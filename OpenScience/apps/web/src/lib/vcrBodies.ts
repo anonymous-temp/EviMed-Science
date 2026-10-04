@@ -195,6 +195,39 @@ export function assumptionBody(input: VcrAssumptionBody) {
   });
 }
 
+/**
+ * A model assessment record, as a person's edit of it: the guideline's fields and nothing the platform derives. The model risk is
+ * worked out from the two ratings on the server and has no field here.
+ */
+export interface VcrAssessmentBody {
+  key: string;
+  questionOfInterest?: string;
+  contextOfUse?: string;
+  influence?: "low" | "medium" | "high" | "";
+  influenceJustification?: string;
+  consequence?: "low" | "medium" | "high" | "";
+  consequenceJustification?: string;
+  riskJustification?: string;
+  impact?: "low" | "medium" | "high" | "";
+  impactJustification?: string;
+  technicalCriteria?: Array<{ criterion: string; rationale: string }>;
+  appropriateness?: string;
+  evaluation?: string;
+  outcome?: string;
+}
+
+export function assessmentBody(input: VcrAssessmentBody) {
+  return said({
+    key: input.key, questionOfInterest: input.questionOfInterest, contextOfUse: input.contextOfUse,
+    influence: input.influence, influenceJustification: input.influenceJustification,
+    consequence: input.consequence, consequenceJustification: input.consequenceJustification,
+    riskJustification: input.riskJustification,
+    impact: input.impact, impactJustification: input.impactJustification,
+    technicalCriteria: input.technicalCriteria, appropriateness: input.appropriateness,
+    evaluation: input.evaluation, outcome: input.outcome,
+  });
+}
+
 export function reviewBody(input: VcrReviewBody) {
   return said({ kind: input.kind, nodes: input.nodes, note: input.note, changes: input.changes });
 }

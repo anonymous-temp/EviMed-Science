@@ -58,7 +58,7 @@
 import { createHash } from "node:crypto";
 
 import {
-  VCR_ASSESSMENT_KEY, VCR_ASSUMPTION_KEY, VCR_CRITERION_TYPES, VCR_DISTRIBUTIONS, VCR_ENDPOINT_TYPES, VCR_ESTIMANDS, VCR_EXPORT_KINDS, VCR_EXPORT_KIND_LABELS_ZH,
+  VCR_ASSESSMENT_KEY, VCR_ASSESSMENT_LIMITS, VCR_ASSESSMENT_RATING_FIELDS, VCR_ASSESSMENT_TEXT_FIELDS, VCR_ASSUMPTION_KEY, VCR_CRITERION_TYPES, VCR_DISTRIBUTIONS, VCR_ENDPOINT_TYPES, VCR_ESTIMANDS, VCR_EXPORT_KINDS, VCR_EXPORT_KIND_LABELS_ZH,
   VCR_FOLLOWUP_KINDS, VCR_INTENDED_USES, VCR_JOB_KINDS, VCR_MODEL_DOCUMENT_SECTIONS, VCR_MODEL_DOCUMENT_SECTION_LABELS_ZH, VCR_MODEL_RISKS,
   VCR_MODEL_DOCUMENT_KINDS, VCR_POPULATION_KINDS, VCR_RATINGS, VCR_SCENARIO_SCHEMAS,
   VCR_STEPS, VCR_SYNTHETIC_USES, VCR_TRIAL_DESIGNS, canonicalScenarioJson, findExpressionFields, validateRequirement, vcrAssessmentIssues,
@@ -1049,28 +1049,25 @@ const WRITERS = {
     if (!item.only(["key", "modelName", "modelVersion", "questionOfInterest", "contextOfUse", "influence", "influenceJustification",
       "consequence", "consequenceJustification", "riskJustification", "impact", "impactJustification", "technicalCriteria",
       "appropriateness", "evaluation", "outcome"])) return null;
-    const key = item.str("key", { max: 64, required: true });
+    const key = item.str("key", { max: VCR_ASSESSMENT_LIMITS.key, required: true });
     if (key && !VCR_ASSESSMENT_KEY.test(key)) {
-      item.bad("key", "key 是小写英文字母开头、只含小写字母、数字和下划线的记录名（最多 64 个字符），例如 survival_projection。");
+      item.bad("key", `key 是小写英文字母开头、只含小写字母、数字和下划线的记录名（最多 ${VCR_ASSESSMENT_LIMITS.key} 个字符），例如 survival_projection。`);
     }
-    const modelName = item.str("modelName", { max: 120, required: true });
-    const modelVersion = item.str("modelVersion", { max: 40 }) ?? "";
+    const modelName = item.str("modelName", { max: VCR_ASSESSMENT_LIMITS.modelName, required: true });
+    const modelVersion = item.str("modelVersion", { max: VCR_ASSESSMENT_LIMITS.modelVersion }) ?? "";
     /** @type {Record<string, any>} */
     const record = { key, modelName, modelVersion };
-    for (const field of ["questionOfInterest", "contextOfUse", "influenceJustification", "consequenceJustification", "riskJustification",
-      "impactJustification", "appropriateness", "evaluation", "outcome"]) {
-      record[field] = item.str(field, { max: 2000 }) ?? "";
-    }
-    for (const field of ["influence", "consequence", "impact"]) record[field] = item.choice(field, VCR_RATINGS) ?? "";
-    const criteria = item.arr("technicalCriteria", { max: 30 }) ?? [];
+    for (const field of VCR_ASSESSMENT_TEXT_FIELDS) record[field] = item.str(field, { max: VCR_ASSESSMENT_LIMITS.text }) ?? "";
+    for (const field of VCR_ASSESSMENT_RATING_FIELDS) record[field] = item.choice(field, VCR_RATINGS) ?? "";
+    const criteria = item.arr("technicalCriteria", { max: VCR_ASSESSMENT_LIMITS.criteria }) ?? [];
     record.technicalCriteria = criteria.map((entry, at) => {
-      if (typeof entry === "string") return entry.slice(0, 600);
+      if (typeof entry === "string") return entry.slice(0, VCR_ASSESSMENT_LIMITS.criterion);
       const row = object(entry);
       if (typeof row.criterion !== "string" || !row.criterion.trim() || (row.rationale != null && typeof row.rationale !== "string")) {
         item.bad(`technicalCriteria[${at}]`, "每条技术标准是一句话，或 { criterion, rationale }。");
         return null;
       }
-      return { criterion: row.criterion.slice(0, 600), rationale: String(row.rationale ?? "").slice(0, 600) };
+      return { criterion: row.criterion.slice(0, VCR_ASSESSMENT_LIMITS.criterion), rationale: String(row.rationale ?? "").slice(0, VCR_ASSESSMENT_LIMITS.criterion) };
     });
     if (!item.ok) return null;
     const saved = await store.saveModelAssessment({ studyId: study.id, userId: study.userId, actor: "runtime", record });

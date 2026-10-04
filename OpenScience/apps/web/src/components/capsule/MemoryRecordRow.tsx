@@ -2,9 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { Link } from "react-router";
 import { Pencil, RotateCcw, Trash2 } from "lucide-react";
-import { deleteStructuredMemory, updateStructuredMemory, webErrorMessage, type WebStructuredMemory } from "@/lib/apiClient";
+import {
+  deleteStructuredMemory, updateStructuredMemory, webErrorMessage, type WebMemoryCaveat, type WebStructuredMemory,
+} from "@/lib/apiClient";
 import { formatDateTime, formatDay } from "@/lib/format";
-import { announceMemoryChanged, archiveMemoryRecord, undoMemoryRecord } from "@/lib/memoryClient";
+import { announceMemoryChanged, archiveMemoryRecord, settleMemoryConflict, undoMemoryRecord } from "@/lib/memoryClient";
 import { isInference, memoryExcerpt } from "@/lib/memoryText";
 import { chatPath } from "@/lib/runLocation";
 import { toast } from "@/lib/toast";
@@ -33,6 +35,15 @@ function when(value: string | null | undefined) {
 function failed(error: unknown) {
   return webErrorMessage(error, { fallback: "操作未完成，请重试。" });
 }
+
+/** What a badge says, by the reason the control plane names. 「有冲突」 comes first, as it does there. */
+const CAVEAT_BADGE: Record<WebMemoryCaveat, string> = {
+  conflict: "有冲突",
+  source_retracted: "来源已撤回",
+  source_expired: "来源已过期",
+  source_changed: "来源已更改",
+  not_yet_valid: "尚未生效",
+};
 
 /** When a replaced fact held, as a compact range (「3月2日～9月1日」); empty when neither end is known. */
 function heldFrom(record: WebStructuredMemory) {
@@ -149,6 +160,18 @@ export function MemoryRecordRow({
     const result = await undoMemoryRecord(record.id, record.version);
     toast.success(result.undone === "removed" ? "已撤销这条记忆" : "已撤销上次改动");
   });
+  // 「以这条为准」: the researcher's own call between two statements that
+  // disagree. The loser is replaced and kept; the toast takes it back.
+  const settle = (keepId: string, otherId: string) => run(async () => {
+    const settled = await settleMemoryConflict(keepId, otherId);
+    toast.success("已按这条为准", {
+      action: {
+        label: "撤销",
+        onClick: () => void undoMemoryRecord(settled.superseded.id, settled.superseded.version)
+          .then(() => { announceMemoryChanged(); onChanged(); }, (error) => toast.error(failed(error))),
+      },
+    });
+  });
   const reject = () => run(async () => {
     setRejecting(false);
     await deleteStructuredMemory(record.id);
@@ -162,6 +185,14 @@ export function MemoryRecordRow({
   const former = record.status === "superseded";
   const inferred = isInference(record);
   const source = memorySource(record);
+  // Why this memory is uncertain, when it is: said in a few small words under
+  // the sentence, and never in place of it (a label withholds nothing).
+  const conflicts = record.relations?.conflicts ?? [];
+  const badges = [
+    ...(former ? ["已被替代"] : []),
+    ...(record.relations?.caveats ?? []).map((caveat) => CAVEAT_BADGE[caveat]).filter(Boolean),
+  ];
+  const settleable = record.status === "active";
   const hasHistory = record.evidence.length > 0 || record.revisions.length > 0 || source != null || formerly.length > 0;
   const opens = hasHistory && !forgotten;
 
@@ -231,7 +262,7 @@ export function MemoryRecordRow({
         onOpen={opens ? () => setOpen((current) => !current) : undefined}
         expanded={opens ? open : undefined}
         muted={forgotten || former}
-        meta={pending || (opens && open) ? (
+        meta={pending || badges.length > 0 || (opens && open) ? (
           <>
             {/* The hold is said under the sentence, where it can never squeeze
                 it, and above the row's stretched target so 确认 is a button. */}
@@ -241,6 +272,36 @@ export function MemoryRecordRow({
                 <Button size="sm" variant="secondary" loading={busy} onClick={() => confirmOrSave({ status: "active" })}>确认</Button>
               </div>
             )}
+            {badges.length > 0 && (
+              <div className="relative z-10 mt-1 flex flex-wrap items-center gap-2">
+                {badges.map((text) => <Tag key={text}>{text}</Tag>)}
+              </div>
+            )}
+            {conflicts.map((side) => {
+              const sideText = side.sensitive ? "这是一条敏感记忆" : `“${memoryExcerpt(side.text, 120)}”`;
+              // Both sides are offered, each with the same words: the
+              // researcher decides which statement holds, so neither is the
+              // default and nothing is preselected.
+              const choosable = settleable && side.status === "active";
+              return (
+                <RowDetail key={`conflict-${side.id}`}>
+                  {choosable && (
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p>这条：“{memoryExcerpt(record.summary || record.value, 120)}”</p>
+                      <Button size="sm" variant="secondary" disabled={busy} onClick={() => void settle(record.id, side.id)}
+                        aria-label={`以这条为准：${memoryExcerpt(record.summary || record.value, 40)}`}>以这条为准</Button>
+                    </div>
+                  )}
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p>另一条：{sideText}</p>
+                    {choosable && (
+                      <Button size="sm" variant="secondary" disabled={busy} onClick={() => void settle(side.id, record.id)}
+                        aria-label={`以这条为准：${side.sensitive ? "另一条" : memoryExcerpt(side.text, 40)}`}>以这条为准</Button>
+                    )}
+                  </div>
+                </RowDetail>
+              );
+            })}
             {opens && open && (
               <RowDetail>
                 {record.evidence.slice(-3).reverse().map((evidence) => (

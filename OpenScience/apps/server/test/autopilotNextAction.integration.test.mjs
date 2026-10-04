@@ -158,3 +158,54 @@ test("the decision is metered under purpose autopilot against the episode it cho
   assert.equal(refused.episode.payload.status, "queued", "the research itself is not held back by the decision's budget");
   assert.equal((await usage.summaryRun(owner, refused.episode.id)).calls, 0, "a refused reservation leaves no row");
 });
+
+// Two control-plane replicas scheduling one occurrence at the same moment: the episode insert already lets one of them win,
+// and the decision is taken under the same identity, so the loser reads the winner's `selection` and asks nothing.
+const slow = (handler) => plannerDouble(async (input, n) => { await new Promise((resolve) => setTimeout(resolve, 200)); return handler(input, n); });
+
+test("two replicas scheduling one occurrence at once ask the planner once, and both answer with the one persisted decision", options, async () => {
+  const planner = slow((input) => reply({ taskType: input.eligible.at(-1) }));
+  const first = new AutopilotService({ documents, jobs, planner, now: () => now });
+  const second = new AutopilotService({ documents, jobs, planner, now: () => now });
+  const row = await started(first);
+  const [a, b] = await Promise.all([first.scheduleDue(owner, row.id), second.scheduleDue(owner, row.id)]);
+  assert.equal(planner.calls.length, 1, "the loser did not call the model");
+  assert.equal(a.episode.id, b.episode.id);
+  assert.equal(a.job.id, b.job.id, "one job, one episode");
+  assert.deepEqual(b.episode.payload.selection, a.episode.payload.selection, "the loser returns the winner's persisted decision");
+  assert.equal(a.episode.payload.selection.source, "model");
+  const stored = await first.getEpisode(owner, a.episode.id);
+  assert.deepEqual(stored.payload.selection, a.episode.payload.selection);
+  assert.equal((await database.query("SELECT count(*)::int AS n FROM evimed_product.jobs WHERE user_id=$1 AND kind='episode' AND payload->>'agendaId'=$2", [owner, row.id])).rows[0].n, 1);
+});
+
+test("the same run-now request arriving twice at once is one decision, and a different request is a decision of its own", options, async () => {
+  const planner = slow((input) => reply({ taskType: input.eligible[0] }));
+  const first = new AutopilotService({ documents, jobs, planner, now: () => now });
+  const second = new AutopilotService({ documents, jobs, planner, now: () => now });
+  const row = await started(first);
+  const [a, b] = await Promise.all([first.runNow(owner, row.id, { requestId: "click-1" }), second.runNow(owner, row.id, { requestId: "click-1" })]);
+  assert.equal(a.episode.id, b.episode.id);
+  assert.equal(planner.calls.length, 1);
+  // A different request is a different occurrence of the work: its own episode and its own decision.
+  const c = await second.runNow(owner, row.id, { requestId: "click-2" });
+  assert.notEqual(c.episode.id, a.episode.id);
+  assert.equal(planner.calls.length, 2);
+});
+
+test("a stop decided by one replica is not decided again by the other", options, async () => {
+  const planner = slow((input, n) => (n === 1 ? reply({ taskType: input.eligible[0] })
+    : { action: "stop", stopKind: "exhausted", reason: "可查的证据已经用尽", model: "deepseek-flash" }));
+  const first = new AutopilotService({ documents, jobs, planner, now: () => now });
+  const second = new AutopilotService({ documents, jobs, planner, now: () => now });
+  const row = await started(first, ["evidence-update"]);
+  const done = await first.scheduleDue(owner, row.id);
+  const current = await first.get(owner, row.id);
+  await first.recordOutcome(owner, row.id, { expectedRevision: current.revision, episodeId: done.episode.id, status: "succeeded", gatedClaims: 1 });
+  now = new Date("2026-10-02T07:35:00Z");
+  const asked = planner.calls.length;
+  const results = await Promise.allSettled([first.scheduleDue(owner, row.id), second.scheduleDue(owner, row.id)]);
+  assert.equal(planner.calls.length, asked + 1, "one question, one answer");
+  assert.equal(results.filter((result) => result.status === "fulfilled" && result.value?.stopped).length, 1, "exactly one stop is recorded");
+  assert.equal((await first.get(owner, row.id)).payload.status, "paused");
+});

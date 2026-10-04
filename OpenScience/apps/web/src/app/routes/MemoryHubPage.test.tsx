@@ -15,6 +15,7 @@ const fetchMyCapsule = vi.fn();
 const listMethods = vi.fn();
 const methodVersions = vi.fn();
 const archiveMemoryRecord = vi.fn();
+const settleMemoryConflict = vi.fn();
 const fetchMemoryGrowth = vi.fn();
 
 vi.mock("@/lib/apiClient", async () => {
@@ -36,6 +37,7 @@ vi.mock("@/lib/memoryClient", async () => {
     ensureMyCapsule: () => Promise.resolve(null),
     fetchMyCapsule: (...args: unknown[]) => fetchMyCapsule(...args),
     archiveMemoryRecord: (...args: unknown[]) => archiveMemoryRecord(...args),
+    settleMemoryConflict: (...args: unknown[]) => settleMemoryConflict(...args),
     fetchMemoryGrowth: (...args: unknown[]) => fetchMemoryGrowth(...args),
   };
 });
@@ -386,6 +388,33 @@ describe("记忆胶囊", () => {
     expect(within(title.closest("li")!).getByText(/曾经如此：只看 RCT。（3月2日～9月1日）/)).toBeInTheDocument();
     // One whose replacement is not on the page keeps a row, marked as what it was.
     expect(screen.getByText(/曾经如此：回答用英文。（2月1日～4月1日）/)).toBeInTheDocument();
+  });
+
+  // F1: the memory page shows a disagreement on both of its rows and settles it.
+  it("shows a disagreement on both rows and settles it for the researcher, then reads the page again", async () => {
+    const user = userEvent.setup();
+    const conflict = (id: string, text: string): WebStructuredMemory["relations"] => ({
+      validity: { from: null, until: null }, caveats: ["conflict"], sources: [],
+      conflicts: [{ id, status: "active", scope: "user", scopeId: "", origin: "explicit", sensitive: false, text, createdAt: null }],
+    });
+    fetchMemoryProfile.mockResolvedValue({
+      records: [
+        record({ id: "rec_a", kind: "preference", key: "preference.a", value: "证据先用表格。", summary: "证据先用表格。",
+          relations: conflict("rec_b", "证据先用列表。") }),
+        record({ id: "rec_b", kind: "preference", key: "preference.b", value: "证据先用列表。", summary: "证据先用列表。",
+          relations: conflict("rec_a", "证据先用表格。") }),
+      ],
+      groups: {}, activeCount: 2, pendingCount: 0, conversations: {}, usage: {},
+    });
+    settleMemoryConflict.mockResolvedValue({ kept: { id: "rec_b" }, superseded: { id: "rec_a", version: 4 } });
+    open();
+    const rowB = (await screen.findByText("证据先用列表。")).closest("li")!;
+    expect(screen.getAllByText("有冲突")).toHaveLength(2);
+    // On the second row, 「这条」 is the list one: choosing it keeps rec_b.
+    await user.click(within(rowB).getAllByRole("button", { name: /^以这条为准/ })[0]);
+    await waitFor(() => expect(settleMemoryConflict).toHaveBeenCalledWith("rec_b", "rec_a"));
+    // The page is read again, so the row shows what the settle left (the page also hears the change event).
+    await waitFor(() => expect(fetchMemoryProfile.mock.calls.length).toBeGreaterThan(1));
   });
 
   it("keeps forgotten memories out of the list, under 已忘记的内容, each with 恢复", async () => {

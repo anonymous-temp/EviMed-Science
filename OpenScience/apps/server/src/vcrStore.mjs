@@ -246,7 +246,7 @@ function criterionFromRow(row) {
 function modelAssessmentFromRow(row) {
   if (!row) return null;
   return { ...normalizeVcrAssessment({ ...object(row.record), key: String(row.key) }), id: String(row.id), studyId: String(row.study_id),
-    version: Number(row.version), createdAt: iso(row.created_at) };
+    version: Number(row.version), createdAt: iso(row.created_at), by: String(row.saved_by ?? "") || null };
 }
 
 /** @param {any} row */
@@ -1163,10 +1163,10 @@ export class VcrStore extends VcrStoreBase {
     return this.transaction(async (client) => {
       const version = await this.nextVersion(client, "model_assessments", "study_id = $1 AND key = $2", [input.studyId, record.key]);
       const row = (await client.query(`INSERT INTO ${VCR_SCHEMA}.model_assessments
-        (id, study_id, user_id, key, version, model_name, model_version, risk, record)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb) RETURNING *`,
+        (id, study_id, user_id, key, version, model_name, model_version, risk, record, saved_by)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10) RETURNING *`,
       [vcrId("modelAssessment"), input.studyId, String(input.userId), record.key, version, record.modelName, record.modelVersion,
-        record.risk, JSON.stringify(record)])).rows[0];
+        record.risk, JSON.stringify(record), String(input.actor ?? "")])).rows[0];
       await this.audit({ client, studyId: input.studyId, userId: String(input.userId), actor: String(input.actor ?? ""),
         action: "vcr.model_assessment.save", object: String(row.id), detail: { key: record.key, version, risk: record.risk } });
       return modelAssessmentFromRow(row);

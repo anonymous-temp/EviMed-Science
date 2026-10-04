@@ -1158,6 +1158,9 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.model_assessments (
   created_at    timestamptz NOT NULL DEFAULT now(),
   UNIQUE (study_id, key, version)
 );
+-- Who wrote this version: a person's account id, or \`runtime\` for a run. Added after the table
+-- existed, so a version written before it reads as empty (nobody is named, not the run).
+ALTER TABLE evimed_vcr.model_assessments ADD COLUMN IF NOT EXISTS saved_by text NOT NULL DEFAULT '';
 
 -- A model analysis plan, frozen: the content, its hash, when and by whom, at the
 -- moment the analysis plan itself froze (vcrSeal.freezePlan) and so before any

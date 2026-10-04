@@ -168,16 +168,26 @@ describe("人群", () => {
     expect(report.textContent).not.toMatch(/安全|匿名|合格/);
   });
 
-  it("puts two versions side by side as each stored them, and computes nothing between them", async () => {
+  // Two cards answering one question with different numbers was a defect: the engine's comparison of two versions (定义库) is the one
+  // comparison, and a side-by-side of what each stored population version said beside it is gone.
+  it("compares two versions once, by the engine, and keeps no second card of what each version stored", async () => {
+    const raw = fixture("ev201/population.json");
+    raw.knowledge = {
+      pack: null, savable: [],
+      definitions: [{ definitionId: "dfn_1", version: 2, populationId: "pop_1", name: "成人 ECOG 0–1", text: "", versions: 2, uses: 1, usedAt: null, packRefs: [] }],
+      comparisons: [{ id: "res_1", definitionId: "dfn_1", versionA: 1, versionB: 2, snapshotId: "snp_1", cohortSizeA: 417, cohortSizeB: 324,
+        overlap: { both: 324, onlyA: 93, onlyB: 0 }, floor: 0.1,
+        covariates: [{ covariate: "age", kind: "continuous", meanA: 59.4, meanB: 63.9, standardizedDifference: 0.321 }] }],
+    };
+    installVcrServer(network.productRequest, { [tab("population")]: raw });
     const { container } = draw(<PopulationTab studyId={STUDY_ID} study={ev201()} />);
-    const table = await found(container, "[data-vcr-version-compare]");
-    expect(within(table).getByText("人群 v1")).toBeInTheDocument();
-    expect(within(table).getByText("人群 v2")).toBeInTheDocument();
-    expect(table.querySelector("[data-vcr-version-count='realPatients']")).toHaveTextContent("3,390");
-    expect(table.querySelector("[data-vcr-version-count='realPatients']")).toHaveTextContent("3,412");
-    // The composition rows exist on one side only in this study: not a comparison.
-    expect(table.querySelectorAll("[data-vcr-version-row]")).toHaveLength(0);
-    expect(table.textContent).not.toContain("SMD");
+    await screen.findByText("逐条筛选");
+    // The stored versions are still named in the toolbar, and the engine's card is the only comparison on the page.
+    expect(screen.getByText("人群 v1")).toBeInTheDocument();
+    expect(container.querySelectorAll("[data-vcr-comparison]")).toHaveLength(1);
+    expect(container.querySelector("[data-vcr-comparison='res_1']")).toHaveTextContent("v1 保留 417 人");
+    expect(container.querySelector("[data-vcr-version-compare]")).toBeNull();
+    expect(screen.queryByText("版本对比")).not.toBeInTheDocument();
   });
 
   it("fixes the four counts at the foot, and keeps them when nothing has counted yet", async () => {

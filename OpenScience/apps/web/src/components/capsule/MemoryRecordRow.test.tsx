@@ -11,7 +11,9 @@ vi.mock("@/lib/apiClient", async () => ({
   deleteStructuredMemory: api.deleteStructuredMemory,
   webErrorMessage: (_error: unknown, overrides?: { fallback?: string }) => overrides?.fallback ?? "操作未完成，请重试。",
 }));
-const client = vi.hoisted(() => ({ announceMemoryChanged: vi.fn(), archiveMemoryRecord: vi.fn(), undoMemoryRecord: vi.fn() }));
+const client = vi.hoisted(() => ({
+  announceMemoryChanged: vi.fn(), archiveMemoryRecord: vi.fn(), undoMemoryRecord: vi.fn(), settleMemoryConflict: vi.fn(),
+}));
 vi.mock("@/lib/memoryClient", () => client);
 const toasts = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }));
 vi.mock("@/lib/toast", () => ({ toast: toasts }));
@@ -196,5 +198,90 @@ describe("one memory, as one row", () => {
     await userEvent.click(screen.getByRole("button", { name: "保存" }));
     expect(await screen.findByText("确认这条敏感记忆？")).toBeInTheDocument();
     expect(api.updateStructuredMemory).not.toHaveBeenCalled();
+  });
+});
+
+// F1: what N13 recorded about a memory — a disagreement, an interval, a source
+// that changed — is on the row, and a disagreement is the researcher's to settle.
+describe("a memory that is uncertain says why, and a disagreement is settled by the researcher", () => {
+  beforeEach(() => { vi.clearAllMocks(); });
+  afterEach(cleanup);
+
+  const side = (patch: Record<string, unknown> = {}) => ({
+    id: "mem_2", status: "active", scope: "user", scopeId: "", origin: "inferred", sensitive: false,
+    text: "证据先用列表", createdAt: "2026-09-01T00:00:00Z", ...patch,
+  });
+  const relations = (patch: Record<string, unknown> = {}) => ({
+    validity: { from: null, until: null }, caveats: [], conflicts: [], sources: [], ...patch,
+  });
+
+  it("says nothing on a memory with nothing to say", () => {
+    row({ relations: relations() });
+    expect(screen.getByRole("listitem").textContent).toBe("关于你证据先用表格");
+  });
+
+  it("labels each reason in a few words under the sentence, and keeps the sentence", () => {
+    row({ relations: relations({ caveats: ["source_retracted", "source_expired", "source_changed", "not_yet_valid"],
+      sources: [{ type: "doi", id: "10.1/a", state: "retracted" }] }) });
+    const item = screen.getByRole("listitem");
+    for (const text of ["来源已撤回", "来源已过期", "来源已更改", "尚未生效"]) expect(within(item).getByText(text)).toBeInTheDocument();
+    expect(within(item).getByText("证据先用表格")).toBeInTheDocument();
+    // The interface does not explain the system: no identifier, no state name.
+    expect(item.textContent).not.toMatch(/10\.1\/a|retracted|source_/);
+    cleanup();
+    row({ status: "superseded", supersededBy: "mem_9", relations: relations({ validity: { from: null, until: "2026-09-01T00:00:00Z" } }) });
+    expect(screen.getByText("已被替代")).toBeInTheDocument();
+  });
+
+  it("shows the other statement of a disagreement and offers 「以这条为准」 on either side", async () => {
+    client.settleMemoryConflict.mockResolvedValue({ kept: { id: "mem_1" }, superseded: { id: "mem_2", version: 5 } });
+    client.undoMemoryRecord.mockResolvedValue({ undone: "restored", record: null, restored: [] });
+    const onChanged = row({ relations: relations({ caveats: ["conflict"], conflicts: [side()] }) });
+    const item = screen.getByRole("listitem");
+    expect(within(item).getByText("有冲突")).toBeInTheDocument();
+    expect(within(item).getByText("另一条：“证据先用列表”")).toBeInTheDocument();
+    const choices = within(item).getAllByRole("button", { name: /^以这条为准/ });
+    expect(choices).toHaveLength(2);
+    expect(choices.map((button) => button.textContent)).toEqual(["以这条为准", "以这条为准"]);
+    expect(choices[0]).toHaveAccessibleName("以这条为准：证据先用表格");
+    expect(choices[1]).toHaveAccessibleName("以这条为准：证据先用列表");
+
+    // This statement holds: it is the one kept.
+    await userEvent.click(choices[0]);
+    await waitFor(() => expect(client.settleMemoryConflict).toHaveBeenCalledWith("mem_1", "mem_2"));
+    await waitFor(() => expect(onChanged).toHaveBeenCalled());
+    expect(client.announceMemoryChanged).toHaveBeenCalled();
+    // The replaced statement is kept, and the toast takes the decision back.
+    const [message, options] = toasts.success.mock.calls.at(-1)!;
+    expect(message).toBe("已按这条为准");
+    options.action.onClick();
+    await waitFor(() => expect(client.undoMemoryRecord).toHaveBeenCalledWith("mem_2", 5));
+
+    // The other statement holds: it is the one kept.
+    await userEvent.click(choices[1]);
+    await waitFor(() => expect(client.settleMemoryConflict).toHaveBeenLastCalledWith("mem_2", "mem_1"));
+  });
+
+  it("says so when it could not be settled, and changes nothing on the page", async () => {
+    client.settleMemoryConflict.mockRejectedValue(new Error("refused"));
+    const onChanged = row({ relations: relations({ caveats: ["conflict"], conflicts: [side()] }) });
+    await userEvent.click(screen.getAllByRole("button", { name: /^以这条为准/ })[0]);
+    await waitFor(() => expect(toasts.error).toHaveBeenCalledWith("操作未完成，请重试。"));
+    expect(onChanged).not.toHaveBeenCalled();
+  });
+
+  it("does not offer to settle against a memory still waiting for confirmation, nor show a sensitive one's words", () => {
+    row({ relations: relations({ caveats: ["conflict"], conflicts: [side({ status: "pending" })] }) });
+    expect(screen.getByText("另一条：“证据先用列表”")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^以这条为准/ })).not.toBeInTheDocument();
+    cleanup();
+    row({ relations: relations({ caveats: ["conflict"], conflicts: [side({ sensitive: true, text: "" })] }) });
+    expect(screen.getByText("另一条：这是一条敏感记忆")).toBeInTheDocument();
+    expect(screen.getAllByRole("button", { name: /^以这条为准/ })).toHaveLength(2);
+  });
+
+  it("offers nothing to settle on a memory that is itself waiting or replaced", () => {
+    row({ status: "pending", relations: relations({ caveats: ["conflict"], conflicts: [side()] }) });
+    expect(screen.queryByRole("button", { name: /^以这条为准/ })).not.toBeInTheDocument();
   });
 });

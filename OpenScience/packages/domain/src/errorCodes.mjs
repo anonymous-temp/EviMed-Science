@@ -1140,6 +1140,7 @@ export const VCR_ROUTE_ERROR_CODES = Object.freeze([
   'vcr_pack_invalid',
   'vcr_definition_not_found',
   'vcr_definition_invalid',
+  'vcr_model_assessment_not_found',
 ])
 
 export const VCR_GATEWAY_ERROR_CODES = Object.freeze([
@@ -1553,6 +1554,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_pack_invalid: '这份知识包不符合规定的结构，没有保存；按提示的字段修改后再写。',
   vcr_definition_not_found: '人群定义库里没有这条定义或这个版本，或它不属于你的账号；刷新定义库后重选。',
   vcr_definition_invalid: '这条人群定义不符合要求，没有保存；按提示补全名称、说明或条件后再试。',
+  vcr_model_assessment_not_found: '这个研究里没有这条模型评估记录；新的评估记录由 AI 在分析中写入。',
   // The runtime channel's write items. The run reads these in `issues` and
   // corrects the item it named.
   // Four the runtime channel already had, which fell through to the family's

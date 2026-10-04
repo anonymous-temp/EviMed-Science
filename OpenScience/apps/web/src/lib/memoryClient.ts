@@ -41,6 +41,17 @@ export function undoMemoryRecord(id: string, expectedVersion: number) {
   );
 }
 
+/**
+ * 「以这条为准」: two memories disagree and the researcher says which one holds.
+ * The other is replaced by it, never deleted, and its undo puts the
+ * disagreement back.
+ */
+export function settleMemoryConflict(keepId: string, otherId: string) {
+  return productRequest<{ kept: WebStructuredMemory; superseded: WebStructuredMemory }>(
+    "/memory/conflicts/resolve", "POST", { keepId, otherId },
+  );
+}
+
 /** Undo the last change to one capsule entry; undoing its creation removes it. */
 export function undoCapsuleEntry(capsuleId: string, entry: Pick<CapsuleEntry, "id" | "revision">) {
   return productRequest<{ undone: "restored" | "removed"; entry: CapsuleEntry }>(

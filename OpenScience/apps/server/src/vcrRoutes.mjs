@@ -59,7 +59,8 @@
  */
 
 import {
-  VCR_ACTIONS, VCR_ASSUMPTION_SOURCE_KINDS, VCR_CRITERION_STATES, VCR_DATA_TIERS, VCR_EXPORT_KINDS, VCR_INTENDED_USES, VCR_JOB_KINDS,
+  VCR_ACTIONS, VCR_ASSESSMENT_KEY, VCR_ASSESSMENT_LIMITS, VCR_ASSESSMENT_RATING_FIELDS, VCR_ASSESSMENT_TEXT_FIELDS, VCR_RATINGS,
+  VCR_ASSUMPTION_SOURCE_KINDS, VCR_CRITERION_STATES, VCR_DATA_TIERS, VCR_EXPORT_KINDS, VCR_INTENDED_USES, VCR_JOB_KINDS,
   VCR_MEMBER_ROLES, VCR_REVIEW_KINDS, VCR_STEPS, VCR_STUDY_STATUSES, VCR_TABS, VCR_VALUE_SOURCES, roleAllows } from "@evimed/domain";
 
 import { HttpError, readJson, sendJson } from "./security.mjs";
@@ -108,6 +109,7 @@ export const VCR_ROUTE_ERROR_CODES = Object.freeze([
   "vcr_pack_invalid",
   "vcr_definition_not_found",
   "vcr_definition_invalid",
+  "vcr_model_assessment_not_found",
 ]);
 
 /**
@@ -128,6 +130,7 @@ export const VCR_ROUTE_ABILITIES = Object.freeze({
   "POST /studies/:id/jobs/:job/cancel": ["run"],
   "POST /studies/:id/budget": ["manage_study"],
   "POST /studies/:id/assumptions": ["write"],
+  "POST /studies/:id/model-assessments": ["manage_study"],
   "POST /studies/:id/correction-cases": ["export"],
   "GET /studies/:id/correction-cases/:dataset": ["export"],
   "POST /studies/:id/correction-cases/:dataset/replay": ["export"],
@@ -190,7 +193,7 @@ export function vcrRoutePattern(pathname) {
   if (parts[0] !== "studies") return "/api/vcr/:route";
   if (parts.length === 1) return "/api/vcr/studies";
   if (parts.length === 2) return "/api/vcr/studies/:id";
-  const known = [...VCR_TABS, "run", "jobs", "budget", "assumptions", "reviews", "curve-extractions", "correction-cases", "decisions", "export", "members", "referrals", "pack", "definitions"];
+  const known = [...VCR_TABS, "run", "jobs", "budget", "assumptions", "model-assessments", "reviews", "curve-extractions", "correction-cases", "decisions", "export", "members", "referrals", "pack", "definitions"];
   const section = known.includes(parts[2]) ? parts[2] : ":route";
   if (parts[2] === "data" && parts.length > 3) {
     // The intake routes: `data/<kind>[/:item[/<action>[/confirm]]]`, every id folded.
@@ -245,6 +248,52 @@ function word(value, vocabulary, code, field) {
     throw new HttpError(400, code, `${field} must be one of: ${vocabulary.join(", ")}.`);
   }
   return value;
+}
+
+/**
+ * What a person may say in a model assessment record: the guideline's fields and nothing the platform derives. The risk is not
+ * among them — it is worked out from the two ratings (`vcrModelRisk`) — and neither is the model the record is about.
+ */
+const ASSESSMENT_EDIT_FIELDS = Object.freeze(["key", ...VCR_ASSESSMENT_TEXT_FIELDS, ...VCR_ASSESSMENT_RATING_FIELDS, "technicalCriteria"]);
+
+/**
+ * The fields a person's edit named, checked against the limits the run's write holds (`VCR_ASSESSMENT_LIMITS`). A rating is one of
+ * the three words, or empty to clear it; a field the edit does not name is the record as it stands.
+ * @param {Record<string, any>} body @returns {Record<string, any>}
+ */
+function assessmentEdit(body) {
+  const refuse = (/** @type {string} */ field, /** @type {string} */ why) => new HttpError(400, "vcr_payload_invalid", `${field} ${why}`);
+  if (typeof body.key !== "string" || body.key.length > VCR_ASSESSMENT_LIMITS.key || !VCR_ASSESSMENT_KEY.test(body.key)) {
+    throw refuse("key", "is the record's name: lowercase letters, digits and underscores, starting with a letter.");
+  }
+  /** @type {Record<string, any>} */
+  const edit = { key: body.key };
+  for (const field of VCR_ASSESSMENT_TEXT_FIELDS) {
+    if (body[field] === undefined) continue;
+    if (typeof body[field] !== "string" || body[field].length > VCR_ASSESSMENT_LIMITS.text) throw refuse(field, `is text of at most ${VCR_ASSESSMENT_LIMITS.text} characters.`);
+    edit[field] = body[field];
+  }
+  for (const field of VCR_ASSESSMENT_RATING_FIELDS) {
+    if (body[field] === undefined) continue;
+    if (body[field] !== "" && !VCR_RATINGS.includes(body[field])) throw refuse(field, `is one of ${VCR_RATINGS.join(", ")}, or empty.`);
+    edit[field] = body[field];
+  }
+  if (body.technicalCriteria !== undefined) {
+    const criteria = body.technicalCriteria;
+    if (!Array.isArray(criteria) || criteria.length > VCR_ASSESSMENT_LIMITS.criteria) {
+      throw refuse("technicalCriteria", `is a list of at most ${VCR_ASSESSMENT_LIMITS.criteria} criteria.`);
+    }
+    edit.technicalCriteria = criteria.map((/** @type {any} */ entry) => {
+      const one = typeof entry === "string" ? { criterion: entry, rationale: "" } : entry;
+      if (!one || typeof one !== "object" || typeof one.criterion !== "string" || !one.criterion.trim()
+        || (one.rationale != null && typeof one.rationale !== "string")
+        || one.criterion.length > VCR_ASSESSMENT_LIMITS.criterion || String(one.rationale ?? "").length > VCR_ASSESSMENT_LIMITS.criterion) {
+        throw refuse("technicalCriteria", `holds sentences, or { criterion, rationale }, of at most ${VCR_ASSESSMENT_LIMITS.criterion} characters each.`);
+      }
+      return { criterion: one.criterion, rationale: String(one.rationale ?? "") };
+    });
+  }
+  return edit;
 }
 
 /** @param {unknown} value @param {string} field @param {number} max */
@@ -854,6 +903,24 @@ export function createVcrRoutes(dependencies) {
         }).catch(() => null);
       }
       return reply(saved, 201);
+    }
+
+    // --- a model assessment record's next version, written by a person ----------------
+    // The study's lead edits what a run wrote. The edit is the next version of the record under its key, by this person; the model
+    // risk is derived again from the two ratings and never taken from the request; the frozen model analysis plan keeps the version
+    // it was frozen with (the table refuses an update) and the next freeze lists this change. Only a record that exists is edited:
+    // a new one is the run's to write.
+    if (parts.length === 3 && method === "POST" && section === "model-assessments") {
+      const body = await bodyOf(req, maxJsonBytes, ASSESSMENT_EDIT_FIELDS);
+      const { study } = await authorize(id, VCR_ROUTE_ABILITIES["POST /studies/:id/model-assessments"]);
+      const edit = assessmentEdit(body);
+      const saved = await audited("vcr.model_assessment.edit", (version) => ({ code: version.id, detail: edit.key }), { code: id, detail: edit.key },
+        async () => {
+          const current = (await data().modelAssessments(study.id)).find((/** @type {any} */ record) => record.key === edit.key);
+          if (!current) throw new HttpError(404, "vcr_model_assessment_not_found", "No assessment record has this key in this study.");
+          return data().saveModelAssessment({ studyId: study.id, userId: study.userId, actor: String(user.id), record: { ...current, ...edit } });
+        });
+      return reply({ id: saved.id, key: saved.key, version: saved.version, risk: saved.risk, riskRule: saved.riskRule }, 201);
     }
 
     // --- a review countersignature ------------------------------------------------

@@ -1,4 +1,4 @@
-import { getVcrPopulation, type VcrCountKey, type VcrPopulationTab as PopulationData, type VcrQualityReport, type VcrStudy } from "@/lib/vcrClient";
+import { getVcrPopulation, type VcrPopulationTab as PopulationData, type VcrQualityReport, type VcrStudy } from "@/lib/vcrClient";
 import { cn } from "@/lib/cn";
 import { Card } from "@/components/ui/Card";
 import { Tag } from "@/components/ui/Tag";
@@ -9,7 +9,7 @@ import { VcrNumber } from "../VcrNumber";
 import { PartialResultNote, Stale, VcrStepFailed, VcrStepPending, VcrTabSkeleton } from "../VcrStates";
 import { VcrDefinitionsSection } from "../VcrKnowledge";
 import { useVcrLoad, VcrFacts, VcrHeadline, VcrSection, VcrTabError, VcrToolbar } from "../vcrTabKit";
-import { countLabel, countText, numberText } from "../vcrText";
+import { countText, numberText } from "../vcrText";
 
 /**
  * 人群: what the study means by "these patients", how many survive each rule,
@@ -21,12 +21,12 @@ import { countLabel, countText, numberText } from "../vcrText";
  * answer the question the middle one raises — *why* 612 people cannot be
  * judged — because that list is what turns into a request for evidence.
  *
- * Under them, the two things a population carries with it (plan §5.1): the
- * quality report of a synthetic population, which reports and never judges —
- * values under 保真度 / 可用性 / 泄露风险 and no word like 安全 or 合格 — and
- * two versions side by side, as each stored them. The page computes no
- * difference between the versions: a standardized difference is the
- * engine's number to send, not the browser's to make up.
+ * Under them, what a population carries with it (plan §5.1): the quality
+ * report of a synthetic population, which reports and never judges — values
+ * under 保真度 / 可用性 / 泄露风险 and no word like 安全 or 合格. Two versions
+ * of a definition are compared once, in 定义库, by the engine on a registered
+ * dataset: the page computes no difference between versions, and it keeps no
+ * second comparison of what each version stored beside the engine's.
  */
 export function PopulationTab({ studyId, study, onStudyChanged }: { studyId: string; study: VcrStudy; onStudyChanged?: () => void }) {
   const { state, reload } = useVcrLoad(`${studyId}:population`, () => getVcrPopulation(studyId));
@@ -35,7 +35,7 @@ export function PopulationTab({ studyId, study, onStudyChanged }: { studyId: str
   const data = state.data;
   const failed = study.steps.population?.status === "failed";
   const nothing = !data.version && data.criteria.length === 0 && data.attrition.length === 0 && data.profile.length === 0
-    && !data.outcome && !data.quality && !data.versionCompare;
+    && !data.outcome && !data.quality;
   if (nothing) {
     return failed
       ? <VcrStepFailed studyId={studyId} study={study} step="population" partial={data.partial} />
@@ -118,10 +118,9 @@ export function PopulationTab({ studyId, study, onStudyChanged }: { studyId: str
             </VcrSection>
           )}
 
-          {(data.quality || data.versionCompare) && (
+          {data.quality && (
             <div className="grid gap-4 lg:grid-cols-2">
-              {data.quality && <QualityCard quality={data.quality} />}
-              {data.versionCompare && <VersionCompareCard compare={data.versionCompare} />}
+              <QualityCard quality={data.quality} />
             </div>
           )}
 
@@ -263,55 +262,6 @@ function QualityCard({ quality }: { quality: VcrQualityReport }) {
         ))}
       </div>
       {counts.length > 0 && <p className="mt-3 text-caption tabular-nums text-text-3">{counts.join(" · ")}</p>}
-    </Card>
-  );
-}
-
-const COUNT_KEYS: readonly VcrCountKey[] = Object.freeze([
-  "realPatients", "events", "effectiveSampleSize", "generatedRecords", "priorEffectiveSampleSize", "reconstructedPseudoPatients",
-]);
-
-/**
- * Two versions side by side: their counts, then their composition where both
- * versions stored the row. A row only one side has is not a comparison, so it
- * is left out rather than drawn against a dash.
- */
-function VersionCompareCard({ compare }: { compare: NonNullable<PopulationData["versionCompare"]> }) {
-  const { left, right } = compare;
-  const counted = COUNT_KEYS.filter((key) => typeof left.counts?.[key] === "number" || typeof right.counts?.[key] === "number");
-  const rows = compare.rows.filter((row) => row.left && row.right);
-  return (
-    <Card title="版本对比">
-      <table data-vcr-version-compare="" className="w-full border-collapse text-caption">
-        <caption className="sr-only">{`${left.label} 与 ${right.label}`}</caption>
-        <thead>
-          <tr className="border-b border-border text-text-3">
-            <th scope="col" className="py-1 pr-2 text-left font-normal"><span className="sr-only">项目</span></th>
-            {[left, right].map((side, index) => (
-              <th key={index} scope="col" className="py-1 pl-2 text-right font-normal">
-                <span className="block text-text-2">{side.label}</span>
-                {side.at && <span className="block text-meta">{side.at}</span>}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {counted.map((key) => (
-            <tr key={key} data-vcr-version-count={key} className="border-b border-faint">
-              <th scope="row" className="py-1.5 pr-2 text-left font-normal text-text-2">{countLabel(key)}</th>
-              <td className="py-1.5 pl-2 text-right tabular-nums text-text">{countText(left.counts?.[key] ?? null)}</td>
-              <td className="py-1.5 pl-2 text-right tabular-nums text-text">{countText(right.counts?.[key] ?? null)}</td>
-            </tr>
-          ))}
-          {rows.map((row) => (
-            <tr key={row.key} data-vcr-version-row={row.key} className="border-b border-faint">
-              <th scope="row" className="py-1.5 pr-2 text-left font-normal text-text-2">{row.label}</th>
-              <td className="py-1.5 pl-2 text-right tabular-nums text-text"><VcrNumber value={row.left} label={`${left.label} ${row.label}`} /></td>
-              <td className="py-1.5 pl-2 text-right tabular-nums text-text"><VcrNumber value={row.right} label={`${right.label} ${row.label}`} /></td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
     </Card>
   );
 }

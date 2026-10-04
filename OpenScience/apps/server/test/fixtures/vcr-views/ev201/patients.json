@@ -59,6 +59,149 @@
     "numeric": null,
     "uncertainty": null
   },
+  "assessments": {
+    "records": [
+      {
+        "key": "pfs_projection",
+        "version": 1,
+        "modelName": "nsclc-docetaxel-pfs-weibull",
+        "modelVersion": "1.2",
+        "risk": "high",
+        "riskLabel": "高",
+        "riskRule": "driven_by_consequence",
+        "riskRuleText": "两项评级不同，模型风险随影响更大的一项——错误决策的后果。",
+        "rows": [
+          {
+            "key": "questionOfInterest",
+            "label": "关注的问题",
+            "rated": false,
+            "derived": false,
+            "rating": null,
+            "ratingLabel": null,
+            "entry": "对照组的无进展生存分布是否足以支持单臂试验的样本量计算",
+            "justification": ""
+          },
+          {
+            "key": "contextOfUse",
+            "label": "使用情境",
+            "rated": false,
+            "derived": false,
+            "rating": null,
+            "ratingLabel": null,
+            "entry": "用文献模型生成对照组个体 PFS，只用于设计阶段的功效模拟",
+            "justification": ""
+          },
+          {
+            "key": "influence",
+            "label": "模型影响力",
+            "rated": true,
+            "derived": false,
+            "rating": "medium",
+            "ratingLabel": "中",
+            "entry": "",
+            "justification": "模拟结果与文献对照并用，不是唯一依据"
+          },
+          {
+            "key": "consequence",
+            "label": "错误决策的后果",
+            "rated": true,
+            "derived": false,
+            "rating": "high",
+            "ratingLabel": "高",
+            "entry": "",
+            "justification": "样本量低估会让关键试验功效不足"
+          },
+          {
+            "key": "risk",
+            "label": "模型风险",
+            "rated": true,
+            "derived": true,
+            "rating": "high",
+            "ratingLabel": "高",
+            "entry": "",
+            "justification": "后果为高而影响力为中，风险随后果"
+          },
+          {
+            "key": "impact",
+            "label": "模型冲击",
+            "rated": true,
+            "derived": false,
+            "rating": "low",
+            "ratingLabel": "低",
+            "entry": "",
+            "justification": "加权外部对照在监管上已有讨论"
+          },
+          {
+            "key": "technicalCriteria",
+            "label": "技术标准",
+            "rated": false,
+            "derived": false,
+            "rating": null,
+            "ratingLabel": null,
+            "entry": "重建后的中位 PFS 与来源试验相差不超过 5%（与模型风险相称）",
+            "justification": ""
+          },
+          {
+            "key": "appropriateness",
+            "label": "所拟用法的适当性",
+            "rated": false,
+            "derived": false,
+            "rating": null,
+            "ratingLabel": null,
+            "entry": "文献模型覆盖二线 NSCLC 多西他赛单药的人群与终点",
+            "justification": ""
+          },
+          {
+            "key": "evaluation",
+            "label": "模型与模型结果的评价",
+            "rated": false,
+            "derived": false,
+            "rating": null,
+            "ratingLabel": null,
+            "entry": "",
+            "justification": ""
+          },
+          {
+            "key": "outcome",
+            "label": "证据评估的结论",
+            "rated": false,
+            "derived": false,
+            "rating": null,
+            "ratingLabel": null,
+            "entry": "",
+            "justification": ""
+          }
+        ],
+        "savedBy": {
+          "kind": "run",
+          "name": "AI"
+        },
+        "savedAt": "昨天",
+        "gaps": [],
+        "fields": {
+          "questionOfInterest": "对照组的无进展生存分布是否足以支持单臂试验的样本量计算",
+          "contextOfUse": "用文献模型生成对照组个体 PFS，只用于设计阶段的功效模拟",
+          "influence": "medium",
+          "influenceJustification": "模拟结果与文献对照并用，不是唯一依据",
+          "consequence": "high",
+          "consequenceJustification": "样本量低估会让关键试验功效不足",
+          "riskJustification": "后果为高而影响力为中，风险随后果",
+          "impact": "low",
+          "impactJustification": "加权外部对照在监管上已有讨论",
+          "technicalCriteria": [
+            {
+              "criterion": "重建后的中位 PFS 与来源试验相差不超过 5%",
+              "rationale": "与模型风险相称"
+            }
+          ],
+          "appropriateness": "文献模型覆盖二线 NSCLC 多西他赛单药的人群与终点",
+          "evaluation": "",
+          "outcome": ""
+        }
+      }
+    ],
+    "plan": null
+  },
   "twin": {
     "label": "基线条件化预测",
     "reason": "缺少：以个体为条件、随新数据更新、不确定性已校准、验证记录"

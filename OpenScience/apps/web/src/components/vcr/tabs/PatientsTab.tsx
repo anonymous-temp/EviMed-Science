@@ -8,6 +8,7 @@ import { VcrCountsBand } from "../VcrCounts";
 import { VcrSeriesLegend, VcrTrajectoryChart } from "../VcrCharts";
 import { VcrTornadoChart } from "../VcrDiagrams";
 import { SourceTag } from "../VcrMarks";
+import { VcrModelAssessments } from "../VcrModelAssessments";
 import { VcrNumber } from "../VcrNumber";
 import { NotApplicableCard, PartialResultNote, Stale, VcrStepFailed, VcrStepPending, VcrTabSkeleton } from "../VcrStates";
 import { useVcrLoad, VcrHeadline, VcrTabError, VcrToolbar } from "../vcrTabKit";
@@ -44,7 +45,8 @@ export function PatientsTab({ studyId, study }: { studyId: string; study: VcrStu
   if (state.kind === "error") return <VcrTabError message={state.message} onRetry={reload} />;
   const data = state.data;
   const failed = study.steps.patients?.status === "failed";
-  const nothing = !data.model && !data.trajectories && !data.example && data.panels.length === 0 && !data.sensitivity;
+  const nothing = !data.model && !data.trajectories && !data.example && data.panels.length === 0 && !data.sensitivity
+    && data.assessments.records.length === 0;
   if (nothing) {
     return failed
       ? <VcrStepFailed studyId={studyId} study={study} step="patients" partial={data.partial} />
@@ -62,6 +64,7 @@ export function PatientsTab({ studyId, study }: { studyId: string; study: VcrStu
         </VcrToolbar>
       )}
       {data.model && <ModelChipRow model={data.model} twin={twin} />}
+      <VcrModelAssessments studyId={studyId} assessments={data.assessments} canEdit={study.abilities.includes("manage_study")} onSaved={reload} />
 
       {failed
         ? <VcrStepFailed studyId={studyId} study={study} step="patients" partial={data.partial} />

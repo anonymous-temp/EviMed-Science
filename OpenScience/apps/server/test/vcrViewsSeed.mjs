@@ -40,7 +40,7 @@ export async function fixClock(store) {
   const tables = [
     ["studies", "created_at", early, "id"], ["study_definitions", "created_at", early, "id"], ["protocol_versions", "created_at", early, "id"],
     ["criteria", "created_at", early, "id"], ["precedents", "created_at", early, "id"], ["evidence_items", "created_at", early, "id"],
-    ["assumptions", "created_at", early, "id"], ["models", "created_at", early, "id"], ["populations", "created_at", early, "id"],
+    ["assumptions", "created_at", early, "id"], ["models", "created_at", early, "id"], ["model_assessments", "created_at", early, "id"], ["populations", "created_at", early, "id"],
     ["patient_sets", "created_at", early, "id"], ["comparator_designs", "created_at", early, "id"], ["trial_scenarios", "created_at", early, "id"],
     ["design_grids", "created_at", early, "id"], ["reviews", "created_at", early, "id"], ["sites", "created_at", early, "id"],
     ["jobs", "created_at", late, "id"], ["executions", "created_at", late, "id"], ["results", "created_at", late, "id"],
@@ -205,6 +205,21 @@ export async function seedEv201({ store, matchStore, evidenceStore }) {
   });
   const modelUsed = [{ name: "nsclc-docetaxel-pfs-weibull", tier: "literature", risk: "low",
     evidence: ["code_verification", "seed_reproducible", "input_traceable", "sensitivity_analysis"] }];
+
+  // --- 模型评估记录（AI 写入，ICH M15 附录 1；评价与结论两行要等分析做完才填）
+  await store.saveModelAssessment({
+    studyId, userId, actor: "runtime", record: {
+      key: "pfs_projection", modelName: "nsclc-docetaxel-pfs-weibull", modelVersion: "1.2",
+      questionOfInterest: "对照组的无进展生存分布是否足以支持单臂试验的样本量计算",
+      contextOfUse: "用文献模型生成对照组个体 PFS，只用于设计阶段的功效模拟",
+      influence: "medium", influenceJustification: "模拟结果与文献对照并用，不是唯一依据",
+      consequence: "high", consequenceJustification: "样本量低估会让关键试验功效不足",
+      riskJustification: "后果为高而影响力为中，风险随后果",
+      impact: "low", impactJustification: "加权外部对照在监管上已有讨论",
+      technicalCriteria: [{ criterion: "重建后的中位 PFS 与来源试验相差不超过 5%", rationale: "与模型风险相称" }],
+      appropriateness: "文献模型覆盖二线 NSCLC 多西他赛单药的人群与终点",
+    },
+  });
 
   // --- 人群（v1 更早，v2 当前）
   await store.savePopulation({

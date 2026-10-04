@@ -1448,10 +1448,38 @@ export class AutopilotService {
     }, { expectedRevision: episode.revision, projectId: episode.projectId });
   }
 
+  /**
+   * One occurrence of an agenda is scheduled by one caller at a time, across
+   * replicas. What the episode will do is a model decision (`chooseNextAction`),
+   * and the episode's own insert already lets only one of two schedulers win —
+   * but the loser used to find that out only after it had asked the model too,
+   * and paid for an answer nothing would read. The episode id is a hash of the
+   * agenda and the occurrence's identity, so a transaction-scoped advisory lock
+   * on the same identity makes the second caller wait for the first, find the
+   * episode it committed, and read the decision back from it (`selection`)
+   * instead of asking again. The lock is released with the transaction, so a
+   * caller that dies holds nothing; a store without a database has one process
+   * to serialize and keeps the replay recovery below.
+   *
+   * The lock's connection waits while the other connections do the work, so the
+   * pool must hold more connections than schedulers running at once (the
+   * scheduler tick is sequential; a researcher's run-now is one more).
+   * @param {string} userId @param {string} agendaId @param {any} input */
+  async schedule(userId, agendaId, input) {
+    const database = this.documents.database;
+    if (!database) return this.#schedule(userId, agendaId, input);
+    const manual = input?.trigger === "manual" || input?.trigger === "follow-up";
+    const identity = manual ? `manual:${input?.requestId}` : `date:${input?.date}`;
+    return database.transaction(async (/** @type {any} */ client) => {
+      await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`evimed-autopilot-episode:${userId}:${agendaId}:${identity}`]);
+      return this.#schedule(userId, agendaId, input);
+    });
+  }
+
   /** Enqueue and settle through the same durable ledger. A real store commits the
    * episode, job and agenda CAS atomically; injected stores retain replay recovery.
    * @param {string} userId @param {string} agendaId @param {any} input */
-  async schedule(userId, agendaId, input) {
+  async #schedule(userId, agendaId, input) {
     const agenda = await this.checkInactivity(userId, agendaId);
     this.assertNotArchived(agenda);
     if (agenda.payload.status === "stopped") throw new HttpError(409, "autopilot_stopped", "This research agenda has been stopped.");

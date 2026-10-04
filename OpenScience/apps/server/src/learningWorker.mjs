@@ -28,7 +28,7 @@ import { HttpError } from "./security.mjs";
 export class LearningWorker {
   /**
    * @param {{jobs: any, distillation: any, consolidation: any, resolveProject?: (job: any) => Promise<any>,
-   *          resolveRun?: (project: any, job: any) => Promise<any>, maintain?: () => Promise<void>,
+   *          resolveRun?: (project: any, job: any) => Promise<any>, maintain?: () => Promise<void>, sweep?: () => Promise<unknown>,
    *          enabled?: boolean, window?: string, windowTimeZone?: string, concurrency?: number,
    *          pollMs?: number, leaseMs?: number, reconcileMs?: number, now?: () => Date}} dependencies
    */
@@ -39,6 +39,9 @@ export class LearningWorker {
     resolveProject = async () => null,
     resolveRun = async () => null,
     maintain = async () => {},
+    // Work the loop owes a lesson that an interruption left undone (a correction whose run ended while the process was down).
+    // It rides the reconcile timer, which already runs whether or not the loop may spend, and adds no timer of its own.
+    sweep = async () => {},
     enabled = true,
     window: activeWindow = "",
     // Which zone the window's numbers are written in. Empty means the process
@@ -69,6 +72,7 @@ export class LearningWorker {
     this.resolveProject = resolveProject;
     this.resolveRun = resolveRun;
     this.maintain = maintain;
+    this.sweep = sweep;
     this.enabled = enabled;
     this.window = parseWindow(activeWindow);
     this.windowTimeZone = String(windowTimeZone ?? "");
@@ -287,6 +291,11 @@ export class LearningWorker {
       .then(() => this.maintain())
       .catch((error) => {
         this.lastError = typeof error?.code === "string" ? error.code : "learning_maintenance_failed";
+      })
+      // Its own failure never undoes the maintenance above, and the maintenance's never skips it.
+      .then(() => this.sweep())
+      .catch((error) => {
+        this.lastError = typeof error?.code === "string" ? error.code : "learning_sweep_failed";
       })
       .then(() => null)
       .finally(() => { this.reconciling = null; });
