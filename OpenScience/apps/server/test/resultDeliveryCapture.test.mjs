@@ -250,6 +250,9 @@ test("a run that finishes with no receipt hands its listed files to capture, and
   // Nothing to hand over: no receipt and no file.
   const empty = { ...f.run, id: "run-three", status: "failed", artifacts: [], unverifiedArtifacts: [] };
   assert.equal(await captureFinishedRun({ results: f.results, project: f.project, run: empty, readReceipt: readDeliveryReceipt }), null);
+  // The platform's own background projects keep to what a receipt vouches for.
+  const background = { ...f.run, id: "run-background", status: "succeeded", artifacts: [f.reportPath], unverifiedArtifacts: [] };
+  assert.equal(await captureFinishedRun({ results: f.results, project: f.project, run: background, readReceipt: readDeliveryReceipt, unreceipted: false }), null);
   // A receipt that is there is read as before, and what it names stays bound.
   // Another run's, since a version's identity is the run, the path and the bytes:
   // the same run's files were just captured as observed.

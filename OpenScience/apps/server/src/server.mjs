@@ -2485,7 +2485,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           // researcher was handed are theirs to inspect, revise, replay and
           // export either way. Those the receipt does not vouch for are
           // captured as observed.
-          const captured = await captureFinishedRun({ results: resultProvenance, project, run, readReceipt: readDeliveryReceipt });
+          const captured = await captureFinishedRun({ results: resultProvenance, project, run, readReceipt: readDeliveryReceipt,
+            unreceipted: !isInternalProject(project.id) });
           for (const failure of captured?.failures ?? []) await securityAudit(config, "result.capture", "failed", {
             userId: project.userId, projectId: project.id, runId: run.id, code: failure.code });
         } catch (error) {

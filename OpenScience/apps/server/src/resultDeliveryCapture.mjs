@@ -190,11 +190,15 @@ export async function captureResultDelivery({ results, project, run, receipt = n
  * What a finished run hands to capture: its receipt when it left a valid one,
  * and every deliverable file it listed, graded or not. Nothing to capture is
  * `null`; a run that left neither a receipt nor a file is not an error.
- * @param {{results:any,project:any,run:any,readReceipt:(project:any, run:any)=>Promise<any>}} input
+ *
+ * `unreceipted` is off for the platform's own background projects, whose runs
+ * are jobs rather than something a researcher was handed: what they got
+ * captured before — the files a receipt vouches for — is all they get.
+ * @param {{results:any,project:any,run:any,readReceipt:(project:any, run:any)=>Promise<any>,unreceipted?:boolean}} input
  */
-export async function captureFinishedRun({ results, project, run, readReceipt }) {
+export async function captureFinishedRun({ results, project, run, readReceipt, unreceipted = true }) {
   const receipt = await readReceipt(project, run);
-  const files = [...(run.artifacts ?? []), ...(run.unverifiedArtifacts ?? [])];
+  const files = unreceipted ? [...(run.artifacts ?? []), ...(run.unverifiedArtifacts ?? [])] : [];
   if (!receipt && files.length === 0) return null;
   return captureResultDelivery({ results, project, run, receipt, files });
 }
