@@ -211,6 +211,34 @@ test("the live shape: an unmounted tool, two corrected edits, an accepted delive
   });
 });
 
+test("the live shape with the capability's other required file absent is delivered marked unverified, and says both", async () => {
+  // The manifest requires `signals.csv` beside the report; the live run's package
+  // held the report and its notes only. That is the missing-file rule's to say,
+  // as it was before the tool failure stopped hiding it: the files go out marked,
+  // with the missing one named, and the tool is a notice beside it.
+  const manifest = { ...ADR, outputs: [{ path: "safety-report.md", required: true }, { path: "signals.csv", required: true }] };
+  await withRun(manifest, async ({ project, dispatch, turn, reconcile }) => {
+    const run = await dispatch();
+    const report = "# 报告\n\n正文。\n";
+    await writeDelivery(project, run.id, { [`${DELIVERABLE_DIR}/safety-report.md`]: report });
+    turn([
+      failedCall("web_read", {}, "UNKNOWN_TOOL", 'Error: unknown tool "web_read"'),
+      call("write", { file_path: `${DELIVERABLE_DIR}/safety-report.md`, content: report }),
+      call("evimed_submit_deliverable", { deliverableId: DELIVERABLE }, { output: kernelToolText({ ok: true, data: { accepted: true } }) }),
+      { type: "text", text: "完成。" },
+    ]);
+    const finished = await reconcile();
+    assert.equal(finished.status, "succeeded");
+    assert.equal(finished.errorCode, null);
+    assert.equal(finished.verification, "unverified");
+    assert.deepEqual(finished.artifacts, [`${DELIVERABLE_DIR}/safety-report.md`]);
+    assert.deepEqual(finished.qualityNotices.map((notice) => `${notice.severity}:${notice.code}`).sort(), [
+      "advice:run_tool_unavailable",
+      "must-fix:specialist_required_output_missing",
+    ]);
+  });
+});
+
 test("an uncorrected research-tool failure with the files written is delivered with a notice naming the tool, how often, and the last code it gave", async () => {
   await withRun(ADR, async ({ project, dispatch, turn, reconcile }) => {
     await dispatch();
