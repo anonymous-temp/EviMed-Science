@@ -9,7 +9,7 @@ import {
 } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 import { callModelForControlPlane } from "./modelGateway.mjs";
-import { memoryPausedFor } from "./researchMemory.mjs";
+import { memoryPausedFor, sourceLinkOf } from "./researchMemory.mjs";
 
 /**
  * What extraction may write.
@@ -398,6 +398,58 @@ const CATCH_ALL_PROJECT_ID = "default";
  */
 const PROJECT_SUBJECT_KINDS = new Set(["project_fact", "decision", "follow_up"]);
 
+/**
+ * The interval a candidate says its fact holds over, when the source states one.
+ *
+ * Which dates a source gives, and whether a fact holds only from or until one,
+ * is the model's reading; what code checks is the closed half: a date is an ISO
+ * date or instant, the interval is not empty, and the year it names is a year
+ * the cited source actually contains — a date the source never mentions is an
+ * invention, and a wrong "until" would take a true memory out of recall. A date
+ * that fails is dropped and the memory is written without it; nothing is
+ * refused over a date.
+ *
+ * @param {any} candidate @param {string} sourceText
+ * @returns {{ validFrom: string | null, invalidSince: string | null }}
+ */
+function validityOfCandidate(candidate, sourceText) {
+  /** @param {unknown} value */
+  const dateOf = (value) => {
+    const text = typeof value === "string" ? value.trim() : "";
+    if (!/^\d{4}-\d{2}-\d{2}(?:T\d{2}:\d{2}(?::\d{2})?Z?)?$/.test(text)) return null;
+    const time = Date.parse(/T/.test(text) ? (text.endsWith("Z") ? text : `${text}Z`) : `${text}T00:00:00Z`);
+    if (!Number.isFinite(time) || !sourceText.includes(text.slice(0, 4))) return null;
+    return new Date(time).toISOString();
+  };
+  const from = dateOf(candidate.validFrom);
+  const until = dateOf(candidate.validUntil);
+  if (from && until && Date.parse(from) >= Date.parse(until)) return { validFrom: null, invalidSince: null };
+  return { validFrom: from, invalidSince: until };
+}
+
+/**
+ * The sources a candidate says it rests on, as recorded identifiers: the
+ * `src_` id of a knowledge-base document, or a DOI. Which of the sources in a
+ * result a fact rests on is the model's judgement; that the identifier is
+ * well-formed and appears in the very source the candidate quotes is checked
+ * here, and one that does not is dropped. Never matched by name.
+ *
+ * @param {unknown} values @param {string} sourceText
+ */
+function sourceLinksOfCandidate(values, sourceText) {
+  if (!Array.isArray(values)) return [];
+  const haystack = sourceText.toLowerCase();
+  /** @type {{ type: string, id: string, version: string | null }[]} */
+  const links = [];
+  for (const value of values.slice(0, 8)) {
+    const text = typeof value === "string" ? value.trim() : "";
+    const link = sourceLinkOf({ type: text.startsWith("src_") ? "knowledge_source" : "doi", id: text });
+    if (!link || !haystack.includes(link.id.toLowerCase()) || links.some((item) => item.id === link.id && item.type === link.type)) continue;
+    links.push(link);
+  }
+  return links;
+}
+
 function validateCandidate(candidate, sourceMap, project, run, rejections = null) {
   const reject = (reason) => {
     if (rejections) rejections.push(reason);
@@ -413,6 +465,7 @@ function validateCandidate(candidate, sourceMap, project, run, rejections = null
   const sourceRef = boundedText(candidate.sourceRef, 500);
   const quote = boundedText(candidate.evidenceQuote, 4_000);
   const supersedesKey = boundedText(candidate.supersedes, 255).toLowerCase();
+  const conflictsWithKey = boundedText(candidate.conflictsWith, 255).toLowerCase();
   const source = sourceMap.get(sourceRef);
   if (!candidateKinds.has(kind)) return reject(`unknown kind "${kind}"`);
   if (!candidateScopes.has(scope)) return reject(`unknown scope "${scope}"`);
@@ -486,6 +539,11 @@ function validateCandidate(candidate, sourceMap, project, run, rejections = null
     // The key of a stored fact this one replaces — the model's judgement,
     // resolved and checked against what is stored in recordRun.
     supersedesKey: memoryKeyPattern.test(supersedesKey) ? supersedesKey : "",
+    // The key of a stored fact this one disagrees with while replacing nothing:
+    // the same judgement and the same check, and both records stay in force.
+    conflictsWithKey: memoryKeyPattern.test(conflictsWithKey) ? conflictsWithKey : "",
+    ...validityOfCandidate(candidate, source.text),
+    sourceLinks: sourceLinksOfCandidate(candidate.sources, source.text),
     confidence: ORIGIN_CONFIDENCE[origin],
     importance: boundedScore(candidate.importance, 0.6),
     sensitive,
@@ -658,7 +716,10 @@ function continuedFrom(previous, candidate) {
     expiresAt: origin === "inferred" ? candidate.expiresAt ?? previous.expiresAt ?? null : null,
     // A replaced fact seen again is still replaced, and still says by what.
     supersededBy: previous.supersededBy ?? null,
-    invalidSince: previous.invalidSince ?? null,
+    // The interval a source stated is kept; a source that states one for a
+    // fact that had none supplies it.
+    invalidSince: previous.invalidSince ?? candidate.invalidSince ?? null,
+    validFrom: previous.validFrom ?? candidate.validFrom ?? null,
   };
 }
 
@@ -687,6 +748,29 @@ function supersededRecord(candidate, known) {
     return { rejection: `"${candidate.key}" (${candidate.kind}) cannot supersede "${key}" (${record.kind})` };
   }
   return { record };
+}
+
+/**
+ * The stored record a candidate says it disagrees with, or why it names none.
+ *
+ * Unlike a replacement, a disagreement may cross families — a source's
+ * statement against the researcher's own, which is exactly the case worth
+ * labelling — so the only closed checks are that the key names a memory in
+ * force, that this conversation may see it (the researcher's, this project's or
+ * this session's), and that it is not the memory being written.
+ *
+ * @param {any} candidate @param {string} writtenId @param {Iterable<any>} known @param {any} project @param {any} run
+ * @returns {{ record: any } | { rejection: string } | null}
+ */
+function conflictingRecord(candidate, writtenId, known, project, run) {
+  const key = candidate.conflictsWithKey;
+  if (!key || key === candidate.key) return null;
+  const record = [...known].find((item) => item.key === key && item.status === "active" && item.id !== writtenId
+    && item.kind !== "run_summary"
+    && (item.scope === "user"
+      || (item.scope === "project" && item.scopeId === project.id)
+      || (item.scope === "session" && item.scopeId === run.sessionId)));
+  return record ? { record } : { rejection: `"${candidate.key}" conflicts with "${key}", which is no memory in force this conversation can see` };
 }
 
 /**
@@ -720,7 +804,7 @@ function writeReason(action, contradiction, statusReason) {
 function skippedResult(source, excluded, runSummary = null) {
   return {
     runSummary, extracted: 0, activated: 0, source, proposed: 0, rejected: 0, rejectionReasons: [],
-    pending: 0, pendingReasons: [], sensitive: 0, conflicts: [], written: [], corrections: [], forgotten: [],
+    pending: 0, pendingReasons: [], sensitive: 0, conflicts: [], disagreements: [], written: [], corrections: [], forgotten: [],
     extractionError: null, excluded,
   };
 }
@@ -900,6 +984,9 @@ export class MemoryIntelligence {
     /** Confirmed memories this conversation changed: for the run's own notice,
      *  the inbox and the audit line. A record of a write, never a refusal of one. */
     const conflicts = [];
+    /** Disagreements this run recorded between two memories, both left in force.
+     *  @type {{ recordId: string, otherId: string, key: string, otherKey: string }[]} */
+    const disagreements = [];
     /** Every record this run wrote and what the write did to it: the run's own
      *  result, and the input of the learning loop's correction trigger. */
     const written = [];
@@ -940,7 +1027,7 @@ export class MemoryIntelligence {
       if (replacing && "record" in replacing && typeof this.memoryStore.supersede === "function") {
         ({ record: stored, superseded } = await this.memoryStore.supersede(project.userId, replacing.record.id, next, candidate.evidence, {
           reason: writeReason("conversation evidence replaced an earlier fact", null, next.statusReason),
-          by: "extraction", runId: run.id ?? null,
+          by: "extraction", runId: run.id ?? null, sourceLinks: candidate.sourceLinks,
         }));
         known.set(canonicalKey(superseded), superseded);
       } else {
@@ -959,6 +1046,9 @@ export class MemoryIntelligence {
         ...(superseded ? { supersedes: superseded.id } : {}),
       });
       known.set(canonicalKey(stored), stored);
+      // A proposal from an outside agent records no disagreement either: it is
+      // not in force, so it is not one side of anything yet.
+      if (!holdForOwner && !superseded) await this.#recordDisagreement(project, run, candidate, stored, known, disagreements, rejections);
       if (contradiction) {
         // After the write, never before it: a notice that names a change the
         // upsert then failed to make would be the same lie in the other
@@ -993,6 +1083,7 @@ export class MemoryIntelligence {
       // rather than implying a confirmation would change it.
       sensitive,
       conflicts,
+      disagreements,
       written,
       // A correction the researcher made, newly written or changed — the
       // learning loop's "the user corrected the assistant" signal. Whether a
@@ -1009,6 +1100,32 @@ export class MemoryIntelligence {
       // carry.
       excluded,
     };
+  }
+
+  /**
+   * Record that the memory just written disagrees with another stored one, when
+   * the conversation said so. A label and not a verdict: both memories stay in
+   * force, recall tells the model they disagree, and nothing is rewritten. A
+   * memory that cannot be related (the other is gone, replaced, or not this
+   * conversation's) is reported in the run's rejections and the write stands.
+   *
+   * @param {any} project @param {any} run @param {any} candidate @param {any} stored @param {Map<string, any>} known
+   * @param {any[]} disagreements @param {string[]} rejections
+   */
+  async #recordDisagreement(project, run, candidate, stored, known, disagreements, rejections) {
+    const target = conflictingRecord(candidate, stored.id, known.values(), project, run);
+    if (!target) return;
+    if ("rejection" in target) { rejections.push(target.rejection); return; }
+    if (typeof this.memoryStore.markConflict !== "function") return;
+    try {
+      await this.memoryStore.markConflict(project.userId, stored.id, target.record.id, {
+        reason: `conversation evidence: "${candidate.key}" disagrees with "${target.record.key}"`,
+      });
+      disagreements.push({ recordId: stored.id, otherId: target.record.id, key: stored.key, otherKey: target.record.key });
+    } catch (error) {
+      if (!(error instanceof HttpError)) throw error;
+      rejections.push(`"${candidate.key}" could not be marked as disagreeing with "${target.record.key}": ${error.code}`);
+    }
   }
 
   /**
@@ -1088,7 +1205,7 @@ export class MemoryIntelligence {
         // hands back on `revisions[].reason`.
         reason: writeReason(previous ? "conversation evidence updated the current memory" : "conversation evidence created the memory",
           contradiction, next.statusReason),
-        by: "extraction", runId: run.id ?? null,
+        by: "extraction", runId: run.id ?? null, sourceLinks: candidate.sourceLinks,
       });
       return { stored, next };
     } catch (error) {
@@ -1101,7 +1218,7 @@ export class MemoryIntelligence {
         expectedVersion: current.version,
         // The retry writes the same record, so it carries the same reason.
         reason: writeReason("conversation evidence retried after a concurrent memory update", contradiction, retried.statusReason),
-        by: "extraction", runId: run.id ?? null,
+        by: "extraction", runId: run.id ?? null, sourceLinks: candidate.sourceLinks,
       });
       return { stored, next: retried };
     }
@@ -1296,7 +1413,7 @@ export class MemoryIntelligence {
                 // No confidence: a number the model types is not a measurement,
                 // and the page used to print it as one. What a record is worth
                 // follows from its origin; how established it is is counted.
-                "Each candidate must contain scope, kind, key, value, summary, origin, importance, sensitive, sourceRef, evidenceQuote.",
+                "Each candidate must contain scope, kind, key, value, summary, origin, importance, sensitive, sourceRef, evidenceQuote. It may also carry validFrom, validUntil, conflictsWith and sources, described below.",
                 "You are building a long-term picture of this user across many sessions, so prefer what will still be true next month over what only matters in this conversation.",
                 // The language of what is stored. Seen on the live site
                 // 2026-09-19: Chinese conversations produced English memories.
@@ -1378,6 +1495,14 @@ export class MemoryIntelligence {
                 // in force and is in the same scope is checked in code
                 // (supersededRecord), and an unchecked claim is dropped.
                 "When this conversation changes a stored fact — a dose, a drug, a population, a threshold, a decision — reuse its key with the new value; the store keeps the old value as history. If the new fact replaces one stored under a different key, give that key as supersedes (it must be in existingMemories, in the same scope), so the old one stops being used instead of standing beside the new one.",
+                // Time, disagreement and provenance of a fact (2026-10-04). Each is
+                // the model's reading; code checks the closed half (an ISO date
+                // whose year the source contains, a key that is in force, an
+                // identifier that appears in the quoted source) and drops what
+                // fails without refusing the memory.
+                "When a fact holds only from or until a date the source itself states — a guideline's effective date, a protocol version, a dose that applied until a change — give validFrom and/or validUntil as ISO dates (YYYY-MM-DD) copied from the source. Never invent a date, and leave both out when the source states none.",
+                "When this conversation states something that disagrees with a stored fact and neither replaces the other — a label that says one thing and the researcher another, two sources that differ — keep both: give the stored fact's key as conflictsWith (it must be in existingMemories, in the same scope) and do not overwrite it. Use supersedes instead when the new fact replaces the old.",
+                "When a fact rests on a knowledge-base document or a published work named in its source, list those as sources: the document id (src_…) or the DOI, exactly as the source gives it. Omit sources when it rests on none.",
                 // Production, 2026-09-19: many of the acceptance account's 54
                 // records began "Reinforced:" or "Refined:" -- the words of the
                 // line above, the likeliest source, turned into labels on the
