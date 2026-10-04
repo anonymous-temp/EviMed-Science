@@ -94,7 +94,10 @@ vcr_case("N38a", c("AC-07", "AC-30"), function() {
                       analysis = list(method = "fisher_exact", alpha = 0.025, sided = 1L)), list(inp))
   tab_ok <- identical(rt$status, "succeeded") && identical(rt$counts$realPatients, 100L) &&
     abs(vcr_measure_value(rt, "primary_p_value") - vcr_measure_value(rn, "primary_p_value")) < 1e-15 &&
-    vcr_measure_value(rt, "cells_changing_conclusion") == vcr_measure_value(rn, "cells_changing_conclusion")
+    vcr_measure_value(rt, "cells_changing_conclusion") == vcr_measure_value(rn, "cells_changing_conclusion") &&
+    # counts a caller typed are a summary; the same numbers analysed from patients are a calculation
+    all(vapply(rn$measures, function(m) identical(m$source, "aggregate"), logical(1))) &&
+    all(vapply(rt$measures, function(m) identical(m$source, "calculated"), logical(1)))
   list(pass = hand_ok && cc_ok && grid_ok && brute_ok && dir_ok && tab_ok,
        detail = sprintf("hand table p = 37/924, 7/924, 112/924, 28/924 (max |d| %.1e), tipping distance %g at (%g, %g), share %.2f; complete cases p %.5f = 6/252; grids vs fisher.test / prop.test / binom.test max |d| %.1e; brute-force nearest tipping point agrees (against: %s, in favour: %s); table input = counts input %s",
                         max(abs(got - want)), vcr_measure_value(r, "tipping_distance"), vcr_measure_value(r, "tipping_treatment_responders"), vcr_measure_value(r, "tipping_control_responders"),

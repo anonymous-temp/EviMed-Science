@@ -807,11 +807,12 @@ function unknownFieldsRefusal(paths) {
 
 /**
  * The keys of a comparator design that declare a robustness analysis beside its primary comparison, and what the primary then does not
- * read: `negativeControls` (a list of outcomes the treatment cannot affect), `tippingPoint` (an object with the tipping-point job's own
- * keys: how the missing outcomes are stressed), and the two keys only the negative-control job reads (`primary`, `effectScale`).
+ * read: `negativeControls` (a list of `{ name, column }`: outcomes the treatment cannot affect, each a 0/1 event column of the study's
+ * patient table), `tippingPoint` (an object with the tipping-point job's own keys: how the missing outcomes are stressed), and the one
+ * key only the negative-control job reads (`effectScale`).
  */
 const ROBUSTNESS_DECLARATIONS = Object.freeze(["negativeControls", "tippingPoint"]);
-const NEGATIVE_CONTROL_ONLY_KEYS = Object.freeze(["primary", "effectScale"]);
+const NEGATIVE_CONTROL_ONLY_KEYS = Object.freeze(["effectScale"]);
 
 /** The design with the keys only a robustness stage reads taken out, so that the primary is held to what it reads. @param {Record<string, any>} configuration */
 function withoutRobustnessKeys(configuration) {
@@ -836,6 +837,13 @@ function robustnessRefusal(configuration, endpoint) {
   if (configuration.tippingPoint !== undefined && endpoint !== "binary" && endpoint !== "time_to_event") {
     return { code: "vcr_job_scenario_invalid", message: `缺失结局的临界点分析只用于二分类和事件时间终点，这个研究的终点是 ${endpoint}。` };
   }
+  // A control is a column of the patient table, analysed by the engine with the primary's adjustment. A number the design states in
+  // its place would be a result nobody computed (the write path refuses `counts` for the same reason).
+  const controls = list(configuration.negativeControls);
+  if (controls.some((control) => !isObject(control) || typeof control.name !== "string" || typeof control.column !== "string")) {
+    return { code: "vcr_job_scenario_invalid",
+      message: "阴性对照每项写 name 和 column：column 是研究数据表里的 0/1 事件列，由引擎按主分析的加权方式计算；自己写的估计值不进研究计划，结果里的数字只来自引擎对授权数据的计算。" };
+  }
   return null;
 }
 
@@ -846,11 +854,14 @@ function robustnessRefusal(configuration, endpoint) {
  */
 function negativeControlScenario(configuration, endpoint, estimand) {
   const weighting = configuration.weighting ?? (configuration.method === "propensity" || estimand !== "ATT" ? "propensity" : "entropy_balance");
+  // The controls are 0/1 event indicators (a risk or odds ratio), whatever the primary's endpoint is: the scenario states no endpoint, and
+  // the primary effect is the design's own outcome column when it is binary (the same adjustment, so a calibrated p-value is possible).
   /** @type {Record<string, any>} */
-  const scenario = { endpoint: { ...object(configuration.endpoint), type: endpoint }, estimand, weighting, controls: configuration.negativeControls };
-  for (const key of ["covariates", "treatmentColumn", "moments", "cohortRules", "effectScale", "primary"]) {
+  const scenario = { estimand, weighting, controls: configuration.negativeControls };
+  for (const key of ["covariates", "treatmentColumn", "moments", "cohortRules", "effectScale"]) {
     if (configuration[key] !== undefined) scenario[key] = configuration[key];
   }
+  if (endpoint === "binary" && typeof configuration.outcomeColumn === "string") scenario.primary = { column: configuration.outcomeColumn };
   return scenario;
 }
 
@@ -867,12 +878,12 @@ function tippingPointScenario(configuration, endpoint) {
 }
 
 /**
- * Whether a negative-control or a tipping-point stage reads the subject table: a control (or the primary effect) given as a column, a
- * tipping point of a binary outcome given as a column, and every time-to-event tipping point. The rest are numbers the design states.
- * @param {"negative_control" | "tipping_point"} kind @param {Record<string, any>} scenario
+ * Whether a tipping-point stage reads the subject table: a binary tipping point given as an outcome column and every time-to-event one.
+ * One given as counts reads no patients (a person typed those; the model cannot, the write path refuses `counts`). A negative-control
+ * stage always does: its controls are columns.
+ * @param {Record<string, any>} scenario
  */
-function robustnessReadsPatients(kind, scenario) {
-  if (kind === "negative_control") return [...list(scenario.controls), scenario.primary].some((source) => isObject(source) && source.column !== undefined);
+function tippingReadsPatients(scenario) {
   return object(scenario.endpoint).type === "time_to_event" || scenario.outcomeColumn !== undefined;
 }
 
@@ -977,13 +988,12 @@ export function vcrBuildStages(item, context) {
     const extras = [];
     if (list(configuration.negativeControls).length) {
       const scenario = negativeControlScenario(configuration, endpoint, estimand);
-      extras.push(stage("negative_control_comparator", scenario, { stage: "negative_control", endpoint, bindAll: false,
-        snapshot: robustnessReadsPatients("negative_control", scenario) }));
+      extras.push(stage("negative_control_comparator", scenario, { stage: "negative_control", endpoint, bindAll: false, snapshot: true }));
     }
     if (isObject(configuration.tippingPoint)) {
       const scenario = tippingPointScenario(configuration, endpoint);
       extras.push(stage("tipping_point", scenario, { stage: "tipping_point", endpoint, bindAll: false,
-        snapshot: robustnessReadsPatients("tipping_point", scenario) }));
+        snapshot: tippingReadsPatients(scenario) }));
     }
     const unknown = extras.flatMap((entry) => entry.unknown);
     return unknown.length ? { refused: unknownFieldsRefusal(unknown) } : { extras };

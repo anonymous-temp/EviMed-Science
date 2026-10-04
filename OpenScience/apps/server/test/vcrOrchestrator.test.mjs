@@ -1120,7 +1120,9 @@ test("a study's declared design reaches the robustness methods: negative control
   assert.equal(nc.ok, true, JSON.stringify(nc));
   assert.deepEqual(nc.stages.map((/** @type {any} */ entry) => [entry.stage, entry.jobKind]), [["primary", "weight_comparator"], ["negative_control", "negative_control_comparator"]]);
   assert.equal(nc.stages[0].scenario.negativeControls, undefined, "the primary reads only what it reads");
-  assert.equal(nc.stages[1].snapshot, true, "controls given as columns are read from the study's patients");
+  assert.equal(nc.stages[1].snapshot, true, "controls are columns of the study's patients");
+  assert.equal(nc.stages[1].scenario.endpoint, undefined, "the controls are 0/1 indicators whatever the primary's endpoint is");
+  assert.equal(nc.stages[1].scenario.primary, undefined, "a time-to-event primary is not a column the screen can analyse");
   assert.deepEqual(nc.stages[1].scenario.controls, controls);
   assert.equal(nc.stages[1].scenario.weighting, "entropy_balance");
   assert.equal(nc.stages[1].scenario.estimand, "ATT");
@@ -1131,14 +1133,12 @@ test("a study's declared design reaches the robustness methods: negative control
   assert.equal(ncPropensity.stages[1].scenario.weighting, "propensity");
   assert.equal(ncPropensity.stages[1].scenario.estimand, "ATE");
   assert.deepEqual(stageIssues(ncPropensity.stages[1]), []);
-  // controls analysed elsewhere (an estimate and its standard error) and a primary effect source: no patient rows are read
-  const analysed = planComparator({ covariates: ["age"], method: "propensity", effectScale: "log_hazard_ratio", primary: { estimate: -0.4, se: 0.12 },
-    negativeControls: [{ name: "a", estimate: 0.05, se: 0.1 }, { name: "b", estimate: -0.02, se: 0.11 }] });
-  assert.equal(analysed.ok, true, JSON.stringify(analysed));
-  assert.equal(analysed.stages[1].snapshot, false);
-  assert.equal(analysed.stages[1].scenario.effectScale, "log_hazard_ratio");
-  assert.deepEqual(analysed.stages[1].scenario.primary, { estimate: -0.4, se: 0.12 });
-  assert.deepEqual(stageIssues(analysed.stages[1]), []);
+  // a binary primary's own outcome column is the effect of interest, analysed by the same adjustment, so the calibrated p-value is possible
+  const ncBinary = planComparator({ covariates: ["age"], outcomeColumn: "response", method: "aipw", effectScale: "log_odds_ratio", negativeControls: controls }, {}, CMP_BINARY);
+  assert.equal(ncBinary.ok, true, JSON.stringify(ncBinary));
+  assert.deepEqual(ncBinary.stages[1].scenario.primary, { column: "response" });
+  assert.equal(ncBinary.stages[1].scenario.effectScale, "log_odds_ratio");
+  assert.deepEqual(stageIssues(ncBinary.stages[1]), []);
   // an empty list declares no controls, and nothing else is planned
   const none = planComparator({ covariates: ["age"], tau: 12, negativeControls: [] });
   assert.equal(none.ok, true, JSON.stringify(none));
@@ -1193,6 +1193,9 @@ test("a robustness declaration the endpoint or the design cannot support is refu
   refused(planComparator({ covariates: ["age"], tippingPoint: BINARY_TIPPING }, {}, { ...CMP_T2, definition: null }), "vcr_scenario_endpoint_missing", /终点类型/);
   // a binary prognostic route with no declared score says what to declare instead of reaching the engine's refusal
   refused(planComparator({ endpoint: { type: "binary" }, outcomeColumn: "y" }, { route: "prognostic_adjustment" }, CMP_BINARY_T3), "vcr_job_scenario_invalid", /prognosticScoreColumn/);
+  // a number the design states in place of a column would be a result nobody computed: refused, and the sentence says what to write
+  refused(planComparator({ covariates: ["age"], tau: 12, negativeControls: [{ name: "a", estimate: 0.05, se: 0.1 }] }), "vcr_job_scenario_invalid", /column/);
+  refused(planComparator({ covariates: ["age"], tau: 12, negativeControls: [{ column: "nc_a" }] }), "vcr_job_scenario_invalid", /name 和 column/);
   // a key the declaration wrote and its method does not read is the declaration's own: refused, not dropped
   const typo = refused(planComparator({ covariates: ["age"], tau: 12, negativeControls: [{ name: "a", column: "nc_a", scale: "log" }] }), "vcr_scenario_unknown_fields", /引擎不读的字段/);
   assert.ok(typo.paths.some((/** @type {string} */ path) => path.includes("scale")), JSON.stringify(typo.paths));
@@ -1201,8 +1204,9 @@ test("a robustness declaration the endpoint or the design cannot support is refu
   // a design-level typo is still found when robustness stages are planned beside the comparison
   const design = refused(planComparator({ covarites: ["age"], covariates: ["age"], tau: 12, negativeControls: [{ name: "a", column: "nc_a" }] }), "vcr_scenario_unknown_fields", /covarites/);
   assert.ok(design.paths.includes("covarites"));
-  // `primary` and `effectScale` belong to the negative-control job: with no controls declared nobody reads them
-  refused(planComparator({ covariates: ["age"], tau: 12, primary: { estimate: 0.1, se: 0.1 } }), "vcr_scenario_unknown_fields", /primary/);
+  // `effectScale` belongs to the negative-control job, and a typed primary effect belongs to no job: nobody reads them
+  refused(planComparator({ covariates: ["age"], tau: 12, effectScale: "log_risk_ratio" }), "vcr_scenario_unknown_fields", /effectScale/);
+  refused(planComparator({ covariates: ["age"], tau: 12, primary: { estimate: 0.1, se: 0.1 }, negativeControls: [{ name: "a", column: "nc_a" }] }), "vcr_scenario_unknown_fields", /primary/);
   // a literature or hybrid control reads neither declaration
   refused(planComparator({ method: "maic", endpoint: { type: "binary" }, covariates: ["age"], targets: { age: 60 }, negativeControls: [{ name: "a", column: "nc_a" }] },
     { route: "literature_control" }, { ...CMP_T2, study: { ...seedStudy, dataTier: "T1" } }),

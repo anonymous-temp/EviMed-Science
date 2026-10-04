@@ -1182,3 +1182,52 @@ test("one run per study at a time, and a study another process holds is left alo
   assert.equal(module.dispatched.length, dispatched, "a run already out holds the slot");
   assert.equal(vcrScenarioHash({}), vcrScenarioHash({}), "the hash is stable, which is what makes the job key idempotent");
 });
+
+// --- robustness methods ---
+test("a comparator that declares robustness analyses plans them beside the comparison; the one that needs no patients runs while the others wait for their grant, and is filed as one limited result", options, async () => {
+  const module = compose({
+    dispatch: false,
+    // the double's engine answers the tipping point as the real one does for counts a person stated
+    resultFor: (job) => engineResult(job, job.method === "comparator.tipping_point"
+      ? { measures: [{ name: "primary_p_value", value: 0.03, source: "aggregate" }, { name: "cells_changing_conclusion", value: 4, source: "aggregate" }],
+        counts: { realPatients: null }, conclusion: "estimable" }
+      : {}),
+  });
+  const study = await makeStudy("robustness", { dataTier: "T2" });
+  await vcrRuntimeWrite({ store, service: module.service, orchestrator: module.orchestrator, study, what: "definition", items: null, data: { ...definition, endpointType: "binary" } });
+
+  // what the model may write: controls and a tipping point as columns of the study's patients. Counts it would have to type are refused by name.
+  const columns = { covariates: ["age"], outcomeColumn: "response", method: "aipw", endpoint: { type: "binary" },
+    negativeControls: [{ name: "fracture", column: "nc_fracture" }, { name: "cataract", column: "nc_cataract" }],
+    tippingPoint: { direction: "against_treatment", design: { kind: "two_arm" }, outcomeColumn: "response", analysis: { method: "fisher_exact" } } };
+  const counts = { treatment: { n: 60, responders: 30, missing: 8 }, control: { n: 60, responders: 18, missing: 6 } };
+  const typed = await vcrRuntimeWrite({ store, service: module.service, orchestrator: module.orchestrator, study, what: "comparator", items: null, data: {
+    route: "external_control", estimand: "ATT", configuration: { ...columns, tippingPoint: { ...columns.tippingPoint, outcomeColumn: undefined, counts } } } });
+  assert.equal(typed.ok, false);
+  assert.equal(typed.issues[0].code, "vcr_write_field_forbidden");
+  assert.match(typed.issues[0].field, /tippingPoint\.counts/);
+  const written = await vcrRuntimeWrite({ store, service: module.service, orchestrator: module.orchestrator, study, what: "comparator", items: null, data: {
+    route: "external_control", estimand: "ATT", configuration: columns } });
+  assert.equal(written.ok, true, JSON.stringify(written.issues));
+  await drainJobs(module, study);
+  assert.equal((await store.jobs(study.id)).length, 0, "all three stages read patients, and none has a granted snapshot: a data gap, not a failure");
+  const gaps = await store.rows("SELECT key, state, detail FROM evimed_vcr.schedule_marks WHERE study_id = $1 AND kind = 'job' ORDER BY key", [study.id]);
+  assert.deepEqual(gaps.map((mark) => [String(mark.key).split("#")[1], mark.state, mark.detail.reason]),
+    [["negative_control", "skipped", "no_snapshot"], ["primary", "skipped", "no_snapshot"], ["tipping_point", "skipped", "no_snapshot"]]);
+
+  // a person may state counts (an aggregate of someone's report): that stage reads no patients, runs, and is labelled a summary
+  await store.saveComparatorDesign({ studyId: study.id, userId: study.userId, route: "external_control", estimand: "ATT",
+    configuration: { ...columns, tippingPoint: { direction: "against_treatment", design: { kind: "two_arm" }, counts, analysis: { method: "fisher_exact" } } } });
+  await drainJobs(module, study);
+  const jobs = await store.jobs(study.id);
+  assert.deepEqual(jobs.map((job) => job.kind), ["tipping_point"], "the comparison and the screen still wait for patients");
+  const [result] = await store.results(study.id, "comparator");
+  assert.ok(result, "the stage that ran is a comparator result");
+  assert.equal(result.conclusion, "limited", "a stress test alone is not an estimated comparison");
+  assert.equal(result.notEstimableRule, null);
+  assert.deepEqual(result.diagnostics.stages.map((/** @type {any} */ entry) => entry.stage), ["tipping_point"]);
+  assert.deepEqual(result.measures.map((/** @type {any} */ measure) => measure.name).sort(), ["cells_changing_conclusion", "primary_p_value"]);
+  assert.ok(result.measures.every((/** @type {any} */ measure) => measure.source === "aggregate"), "numbers computed from stated counts say they are a summary");
+  assert.equal(result.diagnostics.stageResults.tipping_point.conclusion, "estimable", "the stage's own verdict is not edited");
+});
+// --- end robustness methods ---

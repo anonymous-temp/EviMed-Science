@@ -206,6 +206,14 @@ test("a robustness stage that cannot be computed does not turn the comparison in
   assert.equal(settled.conclusion, "limited");
   assert.equal(settled.notEstimableRule, null);
 
+  // stress tests with no comparison beside them are not an estimated comparison: limited until the comparison lands, then whatever the two say together
+  const lone = vcrMergeStageResult(null, { conclusion: "estimable", notEstimableRule: null, counts: {}, measures: [{ name: "primary_p_value", value: 0.03 }], diagnostics: {}, tables: [] }, stage("tipping_point", "job_5"));
+  assert.equal(lone.conclusion, "limited");
+  assert.equal(lone.diagnostics.stageResults.tipping_point.conclusion, "estimable", "the stage's own verdict is not edited");
+  const landed = vcrMergeStageResult(/** @type {any} */ (asFiled(lone)), primary, stage("primary", "job_1"));
+  assert.equal(landed.conclusion, "estimable");
+  assert.equal(landed.notEstimableRule, null);
+
   // a comparison that is itself not estimable stays so, with its own rule, whatever the screen found
   const refusedPrimary = { conclusion: "not_estimable", notEstimableRule: "overlap_below_floor", counts: {}, measures: [], diagnostics: {}, tables: [] };
   const screen = { conclusion: "estimable", notEstimableRule: null, counts: {}, measures: [{ name: "negative_controls_analysed", value: 12 }], diagnostics: {}, tables: [] };

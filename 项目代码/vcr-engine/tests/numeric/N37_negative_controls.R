@@ -40,7 +40,9 @@ vcr_case("N37a", c("AC-07", "AC-30"), function() {
     p_raw < 1e-20 && vcr_measure_value(r, "negative_controls_analysed") == 45 &&
     vcr_measure_value(r, "negative_controls_signalling_bias") == hand_flags &&
     identical(r$diagnostics$calibration$status, "fitted") && identical(r$conclusion, "estimable") &&
-    !any(vapply(r$measures, function(m) grepl("calibrated_(interval|ci)", m$name), logical(1)))
+    !any(vapply(r$measures, function(m) grepl("calibrated_(interval|ci)", m$name), logical(1))) &&
+    # every estimate here was typed by the caller: the measures are a summary of those numbers and say so
+    all(vapply(r$measures, function(m) identical(m$source, "aggregate"), logical(1)))
   list(pass = ok,
        detail = sprintf("45 negative controls: null mean %.5f (package 0.7922, metafor ML %.5f), SD %.5f (0.2834, %.5f), calibrated p %.6f (0.8389142), uncalibrated p %.1e; %d of 45 flagged (hand count %d); no calibrated interval offered",
                         mu, as.numeric(ml$beta), tau, sqrt(ml$tau2), p_cal, p_raw, vcr_measure_value(r, "negative_controls_signalling_bias"), hand_flags))
@@ -102,7 +104,8 @@ vcr_case("N37c", c("AC-08", "AC-30", "AC-07"), function() {
   verdicts_ok <- all(vapply(r$diagnostics$controls, function(cn) identical(cn$verdict, if (cn$low > 0 || cn$high < 0) "signals_bias" else "consistent_with_null"), logical(1)))
   ok <- identical(r$status, "succeeded") && max(abs(got - want)) < 1e-6 && abs(r$counts$effectiveSampleSize - ess_wi) / ess_wi < 1e-6 &&
     r$diagnostics$bootstrapReplicates >= 2000L && brackets && verdicts_ok && identical(r$counts$realPatients, 614L) &&
-    identical(r$diagnostics$calibration$status, "set_too_small") && vcr_measure_value(r, "negative_controls_analysed") == 3
+    identical(r$diagnostics$calibration$status, "set_too_small") && vcr_measure_value(r, "negative_controls_analysed") == 3 &&
+    all(vapply(r$measures, function(m) identical(m$source, "calculated"), logical(1))) # analysed in the engine from patients
   list(pass = ok,
        detail = sprintf("LaLonde, 3 pre-treatment indicators: log RR %s vs WeightIt %s (max |d| %.1e), ESS %.4f vs %.4f, %d bootstrap draws (job asked for 20), %d of 3 flagged; 3 < 30 controls: %s",
                         paste(sprintf("%.5f", got), collapse = "/"), paste(sprintf("%.5f", want), collapse = "/"), max(abs(got - want)),

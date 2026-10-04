@@ -120,7 +120,8 @@ VCR_TIPPING_DEFAULT_DELTAS <- c(1, 1.25, 1.5, 2, 2.5, 3, 4, 5, 7.5, 10, 15, 20, 
   if (!is.null(sc$counts)) {
     arms <- list(treatment = as_arm(sc$counts$treatment, "scenario.counts.treatment"))
     if (identical(design, "two_arm")) arms$control <- as_arm(sc$counts$control, "scenario.counts.control")
-    return(list(arms = arms, source = "calculated", counts = vcr_counts(), cohort = NULL))
+    # numbers the caller typed are a summary, not patients: every measure computed from them says so
+    return(list(arms = arms, source = "aggregate", counts = vcr_counts(), cohort = NULL))
   }
   tabs <- vcr_job_tables(job)
   subj <- .vcr_main_table(tabs)
@@ -210,18 +211,19 @@ VCR_TIPPING_DEFAULT_DELTAS <- c(1, 1.25, 1.5, 2, 2.5, 3, 4, 5, 7.5, 10, 15, 20, 
   unit_label <- function(row) if (is.null(row)) NULL else list(k1 = row$k1, k0 = row$k0, distance = dist[which(g$k1 == row$k1 & g$k0 == row$k0)],
                                                               rateTreatmentMissing = if (m1 > 0) row$k1 / m1 else NULL,
                                                               rateControlMissing = if (two && m0 > 0) row$k0 / m0 else NULL, p = row$p, significant = row$significant)
-  measures <- list(vcr_measure("primary_p_value", prim$p, source = "calculated"),
-                   vcr_measure("grid_cells", nrow(g), source = "calculated"),
-                   vcr_measure("cells_changing_conclusion", sum(changed), source = "calculated"),
-                   vcr_measure("share_changing_conclusion", mean(changed), source = "calculated"),
-                   vcr_measure("worst_case_p_value", worst_row$p, source = "calculated"))
+  msrc <- if (identical(inp$source, "aggregate")) "aggregate" else "calculated"
+  measures <- list(vcr_measure("primary_p_value", prim$p, source = msrc),
+                   vcr_measure("grid_cells", nrow(g), source = msrc),
+                   vcr_measure("cells_changing_conclusion", sum(changed), source = msrc),
+                   vcr_measure("share_changing_conclusion", mean(changed), source = msrc),
+                   vcr_measure("worst_case_p_value", worst_row$p, source = msrc))
   if (!is.null(near_dir)) {
     measures <- c(measures, list(
-      vcr_measure("tipping_distance", dist[which(g$k1 == near_dir$k1 & g$k0 == near_dir$k0)], source = "calculated"),
-      vcr_measure("tipping_treatment_responders", near_dir$k1, source = "calculated"),
-      vcr_measure("tipping_control_responders", near_dir$k0, source = "calculated")))
-    if (m1 > 0) measures <- c(measures, list(vcr_measure("tipping_treatment_rate", near_dir$k1 / m1, source = "calculated")))
-    if (two && m0 > 0) measures <- c(measures, list(vcr_measure("tipping_control_rate", near_dir$k0 / m0, source = "calculated")))
+      vcr_measure("tipping_distance", dist[which(g$k1 == near_dir$k1 & g$k0 == near_dir$k0)], source = msrc),
+      vcr_measure("tipping_treatment_responders", near_dir$k1, source = msrc),
+      vcr_measure("tipping_control_responders", near_dir$k0, source = msrc)))
+    if (m1 > 0) measures <- c(measures, list(vcr_measure("tipping_treatment_rate", near_dir$k1 / m1, source = msrc)))
+    if (two && m0 > 0) measures <- c(measures, list(vcr_measure("tipping_control_rate", near_dir$k0 / m0, source = msrc)))
   }
   tab <- g[, c("k1", "k0", "rateTreatment", "rateControl", "p", "significant")]
   tab$changesConclusion <- changed

@@ -303,7 +303,15 @@ export function vcrMergeStageResult(prior, incoming, stage, { staleSince = null,
   const stageResult = { ...stage, stale: false, conclusion: incoming.conclusion, counts: incoming.counts,
     measures: incoming.measures, diagnostics: incoming.diagnostics, tables: incoming.tables,
     ...(incoming.notEstimableRule ? { notEstimableRule: incoming.notEstimableRule } : {}) };
-  if (!prior) return { ...incoming, diagnostics: { ...incoming.diagnostics, stages: [entry], stageResults: { [stage.stage]: stageResult } } };
+  // --- robustness methods ---
+  // A robustness stage alone is not the comparison: estimable stress tests with nothing beside them read as limited until the stage that
+  // makes the comparison lands (or is said to be missing by the step that skipped it).
+  const robustness = new Set(VCR_ROBUSTNESS_STAGES);
+  if (!prior) {
+    const alone = robustness.has(stage.stage) && incoming.conclusion === "estimable";
+    return { ...incoming, ...(alone ? { conclusion: "limited" } : {}), diagnostics: { ...incoming.diagnostics, stages: [entry], stageResults: { [stage.stage]: stageResult } } };
+  }
+  // --- end robustness methods ---
 
   const before = list(object(prior.diagnostics).stages).map(object).filter((each) => each.stage !== stage.stage);
   const since = staleSince ? Date.parse(staleSince) : Number.NaN;
@@ -341,16 +349,17 @@ export function vcrMergeStageResult(prior, incoming, stage, { staleSince = null,
     .sort((a, b) => ORDER_OF_CONCLUSIONS.indexOf(String(b)) - ORDER_OF_CONCLUSIONS.indexOf(String(a)))[0] ?? incoming.conclusion;
   // --- robustness methods ---
   // A robustness stage that is not estimable counts as limited once a stage that makes the comparison has landed; the comparison's own
-  // conclusion and its rule are the ones the object states. Without any other stage the object is what that stage says.
-  const robustness = new Set(VCR_ROBUSTNESS_STAGES);
+  // conclusion and its rule are the ones the object states. Without any such stage the object is what the robustness stages say, and
+  // never more than limited: the comparison itself has not been computed.
   const making = [...kept, entry].filter((each) => !robustness.has(String(each.stage)));
   let verdict = { conclusion: worst ?? null, notEstimableRule: incoming.notEstimableRule ?? prior.notEstimableRule ?? null };
-  if ((robustness.has(stage.stage) || kept.some((each) => robustness.has(String(each.stage)))) && making.length) {
-    const counted = (/** @type {Record<string, any>} */ each) => (robustness.has(String(each.stage)) && each.conclusion === "not_estimable" ? "limited" : each.conclusion);
+  if (robustness.has(stage.stage) || kept.some((each) => robustness.has(String(each.stage)))) {
+    const counted = (/** @type {Record<string, any>} */ each) => (making.length && robustness.has(String(each.stage)) && each.conclusion === "not_estimable" ? "limited" : each.conclusion);
     const settled = [...kept, entry].map(counted).filter(Boolean)
       .sort((a, b) => ORDER_OF_CONCLUSIONS.indexOf(String(b)) - ORDER_OF_CONCLUSIONS.indexOf(String(a)))[0] ?? incoming.conclusion;
-    const ruled = making.find((each) => each.conclusion === "not_estimable" && each.notEstimableRule);
-    verdict = { conclusion: settled, notEstimableRule: settled === "not_estimable" ? (ruled?.notEstimableRule ?? incoming.notEstimableRule ?? prior.notEstimableRule ?? null) : null };
+    const conclusion = !making.length && settled === "estimable" ? "limited" : settled;
+    const ruled = (making.length ? making : [...kept, entry]).find((each) => each.conclusion === "not_estimable" && each.notEstimableRule);
+    verdict = { conclusion, notEstimableRule: conclusion === "not_estimable" ? (ruled?.notEstimableRule ?? incoming.notEstimableRule ?? prior.notEstimableRule ?? null) : null };
   }
   // --- end robustness methods ---
   const tables = new Map(list(prior.tables).map((table) => [String(object(table).name), table]));

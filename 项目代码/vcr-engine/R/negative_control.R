@@ -273,18 +273,20 @@ vcr_job_negative_control <- function(job, output_dir = NULL, cancel_file = NULL,
                       calibrated = if (!is.null(null)) vcr_calibrated_p(null, primary$estimate, primary$se) else NULL)
   }
   limited <- k < min_k || length(usable) < length(rows) || any(vapply(usable, function(r) r$failureShare > 0.01, logical(1)))
+  # with no column analysed in the engine every estimate was typed by the caller: the measures are a summary of those numbers, and say so
+  msrc <- if (is.null(an)) "aggregate" else "calculated"
   measures <- list(
-    vcr_measure("negative_controls_analysed", k, source = "calculated"),
-    vcr_measure("negative_controls_signalling_bias", flagged, source = "calculated"))
+    vcr_measure("negative_controls_analysed", k, source = msrc),
+    vcr_measure("negative_controls_signalling_bias", flagged, source = msrc))
   if (!is.null(null)) {
-    measures <- c(measures, list(vcr_measure("empirical_null_mean", null$mean, source = "calculated"),
-                                 vcr_measure("empirical_null_sd", null$sd, source = "calculated")))
+    measures <- c(measures, list(vcr_measure("empirical_null_mean", null$mean, source = msrc),
+                                 vcr_measure("empirical_null_sd", null$sd, source = msrc)))
   }
   if (!is.null(primary) && primary$estimable) {
-    measures <- c(measures, list(vcr_measure("primary_log_effect", primary$estimate, source = "calculated",
+    measures <- c(measures, list(vcr_measure("primary_log_effect", primary$estimate, source = msrc,
                                              interval = vcr_interval("confidence", primary$low, primary$high)),
-                                 vcr_measure("uncalibrated_p_value", p_primary$uncalibrated, source = "calculated")))
-    if (!is.null(p_primary$calibrated)) measures <- c(measures, list(vcr_measure("calibrated_p_value", p_primary$calibrated, source = "calculated")))
+                                 vcr_measure("uncalibrated_p_value", p_primary$uncalibrated, source = msrc)))
+    if (!is.null(p_primary$calibrated)) measures <- c(measures, list(vcr_measure("calibrated_p_value", p_primary$calibrated, source = msrc)))
   }
   tab <- do.call(rbind, lapply(rows, function(r) data.frame(
     name = r$name, source = r$source, estimate = r$estimate, se = r$se, low = r$low, high = r$high,

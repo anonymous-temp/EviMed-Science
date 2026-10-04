@@ -221,7 +221,10 @@ says the set is too small, `conclusion: limited`, no null, no calibrated p-value
 true effect, which one comparison does not have. A control with an arm without
 events has no risk ratio: it is listed with its reason and left out of the screen and
 the null; none estimable is `negative_controls_not_estimable`. Only a 0/1 column is
-analysed in the engine; a time-to-event control comes in as an estimate.
+analysed in the engine; a time-to-event control comes in as an estimate. A result
+computed only from estimates, or from tipping-point counts, that a caller typed
+labels its measures `aggregate` (a summary, not patients); one that analysed a column
+says `calculated`.
 
 **Tipping point.** Binary: the reference cell is how the primary analysis treated the
 missing (`non_responders`, the corner (0, 0), or `complete_cases`, the missing
