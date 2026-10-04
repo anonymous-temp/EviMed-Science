@@ -1090,6 +1090,14 @@ services:
       MAX_WORKERS: ${OPEN_SCIENCE_META_MAX_WORKERS:-4}
       EVIMED_META_MAX_ACTIVE_JOBS: ${OPEN_SCIENCE_META_MAX_ACTIVE_JOBS:-1}
       EVIMED_META_MAX_ATTEMPTS: ${OPEN_SCIENCE_META_MAX_ATTEMPTS:-3}
+      # The deployment-wide cap on specialist jobs that run at once, across all six
+      # engine containers (0 = no cap): the host is shared and an adapter engine may
+      # use 2 GB while a job runs. A job over the cap is queued, says so in its status
+      # and starts by itself; one that waits longer than the bound ends retryable.
+      # The slots are flock-ed files on the shared data volume, under
+      # /data/.openscience/specialist-slots, which no runtime mounts.
+      EVIMED_SPECIALIST_MAX_CONCURRENT_JOBS: ${OPEN_SCIENCE_SPECIALIST_MAX_CONCURRENT_JOBS:-0}
+      EVIMED_SPECIALIST_SLOT_WAIT_SECONDS: ${OPEN_SCIENCE_SPECIALIST_SLOT_WAIT_SECONDS:-10800}
     volumes:
       - type: bind
         source: ${OPEN_SCIENCE_EVIMED_API_KEY_HOST_FILE:?set OPEN_SCIENCE_EVIMED_API_KEY_HOST_FILE}
@@ -1281,6 +1289,9 @@ services:
       UMLS_API_KEY: ${OPEN_SCIENCE_UMLS_API_KEY:-}
       PUBMED_EMAIL: ${OPEN_SCIENCE_UNPAYWALL_EMAIL:-}
       EVIMED_SPECIALIST_KIND: mendelian-randomization
+      # The deployment-wide cap on specialist jobs (see evimed-meta-agent).
+      EVIMED_SPECIALIST_MAX_CONCURRENT_JOBS: ${OPEN_SCIENCE_SPECIALIST_MAX_CONCURRENT_JOBS:-0}
+      EVIMED_SPECIALIST_SLOT_WAIT_SECONDS: ${OPEN_SCIENCE_SPECIALIST_SLOT_WAIT_SECONDS:-10800}
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
       EVIMED_USAGE_REPORT_URL: ${OPEN_SCIENCE_ENGINE_USAGE_INTERNAL_URL-http://open-science-web:8787/internal/usage/v1/engine}
       LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
@@ -1444,6 +1455,9 @@ services:
       # "co-citation". Empty is a supported state, not a broken one.
       OPENALEX_API_KEY: ${OPEN_SCIENCE_OPENALEX_API_KEY:-}
       EVIMED_SPECIALIST_KIND: bibliometric-analysis
+      # The deployment-wide cap on specialist jobs (see evimed-meta-agent).
+      EVIMED_SPECIALIST_MAX_CONCURRENT_JOBS: ${OPEN_SCIENCE_SPECIALIST_MAX_CONCURRENT_JOBS:-0}
+      EVIMED_SPECIALIST_SLOT_WAIT_SECONDS: ${OPEN_SCIENCE_SPECIALIST_SLOT_WAIT_SECONDS:-10800}
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
       EVIMED_USAGE_REPORT_URL: ${OPEN_SCIENCE_ENGINE_USAGE_INTERNAL_URL-http://open-science-web:8787/internal/usage/v1/engine}
       LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
@@ -1498,6 +1512,9 @@ services:
       # throttled. Empty means anonymous, as before.
       NCBI_API_KEY: ${OPEN_SCIENCE_NCBI_API_KEY:-}
       EVIMED_SPECIALIST_KIND: research-topic-selection
+      # The deployment-wide cap on specialist jobs (see evimed-meta-agent).
+      EVIMED_SPECIALIST_MAX_CONCURRENT_JOBS: ${OPEN_SCIENCE_SPECIALIST_MAX_CONCURRENT_JOBS:-0}
+      EVIMED_SPECIALIST_SLOT_WAIT_SECONDS: ${OPEN_SCIENCE_SPECIALIST_SLOT_WAIT_SECONDS:-10800}
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
       EVIMED_USAGE_REPORT_URL: ${OPEN_SCIENCE_ENGINE_USAGE_INTERNAL_URL-http://open-science-web:8787/internal/usage/v1/engine}
       LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
@@ -1547,6 +1564,9 @@ services:
         CRAN_MIRROR: ${OPEN_SCIENCE_CRAN_MIRROR:-https://cloud.r-project.org}
     environment:
       EVIMED_SPECIALIST_KIND: peer-review
+      # The deployment-wide cap on specialist jobs (see evimed-meta-agent).
+      EVIMED_SPECIALIST_MAX_CONCURRENT_JOBS: ${OPEN_SCIENCE_SPECIALIST_MAX_CONCURRENT_JOBS:-0}
+      EVIMED_SPECIALIST_SLOT_WAIT_SECONDS: ${OPEN_SCIENCE_SPECIALIST_SLOT_WAIT_SECONDS:-10800}
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
       EVIMED_USAGE_REPORT_URL: ${OPEN_SCIENCE_ENGINE_USAGE_INTERNAL_URL-http://open-science-web:8787/internal/usage/v1/engine}
       LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
@@ -1596,6 +1616,9 @@ services:
         CRAN_MIRROR: ${OPEN_SCIENCE_CRAN_MIRROR:-https://cloud.r-project.org}
     environment:
       EVIMED_SPECIALIST_KIND: drug-safety-analysis
+      # The deployment-wide cap on specialist jobs (see evimed-meta-agent).
+      EVIMED_SPECIALIST_MAX_CONCURRENT_JOBS: ${OPEN_SCIENCE_SPECIALIST_MAX_CONCURRENT_JOBS:-0}
+      EVIMED_SPECIALIST_SLOT_WAIT_SECONDS: ${OPEN_SCIENCE_SPECIALIST_SLOT_WAIT_SECONDS:-10800}
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
       EVIMED_USAGE_REPORT_URL: ${OPEN_SCIENCE_ENGINE_USAGE_INTERNAL_URL-http://open-science-web:8787/internal/usage/v1/engine}
       LLM_API_KEY_FILE: /run/secrets/deepseek-api-key

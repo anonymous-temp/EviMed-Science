@@ -786,6 +786,71 @@ in that time answered 429 `runtime_limit_exceeded`. A driver that leaves its
 runtime up (the stream acceptance, the conversation walk) has the same effect;
 stop it with `stop_runtime` under that project's header.
 
+### Specialist job slots on a small host
+
+The five adapter engines (MR, bibliometric, research-topic, peer-review,
+drug-safety) are each limited to 2 GiB while a job runs, and MetaAgent's container
+carries no memory limit at all, so on a host shared with other products the six
+have to take turns.
+`OPEN_SCIENCE_SPECIALIST_MAX_CONCURRENT_JOBS` caps the specialist jobs running at
+once across all six (`1` on a small host; `0` or unset is no cap, which is how it
+behaved before 2026-10-04). Each engine receives it as
+`EVIMED_SPECIALIST_MAX_CONCURRENT_JOBS`, so recreating the engines is what applies
+a change; nothing else moves. Idle engines hold 20-45 MiB, so nothing is stopped:
+jobs only wait their turn.
+
+The cap is `flock`-ed files under `/data/.openscience/specialist-slots/` on the
+data volume every engine mounts writable (`running-<job>-<pid>.lock` for a job that
+runs, `waiting-<job>-<pid>.lock` for one queued, and `admission.lock`, held for
+milliseconds). A runtime never mounts `.openscience`, so none can see or hold a
+slot. The kernel drops a lock when its holder exits however it exits, so a killed
+worker frees its slot at once and a stale file is deleted by the next job that
+counts: there is nothing to clean up by hand. The directory must stay root-owned;
+the engines run as root with no capabilities, like the web service. The
+drug-evidence adapter runs no jobs and mounts the volume read-only; it is not part
+of the cap.
+
+What a run sees: a job over the cap stays `queued`, with `progress.stage` reading
+"Waiting for a free specialist slot: 1 of 1 running, 2 queued ahead.", and starts
+by itself, first come first served. A job that waits longer than
+`OPEN_SCIENCE_SPECIALIST_SLOT_WAIT_SECONDS` (default 10800) ends retryable as
+`specialist_worker_unavailable` (`meta_agent_worker_unavailable` for MetaAgent)
+and nothing has run. Keep the bound plus the longest run (an MR analysis stops at
+10800 s) inside the engine credential issued at admission
+(`OPEN_SCIENCE_ENGINE_MODEL_TOKEN_TTL_SECONDS`, 21600): the default is exactly
+that, and a job that waited longer than its credential lives would start with one
+that has run out. The job's state records `slotWaitedSeconds` when it waited, and
+its log says when it began and stopped waiting.
+
+Reading it: every engine's `/health` reports `specialistSlots`
+(`limit`, `running`, `waiting`, `waitSeconds`), the same deployment-wide numbers on
+all six. `error: slot_directory_unavailable` means the engines cannot create or
+read the directory (a file where `.openscience` belongs, a volume not mounted
+writable, wrong ownership): jobs then end retryable with that reason while the
+container itself stays healthy, so web still starts. `invalidSetting` echoes a
+limit that is not a whole number; the engine then runs uncapped. A slot belongs to
+its worker process: an engine whose worker alone was killed, and not its container,
+would run on without one until it ends, bounded by the container's own limits
+(`mem_limit: 2g` and `pids_limit` on the five adapter engines; MetaAgent has none).
+
+### Specialist engine evidence is a label
+
+Each engine records, when a job is admitted, hashes of its own source tree and of
+the adapter, and checks them again when the job ends. That record is ours and is
+never a reason to fail a researcher's job (owner ruling 2026-10-04). A change in
+the engine source between admission and completion, a manifest pinned at image
+build (`/adapter/adapter-evidence.json`) that no longer matches the adapter, and a
+source file the hashing cannot read all leave the job running and delivered; the
+job's state and its `auditReceipt` carry an `evidenceNote` (`changed` with both
+evidence blocks, `unavailable` with a code, `pinnedManifest`), and `/health` shows
+`adapterManifest` (`matches`, `absent`, `mismatch`, `unreadable`) and
+`sourceEvidence` (`observable` or a code). Neither moves `ready` or `serving`. The
+release audit does not certify a record that carries an `evidenceNote`, so a
+`mismatch` after an engine delta means the delta skipped its re-pin step. What does
+still fail a job is not evidence: the researcher's own input files, an unsafe
+published output, the MR workspace and output bindings (`mr_input_changed` means
+exactly those now) and request authentication.
+
 ### Bundle updates and identity
 
 Extract the verified CI Web image's complete `/app` closure into a new release;
