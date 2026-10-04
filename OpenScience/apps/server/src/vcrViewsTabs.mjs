@@ -37,6 +37,7 @@ import {
   VCR_ENDPOINT_TYPE_LABELS_ZH, VCR_PERFORMANCE_MEASURE_LABELS_ZH, VCR_REVIEW_KIND_LABELS_ZH, parseLineageNode,
   VCR_ANALYSIS_TABLE_LABELS_ZH, VCR_MEMBER_ROLE_LABELS_ZH, VCR_MISSING_REASONS, VCR_MISSING_REASON_LABELS_ZH,
   VCR_QUALITY_CATEGORY_LABELS_ZH, VCR_TIME_KINDS, VCR_TIME_KIND_LABELS_ZH, VCR_VALUE_SOURCE_LABELS_ZH,
+  VCR_PROGNOSTIC_QUALIFICATION, VCR_PROGNOSTIC_QUALIFICATION_LABEL_ZH, VCR_ROBUSTNESS_STAGES, VCR_ROBUSTNESS_STAGE_LABELS_ZH,
 } from "@evimed/domain";
 
 import { vcrObjectNode } from "./vcrStore.mjs";
@@ -46,7 +47,7 @@ import {
 } from "./vcrViews.mjs";
 import {
   allResultsOf, countsView, finite, intervalView, letterCode, list, markFor, measureLabel, measureValue, naturalScale, numeric, object,
-  personName, plainText, PARAMETER_LABELS, roundTo, scaledSeries, staleNote, text, zhDate, zhTime,
+  personName, plainText, PARAMETER_LABELS, roundTo, scaledSeries, staleNote, text, zhDate, zhTime, VCR_ROBUSTNESS_MEASURES,
 } from "./vcrViewsKit.mjs";
 
 /** A plain value (a number or `{ value, unit, … }` a row stored) as a page value. @param {unknown} raw @param {Record<string, any>} defaults */
@@ -455,6 +456,35 @@ export function presentPatientsTab(bundle) {
 
 // --- 对照 -------------------------------------------------------------------------------------------------------------------------
 
+// --- robustness methods ---
+/**
+ * What a comparator's result says beside the comparison itself: the numbers of the robustness methods (a negative-control screen, a
+ * tipping-point analysis, a prognostic-adjusted effect), a sentence for each robustness analysis that could not be computed, and the
+ * sentence that no regulator has qualified prognostic adjustment for the endpoint, which every prognostic result carries
+ * (`diagnostics.regulatoryStatus`, said by the domain's closed word and never by the engine's English). Null when there is none of them.
+ * @param {Record<string, any> | null} result @param {(measure: any) => any} value
+ */
+function robustnessView(result, value) {
+  if (!result) return null;
+  const diagnostics = object(result.diagnostics);
+  const stageResults = object(diagnostics.stageResults);
+  const regulatory = [diagnostics, ...Object.values(stageResults).map((entry) => object(object(entry).diagnostics))]
+    .map((entry) => object(entry.regulatoryStatus)).find((status) => status.qualification !== undefined);
+  const qualification = regulatory?.qualification === VCR_PROGNOSTIC_QUALIFICATION ? VCR_PROGNOSTIC_QUALIFICATION_LABEL_ZH : null;
+  // `survival_difference_at_tau` is also the weighted comparators' own number; it is listed here only for a prognostic result.
+  const names = new Set([...VCR_ROBUSTNESS_MEASURES, ...(regulatory ? ["survival_difference_at_tau"] : [])]);
+  const rows = list(result.measures).filter((measure) => names.has(String(object(measure).name)))
+    .map((measure) => ({ key: String(object(measure).name), label: measureLabel(String(object(measure).name)), value: value(measure) }));
+  const notes = VCR_ROBUSTNESS_STAGES.flatMap((stage) => {
+    const entry = object(stageResults[stage]);
+    if (entry.conclusion !== "not_estimable") return [];
+    const rule = (/** @type {Record<string, string>} */ (VCR_NOT_ESTIMABLE_RULE_LABELS_ZH))[String(entry.notEstimableRule)];
+    return [`${(/** @type {Record<string, string>} */ (VCR_ROBUSTNESS_STAGE_LABELS_ZH))[stage]}没有算出${rule ? `：${rule}` : ""}`];
+  });
+  return rows.length || notes.length || qualification ? { rows, notes, qualification } : null;
+}
+// --- end robustness methods ---
+
 /**
  * `GET /api/vcr/studies/:id/comparator`.
  * @param {Record<string, any>} bundle
@@ -599,6 +629,7 @@ export function presentComparatorTab(bundle) {
     comparabilityNote: balance.length ? "标准化差异是加权之后的；界值 0.1。" : null,
     dimensions,
     diagnostics: [...diagnosticRows, ...routeRows],
+    robustness: robustnessView(result, value),
     gaps,
     counts: current ? countsView(result?.counts && Object.keys(result.counts).length ? result.counts : {}, { tier: study.dataTier }) : null,
     verdict: shown ? {

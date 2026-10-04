@@ -538,6 +538,7 @@
       }
     }
   ],
+  "robustness": null,
   "gaps": {
     "title": "真实外部对照：不可估计",
     "needs": "需要 T2 完整治疗与纵向结局",

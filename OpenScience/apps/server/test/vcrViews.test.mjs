@@ -9,7 +9,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 
-import { VCR_ENGINE_METHODS, VCR_JOB_KINDS, VCR_VALUE_SOURCES } from "@evimed/domain";
+import { VCR_ENGINE_METHODS, VCR_JOB_KINDS, VCR_PROGNOSTIC_QUALIFICATION_LABEL_ZH, VCR_VALUE_SOURCES } from "@evimed/domain";
 
 import {
   JOB_KIND_LABELS, attentionOf, budgetView, conclusionOf, designsSentence, failedExportsOf, jobView, notEstimableDesign, numberString, presentDesigns, presentModelCard,
@@ -20,7 +20,8 @@ import {
   seriesView, criterionCodes,
 } from "../src/vcrViewsTabs.mjs";
 import {
-  METHOD_LABELS, countsView, decimalsFor, defaultSourceOf, intervalView, measureLabel, measureValue, rangeString, reviewOfNode, staleNote, withReviewState, zhDate, zhTime,
+  METHOD_LABELS, VCR_ROBUSTNESS_MEASURES, countsView, decimalsFor, defaultSourceOf, intervalView, measureLabel, measureValue, rangeString, reviewOfNode, staleNote,
+  withReviewState, zhDate, zhTime,
 } from "../src/vcrViewsKit.mjs";
 import { FIXTURE_DIR } from "./vcrViewsFixtures.mjs";
 
@@ -47,6 +48,75 @@ test("the measures the comparator-effect methods write are named in words, the s
   }
   assert.equal(measureLabel("covariate_set_estimate_3"), "第 3 个协变量集的估计");
 });
+
+// --- robustness methods ---
+
+test("every measure the three robustness methods write is named in words, whatever the engine's source says", () => {
+  const cjk = /[\u4e00-\u9fff]/;
+  const dir = new URL("../../../../项目代码/vcr-engine/R/", import.meta.url);
+  /** @type {Set<string>} */
+  const emitted = new Set();
+  for (const file of ["negative_control.R", "tipping_point.R", "prognostic_adjustment.R"]) {
+    const source = readFileSync(new URL(file, dir), "utf8");
+    for (const match of source.matchAll(/vcr_measure\("([a-z_0-9]+)"/g)) emitted.add(match[1]);
+    // the prognostic job states its measures as (name, value, interval, unit) rows
+    if (file === "prognostic_adjustment.R") for (const match of source.matchAll(/^\s*list\("([a-z_0-9]+)",/gm)) emitted.add(match[1]);
+  }
+  assert.ok(emitted.size >= 30, `the walk proves it walked: ${emitted.size} measure names read from the engine`);
+  for (const name of emitted) assert.ok(cjk.test(measureLabel(name)) && measureLabel(name) !== name, `${name} is shown as itself`);
+  // the page lists what the table names, and each name is one the engine writes (a label for a measure nobody writes is a stale row)
+  for (const name of VCR_ROBUSTNESS_MEASURES) assert.ok(emitted.has(name), `${name} is in the table and no robustness method writes it`);
+  // proportions are said as percentages, as every other proportion on the pages is
+  for (const name of ["share_changing_conclusion", "tipping_treatment_rate", "tipping_control_rate", "risk_treatment_standardised", "risk_control_standardised"]) {
+    assert.equal(measureValue({ name, value: 0.25, source: "calculated" }, { kind: "comparator" }).value, 25, name);
+  }
+});
+
+test("the comparator page lists the robustness numbers, says what could not be computed, and states beside a prognostic result that no regulator has qualified it", () => {
+  const comparator = { id: "cmp_p", version: 1, route: "prognostic_adjustment", estimand: "ATE", conclusion: "estimable", gapList: [], resultId: "res_p",
+    targetTrial: {}, configuration: {}, reviewState: "ai_set", createdAt: "2026-09-28T01:00:00.000Z" };
+  const prognostic = { id: "res_p", version: 1, kind: "comparator", conclusion: "estimable", reviewState: "ai_set", counts: { realPatients: 240 }, executionId: null,
+    measures: [
+      { name: "marginal_risk_difference", value: 0.11, source: "calculated", interval: { kind: "confidence", low: 0.02, high: 0.2, level: 0.95 } },
+      { name: "marginal_odds_ratio", value: 1.9, source: "calculated" },
+      { name: "empirical_variance_ratio", value: 0.82, source: "calculated" },
+      { name: "hazard_ratio", value: 0.7, source: "calculated" },
+    ],
+    diagnostics: { regulatoryStatus: { qualification: "none_beyond_continuous", qualifiedEndpoints: ["continuous"] } } };
+  const tab = presentComparatorTab({ ...emptyBundle(), study: { ...study, dataTier: "T3" }, comparators: [comparator], results: [prognostic], allResults: [prognostic] });
+  assert.deepEqual(tab.robustness.rows.map((/** @type {any} */ row) => row.key), ["marginal_risk_difference", "marginal_odds_ratio", "empirical_variance_ratio"],
+    "only what the robustness methods write; another method's number is not listed here");
+  assert.equal(tab.robustness.rows[0].label, "边际风险差");
+  assert.equal(tab.robustness.rows[0].value.interval.low, 0.02);
+  assert.equal(tab.robustness.qualification, VCR_PROGNOSTIC_QUALIFICATION_LABEL_ZH);
+  assert.match(tab.robustness.qualification, /没有监管机构认可/);
+  assert.deepEqual(tab.robustness.notes, []);
+  // a word of the engine's that the domain does not know says nothing: the page states only what it can vouch for
+  const unknown = { ...prognostic, diagnostics: { regulatoryStatus: { qualification: "something_else" } } };
+  assert.equal(presentComparatorTab({ ...emptyBundle(), comparators: [comparator], results: [unknown], allResults: [unknown] }).robustness.qualification, null);
+  // the statement is read from the stage that carries it when stages were filed as one result
+  const staged = { ...prognostic, diagnostics: { stageResults: { primary: { conclusion: "estimable", diagnostics: prognostic.diagnostics } } } };
+  assert.equal(presentComparatorTab({ ...emptyBundle(), comparators: [comparator], results: [staged], allResults: [staged] }).robustness.qualification, VCR_PROGNOSTIC_QUALIFICATION_LABEL_ZH);
+
+  // an analysis that could not be computed is said, with the rule's own sentence, and the comparison keeps its numbers
+  const external = { ...comparator, id: "cmp_e", route: "external_control", resultId: "res_e" };
+  const limited = { id: "res_e", version: 1, kind: "comparator", conclusion: "limited", reviewState: "ai_set", counts: {}, executionId: null,
+    measures: [{ name: "weighted_difference", value: 1.2, source: "calculated" }, { name: "worst_case_p_value", value: 0.31, source: "calculated" }],
+    diagnostics: { stageResults: { primary: { conclusion: "estimable" },
+      negative_control: { conclusion: "not_estimable", notEstimableRule: "negative_controls_not_estimable" }, tipping_point: { conclusion: "estimable" } } } };
+  const stressed = presentComparatorTab({ ...emptyBundle(), comparators: [external], results: [limited], allResults: [limited] });
+  assert.deepEqual(stressed.robustness.rows.map((/** @type {any} */ row) => row.key), ["worst_case_p_value"]);
+  assert.equal(stressed.robustness.notes.length, 1);
+  assert.match(stressed.robustness.notes[0], /^阴性对照结局没有算出：没有一个阴性对照结局能得出估计/);
+  assert.equal(stressed.robustness.qualification, null);
+  assert.match(String(stressed.headline), /有限制地估计/, "the comparison is still read as estimated, with a limit");
+  // no robustness analysis, no section
+  const plain = { ...limited, measures: [{ name: "weighted_difference", value: 1.2, source: "calculated" }], diagnostics: {} };
+  assert.equal(presentComparatorTab({ ...emptyBundle(), comparators: [external], results: [plain], allResults: [plain] }).robustness, null);
+  assert.equal(presentComparatorTab(emptyBundle()).robustness, null);
+});
+
+// --- end robustness methods ---
 
 // --- how a moment is said ----------------------------------------------------------
 

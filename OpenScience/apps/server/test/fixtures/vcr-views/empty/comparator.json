@@ -109,6 +109,7 @@
     }
   ],
   "diagnostics": [],
+  "robustness": null,
   "gaps": null,
   "counts": null,
   "verdict": null,
