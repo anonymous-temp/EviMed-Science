@@ -14,7 +14,33 @@ description: 把一句话或一份方案草稿变成「虚拟临研」的研究�
 1. `mcp__evimed__vcr_read` `{ "what": "study" }`：研究的名称、问题、数据档位、预期用途、七步进度、结局封存状态。
 2. `mcp__evimed__vcr_read` `{ "what": "definition" }`：是否已经有定义卡。**有就改，不从头写**——写出去的是下一个版本，旧版本仍然可查。
 3. `mcp__evimed__vcr_read` `{ "what": "criteria" }`：已有的方案版本和它的入排条件。重写条件得到的是新的方案版本，旧版本原样保留。
-4. 有登记号就 `mcp__evimed__trial_registry_record`；有方案全文就用 `mcp__evimed__locate_quote` 把每条入排条件的原句定位下来。
+4. `mcp__evimed__vcr_read` `{ "what": "pack" }`：这个研究的病种知识包（见下一节）。读完再写定义和条件。
+5. 有登记号就 `mcp__evimed__trial_registry_record`；有方案全文就用 `mcp__evimed__locate_quote` 把每条入排条件的原句定位下来。
+
+## 一（续）、病种知识包
+
+`mcp__evimed__vcr_read` `{ "what": "pack" }`。研究已经绑定了知识包，回来的就是这份包：病种的术语与编码、表型定义、常用终点（各带评估标准）、常见入排条件（已经写成下面「requirement」的文法）、数据字段对应、简短背景，每一条带来源和使用许可；`filter.kind` 取 `terms` `phenotypes` `endpoints` `criteria` `mappings` `background` 之一时只读那一节。没有绑定时回来的是目录：用 `filter.query` 搜病种的名字（`肺癌`、`diabetes`），选中后绑定：`mcp__evimed__vcr_write` `{ "what": "pack", "data": { "use": "<目录里的 id>" } }`。
+
+知识包给的是定义，不是预测。一句话的研究请求靠它写成标准的研究定义：`endpointType` 取包里那个终点的类型，`pico.outcome` 写包里的终点名和它的评估标准，入排条件从包里的常见条件出发、按用户说的人群取舍；写进 `criteria` 的条件，`sourceLocator` 写 `{ "pack": "<包 id>", "entry": "<条目 id>" }`，`sourceText` 用包里这一条的 `text`——用户或方案给了原句时，以原句为准。包里条件的阈值是定义的一部分，可以用；事件率、效应量、脱落率不在包里，要用就去 `vcr_evidence`。包的状态是「AI 草拟」时，用到它的内容照样可以用，写进 `fieldSources` 时注明「AI 草拟的知识包」。
+
+目录里没有这个病种：起草一份最小的，研究照常往下走（它带「AI 草拟」标签，有人复核后才变成「已整理」，不影响你往下做）。一次写完，术语、终点、常见入排条件各写你有来源的那几条：
+
+```json vcr:pack_draft
+{ "what": "pack", "data": {
+  "disease": { "key": "immune_thrombocytopenia", "name": "Immune thrombocytopenia", "nameZh": "免疫性血小板减少症", "aliases": ["ITP"] },
+  "sources": [ { "id": "guideline", "title": "示例：某国际共识的标题", "url": "https://example.org/consensus", "accessed": "2026-10-04", "licence": "link-only" } ],
+  "terms": [ { "id": "t_disease", "kind": "disease", "label": "Immune thrombocytopenia", "labelZh": "免疫性血小板减少症", "sources": ["guideline"] } ],
+  "endpoints": [ { "id": "e_response", "label": "Platelet response", "labelZh": "血小板反应", "type": "binary", "definitionZh": "治疗后血小板计数达到共识规定的阈值并维持规定时间的患者比例。", "standard": { "name": "示例：共识的反应定义" }, "sources": ["guideline"] } ],
+  "criteria": [ { "id": "c_adult", "kind": "inclusion", "criterionType": "demographic", "requirement": { "op": "compare", "variable": "age", "comparator": "gte", "value": 18, "unit": "years" }, "textZh": "年龄不小于 18 岁。", "sources": ["guideline"] } ]
+} }
+```
+
+写草稿的规矩（被拒的条目会在 `issues` 里带字段路径，改了再整份写一遍）：
+
+- 每个术语、终点、条件都要 `sources`，来源是你读过的指南、文献或登记记录；每个来源写它的链接、标题和读到的日期，`licence` 写 `link-only`（只引用链接，事实用自己的话写，不照抄原文）；读 ClinicalTrials.gov 记录时写 `ctgov-terms`，并带 `processed`（数据日期）和 `modified: true`。示例里的链接是占位，写你真正读过的。
+- 不要抄、不要引：世卫组织 ICTRP 登记记录、ATC/DDD 表、MedDRA 术语。不写 SNOMED CT、LOINC、RxNorm 编码；编码拿不准就不写 `codes`——没有编码的术语也是完整的术语。能写的编码体系只有 NCIt、OMOP、ICD-10-CM，并且要附一个发布该编码的来源。
+- 包里不放数字：事件率、效应量、脱落率都不写；条件里的阈值照来源写。条件的 `requirement` 用下面同一套文法。
+- `id`、`version`、`status` 由平台设置，不要写。
 
 ## 二、研究定义卡
 
