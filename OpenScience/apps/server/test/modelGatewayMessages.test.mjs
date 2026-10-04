@@ -15,7 +15,7 @@ import { once } from "node:events";
 import { createServer } from "node:http";
 import test from "node:test";
 
-import { createModelGatewayHandler, isModelGatewayPath, MODEL_GATEWAY_FILES_PREFIX, MODEL_GATEWAY_MESSAGES_PATH, MODEL_GATEWAY_PATH } from "../src/modelGateway.mjs";
+import { createModelGatewayHandler, isModelGatewayPath, MODEL_GATEWAY_FILES_PREFIX, MODEL_GATEWAY_MESSAGES_PATH, MODEL_GATEWAY_PATH, modelGatewayFilesRefusals } from "../src/modelGateway.mjs";
 import { createUsageTail, messagesUsage, parseMessagesReceipt } from "../src/usageMetering.mjs";
 
 const signingSecret = "test-only-model-gateway-signing-secret-32-bytes";
@@ -188,6 +188,33 @@ test("images travel inline: a provider-side file is refused, and so is the Files
   const accepted = await call(t, (_req, res) => { res.writeHead(200, { "content-type": "text/event-stream" }); res.end(messagesStream("ok")); }, events, { body: inline });
   assert.equal(accepted.status, 200);
   await accepted.text();
+});
+
+test("the adapter's image-upload probe is the protocol working: counted on its own, never reported as a gateway failure", async (t) => {
+  // 2026-09-28 onwards: the pinned kernel's DeepSeek adapter tries POST <base>/files
+  // before every model request whose history holds an image and has no setting
+  // that turns the attempt off. The refusal is deliberate (an uploaded file lives
+  // under the one provider key) and the image then travels inline, so 166 of them
+  // in the error ledger read as a failing gateway and were nothing of the kind.
+  /** @type {any[]} */
+  const failures = [];
+  const handler = createModelGatewayHandler(config("http://127.0.0.1:1"), runtimeManager, { usageLedger: ledger([]) });
+  const gateway = createServer((req, res) => { void handler(req, res, (/** @type {any} */ failure) => failures.push(failure)); });
+  const base = await listen(gateway);
+  t.after(() => new Promise((resolve) => { gateway.closeAllConnections(); gateway.close(resolve); }));
+  const before = modelGatewayFilesRefusals();
+  for (const [method, suffix] of [["POST", ""], ["POST", "/file_abc"], ["GET", "/file_abc"], ["DELETE", "/file_abc"], ["GET", ""]]) {
+    const response = await fetch(`${base}${MODEL_GATEWAY_FILES_PREFIX}${suffix}`, { method, ...(method === "POST" ? { body: "{}", headers: { "content-type": "application/json" } } : {}) });
+    assert.equal(response.status, 404, `${method} ${suffix}`);
+    assert.equal((await response.json()).error.code, "model_gateway_files_unsupported");
+  }
+  assert.deepEqual(failures, [], "the probe's answer is not a failure the ledger should carry");
+  assert.equal(modelGatewayFilesRefusals() - before, 5, "but it is counted");
+  // A real refusal beside it is still reported, with its own code.
+  const wrongMethod = await fetch(`${base}${MODEL_GATEWAY_MESSAGES_PATH}`, { method: "GET" });
+  assert.equal(wrongMethod.status, 404);
+  assert.deepEqual(failures.map((failure) => failure.code), ["not_found"]);
+  assert.equal(modelGatewayFilesRefusals() - before, 5, "and is not counted as a probe");
 });
 
 test("the Messages route authenticates the workload token from x-api-key, and a bearer header is not it", async (t) => {

@@ -95,7 +95,7 @@ import { runEstimate } from "./runRoute.mjs";
 import { BUNDLED_EXAMPLES, createCommandRegistry } from "./commands.mjs";
 import { loadConfig } from "./config.mjs";
 import { assertDockerVolumeName } from "./dockerMounts.mjs";
-import { createModelGatewayHandler, isModelGatewayPath, issueModelGatewayBudgetMarker, MODEL_GATEWAY_PATH, supportedDeepSeekModels } from "./modelGateway.mjs";
+import { createModelGatewayHandler, isModelGatewayPath, issueModelGatewayBudgetMarker, MODEL_GATEWAY_PATH, modelGatewayFilesRefusals, supportedDeepSeekModels } from "./modelGateway.mjs";
 import { createRuntimeGatewayEntry } from "./runtimeGatewayEntry.mjs";
 import { assertSpendWithinLimits, readUsageEvents, summarizeUsage } from "./usageMetering.mjs";
 import { UsageLedger, usageUncertainMetricFamily } from "./usageLedger.mjs";
@@ -7436,6 +7436,13 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
   addMetric(lines, "open_science_runtime_running", "Runtime instances attached to the current Web API process.", "gauge", {
     value: runtimeStats.running,
   });
+  addMetric(
+    lines,
+    "open_science_model_gateway_files_refused_total",
+    "Provider-side image uploads the kernel's adapter tried and the model gateway refused by design (images travel inline); not a gateway failure.",
+    "counter",
+    { value: modelGatewayFilesRefusals() },
+  );
   addMetric(
     lines,
     "open_science_usage_late_attributed_calls_total",
