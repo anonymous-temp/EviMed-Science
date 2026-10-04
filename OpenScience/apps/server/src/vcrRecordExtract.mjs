@@ -144,7 +144,7 @@ export function createVcrRecordExtractor({ config, controller = null, counters =
   const refuse = verdict => {
     const [status, code, message, counter] = REFUSALS[verdict];
     counters[counter] = (counters[counter] ?? 0) + 1;
-    return new HttpError(status, code, message);
+    return new HttpError(Number(status), String(code), String(message));
   };
   const limits = () => ({
     maxPages: Number(config.vcrIntakeMaxPages) || 300,
@@ -200,7 +200,7 @@ export function createVcrRecordExtractor({ config, controller = null, counters =
         else if (error instanceof HttpError && code === 'vcr_intake_failed') counters.failed += 1;
         throw error;
       }
-      if (!verdict.ok) throw refuse(verdict.refusal);
+      if (verdict.ok === false) throw refuse(verdict.refusal);
       counters.extracted += 1;
       return { text: verdict.text, extraction: { ...verdict.extraction } };
     },

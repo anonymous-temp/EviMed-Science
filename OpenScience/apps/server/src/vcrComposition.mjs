@@ -813,6 +813,7 @@ export function createVcrEngineJobRemover({ config, fetchImpl, engine = null }) 
  *   audit?: (event: string, status: string, details: Record<string, any>) => Promise<unknown>,
  *   fetchImpl?: typeof fetch,
  *   report?: (code: string) => void,
+ *   intakeController?: { runVcrIntake?: Function } | null,
  * }} input
  */
 export function composeVcr({ config, productDatabase, projectStore = null, audit = async () => {}, fetchImpl, report = () => {}, intakeController = null }) {

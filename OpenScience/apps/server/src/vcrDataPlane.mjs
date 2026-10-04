@@ -1625,7 +1625,7 @@ function columnForModel(table, column, rows, declaredIdentifiers, floor) {
 // ---------------------------------------------------------------------------
 
 /**
- * @typedef {{ vcrDataPlaneDir?: string, vcrDataMaxBytes?: number, maxFileBytes?: number }} VcrDataPlaneConfig
+ * @typedef {{ vcrDataPlaneDir?: string, vcrDataMaxBytes?: number, maxFileBytes?: number, vcrIntakeMaxBytes?: number }} VcrDataPlaneConfig
  * @typedef {(input: { files: string[], tableNames?: string[], fieldMap: any, sealedFields: string[], asOf: string | null }) => Promise<any>} VcrProfiler
  */
 
@@ -1903,10 +1903,10 @@ export class VcrDataPlane {
     const role = entry.role == null ? "data" : entry.role;
     if (!VCR_SOURCE_FILE_ROLES.includes(role)) throw refuse(400, VCR_DATA_PLANE_CODES.payloadInvalid, `role is one of: ${VCR_SOURCE_FILE_ROLES.join(", ")}.`);
     const named = safeUploadName(entry.name, role);
-    const converted = role === "document" && CONVERTED_DOCUMENT_FORMATS.includes(named.format);
+    const needsConversion = role === "document" && CONVERTED_DOCUMENT_FORMATS.includes(named.format);
     // A PDF or Word file is bigger than the text in it: it has its own ceiling
     // (`vcrIntakeMaxBytes`), and the text that comes out is held to the document cap below.
-    const cap = converted
+    const cap = needsConversion
       ? Math.min(this.maxBytes, Number(this.config.vcrIntakeMaxBytes) > 0 ? Number(this.config.vcrIntakeMaxBytes) : 25 * 1024 * 1024)
       : Math.min(this.maxBytes, /** @type {Record<string, number>} */ (VCR_UPLOAD_ROLE_CAPS)[role] ?? this.maxBytes);
     if (entry.declaredLength != null && entry.declaredLength > cap) {
@@ -1951,7 +1951,7 @@ export class VcrDataPlane {
       if (role === "document") {
         /** @type {string} */
         let documentText;
-        if (converted) {
+        if (needsConversion) {
           // Converted inside the deployment, never sent to the external parsing
           // service: the original goes to a container with no network and comes back
           // as text (vcrRecordExtract.mjs). The original's bytes stay here, in the

@@ -96,7 +96,7 @@ export function createVcrCurveEvidence({ store, studyStore, access, resolveProje
       const image = await readImage(study, imageArtifactId, { withData: true });
       const done = await digitizer.digitize({ request: { imageArtifactId, ...stated }, image, signal });
       if (done.refused) return { refused: done.refused };
-      const { data, ...meta } = image;
+      const { data: _bytes, ...meta } = image;
       const pointsHash = digest(done.scenario);
       const saved = await store.saveCurveExtraction({
         id: `crv_${digest({ studyId, principal, origin: 'digitizer', image: meta, pointsHash }).slice(0, 32)}`,

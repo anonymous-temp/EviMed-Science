@@ -64,12 +64,7 @@ async function world(t, { extractor = 'real', config = {} } = {}) {
     actor: 'owner', studyId: STUDY, sourceId: SOURCE, name, role: 'document', subject: 'S-001', stream: streamOf(bytes), ...extra,
   });
   const read = async name => fs.readFile(fixtures[name]);
-  const planeFiles = async () => (await fs.readdir(path.join(planeDir, 'studies')).then(async names => {
-    const out = [];
-    for (const name of names) for (const sub of await fs.readdir(path.join(planeDir, 'studies', name)).catch(() => [])) out.push(`${name}/${sub}`);
-    return out;
-  }));
-  return { root, planeDir, config: appConfig, store, plane, upload, read, calls, planeFiles };
+  return { root, planeDir, config: appConfig, store, plane, upload, read, calls };
 }
 const inDir = async (dir, sub) => (await fs.readdir(path.join(dir, 'studies')).then(names => Promise.all(names.map(name => fs.readdir(path.join(dir, 'studies', name, sub)).catch(() => []))))).flat();
 

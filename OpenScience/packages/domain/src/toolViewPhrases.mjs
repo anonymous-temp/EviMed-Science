@@ -134,7 +134,7 @@ const PHRASES = Object.freeze({
   vcr_write: phrase('写研究对象', ['what']),
   vcr_simulate: phrase('提交计算作业', ['kind']),
   trial_registry_record: phrase('取试验登记记录', ['registryId', 'nctId']),
-  curve_digitize: phrase('数字化生存曲线图', ['imageArtifactId']),
+  curve_digitize: phrase('数字化生存曲线图'),
   evidence_pool: phrase('合并证据参数', ['parameter']),
   research_calculate: phrase('计算研究数据', ['method']),
   // the kernel's own

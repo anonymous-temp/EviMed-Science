@@ -123,7 +123,7 @@ async function world(t, extra = {}) {
   const extractor = createVcrRecordExtractor({ config, controller: localIntakeController(config, { calls }), counters });
   return { root, config, fixtures, calls, counters, extractor };
 }
-const attempts = async config => (await fs.readdir(path.join(config.dataDir, 'vcr-intake', 'extract')).catch(() => []));
+const attempts = config => fs.readdir(path.join(config.dataDir, 'vcr-intake', 'extract')).catch(() => []);
 
 test('a Word record becomes text with its provenance, and the scratch copy is gone afterwards', { skip: !HAVE_PYTHON && 'python3 is needed' }, async t => {
   const w = await world(t);
@@ -177,7 +177,7 @@ test('a file that is not what its name says is unreadable before any container s
   assert.equal(w.counters.unreadable, 2);
 });
 
-test('only PDF and Word are converted, and without a controller the refusal is the converter being unavailable', async t => {
+test('only PDF and Word are converted, and without a controller the refusal is the converter being unavailable', async () => {
   const config = { dataDir: '/tmp/none', vcrIntakeMaxPages: 300, vcrIntakeMinCharsPerPage: 100 };
   const none = createVcrRecordExtractor({ config });
   assert.equal(none.available, false);

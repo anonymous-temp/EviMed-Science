@@ -519,7 +519,8 @@ async function checkRuntimeContainerTopology() {
     // and the receipt scheduler; the controller merges it rather than
     // restating it. Scanning its block for the literals would report a shared
     // definition as a deleted control.
-    /<<: \*runtime-caps/.test(controllerService) &&
+    // (Alone, or in a list with the intake limits' anchor: `<<: [*runtime-caps, *vcr-intake]`.)
+    /<<: (?:\*runtime-caps|\[[^\]]*\*runtime-caps[^\]]*\])/.test(controllerService) &&
     /OPEN_SCIENCE_MAX_RUNNING_RUNTIMES:\s+\$\{OPEN_SCIENCE_MAX_RUNNING_RUNTIMES:-8\}/.test(compose) &&
     /OPEN_SCIENCE_MAX_RUNNING_RUNTIMES_PER_USER:\s+\$\{OPEN_SCIENCE_MAX_RUNNING_RUNTIMES_PER_USER:-4\}/.test(compose) &&
     /dockerRuntimeInventory\(config\)/.test(controller) &&
