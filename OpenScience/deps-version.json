@@ -126,7 +126,7 @@
         "GHSA-5p4m-2wfm-xmqj",
         "GHSA-2883-xcg3-v3hh"
       ],
-      "notes": "Required security backport for YAML4 CPU bounds. Workspace and both pinned kernel/profile copies must match this package without changing the DSH namespace; runtime build-hook integration is pending in this development checkpoint."
+      "notes": "Required security backport for YAML4 CPU bounds. Workspace and both pinned kernel/profile copies must match this package without changing the DSH namespace. The runtime build hook is integrated, not pending: deploy/runtime-dsh/runtime-yaml-security.mjs runs in both runtime images (Dockerfile and Dockerfile.agentbay) -- `global` patches the globally installed kernel closure once it is installed, and `verify` re-checks that tree and the pre-initialized profile after the profile seed, including the seal -- and scripts/ops/kernel-install.mjs and deploy/runtime-dsh/profile-kernel-pins.mjs read this one pin (apps/server/test/runtimeYamlSecurity.test.mjs and dshProfileKernelPins.test.mjs hold it). Only the single `js-yaml` entry is accepted; moving it is one edit here, with the package's integrity."
     }
   }
 }

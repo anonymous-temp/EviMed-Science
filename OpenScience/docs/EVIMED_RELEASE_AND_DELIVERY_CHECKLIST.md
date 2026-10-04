@@ -28,8 +28,11 @@
 >   其余命令逐条仍在 `OpenScience/package.json` 里。
 > - **2026-09-29 增补：文末「虚拟临研：只有部署后才能做的检查」一节。** 它是新写的、不是快照，
 >   记的是「虚拟临研」模块发版前必须在部署好的栈上做完的六件事，以及这些结果记在哪里。
-> - 架构与部署以 `OpenScience/AGENTS.md`、`OpenScience/docs/WEB_DEPLOYMENT.md` 为准；当前的
->   未完清单见 `docs/superpowers/plans/2026-09-07-gap-closure-todo.md`。
+> - 架构与部署以 `OpenScience/AGENTS.md`、`OpenScience/docs/WEB_DEPLOYMENT.md` 为准。**当前的
+>   未完清单与排期是 `docs/superpowers/plans/2026-10-02-evimed-next-stage-research-workbench.md`
+>   的第 11 节（2026-10-03 定稿，该计划的前文是 10 月 2 日的基线与实施记录，不覆盖第 11 节）。**
+>   `docs/superpowers/plans/2026-09-07-gap-closure-todo.md` 是 2026-09-07 当天的缺口盘点，
+>   只作历史快照读，其中的「仍缺」不再等于现状。
 
 更新日期：2026-07-19
 
