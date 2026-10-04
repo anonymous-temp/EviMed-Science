@@ -20,8 +20,9 @@
  *   (`eligibleTaskTypes` — a type paused for repeated failures is not offered),
  *   what the model is shown (a bounded projection that already separates what
  *   was checked from what failed to run), the closed vocabulary of the answer,
- *   when a stop is not allowed (`stopAllowed`), the budget (the agenda's own
- *   daily and weekly caps and the account's, through the gateway's
+ *   when a stop is not allowed (`stopAllowed`), the budget (the episode's own
+ *   envelope — its cap, or what the agenda has left of its own daily and weekly
+ *   caps if less — and the account's caps, through the gateway's
  *   reserve-then-settle, under purpose `autopilot`), the timeout, and the
  *   fallback. An answer that does not parse, names a type that is not offered,
  *   or asks for a stop that is not allowed is not softened into something
@@ -137,12 +138,6 @@ export function plannerInstructions(context) {
 /** @param {unknown} value @param {number} max */
 function cut(value, max) {
   return typeof value === "string" ? value.replace(/\s+/g, " ").trim().slice(0, max) : "";
-}
-
-/** @param {...unknown} values @returns {number} the smallest positive value, 0 when there is none */
-function minimumPositive(...values) {
-  const positive = values.map(Number).filter((value) => Number.isFinite(value) && value > 0);
-  return positive.length ? Math.min(...positive) : 0;
 }
 
 /**
@@ -303,14 +298,22 @@ export class AutopilotPlanner {
 
   /**
    * One decision, charged to the researcher's own project and, through `runId`,
-   * to the episode it chooses for. The agenda's own daily and weekly caps bound
-   * it together with the account's: the same envelope the episode will spend in.
+   * to the episode it chooses for. Two questions bound it, and they are not the
+   * same sum: the episode's own envelope (`envelopeCny`, 0 for none) is counted
+   * over what that episode has spent — the decision is the first of it — and the
+   * account's daily and weekly caps (the deployment's, zero for none) over
+   * everything the account spent. The agenda's own daily and weekly caps are
+   * never passed here: the gateway would compare them with the account's whole
+   * spend, and a researcher's other research would refuse the agenda's decision
+   * (2026-10-04); they are the agenda's allowance, checked before the episode
+   * exists (`AutopilotService.assertAffordable`), and what is left of them is the
+   * envelope.
    * Throws a coded error when no usable decision was had; the caller falls back.
    *
    * @param {{userId: string, projectId: string, episodeId: string, context: any, eligible: string[], stopAllowed: boolean,
-   *   pauseAllowed?: boolean, limits?: {daily?: number, weekly?: number}}} input
+   *   pauseAllowed?: boolean, envelopeCny?: number}} input
    */
-  async decide({ userId, projectId, episodeId, context, eligible, stopAllowed, pauseAllowed = false, limits = {} }) {
+  async decide({ userId, projectId, episodeId, context, eligible, stopAllowed, pauseAllowed = false, envelopeCny = 0 }) {
     if (!this.available) throw plannerError("autopilot_planner_unavailable", "The next-action planner is not available.");
     if (this.now() < this.openUntil) {
       this.counters.circuitOpen += 1;
@@ -323,8 +326,9 @@ export class AutopilotPlanner {
       const body = await this.callModel({ config: this.config, usageLedger: this.usageLedger, fetchImpl: this.fetchImpl }, {
         userId, projectId, runId: episodeId, purpose: "autopilot",
         limits: {
-          daily: minimumPositive(limits.daily, this.config.userDailySpendLimit),
-          weekly: minimumPositive(limits.weekly, this.config.userWeeklySpendLimit),
+          daily: Number(this.config.userDailySpendLimit) || 0,
+          weekly: Number(this.config.userWeeklySpendLimit) || 0,
+          run: envelopeCny > 0 ? envelopeCny : 0,
         },
         signal: controller.signal,
         body: {

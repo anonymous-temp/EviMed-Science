@@ -46,10 +46,15 @@ class MemoryJobs {
   }
 }
 
-function fixture({ notificationCreate = null, now = () => new Date("2026-09-06T01:00:00.000Z"), planner = null } = {}) {
+function fixture({ notificationCreate = null, now = () => new Date("2026-09-06T01:00:00.000Z"), planner = null, accountCaps = undefined } = {}) {
   const documents = new MemoryDocuments();
   const jobs = new MemoryJobs();
-  const usage = { assertWithinLimits: async () => ({ allowed: true }) };
+  // The ledger's two questions, as a double: the account's limits (`assertWithinLimits`) and
+  // what the agenda's own runs spent (`spendOfRuns`, with when it was made). Both open by default.
+  const usage = { asked: [], spend: { day: 0, week: 0 }, timeline: [],
+    assertWithinLimits: async () => ({ allowed: true }),
+    spendOfRuns: async (userId, options) => { usage.asked.push({ userId, ...options }); return usage.spend; },
+    spendTimelineOfRuns: async () => usage.timeline };
   const notifications = { created: [], create: async (userId, input) => {
     if (notificationCreate) return notificationCreate(userId, input, notifications);
     notifications.created.push({ userId, input });
@@ -58,7 +63,7 @@ function fixture({ notificationCreate = null, now = () => new Date("2026-09-06T0
   // decision promotes has to survive the actual candidate/approved rules, not a
   // stub that agrees with the caller.
   const capsules = new CapsuleService(documents);
-  const service = new AutopilotService({ documents, jobs, usage, notifications, capsules, planner,
+  const service = new AutopilotService({ documents, jobs, usage, notifications, capsules, planner, ...(accountCaps ? { accountCaps } : {}),
     now, id: (() => { let i = 0; return (prefix) => `${prefix}${++i}`; })() });
   return { documents, jobs, usage, notifications, capsules, service };
 }
@@ -1422,12 +1427,14 @@ test("the model's choice, focus and reason are kept on the episode and in its br
   assert.match(prompt, /Planned focus for this episode.*核对尚未复核的结论/);
   assert.match(prompt, /original instruction/, "the researcher's own scope is still the first thing the run reads");
 
-  // What the decision was handed: this episode's id (its cost is the episode's), the agenda's own envelope, no stop yet.
+  // What the decision was handed: this episode's id (its cost is the episode's), the episode's own envelope
+  // (its cap, ¥8; never the agenda's daily and weekly caps, which are not the account's sum), no stop yet.
   const [call] = planner.calls;
   assert.equal(call.userId, "user-one");
   assert.equal(call.projectId, "project-one");
   assert.equal(call.episodeId, first.episode.id);
-  assert.deepEqual(call.limits, { daily: 20, weekly: 80 });
+  assert.equal(call.envelopeCny, 8);
+  assert.equal(call.limits, undefined);
   assert.equal(call.stopAllowed, false, "an agenda that has finished nothing has given the decision nothing to stop on");
   assert.equal(call.context.question.title, "心衰证据追踪");
   assert.equal(call.context.priority, "normal");
@@ -1822,4 +1829,130 @@ test("material added after a needs_input stop is what the next decision reads be
   // Once an episode has run, the stop is behind the question.
   const later = await service.get("user-one", agenda.id);
   assert.equal((await service.researchState("user-one", later.id)).materials[0].name, "年龄分布.xlsx");
+});
+
+// ---------------------------------------------------------------------------
+// An agenda's own caps count the agenda's own spend (2026-10-04).
+//
+// A task written with ¥3 a day and ¥6 a week was refused with the account's
+// wording by an account that had spent ¥16 that day on other research, while the
+// task itself had spent nothing: its caps were handed to the ledger's admission
+// check, which sums everything the account spent. These are the unit halves;
+// the same cases run against the real ledger in `agendaBudget.integration`.
+// ---------------------------------------------------------------------------
+
+const smallAgenda = { ...agendaInput, dailyBudgetCny: 3, weeklyBudgetCny: 6, maxEpisodeCny: 1.5 };
+
+async function started(service, input = smallAgenda) {
+  const created = await service.create("user-one", input);
+  return service.start("user-one", created.id, { expectedRevision: created.revision });
+}
+
+test("an agenda's caps are never compared with the account's spend: the ledger is asked what the agenda's own runs spent, and the account's limits as the account's", async () => {
+  const asked = [];
+  const { service, usage, jobs } = fixture({ accountCaps: () => ({ userDailySpendLimit: 40, userWeeklySpendLimit: 0 }), planner: plannerDouble((input) => choose(input.eligible[0])) });
+  usage.assertWithinLimits = async (userId, limits) => { asked.push({ userId, ...limits }); };
+  const agenda = await started(service);
+  const first = await service.runNow("user-one", agenda.id, { requestId: "one" });
+  // The first episode of a new agenda has no run to ask about: nothing of its own was spent, and the question was still the account's.
+  assert.deepEqual(usage.asked.map((call) => call.runIds), [[]]);
+  assert.equal(first.episode.payload.status, "queued");
+
+  const second = await service.runNow("user-one", agenda.id, { requestId: "two" });
+  const own = usage.asked.at(-1).runIds;
+  assert.deepEqual(own, [first.episode.id, ...[0, 1, 2].map((index) => verificationIdFor(first.episode.id, index))],
+    "the agenda's own episodes and the verifications they may earn, nothing else");
+  assert.equal(usage.asked.at(-1).now.toISOString(), "2026-09-06T01:00:00.000Z", "read at the service's clock");
+  // The account's question: its own caps, 0 for none — never the agenda's ¥3 and ¥6.
+  assert.deepEqual(asked.map(({ userId, dailyLimit, weeklyLimit }) => ({ userId, dailyLimit, weeklyLimit })),
+    [{ userId: "user-one", dailyLimit: 40, weeklyLimit: 0 }, { userId: "user-one", dailyLimit: 40, weeklyLimit: 0 }]);
+  assert.equal(second.episode.payload.status, "queued");
+  assert.equal(jobs.items.filter((job) => job.kind === "episode").length, 2);
+});
+
+test("the task's own daily cap spent refuses as the task's budget, with when it frees; the account is not blamed", async () => {
+  const planner = plannerDouble((input) => choose(input.eligible[0]));
+  const { service, usage, jobs } = fixture({ planner });
+  const agenda = await started(service);
+  usage.spend = { day: 3, week: 3 };
+  // Spend made 5 and 2 hours ago: the earlier one leaving the window is what frees a cent of room.
+  usage.timeline = [{ at: "2026-09-05T20:00:00.000Z", cost: 2 }, { at: "2026-09-05T23:00:00.000Z", cost: 1 }];
+  await assert.rejects(() => service.runNow("user-one", agenda.id, { requestId: "now" }), (error) => {
+    assert.equal(error.status, 402);
+    assert.equal(error.code, "autopilot_daily_budget_spent");
+    assert.match(error.message, /This task's own daily budget is spent: CNY 3\.00 of CNY 3\.00/);
+    assert.equal(error.details, undefined, "no account amounts ride on a task's refusal");
+    // 20:00 + 24 h + the minute the bucket may be early by = 20:01 tomorrow = 19 h after now (01:00).
+    assert.equal(error.retryAfterSeconds, 19 * 3600 + 60);
+    return true;
+  });
+  assert.equal(planner.calls.length, 0, "no decision was paid for");
+  assert.equal(jobs.items.length, 0);
+  assert.equal((await service.listEpisodes("user-one", { projectId: agenda.projectId })).items.length, 0, "and no episode exists");
+  // A follow-up is the researcher asking for work now: bound by the same budget.
+  await assert.rejects(() => service.followUp("user-one", agenda.id, { requestId: "ask", note: "再查一下肾病亚组" }), { code: "autopilot_daily_budget_spent" });
+  // And the scheduled occurrence.
+  await assert.rejects(() => service.schedule("user-one", agenda.id, { date: "2026-09-06" }), { code: "autopilot_daily_budget_spent" });
+});
+
+test("the weekly cap refuses as the week's budget, and is the one named when both are spent because it frees later", async () => {
+  const { service, usage } = fixture();
+  const agenda = await started(service);
+  usage.spend = { day: 1, week: 6 };
+  await assert.rejects(() => service.runNow("user-one", agenda.id, { requestId: "a" }), { status: 402, code: "autopilot_weekly_budget_spent" });
+  usage.spend = { day: 3, week: 6 };
+  await assert.rejects(() => service.runNow("user-one", agenda.id, { requestId: "b" }), { code: "autopilot_weekly_budget_spent" });
+  // A timeline that cannot be read leaves the refusal without a time, never without its reason.
+  usage.spendTimelineOfRuns = async () => { throw new Error("database away"); };
+  await assert.rejects(() => service.runNow("user-one", agenda.id, { requestId: "c" }), (error) => error.code === "autopilot_weekly_budget_spent" && error.retryAfterSeconds === undefined);
+});
+
+test("what the agenda has left is the envelope of its next episode and of that episode's decision, and the episode is funded from it", async () => {
+  const planner = plannerDouble((input) => choose(input.eligible[0]));
+  const { service, usage } = fixture({ planner });
+  const agenda = await started(service);
+  // ¥2.60 of the day's ¥3 is gone: ¥0.40 is left, less than the ¥1.50 an episode may spend.
+  usage.spend = { day: 2.6, week: 2.6 };
+  const { episode } = await service.runNow("user-one", agenda.id, { requestId: "tight" });
+  assert.equal(planner.calls[0].envelopeCny, 0.4);
+  const split = splitEpisodeBudget(0.4);
+  assert.deepEqual([episode.payload.budgetCny, episode.payload.verificationBudgetCny], [split.episodeCny, split.verificationCny]);
+  assert.ok(episode.payload.budgetCny + episode.payload.verificationBudgetCny * STOPPING_RULES.verificationsPerEpisode <= 0.4 + 1e-9, "the episode and its second opinions never exceed what was left");
+  // Plenty left: the episode's own cap is the envelope, as it always was.
+  usage.spend = { day: 0, week: 0 };
+  const roomy = await service.runNow("user-one", agenda.id, { requestId: "roomy" });
+  assert.equal(planner.calls[1].envelopeCny, 1.5);
+  assert.equal(roomy.episode.payload.budgetCny + roomy.episode.payload.verificationBudgetCny * STOPPING_RULES.verificationsPerEpisode, 1.5);
+  // The week binds when it is the tighter: ¥6 a week with ¥5.90 spent leaves ten cents.
+  usage.spend = { day: 0.5, week: 5.9 };
+  await service.runNow("user-one", agenda.id, { requestId: "week" });
+  assert.equal(planner.calls[2].envelopeCny, 0.1);
+});
+
+test("an account at its own cap is refused as the account, whatever the agenda has left", async () => {
+  const { service, usage, jobs } = fixture({ accountCaps: () => ({ userDailySpendLimit: 20, userWeeklySpendLimit: 0 }) });
+  const agenda = await started(service);
+  usage.assertWithinLimits = async (_userId, limits) => {
+    if (limits.dailyLimit > 0) throw new HttpError(402, "usage_budget_exceeded", "This account reached its spending limit.");
+  };
+  await assert.rejects(() => service.runNow("user-one", agenda.id, { requestId: "capped" }), { status: 402, code: "usage_budget_exceeded" });
+  assert.equal(jobs.items.length, 0);
+});
+
+test("an agenda with no ledger composed is bounded by its episode cap and nothing else", async () => {
+  const documents = new MemoryDocuments();
+  const jobs = new MemoryJobs();
+  const service = new AutopilotService({ documents, jobs, now: () => new Date("2026-09-06T01:00:00Z"), id: (prefix) => `${prefix}1` });
+  const created = await service.create("user-one", smallAgenda);
+  const agenda = await service.start("user-one", created.id, { expectedRevision: created.revision });
+  const { episode } = await service.runNow("user-one", agenda.id, { requestId: "free" });
+  assert.equal(episode.payload.budgetCny + episode.payload.verificationBudgetCny * STOPPING_RULES.verificationsPerEpisode, 1.5);
+});
+
+test("a run scope carries the account's day and week and the run's own limit, never the agenda's caps", () => {
+  const { service } = fixture({ accountCaps: () => ({ userDailySpendLimit: 0, userWeeklySpendLimit: 100 }) });
+  const agenda = { payload: { dailyBudgetCny: 3, weeklyBudgetCny: 6 } };
+  assert.deepEqual(service.runScope(agenda, 1.12), { dailyLimit: 1_000_000, weeklyLimit: 100, runLimit: 1.12 },
+    "no account cap is a figure no run reaches, so the agenda's ¥3 cannot become the gateway's daily limit");
+  assert.throws(() => service.runScope(agenda, 0), { code: "autopilot_payload_invalid" }, "a run with nothing to spend is not a run with no limit");
 });

@@ -183,6 +183,15 @@ class FakePool extends EventEmitter {
       const rows = [...this.documents.values()].filter((row) => row.kind === values[1]);
       return { rows, rowCount: rows.length };
     }
+    // The projected list of one agenda's episodes that its own spend is asked about (`AutopilotService.ownRunIds`):
+    // only the fields named, and only the rows the payload filter (`$8`) matches.
+    if (/^SELECT user_id,kind,id,project_id,jsonb_build_object\(.*\) AS payload,revision,created_at,updated_at,deleted_at FROM evimed_product\.documents WHERE user_id=\$1 AND kind=\$2 AND \(deleted_at/.test(sql)) {
+      const filter = JSON.parse(values[7]);
+      const rows = [...this.documents.values()].filter((row) => row.kind === values[1]
+        && Object.entries(filter).every(([key, value]) => row.payload[key] === value))
+        .map((row) => ({ ...row, payload: { agendaId: row.payload.agendaId } }));
+      return { rows, rowCount: rows.length };
+    }
     // Everything below is what the feedback loop needs and nothing else needs:
     // each branch is gated on the one kind it serves, so no statement any other
     // test depends on changes its answer.
@@ -829,7 +838,8 @@ function verificationFixtureRows(episodeStart = false) {
       digestId: episodeStart ? null : "digest-verify", budgetCny: 6, verificationBudgetCny: 0.67, claims: [claim] }),
     documentRow("digest", "digest-verify", { agendaId: "agenda-verify", date: "2026-09-06", costCny: 3,
       headlines: [], leads: [claim], decisions: [] }),
-  ].map(row => ({ ...row, project_id: PROJECT_ID }));
+    // The episode is recent: the agenda's own spend looks back a week, and an episode older than that has none inside it.
+  ].map(row => ({ ...row, project_id: PROJECT_ID, ...(row.kind === "episode" ? { created_at: new Date() } : {}) }));
 }
 
 test("a verification runs in a workspace that does not contain the report it is checking", async (t) => {
@@ -934,6 +944,10 @@ test("a verification runs in a workspace that does not contain the report it is 
   assert.match(text, /data written by the run you are checking/);
   assert.equal(dispatched[0].input.dispatchId, VERIFICATION_ID);
   assert.equal(reserved[0].scope.runId, VERIFICATION_ID);
+  // The scope it is signed with: the account's day and week (no cap here, so a figure no run reaches) and the share the
+  // episode held back for it. The agenda's own ¥8 a day and ¥80 a week are not in it: the gateway would compare them with
+  // everything the account spent.
+  assert.deepEqual(reserved[0].scope, { runId: VERIFICATION_ID, dailyLimit: 1_000_000, weeklyLimit: 1_000_000, runLimit: 0.67 });
 });
 
 test("a verification that could not be dispatched leaves no scratch directory behind", async (t) => {
@@ -1091,11 +1105,14 @@ test("a verification whose scratch cannot be removed still folds, and the sweep 
 
 test("an episode that spent everything it was given still leaves its own verifications affordable", async (t) => {
   // The starvation this splits the budget to prevent: verification spends into
-  // the same rolling 24h window the episode just spent into, and the shipped
-  // configuration lets one episode have the whole night. Dispatched at the full
-  // nightly budget, an episode that used it refuses every re-check of its own
-  // claims -- `usage_budget_exceeded` is terminal, so the claim would sit at
-  // `gated` forever with a verification nobody could ever run.
+  // the same rolling 24h window of the TASK's own spend that the episode just
+  // spent into, and the shipped configuration lets one episode have the whole
+  // night. Dispatched at the full nightly budget, an episode that used it
+  // refuses every re-check of its own claims -- the task's budget is spent, and
+  // that refusal is terminal, so the claim would sit at `gated` forever with a
+  // verification nobody could ever run. (The agenda's caps are compared with the
+  // agenda's own runs' spend, found by its episodes' ids: `daySpendCny` is what
+  // those runs settled in the window, never the account's other research.)
   const fixture = await composedApp(t, { autopilotEnabled: true,
     modelGatewaySigningSecret: randomBytes(32).toString("hex") });
   for (const row of verificationFixtureRows()) fixture.pool.documents.set(`${row.kind}:${row.id}`, row);
@@ -1121,9 +1138,68 @@ test("an episode that spent everything it was given still leaves its own verific
     "an episode that used its whole budget must not have eaten its own second opinion");
 
   // And the assertion is not vacuous: at the budget the episode used to be
-  // dispatched with, the same call is refused.
+  // dispatched with, the same call is refused -- as the task's budget, which is
+  // what is spent, not as the account's.
   fixture.pool.daySpendCny = night;
-  await assert.rejects(() => fixture.app.autopilotWorker.dispatchVerification(request), { code: "usage_budget_exceeded" });
+  await assert.rejects(() => fixture.app.autopilotWorker.dispatchVerification(request), { status: 402, code: "autopilot_daily_budget_spent" });
+});
+
+// An episode's run is signed with the account's day and week and its own limit
+// (2026-10-04). The agenda's daily and weekly caps used to be signed in as the
+// gateway's day and week, which the gateway compares with everything the account
+// spent: a researcher's other research refused their scheduled research's every
+// model call. What the task has left of its own caps bounds the run instead.
+test("an episode is signed with the account's day and week and a run limit of what it and its task may spend, never the task's own caps", async (t) => {
+  const fixture = await composedApp(t, { autopilotEnabled: true, modelGatewaySigningSecret: randomBytes(32).toString("hex") });
+  // A dispatch binds its run to the episode, so each dispatch below starts from the queued episode again.
+  const seed = () => { for (const row of verificationFixtureRows(true)) fixture.pool.documents.set(`${row.kind}:${row.id}`, row); };
+  seed();
+  const { app } = fixture;
+  app.memorySubstrate.recall = async () => [];
+  /** @type {any[]} */ const reserved = [];
+  /** @type {any[]} */ const prompts = [];
+  app.runtimeManager.reserveBoundedRuntimeSession = async (/** @type {any} */ _project, /** @type {any} */ scope) => {
+    reserved.push(scope);
+    return { id: "session-episode", kernel: "dsh" };
+  };
+  app.runtimeManager.dispatchPrompt = async (/** @type {any} */ _project, /** @type {string} */ _sessionId, /** @type {any} */ request) => {
+    prompts.push(request);
+    return { accepted: true };
+  };
+  app.researchSessions.put = async (/** @type {any} */ _project, /** @type {string} */ _sessionId, /** @type {any} */ binding) => binding;
+  app.agentRuns.dispatch = async (/** @type {any} */ _project, /** @type {any} */ input, /** @type {any} */ sendPrompt) => {
+    await sendPrompt({ sessionId: input.sessionId }, { id: "run-episode", kernelRequestIds: [] });
+    return { id: "run-episode", status: "running" };
+  };
+  const episode = {
+    userId: USER_ID, projectId: PROJECT_ID, agendaId: "agenda-verify", episodeId: EPISODE_ID, dispatchId: EPISODE_ID,
+    taskType: "literature-sentinel", budgetCny: 6, prompt: "Run the literature-sentinel proactive research episode.",
+    assertDispatchAllowed: async () => {},
+  };
+
+  // The agenda is ¥8 a day and ¥80 a week with a ¥6 episode; its own runs spent ¥3 today. The account's other research is not in
+  // that figure and cannot be: the pool answers the task's own spend, and the account has no cap here.
+  fixture.pool.daySpendCny = 3;
+  assert.equal((await app.autopilotWorker.dispatchEpisode(episode)).runId, "run-episode");
+  assert.deepEqual(reserved[0], { runId: EPISODE_ID, dailyLimit: 1_000_000, weeklyLimit: 1_000_000, runLimit: 5 },
+    "the account has no cap, so a figure no run reaches; the run's limit is what the task has left (¥8 less ¥3), the smaller of that and the episode's ¥6");
+  const marker = String(prompts[0].text).match(/<evimed-budget-scope>([^<.]+)\./)?.[1];
+  const signed = JSON.parse(Buffer.from(String(marker), "base64url").toString("utf8"));
+  assert.deepEqual([signed.runId, signed.dailyLimit, signed.weeklyLimit, signed.runLimit], [EPISODE_ID, 1_000_000, 1_000_000, 5], "and the same scope is what the gateway is signed with");
+
+  // Room beyond the episode's own budget: the episode's budget is the limit.
+  reserved.length = 0;
+  seed();
+  fixture.pool.daySpendCny = 0;
+  await app.autopilotWorker.dispatchEpisode(episode);
+  assert.equal(reserved[0].runLimit, 6);
+
+  // The task's own cap spent: the dispatch is refused as the task's, before a runtime is reserved.
+  reserved.length = 0;
+  seed();
+  fixture.pool.daySpendCny = 8;
+  await assert.rejects(() => app.autopilotWorker.dispatchEpisode(episode), { status: 402, code: "autopilot_daily_budget_spent" });
+  assert.equal(reserved.length, 0);
 });
 
 // ---------------------------------------------------------------------------

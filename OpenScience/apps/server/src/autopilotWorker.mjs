@@ -5,14 +5,17 @@ import { HttpError } from "./security.mjs";
 
 export const AUTOPILOT_RESOURCE_BACKOFF_MS = Object.freeze([300_000, 900_000, 3_600_000, 21_600_000, 86_400_000]);
 
+// The task's own caps are a rolling window: a dispatch refused by them is not
+// one that a retry a minute later finds open, and the next occurrence asks again.
+const TASK_BUDGET_CODES = ["autopilot_daily_budget_spent", "autopilot_weekly_budget_spent"];
 const TERMINAL = new Set(["autopilot_job_invalid", "autopilot_stopped", "autopilot_episode_state_conflict",
   "result_impact_source_unavailable",
-  "runtime_prompt_acceptance_unknown", "runtime_prompt_rejected"]);
+  "runtime_prompt_acceptance_unknown", "runtime_prompt_rejected", ...TASK_BUDGET_CODES]);
 // A verification that cannot be afforded, cannot be routed, or names a claim
 // that is no longer there will not become affordable, routable or present by
 // being tried again. Retrying it spends the little budget the claim had left on
 // the same refusal.
-const VERIFICATION_TERMINAL = new Set(["usage_budget_exceeded", "autopilot_job_invalid", "autopilot_stopped",
+const VERIFICATION_TERMINAL = new Set(["usage_budget_exceeded", ...TASK_BUDGET_CODES, "autopilot_job_invalid", "autopilot_stopped",
   "result_impact_source_unavailable",
   "autopilot_paused", "autopilot_claim_not_found", "autopilot_episode_not_found", "autopilot_payload_invalid",
   "autopilot_capability_unavailable", "runtime_prompt_rejected"]);

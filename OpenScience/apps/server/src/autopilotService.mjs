@@ -5,6 +5,7 @@ import { ALLOWED_EFFECT_MEASURES, AUTOPILOT_TASK_TYPES, digestPlacement, directi
 import { AUTOPILOT_MATERIALS_MAX, loadAutopilotProgress, projectResearchState, renderAutopilotProgress, safeAutopilotArtifactRefs } from "./autopilotProgress.mjs";
 import { RESEARCHER_PAUSE_KIND, buildPlannerContext, eligibleTaskTypes, rotationTaskType } from "./autopilotNextAction.mjs";
 import { foldOutcome, reducedPriority } from "./autopilotOutcome.mjs";
+import { AGENDA_WINDOW_MS, agendaAllowance, agendaBudget, budgetFreesAt, taskBudgetRefusal } from "./agendaBudget.mjs";
 import { sourceIdFor } from "./sourceService.mjs";
 import { HttpError } from "./security.mjs";
 
@@ -88,6 +89,16 @@ export function isUnsentAutopilotLeaseLoss(run) {
 
 /** @param {string} episodeId @param {number} index */
 export function verificationIdFor(episodeId, index) { return `${episodeId}-v${index}`; }
+
+/**
+ * Every run id the money of these episodes is booked under: the episode's own
+ * (its next-action decision and its run) and each verification it may earn.
+ * What `UsageLedger.spendOfRuns` is asked about to learn what an agenda spent.
+ * @param {readonly string[]} episodeIds @returns {string[]}
+ */
+export function agendaRunIds(episodeIds) {
+  return episodeIds.flatMap((id) => [id, ...Array.from({ length: STOPPING_RULES.verificationsPerEpisode }, (_, index) => verificationIdFor(id, index))]);
+}
 
 /** The episode a verification belongs to, or null if this is not a verification id. */
 export function verificationEpisodeId(verificationId) {
@@ -267,6 +278,8 @@ export function recomputationVerdict(effect, recomputed) {
   return Math.abs(found - claimed) <= 0.01 * Math.max(Math.abs(claimed), 1);
 }
 
+/** How long after an episode is made its runs and verifications can still be spending: two hours of wall clock, verifications retried over about a day and a half. */
+const EPISODE_TAIL_MS = 2 * 86_400_000;
 /** The share of a night's budget held back for the second opinions its claims may earn. */
 const VERIFICATION_BUDGET_SHARE = 0.25;
 /** @param {number} value */
@@ -395,13 +408,15 @@ function continuationBindingKey(value) {
 /** Persistent proactive-research policy and decision ledger. Episodes remain
  * ordinary ProductJobs and are dispatched through the ordinary AgentRun path. */
 export class AutopilotService {
-  /** @param {{documents:any,jobs:any,usage?:any,notifications?:any,capsules?:any,planner?:{decide:(input:any)=>Promise<any>}|null,authorizeContinuation?:((userId:string,projectId:string,binding:any)=>Promise<void>)|null,now?:()=>Date,id?:(prefix:string)=>string}} dependencies */
-  constructor({ documents, jobs, usage = null, notifications = null, capsules = null, planner = null,
+  /** @param {{documents:any,jobs:any,usage?:any,accountCaps?:()=>Record<string,any>,notifications?:any,capsules?:any,planner?:{decide:(input:any)=>Promise<any>}|null,authorizeContinuation?:((userId:string,projectId:string,binding:any)=>Promise<void>)|null,now?:()=>Date,id?:(prefix:string)=>string}} dependencies */
+  constructor({ documents, jobs, usage = null, accountCaps = () => ({}), notifications = null, capsules = null, planner = null,
     authorizeContinuation = null, now = () => new Date(), id = (prefix) => `${prefix}${randomUUID()}` }) {
     if (!documents || !jobs) throw new TypeError("AutopilotService requires product documents and jobs.");
     this.documents = documents;
     this.jobs = jobs;
     this.usage = usage;
+    /** The account's own spending caps (`userDailySpendLimit`, `userWeeklySpendLimit`; zero means none), read when asked so a changed deployment setting is the next question's. */
+    this.accountCaps = accountCaps;
     this.notifications = notifications;
     this.capsules = capsules;
     /** The one model decision before each episode; without it the date rotation chooses (`chooseNextAction`). */
@@ -1449,6 +1464,75 @@ export class AutopilotService {
   }
 
   /**
+   * The run ids an agenda's own spend is booked under (`agendaRunIds`), for the
+   * episodes it made inside the week the caps look back over. The episodes come
+   * newest first, so the walk ends at the first one older than the horizon: an
+   * episode runs for at most two hours of wall clock and its verifications are
+   * retried over about a day and a half, so one made more than that before the
+   * week began has nothing left inside it.
+   * @param {string} userId @param {any} agenda @param {Date} now @returns {Promise<string[]>}
+   */
+  async ownRunIds(userId, agenda, now) {
+    const horizon = now.getTime() - AGENDA_WINDOW_MS.week - EPISODE_TAIL_MS;
+    const older = (/** @type {any} */ item) => Date.parse(item.createdAt) < horizon;
+    /** @type {string[]} */
+    const ids = [];
+    let cursor = null;
+    for (let pages = 0; pages < 20; pages += 1) {
+      const page = await this.documents.list(userId, "episode", { projectId: agenda.projectId, filter: { agendaId: agenda.id },
+        limit: 100, cursor, fields: { agendaId: true } });
+      ids.push(...page.items.filter((/** @type {any} */ item) => !older(item)).map((/** @type {any} */ item) => item.id));
+      cursor = page.items.some(older) ? null : page.nextCursor;
+      if (!cursor) break;
+    }
+    return agendaRunIds(ids);
+  }
+
+  /**
+   * The two budget questions that precede any work for an agenda — an episode,
+   * its planner decision, a verification — asked separately (`agendaBudget.mjs`):
+   * the task's own caps against what the task spent, refused as the task's
+   * budget (`autopilot_daily_budget_spent` / `autopilot_weekly_budget_spent`,
+   * with when it frees), and then the account's caps against everything the
+   * account spent, refused as the account's (`usage_budget_exceeded`). A
+   * manual run and a follow-up ask exactly the same; neither bypasses anything.
+   *
+   * Returns what is left of the task's own caps, the envelope the next piece of
+   * work may spend (`Infinity` when no ledger is composed).
+   * @param {string} userId @param {any} agenda @returns {Promise<{ remainingCny: number }>}
+   */
+  async assertAffordable(userId, agenda) {
+    if (!this.usage) return { remainingCny: Infinity };
+    const at = this.now();
+    const budget = agendaBudget(agenda.payload, this.accountCaps());
+    const runIds = await this.ownRunIds(userId, agenda, at);
+    const allowance = agendaAllowance(budget.own, await this.usage.spendOfRuns(userId, { runIds, now: at }));
+    const spentWindow = allowance.spentWindow;
+    if (spentWindow) {
+      // When it frees is a courtesy to the reader: a timeline that cannot be
+      // read leaves the refusal without a time, never without its reason.
+      /** @type {number | null} */
+      let freesAt = null;
+      try {
+        freesAt = budgetFreesAt({ timeline: await this.usage.spendTimelineOfRuns(userId, { runIds, now: at }),
+          spent: allowance[spentWindow].spent, limit: allowance[spentWindow].limit, windowMs: AGENDA_WINDOW_MS[spentWindow], now: at.getTime() });
+      } catch { /* the reason stands without the time */ }
+      throw taskBudgetRefusal(spentWindow, allowance[spentWindow].spent, allowance[spentWindow].limit, freesAt, at.getTime());
+    }
+    await this.usage.assertWithinLimits(userId, { ...budget.account, now: at });
+    return { remainingCny: allowance.remainingCny };
+  }
+
+  /**
+   * What a bounded runtime and the model gateway are signed with for one run of
+   * this agenda: the account's day and week, and this run's own limit — never
+   * the task's day and week, which the gateway would sum against everything the
+   * account spent.
+   * @param {any} agenda @param {number} runLimitCny
+   */
+  runScope(agenda, runLimitCny) { return agendaBudget(agenda.payload, this.accountCaps(), { runLimitCny }).scope; }
+
+  /**
    * One occurrence of an agenda is scheduled by one caller at a time, across
    * replicas. What the episode will do is a model decision (`chooseNextAction`),
    * and the episode's own insert already lets only one of two schedulers win —
@@ -1506,7 +1590,10 @@ export class AutopilotService {
       throw new HttpError(409, "autopilot_request_conflict", "This request id already belongs to a different task request.");
     }
     if (input.expectedRevision !== undefined && agenda.revision !== input.expectedRevision && !existingEpisode) this.revision(agenda, input.expectedRevision);
-    if (this.usage && !existingEpisode) await this.usage.assertWithinLimits(userId, { dailyLimit: agenda.payload.dailyBudgetCny, weeklyLimit: agenda.payload.weeklyBudgetCny, now: this.now() });
+    // The task's own caps against what the task spent, then the account's against
+    // the account's (`assertAffordable`): the agenda's ¥3 a day was once compared
+    // with everything the account had spent that day (2026-10-04).
+    const allowance = existingEpisode ? null : await this.assertAffordable(userId, agenda);
     // What this episode will do is decided once, from the progress, before the
     // episode exists; a replay of the same request reads the decision back from
     // the episode instead of asking again.
@@ -1514,11 +1601,14 @@ export class AutopilotService {
     if (!existingEpisode && eligible.length === 0) throw new HttpError(409, "autopilot_paused", "Every task type of this research agenda is paused.");
     const reduced = !manual && reducedPriority(agenda.payload);
     const at = this.now().toISOString();
+    // What this episode, its next-action decision included, may spend: its own
+    // cap, and no more than the task has left of its daily and weekly ones.
+    const envelopeCny = Math.min(agenda.payload.maxEpisodeCny, agenda.payload.dailyBudgetCny, allowance?.remainingCny ?? Infinity);
     const progress = existingEpisode?.payload?.progress ?? (!existingEpisode ? await loadAutopilotProgress(this.documents, {
       userId, agenda, date, episodeId, asOf: at,
     }) : null);
     const selection = existingEpisode ? existingEpisode.payload.selection ?? null
-      : await this.chooseNextAction(userId, agenda, { episodeId, date, trigger, note: input.note, progress, eligible, reduced, manual });
+      : await this.chooseNextAction(userId, agenda, { episodeId, date, trigger, note: input.note, progress, eligible, reduced, manual, envelopeCny });
     if (selection?.action === "stop") {
       return this.stopOnDecision(userId, agenda, selection, { episodeId,
         message: trigger === "follow-up" ? { requestId: input.requestId, note: input.note, episodeId: input.episodeId ?? null } : null });
@@ -1526,8 +1616,8 @@ export class AutopilotService {
     const taskType = existingEpisode ? existingEpisode.payload.taskType : selection.taskType;
     // A direction at reduced priority gets half of what a scheduled episode may
     // spend; a researcher's own request for work now is never halved.
-    const nightBudget = Math.min(agenda.payload.maxEpisodeCny, agenda.payload.dailyBudgetCny);
-    const { episodeCny: budgetCny, verificationCny } = splitEpisodeBudget(reduced ? cny(nightBudget / 2) : nightBudget);
+    const nightBudget = envelopeCny;
+    const { episodeCny: budgetCny, verificationCny } = splitEpisodeBudget(reduced ? Math.max(0.01, cny(nightBudget / 2)) : nightBudget);
     const followUps = (agenda.payload.followUps ?? []).filter(item => !item.consumedBy).slice(-5);
     const originalInstruction = agenda.payload.prompt ?? agenda.payload.topics.join("\n");
     const prompt = [
@@ -1645,10 +1735,16 @@ export class AutopilotService {
    * and an agenda with no completed episode has given the model nothing to
    * judge a stop from (`autopilotNextAction.mjs`).
    *
+   * The decision is one model call, and it is bounded by the episode's own
+   * envelope (`envelopeCny`: its cap, or what the task has left if less) —
+   * counted over what that episode has spent, which is the decision itself —
+   * and by the account's caps. Never by the task's daily and weekly caps: the
+   * gateway would sum them against everything the account spent.
+   *
    * @param {string} userId @param {any} agenda
-   * @param {{episodeId:string,date:string,trigger:string,note?:string|null,progress:any,eligible:string[],reduced:boolean,manual:boolean}} input
+   * @param {{episodeId:string,date:string,trigger:string,note?:string|null,progress:any,eligible:string[],reduced:boolean,manual:boolean,envelopeCny?:number}} input
    */
-  async chooseNextAction(userId, agenda, { episodeId, date, trigger, note = null, progress, eligible, reduced, manual }) {
+  async chooseNextAction(userId, agenda, { episodeId, date, trigger, note = null, progress, eligible, reduced, manual, envelopeCny = Infinity }) {
     const base = { eligibleTypes: eligible, priority: reduced ? "reduced" : "normal", decidedAt: this.now().toISOString() };
     const rotation = (/** @type {string} */ fallbackReason) => ({ ...base, source: "date-rotation", action: "run",
       taskType: rotationTaskType(eligible, date), fallbackReason });
@@ -1664,7 +1760,7 @@ export class AutopilotService {
       const decision = await this.planner.decide({
         userId, projectId: agenda.projectId, episodeId, eligible, stopAllowed, pauseAllowed,
         context: buildPlannerContext({ agenda, progress, eligible, date, trigger, note, reducedPriority: reduced, stopAllowed, pauseAllowed }),
-        limits: { daily: agenda.payload.dailyBudgetCny, weekly: agenda.payload.weeklyBudgetCny },
+        envelopeCny: Number.isFinite(envelopeCny) ? envelopeCny : 0,
       });
       return decision.action === "stop"
         ? { ...base, source: "model", model: decision.model, action: "stop", stopKind: decision.stopKind, reason: decision.reason }
