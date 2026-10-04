@@ -480,8 +480,58 @@ def _source_evidence(root: Path) -> dict[str, Any]:
     (audit_receipt.current_evidence). It used to be three files for every
     engine but MR, which no verifier could reproduce, so only MR could ever be
     certified.
+
+    Strict, so the clean verifier and the tests can compare against it. A job never
+    calls it: `_observe_evidence` is what admission and completion use.
     """
     return audit_receipt.current_evidence(root)
+
+
+def _observe_evidence(root: Path) -> dict[str, Any]:
+    """The evidence a job's record can carry, or why not; it cannot raise.
+
+    Evidence is a label (owner ruling 2026-10-04: the receipt is our own mechanism,
+    not a gate on a researcher's job). Until then an engine-source change between
+    admission and completion failed a finished MR job as `mr_input_changed`, a stale
+    pinned adapter manifest answered HTTP 500 on every start, and any file the
+    hashing could not read did the same.
+    """
+    try:
+        return audit_receipt.observe_evidence(root)
+    except Exception:  # noqa: BLE001 — a surprise from the label is still only a label
+        return {"evidence": None, "unavailable": "audit_evidence_error", "pinnedManifest": "unreadable"}
+
+
+def _evidence_health() -> dict[str, str]:
+    """What /health says of the evidence: the pin's status and whether the source can be hashed.
+
+    Reported, never gating: neither value is an input to `ready` or `serving`, so a
+    stale pin cannot make a container unhealthy or refuse a job.
+    """
+    try:
+        observed = _observe_evidence(_agent_root())
+    except RuntimeError:  # no engine source to hash: `serving` already says so
+        return {"adapterManifest": audit_receipt.pinned_manifest_status(), "sourceEvidence": "agent_source_unavailable"}
+    return {
+        "adapterManifest": observed["pinnedManifest"],
+        "sourceEvidence": "observable" if observed["evidence"] is not None else str(observed["unavailable"]),
+    }
+
+
+def _note_evidence(state: dict[str, Any], root: Path) -> None:
+    """Record in the job's state what its source evidence did since admission: its record, never its status.
+
+    The input-integrity guards -- the user's files, the published outputs, the MR
+    workspace and output bindings -- are not evidence and are not touched here.
+    """
+    try:
+        note = audit_receipt.evidence_note(state.get("sourceEvidence"), state.get("evidenceNote"), _observe_evidence(root))
+    except Exception:  # noqa: BLE001 — this runs where an exception would leave a finished job unrecorded
+        return
+    if note is None:
+        state.pop("evidenceNote", None)
+    else:
+        state["evidenceNote"] = note
 
 
 def _job_paths(workspace: Path, job_id: str) -> tuple[Path, Path]:
@@ -786,6 +836,8 @@ def _start(
             _ensure_directory(workspace, target)
         output_root = run_root / job_id / "output"
     root = _agent_root()
+    observed = _observe_evidence(root)
+    note = audit_receipt.admission_note(observed)
     state = {
         "schemaVersion": 2 if queue_record is not None else 1,
         "kind": _kind(),
@@ -803,7 +855,10 @@ def _start(
         **({"mrInputBindings": input_bindings} if input_bindings is not None else {}),
         "workspace": str(workspace),
         "outputRoot": str(output_root),
-        "sourceEvidence": _source_evidence(root),
+        # Absent when the evidence could not be taken (`evidenceNote` says why):
+        # the job is admitted either way.
+        **({"sourceEvidence": observed["evidence"]} if observed["evidence"] is not None else {}),
+        **({"evidenceNote": note} if note else {}),
         # Whose spend this job is, from the token that admitted it: the usage
         # report at the end names the account and project, and by then the
         # token is long expired. MR carries the same in its queue context.
@@ -1240,10 +1295,10 @@ def _run_isolated_mr(
             ) from None
         if outcome.get("cleanupError"):
             state["cleanupError"] = outcome["cleanupError"]
-        if state.get("sourceEvidence") != _source_evidence(root):
-            raise helper.MRInputError(
-                "mr_input_changed", "Managed MR source changed during execution."
-            )
+        # The engine finished: a source that changed under it is written in the
+        # record (and in the receipt below), not turned into `mr_input_changed`,
+        # which stays the code of a changed workspace, input or output.
+        _note_evidence(state, root)
         result = outcome["result"]
         success = outcome["returnCode"] == 0 and result.get("status") == "succeeded"
         usage = usage_report.normalize(result.get("usage"))
@@ -1262,10 +1317,6 @@ def _run_isolated_mr(
                 candidate = {**state, "auditReceipt": receipt}
                 if len(json.dumps(candidate, ensure_ascii=False, indent=2).encode("utf-8")) <= _STATE_LIMIT:
                     state["auditReceipt"] = receipt
-            # Full source evidence includes the worker record implementation itself.
-            if state.get("sourceEvidence") != _source_evidence(root):
-                state.pop("auditReceipt", None)
-                raise helper.MRInputError("mr_input_changed", "Managed MR source changed during execution.")
         if not success:
             if outcome.get("partialScientificReceipt"):
                 state["partialScientificReceipt"] = outcome["partialScientificReceipt"]
@@ -1333,15 +1384,11 @@ def run_job(state_file: str) -> int:
         output_root != workspace / _spec()["directory"] / state["jobId"] / "output"
     ):
         raise RuntimeError("Managed MR job scope does not match its location.")
+    # The engine source is not compared here. It is compared once the engine has
+    # finished and written into the record (`_note_evidence`): a source that
+    # changed between admission and now is a label, and the job runs. What this
+    # worker does still check is where its state and output live.
     root = _agent_root()
-    if state.get("sourceEvidence") != _source_evidence(root):
-        if _kind() == "mendelian-randomization":
-            state.update(status="failed", finishedAt=_now(), updatedAt=_now(),
-                         errorCode="mr_input_changed", retryable=False, artifacts=[],
-                         error="Managed MR source changed after admission.")
-            _write_state(state_path, state)
-            return 1
-        raise RuntimeError("specialist state no longer matches its managed source")
     if _kind() == "mendelian-randomization":
         return _run_isolated_mr(state_path, state, root, data_root)
     expected_state, log_path = _job_paths(workspace, state["jobId"])
@@ -1415,6 +1462,9 @@ def run_job(state_file: str) -> int:
     # What the engine spent at the provider, success or not: a failed job's
     # tokens were paid for as well.
     usage = usage_report.normalize(result.get("usage"))
+    # The engine has ended, either way: what its source evidence did since
+    # admission goes in the record, and decides nothing about the outcome.
+    _note_evidence(state, root)
     if return_code != 0 or result.get("status") != "succeeded" or (isolation is not None and receipt_rows is None):
         state.update(
             {
@@ -1438,8 +1488,6 @@ def run_job(state_file: str) -> int:
         _write_state(state_path, state)
         _report_usage(state, log_path)
         return return_code or 1
-    if state.get("sourceEvidence") != _source_evidence(root):
-        raise RuntimeError("specialist source changed while the job was running")
     # Which of the engine's own steps did not do what they were meant to.
     #
     # The status is still `succeeded`: the engine finished and produced its
@@ -1489,10 +1537,6 @@ def run_job(state_file: str) -> int:
             _log_line(log_path, "job evidence: observation unavailable; completed artifacts remain available")
         elif len(json.dumps({**state, "auditReceipt": receipt}, ensure_ascii=False, indent=2).encode("utf-8")) <= _STATE_LIMIT:
             state["auditReceipt"] = receipt
-        # Full source evidence includes the worker record implementation itself.
-        if state.get("sourceEvidence") != _source_evidence(root):
-            state.pop("auditReceipt", None)
-            raise RuntimeError("specialist source changed while the job was running")
     _write_state(state_path, state)
     _report_usage(state, log_path)
     return 0
@@ -1611,6 +1655,7 @@ def _create_app() -> FastAPI:
             **({"opengwas": opengwas} if opengwas is not None else {}),
             **({"openDataSources": open_sources} if _kind() == "mendelian-randomization" else {}),
             "auditReceiptsReady": audit_receipt.ready(fixture=_kind() == "mendelian-randomization"),
+            **_evidence_health(),
             **(
                 {"acceptedStartInputs": _accepted_start_inputs()}
                 if _kind() in {"research-topic-selection", "mendelian-randomization"}

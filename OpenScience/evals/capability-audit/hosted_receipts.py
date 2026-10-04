@@ -236,7 +236,7 @@ def validate_receipt(value, workspace, tool, max_age_days, *, expected=None, tru
     for key in sorted(required):
         if key not in proof:
             raise ReceiptError("hosted_receipt_missing:" + key)
-    if set(proof) - required - {"releaseStatus", "adapterImageDigest", "adapterRevision"}:
+    if set(proof) - required - {"releaseStatus", "adapterImageDigest", "adapterRevision", "evidenceNote"}:
         raise ReceiptError("hosted_receipt_private_or_unknown_fields")
     if proof["schemaVersion"] not in ({2} if observation else {1}) or proof["tool"] != tool or value.get("tool") != tool:
         raise ReceiptError("hosted_receipt_identity_invalid")
@@ -263,7 +263,11 @@ def validate_receipt(value, workspace, tool, max_age_days, *, expected=None, tru
     except (TypeError, ValueError, AttributeError):
         raise ReceiptError("hosted_receipt_stale") from None
     current = expected if expected is not None else current_evidence(tool)
-    if any(proof[key] != current[key] for key in ("executionEvidence", "adapterEvidence")):
+    # `evidenceNote` is the producer's own word that its source evidence changed
+    # between admission and completion, could not be taken, or sat on a stale
+    # pinned manifest. The job it describes was delivered; this record cannot
+    # certify a release, because its digests do not describe one source.
+    if "evidenceNote" in proof or any(proof[key] != current[key] for key in ("executionEvidence", "adapterEvidence")):
         raise ReceiptError("hosted_receipt_source_changed")
     request = value.get("request")
     if not isinstance(request, dict) or proof["requestSha256"] != digest(canonical(request)):
