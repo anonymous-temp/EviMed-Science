@@ -64,6 +64,7 @@
 
 import { AUTOPILOT_TASK_TYPES } from "@evimed/domain";
 import { callModelForControlPlane } from "./modelGateway.mjs";
+import { claimCheck } from "./autopilotProgress.mjs";
 
 /** What each task type does, in the words the decision reads. Held equal to the domain's closed vocabulary by a test. */
 export const TASK_TYPE_SUMMARIES = Object.freeze({
@@ -75,8 +76,10 @@ export const TASK_TYPE_SUMMARIES = Object.freeze({
   "signal-monitoring": "Analyse adverse-event reports for safety signals on the drugs of the question.",
 });
 
+/** The stop a researcher's own message asks for (`pauseAllowed`): hold the research, spend nothing, until they start it again. */
+export const RESEARCHER_PAUSE_KIND = "paused_by_researcher";
 /** Why an agenda stops, as a closed vocabulary; the sentence is the model's. */
-export const PLANNER_STOP_KINDS = Object.freeze(["answered", "exhausted", "needs_input"]);
+export const PLANNER_STOP_KINDS = Object.freeze(["answered", "exhausted", "needs_input", RESEARCHER_PAUSE_KIND]);
 
 const MAX_REASON_CHARS = 400;
 const MAX_FOCUS_CHARS = 400;
@@ -99,10 +102,13 @@ const instructions = [
   "- A claim that an independent check refuted or weakened is a valid negative result. Build on it; do not queue work to re-prove it.",
   "- An episode with outcome did_not_run or canceled, or a claim whose check was unavailable, says nothing about whether a hypothesis is true. Never treat it as evidence against one. If one task type keeps failing to run, prefer another.",
   "- Do not repeat work an earlier episode completed unless its result is stale or contradicted. Episodes still in progress will report themselves.",
-  "- Choose stop only when another episode cannot add anything: the question is answered (answered), the evidence within reach is used up (exhausted), or what is missing has to come from the researcher (needs_input; say what is needed in reason). Stopping is a legitimate result. When stopAllowed is false you must choose run.",
+  "- Choose stop only when another episode cannot add anything: the question is answered (answered), the evidence within reach is used up (exhausted), or what is missing has to come from the researcher (needs_input; say what is needed in reason). Stopping is a legitimate result. When stopAllowed is false you must choose run (the one exception is the pause below).",
   "- When priority is reduced, recent episodes added little: prefer the narrowest worthwhile step, or stop.",
+  "- researcherMessages is what the researcher has written to this question, oldest first. A correction there stands over the findings it corrects: do not queue work to re-prove what they corrected unless new evidence is in reach, and say in focus what the correction changes. A question there is open until an episode answered it.",
+  "- materials are files the researcher added for this question. Pick the task type that reads a material whose state is ready; one that is reading is not usable yet, and one that needs attention could not be read fully. When earlierStop says input was needed, the material added after it is what was asked for.",
+  "- When request.trigger is follow-up and pauseAllowed is true, the researcher is writing to you now. If the note only asks to pause, hold or stop the research for the time being and asks for nothing to be looked into, choose stop with stopKind paused_by_researcher and say so in reason. A question, a correction, an added requirement or a request with a condition is never a pause: choose run.",
   "Answer with one JSON object and nothing else:",
-  '{"action":"run"|"stop","taskType":"<an available id; required for run>","focus":"<for run: one or two sentences saying what this episode should look into>","reason":"<one or two sentences saying why, from the progress>","stopKind":"answered"|"exhausted"|"needs_input"}',
+  '{"action":"run"|"stop","taskType":"<an available id; required for run>","focus":"<for run: one or two sentences saying what this episode should look into>","reason":"<one or two sentences saying why, from the progress>","stopKind":"answered"|"exhausted"|"needs_input"|"paused_by_researcher"}',
   "Include stopKind only for stop. Write focus and reason in Simplified Chinese.",
 ].join("\n");
 
@@ -146,12 +152,6 @@ function episodeOutcome(status, claims) {
   return "in_progress";
 }
 
-/** What an independent check concluded about one claim, or why there is none. @param {any} claim */
-function claimCheck(claim) {
-  if (["refuted", "weakened", "stands"].includes(claim?.refutation)) return claim.refutation;
-  return claim?.verification?.status === "unavailable" ? "check_unavailable" : "not_checked";
-}
-
 /**
  * What one decision reads. A projection of the agenda and of the bounded
  * progress snapshot (`autopilotProgress.mjs`), with the one distinction the
@@ -159,9 +159,9 @@ function claimCheck(claim) {
  * not an episode that found nothing.
  *
  * @param {{agenda:any, progress:any, eligible:string[], date:string, trigger:string, note?:string|null,
- *   reducedPriority:boolean, stopAllowed:boolean}} input
+ *   reducedPriority:boolean, stopAllowed:boolean, pauseAllowed?:boolean}} input
  */
-export function buildPlannerContext({ agenda, progress, eligible, date, trigger, note = null, reducedPriority, stopAllowed }) {
+export function buildPlannerContext({ agenda, progress, eligible, date, trigger, note = null, reducedPriority, stopAllowed, pauseAllowed = false }) {
   const typeState = agenda.payload.taskTypeState ?? {};
   const episodes = (progress?.episodes ?? []).map((/** @type {any} */ episode) => ({
     date: episode.date,
@@ -183,6 +183,7 @@ export function buildPlannerContext({ agenda, progress, eligible, date, trigger,
     request: { trigger, ...(note ? { note: cut(note, NOTE_CHARS) } : {}) },
     priority: reducedPriority ? "reduced" : "normal",
     stopAllowed,
+    pauseAllowed,
     taskTypes: (agenda.payload.taskTypes ?? []).filter((/** @type {string} */ type) => AUTOPILOT_TASK_TYPES.includes(/** @type {any} */ (type))).map((/** @type {string} */ type) => ({
       id: type, does: TASK_TYPE_SUMMARIES[/** @type {keyof typeof TASK_TYPE_SUMMARIES} */ (type)],
       state: eligible.includes(type) ? "available" : "paused_after_repeated_failures",
@@ -190,6 +191,10 @@ export function buildPlannerContext({ agenda, progress, eligible, date, trigger,
       lastEpisodeDate: lastRun.get(type) ?? null,
     })),
     openQuestions: (progress?.followUps ?? []).map((/** @type {any} */ item) => ({ note: item.note, at: item.at })),
+    // The researcher's own words and files for this question; never another question's.
+    researcherMessages: (progress?.researcherNotes ?? []).map((/** @type {any} */ item) => ({ note: item.note, at: item.at })),
+    materials: (progress?.materials ?? []).map((/** @type {any} */ item) => ({ name: item.name, addedAt: item.addedAt, state: item.state })),
+    earlierStop: progress?.lastStop ? { kind: progress.lastStop.kind, reason: progress.lastStop.reason, at: progress.lastStop.at } : null,
     rejectedDirections: (progress?.rejectedDirections ?? []).map((/** @type {any} */ item) => ({ statement: item.statement, note: item.note })),
     episodes,
     progressTruncated: Boolean(progress?.truncated),
@@ -224,10 +229,10 @@ function parseJsonObject(content) {
  * The model's answer, held to the closed vocabulary or refused. Only format and
  * membership are checked here — whether the choice was wise is the model's.
  *
- * @param {unknown} content @param {{eligible: string[], stopAllowed: boolean}} options
+ * @param {unknown} content @param {{eligible: string[], stopAllowed: boolean, pauseAllowed?: boolean}} options
  * @returns {{action: "run", taskType: string, focus: string, reason: string} | {action: "stop", stopKind: string, reason: string}}
  */
-export function parsePlannerAnswer(content, { eligible, stopAllowed }) {
+export function parsePlannerAnswer(content, { eligible, stopAllowed, pauseAllowed = false }) {
   const answer = /** @type {any} */ (parseJsonObject(content));
   const invalid = (/** @type {string} */ why) => plannerError("autopilot_planner_invalid", `The next-action decision was refused: ${why}.`);
   if (!answer) throw invalid("no JSON object");
@@ -238,8 +243,10 @@ export function parsePlannerAnswer(content, { eligible, stopAllowed }) {
     return { action: "run", taskType: answer.taskType, focus: cut(answer.focus, MAX_FOCUS_CHARS), reason };
   }
   if (answer.action === "stop") {
-    if (!stopAllowed) throw invalid("a stop where none is allowed");
     if (!PLANNER_STOP_KINDS.includes(answer.stopKind)) throw invalid("an unknown stop kind");
+    // The researcher's own pause is the only stop their message can ask for, and
+    // the only one allowed in answer to it; every other stop is the scheduler's.
+    if (answer.stopKind === RESEARCHER_PAUSE_KIND ? !pauseAllowed : !stopAllowed) throw invalid("a stop where none is allowed");
     return { action: "stop", stopKind: answer.stopKind, reason };
   }
   throw invalid("an unknown action");
@@ -279,9 +286,9 @@ export class AutopilotPlanner {
    * Throws a coded error when no usable decision was had; the caller falls back.
    *
    * @param {{userId: string, projectId: string, episodeId: string, context: any, eligible: string[], stopAllowed: boolean,
-   *   limits?: {daily?: number, weekly?: number}}} input
+   *   pauseAllowed?: boolean, limits?: {daily?: number, weekly?: number}}} input
    */
-  async decide({ userId, projectId, episodeId, context, eligible, stopAllowed, limits = {} }) {
+  async decide({ userId, projectId, episodeId, context, eligible, stopAllowed, pauseAllowed = false, limits = {} }) {
     if (!this.available) throw plannerError("autopilot_planner_unavailable", "The next-action planner is not available.");
     if (this.now() < this.openUntil) {
       this.counters.circuitOpen += 1;
@@ -316,7 +323,7 @@ export class AutopilotPlanner {
       if (choice && Object.hasOwn(choice, "finish_reason") && choice.finish_reason !== "stop") {
         throw plannerError("autopilot_planner_incomplete", "The next-action decision was cut off.");
       }
-      const answer = parsePlannerAnswer(choice?.message?.content, { eligible, stopAllowed });
+      const answer = parsePlannerAnswer(choice?.message?.content, { eligible, stopAllowed, pauseAllowed });
       this.consecutiveFailures = 0;
       this.counters[answer.action === "run" ? "runs" : "stops"] += 1;
       return { ...answer, model: this.model };

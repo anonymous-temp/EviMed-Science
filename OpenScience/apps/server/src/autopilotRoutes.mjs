@@ -47,6 +47,20 @@ export function createAutopilotRoutes({ store, service, maxJsonBytes }) {
         : ["expectedRevision", "title", "prompt", "schedule", "taskTypes", "dailyBudgetCny", "weeklyBudgetCny", "maxEpisodeCny"]);
       return reply(service.projectAgenda(await service[method === "DELETE" ? "archive" : "update"](user.id, agenda.id, body)));
     }
+    // The question as the researcher reads it — found, unresolved, the material they
+    // added — and the material itself: sources of the question's own project,
+    // registered by the ordinary knowledge-base upload and only associated here.
+    if (parts[0] === "agendas" && parts.length === 3 && parts[2] === "progress" && method === "GET") {
+      const agenda = await service.get(user.id, parts[1]);
+      await requireProject(agenda.projectId);
+      return reply(await service.researchState(user.id, agenda.id));
+    }
+    if (parts[0] === "agendas" && parts[2] === "materials" && (parts.length === 3 ? method === "POST" : parts.length === 4 && method === "DELETE")) {
+      const agenda = await service.get(user.id, parts[1]);
+      await requireProject(agenda.projectId);
+      if (method === "DELETE") return reply(service.projectAgenda(await service.removeMaterial(user.id, agenda.id, parts[3])));
+      return reply(service.projectAgenda(await service.addMaterials(user.id, agenda.id, await bodyOf(req, maxJsonBytes, ["sourceIds", "sha256"]))));
+    }
     if (parts[0] === "agendas" && parts.length === 3 && method === "POST") {
       const agenda = await service.get(user.id, parts[1]);
       await requireProject(agenda.projectId);

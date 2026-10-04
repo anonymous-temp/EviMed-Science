@@ -37,6 +37,24 @@ export function sourceReadable(payload) {
     && payload.analysis.generation === payload.generation;
 }
 
+/**
+ * A document's state in the page's three words, or `unavailable` for one that
+ * cannot be used and is not going to be read (canceled, removed at its origin).
+ * The JS twin of `SOURCE_STATE_SQL` for a caller that already holds the record;
+ * a document read in part is `attention`, as the page says it, even though its
+ * text is usable.
+ * @param {any} payload a source record's payload
+ * @returns {"reading" | "ready" | "attention" | "unavailable"}
+ */
+export function sourceStateOf(payload) {
+  const status = payload?.status;
+  if (status === "needs_attention") return "attention";
+  if (sourceReadable(payload)) return "ready";
+  if (status === "queued" || status === "parsing") return "reading";
+  if (status === "failed") return "attention";
+  return "unavailable";
+}
+
 /** The SQL twin of `sourceReadable`, over a source row aliased `d`. */
 export const SOURCE_READABLE_SQL = `(d.payload->>'status' IN ('complete','needs_attention')
   OR (d.payload->>'status' IN ('parsing','failed') AND jsonb_typeof(d.payload->'analysis'->'readAt')='string'
@@ -254,6 +272,14 @@ function timestamp(value, field) {
 
 /** @param {string} value */
 function digest(value) { return createHash("sha256").update(value).digest("hex"); }
+
+/**
+ * The id a project's source of these exact bytes has: content-addressed and
+ * scoped by project, so the same file in two projects is two sources and a
+ * caller that holds the bytes' digest can name the source without asking.
+ * @param {string} projectId @param {string} sha256 lower-case hex
+ */
+export function sourceIdFor(projectId, sha256) { return `src_${digest(`${projectId}\0${sha256}`).slice(0, 32)}`; }
 
 /**
  * The dispatch id of one source generation's understanding run.
@@ -496,7 +522,7 @@ export class SourceService {
     const mtime = timestamp(input.mtime, "source mtime");
     const mimeType = text(input.mimeType ?? "application/octet-stream", "MIME type", 160);
     const providerHash = input.providerHash == null ? null : text(input.providerHash, "provider hash", 256);
-    const sourceId = `src_${digest(`${projectId}\0${sha256}`).slice(0, 32)}`;
+    const sourceId = sourceIdFor(projectId, sha256);
     const familyId = `fam_${digest(`${projectId}\0${sourceConnector.type}\0${sourceConnector.id}\0${file}`).slice(0, 32)}`;
     return this.withRegistrationLocks([`source:${userId}:${sourceId}`, `family:${userId}:${familyId}`], async () => {
     let exact = await this.documents.get(userId, "source", sourceId);

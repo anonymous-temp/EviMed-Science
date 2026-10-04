@@ -5,7 +5,8 @@ import { STOPPING_RULES } from "@evimed/domain";
 import { AutopilotService, parseVerificationResult, recomputationVerdict, splitEpisodeBudget, verificationBudgetCny,
   verificationEpisodeId, verificationIdFor, verificationBrief, verificationPrompt,
   verificationWorkspacePath } from "../src/autopilotService.mjs";
-import { AutopilotPlanner, rotationTaskType } from "../src/autopilotNextAction.mjs";
+import { AutopilotPlanner, RESEARCHER_PAUSE_KIND, rotationTaskType } from "../src/autopilotNextAction.mjs";
+import { sourceIdFor } from "../src/sourceService.mjs";
 import { AutopilotWorker } from "../src/autopilotWorker.mjs";
 import { createAutopilotRoutes } from "../src/autopilotRoutes.mjs";
 import { CapsuleService } from "../src/capsuleService.mjs";
@@ -1629,4 +1630,196 @@ test("with the real planner the model's pick of an offered type runs, and a pick
   assert.equal(refused.episode.payload.selection.source, "date-rotation");
   assert.equal(refused.episode.payload.selection.fallbackReason, "autopilot_planner_invalid");
   assert.ok(agendaInput.taskTypes.includes(refused.episode.payload.taskType));
+});
+
+// ——— Question and material to observable research to supplement (plan §11.3 N11) ———
+
+const digestOf = (text) => text.repeat(64).slice(0, 64);
+/** A source of the knowledge base as intake leaves it: its id is derived from the project and the bytes' digest. */
+async function addSource(documents, { projectId = "project-one", userId = "user-one", hex = "a", name = "年龄分布.xlsx", status = "complete" } = {}) {
+  const id = sourceIdFor(projectId, digestOf(hex));
+  await documents.put(userId, "source", id, { status, paths: [`knowledge-base/${name}`], fingerprint: { sha256: digestOf(hex) } }, { expectedRevision: 0, projectId });
+  return id;
+}
+
+test("material is associated with the question it was added to: by id or by the bytes' digest, from this project only, all or nothing", async () => {
+  const { service, documents } = fixture();
+  const created = await service.create("user-one", agendaInput);
+  const mine = await addSource(documents, { hex: "a" });
+  const elsewhere = await addSource(documents, { hex: "b", projectId: "project-two" });
+  const someoneElses = await addSource(documents, { hex: "c", userId: "user-two" });
+
+  let agenda = await service.addMaterials("user-one", created.id, { sha256: [digestOf("a")] });
+  assert.deepEqual(agenda.payload.materials.map((item) => item.sourceId), [mine], "the digest of what was just uploaded names the source exactly");
+  agenda = await service.addMaterials("user-one", created.id, { sourceIds: [mine] });
+  assert.equal(agenda.payload.materials.length, 1, "adding the same material again changes nothing");
+  assert.equal(agenda.revision, (await service.get("user-one", created.id)).revision);
+
+  // Another project's source, another account's source and a digest nobody uploaded are the same answer, and nothing is added.
+  for (const input of [{ sourceIds: [elsewhere] }, { sourceIds: [someoneElses] }, { sha256: [digestOf("d")] }, { sourceIds: [mine, elsewhere] }, { sha256: [digestOf("b")] }]) {
+    await assert.rejects(() => service.addMaterials("user-one", created.id, input), (error) => error.status === 404 && error.code === "autopilot_material_not_found", JSON.stringify(input));
+  }
+  for (const input of [{}, { sourceIds: [] }, { sourceIds: ["../escape"] }, { sourceIds: "src_a" }, { sha256: ["not-a-digest"] }, { sourceIds: Array.from({ length: 11 }, (_, index) => sourceIdFor("project-one", digestOf(String(index)))) }]) {
+    await assert.rejects(() => service.addMaterials("user-one", created.id, input), (error) => error.status === 400, JSON.stringify(input));
+  }
+  agenda = await service.get("user-one", created.id);
+  assert.deepEqual(agenda.payload.materials.map((item) => item.sourceId), [mine], "a refused request leaves the question as it was");
+
+  // Taking it out leaves the source in the knowledge base; taking out what is not there is not an error.
+  agenda = await service.removeMaterial("user-one", created.id, mine);
+  assert.deepEqual(agenda.payload.materials, []);
+  assert.ok(await documents.get("user-one", "source", mine));
+  await service.removeMaterial("user-one", created.id, mine);
+});
+
+test("a question keeps a bounded amount of material", async () => {
+  const { service, documents } = fixture();
+  const created = await service.create("user-one", agendaInput);
+  const ids = [];
+  for (let index = 0; index < 21; index += 1) ids.push(await addSource(documents, { hex: index.toString(16).padStart(2, "0"), name: `doc-${index}.pdf` }));
+  for (const id of ids.slice(0, 20)) await service.addMaterials("user-one", created.id, { sourceIds: [id] });
+  await assert.rejects(() => service.addMaterials("user-one", created.id, { sourceIds: [ids[20]] }), { code: "autopilot_materials_full", status: 409 });
+  assert.equal((await service.get("user-one", created.id)).payload.materials.length, 20);
+});
+
+test("what was said and added to a question reaches its next decision and its brief, and no other question's does", async () => {
+  const planner = plannerDouble((input) => choose(input.eligible[0]));
+  const { service, documents } = fixture({ planner });
+  const first = await service.create("user-one", agendaInput);
+  const second = await service.create("user-one", { ...agendaInput, title: "完全无关的新问题", topics: ["asthma"] });
+  const started = await service.start("user-one", first.id, { expectedRevision: first.revision });
+  await service.start("user-one", second.id, { expectedRevision: second.revision });
+  const material = await addSource(documents, { hex: "a", name: "年龄分布.xlsx" });
+  await addSource(documents, { hex: "e", name: "哮喘队列.xlsx" });
+  await service.addMaterials("user-one", started.id, { sha256: [digestOf("a")] });
+  await service.followUp("user-one", started.id, { requestId: "correct-1", note: "分母应该是随机化人群，不是意向治疗人群" });
+
+  const next = await service.runNow("user-one", started.id, { requestId: "ask-now" });
+  const context = planner.calls.at(-1).context;
+  assert.deepEqual(context.researcherMessages.map((item) => item.note), ["分母应该是随机化人群，不是意向治疗人群"]);
+  assert.deepEqual(context.materials.map((item) => [item.name, item.state]), [["年龄分布.xlsx", "ready"]]);
+  assert.match(next.episode.payload.prompt, /researcherNotes below\)\. A correction there stands/);
+  assert.match(next.episode.payload.prompt, /materials below, in the project's knowledge base/);
+  assert.match(next.episode.payload.prompt, /\.evimed-knowledge\/年龄分布\.xlsx/);
+  assert.equal(next.episode.payload.progress.materials[0].sourceId, material);
+
+  // A new subject in the same project starts from nothing of this one's.
+  const fresh = await service.runNow("user-one", second.id, { requestId: "ask-other" });
+  const other = planner.calls.at(-1).context;
+  assert.deepEqual([other.researcherMessages, other.materials, other.earlierStop, other.episodes], [[], [], null, []]);
+  assert.doesNotMatch(fresh.episode.payload.prompt, /年龄分布|随机化人群|researcherNotes below|materials below/);
+  assert.equal(fresh.episode.payload.progress.materials.length, 0);
+});
+
+test("the researcher reads what was found and what is unresolved from the same progress the next decision reads", async () => {
+  const planner = plannerDouble((input) => choose(input.eligible[0]));
+  const { service, documents } = fixture({ planner, now: () => new Date("2026-09-06T03:00:00Z") });
+  let agenda = await service.create("user-one", agendaInput);
+  agenda = await service.start("user-one", agenda.id, { expectedRevision: agenda.revision });
+  await documents.put("user-one", "episode", "yesterday", { agendaId: agenda.id, date: "2026-09-05", status: "merged", createdAt: "2026-09-05T01:00:00Z", claims: [
+    { id: "c1", statement: "获益在亚组中一致", tier: "gated", refutation: "stands", sources: ["a"] },
+    { id: "c2", statement: "无酮症酸中毒增加", tier: "unverified", sources: ["a"] }] }, { expectedRevision: 0, projectId: agenda.projectId });
+  await documents.put("user-one", "episode", "elsewhere", { agendaId: "someone-elses-question", date: "2026-09-05", status: "merged", createdAt: "2026-09-05T02:00:00Z", claims: [
+    { id: "x", statement: "别的问题的结论", tier: "gated", refutation: "stands" }] }, { expectedRevision: 0, projectId: agenda.projectId });
+  const state = await service.researchState("user-one", agenda.id);
+  assert.deepEqual(state.found.map((item) => [item.check, item.statement]), [["stands", "获益在亚组中一致"]]);
+  assert.deepEqual(state.unresolved.map((item) => [item.kind, item.text]), [["unchecked", "无酮症酸中毒增加"]]);
+  assert.equal(JSON.stringify(state).includes("别的问题"), false);
+  // The same snapshot is what the next episode freezes: the page cannot say one thing while the run acts on another.
+  const scheduled = await service.runNow("user-one", agenda.id, { requestId: "now" });
+  assert.deepEqual(scheduled.episode.payload.progress.episodes.map((item) => item.id), ["yesterday"]);
+  await assert.rejects(() => service.researchState("user-two", agenda.id), { code: "autopilot_agenda_not_found" });
+});
+
+test("a researcher's message that only asks to hold the research pauses it in their conversation, with nothing canceled and no notice", async () => {
+  const planner = plannerDouble((input, n) => n === 1 ? choose(input.eligible[0])
+    : { action: "stop", stopKind: RESEARCHER_PAUSE_KIND, reason: "你要求先暂停，等你说继续再往下做", model: "deepseek-flash" });
+  const { service, jobs, notifications } = fixture({ planner });
+  const created = await service.create("user-one", agendaInput);
+  let agenda = await service.start("user-one", created.id, { expectedRevision: created.revision });
+  const ran = await service.runNow("user-one", agenda.id, { requestId: "first" });
+  const queued = jobs.items.length;
+
+  const paused = await service.followUp("user-one", agenda.id, { requestId: "hold-1", note: "先停一下，我要核对数据来源" });
+  assert.equal(planner.calls[1].pauseAllowed, true);
+  assert.equal(planner.calls[1].stopAllowed, false);
+  assert.equal(planner.calls[1].context.request.note, "先停一下，我要核对数据来源");
+  assert.deepEqual([paused.episode, paused.job, paused.stopped.kind], [null, null, RESEARCHER_PAUSE_KIND]);
+  assert.equal(jobs.items.length, queued, "a pause spends nothing");
+  agenda = await service.get("user-one", agenda.id);
+  assert.deepEqual([agenda.payload.status, agenda.payload.enabled, agenda.payload.plannerStop.kind], ["paused", false, RESEARCHER_PAUSE_KIND]);
+  assert.deepEqual(agenda.payload.messages.at(-1), { requestId: "hold-1", note: "先停一下，我要核对数据来源", episodeId: null, runEpisodeId: null, outcome: "paused", at: agenda.payload.messages.at(-1).at });
+  assert.equal((await service.getEpisode("user-one", ran.episode.id)).payload.status, "queued", "work already in flight is not canceled by a pause");
+  assert.equal(notifications.created.length, 0, "they are not told by notice what they just said");
+
+  // The same request again is refused as against a paused question, and is not a second message.
+  await assert.rejects(() => service.followUp("user-one", agenda.id, { requestId: "hold-1", note: "先停一下，我要核对数据来源" }), { code: "autopilot_paused" });
+  assert.equal((await service.get("user-one", agenda.id)).payload.messages.length, 1);
+});
+
+test("a follow-up that is not a pause runs, and a plain run request is never offered a pause", async () => {
+  const planner = plannerDouble((input) => choose(input.eligible[0]));
+  const { service } = fixture({ planner });
+  const created = await service.create("user-one", agendaInput);
+  const agenda = await service.start("user-one", created.id, { expectedRevision: created.revision });
+  await service.runNow("user-one", agenda.id, { requestId: "run-1" });
+  assert.equal(planner.calls.at(-1).pauseAllowed, false, "nothing was written to the question, so there is nothing to read as a pause");
+  const answered = await service.followUp("user-one", agenda.id, { requestId: "ask-1", note: "请先暂停一下 SGLT2 的结论，改查 GLP-1 受体激动剂" });
+  assert.equal(planner.calls.at(-1).pauseAllowed, true);
+  assert.equal(answered.episode.payload.status, "queued", "the model chose to run, so it runs");
+});
+
+test("with the real planner a pause is honoured only for the researcher's message; the scheduler's stop kinds stay the scheduler's", async () => {
+  const answer = (content) => ({ choices: [{ finish_reason: "stop", message: { content: JSON.stringify(content) } }] });
+  const planner = new AutopilotPlanner({ deepseekProviderEnabled: true, deepseekApiKey: "key", deepseekModel: "deepseek-flash" }, {
+    callModel: async () => answer({ action: "stop", stopKind: RESEARCHER_PAUSE_KIND, reason: "你要求先暂停" }) });
+  const { service, jobs } = fixture({ planner });
+  const created = await service.create("user-one", agendaInput);
+  const agenda = await service.start("user-one", created.id, { expectedRevision: created.revision });
+  // A scheduled occurrence nobody wrote to cannot be paused in a researcher's name: dropped, the rotation runs.
+  const scheduled = await service.schedule("user-one", agenda.id, { date: "2026-09-06" });
+  assert.equal(scheduled.episode.payload.selection.fallbackReason, "autopilot_planner_invalid");
+  assert.equal(jobs.items.filter((job) => job.kind === "episode").length, 1);
+  // Their own message may.
+  const paused = await service.followUp("user-one", agenda.id, { requestId: "hold", note: "先暂停" });
+  assert.equal(paused.stopped.kind, RESEARCHER_PAUSE_KIND);
+});
+
+test("material added after a needs_input stop is what the next decision reads beside the stop, and a start continues the same question without any setup", async () => {
+  let at = new Date("2026-09-06T01:00:00Z");
+  const planner = plannerDouble((input, n) => n === 1 ? choose(input.eligible[0])
+    : n === 2 ? { action: "stop", stopKind: "needs_input", reason: "需要受试者年龄分布才能继续", model: "deepseek-flash" } : choose(input.eligible[0]));
+  const { service, documents, jobs } = fixture({ planner, now: () => at });
+  const created = await service.create("user-one", agendaInput);
+  let agenda = await service.start("user-one", created.id, { expectedRevision: created.revision });
+  const first = await service.schedule("user-one", agenda.id, { date: "2026-09-06" });
+  at = new Date("2026-09-06T03:00:00Z");
+  agenda = await service.get("user-one", agenda.id);
+  await service.recordOutcome("user-one", agenda.id, { expectedRevision: agenda.revision, episodeId: first.episode.id, status: "succeeded", gatedClaims: 1 });
+  at = new Date("2026-09-07T01:00:00Z");
+  const stopped = await service.schedule("user-one", agenda.id, { date: "2026-09-07" });
+  assert.equal(stopped.stopped.kind, "needs_input");
+
+  // The researcher supplies it: registered through the ordinary intake (a source of the project), associated here, and the question starts again.
+  at = new Date("2026-09-07T05:00:00Z");
+  await addSource(documents, { hex: "a", name: "年龄分布.xlsx" });
+  await service.addMaterials("user-one", agenda.id, { sha256: [digestOf("a")] });
+  agenda = await service.get("user-one", agenda.id);
+  assert.equal(agenda.payload.status, "paused", "adding material does not itself authorize work");
+  agenda = await service.start("user-one", agenda.id, { expectedRevision: agenda.revision });
+  assert.deepEqual([agenda.payload.plannerStop, agenda.payload.lastStop.kind, agenda.payload.title, agenda.payload.taskTypes], [null, "needs_input", "心衰证据追踪", agendaInput.taskTypes], "the agenda is the same agenda");
+  assert.equal(agenda.payload.materials.length, 1);
+
+  at = new Date("2026-09-08T01:00:00Z");
+  const resumed = await service.schedule("user-one", agenda.id, { date: "2026-09-08" });
+  const context = planner.calls.at(-1).context;
+  assert.equal(context.earlierStop.reason, "需要受试者年龄分布才能继续");
+  assert.deepEqual(context.materials.map((item) => [item.name, item.addedAt > context.earlierStop.at]), [["年龄分布.xlsx", true]], "the material arrived after the stop it answers");
+  assert.equal(planner.calls.at(-1).stopAllowed, false, "a start authorizes work before it can be answered with a stop");
+  assert.equal(resumed.episode.payload.status, "queued");
+  assert.equal(jobs.items.filter((job) => job.kind === "episode").length, 2);
+
+  // Once an episode has run, the stop is behind the question.
+  const later = await service.get("user-one", agenda.id);
+  assert.equal((await service.researchState("user-one", later.id)).materials[0].name, "年龄分布.xlsx");
 });
