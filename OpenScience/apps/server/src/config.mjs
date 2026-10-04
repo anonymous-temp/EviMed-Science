@@ -2604,6 +2604,11 @@ export function loadConfig(overrides = {}) {
     // (principle 13); off, the source cards simply carry none.
     sourceUpdatesEnabled: overrides.sourceUpdatesEnabled ?? boolEnv("OPEN_SCIENCE_SOURCE_UPDATES_ENABLED", true),
     resultsEnabled: overrides.resultsEnabled ?? boolEnv("OPEN_SCIENCE_RESULTS_ENABLED", true),
+    // What a project's datasets mean (dataSemanticsService.mjs): the recorded interpretation a repeat analysis starts
+    // from, the exact source versions it was read from, and the named outcomes of the data checks. The tool the two
+    // data capabilities use reaches it through its own gateway; off, that tool answers `semantics_disabled` and every
+    // analysis goes on from the files, as before. Needs the product ledger (Postgres).
+    dataSemanticsEnabled: overrides.dataSemanticsEnabled ?? boolEnv("OPEN_SCIENCE_DATA_SEMANTICS_ENABLED", true),
     // Truthful capability availability (availabilityModule.mjs): the collector that joins finished runs to what they
     // used and produced. A label and never a gate, so the switch only decides whether operations are collected; with
     // it off the projection is still served from the deployment's composition and every label that needs a record

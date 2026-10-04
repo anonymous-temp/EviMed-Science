@@ -1328,6 +1328,7 @@ export {
   applySemanticsPatch,
   applyTransformation,
   asWorkspacePath,
+  confirmationPatch,
   emptySemanticsAsset,
   fitAsset,
   interpretationOf,

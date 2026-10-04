@@ -510,7 +510,7 @@ function readJoinSide(side) {
 
 /**
  * @typedef {{ index?: number, path?: string, code: string, message: string }} SemanticsIssue
- * @typedef {{ target: string, outcome: string, basis?: string, keptBasis?: string }} SemanticsOutcome
+ * @typedef {{ target: string, outcome: string, basis?: string, keptBasis?: string, from?: string }} SemanticsOutcome
  */
 
 const PATCH_KEYS = ['datasetId', 'title', 'basis', 'statement', 'statedIn', 'inferredFrom', 'population', 'timeWindow', 'tables', 'variables', 'joins', 'bindings']
@@ -637,6 +637,9 @@ export function applySemanticsPatch(current, input, { now, via }) {
     const given = DATA_VARIABLE_FACETS.filter((facet) => item[facet] !== undefined)
     if (given.length === 0) variableOf()
     for (const facet of given) setFact(() => variableOf()?.facts ?? null, facet, item[facet], `variable:${tableName}/${name}:${facet}`, index)
+    // A variable that says it used to be called something else takes over what is already known under the old name.
+    const renamed = asset.tables.find((candidate) => candidate.name === tableName)?.variables.find((candidate) => candidate.name === name)
+    if (renamed?.facts.aliases) outcomes.push(...absorbFormerNames(asset.tables.find((candidate) => candidate.name === tableName), renamed))
   }
 
   if (patch.joins != null && !Array.isArray(patch.joins)) issues.push({ path: 'joins', code: 'joins_invalid', message: 'joins is a list.' })
@@ -678,6 +681,33 @@ export function applySemanticsPatch(current, input, { now, via }) {
   const changed = canonicalJson(asset) !== before
   if (changed) asset.updatedAt = now
   return { asset, outcomes, issues, changed }
+}
+
+/**
+ * A renamed column is the same variable. When a variable lists a former name
+ * that is still a variable of its own in the table, the old record is folded into
+ * the new one — each fact kept from whichever has the stronger basis (the new
+ * record's on a tie) — and removed, so a delivery that renames a column carries
+ * its meaning with it instead of starting over.
+ * @param {TableRecord | undefined} table @param {VariableRecord} variable @returns {SemanticsOutcome[]}
+ */
+function absorbFormerNames(table, variable) {
+  /** @type {SemanticsOutcome[]} */
+  const outcomes = []
+  if (!table) return outcomes
+  for (const former of variable.facts.aliases?.value ?? []) {
+    const index = table.variables.findIndex((candidate) => candidate.name === former && candidate !== variable)
+    if (index < 0) continue
+    const old = table.variables[index]
+    for (const [facet, fact] of Object.entries(old.facts)) {
+      if (facet === 'aliases') continue
+      const own = variable.facts[facet]
+      if (!own || semanticBasisRank(fact.basis) > semanticBasisRank(own.basis)) variable.facts[facet] = fact
+    }
+    table.variables.splice(index, 1)
+    outcomes.push({ target: `variable:${table.name}/${variable.name}`, outcome: 'renamed_from', from: former })
+  }
+  return outcomes
 }
 
 /**
@@ -1036,6 +1066,55 @@ export function semanticFacts(asset) {
   }
   for (const join of asset.joins) for (const [facet, fact] of Object.entries(join.facts)) list.push({ target: `join:${join.id}:${facet}`, scope: 'join', join: join.id, facet, fact })
   return list
+}
+
+/**
+ * The write that confirms facts exactly as they stand: for each requested
+ * target (`semanticFacts`' own strings) a patch item carrying the stored value,
+ * under the researcher's basis. Applying it upgrades the facts' basis without
+ * changing a value — which is all a button on the files page may do: the page
+ * confirms what it shows, and a correction is a different value in a different
+ * write.
+ * @param {SemanticsAsset} asset @param {readonly string[]} targets
+ * @returns {{ patch: Record<string, any>, unknown: string[] }}
+ */
+export function confirmationPatch(asset, targets) {
+  const facts = new Map(semanticFacts(asset).map((item) => [item.target, item]))
+  /** @type {Record<string, any>} */
+  const patch = { basis: 'researcher_confirmed' }
+  /** @type {Map<string, Record<string, any>>} */
+  const tables = new Map()
+  /** @type {Map<string, Record<string, any>>} */
+  const variables = new Map()
+  /** @type {Map<string, Record<string, any>>} */
+  const joins = new Map()
+  /** @type {string[]} */
+  const unknown = []
+  for (const target of new Set(targets)) {
+    const item = facts.get(target)
+    if (!item) { unknown.push(target); continue }
+    if (item.scope === 'dataset') patch[item.facet] = item.fact.value
+    else if (item.scope === 'table') {
+      const entry = tables.get(item.table ?? '') ?? { name: item.table }
+      entry[item.facet] = item.fact.value
+      tables.set(item.table ?? '', entry)
+    } else if (item.scope === 'variable') {
+      const key = `${item.table}\0${item.variable}`
+      const entry = variables.get(key) ?? { table: item.table, name: item.variable }
+      entry[item.facet] = item.fact.value
+      variables.set(key, entry)
+    } else {
+      const join = asset.joins.find((candidate) => candidate.id === item.join)
+      if (!join) { unknown.push(target); continue }
+      const entry = joins.get(join.id) ?? { left: join.left, right: join.right }
+      entry[item.facet] = item.fact.value
+      joins.set(join.id, entry)
+    }
+  }
+  if (tables.size) patch.tables = [...tables.values()]
+  if (variables.size) patch.variables = [...variables.values()]
+  if (joins.size) patch.joins = [...joins.values()]
+  return { patch, unknown }
 }
 
 /**

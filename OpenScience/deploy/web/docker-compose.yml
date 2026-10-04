@@ -351,6 +351,9 @@ services:
       # holds.
       # 「转为深度研究」 (researchHandoff.mjs, fusion plan §9.5); off by default.
       OPEN_SCIENCE_RESULTS_ENABLED:
+      # What a project's datasets mean (dataSemanticsService.mjs): the interpretation a repeat analysis starts from.
+      # Value-less: unset, the code's default (on, with Postgres) holds.
+      OPEN_SCIENCE_DATA_SEMANTICS_ENABLED:
       # Truthful capability availability (availabilityModule.mjs): the collector's off switch and how often it
       # looks for runs the finish hook missed. A label, never a gate; value-less, so the code's default holds.
       OPEN_SCIENCE_AVAILABILITY_ENABLED:

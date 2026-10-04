@@ -22,6 +22,7 @@ import {
   applyCheckReport,
   applySemanticsPatch,
   applyTransformation,
+  confirmationPatch,
   emptySemanticsAsset,
   fitAsset,
   interpretationOf,
@@ -357,4 +358,43 @@ test("the interpretation digest input moves with what the data is said to mean a
   // A changed value, or the same value with a stronger basis, is.
   assert.notEqual(interpretationOf(applySemanticsPatch(first, { ...inferred, variables: [{ table: "t.csv", name: "c", unit: "g" }] }, { now: T1, via: "conversation" }).asset), base);
   assert.notEqual(interpretationOf(applySemanticsPatch(first, { ...confirmed("单位是 mg"), variables: [{ table: "t.csv", name: "c", unit: "mg" }] }, { now: T1, via: "conversation" }).asset), base);
+});
+
+test("the files page confirms facts exactly as stored: same values, the researcher's basis, no statement needed", () => {
+  const written = applySemanticsPatch(null, {
+    datasetId: "d", ...inferred, population: "Adults with sepsis",
+    tables: [{ name: "t.csv", observationKey: ["id", "visit"] }],
+    variables: [{ table: "t.csv", name: "c", unit: "mg", type: "number" }],
+    joins: [{ left: { table: "t.csv", columns: ["id"] }, right: { table: "p.csv", columns: ["id"] }, cardinality: "many_to_one" }],
+  }, { now: T0, via: "conversation" });
+  const targets = semanticFacts(written.asset).map((item) => item.target);
+  const { patch, unknown } = confirmationPatch(written.asset, [...targets, "variable:t.csv/c:nope", "join:gone:cardinality"]);
+  assert.deepEqual(unknown, ["variable:t.csv/c:nope", "join:gone:cardinality"]);
+  const confirmedByPage = applySemanticsPatch(written.asset, patch, { now: T1, via: "page" });
+  assert.deepEqual(confirmedByPage.issues, []);
+  assert.ok(confirmedByPage.outcomes.length === targets.length && confirmedByPage.outcomes.every((outcome) => outcome.outcome === "upgraded"), JSON.stringify(confirmedByPage.outcomes));
+  const summary = summarizeSemantics(confirmedByPage.asset);
+  assert.deepEqual([summary.researcherConfirmed, summary.modelInferred, summary.facts], [targets.length, 0, targets.length]);
+  assert.equal(factAt(confirmedByPage.asset, "variable:t.csv/c:unit")?.via, "page");
+  // The values did not move: the interpretation changed in who vouches for it, and in nothing it says.
+  assert.equal(JSON.parse(interpretationOf(confirmedByPage.asset)).tables[0].variables[0].facts.unit.value, "mg");
+});
+
+test("a renamed column keeps its meaning: the variable that lists a former name absorbs what was known under it", () => {
+  const before = applySemanticsPatch(null, {
+    datasetId: "d", ...inferred,
+    variables: [{ table: "v.csv", name: "sbp", unit: "mmHg", type: "integer", role: "covariate" }, { table: "v.csv", name: "other", unit: "x" }],
+  }, { now: T0, via: "conversation" });
+  const confirmedUnit = applySemanticsPatch(before.asset, { ...confirmed("单位是 mmHg"), variables: [{ table: "v.csv", name: "sbp", unit: "mmHg" }] }, { now: T0, via: "conversation" });
+  const renamed = applySemanticsPatch(confirmedUnit.asset, {
+    ...inferred, variables: [{ table: "v.csv", name: "systolic_bp", aliases: ["sbp"], type: "number" }],
+  }, { now: T1, via: "conversation" });
+  assert.deepEqual(renamed.outcomes.at(-1), { target: "variable:v.csv/systolic_bp", outcome: "renamed_from", from: "sbp" });
+  assert.deepEqual(renamed.asset.tables[0].variables.map((variable) => variable.name), ["other", "systolic_bp"]);
+  // The researcher's confirmation of the unit travelled with the column; the model's newer type won over the model's older one only where it said something.
+  assert.equal(factAt(renamed.asset, "variable:v.csv/systolic_bp:unit")?.basis, "researcher_confirmed");
+  assert.equal(factAt(renamed.asset, "variable:v.csv/systolic_bp:role")?.value, "covariate");
+  assert.equal(factAt(renamed.asset, "variable:v.csv/systolic_bp:type")?.value, "number");
+  assert.deepEqual(factAt(renamed.asset, "variable:v.csv/systolic_bp:aliases")?.value, ["sbp"]);
+  assert.equal(factAt(renamed.asset, "variable:v.csv/sbp:unit"), undefined);
 });
