@@ -6,7 +6,7 @@ It never accepts a shell command or a caller-supplied absolute output path.
 """
 from __future__ import annotations
 
-from new_meta.core import engine_model
+from new_meta.core import engine_model, job_slots
 
 import base64
 import hashlib
@@ -936,15 +936,36 @@ def _status(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
         state = _settle_orphan(state_path, state)
         job_status = "failed"
     if job_status in {"queued", "running"}:
+        # A job waiting for a slot is `queued` and says why in `progress`, the field
+        # a poller already reads, so it never looks hung.
+        queue = job_slots.stage_of(state.get("slotWait")) if job_status == "queued" else None
+        data = {"jobId": job_id, "jobStatus": job_status, **_liveness(state)}
+        if queue:
+            data["progress"] = {"stage": queue}
         return {
             "status": "warning",
-            "summary": f"MetaAgent job {job_id} is {job_status}.",
-            "data": {"jobId": job_id, "jobStatus": job_status, **_liveness(state)},
+            "summary": f"MetaAgent job {job_id} is queued. {queue}" if queue else f"MetaAgent job {job_id} is {job_status}.",
+            "data": data,
             "sources": [_source(job_id)],
-            "warnings": ["The synthesis is not complete; do not draw final conclusions."],
+            "warnings": [
+                "The job is queued behind other specialist jobs and has not started; it starts by itself "
+                "when a slot frees. Do not draw conclusions from it."
+                if queue else "The synthesis is not complete; do not draw final conclusions."
+            ],
             "next_actions": ["Poll this job again after additional processing time."],
         }
     _reap(job_id)
+    if job_status == "failed" and state.get("slotError"):
+        # The deployment's specialist cap kept this job from starting: nothing ran,
+        # there is nothing partial to preserve, and trying again later is the remedy.
+        return _error(
+            "meta_agent_worker_unavailable",
+            str(state.get("error") or "The job did not start."),
+            True,
+            next_actions=["The deployment's specialist capacity was full or unavailable and this job did not start; "
+                          "start the same request again later."],
+            stop_reason="Stop until a specialist slot is free; retry once later.",
+        )
     if job_status == "failed":
         tail = ""
         descriptor = None
@@ -1224,11 +1245,94 @@ def _report_usage(state_path: Path, state: dict[str, Any], project: Path | None,
         pass
 
 
+class _NoSlot(Exception):
+    """The job is not going to run in this worker; its state already says why, or is someone else's."""
+
+
+def _log_line(log_path: Path | None, text: str) -> None:
+    if log_path is None:
+        return
+    try:
+        descriptor = os.open(log_path, os.O_WRONLY | os.O_CREAT | os.O_APPEND | getattr(os, "O_NOFOLLOW", 0), 0o600)
+        with os.fdopen(descriptor, "ab", buffering=0) as log:
+            log.write(f"\n{text}\n".encode("utf-8"))
+    except OSError:
+        pass
+
+
+def _wait_for_slot(state_path: Path, state: dict[str, Any]) -> job_slots.Slot:
+    """Hold one of the deployment's specialist slots before the job starts, or end the job by name.
+
+    One cap across all six engine containers (new_meta/core/job_slots.py, held
+    byte-identical with the specialist adapter's copy): the host is shared and an
+    engine may use 2 GB while it works. Without one this returns at once and
+    touches nothing. A job over the cap stays `queued`, the worker keeping
+    `updatedAt` moving and recording `slotWait` (which `_status` turns into the
+    poller's `progress.stage`); past the bound, or with an unusable slot
+    directory, it ends retryable and nothing has run. `state` is what the job
+    body goes on with, so what the wait learned is put into it.
+    """
+    if job_slots.limit() == 0 or state.get("status") != "queued":
+        return job_slots.Slot()
+    try:
+        log_path = _job_paths(Path(state["workspace"]), str(state["jobId"]))[1]
+    except Exception:  # noqa: BLE001 — a log is for the operator and never stops a job
+        log_path = None
+    since = _now()
+    announced: list[bool] = []
+
+    def waiting(info: dict[str, Any]) -> None:
+        if not announced:
+            announced.append(True)
+            _log_line(log_path, f"slot: {job_slots.describe(info)}")
+        current = _read_state(state_path)
+        if current.get("status") != "queued":
+            raise job_slots.StopWaiting  # someone else ended this job
+        current.update(
+            workerPid=os.getpid(),
+            updatedAt=_now(),
+            slotWait={"since": since, **{key: info[key] for key in ("limit", "running", "waiting", "ahead")}},
+        )
+        _atomic_json(state_path, current)
+
+    try:
+        slot = job_slots.acquire(str(state["jobId"]), "meta-analysis", on_wait=waiting)
+    except job_slots.StopWaiting:
+        raise _NoSlot from None
+    except job_slots.SlotsUnavailable as error:
+        _log_line(log_path, f"slot: {error.code}: {error}")
+        try:
+            current = _read_state(state_path)
+            if current.get("status") == "queued":
+                current.pop("slotWait", None)
+                current.update(status="failed", updatedAt=_now(), finishedAt=_now(), returnCode=1,
+                               retryable=True, slotError=error.code, error=str(error))
+                _atomic_json(state_path, current)
+        except Exception:  # noqa: BLE001 — the log has it; a queued job whose worker is gone is ended by the next poll
+            pass
+        raise _NoSlot from None
+    if announced:
+        _log_line(log_path, f"slot: acquired after {int(slot.waited)} seconds")
+        state.pop("slotWait", None)
+        state["slotWaitedSeconds"] = int(slot.waited)
+    return slot
+
+
 def run_job(state_file: str) -> int:
     state_path = Path(state_file).resolve()
     state = _read_state(state_path)
     if state.get("status") == "succeeded":
         return 0
+    try:
+        slot = _wait_for_slot(state_path, state)
+    except _NoSlot:
+        return 1
+    # Held until the worker is done with MetaAgent and its record, however it ends.
+    with slot:
+        return _run_job(state_path, state)
+
+
+def _run_job(state_path: Path, state: dict[str, Any]) -> int:
     if not job_observation.unchanged(state):
         state["auditObservationUnavailable"] = "admission_evidence_changed_or_missing"
     if state.get("modelRoute") == "gateway":

@@ -1,6 +1,9 @@
 """Minimal deployable HTTP service for EviMed-managed MetaAgent jobs."""
+from typing import Any
+
 from fastapi import FastAPI
 
+from new_meta.core import job_slots
 from new_meta.evimed_adapter import create_evimed_adapter_router
 
 
@@ -9,5 +12,7 @@ app.include_router(create_evimed_adapter_router())
 
 
 @app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok", "service": "evimed-meta-agent"}
+def health() -> dict[str, Any]:
+    # The deployment-wide specialist cap, from the one directory every engine
+    # container shares: the limit, jobs holding a slot, jobs waiting for one.
+    return {"status": "ok", "service": "evimed-meta-agent", "specialistSlots": job_slots.snapshot()}
