@@ -441,7 +441,7 @@
       "id": "vcr-analysis",
       "visibility": "public",
       "evalHarness": "evals/vcr-analysis",
-      "briefCount": 3,
+      "briefCount": 4,
       "realDelivery": {
         "status": "not-run",
         "evidence": null,
