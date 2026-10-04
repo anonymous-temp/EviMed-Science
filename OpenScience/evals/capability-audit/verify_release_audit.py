@@ -12,7 +12,8 @@ from collections import Counter
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from hosted_receipts import read_owned, file_receipt, validate_receipt, artifact_paths
+import audit_identity
+from hosted_receipts import ReceiptError, read_owned, file_receipt, validate_receipt, artifact_paths
 import public_mr_fixture as public_mr
 import verify_acceptance_ledger as acceptance_ledger
 from audit_inventory import skill_composition, skill_execution_coverage, skill_evidence_metadata
@@ -42,14 +43,26 @@ def require(condition, message):
         raise SystemExit(message)
 
 
-def parsed_fresh(value, label, max_age_days=14):
+# An operator's own bound on the age of evidence, off by default. Evidence is valid for as long as the
+# source it was taken on is the source in this tree (owner ruling, 2026-10-04), and a number of days
+# says nothing about that: the old fourteen-day window turned this audit red on every machine two weeks
+# after each probe although nothing had changed. `--max-evidence-age-days` is for the operator who wants
+# a calendar bound as well.
+OPERATOR_MAX_AGE_DAYS = None
+
+
+def observed_time(value, label, max_age_days=None):
+    """When a piece of evidence says it was taken. A time from the future is no evidence; age alone never is."""
     try:
         observed = datetime.fromisoformat(str(value).replace("Z", "+00:00"))
     except ValueError:
         raise SystemExit("%s timestamp is invalid" % label)
     now = datetime.now(timezone.utc)
     require(observed <= now + timedelta(minutes=5), "%s timestamp is in the future" % label)
-    require(observed >= now - timedelta(days=max_age_days), "%s evidence is stale" % label)
+    limit = max_age_days if max_age_days is not None else OPERATOR_MAX_AGE_DAYS
+    if limit is not None:
+        require(observed >= now - timedelta(days=limit),
+                "%s evidence was taken %d days ago, past the operator's bound of %s days" % (label, (now - observed).days, limit))
     return observed
 
 
@@ -82,24 +95,23 @@ def specialist_source_root(recorded, tool):
     return root
 
 
-TOOL_PROBE_WINDOW_DAYS = 14
-
-
 def tool_probe_currency(document, registry, not_offered):
-    """Say what is stale, by how much, and what would refresh it.
+    """Say whether the probe still describes this tree and, when it does not, what moved and what refreshes it.
 
-    "tool audit evidence is stale" was the whole message, and it was the first
-    thing this function checked, so it was also the only thing anyone learned:
-    the run died before loading the registry and therefore before it could
-    notice that the probe covers 25 tools while the registry declares 34.
-    Someone reading that message re-runs the probe expecting a green audit and
-    gets "tool registry count is not 34" instead - two cycles for one report.
+    A probe is valid for as long as what it certifies is unchanged: the tool
+    registry it covers (names, offered and not offered) and the identity of the
+    source it was taken on (`audit_identity.tool_source_identity`, recorded by
+    the runner in the document). Its age is not a reason: the old fourteen-day
+    window turned this red on every machine two weeks after each recording.
 
-    Both facts are computed before either is raised, and the message carries
-    the age, the window, the counts and the names. The window is not widened
-    and the timestamp is not touched: a probe records what a live deployment
-    answered, and there is no way to make it current except to ask a live
-    deployment again. A gate the run can talk its way past is not a gate.
+    "tool audit evidence is stale" was once the whole message, and it was the
+    first thing this function checked, so it was also the only thing anyone
+    learned: the run died before loading the registry and therefore before it
+    could notice that the probe covers 25 tools while the registry declares 34.
+    Every reason is computed before any is raised, and each names what changed.
+    Nothing is widened and no file is touched: a probe records what a live
+    deployment answered, and there is no way to make it current except to ask a
+    live deployment again. A gate the run can talk its way past is not a gate.
     """
     declared = registry - not_offered
     expected = len(declared)
@@ -117,19 +129,9 @@ def tool_probe_currency(document, registry, not_offered):
     uncovered = sorted(declared - probed)
     surplus = sorted(probed - declared)
     try:
-        observed = datetime.fromisoformat(str(document.get("probedAt")).replace("Z", "+00:00"))
-    except ValueError:
-        reasons.append("probedAt %r is not a timestamp" % document.get("probedAt"))
-        observed = None
-    if observed is not None:
-        now = datetime.now(timezone.utc)
-        require(observed <= now + timedelta(minutes=5), "tool audit timestamp is in the future")
-        age = now - observed
-        if age > timedelta(days=TOOL_PROBE_WINDOW_DAYS):
-            reasons.append(
-                "probed %s (%d days ago); the window is %d days"
-                % (observed.date().isoformat(), age.days, TOOL_PROBE_WINDOW_DAYS)
-            )
+        observed_time(document.get("probedAt"), "tool audit")
+    except SystemExit as error:
+        reasons.append(str(error))
     if recorded != expected or uncovered or surplus:
         reasons.append(
             "covers %s tool(s); the registry declares %d (%d offered, %d not offered)%s%s"
@@ -137,16 +139,27 @@ def tool_probe_currency(document, registry, not_offered):
                (" - never probed: %s" % ", ".join(uncovered)) if uncovered else "",
                (" - probed but no longer declared: %s" % ", ".join(surplus)) if surplus else "")
         )
+    identity = document.get("sourceIdentity")
+    if identity is None:
+        reasons.append(
+            "does not record the identity of the source it was taken on (no sourceIdentity: it predates the field, "
+            "which only the runner writes) - identity not recorded, re-probe"
+        )
+    else:
+        moved = audit_identity.identity_changes(identity, audit_identity.tool_source_identity(REPO))
+        if moved:
+            reasons.append("was taken on other source than this tree's: %s changed since" % "; ".join(moved))
     if not reasons:
         return
     raise SystemExit(
-        "tool audit evidence is out of date: %s.\n"
+        "tool audit evidence does not cover the current source: %s.\n"
         "  evidence: %s\n"
         "  refresh:  run evals/capability-audit/run_tool_audit.py --probe-workspace <ws> against a running deployment,\n"
         "            then commit the regenerated results/tool-probe-v3.json.\n"
-        "  note:     nothing here can be repaired by editing the file. The probe is a record of what a live\n"
-        "            deployment answered; with no deployment reachable this check stays red, and that is the\n"
-        "            correct reading of the evidence."
+        "  note:     the probe stays valid for as long as the tool registry and the source it was taken on are unchanged;\n"
+        "            its age alone never expires it. Nothing here can be repaired by editing the file. The probe is a\n"
+        "            record of what a live deployment answered; with no deployment reachable this check stays red when\n"
+        "            the source has moved, and that is the correct reading of the evidence."
         % ("; ".join(reasons), (RESULTS / "tool-probe-v3.json").relative_to(REPO))
     )
 
@@ -165,6 +178,41 @@ def uncertified_tools(document):
                          str(item.get("errorCode") or item.get("summary") or "no reason recorded")[:200])
         for item in rows
     )
+
+
+#: What a receipt's moved source field means to a reader. The fields are those of `hosted_receipts.source_changes`.
+RECEIPT_SOURCE_WORDS = {
+    "executionEvidence.agentSourceSha256": "the specialist engine's source tree",
+    "executionEvidence.agentSourceFiles": "the number of files in the specialist engine's source tree",
+    "executionEvidence.adapterSha256": "the adapter's service.py",
+    "executionEvidence.evidenceModuleSha256": "the adapter's audit_receipt.py",
+    "adapterEvidence.sha256": "the adapter package and its deployment inputs",
+    "adapterEvidence.files": "the number of files in the adapter package",
+    "evidenceNote": "the producer's own note that its evidence was not taken cleanly",
+}
+
+
+def receipt_proof(value, tool):
+    """A retained specialist receipt's proof, or an exit that says which identity moved and what refreshes it.
+
+    The receipt carries the digests of the engine tree and the adapter it ran on,
+    and `hosted_receipts.current_evidence` computes the same from this checkout by
+    calling the adapter's own function, so it counts for as long as they are
+    equal. `hosted_receipt_source_changed` alone sent the reader to diff two JSON
+    documents to learn whether the engine, the adapter or the note had changed.
+    """
+    try:
+        return validate_receipt(value, EVIDENCE, tool, OPERATOR_MAX_AGE_DAYS)
+    except ReceiptError as error:
+        code, _, detail = str(error).partition(":")
+        if code != "hosted_receipt_source_changed":
+            raise
+        moved = [RECEIPT_SOURCE_WORDS.get(name, name) for name in detail.split(",") if name]
+        raise SystemExit(
+            "%s job receipt was recorded on other source than this tree's: %s changed since.\n"
+            "  refresh: run the specialist again (evals/capability-audit/run_specialist_jobs.py --tool %s), then\n"
+            "           run_tool_audit.py to record the new receipt; the receipt's age is not the reason." % (tool, "; ".join(moved) or "its source", tool)
+        ) from None
 
 
 def verify_tools():
@@ -238,7 +286,7 @@ def verify_tools():
             require(item.get("probeType") == "completed_managed_job", "%s lacks a completed job receipt" % item.get("tool"))
             require(item.get("operation") == "start_then_poll_to_terminal", "%s did not execute a managed task" % item.get("tool"))
             require(isinstance(item.get("jobId"), str) and item.get("jobId"), "%s lacks a job id" % item.get("tool"))
-            parsed_fresh(item.get("executedAt"), "%s job" % item.get("tool"))
+            observed_time(item.get("executedAt"), "%s job" % item.get("tool"))
             require(item.get("artifactCount", 0) > 0, "%s lacks artifacts" % item.get("tool"))
             require(item.get("artifactCount") == len(item.get("artifacts", [])), "%s artifact count does not reconcile" % item.get("tool"))
             require(all(receipt.get("bytes", 0) > 0 and len(receipt.get("sha256", "")) == 64 for receipt in item.get("artifacts", [])), "%s has invalid artifact receipts" % item.get("tool"))
@@ -249,7 +297,7 @@ def verify_tools():
                 retained = item.get("hostedReceipt") or {}
                 require(file_receipt(EVIDENCE, retained.get("path")) == retained, "hosted receipt bytes changed")
                 value = json.loads(read_owned(EVIDENCE, retained["path"], 1024 * 1024))
-                proof = validate_receipt(value, EVIDENCE, item["tool"], 14)
+                proof = receipt_proof(value, item["tool"])
                 require(item.get("jobId") == proof["jobId"] and item.get("jobStatus") == proof["jobStatus"], "hosted job identity changed")
                 require(item.get("executionEvidence") == proof["executionEvidence"], "hosted source evidence changed")
                 require(item.get("scope") == proof["scope"], "hosted scope changed")
@@ -375,7 +423,7 @@ def verify_connectors():
     expected = len(registered)
     document = read("connector-probe-v3.json")
     summary = document.get("summary", {})
-    parsed_fresh(document.get("probedAt"), "connector audit")
+    observed_time(document.get("probedAt"), "connector audit")
     require(document.get("schemaVersion") == 3, "connector audit schema is stale")
     require(summary.get("registrySha256") == hashlib.sha256("\0".join(registry).encode("utf-8")).hexdigest(), "connector evidence does not match the ordered live registry")
     require(summary.get("registrySourceSha256") == file_sha256(REPO / "runtime" / "mcp" / "evimed-research" / "public_sources.py"), "connector evidence does not match the live registry source")
@@ -476,14 +524,18 @@ def verify_acceptance():
 
 
 def main(argv=None):
-    global REPORTS, RESULTS, EVIDENCE, JOB_STATE
+    global REPORTS, RESULTS, EVIDENCE, JOB_STATE, OPERATOR_MAX_AGE_DAYS
     skills_only = False
     if argv is not None:
         parser = argparse.ArgumentParser(description=__doc__)
         parser.add_argument("--report-dir", type=Path, default=REPORTS, help="new audit summaries; historical files are not rewritten")
         parser.add_argument("--evidence-dir", type=Path, default=RESULTS, help="retained task documents and their evidence/ subtree")
         parser.add_argument("--skills-only", action="store_true", help="validate only skill inventory/evidence; this does not certify the release")
+        parser.add_argument("--max-evidence-age-days", type=float, default=None,
+                            help="an operator's own bound on the age of retained evidence; by default none: evidence counts for as "
+                                 "long as the source it was taken on is the source in this tree")
         args = parser.parse_args(argv)
+        OPERATOR_MAX_AGE_DAYS = args.max_evidence_age_days
         REPORTS, RESULTS = args.report_dir.resolve(), args.evidence_dir.resolve()
         EVIDENCE, JOB_STATE = RESULTS / "evidence", RESULTS / "evidence/job-state"
         skills_only = args.skills_only

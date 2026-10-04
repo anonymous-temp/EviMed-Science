@@ -11,8 +11,8 @@ import { parseTableFile } from "@/lib/csv";
 import { getWebProjectId } from "@/lib/apiClient";
 import type { RuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { parseFailureMessage } from "@/lib/errorText";
-import { assignResultAnchors, cancelResultReplay, directlyRelatedResults, exportResult, getResultReplay, getResultVersion, listRelatedResultVersions, listResultVersions, readResultBytes, replayResult, requestResultRevision,
-  resultTextDifference, resultValueDifference, resultGapLabel, saveResultBlob, selectionResultAnchor, type ResultAnchor, type ResultReplay, type ResultVersion } from "@/lib/resultProvenance";
+import { assignResultAnchors, cancelResultReplay, directlyRelatedResults, exportResult, getResultReplay, getResultVersion, listRelatedResultVersions, listResultVersions, readResultBytes, replayEnvironmentLabel, replayErrorText, replayNumbersLabel, replayResult, requestResultRevision,
+  resultActionFailure, resultEnvironmentDifference, resultTextDifference, resultValueDifference, resultGapLabel, saveResultBlob, selectionResultAnchor, type ResultAnchor, type ResultReplay, type ResultVersion } from "@/lib/resultProvenance";
 
 /** Immutable result selection lives in the existing history pane. */
 export function ResultVersionInspector({ path, runId, initialVersionId, onLegacy }: {
@@ -187,7 +187,7 @@ export function ResultVersionInspector({ path, runId, initialVersionId, onLegacy
         const result = await replayResult(version);
         if (generation === viewGeneration.current) setReplay(result);
       }
-    } catch (caught) { if (generation === viewGeneration.current) setActionError(parseFailureMessage(caught, name === "export" ? "导出" : "重算")); }
+    } catch (caught) { if (generation === viewGeneration.current) setActionError(resultActionFailure(caught, (error) => parseFailureMessage(error, name === "export" ? "导出" : "重算"))); }
     finally { if (generation === viewGeneration.current) setAction(null); }
   };
   const loadMore = async () => {
@@ -252,7 +252,8 @@ export function ResultVersionInspector({ path, runId, initialVersionId, onLegacy
       {(!version.reuseEligibility || version.reuseEligibility.replay.status !== "available") && <p className="text-caption text-muted">暂不能重算：{version.reuseEligibility?.replay.reasons.map(resultGapLabel).join("；") || "缺少可用的计算配方"}</p>}
       {version.reuseEligibility?.export.status !== "available" && <p className="text-caption text-muted">{version.reuseEligibility?.export.reasons.map(resultGapLabel).join("；") || "研究包可用性尚未确认"}</p>}
       {actionError && <p role="alert" className="text-error">{actionError}</p>}
-      {replay && <div role="status" className="flex flex-wrap items-center gap-2"><span>{replayLabel(replay.state)}</span>{replay.error && <span className="text-error">{typeof replay.error === "string" ? replay.error : "计算未完成，请查看进度后重试"}</span>}{replay.resultVersionId && <Button variant="text" onClick={() => void openSuccessor(replay.resultVersionId!)}>打开新结果</Button>}{["queued", "running", "pending"].includes(replay.state) && <Button variant="text" loading={action === "cancel"} onClick={() => void refreshReplay(true)}>取消重算</Button>}{actionError && <Button variant="text" onClick={() => void refreshReplay()}>刷新进度</Button>}</div>}
+      {replay && <div role="status" className="flex flex-wrap items-center gap-2"><span>{replayLabel(replay.state)}</span>{replay.error && <span className="text-error">{replayErrorText(replay.error)}</span>}{replay.resultVersionId && <Button variant="text" onClick={() => void openSuccessor(replay.resultVersionId!)}>打开新结果</Button>}{["queued", "running", "pending"].includes(replay.state) && <Button variant="text" loading={action === "cancel"} onClick={() => void refreshReplay(true)}>取消重算</Button>}{actionError && <Button variant="text" onClick={() => void refreshReplay()}>刷新进度</Button>}</div>}
+      {replay?.comparison && <ReplayOutcome comparison={replay.comparison} />}
       <Disclosure summary="依据与核对意见" defaultOpen>
         {!version.findings.length && <p className="py-2 text-muted">此版本没有可读取的核对意见，尚未核实。</p>}
         <ul className="space-y-3 py-2">{version.findings.map((finding) => <li key={finding.id}><p className={finding.status === "verified" ? "text-verify-ok" : "text-verify-pending"}>{finding.status === "verified" ? "✓ " : "⚠ "}{finding.message}</p>{finding.sourceRefs?.map((source) => <SourceReference key={source.id} source={source} onOpen={(id) => navigate(`/app/runs/${version.producer.runId ?? version.producer.sessionId ?? "result"}/files/${(source.path ?? path).split("/").map(encodeURIComponent).join("/")}?version=${encodeURIComponent(id)}`)} />)}</li>)}</ul>
@@ -274,6 +275,13 @@ export function ResultVersionInspector({ path, runId, initialVersionId, onLegacy
     </>}
   </div>;
 }
+/** What a finished recalculation found, with what it ran on: the numbers are never shown as a same-environment reproduction unless the record says so. */
+function ReplayOutcome({ comparison }: { comparison: NonNullable<ResultReplay["comparison"]> }) {
+  const numbers = replayNumbersLabel(comparison);
+  const environment = replayEnvironmentLabel(comparison.environment);
+  if (!numbers && !environment) return null;
+  return <p role="status" className="text-caption text-muted">{numbers}{numbers && environment ? "；" : ""}{environment && <span className={comparison.environment?.status === "same" ? undefined : "text-verify-pending"}>{environment}</span>}</p>;
+}
 function Loading({ text }: { text: string }) { return <p role="status" className="flex items-center gap-2 p-3 text-muted"><Loader2 size={16} aria-hidden="true" className="animate-spin" />{text}</p>; }
 function isText(version: ResultVersion) { return version.mimeType.startsWith("text/") || /\.(md|txt|json|csv|tsv|py|r|js|mjs)$/i.test(version.path); }
 function canCompareResults(left: ResultVersion, right: ResultVersion) { return left.projectId === right.projectId && ((left.path === right.path && left.artifactId === right.artifactId) || directlyRelatedResults(left, right)); }
@@ -290,7 +298,10 @@ export function ResultComparison({ current, prior, before, after }: { current: R
   const valueKeys = new Set([...priorValues.keys(), ...currentValues.keys()]);
   const sourceChanges = current.inputs.filter((input) => !prior.inputs.some((old) => old.id === input.id && old.digest === input.digest));
   const removedSources = prior.inputs.filter((input) => !current.inputs.some((next) => next.id === input.id && next.digest === input.digest));
+  const ranOn = resultEnvironmentDifference(current, prior);
+  const environment = replayEnvironmentLabel(ranOn, "所比较的版本");
   return <section aria-label="版本差异" className="space-y-3 rounded-card border border-border p-3"><p>{current.digest === prior.digest ? "文件内容完全一致" : "文件内容有变化"}</p>
+    {environment && <p className={ranOn?.status === "differs" ? "text-verify-pending" : "text-muted"}>{environment}</p>}
     {differences === null ? <p className="text-muted">无法比较此格式的文本内容。</p> : differences.length === 0 ? <p>文本一致。</p> : <ol className="max-h-64 overflow-auto font-mono text-caption">{differences.map((line, index) => <li key={index} className={line.kind === "added" ? "text-verify-ok" : "text-verify-pending"}>{line.kind === "added" ? "+" : "−"} {line.line} {line.text}</li>)}</ol>}
     <p>新增或改变来源 {sourceChanges.length}；移除或替换来源 {removedSources.length}</p>
     {[...sourceChanges, ...removedSources].map((input, index) => <p key={index} className="text-caption text-muted">{input.path ?? input.id} · {input.digest ?? "摘要未记录"}</p>)}

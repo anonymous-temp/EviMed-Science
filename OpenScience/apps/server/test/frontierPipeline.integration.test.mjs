@@ -371,6 +371,41 @@ test("the state machine end to end: drop, notice, dedupe, screen, hold, promote,
   assert.match(retexts.model_input, /摘要：In 17,604 patients/);
 });
 
+test("a relation is classified by its type: each notice is its own state, and a new version is an item, never a 更正", options, async () => {
+  await reset();
+  const clock = new Date("2026-09-22T12:00:00Z");
+  const { pipeline } = pipelineWith({ now: () => clock });
+  const notices = {
+    correction: await deliver({ source_id: "j-nejm", doi: "10.1056/NEJMx21", title: "Erratum: A trial of something", facts: { is_correction_notice: true, update_to: [{ type: "erratum", doi: "10.1056/NEJMoa1000002" }] } }),
+    retraction: await deliver({ source_id: "j-nejm", doi: "10.1056/NEJMx22", title: "Retraction: Another trial", facts: { is_correction_notice: true, update_to: [{ type: "retraction", doi: "10.1056/NEJMoa1000003" }] } }),
+    "expression-of-concern": await deliver({ source_id: "j-nejm", doi: "10.1056/NEJMx23", title: "Expression of concern: A third trial", facts: { update_to: [{ type: "expression_of_concern", doi: "10.1056/NEJMoa1000004" }] } }),
+    withdrawal: await deliver({ source_id: "j-nejm", doi: "10.1056/NEJMx24", title: "Notice of withdrawal: A fourth trial", facts: { update_to: [{ type: "withdrawal", doi: "10.1056/NEJMoa1000005" }] } }),
+  };
+  // The plugin's old build flagged every relation a correction notice; the type decides, not the flag's presence.
+  const version = await deliver({ source_id: "j-nejm", doi: "10.1056/NEJMoa1000010v2", title: "Colchicine in pericarditis: second version",
+    summary: "S".repeat(120), facts: { update_to: [{ type: "new_version", doi: "10.1056/NEJMoa1000010" }] } });
+  const addendum = await deliver({ source_id: "j-nejm", doi: "10.1056/NEJMx25", title: "Dapagliflozin in kidney disease: further analysis",
+    summary: "A".repeat(120), facts: { update_to: [{ type: "addendum", doi: "10.1056/NEJMoa1000011" }] } });
+  await pipeline.processBatch();
+  for (const [kind, delivered] of Object.entries(notices)) {
+    assert.deepEqual([(await entry(delivered.id)).state, (await entry(delivered.id)).state_reason], ["dropped", `${kind}-notice`], kind);
+  }
+  for (const delivered of [version, addendum]) {
+    const row = await entry(delivered.id);
+    assert.ok(!/-notice/.test(String(row.state_reason ?? "")), `an update is not dropped as a notice: ${row.state} / ${row.state_reason}`);
+  }
+  // What each relation says is kept as its own kind of link; only the new version's names no flag.
+  const links = (await database.query("SELECT kind, from_doi, to_doi FROM evimed_frontier.item_links ORDER BY kind, to_doi")).rows
+    .map((row) => [row.kind, row.from_doi, row.to_doi]);
+  assert.deepEqual(links, [
+    ["correction", "10.1056/nejmx21", "10.1056/nejmoa1000002"],
+    ["expression-of-concern", "10.1056/nejmx23", "10.1056/nejmoa1000004"],
+    ["new-version", "10.1056/nejmoa1000010v2", "10.1056/nejmoa1000010"],
+    ["retraction", "10.1056/nejmx22", "10.1056/nejmoa1000003"],
+    ["withdrawal", "10.1056/nejmx24", "10.1056/nejmoa1000005"],
+  ]);
+});
+
 test("recently generated dailies keep old referenced items eligible for an owed edit without opening all history", options, async () => {
   await reset();
   let clock = new Date("2026-09-22T02:00:00Z");

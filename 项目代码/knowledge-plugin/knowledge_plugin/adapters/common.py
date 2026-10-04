@@ -41,7 +41,7 @@ from urllib.parse import parse_qsl, quote, urlencode, urljoin, urlsplit, urlunsp
 from dateutil import tz as dateutil_tz
 from selectolax.parser import HTMLParser
 
-from ..model import SUMMARY_MAX, TITLE_MAX, FetchError, FetchResult, NormalizedEntry
+from ..model import NOTICE_UPDATE_KINDS, SUMMARY_MAX, TITLE_MAX, FetchError, FetchResult, NormalizedEntry
 
 UTC = timezone.utc
 
@@ -399,10 +399,10 @@ _NOTICE_TITLE = re.compile(
     r"(?:\s*[:：]|\s+to\b|\s*[\"“‘']|\s*$)",
     re.I,
 )
-NOTICE_UPDATE_TYPES = frozenset({
-    "correction", "corrigendum", "erratum", "retraction", "partial_retraction", "removal", "withdrawal",
-    "expression_of_concern", "clarification", "addendum",
-})
+# The ``update-to`` types that make a record a notice about another work: the model's closed table, so the
+# adapter and the normaliser cannot disagree about which relations are notices. A new version, an addendum
+# or a clarification is an update, not a notice.
+NOTICE_UPDATE_TYPES = frozenset(NOTICE_UPDATE_KINDS)
 
 
 def is_notice_title(title: str) -> bool:

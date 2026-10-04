@@ -725,3 +725,44 @@ export function isFrontierMastheadTitle(title) {
   const key = mastheadTitleKey(title)
   return key.length > 0 && FRONTIER_MASTHEAD_TITLES.includes(key)
 }
+
+/**
+ * The kinds of notice a work can carry about another work, most serious first:
+ * what a correction, a retraction, an expression of concern and a withdrawal
+ * each are. They are four states of their own, and a feed that read all of them
+ * as 「更正」 told a reader a retracted trial had merely been corrected.
+ */
+export const FRONTIER_NOTICE_KINDS = Object.freeze(['retraction', 'withdrawal', 'expression-of-concern', 'correction'])
+
+/**
+ * Crossref's `update-to` types, by what the relation says about the record that
+ * carries it. The vocabulary is closed, so this is a table and not a pattern
+ * (principle 5). A record that updates another work with one of the first four
+ * kinds is a *notice about* that work; one that says it is a new version of it
+ * is an item in its own right and says nothing against the other work.
+ * @type {Readonly<Record<string, 'retraction' | 'withdrawal' | 'expression-of-concern' | 'correction' | 'new-version'>>}
+ */
+const FRONTIER_UPDATE_TYPE_KINDS = Object.freeze({
+  retraction: 'retraction',
+  partial_retraction: 'retraction',
+  withdrawal: 'withdrawal',
+  removal: 'withdrawal',
+  expression_of_concern: 'expression-of-concern',
+  correction: 'correction',
+  corrigendum: 'correction',
+  erratum: 'correction',
+  new_version: 'new-version',
+  new_edition: 'new-version',
+})
+
+/**
+ * The kind of one `update_to` relation: one of `FRONTIER_NOTICE_KINDS`,
+ * `'new-version'`, or `'update'` for anything else (an addendum, a
+ * clarification, a type this table has not met). Only the first group are
+ * notices; the last two are updates.
+ * @param {unknown} type @returns {'retraction' | 'withdrawal' | 'expression-of-concern' | 'correction' | 'new-version' | 'update'}
+ */
+export function frontierUpdateKind(type) {
+  const key = String(type ?? '').trim().toLowerCase().replace(/[\s-]+/g, '_')
+  return Object.hasOwn(FRONTIER_UPDATE_TYPE_KINDS, key) ? FRONTIER_UPDATE_TYPE_KINDS[key] : 'update'
+}

@@ -44,5 +44,8 @@ describe("what a result version says about its record", () => {
     // theirs to open, and the page says it has not been verified.
     expect(resultGapLabel("producer_bytes_not_bound")).toBe("文件内容未经核验");
     expect(resultGapLabel("code_not_captured")).toBe("部分来源、代码或环境未完整保存");
+    // Two different things can be missing from a result that cannot be recalculated, and each is named.
+    expect(resultGapLabel("no_owned_deterministic_recipe")).toBe("未保存受支持的计算配方");
+    expect(resultGapLabel("engine_unavailable")).toBe("这个部署没有用于重算的计算引擎");
   });
 });

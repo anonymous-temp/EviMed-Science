@@ -804,7 +804,7 @@ export {
   stripPlatformTags,
   unwrapUserWrappers,
 } from './src/memoryVocabulary.mjs'
-// frontierVocabulary — 59 exports: the frontier feed's closed vocabularies
+// frontierVocabulary — 61 exports: the frontier feed's closed vocabularies
 // (lane, source type, evidence type, specialty, flag, health, egress, access —
 // the enums of the knowledge-source plugin's contract), their Chinese labels,
 // the fallbacks for values a newer plugin sends, PubMed publication type →
@@ -872,6 +872,8 @@ export {
   isFrontierMastheadTitle,
   isFrontierValue,
   mastheadTitleKey,
+  FRONTIER_NOTICE_KINDS,
+  frontierUpdateKind,
 } from './src/frontierVocabulary.mjs'
 // frontierSourceNames — 2 exports: what a reader calls a source — the
 // institution, by the registry's owner entity, never the feed or interface the

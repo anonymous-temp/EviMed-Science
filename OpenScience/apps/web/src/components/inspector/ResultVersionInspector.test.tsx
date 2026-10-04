@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ResultComparison, ResultVersionInspector } from "./ResultVersionInspector";
+import { WebApiError } from "@/lib/apiClient";
 import type { ResultVersion } from "@/lib/resultProvenance";
 
 const api = vi.hoisted(() => ({ list: vi.fn(), related: vi.fn(), get: vi.fn(), raw: vi.fn(), revision: vi.fn(), replay: vi.fn(), progress: vi.fn(), cancel: vi.fn(), export: vi.fn(), save: vi.fn() }));
@@ -37,6 +38,17 @@ describe("immutable result inspection", () => {
     expect(api.raw).toHaveBeenCalledWith(old);
     expect(screen.getByText(/旧版本原文不可用/)).toBeInTheDocument();
     expect(screen.queryByText("新结论")).toBeNull();
+  });
+  it("shows what the producing run found about a version, as warnings in the reader's words", async () => {
+    const found: ResultVersion = { ...latest, findings: [
+      { id: "run-finding-0", kind: "legacy_notice", status: "safety", message: "涉及临床安全，请核对：阿司匹林一级预防：出血风险" },
+      { id: "run-finding-1", kind: "legacy_notice", status: "must-fix", message: "有一处依据需要核对：证据矩阵第 1 条结论" },
+    ] };
+    api.list.mockResolvedValue({ items: [found], nextCursor: null }); api.get.mockResolvedValue(found);
+    mount(found.versionId);
+    expect(await screen.findByText(/⚠ 涉及临床安全，请核对：阿司匹林一级预防：出血风险/)).toBeInTheDocument();
+    expect(screen.getByText(/⚠ 有一处依据需要核对：证据矩阵第 1 条结论/)).toBeInTheDocument();
+    expect(screen.queryByText(/尚未核实/)).toBeNull();
   });
   it("resets content and findings when a different immutable version is selected", async () => {
     mount(old.versionId); await screen.findByText("旧结论");
@@ -151,6 +163,49 @@ describe("immutable result inspection", () => {
     expect(await screen.findByText("重算失败")).toBeInTheDocument();
     expect(screen.getByText("计算未完成，请查看进度后重试")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "打开新结果" })).toBeNull();
+  });
+  it("says which part of the environment moved when a recalculation ran on another one, and never calls that the same environment", async () => {
+    const admitted = { ...latest, reuseEligibility: { replay: { status: "available", reasons: [] }, export: { status: "unavailable", reasons: [] } } };
+    api.get.mockResolvedValue(admitted);
+    api.replay.mockResolvedValue({ id: "job_1", state: "succeeded", versionId: latest.versionId, resultVersionId: "rv_successor",
+      comparison: { bytes: "identical", numbers: { status: "identical" }, environment: { status: "differs", changed: ["code", "environment"] } } });
+    mount(); await screen.findByText("新结论");
+    await userEvent.click(screen.getByRole("button", { name: "重算此结果" }));
+    expect(await screen.findByText(/数值与原结果完全一致；/)).toBeInTheDocument();
+    expect(screen.getByText("运行环境与原结果不同（代码、运行环境已变化），数值比较不是在同一环境下得到的")).toBeInTheDocument();
+    expect(screen.queryByText(/运行环境与原结果相同/)).toBeNull();
+    expect(screen.getByRole("button", { name: "打开新结果" })).toBeInTheDocument();
+  });
+  it("states the same environment only when the record says the engine did not move", async () => {
+    const admitted = { ...latest, reuseEligibility: { replay: { status: "available", reasons: [] }, export: { status: "unavailable", reasons: [] } } };
+    api.get.mockResolvedValue(admitted);
+    api.replay.mockResolvedValue({ id: "job_1", state: "succeeded", versionId: latest.versionId, resultVersionId: "rv_successor",
+      comparison: { numbers: { status: "within-tolerance" }, environment: { status: "same", changed: [] } } });
+    mount(); await screen.findByText("新结论");
+    await userEvent.click(screen.getByRole("button", { name: "重算此结果" }));
+    expect(await screen.findByText(/数值与原结果在允许误差内一致；/)).toBeInTheDocument();
+    expect(screen.getByText("运行环境与原结果相同")).toBeInTheDocument();
+  });
+  it("says plainly what is missing when a recalculation is refused or its output cannot be saved", async () => {
+    const admitted = { ...latest, reuseEligibility: { replay: { status: "available", reasons: [] }, export: { status: "unavailable", reasons: [] } } };
+    api.get.mockResolvedValue(admitted);
+    api.replay.mockRejectedValueOnce(new WebApiError("This result has no recorded calculation recipe", { status: 409, code: "result_recipe_unavailable" }));
+    mount(); await screen.findByText("新结论");
+    await userEvent.click(screen.getByRole("button", { name: "重算此结果" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("这个结果没有保存可重新计算的配方（方法、输入和参数），所以不能重算；原结果仍可查看。");
+    expect(screen.queryByText(/无法解析/)).toBeNull();
+    api.replay.mockResolvedValueOnce({ id: "job_2", state: "failed", versionId: latest.versionId, error: { code: "result_replay_receipt_invalid" } });
+    await userEvent.click(screen.getByRole("button", { name: "重算此结果" }));
+    expect(await screen.findByText(/与计算引擎返回的字节记录对不上/)).toBeInTheDocument();
+  });
+  it("says in the comparison which part of the environment two related versions differ in", () => {
+    const priorRan = { ...old, code: { kind: "code", id: "meta.dl", digest: "c".repeat(64), availability: "reference" }, environment: { kind: "code", id: "engine-environment", digest: "e".repeat(64), availability: "reference" } };
+    const ranElsewhere = { ...latest, code: priorRan.code, environment: { ...priorRan.environment, digest: "f".repeat(64) } };
+    const view = render(<ResultComparison current={ranElsewhere} prior={priorRan} before="a" after="a" />);
+    expect(screen.getByText(/运行环境与所比较的版本不同（运行环境已变化）/)).toBeInTheDocument();
+    view.unmount();
+    render(<ResultComparison current={{ ...ranElsewhere, environment: priorRan.environment }} prior={priorRan} before="a" after="a" />);
+    expect(screen.getByText("运行环境与所比较的版本相同")).toBeInTheDocument();
   });
   it("clears a prior version's replay state when another immutable version is selected", async () => {
     const admitted = { ...latest, reuseEligibility: { replay: { status: "available", reasons: [] }, export: { status: "unavailable", reasons: [] } } };

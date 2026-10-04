@@ -41,8 +41,10 @@
 > Current sources of truth (paths from the workspace root):
 > `OpenScience/AGENTS.md` for architecture and working rules,
 > `OpenScience/docs/WEB_DEPLOYMENT.md` for how the hosted stack is deployed, and
-> `docs/superpowers/plans/2026-09-07-gap-closure-todo.md` for the current open
-> list.
+> `docs/superpowers/plans/2026-10-02-evimed-next-stage-research-workbench.md`
+> (its section 11, final 2026-10-03) for the current open list and sequencing;
+> `docs/superpowers/plans/2026-09-07-gap-closure-todo.md` is the 2026-09-07
+> inventory, a historical snapshot.
 
 Date: 2026-07-13
 

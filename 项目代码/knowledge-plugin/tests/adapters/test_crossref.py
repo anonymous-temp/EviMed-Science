@@ -135,3 +135,22 @@ def test_work_without_doi_or_title_is_skipped():
     work = json.loads(case.results()[0].body)["message"]["items"][0]
     assert crossref_work_entry({**work, "title": []}, source=case.source) is None
     assert crossref_work_entry({**work, "DOI": ""}, source=case.source) is None
+
+
+def test_update_to_is_classified_by_type_not_by_being_there():
+    """A new version, an addendum or a clarification is an update, not a notice; the four notice kinds are notices."""
+    case = load_case("crossref-issn/nature-communications-notices")
+
+    def flagged(update_type, title="Colchicine in pericarditis"):
+        work = {"DOI": "10.1038/s41467-026-00001-1", "title": [title], "created": {"date-parts": [[2026, 9, 21]], "date-time": "2026-09-21T10:00:00Z"},
+                "type": "journal-article", "update-to": [{"DOI": "10.1038/s41467-026-00000-0", "type": update_type, "updated": {"date-parts": [[2026, 9, 21]]}}]}
+        entry = crossref_work_entry(work, source=case.source)
+        assert entry.facts["update_to"][0]["type"] == update_type, "the relation is always reported"
+        return entry.facts.get("is_correction_notice")
+
+    for notice_type in ("correction", "corrigendum", "erratum", "retraction", "partial_retraction", "expression_of_concern", "withdrawal", "removal"):
+        assert flagged(notice_type) is True, notice_type
+    for update_type in ("new_version", "new_edition", "addendum", "clarification", "something_new"):
+        assert flagged(update_type) is None, update_type
+    # A notice-form title is a notice with no relation to say so.
+    assert flagged("new_version", title="Author Correction: Colchicine in pericarditis") is True

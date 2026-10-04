@@ -5,6 +5,7 @@ import { workspaceLayout } from "@evimed/domain";
 import { claimEvidenceSources, claimVerification } from "@evimed/domain/clinical-evidence";
 import { normalizeResultPath } from "@evimed/domain/result-provenance";
 import { clinicalResultLinks } from "./resultImpact.mjs";
+import { describedQualityNotices } from "./runNotices.mjs";
 import { HttpError, openScopedFileNoFollow, readStableFileHandle, resolveScopedPath } from "./security.mjs";
 
 const sha = bytes => createHash("sha256").update(bytes).digest("hex");
@@ -49,6 +50,27 @@ async function sourceCapture(project, relativePath, limit) {
   const bytes = await stableBytes(project, relativePath, limit);
   if (sha(bytes) !== expectedDigest) throw new HttpError(409, "result_source_capture_changed", "Source bytes changed after preservation.");
   return { bytes, expectedDigest, version };
+}
+
+/**
+ * The findings of the run that produced a result, as findings of that result.
+ *
+ * A finished run's ledger record carries them as `qualityNotices` — the gate's
+ * `SAFETY — ` and `MUST FIX — ` findings and the platform's own notes, with the
+ * identity each was raised under. This read `qualityFindings`, a name only the
+ * in-flight completion outcome uses and a stored run never has, so a version
+ * never showed what its run had found about it. Each is described in the
+ * reader's Chinese (`describedQualityNotices`, the same table the inbox and the
+ * run page use) and keeps its severity as its status; none is tied to a claim of
+ * the matrix, because a run-level finding is not a verdict on one.
+ * @param {{ qualityNotices?: unknown }} run
+ * @returns {{ id: string, kind: string, status: string, message: string }[]}
+ */
+export function runFindingsOf(run) {
+  return describedQualityNotices(run?.qualityNotices).map((notice, index) => ({
+    id: `run-finding-${index}`, kind: notice.code, status: notice.severity,
+    message: notice.detail ? `${notice.title}：${notice.detail}` : (notice.title || notice.text),
+  }));
 }
 
 /**
@@ -98,6 +120,7 @@ export async function captureResultDelivery({ results, project, run, receipt = n
   /** Paths captured without a receipt digest behind them. @type {string[]} */
   const unbound = [];
   const sourceCache = new Map();
+  const findings = runFindingsOf(run);
   const fail = (relativePath, error) => failures.push({ path: relativePath, code: error?.code ?? "result_capture_failed" });
   for (const entry of [...(receipt?.entries ?? []), ...unreceiptedEntries(files, receipt)]) {
     const graded = entry.unbound !== true;
@@ -145,7 +168,7 @@ export async function captureResultDelivery({ results, project, run, receipt = n
           throw new HttpError(413, "result_capture_metadata_too_large", "Clinical result links exceed their allowance.");
         }
         matrixVersion = await results.captureFile({ userId: project.userId, project, relativePath: matrixFile.path,
-          producer, expectedDigest: matrixFile.sha256, ...links });
+          producer, expectedDigest: matrixFile.sha256, ...links, findings: [...links.findings, ...findings] });
         review = { status: "available", matrixText: bytes.toString("utf8"), verification,
           matrixVersionId: matrixVersion.versionId, matrixDigest: matrixVersion.digest };
         items.push(matrixVersion);
@@ -155,9 +178,6 @@ export async function captureResultDelivery({ results, project, run, receipt = n
     for (const file of recorded) {
       if (matrixVersion && file.path === matrixFile.path) { capturedOutputs.push(matrixVersion); continue; }
       try {
-        const findings = (run.qualityFindings ?? []).map((finding, index) => ({
-          id: `run-finding-${index}`, kind: finding.code ?? "run_finding", status: finding.severity ?? "notice", message: finding.message ?? finding.text ?? "",
-        }));
         const input = { userId: project.userId, project, relativePath: file.path, producer, expectedDigest: file.sha256, review,
           inputs: [...links.inputs, ...(matrixVersion ? [{ kind: "artifact", id: matrixVersion.artifactId, digest: matrixVersion.digest,
             versionId: matrixVersion.versionId, path: matrixVersion.path, availability: "captured" }] : [])],

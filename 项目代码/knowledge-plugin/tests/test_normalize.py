@@ -265,6 +265,33 @@ def test_update_to_marks_a_correction_notice():
     assert prepared.facts["is_correction_notice"] is True
 
 
+@pytest.mark.parametrize("update_type", [
+    "correction", "corrigendum", "erratum", "retraction", "partial_retraction", "partial-retraction",
+    "expression_of_concern", "expression-of-concern", "withdrawal", "removal", "Retraction",
+])
+def test_a_notice_relation_flags_the_record_as_a_notice_whatever_its_kind(update_type):
+    prepared = prepare(entry(title="Notice", facts={"update_to": [{"type": update_type, "doi": "10.1/abc"}]}), source())
+    assert prepared.facts["is_correction_notice"] is True
+
+
+@pytest.mark.parametrize("update_type", ["new_version", "new-version", "new_edition", "addendum", "clarification", "something_new", ""])
+def test_an_update_that_is_no_notice_does_not_flag_its_record_a_correction(update_type):
+    # Every update_to used to flag the record: an ordinary new version of a work was dropped from the feed as
+    # a correction notice. The relation's type decides; the relation is still reported in update_to.
+    relation = {"type": update_type, "doi": "10.1/abc", "date": "2026-09-01"}
+    prepared = prepare(entry(title="Colchicine in pericarditis: second version", facts={"update_to": [relation]}), source())
+    assert "is_correction_notice" not in prepared.facts
+    assert prepared.facts["update_to"] == [{k: v for k, v in relation.items() if v}]
+
+
+def test_one_notice_relation_among_updates_makes_the_record_a_notice_and_a_notice_title_still_does_without_any():
+    prepared = prepare(entry(title="Notice", facts={"update_to": [{"type": "new_version", "doi": "10.1/a"}, {"type": "erratum", "doi": "10.1/b"}]}), source())
+    assert prepared.facts["is_correction_notice"] is True
+    titled = prepare(entry(title="Correction: A trial of something"), source())
+    assert titled.facts["is_correction_notice"] is True
+    assert "is_correction_notice" not in prepare(entry(), source()).facts
+
+
 
 def test_registry_ids_keep_their_canonical_case():
     from knowledge_plugin.normalize import normalize_registry_ids

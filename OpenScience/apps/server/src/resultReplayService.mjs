@@ -8,6 +8,35 @@ import { HttpError, assertProjectCapacity, openScopedFileNoFollow, readStableFil
 
 const hash = value => createHash("sha256").update(value).digest("hex");
 const recipeId = versionId => `recipe_${versionId}`;
+const ENVIRONMENT_PARTS = Object.freeze({ code: ["codeDigest", "代码"], environment: ["environmentDigest", "运行环境"] });
+
+/**
+ * What a replay ran on, set against what the original recorded.
+ *
+ * The code and environment digests of a recipe say which engine produced a
+ * result. Recalculating on an engine that has since changed is still a
+ * recalculation: it runs, and the record says that it did not run on the same
+ * thing (2026-10-04: a freshness or environment record is our own evidence, it
+ * labels and never refuses). `recorded` is the original's, `current` is what
+ * this replay ran on, and `changed` names which of the two differ.
+ * @param {{codeDigest: string, environmentDigest: string}} recorded @param {{codeDigest: string, environmentDigest: string}} current
+ */
+export function replayEnvironment(recorded, current) {
+  const changed = Object.entries(ENVIRONMENT_PARTS).filter(([, [key]]) => recorded[key] !== current[key]).map(([part]) => part);
+  return { status: changed.length ? "differs" : "same", changed,
+    recorded: { codeDigest: recorded.codeDigest, environmentDigest: recorded.environmentDigest },
+    current: { codeDigest: current.codeDigest, environmentDigest: current.environmentDigest } };
+}
+
+/** The finding a result carries when it was recalculated on another environment than its original's. */
+function environmentFinding(environment) {
+  const parts = environment.changed.map(part => {
+    const [key, label] = ENVIRONMENT_PARTS[part];
+    return `${label}摘要 ${environment.recorded[key].slice(0, 8)} → ${environment.current[key].slice(0, 8)}`;
+  });
+  return { id: "environment-differs", kind: "execution", status: "environment_differs",
+    message: `这次重算所用的计算环境与原结果记录的不同（${parts.join("；")}）；数值比较是在新环境下得到的，不能说明原环境下可以复现。` };
+}
 
 /** Only an owned deterministic producer calls admit(). Browser routes select an
  * existing immutable recipe; they cannot supply paths, code, tools or parameters. */
@@ -113,11 +142,14 @@ export class ResultReplayService {
     const project = await this.results.scope(userId, projectId);
     const output = await this.results.get(userId, projectId, versionId);
     const input = await this.results.raw(userId, projectId, inputVersionId);
-    if (!RESULT_REPLAY_METHODS.includes(recipe?.method) || !isResultDigest(recipe.codeDigest) || !isResultDigest(recipe.environmentDigest)
-      || recipe.input?.sha256 !== input.version.digest || receipt?.recipeDigest !== replayDigest(recipe)
-      || receipt?.outputDigest !== output.digest || output.producer.kind !== "engine" || output.coverage.producer !== "bound") {
-      throw new HttpError(409, "result_recipe_unverified", "The result does not have an owned deterministic recipe.");
-    }
+    const unbound = !RESULT_REPLAY_METHODS.includes(recipe?.method) ? "the method is not an admitted deterministic method"
+      : !isResultDigest(recipe.codeDigest) || !isResultDigest(recipe.environmentDigest) ? "the recipe does not carry the code and environment digests of the engine that ran"
+      : recipe.input?.sha256 !== input.version.digest ? "the recipe's input digest is not that of the captured input"
+      : receipt?.recipeDigest !== replayDigest(recipe) ? "the engine's receipt names another recipe than this one"
+      : receipt?.outputDigest !== output.digest ? "the engine's receipt names other output bytes than the captured result"
+      : output.producer.kind !== "engine" || output.coverage.producer !== "bound" ? "the result was not captured as the engine's own output"
+      : null;
+    if (unbound) throw new HttpError(409, "result_recipe_unverified", `The recipe was not saved with this result: ${unbound}.`);
     compareResultNumbers(machineValues, machineValues);
     const payload = { recordType: "result-replay-recipe", projectId, versionId, inputVersionId,
       recipe: structuredClone(recipe), recipeDigest: replayDigest(recipe), machineValues: structuredClone(machineValues),
@@ -152,7 +184,10 @@ export class ResultReplayService {
     const version = await this.results.get(userId, project.id, versionId);
     if (input.digest !== version.digest) throw new HttpError(409, "result_replay_changed", "The selected result changed.");
     const frozen = await this.recipe(userId, version);
-    if (!frozen || !this.engine.configured(frozen.recipe.method)) throw new HttpError(409, "result_replay_unavailable", "This result cannot be recalculated from its recorded inputs.");
+    // Two different things are missing here, and the researcher can do something
+    // about neither the same way: say which.
+    if (!frozen) throw new HttpError(409, "result_recipe_unavailable", "This result has no recorded calculation recipe (its method, input and parameters), because it was not produced by an admitted deterministic engine run; there is nothing to recalculate it from.");
+    if (!this.engine.configured(frozen.recipe.method)) throw new HttpError(503, "result_engine_unavailable", `The calculation engine for ${frozen.recipe.method} is not deployed in this environment, so this result cannot be recalculated here.`);
     await this.results.raw(userId, project.id, frozen.inputVersionId);
     const id = `replay_${hash(JSON.stringify([project.userId, project.id, userId, input.requestId]))}`;
     const prior = await this.documents.get(project.userId, "result-replay", id);
@@ -177,8 +212,9 @@ export class ResultReplayService {
   /** Initial calculations are requested by an authenticated, observed native
    * tool call. The control plane freezes all execution identities itself. */
   async calculate(userId, project, input, producer, revalidate = async () => {}) {
-    if (!RESULT_REPLAY_METHODS.includes(input.method) || !this.engine.configured(input.method)
-      || !producer.sessionId || !producer.callId) throw new HttpError(409, "result_calculation_unavailable", "This calculation is unavailable.");
+    if (!RESULT_REPLAY_METHODS.includes(input.method)) throw new HttpError(409, "result_calculation_unavailable", `${input.method} is not an admitted deterministic method.`);
+    if (!this.engine.configured(input.method)) throw new HttpError(503, "result_engine_unavailable", `The calculation engine for ${input.method} is not deployed in this environment.`);
+    if (!producer.sessionId || !producer.callId) throw new HttpError(409, "result_calculation_unavailable", "The calculation was not requested from an observed conversation turn, so its result cannot be bound to one.");
     const inputPath = normalizeResultPath(input.inputPath);
     const file = await openScopedFileNoFollow(project.workspaceDir, resolveScopedPath(project.workspaceDir, inputPath));
     let bytes;
@@ -203,7 +239,7 @@ export class ResultReplayService {
     const capabilities = await this.engine.capabilities({ userId: project.userId, projectId: project.id, jobId: id,
       recipeDigest: "0".repeat(64), method: input.method });
     const capability = capabilities.methods?.find(item => item.method === input.method && item.available !== false);
-    if (!capability || !isResultDigest(capability.codeDigest) || !isResultDigest(capability.environmentDigest)) throw new HttpError(503, "result_engine_unavailable", "The calculation environment is unavailable.");
+    if (!capability || !isResultDigest(capability.codeDigest) || !isResultDigest(capability.environmentDigest)) throw new HttpError(503, "result_engine_unavailable", `The calculation engine for ${input.method} did not report the code and environment identity a result must be recorded with, so it cannot run here.`);
     const recipe = { method: input.method, version: capability.version, input: { path: inputPath, sha256: inputVersion.digest },
       parameters, codeDigest: capability.codeDigest, environmentDigest: capability.environmentDigest };
     await revalidate();
@@ -231,7 +267,7 @@ export class ResultReplayService {
     const { project, row } = await this.owned(userId, projectId, id);
     const job = await this.jobs.get(project.userId, row.payload.jobId);
     return { id, projectId, versionId: row.payload.versionId, state: row.payload.cleanup === "unknown" ? "ownership_unknown" : job?.status ?? row.payload.state,
-      outputVersionId: row.payload.outputVersionId ?? null, comparison: row.payload.comparison ?? null,
+      outputVersionId: row.payload.outputVersionId ?? null, comparison: row.payload.comparison ?? null, environment: row.payload.environment ?? null,
       resultVersionId: row.payload.outputVersionId ?? null, artifacts: row.payload.artifacts ?? [],
       partial: row.payload.partial === true,
       error: row.payload.stopError ? { code: row.payload.stopError } : job?.error ? { code: job.error.code } : null, cleanup: row.payload.cleanup ?? null };
@@ -271,8 +307,12 @@ export class ResultReplayService {
     const project = await this.results.scope(row.payload.requestedBy, row.projectId);
     const original = row.payload.versionId ? await this.results.get(row.payload.requestedBy, project.id, row.payload.versionId) : null;
     const frozen = row.payload.initial ?? (original ? await this.recipe(row.payload.requestedBy, original) : null);
-    return frozen ? { project, row, original, frozen, execution: row.payload.execution,
-      recipe: { ...frozen.recipe, input: { ...frozen.recipe.input, path: `result-replays/${row.payload.jobId}/input.json` } } } : null;
+    // What the job ran on, not what the original recorded: the engine's own
+    // receipt names the former.
+    const used = row.payload.environment?.current;
+    return frozen ? { project, row, original, frozen, execution: row.payload.execution, environment: row.payload.environment ?? null,
+      recipe: { ...frozen.recipe, ...(used ? { codeDigest: used.codeDigest, environmentDigest: used.environmentDigest } : {}),
+        input: { ...frozen.recipe.input, path: `result-replays/${row.payload.jobId}/input.json` } } } : null;
   }
 
   /** Called before project/account rows or files disappear, on the deletion's
@@ -298,9 +338,9 @@ export class ResultReplayService {
     if (project.userId !== job.userId || row.payload.jobId !== job.id) throw new HttpError(409, "result_replay_scope_invalid", "The calculation scope changed.");
     const original = row.payload.versionId ? await this.results.get(job.payload.requestedBy, project.id, row.payload.versionId) : null;
     const frozen = row.payload.initial ?? (original ? await this.recipe(job.payload.requestedBy, original) : null);
-    if (!frozen) throw new HttpError(409, "result_recipe_unavailable", "The original recipe is unavailable.");
+    if (!frozen) throw new HttpError(409, "result_recipe_unavailable", "This result has no recorded calculation recipe (its method, input and parameters), so there is nothing to recalculate it from.");
     const input = await this.results.raw(job.payload.requestedBy, project.id, frozen.inputVersionId);
-    if (input.version.digest !== frozen.recipe.input.sha256) throw new HttpError(409, "result_input_changed", "The frozen input changed.");
+    if (input.version.digest !== frozen.recipe.input.sha256) throw new HttpError(409, "result_input_changed", "The input saved with the recipe no longer matches its recorded digest, so the recipe cannot be replayed on it.");
     const relativePath = `result-replays/${job.id}/input.json`;
     const full = resolveScopedPath(project.workspaceDir, relativePath);
     await withProjectStorageMutation(project, async () => {
@@ -313,15 +353,25 @@ export class ResultReplayService {
         finally { await file.handle.close(); }
       }
     });
-    const recipe = { ...frozen.recipe, input: { path: relativePath, sha256: input.version.digest } };
+    const recorded = { ...frozen.recipe, input: { path: relativePath, sha256: input.version.digest } };
+    const probe = { userId: project.userId, projectId: project.id, jobId: job.id, recipeDigest: replayDigest(recorded), method: recorded.method };
+    const capabilities = await this.engine.capabilities(probe);
+    const available = capabilities.methods?.find(item => item.method === recorded.method && item.available !== false);
+    // An engine that is not there, or that does not say what it is, cannot run
+    // anything. One that is there but is not the engine the original ran on can:
+    // it runs, and the record says so (`replayEnvironment`).
+    if (!available || !isResultDigest(available.codeDigest) || !isResultDigest(available.environmentDigest)) {
+      throw new HttpError(503, "result_engine_unavailable", `The calculation engine does not offer ${recorded.method} here (it is not deployed, or it did not report its code and environment identity), so this result cannot be recalculated.`);
+    }
+    // A job that has started keeps the identity it started under: after a
+    // restart it joins that engine job, even if the engine has been replaced.
+    const current = row.payload.execution && row.payload.environment?.current ? row.payload.environment.current
+      : { codeDigest: available.codeDigest, environmentDigest: available.environmentDigest };
+    const recipe = { ...recorded, codeDigest: current.codeDigest, environmentDigest: current.environmentDigest };
     const execution = { userId: project.userId, projectId: project.id, jobId: job.id, recipeDigest: replayDigest(recipe), method: recipe.method };
     if (row.payload.execution && replayDigest(row.payload.execution) !== replayDigest(execution)) throw new HttpError(409, "result_replay_scope_invalid", "The calculation identity changed.");
-    const capabilities = await this.engine.capabilities(execution);
-    const available = capabilities.methods?.find(item => item.method === recipe.method && item.available !== false);
-    if (!available || available.codeDigest !== recipe.codeDigest || available.environmentDigest !== recipe.environmentDigest) {
-      throw new HttpError(409, "result_replay_environment_changed", "The recorded calculation environment is unavailable.");
-    }
-    return { project, row, original, frozen, recipe, execution };
+    const environment = replayEnvironment({ codeDigest: frozen.recipe.codeDigest, environmentDigest: frozen.recipe.environmentDigest }, current);
+    return { project, row, original, frozen, recipe, execution, environment };
   }
 
   /** Serialize admission with cancellation and commit the stable execution
@@ -332,7 +382,7 @@ export class ResultReplayService {
       if (!current || current.payload.jobId !== job.id) throw new HttpError(409, "result_replay_scope_invalid", "The calculation scope changed.");
       if (current.payload.execution && replayDigest(current.payload.execution) !== replayDigest(prepared.execution)) throw new HttpError(409, "result_replay_scope_invalid", "The calculation identity changed.");
       if (!current.payload.execution) await this.documents.put(job.userId, "result-replay", current.id,
-        { ...current.payload, execution: prepared.execution, cleanup: "pending", state: "running" },
+        { ...current.payload, execution: prepared.execution, environment: prepared.environment, cleanup: "pending", state: "running" },
         { projectId: job.projectId, expectedRevision: current.revision, transactionClient: client });
       if (!await this.jobs.renew(job.userId, job.id, job.leaseToken, 60000)) throw new HttpError(409, "product_job_lease_lost", "The worker no longer owns this calculation.");
       try { return { answer: await this.engine.start(prepared.execution, prepared.recipe, options) }; }
@@ -347,10 +397,13 @@ export class ResultReplayService {
   }
 
   async completeOwned(job, prepared, answer) {
-    if (answer.state !== "succeeded") throw new HttpError(409, "result_replay_receipt_invalid", "The calculation is incomplete.");
+    if (answer.state !== "succeeded") throw new HttpError(409, "result_replay_receipt_invalid", `The engine's answer is "${answer.state}", not a finished calculation, so no result was saved from it.`);
     const output = await this.captureOutputOwned(job, prepared, answer);
+    // The numbers are compared on whatever the replay ran on, and the
+    // comparison says whether that was what the original ran on.
     const comparison = prepared.original ? { bytes: output.digest === prepared.original.digest ? "identical" : "changed",
-      numbers: compareResultNumbers(prepared.frozen.machineValues, answer.machineValues), scientificApplicability: "not_assessed" } : null;
+      numbers: compareResultNumbers(prepared.frozen.machineValues, answer.machineValues), environment: prepared.environment ?? null,
+      scientificApplicability: "not_assessed" } : null;
     await this.admit(job.payload.requestedBy, { projectId: job.projectId, versionId: output.versionId,
       inputVersionId: prepared.frozen.inputVersionId, recipe: prepared.recipe, machineValues: answer.machineValues,
       receipt: { recipeDigest: prepared.execution.recipeDigest, outputDigest: output.digest } });
@@ -364,13 +417,13 @@ export class ResultReplayService {
   }
 
   async readOutput(project, artifact, limit) {
-    if (!artifact || !isResultDigest(artifact.sha256)) throw new HttpError(409, "result_replay_receipt_invalid", "The calculation output lacks its byte receipt.");
+    if (!artifact || !isResultDigest(artifact.sha256)) throw new HttpError(409, "result_replay_receipt_invalid", "The engine returned a calculation output without the sha256 of its bytes, so the output cannot be checked against a record and was not saved.");
     const file = await openScopedFileNoFollow(project.workspaceDir, resolveScopedPath(project.workspaceDir, artifact.path));
     try {
       if (file.stat.size > limit) throw new HttpError(413, "result_replay_response_limit", "The calculation output exceeds its limit.");
       const bytes = await readStableFileHandle(file.handle, file.stat);
       if (hash(bytes) !== artifact.sha256 || artifact.bytes !== undefined && artifact.bytes !== bytes.length) {
-        throw new HttpError(409, "result_replay_receipt_invalid", "The calculation bytes do not match their receipt.");
+        throw new HttpError(409, "result_replay_receipt_invalid", "The calculation output's size or sha256 does not match the byte record the engine returned for it, so it was not saved as a result.");
       }
       return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes));
     } finally { await file.handle.close(); }
@@ -394,13 +447,13 @@ export class ResultReplayService {
   async captureOutputOwned(job, prepared, answer) {
     if (answer.jobId !== job.id || answer.recipeDigest !== prepared.execution.recipeDigest
       || !["succeeded", "failed", "canceled", "timed_out"].includes(answer.state) || answer.cleanup !== "confirmed") {
-      throw new HttpError(409, "result_replay_receipt_invalid", "The calculation did not return its owned result.");
+      throw new HttpError(409, "result_replay_receipt_invalid", "The engine's answer does not carry this calculation's job and recipe identity, or does not say its process has stopped, so it cannot be taken as this calculation's result.");
     }
     compareResultNumbers(answer.machineValues, answer.machineValues);
     const outputPath = normalizeResultPath(answer.resultPath);
-    if (!outputPath.startsWith(`result-replays/${job.id}/output/`)) throw new HttpError(409, "result_replay_receipt_invalid", "The calculation output is outside its owned directory.");
+    if (!outputPath.startsWith(`result-replays/${job.id}/output/`)) throw new HttpError(409, "result_replay_receipt_invalid", "The engine named a result file outside this calculation's own output directory, so it was not read.");
     const artifact = answer.artifacts?.find(file => file.path === outputPath);
-    if (!artifact || !isResultDigest(artifact.sha256)) throw new HttpError(409, "result_replay_receipt_invalid", "The calculation output lacks its byte receipt.");
+    if (!artifact || !isResultDigest(artifact.sha256)) throw new HttpError(409, "result_replay_receipt_invalid", "The engine's byte record does not list the result file with its sha256, so the result cannot be checked and was not saved.");
     const payload = await this.readOutput(prepared.project, artifact, 8 * 1024 * 1024);
     if (["design.analytic", "comparator.evalue"].includes(prepared.recipe.method)) {
       const receiptPath = `result-replays/${job.id}/output/receipt.json`;
@@ -415,19 +468,24 @@ export class ResultReplayService {
         || recorded?.sha256 !== artifact.sha256 || payload.method !== prepared.recipe.method
         || replayDigest(receipt.machineValues) !== replayDigest(answer.machineValues)
         || replayDigest(measures) !== replayDigest(numeric(answer.machineValues))) {
-        throw new HttpError(409, "result_replay_receipt_invalid", "The R calculation numbers do not match their preserved output and receipt.");
+        throw new HttpError(409, "result_replay_receipt_invalid", "The numbers the engine reported do not match the result file and receipt it saved (the output, the receipt or the measures differ), so none of it was saved as a result.");
       }
     } else if (payload.receipt?.recipeDigest !== prepared.execution.recipeDigest || replayDigest(payload.machineValues) !== replayDigest(answer.machineValues)) {
-      throw new HttpError(409, "result_replay_receipt_invalid", "The calculation numbers do not match their preserved output.");
+      throw new HttpError(409, "result_replay_receipt_invalid", "The numbers the engine reported do not match the result file it saved, so none of it was saved as a result.");
     }
     return this.results.captureFile({ userId: job.payload.requestedBy, project: prepared.project, relativePath: outputPath,
       expectedDigest: artifact.sha256, producer: { ...(prepared.frozen.producer ?? prepared.original?.producer), kind: "engine", callId: job.id, eventId: job.id },
       inputs: [{ kind: "data", id: prepared.frozen.inputVersionId, versionId: prepared.frozen.inputVersionId,
         digest: prepared.recipe.input.sha256, availability: "captured" }],
-      code: prepared.original?.code ?? { kind: "code", id: prepared.recipe.method, digest: prepared.recipe.codeDigest, availability: "reference" },
-      environment: prepared.original?.environment ?? { kind: "code", id: "engine-environment", digest: prepared.recipe.environmentDigest, availability: "reference" },
+      // What actually ran: the original's own references while the engine is the
+      // one it recorded, this engine's when it is not.
+      code: !prepared.environment?.changed.includes("code") && prepared.original?.code
+        ? prepared.original.code : { kind: "code", id: prepared.recipe.method, digest: prepared.recipe.codeDigest, availability: "reference" },
+      environment: !prepared.environment?.changed.includes("environment") && prepared.original?.environment
+        ? prepared.original.environment : { kind: "code", id: "engine-environment", digest: prepared.recipe.environmentDigest, availability: "reference" },
       machineValues: answer.machineValues, supersedesVersionId: prepared.original?.versionId,
-      findings: answer.state === "succeeded" ? [] : [{ id: "partial-calculation", kind: "execution", status: "partial",
-        message: "The calculation stopped before completing; these preserved values are partial output." }] });
+      findings: [...(answer.state === "succeeded" ? [] : [{ id: "partial-calculation", kind: "execution", status: "partial",
+        message: "计算在完成之前停止了，保存下来的数值只是部分输出。" }]),
+      ...(prepared.environment?.status === "differs" ? [environmentFinding(prepared.environment)] : [])] });
   }
 }

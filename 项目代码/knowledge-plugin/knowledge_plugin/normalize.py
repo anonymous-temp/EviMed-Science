@@ -40,7 +40,7 @@ from urllib.parse import parse_qsl, quote, unquote, urlsplit, urlunsplit
 
 from .model import (
     DEFECTS, EXTERNAL_KEY_MAX, FACT_TYPES, LANES, SHORT_SUMMARY_MIN, SUMMARY_MAX, TITLE_MAX,
-    TRIAL_EVENTS, UPDATE_TO_KEYS, URL_MAX, NormalizedEntry, SourceConfig,
+    TRIAL_EVENTS, UPDATE_TO_KEYS, URL_MAX, NormalizedEntry, SourceConfig, update_to_notice_kind,
 )
 
 # ------------------------------------------------------------------------------------ text
@@ -425,7 +425,9 @@ def prepare(entry: NormalizedEntry, source: SourceConfig) -> Prepared:
         notes.append("dropped_facts:" + ",".join(sorted(set(dropped)))[:120])
     if is_masthead_title(title):
         facts["is_masthead"] = True
-    if facts.get("update_to") or is_correction_title(title):
+    # A notice is decided by the TYPE of the relation, not by there being one: any ``update_to`` used to
+    # flag the record a correction notice, so an ordinary new version of a work was dropped as one.
+    if any(update_to_notice_kind(item.get("type")) for item in facts.get("update_to", [])) or is_correction_title(title):
         facts["is_correction_notice"] = True
 
     hint = valid_hint(entry.identity_hint)

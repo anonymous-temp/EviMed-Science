@@ -21,6 +21,8 @@ import {
   frontierTextDecision,
   frontierTextPendingHold,
   frontierTimelineAt,
+  frontierNoticeKind,
+  frontierUpdateLinks,
   isCorrectionNotice,
   isUrgentSource,
   titleKey,
@@ -135,6 +137,36 @@ test("mastheads and unreadable titles are dropped; correction notices are recogn
   assert.equal(isCorrectionNotice({ facts: { is_correction_notice: true } }), true);
   assert.equal(isCorrectionNotice({ facts: { update_to: [{ type: "retraction", doi: "10.1/x" }] } }), true);
   assert.equal(isCorrectionNotice({ facts: { update_to: [] } }), false);
+});
+
+test("a relation is classified by its type: four notice states, and everything else is an update that is an item", () => {
+  const kind = (/** @type {any[]} */ update_to, /** @type {any} */ extra = {}) => frontierNoticeKind({ facts: { update_to, ...extra } });
+  // Correction and erratum are corrections; retraction, expression of concern and withdrawal are states of their own.
+  assert.equal(kind([{ type: "correction", doi: "10.1056/a" }]), "correction");
+  assert.equal(kind([{ type: "Erratum", doi: "10.1056/a" }]), "correction");
+  assert.equal(kind([{ type: "corrigendum", doi: "10.1056/a" }]), "correction");
+  assert.equal(kind([{ type: "retraction", doi: "10.1056/a" }]), "retraction");
+  assert.equal(kind([{ type: "partial_retraction", doi: "10.1056/a" }]), "retraction");
+  assert.equal(kind([{ type: "expression-of-concern", doi: "10.1056/a" }]), "expression-of-concern");
+  assert.equal(kind([{ type: "withdrawal", doi: "10.1056/a" }]), "withdrawal");
+  assert.equal(kind([{ type: "removal", doi: "10.1056/a" }]), "withdrawal");
+  // The most serious relation names the notice.
+  assert.equal(kind([{ type: "correction" }, { type: "retraction" }]), "retraction");
+  assert.equal(kind([{ type: "new_version" }, { type: "erratum" }]), "correction", "a new version listed beside a correction is not a correction of anything");
+  // A new version and any other update is no notice: it is an item, and no entry is flagged 更正 for carrying one.
+  for (const type of ["new_version", "new-version", "new_edition", "addendum", "clarification", "something_new", undefined]) {
+    assert.equal(kind([{ type, doi: "10.1056/a" }]), null, String(type));
+    assert.equal(isCorrectionNotice({ facts: { update_to: [{ type, doi: "10.1056/a" }] } }), false, String(type));
+  }
+  // The plugin's own flag decides when no relation can speak: a title in a notice form arrives with none.
+  assert.equal(kind(undefined, { is_correction_notice: true }), "correction");
+  assert.equal(kind([], { is_correction_notice: true }), "correction");
+  assert.equal(kind([]), null);
+  assert.equal(frontierNoticeKind({}), null);
+  // What a new version says about the work it follows is kept as a link; a notice's relations are not links of this kind.
+  assert.deepEqual(frontierUpdateLinks({ facts: { update_to: [{ type: "new_version", doi: "https://doi.org/10.1056/ABC" }, { type: "correction", doi: "10.1056/y" }, { type: "new_edition", doi: "10.1056/z" }, { type: "new_version" }, { type: "addendum", doi: "10.1056/w" }] } })
+    .map((link) => [link.update.kind, link.doi]), [["new-version", "10.1056/abc"], ["new-version", "10.1056/z"]]);
+  assert.deepEqual(frontierUpdateLinks({}), []);
 });
 
 test("the text step: take it when it is there, wait for it when it is worth waiting, never more than five days", () => {
