@@ -879,7 +879,22 @@ container itself stays healthy, so web still starts. `invalidSetting` echoes a
 limit that is not a whole number; the engine then runs uncapped. A slot belongs to
 its worker process: an engine whose worker alone was killed, and not its container,
 would run on without one until it ends, bounded by the container's own limits
-(`mem_limit: 2g` and `pids_limit` on the five adapter engines; MetaAgent has none).
+(`mem_limit: 2g`, `cpus: 1.5` and `pids_limit: 256` on all six engines).
+
+A held slot is also bounded in time. Every engine job has a wall clock,
+`OPEN_SCIENCE_SPECIALIST_EXECUTION_TIMEOUT_SECONDS` (default 10800, clamped to
+60-14400; each engine reads it as `EVIMED_SPECIALIST_EXECUTION_TIMEOUT_SECONDS`, the
+name the managed-local executor already used). Past it the worker stops the engine's
+whole process group, publishes what the engine had written (named in the job's
+`artifacts`, as for any failed job), ends the job retryable as `specialist_job_timeout`
+(`meta_agent_job_timeout` for MetaAgent, which resumes from its last completed step;
+`mr_analysis_timeout` for MR, whose engine enforces the same bound) and releases the
+slot with the worker. Before 2026-10-04 only MR had one: with
+`OPEN_SCIENCE_SPECIALIST_MAX_CONCURRENT_JOBS=1` a hung engine of any other kind held
+the slot until it died and every waiting job ended at the wait bound. The default is
+the MR engine's own three hours, equal to the slot wait bound, so wait plus run is
+exactly the engine credential's six hours; raising either needs the credential's
+`OPEN_SCIENCE_ENGINE_MODEL_TOKEN_TTL_SECONDS` raised with it.
 
 ### Specialist engine evidence is a label
 

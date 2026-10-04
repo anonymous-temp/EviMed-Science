@@ -64,6 +64,12 @@ _DEFAULT_MAX_ACTIVE_JOBS = 1
 #: failing at the same step stops being retried and says so.
 _DEFAULT_MAX_ATTEMPTS = 3
 _MAX_SCANNED_JOBS = 200
+#: What a run the wall clock stopped ends as (`job_slots.execution_timeout()`, the
+#: deployment's EVIMED_SPECIALIST_EXECUTION_TIMEOUT_SECONDS, shared by every
+#: engine): an engine that hangs would hold its slot, and the deployment's one job
+#: at a time, forever. `124` is the status `timeout(1)` and the MR engine use.
+_TIMEOUT_CODE = "meta_agent_job_timeout"
+_TIMEOUT_RETURN_CODE = 124
 
 #: The engine's terminal release vocabulary (new_meta/core/release_contract.py).
 #: The adapter reports these values verbatim; anything else is named as unknown
@@ -1000,7 +1006,7 @@ def _status(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
             ["Report the failure and the partial files it left; do not present them as a finished review."]
         )
         return _error(
-            "meta_agent_execution_failed",
+            _TIMEOUT_CODE if state.get("errorCode") == _TIMEOUT_CODE else "meta_agent_execution_failed",
             message,
             bool(state.get("retryable")) or resumable,
             next_actions=next_actions,
@@ -1260,6 +1266,15 @@ def _log_line(log_path: Path | None, text: str) -> None:
         pass
 
 
+def _timeout_message() -> str:
+    """What a run the wall clock stopped says, for a reader: the limit, what is kept, what to do."""
+    return (
+        f"MetaAgent was stopped after {int(job_slots.execution_timeout())} seconds without finishing "
+        "(the deployment's execution limit for one job). The steps it had completed and the files it had "
+        "written are kept; starting the same request again resumes from the last completed step."
+    )
+
+
 def _wait_for_slot(state_path: Path, state: dict[str, Any]) -> job_slots.Slot:
     """Hold one of the deployment's specialist slots before the job starts, or end the job by name.
 
@@ -1382,17 +1397,27 @@ def _run_job(state_path: Path, state: dict[str, Any]) -> int:
         os.O_WRONLY | os.O_CREAT | os.O_APPEND | getattr(os, "O_NOFOLLOW", 0),
         0o600,
     )
+    timed_out = False
     with os.fdopen(log_descriptor, "ab", buffering=0) as log:
         with _heartbeat(state_path, state, output_root, log_path):
-            completed = subprocess.run(
-                command,
-                cwd=str(Path(__file__).resolve().parents[1]),
-                env=dict(os.environ),
-                stdin=subprocess.DEVNULL,
-                stdout=log,
-                stderr=subprocess.STDOUT,
-                check=False,
-            )
+            try:
+                completed = subprocess.run(
+                    command,
+                    cwd=str(Path(__file__).resolve().parents[1]),
+                    env=dict(os.environ),
+                    stdin=subprocess.DEVNULL,
+                    stdout=log,
+                    stderr=subprocess.STDOUT,
+                    check=False,
+                    timeout=job_slots.execution_timeout(),
+                )
+            except subprocess.TimeoutExpired:
+                # `run` has stopped the engine and waited for it. What it had
+                # written stays in the output directory and is looked at below
+                # like the output of any other process that ended early.
+                completed = subprocess.CompletedProcess(command, _TIMEOUT_RETURN_CODE)
+                timed_out = True
+                _log_line(log_path, f"execution limit: stopped after {int(job_slots.execution_timeout())} seconds")
     projects = sorted(
         (entry for entry in output_root.iterdir() if entry.is_dir()),
         key=lambda entry: entry.stat().st_mtime_ns,
@@ -1415,10 +1440,11 @@ def _run_job(state_path: Path, state: dict[str, Any]) -> int:
             "updatedAt": _now(),
             "finishedAt": _now(),
             "returnCode": completed.returncode,
-            "retryable": completed.returncode in {75, 137, 143},
+            "retryable": completed.returncode in {75, 137, 143} or timed_out,
             "error": f"MetaAgent exited with code {completed.returncode}.",
             # Principle 19: what it finished before failing stays named.
             **(_partial_record(workspace, inside) if inside is not None else {}),
+            **({"errorCode": _TIMEOUT_CODE, "error": _timeout_message()} if timed_out else {}),
         })
         _atomic_json(state_path, state)
         # A failed attempt's tokens were paid for too. Only a project inside
@@ -1436,8 +1462,11 @@ def _run_job(state_path: Path, state: dict[str, Any]) -> int:
         pass
     if partial_completion:
         release = {**release, "status": "ready_with_warnings", "deliverable": True,
-                   "summary": "The process ended after writing a readable manuscript; completed evidence is retained and later work remains incomplete.",
-                   "warning_codes": [*(release.get("warning_codes") or []), "partial_process_completion"],
+                   "summary": ("The process was stopped at the deployment's execution limit after writing a readable manuscript; "
+                               if timed_out else "The process ended after writing a readable manuscript; ")
+                              + "completed evidence is retained and later work remains incomplete.",
+                   "warning_codes": [*(release.get("warning_codes") or []), "partial_process_completion",
+                                     *([_TIMEOUT_CODE] if timed_out else [])],
                    "next_actions": []}
         state.update(completion="partial", verification="unverified")
         draft = project / "manuscript" / "draft.md"

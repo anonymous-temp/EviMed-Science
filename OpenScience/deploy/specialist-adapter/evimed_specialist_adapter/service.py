@@ -63,6 +63,12 @@ _MR_RUNNER_MESSAGE_LIMIT = 2000
 #: trying again later is the whole remedy -- the same fact as an engine that is
 #: not running, which this code already says.
 _SLOT_FAILURE_CODE = "specialist_worker_unavailable"
+#: What a job the engine's wall clock stopped ends as (`job_slots.execution_timeout()`):
+#: a named code of its own, because "the engine failed" and "the engine did not
+#: finish in the time a job may take" ask for different next steps. `124` is the
+#: exit status `timeout(1)` and the MR engine's own wall clock use for it.
+_TIMEOUT_CODE = "specialist_job_timeout"
+_TIMEOUT_RETURN_CODE = 124
 
 
 SPECS: dict[str, dict[str, Any]] = {
@@ -1109,7 +1115,10 @@ def _status(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
         tail = _log_tail(log_path)
         if tail:
             message = f"{message} Log tail: {tail}"
-        failure = _error("specialist_execution_failed", message, bool(state.get("retryable")))
+        failure = _error(
+            _TIMEOUT_CODE if state.get("errorCode") == _TIMEOUT_CODE else "specialist_execution_failed",
+            message, bool(state.get("retryable")),
+        )
         if state.get("artifacts"):
             failure["artifacts"] = state["artifacts"]
             failure["warnings"] = ["These are partial outputs from a failed job; verify their scope before drawing conclusions."]
@@ -1345,6 +1354,9 @@ def _run_isolated_mr(
             bindings=state.get("mrInputBindings", {}),
             python=sys.executable,
             runner=root / "evimed_runner.py",
+            # The same wall clock as every other engine (it was a constant 10800
+            # in the engine), so one lever bounds them all.
+            timeout=int(job_slots.execution_timeout()),
         )
         environment = _child_environment()
         credentials = None
@@ -1523,6 +1535,15 @@ def _fail_unslotted(state_path: Path, error: job_slots.SlotsUnavailable, log_pat
         pass
 
 
+def _timeout_message() -> str:
+    """What a job the wall clock stopped says, for a reader: the limit, what is kept, what to do."""
+    return (
+        f"{_spec()['label']} was stopped after {int(job_slots.execution_timeout())} seconds without finishing "
+        "(the deployment's execution limit for one job). Files it had already written are kept; "
+        "starting it again, with a narrower request if it is a large one, may finish."
+    )
+
+
 def run_job(state_file: str) -> int:
     state_path = Path(state_file).absolute()
     data_root = Path(os.getenv("EVIMED_DATA_ROOT", "/data")).resolve()
@@ -1577,6 +1598,7 @@ def _run_job(state_path: Path, data_root: Path) -> int:
     request_path = output_root / "request.json"
     request = state["request"]
     _atomic_json(request_path, request)
+    timed_out = False
     log_descriptor = os.open(
         log_path,
         os.O_WRONLY | os.O_CREAT | os.O_APPEND | getattr(os, "O_NOFOLLOW", 0),
@@ -1609,7 +1631,7 @@ def _run_job(state_path: Path, data_root: Path) -> int:
                     ).returncode
             else:
                 try:
-                    return_code, receipt_rows = _run_isolated(
+                    return_code, receipt_rows, timed_out = _run_isolated(
                         state, state_path, root, workspace, output_root, request_path, log, isolation
                     )
                 except (OSError, ValueError, isolated_job.IsolatedJobError) as error:
@@ -1633,7 +1655,7 @@ def _run_job(state_path: Path, data_root: Path) -> int:
     # The engine has ended, either way: what its source evidence did since
     # admission goes in the record, and decides nothing about the outcome.
     _note_evidence(state, root)
-    if return_code != 0 or result.get("status") != "succeeded" or (isolation is not None and receipt_rows is None):
+    if timed_out or return_code != 0 or result.get("status") != "succeeded" or (isolation is not None and receipt_rows is None):
         state.update(
             {
                 "status": "failed",
@@ -1653,6 +1675,11 @@ def _run_job(state_path: Path, data_root: Path) -> int:
                 **({"usage": usage} if usage else {}),
             }
         )
+        if timed_out:
+            # Whatever the engine had written was published above and is named in
+            # `artifacts` (principle 19); the engine's own last word, if it left
+            # one, says nothing about why it was stopped.
+            state.update(errorCode=_TIMEOUT_CODE, retryable=True, error=_timeout_message())
         _write_state(state_path, state)
         _report_usage(state, log_path)
         return return_code or 1
@@ -1727,12 +1754,14 @@ def _run_isolated(
     request_path: Path,
     log: Any,
     credentials: dict[str, Any],
-) -> tuple[int, dict[str, list[dict[str, Any]]]]:
+) -> tuple[int, dict[str, list[dict[str, Any]]], bool]:
     """Run the engine in a private stage and publish its regular output files.
 
-    Returns its exit code and the owner's receipt rows: the inputs it was
-    handed and every file published into the job's output, the request the
-    owner wrote there included.
+    Returns its exit code, the owner's receipt rows (the inputs it was handed
+    and every file published into the job's output, the request the owner wrote
+    there included) and whether the wall clock stopped it. A stopped engine's
+    files are published all the same: what it had written before is the partial
+    result.
     """
     request = dict(state["request"])
     inputs, handed = [], {}
@@ -1772,11 +1801,18 @@ def _run_isolated(
             "--output-dir",
             str(stage / "output"),
         ]
+        timed_out = False
         with _heartbeat(state_path, state, read=_read_json, write=_atomic_json, progress_path=progress):
-            return_code = isolated_job.run(command, credentials=credentials, cwd=str(root), env=environment, log=log)
+            try:
+                return_code = isolated_job.run(
+                    command, credentials=credentials, cwd=str(root), env=environment, log=log,
+                    timeout=job_slots.execution_timeout(),
+                )
+            except isolated_job.ExecutionTimeout:
+                return_code, timed_out = _TIMEOUT_RETURN_CODE, True
         artifacts = isolated_job.publish(stage / "output", output_root, workspace)
     artifacts.append(isolated_job.file_row(workspace, request_path))
-    return return_code, {"inputs": inputs, "artifacts": sorted(artifacts, key=lambda row: row["path"])}
+    return return_code, {"inputs": inputs, "artifacts": sorted(artifacts, key=lambda row: row["path"])}, timed_out
 
 
 def _create_app() -> FastAPI:

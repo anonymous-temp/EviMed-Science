@@ -16,6 +16,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+import time
 from contextlib import ExitStack, closing, contextmanager
 from pathlib import Path
 from typing import Any, Iterator
@@ -35,6 +36,14 @@ _REMOVE_TREE = "import shutil,sys\nshutil.rmtree(sys.argv[1], ignore_errors=True
 
 class IsolatedJobError(RuntimeError):
     """The isolated run could not be completed safely; never carries a path or a secret."""
+
+
+class ExecutionTimeout(IsolatedJobError):
+    """The engine ran past its wall clock; its process group has been stopped and reaped.
+
+    Raised by `run` once there is nothing left running, so the caller can still
+    publish what the engine had written before it was stopped.
+    """
 
 
 @contextmanager
@@ -111,33 +120,59 @@ def hand_over(blob: bytes, name: str, target_directory: Path) -> Path:
     return target
 
 
-def run(command: list[str], *, credentials: dict[str, Any], cwd: str, env: dict[str, str], log: Any) -> int:
+def _wait_for_exit(pid: int, timeout: float | None) -> bool:
+    """True once the process has exited (left unreaped); False when `timeout` seconds pass first.
+
+    No timeout waits as long as the engine runs.
+    """
+    if hasattr(os, "waitid"):
+        if timeout is None:
+            os.waitid(os.P_PID, pid, os.WEXITED | os.WNOWAIT)
+            return True
+        deadline = time.monotonic() + timeout
+        while True:
+            if os.waitid(os.P_PID, pid, os.WEXITED | os.WNOHANG | os.WNOWAIT) is not None:
+                return True
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return False
+            time.sleep(min(0.05, remaining))
+    # macOS exposes process-exit notification through kqueue. Like WNOWAIT, it
+    # leaves the child unreaped until its group is stopped.
+    with closing(select.kqueue()) as queue:
+        event = select.kevent(pid, filter=select.KQ_FILTER_PROC, flags=select.KQ_EV_ADD, fflags=select.KQ_NOTE_EXIT)
+        try:
+            return bool(queue.control([event], 1, timeout))
+        except ProcessLookupError:
+            # A very short-lived child can exit before registration.
+            # This owner has not waited/reaped it, so its PID is held.
+            return True
+
+
+def run(
+    command: list[str], *, credentials: dict[str, Any], cwd: str, env: dict[str, str], log: Any,
+    timeout: float | None = None,
+) -> int:
     """Run the engine in its own session and stop everything it left behind.
 
     The leader is waited for without being reaped, so its process-group id
     cannot be reused while the rest of the group is killed; then it is reaped.
     A child that outlived the engine could otherwise still write into the stage
         between the worker's observation and publication.
+
+    `timeout` is the engine's wall clock (`job_slots.execution_timeout()`): an
+    engine that hangs would hold its slot, and the deployment's one job at a
+    time, forever. When it runs out the whole group is stopped like any other
+    exit and the engine is reaped, and then `ExecutionTimeout` is raised, so the
+    caller can still publish what the engine had written.
     """
     process = subprocess.Popen(
         command, cwd=cwd, env=env, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT,
         start_new_session=True, **credentials,
     )
+    exited = True
     try:
-        if hasattr(os, "waitid"):
-            os.waitid(os.P_PID, process.pid, os.WEXITED | os.WNOWAIT)
-        else:
-            # macOS exposes process-exit notification through kqueue. Like
-            # WNOWAIT, it leaves the child unreaped until its group is stopped.
-            with closing(select.kqueue()) as queue:
-                event = select.kevent(process.pid, filter=select.KQ_FILTER_PROC,
-                                      flags=select.KQ_EV_ADD, fflags=select.KQ_NOTE_EXIT)
-                try:
-                    queue.control([event], 1, None)
-                except ProcessLookupError:
-                    # A very short-lived child can exit before registration.
-                    # This owner has not waited/reaped it, so its PID is held.
-                    pass
+        exited = _wait_for_exit(process.pid, timeout)
     finally:
         if credentials:
             _as_analysis(credentials, _STOP_GROUP, str(process.pid))
@@ -146,7 +181,10 @@ def run(command: list[str], *, credentials: dict[str, Any], cwd: str, env: dict[
                 os.killpg(process.pid, signal.SIGKILL)
             except (ProcessLookupError, PermissionError):
                 pass
-    return process.wait()
+    code = process.wait()
+    if not exited:
+        raise ExecutionTimeout("the engine ran past its execution limit")
+    return code
 
 
 def _walk(directory: int, parts: tuple[str, ...], found: list[tuple[tuple[str, ...], int]]) -> None:

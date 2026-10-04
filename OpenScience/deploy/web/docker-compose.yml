@@ -1102,6 +1102,12 @@ services:
       # /data/.openscience/specialist-slots, which no runtime mounts.
       EVIMED_SPECIALIST_MAX_CONCURRENT_JOBS: ${OPEN_SCIENCE_SPECIALIST_MAX_CONCURRENT_JOBS:-0}
       EVIMED_SPECIALIST_SLOT_WAIT_SECONDS: ${OPEN_SCIENCE_SPECIALIST_SLOT_WAIT_SECONDS:-10800}
+      # One job's wall clock, on every engine: past it the worker stops the engine,
+      # keeps what it wrote and ends the job `specialist_job_timeout`, and its slot
+      # is released. Without it a hung engine held the only slot until it died.
+      # 3 h, the MR engine's own limit; with the wait bound above it is exactly the
+      # engine credential's 6 h (clamped to 60-14400 s by the engine).
+      EVIMED_SPECIALIST_EXECUTION_TIMEOUT_SECONDS: ${OPEN_SCIENCE_SPECIALIST_EXECUTION_TIMEOUT_SECONDS:-10800}
     volumes:
       # Optional, like the web service's: /dev/null where the deployment holds no
       # EviMed evidence key. MetaAgent's evidence tool then says it was not used.
@@ -1306,6 +1312,8 @@ services:
       # The deployment-wide cap on specialist jobs (see evimed-meta-agent).
       EVIMED_SPECIALIST_MAX_CONCURRENT_JOBS: ${OPEN_SCIENCE_SPECIALIST_MAX_CONCURRENT_JOBS:-0}
       EVIMED_SPECIALIST_SLOT_WAIT_SECONDS: ${OPEN_SCIENCE_SPECIALIST_SLOT_WAIT_SECONDS:-10800}
+      # One job's wall clock (see evimed-meta-agent).
+      EVIMED_SPECIALIST_EXECUTION_TIMEOUT_SECONDS: ${OPEN_SCIENCE_SPECIALIST_EXECUTION_TIMEOUT_SECONDS:-10800}
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
       EVIMED_USAGE_REPORT_URL: ${OPEN_SCIENCE_ENGINE_USAGE_INTERNAL_URL-http://open-science-web:8787/internal/usage/v1/engine}
       LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
@@ -1472,6 +1480,8 @@ services:
       # The deployment-wide cap on specialist jobs (see evimed-meta-agent).
       EVIMED_SPECIALIST_MAX_CONCURRENT_JOBS: ${OPEN_SCIENCE_SPECIALIST_MAX_CONCURRENT_JOBS:-0}
       EVIMED_SPECIALIST_SLOT_WAIT_SECONDS: ${OPEN_SCIENCE_SPECIALIST_SLOT_WAIT_SECONDS:-10800}
+      # One job's wall clock (see evimed-meta-agent).
+      EVIMED_SPECIALIST_EXECUTION_TIMEOUT_SECONDS: ${OPEN_SCIENCE_SPECIALIST_EXECUTION_TIMEOUT_SECONDS:-10800}
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
       EVIMED_USAGE_REPORT_URL: ${OPEN_SCIENCE_ENGINE_USAGE_INTERNAL_URL-http://open-science-web:8787/internal/usage/v1/engine}
       LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
@@ -1529,6 +1539,8 @@ services:
       # The deployment-wide cap on specialist jobs (see evimed-meta-agent).
       EVIMED_SPECIALIST_MAX_CONCURRENT_JOBS: ${OPEN_SCIENCE_SPECIALIST_MAX_CONCURRENT_JOBS:-0}
       EVIMED_SPECIALIST_SLOT_WAIT_SECONDS: ${OPEN_SCIENCE_SPECIALIST_SLOT_WAIT_SECONDS:-10800}
+      # One job's wall clock (see evimed-meta-agent).
+      EVIMED_SPECIALIST_EXECUTION_TIMEOUT_SECONDS: ${OPEN_SCIENCE_SPECIALIST_EXECUTION_TIMEOUT_SECONDS:-10800}
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
       EVIMED_USAGE_REPORT_URL: ${OPEN_SCIENCE_ENGINE_USAGE_INTERNAL_URL-http://open-science-web:8787/internal/usage/v1/engine}
       LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
@@ -1581,6 +1593,8 @@ services:
       # The deployment-wide cap on specialist jobs (see evimed-meta-agent).
       EVIMED_SPECIALIST_MAX_CONCURRENT_JOBS: ${OPEN_SCIENCE_SPECIALIST_MAX_CONCURRENT_JOBS:-0}
       EVIMED_SPECIALIST_SLOT_WAIT_SECONDS: ${OPEN_SCIENCE_SPECIALIST_SLOT_WAIT_SECONDS:-10800}
+      # One job's wall clock (see evimed-meta-agent).
+      EVIMED_SPECIALIST_EXECUTION_TIMEOUT_SECONDS: ${OPEN_SCIENCE_SPECIALIST_EXECUTION_TIMEOUT_SECONDS:-10800}
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
       EVIMED_USAGE_REPORT_URL: ${OPEN_SCIENCE_ENGINE_USAGE_INTERNAL_URL-http://open-science-web:8787/internal/usage/v1/engine}
       LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
@@ -1633,6 +1647,8 @@ services:
       # The deployment-wide cap on specialist jobs (see evimed-meta-agent).
       EVIMED_SPECIALIST_MAX_CONCURRENT_JOBS: ${OPEN_SCIENCE_SPECIALIST_MAX_CONCURRENT_JOBS:-0}
       EVIMED_SPECIALIST_SLOT_WAIT_SECONDS: ${OPEN_SCIENCE_SPECIALIST_SLOT_WAIT_SECONDS:-10800}
+      # One job's wall clock (see evimed-meta-agent).
+      EVIMED_SPECIALIST_EXECUTION_TIMEOUT_SECONDS: ${OPEN_SCIENCE_SPECIALIST_EXECUTION_TIMEOUT_SECONDS:-10800}
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
       EVIMED_USAGE_REPORT_URL: ${OPEN_SCIENCE_ENGINE_USAGE_INTERNAL_URL-http://open-science-web:8787/internal/usage/v1/engine}
       LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
