@@ -38,6 +38,17 @@ describe("immutable result inspection", () => {
     expect(screen.getByText(/旧版本原文不可用/)).toBeInTheDocument();
     expect(screen.queryByText("新结论")).toBeNull();
   });
+  it("shows what the producing run found about a version, as warnings in the reader's words", async () => {
+    const found: ResultVersion = { ...latest, findings: [
+      { id: "run-finding-0", kind: "legacy_notice", status: "safety", message: "涉及临床安全，请核对：阿司匹林一级预防：出血风险" },
+      { id: "run-finding-1", kind: "legacy_notice", status: "must-fix", message: "有一处依据需要核对：证据矩阵第 1 条结论" },
+    ] };
+    api.list.mockResolvedValue({ items: [found], nextCursor: null }); api.get.mockResolvedValue(found);
+    mount(found.versionId);
+    expect(await screen.findByText(/⚠ 涉及临床安全，请核对：阿司匹林一级预防：出血风险/)).toBeInTheDocument();
+    expect(screen.getByText(/⚠ 有一处依据需要核对：证据矩阵第 1 条结论/)).toBeInTheDocument();
+    expect(screen.queryByText(/尚未核实/)).toBeNull();
+  });
   it("resets content and findings when a different immutable version is selected", async () => {
     mount(old.versionId); await screen.findByText("旧结论");
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "结果版本" }), latest.versionId);
