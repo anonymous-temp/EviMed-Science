@@ -243,9 +243,25 @@ def _samples_tsv(table):
     return ("\n".join(lines) + "\n").encode("utf-8")
 
 
+def _platform_block(accession, record, download, failure):
+    """The platform as the capture records it: what its record states, or that no record could be used and why."""
+    if record is None:
+        return {"accession": accession, "record": {"available": False, **(failure or {})}, "annotationColumns": None}
+    return {
+        "accession": record.first("geo_accession") or accession, "title": record.first("title"),
+        "organism": record.first("organism"), "taxId": record.first("taxid"), "technology": record.first("technology"),
+        "status": _stated(record.first("status")), "submissionDate": _stated(record.first("submission_date")),
+        "lastUpdateDate": _stated(record.first("last_update_date")), "rowCount": record.row_count,
+        "duplicateProbeIds": record.duplicate_ids, "bytes": len(download.body), "sha256": hashlib.sha256(download.body).hexdigest(),
+        "annotationColumns": {"symbol": record.symbol_column, "entrez": record.entrez_column, "title": record.title_column,
+                              "genbank": record.accession_column, "genomeBuild": record.build_column},
+        "record": {"available": True},
+    }
+
+
 def _annotation_tsv(platform, probe_ids):
     lines = ["\t".join(("probe_id", "gene_symbol", "entrez_id", "gene_title", "genbank_accession", "genome_build"))]
-    for probe in probe_ids:
+    for probe in probe_ids if platform is not None else ():
         row = platform.rows.get(probe)
         if row is None:
             continue
@@ -279,8 +295,21 @@ def series(arguments):
             "The series matrix does not name one platform for its samples (%s), so no platform record can be read for it." % (", ".join(samples_platforms) or "none stated"),
             detail={"platforms": samples_platforms},
         )
-    platform_download = _download("ncbi-gene-expression-platform-record", {"accession": wanted}, deadline, "annotation_bytes", limit_values["annotation_bytes"], "The platform record")
-    platform_record = engine.parse_platform(platform_download.body, limit_values=limit_values)
+    # The platform record is the probe-to-gene table. A record over its byte limit is refused like any input over a limit; one that
+    # could not be fetched (refused, out of time, unreachable) or read does not take the matrix with it: the series is still
+    # preserved with its own sample and platform identities, the probes carry no gene annotation, and that is said (principle 19).
+    platform_download = platform_record = platform_failure = None
+    try:
+        platform_download = _download("ncbi-gene-expression-platform-record", {"accession": wanted}, deadline, "annotation_bytes", limit_values["annotation_bytes"], "The platform record")
+        platform_record = engine.parse_platform(platform_download.body, limit_values=limit_values)
+    except source_outcome.SourceError as error:
+        platform_failure = {"state": error.state, "reason": error.reason, "message": str(error)}
+    except engine.GeneExpressionError as error:
+        if error.code == "gene_expression_input_over_limit":
+            raise
+        platform_failure = {"state": "unavailable", "reason": error.code, "message": str(error)}
+    if platform_record is None:
+        platform_download = None
     identity = engine.identity_checks(matrix, platform_record, requested_platform=platform)
     sample_table = engine._sample_table(matrix)  # noqa: SLF001 - one parser for the capture and the computation
     series_title = matrix.first("title") or ""
@@ -293,15 +322,7 @@ def series(arguments):
             "sampleCount": len(matrix.sample_ids), "platforms": matrix.series.get("platform_id", []),
             "summary": " ".join(matrix.series.get("summary", []))[:1200], "overallDesign": " ".join(matrix.series.get("overall_design", []))[:800],
         },
-        "platform": {
-            "accession": platform_record.first("geo_accession") or wanted, "title": platform_record.first("title"),
-            "organism": platform_record.first("organism"), "taxId": platform_record.first("taxid"), "technology": platform_record.first("technology"),
-            "status": _stated(platform_record.first("status")), "submissionDate": _stated(platform_record.first("submission_date")),
-            "lastUpdateDate": _stated(platform_record.first("last_update_date")), "rowCount": platform_record.row_count,
-            "duplicateProbeIds": platform_record.duplicate_ids, "bytes": len(platform_download.body), "sha256": hashlib.sha256(platform_download.body).hexdigest(),
-            "annotationColumns": {"symbol": platform_record.symbol_column, "entrez": platform_record.entrez_column, "title": platform_record.title_column,
-                                  "genbank": platform_record.accession_column, "genomeBuild": platform_record.build_column},
-        },
+        "platform": _platform_block(wanted, platform_record, platform_download, platform_failure),
         "matrix": {
             "file": matrix_file_name(accession, platform), "sha256": hashlib.sha256(matrix_bytes).hexdigest(), "bytes": len(matrix_bytes),
             "probes": len(matrix.probe_ids), "samples": len(matrix.sample_ids), "cellsMissing": matrix.cells_missing,
@@ -313,17 +334,18 @@ def series(arguments):
     }
     # Stored bytes: the matrix exactly as served; the platform record gzipped (deterministically) because it is tens of MB of text, with the
     # digest of the bytes as served above; the harmonised sample and probe tables; and the record that ties them together.
-    platform_stored = _gzip(platform_download.body)
-    record["platform"]["storedFile"] = "platform.soft.txt.gz"
-    record["platform"]["storedSha256"] = hashlib.sha256(platform_stored).hexdigest()
     annotation_payload = _annotation_tsv(platform_record, matrix.probe_ids)
     payloads = {
         "series_matrix.txt.gz": matrix_bytes,
-        "platform.soft.txt.gz": platform_stored,
         "samples.tsv": _samples_tsv(sample_table),
         "probe-annotation.tsv": annotation_payload,
-        "record.json": (json.dumps(record, ensure_ascii=False, indent=1, sort_keys=False, allow_nan=False) + "\n").encode("utf-8"),
     }
+    if platform_download is not None:
+        platform_stored = _gzip(platform_download.body)
+        payloads["platform.soft.txt.gz"] = platform_stored
+        record["platform"]["storedFile"] = "platform.soft.txt.gz"
+        record["platform"]["storedSha256"] = hashlib.sha256(platform_stored).hexdigest()
+    payloads["record.json"] = (json.dumps(record, ensure_ascii=False, indent=1, sort_keys=False, allow_nan=False) + "\n").encode("utf-8")
     workspace = managed_workspace()
     try:
         paths = preserve(workspace, Path(engine.SOURCES_ROOT) / ("%s-%s" % (accession, wanted)), payloads)
@@ -332,6 +354,9 @@ def series(arguments):
     capture_dir = Path(paths["record.json"]).parent.as_posix()
     checks = identity["checks"]
     warnings = []
+    if platform_failure is not None:
+        warnings.append("The platform record %s could not be used (%s: %s), so the probes carry no gene annotation and the platform and organism checks against its record are unknown; "
+                        "the matrix is preserved and the analysis can run at probe level." % (wanted, platform_failure["state"], platform_failure["reason"]))
     for name, entry in checks.items():
         if entry["status"] == "mismatch":
             warnings.append("Identity check %s failed: %s No differential expression can be computed from this capture." % (name, entry["detail"]))
@@ -340,7 +365,7 @@ def series(arguments):
     data = {
         "accession": record["series"]["accession"], "title": series_title,
         "series": {key: record["series"][key] for key in ("status", "submissionDate", "lastUpdateDate", "type", "pubmedIds", "sampleCount", "platforms")},
-        "platform": {key: record["platform"][key] for key in ("accession", "title", "organism", "technology", "lastUpdateDate", "rowCount", "annotationColumns")},
+        "platform": {key: record["platform"].get(key) for key in ("accession", "title", "organism", "technology", "lastUpdateDate", "rowCount", "annotationColumns", "record")},
         "matrix": record["matrix"], "captureDir": capture_dir, "paths": {name: path for name, path in paths.items()},
         "artifactSha256s": {path: hashlib.sha256(payloads[name]).hexdigest() for name, path in paths.items() if name in payloads},
         "samples": [{"accession": entry["accession"], "title": entry.get("title", ""), "characteristics": entry.get("characteristics", {})} for entry in sample_table[:MAX_SAMPLES_LISTED]],
@@ -352,8 +377,9 @@ def series(arguments):
         "terms": TERMS, "retrievedAt": _now(), "limits": limit_values,
         "outcome": source_outcome.complete(),
     }
-    summary = "Preserved GEO series %s (%s; %d samples, %d probes on %s) with the platform's probe annotation; identities %s." % (
+    summary = "Preserved GEO series %s (%s; %d samples, %d probes on %s) %s; identities %s." % (
         data["accession"], series_title[:80] or "untitled", len(matrix.sample_ids), len(matrix.probe_ids), record["platform"]["accession"],
+        "with the platform's probe annotation" if platform_record is not None else "WITHOUT the platform's probe annotation (its record could not be used)",
         "agree" if identity["computationReady"] else "do not all agree")
     result = {
         "status": "warning" if warnings else "success", "summary": summary, "data": data,

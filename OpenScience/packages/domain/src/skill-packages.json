@@ -470,7 +470,7 @@
       "origin": "capability",
       "version": "1.0.0",
       "source": {"kind":"release"},
-      "digest": "sha256:3f467fc8da78fbdd6b6babbb68b7047c2231998684b973acf7581fed8dcd9fc7",
+      "digest": "sha256:a884e8723d872595b24162a808937c937e01ca3543f26f354acdcea3bba1bb52",
       "digestAlgorithm": "release-directory-v1",
       "scripts": [{"path":"scripts/verify_result.py","sha256":"3fb75ee936ad10beb61da36019a7fea735656ac8dc29acbbaa903e41b5c29fcb"}],
       "references": [{"path":"capability.yaml","sha256":"a865c81398a409710e8476c77af1e5b7719cac04682ed38f61f25cc57d1bd334"}],
@@ -950,7 +950,7 @@
       "origin": "capability",
       "version": "1.2.0",
       "source": {"kind":"release"},
-      "digest": "sha256:95ab86a50258d53cede520c02fc24727471f84c59b8d0d21a861effcaaf702fe",
+      "digest": "sha256:631e4c369f9b4e05b4c6e767e375322432e49fd114225907470c2e957fe8e31c",
       "digestAlgorithm": "release-directory-v1",
       "scripts": [
         {"path":"scripts/analysis_methods.py","sha256":"e71ff10c840b7fb96003b341da4dd56d3d77ac9ea0d6023cdc712783fe5fd0c2"},

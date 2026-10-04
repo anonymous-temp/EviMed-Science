@@ -216,7 +216,11 @@
       "knownLimits": [
         "只做两组比较的 Welch 检验加 BH 校正，不是 limma；每组至少三个样本，只读已处理矩阵，不处理原始读段。",
         "结果以探针为单位，一个探针可能对应多个基因；超出资源上限的数据集会被拒绝。"
-      ]
+      ],
+      "evaluation": {
+        "lastStatus": "not-run",
+        "lastRunAt": null
+      }
     },
     "geo-content": {
       "title": "循证 GEO · 分层稿件",

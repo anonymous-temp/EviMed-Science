@@ -73,18 +73,22 @@ def synthetic_platform(probes, *, accession="GPL999", taxid="9606", symbols=None
     return ("\n".join(lines) + "\n").encode("utf-8")
 
 
-def not_found():
+def http_error(status):
     import urllib.error
     from email.message import Message
 
-    return urllib.error.HTTPError("https://gateway.invalid/internal/sources/v1/fetch", 404, "not found", Message(), io.BytesIO(b'{"error":{"code":"public_source_gateway_upstream_error"}}'))
+    return urllib.error.HTTPError("https://gateway.invalid/internal/sources/v1/fetch", status, "refused", Message(), io.BytesIO(b'{"error":{"code":"public_source_gateway_upstream_error"}}'))
+
+
+def not_found():
+    return http_error(404)
 
 
 class Door:
     """GEO as a door: the matrix, the platform record and the series brief, or what a test says they are."""
 
-    def __init__(self, matrix=MATRIX, platform=PLATFORM_TEXT, brief=b"", matrix_status=200):
-        self.matrix, self.platform, self.brief, self.matrix_status = matrix, platform, brief, matrix_status
+    def __init__(self, matrix=MATRIX, platform=PLATFORM_TEXT, brief=b"", matrix_status=200, platform_status=200):
+        self.matrix, self.platform, self.brief, self.matrix_status, self.platform_status = matrix, platform, brief, matrix_status, platform_status
         self.calls = []
 
     def __call__(self, url, accepted, **options):
@@ -94,6 +98,8 @@ class Door:
                 raise not_found()
             return wire.derived(self.matrix, "application/x-gzip")
         if "view=full" in url:
+            if self.platform_status != 200:
+                raise http_error(self.platform_status)
             return wire.derived(self.platform, "geo/text")
         if "view=brief" in url:
             return wire.derived(self.brief, "geo/text")
@@ -274,6 +280,31 @@ class SeriesTests(Workspace):
         self.assertEqual(refused["error"]["code"], "gene_expression_identity_mismatch")
         self.assertFalse((self.workspace / "deliverables").exists(), "a refused computation writes nothing")
 
+    def test_a_platform_record_that_cannot_be_fetched_does_not_take_the_series_with_it(self):
+        result = self.preserve(door=Door(platform_status=503))
+        self.assertEqual(result["status"], "warning", result)
+        data = result["data"]
+        self.assertFalse(data["platform"]["record"]["available"])
+        self.assertEqual(data["platform"]["record"]["state"], "unavailable")
+        self.assertEqual({name: entry["status"] for name, entry in data["identity"].items()}["platformRecord"], "unknown")
+        self.assertTrue(data["computationReady"], "no mismatch, so the matrix's own identities stand")
+        self.assertTrue(any("WITHOUT the platform's probe annotation" in text for text in [result["summary"]]))
+        capture = self.workspace / data["captureDir"]
+        self.assertFalse((capture / "platform.soft.txt.gz").exists())
+        self.assertEqual(len((capture / "probe-annotation.tsv").read_text().splitlines()), 1, "a header and no rows: no probe is annotated")
+        computed = self.compute(data["captureDir"])
+        self.assertIn(computed["status"], ("success", "warning"), computed)
+        results = self.read_json(computed["data"]["resultsPath"])
+        self.assertEqual(results["diagnostics"]["unannotatedProbes"], 12488)
+        self.assertEqual(results["top"][0]["probe"], "101451_at", "the statistics do not depend on the annotation")
+        self.assertEqual(results["top"][0]["geneSymbols"], [])
+
+    def test_a_platform_record_over_its_limit_is_still_a_refusal_not_a_degrade(self):
+        with mock.patch.dict(os.environ, {"EVIMED_GENE_EXPRESSION_MAX_ANNOTATION_BYTES": "100000"}):
+            result = self.preserve()
+        self.assertEqual(result["error"]["code"], LOG2)
+        self.assertEqual(result["data"]["limit"], "annotation_bytes")
+
     def test_samples_on_two_platforms_are_a_mismatch(self):
         samples = ["GSM1", "GSM2", "GSM3", "GSM4"]
         data = synthetic_matrix(samples, [("p1", [1, 2, 3, 4])])
@@ -378,7 +409,7 @@ class DifferentialTests(Workspace):
         result = self.compute(self.capture, topN=50)
         self.assertIn(result["status"], ("success", "warning"), result)
         results = self.read_json(result["data"]["resultsPath"])
-        reference = list(csv.DictReader((EVALS / "reference_top_table.tsv").open(encoding="utf-8"), delimiter="\t"))
+        reference = list(csv.DictReader((EVALS / "reference_top_table.tsv").read_text(encoding="utf-8").splitlines(), delimiter="\t"))
         summary = dict(line.split("\t") for line in (EVALS / "reference_top_table.tsv.summary").read_text().strip().splitlines())
         self.assertEqual([row["probe"] for row in results["top"]], [row["probe_id"] for row in reference])
         names = {"mean_reference": "meanReference", "mean_comparison": "meanComparison", "log2_fold_change": "logFC", "t": "t", "df": "df", "p_value": "pValue",
@@ -394,7 +425,7 @@ class DifferentialTests(Workspace):
 
     def test_the_full_table_is_every_tested_probe_in_the_same_order(self):
         result = self.compute(self.capture)
-        rows = list(csv.DictReader((self.workspace / result["data"]["tablePath"]).open(encoding="utf-8"), delimiter="\t"))
+        rows = list(csv.DictReader((self.workspace / result["data"]["tablePath"]).read_text(encoding="utf-8").splitlines(), delimiter="\t"))
         self.assertEqual(len(rows), 12488)
         adjusted = [float(row["adj_p_value"]) for row in rows]
         self.assertEqual(adjusted, sorted(adjusted), "BH adjusted p-values are monotone in the p order")
