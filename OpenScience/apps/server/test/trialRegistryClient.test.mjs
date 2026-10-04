@@ -563,6 +563,33 @@ test("PA-41 ChiCTR is reached through the evidence API with the deployment's cre
   assert.throws(() => createChictrAdapter({ search: null }), TypeError);
 });
 
+test("the coverage a researcher meets says ChiCTR is unconfigured for them when the key must be theirs and they have none", async () => {
+  const fetchImpl = async () => new Response(JSON.stringify({ code: 200, data: { total: 0, list: [] } }), { status: 200 });
+  const store = { async resolveOwn(/** @type {string} */ userId) { return userId === "alice" ? "alice-own-key" : null; } };
+  const chictr = (/** @type {any[]} */ rows) => rows.find((row) => row.key === "chictr");
+  const client = createTrialRegistryClient({ fetchImpl, sleep: noSleep, chictrAdapter: vcrChictrAdapter({ config: {}, fetchImpl, connectorCredentials: store }) });
+  // The shared view has no user, and says the seat exists.
+  assert.equal(chictr(client.coverage()).configured, true);
+  const alice = await client.coverageFor("alice");
+  assert.deepEqual([chictr(alice).configured, chictr(alice).availability, chictr(alice).reason], [true, "not_queried", null]);
+  // Bob has no key and the deployment has none: 未配置 for him, never 尚未查询 for good.
+  const bob = await client.coverageFor("bob");
+  assert.deepEqual([chictr(bob).configured, chictr(bob).availability, chictr(bob).reason], [false, "unavailable", "registry_not_configured"]);
+  assert.deepEqual(bob.filter((row) => row.key !== "chictr"), alice.filter((row) => row.key !== "chictr"), "no other source is touched");
+  assert.equal(chictr(client.coverage()).configured, true, "and the shared view is not edited by asking");
+  // A deployment key answers for everyone.
+  const withKey = createTrialRegistryClient({ fetchImpl, sleep: noSleep, chictrAdapter: vcrChictrAdapter({ config: { publicSourceCredentials: { evimedEvidence: "deployment-key" } }, fetchImpl, connectorCredentials: store }) });
+  assert.equal(chictr(await withKey.coverageFor("bob")).configured, true);
+  // An adapter that cannot say who may use it leaves the shared view as it is, and one that fails says closed.
+  const plain = createTrialRegistryClient({ fetchImpl, sleep: noSleep, chictrAdapter: async () => ({ items: [] }) });
+  assert.deepEqual(await plain.coverageFor("bob"), plain.coverage());
+  const failing = createTrialRegistryClient({ fetchImpl, sleep: noSleep, chictrAdapter: Object.assign(async () => ({ items: [] }), { availableFor: async () => { throw new Error("down"); } }) });
+  assert.equal(chictr(await failing.coverageFor("bob")).configured, false);
+  // No ChiCTR seat at all: the shared view.
+  const none = createTrialRegistryClient({ fetchImpl, sleep: noSleep });
+  assert.deepEqual(await none.coverageFor("bob"), none.coverage());
+});
+
 test("ChiCTR takes the EviMed key like every connector: the deployment's first, else the researcher's own, else by name", async () => {
   // 2026-10-04: the evidence API's key is a connector a researcher may bring
   // (设置 → 数据源), where it used to be the deployment's alone. A researcher who

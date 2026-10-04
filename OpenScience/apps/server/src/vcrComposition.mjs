@@ -941,15 +941,24 @@ export function vcrChictrAdapter({ config, fetchImpl, connectorCredentials = nul
       return response.json();
     },
   });
-  return async ({ query, limit, userId = "" }) => {
-    let key = deploymentKey;
-    if (!key && connectorCredentials && userId) {
-      // A store that cannot be read is "no key for this researcher", never a thrown fault.
-      key = String(await connectorCredentials.resolveOwn(userId, "evimed-evidence").catch(() => null) ?? "").trim();
-    }
-    if (!key) throw Object.assign(new Error("No EviMed evidence credential is configured for this deployment or this researcher."), { code: "registry_not_configured" });
-    return searchWith(key)({ query, limit });
+  /** @param {string} userId */
+  const keyFor = async (userId) => {
+    if (deploymentKey) return deploymentKey;
+    if (!connectorCredentials || !userId) return "";
+    // A store that cannot be read is "no key for this researcher", never a thrown fault.
+    return String(await connectorCredentials.resolveOwn(userId, "evimed-evidence").catch(() => null) ?? "").trim();
   };
+  return Object.assign(
+    async (/** @type {{ query: string, limit: number, userId?: string }} */ { query, limit, userId = "" }) => {
+      const key = await keyFor(userId);
+      if (!key) throw Object.assign(new Error("No EviMed evidence credential is configured for this deployment or this researcher."), { code: "registry_not_configured" });
+      return searchWith(key)({ query, limit });
+    },
+    {
+      /** Whether this researcher can read ChiCTR at all: the coverage page says so (`coverageFor`). */
+      availableFor: async (/** @type {string} */ userId) => Boolean(await keyFor(userId)),
+    },
+  );
 }
 
 /**

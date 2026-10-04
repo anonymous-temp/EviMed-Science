@@ -944,7 +944,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         // One cheap question to the source when a credential is saved, over the
         // same egress the gateway uses (the Tokyo node included). Resolved when
         // a save happens, by which time `gatewayFetch` below exists.
-        check: (connector, value) => checkConnectorCredential(connector, value, { fetchImpl: overrides.connectorCheckFetch ?? gatewayFetch }),
+        check: (connector, value) => checkConnectorCredential(connector, value, { fetchImpl: gatewayFetch }),
       })
       : null);
   let maintenanceService = null;

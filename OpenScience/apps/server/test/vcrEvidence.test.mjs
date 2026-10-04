@@ -883,6 +883,18 @@ test("the researcher's identity reaches the ChiCTR seat on every read, so their 
   assert.deepEqual(asked.map((request) => request.userId), ["alice", "alice", "alice"]);
 });
 
+test("the evidence pipeline gives the page the coverage as this researcher meets it, and the shared one where the registry cannot say", async () => {
+  const shared = [{ key: "chictr", configured: true }];
+  const seen = [];
+  const asking = createVcrEvidencePipeline({ store: storeDouble(), registry: { configured: true, coverage: () => shared, async coverageFor(/** @type {string} */ userId) { seen.push(userId); return [{ key: "chictr", configured: false }]; } } });
+  assert.deepEqual(await asking.registryCoverageFor("u1"), [{ key: "chictr", configured: false }]);
+  assert.deepEqual(seen, ["u1"]);
+  assert.deepEqual(asking.registryCoverage(), shared, "the shared view is still there");
+  const plain = createVcrEvidencePipeline({ store: storeDouble(), registry: { configured: true, coverage: () => shared } });
+  assert.deepEqual(await plain.registryCoverageFor("u1"), shared);
+  assert.deepEqual(await createVcrEvidencePipeline({ store: storeDouble() }).registryCoverageFor("u1"), []);
+});
+
 test("ChiCTR: the record asked for is the one whose own registration number it is, and the nearest is never taken instead", async () => {
   const store = storeDouble();
   const hit = { precedent: { registry: "chictr", registryId: "ChiCTR2000030000", title: "试验", pico: { conditions: [], interventions: [] }, design: {}, enrollment: {}, sites: {}, endpoints: [], results: {}, sources: [] },

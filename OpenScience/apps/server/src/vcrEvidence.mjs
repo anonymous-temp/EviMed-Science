@@ -1139,6 +1139,8 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
     get engineReady() { return typeof jobs?.enqueue === "function"; },
     get registryReady() { return Boolean(registry?.configured); },
     registryCoverage() { return registry?.coverage?.() ?? []; },
+    /** The coverage as this researcher meets it (a ChiCTR seat whose key is theirs to bring). */
+    async registryCoverageFor(/** @type {string} */ userId) { return registry?.coverageFor ? registry.coverageFor(userId) : registry?.coverage?.() ?? []; },
 
     /**
      * Step 1 — candidates. Registry answers are ranked by similarity and
@@ -1593,7 +1595,7 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
       return {
         available: true,
         registryConfigured: Boolean(registry?.configured),
-        registryCoverage: pipeline.registryCoverage(),
+        registryCoverage: await pipeline.registryCoverageFor(String(study?.userId ?? "")),
         // The page says so rather than showing an empty pooling panel: with no
         // queue there is no card, and that is a deployment fact, not a result.
         engineConfigured: typeof jobs?.enqueue === "function",

@@ -935,6 +935,23 @@ export function createTrialRegistryClient({
      * @returns {RegistryCoverage[]}
      */
     coverage() { return sourceCoverage.map((source) => ({ ...source })); },
+    /**
+     * The coverage as one researcher meets it. The shared view has no user, so
+     * it cannot say that the ChiCTR seat — whose key may be the researcher's own
+     * (`chictrAdapter.availableFor`) — is closed to a researcher who has none; this
+     * says so, as 未配置, instead of leaving it at 尚未查询 for good. A seat that
+     * answers for everyone (a deployment key) or an adapter that cannot say
+     * leaves the shared view as it is.
+     * @param {string} userId @returns {Promise<RegistryCoverage[]>}
+     */
+    async coverageFor(userId) {
+      const view = sourceCoverage.map((source) => ({ ...source }));
+      const availableFor = chictrAdapter && /** @type {any} */ (chictrAdapter).availableFor;
+      if (typeof availableFor !== "function") return view;
+      const open = await availableFor(text(userId)).then(Boolean, () => false);
+      return open ? view : view.map((source) => (source.key === "chictr"
+        ? { ...source, configured: false, availability: /** @type {const} */ ("unavailable"), reason: "registry_not_configured" } : source));
+    },
     status() {
       return {
         configured,
