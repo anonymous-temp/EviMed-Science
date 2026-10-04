@@ -219,7 +219,7 @@ export function qualityReportView(quality) {
  * @param {Record<string, any>} bundle
  */
 export function presentPopulationTab(bundle) {
-  const { study, populations, stale, protocol, criteria, now } = bundle;
+  const { study, populations, stale, protocol, criteria } = bundle;
   const current = populations[0] ?? null;
   const result = current ? resultById(bundle, current.resultId) : null;
   const marks = current ? [markFor(stale, vcrObjectNode("population", current)), result ? markFor(stale, resultNode(result)) : null] : [];
@@ -311,12 +311,10 @@ export function presentPopulationTab(bundle) {
   }
   const first = steps[0];
   const total = numeric(first?.remaining) ?? numeric(current?.counts?.realPatients);
-  const compare = compareVersions(populations, now);
   return {
     version: view.version,
     kind: view.kind,
     versions: view.versions,
-    versionCompare: compare,
     definition: view.definition,
     criteria: rows,
     attrition: steps.map((step) => ({
@@ -353,34 +351,6 @@ export function vcrLocatorText(raw, { draftPack = false } = {}) {
   if (text(locator.section)) parts.push(String(locator.section));
   if (text(locator.table)) parts.push(String(locator.table));
   return parts.length ? parts.join("，") : null;
-}
-
-/**
- * Two versions side by side: counts and composition as each version stored
- * them. The standardized difference between versions is not computed here —
- * only a stored one is shown.
- * @param {readonly Record<string, any>[]} populations @param {Date} now
- */
-function compareVersions(populations, now) {
-  if (populations.length < 2) return null;
-  const [newer, older] = populations;
-  const left = profileRows(object(older.profile)).map(object);
-  const right = profileRows(object(newer.profile)).map(object);
-  const keys = [...new Set([...left, ...right].map((row, index) => text(row.key) ?? text(row.covariate) ?? `row_${index}`))];
-  const pick = (/** @type {any[]} */ rows, /** @type {string} */ key) => rows.find((row, index) => (text(row.key) ?? text(row.covariate) ?? `row_${index}`) === key);
-  return {
-    left: { label: `人群 v${older.version}`, at: zhDate(older.createdAt, now), counts: countsView(older.counts) },
-    right: { label: `人群 v${newer.version}`, at: zhDate(newer.createdAt, now), counts: countsView(newer.counts) },
-    rows: keys.map((key) => {
-      const a = pick(left, key);
-      const b = pick(right, key);
-      return {
-        key, label: text((b ?? a)?.label) ?? text((b ?? a)?.covariate) ?? key,
-        left: a ? plainValue(a.ours, { source: "observed", unit: text(a.unit) }) : null,
-        right: b ? plainValue(b.ours, { source: "observed", unit: text(b.unit) }) : null,
-      };
-    }),
-  };
 }
 
 // --- 虚拟患者 -----------------------------------------------------------------------------------------------------------------

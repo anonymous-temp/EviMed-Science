@@ -515,12 +515,6 @@ export interface VcrPopulationTab {
   /** 「真实队列」. */
   kind?: string | null;
   versions: Array<{ id: string; label: string; stale?: boolean; counts?: VcrCounts | null }>;
-  /** Two versions side by side: counts and composition, as each stored them. */
-  versionCompare: {
-    left: { label: string; at: string | null; counts: VcrCounts | null };
-    right: { label: string; at: string | null; counts: VcrCounts | null };
-    rows: Array<{ key: string; label: string; left: VcrValue | null; right: VcrValue | null }>;
-  } | null;
   definition: {
     timeZero?: string | null;
     evidenceWindow?: string | null;
@@ -1367,19 +1361,10 @@ export function readVcrModelCard(raw: unknown): VcrModelCard {
 
 export function readVcrPopulation(raw: unknown): VcrPopulationTab {
   const value = obj(raw);
-  const compare = obj(value.versionCompare);
   const quality = obj(value.quality);
   return {
     ...(value as unknown as VcrPopulationTab),
     versions: arr(value.versions).map((item) => ({ ...(item as unknown as VcrPopulationTab["versions"][number]), counts: readVcrCounts(item.counts) })),
-    versionCompare: Object.keys(compare).length ? {
-      left: { label: text(obj(compare.left).label) ?? "", at: text(obj(compare.left).at), counts: readVcrCounts(obj(compare.left).counts) },
-      right: { label: text(obj(compare.right).label) ?? "", at: text(obj(compare.right).at), counts: readVcrCounts(obj(compare.right).counts) },
-      rows: arr(compare.rows).map((row) => ({
-        key: text(row.key) ?? "", label: text(row.label) ?? "",
-        left: row.left ? readVcrValue(row.left) : null, right: row.right ? readVcrValue(row.right) : null,
-      })),
-    } : null,
     criteria: arr(value.criteria) as unknown as VcrCriterion[],
     attrition: arr(value.attrition) as unknown as VcrAttritionStep[],
     outcome: value.outcome && typeof value.outcome === "object" ? value.outcome as VcrPopulationTab["outcome"] : null,

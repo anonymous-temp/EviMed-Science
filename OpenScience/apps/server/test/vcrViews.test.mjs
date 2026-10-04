@@ -558,16 +558,17 @@ test("criteria are numbered I1… and E1… by kind and position, and a waterfal
   assert.deepEqual(tab.blockers.map((row) => row.code), ["I2", "E1"], "the rules that cost the most people, in that order");
 });
 
-test("a covariate past the balance floor is flagged, and a version comparison shows what was stored and computes no SMD", () => {
+test("a covariate past the balance floor is flagged, and the population tab carries one comparison of versions: the engine's, never a second one of its own", () => {
   const profile = { rows: [{ key: "a", label: "A", ours: { value: 50 }, theirs: { value: 40 }, smd: 0.31 }, { key: "b", label: "B", ours: 1, theirs: 1, smd: 0.05 }] };
   const older = { id: "p1", version: 1, kind: "real", counts: { realPatients: 90 }, profile: { rows: [{ key: "a", label: "A", ours: { value: 48 } }] }, waterfall: [], quality: {}, createdAt: "2026-09-27T01:00:00.000Z" };
   const newer = { id: "p2", version: 2, kind: "real", counts: { realPatients: 100 }, profile, waterfall: [], quality: {}, createdAt: "2026-09-28T01:00:00.000Z" };
   const tab = presentPopulationTab({ ...emptyBundle(), populations: [newer, older] });
   assert.deepEqual(tab.profile.map((row) => row.flagged), [true, false]);
-  assert.equal(tab.versionCompare.left.counts.realPatients, 90);
-  assert.equal(tab.versionCompare.right.counts.realPatients, 100);
-  assert.equal(tab.versionCompare.rows.find((row) => row.key === "a").left.value, 48);
-  assert.equal(presentPopulationTab({ ...emptyBundle(), populations: [newer] }).versionCompare, null, "one version has nothing to compare with");
+  // Two stored versions are listed as versions. What they were computed to differ by is the engine's job on a registered dataset
+  // (`presentComparison`, the library's `cohort.build` comparison); a side-by-side of what each version stored was a second answer
+  // to that question with other numbers, and is gone.
+  assert.deepEqual(tab.versions.map((version) => version.label), ["人群 v2", "人群 v1"]);
+  assert.equal(Object.hasOwn(tab, "versionCompare"), false);
 });
 
 test("the quality report reports numbers and never a verdict", () => {

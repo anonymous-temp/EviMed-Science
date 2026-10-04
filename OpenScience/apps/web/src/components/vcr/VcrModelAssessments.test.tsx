@@ -71,7 +71,7 @@ describe("模型评估", () => {
     await user.clear(form.getByLabelText("错误决策的后果的理由"));
     await user.type(form.getByLabelText("错误决策的后果的理由"), "只用于设计阶段");
     network.productRequest.mockClear();
-    network.productRequest.mockImplementation(async (path: string, method = "GET") => (method === "POST"
+    network.productRequest.mockImplementation(async (_path: string, method = "GET") => (method === "POST"
       ? { id: "mia_9", key: "pfs_projection", version: 2, risk: "medium" } : fixture("ev201/patients.json")));
     await user.click(form.getByRole("button", { name: "保存" }));
     await waitFor(() => expect(toasts.success).toHaveBeenCalledWith("已保存为版本 2。"));
