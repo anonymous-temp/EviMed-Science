@@ -59,3 +59,41 @@ test('malformed caller inputs retain a named queue refusal before any engine cal
   }
   assert.equal(submitted.length,before);
 });
+test('a digitizer record persists its digitization, reaches the engine like a human click, and a changed one stops before submission',options,async()=>{
+  const calibration={x:{min:0,max:12,unit:'months'},y:{min:0,max:1,scale:'fraction'}};
+  // The digitizer itself is measured elsewhere; this proves the record: the new column round-trips, the verifier
+  // attests it from the database, and the job queue treats it exactly as it treats a person's selection.
+  const digitizer={available:true,async digitize({image}){
+    return {scenario:{...points,provenance:{kind:'digitizer',tool:'EviMed curve digitizer',toolVersion:'1.0.0'}},
+      digitization:{statedBy:'run',algorithm:{name:'evimed-km-digitizer',version:'1.0.0',libraries:{}},
+        image:{sha256:image.sha256,bytes:image.bytes,mime:image.mime,width:1,height:1},calibration,plotArea:{},anchor:'ticks',ticks:null,resolution:{},parameters:{},
+        palette:[],curves:[{name:'control',selector:{},color:'#000000',colorSource:'only_colour',quality:{points:2}}],warnings:[]}};
+  }};
+  const digitizing=createVcrCurveEvidence({store:new VcrEvidenceStore({database}),studyStore:store,access:new VcrAccess({store:new VcrDataStore({database})}),
+    resolveProject:async()=>({workspaceDir:root}),digitizer});
+  const made=await digitizing.recordDigitization({studyId:study.id,principal:'alice',
+    request:{imageArtifactId:'source.png',calibration,arms:[{riskTable:points.riskTable}]}});
+  assert.match(made.id,/^crv_[a-f0-9]{32}$/);
+  assert.equal(made.origin,'digitizer');
+  const row=(await database.query('SELECT origin, digitization, points_hash FROM evimed_vcr.curve_extractions WHERE id=$1',[made.id])).rows[0];
+  assert.equal(row.origin,'digitizer');
+  assert.equal(row.digitization.statedBy,'run');
+  assert.deepEqual(row.digitization.calibration,calibration);
+  assert.equal(row.digitization.pointsHash,row.points_hash);
+  const human=(await database.query('SELECT digitization FROM evimed_vcr.curve_extractions WHERE id=$1',[receipt.id])).rows[0];
+  assert.equal(human.digitization,null,'a person\'s selection has no digitization');
+
+  const before=submitted.length;
+  const queued=await enqueue('digitized','alice',{provenance:{receiptId:made.id}});
+  const [claim]=await jobs.claim({limit:1});await jobs.advance(claim);
+  assert.equal(submitted.length,before+1);
+  assert.deepEqual(submitted.at(-1).scenario.curve,points.curve);
+  assert.equal(submitted.at(-1).scenario.provenance.kind,'digitizer');
+  assert.equal(submitted.at(-1).scenario.provenance.receiptId,undefined);
+  assert.ok(submitted.at(-1).inputs.some(input=>input.id===`evidence:${made.id}@1`));
+  await jobs.advance(claim);assert.equal((await jobs.get(study.id,queued.job.id)).state,'succeeded');
+
+  await database.query("UPDATE evimed_vcr.curve_extractions SET digitization=jsonb_set(digitization,'{algorithm,version}','\"9.9.9\"') WHERE id=$1",[made.id]);
+  await assert.rejects(enqueue('tampered','alice',{provenance:{receiptId:made.id}}),{code:'vcr_curve_provenance_invalid'});
+  assert.equal(submitted.length,before+1,'nothing was submitted for the changed record');
+});
