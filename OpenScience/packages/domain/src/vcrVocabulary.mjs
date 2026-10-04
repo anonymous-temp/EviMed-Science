@@ -716,9 +716,12 @@ export const VCR_LINEAGE_NODE_KINDS = frozen([
 ])
 
 /** Deliverables this module exports (§8.3). */
-export const VCR_EXPORT_KINDS = frozen(['study_package', 'cde_communication_pack', 'simulation_report', 'validation_pack'])
+export const VCR_EXPORT_KINDS = frozen([
+  'study_package', 'cde_communication_pack', 'simulation_report', 'validation_pack', 'model_analysis_plan', 'model_analysis_report',
+])
 export const VCR_EXPORT_KIND_LABELS_ZH = Object.freeze({
   study_package: '研究包', cde_communication_pack: 'CDE 沟通交流资料包', simulation_report: '模拟报告', validation_pack: '系统验证文档包',
+  model_analysis_plan: '模型分析计划', model_analysis_report: '模型分析报告',
 })
 
 /** The module's own capability packages (§11.2 layer 8). */

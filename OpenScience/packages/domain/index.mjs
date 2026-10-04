@@ -1232,6 +1232,46 @@ export {
   vcrWeakestSource,
 } from './src/vcrVocabulary.mjs'
 
+// vcrModelAssessment — 「虚拟临研」's model assessment record (ICH M15 Appendix 1: question of interest, context
+// of use, model influence, consequence of a wrong decision, the model risk derived from the two, model impact,
+// technical criteria, the evaluation and the outcome), and the section vocabulary of the 模型分析计划 and the
+// 模型分析报告 built on it
+export {
+  VCR_ASSESSMENT_KEY,
+  VCR_ASSESSMENT_KEY_PATTERN,
+  VCR_ASSESSMENT_ROWS,
+  VCR_MODEL_DOCUMENT_ATTRIBUTION_ZH,
+  VCR_MODEL_DOCUMENT_KINDS,
+  VCR_MODEL_DOCUMENT_SECTIONS,
+  VCR_MODEL_DOCUMENT_SECTION_LABELS_ZH,
+  VCR_MODEL_DOCUMENT_TITLES_ZH,
+  VCR_MODEL_RISK_RULES,
+  VCR_MODEL_RISK_RULE_LABELS_ZH,
+  VCR_RATINGS,
+  VCR_RATING_LABELS_ZH,
+  normalizeVcrAssessment,
+  vcrAssessmentGroups,
+  vcrAssessmentIssues,
+  vcrAssessmentRows,
+  vcrAssessmentText,
+  vcrModelDocumentTakesProse,
+  vcrModelRisk,
+} from './src/vcrModelAssessment.mjs'
+
+// vcrModelInterfaces — the two model-package call shapes of plan §5.2 (baseline → outcome distribution, event
+// history → N future trajectories), the second shape's card contract and the scope check over it
+export {
+  VCR_DEFAULT_MODEL_INTERFACE,
+  VCR_EVENT_HISTORY_CARD_FIELDS,
+  VCR_HORIZON_UNIT_DAYS,
+  VCR_HOSTED_MODEL_INTERFACES,
+  VCR_MODEL_INTERFACES,
+  VCR_MODEL_INTERFACE_LABELS_ZH,
+  vcrEventHistoryScopeIssues,
+  vcrModelCardIssues,
+  vcrModelInterfaceOf,
+} from './src/vcrModelInterfaces.mjs'
+
 // vcrSuppression — 2 exports: small-cell suppression for everything a model may read: every people-count
 // below the floor, in any shape the stores produce
 export {
