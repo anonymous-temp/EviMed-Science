@@ -69,6 +69,32 @@ export function assertSuccessor(original, successor, run, prompt) {
   assert.ok(successor.inputs.some(input => input.versionId === original.versionId && input.digest === original.digest));
   assert.ok(successor.path.startsWith(`artifacts/result-revisions/${prompt.referenceId}/output/`));
 }
+export const CORRECTION_KINDS = Object.freeze(["analytic", "evidence", "presentation", "unknown"]);
+/** The correction the platform recorded for one journey: the immutable pair, what changed, whose words and whose output.
+ * `items` is `GET /api/results/:id/corrections` for the original. The kind is decided from the two versions' bytes, so an
+ * add-study journey (the pooled estimate moves) must read as analytic and a restyle or a correction that keeps the numbers must not. */
+export function assertCorrection(original, successor, items, journey, run) {
+  const item = items.find(entry => entry.correction?.successor?.versionId === successor.versionId);
+  assert.ok(item, "no correction was recorded with the successor's immutable version");
+  const correction = item.correction;
+  assert.equal(item.role, "original");
+  assert.deepEqual([correction.original.versionId, correction.original.digest], [original.versionId, original.digest]);
+  assert.equal(correction.successor.digest, successor.digest);
+  assert.equal(correction.revisionRunId, run.id, "the correction names the run that revised the result");
+  assert.deepEqual([correction.instructionOrigin, correction.successorOrigin, correction.adoption], ["researcher", "system_generated", "not_recorded"]);
+  assert.ok(CORRECTION_KINDS.includes(correction.kind), `unknown correction kind ${correction.kind}`);
+  if (journey.numerical === "changed") assert.equal(correction.kind, "analytic", "adding a study moved the printed numbers");
+  else assert.notEqual(correction.kind, "analytic", "the numbers were to stay as they were");
+  return item;
+}
+/** What the run left, once it ended: the successor among its outputs, and every Word or PDF it wrote labelled unchecked. */
+export function assertSettled(item, successor) {
+  assert.equal(item.outcome?.status, "settled", "the revision was not settled when the run ended");
+  assert.ok(item.outcome.outputs.some(output => output.versionId === successor.versionId), "the successor is not among the run's recorded outputs");
+  for (const output of item.outcome.outputs.filter(entry => entry.role === "rendering")) {
+    assert.equal(output.consistency, "not_checked", `${output.path}: a rendering the run wrote is not checked against the successor by the platform`);
+  }
+}
 export function assertStaging(status, input, stage, original, projectId, selection) {
   assert.equal(status, 201, "immutable selection staging failed");
   assert.equal(input.projectId, projectId); assert.equal(input.digest, original.digest);
@@ -188,6 +214,29 @@ export async function runResultRevisionAcceptance(args) {
       const response = await context.request.get(`${base}/api/files/download/${relative.split("/").map(encodeURIComponent).join("/")}`, { headers, timeout: 30_000 });
       assert.equal(response.status(), 200, "missing actual workspace output"); return response.body();
     }
+    const textOf = async (ext, file, bytes) => {
+      if (ext === "md") return bytes.toString("utf8");
+      if (ext === "pdf") { assert.equal(bytes.subarray(0, 5).toString(), "%PDF-"); return (await execute("pdftotext", ["-layout", file, "-"], { timeout: 30_000, maxBuffer: 2 * 1024 * 1024 })).stdout; }
+      return (await execute("python3", ["-c", "import sys,zipfile,xml.etree.ElementTree as E\nz=zipfile.ZipFile(sys.argv[1]); name='word/document.xml'; assert z.getinfo(name).file_size<=2*1024*1024\nr=E.fromstring(z.read(name)); ns={'w':'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}\nprint('\\n'.join(''.join(t.text or '' for t in p.findall('.//w:t',ns)) for p in r.findall('.//w:p',ns)))", file], { timeout: 30_000, maxBuffer: 2 * 1024 * 1024 })).stdout;
+    }
+    // Word and PDF of a version, converted by the platform from that version's own preserved bytes, must carry that
+    // version's marker and numbers: a rendering of the successor is the successor's whatever the workspace holds now.
+    const versionConversion = async (version, marker, numericValues, label) => {
+      let record = await api("/api/document-exports", { projectId, source: { versionId: version.versionId }, formats: ["docx", "pdf"] });
+      const deadline = Date.now() + 180_000;
+      while (!["ready", "partial", "failed", "canceled"].includes(record.state) && Date.now() < deadline) { await sleep(2000); record = await api(`/api/document-exports/${record.id}`); }
+      assert.equal(record.state, "ready", `${label}: the conversion of the version itself did not finish (${record.state})`);
+      const texts = {};
+      for (const ext of ["docx", "pdf"]) {
+        const response = await context.request.get(`${base}/api/document-exports/${record.id}/download/${ext}`, { headers, timeout: 60_000 });
+        assert.equal(response.status(), 200, `${label}: ${ext} download`);
+        const bytes = await response.body(); const file = path.join(out, `${sha(label).slice(0, 8)}-version.${ext}`); await writeFile(file, bytes, { mode: 0o600 });
+        texts[ext] = await textOf(ext, file, bytes);
+        assert.ok(texts[ext].includes(marker), `${label}: ${ext} of the version lacks ${marker}`);
+        for (const value of numericValues) assert.ok(texts[ext].includes(Number(value).toFixed(6)), `${label}: ${ext} of the version lacks ${Number(value).toFixed(6)}`);
+      }
+      return { exportId: record.id, sourceDigest: version.digest, formats: Object.keys(texts) };
+    }
     const formats = async (directory, marker, numericValues, source) => {
       assert.equal(numericValues.length, 2, "pooled and heterogeneity machine values are required");
       const texts = {};
@@ -195,9 +244,7 @@ export async function runResultRevisionAcceptance(args) {
         const relative = `${directory}/report.${ext}`;
         const bytes = await workspaceBytes(relative);
         const file = path.join(out, `${sha(directory).slice(0, 8)}-report.${ext}`); await writeFile(file, bytes, { mode: 0o600 });
-        if (ext === "md") texts[ext] = bytes.toString("utf8");
-        else if (ext === "pdf") { assert.equal(bytes.subarray(0, 5).toString(), "%PDF-"); texts[ext] = (await execute("pdftotext", ["-layout", file, "-"], { timeout: 30_000, maxBuffer: 2 * 1024 * 1024 })).stdout; }
-        else { texts[ext] = (await execute("python3", ["-c", "import sys,zipfile,xml.etree.ElementTree as E\nz=zipfile.ZipFile(sys.argv[1]); name='word/document.xml'; assert z.getinfo(name).file_size<=2*1024*1024\nr=E.fromstring(z.read(name)); ns={'w':'http://schemas.openxmlformats.org/wordprocessingml/2006/main'}\nprint('\\n'.join(''.join(t.text or '' for t in p.findall('.//w:t',ns)) for p in r.findall('.//w:p',ns)))", file], { timeout: 30_000, maxBuffer: 2 * 1024 * 1024 })).stdout; }
+        texts[ext] = await textOf(ext, file, bytes);
         assert.ok(texts[ext].includes(marker), `${ext} lacks revision marker`);
         for (const value of numericValues) assert.ok(texts[ext].includes(Number(value).toFixed(6)), `${ext} lacks six-decimal machine value ${Number(value).toFixed(6)}`);
         const compact = texts[ext].replace(/\s+/g, "");
@@ -262,8 +309,26 @@ export async function runResultRevisionAcceptance(args) {
         const dataInput = version => version.inputs.find(input => input.kind === "data" && input.versionId);
         if (journey.numerical === "identical") assert.equal(dataInput(before)?.digest, dataInput(after)?.digest, "style/prose revision changed aggregate input");
         else { const data = dataInput(after); assert.ok(data); const input = await api(`/api/results/${data.versionId}?projectId=${projectId}`); const aggregate = JSON.parse((await raw(input)).toString()); assert.equal(aggregate.studies.length, 4); assert.deepEqual(aggregate.studies.filter(study => study.id !== "D"), STUDIES); const added = aggregate.studies.find(study => study.id === "D"); assert.ok(added); assert.equal(added.yi, 2); assert.equal(added.vi, 0.1); }
+        // What the platform recorded of this correction: the immutable pair, what changed (decided from the bytes), whose words and
+        // whose output; and, once the run has ended, what it left. The recording of a run's end follows the run's status, so it is waited for.
+        const correctionsPath = `/api/results/${original.versionId}/corrections?projectId=${encodeURIComponent(projectId)}`;
+        let recorded = await api(correctionsPath);
+        const settledBy = Date.now() + 120_000;
+        while (!recorded.items.some(entry => entry.correction?.successor?.versionId === successor.versionId && entry.outcome?.status === "settled") && Date.now() < settledBy) { await sleep(3000); recorded = await api(correctionsPath); }
+        const correction = assertCorrection(original, successor, recorded.items, journey, revisedRun);
+        assertSettled(correction, successor);
+        const flipped = await api(`/api/results/${successor.versionId}/corrections?projectId=${encodeURIComponent(projectId)}`);
+        assert.ok(flipped.items.some(entry => entry.role === "successor" && entry.correction.original.versionId === original.versionId), "the same correction is not found from the successor's side");
+        const adopted = await api("/api/feedback/events?trigger=deliverable-adopted&limit=100");
+        assert.ok(!adopted.items.some(event => event.runId === revisedRun.id || event.detail?.runId === revisedRun.id), "the successor was recorded as the researcher's adoption");
+        entry.steps.correction = { eventId: correction.id, kind: correction.correction.kind, effects: correction.correction.effects, outcomeStatus: correction.outcome.status,
+          renderings: correction.outcome.outputs.filter(item => item.role === "rendering").map(item => ({ path: item.path, consistency: item.consistency })) };
         const output = `artifacts/result-revisions/${staged.referenceId}/output`;
         entry.steps.revisedFormats = await formats(output, { "forest-restyle": "STYLE-ONLY", "add-study": "ADD-STUDY", "correct-conclusion": "CORRECT-CLAIM" }[journey.id], after.machineValues.filter(item => ["values.pooled_effect", "values.tau_squared"].includes(item.key)).map(item => item.value), source);
+        // The revised report's Word and PDF, made by the platform from that version's own bytes rather than from the path's current ones.
+        const reportVersion = (await capturedFor(revisedRun, captured => captured.some(value => value.path === `${output}/report.md`))).find(value => value.path === `${output}/report.md`);
+        entry.steps.versionConversion = await versionConversion(reportVersion, { "forest-restyle": "STYLE-ONLY", "add-study": "ADD-STUDY", "correct-conclusion": "CORRECT-CLAIM" }[journey.id],
+          after.machineValues.filter(item => ["values.pooled_effect", "values.tau_squared"].includes(item.key)).map(item => item.value), `${journey.id}-revised-report`);
         const exported = await context.request.get(`${base}/api/results/${successor.versionId}/export?projectId=${projectId}`, { headers, timeout: 30_000 }); assert.equal(exported.status(), 200);
         const archive = await exported.body(); const { unzipSync } = require("../../apps/server/node_modules/fflate"); const zip = unzipSync(archive);
         const exportManifest = JSON.parse(Buffer.from(zip["manifest.json"]).toString());

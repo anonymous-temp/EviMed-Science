@@ -37,10 +37,12 @@ export const FEEDBACK_EVENT_TRIGGERS = Object.freeze([
   "memory-rejected",
   "deliverable-adopted",
   "deliverable-edited",
+  // A correction made through the anchored revision, with the immutable pair of result versions it produced (N12).
+  "result-corrected",
 ]);
 
-/** What a feedback event can be about. */
-export const FEEDBACK_SUBJECT_TYPES = Object.freeze(["memory-record", "deliverable"]);
+/** What a feedback event can be about. A `result-version` is an immutable result version, named by its version id. */
+export const FEEDBACK_SUBJECT_TYPES = Object.freeze(["memory-record", "deliverable", "result-version"]);
 
 const migrations = new WeakMap();
 
@@ -428,6 +430,29 @@ CREATE INDEX IF NOT EXISTS feedback_events_subject_idx ON evimed_product.feedbac
 CREATE INDEX IF NOT EXISTS feedback_events_owner_idx ON evimed_product.feedback_events(user_id,occurred_at DESC,id);
 CREATE INDEX IF NOT EXISTS feedback_events_project_fk_idx ON evimed_product.feedback_events(user_id,project_id);
 INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-09-07-feedback-events-v1') ON CONFLICT DO NOTHING;
+DO $feedback_vocabulary$
+BEGIN
+  -- CREATE TABLE IF NOT EXISTS leaves an existing table's constraints as they were, so a trigger or a subject type added
+  -- to the vocabulary above is refused by the database of every deployment that already has the table, on the first
+  -- write of it, until the constraint is rebuilt. One block per constraint, each guarded by the word it must now hold.
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint c WHERE c.conrelid='evimed_product.feedback_events'::regclass
+      AND c.conname='feedback_events_trigger_check' AND pg_get_constraintdef(c.oid) LIKE '%result-corrected%'
+  ) THEN
+    ALTER TABLE evimed_product.feedback_events DROP CONSTRAINT IF EXISTS feedback_events_trigger_check;
+    ALTER TABLE evimed_product.feedback_events ADD CONSTRAINT feedback_events_trigger_check
+      CHECK (trigger_kind IN (${FEEDBACK_EVENT_TRIGGERS.map((x) => `'${x}'`).join(",")}));
+  END IF;
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint c WHERE c.conrelid='evimed_product.feedback_events'::regclass
+      AND c.conname='feedback_events_subject_check' AND pg_get_constraintdef(c.oid) LIKE '%result-version%'
+  ) THEN
+    ALTER TABLE evimed_product.feedback_events DROP CONSTRAINT IF EXISTS feedback_events_subject_check;
+    ALTER TABLE evimed_product.feedback_events ADD CONSTRAINT feedback_events_subject_check
+      CHECK (subject_type IN (${FEEDBACK_SUBJECT_TYPES.map((x) => `'${x}'`).join(",")}));
+  END IF;
+END $feedback_vocabulary$;
+INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-10-04-feedback-result-corrected-v1') ON CONFLICT DO NOTHING;
 ALTER TABLE evimed_product.memory_index_state ADD COLUMN IF NOT EXISTS verified_at timestamptz(3) NOT NULL DEFAULT clock_timestamp();
 -- The engine's own record ids were a MemOS-era receipt; the index is addressed
 -- by path now, and a readback reads those paths. CREATE TABLE IF NOT EXISTS

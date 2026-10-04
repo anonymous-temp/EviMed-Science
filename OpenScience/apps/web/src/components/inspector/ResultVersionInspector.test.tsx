@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -15,6 +15,8 @@ vi.mock("@/lib/resultProvenance", async (original) => ({ ...await original<typeo
 vi.mock("@/components/report/ReportReader", () => ({ ReportReader: ({ text, immutableVersion }: { text: string; immutableVersion: ResultVersion }) => <p data-version={immutableVersion.versionId}>{text}</p> }));
 vi.mock("./ResultImpactPanel", () => ({ ResultImpactPanel: () => null }));
 vi.mock("./ResultLineagePanel", () => ({ ResultLineagePanel: () => null }));
+vi.mock("./ResultCorrectionPanel", () => ({ ResultCorrectionPanel: ({ versionId }: { versionId: string }) => <p data-testid="corrections" data-version={versionId} /> }));
+vi.mock("@/components/document/DocumentExportActions", () => ({ DocumentExportActions: ({ source, groupLabel }: { source: unknown; groupLabel?: string }) => <p data-testid="export" data-source={JSON.stringify(source)} data-label={groupLabel} /> }));
 const old: ResultVersion = { artifactId: "a", versionId: "rv_old", projectId: "default", path: "report.md", digest: "a".repeat(64), size: 10, mimeType: "text/markdown", capturedAt: "2026-10-01T00:00:00Z",
   producer: { kind: "tool", sessionId: "ses_1", runId: "run_1" }, inputs: [], code: null, environment: null,
   findings: [{ id: "f_old", kind: "claim", status: "source_unavailable", message: "旧版本原文不可用" }], machineValues: [],
@@ -39,6 +41,17 @@ describe("immutable result inspection", () => {
     expect(api.raw).toHaveBeenCalledWith(old);
     expect(screen.getByText(/旧版本原文不可用/)).toBeInTheDocument();
     expect(screen.queryByText("新结论")).toBeNull();
+  });
+  it("offers Word and PDF of the selected version itself, and the corrections made to it, never of the path's current bytes", async () => {
+    const { container } = mount(old.versionId); await screen.findByText("旧结论");
+    const shown = (testId: string) => container.querySelector(`[data-testid="${testId}"]`);
+    expect(shown("export")).toHaveAttribute("data-source", JSON.stringify({ versionId: old.versionId }));
+    expect(shown("export")).toHaveAttribute("data-label", "导出此版本");
+    expect(shown("corrections")).toHaveAttribute("data-version", old.versionId);
+    await userEvent.selectOptions(within(container).getByRole("combobox", { name: "结果版本" }), latest.versionId);
+    await within(container).findByText("新结论");
+    expect(shown("export")).toHaveAttribute("data-source", JSON.stringify({ versionId: latest.versionId }));
+    expect(shown("corrections")).toHaveAttribute("data-version", latest.versionId);
   });
   it("shows what the producing run found about a version, as warnings in the reader's words", async () => {
     const found: ResultVersion = { ...latest, findings: [

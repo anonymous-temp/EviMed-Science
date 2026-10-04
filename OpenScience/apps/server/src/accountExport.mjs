@@ -1,4 +1,4 @@
-import { DOCUMENT_EXPORT_FORMATS, priceListFor, projectResultInput, projectResultVersion } from "@evimed/domain";
+import { DOCUMENT_EXPORT_FORMATS, priceListFor, projectCorrectionOutcome, projectResultInput, projectResultVersion } from "@evimed/domain";
 import { PLUGIN_REGISTRY, exportPluginPayload, projectPluginId } from "./pluginService.mjs";
 import { HttpError } from "./security.mjs";
 import { migrateProductStore } from "./productPersistence.mjs";
@@ -241,7 +241,9 @@ const payloadProjections = {
   "result-revision": payload => {
     recorded(payload, "result-revision");
     return { ...pick(payload, ["recordType", "id", "projectId", "versionId", "digest", "sessionId", "state", "stagedAt", "boundAt", "instruction", "inputPath"]),
-      anchor: pick(payload.anchor, ["kind", "elementId", "elementKind", "selectedText", "matchMode", "page", "row", "column"]) };
+      anchor: pick(payload.anchor, ["kind", "elementId", "elementKind", "selectedText", "matchMode", "page", "row", "column"]),
+      // What the run left, from the domain's own closed projection; absent until the run ends.
+      ...(payload.outcome ? { outcome: projectCorrectionOutcome(payload.outcome) } : {}) };
   },
   // Which source changed under which result, and whether research continued.
   "result-impact": payload => {
@@ -266,7 +268,7 @@ const payloadProjections = {
   // What was converted, from which revision of it, and what came out.
   "document-export": payload => ({
     ...pick(payload, ["projectId", "title", "sourceRevision", "rendererVersion", "state"]),
-    source: pick(payload?.source, ["artifactId", "root", "workspace", "studyId", "exportId"]),
+    source: pick(payload?.source, ["artifactId", "root", "workspace", "studyId", "exportId", "versionId", "digest"]),
     formats: Object.fromEntries(DOCUMENT_EXPORT_FORMATS.filter(format => Object.hasOwn(payload?.formats ?? {}, format))
       .map(format => [format, pick(payload.formats[format], ["state", "mime", "sha256", "bytes", "code"])])),
     findings: Array.isArray(payload?.findings) ? payload.findings.filter((/** @type {unknown} */ finding) => typeof finding === "string") : [],

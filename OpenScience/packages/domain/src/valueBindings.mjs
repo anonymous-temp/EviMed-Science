@@ -266,6 +266,74 @@ export function bindableKind(path, mimeType = "") {
 }
 
 /**
+ * Every number a file prints, in the order it prints them, each with where it stands: the one reading of "printed"
+ * that binding a number to a calculation and comparing what two files print both use, so the two cannot disagree on
+ * what a number of the analysis is. Text is read by its statements, a delimited table by its cells, a figure by the
+ * text it draws; anything else prints nothing this reads.
+ * @param {{ body: string, kind: string, path: string, skip?: Array<[number, number]>,
+ *   visit: (number: { raw: string, negative: boolean, percentSign: boolean }, locator: Record<string, any>) => void,
+ *   stopped?: () => boolean }} input `skip`: stretches of `body` not to read; `stopped`: whether the caller wants no more
+ */
+function scanPrintedNumbers({ body, kind, path, skip = [], visit, stopped = () => false }) {
+  if (kind === "text") {
+    const locate = locatorIndex(body);
+    for (const { line, start } of textUnits(body)) {
+      if (stopped()) break;
+      for (const span of typedNumberSpans(line, { report: true })) {
+        const at = start + span.start;
+        if (skip.some(([from, to]) => at >= from && at < to)) continue;
+        const before = line.slice(Math.max(0, span.start - 2), span.start);
+        // A minus sign, not the dash of a range (`0.52–0.91`) or a list marker.
+        const negative = /(?:^|[^\d)\]])[-−]$/.test(before);
+        visit({ raw: span.raw, negative, percentSign: line[span.end] === "%" }, locate(at));
+      }
+    }
+  } else if (kind === "table") {
+    const separator = path.toLowerCase().endsWith(".tsv") ? "\t" : ",";
+    body.split(/\r?\n/).forEach((line, row) => {
+      if (stopped()) return;
+      splitDelimited(line, separator).forEach((cell, column) => {
+        const number = cellNumber(cell);
+        if (!number) return;
+        const value = Number(number.literal);
+        if (Number.isInteger(value) && value >= 1900 && value <= 2100 && !number.raw.includes(".")) return;
+        visit(number, { kind: "cell", row: row + 1, column: column + 1 });
+      });
+    });
+  } else if (kind === "svg") {
+    svgTexts(body).forEach((label, index) => {
+      for (const span of typedNumberSpans(label, { report: true })) {
+        const before = label.slice(Math.max(0, span.start - 2), span.start);
+        visit({ raw: span.raw, negative: /(?:^|[^\d)\]])[-−]$/.test(before), percentSign: label[span.end] === "%" }, { kind: "svg", index: index + 1 });
+      }
+    });
+  }
+}
+
+/** The words a printed number is shown as: its sign, its digits as written, its percent sign. @param {{ raw: string, negative: boolean, percentSign: boolean }} number */
+const shownWords = (number) => `${number.negative ? "-" : ""}${number.raw}${number.percentSign ? "%" : ""}`;
+
+/** The most numbers one file's words list holds; past it the list says it is cut and nothing is compared from it. */
+const PRINTED_WORDS_LIMIT = 5000;
+
+/**
+ * The words of the numbers a file prints, in print order, with no calculation to compare them to: what two versions of
+ * a file are compared by when the question is whether their numbers moved (`resultCorrection.mjs`). `checkable` is
+ * false for a file whose numbers this cannot read (a results document, whose numbers are its values; a raster figure, a
+ * PDF or a Word file) and for one with more numbers than the list holds: such a file is unknown, never "unchanged".
+ * @param {{ body: string, path: string, mimeType?: string }} input
+ * @returns {{ kind: "text" | "table" | "svg" | "values" | "binary", checkable: boolean, words: string[] }}
+ */
+export function printedNumberWords({ body, path, mimeType = "" }) {
+  const kind = bindableKind(path, mimeType);
+  if (kind === "binary" || kind === "values") return { kind, checkable: false, words: [] };
+  /** @type {string[]} */
+  const words = [];
+  scanPrintedNumbers({ body, kind, path, visit: (number) => { words.push(shownWords(number)); }, stopped: () => words.length > PRINTED_WORDS_LIMIT });
+  return words.length > PRINTED_WORDS_LIMIT ? { kind, checkable: false, words: [] } : { kind, checkable: true, words };
+}
+
+/**
  * Bind the numbers a file prints to the calculation values that state them.
  *
  * A number is bound when exactly one (calculation, key) equals it at the
@@ -302,7 +370,7 @@ export function bindPrintedNumbers({ body, path, mimeType = "", calculations, sk
     if (!Number.isFinite(written)) return;
     examined += 1;
     const printed = { written, places: placesOf(literal), percentSign: number.percentSign, negative: number.negative, grouped: number.raw.includes(",") };
-    const shown = `${number.negative ? "-" : ""}${number.raw}${number.percentSign ? "%" : ""}`;
+    const shown = shownWords(number);
     const found = candidatesFor(printed, usable);
     if (found.length === 1) {
       if (items.length >= RESULT_LINEAGE_LIMITS.bindings) { truncated = true; return; }
@@ -321,39 +389,7 @@ export function bindPrintedNumbers({ body, path, mimeType = "", calculations, sk
       : { locator, printed: shown, reason: "no_matching_value" });
   };
 
-  if (kind === "text") {
-    const locate = locatorIndex(body);
-    for (const { line, start } of textUnits(body)) {
-      if (full()) break;
-      for (const span of typedNumberSpans(line, { report: true })) {
-        const at = start + span.start;
-        if (skip.some(([from, to]) => at >= from && at < to)) continue;
-        const before = line.slice(Math.max(0, span.start - 2), span.start);
-        // A minus sign, not the dash of a range (`0.52–0.91`) or a list marker.
-        const negative = /(?:^|[^\d)\]])[-−]$/.test(before);
-        bindOne({ raw: span.raw, negative, percentSign: line[span.end] === "%" }, locate(at));
-      }
-    }
-  } else if (kind === "table") {
-    const separator = path.toLowerCase().endsWith(".tsv") ? "\t" : ",";
-    body.split(/\r?\n/).forEach((line, row) => {
-      if (full()) return;
-      splitDelimited(line, separator).forEach((cell, column) => {
-        const number = cellNumber(cell);
-        if (!number) return;
-        const value = Number(number.literal);
-        if (Number.isInteger(value) && value >= 1900 && value <= 2100 && !number.raw.includes(".")) return;
-        bindOne(number, { kind: "cell", row: row + 1, column: column + 1 });
-      });
-    });
-  } else if (kind === "svg") {
-    svgTexts(body).forEach((label, index) => {
-      for (const span of typedNumberSpans(label, { report: true })) {
-        const before = label.slice(Math.max(0, span.start - 2), span.start);
-        bindOne({ raw: span.raw, negative: /(?:^|[^\d)\]])[-−]$/.test(before), percentSign: label[span.end] === "%" }, { kind: "svg", index: index + 1 });
-      }
-    });
-  }
+  scanPrintedNumbers({ body, kind, path, skip, visit: bindOne, stopped: full });
   return { kind, items, unbound, examined, truncated };
 }
 

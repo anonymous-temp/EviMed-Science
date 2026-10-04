@@ -1470,11 +1470,29 @@ export {
   emptyValueBindings,
   flattenMachineValues,
   locatorIndex,
+  printedNumberWords,
   projectValueBindings,
   renderWithBindings,
   valueBindingRecord,
   valueBindingStatus,
 } from './src/valueBindings.mjs'
+
+// resultCorrection — a correction made through the anchored revision, as a fact about two immutable result versions:
+// the pair, what differs between them, the researcher's words and who generated the successor (plan §11.3 N12).
+export {
+  RENDERING_FORMATS,
+  RESULT_CORRECTION_ANCHOR_KINDS,
+  RESULT_CORRECTION_DETAIL_BYTES,
+  RESULT_CORRECTION_KINDS,
+  RESULT_CORRECTION_STATES,
+  RESULT_CORRECTION_VERSION,
+  correctionCalculations,
+  correctionEffects,
+  fitResultCorrection,
+  projectCorrectionOutcome,
+  projectResultCorrection,
+  renderingFormat,
+} from './src/resultCorrection.mjs'
 
 export { RESULT_PRODUCER_KINDS, RESULT_INPUT_KINDS, RESULT_AVAILABILITY, isResultDigest, normalizeResultPath, projectResultInput, projectResultVersion, projectResultMethod, resultMethodDifference, validateResultAnchor, resultVersionDifference } from "./src/resultProvenance.mjs";
 export { RESULT_REPLAY_METHODS, compareResultNumbers } from "./src/resultReplay.mjs";

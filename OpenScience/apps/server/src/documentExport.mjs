@@ -45,6 +45,33 @@ export async function freezeArtifactDocument(project, source) {
 }
 
 
+/**
+ * A result version converted from its own preserved bytes, never from the workspace path it was captured at: the path may
+ * have been overwritten since, and a Word or PDF of the successor of a correction must be the successor's. Only a Markdown
+ * or text version converts. `revision` is the version's digest, so the conversion names exactly which bytes it is of.
+ *
+ * A figure the document embeds is read from the workspace and goes into the conversion only when `preserved` says it is
+ * exactly a version captured beside the document; any other is left out, and the renderer says it could not place it. An
+ * old document is not given a newer figure.
+ * @param {any} project @param {{path:string,digest:string,versionId:string}} version @param {Buffer} bytes
+ * @param {{preserved?:(asset:{path:string,sha256:string})=>Promise<boolean>}} [options]
+ */
+export async function freezeResultVersionDocument(project, version, bytes, { preserved = async () => false } = {}) {
+  if (!/\.(md|markdown|txt)$/i.test(version.path)) throw new HttpError(400, 'document_format_unsupported', 'Convert a Markdown or text report.');
+  if (bytes.length > 4 * 1024 * 1024) throw new HttpError(413, 'document_export_too_large', 'Document exceeds the conversion limit.');
+  let canonicalMarkdown;
+  try { canonicalMarkdown = new TextDecoder('utf-8', { fatal: true }).decode(bytes); }
+  catch { throw new HttpError(400, 'document_format_unsupported', 'Convert a Markdown or text report.'); }
+  const directory = path.dirname(resolveScopedPath(project.workspaceDir, version.path));
+  const found = await freezeDocumentAssets(project.workspaceDir, canonicalMarkdown, directory);
+  const assets = [];
+  for (const asset of found) {
+    const relative = path.posix.join(path.posix.dirname(version.path), asset.path);
+    if (await preserved({ path: relative, sha256: asset.sha256 })) assets.push(asset);
+  }
+  return { canonicalMarkdown, title: path.basename(version.path), cover: {}, revision: version.digest, assets };
+}
+
 /** Freeze only the verified local raster assets named by a canonical document. */
 export async function freezeDocumentAssets(root, canonicalMarkdown, documentDirectory = root) {
   const assets = [];

@@ -283,9 +283,14 @@ export function buildDistillationInput(input) {
 }
 
 /** The dispatch identity, stable for a (run, trigger, rules) triple so a
- *  re-queued job adopts the run it already started instead of starting a second. */
-export function distillationDispatchId(runId, trigger) {
-  const digest = createHash("sha256").update(`${runId}\0${trigger}\0${DISTILLATION_EXTRACTOR_VERSION}`).digest("hex");
+ *  re-queued job adopts the run it already started instead of starting a second.
+ *
+ *  A lesson that is one of several of the same trigger about one run — each correction a researcher made to a result the
+ *  run delivered — names its own `discriminator`, so the second does not adopt the first's bounded run. Without one the
+ *  identity is exactly what it always was, so no job already queued changes identity. */
+export function distillationDispatchId(runId, trigger, discriminator = "") {
+  const key = `${runId}\0${trigger}\0${DISTILLATION_EXTRACTOR_VERSION}${discriminator ? `\0${discriminator}` : ""}`;
+  const digest = createHash("sha256").update(key).digest("hex");
   return `method-distillation-${digest.slice(0, 32)}`;
 }
 
@@ -367,7 +372,7 @@ export class MethodDistillationRuns {
       peerRuns.push({ runId: peer.runId, transcript: peerProject ? await readRunTranscript(peerProject, peer.runId).catch(() => null) : null });
     }
     const input = buildDistillationInput({ run, trigger, transcript, feedback, repairIssues, relatedMethods: related, peerRuns, correctionRecords });
-    const dispatchId = distillationDispatchId(run.id, trigger);
+    const dispatchId = distillationDispatchId(run.id, trigger, typeof job.payload?.dispatchKey === "string" ? job.payload.dispatchKey.slice(0, 200) : "");
     const identity = await this.dispatch({
       userId: job.userId,
       projectId: job.projectId,

@@ -1,4 +1,4 @@
-import { DocumentExportService, freezeArtifactDocument } from "./documentExport.mjs";
+import { DocumentExportService, freezeArtifactDocument, freezeResultVersionDocument } from "./documentExport.mjs";
 import { ResultProvenanceService } from "./resultProvenanceService.mjs";
 import { createResultProvenanceRoutes } from "./resultProvenanceRoutes.mjs";
 import { createResultProducerCapture, createResultCaptureQueue } from "./resultProducerCapture.mjs";
@@ -17,6 +17,7 @@ import { createDataSemanticsGateway, DATA_SEMANTICS_GATEWAY_PATH } from "./dataS
 import { createDataSemanticsRoutes } from "./dataSemanticsRoutes.mjs";
 import { ResultExportService } from "./resultExport.mjs";
 import { ResultRevisionService } from "./resultRevision.mjs";
+import { ResultCorrectionService } from "./resultCorrection.mjs";
 import { createResultReuseRoutes } from "./resultReuseRoutes.mjs";
 import { ResultImpactService } from "./resultImpact.mjs";
 import { createResultImpactRoutes } from "./resultImpactRoutes.mjs";
@@ -1875,6 +1876,21 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       }
       const project = await store.requireProject(user, request.projectId);
       const source = request.source ?? {};
+      // A result version converted from its own preserved bytes, so a Word or PDF of a revision's successor is the
+      // successor's, and one of the original is the original's, whatever the workspace holds now.
+      if (source.versionId !== undefined) {
+        if (!resultProvenance || Object.keys(source).some(key => key !== "versionId") || typeof source.versionId !== "string") {
+          throw new HttpError(404, "document_export_unavailable", "The document is unavailable.");
+        }
+        const { version, bytes } = await resultProvenance.raw(user.id, project.id, source.versionId);
+        return { project, reference: { versionId: version.versionId, digest: version.digest },
+          ...await freezeResultVersionDocument(project, version, bytes, {
+            // A figure the document embeds goes into the conversion only when it is exactly a version the same run captured.
+            preserved: async asset => (version.producer.runId || version.producer.sessionId)
+              ? (await resultProvenance.query(user.id, project.id, { path: asset.path, digest: asset.sha256,
+                producer: version.producer.runId ? { runId: version.producer.runId } : { sessionId: version.producer.sessionId } }, { limit: 1 })).items.length > 0
+              : false }) };
+      }
       return { project, reference: { artifactId: source.artifactId, root: source.root ?? "workspace", workspace: project.activeWorkspace ?? "" },
         ...await freezeArtifactDocument(project, source) };
     },
@@ -1904,6 +1920,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       const run = (await agentRuns.list(project)).find(row => row.id === input.producer.runId);
       return resultRevisions.captureContext(project, input, run);
     },
+    // The researcher's act a captured successor answers, recorded with the immutable pair it produced (resultCorrection.mjs).
+    afterCorrection: event => resultCorrections?.capture(event),
     authorizeProject: async (userId, projectId) => {
       const user = await store.userById(userId);
       if (!user) throw new HttpError(403, "result_project_forbidden", "The result project is unavailable.");
@@ -1946,7 +1964,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     transformationsFor: dataSemantics ? (project, digests) => dataSemantics.transformationsByCode(project.userId, project.id, digests) : null,
     runtimeImageId: async () => (await runtimeManager.inspectRuntimeImage().catch(() => null))?.imageId ?? null }) : null;
   if (resultRevisions) resultRevisions.lineage = resultLineage;
-  const resultRoutes = createResultProvenanceRoutes({ store, service: resultProvenance, lineage: resultLineage });
+  // What a correction made through the anchored revision was and left: the feedback event of each (original, successor)
+  // pair, the settled record of what the run recomputed, and the lesson it is evidence for.
+  const resultCorrections = resultProvenance && productDocuments ? new ResultCorrectionService({ results: resultProvenance,
+    documents: productDocuments, feedback: feedbackEvents,
+    runs: { list: project => agentRuns.list(project) },
+    learning: () => (learningWorker ? learningTriggers : null),
+    report: code => { void securityAudit(config, "result.correction", "failed", { code }).catch(() => {}); } }) : null;
+  const resultRoutes = createResultProvenanceRoutes({ store, service: resultProvenance, lineage: resultLineage, corrections: resultCorrections });
   const resultReuseRoutes = createResultReuseRoutes({ store, exporter: resultExporter, revisions: resultRevisions });
   const resultImpactRoutes = createResultImpactRoutes({ store, service: resultImpacts, maxJsonBytes: config.maxJsonBytes });
   const resultCapture = resultProvenance ? createResultProducerCapture({ service: resultProvenance,
@@ -2590,6 +2615,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           await securityAudit(config, "result.capture", "failed", { userId: project.userId, projectId: project.id,
             runId: run.id, code: error?.code ?? "result_capture_failed" });
         }
+        // The run's files and bindings are captured: what each revision it answered left is settled now.
+        try { await resultCorrections?.settle(project, run); } catch { /* the revision record stays as it was */ }
       }
       await attributeLateCalls(project, run);
       const evaluationRun = runtimeManager.evaluationMethodSnapshots.has(runtimeManager.key(project));

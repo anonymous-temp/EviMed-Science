@@ -53,10 +53,11 @@ test('all four VCR formats assemble every section against the same frozen result
 });
 
 import fs from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 import os from 'node:os';
 import YAML from 'yaml';
-import { freezeArtifactDocument } from '../src/documentExport.mjs';
+import { freezeArtifactDocument, freezeResultVersionDocument } from '../src/documentExport.mjs';
 test('every registered public document capability has a canonical output supported by the common converter', async t => {
   const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'document-capabilities-')));
   t.after(() => fs.rm(root, { recursive:true, force:true }));
@@ -79,6 +80,34 @@ test('every registered public document capability has a canonical output support
     documents++;
   }
   assert.ok(documents >= 20, `Checked ${documents} public document capabilities`);
+});
+
+test('a result version converts from its own preserved bytes, never from what its path holds now, and an old document is not given a newer figure', async t => {
+  const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'document-version-')));
+  t.after(() => fs.rm(root, { recursive:true, force:true }));
+  await fs.mkdir(path.join(root, 'out'), { recursive:true });
+  const png = Buffer.from('89504e470d0a1a0a00', 'hex');
+  const newerPng = Buffer.from('89504e470d0a1a0a01', 'hex');
+  await fs.writeFile(path.join(root, 'out', 'forest.png'), png);
+  await fs.writeFile(path.join(root, 'out', 'other.png'), newerPng);
+  // The workspace now holds a different report under the same path; the version's own bytes are what convert.
+  await fs.writeFile(path.join(root, 'out', 'report.md'), 'Effect 99.9 [1].');
+  const bytes = Buffer.from('# 报告\n\nEffect 42.5 [1].\n\n![forest](forest.png)\n\n![other](other.png)\n');
+  const version = { versionId: `rv_${'a'.repeat(64)}`, digest: createHash('sha256').update(bytes).digest('hex'), path: 'out/report.md' };
+  const asked = [];
+  const frozen = await freezeResultVersionDocument({ workspaceDir: root }, version, bytes, {
+    preserved: async asset => { asked.push(asset.path); return asset.path === 'out/forest.png'; } });
+  assert.match(frozen.canonicalMarkdown, /Effect 42\.5/);
+  assert.doesNotMatch(frozen.canonicalMarkdown, /99\.9/);
+  assert.equal(frozen.revision, version.digest, 'the conversion names exactly which bytes it is of');
+  assert.equal(frozen.title, 'report.md');
+  assert.deepEqual(frozen.assets.map(asset => asset.path), ['forest.png'], 'only a figure that is exactly a version captured beside the document goes in');
+  assert.deepEqual(asked.sort(), ['out/forest.png', 'out/other.png']);
+  const bare = await freezeResultVersionDocument({ workspaceDir: root }, version, bytes);
+  assert.deepEqual(bare.assets, [], 'with nothing to vouch for a figure, none is carried');
+  await assert.rejects(freezeResultVersionDocument({ workspaceDir: root }, { ...version, path: 'out/forest.png' }, png), { code: 'document_format_unsupported' });
+  await assert.rejects(freezeResultVersionDocument({ workspaceDir: root }, version, Buffer.from([0xff, 0xfe, 0xfd])), { code: 'document_format_unsupported' });
+  await assert.rejects(freezeResultVersionDocument({ workspaceDir: root }, version, Buffer.alloc(4 * 1024 * 1024 + 1, 97)), { code: 'document_export_too_large' });
 });
 
 import { createVcrDocumentAdapter } from '../src/vcrDocumentExport.mjs';

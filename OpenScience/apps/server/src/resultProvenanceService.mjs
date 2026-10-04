@@ -19,9 +19,15 @@ export class ResultProvenanceService {
    * authorizeReference?:(userId:string,project:any,reference:any)=>Promise<any>,
    * deriveEligibility?:(userId:string,version:any)=>Promise<any>,config?:any,maxSnapshotBytes?:number,
    * resolveCaptureContext?:(project:any,input:any)=>Promise<any>,
-   * now?:()=>Date}} dependencies */
+   * afterCorrection?:((event:{userId:string,project:any,successor:any,correction:any})=>Promise<any>)|null,
+   * now?:()=>Date}} dependencies
+   * `afterCorrection`: told, after a successor to a revision's selected result is captured (and again when its capture
+   * replays), which researcher's act it answers (`resultCorrection.mjs`). It records and never decides: whatever it does or
+   * fails to do leaves the captured version exactly as it is. */
   constructor({ documents, authorizeProject, authorizeReference = null, deriveEligibility = null,
-    config = {}, maxSnapshotBytes = 64 * 1024 * 1024, now = () => new Date(), resolveCaptureContext = async () => null }) {
+    config = {}, maxSnapshotBytes = 64 * 1024 * 1024, now = () => new Date(), resolveCaptureContext = async () => null,
+    afterCorrection = null }) {
+    this.afterCorrection = afterCorrection;
     this.documents = documents; this.authorizeProject = authorizeProject;
     this.authorizeReference = authorizeReference; this.deriveEligibility = deriveEligibility;
     this.config = config; this.maxSnapshotBytes = maxSnapshotBytes; this.now = now;
@@ -69,6 +75,7 @@ export class ResultProvenanceService {
     const context = await this.resolveCaptureContext(project, { ...input, relativePath });
     if (context) input = { ...input, inputs: [...(input.inputs ?? []), ...(context.inputs ?? [])],
       supersedesVersionId: context.supersedesVersionId ?? input.supersedesVersionId };
+    const correction = context?.correction ?? null;
     const full = resolveScopedPath(project.workspaceDir, relativePath);
     const rawProducer = input.producer ?? {};
     const producer = { kind: RESULT_PRODUCER_KINDS.includes(rawProducer.kind) ? rawProducer.kind : "workspace" };
@@ -84,7 +91,7 @@ export class ResultProvenanceService {
     const inputs = await Promise.all((input.inputs ?? []).map(reference => this.reference(input.userId, project, reference)));
     const code = input.code ? await this.reference(input.userId, project, input.code) : null;
     const environment = input.environment ? await this.reference(input.userId, project, input.environment) : null;
-    return withProjectStorageMutation(project, async () => {
+    const captured = await withProjectStorageMutation(project, async () => {
       let opened;
       let bytes;
       try {
@@ -149,6 +156,13 @@ export class ResultProvenanceService {
       }
       return this.project(input.userId, project, payload);
     });
+    // Outside the project's storage lock: it reads two versions and writes a ledger row. A replayed capture comes here
+    // too, and the ledger keeps one event for one pair.
+    if (correction && this.afterCorrection) {
+      try { await this.afterCorrection({ userId: input.userId, project, successor: captured, correction }); }
+      catch { /* A correction that could not be recorded leaves the version it describes. */ }
+    }
+    return captured;
   }
 
   /**

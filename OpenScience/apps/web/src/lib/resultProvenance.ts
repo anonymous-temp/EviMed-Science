@@ -115,6 +115,47 @@ export function getResultVersion(versionId: string) {
 export function getResultLineage(versionId: string) {
   return resultJson<ResultLineage>(`/${encodeURIComponent(versionId)}/lineage`);
 }
+/** What a correction changed, decided from the bytes of its two versions; `unknown` is a value, never "unchanged". */
+export type CorrectionKind = "analytic" | "evidence" | "presentation" | "unknown";
+export type CorrectionState = "changed" | "identical" | "unknown";
+export interface ResultCorrectionRecord {
+  revisionId: string | null;
+  original: { versionId: string; digest: string; path: string | null };
+  successor: { versionId: string; digest: string; path: string | null };
+  kind: CorrectionKind;
+  effects: { bytes: CorrectionState; printedNumbers: CorrectionState; machineValues: "changed" | "identical" | "none" | "unknown"; evidence: CorrectionState;
+    numbersAdded: string[]; numbersRemoved: string[]; identifiersAdded: string[]; identifiersRemoved: string[]; claimsAdded: string[]; claimsRemoved: string[] };
+  anchor: { kind: string; selectedText: string };
+  instruction: string | null;
+}
+/** What the run left beside the successor: a Word or PDF it wrote is a rendering, and nothing checked it against the successor. */
+export interface ResultCorrectionOutcome {
+  status: "settled" | "no_successor";
+  successorVersionId: string | null;
+  outputs: Array<{ versionId: string; path: string; role: "successor" | "rendering" | "other"; format: string | null; consistency: "not_checked" }>;
+  calculations: Array<{ key: string; unit: string | null; before: { versionId: string; value: number }; after: { versionId: string; value: number } }>;
+}
+export interface ResultCorrectionEntry { id: string; occurredAt: string; role: "original" | "successor"; correction: ResultCorrectionRecord; outcome: ResultCorrectionOutcome | null }
+/** The corrections a version was the original or the successor of. */
+export function getResultCorrections(versionId: string) {
+  return resultJson<{ versionId: string; items: ResultCorrectionEntry[] }>(`/${encodeURIComponent(versionId)}/corrections`);
+}
+const CORRECTION_KIND_LABELS: Record<CorrectionKind, string> = { analytic: "数值有变化", evidence: "依据有变化", presentation: "只改了呈现方式", unknown: "两个版本的内容无法逐项比较" };
+export function correctionKindLabel(kind: CorrectionKind): string { return CORRECTION_KIND_LABELS[kind] ?? CORRECTION_KIND_LABELS.unknown; }
+/** What moved between the two versions, in words; a part that could not be compared says so. */
+export function correctionEffectLines(correction: ResultCorrectionRecord): string[] {
+  const { effects } = correction;
+  const lines: string[] = [];
+  if (effects.printedNumbers === "changed") {
+    if (effects.numbersRemoved.length) lines.push(`不再出现的数值：${effects.numbersRemoved.join("、")}`);
+    if (effects.numbersAdded.length) lines.push(`新出现的数值：${effects.numbersAdded.join("、")}`);
+  } else if (effects.printedNumbers === "unknown" && effects.machineValues !== "changed") lines.push("文中的数值无法比较");
+  if (effects.identifiersAdded.length) lines.push(`新增来源：${effects.identifiersAdded.join("、")}`);
+  if (effects.identifiersRemoved.length) lines.push(`不再引用的来源：${effects.identifiersRemoved.join("、")}`);
+  if (effects.claimsAdded.length) lines.push(`新增结论：${effects.claimsAdded.join("、")}`);
+  if (effects.claimsRemoved.length) lines.push(`不再保留的结论：${effects.claimsRemoved.join("、")}`);
+  return lines;
+}
 export async function readResultBytes(version: ResultVersion): Promise<Blob> {
   const response = await fetchWithWebAuth(resultUrl(`/${encodeURIComponent(version.versionId)}/raw`));
   if (!response.ok) throw new Error("此版本的文件无法读取，请重试");
