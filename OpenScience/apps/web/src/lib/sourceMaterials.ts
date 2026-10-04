@@ -11,7 +11,7 @@ export interface SourceMaterialsLedger {
   failure?: string;
   unavailable?: string;
   format: string;
-  pagination: "paginated" | "sheet" | "delimited" | "image" | "flow";
+  pagination: "paginated" | "sheet" | "delimited" | "image" | "flow" | "unaddressed";
   origin: "reported" | "ocr";
   uncertainty?: "unknown";
   extraction: { materials: string; parser?: string; locator?: string };

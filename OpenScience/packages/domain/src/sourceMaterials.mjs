@@ -61,8 +61,13 @@ export const SOURCE_MATERIAL_LIMITS = Object.freeze({
   maxSheets: 40,
 })
 
-/** How a value in a format is located: by page, by sheet cell, by delimited row and column, in an image, or by its place in the flow of the text. */
-export const SOURCE_PAGINATIONS = Object.freeze(['paginated', 'sheet', 'delimited', 'image', 'flow'])
+/**
+ * How a value in a format is located: by page, by sheet cell, by delimited row and
+ * column, in an image, or by its place in the flow of the text. `unaddressed` is a
+ * spreadsheet whose cells could not be read as cells: the parser's Markdown of it
+ * has tables and no sheet addresses, so its values have no location in the workbook.
+ */
+export const SOURCE_PAGINATIONS = Object.freeze(['paginated', 'sheet', 'delimited', 'image', 'flow', 'unaddressed'])
 /** Where a value came from. `graph_estimated` is reserved for a value read off a figure by the digitizer; this module never produces one. */
 export const SOURCE_VALUE_ORIGINS = Object.freeze(['reported', 'ocr', 'graph_estimated'])
 /** The closed formats a cell is parsed into; anything else is text. */
@@ -782,8 +787,11 @@ function supplementReferences(text, tables) {
     const key = materialLabelKey(label)
     if (!key || found.has(key)) continue
     const own = tables.find((table) => table.caption?.label && materialLabelKey(table.caption.label) === key)
+    // A link the document prints in the same line is the supplement's address, as printed; it is not fetched or trusted here.
+    const lineEnd = text.indexOf('\n', match.index)
+    const href = /https?:\/\/[^\s)>\]"']+/.exec(text.slice(match.index, lineEnd < 0 ? text.length : lineEnd))?.[0]
     found.set(key, {
-      label, start: match.index, end: match.index + match[0].length,
+      label, start: match.index, end: match.index + match[0].length, ...(href ? { href: href.replace(/[.,;]+$/, '').slice(0, 300) } : {}),
       kind: /fig|图/i.test(label) ? 'figure' : /table|表/i.test(label) ? 'table' : /appendix/i.test(label) ? 'appendix' : 'material',
       ...(own ? { linked: { tableId: own.id } } : { linked: 'unknown', reason: 'supplement_not_attached' }),
     })
@@ -942,6 +950,8 @@ export function deriveSheetStructure({ sheets }) {
   const limits = []
   for (const sheet of (Array.isArray(sheets) ? sheets : []).slice(0, SOURCE_MATERIAL_LIMITS.maxSheets)) {
     const input = Array.isArray(sheet?.cells) ? sheet.cells : []
+    // A sheet the reader did not open (its bounding box is too large) is a sheet nobody read: said, not dropped.
+    if (sheet?.skipped && !limits.includes('sheet_too_large')) limits.push('sheet_too_large')
     const kept = input.slice(0, SOURCE_MATERIAL_LIMITS.maxCellsPerTable)
     const truncated = input.length > kept.length || Boolean(sheet?.truncated)
     if (truncated && !limits.includes('cell_limit')) limits.push('cell_limit')

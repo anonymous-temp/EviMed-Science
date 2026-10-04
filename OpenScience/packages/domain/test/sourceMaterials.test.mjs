@@ -196,6 +196,8 @@ test("a supplement reference is listed unlinked with its reason, and linked only
     ["Supplementary Table S2", "unknown", "supplement_not_attached"],
     ["Supplementary Figure S1", "unknown", "supplement_not_attached"],
   ]);
+  const linked = deriveMarkdownStructure({ text: "Data are in Supplementary Material 2 (https://example.org/media-2.pdf).\n" });
+  assert.deepEqual([linked.supplements[0].label, linked.supplements[0].href, linked.supplements[0].linked], ["Supplementary Material 2", "https://example.org/media-2.pdf", "unknown"]);
   const own = deriveMarkdownStructure({ text: "See Supplementary Table S1.\n\nSupplementary Table S1. Details\n\n| A | B |\n| --- | --- |\n| 1 | 2 |\n" });
   assert.deepEqual(own.supplements[0].linked, { tableId: "tbl-1" });
 });
@@ -251,8 +253,11 @@ test("spreadsheet cells: the sheet address is the location, a formula nobody com
         ],
       },
       { name: "Hidden", state: "hidden", cells: [{ a: "A1", k: "s", v: "x" }] },
+      { name: "Huge", cells: [], skipped: "too_large", dimensions: { rows: 1048576, cols: 16384 } },
     ],
   });
+  assert.deepEqual(found.limits, ["sheet_too_large"], "a sheet that was not opened is said, not dropped");
+  assert.equal(found.tables.length, 2);
   const [first, second] = found.tables;
   assert.equal(first.kind, "sheet");
   assert.equal(first.name, "Table S2");
@@ -309,8 +314,11 @@ test("a row found on exactly one page is on that page; on several it is ambiguou
   assert.deepEqual(located.tables[1].page, { status: "located", pages: [2], basis: "rows" });
   // The outcomes table's last row is on no page with a text layer: unknown, with no scan to blame.
   assert.deepEqual(materialRowPage(located.tables[1], 6), { status: "unknown", reason: "no_match" });
-  // The HTML table is not requested.
-  assert.deepEqual(located.tables[0].rowPages.at(0), { from: 1, to: 1, status: "located", pages: [1], basis: "row_text" });
+  // Rows with the same outcome run together: rows 1 to 7 are one entry, and the repeated row after them its own.
+  assert.deepEqual(located.tables[0].rowPages.slice(0, 2), [
+    { from: 1, to: 7, status: "located", pages: [1], basis: "row_text" },
+    { from: 8, to: 8, status: "ambiguous", candidates: [1, 2], basis: "row_text" },
+  ]);
   assert.equal(located.info.status, "mapped");
   assert.equal(located.info.pageCount, 3);
   // The figure's caption is found on no page: unknown.
@@ -328,6 +336,12 @@ test("a row whose cells come out of the text layer in another order is placed by
   assert.equal(page.status, "located");
   assert.deepEqual(page.pages, [4]);
   assert.equal(page.basis, "cell_text");
+});
+
+test("a short row is not placed by its cells: the same words and numbers on a page of prose are not that row", () => {
+  const found = deriveMarkdownStructure({ text: "| Item | A | B |\n| - | - | - |\n| Age | 65 | 70 |\n" });
+  const located = locateUnitsOnPages({ tables: found.tables, pages: [{ page: 1, text: "The age of 70 and then 65 were the cut-offs, and A and B were arms." }] });
+  assert.equal(materialRowPage(located.tables[0], 2).status, "unknown");
 });
 
 test("a scan has no text layer: the page is unknown for that reason, and the document is said to have none", () => {
@@ -398,6 +412,12 @@ test("without pages a PDF's values are unlocated, not located: their table and c
   const flow = sourceMaterialsCoverage({ tables: clinical.tables, pagination: "flow", format: "md", pages: { status: "not_paginated" }, extraction: {} });
   assert.equal(flow.values.unlocated, 0);
   assert.equal(flow.values.located, flow.values.total - flow.values.unextracted);
+});
+
+test("a spreadsheet read only as the parser's text has no sheet addresses: its values are unlocated, not located", () => {
+  const coverage = sourceMaterialsCoverage({ tables: clinical.tables, pagination: "unaddressed", format: "xlsx", pages: { status: "unavailable", reason: "sheet_reader_unavailable" }, extraction: {} });
+  assert.equal(coverage.values.located, 0);
+  assert.equal(coverage.values.unlocated, coverage.values.total - coverage.values.unextracted);
 });
 
 test("a scanned document or an image says its values are OCR readings of unknown uncertainty and puts them unlocated", () => {

@@ -51,6 +51,8 @@ export const SOURCE_LOCATE_LIMITS = Object.freeze({
   minRowNeedle: 4,
   /** A cell shorter than this does not count towards the cell-level match. */
   minCellNeedle: 2,
+  /** Cells placed one by one must together carry at least this many letters and digits. */
+  minCellsNeedle: 8,
   minCaptionNeedle: 12,
 })
 
@@ -118,7 +120,8 @@ export function locateUnitsOnPages({ tables, figures = [], pages, pageCount = pa
         // The cells may come out of the PDF in another order: every cell of the
         // row on one page still places it, when there are at least two to place.
         const parts = ordered.filter((cell) => cell.skeleton.length >= SOURCE_LOCATE_LIMITS.minCellNeedle)
-        if (parts.length >= 2) {
+        // Short rows ("Age | 65 | 70") would be found on any page that mentions those words and numbers: they are not placed this way.
+        if (parts.length >= 2 && parts.reduce((total, cell) => total + cell.skeleton.length, 0) >= SOURCE_LOCATE_LIMITS.minCellsNeedle) {
           found = withText.filter((entry) => parts.every((cell) => entry.skeleton.includes(cell.skeleton))).map((entry) => entry.page)
           basis = 'cell_text'
         }
@@ -129,9 +132,11 @@ export function locateUnitsOnPages({ tables, figures = [], pages, pageCount = pa
     // Rows with the same outcome run together, so a long table is a few entries.
     /** @type {Record<string, any>[]} */
     const rowPages = []
+    /** @param {MaterialPage} entry */
+    const outcome = (entry) => JSON.stringify([entry.status, entry.pages ?? null, entry.candidates ?? null, entry.basis ?? null, entry.reason ?? null])
     for (const { row, page } of results) {
       const last = rowPages[rowPages.length - 1]
-      const same = last && last.to === row - 1 && JSON.stringify({ ...last, from: 0, to: 0 }) === JSON.stringify({ ...page, from: 0, to: 0 })
+      const same = last && last.to === row - 1 && outcome(last) === outcome(page)
       if (same) last.to = row
       else rowPages.push({ from: row, to: row, ...page })
     }
@@ -180,7 +185,9 @@ export function locateUnitsOnPages({ tables, figures = [], pages, pageCount = pa
  *   location, and is exact;
  * - `flow` (text, Markdown, HTML): the table and cell and their character span;
  * - `image`: a scan has no pages and the text is the parser's reading of pixels —
- *   unlocated, said so.
+ *   unlocated, said so;
+ * - `unaddressed`: a spreadsheet read only as the parser's text — its cells have no
+ *   sheet address here, so no value has a place in the workbook: unlocated.
  *
  * @param {Record<string, any>} table @param {string} pagination
  */
@@ -200,7 +207,7 @@ export function materialTableCounts(table, pagination) {
       if (status === 'located') counts.located += 1
       else if (status === 'ambiguous') counts.ambiguous += 1
       else counts.unlocated += 1
-    } else if (pagination === 'image') counts.unlocated += 1
+    } else if (pagination === 'image' || pagination === 'unaddressed') counts.unlocated += 1
     else counts.located += 1
   }
   counts.unextracted += Number.isSafeInteger(table.unextracted) ? table.unextracted : 0

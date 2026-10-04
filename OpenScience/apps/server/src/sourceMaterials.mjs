@@ -194,15 +194,15 @@ export function createSourceMaterials({ config, controller = null, report = () =
   async function extract({ text, file = null, name, sha256: sourceSha256, parserRevision, signal }) {
     const at = now().toISOString();
     const format = sourceFileFormat(name);
-    const pagination = sourceMaterialsPagination(format);
+    let pagination = sourceMaterialsPagination(format);
     const capture = materialCaptureText(text);
     const textSha256 = sha256(capture);
     /** @type {{ materials?: string, parser?: string, locator?: string }} */
     const extraction = { parser: parserRevision };
-    const identity = { format, pagination, sourceSha256, textSha256, extraction, now: at };
+    const identity = () => ({ format, pagination, sourceSha256, textSha256, extraction, now: at });
     /** None was attempted, and the ledger says why. @param {string} why @param {{ status: string, reason?: string }} [pages] */
     const notAttempted = (why, pages = { status: "unavailable", reason: why }) => ({
-      coverage: sourceMaterialsCoverage({ tables: [], pages, unavailable: why, ...identity }), structure: null, tables: [],
+      coverage: sourceMaterialsCoverage({ tables: [], pages, unavailable: why, ...identity() }), structure: null, tables: [],
     });
     if (!enabled()) return notAttempted("materials_disabled");
     if (!capture.trim()) return notAttempted("no_text");
@@ -217,11 +217,13 @@ export function createSourceMaterials({ config, controller = null, report = () =
       const extraLimits = [];
       if (format === "csv" || format === "tsv") {
         derived = deriveDelimitedStructure({ text: capture, delimiter: format === "tsv" ? "\t" : "," });
-      } else if (["xlsx", "xlsm"].includes(format) && file) {
+      } else if (["xlsx", "xlsm", "xls"].includes(format)) {
         derived = { tables: [], figures: [], supplements: [], limits: [] };
         /** @type {string | null} */
         let reason = null;
-        if (!locatorAvailable()) reason = "sheet_reader_unavailable";
+        // Only a workbook of the open format is read as cells (openpyxl); a legacy .xls is the parser's text alone.
+        if (format === "xls") reason = "sheet_reader_unsupported";
+        else if (!file || !locatorAvailable()) reason = "sheet_reader_unavailable";
         else {
           try {
             const { result } = await measure({ file, name: `workbook.${format}`, sourceSha256, format,
@@ -238,11 +240,13 @@ export function createSourceMaterials({ config, controller = null, report = () =
           }
         }
         if (reason) {
-          // The workbook's Markdown from the parser still holds its tables, without a sheet address.
+          // The workbook's Markdown from the parser still holds its tables, without a
+          // sheet address: its values have no place in the workbook, and say so.
           const fallback = deriveMarkdownStructure({ text: capture });
           derived = { ...fallback };
           extraLimits.push(reason);
           pages = { status: "unavailable", reason };
+          pagination = "unaddressed";
         }
       } else {
         derived = deriveMarkdownStructure({ text: capture });
@@ -291,7 +295,7 @@ export function createSourceMaterials({ config, controller = null, report = () =
         return { ...table, origin, ...(origin === "ocr" ? { uncertainty: "unknown" } : {}) };
       });
       const coverage = sourceMaterialsCoverage({
-        tables, figures, supplements: derived.supplements, pages, limits: [...derived.limits, ...extraLimits, ...budgetLimits], ...identity,
+        tables, figures, supplements: derived.supplements, pages, limits: [...derived.limits, ...extraLimits, ...budgetLimits], ...identity(),
       });
       // A ledger that does not hold together is not stored as one: it is a failure, and says so.
       if (sourceMaterialsCoverageIssues(coverage).length) throw new Error("materials_coverage_invalid");
@@ -314,7 +318,7 @@ export function createSourceMaterials({ config, controller = null, report = () =
       if (signal?.aborted) throw error;
       note("source_materials_failed");
       return {
-        coverage: sourceMaterialsCoverage({ tables: [], pages: { status: "failed", reason: "derivation_failed" }, failure: "derivation_failed", ...identity }),
+        coverage: sourceMaterialsCoverage({ tables: [], pages: { status: "failed", reason: "derivation_failed" }, failure: "derivation_failed", ...identity() }),
         structure: null, tables: [],
       };
     }

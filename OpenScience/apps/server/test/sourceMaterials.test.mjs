@@ -10,6 +10,7 @@ import { HttpError } from "../src/security.mjs";
 import { createSourceMaterials, materialsRecords, materialsRecordIds } from "../src/sourceMaterials.mjs";
 import { localIntakeController, pythonCan, writeMaterialFixtures } from "./helpers/vcrIntakeLocal.mjs";
 
+const committed = name => new URL(`./fixtures/materials/${name}`, import.meta.url).pathname;
 const fixtureText = name => readFileSync(new URL(`../../../packages/domain/test/fixtures/materials/${name}`, import.meta.url), "utf8");
 const sha = bytes => createHash("sha256").update(bytes).digest("hex");
 const PARSER = "evimed-extract@0.5.0";
@@ -194,6 +195,25 @@ test("a spreadsheet's cells are read in the container and keep their sheet addre
   assert.match(result.coverage.extraction.locator, /^evimed-source-material-extract@/);
 });
 
+test("a workbook that cannot be read as cells keeps the parser's tables, with no sheet address: its values are unlocated, and the reason is said", async t => {
+  const w = await world(t);
+  const text = "| Arm | Events, n (%) |\n| --- | --- |\n| Drug | 12 (40.0) |\n| Placebo | 9 (30.0) |\n";
+  const bare = createSourceMaterials({ config: w.config, controller: null });
+  const unread = await bare.extract({ text, file: "/data/supplement.xlsx", name: "supplement.xlsx", sha256: "f".repeat(64), parserRevision: PARSER });
+  assert.equal(unread.coverage.pagination, "unaddressed");
+  assert.deepEqual(unread.coverage.pages, { status: "unavailable", reason: "sheet_reader_unavailable" });
+  assert.equal(unread.coverage.values.located, 0);
+  assert.equal(unread.coverage.values.unlocated, 2);
+  assert.ok(unread.coverage.reasons.includes("sheet_reader_unavailable"));
+  assert.equal(unread.coverage.status, "partial");
+  assert.equal(unread.tables[0].kind, "table", "a Markdown table of the parser's text, not a sheet");
+  // The legacy format is never read as cells.
+  const legacy = await w.materials.extract({ text, file: "/data/supplement.xls", name: "supplement.xls", sha256: "f".repeat(64), parserRevision: PARSER });
+  assert.deepEqual(legacy.coverage.pages, { status: "unavailable", reason: "sheet_reader_unsupported" });
+  assert.equal(legacy.coverage.pagination, "unaddressed");
+  assert.equal(w.calls.length, 0);
+});
+
 test("a delimited file is located by row and column, with no container at all", async t => {
   const w = await world(t, {});
   const noController = createSourceMaterials({ config: w.config, controller: null, now: () => new Date("2026-10-04T10:00:00.000Z") });
@@ -284,4 +304,42 @@ test("the caller's own cancellation stops the extraction instead of becoming a l
   const abort = new AbortController();
   const canceling = createSourceMaterials({ config: w.config, controller: { runVcrIntake: async () => { abort.abort(); throw new DOMException("Intake canceled.", "AbortError"); } } });
   await assert.rejects(canceling.extract({ text: fixtureText("clinical-table.md"), file: files["paper.pdf"], name: "paper.pdf", sha256: sha(await fs.readFile(files["paper.pdf"])), parserRevision: PARSER, signal: abort.signal }), { name: "AbortError" });
+});
+
+// The committed fixtures are real files, not built by this suite's helpers: a PDF a word processor laid out (its label cells wrap onto several
+// lines in the text layer), an image-only PDF and a workbook written by openpyxl. They are small and synthetic.
+test("a laid-out PDF's tables are all placed on their pages, row by row, by the text layer a real renderer wrote", { skip: !python }, async t => {
+  const w = await world(t);
+  const text = readFileSync(committed("clinical-paper.md"), "utf8");
+  const bytes = await fs.readFile(committed("clinical-paper.pdf"));
+  const result = await w.materials.extract({ text, file: committed("clinical-paper.pdf"), name: "clinical-paper.pdf", sha256: sha(bytes), parserRevision: PARSER });
+  assert.equal(result.coverage.status, "extracted");
+  assert.deepEqual(result.coverage.pages, { status: "mapped", pageCount: 2, textLayerPages: 2 });
+  assert.equal(result.coverage.values.total, 27);
+  assert.equal(result.coverage.values.located, 27, JSON.stringify(result.coverage.values));
+  assert.deepEqual(result.tables.map(table => table.page), [{ status: "located", pages: [1], basis: "rows" }, { status: "located", pages: [2], basis: "rows" }]);
+  assert.deepEqual(materialRowPage(result.tables[0], 4), { status: "located", pages: [1], basis: "row_text" }, "the footnoted row, whose marker the PDF prints as a plain letter");
+  assert.deepEqual(result.coverage.footnotes, { linked: 1, orphanMarkers: 0, orphanNotes: 0 });
+});
+
+test("an image-only PDF has no text layer: nothing is placed, and the OCR reading says its uncertainty is unknown", { skip: !python }, async t => {
+  const w = await world(t);
+  const bytes = await fs.readFile(committed("scanned-page.pdf"));
+  const result = await w.materials.extract({ text: fixtureText("scanned-page.md"), file: committed("scanned-page.pdf"), name: "scanned-page.pdf", sha256: sha(bytes), parserRevision: PARSER });
+  assert.deepEqual(result.coverage.pages, { status: "no_text_layer", pageCount: 1, textLayerPages: 0, noTextLayerPages: [1] });
+  assert.equal(result.coverage.origin, "ocr");
+  assert.equal(result.coverage.values.located, 0);
+});
+
+test("a committed workbook keeps its sheet addresses, its merged range and its hidden sheet", { skip: !python }, async t => {
+  const w = await world(t);
+  const bytes = await fs.readFile(committed("supplement.xlsx"));
+  const result = await w.materials.extract({ text: "(the parser's text of the workbook)", file: committed("supplement.xlsx"), name: "supplement.xlsx", sha256: sha(bytes), parserRevision: PARSER });
+  assert.deepEqual(result.tables.map(table => [table.name, table.sheetState ?? "visible", table.merges ?? []]), [["Table S2", "visible", ["A5:D5"]], ["Notes", "hidden", []]]);
+  const sheet = result.tables[0];
+  assert.equal(sheet.cells.find(cell => cell.a === "B3").v.percentCheck?.consistent, undefined, "no denominator in this header: no arithmetic claimed");
+  assert.equal(sheet.cells.find(cell => cell.a === "D2").v.numberFormat, "0.0%");
+  assert.equal(sheet.cells.find(cell => cell.a === "D3").formula, "=B3");
+  assert.equal(sheet.cells.find(cell => cell.a === "D3").v, undefined, "openpyxl cached nothing, so the formula has no value");
+  assert.equal(result.coverage.values.located, result.coverage.values.total);
 });

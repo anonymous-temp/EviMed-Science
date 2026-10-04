@@ -2301,6 +2301,8 @@ export function claimVerification({ matrix, sourceArtifacts = {} } = {}) {
 
 /** The longest preserved text a quotation's place is derived from; a larger one says so instead. */
 const LOCATION_MAX_CHARS = 4 * 1024 * 1024;
+/** How long one verification spends placing quotations: the rest are `unknown`, said so, and the marks are never delayed past it. */
+const LOCATION_BUDGET_MS = 3000;
 
 /**
  * Where each verified quotation sits in its preserved source — its table, row
@@ -2328,6 +2330,7 @@ export function attachClaimSourceLocations(verdict, { matrix, sourceArtifacts = 
   const matrixClaims = new Map((Array.isArray(matrix?.claims) ? matrix.claims : []).map((/** @type {any} */ claim) => [String(claim?.claimId), claim]));
   /** @type {Map<string, any>} */
   const structures = new Map();
+  const started = Date.now();
   for (const claim of Array.isArray(verdict?.claims) ? verdict.claims : []) {
     const origins = claimEvidenceSources(matrixClaims.get(claim.claimId));
     (claim.sources ?? []).forEach((/** @type {any} */ source, /** @type {number} */ index) => {
@@ -2335,6 +2338,10 @@ export function attachClaimSourceLocations(verdict, { matrix, sourceArtifacts = 
       const text = source.artifactPath ? artifactText.get(source.artifactPath) : undefined;
       if (source.status !== "verified" || typeof quote !== "string" || typeof text !== "string") {
         source.location = { status: "unknown", page: { status: "unknown", reason: "quote_not_verified" }, reason: String(source.status ?? "no_quote") };
+        return;
+      }
+      if (Date.now() - started > LOCATION_BUDGET_MS) {
+        source.location = { status: "unknown", page: { status: "unknown", reason: "locate_budget" }, reason: "locate_budget" };
         return;
       }
       if (text.length > LOCATION_MAX_CHARS) {
