@@ -86,6 +86,19 @@ export const RESULT_PACKAGE_SCAN_LIMIT_BYTES = 8 * 1024 * 1024
 /** The methods whose engine is the R service; every other admitted method is the Python adapter's. */
 const R_ENGINE_METHODS = Object.freeze(['design.analytic', 'comparator.evalue'])
 
+/**
+ * The variable the Python adapter reads each method's engine root from (`METHODS` in
+ * `deploy/specialist-adapter/evimed_specialist_adapter/deterministic_replay.py`), so the steps can name it. A test reads
+ * the adapter's own table and holds the two equal.
+ */
+const PYTHON_ENGINE_ROOTS = Object.freeze({
+  'meta.dl': 'EVIMED_REPLAY_META_ROOT',
+  'faers.signals': 'EVIMED_REPLAY_SAFETY_ROOT',
+  'bibliometric.network': 'EVIMED_REPLAY_BIBLIOMETRIC_ROOT',
+})
+const PYTHON_ENGINE_SOURCE = 'deploy/specialist-adapter/evimed_specialist_adapter/deterministic_replay.py'
+const R_ENGINE_SOURCE = '项目代码/vcr-engine/README.md'
+
 /** Bounds on the records, so a record always fits its allowance beside the files. */
 const RECORD_LIMITS = Object.freeze({ replays: 10, replayValues: 500, findings: 200, corrections: 10, message: 600 })
 
@@ -296,18 +309,19 @@ export function packageReplay(replay) {
  * version's re-runs and revisions. A part that was not read is `unavailable` with its reason, and a part that has no
  * record is `none_recorded`: neither reads as clean.
  * @param {any} version
- * @param {{ replays?: { status: 'recorded' | 'unavailable', items?: any[], reason?: string } | null, corrections?: { status: 'recorded' | 'unavailable', items?: any[], reason?: string } | null }} read
+ * @param {{ replays?: { status: string, items?: any[], reason?: string } | null, corrections?: { status: string, items?: any[], reason?: string } | null }} read
  */
 export function verificationRecord(version, { replays = null, corrections = null } = {}) {
   const findings = (Array.isArray(version.findings) ? version.findings : []).slice(0, RECORD_LIMITS.findings)
   const review = version.review ?? { status: 'unknown' }
   const bindings = version.bindings ?? null
-  /** @param {{ status: string, items?: any[], reason?: string } | null} read @param {(item: any) => any} project */
-  const part = (read, project) => {
+  /** @param {{ status: string, items?: any[], reason?: string } | null} read @param {(item: any) => any} project @param {number} limit */
+  const part = (read, project, limit) => {
     if (!read) return { status: 'unavailable', reason: 'not_read', items: [] }
     if (read.status !== 'recorded') return { status: 'unavailable', reason: read.reason ?? 'not_read', items: [] }
-    const items = (read.items ?? []).map(project)
-    return { status: items.length ? 'recorded' : 'none_recorded', items }
+    const all = read.items ?? []
+    const items = all.slice(0, limit).map(project)
+    return { status: items.length ? 'recorded' : 'none_recorded', items, ...(all.length > limit ? { truncated: all.length - limit } : {}) }
   }
   return {
     versionId: version.versionId,
@@ -318,20 +332,17 @@ export function verificationRecord(version, { replays = null, corrections = null
     review: { status: review.status ?? 'unknown', matrixVersionId: review.matrixVersionId ?? null, matrixDigest: review.matrixDigest ?? null,
       claims: review.verification?.counts ?? null },
     bindings: bindings ? { status: bindings.status ?? 'not_checked', counts: bindings.counts ?? null } : { status: 'not_checked', counts: null },
-    replays: part(replays, packageReplay),
-    corrections: part(corrections, packageCorrection),
+    replays: part(replays, packageReplay, RECORD_LIMITS.replays),
+    corrections: part(corrections, packageCorrection, RECORD_LIMITS.corrections),
     scientificApplicability: 'not_assessed',
   }
 }
 
-/** Bounds on how many replays and corrections a record keeps. */
-export const RESULT_PACKAGE_RECORD_LIMITS = RECORD_LIMITS
-
 /** The steps by basis. Prose a researcher follows; nothing the platform or the verifier runs. */
 const REPRODUCTION_STEPS = Object.freeze({
   engine_recipe: Object.freeze([
-    'Obtain the engine named under `engine`, at the code whose file digests are listed under `executionFiles`, and install the packages listed under `environment.packages` at those versions.',
-    'Write `recipe` to recipe.json and the file named under `inputs` (its sha256 is recorded; verify.py has checked it) to the path `recipe.input.path` names, then run the engine on them.',
+    'Obtain the engine named under `engine` from the EviMed source repository (`engineSource`) at the code whose file digests are listed under `executionFiles` (paths are relative to the engine root, which the Python adapter reads from `engineRootVariable`; `adapter/deterministic_replay.py` is the adapter itself), and install the packages listed under `environment.packages` at those versions.',
+    'Write `recipe` unchanged to recipe.json (its digest covers `recipe.input.path`) and the file named under `inputs` (its sha256 is recorded; verify.py has checked it) to any path, then run `invocation` with that path. The R engine is a service: its own README describes how a job is submitted.',
     'The engine refuses a recipe whose code or environment digest is not its own (replay_code_changed, replay_environment_incompatible). That refusal is the answer: the environment is not the recorded one, and the numbers it would give are not a reproduction.',
     'Take the machine values the engine wrote (a list of {key, value, unit}) to a file and run `python3 verify.py --compare <file>`. It compares each key under the tolerance the original declared, never one taken from your run.',
   ]),
@@ -391,7 +402,11 @@ export function reproductionRecord(version, { recipe = null, archivePathFor }) {
       versionId: version.versionId, digest: version.digest, basis: 'engine_recipe',
       status: reasons.length ? 'partial' : 'reconstructable', reasons,
       method: version.method ?? null,
-      engine: R_ENGINE_METHODS.includes(frozen.method) ? 'vcr-engine (R service)' : 'evimed_specialist_adapter.deterministic_replay (Python)',
+      ...(R_ENGINE_METHODS.includes(frozen.method)
+        ? { engine: 'vcr-engine (R service)', engineSource: R_ENGINE_SOURCE, invocation: null }
+        : { engine: 'evimed_specialist_adapter.deterministic_replay (Python)', engineSource: PYTHON_ENGINE_SOURCE,
+          engineRootVariable: /** @type {Record<string, string>} */ (PYTHON_ENGINE_ROOTS)[frozen.method] ?? null,
+          invocation: 'python -m evimed_specialist_adapter.deterministic_replay --recipe recipe.json --input <the input file> --output output.json' }),
       recipe: { method: frozen.method, version: frozen.version ?? null, parameters: frozen.parameters ?? {},
         input: { path: frozen.input?.path ?? null, sha256: frozen.input?.sha256 ?? null },
         codeDigest: frozen.codeDigest ?? null, environmentDigest: frozen.environmentDigest ?? null },

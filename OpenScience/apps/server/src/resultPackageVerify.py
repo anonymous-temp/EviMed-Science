@@ -7,9 +7,11 @@
 
 What it checks: that every file the manifest lists is there with the size and sha-256 it states; that nothing else is
 there (an extra file, a link, a name that would land outside the package); that the versions in the manifest agree with
-their files; that every input, code and environment a version records is either a file or a named omission; and that the
-completeness the manifest declares is the one its omissions and gaps give. It prints one JSON report. Exit status: 0 the
-package is as declared, 1 it is not, 2 it could not be read as a package, 3 (with --compare) the numbers you gave differ.
+their files; that every input, code and environment a version records is either a file or a named omission; that the
+records beside the files (execution, verification, reproduction) cite files and versions the package holds, with the
+digests it holds them under; and that the completeness the manifest declares is the one its omissions and gaps give.
+It prints one JSON report. Exit status: 0 the package is as declared, 1 it is not, 2 it could not be read as a package,
+3 (with --compare) the numbers you gave differ.
 
 What it does not do: it runs, imports and installs nothing from the package, opens no network connection and writes no
 file. Reading a .zip never extracts it. It is standard library only (hashlib, json, zipfile) so there is nothing to
@@ -144,6 +146,18 @@ def sha256(source, name, limit):
             return None, size
         digest.update(chunk)
     return digest.hexdigest(), size
+
+
+def walk(value, depth=0):
+    """Every dict inside a parsed record, to a bounded depth."""
+    if depth > 12:
+        return
+    if isinstance(value, dict):
+        yield value
+        value = list(value.values())
+    if isinstance(value, list):
+        for item in value:
+            yield from walk(item, depth + 1)
 
 
 def check(source):
@@ -285,10 +299,22 @@ def check(source):
         for entry in record.get("versions") or record.get("calculations") or []:
             if isinstance(entry, dict) and entry.get("versionId") not in versions:
                 problem("record_version_unknown", name, str(entry.get("versionId"))[:80])
-            if isinstance(entry, dict) and key == "reproduction":
-                for item in entry.get("inputs") or []:
-                    if isinstance(item, dict) and item.get("archivePath") is not None and item["archivePath"] not in listed:
-                        problem("reproduction_input_missing", name, str(item["archivePath"])[:200])
+            if isinstance(entry, dict) and key == "reproduction" and entry.get("versionId") in versions:
+                stated = [(r.get("key"), r.get("value"), r.get("unit"), r.get("absoluteTolerance"), r.get("relativeTolerance"))
+                          for r in (entry.get("expected") or {}).get("values") or [] if isinstance(r, dict)]
+                held = [(r.get("key"), r.get("value"), r.get("unit"), r.get("absoluteTolerance"), r.get("relativeTolerance"))
+                        for r in versions[entry["versionId"]].get("machineValues") or [] if isinstance(r, dict)
+                        and isinstance(r.get("key"), str) and isinstance(r.get("value"), (int, float)) and not isinstance(r.get("value"), bool)]
+                if stated != held[:len(stated)] or (len(stated) < len(held) and not (entry.get("expected") or {}).get("truncated")):
+                    problem("expected_values_inconsistent", name, str(entry.get("versionId")))
+        for node in walk(record):
+            target = node.get("archivePath")
+            if not isinstance(target, str):
+                continue
+            if target not in listed:
+                problem("record_file_missing", name, target[:200])
+            elif isinstance(node.get("digest"), str) and listed[target].get("sha256") != node["digest"]:
+                problem("record_digest_mismatch", name, target[:200])
     report["files"] = len(listed)
     return finish(report, problems, warnings, manifest, listed), manifest, listed
 

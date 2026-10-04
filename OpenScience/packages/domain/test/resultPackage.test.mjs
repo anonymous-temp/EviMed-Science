@@ -116,6 +116,8 @@ test("a verification record never lets a check that was not run read as a check 
   assert.equal(read.replays.items[0].comparison.numbers.values.length, 500);
   assert.equal(read.replays.items[0].comparison.numbers.truncated, 100, "a long comparison says how much it left out");
   assert.equal(read.replays.items[0].comparison.scientificApplicability, "not_assessed");
+  const many = verificationRecord(calculation(), { replays: { status: "recorded", items: Array.from({ length: 12 }, (_, index) => ({ id: `replay_${index}`, state: "succeeded" })) } });
+  assert.deepEqual([many.replays.items.length, many.replays.truncated], [10, 2], "a long history says how many re-runs it left out");
 });
 
 test("an engine recipe is reconstructable only with its input and an environment; a script's rerun is partial by its own account", () => {

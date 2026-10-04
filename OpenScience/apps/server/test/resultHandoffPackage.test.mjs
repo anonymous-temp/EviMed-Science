@@ -9,17 +9,19 @@
 // never rides in, and a record that cannot be read never refuses the package.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { execFile } from "node:child_process";
+import { execFile, spawnSync } from "node:child_process";
+import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { unzipSync, zipSync } from "fflate";
-import { RESULT_PACKAGE_FILE_ROLES, RESULT_PACKAGE_FORMAT, RESULT_PACKAGE_OMISSION_REASONS, RESULT_PACKAGE_RECORD_FILES, compareResultNumbers, projectResultCorrection } from "@evimed/domain";
+import { RESULT_PACKAGE_FILE_ROLES, engineJobSnapshot, RESULT_PACKAGE_FORMAT, RESULT_PACKAGE_OMISSION_REASONS, RESULT_PACKAGE_RECORD_FILES, compareResultNumbers, projectResultCorrection, reproductionRecord } from "@evimed/domain";
 import { ResultExportService } from "../src/resultExport.mjs";
 import { ResultProvenanceService } from "../src/resultProvenanceService.mjs";
-import { ResultReplayService } from "../src/resultReplayService.mjs";
+import { ResultReplayService, verifiedEngineFacts } from "../src/resultReplayService.mjs";
 import { replayDigest } from "../src/resultReplayClient.mjs";
 import { captureSkillResults, readSkillExecution } from "../src/skillExecution.mjs";
 import { stableBytes } from "../src/resultDeliveryCapture.mjs";
@@ -220,7 +222,17 @@ test("a changed byte, a missing file, an undeclared extra file and a name that e
   const dependency = Object.keys(clean).find(name => name.startsWith("results/rv_") && !name.startsWith(`results/${original.versionId}/`));
   const manifestOf = files => JSON.parse(Buffer.from(files["manifest.json"]).toString());
   const rewrite = (files, change) => { const manifest = manifestOf(files); change(manifest); return { ...files, "manifest.json": Buffer.from(JSON.stringify(manifest)) }; };
+  /** A record rewritten and the manifest re-sealed over it, the way someone who edits both would: the hashes agree, the contents must not. */
+  const reseal = (files, name, change) => {
+    const record = JSON.parse(Buffer.from(files[name]).toString()); change(record);
+    const bytes = Buffer.from(`${JSON.stringify(record, null, 2)}\n`);
+    return rewrite({ ...files, [name]: bytes }, manifest => { Object.assign(manifest.files.find(file => file.archivePath === name), { bytes: bytes.length, sha256: sha(bytes) }); });
+  };
   const cases = {
+    "a record that cites a file under another digest": { files: reseal(clean, "execution.json", record => { record.versions[0].inputs[0].digest = "9".repeat(64); }), code: "record_digest_mismatch" },
+    "a record that cites a file the package does not hold": { files: reseal(clean, "execution.json", record => { record.versions[0].inputs[0].archivePath = "results/rv_none/input.json"; }), code: "record_file_missing" },
+    "a record about a version the package does not describe": { files: reseal(clean, "verification.json", record => { record.versions[0].versionId = `rv_${"8".repeat(64)}`; }), code: "record_version_unknown" },
+    "expected numbers that are not the version's": { files: reseal(clean, "reproduction.json", record => { record.calculations[0].expected.values[0].value += 1; }), code: "expected_values_inconsistent" },
     "a changed byte": { files: { ...clean, [resultFile]: Buffer.from(Buffer.from(clean[resultFile]).toString().replace("receipt", "receipz")) }, code: "file_hash_mismatch", path: resultFile },
     "a changed size": { files: rewrite(clean, manifest => { manifest.files.find(file => file.archivePath === resultFile).bytes += 1; }), code: "file_size_mismatch", path: resultFile },
     "a missing file": { files: Object.fromEntries(Object.entries(clean).filter(([name]) => name !== dependency)), code: "file_missing", path: dependency },
@@ -515,4 +527,92 @@ test("the verifier and the exporter name the same format, records and omission r
   assert.equal(manifest.format, RESULT_PACKAGE_FORMAT);
   const clean = await verify((await extract(t, (await f.exportOf().export(OWNER, "p", original.versionId)).bytes)).root);
   assert.deepEqual(clean.report.warnings, [], "a package the exporter wrote has nothing the verifier merely tolerates");
+});
+
+test("the engine variables a reproduction names are the ones the adapter reads", async () => {
+  const adapter = await readFile(new URL("../../../deploy/specialist-adapter/evimed_specialist_adapter/deterministic_replay.py", import.meta.url), "utf8");
+  const table = Object.fromEntries([...adapter.matchAll(/"([a-z.]+)": \{\s*"environment": "([A-Z_]+)"/g)].map(match => [match[1], match[2]]));
+  assert.deepEqual(Object.keys(table).sort(), ["bibliometric.network", "faers.signals", "meta.dl"], "the adapter's table was not read; the pattern is wrong");
+  for (const [method, variable] of Object.entries(table)) {
+    const record = domainReproduction(method);
+    assert.equal(record.engineRootVariable, variable, method);
+    assert.equal(record.engineSource, "deploy/specialist-adapter/evimed_specialist_adapter/deterministic_replay.py");
+  }
+  assert.equal(domainReproduction("design.analytic").invocation, null, "the R engine is a service, and no command is made up for it");
+});
+
+/** @param {string} method */
+function domainReproduction(method) {
+  return reproductionRecord({ versionId: `rv_${"a".repeat(64)}`, digest: "1".repeat(64), size: 1, path: "r.json", inputs: [], machineValues: [{ key: "k", value: 1 }], snapshot: {} },
+    { recipe: { recipe: { method, input: { sha256: "2".repeat(64) } } }, archivePathFor: () => null });
+}
+
+// The documented way to reproduce, followed to the end with the real engine: the recipe and the input are taken out of the
+// package, the adapter's own command is run on them, and the numbers it writes are held to the original's tolerances by
+// the shipped verifier. Needs the Python engines (numpy, scipy, pydantic and 项目代码/meta); skipped where they are not
+// installed unless OPEN_SCIENCE_TEST_RESULT_ENGINES=1 says this job must have them.
+const ADAPTER = new URL("../../../deploy/specialist-adapter", import.meta.url).pathname;
+const META_ROOT = fileURLToPath(new URL("../../../../项目代码/meta", import.meta.url));
+const enginesRequired = process.env.OPEN_SCIENCE_TEST_RESULT_ENGINES === "1";
+const enginesPresent = existsSync(path.join(META_ROOT, "new_meta")) && spawnSync("python3", ["-c", "import numpy, scipy, pydantic"]).status === 0;
+
+test("a recipient reproduces an engine result from the package alone, and an engine that is not the recorded one says so", { skip: !enginesRequired && !enginesPresent ? "the Python engines are not installed" : false }, async t => {
+  const environment = { ...process.env, PYTHONPATH: ADAPTER, EVIMED_REPLAY_META_ROOT: META_ROOT };
+  const adapter = (args, options = {}) => run("python3", ["-m", "evimed_specialist_adapter.deterministic_replay", ...args], { env: environment, ...options });
+  const measured = JSON.parse((await run("python3", ["-c", "import json; from evimed_specialist_adapter import deterministic_replay as r; print(json.dumps(r.manifest('meta.dl')))"], { env: environment })).stdout);
+  const f = await fixture(t);
+  const input = Buffer.from(JSON.stringify({ studies: [0, 1, 3].map((effect, index) => ({ id: String(index), label: String(index), yi: effect, vi: 0.1 })), effectMeasure: "MD", outcome: "outcome" }));
+  const recipe = { method: "meta.dl", version: "1", input: { path: "result-replays/job_1/input.json", sha256: sha(input) }, parameters: {},
+    codeDigest: measured.codeDigest, environmentDigest: measured.environmentDigest };
+  const work = await mkdtemp(path.join(os.tmpdir(), "evimed-handoff-engine-"));
+  t.after(() => rm(work, { recursive: true, force: true }));
+  await writeFile(path.join(work, "recipe.json"), JSON.stringify(recipe)); await writeFile(path.join(work, "input.json"), input);
+  await adapter(["--recipe", path.join(work, "recipe.json"), "--input", path.join(work, "input.json"), "--output", path.join(work, "original.json")]);
+  const produced = await readFile(path.join(work, "original.json"));
+  const output = JSON.parse(produced.toString());
+
+  // The platform's own capture of that run: the input and the engine's output, bound to the recipe the engine was given.
+  await f.write(recipe.input.path, input); await f.write("result-replays/job_1/output/result.json", produced);
+  const inputVersion = await f.results.captureFile({ userId: OWNER, project: f.project, relativePath: recipe.input.path, expectedDigest: sha(input),
+    producer: { kind: "tool", sessionId: "s", callId: "c", eventId: "input:c" } });
+  const inputs = [{ kind: "data", id: inputVersion.versionId, versionId: inputVersion.versionId, digest: inputVersion.digest, availability: "captured" }];
+  const facts = verifiedEngineFacts(recipe, { codeFiles: measured.codeFiles, environment: measured.environment }, output);
+  const original = await f.results.captureFile({ userId: OWNER, project: f.project, relativePath: "result-replays/job_1/output/result.json", expectedDigest: sha(produced),
+    producer: { kind: "engine", sessionId: "s", callId: "job_1", eventId: "job_1" }, inputs, machineValues: output.machineValues,
+    snapshot: engineJobSnapshot({ recipe, capability: facts.capability, output: facts.output, inputs }),
+    code: { kind: "code", id: "meta.dl", digest: recipe.codeDigest, availability: "reference" }, environment: { kind: "code", id: "engine-environment", digest: recipe.environmentDigest, availability: "reference" } });
+  await f.replays.admit(OWNER, { projectId: "p", versionId: original.versionId, inputVersionId: inputVersion.versionId, recipe, machineValues: output.machineValues,
+    receipt: { recipeDigest: replayDigest(recipe), outputDigest: original.digest } });
+  assert.equal(output.receipt.recipeDigest, replayDigest(recipe), "the JavaScript and Python canonical forms of a recipe agree");
+
+  const pkg = await extract(t, (await f.exportOf().export(OWNER, "p", original.versionId)).bytes);
+  const [calculation] = pkg.json("reproduction.json").calculations;
+  assert.equal(calculation.status, "reconstructable");
+  assert.deepEqual(calculation.environment.packages, measured.environment.packages, "the packages to install are the ones the engine measured");
+  assert.deepEqual(calculation.executionFiles.map(file => file.sha256), measured.codeFiles.map(file => file.sha256));
+  assert.equal(calculation.engineRootVariable, "EVIMED_REPLAY_META_ROOT");
+
+  // The recipient: the recipe and the input out of the package, the adapter's command, the shipped verifier.
+  const recipient = await mkdtemp(path.join(os.tmpdir(), "evimed-handoff-recipient-"));
+  t.after(() => rm(recipient, { recursive: true, force: true }));
+  await writeFile(path.join(recipient, "recipe.json"), JSON.stringify(calculation.recipe));
+  await writeFile(path.join(recipient, "the-input.json"), pkg.files[calculation.inputs[0].archivePath]);
+  await adapter(["--recipe", path.join(recipient, "recipe.json"), "--input", path.join(recipient, "the-input.json"), "--output", path.join(recipient, "numbers.json")]);
+  const outcome = await verify(pkg.root, "--compare", path.join(recipient, "numbers.json"));
+  assert.equal(outcome.status, 0, JSON.stringify(outcome.report.compare));
+  assert.equal(outcome.report.compare.status, "identical");
+  assert.equal(outcome.report.compare.reproductionStatus, "reconstructable");
+  assert.ok(outcome.report.compare.values.length > 20, "every machine value of the result was compared");
+
+  // An engine that is not the recorded one refuses the recipe under its own name; that refusal is the answer.
+  await writeFile(path.join(recipient, "other.json"), JSON.stringify({ ...calculation.recipe, codeDigest: "a".repeat(64) }));
+  await assert.rejects(adapter(["--recipe", path.join(recipient, "other.json"), "--input", path.join(recipient, "the-input.json"), "--output", path.join(recipient, "refused.json")]),
+    error => error.code === 1 && /replay_code_changed/.test(error.stderr));
+  // A numerical difference beyond the original's tolerance is reported, not forgiven.
+  const drifted = JSON.parse(await readFile(path.join(recipient, "numbers.json"), "utf8"));
+  drifted.machineValues[0].value += 1e-3;
+  await writeFile(path.join(recipient, "drifted.json"), JSON.stringify(drifted));
+  const different = await verify(pkg.root, "--compare", path.join(recipient, "drifted.json"));
+  assert.equal(different.status, 3);
+  assert.equal(different.report.compare.status, "changed");
 });
