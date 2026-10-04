@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { Search } from "lucide-react";
 import { capabilityListed } from "@evimed/domain";
-import { fetchWebResearchEstimates, webErrorMessage, listWebResearchAgents, type WebResearchAgent, type WebResearchEstimate } from "@/lib/apiClient";
+import { fetchWebResearchEstimates, webErrorMessage, listWebResearchAgents, type WebAvailabilityState, type WebResearchAgent, type WebResearchEstimate } from "@/lib/apiClient";
 import { researchAgentUi, type CapabilityUi } from "@/lib/researchAgentUi";
 import { capabilityIcon } from "@/lib/capabilityIcons";
 import { bindConversationCapability } from "@/lib/dispatch";
@@ -15,6 +15,7 @@ import { PageShell } from "@/components/layout/PageShell";
 import { SimulatedAllowanceNotice, SimulatedMark } from "@/components/settings/SimulatedAllowance";
 import { FilterChips } from "@/components/ui/FilterChips";
 import { SearchInput } from "@/components/ui/SearchInput";
+import { Tag } from "@/components/ui/Tag";
 
 /**
  * The groups in the product's order — evidence, pharmacy, study design and
@@ -188,20 +189,35 @@ export function CapabilitiesPage() {
 }
 
 /**
- * One tool: its icon and name, one sentence, and how long it usually takes —
- * and, where the allowance is simulated, what it usually takes out of it, with
- * the mark every simulated amount carries.
+ * The states whose sentence a reader can act on, and so is shown. The rest
+ * (installed, executable, unverified) are a label alone: the sentence for them
+ * says how often something ran, which is the system explaining itself
+ * (AGENTS.md, 「The interface never explains the system」). It is still there for
+ * assistive technology.
+ */
+const SENTENCE_SHOWN = new Set<WebAvailabilityState>(["limited", "unavailable", "source-planned"]);
+
+/**
+ * One tool: its icon and name, one sentence, how long it usually takes, what
+ * this deployment can truthfully say about it — and, where the allowance is
+ * simulated, what it usually takes out of it, with the mark every simulated
+ * amount carries. The label is a label: the card opens the same conversation
+ * whatever it says (an unavailable tool reports "blocked" by its own mechanism
+ * when asked).
  */
 function ToolCard({ agent, estimate, busy, onOpen }: { agent: CapabilityUi; estimate?: WebResearchEstimate; busy: boolean; onOpen: () => void }) {
   const Icon = capabilityIcon(agent.id);
   const duration = durationText(agent.estimatedMinutes);
   const allowance = allowanceText(estimate);
+  const availability = agent.availability ?? null;
+  const sentenceId = `availability-${agent.id}`;
   return (
     <button
       type="button"
       onClick={onOpen}
       disabled={busy}
       aria-label={`用“${agent.title}”开始一次对话`}
+      aria-describedby={availability ? sentenceId : undefined}
       className="flex min-h-32 w-full flex-col gap-1.5 rounded-card bg-surface-1 p-4 text-left transition-colors duration-fast hover:bg-surface-2 disabled:cursor-wait disabled:opacity-40"
     >
       <span className="flex items-center gap-2 text-ui font-semibold text-text">
@@ -209,8 +225,14 @@ function ToolCard({ agent, estimate, busy, onOpen }: { agent: CapabilityUi; esti
         {agent.title}
       </span>
       <span className="text-ui text-text-2">{agent.description}</span>
-      {(duration || allowance) && (
+      {availability && (
+        <span id={sentenceId} className={SENTENCE_SHOWN.has(availability.state) ? "text-caption text-text-3" : "sr-only"}>
+          {availability.text}
+        </span>
+      )}
+      {(duration || allowance || availability) && (
         <span className="mt-auto flex flex-wrap items-center gap-x-1.5 gap-y-1 pt-1 text-caption text-text-3">
+          {availability && <Tag>{availability.label}</Tag>}
           {[duration, allowance].filter(Boolean).join(" · ")}
           {allowance && <SimulatedMark />}
         </span>

@@ -285,6 +285,75 @@ describe("CapabilitiesPage", () => {
     expect(screen.queryByText(/循证 GEO/)).not.toBeInTheDocument();
   });
 
+  // What the deployment can truthfully say about a tool is a label beside it, and only a label: nothing is hidden, and
+  // a card whose tool is unavailable opens the same conversation (the tool reports "blocked" by its own mechanism).
+  describe("availability", () => {
+    const availability = (id: string, state: string, label: string, text: string, version: string | null = "1.0.0") => ({
+      kind: "capability" as const, id, version, state: state as never, label, text, reason: { code: "x", source: "operation-record" },
+    });
+    const labelled = () => [
+      { ...agents[0], availability: availability("adr-analysis", "executable", "可运行", "1.0.0 版已在这个部署上成功运行过，最近一次是 2026-10-03。") },
+      { ...agents[1], availability: availability("off-label-analysis", "limited", "受限", "分析引擎（一项工具）现在连不上；提交后仍会受理，受阻时会如实说明。") },
+      { ...agents[2], availability: availability("meta-analysis", "unavailable", "不可用", "分析引擎（一项工具）这个部署没有配置。") },
+      { ...agents[3], availability: availability("peer-review", "unverified", "未验证", "当前是模拟运行环境，不能证明真实可运行。") },
+    ];
+
+    it("shows each tool's state as a label in the card", async () => {
+      mocks.listWebResearchAgents.mockResolvedValue(labelled());
+      renderPage();
+      await screen.findByRole("button", { name: /药品安全性分析/ });
+      expect(card("药品安全性分析")).toHaveTextContent("可运行");
+      expect(card("超说明书用药分析")).toHaveTextContent("受限");
+      expect(card("自动化 Meta 分析")).toHaveTextContent("不可用");
+      expect(card("论文审稿")).toHaveTextContent("未验证");
+    });
+
+    it("says why in a sentence only where the reader can act on it, and keeps the rest for assistive technology", async () => {
+      mocks.listWebResearchAgents.mockResolvedValue(labelled());
+      renderPage();
+      await screen.findByRole("button", { name: /药品安全性分析/ });
+      const shown = (name: string) => {
+        const sentence = document.getElementById(card(name).getAttribute("aria-describedby")!)!;
+        return !sentence.classList.contains("sr-only");
+      };
+      expect(shown("超说明书用药分析")).toBe(true);
+      expect(shown("自动化 Meta 分析")).toBe(true);
+      // How often something ran is the system explaining itself; it is a label alone on the screen.
+      expect(shown("药品安全性分析")).toBe(false);
+      expect(shown("论文审稿")).toBe(false);
+      expect(card("药品安全性分析")).toHaveAccessibleDescription(/1\.0\.0 版已在这个部署上成功运行过/);
+      expect(card("超说明书用药分析")).toHaveAccessibleDescription(/现在连不上/);
+    });
+
+    it("never hides a tool or disables its card for what its label says", async () => {
+      mocks.listWebResearchAgents.mockResolvedValue(labelled());
+      render(
+        <MemoryRouter initialEntries={["/app/capabilities"]}>
+          <Routes>
+            <Route path="/app/capabilities" element={<CapabilitiesPage />} />
+            <Route path="/app/chat" element={<LocationProbe />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+      expect(await screen.findAllByRole("listitem")).toHaveLength(4);
+      expect(card("自动化 Meta 分析")).toBeEnabled();
+      await userEvent.click(card("自动化 Meta 分析"));
+      await waitFor(() => expect(mocks.putWebResearchSession).toHaveBeenCalledWith(
+        expect.stringMatching(/^web-/), { mode: "specialist", agentId: "meta-analysis", agentVersion: "1.0.0" }));
+      await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/chat"));
+    });
+
+    it("draws nothing extra for a catalogue that carries no label, or one that could not compute it", async () => {
+      mocks.listWebResearchAgents.mockResolvedValue([agents[0], { ...agents[1], availability: null }]);
+      renderPage();
+      await screen.findByRole("button", { name: /药品安全性分析/ });
+      for (const name of ["药品安全性分析", "超说明书用药分析"]) {
+        expect(card(name)).not.toHaveAttribute("aria-describedby");
+        expect(card(name)).not.toHaveTextContent(/可运行|受限|不可用|未验证|已安装|规划中/);
+      }
+    });
+  });
+
   it("offers a retry when the catalogue could not be loaded, rather than a dead error line", async () => {
     mocks.listWebResearchAgents.mockRejectedValueOnce(new WebApiError("later", { status: 503, code: "service_unavailable" }));
     renderPage();

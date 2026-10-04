@@ -15,7 +15,10 @@ export const PRODUCT_KINDS = Object.freeze([
 // durable ledger. Its per-entry queue — thousands of rows a day — lives in
 // `evimed_frontier`'s own state and lease columns, where it cannot drown this.
 export const PRODUCT_JOB_KINDS = Object.freeze(["ingest", "distill", "consolidate", "episode", "verify", "digest", "notify", "memory-index", "memory-record-index", "plugin-apply",
-  "frontier-daily", "frontier-rebuild", "frontier-weekly", "frontier-notify", "document-export", "study-review", "result-replay", ...EXTENSION_JOB_KINDS]);
+  "frontier-daily", "frontier-rebuild", "frontier-weekly", "frontier-notify", "document-export", "study-review", "result-replay",
+  // One finished run joined to the capability, skill and tool versions it used and to the result versions it
+  // produced (`availabilityCollector.mjs`), and the sweep that finds runs the finish hook missed.
+  "availability-collect", ...EXTENSION_JOB_KINDS]);
 
 /**
  * What the researcher did, as a closed vocabulary.
@@ -278,6 +281,31 @@ BEGIN
   END IF;
 END $result_workbench_kinds$;
 INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-10-02-result-workbench-v1') ON CONFLICT DO NOTHING;
+DO $availability_kind$
+BEGIN
+  -- Its own block, for the reason the method-trial block gives: the blocks before
+  -- this one rebuild the constraint only when it lacks *their* kind.
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint c WHERE c.conrelid='evimed_product.jobs'::regclass
+      AND c.conname='product_jobs_kind_check' AND position('''availability-collect''' in pg_get_constraintdef(c.oid)) > 0) THEN
+    ALTER TABLE evimed_product.jobs DROP CONSTRAINT IF EXISTS product_jobs_kind_check;
+    ALTER TABLE evimed_product.jobs ADD CONSTRAINT product_jobs_kind_check
+      CHECK (kind IN (${PRODUCT_JOB_KINDS.map(kind => `'${kind}'`).join(",")}));
+  END IF;
+END $availability_kind$;
+-- What finished operations say about a capability version, a tool, a skill or an extension on THIS
+-- deployment (the availability projection's evidence). One row per subject and exact version, folded
+-- by the collector in the same transaction that completes the job for one run. Deployment-wide by
+-- design, so it carries no user_id: counts and times, and the opaque references of the last success
+-- and the last failure for the operator's export.
+CREATE TABLE IF NOT EXISTS evimed_product.availability_operations (
+  kind text NOT NULL CHECK (kind IN ('capability','tool','skill','extension')),
+  id text NOT NULL CHECK (length(id) BETWEEN 1 AND 200),
+  version text NOT NULL DEFAULT '' CHECK (length(version) <= 200),
+  record jsonb NOT NULL CHECK (jsonb_typeof(record) = 'object'),
+  updated_at timestamptz(3) NOT NULL DEFAULT clock_timestamp(),
+  PRIMARY KEY (kind, id, version)
+);
+INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-10-04-availability-operations-v1') ON CONFLICT DO NOTHING;
 CREATE TABLE IF NOT EXISTS evimed_product.plugin_prompt_admissions (
   id text PRIMARY KEY,
   user_id text NOT NULL,

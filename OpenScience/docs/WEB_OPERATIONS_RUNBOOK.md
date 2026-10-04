@@ -883,6 +883,44 @@ still fail a job is not evidence: the researcher's own input files, an unsafe
 published output, the MR workspace and output bindings (`mr_input_changed` means
 exactly those now) and request authentication.
 
+### What the deployment really did: capability availability
+
+Each capability in the catalogue (`GET /api/agents`, field `availability`; the whole
+list at `GET /api/availability`) and each research tool carries one of six labels:
+`source-planned`, `installed`, `executable`, `limited`, `unavailable`, `unverified`,
+with the reason and the record it came from. It is a label and never a gate: nothing
+consults it before a dispatch, no button is disabled by it, and an engine that is down
+still accepts the job and reports it blocked by its own mechanism. `executable` needs a
+finished operation of that exact capability version on this deployment, so a package
+count, a mock runtime (`OPEN_SCIENCE_RUNTIME_MODE=mock`) or the release audit's outside
+probe never yields it. `limited` names what is missing: an engine whose own `/health`
+says it is not ready or does not answer, a data source nobody configured, a method not
+yet measured. `unavailable` is a tool the deployment withholds from runtimes (the same
+rules as `EVIMED_DISABLED_TOOLS`, restated in `deploymentComposition.mjs` and held equal
+to the launch by a parity test), a module that is off or closed to the account, or a
+runtime that answered "unknown tool". `unverified` is the default whenever nothing can be
+believed either way, including the minutes after a first start while the collector is
+still reading the runs that finished before it existed.
+
+The evidence is collected, not written by runs: one leased `availability-collect` job per
+finished run joins the run ledger, the persisted transcript, the result versions the run
+produced and its settled spend, and folds them into
+`evimed_product.availability_operations` in the transaction that completes the job, so a
+replay never counts a run twice. An hourly per-account sweep
+(`OPEN_SCIENCE_AVAILABILITY_SWEEP_INTERVAL_MS`) queues any run that has no job and gives
+jobs that gave up another try; `OPEN_SCIENCE_AVAILABILITY_ENABLED=false` stops collection
+and leaves every label that needs a record at `unverified`.
+
+For the release audit: `GET /api/ops/availability` with the operator token returns every
+record in full — counts, last success and last failure code, typical duration and cost,
+and for the last success and failure the run, dispatch, session, project, result-version
+and skill-version references — beside the deployment's own view of every capability and
+tool and each engine's fresh `/health`. An ordinary account is never handed those
+references. `/api/ops/metrics` carries `open_science_availability_subjects{kind,state}`,
+`open_science_availability_operations_total{kind,outcome}` and the collector's backlog,
+failed-job and state gauges; a backlog that does not drain, or failed jobs above zero,
+mean runs the collector cannot read.
+
 ### Bundle updates and identity
 
 Extract the verified CI Web image's complete `/app` closure into a new release;

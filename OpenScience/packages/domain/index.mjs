@@ -26,6 +26,11 @@
 
 export const DOMAIN_VERSION = '0.1.0'
 
+/** @typedef {import('./src/capabilityAvailability.mjs').AvailabilityEntry} AvailabilityEntry */
+/** @typedef {import('./src/capabilityAvailability.mjs').AvailabilityReason} AvailabilityReason */
+/** @typedef {import('./src/capabilityAvailability.mjs').AvailabilityState} AvailabilityState */
+/** @typedef {import('./src/capabilityAvailability.mjs').OperationObservation} OperationObservation */
+/** @typedef {import('./src/capabilityAvailability.mjs').OperationRecord} OperationRecord */
 /** @typedef {import('./src/extensions.mjs').ExtensionCoordinate} ExtensionCoordinate */
 /** @typedef {import('./src/extensions.mjs').ExtensionInstallRequest} ExtensionInstallRequest */
 /** @typedef {import('./src/extensions.mjs').SkillWriteRequest} SkillWriteRequest */
@@ -257,6 +262,28 @@ export {
   capabilityListed,
   capabilityTitle,
 } from './src/capabilityDisplay.mjs'
+
+// capabilityAvailability — 17 exports: whether a capability, tool, skill or extension has really run on this
+// deployment, as a label (source-planned / installed / executable / limited / unavailable / unverified)
+export {
+  AVAILABILITY_RECORD_SOURCES,
+  AVAILABILITY_RECORD_VERSION,
+  AVAILABILITY_REASON_CODES,
+  AVAILABILITY_SAMPLE_LIMIT,
+  AVAILABILITY_STATE_LABELS_ZH,
+  AVAILABILITY_SUBJECT_KINDS,
+  CAPABILITY_AVAILABILITY_STATES,
+  availabilityReasonState,
+  countAvailabilityStates,
+  describeAvailability,
+  emptyOperationRecord,
+  foldOperation,
+  normalizeOperationRecord,
+  operationOutcomeOfRun,
+  projectAvailability,
+  summarizeOperations,
+  typicalOf,
+} from './src/capabilityAvailability.mjs'
 
 // contractRegistry — 7 exports
 export {
