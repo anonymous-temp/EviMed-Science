@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { BALANCE_REFUSAL_CODES } from "@evimed/domain";
+import { AUTOPILOT_BUDGET_ERROR_CODES, BALANCE_REFUSAL_CODES } from "@evimed/domain";
 import { autopilotAttemptDispatchId } from "./autopilotService.mjs";
 import { HttpError } from "./security.mjs";
 
@@ -7,7 +7,7 @@ export const AUTOPILOT_RESOURCE_BACKOFF_MS = Object.freeze([300_000, 900_000, 3_
 
 // The task's own caps are a rolling window: a dispatch refused by them is not
 // one that a retry a minute later finds open, and the next occurrence asks again.
-const TASK_BUDGET_CODES = ["autopilot_daily_budget_spent", "autopilot_weekly_budget_spent"];
+const TASK_BUDGET_CODES = AUTOPILOT_BUDGET_ERROR_CODES;
 const TERMINAL = new Set(["autopilot_job_invalid", "autopilot_stopped", "autopilot_episode_state_conflict",
   "result_impact_source_unavailable",
   "runtime_prompt_acceptance_unknown", "runtime_prompt_rejected", ...TASK_BUDGET_CODES]);

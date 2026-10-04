@@ -1504,9 +1504,9 @@ export class AutopilotService {
   async assertAffordable(userId, agenda) {
     if (!this.usage) return { remainingCny: Infinity };
     const at = this.now();
-    const budget = agendaBudget(agenda.payload, this.accountCaps());
+    const caps = agendaBudget(agenda.payload, this.accountCaps());
     const runIds = await this.ownRunIds(userId, agenda, at);
-    const allowance = agendaAllowance(budget.own, await this.usage.spendOfRuns(userId, { runIds, now: at }));
+    const allowance = agendaAllowance(caps.own, await this.usage.spendOfRuns(userId, { runIds, now: at }));
     const spentWindow = allowance.spentWindow;
     if (spentWindow) {
       // When it frees is a courtesy to the reader: a timeline that cannot be
@@ -1519,7 +1519,7 @@ export class AutopilotService {
       } catch { /* the reason stands without the time */ }
       throw taskBudgetRefusal(spentWindow, allowance[spentWindow].spent, allowance[spentWindow].limit, freesAt, at.getTime());
     }
-    await this.usage.assertWithinLimits(userId, { ...budget.account, now: at });
+    await this.usage.assertWithinLimits(userId, { ...caps.account, now: at });
     return { remainingCny: allowance.remainingCny };
   }
 

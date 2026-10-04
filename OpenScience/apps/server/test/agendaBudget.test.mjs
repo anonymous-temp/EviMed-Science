@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { UNCAPPED_CNY } from "../src/boundedRunBudget.mjs";
 import { AGENDA_WINDOW_MS, FUNDABLE_CNY, agendaAllowance, agendaBudget, budgetFreesAt, taskBudgetRefusal } from "../src/agendaBudget.mjs";
 import { agendaRunIds, verificationIdFor } from "../src/autopilotService.mjs";
+import { openCostWindows } from "../src/usageLedger.mjs";
 
 const payload = { dailyBudgetCny: 3, weeklyBudgetCny: 6, maxEpisodeCny: 1.5 };
 
@@ -21,6 +22,13 @@ test("the task's caps and the account's are two questions, and the signed scope 
   assert.deepEqual(capped.account, { dailyLimit: 30, weeklyLimit: 100 });
   assert.deepEqual(capped.scope, { dailyLimit: 30, weeklyLimit: 100, runLimit: 1.12 }, "the account's own caps ride in the scope, the task's never");
   assert.equal(Object.values(capped.scope).includes(3), false);
+});
+
+test("the task's windows are the ledger's windows: one clock for the account's caps and the task's", () => {
+  // `spendOfRuns` measures in SQL with `openCostWindows`; the freeing time is computed here with these.
+  const hours = (/** @type {string} */ text) => { const [count, unit] = text.split(" "); return Number(count) * (unit.startsWith("hour") ? 3_600_000 : 86_400_000); };
+  assert.equal(AGENDA_WINDOW_MS.day, hours(openCostWindows.day));
+  assert.equal(AGENDA_WINDOW_MS.week, hours(openCostWindows.week));
 });
 
 test("a run with nothing to spend is refused, not read as a run with no limit", () => {

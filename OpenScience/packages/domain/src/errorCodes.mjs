@@ -1064,13 +1064,14 @@ const autopilotMaterialErrorCodes = Object.freeze([
  * starts (`AutopilotService.assertAffordable`): what this task has spent in the
  * last 24 hours or 7 days has reached the 每日上限 or 每周上限 written on the
  * task. They are not the account's ceiling and must not read as one — on
- * 2026-10-04 a task with ¥3 a day was refused with 「账户已达用量上限」 because
+ * 2026-10-04 a task with ¥3 a day was refused in the account's words because
  * the researcher's own other research that day had cost ¥16, and the task had
  * spent nothing. Shown on the page where the researcher presses 立即运行 or
- * sends a follow-up; the weekly one is named first when both are spent, since
- * it frees later. Private for the same reason as the materials list.
+ * sends a follow-up, and on an episode that was refused at dispatch because the
+ * budget was spent in between; the weekly one is named first when both are
+ * spent, since it frees later.
  */
-const autopilotBudgetErrorCodes = Object.freeze([
+export const AUTOPILOT_BUDGET_ERROR_CODES = Object.freeze([
   'autopilot_daily_budget_spent',
   'autopilot_weekly_budget_spent',
 ])
@@ -1453,7 +1454,7 @@ export const ALL_ERROR_CODES = Object.freeze([...new Set([
   ...terminalEvidenceSourceErrorCodes,
   ...sourceIntakeErrorCodes,
   ...autopilotMaterialErrorCodes,
-  ...autopilotBudgetErrorCodes,
+  ...AUTOPILOT_BUDGET_ERROR_CODES,
   ...libraryErrorCodes,
   ...capsuleTransferErrorCodes,
   ...GEO_ROUTE_ERROR_CODES,
@@ -2319,7 +2320,7 @@ export function errorCodeOutcome(code) {
   // ceiling, and a source that is not there is nothing to act on.
   if (text === 'autopilot_materials_full') return 'capped'
   // A task's own spending cap is a ceiling like the account's, and frees the same way.
-  if (autopilotBudgetErrorCodes.includes(text)) return 'capped'
+  if (AUTOPILOT_BUDGET_ERROR_CODES.includes(text)) return 'capped'
   if (autopilotMaterialErrorCodes.includes(text)) return 'upstream'
   if (libraryErrorCodes.includes(text)) return 'upstream'
   // Sharing a capsule refuses for what the pack holds or who it is for —
