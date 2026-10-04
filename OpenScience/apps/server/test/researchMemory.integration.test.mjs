@@ -350,10 +350,13 @@ test("export carries every surface and purge empties exactly one account", optio
   // `manualMemos` is still a key of the archive, always empty: an archive a
   // customer already downloaded has it, and a reader that expects it is owed
   // the same shape rather than a missing field it has to guess about.
-  assert.deepEqual(Object.keys(exported).sort(), ["manualMemos", "records", "settings", "version"]);
+  // `links` joined the archive on 2026-10-04 (the relations between memories
+  // and what they rest on), beside the keys a downloaded archive already has.
+  assert.deepEqual(Object.keys(exported).sort(), ["links", "manualMemos", "records", "settings", "version"]);
   assert.equal(exported.version, 1);
   assert.equal(exported.records.length, 1);
   assert.deepEqual(exported.manualMemos, []);
+  assert.deepEqual(exported.links, { conflicts: [], sources: [] });
 
   assert.deepEqual(await store.purgeUserMemory(alpha), { structured: 1 });
   assert.equal((await store.exportUserMemory(alpha)).records.length, 0);

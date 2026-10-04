@@ -99,6 +99,10 @@ export function agentMemoryOpenApi({ basePath, rateLimitPerMinute }) {
             limit: { type: "integer", minimum: 1, maximum: 50, default: 10 },
             factKinds: { type: "array", items: { $ref: "#/components/schemas/FactKind" } },
             since: { type: "string", format: "date-time" },
+            asOf: {
+              type: "string",
+              description: "The time the question is about, an ISO date (`2025-06-30`, read at the end of that day) or instant; now when omitted. Applies to the account's records: the version that held then comes back, or the earliest version labelled `not_yet_valid` when nothing was recorded that early. A capsule fact has no interval of its own and is returned as it is.",
+            },
             scope: {
               type: "string", enum: ["all", "capsule", "conversation", "agenda"], default: "all",
               description: "`conversation`: the structured records and notes the platform keeps for this account; `capsule`: the facts of its active capsules (or of `capsuleIds`); `all`: both. `agenda` is reserved and currently refused.",

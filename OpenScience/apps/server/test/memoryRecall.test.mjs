@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { MEMORY_RECALL_SCOPES, recallAcrossMemory } from "../src/memoryRecall.mjs";
+import { renderMemoryContext } from "../src/researchContext.mjs";
 
 // What these cases pin down is not the merge arithmetic but the promise the
 // two callers' schemas already made: `scope: all` means both stores. Before
@@ -26,7 +27,7 @@ function services({ memory = [], facts = [] } = {}) {
 }
 
 const record = (over = {}) => ({
-  id: "record:r1", content: "回答尽量简短", kind: "preference", scope: "user", memoryType: "structured",
+  id: "record:r1", content: "回答尽量简短", kind: "preference", scope: "user", memoryType: "structured", origin: "explicit",
   updatedAt: "2026-09-01T00:00:00.000Z", confidence: 0.9, importance: 0.6, ...over,
 });
 const fact = (over = {}) => ({ id: "fact_1", capsuleId: "cap_1", factKind: "preference", content: "偏好中文", origin: "explicit", ...over });
@@ -91,4 +92,57 @@ test("agenda is refused by name, and a store that is not deployed is an empty ha
   assert.deepEqual(recordsOnly.items.map((item) => item.source), ["memory"]);
   assert.equal(recordsOnly.mode, "none");
   assert.deepEqual([...MEMORY_RECALL_SCOPES], ["all", "capsule", "conversation"]);
+});
+
+// ---------------------------------------------------------------------------
+// The time a question is about, and what is uncertain about the answer (N13).
+// ---------------------------------------------------------------------------
+
+test("a question that names a time is asked of the records at that time; one that does not is the call it always was", async () => {
+  const s = services({ memory: [record()] });
+  const answer = await recallAcrossMemory(s, user, { query: "简短", projectId: "p1", asOf: "2025-06-30", scope: "conversation" });
+  assert.equal(s.calls[0][3].asOf, Date.parse("2025-06-30T23:59:59.999Z"), "a bare date is read at its end");
+  assert.equal(answer.asOf, "2025-06-30T23:59:59.999Z", "the answer says which time it resolved the question to");
+  const plain = await recallAcrossMemory(s, user, { query: "简短", projectId: "p1", scope: "conversation" });
+  assert.equal("asOf" in s.calls[1][3], false);
+  assert.equal("asOf" in plain, false);
+  for (const asOf of ["last spring", "2025", "2025-13-45", 2025]) {
+    await assert.rejects(recallAcrossMemory(s, user, { query: "x", asOf }), (error) => error.status === 400 && error.code === "memory_as_of_invalid", String(asOf));
+  }
+});
+
+test("an uncertain record says why, and carries the other side or the sources; a plain one carries nothing extra", async () => {
+  const uncertain = record({
+    id: "record:r9", caveats: ["conflict", "source_retracted"], validity: { from: "2024-03-01T00:00:00Z", until: null },
+    conflictsWith: [{ id: "r3", key: "project.dose.label", kind: "project_fact", scope: "project", summary: "说明书 20 mg" }],
+    staleSources: [{ type: "doi", id: "10.1000/x", state: "retracted" }],
+  });
+  const s = services({ memory: [record(), uncertain] });
+  const { items } = await recallAcrossMemory(s, user, { query: "剂量", scope: "conversation" });
+  const [plain, flagged] = items;
+  for (const field of ["uncertain", "caveats", "validity", "conflictsWith", "staleSources"]) assert.equal(field in plain, false, field);
+  assert.equal(plain.origin, "explicit", "whose statement a record is travels with it");
+  assert.equal(flagged.uncertain, true);
+  assert.deepEqual(flagged.caveats, ["conflict", "source_retracted"]);
+  assert.equal(flagged.conflictsWith[0].key, "project.dose.label");
+  assert.equal(flagged.staleSources[0].state, "retracted");
+  assert.equal(flagged.contextOnly, true, "uncertain or not, a record is context and never permission");
+});
+
+test("the memory block marks an uncertain memory once and says how to read the mark, and leaves a plain block as it was", () => {
+  const plain = renderMemoryContext([{ id: "record:a", content: "回答尽量简短", kind: "preference", scope: "user", memoryType: "structured" }]);
+  assert.doesNotMatch(plain, /caveats/);
+  const flagged = renderMemoryContext([
+    { id: "record:a", content: "说明书写 20 mg", kind: "project_fact", scope: "project", memoryType: "structured",
+      caveats: ["conflict", "source_changed"], validity: { from: "2024-03-01T00:00:00Z", until: null },
+      conflictsWith: [{ id: "b", key: "project.dose.said", origin: "explicit", summary: "研究者说 10 mg <b>" }],
+      staleSources: [{ type: "doi", id: "10.1000/x", state: "changed" }] },
+    { id: "record:b", content: "另一条", kind: "preference", scope: "user", memoryType: "structured", caveats: ["not_yet_valid"] },
+  ]);
+  assert.match(flagged, /caveats="conflict,source_changed"/);
+  assert.match(flagged, /caveats="not_yet_valid"/);
+  assert.equal((flagged.match(/带 caveats 属性的记忆/g) ?? []).length, 1);
+  assert.match(flagged, /有效期：2024-03-01T00:00:00Z 起，至今 止/);
+  assert.match(flagged, /与此冲突的另一条记忆（project\.dose\.said，用户所述）：研究者说 10 mg &lt;b&gt;/, "text out of a record is escaped, as everything in the block is; and who made the statement is said");
+  assert.match(flagged, /所依据的来源 10\.1000\/x：已更正或数据已修订/);
 });

@@ -125,6 +125,8 @@ export const UNEXPORTED_ACCOUNT_TABLES = Object.freeze({
   "evimed_memory.records": "carried by the archive as memory/memory.json, written from the store's own exportUserMemory so that the evidence and revision history travel in the shape the product reads them in",
   "evimed_memory.settings": "carried by the archive as memory/memory.json, beside the records: the researcher's own pause switches, read through the same store",
   "evimed_memory.sessions": "the capsule a conversation is trying, for conversations that live in this deployment's runtime; it means nothing outside it, and the capsule itself is exported",
+  "evimed_memory.record_conflicts": "carried by the archive as memory/memory.json under `links`, beside the records they relate: which statements disagree, and whether it was settled",
+  "evimed_memory.record_sources": "carried by the archive as memory/memory.json under `links`, beside the records: the sources each memory rests on, by recorded identifier, with what a later check found",
   "evimed_memory.record_usage": "how often each memory was recalled: derived from the records that are themselves exported, rebuilt by use, and meaningless in another deployment",
 });
 

@@ -2,14 +2,19 @@ import { createHash, randomUUID } from "node:crypto";
 import {
   DURABLE_RECALL_KINDS, recallContent, searchTokens, selectWithinBudget,
 } from "./memoryRecallPolicy.mjs";
+import { annotateVersions, versionFields, versionsInForce } from "./memoryValidity.mjs";
 import { HttpError } from "./security.mjs";
 import {
+  MEMORY_CONFLICT_STATES,
   MEMORY_EVIDENCE_LIMIT,
   MEMORY_KINDS,
   MEMORY_ORIGINS,
   MEMORY_PAUSED_PROJECT_LIMIT,
   MEMORY_REVISION_LIMIT,
   MEMORY_SCOPES,
+  MEMORY_SOURCE_LINK_LIMIT,
+  MEMORY_SOURCE_STATES,
+  MEMORY_SOURCE_TYPES,
   MEMORY_STATUSES,
   migrateResearchMemory,
 } from "./researchMemoryPersistence.mjs";
@@ -59,7 +64,10 @@ export const MEMORY_EXPORT_LIMIT = 100_000;
  *  for as long as it takes, for work the sweep does anyway. */
 export const MEMORY_BULK_OUTBOX_LIMIT = 2_000;
 
-export { MEMORY_EVIDENCE_LIMIT, MEMORY_KINDS, MEMORY_ORIGINS, MEMORY_REVISION_LIMIT, MEMORY_SCOPES, MEMORY_STATUSES };
+export {
+  MEMORY_CONFLICT_STATES, MEMORY_EVIDENCE_LIMIT, MEMORY_KINDS, MEMORY_ORIGINS, MEMORY_REVISION_LIMIT, MEMORY_SCOPES,
+  MEMORY_SOURCE_LINK_LIMIT, MEMORY_SOURCE_STATES, MEMORY_SOURCE_TYPES, MEMORY_STATUSES,
+};
 
 /**
  * Who changed a record: the extractor after a run, the researcher on the
@@ -214,6 +222,22 @@ export function appendRevision(existing, revision) {
 }
 
 /**
+ * The pointers and the interval a revision keeps beside the text it holds, so
+ * undoing a change puts back exactly what it replaced: what replaced a
+ * superseded fact, when the fact stopped holding, and when it began.
+ * `validFrom` is always written (null is a value: the start was unknown), so a
+ * revision that carries the key is one an undo may restore it from.
+ * @param {{ supersededBy?: string | null, invalidSince?: string | null, validFrom?: string | null }} record
+ */
+function revisionPointers(record) {
+  return {
+    ...(record.supersededBy ? { supersededBy: record.supersededBy } : {}),
+    ...(record.invalidSince ? { invalidSince: record.invalidSince } : {}),
+    validFrom: record.validFrom ?? null,
+  };
+}
+
+/**
  * Is this write asking for the state the record is already in?
  *
  * Every mutable field, compared at the precision the row is stored at. A write
@@ -234,7 +258,8 @@ export function currentStateEqual(stored, next) {
     && (stored.lastConfirmedAt ?? null) === (next.lastConfirmedAt ?? null)
     && (stored.expiresAt ?? null) === (next.expiresAt ?? null)
     && (stored.supersededBy ?? null) === (next.supersededBy ?? null)
-    && (stored.invalidSince ?? null) === (next.invalidSince ?? null);
+    && (stored.invalidSince ?? null) === (next.invalidSince ?? null)
+    && (stored.validFrom ?? null) === (next.validFrom ?? null);
 }
 
 /** @param {unknown} value */
@@ -308,7 +333,69 @@ export function validateRecordInput(input) {
     // superseded record's text does not quietly put it back in force.
     supersededBy: input.supersededBy == null || input.supersededBy === "" ? null : assertRecordId(input.supersededBy),
     invalidSince: timestampInput(input.invalidSince, "invalidSince"),
+    // When the fact began to hold, when that is known; null is unknown. Together
+    // with `invalidSince` it is the fact's validity interval, which an inverted
+    // pair would make empty — refused, as any other malformed field is.
+    validFrom: validFrom(input.validFrom, input.invalidSince),
   };
+}
+
+/** The one form of an identifier a source link is recorded and compared in. A
+ *  knowledge-base document is its `src_` id; a published work is its DOI,
+ *  lower-cased with no resolver prefix. Anything else names nothing we can find
+ *  again, so it is no link at all. */
+const SOURCE_ID_FORMAT = Object.freeze({
+  knowledge_source: /^src_[a-f0-9]{32}$/,
+  doi: /^10\.\d{4,9}\/\S{1,250}$/,
+});
+
+/**
+ * One recorded dependency on a source, normalised, or null when it is not one.
+ * The version is whatever the writer knew the source to be at (a digest, a
+ * revision); null is unknown, and is kept as unknown.
+ * @param {unknown} link @returns {{ type: string, id: string, version: string | null } | null}
+ */
+export function sourceLinkOf(link) {
+  const type = String(/** @type {any} */ (link)?.type ?? "");
+  if (!MEMORY_SOURCE_TYPES.includes(type)) return null;
+  const raw = String(/** @type {any} */ (link)?.id ?? "").trim();
+  const id = type === "doi" ? raw.toLowerCase().replace(/^https?:\/\/(?:dx\.)?doi\.org\//u, "") : raw;
+  if (!SOURCE_ID_FORMAT[/** @type {keyof typeof SOURCE_ID_FORMAT} */ (type)].test(id)) return null;
+  const version = /** @type {any} */ (link)?.version == null || /** @type {any} */ (link).version === ""
+    ? null : String(/** @type {any} */ (link).version).trim();
+  if (version != null && (version.length === 0 || version.length > 200)) return null;
+  return { type, id, version };
+}
+
+/** @param {unknown} links @returns {{ type: string, id: string, version: string | null }[]} */
+function validSourceLinks(links) {
+  if (links == null) return [];
+  if (!Array.isArray(links) || links.length > MEMORY_SOURCE_LINK_LIMIT) throw invalid("sourceLinks");
+  /** @type {Map<string, { type: string, id: string, version: string | null }>} */
+  const found = new Map();
+  for (const link of links) {
+    const normal = sourceLinkOf(link);
+    if (!normal) throw invalid("sourceLinks");
+    found.set(`${normal.type}\u0000${normal.id}`, normal);
+  }
+  return [...found.values()];
+}
+
+/** @param {any} row */
+function sourceLinkRow(row) {
+  return {
+    type: String(row.source_type), id: String(row.source_id), version: row.source_version ?? null,
+    state: String(row.state), stateReason: String(row.state_reason ?? ""),
+    stateAt: memoryInstant(row.state_at), linkedAt: memoryInstant(row.linked_at),
+  };
+}
+
+/** @param {unknown} value @param {unknown} until */
+function validFrom(value, until) {
+  const from = timestampInput(value, "validFrom");
+  const end = timestampInput(until, "invalidSince");
+  if (from && end && Date.parse(from) >= Date.parse(end)) throw invalid("validFrom");
+  return from;
 }
 
 /** The lock one upsert takes: the canonical key of the record it will write. */
@@ -494,7 +581,7 @@ export function recordProvenance(row, evidence, revisions) {
  */
 const LIGHT_RECORD_COLUMNS = `user_id, id, scope, scope_id, kind, key, left(value, 1000) AS value, left(summary, 1000) AS summary,
   origin, status, confidence, importance, sensitive, version, created_at, updated_at, last_confirmed_at, expires_at,
-  superseded_by, invalid_since,
+  superseded_by, invalid_since, valid_from,
   (SELECT coalesce(jsonb_agg(jsonb_build_object('sourceRef', item->'sourceRef', 'observedAt', item->'observedAt') ORDER BY position), '[]'::jsonb)
      FROM jsonb_array_elements(evidence) WITH ORDINALITY AS observed(item, position)) AS evidence,
   (SELECT coalesce(jsonb_agg(jsonb_build_object('version', item->'version', 'status', item->'status', 'changedAt', item->'changedAt',
@@ -526,6 +613,7 @@ function publicRecord(row) {
     expiresAt: memoryInstant(row.expires_at),
     supersededBy: row.superseded_by ?? null,
     invalidSince: memoryInstant(row.invalid_since),
+    validFrom: memoryInstant(row.valid_from),
     provenance: recordProvenance(row, evidence, revisions),
     evidence: evidence.map((item) => ({
       sourceType: String(item?.sourceType ?? ""),
@@ -600,7 +688,7 @@ export function inferenceFreshness(updatedAt, now, ttlMs) {
 }
 
 const recordColumns = "user_id,id,scope,scope_id,kind,key,value,summary,origin,status,confidence,importance,"
-  + "sensitive,evidence,revisions,version,created_at,updated_at,last_confirmed_at,expires_at,superseded_by,invalid_since";
+  + "sensitive,evidence,revisions,version,created_at,updated_at,last_confirmed_at,expires_at,superseded_by,invalid_since,valid_from";
 
 export class ResearchMemoryStore {
 
@@ -857,12 +945,17 @@ export class ResearchMemoryStore {
    *
    * @param {string} userId @param {Record<string, any>} input
    * @param {Record<string, any>|null} evidence
-   * @param {{ expectedVersion?: number, reason?: string, by?: string, runId?: string | null }} options
+   * @param {{ expectedVersion?: number, reason?: string, by?: string, runId?: string | null,
+   *   sourceLinks?: readonly { type: string, id: string, version?: string | null }[] }} options
+   *   `sourceLinks`: the sources this write rests on, by recorded identifier
+   *   (`sourceLinkOf`); they are added to the record's links in the same
+   *   transaction and never replace the ones it already has.
    */
-  async upsertRecord(userId, input, evidence = null, { expectedVersion = 0, reason = "", by = "", runId = null } = {}) {
+  async upsertRecord(userId, input, evidence = null, { expectedVersion = 0, reason = "", by = "", runId = null, sourceLinks = [] } = {}) {
     const owner = assertUserId(userId);
     const next = validateRecordInput(input);
     const proof = boundedEvidence(evidence);
+    const links = validSourceLinks(sourceLinks);
     // Truncated, never refused. This is audit text that rides along with a
     // write; a long contradiction notice must not cost the memory it explains.
     const auditReason = boundedText(reason, MEMORY_REASON_LIMIT);
@@ -872,7 +965,7 @@ export class ResearchMemoryStore {
 
     return this.#transaction(async (client) => {
       await this.#lockOwnerForOutbox(client, owner);
-      return this.#writeRecord(client, owner, next, proof, { expected, providedId, auditReason, actor });
+      return this.#writeRecord(client, owner, next, proof, { expected, providedId, auditReason, actor, sourceLinks: links });
     });
   }
 
@@ -882,9 +975,10 @@ export class ResearchMemoryStore {
    * shares one commit.
    * @param {any} client @param {string} owner @param {Record<string, any>} next
    * @param {Record<string, any>|null} proof
-   * @param {{ expected: number, providedId: string|null, auditReason: string, actor?: Record<string, string> }} options
+   * @param {{ expected: number, providedId: string|null, auditReason: string, actor?: Record<string, string>,
+   *   sourceLinks?: { type: string, id: string, version: string | null }[] }} options
    */
-  async #writeRecord(client, owner, next, proof, { expected, providedId, auditReason, actor = {} }) {
+  async #writeRecord(client, owner, next, proof, { expected, providedId, auditReason, actor = {}, sourceLinks = [] }) {
     // Two writers extracting from two runs of the same conversation reach
     // this line at the same instant. The lock is on the canonical key rather
     // than the table, so unrelated memories still write in parallel, and it
@@ -901,11 +995,11 @@ export class ResearchMemoryStore {
     if (found.rowCount === 0) {
       const { evidence: created } = mergeEvidence([], proof);
       const inserted = await client.query(`INSERT INTO evimed_memory.records (${recordColumns})
-        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,'[]'::jsonb,1,$15,$15,$16,$17,$18,$19)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14::jsonb,'[]'::jsonb,1,$15,$15,$16,$17,$18,$19,$20)
         ON CONFLICT DO NOTHING RETURNING *`,
       [owner, providedId ?? randomUUID(), next.scope, next.scopeId, next.kind, next.key, next.value, next.summary,
         next.origin, next.status, next.confidence, next.importance, next.sensitive, JSON.stringify(created),
-        now, next.lastConfirmedAt, next.expiresAt, next.supersededBy ?? null, next.invalidSince ?? null]);
+        now, next.lastConfirmedAt, next.expiresAt, next.supersededBy ?? null, next.invalidSince ?? null, next.validFrom ?? null]);
       // The only way to get here is a provided id that already names another
       // of this user's memories: the canonical key was free a statement ago
       // and the lock is still held. Resurrecting the wrong row would be
@@ -914,6 +1008,7 @@ export class ResearchMemoryStore {
         throw new HttpError(409, "memory_conflict", "That memory id already names another memory.");
       }
       const record = publicRecord(inserted.rows[0]);
+      await this.#linkSources(client, owner, record.id, sourceLinks, now);
       await this.#enqueueRecordIndex(client, owner, record);
       return record;
     }
@@ -922,6 +1017,9 @@ export class ResearchMemoryStore {
     if (expected > 0 && expected !== stored.version) {
       throw new HttpError(409, "memory_conflict", "This memory changed since it was read.");
     }
+    // Before the no-change return below: a re-observation that adds nothing to
+    // the text may still be the first to name the source it came from.
+    await this.#linkSources(client, owner, stored.id, sourceLinks, now);
     const { evidence: merged, added } = mergeEvidence(stored.evidence, proof);
     const stateChanged = stored.value !== next.value || stored.summary !== next.summary || stored.status !== next.status;
     const revisions = stateChanged
@@ -935,18 +1033,18 @@ export class ResearchMemoryStore {
         ...actor,
         // The pointers a restore needs: undoing a change to a superseded
         // record must be able to put them back exactly.
-        ...(stored.supersededBy ? { supersededBy: stored.supersededBy, invalidSince: stored.invalidSince } : {}),
+        ...revisionPointers(stored),
       })
       : stored.revisions;
     if (!added && !stateChanged && currentStateEqual(stored, next)) return stored;
 
     const updated = await client.query(`UPDATE evimed_memory.records SET value=$3,summary=$4,origin=$5,status=$6,
       confidence=$7,importance=$8,sensitive=$9,evidence=$10::jsonb,revisions=$11::jsonb,version=version+1,
-      updated_at=$12,last_confirmed_at=$13,expires_at=$14,superseded_by=$16,invalid_since=$17
+      updated_at=$12,last_confirmed_at=$13,expires_at=$14,superseded_by=$16,invalid_since=$17,valid_from=$18
       WHERE user_id=$1 AND id=$2 AND version=$15 RETURNING *`,
     [owner, stored.id, next.value, next.summary, next.origin, next.status, next.confidence, next.importance,
       next.sensitive, JSON.stringify(merged), JSON.stringify(revisions), now, next.lastConfirmedAt,
-      next.expiresAt, stored.version, next.supersededBy ?? null, next.invalidSince ?? null]);
+      next.expiresAt, stored.version, next.supersededBy ?? null, next.invalidSince ?? null, next.validFrom ?? null]);
     if (updated.rowCount !== 1) {
       throw new HttpError(409, "memory_conflict", "This memory changed while it was being written.");
     }
@@ -965,13 +1063,16 @@ export class ResearchMemoryStore {
    * `active` rows, so the replaced fact leaves every prompt at once.
    *
    * @param {string} userId @param {string} previousId @param {Record<string, any>} input
-   * @param {Record<string, any>|null} evidence @param {{ reason?: string, by?: string, runId?: string | null }} options
+   * @param {Record<string, any>|null} evidence
+   * @param {{ reason?: string, by?: string, runId?: string | null,
+   *   sourceLinks?: readonly { type: string, id: string, version?: string | null }[] }} options
    * @returns {Promise<{ record: any, superseded: any }>}
    */
-  async supersede(userId, previousId, input, evidence = null, { reason = "", by = "", runId = null } = {}) {
+  async supersede(userId, previousId, input, evidence = null, { reason = "", by = "", runId = null, sourceLinks = [] } = {}) {
     const owner = assertUserId(userId);
     const next = validateRecordInput(input);
     const proof = boundedEvidence(evidence);
+    const links = validSourceLinks(sourceLinks);
     const auditReason = boundedText(reason, MEMORY_REASON_LIMIT);
     const actor = revisionActor(by, runId);
     const replacedId = assertRecordId(previousId);
@@ -987,20 +1088,80 @@ export class ResearchMemoryStore {
         // the record it is about to write.
         throw new HttpError(400, "memory_supersede_invalid", "A memory cannot supersede itself.");
       }
-      const record = await this.#writeRecord(client, owner, next, proof, { expected: 0, providedId: null, auditReason, actor });
-      const now = await transactionInstant(client);
-      const retired = await client.query(`UPDATE evimed_memory.records SET status='superseded',superseded_by=$3,
-        invalid_since=COALESCE(invalid_since,$4),revisions=$5::jsonb,version=version+1,updated_at=$4
-        WHERE user_id=$1 AND id=$2 RETURNING *`,
-      [owner, replaced.id, record.id, now, JSON.stringify(appendRevision(replaced.revisions, {
-        version: replaced.version, value: replaced.value, summary: replaced.summary, status: replaced.status,
-        changedAt: now, reason: boundedText(`superseded by ${record.key}${auditReason ? `: ${auditReason}` : ""}`, MEMORY_REASON_LIMIT),
-        ...actor,
-      }))]);
-      const superseded = publicRecord(retired.rows[0]);
-      await this.#enqueueRecordIndex(client, owner, superseded);
+      const record = await this.#writeRecord(client, owner, next, proof, { expected: 0, providedId: null, auditReason, actor, sourceLinks: links });
+      const superseded = await this.#retire(client, owner, replaced, record, { auditReason, actor });
       return { record, superseded };
     });
+  }
+
+  /**
+   * Retire a fact in favour of the record that replaces it, inside the caller's
+   * transaction: it stops holding from now, points at its replacement, keeps its
+   * value and evidence and its links, and every disagreement it was a side of is
+   * settled by the replacement (the statement that lost is no longer in force).
+   * @param {any} client @param {string} owner @param {any} replaced @param {any} replacement
+   * @param {{ auditReason: string, actor: Record<string, string> }} options
+   */
+  async #retire(client, owner, replaced, replacement, { auditReason, actor }) {
+    const now = await transactionInstant(client);
+    const retired = await client.query(`UPDATE evimed_memory.records SET status='superseded',superseded_by=$3,
+      invalid_since=COALESCE(invalid_since,$4),revisions=$5::jsonb,version=version+1,updated_at=$4
+      WHERE user_id=$1 AND id=$2 RETURNING *`,
+    [owner, replaced.id, replacement.id, now, JSON.stringify(appendRevision(replaced.revisions, {
+      version: replaced.version, value: replaced.value, summary: replaced.summary, status: replaced.status,
+      changedAt: now, reason: boundedText(`superseded by ${replacement.key}${auditReason ? `: ${auditReason}` : ""}`, MEMORY_REASON_LIMIT),
+      ...actor,
+    }))]);
+    await client.query(`UPDATE evimed_memory.record_conflicts SET state='resolved',resolved_at=$3,resolution=$4,resolved_by=$5
+      WHERE user_id=$1 AND state='open' AND (record_id=$2 OR other_id=$2)`,
+    [owner, replaced.id, now, boundedText(`${replaced.key} was replaced by ${replacement.key}`, MEMORY_REASON_LIMIT), replacement.id]);
+    const superseded = publicRecord(retired.rows[0]);
+    await this.#enqueueRecordIndex(client, owner, superseded);
+    return superseded;
+  }
+
+  /**
+   * Put back the disagreements a replacement had settled, when the replacement
+   * is undone: the statement it retired is in force again, and so is what it
+   * disagreed with. A disagreement is reopened, never invented — only rows that
+   * were settled by that replacement.
+   * @param {any} client @param {string} owner @param {string} resolvedBy @param {string | null} [recordId]
+   */
+  async #reopenConflicts(client, owner, resolvedBy, recordId = null) {
+    await client.query(`UPDATE evimed_memory.record_conflicts SET state='open',resolved_at=NULL,resolution='',resolved_by=NULL
+      WHERE user_id=$1 AND state='resolved' AND resolved_by=$2 AND ($3::text IS NULL OR record_id=$3 OR other_id=$3)`,
+    [owner, resolvedBy, recordId]);
+  }
+
+  /**
+   * Record the sources a memory rests on. Additive: a link already there keeps
+   * its state, except that naming it again against a different version resets
+   * it to `current` — the memory was just read from that version. At most
+   * `MEMORY_SOURCE_LINK_LIMIT` per record; a link past it is not recorded, and
+   * the memory is unaffected.
+   * @param {any} client @param {string} owner @param {string} recordId
+   * @param {readonly { type: string, id: string, version: string | null }[]} links @param {string} now
+   */
+  async #linkSources(client, owner, recordId, links, now) {
+    if (links.length === 0) return;
+    const held = await client.query(
+      "SELECT source_type, source_id FROM evimed_memory.record_sources WHERE user_id=$1 AND record_id=$2", [owner, recordId]);
+    const have = new Set(held.rows.map((/** @type {any} */ row) => `${row.source_type}\u0000${row.source_id}`));
+    let room = MEMORY_SOURCE_LINK_LIMIT - have.size;
+    const wanted = links.filter((link) => {
+      if (have.has(`${link.type}\u0000${link.id}`)) return true;
+      room -= 1;
+      return room >= 0;
+    });
+    if (wanted.length === 0) return;
+    await client.query(`INSERT INTO evimed_memory.record_sources AS s
+        (user_id, record_id, source_type, source_id, source_version, linked_at)
+      SELECT $1, $2, given.type, given.id, given.version, $6
+        FROM unnest($3::text[], $4::text[], $5::text[]) AS given(type, id, version)
+      ON CONFLICT (user_id, record_id, source_type, source_id) DO UPDATE
+        SET source_version=EXCLUDED.source_version, state='current', state_reason='', state_at=NULL
+        WHERE EXCLUDED.source_version IS NOT NULL AND s.source_version IS DISTINCT FROM EXCLUDED.source_version`,
+    [owner, recordId, wanted.map((link) => link.type), wanted.map((link) => link.id), wanted.map((link) => link.version), now]);
   }
 
   /**
@@ -1050,29 +1211,38 @@ export class ResearchMemoryStore {
               version: earlier.version, value: earlier.value, summary: earlier.summary, status: earlier.status,
               changedAt: now, reason: `back in force: ${current.key}, which had replaced it, was undone`,
               ...revisionActor("system", null),
-              supersededBy: earlier.supersededBy, invalidSince: earlier.invalidSince,
+              ...revisionPointers(earlier),
             })), now]);
           const record = publicRecord(back.rows[0]);
           await this.#enqueueRecordIndex(client, owner, record);
           restored.push(record);
         }
+        // What the removed record's replacing had settled is open again.
+        await this.#reopenConflicts(client, owner, current.id);
         return { undone: "removed", record: null, previous: current, restored };
       }
       const before = /** @type {any} */ (current.revisions.at(-1));
       const raw = Array.isArray(found.rows[0].revisions) ? found.rows[0].revisions.at(-1) : null;
+      // The interval goes back with the text only when the revision recorded it:
+      // one written before the interval existed says nothing about it.
+      const restoresStart = Boolean(raw) && Object.hasOwn(raw, "validFrom");
       const updated = await client.query(`UPDATE evimed_memory.records SET value=$3,summary=$4,status=$5,
-        superseded_by=$6,invalid_since=$7,revisions=$8::jsonb,version=version+1,updated_at=$9
+        superseded_by=$6,invalid_since=$7,revisions=$8::jsonb,version=version+1,updated_at=$9,
+        valid_from=CASE WHEN $10::boolean THEN $11::timestamptz ELSE valid_from END
         WHERE user_id=$1 AND id=$2 RETURNING *`,
       [owner, current.id, before.value || current.value, before.summary, before.status,
         typeof raw?.supersededBy === "string" ? raw.supersededBy : null,
-        typeof raw?.supersededBy === "string" ? memoryInstant(raw.invalidSince) : null,
+        typeof raw?.invalidSince === "string" ? memoryInstant(raw.invalidSince) : null,
         JSON.stringify(appendRevision(current.revisions, {
           version: current.version, value: current.value, summary: current.summary, status: current.status,
           changedAt: now, reason: boundedText(`undone: ${before.reason || "the last change"}`, MEMORY_REASON_LIMIT),
           ...actor,
-          ...(current.supersededBy ? { supersededBy: current.supersededBy, invalidSince: current.invalidSince } : {}),
-        })), now]);
+          ...revisionPointers(current),
+        })), now, restoresStart, restoresStart ? memoryInstant(raw.validFrom) : null]);
       const record = publicRecord(updated.rows[0]);
+      if (current.status === "superseded" && current.supersededBy && record.status !== "superseded") {
+        await this.#reopenConflicts(client, owner, current.supersededBy, record.id);
+      }
       await this.#enqueueRecordIndex(client, owner, record);
       return { undone: "restored", record, previous: current, restored: [] };
     });
@@ -1165,7 +1335,7 @@ export class ResearchMemoryStore {
           version: current.version, value: current.value, summary: current.summary, status: current.status,
           changedAt: now, reason: boundedText(`origin ${current.origin} -> ${next}: ${auditReason}`, MEMORY_REASON_LIMIT),
           ...revisionActor("system", null),
-          ...(current.supersededBy ? { supersededBy: current.supersededBy, invalidSince: current.invalidSince } : {}),
+          ...revisionPointers(current),
         })), now]);
       const record = publicRecord(updated.rows[0]);
       await this.#enqueueRecordIndex(client, owner, record);
@@ -1202,6 +1372,205 @@ export class ResearchMemoryStore {
       await this.#forgetRows(client, owner, result.rows);
       return Number(result.rowCount ?? 0);
     });
+  }
+
+  // -------------------------------------------------------------- relations
+
+  /**
+   * Record that two memories disagree, without deciding which is right.
+   *
+   * A relation, not a resolution: both stay in force and recall labels each with
+   * the other until one replaces it (`supersede`, `resolveConflict`) or one is
+   * forgotten. Whether two statements disagree is a language judgement — the
+   * extraction model's, or the researcher's — and this is where it is kept; what
+   * the store checks is the closed half: both memories are this account's, both
+   * are live (a replaced or archived memory is not one side of anything), and
+   * they are two memories. Idempotent, and a pair settled earlier stays settled.
+   *
+   * @param {string} userId @param {string} firstId @param {string} secondId
+   * @param {{ reason?: string }} [options]
+   * @returns {Promise<{ recordId: string, otherId: string, state: string, created: boolean }>}
+   */
+  async markConflict(userId, firstId, secondId, { reason = "" } = {}) {
+    const owner = assertUserId(userId);
+    const a = assertRecordId(firstId);
+    const b = assertRecordId(secondId);
+    if (a === b) throw new HttpError(400, "memory_conflict_invalid", "A memory cannot conflict with itself.");
+    const [low, high] = a < b ? [a, b] : [b, a];
+    const note = boundedText(reason, MEMORY_REASON_LIMIT);
+    return this.#transaction(async (client) => {
+      // In id order, so two writers marking the same pair take the rows in one order.
+      const found = await client.query(`SELECT id, status FROM evimed_memory.records
+        WHERE user_id=$1 AND id=ANY($2::text[]) ORDER BY id FOR SHARE`, [owner, [low, high]]);
+      if (found.rowCount !== 2) throw new HttpError(404, "memory_not_found", "Memory not found.");
+      if (found.rows.some((/** @type {any} */ row) => !["active", "pending"].includes(row.status))) {
+        throw new HttpError(409, "memory_conflict_invalid", "A replaced or archived memory is not in conflict with anything.");
+      }
+      const inserted = await client.query(`INSERT INTO evimed_memory.record_conflicts (user_id, record_id, other_id, reason)
+        VALUES ($1,$2,$3,$4) ON CONFLICT (user_id, record_id, other_id) DO NOTHING RETURNING state`, [owner, low, high, note]);
+      if (inserted.rowCount === 1) return { recordId: low, otherId: high, state: "open", created: true };
+      const existing = await client.query(
+        "SELECT state FROM evimed_memory.record_conflicts WHERE user_id=$1 AND record_id=$2 AND other_id=$3", [owner, low, high]);
+      return { recordId: low, otherId: high, state: String(existing.rows[0]?.state ?? "open"), created: false };
+    });
+  }
+
+  /**
+   * Settle a disagreement in favour of one statement: the other is replaced by
+   * it — kept, with its value, evidence and links, but no longer in force — and
+   * the conflict is resolved. The act of the researcher, or of a platform step
+   * acting on their word; the old statement stays as history and is never
+   * deleted.
+   *
+   * @param {string} userId @param {string} keepId @param {string} otherId
+   * @param {{ reason?: string, by?: string, runId?: string | null }} [options]
+   * @returns {Promise<{ kept: any, superseded: any }>}
+   */
+  async resolveConflict(userId, keepId, otherId, { reason = "", by = "user", runId = null } = {}) {
+    const owner = assertUserId(userId);
+    const keep = assertRecordId(keepId);
+    const loser = assertRecordId(otherId);
+    if (keep === loser) throw new HttpError(400, "memory_conflict_invalid", "A memory cannot conflict with itself.");
+    // An inference does not settle which of two statements is right: the
+    // researcher does, or a platform step acting on their word (principle 18).
+    if (by === "extraction") throw new HttpError(400, "memory_conflict_invalid", "A disagreement is settled by the researcher, not by an extraction.");
+    const auditReason = boundedText(reason, MEMORY_REASON_LIMIT);
+    const actor = revisionActor(by, runId);
+    return this.#transaction(async (client) => {
+      await this.#lockOwnerForOutbox(client, owner);
+      const rows = await client.query(`SELECT * FROM evimed_memory.records WHERE user_id=$1 AND id=ANY($2::text[])
+        ORDER BY id FOR UPDATE`, [owner, [keep, loser]]);
+      if (rows.rowCount !== 2) throw new HttpError(404, "memory_not_found", "Memory not found.");
+      const kept = publicRecord(rows.rows.find((/** @type {any} */ row) => row.id === keep));
+      const replaced = publicRecord(rows.rows.find((/** @type {any} */ row) => row.id === loser));
+      const [low, high] = keep < loser ? [keep, loser] : [loser, keep];
+      const pair = await client.query(`SELECT state FROM evimed_memory.record_conflicts
+        WHERE user_id=$1 AND record_id=$2 AND other_id=$3 AND state='open'`, [owner, low, high]);
+      if (pair.rowCount !== 1) throw new HttpError(404, "memory_conflict_not_found", "These memories are not in open conflict.");
+      if (kept.status !== "active" || replaced.status !== "active") {
+        throw new HttpError(409, "memory_conflict_invalid", "Only memories in force can be settled against each other.");
+      }
+      const superseded = await this.#retire(client, owner, replaced, kept, {
+        auditReason: auditReason || "the researcher settled a disagreement in favour of it", actor,
+      });
+      return { kept, superseded };
+    });
+  }
+
+  /**
+   * What recall needs to label a set of memories, in one read: the open
+   * disagreements each is a side of (with the other statement, light) and the
+   * sources it rests on that are no longer as they were. A source whose state is
+   * `current` or `unknown` is not listed — neither is a finding.
+   *
+   * @param {string} userId @param {readonly unknown[]} recordIds
+   * @returns {Promise<{ conflicts: Map<string, any[]>, sources: Map<string, any[]> }>}
+   */
+  async recallLinks(userId, recordIds) {
+    const owner = assertUserId(userId);
+    const ids = [...new Set((recordIds ?? []).map(String))].filter((id) => recordIdPattern.test(id)).slice(0, 500);
+    /** @type {{ conflicts: Map<string, any[]>, sources: Map<string, any[]> }} */
+    const links = { conflicts: new Map(), sources: new Map() };
+    if (ids.length === 0) return links;
+    const [conflicts, sources] = await Promise.all([
+      this.#query(`SELECT t.self_id, c.state, c.created_at, o.id, o.scope, o.scope_id, o.kind, o.key, o.status, o.origin,
+          o.sensitive, o.expires_at, o.created_at AS other_created_at, o.valid_from, o.invalid_since, o.superseded_by,
+          left(o.summary, 300) AS summary, left(o.value, 300) AS value
+        FROM evimed_memory.record_conflicts c
+        CROSS JOIN LATERAL (VALUES (c.record_id, c.other_id), (c.other_id, c.record_id)) AS t(self_id, peer_id)
+        JOIN evimed_memory.records o ON o.user_id=c.user_id AND o.id=t.peer_id
+        WHERE c.user_id=$1 AND c.state='open' AND t.self_id=ANY($2::text[])`, [owner, ids]),
+      this.#query(`SELECT record_id, source_type, source_id, source_version, state FROM evimed_memory.record_sources
+        WHERE user_id=$1 AND record_id=ANY($2::text[]) AND state IN ('changed','retracted','expired')
+        ORDER BY record_id, source_type, source_id`, [owner, ids]),
+    ]);
+    for (const row of conflicts.rows) {
+      const list = links.conflicts.get(row.self_id) ?? [];
+      list.push({
+        otherId: row.id, state: row.state, createdAt: memoryInstant(row.created_at),
+        other: {
+          id: row.id, scope: row.scope, scopeId: row.scope_id, kind: row.kind, key: row.key, status: row.status,
+          origin: row.origin, sensitive: Boolean(row.sensitive), summary: row.summary, value: row.value,
+          expiresAt: memoryInstant(row.expires_at), createdAt: memoryInstant(row.other_created_at),
+          validFrom: memoryInstant(row.valid_from), invalidSince: memoryInstant(row.invalid_since),
+          supersededBy: row.superseded_by ?? null,
+        },
+      });
+      links.conflicts.set(row.self_id, list);
+    }
+    for (const row of sources.rows) {
+      const list = links.sources.get(row.record_id) ?? [];
+      list.push({ type: row.source_type, id: row.source_id, state: row.state, version: row.source_version ?? null });
+      links.sources.set(row.record_id, list);
+    }
+    return links;
+  }
+
+  /**
+   * Every source a record rests on, with what is known of each. A record's
+   * history keeps its links: a replaced fact still says what it was read from.
+   * @param {string} userId @param {string} recordId
+   * @returns {Promise<{ type: string, id: string, version: string | null, state: string, stateReason: string,
+   *   stateAt: string | null, linkedAt: string | null }[]>}
+   */
+  async sourceLinks(userId, recordId) {
+    const result = await this.#query(`SELECT source_type, source_id, source_version, state, state_reason, state_at, linked_at
+      FROM evimed_memory.record_sources WHERE user_id=$1 AND record_id=$2 ORDER BY source_type, source_id`,
+    [assertUserId(userId), assertRecordId(recordId)]);
+    return result.rows.map(sourceLinkRow);
+  }
+
+  /**
+   * The memories that rest on one source, found by the recorded identifier and
+   * nothing else — never by what a memory says. What a knowledge change walks
+   * to find the memories it may affect. Every status is returned (a replaced
+   * memory is history that still names its source), tagged, so the caller
+   * decides what an old version is owed; one account's, always.
+   *
+   * @param {string} userId @param {{ type: string, id: string }} source @param {{ limit?: number }} [options]
+   */
+  async dependentsOfSource(userId, source, { limit = 500 } = {}) {
+    const link = sourceLinkOf({ type: source?.type, id: source?.id });
+    if (!link) throw invalid("source");
+    const result = await this.#query(`SELECT r.id, r.scope, r.scope_id, r.kind, r.key, r.status, r.version,
+        s.source_type, s.source_id, s.source_version, s.state, s.state_reason, s.state_at, s.linked_at
+      FROM evimed_memory.record_sources s JOIN evimed_memory.records r ON r.user_id=s.user_id AND r.id=s.record_id
+      WHERE s.user_id=$1 AND s.source_type=$2 AND s.source_id=$3 ORDER BY r.id LIMIT $4`,
+    [assertUserId(userId), link.type, link.id, Math.max(1, Math.min(2000, Number(limit) || 500))]);
+    return result.rows.map((/** @type {any} */ row) => {
+      const recorded = sourceLinkRow(row);
+      return {
+        recordId: row.id, scope: row.scope, scopeId: row.scope_id, kind: row.kind, key: row.key, status: row.status,
+        recordVersion: Number(row.version) || 1,
+        sourceVersion: recorded.version, state: recorded.state, stateReason: recorded.stateReason,
+        stateAt: recorded.stateAt, linkedAt: recorded.linkedAt,
+      };
+    });
+  }
+
+  /**
+   * Say what a check found about a source, on every memory that rests on it:
+   * `retracted`, `changed`, `expired`, `current` again, or `unknown` when the
+   * check could not answer — which is recorded as unknown and not as clean.
+   *
+   * The memories themselves are untouched: no version moves and nothing is
+   * withheld. A label on the link is what recall reads, so the memory keeps its
+   * history and the researcher's own statement stays theirs. A correction notice
+   * does not by itself make a conclusion false; it makes it worth checking.
+   *
+   * @param {string} userId @param {{ type: string, id: string }} source
+   * @param {{ state: string, reason?: string }} finding
+   * @returns {Promise<{ recordIds: string[] }>}
+   */
+  async markSourceLinks(userId, source, { state, reason = "" }) {
+    const link = sourceLinkOf({ type: source?.type, id: source?.id });
+    if (!link) throw invalid("source");
+    const next = enumValue(state, MEMORY_SOURCE_STATES, "state");
+    const result = await this.#query(`UPDATE evimed_memory.record_sources SET state=$4,state_reason=$5,
+        state_at=date_trunc('second', clock_timestamp())
+      WHERE user_id=$1 AND source_type=$2 AND source_id=$3 RETURNING record_id`,
+    [assertUserId(userId), link.type, link.id, next, boundedText(reason, MEMORY_REASON_LIMIT)]);
+    return { recordIds: result.rows.map((/** @type {any} */ row) => String(row.record_id)).sort() };
   }
 
   // --------------------------------------------------------------- settings
@@ -1306,22 +1675,37 @@ export class ResearchMemoryStore {
    *
    * This is the builtin recall arm — the one that needs no index deployed and
    * the one every other arm is measured against — so its scoring is kept
-   * exactly as it was.
+   * exactly as it was. What it is allowed to nominate is decided by
+   * `memoryValidity`, the decision both arms share: the version of each fact
+   * that held at the time asked (now, unless `asOf` names another) in this
+   * project, with what a reader must be told about it — a disagreement, a
+   * retracted or corrected source — as labels on the memo and never as a
+   * reason to withhold it.
+   *
+   * A question about an earlier time is answered from here and not from the
+   * index: the index holds what is in force now and nothing else, and the
+   * versions that held then are in the authority.
    *
    * @param {string} userId @param {string} query
-   * @param {{ projectId?: string|null, sessionId?: string|null }} scope
+   * @param {{ projectId?: string|null, sessionId?: string|null, asOf?: number|null, now?: number }} scope
+   *   `asOf`/`now` in epoch milliseconds; `now` is injectable so the time a
+   *   recall is made in is never read behind a test's back.
    */
-  async relevant(userId, query, { projectId = null, sessionId = null } = {}) {
+  async relevant(userId, query, { projectId = null, sessionId = null, asOf = null, now = Date.now() } = {}) {
     if (!this.configured || this.contextLimit === 0 || this.contextMaxChars === 0) return [];
     const terms = searchTokens(query);
+    const past = asOf != null && asOf < now;
+    // History is recallable only for a question about the time before it was
+    // replaced; for now, a replaced fact is not true and is not read.
+    const statuses = past ? ["active", "superseded"] : ["active"];
     // Durable memories are fetched in their own query. A single page ordered by
     // importance cannot hold both: run summaries arrive one per run and a failed
     // one carries importance 0.7 against a preference's 0.6, so past a hundred
     // runs the page is all episodes and the user's long-term picture becomes
     // permanently unreachable — silently, because a full page still looks fine.
     const [durableRecords, episodicRecords] = await Promise.all([
-      this.listRecords(userId, { statuses: ["active"], kinds: [...DURABLE_RECALL_KINDS], pageSize: 100 }),
-      this.listRecords(userId, { statuses: ["active"], pageSize: 100 }),
+      this.listRecords(userId, { statuses, kinds: [...DURABLE_RECALL_KINDS], pageSize: 100 }),
+      this.listRecords(userId, { statuses, pageSize: 100 }),
     ]);
     const seenRecordIds = new Set();
     const records = [...durableRecords, ...episodicRecords].filter((record) => {
@@ -1329,20 +1713,16 @@ export class ResearchMemoryStore {
       seenRecordIds.add(record.id);
       return true;
     });
-    const now = Date.now();
-    const structured = records
-      // A run summary is the timeline's, not memory the next prompt is handed
-      // (2026-09-19 proposal §4.1): it held the platform's own earlier answer,
-      // and recalled it as if it were something known about the researcher.
-      .filter((record) => record.kind !== "run_summary")
-      .filter((record) => !record.sensitive)
-      .filter((record) => !record.expiresAt || Date.parse(record.expiresAt) > now)
-      // A fact that stopped holding: what replaced it is the one to recall.
-      .filter((record) => !record.invalidSince || Date.parse(record.invalidSince) > now)
-      .filter((record) => record.scope === "user"
-        || (record.scope === "project" && record.scopeId === projectId)
-        || (record.scope === "session" && record.scopeId === sessionId))
-      .map((record) => {
+    const context = { now, asOf, projectId, sessionId };
+    // A run summary is the timeline's, not memory the next prompt is handed
+    // (2026-09-19 proposal §4.1): it held the platform's own earlier answer,
+    // and recalled it as if it were something known about the researcher.
+    // Sensitive text is stored and never recalled. Scope, expiry and the
+    // validity interval are `versionsInForce`'s.
+    const inForce = versionsInForce(records, context);
+    const scored = inForce
+      .map((entry) => {
+        const record = entry.record;
         const content = recallContent(record);
         const haystack = `${record.key} ${content}`.toLowerCase();
         const matches = terms.reduce((score, term) => score + (haystack.includes(term) ? 1 : 0), 0);
@@ -1353,26 +1733,35 @@ export class ResearchMemoryStore {
         const freshness = record.origin === "inferred" ? inferenceFreshness(record.updatedAt, now, this.inferredTtlMs) : 1;
         const score = matches + (durable ? 0.75 * freshness : 0) + record.importance + record.confidence * 0.5;
         return {
+          entry,
+          content,
           // Only durable identity memories apply to every question. Everything
           // else has to earn recall with a query-term match: importance and
           // confidence alone put the score above zero, so without this a
           // greeting would pull every stored run summary into the prompt.
           recallable: durable || matches > 0,
-          memo: {
-            id: `record:${record.id}`,
-            content,
-            updatedAt: record.updatedAt,
-            memoryType: "structured",
-            kind: record.kind,
-            scope: record.scope,
-            origin: record.origin,
-            confidence: record.confidence,
-            importance: record.importance,
-          },
           score,
         };
       })
       .filter((row) => row.recallable);
+    // What each recallable memory has to be labelled with, in one read.
+    const links = scored.length ? await this.recallLinks(userId, scored.map((row) => row.entry.record.id)) : undefined;
+    const labelled = annotateVersions(scored.map((row) => row.entry), links, context);
+    const structured = scored.map((row, index) => ({
+      memo: {
+        id: `record:${row.entry.record.id}`,
+        content: row.content,
+        updatedAt: row.entry.record.updatedAt,
+        memoryType: "structured",
+        kind: row.entry.record.kind,
+        scope: row.entry.record.scope,
+        origin: row.entry.record.origin,
+        confidence: row.entry.record.confidence,
+        importance: row.entry.record.importance,
+        ...versionFields(labelled[index]),
+      },
+      score: row.score,
+    }));
     const byScore = (left, right) =>
       right.score - left.score || String(right.memo.updatedAt).localeCompare(String(left.memo.updatedAt));
     const ranked = [...structured].sort(byScore);
@@ -1430,11 +1819,32 @@ export class ResearchMemoryStore {
 
   /** @param {string} userId */
   async exportUserMemory(userId) {
-    const [records, settings] = await Promise.all([this.listAllRecords(userId), this.settings(userId)]);
+    const [records, settings, links] = await Promise.all([this.listAllRecords(userId), this.settings(userId), this.#allLinks(userId)]);
     // `manualMemos` is still in the archive, always empty: an archive a
     // customer already downloaded has the key, and a reader that expects it is
     // owed the same shape rather than a missing field it has to guess about.
-    return { version: 1, records, manualMemos: [], settings };
+    // `links` is the relations between memories and what they rest on, added
+    // beside the existing keys: everything held about the researcher is in it.
+    return { version: 1, records, manualMemos: [], settings, links };
+  }
+
+  /** Every relation an account's memories hold, for the export.
+   *  @param {string} userId */
+  async #allLinks(userId) {
+    const owner = assertUserId(userId);
+    const [conflicts, sources] = await Promise.all([
+      this.#query(`SELECT record_id, other_id, state, reason, resolution, created_at, resolved_at
+        FROM evimed_memory.record_conflicts WHERE user_id=$1 ORDER BY record_id, other_id`, [owner]),
+      this.#query(`SELECT record_id, source_type, source_id, source_version, state, state_reason, state_at, linked_at
+        FROM evimed_memory.record_sources WHERE user_id=$1 ORDER BY record_id, source_type, source_id`, [owner]),
+    ]);
+    return {
+      conflicts: conflicts.rows.map((/** @type {any} */ row) => ({
+        recordId: row.record_id, otherId: row.other_id, state: row.state, reason: row.reason, resolution: row.resolution,
+        createdAt: memoryInstant(row.created_at), resolvedAt: memoryInstant(row.resolved_at),
+      })),
+      sources: sources.rows.map((/** @type {any} */ row) => ({ recordId: row.record_id, ...sourceLinkRow(row) })),
+    };
   }
 
   /** What an account's memory amounts to, without deleting any of it.

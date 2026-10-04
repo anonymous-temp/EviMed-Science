@@ -995,6 +995,37 @@ test("the capsule tools exist on a deployment with no memory service, and answer
   assert.match(result.value.issues[0].message, /未配置记忆服务/);
 });
 
+test("the recall tool names the time of the question only when the question has one, and says what an uncertain answer is", async () => {
+  const { apply: applyCapsule } = await import("../plugins/capsule.mjs");
+  /** @type {any[]} */
+  const bodies = [];
+  const server = createServer((req, res) => {
+    let raw = "";
+    req.on("data", (chunk) => { raw += chunk; });
+    req.on("end", () => {
+      bodies.push(JSON.parse(raw));
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ items: [], mode: "none", contextOnly: true }));
+    });
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve(undefined)));
+  try {
+    const ctx = harness();
+    await applyCapsule(ctx, { methodsDir: "", recallUrl: `http://127.0.0.1:${/** @type {any} */ (server.address()).port}/internal/capsules/v1`, tokenFile: "", recallTimeoutMs: 2000 });
+    const call = (/** @type {Record<string, unknown>} */ args) => ctx.tools.execute({ agent: { id: "a" }, name: "evimed_capsule_recall", callId: "c", arguments: args, signal: AbortSignal.timeout(2000) });
+    assert.equal((await call({ query: "剂量" })).value.ok, true);
+    assert.equal((await call({ query: "剂量", asOf: "2025-06-30" })).value.ok, true);
+    assert.equal("asOf" in bodies[0], false, "a question about now sends no time: the gateway reads absence as now");
+    assert.equal(bodies[1].asOf, "2025-06-30");
+    const tool = ctx.toolDefinition("evimed_capsule_recall");
+    assert.match(JSON.stringify(tool.input ?? tool.parameters ?? tool), /asOf/, "the parameter is declared");
+    assert.match(String(tool.description), /uncertain/, "a reader of the tool is told what an uncertain item is");
+  } finally {
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(() => resolve(undefined)));
+  }
+});
+
 test("a delegation constructor failure leaves the item retriable and records no running child", async () => {
   const f = await nativePolicyFixture({
     briefId: "delegation_owner",

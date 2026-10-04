@@ -2,6 +2,7 @@ import { CAPSULE_FACT_KINDS } from "@evimed/domain";
 import { AGENT_RECALL_MAX_CAPSULES, AGENT_RECALL_METHOD_MODES, recallForAgent } from "./agentMemoryRecall.mjs";
 import { memoryBoard, methodAction, methodDetail, noteAction, recordAction } from "./agentMemoryBoard.mjs";
 import { OBSERVATION_FIELDS, readObservation } from "./agentMemoryObservations.mjs";
+import { parseAsOf } from "./memoryValidity.mjs";
 import { HttpError, readJson, sendJson } from "./security.mjs";
 import { assertAgentSubject } from "./agentApiKeys.mjs";
 import { agentMemoryOpenApi } from "./agentMemoryOpenApi.mjs";
@@ -66,7 +67,7 @@ export const AGENT_MEMORY_ENDPOINTS = Object.freeze([
 /** The fields each request body may carry, by operation. A contract test holds
  *  the OpenAPI description's request schemas to exactly these lists. */
 export const AGENT_MEMORY_REQUEST_FIELDS = Object.freeze({
-  recall: Object.freeze(["query", "projectId", "limit", "factKinds", "since", "scope", "capsuleIds", "methods"]),
+  recall: Object.freeze(["query", "projectId", "limit", "factKinds", "since", "asOf", "scope", "capsuleIds", "methods"]),
   note: Object.freeze(["factKind", "content", "projectId"]),
   episodes: Object.freeze(["projectId", "sessionId", "messages"]),
   observations: OBSERVATION_FIELDS,
@@ -231,6 +232,9 @@ export function createAgentMemoryRoutes({
       if (input.scope !== undefined && !["all", "capsule", "conversation", "agenda"].includes(input.scope)) {
         throw new HttpError(400, "agent_memory_payload_invalid", "Invalid memory scope.");
       }
+      if (input.asOf != null && parseAsOf(input.asOf) === undefined) {
+        throw new HttpError(400, "agent_memory_payload_invalid", "asOf must be an ISO date such as 2025-06-30.");
+      }
       // The capsules to read instead of the ones in force: at most eight,
       // each named once.
       if (input.capsuleIds !== undefined && (!Array.isArray(input.capsuleIds) || input.capsuleIds.length < 1
@@ -253,6 +257,7 @@ export function createAgentMemoryRoutes({
           limit: input.limit ?? 10,
           factKinds: input.factKinds ?? [],
           since: input.since ?? null,
+          ...(input.asOf ? { asOf: input.asOf } : {}),
           scope: input.scope ?? "all",
           ...(input.capsuleIds ? { capsuleIds: input.capsuleIds } : {}),
           methods: input.methods ?? "all",

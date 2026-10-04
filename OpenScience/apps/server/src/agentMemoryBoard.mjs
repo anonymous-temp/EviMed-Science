@@ -89,13 +89,13 @@ function wasTrue(record, replaced) {
     earlier.push({
       version: revision.version,
       summary: words,
-      from: index === 0 ? record.createdAt : revisions[index - 1].changedAt ?? null,
+      from: index === 0 ? record.validFrom ?? record.createdAt : revisions[index - 1].changedAt ?? null,
       until: revision.changedAt ?? null,
       ...(revision.by ? { by: revision.by } : {}),
     });
   });
   for (const old of replaced) {
-    earlier.push({ recordId: old.id, summary: String(old.summary || old.value || ""), from: old.createdAt, until: old.invalidSince ?? old.updatedAt });
+    earlier.push({ recordId: old.id, summary: String(old.summary || old.value || ""), from: old.validFrom ?? old.createdAt, until: old.invalidSince ?? old.updatedAt });
   }
   return earlier.sort((left, right) => String(right.until ?? "").localeCompare(String(left.until ?? "")));
 }
