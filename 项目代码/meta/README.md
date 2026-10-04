@@ -196,6 +196,15 @@ The repository also contains versioned external numerical corpora under
 marked production until its required independent reference and boundary evidence
 are present.
 
+`validation/corpora/published_worked_examples.json` holds worked examples that
+publications and metafor's documentation print (Raudenbush 2009, Normand 1999,
+DerSimonian & Laird 2007, Stata `metan` on the BCG trials, the magnesium trials of
+Egger et al. 2001), and `tests/test_published_reference_cases.py` runs pooling,
+heterogeneity, Hartung-Knapp, meta-regression, Egger, Begg, trim-and-fill, fail-safe
+N and Hedges' g against them at the sources' printed precision. The corpus is not
+listed in the capability manifest on purpose: the manifest's fingerprint is bound
+into every stored method plan, so adding to it is a decision about those plans.
+
 ## License
 
 MIT
