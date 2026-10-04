@@ -1379,7 +1379,7 @@ export function presentIntake(bundle) {
   if (!dataPlane || dataPlane.available === false) {
     return {
       available: false,
-      message: text(dataPlane?.message) ?? (study.dataTier === "T0" ? "T0 档不需要患者级数据；升到 T1 及以上后在这里接入。" : "本部署未接入数据平面，暂不能接入患者级数据。"),
+      message: text(dataPlane?.message) ?? (study.dataTier === "T0" ? "T0 档不需要患者级数据；有了数据，在这里接入并冻结后，研究页会提示升到 T1 及以上。" : "本部署未接入数据平面，暂不能接入患者级数据。"),
       formats: [], maxBytes: null, seal: null, sources: [], snapshots: [],
     };
   }
