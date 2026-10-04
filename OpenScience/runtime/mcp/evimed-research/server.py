@@ -22,6 +22,7 @@ from pathlib import Path, PurePosixPath
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import public_sources
+import source_outcome
 import science_connectors
 import drug_assessment
 import open_access_fulltext
@@ -550,6 +551,25 @@ TOOL_DEFINITIONS = [
         ),
     },
     {
+        "name": "identifier_resolve",
+        "description": (
+            "Link PMIDs, PMCIDs and DOIs to one another (up to 200) and preserve the answer: NCBI's ID converter, then "
+            "Europe PMC, PubMed and Crossref for what it cannot place. Each identifier ends resolved, conflict, not_found, "
+            "invalid or unchecked. A PMID that is not in PMC has no PMCID, which is not the same as not existing. "
+            "Returns the linked ids, title, PMC versions, which source said what, and the preserved links.json."
+        ),
+        "inputSchema": object_schema(
+            {
+                "identifiers": {
+                    "type": "array", "minItems": 1, "maxItems": public_sources.MAX_IDENTIFIER_BATCH,
+                    "items": {"type": "string", "minLength": 1, "maxLength": 300},
+                    "description": "PMIDs (\"30221596\", \"PMID: 30221596\"), PMCIDs (\"PMC6426126\") and DOIs, in any mix.",
+                },
+            },
+            ("identifiers",),
+        ),
+    },
+    {
         "name": "guideline_search",
         "description": "Search configured clinical-guideline sources.",
         "inputSchema": object_schema(
@@ -1038,6 +1058,13 @@ def _public_source_failure(error, stop_reason, next_actions):
     """
     if isinstance(error, public_sources.SourceNotConfigured):
         return failure(error.code, str(error), False, error.STOP_REASON, error.next_actions())
+    # A retrieval that ended in one of the three failure names says what to do
+    # about that one (source_outcome.py): refused, out of time, or unreachable.
+    if isinstance(error, source_outcome.SourceError):
+        return failure(error.code, str(error), error.retryable, error.stop_reason(), error.next_actions())
+    # A request the run built wrongly is the run's to correct, not an outage to retry.
+    if isinstance(error.code, str) and error.code.endswith("_invalid") and not error.retryable:
+        return failure(error.code, str(error), False, "Stop until the tool input is corrected.", ["Correct the named field and call again."])
     return failure(error.code, str(error), error.retryable, stop_reason, next_actions)
 
 
@@ -2296,6 +2323,18 @@ def _dispatch(name, arguments, execution_context=None):
                 False,
                 "Stop and read the records another way.",
                 ["Use open_access_full_text for records with a PMC copy, or ask an operator to enable public connectors."],
+            )
+        return _public_adapter_call(name, arguments)
+    if name == "identifier_resolve":
+        # The converter, PubMed, Europe PMC and Crossref are public and have no
+        # private adapter: this goes through the gateway or is refused.
+        if not public_sources.enabled():
+            return failure(
+                "public_source_unsupported",
+                "Identifier resolution needs the public connectors, which are disabled in this deployment.",
+                False,
+                "Stop and link the identifiers another way.",
+                ["Open each record with literature_search pmids or web_read and read its identifiers."],
             )
         return _public_adapter_call(name, arguments)
     if name == "reference_list":

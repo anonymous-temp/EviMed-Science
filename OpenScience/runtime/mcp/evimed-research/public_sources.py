@@ -43,6 +43,8 @@ PUBMED_EFETCH_BATCH = 200
 MAX_PUBMED_ABSTRACT_PMIDS = 200
 _PMID_PATTERN = re.compile(r"^\s*(?:PMID\s*:?\s*)?(\d{1,9})\s*$", re.I)
 _RXNORM_RESOLVE_LIMIT = 10
+# The most identifiers one `identifier_resolve` call links (the NCBI ID converter's own bound).
+MAX_IDENTIFIER_BATCH = 200
 
 
 class PublicSourceError(Exception):
@@ -152,6 +154,7 @@ def supports(name):
         "comprehensive_drug_evaluation",
         "drug_selection_evaluation",
         "biomedical_source_search",
+        "identifier_resolve",
     }
 
 
@@ -4224,4 +4227,7 @@ def call(name, arguments):
         return drug_selection(arguments)
     if name == "reference_list":
         return reference_list(arguments)
+    if name == "identifier_resolve":
+        import identifier_links  # lazy: it imports this module
+        return identifier_links.resolve(arguments)
     raise PublicSourceError("public_source_unsupported", "No public connector is available for %s." % name)

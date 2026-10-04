@@ -1,0 +1,220 @@
+{
+ "schemaVersion": 1,
+ "note": "Every file here is a response recorded from the live API on the date shown (origin live), or a constructed fixture (origin constructed) written from the provider's documentation and marked so. `record.py` re-records the live ones through the gateway from a deployment.",
+ "files": [
+  {
+   "file": "crossref__work_404.txt",
+   "request": "GET https://api.crossref.org/works/10.9999/does-not-exist",
+   "status": 404,
+   "contentType": "text/plain",
+   "origin": "live",
+   "recordedAt": "2026-10-04T07:51:36Z",
+   "bytes": 19,
+   "sha256": "ae8462e3af85ca7577aaa97ff22a194f9dfd7fada58cf4944b53d2fdfa7b1f92"
+  },
+  {
+   "file": "crossref__works_filter_two_of_three.json",
+   "request": "GET https://api.crossref.org/works?filter=doi:10.1056/NEJMoa1800722,doi:10.9999/does-not-exist,doi:10.3389/fphys.2018.01776&select=DOI,title,type,issued&rows=10",
+   "status": 200,
+   "contentType": "application/json",
+   "origin": "live",
+   "recordedAt": "2026-10-04T07:51:45Z",
+   "bytes": 581,
+   "sha256": "801959ed7284a68adba912099616241e169f87e891aa6209db966d6aa553b977",
+   "note": "Only the DOIs Crossref holds come back: a missing one is absent from the list, not an error."
+  },
+  {
+   "file": "europepmc__fulltext_PMC6454835.xml",
+   "request": "GET https://www.ebi.ac.uk/europepmc/webservices/rest/PMC6454835/fullTextXML",
+   "status": 200,
+   "contentType": "application/xml",
+   "origin": "live",
+   "recordedAt": "2026-10-04T07:38:07Z",
+   "bytes": 105697,
+   "sha256": "b917f4fa8d9d6de09771cb435b3458690005a1f3f19ca5ac20d11742e29960f0",
+   "note": "A CC-BY article (Front Physiol 2019): pmcid-ver, pub-history and ten supplementary-material entries with suppdata size and md5 processing instructions."
+  },
+  {
+   "file": "europepmc__fulltextxml_500.json",
+   "request": "GET https://www.ebi.ac.uk/europepmc/webservices/rest/PMC6533834/fullTextXML",
+   "status": 500,
+   "contentType": "application/json",
+   "origin": "live",
+   "recordedAt": "2026-10-04T07:38:52Z",
+   "bytes": 150,
+   "sha256": "3d8b3a9ba50281691e67a83f3f90a9a85e7bd8254051c7c043b7e73502952aee",
+   "note": "A PMC article that is not open access (and a PMCID that does not exist: PMC99999999) answer HTTP 500, not 403 or 404."
+  },
+  {
+   "file": "europepmc__search_lite_doi_missing.json",
+   "request": "GET https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=DOI:\"10.9999/does-not-exist\"&format=json&resultType=lite&pageSize=2",
+   "status": 200,
+   "contentType": "application/json;charset=UTF-8",
+   "origin": "live",
+   "recordedAt": "2026-10-04T08:06:20Z",
+   "bytes": 192,
+   "sha256": "5ea963bb08246c6fe7f600dc916bc280b530beb8000fe3686dc3b76a5156c1e5",
+   "note": "No match is hitCount 0 and an empty result list, HTTP 200."
+  },
+  {
+   "file": "europepmc__search_lite_doi_nejm.json",
+   "request": "GET https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=DOI:\"10.1056/NEJMoa1800722\"&format=json&resultType=lite&pageSize=5",
+   "status": 200,
+   "contentType": "application/json;charset=UTF-8",
+   "origin": "live",
+   "recordedAt": "2026-10-04T07:51:12Z",
+   "bytes": 1415,
+   "sha256": "1cf40526e45e0e26701fc96b25682f3af075d84b2e331ffbc5660b3941682aef",
+   "note": "Europe PMC lower-cases the DOI it returns (10.1056/nejmoa1800722); a DOI is case-insensitive."
+  },
+  {
+   "file": "europepmc__search_lite_has_suppl.json",
+   "request": "GET https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=HAS_SUPPL:y AND OPEN_ACCESS:y AND SRC:MED AND PUB_YEAR:2018&format=json&resultType=lite&pageSize=3",
+   "status": 200,
+   "contentType": "application/json;charset=UTF-8",
+   "origin": "live",
+   "recordedAt": "2026-10-04T07:37:29Z",
+   "bytes": 3470,
+   "sha256": "74698cac5e00b4e74959742abe26b5615ee20ed18e0dfeb7d2dc02d855da133b",
+   "note": "hitCount, nextCursorMark and per-record isOpenAccess/inPMC/hasSuppl flags."
+  },
+  {
+   "file": "europepmc__search_lite_pmcid_PMC5737441.json",
+   "request": "GET https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=PMCID:PMC5737441&format=json&resultType=lite&pageSize=2",
+   "status": 200,
+   "contentType": "application/json;charset=UTF-8",
+   "origin": "live",
+   "recordedAt": "2026-10-04",
+   "bytes": 1093,
+   "sha256": "e223848a33ddd09680a3277e0da9915ad5a3cf42e2a355d8df820ee2169c47cf"
+  },
+  {
+   "file": "europepmc__search_lite_pmcid_missing.json",
+   "request": "GET https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=PMCID:PMC9999999999&format=json&resultType=lite&pageSize=2",
+   "status": 200,
+   "contentType": "application/json;charset=UTF-8",
+   "origin": "live",
+   "recordedAt": "2026-10-04T08:06:24Z",
+   "bytes": 219,
+   "sha256": "e2b261aebe68f15e6d5f51610f0c309238ea678312ec3bc871035ddf1a3b6dd1"
+  },
+  {
+   "file": "europepmc__search_lite_two_dois_one_held.json",
+   "request": "GET https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=DOI:\"10.1056/nejmoa1800722\" OR DOI:\"10.9999/does-not-exist\"&format=json&resultType=lite&pageSize=4",
+   "status": 200,
+   "contentType": "application/json;charset=UTF-8",
+   "origin": "live",
+   "recordedAt": "2026-10-04T08:06:28Z",
+   "bytes": 1449,
+   "sha256": "47d59d12c89b9ce81de1030bc63c9aef27e405acd10432e90327580a4408c191",
+   "note": "An OR query returns only the records that exist; the missing DOI is absent from the list."
+  },
+  {
+   "file": "europepmc__supplementary_none.xml",
+   "request": "GET https://www.ebi.ac.uk/europepmc/webservices/rest/PMC8579481/supplementaryFiles",
+   "status": 200,
+   "contentType": "application/xml",
+   "origin": "live",
+   "recordedAt": "2026-10-04T07:57:23Z",
+   "bytes": 201,
+   "sha256": "578d54a53d043ae572a2d790ee097fac16a74dd74db03021fe986d31fcadc0b1",
+   "note": "An open-access article with no supplementary files: an empty fullTextXMLBean, HTTP 200."
+  },
+  {
+   "file": "europepmc__supplementary_not_open_access.xml",
+   "request": "GET https://www.ebi.ac.uk/europepmc/webservices/rest/PMC6533834/supplementaryFiles",
+   "status": 200,
+   "contentType": "application/xml",
+   "origin": "live",
+   "recordedAt": "2026-10-04T07:38:54Z",
+   "bytes": 296,
+   "sha256": "caa1422f268579cbdd7b655f4f39946003a8028de6bf94f94bc7bffb26c0b5e5",
+   "note": "An error disguised as HTTP 200: an errorBean in XML."
+  },
+  {
+   "file": "idconv__429.html",
+   "request": "GET https://pmc.ncbi.nlm.nih.gov/tools/idconv/api/v1/articles/?ids=30153985,PMC6143516,10.1056/NEJMoa1800722&format=json&tool=evimed_research",
+   "status": 429,
+   "contentType": "text/html; charset=UTF-8",
+   "origin": "live",
+   "recordedAt": "2026-10-04T07:35:46Z",
+   "bytes": 142,
+   "sha256": "6ff059e12183cc1b0cea42b12c922ecedd2c6400fc4948d4e257b9fcbb152515",
+   "note": "A rate limit as HTML with no Retry-After header (content-length 142), the first request from this box."
+  },
+  {
+   "file": "idconv__doi_found_and_missing.json",
+   "request": "GET https://pmc.ncbi.nlm.nih.gov/tools/idconv/api/v1/articles/?ids=10.1056/NEJMoa1800722,10.9999/does-not-exist&idtype=doi&format=json&tool=evimed_research&email=research%40evimed.example",
+   "status": 200,
+   "contentType": "application/json",
+   "origin": "live",
+   "recordedAt": "2026-10-04T07:36:12Z",
+   "bytes": 647,
+   "sha256": "cb729028116c1dbb854d41ac3a3117ee10efa3729425af7cbc5e358763165556"
+  },
+  {
+   "file": "idconv__mixed_idtypes_400.json",
+   "request": "GET https://pmc.ncbi.nlm.nih.gov/tools/idconv/api/v1/articles/?ids=30153985,PMC6143516,10.1056/NEJMoa1800722,99999999999,notanid&format=json&tool=evimed_research&email=research%40evimed.example",
+   "status": 400,
+   "contentType": "application/json",
+   "origin": "live",
+   "recordedAt": "2026-10-04T07:36:00Z",
+   "bytes": 552,
+   "sha256": "6af8a49cc3fef0bdbf5f1172910dbcd9cee42fb3a3fdb1ffb80fce8f5e1b0f38",
+   "note": "All ids in one request must be one type; the type is read from the first id unless idtype is given."
+  },
+  {
+   "file": "idconv__no_email_warning.json",
+   "request": "GET https://pmc.ncbi.nlm.nih.gov/tools/idconv/api/v1/articles/?ids=29045601&idtype=pmid&format=json&tool=evimed_research",
+   "status": 200,
+   "contentType": "application/json",
+   "origin": "live",
+   "recordedAt": "2026-10-04T07:46:39Z",
+   "bytes": 391,
+   "sha256": "80f2ce703e8c3ad49e43b154943fc8b65de54d581880a40fa2b0b57c5b3a0745",
+   "note": "email is requested, not required: the answer carries request.warnings."
+  },
+  {
+   "file": "idconv__pmcid_found_and_missing.json",
+   "request": "GET https://pmc.ncbi.nlm.nih.gov/tools/idconv/api/v1/articles/?ids=PMC6143516,PMC9999999999&idtype=pmcid&format=json&versions=yes&tool=evimed_research&email=research%40evimed.example",
+   "status": 200,
+   "contentType": "application/json",
+   "origin": "live",
+   "recordedAt": "2026-10-04T07:36:10Z",
+   "bytes": 687,
+   "sha256": "7baa4141798b0b9be3c246387276e673ada4273f2ab5ed16e09c8d61b4582e11"
+  },
+  {
+   "file": "idconv__pmid_found_and_not_in_pmc.json",
+   "request": "GET https://pmc.ncbi.nlm.nih.gov/tools/idconv/api/v1/articles/?ids=30153985,29045601,99999999&idtype=pmid&format=json&versions=yes&tool=evimed_research&email=research%40evimed.example",
+   "status": 200,
+   "contentType": "application/json",
+   "origin": "live",
+   "recordedAt": "2026-10-04T08:06:13Z",
+   "bytes": 762,
+   "sha256": "7e61edd9d7e5f0cad7af3368e6a24ca30fa29b5c65ecc1a13ffdd27074eb85fc",
+   "note": "30153985 exists in PubMed and is not in PMC: the converter says 'Identifier not found in PMC', which is not 'no such PMID'. 99999999 exists nowhere and gets the same words."
+  },
+  {
+   "file": "pubmed__esummary_three_pmids.json",
+   "request": "GET https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&id=29045601,30153985,99999999&retmode=json&tool=evimed_research",
+   "status": 200,
+   "contentType": "application/json; charset=UTF-8",
+   "origin": "live",
+   "recordedAt": "2026-10-04T08:06:16Z",
+   "bytes": 5686,
+   "sha256": "45516fa381d556c3c0ab7090ebe95fb6e066ab4085f500e782b93a69f2d864ba",
+   "note": "An unknown PMID is a uid entry with error 'cannot get document summary'. articleids carries the PMC id twice, as idtype pmc and as idtype pmcid ('pmc-id: PMC5737441;')."
+  },
+  {
+   "file": "pubmed__esummary_two_pmids_from_links.json",
+   "request": "GET https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&id=30221596,30228269&retmode=json&tool=evimed_research",
+   "status": 200,
+   "contentType": "application/json; charset=UTF-8",
+   "origin": "live",
+   "recordedAt": "2026-10-04T08:06:56Z",
+   "bytes": 7012,
+   "sha256": "c8b90b087abe34a7ed7273a5334006bb1f22be43a3878a70bf7f243e80744413"
+  }
+ ]
+}
