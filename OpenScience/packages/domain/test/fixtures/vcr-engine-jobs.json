@@ -1899,6 +1899,68 @@
           }
         ]
       }
+    },
+    {
+      "name": "weight_comparator with sources per column",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "weight_comparator",
+        "method": "comparator.entropy_balance",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariates": [
+            "age",
+            "ecog",
+            "ldh"
+          ],
+          "treatmentColumn": "arm",
+          "moments": 2,
+          "estimand": "ATT"
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "imputed",
+            "columnSources": {
+              "age": "imputed",
+              "male": "observed",
+              "y": "calculated"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "profile_snapshot with an empty columnSources",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "profile_snapshot",
+        "method": "profile.snapshot",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {},
+        "inputs": [
+          {
+            "kind": "snapshot_file",
+            "id": "snp_1:1",
+            "location": "std_1/snp_1/raw1.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed",
+            "columnSources": {}
+          }
+        ]
+      }
     }
   ],
   "invalid": [
@@ -12715,6 +12777,276 @@
       },
       "expected": [
         "scenario_value_invalid@scenario.analysis.alpha"
+      ]
+    },
+    {
+      "name": "columnSources names a source that does not exist",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "profile_snapshot",
+        "method": "profile.snapshot",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {},
+        "inputs": [
+          {
+            "kind": "snapshot_file",
+            "id": "snp_1:1",
+            "location": "std_1/snp_1/raw1.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed",
+            "columnSources": {
+              "age": "guessed",
+              "male": "observed"
+            }
+          }
+        ]
+      },
+      "expected": [
+        "input_column_source_invalid@inputs[0].columnSources.age"
+      ]
+    },
+    {
+      "name": "columnSources names a source the table-level list has but a column may not (aggregate)",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "profile_snapshot",
+        "method": "profile.snapshot",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {},
+        "inputs": [
+          {
+            "kind": "snapshot_file",
+            "id": "snp_1:1",
+            "location": "std_1/snp_1/raw1.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed",
+            "columnSources": {
+              "age": "aggregate"
+            }
+          }
+        ]
+      },
+      "expected": [
+        "input_column_source_invalid@inputs[0].columnSources.age"
+      ]
+    },
+    {
+      "name": "columnSources is a list",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "profile_snapshot",
+        "method": "profile.snapshot",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {},
+        "inputs": [
+          {
+            "kind": "snapshot_file",
+            "id": "snp_1:1",
+            "location": "std_1/snp_1/raw1.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed",
+            "columnSources": [
+              "age"
+            ]
+          }
+        ]
+      },
+      "expected": [
+        "input_column_sources_invalid@inputs[0].columnSources"
+      ]
+    },
+    {
+      "name": "columnSources is a string",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "profile_snapshot",
+        "method": "profile.snapshot",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {},
+        "inputs": [
+          {
+            "kind": "snapshot_file",
+            "id": "snp_1:1",
+            "location": "std_1/snp_1/raw1.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed",
+            "columnSources": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "input_column_sources_invalid@inputs[0].columnSources"
+      ]
+    },
+    {
+      "name": "columnSources has an empty column name",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "profile_snapshot",
+        "method": "profile.snapshot",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {},
+        "inputs": [
+          {
+            "kind": "snapshot_file",
+            "id": "snp_1:1",
+            "location": "std_1/snp_1/raw1.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed",
+            "columnSources": {
+              "": "observed"
+            }
+          }
+        ]
+      },
+      "expected": [
+        "input_column_sources_invalid@inputs[0].columnSources"
+      ]
+    },
+    {
+      "name": "columnSources has a column name of 201 characters",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "profile_snapshot",
+        "method": "profile.snapshot",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {},
+        "inputs": [
+          {
+            "kind": "snapshot_file",
+            "id": "snp_1:1",
+            "location": "std_1/snp_1/raw1.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed",
+            "columnSources": {
+              "ccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc": "observed"
+            }
+          }
+        ]
+      },
+      "expected": [
+        "input_column_sources_invalid@inputs[0].columnSources"
+      ]
+    },
+    {
+      "name": "columnSources on a synthetic table",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "profile_snapshot",
+        "method": "profile.snapshot",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {},
+        "inputs": [
+          {
+            "kind": "snapshot_file",
+            "id": "snp_1:1",
+            "location": "std_1/snp_1/raw1.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "synthetic",
+            "columnSources": {
+              "age": "observed"
+            }
+          }
+        ]
+      },
+      "expected": [
+        "input_column_source_not_individual@inputs[0].columnSources"
+      ]
+    },
+    {
+      "name": "columnSources on a reconstructed table",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "rmst",
+        "method": "comparator.rmst",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "tau": 24,
+          "treatmentColumn": "arm",
+          "weightColumn": "w",
+          "timeUnit": "months"
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:events",
+            "shape": "events",
+            "location": "std_1/snp_1/events.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "reconstructed",
+            "columnSources": {
+              "AVAL": "observed"
+            }
+          }
+        ]
+      },
+      "expected": [
+        "input_column_source_not_individual@inputs[0].columnSources"
+      ]
+    },
+    {
+      "name": "a lineage input carrying columnSources",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "profile_snapshot",
+        "method": "profile.snapshot",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {},
+        "inputs": [
+          {
+            "kind": "snapshot_file",
+            "id": "snp_1:1",
+            "location": "std_1/snp_1/raw1.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          },
+          {
+            "kind": "assumption",
+            "id": "asm_1@1",
+            "columnSources": {
+              "age": "observed"
+            }
+          }
+        ]
+      },
+      "expected": [
+        "input_field_unknown@inputs[1].columnSources"
       ]
     }
   ],

@@ -1187,6 +1187,7 @@ export const VCR_PROTOCOL_ISSUE_CODES = Object.freeze([
   'input_id_invalid', 'input_version_missing', 'input_hash_invalid', 'input_hash_missing', 'input_value_source_invalid',
   'input_value_source_missing', 'input_location_invalid', 'input_location_missing', 'input_location_forbidden',
   'input_field_unknown', 'input_shape_invalid', 'input_source_not_individual', 'patient_input_required', 'snapshot_required',
+  'input_column_sources_invalid', 'input_column_source_invalid', 'input_column_source_not_individual',
   // its scenario
   'scenario_missing', 'scenario_value_invalid', 'scenario_field_unknown', 'scenario_field_missing',
   'endpoint_unknown', 'endpoint_not_supported', 'design_unknown', 'design_not_supported',

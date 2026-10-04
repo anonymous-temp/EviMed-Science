@@ -47,7 +47,7 @@
  */
 
 import {
-  VCR_ANALYSIS_TABLES, VCR_CONCLUSIONS, VCR_ENDPOINT_TYPES, VCR_INTERVAL_KINDS, VCR_JOB_KINDS, VCR_MODEL_RISKS,
+  VCR_ANALYSIS_TABLES, VCR_COLUMN_SOURCES, VCR_CONCLUSIONS, VCR_ENDPOINT_TYPES, VCR_INTERVAL_KINDS, VCR_JOB_KINDS, VCR_MODEL_RISKS,
   VCR_MODEL_TIERS, VCR_NOT_ESTIMABLE_RULES, VCR_REPLICATES_ALT_MIN, VCR_REPLICATES_NULL_MIN, VCR_TRIAL_DESIGNS,
   VCR_REAL_PATIENT_SOURCES, VCR_VALUE_SOURCES,
 } from './vcrVocabulary.mjs'
@@ -236,7 +236,17 @@ export const VCR_CALLER_SNAPSHOT_KIND = 'snapshot'
  * snapshot input carries nothing but its kind and id.
  */
 export const VCR_CALLER_INPUT_KEYS = frozen(['kind', 'id', 'value'])
-export const VCR_ENGINE_TABLE_INPUT_KEYS = frozen(['kind', 'id', 'shape', 'location', 'hash', 'valueSource'])
+export const VCR_ENGINE_TABLE_INPUT_KEYS = frozen(['kind', 'id', 'shape', 'location', 'hash', 'valueSource', 'columnSources'])
+/**
+ * What a table input's `columnSources` may be: an object naming, for some of the
+ * table's columns, the source of that column (`VCR_COLUMN_SOURCES`). A column it
+ * does not name has the table's own `valueSource`, so the map only has to say
+ * where a column differs from its table. Only the control plane writes it, and
+ * only for a table of real people's rows (a synthetic or reconstructed table has
+ * no per-column sources). The engine labels a result with the weakest source of
+ * the columns its method used (`vcrWeakestSource`).
+ */
+export const VCR_COLUMN_SOURCE_LIMITS = Object.freeze({ maxColumns: 1000, maxNameLength: 200 })
 export const VCR_ENGINE_LINEAGE_INPUT_KEYS = frozen(['kind', 'id', 'hash', 'value'])
 
 /**
@@ -414,7 +424,7 @@ export function validateCallerInputs(inputs, { kind = undefined } = {}) {
         bad('input_kind_missing', `${at}.kind`, 'An input names what it is (assumption, snapshot, population …).')
       } else bad('input_kind_unknown', `${at}.kind`, `Unknown input kind ${JSON.stringify(input.kind)}.`)
     }
-    for (const key of ['location', 'shape', 'valueSource']) {
+    for (const key of ['location', 'shape', 'valueSource', 'columnSources']) {
       if (input[key] !== undefined && input[key] !== null) bad('input_location_forbidden', `${at}.${key}`, `A caller never supplies ${key}: the control plane resolves it from the snapshot.`)
     }
     if (input.hash !== undefined && input.hash !== null) bad('input_location_forbidden', `${at}.hash`, 'A caller never supplies a hash: the control plane hashes the file it resolved.')
@@ -423,7 +433,7 @@ export function validateCallerInputs(inputs, { kind = undefined } = {}) {
       bad('input_version_missing', `${at}.id`, 'A lineage input names a version: `<id>@<n>`.')
     }
     for (const key of Object.keys(input)) {
-      if (['location', 'shape', 'valueSource', 'hash'].includes(key)) continue
+      if (['location', 'shape', 'valueSource', 'columnSources', 'hash'].includes(key)) continue
       if (VCR_CALLER_INPUT_KEYS.includes(key) && !(key === 'value' && input.kind === VCR_CALLER_SNAPSHOT_KIND)) continue
       bad('input_field_unknown', `${at}.${key}`, 'A caller input is { kind, id } (and a lineage input its frozen value), nothing else.')
     }
@@ -518,6 +528,28 @@ export function validateEngineJob(job) {
       if (hasHash && !SHA256.test(input.hash)) bad('input_hash_invalid', `${at}.hash`, 'An input hash is a lowercase sha256 hex digest.')
       const hasSource = input.valueSource !== undefined && input.valueSource !== null
       if (hasSource && !VCR_VALUE_SOURCES.includes(input.valueSource)) bad('input_value_source_invalid', `${at}.valueSource`, `valueSource is one of ${VCR_VALUE_SOURCES.join(', ')}.`)
+      if (input.columnSources !== undefined && input.columnSources !== null) {
+        const where = `${at}.columnSources`
+        if (!isObject(input.columnSources)) {
+          bad('input_column_sources_invalid', where, 'columnSources is an object: a column name and its source, for the columns that differ from the table.')
+        } else {
+          const entries = Object.entries(input.columnSources)
+          if (entries.length > VCR_COLUMN_SOURCE_LIMITS.maxColumns) {
+            bad('input_column_sources_invalid', where, `At most ${VCR_COLUMN_SOURCE_LIMITS.maxColumns} columns carry a source of their own.`)
+          } else if (entries.some(([column]) => !column || [...column].length > VCR_COLUMN_SOURCE_LIMITS.maxNameLength)) {
+            bad('input_column_sources_invalid', where, `A column name is 1-${VCR_COLUMN_SOURCE_LIMITS.maxNameLength} characters.`)
+          } else {
+            for (const [column, source] of entries) {
+              if (!VCR_COLUMN_SOURCES.includes(/** @type {string} */ (source))) {
+                bad('input_column_source_invalid', `${where}.${column}`, `A column's source is one of ${VCR_COLUMN_SOURCES.join(', ')}.`)
+              }
+            }
+          }
+          if (hasSource && !VCR_COLUMN_SOURCES.includes(input.valueSource)) {
+            bad('input_column_source_not_individual', where, `Only a table of real people's rows (${VCR_COLUMN_SOURCES.join(', ')}) has sources per column, not ${input.valueSource}.`)
+          }
+        }
+      }
       const hasLocation = input.location !== undefined && input.location !== null
       if (hasLocation && !vcrLocationIsValid(input.location)) {
         bad('input_location_invalid', `${at}.location`, 'A location is a path relative to the data plane: no "..", no leading "/", no hidden or empty segment.')

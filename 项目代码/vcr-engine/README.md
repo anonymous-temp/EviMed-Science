@@ -35,6 +35,7 @@ language model never enters this path.
 | A rule is data, never code | no `eval`/`parse` anywhere in `R/` or `service/`; an `expression` key anywhere in a scenario is refused by name | N23 |
 | The engine reads only what the job names, hash-verified, under the data root | `R/inputs.R` (section 3) | E06, N24, N25 |
 | A job never raises | every malformation ends as a named refusal in a protocol-valid result | E10a |
+| A result is labelled with the weakest source of the columns it used, not of its whole table | `columnSources` on a table input; `vcr_used_sources` (`R/inputs.R`) | N32 |
 
 ## 2. Running it
 
@@ -85,8 +86,27 @@ The bytes are hashed and then parsed *from memory*, so the file that was
 checked is the file that was read.
 
 `valueSource` is honoured, not assumed: weighting, propensity, RMST, MAIC and
-synthetic-data generation need `observed` rows (`input_source_not_individual`
-otherwise), and `counts.realPatients` counts only observed rows.
+synthetic-data generation need real people's rows (`input_source_not_individual`
+otherwise), and `counts.realPatients` counts only those rows.
+
+`columnSources` (optional, a table input's, written only by the control plane) is
+the source of single columns: `{ "age": "imputed", "male": "observed" }`, each
+word one of `observed`, `extracted`, `calculated`, `imputed` (most direct first;
+the order is the domain's `VCR_COLUMN_SOURCES`). A column it does not name has the
+table's `valueSource`, which the control plane sets to the weakest of the table's
+columns. It is accepted only on a table of real people's rows (never on a
+synthetic, aggregate or reconstructed one). A method then labels its result with
+the weakest source among the columns it **used** (covariates, arm and outcome
+columns, the columns its rules name; a profile and a synthesis read every
+column), so one imputed column that the method never read does not mark the
+result imputed. What it used is in `diagnostics.valueSourcesUsed`
+(`weakest`, `basis` = `columns` when any used column had a source of its own and
+`table` when none did, and each used column's source). Counts such as `rows` and
+`cohort_size` carry that source; an estimate is `calculated` unless it rests on an
+imputed column, when it says `imputed` (a computed value ranks above an imputed
+one, so an estimate cannot be more direct than the column it was computed from).
+How a source is spelled in Define-XML and ADaM for an export is the domain's
+(`VCR_COLUMN_SOURCE_EXPORT`), not this engine's.
 
 Analysis tables come in three shapes: `subject` (ADSL, one row per person),
 `longitudinal` (BDS, one row per person and visit) and `events` (ADTTE: `AVAL`
@@ -251,7 +271,7 @@ PASSED n/n
 Case families: `N00a-l` (the protocol mirror), `N01-N22` (design, weighting,
 survival, literature, borrowing, PROCOVA), `N23-N29` (rules, data plane, schema
 agreement, accrual and pooling, populations and patients, matching), `C2-01-C2-18`
-(cohort, models, quality), `E01-E10` (the engine itself: accrual, cancel and
+(cohort, models, quality), `N32` (the source of a column), `E01-E10` (the engine itself: accrual, cancel and
 budget, counts, inputs, analytic vs simulated across the families, group
 sequential, the T0 chain, robustness and limits), `Z99` (every method went
 through `vcr_run_job`, and through a case that asserts numbers). Each line carries

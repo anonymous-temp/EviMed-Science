@@ -1017,6 +1017,8 @@ export {
   VCR_ASSUMPTION_SOURCE_KIND_LABELS_ZH,
   VCR_BOOTSTRAP_MIN,
   VCR_CAPABILITIES,
+  VCR_COLUMN_SOURCES,
+  VCR_COLUMN_SOURCE_EXPORT,
   VCR_COMPARABILITY_DIMENSIONS,
   VCR_COMPARABILITY_DIMENSION_LABELS_ZH,
   VCR_COMPARATOR_ROUTES,
@@ -1138,6 +1140,7 @@ export {
   twinLabel,
   useWithin,
   vcrKnown,
+  vcrWeakestSource,
 } from './src/vcrVocabulary.mjs'
 
 // vcrSuppression — 2 exports: small-cell suppression for everything a model may read: every people-count
@@ -1176,6 +1179,7 @@ export {
 // `vcr-engine` both run
 export {
   VCR_CALLER_SNAPSHOT_KIND,
+  VCR_COLUMN_SOURCE_LIMITS,
   VCR_DESIGN_SUPPORT,
   VCR_ENGINE_METHODS,
   VCR_ENGINE_METHOD_IDS,

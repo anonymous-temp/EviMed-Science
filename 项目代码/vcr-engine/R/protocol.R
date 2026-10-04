@@ -889,6 +889,29 @@ vcr_validate_job <- function(job) {
       if (has_source && !(.vcrp_chr(input[["valueSource"]]) && input[["valueSource"]] %in% d$valueSources)) {
         bad("input_value_source_invalid", .vcrp_at(at, "valueSource"), "Unknown value source.")
       }
+      cs <- input[["columnSources"]]
+      if (!is.null(cs)) {
+        where <- .vcrp_at(at, "columnSources")
+        if (!.vcrp_named(cs)) {
+          bad("input_column_sources_invalid", where, "columnSources is an object: a column name and its source, for the columns that differ from the table.")
+        } else {
+          lim <- d$columnSourceLimits
+          cols <- names(cs)
+          if (length(cols) > lim$maxColumns) {
+            bad("input_column_sources_invalid", where, "Too many columns carry a source of their own.")
+          } else if (any(!nzchar(cols) | .vcrp_chars(cols) > lim$maxNameLength)) {
+            bad("input_column_sources_invalid", where, "A column name is a short non-empty string.")
+          } else {
+            for (i in seq_along(cols)) {
+              v <- cs[[i]]
+              if (!(.vcrp_chr(v) && v %in% d$columnSources)) bad("input_column_source_invalid", .vcrp_at(where, cols[i]), "A column's source is one of the real-patient sources.")
+            }
+          }
+          if (has_source && !(.vcrp_chr(input[["valueSource"]]) && input[["valueSource"]] %in% d$columnSources)) {
+            bad("input_column_source_not_individual", where, "Only a table of real people's rows has sources per column.")
+          }
+        }
+      }
       has_location <- !is.null(input[["location"]])
       if (has_location && !.vcrp_location_valid(input[["location"]])) bad("input_location_invalid", .vcrp_at(at, "location"), "A location is a path relative to the data plane.")
       is_table <- .vcrp_chr(ikind) && ikind %in% d$engineTableInputKinds

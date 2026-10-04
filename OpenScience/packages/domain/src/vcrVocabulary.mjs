@@ -54,6 +54,73 @@ export const VCR_REAL_PATIENT_SOURCES = frozen(['observed', 'extracted', 'calcul
 export const VCR_NON_INDIVIDUAL_SOURCES = frozen(['aggregate', 'synthetic', 'predicted'])
 
 /**
+ * The source of ONE COLUMN of a real person's table, most direct first. A column
+ * of a real source is still a real person's value, so these are exactly the
+ * real-patient sources, and their order is a judgment made once: a recorded value
+ * beats a transcription of one, a transcription beats a deterministic computation
+ * from others, and a computed value beats one filled in by a declared method. A
+ * table is labelled with the weakest of its columns; a RESULT is labelled with
+ * the weakest of the columns its method actually used (`vcrWeakestSource`), so
+ * one imputed column that nothing read does not mark the result imputed.
+ */
+export const VCR_COLUMN_SOURCES = VCR_REAL_PATIENT_SOURCES
+
+/**
+ * The least direct of `sources` (the last in `VCR_COLUMN_SOURCES`), or `fallback`
+ * for none. A source outside the real-patient four (a synthetic or aggregate
+ * table has no per-column sources) is returned as it is, so a caller cannot
+ * launder it by listing it beside observed ones. `R/inputs.R` mirrors this.
+ * @param {Iterable<string>} sources @param {string} fallback
+ */
+export function vcrWeakestSource(sources, fallback) {
+  const list = [...sources]
+  if (!list.length) return fallback
+  const outside = list.find((source) => !VCR_COLUMN_SOURCES.includes(source))
+  if (outside) return outside
+  return list.reduce((weakest, source) => (VCR_COLUMN_SOURCES.indexOf(source) > VCR_COLUMN_SOURCES.indexOf(weakest) ? source : weakest))
+}
+
+/**
+ * How a column source is spelled in the standards an export has to meet, kept
+ * here and never in the engine (the engine states a source; a deliverable states
+ * how a regulator reads it). Verified against the NCI EVS terminology files
+ * (2026-10-04, last modified 2026-09-25):
+ *
+ * - **Define-XML** carries one provenance word per variable, the Origin Type
+ *   (codelist C170449, ORIGINT): `Collected` (C170548, "a value that is actually
+ *   observed and recorded by a person or obtained by an instrument"), `Derived`
+ *   (C170549, "a value that is calculated by an algorithm or reproducible rule,
+ *   and which is dependent upon other data values") and `Other` (C17649). It has
+ *   NO "imputed" and NO "extracted" term.
+ * - **ADaM** words an imputed value as a derived one: the record-level
+ *   Derivation Type (DTYPE, codelist C81224, extensible) names the imputation
+ *   technique (LOCF, WOCF, MI ...), and the algorithm goes into the variable's
+ *   method. So `imputed` exports as `Derived` plus a DTYPE whose value is the
+ *   imputation method's own term (`adamDerivation.value: null` here: only the
+ *   analysis knows the method).
+ * - **Extracted** (read from unstructured text by a person or a model) has no
+ *   CDISC term; it exports as `Other` and the variable's description says how it
+ *   was extracted (`describe: true`).
+ *
+ * `describe` marks the entries whose export must also carry a sentence.
+ */
+export const VCR_COLUMN_SOURCE_EXPORT = Object.freeze({
+  observed: Object.freeze({
+    defineXmlOrigin: Object.freeze({ term: 'Collected', code: 'C170548' }), adamDerivation: null, describe: false,
+  }),
+  extracted: Object.freeze({
+    defineXmlOrigin: Object.freeze({ term: 'Other', code: 'C17649' }), adamDerivation: null, describe: true,
+  }),
+  calculated: Object.freeze({
+    defineXmlOrigin: Object.freeze({ term: 'Derived', code: 'C170549' }), adamDerivation: null, describe: false,
+  }),
+  imputed: Object.freeze({
+    defineXmlOrigin: Object.freeze({ term: 'Derived', code: 'C170549' }),
+    adamDerivation: Object.freeze({ variable: 'DTYPE', codelist: 'C81224', extensible: true, value: null }), describe: true,
+  }),
+})
+
+/**
  * The four counts that must be shown apart wherever a sample size appears
  * (§3.5), plus the two that appear only when their route is used.
  */

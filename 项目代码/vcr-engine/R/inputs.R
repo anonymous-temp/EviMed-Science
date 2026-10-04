@@ -226,6 +226,7 @@ vcr_read_table_input <- function(input) {
   if (!is.data.frame(df)) vcr_abort("input_parse_failed", field, "The file could not be read as a table.")
   shape <- .VCR_SHAPE_ALIASES[as.character(input[["shape"]] %||% "")]
   attr(df, "vcrSource") <- as.character(input[["valueSource"]] %||% "")
+  attr(df, "vcrColumnSources") <- .vcr_column_sources_of(input)
   attr(df, "vcrShape") <- if (length(shape) && !is.na(shape)) unname(shape) else NA_character_
   attr(df, "vcrInputId") <- as.character(input[["id"]] %||% "")
   attr(df, "vcrKind") <- as.character(input[["kind"]] %||% "")
@@ -266,6 +267,102 @@ vcr_input_by_id <- function(job, id) {
 vcr_table_source <- function(df) {
   s <- attr(df, "vcrSource")
   if (is.null(s) || !nzchar(s)) NA_character_ else s
+}
+
+# --- the source of a column ---------------------------------------------------
+#
+# Hidden knowledge:
+#
+# - **A table is labelled with the weakest of its columns; a result is labelled
+#   with the weakest of the columns its method USED.** The control plane can only
+#   put one `valueSource` on a table, and it puts the weakest of its columns', so
+#   one imputed baseline column marks every number computed from the table as
+#   imputed -- including the ones that never read it. `columnSources` (the
+#   control plane's, validated by the protocol: only the four real-patient
+#   sources, only on a table of real people's rows) lets a method say which of
+#   its columns it read, and the result carry the weakest of those. A column the
+#   job does not name has the table's source (`vcr_column_source`).
+# - **The order is the domain's, not this file's.** `vcr_weakest_source` reads it
+#   from the snapshot (`columnSources`, most direct first), so the engine, the
+#   data plane and an export cannot disagree about which of two sources is weaker.
+# - **A source outside the real-patient four is never averaged away.** A
+#   reconstructed or synthetic table has no per-column sources; listing it beside
+#   observed ones returns it as it is, exactly as the domain's `vcrWeakestSource`.
+
+#' The per-column sources a table input names, as a named character vector, or
+#' NULL when it names none. (A job parsed from JSON carries a named list; one an
+#' R caller built may carry a named vector.)
+.vcr_column_sources_of <- function(input) {
+  cs <- input[["columnSources"]]
+  if (is.null(cs) || !length(cs) || is.null(names(cs))) return(NULL)
+  out <- vapply(seq_along(cs), function(i) { v <- cs[[i]]; if (is.character(v) && length(v) == 1L && !is.na(v)) v else NA_character_ }, character(1))
+  names(out) <- names(cs)
+  out[!is.na(out)]
+}
+
+#' The least direct of `sources` (the last in the domain's order), or `fallback`
+#' for none; a source outside the real-patient four is returned as it is.
+#' Mirrors `vcrWeakestSource`.
+vcr_weakest_source <- function(sources, fallback = NA_character_) {
+  s <- as.character(sources)
+  s <- s[!is.na(s) & nzchar(s)]
+  if (!length(s)) return(fallback)
+  order <- unlist(vcr_domain()$columnSources)
+  outside <- s[!(s %in% order)]
+  if (length(outside)) return(outside[[1L]])
+  s[[which.max(match(s, order))]]
+}
+
+#' The source of one column of a table: the control plane's own word for that
+#' column when it said one, else the table's (NA when the table is unlabelled).
+vcr_column_source <- function(df, column) {
+  cs <- attr(df, "vcrColumnSources")
+  if (!is.null(cs) && column %in% names(cs)) cs[[column]] else vcr_table_source(df)
+}
+
+#' What a method's result says about the data it used. `parts` is a list of
+#' `list(df, columns)`: each table the method read and the columns of it that it
+#' used (the covariates, the treatment and outcome columns, the columns its rules
+#' name; never the whole table unless it profiled the whole table). Returns the
+#' weakest source among them (`default` when no used column has one), whether any
+#' used column had a source of its own (`basis`), and each used column's source.
+vcr_used_sources <- function(parts, default = NA_character_) {
+  rows <- list(); own <- FALSE; srcs <- character(0)
+  for (part in parts) {
+    df <- part$df
+    if (is.null(df)) next
+    named <- names(attr(df, "vcrColumnSources"))
+    for (cn in unique(as.character(part$columns))) {
+      src <- vcr_column_source(df, cn)
+      if (cn %in% named) own <- TRUE
+      srcs <- c(srcs, src)
+      rows[[length(rows) + 1L]] <- list(table = attr(df, "vcrInputId") %||% "", column = cn, source = if (is.na(src)) NULL else src)
+    }
+  }
+  weakest <- vcr_weakest_source(srcs, NA_character_)
+  if (is.na(weakest)) {
+    # no column said anything: the table's own labels, weakest of them (a method that
+    # used no column of a table still states what the table is)
+    weakest <- vcr_weakest_source(vapply(Filter(Negate(is.null), lapply(parts, function(p) p$df)), vcr_table_source, character(1)), default)
+  }
+  list(source = weakest, basis = if (own) "columns" else "table", columns = rows)
+}
+
+#' The weakest source among the used columns of ONE table.
+vcr_used_source <- function(df, columns = names(df), default = NA_character_) {
+  vcr_used_sources(list(list(df = df, columns = columns)), default)$source
+}
+
+#' The source an ESTIMATE carries. A computed number is `calculated`, which the
+#' domain ranks above imputed: an estimate that rests on an imputed column is no
+#' more direct than that column, so it says `imputed`; any other data source
+#' leaves it `calculated`, as it always was.
+vcr_estimate_source <- function(used) if (identical(used, "imputed")) "imputed" else "calculated"
+
+#' The diagnostics block every table-reading method carries: the weakest source
+#' among the columns it used, and which columns those were.
+vcr_value_sources_used <- function(used) {
+  list(weakest = if (is.na(used$source)) NULL else used$source, basis = used$basis, columns = used$columns)
 }
 
 #' Refuse a table that is not a record of real people. The accepted sources

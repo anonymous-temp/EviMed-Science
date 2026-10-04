@@ -18,6 +18,9 @@ import {
   VCR_ENGINE_METHODS,
   VCR_ENGINE_METHOD_IDS,
   VCR_ENGINE_PROTOCOL_VERSION,
+  VCR_COLUMN_SOURCES,
+  VCR_COLUMN_SOURCE_EXPORT,
+  VCR_COLUMN_SOURCE_LIMITS,
   VCR_JOB_KINDS,
   VCR_JOB_METHODS,
   VCR_MAX_REPLICATES,
@@ -26,6 +29,7 @@ import {
   VCR_PATIENT_LEVEL_JOB_KINDS,
   VCR_PATTERNS,
   VCR_PROTOCOL_ISSUE_CODES,
+  VCR_REAL_PATIENT_SOURCES,
   VCR_SCENARIO_SCHEMAS,
   VCR_TRIAL_DESIGNS,
   canonicalScenarioJson,
@@ -40,6 +44,7 @@ import {
   vcrLocationIsValid,
   vcrReplicateFloorFor,
   vcrResultOutputPayload,
+  vcrWeakestSource,
 } from "@evimed/domain";
 
 /** JSON-safe deep copy: the fixture is JSON, and a job is never anything else. @template T @param {T} value @returns {T} */
@@ -91,6 +96,9 @@ test("the engine's generated snapshot carries exactly the live schemas, patterns
   assert.deepEqual(snapshot.patterns, plain(VCR_PATTERNS));
   assert.deepEqual(snapshot.jobMethods, plain(VCR_JOB_METHODS));
   assert.deepEqual(snapshot.observedOnlyMethods, [...VCR_OBSERVED_ONLY_METHODS]);
+  assert.deepEqual(snapshot.columnSources, [...VCR_COLUMN_SOURCES]);
+  assert.deepEqual(snapshot.columnSourceLimits, plain(VCR_COLUMN_SOURCE_LIMITS));
+  assert.deepEqual(snapshot.engineTableInputKeys, ["kind", "id", "shape", "location", "hash", "valueSource", "columnSources"]);
   assert.equal(snapshot.maxReplicates, VCR_MAX_REPLICATES);
   for (const [id, spec] of Object.entries(VCR_ENGINE_METHODS)) assert.equal(snapshot.methods[id].modelTier, spec.modelTier, id);
 });
@@ -310,6 +318,71 @@ test("a method that weighs real patients refuses a row that is not one", () => {
   const profile = clone(fixture.valid.find((/** @type {any} */ item) => item.job.method === "profile.snapshot").job);
   profile.inputs[0].valueSource = "synthetic";
   assert.deepEqual(validateEngineJob(profile), []);
+});
+
+// --- the source of a column --------------------------------------------------
+
+test("a column's source is one of the real-patient four, and a result takes the weakest of the columns it used", () => {
+  assert.deepEqual([...VCR_COLUMN_SOURCES], ["observed", "extracted", "calculated", "imputed"], "most direct first: the order is the judgment");
+  assert.deepEqual([...VCR_COLUMN_SOURCES], [...VCR_REAL_PATIENT_SOURCES], "a column of a real source is still a real person's value");
+  assert.equal(vcrWeakestSource(["observed", "observed"], "calculated"), "observed");
+  assert.equal(vcrWeakestSource(["observed", "extracted"], "calculated"), "extracted");
+  assert.equal(vcrWeakestSource(["imputed", "observed", "calculated"], "calculated"), "imputed");
+  assert.equal(vcrWeakestSource(["calculated", "observed"], "observed"), "calculated");
+  assert.equal(vcrWeakestSource([], "observed"), "observed", "no column used: the fallback");
+  assert.equal(vcrWeakestSource(new Set(["observed"]), "x"), "observed", "any iterable");
+  // a source outside the four is returned as it is: it cannot be laundered by listing it beside observed ones
+  assert.equal(vcrWeakestSource(["observed", "synthetic"], "observed"), "synthetic");
+  assert.equal(vcrWeakestSource(["imputed", "reconstructed"], "observed"), "reconstructed");
+  assert.deepEqual(VCR_COLUMN_SOURCE_LIMITS, { maxColumns: 1000, maxNameLength: 200 });
+});
+
+test("an export names a column source in Define-XML and ADaM terms, and only the domain knows how", () => {
+  assert.deepEqual(Object.keys(VCR_COLUMN_SOURCE_EXPORT).sort(), [...VCR_COLUMN_SOURCES].sort(), "one entry per column source, no more");
+  // Define-XML Origin Type (NCI EVS codelist C170449): Collected, Derived, Other; there is no Imputed and no Extracted.
+  const origin = (/** @type {string} */ source) => /** @type {any} */ (VCR_COLUMN_SOURCE_EXPORT)[source].defineXmlOrigin;
+  assert.deepEqual(origin("observed"), { term: "Collected", code: "C170548" });
+  assert.deepEqual(origin("calculated"), { term: "Derived", code: "C170549" });
+  assert.deepEqual(origin("imputed"), { term: "Derived", code: "C170549" }, "imputed is a derived value whose method says how");
+  assert.deepEqual(origin("extracted"), { term: "Other", code: "C17649" }, "no standard term for a value read from text");
+  const entry = (/** @type {string} */ source) => /** @type {any} */ (VCR_COLUMN_SOURCE_EXPORT)[source];
+  // ADaM words an imputed value through the record-level DTYPE (codelist C81224, extensible); only the analysis knows which technique.
+  assert.deepEqual(entry("imputed").adamDerivation, { variable: "DTYPE", codelist: "C81224", extensible: true, value: null });
+  for (const source of ["observed", "extracted", "calculated"]) assert.equal(entry(source).adamDerivation, null, source);
+  assert.deepEqual(["observed", "extracted", "calculated", "imputed"].map((source) => entry(source).describe), [false, true, false, true], "the entries an export must describe in a sentence");
+  assert.ok(Object.isFrozen(VCR_COLUMN_SOURCE_EXPORT) && Object.isFrozen(entry("imputed")) && Object.isFrozen(entry("imputed").adamDerivation));
+});
+
+test("columnSources: only the control plane writes it, only on real people's rows, and each word is one of the four", () => {
+  const profile = () => clone(fixture.valid.find((/** @type {any} */ item) => item.job.method === "profile.snapshot").job);
+  const withSources = (/** @type {any} */ columnSources, /** @type {any} */ over = {}) => { const job = profile(); Object.assign(job.inputs[0], over, { columnSources }); return keys(validateEngineJob(job)); };
+  assert.deepEqual(withSources({ age: "imputed", male: "observed" }), []);
+  assert.deepEqual(withSources({}), [], "an empty map names no column: every column has the table's source");
+  assert.deepEqual(withSources(null), [], "null reads as absent, like a hash or a value source");
+  assert.deepEqual(withSources({ age: "guessed" }), ["input_column_source_invalid@inputs[0].columnSources.age"]);
+  assert.deepEqual(withSources({ age: "aggregate", sex: "synthetic" }), ["input_column_source_invalid@inputs[0].columnSources.age", "input_column_source_invalid@inputs[0].columnSources.sex"], "a column of a real table cannot be called aggregate or synthetic");
+  assert.deepEqual(withSources({ age: 3 }), ["input_column_source_invalid@inputs[0].columnSources.age"]);
+  assert.deepEqual(withSources(["age"]), ["input_column_sources_invalid@inputs[0].columnSources"]);
+  assert.deepEqual(withSources("observed"), ["input_column_sources_invalid@inputs[0].columnSources"]);
+  assert.deepEqual(withSources({ "": "observed" }), ["input_column_sources_invalid@inputs[0].columnSources"]);
+  assert.deepEqual(withSources({ ["c".repeat(201)]: "observed" }), ["input_column_sources_invalid@inputs[0].columnSources"]);
+  assert.deepEqual(withSources({ ["c".repeat(200)]: "observed" }), [], "200 characters is the limit");
+  const many = Object.fromEntries(Array.from({ length: 1001 }, (_, i) => [`c${i}`, "observed"]));
+  assert.deepEqual(withSources(many), ["input_column_sources_invalid@inputs[0].columnSources"]);
+  // a table that is not real people's rows has no sources per column
+  for (const valueSource of ["synthetic", "aggregate", "reconstructed", "predicted", "assumed"]) {
+    assert.deepEqual(withSources({ age: "observed" }, { valueSource }), ["input_column_source_not_individual@inputs[0].columnSources"], valueSource);
+  }
+  // a caller never says it, and a lineage input has no such key
+  const caller = (/** @type {any} */ input) => validateCallerInputs([input]).map((issue) => `${issue.code}@${issue.field}`);
+  assert.deepEqual(caller({ kind: "snapshot", id: "snp_1", columnSources: { age: "observed" } }), ["input_location_forbidden@inputs[0].columnSources"]);
+  const lineage = profile();
+  lineage.inputs.push({ kind: "assumption", id: "asm_1@1", columnSources: { age: "observed" } });
+  assert.deepEqual(keys(validateEngineJob(lineage)), ["input_field_unknown@inputs[1].columnSources"]);
+  for (const code of ["input_column_sources_invalid", "input_column_source_invalid", "input_column_source_not_individual"]) {
+    assert.ok(VCR_PROTOCOL_ISSUE_CODES.includes(code), code);
+    assert.ok(ALL_ERROR_CODES.includes(code), code);
+  }
 });
 
 // --- results -----------------------------------------------------------------

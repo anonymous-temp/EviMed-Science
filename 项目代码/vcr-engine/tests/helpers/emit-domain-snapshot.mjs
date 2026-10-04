@@ -66,6 +66,10 @@ const snapshot = {
   optionalCountKeys: [...vocab.VCR_OPTIONAL_COUNT_KEYS],
   valueSources: [...vocab.VCR_VALUE_SOURCES],
   realPatientSources: [...vocab.VCR_REAL_PATIENT_SOURCES],
+  // A column's source, most direct first; the engine labels a result with the
+  // weakest of the columns it used (`vcr_weakest_source`, R/inputs.R).
+  columnSources: [...vocab.VCR_COLUMN_SOURCES],
+  columnSourceLimits: { ...job.VCR_COLUMN_SOURCE_LIMITS },
   nonIndividualSources: [...vocab.VCR_NON_INDIVIDUAL_SOURCES],
   populationKinds: [...vocab.VCR_POPULATION_KINDS],
   comparatorRoutes: [...vocab.VCR_COMPARATOR_ROUTES],

@@ -299,7 +299,8 @@
     "shape",
     "location",
     "hash",
-    "valueSource"
+    "valueSource",
+    "columnSources"
   ],
   "engineLineageInputKeys": [
     "kind",
@@ -5757,6 +5758,16 @@
     "calculated",
     "imputed"
   ],
+  "columnSources": [
+    "observed",
+    "extracted",
+    "calculated",
+    "imputed"
+  ],
+  "columnSourceLimits": {
+    "maxColumns": 1000,
+    "maxNameLength": 200
+  },
   "nonIndividualSources": [
     "aggregate",
     "synthetic",
