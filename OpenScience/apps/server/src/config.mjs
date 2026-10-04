@@ -1886,6 +1886,15 @@ export function loadConfig(overrides = {}) {
       process.env.OPEN_SCIENCE_PUBLIC_SOURCE_GATEWAY_MAX_RESPONSE_BYTES ??
       16 * 1024 * 1024,
     ),
+    // A named download (a paper's supplementary-file zip, an older label
+    // version): Europe PMC builds that zip as it sends it, 33 s to the first
+    // byte and 136 s for 3.5 MB on 2026-10-04, so it gets one whole tool
+    // call's budget less the margin instead of the buffered fetch's minute.
+    // Derived from the ceiling, not an environment lever: a longer deadline
+    // would only mean the gateway's own answer never arrives.
+    publicSourceDownloadTimeoutMs: Number(
+      overrides.publicSourceDownloadTimeoutMs ?? (MCP_TOOL_CALL_TIMEOUT_MS - GATEWAY_RESPONSE_MARGIN_MS),
+    ),
     // The self-hosted metasearch origin. Empty means the deployment has no
     // open-web channel; the tool then refuses with a stated reason instead of
     // the runtime silently getting nothing back.

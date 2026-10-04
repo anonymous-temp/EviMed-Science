@@ -116,6 +116,12 @@ class ToolContractTests(unittest.TestCase):
             # A paper's reference list or its citing papers, from Europe PMC's
             # citation network (2026-09-23): landmark-trial tracing.
             "reference_list",
+            # Linked identifiers, a trial's record kept as snapshots and a US label
+            # by version (2026-10-04): each preserves what it read and names how
+            # the retrieval ended.
+            "identifier_resolve",
+            "clinical_trial_snapshot",
+            "dailymed_label",
             # 「循证 GEO」's platform data and its social channel, through the
             # server's gateway (`geo_platform.py`, 2026-09-25).
             "geo_read",

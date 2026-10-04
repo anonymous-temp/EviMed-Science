@@ -22,6 +22,7 @@ from pathlib import Path, PurePosixPath
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import public_sources
+import source_outcome
 import science_connectors
 import drug_assessment
 import open_access_fulltext
@@ -410,9 +411,20 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "open_access_full_text",
-        "description": "Resolve a PMCID, PMID, or DOI through Europe PMC, retrieve the complete open-access JATS XML, and write bounded Markdown and XML artifacts into the current workspace for direct, paginated reading.",
+        "description": (
+            "Resolve a PMCID, PMID or DOI through Europe PMC and preserve the open-access full text (publisher JATS XML, "
+            "else the open-access PDF) with its tables as cells, its PMC version and its license. data.contentLevel says what "
+            "the text is; an abstract is never full text. supplements=true also fetches the article's supplementary files, "
+            "checks each against the md5 the article declares and preserves them (up to ~150 s; a cut-short archive keeps "
+            "the files that arrived whole). intake=true hands the text and supplements to the project's knowledge base. "
+            "Refusals, timeouts and no-supplement answers are named in data.outcome and data.supplementaryFiles."
+        ),
         "inputSchema": object_schema(
-            {"identifier": {"type": "string", "minLength": 1, "maxLength": 512}},
+            {
+                "identifier": {"type": "string", "minLength": 1, "maxLength": 512},
+                "supplements": {"type": "boolean", "description": "Default false. Fetch and preserve the supplementary files."},
+                "intake": {"type": "boolean", "description": "Default false. Offer the preserved text and supplements to the knowledge base."},
+            },
             ("identifier",),
         ),
     },
@@ -502,6 +514,7 @@ TOOL_DEFINITIONS = [
                     ("subject",),
                 ),
                 "limit": EVIMED_SEARCH_LIMIT,
+                "offset": {"type": "integer", "minimum": 0, "maximum": 9999, "description": "PubMed route: results to skip. data.outcome says when more exist and what to pass."},
                 "dateFrom": DATE,
                 "dateTo": DATE,
                 "articleTypes": {
@@ -550,6 +563,66 @@ TOOL_DEFINITIONS = [
         ),
     },
     {
+        "name": "identifier_resolve",
+        "description": (
+            "Link PMIDs, PMCIDs and DOIs to one another (up to 200) and preserve the answer: NCBI's ID converter, then "
+            "Europe PMC, PubMed and Crossref for what it cannot place. Each identifier ends resolved, conflict, not_found, "
+            "invalid or unchecked. A PMID that is not in PMC has no PMCID, which is not the same as not existing. "
+            "Returns the linked ids, title, PMC versions, which source said what, and the preserved links.json."
+        ),
+        "inputSchema": object_schema(
+            {
+                "identifiers": {
+                    "type": "array", "minItems": 1, "maxItems": public_sources.MAX_IDENTIFIER_BATCH,
+                    "items": {"type": "string", "minLength": 1, "maxLength": 300},
+                    "description": "PMIDs (\"30221596\", \"PMID: 30221596\"), PMCIDs (\"PMC6426126\") and DOIs, in any mix.",
+                },
+            },
+            ("identifiers",),
+        ),
+    },
+    {
+        "name": "clinical_trial_snapshot",
+        "description": (
+            "Read one ClinicalTrials.gov record whole, with posted results, and preserve it as a snapshot: record.json, a "
+            "quotable record.md and alignment.json (populations, registered and reported endpoints, timepoints). Each read "
+            "is compared with the snapshot held before it and the changes are listed by kind (endpoint_timeframe_changed, "
+            "enrollment_changed, result_values_changed ...). The registry's API serves only the current record, so versions "
+            "older than your first snapshot are not available and the result says so."
+        ),
+        "inputSchema": object_schema(
+            {
+                "nctId": {"type": "string", "pattern": r"^[Nn][Cc][Tt]\d{8}$", "description": "NCT and eight digits."},
+                "compareTo": {"type": "string", "maxLength": 64, "description": "previous (default), none, or the leading hex of a held snapshot directory."},
+                "intake": {"type": "boolean", "description": "Default false. Offer record.md to the knowledge base."},
+            },
+            ("nctId",),
+        ),
+    },
+    {
+        "name": "dailymed_label",
+        "description": (
+            "United States (FDA) drug labels from DailyMed, by version. drug=... searches (paged: data.outcome says how many "
+            "more and which page to ask for). setid=... reads one label at one version (default the current; version=N for an "
+            "older one, compareVersion=M to list section-level changes between two) and preserves the SPL XML, a quotable "
+            "label.md and normalised label.json (ingredients with UNII, products with NDC, forms, routes, strengths, "
+            "marketing category, labeler). Every result says it is the US label; another jurisdiction is refused, never "
+            "substituted. Use drug_label_search for China."
+        ),
+        "inputSchema": object_schema(
+            {
+                "drug": {"type": "string", "minLength": 1, "maxLength": 128, "description": "Brand or generic name; search mode."},
+                "setid": {"type": "string", "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", "description": "A DailyMed set id; read mode."},
+                "version": {"type": "integer", "minimum": 1, "maximum": 100000, "description": "SPL version to read; default the current."},
+                "compareVersion": {"type": "integer", "minimum": 1, "maximum": 100000, "description": "Another version to compare with; default the nearest earlier held one."},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 100, "description": "Search page size; default 10."},
+                "page": {"type": "integer", "minimum": 1, "maximum": 1000, "description": "Search page; default 1."},
+                "jurisdiction": SHORT_STRING,
+                "intake": {"type": "boolean", "description": "Default false. Offer label.md to the knowledge base."},
+            },
+        ),
+    },
+    {
         "name": "guideline_search",
         "description": "Search configured clinical-guideline sources.",
         "inputSchema": object_schema(
@@ -575,6 +648,7 @@ TOOL_DEFINITIONS = [
                 "recruitmentStatus": SHORT_STRING,
                 "limit": EVIMED_SEARCH_LIMIT,
                 "registry": {"type": "integer", "minimum": 0, "maximum": 2},
+                "pageToken": {"type": "string", "maxLength": 200, "pattern": "^[A-Za-z0-9_-]+$", "description": "ClinicalTrials.gov continuation from data.outcome.next; same query."},
                 "startYear": YEAR,
                 "endYear": YEAR,
                 "status": {"type": "array", "maxItems": 20, "items": SHORT_STRING},
@@ -1038,6 +1112,13 @@ def _public_source_failure(error, stop_reason, next_actions):
     """
     if isinstance(error, public_sources.SourceNotConfigured):
         return failure(error.code, str(error), False, error.STOP_REASON, error.next_actions())
+    # A retrieval that ended in one of the three failure names says what to do
+    # about that one (source_outcome.py): refused, out of time, or unreachable.
+    if isinstance(error, source_outcome.SourceError):
+        return failure(error.code, str(error), error.retryable, error.stop_reason(), error.next_actions())
+    # A request the run built wrongly is the run's to correct, not an outage to retry.
+    if isinstance(error.code, str) and error.code.endswith("_invalid") and not error.retryable:
+        return failure(error.code, str(error), False, "Stop until the tool input is corrected.", ["Correct the named field and call again."])
     return failure(error.code, str(error), error.retryable, stop_reason, next_actions)
 
 
@@ -2298,6 +2379,40 @@ def _dispatch(name, arguments, execution_context=None):
                 False,
                 "Stop and read the records another way.",
                 ["Use open_access_full_text for records with a PMC copy, or ask an operator to enable public connectors."],
+            )
+        return _public_adapter_call(name, arguments)
+    if name == "identifier_resolve":
+        # The converter, PubMed, Europe PMC and Crossref are public and have no
+        # private adapter: this goes through the gateway or is refused.
+        if not public_sources.enabled():
+            return failure(
+                "public_source_unsupported",
+                "Identifier resolution needs the public connectors, which are disabled in this deployment.",
+                False,
+                "Stop and link the identifiers another way.",
+                ["Open each record with literature_search pmids or web_read and read its identifiers."],
+            )
+        return _public_adapter_call(name, arguments)
+    if name == "clinical_trial_snapshot":
+        # The registry's record is public and has no private adapter.
+        if not public_sources.enabled():
+            return failure(
+                "public_source_unsupported",
+                "Trial snapshots need the public connectors, which are disabled in this deployment.",
+                False,
+                "Stop and read the registry record another way.",
+                ["Read the study page with web_read, or use clinical_trial_search."],
+            )
+        return _public_adapter_call(name, arguments)
+    if name == "dailymed_label":
+        # DailyMed is public and has no private adapter: through the gateway or refused.
+        if not public_sources.enabled():
+            return failure(
+                "public_source_unsupported",
+                "DailyMed labels need the public connectors, which are disabled in this deployment.",
+                False,
+                "Stop and read the label another way.",
+                ["Use drug_label_search, or read the label page with web_read."],
             )
         return _public_adapter_call(name, arguments)
     if name == "reference_list":

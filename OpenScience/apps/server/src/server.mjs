@@ -2,7 +2,8 @@ import { DocumentExportService, freezeArtifactDocument } from "./documentExport.
 import { ResultProvenanceService } from "./resultProvenanceService.mjs";
 import { createResultProvenanceRoutes } from "./resultProvenanceRoutes.mjs";
 import { createResultProducerCapture, createResultCaptureQueue } from "./resultProducerCapture.mjs";
-import { captureFinishedRun } from "./resultDeliveryCapture.mjs";
+import { captureFinishedRun, sourceCapture } from "./resultDeliveryCapture.mjs";
+import { createSourceIntakeHandoff } from "./sourceIntakeHandoff.mjs";
 import { ResultReplayClient } from "./resultReplayClient.mjs";
 import { ResultEngineRouter } from "./resultEngineRouter.mjs";
 import { ResultVcrReplay } from "./resultVcrReplay.mjs";
@@ -3686,6 +3687,18 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     connectorCredentials,
     webReader,
     documentParser,
+    // What a run preserved becomes a knowledge-base source the way an upload
+    // does (`writeProjectUpload`), re-verified against its capture manifest on
+    // the way; off wherever source intake is (`sourceService`).
+    sourceIntake: sourceService ? createSourceIntakeHandoff({
+      context: async identity => {
+        const user = await store.userById(identity.userId);
+        if (!user) throw new HttpError(404, "project_not_found", "Project not found.");
+        return { user, project: await store.requireProject(user, identity.projectId) };
+      },
+      read: (project, relativePath) => sourceCapture(project, relativePath, config.maxFileBytes),
+      write: (ctx, rel, buffer) => writeProjectUpload({ config, ...ctx }, { root: "base", rel, buffer }),
+    }) : null,
     preparePdfCapture: hostedExtensions ? async principal => {
       try { return await hostedExtensions.documents.prepareCapture(principal); }
       catch (error) {

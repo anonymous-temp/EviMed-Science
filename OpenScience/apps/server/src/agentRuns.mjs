@@ -1448,6 +1448,9 @@ async function readDelegatedAssistantMessages(project, parentMessages, readSessi
 const evidenceSourceToolSuffixes = Object.freeze([
   "web_read",
   "open_access_full_text",
+  "identifier_resolve",
+  "clinical_trial_snapshot",
+  "dailymed_label",
   "literature_search",
   "guideline_search",
   "biomedical_source_search",

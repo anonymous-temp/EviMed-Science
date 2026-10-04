@@ -347,17 +347,37 @@ function sendError(res, error, onFailure) {
     onFailure({ code, status, truncated: res.headersSent && !res.writableEnded, upstream: error?.upstream ?? null });
   }
   if (res.headersSent || res.destroyed) {
-    if (!res.destroyed) res.destroy();
+    if (!res.destroyed) {
+      // Part of a body is already on its way. End the connection after what was
+      // written has been sent and without the response's terminator, so the
+      // reader sees a body that stops early rather than one that ended; a plain
+      // destroy() would also discard the part that was written.
+      const socket = res.socket;
+      if (socket && !socket.destroyed) socket.end();
+      else res.destroy();
+    }
     return;
   }
   const message = error instanceof PublicSourceGatewayError
     ? error.message
     : "The public-source gateway is temporarily unavailable.";
-  const body = Buffer.from(JSON.stringify({ error: { code, message } }));
+  // What the runtime needs to act on a refusal it did not cause: how long the
+  // source asked it to wait, and the status the source itself answered. Both
+  // are numbers the gateway read off a response; neither is the source's text.
+  const retryAfter = Number.isSafeInteger(error?.retryAfterSeconds) ? error.retryAfterSeconds : null;
+  const upstreamStatus = Number.isSafeInteger(error?.upstream?.status) ? error.upstream.status : null;
+  const body = Buffer.from(JSON.stringify({
+    error: {
+      code, message,
+      ...(retryAfter !== null ? { retryAfterSeconds: retryAfter } : {}),
+      ...(upstreamStatus !== null ? { upstreamStatus } : {}),
+    },
+  }));
   res.writeHead(status, {
     "content-type": "application/json; charset=utf-8",
     "content-length": String(body.length),
     "cache-control": "no-store",
+    ...(retryAfter !== null ? { "retry-after": String(retryAfter) } : {}),
   });
   res.end(body);
 }
@@ -524,12 +544,94 @@ function validatedWebReadRequest(value) {
   return { mode: "web-read", url: read.url };
 }
 
+/**
+ * Named downloads: a file a run needs whole that the buffered fetch cannot give
+ * it, because the source builds it slowly or it is bigger than a JSON answer.
+ *
+ * Europe PMC assembles a paper's supplementary files into a zip as it streams
+ * them — measured 2026-10-04: 33 s to the first byte and 136 s for 3.5 MB — and
+ * DailyMed serves an older label version only as a zip. The runtime names the
+ * kind and its identifiers, never a host or a path, the same rule as the
+ * open-access PDF: it cannot use this to reach anywhere it chooses. The body
+ * is relayed as it arrives, inside this gateway's one deadline and its byte
+ * bound, and a stream that ends at either is cut short on the wire, so the
+ * runtime reads a body that ends early instead of a short file that looks whole.
+ *
+ * `types` is what the source may answer with: `stream` is relayed, `small` is
+ * read whole (bounded) and relayed as is. Europe PMC answers "not an open
+ * access article" and "no supplementary files" as small XML with status 200,
+ * and the runtime, which knows that wire, is the one that reads them.
+ */
+const SMALL_DOWNLOAD_BYTES = 64 * 1024;
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const downloadKinds = new Map([
+  ["epmc-supplements", {
+    params: { pmcid: (/** @type {unknown} */ value) => typeof value === "string" && /^PMC\d{3,12}$/.test(value) },
+    url: (/** @type {Record<string, any>} */ { pmcid }) => new URL(`https://www.ebi.ac.uk/europepmc/webservices/rest/${pmcid}/supplementaryFiles`),
+    types: new Map([["application/zip", "stream"], ["application/xml", "small"]]),
+  }],
+  ["dailymed-spl-zip", {
+    params: {
+      setid: (/** @type {unknown} */ value) => typeof value === "string" && uuidPattern.test(value),
+      version: (/** @type {unknown} */ value) => Number.isSafeInteger(value) && /** @type {number} */ (value) >= 1 && /** @type {number} */ (value) <= 100_000,
+    },
+    url: (/** @type {Record<string, any>} */ { setid, version }) => {
+      const url = new URL("https://dailymed.nlm.nih.gov/dailymed/getFile.cfm");
+      url.searchParams.set("setid", setid.toLowerCase());
+      url.searchParams.set("type", "zip");
+      url.searchParams.set("version", String(version));
+      return url;
+    },
+    types: new Map([["application/zip", "stream"]]),
+  }],
+]);
+
+/** @param {Record<string, unknown>} value */
+function validatedDownloadRequest(value) {
+  const download = /** @type {Record<string, any>} */ (value.download);
+  const kind = download && typeof download === "object" && !Array.isArray(download) ? downloadKinds.get(download.kind) : undefined;
+  if (
+    Object.keys(value).some((key) => key !== "download")
+    || !kind
+    || Object.keys(download).some((key) => key !== "kind" && !(key in kind.params))
+    || Object.keys(kind.params).some((key) => !kind.params[key](download[key]))
+  ) {
+    throw gatewayError(400, "public_source_gateway_field_invalid", "A download request names a known kind and exactly its identifiers.");
+  }
+  const params = Object.fromEntries(Object.keys(kind.params).map((key) => [key, download[key]]));
+  const url = kind.url(params);
+  if (!allowedHosts.has(url.hostname.toLowerCase())) {
+    throw gatewayError(403, "public_source_gateway_url_forbidden", "The public-source URL is not an approved official endpoint.");
+  }
+  return { mode: "download", kind: download.kind, types: kind.types, url };
+}
+
+/**
+ * A hand-off of preserved files to source intake (`sourceIntakeHandoff.mjs`):
+ * a preserved path per file and one group label, never a destination.
+ * @param {Record<string, unknown>} value
+ */
+function validatedSourceIntakeRequest(value) {
+  const intake = /** @type {Record<string, any>} */ (value.sourceIntake);
+  if (
+    Object.keys(value).some((key) => key !== "sourceIntake")
+    || intake == null || typeof intake !== "object" || Array.isArray(intake)
+    || Object.keys(intake).some((key) => key !== "group" && key !== "files")
+    || typeof intake.group !== "string" || !Array.isArray(intake.files)
+  ) {
+    throw gatewayError(400, "public_source_gateway_field_invalid", "A source-intake request carries only { sourceIntake: { group, files } }.");
+  }
+  return { mode: "source-intake", group: intake.group, files: intake.files };
+}
+
 function validatedRequest(value) {
   if (value == null || typeof value !== "object" || Array.isArray(value)) {
     throw gatewayError(400, "public_source_gateway_body_invalid", "The public-source request must be an object.");
   }
+  if (value.sourceIntake !== undefined) return validatedSourceIntakeRequest(value);
   if (value.openAccessPdfDoi !== undefined) return validatedOpenAccessPdfRequest(value);
   if (value.webRead !== undefined) return validatedWebReadRequest(value);
+  if (value.download !== undefined) return validatedDownloadRequest(value);
   if (Object.keys(value).some((key) => !["url", "accept", "method", "body", "credentialProfile"].includes(key))) {
     throw gatewayError(400, "public_source_gateway_field_invalid", "The public-source request contains an unsupported field.");
   }
@@ -738,6 +840,43 @@ function mappedUpstreamStatus(status) {
   if (status === 404 || status === 429) return status;
   if (status >= 400 && status < 500) return 400;
   return 502;
+}
+
+/**
+ * The whole seconds a source's Retry-After asks for (a number of seconds or an
+ * HTTP date), bounded to an hour; null when it sent nothing a client can use.
+ * Passed to the runtime so it can wait inside its own deadline, or stop and say
+ * how long the source asked for, instead of retrying into a refusal.
+ * @param {string | null | undefined} value @param {number} [now]
+ * @returns {number | null}
+ */
+export function retryAfterSecondsOf(value, now = Date.now()) {
+  const text = String(value ?? "").trim();
+  if (!text) return null;
+  if (/^\d+$/.test(text)) return Math.min(Number(text), 3600);
+  const at = Date.parse(text);
+  return Number.isFinite(at) ? Math.min(Math.max(Math.ceil((at - now) / 1000), 0), 3600) : null;
+}
+
+/**
+ * An upstream that answered with a refusal, as the gateway's error: a source
+ * that said no to this caller (401 or 403) is `public_source_gateway_upstream_denied`
+ * (retrying cannot help), one that rate limits is `..._rate_limited`, and the
+ * rest are `..._upstream_error`. The HTTP status the runtime sees is unchanged
+ * (`mappedUpstreamStatus`); the code is what names the three apart.
+ * @param {{ status: number, headers: Headers }} upstream @param {string} host
+ */
+function upstreamRefusal(upstream, host) {
+  const denied = upstream.status === 401 || upstream.status === 403;
+  const retryAfter = retryAfterSecondsOf(upstream.headers?.get?.("retry-after"));
+  return Object.assign(gatewayError(
+    mappedUpstreamStatus(upstream.status),
+    upstream.status === 429 ? "public_source_gateway_rate_limited"
+      : denied ? "public_source_gateway_upstream_denied" : "public_source_gateway_upstream_error",
+    denied
+      ? `The official public source refused this request (HTTP ${upstream.status}).`
+      : `The official public source returned HTTP ${upstream.status}.`,
+  ), { upstream: { host, status: upstream.status }, ...(retryAfter !== null ? { retryAfterSeconds: retryAfter } : {}) });
 }
 
 async function readBoundedBody(body, maxBytes) {
@@ -961,6 +1100,112 @@ async function sendParsedPdf(res, buffer, provenance, documentParser, resource =
 }
 
 /**
+ * Write one chunk, waiting for the socket to drain; returns false when the
+ * caller has gone, so the loop stops reading a body nobody is receiving.
+ * @param {import("node:http").ServerResponse} res @param {Uint8Array} chunk
+ */
+async function relayChunk(res, chunk) {
+  if (res.destroyed || res.writableEnded) return false;
+  if (res.write(chunk)) return true;
+  return new Promise((resolve) => {
+    const finish = (/** @type {boolean} */ more) => { res.off("drain", onDrain); res.off("close", onClose); resolve(more); };
+    const onDrain = () => finish(true);
+    const onClose = () => finish(false);
+    res.once("drain", onDrain);
+    res.once("close", onClose);
+  });
+}
+
+/**
+ * Serve a named download: the upstream's body relayed as it arrives, inside the
+ * request's deadline and `maxBytes`. The deadline is the AbortController's, armed
+ * by the caller; a body that outlives it, or passes the bound, ends the response
+ * on the wire without its terminator (see `sendError`), which the runtime reads
+ * as a body cut short.
+ * @param {{ kind: string, types: Map<string, string>, url: URL }} request
+ * @param {{ res: import("node:http").ServerResponse, fetchImpl: typeof fetch, signal: AbortSignal, maxBytes: number }} context
+ */
+async function serveDownload(request, { res, fetchImpl, signal, maxBytes }) {
+  const timedOut = () => signal.reason?.name === "TimeoutError";
+  let upstream;
+  try {
+    upstream = await fetchImpl(request.url, {
+      headers: { accept: [...request.types.keys()].join(", "), "user-agent": "EviMed-Research/1.2 (server public-source gateway)" },
+      redirect: "error",
+      signal,
+    });
+  } catch (error) {
+    if (error instanceof PublicSourceGatewayError) throw error;
+    if (timedOut()) throw gatewayError(504, "public_source_gateway_timeout", "The official public source timed out.");
+    throw gatewayError(502, "public_source_gateway_upstream_unavailable", "The official public source is temporarily unavailable.");
+  }
+  if (!upstream.ok) {
+    await upstream.body?.cancel().catch(() => {});
+    throw upstreamRefusal(upstream, request.url.hostname);
+  }
+  const contentType = String(upstream.headers.get("content-type") ?? "").split(";", 1)[0].trim().toLowerCase();
+  const mode = request.types.get(contentType);
+  if (!mode) {
+    await upstream.body?.cancel().catch(() => {});
+    throw gatewayError(502, "public_source_gateway_response_invalid", "The official public source returned an unexpected content type.");
+  }
+  const declared = Number(upstream.headers.get("content-length") ?? NaN);
+  if (mode === "small") {
+    let buffer;
+    try {
+      buffer = await readBoundedBody(upstream.body, SMALL_DOWNLOAD_BYTES);
+    } catch (error) {
+      if (!(error instanceof PublicSourceGatewayError) && timedOut()) {
+        throw gatewayError(504, "public_source_gateway_timeout", "The official public source stopped sending its answer in time.");
+      }
+      throw error;
+    }
+    res.writeHead(200, { "content-type": contentType, "content-length": String(buffer.length), "cache-control": "no-store" });
+    res.end(buffer);
+    return;
+  }
+  if (Number.isFinite(declared) && declared > maxBytes) {
+    await upstream.body?.cancel().catch(() => {});
+    throw gatewayError(502, "public_source_gateway_response_too_large", "The official public-source response exceeded the gateway limit.");
+  }
+  if (!upstream.body) throw gatewayError(502, "public_source_gateway_response_invalid", "The official public source returned no readable body.");
+  res.writeHead(200, {
+    "content-type": contentType,
+    "cache-control": "no-store",
+    "x-evimed-download-kind": request.kind,
+    // The source's own length, when it gives one, lets the runtime tell a body
+    // that ended early from one that is whole.
+    ...(Number.isFinite(declared) ? { "content-length": String(declared) } : {}),
+  });
+  const reader = upstream.body.getReader();
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        throw gatewayError(502, "public_source_gateway_response_too_large", "The official public-source response exceeded the gateway limit.");
+      }
+      if (!(await relayChunk(res, value))) {
+        // The caller left; the handler's close listener has aborted the fetch.
+        await reader.cancel().catch(() => {});
+        return;
+      }
+    }
+  } catch (error) {
+    await reader.cancel(error).catch(() => {});
+    if (!(error instanceof PublicSourceGatewayError) && timedOut()) {
+      throw gatewayError(504, "public_source_gateway_timeout", "The official public source stopped sending its answer in time.");
+    }
+    throw error;
+  } finally {
+    reader.releaseLock();
+  }
+  res.end();
+}
+
+/**
  * @param {any} config
  * @param {any} runtimeManager
  * `pdfTransport` is how an open-access PDF is fetched: the deployment's web
@@ -969,11 +1214,12 @@ async function sendParsedPdf(res, buffer, provenance, documentParser, resource =
  * again unchecked.
  * @param {{ fetchImpl?: typeof fetch, resolveImpl?: any, connectorCredentials?: any,
  *   webReader?: { read: (url: string, options: { signal?: AbortSignal, runtime?: { userId: string, projectId: string } }) => Promise<any> } | null,
- *   documentParser?: any, pdfTransport?: import("./webReadNetwork.mjs").WebTransport | null, capturePdf?: any, preparePdfCapture?: any }} [options]
+ *   documentParser?: any, pdfTransport?: import("./webReadNetwork.mjs").WebTransport | null, capturePdf?: any, preparePdfCapture?: any,
+ *   sourceIntake?: ((request: { identity: any, group: string, files: string[] }) => Promise<any>) | null }} [options]
  */
 export function createPublicSourceGatewayHandler(config, runtimeManager, {
   fetchImpl = fetch, resolveImpl = dnsLookup, connectorCredentials = null, webReader = null, documentParser = null,
-  pdfTransport = null, capturePdf = null, preparePdfCapture = null,
+  pdfTransport = null, capturePdf = null, preparePdfCapture = null, sourceIntake = null,
 } = {}) {
   const openAccessTransport = pdfTransport ?? nodeWebTransport({ resolveImpl });
   return async function publicSourceGatewayHandler(req, res, onFailure) {
@@ -1019,6 +1265,38 @@ export function createPublicSourceGatewayHandler(config, runtimeManager, {
             return preparePdfCapture && !captureContext ? null : capturePdf(current, bytes, provenance, captureContext,
               () => runtimeManager.assertActiveModelGatewayToken(token));
           } : null,
+        });
+        return;
+      }
+      if (request.mode === "source-intake") {
+        if (typeof sourceIntake !== "function") {
+          throw gatewayError(503, "public_source_gateway_unavailable", "Source intake is not available in this deployment.");
+        }
+        let answered;
+        try {
+          answered = await sourceIntake({ identity, group: request.group, files: request.files });
+        } catch (error) {
+          // The hand-off refuses what it cannot take by a status of its own
+          // (a bad group or file list, a project that is not a library); the
+          // gateway words that as a malformed request, never as a source failure.
+          const status = Number.isSafeInteger(/** @type {any} */ (error)?.status) ? /** @type {any} */ (error).status : 500;
+          if (status >= 400 && status < 500) throw gatewayError(400, "public_source_gateway_field_invalid", String(/** @type {any} */ (error).message ?? "The hand-off was refused."));
+          throw gatewayError(503, "public_source_gateway_unavailable", "Source intake is temporarily unavailable.");
+        }
+        const body = Buffer.from(JSON.stringify(answered));
+        res.writeHead(200, { "content-type": "application/json; charset=utf-8", "content-length": String(body.length), "cache-control": "no-store" });
+        res.end(body);
+        return;
+      }
+      if (request.mode === "download") {
+        // A named download gets the budget of one whole tool call minus the
+        // margin (config.mjs), not the buffered fetch's minute: that is the
+        // difference between a slow source answering and a timeout every time.
+        clearTimeout(timeout);
+        timeout = arm(Math.max(1_000, Number(config.publicSourceDownloadTimeoutMs) || 150_000));
+        await serveDownload(/** @type {{ kind: string, types: Map<string, string>, url: URL }} */ (request), {
+          res, fetchImpl, signal: controller.signal,
+          maxBytes: Math.max(1024, Number(config.publicSourceGatewayMaxResponseBytes) || 16 * 1024 * 1024),
         });
         return;
       }
@@ -1154,11 +1432,7 @@ export function createPublicSourceGatewayHandler(config, runtimeManager, {
         // 2026-09-21 read only 「upstream_error」, which named neither. The
         // host and the status, never the URL — a credential can ride in its
         // query string.
-        throw Object.assign(gatewayError(
-          mappedUpstreamStatus(upstream.status),
-          upstream.status === 429 ? "public_source_gateway_rate_limited" : "public_source_gateway_upstream_error",
-          `The official public source returned HTTP ${upstream.status}.`,
-        ), { upstream: { host: request.url.hostname, status: upstream.status } });
+        throw upstreamRefusal(upstream, request.url.hostname);
       }
       const contentType = String(upstream.headers.get("content-type") ?? "").split(";", 1)[0].trim().toLowerCase();
       if (!request.accept.includes(contentType)) {
@@ -1171,7 +1445,18 @@ export function createPublicSourceGatewayHandler(config, runtimeManager, {
         await upstream.body?.cancel().catch(() => {});
         throw gatewayError(502, "public_source_gateway_response_too_large", "The official public-source response exceeded the gateway limit.");
       }
-      const buffer = await readBoundedBody(upstream.body, maxBytes);
+      let buffer;
+      try {
+        buffer = await readBoundedBody(upstream.body, maxBytes);
+      } catch (error) {
+        // The one deadline covers the body as well as the wait for it: a source
+        // that answered and then stalled is a timeout (504), the same as one
+        // that never answered, and not the generic 502 "unavailable".
+        if (!(error instanceof PublicSourceGatewayError) && controller.signal.reason?.name === "TimeoutError") {
+          throw gatewayError(504, "public_source_gateway_timeout", "The official public source stopped sending its answer in time.");
+        }
+        throw error;
+      }
       res.writeHead(200, {
         "content-type": contentType,
         "content-length": String(buffer.length),
@@ -1232,3 +1517,5 @@ export const PUBLIC_SOURCE_ALLOWED_HOSTS = allowedHosts;
 export const PUBLIC_SOURCE_ALLOWED_POST_ENDPOINTS = allowedPostEndpoints;
 export const PUBLIC_SOURCE_CREDENTIAL_PROFILES = credentialProfiles;
 export const PUBLIC_SOURCE_ALLOWED_ACCEPT_TYPES = allowedAcceptTypes;
+/** The named downloads the runtime may ask for; `source_transport.py` names the same kinds, and a test holds the two equal. */
+export const PUBLIC_SOURCE_DOWNLOAD_KINDS = Object.freeze([...downloadKinds.keys()]);
