@@ -27,7 +27,8 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import {
-  MCP_TOOL_BASE_NAMES, VCR_ENGINE_METHODS, VCR_ENGINE_PROTOCOL_VERSION, VCR_JOB_KINDS, VCR_JOB_METHODS, validateEngineJob,
+  MCP_TOOL_BASE_NAMES, VCR_ENGINE_METHODS, VCR_ENGINE_PROTOCOL_VERSION, VCR_EXPORT_KINDS, VCR_JOB_KINDS, VCR_JOB_METHODS, VCR_MODEL_DOCUMENT_KINDS,
+  VCR_MODEL_DOCUMENT_SECTIONS, normalizeVcrAssessment, validateEngineJob, vcrAssessmentIssues, vcrModelDocumentTakesProse,
 } from "@evimed/domain";
 
 import { vcrRuntimeWrite } from "../src/vcrGateway.mjs";
@@ -111,7 +112,7 @@ test("every what a skill teaches is a word the read or write vocabulary has, and
     for (const match of text.matchAll(/"kind":\s*"([a-z_]+)"\s*[,}]/g)) {
       if (!/"action":\s*"start"[^}]*"kind":\s*"([a-z_]+)"/.test(text)) continue;
       if (VCR_JOB_KINDS.includes(match[1])) continue;
-      assert.ok(["study_package", "cde_communication_pack", "simulation_report", "validation_pack", "exclusion", "inclusion", "study_specific", "routine_care", "post_exit"].includes(match[1]),
+      assert.ok([...VCR_EXPORT_KINDS, "exclusion", "inclusion", "study_specific", "routine_care", "post_exit"].includes(match[1]),
         `${skill} teaches kind "${match[1]}", which is neither a job kind nor a word of the write it sits in`);
     }
   }
@@ -152,8 +153,8 @@ test("every vcr_write example in a skill passes the real write path's own checks
     }
   }
   assert.ok(checked >= 12, `the walk found the write examples (${checked})`);
-  assert.deepEqual(analysisObjects.sort(), ["comparator", "design_grid", "patient_set", "population", "trial_scenario", "trial_scenario"],
-    "the six ordinary analysis objects retain population, patient, comparator, both trial designs and the grid");
+  assert.deepEqual(analysisObjects.sort(), ["comparator", "design_grid", "model_assessment", "patient_set", "population", "trial_scenario", "trial_scenario"],
+    "the six ordinary analysis objects retain population, patient, comparator, both trial designs and the grid, and the model's assessment record is written beside them");
 });
 
 test("the analysis skill's curve example uses a recorded receipt and passes the real write path", async (t) => {
@@ -250,4 +251,27 @@ test("no skill speaks in build-plan identifiers, and the pairs of each skill are
     assert.doesNotMatch(text, /\bAC-\d+|方案\s*§|平台原则|\b[A-Z]{1,3}-\d{1,2}\b(?=[）)，、])/, `${skill}: a plan or acceptance identifier is in a model's instruction`);
     assert.equal(read(`capability-skills/${skill}/SKILL.md`), text, `${skill}: capabilities/ and capability-skills/ hold different texts`);
   }
+});
+
+test("the skills' model-document instructions agree with the platform: the sections a run is told to write are the ones the gateway takes, and the assessment example is a complete record", () => {
+  const pack = read("capabilities/vcr-package/SKILL.md");
+  // Every section the package skill names for a model document is a prose section of that document, and every prose section is named.
+  for (const kind of VCR_MODEL_DOCUMENT_KINDS) {
+    const prose = VCR_MODEL_DOCUMENT_SECTIONS[kind].prose;
+    const row = pack.split("\n").find((line) => line.startsWith(`| ${kind === "model_analysis_plan" ? "模型分析计划" : "模型分析报告"} |`));
+    assert.ok(row, `${kind}: the skill has its row`);
+    const named = [...row.matchAll(/`([a-z_]+)`/g)].map((match) => match[1]);
+    assert.deepEqual(named.sort(), [...prose].sort(), `${kind}: the skill names exactly the sections the gateway takes`);
+    for (const section of named) assert.equal(vcrModelDocumentTakesProse(kind, section), true);
+  }
+  // The report example the skill shows is for a section a run may write.
+  const example = jsonBlocks(pack).map((block) => JSON.parse(concrete(block))).find((call) => call?.data?.kind === "model_analysis_report");
+  assert.ok(example, "the skill shows one model-document write");
+  assert.equal(vcrModelDocumentTakesProse(example.data.kind, example.data.section), true);
+  // The assessment example in the analysis skill leaves nothing for a notice to say: it is the shape a run copies.
+  const call = jsonBlocks(read("capabilities/vcr-analysis/SKILL.md")).map((block) => JSON.parse(concrete(block))).find((entry) => entry?.what === "model_assessment");
+  assert.ok(call, "the analysis skill shows the assessment write");
+  assert.deepEqual(vcrAssessmentIssues(call.data, "planning"), []);
+  assert.equal(normalizeVcrAssessment(call.data).risk, "high", "and its ratings give the risk its own justification speaks of");
+  assert.ok(!("risk" in call.data), "a run never writes the risk");
 });

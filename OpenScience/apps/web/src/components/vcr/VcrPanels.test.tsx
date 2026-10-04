@@ -59,6 +59,28 @@ describe("模型与方法", () => {
     expect(card().textContent).not.toContain("不适用");
   });
 
+  it("names the call shape of a model, and for the event-history shape what it reads, how far it projects and what its card still lacks", async () => {
+    const payload = fixture("ev201/models.json");
+    expect(payload.models[0].shapeLabel).toBe("基线 → 结局分布");
+    Object.assign(payload.models[1], {
+      shape: "event_history_to_trajectories", shapeLabel: "事件历史 → 未来轨迹", events: ["诊断", "处方"], horizon: "24 months", trajectoriesMax: 500,
+      shapeMissing: ["事件历史 → 未来轨迹接口的模型卡缺「已知局限」"],
+    });
+    server = installVcrServer(network.productRequest, { "GET /vcr/models": payload });
+    draw(<VcrModelsPanel />);
+    await screen.findByRole("heading", { name: "二线 NSCLC 多西他赛组 PFS · Weibull" });
+    expect(within(card()).getByText("调用接口").nextElementSibling).toHaveTextContent("基线 → 结局分布");
+    expect(card().querySelector("[data-vcr-model-shape-missing]")).toBeNull();
+    await userEvent.click(document.querySelector("[data-vcr-model='mdl_2']") as HTMLElement);
+    await screen.findByRole("heading", { name: "二分类终点参考仿真器" });
+    const facts = within(card());
+    expect(facts.getByText("调用接口").nextElementSibling).toHaveTextContent("事件历史 → 未来轨迹");
+    expect(facts.getByText("读取的事件").nextElementSibling).toHaveTextContent("诊断、处方");
+    expect(facts.getByText("最长推演时间").nextElementSibling).toHaveTextContent("24 months");
+    expect(facts.getByText("每份历史最多轨迹数").nextElementSibling).toHaveTextContent("500");
+    expect(card().querySelector("[data-vcr-model-shape-missing]")).toHaveTextContent("缺「已知局限」");
+  });
+
   it("says 数字孪生 only for a model that has earned it", async () => {
     const payload = fixture("ev201/models.json");
     Object.assign(payload.models[0], { twin: "digital_twin", twinLabel: null, twinReason: null });

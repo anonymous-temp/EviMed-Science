@@ -86,7 +86,8 @@ function fixture(overrides = {}) {
     async latestPopulation() { return null; },
     async latestComparatorDesign() { return null; },
     async trialScenarios() { return []; },
-    async models() { return []; },
+    async models() { return [{ id: "mdl_ref", name: "reference-time-to-event", version: "1.0.0" }]; },
+    async saveModelAssessment(input) { calls.push(["assessment", input.record.key, input.record.risk, input.record.influence]); return { id: "mia_1", version: 1 }; },
     async exports() { return []; },
     async createExport(input) { calls.push(["export", input.kind]); return { id: "exp_1", kind: input.kind, state: "queued", cover: {} }; },
     async updateExport(id, patch) { calls.push(["updateExport", id, Object.keys(patch).join(","), patch]); return { id, ...patch }; },
@@ -692,4 +693,101 @@ test('patient-set requests resolve exactly one registered model version before s
   assert.equal(res.json().data.ids.length, 1);
   assert.equal(res.json().data.issues.length, 3);
   assert.equal(saved.length, 1); assert.equal(saved[0].modelId, 'mdl_v2'); assert.equal(saved[0].modelVersion, '2');
+});
+
+/** A complete assessment record as a run writes one. @param {Record<string, any>} [more] */
+const assessmentItem = (more = {}) => ({
+  key: "survival_projection", modelName: "reference-time-to-event", modelVersion: "1.0.0",
+  questionOfInterest: "外部对照的生存基准能否用", contextOfUse: "生成对照臂的事件时间分布",
+  influence: "medium", influenceJustification: "与文献对照一起使用", consequence: "high", consequenceJustification: "错判会让无效疗法进入关键试验",
+  riskJustification: "后果为高", impact: "low", impactJustification: "做法已有讨论",
+  technicalCriteria: ["重建曲线通过质控", { criterion: "校准斜率落在预设区间", rationale: "与风险相称" }], appropriateness: "覆盖终点",
+  ...more,
+});
+
+test("a model assessment is written as the next version of its key, with the risk derived by the platform and never typed", async () => {
+  const { calls, handler } = fixture();
+  const res = response();
+  await handler(request("/internal/vcr/v1/write", { what: "model_assessment", data: assessmentItem() }), res);
+  const done = res.json().data;
+  assert.deepEqual([done.ok, done.ids, done.issues], [true, ["mia_1"], []], JSON.stringify(done));
+  assert.deepEqual(calls.find((call) => call[0] === "assessment"), ["assessment", "survival_projection", undefined, "medium"],
+    "the gateway carries the two ratings and no risk; the store derives it (the integration suite holds that half)");
+
+  // The risk is not a field: a run that types one is told, and nothing is written.
+  const typed = response();
+  await handler(request("/internal/vcr/v1/write", { what: "model_assessment", data: assessmentItem({ risk: "low" }) }), typed);
+  assert.deepEqual([typed.json().data.ok, typed.json().data.issues.map((/** @type {any} */ issue) => [issue.field, issue.code])], [false, [["risk", "vcr_write_field_forbidden"]]]);
+  // A rating outside the three words, a key that is not a token and a model with no name are each refused by name.
+  const bad = response();
+  await handler(request("/internal/vcr/v1/write", { what: "model_assessment", items: [
+    assessmentItem({ influence: "severe" }), assessmentItem({ key: "Not A Key" }), assessmentItem({ modelName: undefined }),
+    assessmentItem({ technicalCriteria: [{ rationale: "没有标准" }] }),
+  ] }), bad);
+  assert.deepEqual(bad.json().data.issues.map((/** @type {any} */ issue) => issue.field), ["influence", "key", "modelName", "technicalCriteria[0]"]);
+  assert.equal(calls.filter((call) => call[0] === "assessment").length, 1, "none of the four refused items was written");
+});
+
+test("a half-filled assessment record is stored as it stands, with every gap named as a notice and a missing model named, never refused", async () => {
+  const { calls, handler } = fixture();
+  const res = response();
+  await handler(request("/internal/vcr/v1/write", { what: "model_assessment", data: assessmentItem({
+    modelName: "private-model", influenceJustification: undefined, technicalCriteria: undefined, appropriateness: undefined } ) }), res);
+  const done = res.json().data;
+  assert.deepEqual([done.ok, done.ids], [true, ["mia_1"]], "stored");
+  assert.ok(calls.some((call) => call[0] === "assessment"));
+  assert.ok(done.issues.some((/** @type {any} */ issue) => issue.code === "vcr_model_not_found" && issue.field === "modelName"), "the library does not hold it, and the run is told");
+  assert.deepEqual(done.issues.filter((/** @type {any} */ issue) => issue.code === "vcr_model_assessment_incomplete").map((/** @type {any} */ issue) => issue.field).sort(),
+    ["appropriateness", "influence", "technicalCriteria"], "each gap, by the field it is in");
+});
+
+test("the two model documents take a run's words by named section only; the platform's tables cannot be written over, and every other kind is unchanged", async () => {
+  for (const kind of VCR_MODEL_DOCUMENT_KINDS) {
+    const { calls, handler } = exportRunFixture({ kind });
+    const prose = VCR_MODEL_DOCUMENT_SECTIONS[kind].prose;
+    for (const section of prose) {
+      const written = await writeReport(handler, { kind, section, template: "一段文字。" });
+      assert.deepEqual([written.ok, written.ids], [true, ["exp_wanted"]], `${kind}/${section}`);
+    }
+    const refused = [];
+    // A section that is the platform's own, one nobody has, and a body with no section at all.
+    for (const data of [{ section: "appendices" }, { section: "assessment_table" }, {}]) refused.push(await writeReport(handler, { kind, template: "改写表格。", ...data }));
+    for (const one of refused) {
+      assert.deepEqual([one.ok, one.ids], [false, []], kind);
+      assert.deepEqual(one.issues.map((/** @type {any} */ issue) => [issue.field, issue.code]), [["section", "vcr_report_section_invalid"]]);
+      assert.ok(one.issues[0].message.includes(prose[0]), "and the sections that are a run's are named");
+    }
+    assert.equal(calls.filter((call) => call[0] === "updateExport").length, prose.length, "only the allowed sections reached the export");
+  }
+  // The other four documents keep one free-form body, section or not.
+  for (const kind of VCR_EXPORT_KINDS.filter((entry) => !VCR_MODEL_DOCUMENT_KINDS.includes(entry))) {
+    const { handler } = exportRunFixture({ kind });
+    const written = await writeReport(handler, { kind, section: "任何一节", template: "方法与局限。" });
+    assert.deepEqual([written.ok, written.ids], [true, ["exp_wanted"]], kind);
+  }
+});
+
+test("the report of a model document is rendered against the model built for that document, with the plan's block in it", async () => {
+  /** @type {any[]} */
+  const asked = [];
+  const { vcr, handler } = exportRunFixture({ kind: "model_analysis_plan" });
+  vcr.service.reportModel = async (/** @type {any} */ target, /** @type {any} */ options) => {
+    asked.push(options);
+    return { study: target, modelAnalysis: { results: [{ measures: [{ name: "power", value: 0.8, simulated: false }] }] } };
+  };
+  const written = await writeReport(handler, { kind: "model_analysis_plan", section: "methods", template: "功效 {{n:modelAnalysis.results[0].measures[0].value|f1}}。" });
+  assert.equal(written.ok, true, JSON.stringify(written));
+  assert.deepEqual(asked, [{ kind: "model_analysis_plan" }], "the model is built for the export's kind, which the dispatch names");
+});
+
+test("a model written by a run keeps the notices its card earned: the run hears what the contract of its call shape still lacks", async () => {
+  const { handler, vcr } = fixture();
+  vcr.service.adoptModel = async () => ({ id: "mdl_9", issues: [
+    { code: "interface_field_missing", field: "applicability.horizon", text: "事件历史 → 未来轨迹接口的模型卡缺「最长推演时间（数值与单位）」" },
+  ] });
+  const res = response();
+  await handler(request("/internal/vcr/v1/write", { what: "model", data: { name: "event-model", card: { interfaceShape: "event_history_to_trajectories" } } }), res);
+  const done = res.json().data;
+  assert.deepEqual([done.ok, done.ids], [true, ["mdl_9"]], "the model is kept");
+  assert.deepEqual(done.issues.map((/** @type {any} */ issue) => [issue.field, issue.code]), [["applicability.horizon", "vcr_model_card_incomplete"]]);
 });

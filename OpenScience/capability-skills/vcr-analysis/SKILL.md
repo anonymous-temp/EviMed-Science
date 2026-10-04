@@ -92,6 +92,34 @@ description: 「虚拟临研」的人群、虚拟患者、对照与试验四步�
 
 模型不适用时（人群、终点或输入超出范围），给出「适用性问题」：哪一项超出范围，然后在「换一个合适的模型」「用文献模型或情景模型并标明」「提一个数据需求」三条里选一条，照实标注。**不要编一条轨迹顶替。**
 
+**每个用到的模型写一条评估记录**（`mcp__evimed__vcr_write` `what: "model_assessment"`），在对照步骤之前写：平台在分析计划冻结的那一刻，把这些记录连同模型卡、假设、方法和情景一起冻结成模型分析计划，冻结之后再改只会成为新的一版。一条记录回答一个问题、对一个模型：关注的问题（`questionOfInterest`，模型要回答什么）、使用情境（`contextOfUse`，模型的角色与范围、用什么数据建的、还有什么证据一起用）、模型影响力（`influence`：模型结果在决策里的分量，只有它一个依据时是 `high`）、错误决策的后果（`consequence`：严重程度和发生可能），各自的理由、模型冲击（`impact`：这个用法偏离监管惯例多远）及理由、技术标准（`technicalCriteria`：事先写下**怎样算模型和结果可以接受**，看到结果之前写）、所拟用法的适当性（`appropriateness`）。评级只有 `low`、`medium`、`high`，**每个评级都要写理由**。
+
+**模型风险你不写**：平台按影响力和后果推出来——两个都低就是低，都高就是高，不一样时随影响更大的一项——并把依据写进记录；你在 `riskJustification` 里写这个风险为什么是这样。同一个问题有几个模型回答，就写几条记录，问题的写法保持一致，平台按问题分表。评价（`evaluation`）和证据评估的结论（`outcome`）是分析做完之后才填的，计划阶段留空。
+
+```json
+{
+  "what": "model_assessment",
+  "data": {
+    "key": "survival_projection",
+    "modelName": "reference-time-to-event",
+    "modelVersion": "1.0.0",
+    "questionOfInterest": "外部对照的生存基准能否用于单臂试验的比较",
+    "contextOfUse": "用情景模型生成对照臂的事件时间分布，作为单臂试验的比较基准；与文献对照一起使用",
+    "influence": "medium",
+    "influenceJustification": "模型结果与文献对照并列使用，不是唯一依据",
+    "consequence": "high",
+    "consequenceJustification": "错误的基准会让一项无效疗法进入关键试验",
+    "riskJustification": "后果为高而影响力为中，风险随后果",
+    "impact": "low",
+    "impactJustification": "加权外部对照是监管上已经讨论过的做法",
+    "technicalCriteria": [{ "criterion": "重建的曲线通过质控", "rationale": "与模型风险相称" }],
+    "appropriateness": "情景模型覆盖研究的终点，用法只作设计依据"
+  }
+}
+```
+
+返回值里的 `issues` 是这条记录还没填的项：照着补，再写一次（新版本）。记录先存下，缺的项会在文件里写成「未填写」。模型卡写明接口是「事件历史 → 未来轨迹」的模型，这个部署还没有能执行它的模型包：写患者集会被按名拒绝，不要用别的模型顶替。
+
 ### 步骤 5：对照
 
 `mcp__evimed__vcr_read` `what: "comparator"` 会回来 `routes`——这个数据档位能走哪几条路线，是确定性的。路线、最低档位和引擎做的事：

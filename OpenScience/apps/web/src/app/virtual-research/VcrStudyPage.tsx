@@ -189,6 +189,8 @@ function StudyView({ studyId, study, tab, reload }: { studyId: string; study: Vc
       { label: "导出 CDE 沟通交流资料包", disabled: running, onSelect: () => exportAs("cde_communication_pack", "资料包暂时无法导出，请稍后重试。") },
       { label: `导出${VCR_EXPORT_KIND_LABELS_ZH.simulation_report}`, disabled: running, onSelect: () => exportAs("simulation_report", "模拟报告暂时无法导出，请稍后重试。") },
       { label: `导出${VCR_EXPORT_KIND_LABELS_ZH.validation_pack}`, disabled: running, onSelect: () => exportAs("validation_pack", "系统验证文档包暂时无法导出，请稍后重试。") },
+      { label: `导出${VCR_EXPORT_KIND_LABELS_ZH.model_analysis_plan}`, disabled: running, onSelect: () => exportAs("model_analysis_plan", "模型分析计划暂时无法导出，请稍后重试。") },
+      { label: `导出${VCR_EXPORT_KIND_LABELS_ZH.model_analysis_report}`, disabled: running, onSelect: () => exportAs("model_analysis_report", "模型分析报告暂时无法导出，请稍后重试。") },
     ] : []),
     // The compute budget, the study's status and its deletion are the lead's
     // (`manage_study`): the second human stop is confirmed by the person who

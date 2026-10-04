@@ -84,7 +84,9 @@ export type VcrReferralState =
   | "site_responded" | "screening" | "enrolled" | "screen_failed" | "withdrawn";
 export type VcrComparatorRoute =
   | "prognostic_adjustment" | "external_control" | "literature_control" | "model_comparator" | "hybrid_control";
-export type VcrExportKind = "study_package" | "cde_communication_pack" | "simulation_report" | "validation_pack";
+export type VcrExportKind =
+  | "study_package" | "cde_communication_pack" | "simulation_report" | "validation_pack"
+  | "model_analysis_plan" | "model_analysis_report";
 export type VcrMemberRole =
   | "lead" | "clinical_reviewer" | "statistical_reviewer" | "data_manager" | "recruiter" | "site" | "viewer";
 /** The four counts that appear wherever a sample size does (`VCR_COUNT_KEYS`). */
@@ -557,6 +559,15 @@ export interface VcrModelCard {
   sources?: string | null;
   provider?: string | null;
   interface?: string | null;
+  /** How the model is called (plan §5.2): a baseline in and an outcome distribution out, or an event history in and future trajectories out. */
+  shape?: "baseline_to_outcome" | "event_history_to_trajectories" | "unknown";
+  shapeLabel?: string | null;
+  /** What the card of a model of the second shape has not said yet, in words. */
+  shapeMissing?: string[];
+  /** The event types an event-history model reads, how far it projects and how many trajectories a history gets at most. */
+  events?: string[];
+  horizon?: string | null;
+  trajectoriesMax?: number | null;
   inputs?: string[];
   outputs?: string | null;
   missingData?: string | null;
@@ -1198,6 +1209,8 @@ export function readVcrModelCard(raw: unknown): VcrModelCard {
     validation: arr(value.validation) as unknown as VcrModelCard["validation"],
     limits: strings(value.limits),
     missingEvidence: strings(value.missingEvidence),
+    shapeMissing: strings(value.shapeMissing),
+    events: strings(value.events),
     usedBy: arr(value.usedBy) as unknown as VcrModelCard["usedBy"],
   };
 }

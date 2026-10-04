@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-matching",
-  "version": "sha256:97f10da9849214313d359734cfcb8fa79724f64079d57d73a1a7af733771752e",
+  "version": "sha256:63da074745aa1e18eedfe9d0ac79429f1a085645d65f52b34879717f12b622ca",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 24,
@@ -892,7 +892,8 @@
               "snapshot_profile",
               "models",
               "jobs",
-              "trial_registry_record"
+              "trial_registry_record",
+              "model_assessments"
             ]
           },
           "filter": {
@@ -1092,7 +1093,7 @@
     {
       "name": "mcp__evimed__vcr_write",
       "source": "mcp",
-      "description": "Write this 虚拟临研 study's definitions and designs: the research definition, a protocol version and its structured eligibility criteria, assumption cards and their evidence items, precedents, population, patient-set, comparator and trial designs, a design grid, a decision record, a fitted literature model, patient facts, sites and follow-up, or the report text. Numbers are not writable: results, counts, measures and execution records come from the engine, and an object's configuration carries only the keys the engine reads (see vcr_simulate). Items are checked one by one; refused items come back in issues and the rest are written.",
+      "description": "Write this 虚拟临研 study's definitions and designs: the research definition, a protocol version and its structured eligibility criteria, assumption cards and their evidence items, precedents, population, patient-set, comparator and trial designs, a design grid, a decision record, a fitted literature model, a model's ICH M15 assessment record, patient facts, sites and follow-up, or the report text. Numbers are not writable: results, counts, measures and execution records come from the engine, and an object's configuration carries only the keys the engine reads (see vcr_simulate). Items are checked one by one; refused items come back in issues and the rest are written.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1120,7 +1121,8 @@
               "language_judgment",
               "site",
               "followup",
-              "field_map"
+              "field_map",
+              "model_assessment"
             ]
           },
           "items": {

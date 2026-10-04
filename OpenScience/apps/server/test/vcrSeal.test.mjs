@@ -215,3 +215,40 @@ test("a study that does not exist answers rather than throwing", async () => {
   assert.equal(await seal.recordOutcomeAccess({ studyId: "gone", fields: [] }), null);
   assert.deepEqual(await seal.readable("gone"), { readable: false, reason: "study_not_found" });
 });
+
+test("the model analysis plan is frozen first, under the analysis plan's own instant and hash, and its freeze is passed what the seal will become", async () => {
+  const study = { id: "std_1", userId: "u1", intendedUse: "specified_analysis", outcomeSeal: {} };
+  const store = storeDouble(study);
+  /** @type {string[]} */
+  const order = [];
+  const updateStudy = store.updateStudy;
+  store.updateStudy = async (id, patch) => { order.push("seal-written"); return updateStudy(id, patch); };
+  /** @type {any[]} */
+  const frozen = [];
+  const modelPlans = { async freeze(/** @type {any} */ input) { order.push("model-plan-frozen"); frozen.push(input); return { created: true, plan: { version: 1, contentHash: "h".repeat(64) } }; } };
+  const seal = createVcrSeal({ store, modelPlans, now: () => new Date("2026-09-28T10:00:00Z") });
+  const first = await seal.freezePlan({ studyId: "std_1", plan, actor: "orchestrator" });
+  assert.deepEqual(order, ["model-plan-frozen", "seal-written"], "before the write that makes the outcome columns readable");
+  assert.equal(frozen[0].frozenAt, first.planFrozenAt, "one instant for both");
+  assert.deepEqual(frozen[0].seal, { planHash: vcrPlanHash(plan), planVersion: 1, outcomeFirstReadAt: null });
+  assert.deepEqual(first.modelPlan, { version: 1, created: true, contentHash: "h".repeat(64) });
+  // Frozen again with the same analysis plan: the seal does not move, and the model plan is asked again (its content may have changed).
+  await seal.freezePlan({ studyId: "std_1", plan, actor: "runtime" });
+  assert.equal(frozen[1].seal.planVersion, 1, "an unchanged analysis plan keeps its version");
+  // A changed plan is version 2, and an outcome read in between is what the model plan is told.
+  await seal.recordOutcomeAccess({ studyId: "std_1", fields: ["pfs_time"], actor: "analyst" });
+  await seal.freezePlan({ studyId: "std_1", plan: { ...plan, analysis: { method: "comparator.propensity_weight" } }, actor: "runtime" });
+  assert.equal(frozen[2].seal.planVersion, 2);
+  assert.ok(frozen[2].seal.outcomeFirstReadAt, "the read that came first is on the record");
+});
+
+test("a model analysis plan that cannot be frozen is audited and the analysis plan freezes anyway; a seal with no model plan service is unchanged", async () => {
+  const store = storeDouble({ id: "std_1", userId: "u1", intendedUse: "specified_analysis", outcomeSeal: {} });
+  const seal = createVcrSeal({ store, modelPlans: { async freeze() { throw Object.assign(new Error("boom"), { code: "XX000" }); } } });
+  const frozen = await seal.freezePlan({ studyId: "std_1", plan, actor: "runtime" });
+  assert.ok(frozen?.planFrozenAt, "the analysis plan froze");
+  assert.equal(frozen?.modelPlan, null);
+  assert.deepEqual(store.audits.filter((entry) => entry.action === "vcr.model_plan.freeze_failed").map((entry) => [entry.outcome, entry.reason]), [["failed", "XX000"]]);
+  const without = createVcrSeal({ store: storeDouble({ id: "std_2", userId: "u1", intendedUse: "specified_analysis", outcomeSeal: {} }) });
+  assert.equal((await without.freezePlan({ studyId: "std_2", plan, actor: "runtime" }))?.modelPlan, null);
+});
