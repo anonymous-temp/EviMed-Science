@@ -28,7 +28,7 @@ from fastapi import Header, Body, FastAPI, HTTPException, Security
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 
 from .mr_job_store import MRJobStore
-from . import audit_receipt, engine_model, isolated_job, usage_report
+from . import audit_receipt, engine_model, isolated_job, job_slots, usage_report
 from .security import _authorized_claims, _read_secret, _signing_secret
 
 
@@ -58,6 +58,11 @@ _MR_RUNNER_NAMED_CODES = frozenset({
 })
 _MR_RUNNER_FAILED = "The fixed MR runner failed."
 _MR_RUNNER_MESSAGE_LIMIT = 2000
+#: What a job that the deployment's specialist cap kept from starting ends as. An
+#: existing code, not a new one: nothing ran, the deployment was at capacity, and
+#: trying again later is the whole remedy -- the same fact as an engine that is
+#: not running, which this code already says.
+_SLOT_FAILURE_CODE = "specialist_worker_unavailable"
 
 
 SPECS: dict[str, dict[str, Any]] = {
@@ -982,12 +987,23 @@ def _status(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
     job_status = state.get("status")
     if job_status in {"queued", "running"}:
         if _managed_worker_alive(job_id, state_path, state):
+            # A job waiting for a slot is `queued` and says why in `progress`, the
+            # field a poller already reads, so it never looks hung.
+            queue = job_slots.stage_of(state.get("slotWait")) if job_status == "queued" else None
+            data = {"jobId": job_id, "jobStatus": job_status, **_liveness(state)}
+            if queue:
+                data["progress"] = {"stage": queue}
             return {
                 "status": "warning",
-                "summary": f"{_spec()['label']} job {job_id} is {job_status}.",
-                "data": {"jobId": job_id, "jobStatus": job_status, **_liveness(state)},
+                "summary": (f"{_spec()['label']} job {job_id} is queued. {queue}" if queue
+                            else f"{_spec()['label']} job {job_id} is {job_status}."),
+                "data": data,
                 "sources": [_source(job_id)],
-                "warnings": ["The specialist analysis is incomplete; do not draw final conclusions."],
+                "warnings": [
+                    "The job is queued behind other specialist jobs and has not started; it starts by itself "
+                    "when a slot frees. Do not draw conclusions from it."
+                    if queue else "The specialist analysis is incomplete; do not draw final conclusions."
+                ],
                 "next_actions": ["Poll this job again after additional processing time."],
             }
         try:
@@ -1021,6 +1037,16 @@ def _status(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
         except subprocess.TimeoutExpired:
             _WORKERS[job_id] = worker
     cleanup = state.get("cleanupError") if _kind() == "mendelian-randomization" else None
+    if job_status == "failed" and state.get("slotError"):
+        # The deployment's specialist cap kept this job from starting: nothing ran,
+        # there is nothing partial to preserve, and trying again later is the remedy.
+        return _error(
+            _SLOT_FAILURE_CODE,
+            str(state.get("error") or "The job did not start."),
+            True,
+            next_actions=["The deployment's specialist capacity was full or unavailable and this job did not start; "
+                          "start the same request again later."],
+        )
     if job_status == "failed":
         message = str(state.get("error") or f"{_spec()['label']} execution failed.")
         if _kind() == "mendelian-randomization":
@@ -1365,11 +1391,112 @@ def _run_isolated_mr(
         return 1
 
 
+class _NoSlot(Exception):
+    """The job is not going to run in this worker; its state already says why, or is someone else's."""
+
+
+def _job_log_path(state: dict[str, Any]) -> Path | None:
+    """The job's log, or None: a log is for the operator and never stops a job."""
+    try:
+        return _job_paths(Path(state["workspace"]).absolute(), str(state["jobId"]))[1]
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def _wait_for_slot(state_path: Path) -> job_slots.Slot:
+    """Hold one of the deployment's specialist slots before the job starts, or end the job by name.
+
+    The cap (`job_slots`) is one deployment-wide limit on jobs that run at once,
+    across all six engine containers: the host is shared and an engine may use
+    2 GB while it works. Without one this returns at once and touches nothing.
+
+    A job over the cap stays `queued`, not `running`: its worker waits here,
+    before MR's `claim()` or any other transition, so MR's queue authority is
+    untouched and a poller reads the truth. While it waits the worker keeps the
+    state's `updatedAt` moving and records `slotWait`, which `_status` turns into
+    the poller's `progress.stage`; a waiting job must not look hung. The wait is
+    bounded (`EVIMED_SPECIALIST_SLOT_WAIT_SECONDS`); past it, or if the slot
+    directory cannot be used, the job ends retryable with
+    `specialist_worker_unavailable` and nothing has run.
+    """
+    if job_slots.limit() == 0:
+        return job_slots.Slot()
+    try:
+        state = _read_state(state_path)
+    except Exception:  # noqa: BLE001 — an unreadable or unsafe state is refused by name by the job itself
+        return job_slots.Slot()
+    if state.get("status") != "queued":
+        return job_slots.Slot()  # not this worker's to run; the job body decides what that means
+    log_path = _job_log_path(state)
+    since = _now()
+    announced: list[bool] = []
+
+    def waiting(info: dict[str, Any]) -> None:
+        if not announced:
+            announced.append(True)
+            _log_line(log_path, f"slot: {job_slots.describe(info)}")
+        current = _read_state(state_path)
+        if current.get("status") != "queued":
+            raise job_slots.StopWaiting  # someone else ended or claimed this job
+        current.update(
+            workerPid=os.getpid(),
+            updatedAt=_now(),
+            slotWait={"since": since, **{key: info[key] for key in ("limit", "running", "waiting", "ahead")}},
+        )
+        _write_state(state_path, current)
+
+    try:
+        slot = job_slots.acquire(str(state.get("jobId") or ""), _kind(), on_wait=waiting)
+    except job_slots.StopWaiting:
+        raise _NoSlot from None
+    except job_slots.SlotsUnavailable as error:
+        _fail_unslotted(state_path, error, log_path)
+        raise _NoSlot from None
+    if announced:
+        _log_line(log_path, f"slot: acquired after {int(slot.waited)} seconds")
+        try:
+            current = _read_state(state_path)
+            if current.get("status") == "queued":
+                current.pop("slotWait", None)
+                current.update(updatedAt=_now(), slotWaitedSeconds=int(slot.waited))
+                _write_state(state_path, current)
+        except Exception:  # noqa: BLE001 — the slot is held; the record of the wait is not worth the job
+            pass
+    return slot
+
+
+def _fail_unslotted(state_path: Path, error: job_slots.SlotsUnavailable, log_path: Path | None) -> None:
+    """End a job the cap kept from starting: retryable, nothing ran, and the log says which limit."""
+    _log_line(log_path, f"slot: {error.code}: {error}")
+    try:
+        state = _read_state(state_path)
+        if state.get("status") != "queued":
+            return
+        state.pop("slotWait", None)
+        state.update(
+            status="failed", updatedAt=_now(), finishedAt=_now(), returnCode=1, retryable=True,
+            errorCode=_SLOT_FAILURE_CODE, slotError=error.code, error=str(error), artifacts=[],
+        )
+        _write_state(state_path, state)
+    except Exception:  # noqa: BLE001 — the log has it; a queued job whose worker is gone is ended by the next poll
+        pass
+
+
 def run_job(state_file: str) -> int:
     state_path = Path(state_file).absolute()
     data_root = Path(os.getenv("EVIMED_DATA_ROOT", "/data")).resolve()
     if data_root != state_path and data_root not in state_path.parents:
         raise RuntimeError("specialist state escaped the data root")
+    try:
+        slot = _wait_for_slot(state_path)
+    except _NoSlot:
+        return 1
+    # Held until the worker is done with the engine and its record, however it ends.
+    with slot:
+        return _run_job(state_path, data_root)
+
+
+def _run_job(state_path: Path, data_root: Path) -> int:
     if _kind() == "mendelian-randomization":
         with _mr_store().claim(state_path) as state:
             if state is None:
@@ -1656,6 +1783,9 @@ def _create_app() -> FastAPI:
             **({"openDataSources": open_sources} if _kind() == "mendelian-randomization" else {}),
             "auditReceiptsReady": audit_receipt.ready(fixture=_kind() == "mendelian-randomization"),
             **_evidence_health(),
+            # Deployment-wide, from the one directory every engine container
+            # shares: the cap, the jobs holding a slot, the jobs waiting for one.
+            "specialistSlots": job_slots.snapshot(),
             **(
                 {"acceptedStartInputs": _accepted_start_inputs()}
                 if _kind() in {"research-topic-selection", "mendelian-randomization"}
