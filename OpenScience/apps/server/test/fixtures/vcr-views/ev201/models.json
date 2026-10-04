@@ -16,6 +16,9 @@
       "sources": "来源 3 项：NCT09900001、NCT09900002、CTR20990001",
       "provider": "研究 EV-201",
       "interface": "vcr-engine patients.time_to_event",
+      "shape": "baseline_to_outcome",
+      "shapeLabel": "基线 → 结局分布",
+      "shapeMissing": [],
       "inputs": [
         "中位 PFS",
         "形状参数"
@@ -78,6 +81,9 @@
       "sources": null,
       "provider": "EviMed 虚拟临研",
       "interface": "vcr-engine patients.binary",
+      "shape": "baseline_to_outcome",
+      "shapeLabel": "基线 → 结局分布",
+      "shapeMissing": [],
       "inputs": [
         "两组人数",
         "对照组事件率",
@@ -128,6 +134,9 @@
       "sources": null,
       "provider": "EviMed 虚拟临研",
       "interface": "vcr-engine patients.continuous",
+      "shape": "baseline_to_outcome",
+      "shapeLabel": "基线 → 结局分布",
+      "shapeMissing": [],
       "inputs": [
         "两组人数",
         "处理效应（均值差）",
@@ -179,6 +188,9 @@
       "sources": null,
       "provider": "EviMed 虚拟临研",
       "interface": "vcr-engine patients.time_to_event",
+      "shape": "baseline_to_outcome",
+      "shapeLabel": "基线 → 结局分布",
+      "shapeMissing": [],
       "inputs": [
         "两组人数",
         "风险比",

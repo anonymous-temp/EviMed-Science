@@ -205,6 +205,10 @@ function ModelDetail({ model }: { model: VcrModelCard }) {
           ...text(model.version).map((value) => ({ label: "版本", value })),
           ...text(model.provider).map((value) => ({ label: "提供方", value })),
           ...text(model.interface).map((value) => ({ label: "执行接口", value })),
+          ...text(model.shapeLabel).map((value) => ({ label: "调用接口", value })),
+          ...(model.events && model.events.length > 0 ? [{ label: "读取的事件", value: model.events.join("、") }] : []),
+          ...text(model.horizon).map((value) => ({ label: "最长推演时间", value })),
+          ...(model.trajectoriesMax ? [{ label: "每份历史最多轨迹数", value: String(model.trajectoriesMax) }] : []),
           ...text(model.scope).map((value) => ({ label: "适用人群", value })),
           ...text(model.region).map((value) => ({ label: "适用地区", value })),
           ...text(endpointLabel(model.endpoint)).map((value) => ({ label: "终点", value })),
@@ -224,6 +228,14 @@ function ModelDetail({ model }: { model: VcrModelCard }) {
           <Tag tone={model.twin === "digital_twin" ? "accent" : "neutral"}>{twin}</Tag>
           {model.twinReason && <span className="text-text-3">{model.twinReason}</span>}
         </p>
+      )}
+
+      {model.shapeMissing && model.shapeMissing.length > 0 && (
+        <VcrSection title="接口还缺的内容" className="mt-6">
+          <ul data-vcr-model-shape-missing="" className="flex list-disc flex-col gap-1 pl-4 text-caption text-text-2">
+            {model.shapeMissing.map((item) => <li key={item}>{item}</li>)}
+          </ul>
+        </VcrSection>
       )}
 
       {model.validation && model.validation.length > 0 && (

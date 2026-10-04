@@ -13,8 +13,9 @@ import { VCR_ENGINE_METHODS, VCR_JOB_KINDS, VCR_PROGNOSTIC_QUALIFICATION_LABEL_Z
 
 import {
   JOB_KIND_LABELS, attentionOf, budgetView, conclusionOf, designsSentence, failedExportsOf, jobView, notEstimableDesign, numberString, presentDesigns, presentModelCard,
-  presentPrecedent, presentStudy, presentSummary, useCeilingOf, valueString, vcrCurrentNodes, vcrDependencies, vcrReviewIsCurrent,
+  presentExport, presentPrecedent, presentStudy, presentSummary, useCeilingOf, valueString, vcrCurrentNodes, vcrDependencies, vcrReviewIsCurrent,
 } from "../src/vcrViews.mjs";
+import { frozenVersion, modelInputs, reportModelFor, resultRows, study as modelStudy } from "./vcrModelDocumentFixtures.mjs";
 import {
   presentComparatorTab, presentDataTab, presentIntake, presentMatchingTab, presentPatientsTab, presentPopulationTab, presentTrialTab, qualityReportView,
   seriesView, criterionCodes, vcrLocatorText,
@@ -596,6 +597,50 @@ test("a patient set's model card says what the model is, where it may be used, a
   assert.equal(card.region, "含中国人群");
   assert.deepEqual(card.validation.map((row) => row.label), ["外部验证", "内部验证"], "a key the page has no word for is not printed as a raw id");
   assert.equal(card.useCeiling, "design_support");
+});
+
+test("a model card says which call shape it has: the first by default, the second with what it reads, how far it projects and what its contract still lacks", () => {
+  const first = presentModelCard({ id: "m1", name: "x", version: "1.0.0", tier: "scenario", risk: "none", card: {}, applicability: {}, validation: {}, evidence: [] }, []);
+  assert.deepEqual([first.shape, first.shapeLabel, first.shapeMissing], ["baseline_to_outcome", "基线 → 结局分布", []]);
+  assert.equal("events" in first, false, "nothing of the second shape is claimed for the first");
+  const second = presentModelCard({
+    id: "m2", name: "event-model", version: "2.1.0", tier: "literature", risk: "low",
+    card: { interfaceShape: "event_history_to_trajectories", inputs: ["诊断事件"], outputs: "N 条未来轨迹", history: { eventTypes: ["diagnosis", "lab"], fields: ["subject", "time"] },
+      trajectories: { max: 500, absorbing: [] }, knownLimits: ["罕见事件"] },
+    applicability: { population: "成人", eventTypes: ["death"], horizon: { max: 24, unit: "months" } }, validation: { temporal: "时间外验证" }, evidence: [],
+  }, []);
+  assert.deepEqual([second.shape, second.shapeLabel, second.events, second.horizon, second.trajectoriesMax], ["event_history_to_trajectories", "事件历史 → 未来轨迹", ["diagnosis", "lab"], "24 months", 500]);
+  assert.deepEqual(second.shapeMissing, [], "a complete card has nothing missing");
+  const gaps = presentModelCard({ id: "m3", name: "e", version: "1", tier: "literature", risk: "low", card: { interfaceShape: "event_history_to_trajectories" }, applicability: {}, validation: {}, evidence: [] }, []);
+  assert.ok(gaps.shapeMissing.length >= 10 && gaps.shapeMissing.every((text) => text.includes("事件历史 → 未来轨迹接口的模型卡缺")));
+  assert.equal(presentModelCard({ id: "m4", name: "u", version: "1", tier: "scenario", risk: "none", card: { interfaceShape: "quantum" }, applicability: {}, validation: {}, evidence: [] }, []).shape, "unknown");
+});
+
+test("the reader shows a model document as its own sections, and says the snapshot is unchanged while the records still agree", () => {
+  const inputs = modelInputs();
+  const versions = [frozenVersion(inputs)];
+  const results = resultRows();
+  const model = reportModelFor({ inputs, versions, results });
+  const bundle = {
+    now: NOW, study: modelStudy, exports: [], definition: inputs.definition, assumptions: inputs.assumptions, results, seal: null, reviews: [], stale: [],
+    models: [], populations: [], comparators: [], comparator: null, scenarios: [], patientSets: [], executions: new Map(), decisions: [], allResults: [], currentNodes: null,
+    modelAnalysis: model.modelAnalysis,
+  };
+  const row = { id: "exp_1", kind: "model_analysis_report", state: "ready", createdAt: "2026-10-04T08:00:00.000Z", cover: { results: model, reports: [{ section: "introduction", template: "引言的文字。", rendered: "引言的文字。" }] } };
+  const shown = presentExport(row, { ...bundle, exports: [row] });
+  assert.equal(shown.title, "模型分析报告 v1");
+  const titles = shown.document.sections.filter((section) => !section.id.includes("-t")).map((section) => section.title);
+  assert.deepEqual(titles.slice(0, 3), ["摘要", "引言", "目的"], "M15's sections, not the nine parts of a study package");
+  assert.ok(shown.document.sections.some((section) => section.body === "引言的文字。"));
+  assert.equal(shown.snapshotChanged, undefined, "the records still say what the document was built from");
+  // Another kind keeps the nine parts.
+  const other = presentExport({ ...row, kind: "study_package", cover: { results: reportModelFor({ inputs, versions, results }), reports: row.cover.reports } }, { ...bundle, exports: [row] });
+  assert.equal(other.document.sections[0].title, "研究与分析概要");
+  // A record that moved since is said: the document keeps what it was built from.
+  const moved = modelInputs();
+  moved.assumptions[0] = { ...moved.assumptions[0], pointValue: 15 };
+  const after = presentExport(row, { ...bundle, exports: [row], modelAnalysis: reportModelFor({ inputs: moved, versions, results }).modelAnalysis, assumptions: moved.assumptions });
+  assert.equal(after.snapshotChanged, true);
 });
 
 test("a precedent keeps planned and actual apart and shows a rate only when its three inputs exist", () => {

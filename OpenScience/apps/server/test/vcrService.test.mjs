@@ -319,3 +319,42 @@ test("a rise in tier needs data that supports it; T3 needs the data that qualifi
   const bare = new VcrService({ store: /** @type {any} */ (studyOnly(study).store), config: {} });
   await assert.rejects(bare.updateStudy({ id: "lead" }, study.id, { dataTier: "T1" }), (/** @type {any} */ error) => error.code === "vcr_tier_unsupported");
 });
+
+/** A service whose store keeps what it was asked to save. */
+function adoptingService() {
+  /** @type {any[]} */
+  const saved = [];
+  const store = {
+    async saveModel(/** @type {any} */ input) { saved.push(input); return { id: "mdl_new", name: input.name, version: input.version, tier: input.tier }; },
+    async audit() {},
+  };
+  return { saved, service: new VcrService({ store: /** @type {any} */ (store), config: { vcrEnabled: true, vcrAudience: "all" } }) };
+}
+
+test("a model is adopted as the first call shape unless its card says otherwise, and an unknown shape is refused by name", async () => {
+  const { saved, service } = adoptingService();
+  const plain = /** @type {any} */ (await service.adoptModel({ id: "u1" }, { name: "fitted-os", version: "1.0.0", card: { inputs: ["年龄"] } }));
+  assert.equal(saved[0].card.type, "fitted_prediction_model");
+  assert.deepEqual(plain.issues, [], "a first-shape card is asked for nothing new");
+  await assert.rejects(service.adoptModel({ id: "u1" }, { name: "x", card: { interfaceShape: "quantum" } }), { code: "vcr_model_invalid" });
+  assert.equal(saved.length, 1, "nothing was saved for the unknown shape");
+});
+
+test("a model of the event-history shape is kept with the card it arrives with, typed generative, and what the card lacks comes back as notices", async () => {
+  const { saved, service } = adoptingService();
+  const bare = /** @type {any} */ (await service.adoptModel({ id: "u1" }, { name: "event-model", version: "2.1.0", card: { interfaceShape: "event_history_to_trajectories" } }));
+  assert.equal(saved[0].card.type, "generative", "a generator of sampled futures is not a fitted prediction model");
+  assert.equal(saved[0].card.interfaceShape, "event_history_to_trajectories");
+  assert.equal(bare.id, "mdl_new", "the model is kept: a card with gaps is still a card");
+  const fields = bare.issues.map((/** @type {any} */ issue) => issue.field);
+  for (const field of ["card.inputs", "card.outputs", "card.history.eventTypes", "applicability.eventTypes", "applicability.horizon", "validation", "card.knownLimits"]) {
+    assert.ok(fields.includes(field), `${field} is named`);
+  }
+  const complete = /** @type {any} */ (await service.adoptModel({ id: "u1" }, {
+    name: "event-model", version: "2.2.0",
+    card: { interfaceShape: "event_history_to_trajectories", inputs: ["诊断事件"], outputs: "N 条未来轨迹，是预测分布的抽样。",
+      history: { eventTypes: ["diagnosis"], fields: ["subject", "event_type", "time"] }, trajectories: { max: 500, absorbing: ["death"] }, knownLimits: ["罕见事件校准较差"] },
+    applicability: { eventTypes: ["death"], horizon: { max: 24, unit: "months" } }, validation: { temporal: "时间外验证" },
+  }));
+  assert.deepEqual(complete.issues, []);
+});

@@ -81,6 +81,7 @@ import { VcrKnowledgeStore } from "./vcrKnowledgeStore.mjs";
 import { createVcrContact } from "./vcrContact.mjs";
 import { VcrMatchStore } from "./vcrMatchStore.mjs";
 import { VcrMembers } from "./vcrMembers.mjs";
+import { createVcrModelPlans } from "./vcrModelDocuments.mjs";
 import { createVcrSeal } from "./vcrSeal.mjs";
 import { VcrService } from "./vcrService.mjs";
 import { VcrStore } from "./vcrStore.mjs";
@@ -887,6 +888,8 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   // other's business.
   const seal = createVcrSeal({
     store,
+    // The model analysis plan freezes at the instant the analysis plan does, before the outcome columns lift.
+    modelPlans: createVcrModelPlans({ store }),
     dataPlane: dataPlane ? { liftStudySeal: (/** @type {any} */ input) => dataPlane.liftStudySeal(input) } : null,
     audit: (event, status, details) => store.audit({ action: event, outcome: status, detail: details }),
   });

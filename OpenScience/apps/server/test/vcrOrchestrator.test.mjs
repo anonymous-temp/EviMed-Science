@@ -16,7 +16,8 @@ import {
 import { VCR_NOTICE_KINDS, createVcrNotifier, vcrNoticeHref, vcrStudyName } from "../src/vcrNotify.mjs";
 import {
   VCR_ENGINE_METHODS, VCR_EXPORT_KINDS, VCR_EXPORT_KIND_LABELS_ZH, VCR_JOB_KINDS, VCR_JOB_METHODS, VCR_NOTIFICATION_KINDS, VCR_NOT_ESTIMABLE_RULES,
-  VCR_NOT_ESTIMABLE_RULE_LABELS_ZH, VCR_SCENARIO_SCHEMAS, VCR_STEPS, VCR_STEP_CAPABILITIES, VCR_STEP_NEEDS, validateEngineJob, validateScenario,
+  VCR_MODEL_DOCUMENT_SECTIONS, VCR_NOT_ESTIMABLE_RULE_LABELS_ZH, VCR_SCENARIO_SCHEMAS, VCR_STEPS, VCR_STEP_CAPABILITIES, VCR_STEP_NEEDS, validateEngineJob,
+  validateScenario,
 } from "@evimed/domain";
 
 /** @param {string[]} requested */
@@ -222,6 +223,17 @@ test("the brief of a review's one revision names the document it revises, whiche
     assert.match(brief, /deliverables\/vcr-review-exp_2\//);
     assert.ok(brief.includes("功效为 {{n:measure(power).value|pct1}}。") && brief.includes("Clarify uncertainty."), "the retained template and the findings are in it");
   }
+});
+
+test("the brief of a review's revision of a model document names its sections: each is submitted under its own name, and the ones kept are all resubmitted", () => {
+  for (const kind of ["model_analysis_plan", "model_analysis_report"]) {
+    const brief = vcrReviewRepairBrief({ revisionId: "exp_2", originalId: "exp_1", kind, templates: "[section: introduction]\n引言。", findings: [] });
+    assert.match(brief, /This document takes its words by section: submit each revised section once, data\.section one of /);
+    for (const section of VCR_MODEL_DOCUMENT_SECTIONS[kind].prose) assert.ok(brief.includes(section), `${kind}: ${section}`);
+    assert.match(brief, /a section you do not submit has no words in the revision/);
+    assert.ok(brief.includes("[section: introduction]\n引言。"), "the retained template is labelled by section");
+  }
+  assert.doesNotMatch(vcrReviewRepairBrief({ revisionId: "exp_2", originalId: "exp_1", kind: "study_package", templates: "正文。", findings: [] }), /by section/);
 });
 
 /**
@@ -823,6 +835,63 @@ test("C2-5 the assurance stage binds what its own schema takes from the cards �
   const binaryAssurance = binary.stages.find((entry) => entry.stage === "assurance");
   assert.equal(binaryAssurance.scenario.truth.controlRate, 0.3, "the binary assurance schema requires the control rate");
   assert.deepEqual(validateScenario("design.assurance", binaryAssurance.scenario), []);
+});
+
+/** A complete card of the second call shape (plan 5.2): an event history in, N future trajectories out. */
+const eventHistoryModel = () => ({
+  id: "mdl_eh", name: "event-model", version: "2.1.0", endpointType: "time_to_event", tier: "literature", risk: "low",
+  card: { interfaceShape: "event_history_to_trajectories", type: "generative", inputs: ["诊断事件"], outputs: "N 条未来轨迹，是预测分布的抽样，不是对某个人的预报。",
+    history: { eventTypes: ["diagnosis"], fields: ["subject", "event_type", "time"] }, trajectories: { max: 500, absorbing: ["death"] }, knownLimits: ["罕见事件校准较差"] },
+  applicability: { population: "成人 2 型糖尿病", endpoints: ["time_to_event"], eventTypes: ["death", "hospitalization"], horizon: { max: 24, unit: "months" } },
+  validation: { temporal: "时间外验证" }, evidence: [],
+});
+
+test("the applicability check covers the second call shape: its card against its contract, then the horizon, the events and the trajectories a study asks", () => {
+  const variables = vcrPopulationVariables({ definition: { population: { variables: [{ name: "age", min: 30, max: 92 }] } } });
+  const model = eventHistoryModel();
+  assert.deepEqual(vcrModelApplicabilityIssues(model, { endpointType: "time_to_event", variables }), []);
+  const asked = vcrModelApplicabilityIssues(model, { endpointType: "time_to_event", variables,
+    horizon: { value: 3, unit: "years" }, eventTypes: ["death", "stroke"], trajectories: 5000 });
+  assert.deepEqual(asked.map((issue) => issue.code), ["horizon_exceeded", "event_type_not_covered", "trajectory_count_exceeded"]);
+  // The endpoint check is the same one every model has.
+  assert.deepEqual(vcrModelApplicabilityIssues(model, { endpointType: "binary", variables }).map((issue) => issue.code), ["endpoint_not_covered"]);
+  // A card short of the contract is reported field by field, before anything about the study.
+  const bare = vcrModelApplicabilityIssues({ ...model, card: { interfaceShape: "event_history_to_trajectories" }, applicability: {}, validation: {} }, { endpointType: "time_to_event", variables });
+  assert.ok(bare.length >= 10 && bare.every((issue) => issue.code === "interface_field_missing"), JSON.stringify(bare.map((issue) => issue.field)));
+  // The first shape is asked for nothing new, whether it says its shape or not.
+  const first = { id: "mdl_b", name: "fitted", version: "1.0.0", endpointType: "binary", applicability: { endpoints: ["binary"] }, card: { interfaceShape: "baseline_to_outcome" } };
+  assert.deepEqual(vcrModelApplicabilityIssues(first, { endpointType: "binary", variables }), []);
+  assert.deepEqual(vcrModelApplicabilityIssues({ ...first, card: { interfaceShape: "quantum" } }, { endpointType: "binary", variables }).map((issue) => issue.code), ["interface_unknown"]);
+});
+
+test("a patient set that names a model of a shape this deployment does not host is refused by name, with no job queued and no generator run in its place", () => {
+  const patientRow = { id: "pts_1", version: 1, populationId: "pop_1", modelId: "event-model", modelVersion: "2.1.0",
+    scenario: { design: { nTreat: 60, nControl: 40 }, endpoint: { type: "time_to_event" }, truth: { hazardRatio: 0.7, controlMedian: 6 } } };
+  const population = { id: "pop_1", resultId: "res_1", definition: { population: { variables: [{ name: "age", family: "normal", mean: 63, sd: 9 }] } } };
+  const refused = /** @type {any} */ (vcrBuildStages({ kind: "patient_set", row: patientRow }, { ...context, populations: [population], models: [eventHistoryModel()] }));
+  assert.equal(refused.ok, false);
+  assert.equal(refused.refused.code, "vcr_model_interface_not_hosted");
+  assert.match(refused.refused.message, /event-model/);
+  assert.match(refused.refused.message, /事件历史 → 未来轨迹/);
+  assert.match(refused.refused.message, /其他研究结果继续保留/, "the rest of the study goes on");
+  // A model that says it is the first shape is run as before.
+  const fitted = { id: "mdl_f", name: "fitted-os", version: "1.0.0", endpointType: "time_to_event", applicability: { endpoints: ["time_to_event"] }, card: { interfaceShape: "baseline_to_outcome" } };
+  const covered = /** @type {any} */ (vcrBuildStages({ kind: "patient_set", row: { ...patientRow, modelId: "fitted-os", modelVersion: "1.0.0" } }, { ...context, populations: [population], models: [fitted] }));
+  assert.equal(covered.ok, true);
+});
+
+test("the two model documents are briefed by section: the run is told the sections that are its own and that the tables are the platform's", () => {
+  for (const kind of ["model_analysis_plan", "model_analysis_report"]) {
+    const lines = vcrExportBriefLines(kind);
+    const sections = lines.find((line) => line.startsWith("文字按节提交"));
+    assert.ok(sections, `${kind}: the brief lists the sections`);
+    for (const section of VCR_MODEL_DOCUMENT_SECTIONS[kind].prose) assert.ok(sections.includes(section), `${kind}: ${section}`);
+    assert.ok(!sections.includes("appendices"), "the appendices are the platform's");
+    assert.match(sections, /表格和登记项不接受改写/);
+    assert.ok(lines.some((line) => line.includes("每节一个小标题")), "the workspace file holds the sections");
+  }
+  // Every other document is briefed with one body, as before.
+  assert.equal(vcrExportBriefLines("study_package").some((line) => line.startsWith("文字按节提交")), false);
 });
 
 test("C2-6 a key only the binder injected, which the stage's schema does not read, is dropped in silence; a key the run wrote is refused by its path", () => {

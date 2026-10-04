@@ -36,16 +36,17 @@ import { documentExportDigest } from "@evimed/domain";
 import {
   VCR_COMPARATOR_ROUTE_LABELS_ZH, VCR_ENDPOINT_TYPE_LABELS_ZH, VCR_ESTIMAND_LABELS_ZH, VCR_EXPORT_KIND_LABELS_ZH, VCR_INTENDED_USE_LABELS_ZH, VCR_MODEL_RISKS,
   VCR_MODEL_RISK_EVIDENCE, VCR_MODEL_RISK_LABELS_ZH, VCR_MODEL_TIER_LABELS_ZH, VCR_POOLING_METHOD_LABELS_ZH, VCR_MODEL_TIER_USE_CEILING, VCR_MODEL_TIERS,
-  VCR_REVIEW_KIND_LABELS_ZH, VCR_ROLE_ABILITIES, VCR_STALE_REASON_LABELS_ZH,
+  VCR_MODEL_INTERFACE_LABELS_ZH, VCR_REVIEW_KIND_LABELS_ZH, VCR_ROLE_ABILITIES, VCR_STALE_REASON_LABELS_ZH,
   VCR_STEP_LABELS_ZH, VCR_STEPS, VCR_TWIN_LABELS_ZH, VCR_TWIN_EVIDENCE, VCR_VALUE_SOURCE_LABELS_ZH,
   VCR_TRIAL_DESIGN_LABELS_ZH,
-  allowanceWaitingSentence, intendedUseCeiling, lineageNode, parseLineageNode, twinLabel, useWithin,
+  allowanceWaitingSentence, intendedUseCeiling, lineageNode, parseLineageNode, twinLabel, useWithin, vcrModelCardIssues, vcrModelInterfaceOf,
 } from "@evimed/domain";
 
 import { vcrExportHoldsDocument, vcrReportModel, vcrReportReviewRevision } from "./vcrRender.mjs";
+import { modelDocumentReaderSections, renderModelDocument } from "./vcrModelDocuments.mjs";
 import { vcrObjectNode } from "./vcrStore.mjs";
 import {
-  allResultsOf, countsView, finite, intervalView, list, markFor, measureLabel, measureValue, METHOD_LABELS, numeric, object, rangeString, roundTo,
+  allResultsOf, countsView, evidenceLabel, finite, MODEL_TYPE_LABELS, VALIDATION_LABELS, intervalView, list, markFor, measureLabel, measureValue, METHOD_LABELS, numeric, object, rangeString, roundTo,
   text, cpuText, zhTime,
 } from "./vcrViewsKit.mjs";
 
@@ -954,16 +955,6 @@ export function presentModels({ models, methods, usedBy, engineAvailable, engine
   };
 }
 
-/** The evidence items a model card lists, in Chinese. */
-const EVIDENCE_LABELS = Object.freeze(/** @type {Record<string, string>} */ ({
-  code_verification: "代码核对", seed_reproducible: "种子可复现", input_traceable: "输入可追溯", sensitivity_analysis: "敏感性分析",
-  external_validation: "外部验证", model_locked: "模型已锁定", model_analysis_plan: "模型分析计划", prospective_validation: "前瞻验证",
-  independent_review: "独立评审", regulatory_contact: "监管沟通", individual_conditioned: "以个体为条件",
-  updates_with_new_data: "随新数据更新", calibrated_uncertainty: "不确定性已校准", validation_record: "验证记录",
-}));
-/** @param {string} key */
-const evidenceLabel = (key) => EVIDENCE_LABELS[key] ?? key;
-
 /**
  * One model as the §8.2 card: what it is for, where it may be used, how it
  * was validated, and the label it has earned — derived from evidence, never
@@ -978,6 +969,7 @@ export function presentModelCard(model, usedBy) {
   const twin = twinLabel(held);
   const missingTwin = VCR_TWIN_EVIDENCE.filter((item) => !held.includes(item));
   const tier = (/** @type {readonly string[]} */ (VCR_MODEL_TIERS)).includes(String(model.tier)) ? String(model.tier) : "scenario";
+  const shape = vcrModelInterfaceOf(model) ?? "unknown";
   const validationRows = Object.entries(validation).filter(([key]) => key in VALIDATION_LABELS).map(([key, value]) => ({
     label: VALIDATION_LABELS[key] ?? key,
     state: value === true || (typeof value === "string" && value) ? "passed" : value === false ? "none" : "partial",
@@ -999,6 +991,15 @@ export function presentModelCard(model, usedBy) {
     sources: list(applicability.sources).length ? `来源 ${list(applicability.sources).length} 项：${list(applicability.sources).join("、")}` : null,
     provider: text(card.provider),
     interface: text(card.interface),
+    // The call shape (plan §5.2): a card with no shape is the first, and the second says what its contract still lacks.
+    shape,
+    shapeLabel: (/** @type {Record<string, string>} */ (VCR_MODEL_INTERFACE_LABELS_ZH))[shape],
+    shapeMissing: vcrModelCardIssues(model).map((issue) => issue.text),
+    ...(shape === "event_history_to_trajectories" ? {
+      events: list(object(card.history).eventTypes).map(String),
+      horizon: object(applicability.horizon).max ? `${object(applicability.horizon).max} ${object(applicability.horizon).unit}` : null,
+      trajectoriesMax: numeric(object(card.trajectories).max),
+    } : {}),
     inputs: list(card.inputs).map(String),
     outputs: text(card.outputs),
     missingData: text(card.missingData),
@@ -1014,15 +1015,6 @@ export function presentModelCard(model, usedBy) {
     uncertainty: text(card.uncertainty),
   };
 }
-
-const VALIDATION_LABELS = Object.freeze(/** @type {Record<string, string>} */ ({
-  codeVerification: "代码核对", seedReproducible: "种子可复现", calibrationSlope: "校准斜率", ici: "综合校准指数",
-  predictionIntervalCoverage: "预测区间覆盖率", crps: "CRPS", subgroups: "亚组表现", temporal: "时间外验证", drift: "漂移监测",
-  external: "外部验证", internal: "内部验证",
-}));
-const MODEL_TYPE_LABELS = Object.freeze(/** @type {Record<string, string>} */ ({
-  mathematical_simulation: "数学仿真", fitted_prediction_model: "拟合预测", generative: "生成模型", mechanistic: "机制模型",
-}));
 
 // --- precedents -------------------------------------------------------------------------------------------------------------------------
 
@@ -1103,7 +1095,7 @@ export function presentExport(row, bundle) {
     seal: bundle.seal ?? null, reviews: list(bundle.reviews).map(review => ({ ...review,
       current: vcrReviewIsCurrent(review, { results: bundle.results, stale: bundle.stale, current: bundle.currentNodes ?? null, exports: bundle.exports ?? [] }) })),
     staleMarks: bundle.stale, models: bundle.models, population: bundle.populations[0] ?? null,
-    comparator: bundle.comparator, scenarios: bundle.scenarios,
+    comparator: bundle.comparator, scenarios: bundle.scenarios, modelAnalysis: bundle.modelAnalysis ?? null,
   });
   const model = object(cover.results).study ? cover.results : currentModel;
   // Old documents remain readable. Compare the inputs available to their
@@ -1129,9 +1121,21 @@ export function presentExport(row, bundle) {
         ...list(model.review?.records).filter(review => !list(bundle.reviews).some(live => live.platformReviewId && live.platformReviewId === review.platformReviewId))].map(review => presentVcrReview({ ...review, current: vcrReviewIsCurrent(review,
           { results: bundle.results, stale: bundle.stale, current: bundle.currentNodes ?? null, exports: [row] }) })),
       status: coverStatus({ cover, row, bundle, model }),
-      sections: packageSections({ cover, row, bundle, model }),
+      // The two model documents read as their own structure (M15's sections, the platform's tables); every other export as the nine parts of §8.3.
+      sections: modelSections(row, cover, model) ?? packageSections({ cover, row, bundle, model }),
     },
   };
+}
+
+/**
+ * The sections of a model analysis plan or report as the reader shows them, or null for any other export (or one whose prose has not
+ * been written yet, which has no frozen model to read).
+ * @param {Record<string, any>} row @param {Record<string, any>} cover @param {Record<string, any>} model
+ */
+function modelSections(row, cover, model) {
+  const reports = list(cover.reports).length ? list(cover.reports) : cover.report ? [cover.report] : [];
+  const rendered = renderModelDocument(String(row.kind), model, reports);
+  return rendered ? modelDocumentReaderSections(rendered.sections) : null;
 }
 
 /** The cover block: intended use, each review, the seal. @param {{ cover: Record<string, any>, row: Record<string, any>, bundle: Record<string, any>, model: Record<string, any> }} input */

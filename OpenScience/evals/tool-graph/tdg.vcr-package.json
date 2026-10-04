@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-package",
-  "version": "sha256:95a5285e66f94bd7c15e77216e97325eebd75e8732e0b4e0d3684575e64fa704",
+  "version": "sha256:735dacaf6ea4e66446f6333f16f142e2774757c0c03a27d279fc66f5c5691285",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 22,
@@ -768,7 +768,8 @@
               "jobs",
               "trial_registry_record",
               "pack",
-              "library"
+              "library",
+              "model_assessments"
             ]
           },
           "filter": {
@@ -857,7 +858,7 @@
     {
       "name": "mcp__evimed__vcr_write",
       "source": "mcp",
-      "description": "Write this 虚拟临研 study's definitions and designs: the research definition, a protocol version and its structured eligibility criteria, assumption cards and their evidence items, precedents, population, patient-set, comparator and trial designs, a design grid, a decision record, a fitted literature model, patient facts, sites and follow-up, or the report text. A disease pack: data {use: <catalogue id>} binds one, data {disease, sources, terms, endpoints, criteria…} drafts one for a disease with none (marked AI draft); a population item may carry fromLibrary {definitionId, version?} instead of a definition. Numbers are not writable: results, counts, measures and execution records come from the engine, and an object's configuration carries only the keys the engine reads (see vcr_simulate). Items are checked one by one; refused items come back in issues and the rest are written.",
+      "description": "Write this 虚拟临研 study's definitions and designs: the research definition, a protocol version and its structured eligibility criteria, assumption cards and their evidence items, precedents, population, patient-set, comparator and trial designs, a design grid, a decision record, a fitted literature model, a model's ICH M15 assessment record, patient facts, sites and follow-up, or the report text. A disease pack: data {use: <catalogue id>} binds one, data {disease, sources, terms, endpoints, criteria…} drafts one for a disease with none (marked AI draft); a population item may carry fromLibrary {definitionId, version?} instead of a definition. Numbers are not writable: results, counts, measures and execution records come from the engine, and an object's configuration carries only the keys the engine reads (see vcr_simulate). Items are checked one by one; refused items come back in issues and the rest are written.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -886,7 +887,8 @@
               "site",
               "followup",
               "field_map",
-              "pack"
+              "pack",
+              "model_assessment"
             ]
           },
           "items": {

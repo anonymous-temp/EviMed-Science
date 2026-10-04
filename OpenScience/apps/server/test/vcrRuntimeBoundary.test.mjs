@@ -71,6 +71,8 @@ const store = {
   async methods() { return []; },
   async reviews() { return []; },
   async exports() { return []; },
+  async modelAssessments() { return [{ key: "survival_projection", version: 1, modelName: "reference-time-to-event", modelVersion: "1.0.0", questionOfInterest: "q", influence: "low", consequence: "low" }]; },
+  async modelPlanVersions() { return []; },
 };
 
 function service(packages = {}) {
@@ -106,6 +108,19 @@ test("every `what` a run may read leaves through the boundary: no head count bel
     assert.deepEqual(small, [], `${what} carried a small count: ${JSON.stringify(answer).slice(0, 300)}`);
   }
   assert.deepEqual(seen, [...VCR_READ_WHATS], "the walk read every `what`");
+});
+
+test("the model analysis block a run reads for a model document passes the same boundary: a small people-count in a tabulated result is hidden", async () => {
+  const read = await service().runtimeRead(study, "report_model", { kind: "model_analysis_report" });
+  const tabulated = read.model.modelAnalysis.results;
+  assert.equal(tabulated.length, 1, "the study's one comparator result is tabulated");
+  assert.equal(tabulated[0].counts.realPatients, null, "6 real patients is below the floor and hidden");
+  assert.equal(tabulated[0].counts.events, null);
+  assert.equal(tabulated[0].counts.generatedRecords, 2000, "generated records are not people");
+  assert.ok(read.model.modelAnalysis.current.assessments.length === 1, "and the assessment records are there to read");
+  // Any other document's model carries none of it: the plan's content is not in every export.
+  const plain = await service().runtimeRead(study, "report_model", {});
+  assert.equal(plain.model.modelAnalysis, undefined);
 });
 
 test("the shapes the stores emit are each suppressed as their own kind of cell", async () => {

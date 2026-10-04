@@ -58,9 +58,11 @@
 import { createHash } from "node:crypto";
 
 import {
-  VCR_ASSUMPTION_KEY, VCR_CRITERION_TYPES, VCR_DISTRIBUTIONS, VCR_ENDPOINT_TYPES, VCR_ESTIMANDS, VCR_EXPORT_KINDS, VCR_EXPORT_KIND_LABELS_ZH,
-  VCR_FOLLOWUP_KINDS, VCR_INTENDED_USES, VCR_JOB_KINDS, VCR_MODEL_RISKS, VCR_POPULATION_KINDS, VCR_SCENARIO_SCHEMAS,
-  VCR_STEPS, VCR_SYNTHETIC_USES, VCR_TRIAL_DESIGNS, canonicalScenarioJson, findExpressionFields, validateRequirement,
+  VCR_ASSESSMENT_KEY, VCR_ASSUMPTION_KEY, VCR_CRITERION_TYPES, VCR_DISTRIBUTIONS, VCR_ENDPOINT_TYPES, VCR_ESTIMANDS, VCR_EXPORT_KINDS, VCR_EXPORT_KIND_LABELS_ZH,
+  VCR_FOLLOWUP_KINDS, VCR_INTENDED_USES, VCR_JOB_KINDS, VCR_MODEL_DOCUMENT_SECTIONS, VCR_MODEL_DOCUMENT_SECTION_LABELS_ZH, VCR_MODEL_RISKS,
+  VCR_MODEL_DOCUMENT_KINDS, VCR_POPULATION_KINDS, VCR_RATINGS, VCR_SCENARIO_SCHEMAS,
+  VCR_STEPS, VCR_SYNTHETIC_USES, VCR_TRIAL_DESIGNS, canonicalScenarioJson, findExpressionFields, validateRequirement, vcrAssessmentIssues,
+  vcrModelDocumentTakesProse,
 } from "@evimed/domain";
 
 import { HttpError } from "./security.mjs";
@@ -1031,7 +1033,51 @@ const WRITERS = {
     const sources = (item.arr("sources", { max: 30 }) ?? []).map((source) => String(typeof source === "object" ? object(source).label : source).slice(0, 200));
     if (!item.ok) return null;
     const saved = await service.adoptModel({ id: study.userId }, { name, version, endpointType, risk, card, sources, studyId: study.id });
+    // What the card of a model of the event-history shape has not said is the run's to hear, and the model is kept as it stands:
+    // the applicability check declines to answer for it, field by field, and every other result of the study goes on.
+    for (const found of list(saved?.issues)) item.issues.push(issue(item.index, String(found.field), "vcr_model_card_incomplete", String(found.text)));
     return saved?.id ?? null;
+  },
+
+  /**
+   * One model's assessment record (ICH M15 Appendix 1), as the next version of its key. The ratings are the run's judgment and
+   * each is checked against the three words; the model risk is not a field: the platform derives it from influence and consequence
+   * (`vcrModelRisk`) and records the rule. What the record has not said yet comes back as notices — it is stored as it stands,
+   * because a plan with gaps is still the plan — and a model the library does not hold is named, not refused.
+   */
+  async model_assessment(item, { store, study }) {
+    if (!item.only(["key", "modelName", "modelVersion", "questionOfInterest", "contextOfUse", "influence", "influenceJustification",
+      "consequence", "consequenceJustification", "riskJustification", "impact", "impactJustification", "technicalCriteria",
+      "appropriateness", "evaluation", "outcome"])) return null;
+    const key = item.str("key", { max: 64, required: true });
+    if (key && !VCR_ASSESSMENT_KEY.test(key)) {
+      item.bad("key", "key 是小写英文字母开头、只含小写字母、数字和下划线的记录名（最多 64 个字符），例如 survival_projection。");
+    }
+    const modelName = item.str("modelName", { max: 120, required: true });
+    const modelVersion = item.str("modelVersion", { max: 40 }) ?? "";
+    /** @type {Record<string, any>} */
+    const record = { key, modelName, modelVersion };
+    for (const field of ["questionOfInterest", "contextOfUse", "influenceJustification", "consequenceJustification", "riskJustification",
+      "impactJustification", "appropriateness", "evaluation", "outcome"]) {
+      record[field] = item.str(field, { max: 2000 }) ?? "";
+    }
+    for (const field of ["influence", "consequence", "impact"]) record[field] = item.choice(field, VCR_RATINGS) ?? "";
+    const criteria = item.arr("technicalCriteria", { max: 30 }) ?? [];
+    record.technicalCriteria = criteria.map((entry, at) => {
+      if (typeof entry === "string") return entry.slice(0, 600);
+      const row = object(entry);
+      if (typeof row.criterion !== "string" || !row.criterion.trim() || (row.rationale != null && typeof row.rationale !== "string")) {
+        item.bad(`technicalCriteria[${at}]`, "每条技术标准是一句话，或 { criterion, rationale }。");
+        return null;
+      }
+      return { criterion: row.criterion.slice(0, 600), rationale: String(row.rationale ?? "").slice(0, 600) };
+    });
+    if (!item.ok) return null;
+    const saved = await store.saveModelAssessment({ studyId: study.id, userId: study.userId, actor: "runtime", record });
+    const named = (await store.models(study.userId)).some((model) => model.name === modelName && (!modelVersion || model.version === modelVersion));
+    if (!named) item.issues.push(issue(item.index, "modelName", "vcr_model_not_found", `模型库里没有「${modelName}${modelVersion ? ` ${modelVersion}` : ""}」，记录已保存，文件里会写明模型库里没有它。`));
+    for (const found of vcrAssessmentIssues(record, "planning")) item.issues.push(issue(item.index, found.field, "vcr_model_assessment_incomplete", found.text));
+    return saved.id;
   },
 
   async step(item, { store, study }) {
@@ -1301,10 +1347,17 @@ const WRITERS = {
       const open = (await store.exports(study.id)).find((/** @type {any} */ row) => ["queued", "running"].includes(row.state) && row.kind === kind);
       target = open ?? await store.createExport({ studyId: study.id, userId: study.userId, kind, cover: {} });
     }
+    // The two model documents are the platform's structure with a run's words in it: the run writes prose only for the sections
+    // that need an author, each once, and never under a name that would stand beside (or in place of) a table the platform wrote.
+    if (VCR_MODEL_DOCUMENT_KINDS.includes(target.kind) && !vcrModelDocumentTakesProse(target.kind, section)) {
+      const allowed = /** @type {Record<string, { prose: readonly string[] }>} */ (VCR_MODEL_DOCUMENT_SECTIONS)[target.kind].prose;
+      return void item.bad("section", `「${/** @type {Record<string, string>} */ (VCR_EXPORT_KIND_LABELS_ZH)[target.kind]}」的文字只写这几节：`
+        + `${allowed.map((name) => `${name}（${/** @type {Record<string, string>} */ (VCR_MODEL_DOCUMENT_SECTION_LABELS_ZH)[name]}）`).join("、")}；表格与登记项由平台写，这次提交的文字没有保存。`, "vcr_report_section_invalid");
+    }
     // The first section freezes the numerical and review snapshot. Later
     // sections bind to that model under the export row lock, including two
     // report writes arriving while a calculation changes the live study.
-    const candidate = object(target.cover).results ?? (service.reportModel ? await service.reportModel(study) : {});
+    const candidate = object(target.cover).results ?? (service.reportModel ? await service.reportModel(study, { kind: target.kind }) : {});
     let rendered = renderVcrNumbers(template, candidate);
     const update = (cover) => {
       const model = cover.results ?? candidate;

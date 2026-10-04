@@ -155,3 +155,50 @@ test('VCR reports freeze their verified workspace figure bytes through the share
   assert.deepEqual(frozen.assets[0].data,bytes);
   assert.equal(frozen.assets[0].sha256.length,64);
 });
+
+import { VCR_MODEL_DOCUMENT_KINDS } from '@evimed/domain';
+import { frozenVersion, modelInputs, reportModelFor } from './vcrModelDocumentFixtures.mjs';
+test('the two model documents are queued for Word, PDF and HTML like every other VCR export, bound to the exact frozen revision', async () => {
+  for (const kind of VCR_MODEL_DOCUMENT_KINDS) {
+    const study = { id: 'study', name: 'Research', projectId: 'project', intendedUse: 'exploratory' };
+    const model = reportModelFor({ versions: [frozenVersion(modelInputs())] });
+    const row = { id: 'document', kind, cover: { results: model, reports: [{ section: 'introduction', template: '引言。' }] } };
+    let cover = structuredClone(row.cover);
+    /** @type {any[]} */
+    const requested = [];
+    const revision = canonicalVcrDocument(study, row).revision;
+    const service = { async request(_user, input) { requested.push(input); return { id: `conversion-${kind}`, sourceRevision: revision }; } };
+    const adapter = createVcrDocumentAdapter({ store: {}, vcr: { store: { async updateExportCover(_id, update) { cover = update(cover); return { ...row, cover }; } } } });
+    const queued = await adapter.queue(service, { id: 'alice' }, study, row);
+    assert.equal(queued.id, `conversion-${kind}`);
+    assert.deepEqual(requested[0].formats, ['docx', 'pdf', 'html'], kind);
+    assert.deepEqual(requested[0].source, { studyId: 'study', exportId: 'document' });
+    assert.equal(cover.documentExportId, `conversion-${kind}`, 'the conversion is bound to the revision it was frozen on');
+    assert.equal(cover.documentExportSourceRevision, revision);
+  }
+});
+
+import { spawnSync } from 'node:child_process';
+const hasPandoc = spawnSync('pandoc', ['--version']).status === 0;
+test('the model documents convert to Word and HTML with their tables, their not-estimable results and their rendered numbers intact', { skip: !hasPandoc && 'pandoc is not installed' }, async t => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'model-document-'));
+  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+  for (const kind of VCR_MODEL_DOCUMENT_KINDS) {
+    const study = { id: 'study', name: 'Research', intendedUse: 'exploratory' };
+    const model = reportModelFor({ versions: [frozenVersion(modelInputs())] });
+    const { canonicalMarkdown } = canonicalVcrDocument(study, { kind, cover: { results: model, reports: [{ section: 'introduction', template: '引言。' }] } });
+    await fs.writeFile(path.join(dir, `${kind}.md`), canonicalMarkdown);
+    for (const format of ['docx', 'html']) {
+      const converted = spawnSync('pandoc', [path.join(dir, `${kind}.md`), '-f', 'markdown', '-o', path.join(dir, `${kind}.${format}`), ...(format === 'html' ? ['-s', '--metadata', 'title=文件'] : [])], { encoding: 'utf8' });
+      assert.equal(converted.status, 0, converted.stderr);
+    }
+    const html = await fs.readFile(path.join(dir, `${kind}.html`), 'utf8');
+    assert.ok((html.match(/<table/g) ?? []).length >= 4, `${kind}: the tables survive conversion`);
+    assert.match(html, kind === 'model_analysis_plan' ? /冻结信息/ : /这份报告依据的模型分析计划/);
+    if (kind === 'model_analysis_report') {
+      assert.match(html, /不可估计/);
+      assert.match(html, /0\.812（蒙特卡洛标准误 0\.0027）/);
+    }
+    assert.ok((await fs.stat(path.join(dir, `${kind}.docx`))).size > 5_000, `${kind}: a Word file was written`);
+  }
+});

@@ -52,9 +52,9 @@ description: 把一项「虚拟临研」研究写成可检查、可复现的研�
 { "what": "report", "data": { "kind": "study_package", "section": "main", "template": "<带 {{n:…}} 引用的正文>" } }
 ```
 
-`kind` 还可以是 `cde_communication_pack`、`simulation_report`、`validation_pack`；写另一份资料就换 `kind`。
+`kind` 还可以是 `cde_communication_pack`、`simulation_report`、`validation_pack`、`model_analysis_plan`、`model_analysis_report`；写另一份资料就换 `kind`。
 平台在这里把 `{{n:…}}` 渲染成数字，放进研究者拿到的导出包的封面和正文；**你读不到渲染后的数字，也不需要**——引用写对，数就对。
-返回值里的 `issues` 是平台渲染时发现的问题：找不到的引用、缺蒙特卡洛误差的仿真值、没写明种类的区间、手打的数字（报告里已写成「未计算」）、读不成引用的 `{{n:…}}`（报告里同样写成「未计算」）。照着改，再写一次：**整份正文一次写完**，再提交的会取代上一次提交的，不要分节多次提交。
+返回值里的 `issues` 是平台渲染时发现的问题：找不到的引用、缺蒙特卡洛误差的仿真值、没写明种类的区间、手打的数字（报告里已写成「未计算」）、读不成引用的 `{{n:…}}`（报告里同样写成「未计算」）。照着改，再写一次：**整份正文一次写完**，再提交的会取代上一次提交的，不要分节多次提交（模型分析计划和模型分析报告除外：它们按节提交，见下）。
 
 工作区里的 `study-package.md` 存放的是**同一份带引用的正文**（`{{n:…}}` 原样保留），它是交付物检查的对象，也是渲染前的原稿；不要在里面手工替换成数字。
 
@@ -70,6 +70,26 @@ description: 把一项「虚拟临研」研究写成可检查、可复现的研�
 | `{{n:assumptions[0].value\|f1}}` | `4.1` |
 
 年份、12 以内的序号和月份、日期、页码和图表编号（第 35 页、图 3）、用「」引起来的方案原文（「年龄 ≥ 18 岁」）里的数不算手写数字，不用写成引用；其余的数，包括方案里的阈值，在正文里要么写成引用，要么放进「」里照抄原文。
+
+## 模型分析计划与模型分析报告
+
+这两份文件（`kind: model_analysis_plan` 和 `model_analysis_report`，结构依据 ICH M15）**表格、登记项和数字都是平台写的**：模型与模型卡、假设与证据、方法与情景、评估表、冻结的版本与哈希、与计划的偏离、结果表。你只写各节的文字，每节提交一次，`section` 只能是下面这些，别的会被拒绝：
+
+| 文件 | 你写的节（`section`） |
+|---|---|
+| 模型分析计划 | `introduction` 引言、`objectives` 目的、`data` 数据、`methods` 方法 |
+| 模型分析报告 | `executive_summary` 摘要、`introduction` 引言、`objectives` 目的、`data_methods` 数据与方法、`results` 结果、`discussion` 讨论、`conclusions` 结论 |
+
+```json
+{ "what": "report", "data": { "kind": "model_analysis_report", "section": "discussion", "template": "<讨论的文字，数字用 {{n:…}} 引用>" } }
+```
+
+先用 `mcp__evimed__vcr_read` `what: "report_model"`、`filter: { "kind": "model_analysis_report" }` 读平台已经写了什么：`modelAnalysis.plan`（冻结的版本、时间、冻结者、哈希）、`modelAnalysis.deviations`（报告相对冻结计划的每一处偏离）、`modelAnalysis.results`（每个结果的结论、指标与区间，路径 `modelAnalysis.results[i].measures[j]` 可以引用）、`modelAnalysis.current.assessments`（评估记录）。文字里的数一律写成引用，手打的数字照旧被写成「未计算」。
+
+- **计划的文字写在冻结之后，不改计划本身**：计划的内容已经冻结，你写的是对它的说明；不要在文字里改写评估表、版本或哈希，也不要写任何结果。
+- **报告的偏离要逐项说明**：平台列出的每一处偏离，在「讨论」里说明为什么变、对结果有什么影响；没有冻结的计划就照实写「分析是在没有事先冻结计划的情况下做的」，不要编一个计划。
+- **「不可估计」是完成的结果**：平台在结果表里已经写成「不可估计」和触发的规则，你在「结果」「讨论」里说明缺什么、补上之后能做什么，不要补数。
+- **评估表的最后两行**（模型与模型结果的评价、证据评估的结论）是分析做完之后用 `what: "model_assessment"` 补的：写一次新版本，把 `evaluation`（技术标准满足得怎样）和 `outcome`（这些结果能不能作为模型证据）填上，计划阶段的各项原样保留。
 
 ## 规矩
 

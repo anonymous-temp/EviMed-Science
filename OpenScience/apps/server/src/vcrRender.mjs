@@ -168,8 +168,12 @@ export function renderVcrNumbers(template, results) {
  * contract's traceability check reads. One document, so the two can never
  * disagree about a number.
  *
+ * `modelAnalysis` is the block the two model documents are rendered from (`vcrModelDocuments.buildModelAnalysis`): present only
+ * in the report model of an export of one of those kinds, so no other document carries the plan's content.
+ *
  * @param {{ study: any, definition?: any, assumptions?: any[], results?: any[], seal?: any, reviews?: any[],
- *   staleMarks?: any[], models?: any[], population?: any, comparator?: any, scenarios?: any[], counts?: Record<string, any> }} input
+ *   staleMarks?: any[], models?: any[], population?: any, comparator?: any, scenarios?: any[], counts?: Record<string, any>,
+ *   modelAnalysis?: Record<string, any> | null }} input
  */
 export function vcrReportModel(input) {
   const study = object(input.study);
@@ -283,6 +287,7 @@ export function vcrReportModel(input) {
       return { node: String(row.node ?? ""), reason: String(row.reason ?? "") };
     }),
     seal: input.seal ?? null,
+    ...(input.modelAnalysis ? { modelAnalysis: input.modelAnalysis } : {}),
   };
 }
 

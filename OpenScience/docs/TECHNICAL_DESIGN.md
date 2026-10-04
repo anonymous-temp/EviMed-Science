@@ -243,7 +243,13 @@ its switch is on; the rest are changes inside existing layers.
   Patient-level data lives in a data plane never mounted in a runtime: the control plane alone
   resolves a snapshot into engine inputs after an access decision, outcome columns stay sealed
   until the analysis plan is frozen, and what the runtime reads passes through small-cell
-  suppression. The seams are fixed in `docs/superpowers/specs/2026-09-29-vcr-integration-contract.md`.
+  suppression. The 模型分析计划 and 模型分析报告 (ICH M15) are two more export kinds whose
+  structure, tables and numbers the control plane writes from the study's records
+  (`vcrModelDocuments.mjs`; every report number is rendered from a saved result by `vcrRender.mjs`)
+  and whose prose sections the `vcr-package` capability writes by named section; the plan's
+  content is frozen as a hashed version, never edited (a trigger refuses it), at the same
+  instant as the analysis plan and before the outcome columns lift (`vcrSeal.mjs`). The seams
+  are fixed in `docs/superpowers/specs/2026-09-29-vcr-integration-contract.md`.
   A study lands on a disease through a **knowledge pack** (`vcrKnowledge*.mjs`, contract and
   validator in `@evimed/domain` `vcrKnowledgePack.mjs`): definitions only — terms with
   identifiers from NCIt, OMOP or ICD-10-CM, phenotypes and common criteria in the requirement

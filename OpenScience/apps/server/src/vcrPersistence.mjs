@@ -42,7 +42,7 @@ import {
   VCR_CRITERION_TYPES, VCR_DATA_TIERS, VCR_ELIGIBILITY_SUMMARIES, VCR_ENDPOINT_TYPES, VCR_ENROLLMENT_KINDS,
   VCR_EXPORT_KINDS, VCR_FOLLOWUP_KINDS, VCR_INTENDED_USES, VCR_JOB_KINDS, VCR_JOB_STATES, VCR_MEMBER_ROLES,
   VCR_MISSING_REASONS, VCR_MODEL_RISKS, VCR_MODEL_TIERS, VCR_POOLING_METHODS, VCR_POPULATION_KINDS,
-  VCR_REFERRAL_STATES, VCR_REVIEW_KINDS, VCR_REVIEW_STATES, VCR_STALE_REASONS, VCR_STEPS, VCR_STUDY_STATUSES,
+  VCR_RATINGS, VCR_REFERRAL_STATES, VCR_REVIEW_KINDS, VCR_REVIEW_STATES, VCR_STALE_REASONS, VCR_STEPS, VCR_STUDY_STATUSES,
   VCR_TRIAL_DESIGNS, VCR_VALUE_SOURCES, VCR_FIELD_ROLES, VCR_PACK_STATUSES,
 } from "@evimed/domain";
 import { refreshVocabularyChecks } from "./vocabularyChecks.mjs";
@@ -87,6 +87,7 @@ export const VCR_TABLES = Object.freeze([
   "matching_assessments", "criterion_judgments", "matching_facts", "language_judgments",
   "referrals", "referral_events", "sites", "followup_episodes",
   "dependencies", "stale_marks", "reviews", "decisions", "regulatory_contacts", "exports", "audit", "schedule_marks",
+  "model_assessments", "model_plan_versions",
 ]);
 
 const migrations = new WeakMap();
@@ -1132,6 +1133,63 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.audit (
 );
 CREATE INDEX IF NOT EXISTS vcr_audit_study_idx ON evimed_vcr.audit (study_id, occurred_at DESC);
 CREATE INDEX IF NOT EXISTS vcr_audit_action_idx ON evimed_vcr.audit (action, occurred_at DESC);
+
+-- ---------------------------------------------------------------------------
+-- Model assessment and the frozen model analysis plan (ICH M15, plan §8.2)
+-- ---------------------------------------------------------------------------
+
+-- One assessment record per model and question: a version is a new row under
+-- the same key (the assumption shape), so what a frozen plan listed stays
+-- readable after the record moves on. The fields are the guideline's own
+-- (question of interest, context of use, influence, consequence, risk, impact,
+-- technical criteria, evaluation, outcome), kept as the one normalized record
+-- the domain defines; \`risk\` is derived from the two ratings and repeated as
+-- a column so a page can sort and count by it.
+CREATE TABLE IF NOT EXISTS evimed_vcr.model_assessments (
+  id            text PRIMARY KEY,
+  study_id      text NOT NULL REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
+  user_id       text NOT NULL,
+  key           text NOT NULL,
+  version       integer NOT NULL,
+  model_name    text NOT NULL DEFAULT '',
+  model_version text NOT NULL DEFAULT '',
+  risk          text CHECK (risk IS NULL OR risk IN ${inList(VCR_RATINGS)}),
+  record        jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (study_id, key, version)
+);
+
+-- A model analysis plan, frozen: the content, its hash, when and by whom, at the
+-- moment the analysis plan itself froze (vcrSeal.freezePlan) and so before any
+-- sealed outcome is opened. A later change is the next version with what
+-- changed; an earlier version is never edited, which the trigger below makes a
+-- fact of the database and not a habit of the code.
+CREATE TABLE IF NOT EXISTS evimed_vcr.model_plan_versions (
+  id                    text PRIMARY KEY,
+  study_id              text NOT NULL REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
+  user_id               text NOT NULL,
+  version               integer NOT NULL,
+  content               jsonb NOT NULL,
+  content_hash          text NOT NULL,
+  seal_plan_version     integer NOT NULL DEFAULT 0,
+  seal_plan_hash        text NOT NULL DEFAULT '',
+  frozen_at             timestamptz NOT NULL,
+  frozen_by             text NOT NULL DEFAULT '',
+  outcome_first_read_at timestamptz,
+  changes               jsonb NOT NULL DEFAULT '[]'::jsonb,
+  issues                jsonb NOT NULL DEFAULT '[]'::jsonb,
+  created_at            timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (study_id, version)
+);
+
+CREATE OR REPLACE FUNCTION evimed_vcr.model_plan_versions_frozen() RETURNS trigger AS $$
+BEGIN
+  RAISE EXCEPTION 'a frozen model analysis plan is not edited: freeze a new version' USING ERRCODE = 'check_violation';
+END;
+$$ LANGUAGE plpgsql;
+DROP TRIGGER IF EXISTS model_plan_versions_frozen ON evimed_vcr.model_plan_versions;
+CREATE TRIGGER model_plan_versions_frozen BEFORE UPDATE ON evimed_vcr.model_plan_versions
+  FOR EACH ROW EXECUTE FUNCTION evimed_vcr.model_plan_versions_frozen();
 
 -- The orchestrator's marks: what it dispatched, enqueued, sent or skipped,
 -- once per key (the GEO shape, so restarts and two processes cannot double).
