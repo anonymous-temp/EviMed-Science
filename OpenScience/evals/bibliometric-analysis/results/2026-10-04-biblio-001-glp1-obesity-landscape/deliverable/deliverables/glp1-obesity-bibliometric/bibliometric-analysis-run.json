@@ -1,0 +1,349 @@
+{
+  "deliverable": "bibliometric-analysis-report.md",
+  "jobId": "bibliometric-20261004071320-d725e01dbd9b",
+  "status": "succeeded",
+  "contractKind": "bibliometric-analysis-report",
+  "managedJob": {
+    "id": "bibliometric-20261004071320-d725e01dbd9b",
+    "terminalState": "succeeded",
+    "degraded": true,
+    "modules": {
+      "searchStrategy": {
+        "status": "ok"
+      },
+      "citationSource": {
+        "status": "degraded",
+        "reason": "citations observed for 36/1236 articles; icite: http_413; openalex: api_key_missing; semantic_scholar: rate_limited"
+      },
+      "report": {
+        "status": "ok"
+      }
+    },
+    "recordedStatus": "succeeded",
+    "updatedAt": "2026-10-04T07:15:50.539156Z",
+    "startedAt": "2026-10-04T07:13:21.329675Z"
+  },
+  "analysisInputs": {
+    "topic": "GLP-1 receptor agonists for obesity and weight management",
+    "dateFrom": "2015",
+    "dateTo": "2025",
+    "maxRecords": 5000,
+    "outputLanguage": "zh-CN"
+  },
+  "search": {
+    "database": "PubMed (MEDLINE), via NCBI E-utilities esearch/efetch",
+    "searchedAt": "2026-10-04T07:13:55+00:00",
+    "sort": "relevance",
+    "formalQuery": "(\"GLP-1 receptor agonists\"[Title/Abstract]) AND (\"Obesity\"[MeSH Terms] OR \"obesity\"[Title/Abstract] OR \"Overweight\"[Title/Abstract] OR \"Adiposity\"[Title/Abstract] OR \"Corpulence\"[Title/Abstract]) AND (\"2015/01/01\"[Date - Publication] : \"2025/12/31\"[Date - Publication])",
+    "concepts": [
+      {
+        "label": "GLP-1 receptor agonists",
+        "free_terms": [
+          "GLP-1 receptor agonists"
+        ],
+        "mesh_descriptor": null,
+        "mesh_ui": null,
+        "entry_terms_used": [],
+        "mesh_lookup_failed": true
+      },
+      {
+        "label": "obesity",
+        "free_terms": [
+          "obesity",
+          "Overweight",
+          "Adiposity",
+          "Corpulence"
+        ],
+        "mesh_descriptor": "Obesity",
+        "mesh_ui": "D009765",
+        "entry_terms_used": [
+          "Overweight",
+          "Adiposity",
+          "Corpulence"
+        ],
+        "mesh_lookup_failed": false
+      }
+    ],
+    "totalFound": 1241,
+    "totalRetrieved": 1241,
+    "totalFetched": 1238,
+    "afterDedup": 1236,
+    "truncated": false
+  },
+  "corpus": {
+    "analysedRecords": 1236,
+    "citationCoverage": {
+      "total": 1236,
+      "observed": 36,
+      "missing": 1200,
+      "by_source": {
+        "icite": 36
+      },
+      "sources_unavailable": {
+        "icite": "http_413",
+        "openalex": "api_key_missing",
+        "semantic_scholar": "rate_limited"
+      },
+      "reference_relations": 35
+    }
+  },
+  "artifactCount": 51,
+  "artifacts": [
+    {
+      "path": "data/author_collaboration.csv",
+      "bytes": 73730,
+      "sha256": "1456b823d94a43e53224b84b1c11a776b391891968b1b9daac7c47c004347973"
+    },
+    {
+      "path": "data/author_network.json",
+      "bytes": 9241,
+      "sha256": "4bf250b7ec7119571f8f4e5128756fc388394f2ce8d5e58b63a8229d96559f29"
+    },
+    {
+      "path": "data/citation_coverage.json",
+      "bytes": 254,
+      "sha256": "7b2796dcc2b05cfc5b2aa6292a0ba3ab13322bc2104bede88e070f0c50568652"
+    },
+    {
+      "path": "data/cleaned_records.csv",
+      "bytes": 727791,
+      "sha256": "2f8d12b34019dc4d68f05fb8cec9532790e77ce57522c8bc344aa3e498241f24"
+    },
+    {
+      "path": "data/country_collaboration.csv",
+      "bytes": 9201,
+      "sha256": "1f0badab8553a5987aec5633824b33fe0634b9ab24635f423393c3cfcc21414b"
+    },
+    {
+      "path": "data/country_network.json",
+      "bytes": 5907,
+      "sha256": "73694f9c991a34f9f9fd70667f8d59a403cdb489d6973be33bd230d1fae940b7"
+    },
+    {
+      "path": "data/institution_collaboration.csv",
+      "bytes": 147095,
+      "sha256": "e25a7e68c826a26d3c9ffb5d88af2e8a9e96b49e52b5109e1fc98bdf28bae34d"
+    },
+    {
+      "path": "data/institution_network.json",
+      "bytes": 12855,
+      "sha256": "d602dadd774f4a45ad1fc345b28877694f79058bb54e7560486be7f46492def5"
+    },
+    {
+      "path": "data/keyword_cooccurrence.csv",
+      "bytes": 777879,
+      "sha256": "1652f8169d6553edead0cf972783eba249147973912f7af45ebeea6cb85d6e4e"
+    },
+    {
+      "path": "data/keyword_network.json",
+      "bytes": 119618,
+      "sha256": "d5f707e56b020bd56c1ae161857b5ea4fe225b146c28e8cce03c01f31c19ac30"
+    },
+    {
+      "path": "data/raw_records.json",
+      "bytes": 6098062,
+      "sha256": "35c3d763e85f45810e56b4e25f4fe11d942c50c51657d5731558dc48267f0f9a"
+    },
+    {
+      "path": "data/search_metadata.json",
+      "bytes": 2205,
+      "sha256": "246b1464ddedf0dffca9f507200363856ac71baabd834daef9ab553d32ce9d4b"
+    },
+    {
+      "path": "figures/annual_trend.png",
+      "bytes": 50661,
+      "sha256": "929248191aa2cd5a0780430df45b09bdfab1042660216b43d279e769fbec4acf"
+    },
+    {
+      "path": "figures/annual_trend_records.png",
+      "bytes": 83000,
+      "sha256": "21060530cd7e71f7b88b9754c7f2d2a15ad4b3f976b907ac82e38e94a383f495"
+    },
+    {
+      "path": "figures/author_network.png",
+      "bytes": 129934,
+      "sha256": "74c4ddd9df650a56a3d0c2ffc80da22fabc879685d1a80d5e59ec40693890480"
+    },
+    {
+      "path": "figures/burst_terms.png",
+      "bytes": 61767,
+      "sha256": "1771ecf600ecec5fb372f06af17cd5cc694f7086899722a59b73e63c004689e0"
+    },
+    {
+      "path": "figures/citation_overview.png",
+      "bytes": 72956,
+      "sha256": "321c76771309eb94850acd66688f162a93df04e2dd64d72ad9affe7caff7a87c"
+    },
+    {
+      "path": "figures/country_network.png",
+      "bytes": 136863,
+      "sha256": "ca560dcb185385c325004389cb364931053deeb8219c0bb94231ccc81f215730"
+    },
+    {
+      "path": "figures/institution_network.png",
+      "bytes": 150858,
+      "sha256": "7c78e381f7fbe2351643fe62d1640270bf642680dfa32e1a2cac1cc6ece7b57c"
+    },
+    {
+      "path": "figures/keyword_network.png",
+      "bytes": 505857,
+      "sha256": "a0a203e100981e0fe9f873f16ea9fabdda7a59f3765272cd2d9b6e8cab04d5bc"
+    },
+    {
+      "path": "figures/keyword_wordcloud.png",
+      "bytes": 161342,
+      "sha256": "49c41befa069d862b0df5722b8be3558c0b30109dbca468265512f7acd503b14"
+    },
+    {
+      "path": "figures/timeline_clusters.png",
+      "bytes": 26626,
+      "sha256": "d26fa6625135dacdee1d120a3505d95be363ec3569f14557794005b200d8328c"
+    },
+    {
+      "path": "figures/top_authors.png",
+      "bytes": 25278,
+      "sha256": "61c00e6efa39c92166dedcd7213283a3275e4128717d1d871200d0398cf422b7"
+    },
+    {
+      "path": "figures/top_countries.png",
+      "bytes": 19844,
+      "sha256": "4253f59547a31a6c2ea6175f4b9e1033f20fc274e031ac62883825f73bce51a3"
+    },
+    {
+      "path": "figures/top_institutions.png",
+      "bytes": 30725,
+      "sha256": "118b31cc6acc87aebf641e9d226b8fffa6017cd32738bac25c17b314c0e311a2"
+    },
+    {
+      "path": "figures/top_journals.png",
+      "bytes": 31493,
+      "sha256": "546a51d2448e2b4b79202f6b0b431ca189c690b420baf5cc2378d908d6419f5b"
+    },
+    {
+      "path": "figures/top_keywords.png",
+      "bytes": 47930,
+      "sha256": "46c3581fe5bc0c98438c1530985a590e6918eb24da1e902f9ed5de4cc2e8645f"
+    },
+    {
+      "path": "report.md",
+      "bytes": 429261,
+      "sha256": "179951de3f0842ed5bcff0b4c40480d18b889ed8648aa7b654360e2ac9571fa7"
+    },
+    {
+      "path": "request.json",
+      "bytes": 164,
+      "sha256": "fa2838629016d6ee90d8e722a0c420d038a9cb30af92a85e3f3356f4e5bb79ab"
+    },
+    {
+      "path": "result.json",
+      "bytes": 923,
+      "sha256": "b63746c1df2812fe046f8969bf79f8db3ae4479ac1ec35a6b2527afdc3e67ac9"
+    },
+    {
+      "path": "tables/bibliographic_coupling_pairs.csv",
+      "bytes": 39023,
+      "sha256": "3da65c714ad1338a01174d61d0c400ab38a68de38bd611d93b04232326ad98ee"
+    },
+    {
+      "path": "tables/burst_terms.csv",
+      "bytes": 952,
+      "sha256": "2cd16c80f88c6ada37f468320a9e4856631edc73309ad9dc5a337641c5af6b81"
+    },
+    {
+      "path": "tables/cluster_summary.csv",
+      "bytes": 297,
+      "sha256": "473e5cee41bd6ce7f2d65a87c980983f0ba7faf7e35327dc2b2b2f8c3bb2d6c5"
+    },
+    {
+      "path": "tables/cocitation_pairs.csv",
+      "bytes": 11097,
+      "sha256": "0aab76c4f2d952aeedc1e9ab177e98d074fa64ae4342bdfa4aa35ac45df21da1"
+    },
+    {
+      "path": "tables/frontier_topics.csv",
+      "bytes": 1968,
+      "sha256": "e9346b9cf739af29c7f0bcc349a5c5be5cbe8750316f7376510a805dd8fc6011"
+    },
+    {
+      "path": "tables/pub_type_distribution.csv",
+      "bytes": 438,
+      "sha256": "c9cc6aafd3d6298c550a87e4619fe86405ed54481e14696fd5a8975b13c881ca"
+    },
+    {
+      "path": "tables/top_authors.csv",
+      "bytes": 384,
+      "sha256": "19c16e34e5149448552c569cf1e756553a7281ecd727cc7e1c97f309f4113357"
+    },
+    {
+      "path": "tables/top_countries.csv",
+      "bytes": 252,
+      "sha256": "7680ea3f5f37f6c46d8ecc55d066d25714256180855a8df3ba0b819d924d48ba"
+    },
+    {
+      "path": "tables/top_institutions.csv",
+      "bytes": 571,
+      "sha256": "d56d57a2b195e1f99a882406404b16cb39140be50a6904a3949a653ae55bac53"
+    },
+    {
+      "path": "tables/top_journals.csv",
+      "bytes": 620,
+      "sha256": "6004e7fd6bc12a9e7b496138fbd026016a08dc7a772a9b9028cf2799278bdc11"
+    },
+    {
+      "path": "tables/top_keywords.csv",
+      "bytes": 702,
+      "sha256": "ef6fb738c1b8a7de5503f5cbbfed93d085900bee29d0960595d7a45ccecc8964"
+    },
+    {
+      "path": "tables/year_trend.csv",
+      "bytes": 109,
+      "sha256": "00f95104cd477f575e9094f1206b33323667545cfa4cec631c4074569d60801b"
+    },
+    {
+      "path": "tables/year_trend_coverage.json",
+      "bytes": 203,
+      "sha256": "7ef9de7ae166e012954db0aa7cb0e0ca667d8c4bd4057e3f095f61dc20fd29fc"
+    },
+    {
+      "path": "vosviewer/author_map.txt",
+      "bytes": 1260,
+      "sha256": "9a5bc7bf283eded8c8c38e1e8573215f77589a105237c914e9574afcbd2b19e9"
+    },
+    {
+      "path": "vosviewer/author_network.txt",
+      "bytes": 284,
+      "sha256": "3fca40f9a0629db975d75a07ed5470ec3c57ce816eca202eb405144ab0bdada6"
+    },
+    {
+      "path": "vosviewer/country_map.txt",
+      "bytes": 452,
+      "sha256": "7a6b7285159c1a5da0d9328f8e7aa284ad8d39073f3f2aa1fcc3e03ae5842c4c"
+    },
+    {
+      "path": "vosviewer/country_network.txt",
+      "bytes": 291,
+      "sha256": "62322ca8eaf67e46688d6c745bda4a6b91d163a9496a75b8cb5e472c86a2a02a"
+    },
+    {
+      "path": "vosviewer/institution_map.txt",
+      "bytes": 1156,
+      "sha256": "2fbbc1f46a97cf9f746250f94cc5ad8dcfe42c7d5524236f5f5bb6d2926f3303"
+    },
+    {
+      "path": "vosviewer/institution_network.txt",
+      "bytes": 514,
+      "sha256": "47e0d1cd91d7732a54fb8fc2a91d744679a2536aca1bd7da904a13d9f75552fe"
+    },
+    {
+      "path": "vosviewer/keyword_map.txt",
+      "bytes": 2587,
+      "sha256": "8b46a9e6c7cc1896222de223bed50c379bed6f54c53ef2a025f7d21e4ba4f1ee"
+    },
+    {
+      "path": "vosviewer/keyword_network.txt",
+      "bytes": 8172,
+      "sha256": "f21379d7a4f9febb73c57d0bbd6a14806767cc539ed7512a9c2aeaed2932787a"
+    }
+  ],
+  "artifactsRoot": "bibliometric-analysis-runs/bibliometric-20261004071320-d725e01dbd9b/output"
+}

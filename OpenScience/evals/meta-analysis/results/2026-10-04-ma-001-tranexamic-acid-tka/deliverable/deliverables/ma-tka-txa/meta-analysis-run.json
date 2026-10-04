@@ -1,0 +1,374 @@
+{
+  "deliverableId": "ma-tka-txa",
+  "contractKind": "meta-analysis-report",
+  "topic": "氨甲环酸用于全膝关节置换术围手术期减少失血的系统评价与 Meta 分析。研究问题：在接受初次单侧全膝关节置换术的成年患者中，围手术期使用氨甲环酸（静脉、局部或联合给药）与安慰剂或不使用氨甲环酸相比，能否减少总失血量、降低输血率，以及是否增加症状性静脉血栓栓塞事件。纳入研究设计：随机对照试验。分析类型：pairwise。主要结局：(1) 总失血量；(2) 输血率；(3) 症状性静脉血栓栓塞事件（深静脉血栓、肺栓塞）。",
+  "outputLanguage": "zh",
+  "analysisType": "pairwise",
+  "jobId": "meta-20261004065926-5a8b2fdb6e29",
+  "status": "succeeded",
+  "startedAt": "2026-10-04T06:59:27.714668Z",
+  "finishedAt": "2026-10-04T07:38:37.582213Z",
+  "elapsedSeconds": 2341,
+  "releaseStatus": "ready_with_warnings",
+  "deliverable": true,
+  "blockingReasons": [],
+  "warningReasons": [
+    "project_submission_quality_gate",
+    "manuscript_language",
+    "clinical_interpretation",
+    "citation_coverage"
+  ],
+  "projectPath": "meta-analysis-runs/meta-20261004065926-5a8b2fdb6e29/output/20261004_065933_氨甲环酸用于全膝关节置换术围手术期减少失血的系统评价与_Meta_分析研究问题在接受初次单侧全膝关节",
+  "artifacts": [
+    {
+      "path": "meta-analysis-runs/meta-20261004065926-5a8b2fdb6e29/output/20261004_065933_氨甲环酸用于全膝关节置换术围手术期减少失血的系统评价与_Meta_分析研究问题在接受初次单侧全膝关节/analysis/synthesis_result.json",
+      "bytes": 4507,
+      "sha256": "1ab9c68f17d3afb8f746e7e7d4fee3ed33c49ce030ae7b8cb91b08609c50daea"
+    },
+    {
+      "path": "meta-analysis-runs/meta-20261004065926-5a8b2fdb6e29/output/20261004_065933_氨甲环酸用于全膝关节置换术围手术期减少失血的系统评价与_Meta_分析研究问题在接受初次单侧全膝关节/manuscript/draft.docx",
+      "bytes": 623771,
+      "sha256": "6e0b952446444311638aa91e9c9269b4e38ec3b0facd3da90a3446ffa3765f19"
+    },
+    {
+      "path": "meta-analysis-runs/meta-20261004065926-5a8b2fdb6e29/output/20261004_065933_氨甲环酸用于全膝关节置换术围手术期减少失血的系统评价与_Meta_分析研究问题在接受初次单侧全膝关节/manuscript/draft.md",
+      "bytes": 36558,
+      "sha256": "8383abb6d948850b7d46b81e1a8d009e6ad87a5393218c8adaaaff842fc9d229"
+    },
+    {
+      "path": "meta-analysis-runs/meta-20261004065926-5a8b2fdb6e29/output/20261004_065933_氨甲环酸用于全膝关节置换术围手术期减少失血的系统评价与_Meta_分析研究问题在接受初次单侧全膝关节/manuscript/draft.pdf",
+      "bytes": 651740,
+      "sha256": "39babaf28a0984cda7b5f93e6b4b6856d6dad0780b212c760fc7d37aaf42845b"
+    },
+    {
+      "path": "meta-analysis-runs/meta-20261004065926-5a8b2fdb6e29/output/20261004_065933_氨甲环酸用于全膝关节置换术围手术期减少失血的系统评价与_Meta_分析研究问题在接受初次单侧全膝关节/package/evidence_accounting.json",
+      "bytes": 2380,
+      "sha256": "e73569f263a2ff8cd68f8705de575597e06fb62fbcbd7a457ffc215df0e16ff3"
+    },
+    {
+      "path": "meta-analysis-runs/meta-20261004065926-5a8b2fdb6e29/output/20261004_065933_氨甲环酸用于全膝关节置换术围手术期减少失血的系统评价与_Meta_分析研究问题在接受初次单侧全膝关节/package/metaagent_export.zip",
+      "bytes": 2399731,
+      "sha256": "0530efbb84a9efea7f007e13402e09417f1c7bfafcc6ac854e7e98173249661f"
+    },
+    {
+      "path": "meta-analysis-runs/meta-20261004065926-5a8b2fdb6e29/output/20261004_065933_氨甲环酸用于全膝关节置换术围手术期减少失血的系统评价与_Meta_分析研究问题在接受初次单侧全膝关节/package/release_decision.json",
+      "bytes": 5213,
+      "sha256": "d40bf6ad645ebdfde374b5ba1535d6839e2d51a2350d8a3aca7d98b479455f76"
+    },
+    {
+      "path": "meta-analysis-runs/meta-20261004065926-5a8b2fdb6e29/output/20261004_065933_氨甲环酸用于全膝关节置换术围手术期减少失血的系统评价与_Meta_分析研究问题在接受初次单侧全膝关节/prisma_flow.json",
+      "bytes": 7373,
+      "sha256": "9ceef5c72e1aa5febd60c8797fe2b895237e84392c3138023707c3b8879a0805"
+    }
+  ],
+  "evidenceAccounting": {
+    "schema_version": 1,
+    "source": "prisma_flow.json",
+    "counts": {
+      "records_identified": 1652,
+      "identified_by_source": {
+        "internal_db": 446,
+        "pubmed": 1085,
+        "OpenAlex": 121
+      },
+      "database_hits": {
+        "pubmed": {
+          "hits": 1085,
+          "retrieved": 300,
+          "not_retrieved": 785
+        }
+      },
+      "duplicates_removed": 132,
+      "removed_by_automation_tools": 756,
+      "removed_for_other_reasons": 704,
+      "removed_before_screening_reasons": {
+        "supplementary-source relevance cap": 64,
+        "relevance cap before screening": 692,
+        "not retrieved from the source (retrieval limit)": 704
+      },
+      "screening_cap": {
+        "formula": "B(T) = min(T, max(floor, ceil(fraction * T)), ceiling)",
+        "T": 752,
+        "floor": 400,
+        "fraction": 0.5,
+        "ceiling": 1000,
+        "explicit_max": 60,
+        "budget": 60,
+        "cut": 692,
+        "ranking": "query concept groups matched in title/abstract, then lexical match strength, then a study-design and identifier tiebreak, then citation count (_merged_search_relevance_score)",
+        "pubmed_reserved": 30,
+        "pubmed_reservation": "up to half the budget is kept for PubMed-origin records in ranked order"
+      },
+      "records_screened": 60,
+      "records_excluded_at_screening": 35,
+      "reports_sought": 25,
+      "reports_not_retrieved": 15,
+      "reports_not_retrieved_reasons": {
+        "abstract only": 11,
+        "no text retrieved": 4
+      },
+      "reports_assessed": 10,
+      "reports_excluded": 3,
+      "studies_included": 7
+    },
+    "synthesis": {
+      "source": "analysis/synthesis_result.json",
+      "results_pooled": 4,
+      "studies_pooled": 3,
+      "pooled_study_ids": [
+        "22053253",
+        "29410968",
+        "39673144"
+      ],
+      "results_left_out": 0,
+      "reasons": {},
+      "results": {}
+    },
+    "arithmetic": [
+      {
+        "identity": "identified - duplicates - automation - other = screened",
+        "holds": true,
+        "computed": 60,
+        "recorded": 60
+      },
+      {
+        "identity": "screened - excluded = sought",
+        "holds": true,
+        "computed": 25,
+        "recorded": 25
+      },
+      {
+        "identity": "sought - not retrieved = assessed",
+        "holds": true,
+        "computed": 10,
+        "recorded": 10
+      },
+      {
+        "identity": "assessed - excluded = included",
+        "holds": true,
+        "computed": 7,
+        "recorded": 7
+      }
+    ]
+  },
+  "supplementarySyntheses": [
+    {
+      "supplementaryAnalysisId": "transfusion-rate-RR-6-studies",
+      "description": "输血率，风险比（RR）尺度，6 项试验（含 1 项零事件格研究，采用 0.5 连续性校正）",
+      "estimator": "DerSimonian-Laird random effects inverse variance (meta.dl)",
+      "calculationJobId": "44eb5101-c61f-49f0-ae1c-427524907bcc",
+      "frozenInputPath": "deliverables/ma-tka-txa/supplementary/transfusion-rate-RR-6-studies.json",
+      "frozenInputSha256": "21be5b64e9dc7c97be05321bebc0c170784329c9e4be4a2ebf2f8072f4e6cc21",
+      "outputPath": "result-replays/44eb5101-c61f-49f0-ae1c-427524907bcc/output/result.json",
+      "outputSha256": "2e74b1c75e22a15c714d3a7e263136cf57bdc83fb69431ce4d1be222a9a836d6",
+      "terminalStatus": "completed"
+    },
+    {
+      "supplementaryAnalysisId": "transfusion-rate-RR-sensitivity-5-studies",
+      "description": "输血率 RR 敏感性分析，剔除唯一采用连续性校正的研究后 5 项试验",
+      "estimator": "DerSimonian-Laird random effects inverse variance (meta.dl)",
+      "calculationJobId": "43675279-7dd8-4173-ac45-0f8a060c573e",
+      "frozenInputPath": "deliverables/ma-tka-txa/supplementary/transfusion-rate-RR-sensitivity-5-studies.json",
+      "frozenInputSha256": "6cb0aa7dfb9bef07e8bb1f046e59a1c8d6dff5374bb695d418494a8c3e100d4f",
+      "outputPath": "result-replays/43675279-7dd8-4173-ac45-0f8a060c573e/output/result.json",
+      "outputSha256": "ae148f78c16d41fb060b652acd1df67a11549d3e80bbe27eebd4d1324c642659",
+      "terminalStatus": "completed"
+    },
+    {
+      "supplementaryAnalysisId": "transfusion-rate-RD-6-studies",
+      "description": "输血率，风险差（RD）尺度，6 项试验",
+      "estimator": "DerSimonian-Laird random effects inverse variance (meta.dl)",
+      "calculationJobId": "d6979de5-e6dc-42f6-aad1-cdb91a309b8b",
+      "frozenInputPath": "deliverables/ma-tka-txa/supplementary/transfusion-rate-RD-6-studies.json",
+      "frozenInputSha256": "6acdcb315b33da958f98ff9970322bcabd6d1f0daedfde342fc168aca3978fd5",
+      "outputPath": "result-replays/d6979de5-e6dc-42f6-aad1-cdb91a309b8b/output/result.json",
+      "outputSha256": "dc6ffcafe04ff793c9fb41cd9bdb3d39c6d71e201dceafbd722c1c24fbb344b9",
+      "terminalStatus": "completed"
+    },
+    {
+      "supplementaryAnalysisId": "vte-RD-3-informative-studies",
+      "description": "症状性静脉血栓栓塞事件，风险差（RD）尺度，3 项可提供信息的试验",
+      "estimator": "DerSimonian-Laird random effects inverse variance (meta.dl)",
+      "calculationJobId": "5fac88da-e9b2-4f85-9bf8-eacc519593b1",
+      "frozenInputPath": "deliverables/ma-tka-txa/supplementary/vte-RD-3-informative-studies.json",
+      "frozenInputSha256": "077c0106626994e5d976a83cebe84d300153795d4c12fb50e3f5845c568b01a0",
+      "outputPath": "result-replays/5fac88da-e9b2-4f85-9bf8-eacc519593b1/output/result.json",
+      "outputSha256": "278f1d8d0c68566a97393cb8b189befa4ce4cdafff9a378e54bbf54d51ec8990",
+      "terminalStatus": "completed"
+    }
+  ],
+  "primaryRun": {
+    "jobId": "meta-20261004065926-5a8b2fdb6e29",
+    "status": "succeeded",
+    "startedAt": "2026-10-04T06:59:27.714668Z",
+    "finishedAt": "2026-10-04T07:38:37.582213Z",
+    "elapsedSeconds": 2341,
+    "requestDigest": "6d6cc5223908e6c3cdc690975ea9ebf4b5a4cc5c6d5935d9c2993b4b434dacb0",
+    "releaseStatus": "ready_with_warnings",
+    "deliverable": true,
+    "releaseSummary": "The generated article is delivered with advisory findings; none of them makes it unreadable or hides a defect from its reader.",
+    "blockingReasons": [],
+    "warningReasons": [
+      "project_submission_quality_gate",
+      "manuscript_language",
+      "clinical_interpretation",
+      "citation_coverage"
+    ],
+    "degradedModules": [
+      {
+        "module": "protocol",
+        "status": "degraded",
+        "reason": "protocol_scope_deviation: The protocol differs from the original question on primary_outcome_type. Primary outcome analysed: Total blood loss (continuous outcome, expressed in mL or as calculated/estimated total perioperative blood loss, including maximum hemoglobin drop-derived or transfusion-adjusted estimates); secondary: Transfusion rate (dichotomous outcome; proportion of patients receiving allogeneic red blood cell transfusion) — designated as a primary outcome in the original review question and therefore analyzed with equal priority alongside total blood loss; Symptomatic venous thromboembolism (dichotomous outcome; composite of symptomatic deep vein thrombosis and pulmonary embolism, as confirmed by clinical assessment with objective imaging where reported) — designated as a primary outcome in the original review question and therefore analyzed with equal priority alongside total blood loss - the protocol holds one primary outcome."
+      },
+      {
+        "module": "synthesis",
+        "status": "degraded",
+        "reason": "trial_identity_assumed_from_publication: 1 pooled study reports neither a trial registration nor a trial name; each primary publication was taken as its own independent trial.; primary_timepoints_merged: Results reported at different time windows were analysed as one outcome, because the independent source verification judged each to match the protocol's primary outcome, time horizon included. Each trial contributes once; a multi-arm trial's contrasts enter together with their shared-control covariance, and their closed protocol subgroup values are kept as moderators.; primary_results_left_out: 4 verified primary-outcome result(s) were not entered into the primary analysis, so that no trial is counted twice: a trial reporting the same comparison more than once (several windows or population subgroups), or contrasts whose covariance is not known."
+      }
+    ],
+    "projectPath": "meta-analysis-runs/meta-20261004065926-5a8b2fdb6e29/output/20261004_065933_氨甲环酸用于全膝关节置换术围手术期减少失血的系统评价与_Meta_分析研究问题在接受初次单侧全膝关节",
+    "artifacts": [
+      {
+        "path": "meta-analysis-runs/meta-20261004065926-5a8b2fdb6e29/output/20261004_065933_氨甲环酸用于全膝关节置换术围手术期减少失血的系统评价与_Meta_分析研究问题在接受初次单侧全膝关节/analysis/synthesis_result.json",
+        "bytes": 4507,
+        "sha256": "1ab9c68f17d3afb8f746e7e7d4fee3ed33c49ce030ae7b8cb91b08609c50daea"
+      },
+      {
+        "path": "meta-analysis-runs/meta-20261004065926-5a8b2fdb6e29/output/20261004_065933_氨甲环酸用于全膝关节置换术围手术期减少失血的系统评价与_Meta_分析研究问题在接受初次单侧全膝关节/manuscript/draft.docx",
+        "bytes": 623771,
+        "sha256": "6e0b952446444311638aa91e9c9269b4e38ec3b0facd3da90a3446ffa3765f19"
+      },
+      {
+        "path": "meta-analysis-runs/meta-20261004065926-5a8b2fdb6e29/output/20261004_065933_氨甲环酸用于全膝关节置换术围手术期减少失血的系统评价与_Meta_分析研究问题在接受初次单侧全膝关节/manuscript/draft.md",
+        "bytes": 36558,
+        "sha256": "8383abb6d948850b7d46b81e1a8d009e6ad87a5393218c8adaaaff842fc9d229"
+      },
+      {
+        "path": "meta-analysis-runs/meta-20261004065926-5a8b2fdb6e29/output/20261004_065933_氨甲环酸用于全膝关节置换术围手术期减少失血的系统评价与_Meta_分析研究问题在接受初次单侧全膝关节/manuscript/draft.pdf",
+        "bytes": 651740,
+        "sha256": "39babaf28a0984cda7b5f93e6b4b6856d6dad0780b212c760fc7d37aaf42845b"
+      },
+      {
+        "path": "meta-analysis-runs/meta-20261004065926-5a8b2fdb6e29/output/20261004_065933_氨甲环酸用于全膝关节置换术围手术期减少失血的系统评价与_Meta_分析研究问题在接受初次单侧全膝关节/package/evidence_accounting.json",
+        "bytes": 2380,
+        "sha256": "e73569f263a2ff8cd68f8705de575597e06fb62fbcbd7a457ffc215df0e16ff3"
+      },
+      {
+        "path": "meta-analysis-runs/meta-20261004065926-5a8b2fdb6e29/output/20261004_065933_氨甲环酸用于全膝关节置换术围手术期减少失血的系统评价与_Meta_分析研究问题在接受初次单侧全膝关节/package/metaagent_export.zip",
+        "bytes": 2399731,
+        "sha256": "0530efbb84a9efea7f007e13402e09417f1c7bfafcc6ac854e7e98173249661f"
+      },
+      {
+        "path": "meta-analysis-runs/meta-20261004065926-5a8b2fdb6e29/output/20261004_065933_氨甲环酸用于全膝关节置换术围手术期减少失血的系统评价与_Meta_分析研究问题在接受初次单侧全膝关节/package/release_decision.json",
+        "bytes": 5213,
+        "sha256": "d40bf6ad645ebdfde374b5ba1535d6839e2d51a2350d8a3aca7d98b479455f76"
+      },
+      {
+        "path": "meta-analysis-runs/meta-20261004065926-5a8b2fdb6e29/output/20261004_065933_氨甲环酸用于全膝关节置换术围手术期减少失血的系统评价与_Meta_分析研究问题在接受初次单侧全膝关节/prisma_flow.json",
+        "bytes": 7373,
+        "sha256": "9ceef5c72e1aa5febd60c8797fe2b895237e84392c3138023707c3b8879a0805"
+      }
+    ],
+    "evidenceAccounting": {
+      "schema_version": 1,
+      "source": "prisma_flow.json",
+      "counts": {
+        "records_identified": 1652,
+        "identified_by_source": {
+          "internal_db": 446,
+          "pubmed": 1085,
+          "OpenAlex": 121
+        },
+        "database_hits": {
+          "pubmed": {
+            "hits": 1085,
+            "retrieved": 300,
+            "not_retrieved": 785
+          }
+        },
+        "duplicates_removed": 132,
+        "removed_by_automation_tools": 756,
+        "removed_for_other_reasons": 704,
+        "removed_before_screening_reasons": {
+          "supplementary-source relevance cap": 64,
+          "relevance cap before screening": 692,
+          "not retrieved from the source (retrieval limit)": 704
+        },
+        "screening_cap": {
+          "formula": "B(T) = min(T, max(floor, ceil(fraction * T)), ceiling)",
+          "T": 752,
+          "floor": 400,
+          "fraction": 0.5,
+          "ceiling": 1000,
+          "explicit_max": 60,
+          "budget": 60,
+          "cut": 692,
+          "ranking": "query concept groups matched in title/abstract, then lexical match strength, then a study-design and identifier tiebreak, then citation count (_merged_search_relevance_score)",
+          "pubmed_reserved": 30,
+          "pubmed_reservation": "up to half the budget is kept for PubMed-origin records in ranked order"
+        },
+        "records_screened": 60,
+        "records_excluded_at_screening": 35,
+        "reports_sought": 25,
+        "reports_not_retrieved": 15,
+        "reports_not_retrieved_reasons": {
+          "abstract only": 11,
+          "no text retrieved": 4
+        },
+        "reports_assessed": 10,
+        "reports_excluded": 3,
+        "studies_included": 7
+      },
+      "synthesis": {
+        "source": "analysis/synthesis_result.json",
+        "results_pooled": 4,
+        "studies_pooled": 3,
+        "pooled_study_ids": [
+          "22053253",
+          "29410968",
+          "39673144"
+        ],
+        "results_left_out": 0,
+        "reasons": {},
+        "results": {}
+      },
+      "arithmetic": [
+        {
+          "identity": "identified - duplicates - automation - other = screened",
+          "holds": true,
+          "computed": 60,
+          "recorded": 60
+        },
+        {
+          "identity": "screened - excluded = sought",
+          "holds": true,
+          "computed": 25,
+          "recorded": 25
+        },
+        {
+          "identity": "sought - not retrieved = assessed",
+          "holds": true,
+          "computed": 10,
+          "recorded": 10
+        },
+        {
+          "identity": "assessed - excluded = included",
+          "holds": true,
+          "computed": 7,
+          "recorded": 7
+        }
+      ]
+    },
+    "nextActions": [
+      "State each listed finding in plain words when handing the article over.",
+      "A finding is not a reason to run the job again; the same request reproduces it."
+    ]
+  },
+  "report": {
+    "path": "deliverables/ma-tka-txa/meta-analysis-report.md",
+    "sha256": "6ac32209fddd2cbb58a696a8a05a1d48bc23cddda523acab71f2f4c01fced670",
+    "role": "Reader-facing navigation and interpretation layer. Its counts are copied from the run's PRISMA flow and evidence accounting; its effect estimates come from the primary run's synthesis output and the supplementary deterministic analyses recorded above."
+  },
+  "note": "The primary run's quantitative synthesis covers the continuous primary outcome (total blood loss) only. Transfusion rate and symptomatic venous thromboembolism were analysed afterwards by the same deterministic engine on already-extracted study-level 2x2 data, because the original review question designates them as outcomes of equal priority.",
+  "generatedAt": "2026-10-04T07:46:32Z"
+}

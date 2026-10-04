@@ -1,0 +1,120 @@
+{
+  "jobId": "mr-20261004080024-eb6810ffa248",
+  "status": "succeeded",
+  "contractKind": "mendelian-randomization-report",
+  "exposure": "body mass index",
+  "outcome": "coronary artery disease",
+  "analysisDirection": "forward",
+  "outputLanguage": "zh-CN",
+  "analysisPairs": 1,
+  "instruments": 64,
+  "request": {
+    "exposure": "body mass index",
+    "outcome": "coronary artery disease",
+    "outputLanguage": "zh",
+    "analysisDirection": "forward",
+    "exposureSource": {
+      "pubmedId": "25673413",
+      "type": "gwas_catalog"
+    },
+    "outcomeSource": {
+      "pubmedId": "26343387",
+      "type": "gwas_catalog"
+    }
+  },
+  "modules": {
+    "instrumentSelection": {
+      "status": "ok"
+    },
+    "primaryEstimate": {
+      "status": "ok"
+    },
+    "interpretation": {
+      "status": "ok"
+    },
+    "diagnosticPlots": {
+      "status": "ok",
+      "checks": [
+        {
+          "scatter_plot": {
+            "status": "ok",
+            "pages": 1,
+            "images": 1
+          },
+          "forest_plot": {
+            "status": "ok",
+            "pages": 1,
+            "images": 1
+          },
+          "funnel_plot": {
+            "status": "ok",
+            "pages": 1,
+            "images": 1
+          },
+          "loo_plot": {
+            "status": "ok",
+            "pages": 1,
+            "images": 1
+          }
+        }
+      ]
+    },
+    "sensitivityAnalyses": {
+      "status": "ok"
+    },
+    "steigerDirection": {
+      "status": "ok"
+    },
+    "reverseMR": {
+      "status": "skipped",
+      "reason": "bidirectional analysis was not requested"
+    }
+  },
+  "degraded": false,
+  "usage": {
+    "requests": 38,
+    "cacheHitTokens": 68348,
+    "cacheMissTokens": 39090,
+    "outputTokens": 217364,
+    "model": "deepseek-flash"
+  },
+  "artifacts": [
+    "analysis-data/1-GCST002783-GCST003116/conmix.csv",
+    "analysis-data/1-GCST002783-GCST003116/diagnostic-plots.json",
+    "analysis-data/1-GCST002783-GCST003116/environment.json",
+    "analysis-data/1-GCST002783-GCST003116/f_statistics.csv",
+    "analysis-data/1-GCST002783-GCST003116/forest_plot.pdf",
+    "analysis-data/1-GCST002783-GCST003116/forest_plot.png",
+    "analysis-data/1-GCST002783-GCST003116/funnel_plot.pdf",
+    "analysis-data/1-GCST002783-GCST003116/funnel_plot.png",
+    "analysis-data/1-GCST002783-GCST003116/harmonisation.json",
+    "analysis-data/1-GCST002783-GCST003116/harmonised-rows.csv",
+    "analysis-data/1-GCST002783-GCST003116/heterogeneity.csv",
+    "analysis-data/1-GCST002783-GCST003116/instrument-selection.json",
+    "analysis-data/1-GCST002783-GCST003116/loo_plot.pdf",
+    "analysis-data/1-GCST002783-GCST003116/loo_plot.png",
+    "analysis-data/1-GCST002783-GCST003116/mr_results.csv",
+    "analysis-data/1-GCST002783-GCST003116/mr_summary.json",
+    "analysis-data/1-GCST002783-GCST003116/mrpresso.csv",
+    "analysis-data/1-GCST002783-GCST003116/pleiotropy.csv",
+    "analysis-data/1-GCST002783-GCST003116/radial.csv",
+    "analysis-data/1-GCST002783-GCST003116/replay/analysis.R",
+    "analysis-data/1-GCST002783-GCST003116/replay/inputs/exposure.csv",
+    "analysis-data/1-GCST002783-GCST003116/replay/inputs/outcome.csv",
+    "analysis-data/1-GCST002783-GCST003116/replay/manifest.json",
+    "analysis-data/1-GCST002783-GCST003116/replay/observed-environment.json",
+    "analysis-data/1-GCST002783-GCST003116/replay/options.json",
+    "analysis-data/1-GCST002783-GCST003116/replay/run.R",
+    "analysis-data/1-GCST002783-GCST003116/scatter_plot.pdf",
+    "analysis-data/1-GCST002783-GCST003116/scatter_plot.png",
+    "analysis-data/1-GCST002783-GCST003116/selected-source-rows.csv",
+    "analysis-data/1-GCST002783-GCST003116/steiger.csv",
+    "mendelian-randomization-report.md",
+    "mendelian-randomization-pair-results.json",
+    "mendelian-randomization-inputs.json",
+    "mendelian-randomization-open-sources.json",
+    "inputs/open-exposure.csv",
+    "inputs/open-outcome.csv",
+    "revision-notes.md"
+  ]
+}
