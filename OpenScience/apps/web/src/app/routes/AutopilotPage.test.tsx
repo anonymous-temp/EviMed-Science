@@ -43,6 +43,27 @@ describe("scheduled tasks", () => {
     await userEvent.click(within(panel).getByRole("button", { name: "返回任务列表" }));
     expect(screen.getByTestId("location")).toHaveTextContent(/^\/app\/autopilot$/);
   });
+  it("says what a model-chosen run was set to look into, and nothing for one the date rotation chose", async () => {
+    mocks.listEpisodes.mockResolvedValue({ items: [
+      { ...episode, payload: { ...episode.payload, selection: { source: "model", taskType: "evidence-update", focus: "核对尚未复核的结论", reason: "上次的结论还没有独立复核" } } },
+      { ...episode, id: "ep-two", payload: { ...episode.payload, createdAt: "2026-09-30T00:00:00Z", selection: { source: "date-rotation", taskType: "evidence-update", fallbackReason: "usage_budget_exceeded" } } },
+    ] });
+    render(); const panel = await detail();
+    expect(panel).toHaveTextContent("本次关注：核对尚未复核的结论");
+    expect(panel).not.toHaveTextContent("usage_budget_exceeded");
+    expect(within(panel).getAllByText(/本次关注/)).toHaveLength(1);
+  });
+  it("tells the researcher why a task stopped itself and which task type was paused, and that a restart resumes it", async () => {
+    const stopped = { ...agenda, payload: { ...agenda.payload, enabled: false, status: "paused", scheduleState: "paused", nextRunAt: null,
+      pauseReason: "问题已经回答", plannerStop: { kind: "needs_input", reason: "请补充原始数据表", at: "2026-10-01T00:00:00Z" },
+      taskTypeState: { "evidence-update": { consecutiveFailures: 2, pausedAt: "2026-10-01T00:00:00Z" }, "literature-sentinel": { consecutiveFailures: 1 } } } };
+    mocks.listAgendas.mockResolvedValue({ items: [stopped] }); mocks.getAgenda.mockResolvedValue(stopped);
+    render(); const panel = await detail();
+    expect(panel).toHaveTextContent("需要你补充：请补充原始数据表");
+    expect(panel).toHaveTextContent("证据更新连续未能运行，已暂停");
+    expect(panel).not.toHaveTextContent("文献追踪连续未能运行");
+    expect(within(panel).getByRole("button", { name: "启用任务" })).toBeEnabled();
+  });
   it("searches tasks and keeps selection in the URL", async () => {
     render("/app/autopilot"); await screen.findByText("心衰证据追踪");
     await userEvent.type(screen.getByRole("searchbox"), "missing"); expect(screen.queryByRole("button", { name: "心衰证据追踪" })).not.toBeInTheDocument();

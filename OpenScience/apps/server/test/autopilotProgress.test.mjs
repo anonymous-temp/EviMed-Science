@@ -24,6 +24,19 @@ test("prior progress retains actual claims, failed work, rejected directions and
   assert.match(renderAutopilotProgress(result), /untrusted context/i);
 });
 
+test("what an earlier episode was chosen to look into travels with it, bounded, and an episode chosen by the rotation carries nothing", () => {
+  const result = buildAutopilotProgress({ ...input, episodes: [
+    episode("chosen", "2026-09-29", "failed", { selection: { source: "model", focus: `核对分母${"长".repeat(900)}`, reason: "x" }, error: { code: "runtime_died" } }),
+    episode("rotation", "2026-09-28", "merged", { selection: { source: "date-rotation", fallbackReason: "autopilot_planner_unavailable" } }),
+    episode("before", "2026-09-27", "merged"),
+  ] });
+  assert.equal(result.episodes[0].focus.length, 300);
+  assert.match(result.episodes[0].focus, /^核对分母/);
+  assert.equal(Object.hasOwn(result.episodes[1], "focus"), false);
+  assert.equal(Object.hasOwn(result.episodes[2], "focus"), false);
+  assert.equal(result.truncated, true, "the cut is said, not silent");
+});
+
 test("the snapshot excludes self, future episodes, other agendas, projects and owners", () => {
   const result = buildAutopilotProgress({ ...input, episodes: [episode("past", "2026-09-29", "merged"), episode("current", "2026-09-29", "queued"), episode("future", "2026-10-01", "merged"),
     { ...episode("foreign", "2026-09-29", "merged"), ownerId: "bob" }, { ...episode("other-project", "2026-09-29", "merged"), projectId: "elsewhere" },

@@ -571,6 +571,7 @@ test("operator metrics endpoint requires a bearer token and exposes only low-car
       assert.match(body, /^# HELP open_science_up /m);
       assert.match(body, /^open_science_up 1$/m);
       assert.match(body, /^open_science_ready 1$/m);
+      assert.match(body, /^open_science_autopilot_planner_decisions_total\{result="run"\} 0$/m);
       assert.match(body, /^open_science_readiness_check\{check="dataDir",code="ok"\} 1$/m);
       assert.match(body, /^open_science_process_memory_bytes\{kind="rss"\} \d+$/m);
       assert.match(body, /^open_science_http_active_requests 1$/m);

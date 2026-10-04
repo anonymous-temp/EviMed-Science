@@ -18,7 +18,7 @@ import { FilesSkeleton } from "@/components/cards/Skeletons";
 import { PageTitle } from "@/components/layout/PageTitle";
 import { TaskForm } from "@/components/autopilot/TaskForm";
 import { TaskTimeline } from "@/components/autopilot/TaskTimeline";
-import { activeAgenda, recurrence, RECOMMENDATIONS, revisionConflict, scheduleOf, scheduleStatus, type Recommendation } from "@/components/autopilot/taskPresentation";
+import { activeAgenda, pauseNotes, recurrence, RECOMMENDATIONS, revisionConflict, scheduleOf, scheduleStatus, type Recommendation } from "@/components/autopilot/taskPresentation";
 
 type Action = { kind: "pause" | "archive" | "resume" | "run" | "follow-up"; agenda: AgendaRecord; requestId?: string; note?: string };
 
@@ -183,7 +183,7 @@ function ProjectAutopilotPage({ projectId }: { projectId: string }) {
     <section aria-label="任务详情" className={cn("min-h-0 min-w-0 flex-1 flex-col", selectedId ? "flex" : "hidden md:flex")}>
       {selected ? <>
         <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-5 py-4">
-          <div className="min-w-0"><Button variant="text" size="sm" aria-label="返回任务列表" className="mb-2 md:hidden" onClick={() => select(null)}><ArrowLeft size={16} aria-hidden="true" />任务列表</Button><h2 className="text-body font-semibold text-text">{selected.payload.title}</h2><p className="mt-1 text-caption text-text-3">{recurrence(scheduleOf(selected))} · {scheduleOf(selected).timeZone}</p><p className="mt-1 text-caption text-text-3">{scheduleStatus(selected)}</p></div>
+          <div className="min-w-0"><Button variant="text" size="sm" aria-label="返回任务列表" className="mb-2 md:hidden" onClick={() => select(null)}><ArrowLeft size={16} aria-hidden="true" />任务列表</Button><h2 className="text-body font-semibold text-text">{selected.payload.title}</h2><p className="mt-1 text-caption text-text-3">{recurrence(scheduleOf(selected))} · {scheduleOf(selected).timeZone}</p><p className="mt-1 text-caption text-text-3">{scheduleStatus(selected)}</p>{pauseNotes(selected).map(note => <p key={note} className="mt-1 whitespace-pre-wrap break-words text-caption text-text-2">{note}</p>)}</div>
           <div className="flex flex-wrap gap-1">
             <Button variant="text" size="sm" disabled={busy} onClick={() => setEditor({ agenda: selected })}>编辑任务</Button>
             <Button variant="text" size="sm" disabled={busy} onClick={() => activeAgenda(selected) ? setConfirm({ kind: "pause", agenda: selected }) : void operate({ kind: "resume", agenda: selected })}>{activeAgenda(selected) ? "暂停任务" : "启用任务"}</Button>

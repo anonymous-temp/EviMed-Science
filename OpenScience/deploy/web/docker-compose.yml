@@ -453,6 +453,10 @@ services:
       OPEN_SCIENCE_AUTOPILOT_ENABLED: ${OPEN_SCIENCE_AUTOPILOT_ENABLED:-true}
       OPEN_SCIENCE_AUTOPILOT_POLL_MS: ${OPEN_SCIENCE_AUTOPILOT_POLL_MS:-1000}
       OPEN_SCIENCE_AUTOPILOT_LEASE_MS: ${OPEN_SCIENCE_AUTOPILOT_LEASE_MS:-300000}
+      # The planner that chooses each proactive episode's task type from the
+      # agenda's progress (N10). Value-less: unset keeps config.mjs's default,
+      # on; off falls back to the date rotation, and every episode records it.
+      OPEN_SCIENCE_AUTOPILOT_PLANNER_ENABLED:
       # IM: Feishu bots, the channel port and the own-app reservations
       # (imService.mjs). Value-less: unset keeps config.mjs's defaults — the
       # module off, every reserved channel off, device sign-in off — so a

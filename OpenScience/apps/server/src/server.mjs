@@ -203,6 +203,7 @@ import { runUsageKeys } from "./runUsage.mjs";
 import { inspectAutopilotDispatch, reclaimUnsentAutopilotRuntime } from "./autopilotDispatchRecovery.mjs";
 import { createAutopilotRoutes } from "./autopilotRoutes.mjs";
 import { AutopilotWorker } from "./autopilotWorker.mjs";
+import { AutopilotPlanner, autopilotPlannerMetricFamily } from "./autopilotNextAction.mjs";
 // 「前沿动态」, the frontier feed (plan 2026-09-21 §7): the plugin client, the
 // ingest, package E's editor and pipeline, the reader's service and routes, and
 // the worker that turns them.
@@ -1615,9 +1616,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const library = createLibrary({ config, store, documents: productDocuments, sources: sourceService, capsules: capsuleService,
     kbIndex, report: (code) => process.stderr.write(`personal library: ${code}\n`) });
   libraryService = library.service;
+  const autopilotPlanner = new AutopilotPlanner(config, { usageLedger });
   const autopilotService = productDocuments && productJobs ? new AutopilotService({
     documents: productDocuments, jobs: productJobs, usage: usageLedger, notifications: notificationService,
     capsules: capsuleService,
+    // The model decision before each episode: metered under purpose `autopilot`,
+    // and absent it the date rotation chooses (autopilotNextAction.mjs).
+    planner: autopilotPlanner,
     authorizeContinuation: async (userId, projectId, binding) => {
       if (!resultImpacts) throw new HttpError(409, "result_impact_source_unavailable", "Research continuation is unavailable.");
       await resultImpacts.assertContinuation(userId, projectId, binding);
@@ -4608,6 +4613,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           vcr,
           credits,
           learning: { enabled: Boolean(learningWorker), counters: learningMetrics },
+          autopilotPlanner,
           alertReceiver,
           availability,
           eventPump: runtimeEventPump,
@@ -7399,7 +7405,7 @@ function addHistogramMetric(lines, name, help, series) {
   }
 }
 
-async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, alertReceiver = null, availability = null, eventPump = null }) {
+async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null }) {
   const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate, frontier, review, geo, vcr, credits);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
@@ -7760,6 +7766,10 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
   // uses, the day's spend, and what launches mounted (learningMetrics.mjs, §13).
   const learningLedger = learning?.enabled && productDatabase ? await learningLedgerCounts(productDatabase).catch(() => null) : null;
   for (const family of learningMetricFamilies(Boolean(learning?.enabled), learningLedger, learning?.counters ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
+  // The scheduled-research planner's decisions and how each ended
+  // (autopilotNextAction.mjs): the fallback share says who is choosing.
+  const plannerDecisions = autopilotPlannerMetricFamily(autopilotPlanner);
+  addMetric(lines, plannerDecisions.name, plannerDecisions.help, plannerDecisions.type, plannerDecisions.series);
   // Refusals by model provider and status; 402 is an exhausted balance and
   // pages (providerRefusals.mjs, alert ModelProviderBalanceExhausted).
   const refusals = providerRefusalMetricFamily();

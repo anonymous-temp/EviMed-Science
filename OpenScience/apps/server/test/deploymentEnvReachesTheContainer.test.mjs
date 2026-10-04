@@ -81,6 +81,10 @@ const operatorLevers = {
   // classifier off got the shipped default and no indication their setting had
   // been dropped on the floor.
   OPEN_SCIENCE_LLM_ROUTING_ENABLED: ["open-science-web"],
+  // The planner that chooses each proactive episode's task type (N10,
+  // 2026-10-04): on by default and a model call per scheduled episode, so the
+  // off switch is the one that has to arrive.
+  OPEN_SCIENCE_AUTOPILOT_PLANNER_ENABLED: ["open-science-web"],
   // The learning loop defaults on since 2026-09-08, which is what makes the
   // off switch load-bearing: a deployment that decides not to spend on
   // distillation edits `.env`, and if the variable never reaches the service

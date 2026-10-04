@@ -15,7 +15,7 @@
  * `other` — bookkeeping never fails a model call.
  */
 
-/** @typedef {'kernel'|'memory-extraction'|'routing'|'title'|'engine'|'capsule-scan'|'channel-intent'|'source-understanding'|'learning'|'frontier'|'review'|'geo'|'web-search'|'other'} UsagePurpose */
+/** @typedef {'kernel'|'memory-extraction'|'routing'|'title'|'engine'|'capsule-scan'|'channel-intent'|'source-understanding'|'learning'|'autopilot'|'frontier'|'review'|'geo'|'vcr'|'web-search'|'other'} UsagePurpose */
 
 /** Every purpose, in report order. `frontier` is the frontier feed reading
  *  the literature for everyone (screening, editing, the daily issue): one
@@ -30,7 +30,12 @@
  *  researcher's caps. `web-search` is the web-search gateway's own model call
  *  — Bailian's web search rides on a Qwen request whose prompt the retrieved
  *  pages are billed into — made for a researcher's run and charged to it like
- *  the kernel's calls, caps included. */
+ *  the kernel's calls, caps included. `autopilot` is the one decision a
+ *  scheduled research agenda makes before each episode — what the next
+ *  episode should do, from the progress so far — made on a researcher's own
+ *  agenda and charged to them like the episode it chooses for, caps included;
+ *  a line of its own so what choosing costs is never folded into what
+ *  researching costs. */
 export const USAGE_PURPOSES = /** @type {readonly UsagePurpose[]} */ (Object.freeze([
   'kernel',
   'memory-extraction',
@@ -41,6 +46,7 @@ export const USAGE_PURPOSES = /** @type {readonly UsagePurpose[]} */ (Object.fre
   'channel-intent',
   'source-understanding',
   'learning',
+  'autopilot',
   'frontier',
   'review',
   'geo',
@@ -60,6 +66,7 @@ export const USAGE_PURPOSE_LABELS_ZH = /** @type {Readonly<Record<UsagePurpose, 
   'channel-intent': '渠道意图',
   'source-understanding': '资料理解',
   learning: '学习做法',
+  autopilot: '主动科研规划',
   frontier: '前沿动态',
   review: '成果审查',
   geo: '循证 GEO',
