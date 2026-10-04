@@ -20,10 +20,11 @@
  */
 
 import { validateKnowledgePack } from './vcrKnowledgePack.mjs'
+import breastCancer from './vcr-packs/breast_cancer.json' with { type: 'json' }
 import nsclc from './vcr-packs/nsclc.json' with { type: 'json' }
 
 /** @type {readonly Record<string, any>[]} */
-const FILES = [nsclc]
+const FILES = [nsclc, breastCancer]
 
 /** @param {Record<string, any>} value @returns {any} */
 function deepFreeze(value) {

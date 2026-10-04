@@ -1,0 +1,3546 @@
+{
+  "schema": "evimed.vcr.knowledge-pack/1",
+  "id": "breast_cancer",
+  "disease": {
+    "key": "breast_cancer",
+    "name": "Breast cancer",
+    "nameZh": "乳腺癌",
+    "aliases": [
+      "breast carcinoma",
+      "carcinoma of the breast",
+      "mammary carcinoma"
+    ],
+    "aliasesZh": [
+      "乳腺癌",
+      "乳癌"
+    ]
+  },
+  "version": 1,
+  "status": "curated",
+  "updated": "2026-10-04",
+  "sources": [
+    {
+      "id": "ncit",
+      "title": "NCI Thesaurus (flat file)",
+      "url": "https://evs.nci.nih.gov/ftp1/NCI_Thesaurus/Thesaurus.FLAT.zip",
+      "accessed": "2026-10-04",
+      "licence": "CC-BY-4.0",
+      "publisher": "National Cancer Institute, Enterprise Vocabulary Services",
+      "version": "26.09d",
+      "note": "Released under CC BY 4.0 (ThesaurusTermsofUse.htm). Version string from the EVS REST metadata (latest, dated 2026-09-28); the flat file used is dated 2026-09-29. Preferred names and definitions are NCIt's own."
+    },
+    {
+      "id": "ohdsi_788",
+      "title": "OHDSI PhenotypeLibrary cohort 788: [P] Breast cancer",
+      "url": "https://raw.githubusercontent.com/OHDSI/PhenotypeLibrary/v3.37.0/inst/cohorts/788.json",
+      "accessed": "2026-10-04",
+      "licence": "Apache-2.0",
+      "publisher": "OHDSI",
+      "version": "PhenotypeLibrary v3.37.0",
+      "note": "Library status \"Pending peer review\": not accepted or validated. README and package DESCRIPTION state Apache-2.0; the repository has no LICENSE file. Cohort JSON opened and read; only its logic and one concept id (4112853) are used. Cohorts 636 and 991 use the same concept and are Pending / Pending peer review."
+    },
+    {
+      "id": "nct01958021",
+      "title": "NCT01958021: Study of Efficacy and Safety of LEE011 in Postmenopausal Women With Advanced Breast Cancer",
+      "url": "https://clinicaltrials.gov/study/NCT01958021",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true,
+      "note": "Eligibility and outcome measures restated and structured in the pack's own words."
+    },
+    {
+      "id": "nct01740427",
+      "title": "NCT01740427: A Study of Palbociclib (PD-0332991) + Letrozole vs. Letrozole For 1st Line Treatment Of Postmenopausal Women With ER+/HER2- Advanced Breast Cancer (PALOMA-2)",
+      "url": "https://clinicaltrials.gov/study/NCT01740427",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true,
+      "note": "Eligibility and outcome measures restated and structured in the pack's own words."
+    },
+    {
+      "id": "nct02246621",
+      "title": "NCT02246621: A Study of Nonsteroidal Aromatase Inhibitors Plus Abemaciclib (LY2835219) in Postmenopausal Women With Breast Cancer",
+      "url": "https://clinicaltrials.gov/study/NCT02246621",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true,
+      "note": "Eligibility and outcome measures restated and structured in the pack's own words."
+    },
+    {
+      "id": "nct03155997",
+      "title": "NCT03155997: Endocrine Therapy With or Without Abemaciclib (LY2835219) Following Surgery in Participants With Breast Cancer",
+      "url": "https://clinicaltrials.gov/study/NCT03155997",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true,
+      "note": "Eligibility and outcome measures restated and structured in the pack's own words."
+    },
+    {
+      "id": "nct02513394",
+      "title": "NCT02513394: PALbociclib CoLlaborative Adjuvant Study",
+      "url": "https://clinicaltrials.gov/study/NCT02513394",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true,
+      "note": "Eligibility and outcome measures restated and structured in the pack's own words."
+    },
+    {
+      "id": "nct03901339",
+      "title": "NCT03901339: Study of Sacituzumab Govitecan-hziy Versus Treatment of Physician's Choice in Participants With HR+/HER2- Metastatic Breast Cancer",
+      "url": "https://clinicaltrials.gov/study/NCT03901339",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true,
+      "note": "Eligibility and outcome measures restated and structured in the pack's own words."
+    },
+    {
+      "id": "nct04494425",
+      "title": "NCT04494425: Study of Trastuzumab Deruxtecan (T-DXd) vs Investigator's Choice Chemotherapy in HER2-low, Hormone Receptor Positive, Metastatic Breast Cancer",
+      "url": "https://clinicaltrials.gov/study/NCT04494425",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true,
+      "note": "Eligibility and outcome measures restated and structured in the pack's own words."
+    },
+    {
+      "id": "nct03529110",
+      "title": "NCT03529110: DS-8201a Versus T-DM1 for Human Epidermal Growth Factor Receptor 2 (HER2)-Positive, Unresectable and/or Metastatic Breast Cancer Previously Treated With Trastuzumab and Taxane …",
+      "url": "https://clinicaltrials.gov/study/NCT03529110",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true,
+      "note": "Eligibility and outcome measures restated and structured in the pack's own words."
+    },
+    {
+      "id": "nct04622319",
+      "title": "NCT04622319: A Study of Trastuzumab Deruxtecan (T-DXd) Versus Trastuzumab Emtansine (T-DM1) in High-risk HER2-positive Participants With Residual Invasive Breast Cancer Following Neoadjuvant …",
+      "url": "https://clinicaltrials.gov/study/NCT04622319",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true,
+      "note": "Eligibility and outcome measures restated and structured in the pack's own words."
+    },
+    {
+      "id": "nct01772472",
+      "title": "NCT01772472: A Study of Trastuzumab Emtansine Versus Trastuzumab as Adjuvant Therapy in Patients With HER2-Positive Breast Cancer Who Have Residual Tumor in the Breast or Axillary Lymph Nodes …",
+      "url": "https://clinicaltrials.gov/study/NCT01772472",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true,
+      "note": "Eligibility and outcome measures restated and structured in the pack's own words."
+    },
+    {
+      "id": "nct02614794",
+      "title": "NCT02614794: A Study of Tucatinib vs. Placebo in Combination With Capecitabine & Trastuzumab in Patients With Advanced HER2+ Breast Cancer",
+      "url": "https://clinicaltrials.gov/study/NCT02614794",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true,
+      "note": "Eligibility and outcome measures restated and structured in the pack's own words."
+    },
+    {
+      "id": "nct03734029",
+      "title": "NCT03734029: Trastuzumab Deruxtecan (DS-8201a) Versus Investigator's Choice for HER2-low Breast Cancer That Has Spread or Cannot be Surgically Removed [DESTINY-Breast04]",
+      "url": "https://clinicaltrials.gov/study/NCT03734029",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true,
+      "note": "Eligibility and outcome measures restated and structured in the pack's own words."
+    },
+    {
+      "id": "nct02819518",
+      "title": "NCT02819518: Study of Pembrolizumab (MK-3475) Plus Chemotherapy vs. Placebo Plus Chemotherapy for Previously Untreated Locally Recurrent Inoperable or Metastatic Triple Negative Breast Cancer …",
+      "url": "https://clinicaltrials.gov/study/NCT02819518",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true,
+      "note": "Eligibility and outcome measures restated and structured in the pack's own words."
+    },
+    {
+      "id": "nct03036488",
+      "title": "NCT03036488: Study of Pembrolizumab (MK-3475) Plus Chemotherapy vs Placebo Plus Chemotherapy as Neoadjuvant Therapy and Pembrolizumab vs Placebo as Adjuvant Therapy in Participants With Triple …",
+      "url": "https://clinicaltrials.gov/study/NCT03036488",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true,
+      "note": "Eligibility and outcome measures restated and structured in the pack's own words."
+    },
+    {
+      "id": "nct02425891",
+      "title": "NCT02425891: A Study of Atezolizumab in Combination With Nab-Paclitaxel Compared With Placebo With Nab-Paclitaxel for Participants With Previously Untreated Metastatic Triple-Negative Breast …",
+      "url": "https://clinicaltrials.gov/study/NCT02425891",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true,
+      "note": "Eligibility and outcome measures restated and structured in the pack's own words."
+    },
+    {
+      "id": "nct03125902",
+      "title": "NCT03125902: A Study of Atezolizumab and Paclitaxel Versus Placebo and Paclitaxel in Participants With Previously Untreated Locally Advanced or Metastatic Triple Negative Breast Cancer (TNBC)",
+      "url": "https://clinicaltrials.gov/study/NCT03125902",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true,
+      "note": "Eligibility and outcome measures restated and structured in the pack's own words."
+    },
+    {
+      "id": "nct02574455",
+      "title": "NCT02574455: Trial of Sacituzumab Govitecan in Participants With Refractory/Relapsed Metastatic Triple-Negative Breast Cancer (TNBC)",
+      "url": "https://clinicaltrials.gov/study/NCT02574455",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true,
+      "note": "Eligibility and outcome measures restated and structured in the pack's own words."
+    },
+    {
+      "id": "nct02032823",
+      "title": "NCT02032823: Olaparib as Adjuvant Treatment in Patients With Germline BRCA Mutated High Risk HER2 Negative Primary Breast Cancer",
+      "url": "https://clinicaltrials.gov/study/NCT02032823",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true,
+      "note": "Eligibility and outcome measures restated and structured in the pack's own words."
+    },
+    {
+      "id": "nct02000622",
+      "title": "NCT02000622: Assessment of the Efficacy and Safety of Olaparib Monotherapy Versus Physicians Choice Chemotherapy in the Treatment of Metastatic Breast Cancer Patients With Germline BRCA1/2 Mutations.",
+      "url": "https://clinicaltrials.gov/study/NCT02000622",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true,
+      "note": "Eligibility and outcome measures restated and structured in the pack's own words."
+    },
+    {
+      "id": "nct01945775",
+      "title": "NCT01945775: A Study Evaluating Talazoparib (BMN 673), a PARP Inhibitor, in Advanced and/or Metastatic Breast Cancer Patients With BRCA Mutation (EMBRACA Study)",
+      "url": "https://clinicaltrials.gov/study/NCT01945775",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true,
+      "note": "Eligibility and outcome measures restated and structured in the pack's own words."
+    },
+    {
+      "id": "fda_endpoints",
+      "title": "FDA guidance: Clinical Trial Endpoints for the Approval of Cancer Drugs and Biologics (December 2018)",
+      "url": "https://www.fda.gov/regulatory-information/search-fda-guidance-documents/clinical-trial-endpoints-approval-cancer-drugs-and-biologics",
+      "accessed": "2026-10-04",
+      "licence": "link-only",
+      "publisher": "U.S. Food and Drug Administration",
+      "note": "Landing page and the guidance PDF (fda.gov/media/71195/download) were opened and read; facts restated in own words."
+    },
+    {
+      "id": "fda_pcr",
+      "title": "FDA guidance: Pathological Complete Response in Neoadjuvant Treatment of High-Risk Early-Stage Breast Cancer: Use as an Endpoint to Support Accelerated Approval (July 2020, Revision 1)",
+      "url": "https://www.fda.gov/regulatory-information/search-fda-guidance-documents/pathological-complete-response-neoadjuvant-treatment-high-risk-early-stage-breast-cancer-use",
+      "accessed": "2026-10-04",
+      "licence": "link-only",
+      "publisher": "U.S. Food and Drug Administration",
+      "note": "Landing page and the guidance PDF (fda.gov/media/83507/download) were opened and read; facts restated in own words."
+    },
+    {
+      "id": "ema_anticancer",
+      "title": "EMA Guideline on the clinical evaluation of anticancer medicinal products (EMA/CHMP/205/95 Rev.6, adopted November 2023)",
+      "url": "https://www.ema.europa.eu/system/files/documents/scientific-guideline/anticancer-gl-rev-6-adopted-chmp-november-2023_en.pdf",
+      "accessed": "2026-10-04",
+      "licence": "link-only",
+      "publisher": "European Medicines Agency",
+      "note": "Guideline PDF opened and read; facts restated in own words."
+    },
+    {
+      "id": "ema_appendix4",
+      "title": "EMA Appendix 4 to the guideline on the evaluation of anticancer medicinal products: condition specific guidance, section 6 on pCR in neoadjuvant breast cancer (EMA/CHMP/703715/2012 Rev. 2)",
+      "url": "https://www.ema.europa.eu/en/documents/scientific-guideline/evaluation-anticancer-medicinal-products-man-appendix-4-condition-specific-guidance-revision-2_en.pdf",
+      "accessed": "2026-10-04",
+      "licence": "link-only",
+      "publisher": "European Medicines Agency",
+      "note": "Guideline PDF opened and read (section 6); facts restated in own words."
+    },
+    {
+      "id": "recist11",
+      "title": "Eisenhauer EA et al. New response evaluation criteria in solid tumours: revised RECIST guideline (version 1.1). Eur J Cancer 2009;45:228-47",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/19097774/",
+      "accessed": "2026-10-04",
+      "licence": "link-only",
+      "publisher": "European Journal of Cancer (PubMed record)",
+      "note": "PubMed record (abstract) read through NCBI E-utilities; the full text was not opened."
+    },
+    {
+      "id": "steep",
+      "title": "Hudis CA et al. Proposal for standardized definitions for efficacy end points in adjuvant breast cancer trials: the STEEP system. J Clin Oncol 2007;25:2127-32",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/17513820/",
+      "accessed": "2026-10-04",
+      "licence": "link-only",
+      "publisher": "Journal of Clinical Oncology (PubMed record)",
+      "note": "PubMed record (abstract) read through NCBI E-utilities; the full text and its event tables were not opened, so no STEEP event list is restated here."
+    },
+    {
+      "id": "asco_cap_her2",
+      "title": "Wolff AC et al. Human Epidermal Growth Factor Receptor 2 Testing in Breast Cancer: ASCO-College of American Pathologists Guideline Update. J Clin Oncol 2023;41:3867-72",
+      "url": "https://pubmed.ncbi.nlm.nih.gov/37284804/",
+      "accessed": "2026-10-04",
+      "licence": "link-only",
+      "publisher": "Journal of Clinical Oncology (PubMed record)",
+      "note": "PubMed record (abstract) read through NCBI E-utilities; the full guideline was not opened."
+    },
+    {
+      "id": "fda_elacestrant",
+      "title": "FDA approves elacestrant for ER-positive, HER2-negative, ESR1-mutated advanced or metastatic breast cancer",
+      "url": "https://www.fda.gov/drugs/resources-information-approved-drugs/fda-approves-elacestrant-er-positive-her2-negative-esr1-mutated-advanced-or-metastatic-breast-cancer",
+      "accessed": "2026-10-04",
+      "licence": "link-only",
+      "publisher": "U.S. Food and Drug Administration",
+      "note": "Page opened and read; facts restated in own words."
+    },
+    {
+      "id": "fda_piqray_label",
+      "title": "FDA prescribing information: PIQRAY (alpelisib) tablets, revised 01/2024",
+      "url": "https://www.accessdata.fda.gov/drugsatfda_docs/label/2024/212526s009lbl.pdf",
+      "accessed": "2026-10-04",
+      "licence": "link-only",
+      "publisher": "U.S. Food and Drug Administration",
+      "note": "Label PDF opened; indication and patient-selection statement read; facts restated in own words."
+    },
+    {
+      "id": "eortc_qlqc30",
+      "title": "EORTC Quality of Life Group: QLQ-C30 questionnaire page",
+      "url": "https://qol.eortc.org/questionnaire/eortc-qlq-c30/",
+      "accessed": "2026-10-04",
+      "licence": "link-only",
+      "publisher": "EORTC Quality of Life Group",
+      "note": "Page opened; it identifies the QLQ-C30 as the EORTC core quality-of-life questionnaire for cancer patients and version 3.0 as the current version. No questionnaire text is reproduced."
+    },
+    {
+      "id": "icd10cm_nchs",
+      "title": "ICD-10-CM FY2027 code files (NCHS file area, order file header C50)",
+      "url": "https://ftp.cdc.gov/pub/Health_Statistics/NCHS/Publications/ICD10CM/2027/",
+      "accessed": "2026-10-04",
+      "licence": "link-only",
+      "publisher": "CDC National Center for Health Statistics",
+      "version": "FY2027",
+      "note": "icd10cm-code-descriptions-2027.zip opened; the category C50 is a header of the order file. The CDC statement on reuse (cdc.gov/other/agencymaterials.html) says most CDC content is public domain with attribution, no endorsement implied and no change of substantive content; the NCHS ICD-10-CM page itself states no separate terms. Only the code identifier is used."
+    },
+    {
+      "id": "evimed_hints",
+      "title": "EviMed authored dataset field-name hints",
+      "url": "https://www.evimed.com/",
+      "accessed": "2026-10-04",
+      "licence": "evimed-own",
+      "publisher": "EviMed Science"
+    }
+  ],
+  "terms": [
+    {
+      "id": "t_breast_cancer",
+      "kind": "disease",
+      "label": "Breast cancer",
+      "labelZh": "乳腺癌",
+      "concept": "breast_cancer",
+      "definition": "A carcinoma arising from the breast, most commonly the terminal ductal-lobular unit. It is the most common malignant tumor in females. Risk factors include country of birth, family history, menstrual and reproductive history, fibrocystic disease and epithelial hyperplasia, exogenous estrogens, contraceptive agents, and ionizing radiation. The vast majority of breast carcinomas are adenocarcinomas (ductal or lobular). Breast carcinoma spreads by direct invasion, by the lymphatic route, and by the blood vessel route. The most common site of lymph node involvement is the axilla.",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C4872",
+          "display": "Breast Carcinoma"
+        },
+        {
+          "system": "OMOP",
+          "code": "4112853",
+          "display": "Malignant neoplasm of the breast (OMOP standard concept)"
+        },
+        {
+          "system": "ICD-10-CM",
+          "code": "C50",
+          "display": "Breast cancer (ICD-10-CM category)"
+        }
+      ],
+      "synonyms": [
+        "breast carcinoma",
+        "carcinoma of the breast",
+        "mammary carcinoma"
+      ],
+      "sources": [
+        "ncit",
+        "ohdsi_788",
+        "icd10cm_nchs"
+      ]
+    },
+    {
+      "id": "t_hr_positive_bc",
+      "kind": "disease",
+      "label": "Hormone receptor-positive breast cancer",
+      "labelZh": "激素受体阳性乳腺癌",
+      "concept": "hormone_receptor_status",
+      "definition": "A breast adenocarcinoma that is positive for hormone receptors.",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C157056",
+          "display": "Hormone Receptor-Positive Breast Carcinoma"
+        }
+      ],
+      "synonyms": [
+        "HR-positive breast cancer",
+        "HR+ breast cancer"
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_her2_negative_bc",
+      "kind": "disease",
+      "label": "HER2-negative breast cancer",
+      "labelZh": "HER2 阴性乳腺癌",
+      "concept": "her2_status",
+      "definition": "A breast adenocarcinoma that is negative for the expression of the HER2 receptor.",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C168519",
+          "display": "HER2-Negative Breast Carcinoma"
+        }
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_her2_positive_bc",
+      "kind": "disease",
+      "label": "HER2-positive breast cancer",
+      "labelZh": "HER2 阳性乳腺癌",
+      "concept": "her2_status",
+      "synonyms": [
+        "HER2+ breast cancer",
+        "HER2-overexpressing breast cancer"
+      ],
+      "sources": [
+        "nct04622319",
+        "nct03529110",
+        "asco_cap_her2"
+      ]
+    },
+    {
+      "id": "t_her2_low_bc",
+      "kind": "disease",
+      "label": "HER2-low breast cancer",
+      "labelZh": "HER2 低表达乳腺癌",
+      "definition": "A breast adenocarcinoma defined by low expression of HER2 (IHC1+ or IHC2+; FISH negative).",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C179553",
+          "display": "HER2-Low Breast Carcinoma"
+        }
+      ],
+      "sources": [
+        "ncit",
+        "nct03734029"
+      ]
+    },
+    {
+      "id": "t_tnbc",
+      "kind": "disease",
+      "label": "Triple-negative breast cancer",
+      "labelZh": "三阴性乳腺癌",
+      "definition": "An invasive breast carcinoma that is negative for expression of estrogen receptor (ER), progesterone receptor (PR), and human epidermal growth factor receptor 2 (HER2).",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C71732",
+          "display": "Triple-Negative Breast Carcinoma"
+        }
+      ],
+      "synonyms": [
+        "TNBC"
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_metastatic_bc",
+      "kind": "stage",
+      "label": "Metastatic breast cancer",
+      "labelZh": "转移性乳腺癌",
+      "concept": "metastatic_disease",
+      "definition": "A carcinoma that arises from the breast and has metastasized to another anatomic site.",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C153238",
+          "display": "Metastatic Breast Carcinoma"
+        }
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_locally_advanced_bc",
+      "kind": "stage",
+      "label": "Locally advanced breast cancer",
+      "labelZh": "局部晚期乳腺癌",
+      "definition": "A breast carcinoma that has spread from its original site of growth to nearby tissues or lymph nodes.",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C160920",
+          "display": "Locally Advanced Breast Carcinoma"
+        }
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_localized_bc",
+      "kind": "stage",
+      "label": "Localized (non-metastatic) breast cancer",
+      "labelZh": "局限性（非转移性）乳腺癌",
+      "definition": "A breast carcinoma that is confined to the breast site in which it initially manifested without evidence of spread to other anatomic sites.",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C162782",
+          "display": "Localized Breast Carcinoma"
+        }
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_neoadjuvant",
+      "kind": "treatment",
+      "label": "Neoadjuvant therapy",
+      "labelZh": "新辅助治疗",
+      "definition": "Therapy administered prior to the primary treatment for the purpose of making the primary treatment more effective.",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C15665",
+          "display": "Neoadjuvant Therapy"
+        }
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_adjuvant",
+      "kind": "treatment",
+      "label": "Adjuvant therapy",
+      "labelZh": "辅助治疗",
+      "definition": "Any therapy that is administered to augment or stimulate other treatment modalities or to minimize or prevent disease recurrence subsequent to the main treatment plan.",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C15675",
+          "display": "Adjuvant Therapy"
+        }
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_er",
+      "kind": "biomarker",
+      "label": "Estrogen receptor (ER)",
+      "labelZh": "雌激素受体（ER）",
+      "concept": "er_status",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C38361",
+          "display": "Estrogen Receptor"
+        }
+      ],
+      "sources": [
+        "ncit",
+        "nct04622319",
+        "nct02574455"
+      ]
+    },
+    {
+      "id": "t_pr",
+      "kind": "biomarker",
+      "label": "Progesterone receptor (PR)",
+      "labelZh": "孕激素受体（PR）",
+      "concept": "pr_status",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C17075",
+          "display": "Progesterone Receptor"
+        }
+      ],
+      "sources": [
+        "ncit",
+        "nct04622319",
+        "nct02574455"
+      ]
+    },
+    {
+      "id": "t_her2",
+      "kind": "biomarker",
+      "label": "HER2 (ERBB2) receptor",
+      "labelZh": "HER2（ERBB2）受体",
+      "concept": "her2_status",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C17319",
+          "display": "Receptor Tyrosine-Protein Kinase erbB-2"
+        }
+      ],
+      "synonyms": [
+        "HER2/neu",
+        "ERBB2"
+      ],
+      "sources": [
+        "ncit",
+        "asco_cap_her2",
+        "nct04622319"
+      ]
+    },
+    {
+      "id": "t_her2_ihc",
+      "kind": "measure",
+      "label": "HER2 immunohistochemistry (IHC) score",
+      "labelZh": "HER2 免疫组化（IHC）评分",
+      "concept": "her2_ihc_score",
+      "sources": [
+        "nct03734029",
+        "nct04622319",
+        "asco_cap_her2"
+      ]
+    },
+    {
+      "id": "t_her2_ish",
+      "kind": "measure",
+      "label": "HER2 in situ hybridization (ISH) result",
+      "labelZh": "HER2 原位杂交（ISH）结果",
+      "concept": "her2_ish_status",
+      "sources": [
+        "nct01958021",
+        "nct04622319",
+        "asco_cap_her2"
+      ]
+    },
+    {
+      "id": "t_brca",
+      "kind": "biomarker",
+      "label": "Germline BRCA1/2 pathogenic variant",
+      "labelZh": "胚系 BRCA1/2 致病性变异",
+      "concept": "germline_brca_mutation",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C17965",
+          "display": "BRCA1 Gene"
+        },
+        {
+          "system": "NCIt",
+          "code": "C18120",
+          "display": "BRCA2 Gene"
+        }
+      ],
+      "synonyms": [
+        "gBRCA",
+        "germline BRCA mutation"
+      ],
+      "sources": [
+        "ncit",
+        "nct02032823",
+        "nct02000622",
+        "nct01945775"
+      ]
+    },
+    {
+      "id": "t_pik3ca",
+      "kind": "biomarker",
+      "label": "PIK3CA mutation",
+      "labelZh": "PIK3CA 突变",
+      "concept": "pik3ca_mutation",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C21220",
+          "display": "PIK3CA Gene"
+        }
+      ],
+      "sources": [
+        "ncit",
+        "fda_piqray_label"
+      ]
+    },
+    {
+      "id": "t_esr1",
+      "kind": "biomarker",
+      "label": "ESR1 mutation",
+      "labelZh": "ESR1 突变",
+      "concept": "esr1_mutation",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C38349",
+          "display": "ESR1 Gene"
+        }
+      ],
+      "sources": [
+        "ncit",
+        "fda_elacestrant"
+      ]
+    },
+    {
+      "id": "t_pdl1_cps",
+      "kind": "biomarker",
+      "label": "PD-L1 combined positive score (CPS)",
+      "labelZh": "PD-L1 联合阳性评分（CPS）",
+      "concept": "pdl1_cps",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C96024",
+          "display": "Programmed Cell Death 1 Ligand 1"
+        },
+        {
+          "system": "NCIt",
+          "code": "C204670",
+          "display": "Combined Positive Score"
+        }
+      ],
+      "synonyms": [
+        "PD-L1 CPS"
+      ],
+      "sources": [
+        "ncit",
+        "nct02819518"
+      ]
+    },
+    {
+      "id": "t_ecog",
+      "kind": "assessment",
+      "label": "ECOG performance status",
+      "labelZh": "ECOG 体能状态评分",
+      "concept": "ecog",
+      "definition": "A performance status scale designed to assess disease progression and its affect on the daily living abilities of the patient.",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C105721",
+          "display": "ECOG Performance Status"
+        }
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_recist",
+      "kind": "assessment",
+      "label": "RECIST (Response Evaluation Criteria in Solid Tumors)",
+      "labelZh": "RECIST 实体瘤疗效评价标准",
+      "definition": "Standard parameters to be used when documenting response of solid tumors to treatment; a set of published rules that define when cancer patients improve (\"respond\"), stay the same (\"stable\"), or worsen (\"progression\") during treatments. (from www.recist.com)",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C49164",
+          "display": "Response Evaluation Criteria in Solid Tumors"
+        }
+      ],
+      "synonyms": [
+        "RECIST 1.1"
+      ],
+      "sources": [
+        "ncit",
+        "recist11"
+      ]
+    },
+    {
+      "id": "t_measurable_disease",
+      "kind": "measure",
+      "label": "Measurable disease",
+      "labelZh": "可测量病灶",
+      "concept": "measurable_disease",
+      "definition": "A finding indicating that a subject has one or more measurable pathological lesions.",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C8507",
+          "display": "Measurable Disease"
+        }
+      ],
+      "sources": [
+        "ncit",
+        "nct02819518"
+      ]
+    },
+    {
+      "id": "t_postmenopausal",
+      "kind": "other",
+      "label": "Postmenopausal",
+      "labelZh": "绝经后",
+      "concept": "menopausal_status",
+      "definition": "After menopause.",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C15421",
+          "display": "Postmenopausal"
+        }
+      ],
+      "sources": [
+        "ncit",
+        "nct01958021"
+      ]
+    },
+    {
+      "id": "t_os",
+      "kind": "measure",
+      "label": "Overall survival",
+      "labelZh": "总生存期",
+      "definition": "A measure of the time until death from any cause.",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C125201",
+          "display": "Overall Survival"
+        }
+      ],
+      "synonyms": [
+        "OS"
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_pfs",
+      "kind": "measure",
+      "label": "Progression-free survival",
+      "labelZh": "无进展生存期",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C28234",
+          "display": "Progression-free Survival"
+        }
+      ],
+      "synonyms": [
+        "PFS"
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_dfs",
+      "kind": "measure",
+      "label": "Disease-free survival",
+      "labelZh": "无病生存期",
+      "definition": "The length of time after treatment for a specific disease during which a patient survives with no sign of recurrence of the disease.",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C17751",
+          "display": "Disease-Free Survival"
+        }
+      ],
+      "synonyms": [
+        "DFS"
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_idfs",
+      "kind": "measure",
+      "label": "Invasive disease-free survival",
+      "labelZh": "浸润性无病生存期",
+      "definition": "The duration in which an individual remains free of invasive disease after primary treatment.",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C227779",
+          "display": "Invasive Disease-Free Survival"
+        }
+      ],
+      "synonyms": [
+        "IDFS",
+        "iDFS"
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_efs",
+      "kind": "measure",
+      "label": "Event-free survival",
+      "labelZh": "无事件生存期",
+      "definition": "The length of time after treatment during which a patient survives with no sign of a particular complication of disease.",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C96340",
+          "display": "Event-Free Survival"
+        }
+      ],
+      "synonyms": [
+        "EFS"
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_orr",
+      "kind": "measure",
+      "label": "Objective response rate",
+      "labelZh": "客观缓解率",
+      "definition": "A clinical metric measuring the percentage of patients whose tumors shrink or completely disappear after a specific treatment.",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C227552",
+          "display": "Objective Response Rate"
+        }
+      ],
+      "synonyms": [
+        "ORR"
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_pcr",
+      "kind": "measure",
+      "label": "Pathological complete response",
+      "labelZh": "病理完全缓解",
+      "definition": "The disappearance of all signs of cancer, supported by pathological examination.",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C123603",
+          "display": "Pathologic Complete Response"
+        }
+      ],
+      "synonyms": [
+        "pCR"
+      ],
+      "sources": [
+        "ncit"
+      ]
+    }
+  ],
+  "phenotypes": [
+    {
+      "id": "p_breast_cancer",
+      "label": "Breast cancer",
+      "labelZh": "乳腺癌",
+      "type": "diagnosis",
+      "rule": {
+        "op": "present",
+        "variable": "breast_cancer"
+      },
+      "text": "The person has a recorded malignant breast neoplasm. The OHDSI \"Breast cancer\" cohort (library status: pending peer review, not validated) indexes the first record of a malignant breast tumour with at least one year of prior observation and leaves out a long list of morphology concepts such as leukaemia, lymphoma, sarcoma and melanoma.",
+      "textZh": "患者有恶性乳腺肿瘤的记录。OHDSI「Breast cancer」队列（库内状态：待同行评审，尚未验证）以首次恶性乳腺肿瘤记录为起点，要求此前至少有一年的观察期，并排除白血病、淋巴瘤、肉瘤、黑色素瘤等一长串形态学概念。",
+      "terms": [
+        "t_breast_cancer"
+      ],
+      "sources": [
+        "ncit",
+        "ohdsi_788"
+      ]
+    },
+    {
+      "id": "p_hr_positive",
+      "label": "Hormone receptor-positive breast cancer",
+      "labelZh": "激素受体阳性乳腺癌",
+      "type": "biomarker",
+      "rule": {
+        "op": "any",
+        "operands": [
+          {
+            "op": "compare",
+            "variable": "hormone_receptor_status",
+            "comparator": "eq",
+            "value": "positive"
+          },
+          {
+            "op": "compare",
+            "variable": "er_status",
+            "comparator": "eq",
+            "value": "positive"
+          },
+          {
+            "op": "compare",
+            "variable": "pr_status",
+            "comparator": "eq",
+            "value": "positive"
+          }
+        ]
+      },
+      "text": "Estrogen receptor and/or progesterone receptor positive. One registered trial states the ASCO-CAP cut-off as 1% or more; a hormone-receptor-negative tumour is negative for both receptors.",
+      "textZh": "雌激素受体和/或孕激素受体阳性。一项注册试验写明采用 ASCO-CAP 的界值（阳性细胞比例 ≥1%）；激素受体阴性是指两种受体均为阴性。",
+      "terms": [
+        "t_hr_positive_bc",
+        "t_er",
+        "t_pr"
+      ],
+      "sources": [
+        "ncit",
+        "nct04622319",
+        "nct01958021"
+      ]
+    },
+    {
+      "id": "p_her2_positive",
+      "label": "HER2-positive breast cancer",
+      "labelZh": "HER2 阳性乳腺癌",
+      "type": "biomarker",
+      "rule": {
+        "op": "any",
+        "operands": [
+          {
+            "op": "compare",
+            "variable": "her2_status",
+            "comparator": "eq",
+            "value": "positive"
+          },
+          {
+            "op": "compare",
+            "variable": "her2_ihc_score",
+            "comparator": "eq",
+            "value": 3
+          },
+          {
+            "op": "compare",
+            "variable": "her2_ish_status",
+            "comparator": "eq",
+            "value": "positive"
+          }
+        ]
+      },
+      "text": "HER2 immunohistochemistry score 3+ and/or a positive in situ hybridization result, confirmed before randomization in one registered trial and judged by the ASCO-CAP guideline in another.",
+      "textZh": "HER2 免疫组化评分 3+ 和/或原位杂交阳性；一项注册试验要求随机前确认，另一项按 ASCO-CAP 指南判定。",
+      "terms": [
+        "t_her2_positive_bc",
+        "t_her2",
+        "t_her2_ihc",
+        "t_her2_ish"
+      ],
+      "sources": [
+        "nct04622319",
+        "nct03529110",
+        "asco_cap_her2"
+      ]
+    },
+    {
+      "id": "p_her2_negative",
+      "label": "HER2-negative breast cancer",
+      "labelZh": "HER2 阴性乳腺癌",
+      "type": "biomarker",
+      "rule": {
+        "op": "any",
+        "operands": [
+          {
+            "op": "compare",
+            "variable": "her2_status",
+            "comparator": "eq",
+            "value": "negative"
+          },
+          {
+            "op": "compare",
+            "variable": "her2_ihc_score",
+            "comparator": "in",
+            "value": [
+              0,
+              1
+            ]
+          },
+          {
+            "op": "all",
+            "operands": [
+              {
+                "op": "compare",
+                "variable": "her2_ihc_score",
+                "comparator": "eq",
+                "value": 2
+              },
+              {
+                "op": "compare",
+                "variable": "her2_ish_status",
+                "comparator": "eq",
+                "value": "negative"
+              }
+            ]
+          }
+        ]
+      },
+      "text": "HER2 immunohistochemistry 0 or 1+, or 2+ with a negative in situ hybridization test (FISH, CISH or SISH); this is the definition one registered trial writes out.",
+      "textZh": "HER2 免疫组化 0 或 1+，或免疫组化 2+ 且原位杂交（FISH、CISH 或 SISH）阴性；这是一项注册试验写明的定义。",
+      "terms": [
+        "t_her2_negative_bc",
+        "t_her2",
+        "t_her2_ihc",
+        "t_her2_ish"
+      ],
+      "sources": [
+        "ncit",
+        "nct01958021",
+        "asco_cap_her2"
+      ]
+    },
+    {
+      "id": "p_her2_low",
+      "label": "HER2-low breast cancer",
+      "labelZh": "HER2 低表达乳腺癌",
+      "type": "biomarker",
+      "rule": {
+        "op": "any",
+        "operands": [
+          {
+            "op": "compare",
+            "variable": "her2_ihc_score",
+            "comparator": "eq",
+            "value": 1
+          },
+          {
+            "op": "all",
+            "operands": [
+              {
+                "op": "compare",
+                "variable": "her2_ihc_score",
+                "comparator": "eq",
+                "value": 2
+              },
+              {
+                "op": "compare",
+                "variable": "her2_ish_status",
+                "comparator": "eq",
+                "value": "negative"
+              }
+            ]
+          }
+        ]
+      },
+      "text": "HER2 immunohistochemistry 1+, or 2+ with a negative in situ hybridization test; it is a subset of HER2-negative disease used to define trial populations.",
+      "textZh": "HER2 免疫组化 1+，或免疫组化 2+ 且原位杂交阴性；属于 HER2 阴性乳腺癌的一个亚组，用于界定试验人群。",
+      "terms": [
+        "t_her2_low_bc",
+        "t_her2_ihc",
+        "t_her2_ish"
+      ],
+      "sources": [
+        "ncit",
+        "nct03734029",
+        "nct04494425"
+      ]
+    },
+    {
+      "id": "p_hr_positive_her2_negative",
+      "label": "Hormone receptor-positive, HER2-negative breast cancer",
+      "labelZh": "激素受体阳性、HER2 阴性乳腺癌",
+      "type": "biomarker",
+      "rule": {
+        "op": "all",
+        "operands": [
+          {
+            "op": "any",
+            "operands": [
+              {
+                "op": "compare",
+                "variable": "hormone_receptor_status",
+                "comparator": "eq",
+                "value": "positive"
+              },
+              {
+                "op": "compare",
+                "variable": "er_status",
+                "comparator": "eq",
+                "value": "positive"
+              },
+              {
+                "op": "compare",
+                "variable": "pr_status",
+                "comparator": "eq",
+                "value": "positive"
+              }
+            ]
+          },
+          {
+            "op": "any",
+            "operands": [
+              {
+                "op": "compare",
+                "variable": "her2_status",
+                "comparator": "eq",
+                "value": "negative"
+              },
+              {
+                "op": "compare",
+                "variable": "her2_ihc_score",
+                "comparator": "in",
+                "value": [
+                  0,
+                  1
+                ]
+              },
+              {
+                "op": "all",
+                "operands": [
+                  {
+                    "op": "compare",
+                    "variable": "her2_ihc_score",
+                    "comparator": "eq",
+                    "value": 2
+                  },
+                  {
+                    "op": "compare",
+                    "variable": "her2_ish_status",
+                    "comparator": "eq",
+                    "value": "negative"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "text": "Hormone receptor-positive and HER2-negative; the population of the CDK4/6-inhibitor, adjuvant endocrine and later-line trials registered for this subtype.",
+      "textZh": "激素受体阳性且 HER2 阴性；该亚型 CDK4/6 抑制剂、辅助内分泌及后线治疗注册试验所入组的人群。",
+      "terms": [
+        "t_hr_positive_bc",
+        "t_her2_negative_bc"
+      ],
+      "sources": [
+        "nct02246621",
+        "nct03155997",
+        "nct03901339"
+      ]
+    },
+    {
+      "id": "p_triple_negative",
+      "label": "Triple-negative breast cancer",
+      "labelZh": "三阴性乳腺癌",
+      "type": "biomarker",
+      "rule": {
+        "op": "all",
+        "operands": [
+          {
+            "op": "any",
+            "operands": [
+              {
+                "op": "compare",
+                "variable": "hormone_receptor_status",
+                "comparator": "eq",
+                "value": "negative"
+              },
+              {
+                "op": "all",
+                "operands": [
+                  {
+                    "op": "compare",
+                    "variable": "er_status",
+                    "comparator": "eq",
+                    "value": "negative"
+                  },
+                  {
+                    "op": "compare",
+                    "variable": "pr_status",
+                    "comparator": "eq",
+                    "value": "negative"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "any",
+            "operands": [
+              {
+                "op": "compare",
+                "variable": "her2_status",
+                "comparator": "eq",
+                "value": "negative"
+              },
+              {
+                "op": "compare",
+                "variable": "her2_ihc_score",
+                "comparator": "in",
+                "value": [
+                  0,
+                  1
+                ]
+              },
+              {
+                "op": "all",
+                "operands": [
+                  {
+                    "op": "compare",
+                    "variable": "her2_ihc_score",
+                    "comparator": "eq",
+                    "value": 2
+                  },
+                  {
+                    "op": "compare",
+                    "variable": "her2_ish_status",
+                    "comparator": "eq",
+                    "value": "negative"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "text": "Negative for estrogen receptor, progesterone receptor and HER2. One registered trial writes the receptor cut-off as under 1% expression and HER2-negative by in situ hybridization.",
+      "textZh": "雌激素受体、孕激素受体和 HER2 均为阴性。一项注册试验写明受体表达 <1% 且 HER2 原位杂交阴性。",
+      "terms": [
+        "t_tnbc",
+        "t_er",
+        "t_pr",
+        "t_her2"
+      ],
+      "sources": [
+        "ncit",
+        "nct02574455",
+        "nct02425891"
+      ]
+    },
+    {
+      "id": "p_germline_brca",
+      "label": "Germline BRCA1/2 pathogenic variant carrier",
+      "labelZh": "胚系 BRCA1/2 致病性变异携带者",
+      "type": "biomarker",
+      "rule": {
+        "op": "present",
+        "variable": "germline_brca_mutation"
+      },
+      "text": "A documented germline BRCA1 or BRCA2 variant that is deleterious or suspected deleterious (pathogenic).",
+      "textZh": "有记录的胚系 BRCA1 或 BRCA2 有害或疑似有害（致病性）变异。",
+      "terms": [
+        "t_brca"
+      ],
+      "sources": [
+        "nct02032823",
+        "nct02000622",
+        "nct01945775"
+      ]
+    },
+    {
+      "id": "p_pik3ca_mutated",
+      "label": "PIK3CA-mutated breast cancer",
+      "labelZh": "PIK3CA 突变乳腺癌",
+      "type": "biomarker",
+      "rule": {
+        "op": "present",
+        "variable": "pik3ca_mutation"
+      },
+      "text": "One or more PIK3CA mutations found in tumour tissue or plasma; the alpelisib label ties this to hormone receptor-positive, HER2-negative advanced or metastatic disease after an endocrine-based regimen.",
+      "textZh": "肿瘤组织或血浆中检出一个或多个 PIK3CA 突变；阿培利司标签将其限定于内分泌方案治疗后进展的激素受体阳性、HER2 阴性晚期或转移性乳腺癌。",
+      "terms": [
+        "t_pik3ca"
+      ],
+      "sources": [
+        "ncit",
+        "fda_piqray_label"
+      ]
+    },
+    {
+      "id": "p_esr1_mutated",
+      "label": "ESR1-mutated breast cancer",
+      "labelZh": "ESR1 突变乳腺癌",
+      "type": "biomarker",
+      "rule": {
+        "op": "present",
+        "variable": "esr1_mutation"
+      },
+      "text": "An ESR1 mutation; in the elacestrant trial it was determined in blood circulating tumour DNA and limited to missense mutations in the ligand-binding domain.",
+      "textZh": "存在 ESR1 突变；在艾拉司群试验中通过血液循环肿瘤 DNA 检测，且限于配体结合域的错义突变。",
+      "terms": [
+        "t_esr1"
+      ],
+      "sources": [
+        "ncit",
+        "fda_elacestrant"
+      ]
+    },
+    {
+      "id": "p_pdl1_cps_10",
+      "label": "PD-L1 combined positive score of 10 or more",
+      "labelZh": "PD-L1 联合阳性评分 ≥10",
+      "type": "biomarker",
+      "rule": {
+        "op": "compare",
+        "variable": "pdl1_cps",
+        "comparator": "gte",
+        "value": 10
+      },
+      "text": "PD-L1 combined positive score of at least 10, one of the two score thresholds (1 and 10) used to define analysis populations in KEYNOTE-355.",
+      "textZh": "PD-L1 联合阳性评分至少为 10；这是 KEYNOTE-355 用来界定分析人群的两个评分界值（1 和 10）之一。",
+      "terms": [
+        "t_pdl1_cps"
+      ],
+      "sources": [
+        "ncit",
+        "nct02819518"
+      ]
+    },
+    {
+      "id": "p_metastatic",
+      "label": "Metastatic breast cancer",
+      "labelZh": "转移性乳腺癌",
+      "type": "diagnosis",
+      "rule": {
+        "op": "present",
+        "variable": "metastatic_disease"
+      },
+      "text": "Breast cancer that has spread to another anatomic site.",
+      "textZh": "乳腺癌已转移至其他解剖部位。",
+      "terms": [
+        "t_metastatic_bc"
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "p_advanced_or_metastatic",
+      "label": "Locally advanced, locally recurrent or metastatic disease not amenable to cure",
+      "labelZh": "不适合根治的局部晚期、局部复发或转移性疾病",
+      "type": "diagnosis",
+      "rule": {
+        "op": "any",
+        "operands": [
+          {
+            "op": "present",
+            "variable": "metastatic_disease"
+          },
+          {
+            "op": "present",
+            "variable": "unresectable_locoregional_disease"
+          }
+        ]
+      },
+      "text": "Metastatic disease, or locally advanced or locally recurrent disease that cannot be resected or treated with curative intent; the setting of the advanced-disease trials.",
+      "textZh": "转移性疾病，或无法切除、无法以根治为目的治疗的局部晚期或局部复发疾病；晚期疾病试验入组的疾病状态。",
+      "terms": [
+        "t_metastatic_bc",
+        "t_locally_advanced_bc"
+      ],
+      "sources": [
+        "nct01958021",
+        "nct03529110",
+        "nct01740427"
+      ]
+    },
+    {
+      "id": "p_non_metastatic",
+      "label": "Non-metastatic (early or locally advanced) breast cancer",
+      "labelZh": "非转移性（早期或局部晚期）乳腺癌",
+      "type": "diagnosis",
+      "rule": {
+        "op": "all",
+        "operands": [
+          {
+            "op": "present",
+            "variable": "breast_cancer"
+          },
+          {
+            "op": "absent",
+            "variable": "metastatic_disease"
+          }
+        ]
+      },
+      "text": "Breast cancer without evidence of distant metastasis, the population of neoadjuvant and adjuvant trials.",
+      "textZh": "无远处转移证据的乳腺癌，是新辅助和辅助治疗试验的入组人群。",
+      "terms": [
+        "t_localized_bc"
+      ],
+      "sources": [
+        "ncit",
+        "nct01772472",
+        "nct04622319",
+        "nct02032823"
+      ]
+    }
+  ],
+  "endpoints": [
+    {
+      "id": "e_os",
+      "label": "Overall survival",
+      "labelZh": "总生存期",
+      "type": "time_to_event",
+      "definition": "Time from randomization to death from any cause, analysed in the intent-to-treat population.",
+      "definitionZh": "从随机化到任何原因死亡的时间，在意向性治疗人群中分析。",
+      "assessment": "Date of death from any source; participants not known to have died are censored at the last date they were known to be alive.",
+      "standard": {
+        "name": "FDA guidance: Clinical Trial Endpoints for the Approval of Cancer Drugs and Biologics",
+        "version": "December 2018",
+        "url": "https://www.fda.gov/regulatory-information/search-fda-guidance-documents/clinical-trial-endpoints-approval-cancer-drugs-and-biologics"
+      },
+      "setting": "All settings",
+      "terms": [
+        "t_os"
+      ],
+      "sources": [
+        "fda_endpoints",
+        "ema_anticancer",
+        "nct02819518",
+        "nct03901339"
+      ]
+    },
+    {
+      "id": "e_pfs",
+      "label": "Progression-free survival",
+      "labelZh": "无进展生存期",
+      "type": "time_to_event",
+      "definition": "Time from randomization to the first documented objective disease progression or death from any cause, whichever comes first. Progression is usually read by RECIST 1.1: at least a 20% rise in the sum of target-lesion diameters with an absolute rise of at least 5 mm, or new lesions.",
+      "definitionZh": "从随机化到首次记录的客观疾病进展或任何原因死亡的时间（以先发生者为准）。进展通常按 RECIST 1.1 判定：靶病灶直径总和增加至少 20% 且绝对值增加至少 5 mm，或出现新病灶。",
+      "assessment": "Scheduled radiological tumour assessments read by the investigator or by blinded independent central review; participants without an event are censored at the last adequate tumour assessment.",
+      "standard": {
+        "name": "RECIST",
+        "version": "1.1",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/19097774/"
+      },
+      "setting": "Advanced or metastatic disease",
+      "terms": [
+        "t_pfs",
+        "t_recist"
+      ],
+      "sources": [
+        "fda_endpoints",
+        "recist11",
+        "ema_anticancer",
+        "nct01958021",
+        "nct03529110",
+        "nct02819518"
+      ]
+    },
+    {
+      "id": "e_orr",
+      "label": "Objective response rate",
+      "labelZh": "客观缓解率",
+      "type": "binary",
+      "definition": "Proportion of participants whose best overall response is a complete or partial response by RECIST 1.1; stable disease is not counted as a response. Several trials require the response to be confirmed at a later assessment.",
+      "definitionZh": "按 RECIST 1.1 最佳总体疗效为完全缓解或部分缓解的受试者比例；疾病稳定不计为缓解。若干试验要求缓解在后续评估中得到确认。",
+      "assessment": "Tumour assessments by RECIST 1.1 on imaging, by blinded independent central review and/or the investigator, computed over the analysis population.",
+      "standard": {
+        "name": "RECIST",
+        "version": "1.1",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/19097774/"
+      },
+      "setting": "Advanced or metastatic disease",
+      "terms": [
+        "t_orr",
+        "t_recist"
+      ],
+      "sources": [
+        "fda_endpoints",
+        "recist11",
+        "ema_anticancer",
+        "nct03529110",
+        "nct02819518",
+        "nct03901339"
+      ]
+    },
+    {
+      "id": "e_dor",
+      "label": "Duration of response",
+      "labelZh": "缓解持续时间",
+      "type": "time_to_event",
+      "definition": "In participants with a complete or partial response, the time from the first documented response to the first documented progression or death.",
+      "definitionZh": "在获得完全缓解或部分缓解的受试者中，从首次记录缓解到首次记录进展或死亡的时间。",
+      "assessment": "Derived from the same RECIST 1.1 tumour assessments as the response; EMA expects it to be reported in advanced disease whichever endpoint is primary.",
+      "standard": {
+        "name": "RECIST",
+        "version": "1.1",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/19097774/"
+      },
+      "setting": "Advanced or metastatic disease",
+      "terms": [
+        "t_recist"
+      ],
+      "sources": [
+        "fda_endpoints",
+        "ema_anticancer",
+        "nct03529110",
+        "nct03901339",
+        "nct02819518"
+      ]
+    },
+    {
+      "id": "e_cbr",
+      "label": "Clinical benefit rate",
+      "labelZh": "临床获益率",
+      "type": "binary",
+      "definition": "Proportion of participants with a complete response, a partial response or prolonged stable disease; for breast cancer the prolonged-stability threshold is typically 24 weeks, and one trial uses 6 months.",
+      "definitionZh": "获得完全缓解、部分缓解或长期疾病稳定的受试者比例；乳腺癌中长期稳定的界值通常为 24 周，也有试验采用 6 个月。",
+      "assessment": "RECIST 1.1 best overall response plus the duration of stable disease measured from randomization.",
+      "standard": {
+        "name": "RECIST",
+        "version": "1.1",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/19097774/"
+      },
+      "setting": "Advanced or metastatic disease",
+      "terms": [
+        "t_recist"
+      ],
+      "sources": [
+        "ema_anticancer",
+        "nct01958021",
+        "nct03901339"
+      ]
+    },
+    {
+      "id": "e_pcr",
+      "label": "Pathological complete response",
+      "labelZh": "病理完全缓解",
+      "type": "binary",
+      "definition": "Absence of residual invasive cancer in the resected breast specimen and all sampled regional lymph nodes after neoadjuvant systemic therapy (ypT0/Tis ypN0). FDA also accepts the stricter form with no invasive or in situ cancer (ypT0 ypN0). FDA treats it as a surrogate that can support accelerated approval in high-risk early-stage disease, to be confirmed by event-free or overall survival.",
+      "definitionZh": "新辅助全身治疗后，切除的乳腺标本及所有取样区域淋巴结中无残留浸润性癌（ypT0/Tis ypN0）。FDA 也接受更严格的无浸润性癌和原位癌（ypT0 ypN0）定义。FDA 将其视为可支持高危早期乳腺癌加速批准的替代终点，须由无事件生存期或总生存期确证。",
+      "assessment": "Haematoxylin and eosin evaluation of the complete resected breast specimen and all sampled regional lymph nodes at definitive surgery; read locally or centrally; EMA expects experienced pathologists blinded to treatment assignment.",
+      "standard": {
+        "name": "FDA guidance: Pathological Complete Response in Neoadjuvant Treatment of High-Risk Early-Stage Breast Cancer",
+        "version": "July 2020, Revision 1",
+        "url": "https://www.fda.gov/regulatory-information/search-fda-guidance-documents/pathological-complete-response-neoadjuvant-treatment-high-risk-early-stage-breast-cancer-use"
+      },
+      "setting": "Neoadjuvant, high-risk early-stage disease",
+      "terms": [
+        "t_pcr",
+        "t_neoadjuvant"
+      ],
+      "sources": [
+        "fda_pcr",
+        "ema_appendix4",
+        "nct03036488"
+      ]
+    },
+    {
+      "id": "e_efs",
+      "label": "Event-free survival",
+      "labelZh": "无事件生存期",
+      "type": "time_to_event",
+      "definition": "Time from randomization (before surgery) to the first of progression that precludes surgery, local or distant recurrence, or death from any cause; some trials also count a second primary malignancy.",
+      "definitionZh": "从随机化（术前）到出现以下任一事件的时间：导致无法手术的疾病进展、局部或远处复发、任何原因死亡；部分试验还将第二原发恶性肿瘤计为事件。",
+      "assessment": "Clinical and imaging follow-up before and after surgery; the endpoint FDA and EMA name for confirmatory neoadjuvant trials.",
+      "standard": {
+        "name": "FDA guidance: Pathological Complete Response in Neoadjuvant Treatment of High-Risk Early-Stage Breast Cancer",
+        "version": "July 2020, Revision 1",
+        "url": "https://www.fda.gov/regulatory-information/search-fda-guidance-documents/pathological-complete-response-neoadjuvant-treatment-high-risk-early-stage-breast-cancer-use"
+      },
+      "setting": "Neoadjuvant",
+      "terms": [
+        "t_efs",
+        "t_neoadjuvant"
+      ],
+      "sources": [
+        "fda_pcr",
+        "fda_endpoints",
+        "ema_appendix4",
+        "nct03036488"
+      ]
+    },
+    {
+      "id": "e_dfs",
+      "label": "Disease-free survival",
+      "labelZh": "无病生存期",
+      "type": "time_to_event",
+      "definition": "Time from randomization to local or distant recurrence or death from any cause, in patients presumed free of disease after definitive surgery.",
+      "definitionZh": "在确定性手术后被认为无病的患者中，从随机化到局部或远处复发或任何原因死亡的时间。",
+      "assessment": "Scheduled clinical and imaging follow-up; FDA names it the basis of past approvals of adjuvant breast cancer hormonal and cytotoxic therapy, and EMA calls it an appropriate primary endpoint for adjuvant studies.",
+      "standard": {
+        "name": "FDA guidance: Clinical Trial Endpoints for the Approval of Cancer Drugs and Biologics",
+        "version": "December 2018",
+        "url": "https://www.fda.gov/regulatory-information/search-fda-guidance-documents/clinical-trial-endpoints-approval-cancer-drugs-and-biologics"
+      },
+      "setting": "Adjuvant",
+      "terms": [
+        "t_dfs",
+        "t_adjuvant"
+      ],
+      "sources": [
+        "fda_endpoints",
+        "fda_pcr",
+        "ema_appendix4",
+        "ema_anticancer"
+      ]
+    },
+    {
+      "id": "e_idfs",
+      "label": "Invasive disease-free survival",
+      "labelZh": "浸润性无病生存期",
+      "type": "time_to_event",
+      "definition": "Time from randomization to the first invasive breast cancer recurrence (local, regional or distant), invasive contralateral breast cancer, second primary invasive cancer, or death from any cause; in situ disease is not an event. Trials differ in which second primary cancers they count.",
+      "definitionZh": "从随机化到首次浸润性乳腺癌复发（局部、区域或远处）、对侧浸润性乳腺癌、第二原发浸润性癌或任何原因死亡的时间；原位病变不计为事件。各试验对哪些第二原发癌计为事件的规定略有不同。",
+      "assessment": "Scheduled clinical and imaging follow-up with each recurrence or new cancer confirmed per protocol; the primary endpoint of the large adjuvant trials in this pack.",
+      "standard": {
+        "name": "STEEP system (standardized efficacy end points for adjuvant breast cancer trials)",
+        "url": "https://pubmed.ncbi.nlm.nih.gov/17513820/"
+      },
+      "setting": "Adjuvant",
+      "terms": [
+        "t_idfs",
+        "t_adjuvant"
+      ],
+      "sources": [
+        "steep",
+        "nct03155997",
+        "nct02032823",
+        "nct02513394",
+        "nct01772472",
+        "nct04622319"
+      ]
+    },
+    {
+      "id": "e_drfs",
+      "label": "Distant relapse-free survival",
+      "labelZh": "远处无复发生存期",
+      "type": "time_to_event",
+      "definition": "Time from randomization to first distant recurrence or death from any cause, whichever comes first.",
+      "definitionZh": "从随机化到首次远处复发或任何原因死亡的时间（以先发生者为准）。",
+      "assessment": "Scheduled clinical and imaging follow-up; a common secondary endpoint of adjuvant trials (called distant disease-free survival in OlympiA).",
+      "standard": {
+        "name": "Trial-protocol definition (monarchE and OlympiA registry records)"
+      },
+      "setting": "Adjuvant",
+      "terms": [
+        "t_adjuvant"
+      ],
+      "sources": [
+        "nct03155997",
+        "nct02032823"
+      ]
+    },
+    {
+      "id": "e_qol_gh",
+      "label": "Change from baseline in EORTC QLQ-C30 global health status / quality of life",
+      "labelZh": "EORTC QLQ-C30 总体健康状况/生活质量评分较基线的变化",
+      "type": "continuous",
+      "definition": "Change from baseline in the global health status / quality-of-life scale of the EORTC QLQ-C30, scored 0 to 100 with higher meaning better, at a prespecified visit.",
+      "definitionZh": "EORTC QLQ-C30 总体健康状况/生活质量量表（0–100 分，分越高越好）在预设访视时点较基线的变化。",
+      "assessment": "Patient-completed questionnaire at scheduled visits (for example week 15 in KEYNOTE-355); compared between arms.",
+      "standard": {
+        "name": "EORTC QLQ-C30",
+        "version": "3.0",
+        "url": "https://qol.eortc.org/questionnaire/eortc-qlq-c30/"
+      },
+      "setting": "Advanced and early breast cancer",
+      "sources": [
+        "eortc_qlqc30",
+        "nct02819518",
+        "nct01958021",
+        "nct02032823"
+      ]
+    }
+  ],
+  "criteria": [
+    {
+      "id": "c_age_adult",
+      "kind": "inclusion",
+      "criterionType": "demographic",
+      "requirement": {
+        "op": "compare",
+        "variable": "age",
+        "comparator": "gte",
+        "value": 18,
+        "unit": "years"
+      },
+      "text": "Adult, at least 18 years old (or the local age of consent when it is higher).",
+      "textZh": "成年人，年龄不低于 18 岁（当地法定同意年龄更高时从其规定）。",
+      "sources": [
+        "nct03529110",
+        "nct03155997",
+        "nct02513394",
+        "nct01772472",
+        "nct04622319",
+        "nct04494425"
+      ]
+    },
+    {
+      "id": "c_breast_cancer_confirmed",
+      "kind": "inclusion",
+      "criterionType": "diagnosis",
+      "requirement": {
+        "op": "present",
+        "variable": "breast_cancer"
+      },
+      "text": "Breast cancer confirmed by histology or cytology (the early-stage trials require invasive carcinoma).",
+      "textZh": "经组织学或细胞学确诊的乳腺癌（早期乳腺癌试验要求为浸润性癌）。",
+      "terms": [
+        "t_breast_cancer"
+      ],
+      "sources": [
+        "nct01945775",
+        "nct02000622",
+        "nct01772472",
+        "nct03529110",
+        "nct03734029"
+      ]
+    },
+    {
+      "id": "c_advanced_or_metastatic",
+      "kind": "inclusion",
+      "criterionType": "diagnosis",
+      "requirement": {
+        "op": "any",
+        "operands": [
+          {
+            "op": "present",
+            "variable": "metastatic_disease"
+          },
+          {
+            "op": "present",
+            "variable": "unresectable_locoregional_disease"
+          }
+        ]
+      },
+      "text": "Metastatic disease, or locally advanced or locally recurrent disease that is not amenable to curative surgery or radiotherapy (advanced-disease trials).",
+      "textZh": "转移性疾病，或不适合根治性手术或放疗的局部晚期、局部复发疾病（晚期疾病试验）。",
+      "terms": [
+        "t_metastatic_bc",
+        "t_locally_advanced_bc"
+      ],
+      "sources": [
+        "nct01958021",
+        "nct01740427",
+        "nct02246621",
+        "nct03529110",
+        "nct03734029",
+        "nct02819518",
+        "nct03125902"
+      ]
+    },
+    {
+      "id": "c_no_distant_metastasis",
+      "kind": "exclusion",
+      "criterionType": "diagnosis",
+      "requirement": {
+        "op": "absent",
+        "variable": "metastatic_disease"
+      },
+      "text": "No distant metastasis: stage IV or metastatic disease excludes the patient from adjuvant and post-neoadjuvant trials.",
+      "textZh": "无远处转移：IV 期或转移性疾病者不能进入辅助及新辅助后治疗试验。",
+      "terms": [
+        "t_localized_bc"
+      ],
+      "sources": [
+        "nct02032823",
+        "nct03155997",
+        "nct02513394",
+        "nct01772472",
+        "nct04622319"
+      ]
+    },
+    {
+      "id": "c_definitive_surgery",
+      "kind": "inclusion",
+      "criterionType": "prior_treatment",
+      "requirement": {
+        "op": "present",
+        "variable": "definitive_breast_surgery"
+      },
+      "text": "Definitive breast surgery (with adequate excision of the breast and axillary disease) has been completed (adjuvant and post-neoadjuvant trials).",
+      "textZh": "已完成确定性乳腺手术（乳腺及腋窝病灶得到充分切除）（辅助及新辅助后治疗试验）。",
+      "sources": [
+        "nct03155997",
+        "nct02513394",
+        "nct02032823",
+        "nct01772472",
+        "nct04622319"
+      ]
+    },
+    {
+      "id": "c_ecog_0_1",
+      "kind": "inclusion",
+      "criterionType": "performance_status",
+      "requirement": {
+        "op": "compare",
+        "variable": "ecog",
+        "comparator": "lte",
+        "value": 1
+      },
+      "text": "ECOG performance status of 0 or 1.",
+      "textZh": "ECOG 体能状态评分为 0 或 1。",
+      "terms": [
+        "t_ecog"
+      ],
+      "sources": [
+        "nct02819518",
+        "nct03036488",
+        "nct02425891",
+        "nct02574455",
+        "nct02000622",
+        "nct02032823",
+        "nct01772472",
+        "nct03155997"
+      ]
+    },
+    {
+      "id": "c_measurable_disease",
+      "kind": "inclusion",
+      "criterionType": "diagnosis",
+      "requirement": {
+        "op": "present",
+        "variable": "measurable_disease"
+      },
+      "applicability": {
+        "op": "any",
+        "operands": [
+          {
+            "op": "present",
+            "variable": "metastatic_disease"
+          },
+          {
+            "op": "present",
+            "variable": "unresectable_locoregional_disease"
+          }
+        ]
+      },
+      "text": "At least one measurable lesion by RECIST 1.1 (advanced-disease trials of chemotherapy, immunotherapy and antibody-drug conjugates; some endocrine-based trials also admit bone-only disease).",
+      "textZh": "按 RECIST 1.1 至少有一个可测量病灶（化疗、免疫治疗及抗体药物偶联物的晚期疾病试验；部分内分泌为基础的试验也允许仅有骨转移）。",
+      "terms": [
+        "t_measurable_disease",
+        "t_recist"
+      ],
+      "sources": [
+        "nct02819518",
+        "nct02425891",
+        "nct03125902",
+        "nct02574455",
+        "nct03734029",
+        "nct01740427",
+        "nct02246621"
+      ]
+    },
+    {
+      "id": "c_first_line_advanced",
+      "kind": "inclusion",
+      "criterionType": "prior_treatment",
+      "requirement": {
+        "op": "absent",
+        "variable": "prior_systemic_therapy_advanced"
+      },
+      "text": "No earlier systemic anti-cancer therapy, endocrine therapy or chemotherapy, for the advanced or metastatic disease; (neo)adjuvant treatment is allowed.",
+      "textZh": "此前未因晚期或转移性疾病接受过全身抗肿瘤治疗（含内分泌治疗和化疗）；（新）辅助治疗允许。",
+      "terms": [
+        "t_adjuvant",
+        "t_neoadjuvant"
+      ],
+      "sources": [
+        "nct01958021",
+        "nct01740427",
+        "nct02246621",
+        "nct03125902"
+      ]
+    },
+    {
+      "id": "c_hr_positive",
+      "kind": "inclusion",
+      "criterionType": "biomarker",
+      "requirement": {
+        "op": "any",
+        "operands": [
+          {
+            "op": "compare",
+            "variable": "hormone_receptor_status",
+            "comparator": "eq",
+            "value": "positive"
+          },
+          {
+            "op": "compare",
+            "variable": "er_status",
+            "comparator": "eq",
+            "value": "positive"
+          },
+          {
+            "op": "compare",
+            "variable": "pr_status",
+            "comparator": "eq",
+            "value": "positive"
+          }
+        ]
+      },
+      "text": "Hormone receptor-positive disease, estrogen receptor and/or progesterone receptor positive (a trial of the first-line palbociclib combination requires estrogen receptor positivity).",
+      "textZh": "激素受体阳性，即雌激素受体和/或孕激素受体阳性（一项一线哌柏西利联合方案试验要求雌激素受体阳性）。",
+      "terms": [
+        "t_hr_positive_bc",
+        "t_er",
+        "t_pr"
+      ],
+      "sources": [
+        "nct01958021",
+        "nct02246621",
+        "nct03155997",
+        "nct02513394",
+        "nct03901339",
+        "nct04494425",
+        "nct01740427"
+      ]
+    },
+    {
+      "id": "c_her2_negative",
+      "kind": "inclusion",
+      "criterionType": "biomarker",
+      "requirement": {
+        "op": "any",
+        "operands": [
+          {
+            "op": "compare",
+            "variable": "her2_status",
+            "comparator": "eq",
+            "value": "negative"
+          },
+          {
+            "op": "compare",
+            "variable": "her2_ihc_score",
+            "comparator": "in",
+            "value": [
+              0,
+              1
+            ]
+          },
+          {
+            "op": "all",
+            "operands": [
+              {
+                "op": "compare",
+                "variable": "her2_ihc_score",
+                "comparator": "eq",
+                "value": 2
+              },
+              {
+                "op": "compare",
+                "variable": "her2_ish_status",
+                "comparator": "eq",
+                "value": "negative"
+              }
+            ]
+          }
+        ]
+      },
+      "text": "HER2-negative disease.",
+      "textZh": "HER2 阴性疾病。",
+      "terms": [
+        "t_her2_negative_bc",
+        "t_her2"
+      ],
+      "sources": [
+        "nct01958021",
+        "nct02246621",
+        "nct03155997",
+        "nct02513394",
+        "nct03901339",
+        "nct02032823"
+      ]
+    },
+    {
+      "id": "c_her2_positive",
+      "kind": "inclusion",
+      "criterionType": "biomarker",
+      "requirement": {
+        "op": "any",
+        "operands": [
+          {
+            "op": "compare",
+            "variable": "her2_status",
+            "comparator": "eq",
+            "value": "positive"
+          },
+          {
+            "op": "compare",
+            "variable": "her2_ihc_score",
+            "comparator": "eq",
+            "value": 3
+          },
+          {
+            "op": "compare",
+            "variable": "her2_ish_status",
+            "comparator": "eq",
+            "value": "positive"
+          }
+        ]
+      },
+      "text": "HER2-positive disease by immunohistochemistry 3+ or in situ hybridization, confirmed per ASCO-CAP guidance, in the HER2-targeted trials.",
+      "textZh": "HER2 阳性（免疫组化 3+ 或原位杂交阳性，按 ASCO-CAP 指南确认），见于 HER2 靶向药物试验。",
+      "terms": [
+        "t_her2_positive_bc",
+        "t_her2"
+      ],
+      "sources": [
+        "nct03529110",
+        "nct04622319",
+        "nct01772472",
+        "nct02614794"
+      ]
+    },
+    {
+      "id": "c_triple_negative",
+      "kind": "inclusion",
+      "criterionType": "biomarker",
+      "requirement": {
+        "op": "all",
+        "operands": [
+          {
+            "op": "any",
+            "operands": [
+              {
+                "op": "compare",
+                "variable": "hormone_receptor_status",
+                "comparator": "eq",
+                "value": "negative"
+              },
+              {
+                "op": "all",
+                "operands": [
+                  {
+                    "op": "compare",
+                    "variable": "er_status",
+                    "comparator": "eq",
+                    "value": "negative"
+                  },
+                  {
+                    "op": "compare",
+                    "variable": "pr_status",
+                    "comparator": "eq",
+                    "value": "negative"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "op": "any",
+            "operands": [
+              {
+                "op": "compare",
+                "variable": "her2_status",
+                "comparator": "eq",
+                "value": "negative"
+              },
+              {
+                "op": "compare",
+                "variable": "her2_ihc_score",
+                "comparator": "in",
+                "value": [
+                  0,
+                  1
+                ]
+              },
+              {
+                "op": "all",
+                "operands": [
+                  {
+                    "op": "compare",
+                    "variable": "her2_ihc_score",
+                    "comparator": "eq",
+                    "value": 2
+                  },
+                  {
+                    "op": "compare",
+                    "variable": "her2_ish_status",
+                    "comparator": "eq",
+                    "value": "negative"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "text": "Triple-negative disease: negative for estrogen receptor, progesterone receptor and HER2, documented on a tumour specimen (several trials confirm it centrally).",
+      "textZh": "三阴性疾病：雌激素受体、孕激素受体和 HER2 均为阴性，并有肿瘤标本的记录（若干试验由中心实验室确认）。",
+      "terms": [
+        "t_tnbc"
+      ],
+      "sources": [
+        "nct02819518",
+        "nct03036488",
+        "nct02425891",
+        "nct03125902",
+        "nct02574455"
+      ]
+    },
+    {
+      "id": "c_germline_brca",
+      "kind": "inclusion",
+      "criterionType": "biomarker",
+      "requirement": {
+        "op": "present",
+        "variable": "germline_brca_mutation"
+      },
+      "text": "A documented germline BRCA1 or BRCA2 variant that is deleterious, suspected deleterious or pathogenic (PARP-inhibitor trials).",
+      "textZh": "有记录的胚系 BRCA1 或 BRCA2 有害、疑似有害或致病性变异（PARP 抑制剂试验）。",
+      "terms": [
+        "t_brca"
+      ],
+      "sources": [
+        "nct02032823",
+        "nct02000622",
+        "nct01945775"
+      ]
+    },
+    {
+      "id": "c_postmenopausal",
+      "kind": "inclusion",
+      "criterionType": "demographic",
+      "requirement": {
+        "op": "compare",
+        "variable": "menopausal_status",
+        "comparator": "eq",
+        "value": "postmenopausal"
+      },
+      "text": "Postmenopausal woman (first-line aromatase-inhibitor combination trials). One trial defines it as prior bilateral oophorectomy, age 60 or older, or younger than 60 with at least 12 months of amenorrhoea off chemotherapy, tamoxifen, toremifene and ovarian suppression and with FSH and estradiol in the postmenopausal range.",
+      "textZh": "绝经后女性（一线芳香化酶抑制剂联合方案试验）。一项试验的定义为：既往双侧卵巢切除，或年龄 ≥60 岁，或年龄 <60 岁且停用化疗、他莫昔芬、托瑞米芬和卵巢功能抑制后闭经满 12 个月、FSH 和雌二醇处于绝经后范围。",
+      "terms": [
+        "t_postmenopausal"
+      ],
+      "sources": [
+        "nct01958021",
+        "nct01740427",
+        "nct02246621"
+      ]
+    },
+    {
+      "id": "c_no_prior_cdk46",
+      "kind": "exclusion",
+      "criterionType": "prior_treatment",
+      "requirement": {
+        "op": "absent",
+        "variable": "prior_cdk4_6_inhibitor"
+      },
+      "text": "No earlier CDK4/6 inhibitor (trials of a CDK4/6 inhibitor in hormone receptor-positive disease).",
+      "textZh": "此前未使用过 CDK4/6 抑制剂（激素受体阳性疾病 CDK4/6 抑制剂试验）。",
+      "sources": [
+        "nct01958021",
+        "nct01740427",
+        "nct02246621",
+        "nct03155997"
+      ]
+    },
+    {
+      "id": "c_no_prior_parp",
+      "kind": "exclusion",
+      "criterionType": "prior_treatment",
+      "requirement": {
+        "op": "absent",
+        "variable": "prior_parp_inhibitor"
+      },
+      "text": "No earlier PARP inhibitor (PARP-inhibitor trials in germline BRCA-mutated disease).",
+      "textZh": "此前未使用过 PARP 抑制剂（胚系 BRCA 突变疾病的 PARP 抑制剂试验）。",
+      "sources": [
+        "nct02032823",
+        "nct02000622",
+        "nct01945775"
+      ]
+    },
+    {
+      "id": "c_adjuvant_nsai_interval",
+      "kind": "exclusion",
+      "criterionType": "time_window",
+      "requirement": {
+        "op": "absent",
+        "variable": "prior_adjuvant_nsai",
+        "window": {
+          "months": 12
+        }
+      },
+      "text": "If (neo)adjuvant therapy included letrozole or anastrozole, more than 12 months must have passed since it ended; one trial applies the same interval to any (neo)adjuvant endocrine therapy.",
+      "textZh": "如（新）辅助治疗包含来曲唑或阿那曲唑，停药后须超过 12 个月；有一项试验对任何（新）辅助内分泌治疗都采用同样的间隔。",
+      "sources": [
+        "nct01958021",
+        "nct01740427",
+        "nct02246621"
+      ]
+    },
+    {
+      "id": "c_no_active_cns_metastases",
+      "kind": "exclusion",
+      "criterionType": "comorbidity",
+      "requirement": {
+        "op": "any",
+        "operands": [
+          {
+            "op": "absent",
+            "variable": "brain_metastases"
+          },
+          {
+            "op": "language",
+            "key": "brain_mets_treated_stable",
+            "text": "Known brain metastases have been treated, are asymptomatic and stable, and need no corticosteroids or anticonvulsants to control symptoms."
+          }
+        ]
+      },
+      "text": "No active central nervous system metastases: brain metastases are acceptable only when treated, asymptomatic and stable without steroids or anticonvulsants. Trials focused on brain metastases admit more.",
+      "textZh": "无活动性中枢神经系统转移：脑转移仅在已治疗、无症状且稳定、无需糖皮质激素或抗惊厥药时可接受。以脑转移为重点的试验入组更宽。",
+      "sources": [
+        "nct03529110",
+        "nct03734029",
+        "nct02819518",
+        "nct02425891",
+        "nct01945775",
+        "nct02574455",
+        "nct02614794"
+      ]
+    },
+    {
+      "id": "c_no_other_malignancy",
+      "kind": "exclusion",
+      "criterionType": "comorbidity",
+      "requirement": {
+        "op": "absent",
+        "variable": "other_malignancy",
+        "window": {
+          "years": 5
+        }
+      },
+      "text": "No other malignancy in the previous 5 years, apart from low-risk exceptions such as adequately treated non-melanoma skin cancer and carcinoma in situ of the cervix.",
+      "textZh": "既往 5 年内无其他恶性肿瘤，充分治疗的非黑色素瘤皮肤癌和宫颈原位癌等低风险情形除外。",
+      "sources": [
+        "nct02819518",
+        "nct03036488",
+        "nct03125902",
+        "nct01772472",
+        "nct04622319"
+      ]
+    },
+    {
+      "id": "c_no_hiv",
+      "kind": "exclusion",
+      "criterionType": "comorbidity",
+      "requirement": {
+        "op": "absent",
+        "variable": "hiv_infection"
+      },
+      "text": "No known HIV infection.",
+      "textZh": "无已知 HIV 感染。",
+      "sources": [
+        "nct02819518",
+        "nct03036488",
+        "nct02425891",
+        "nct03125902",
+        "nct02000622",
+        "nct01945775",
+        "nct02574455",
+        "nct01772472"
+      ]
+    },
+    {
+      "id": "c_no_active_hepatitis",
+      "kind": "exclusion",
+      "criterionType": "comorbidity",
+      "requirement": {
+        "op": "all",
+        "operands": [
+          {
+            "op": "absent",
+            "variable": "hepatitis_b"
+          },
+          {
+            "op": "absent",
+            "variable": "hepatitis_c"
+          }
+        ]
+      },
+      "text": "No active hepatitis B or hepatitis C infection.",
+      "textZh": "无活动性乙型或丙型肝炎感染。",
+      "sources": [
+        "nct02819518",
+        "nct03036488",
+        "nct02425891",
+        "nct01945775",
+        "nct03125902"
+      ]
+    },
+    {
+      "id": "c_not_pregnant_or_lactating",
+      "kind": "exclusion",
+      "criterionType": "pregnancy",
+      "requirement": {
+        "op": "all",
+        "operands": [
+          {
+            "op": "absent",
+            "variable": "pregnancy"
+          },
+          {
+            "op": "absent",
+            "variable": "breastfeeding"
+          }
+        ]
+      },
+      "applicability": {
+        "op": "compare",
+        "variable": "sex",
+        "comparator": "in",
+        "value": [
+          "female"
+        ]
+      },
+      "text": "Not pregnant and not breastfeeding.",
+      "textZh": "未妊娠且未哺乳。",
+      "sources": [
+        "nct02819518",
+        "nct02425891",
+        "nct03125902",
+        "nct02574455",
+        "nct02000622",
+        "nct01772472",
+        "nct03155997",
+        "nct03901339"
+      ]
+    },
+    {
+      "id": "c_no_recent_mi",
+      "kind": "exclusion",
+      "criterionType": "comorbidity",
+      "requirement": {
+        "op": "absent",
+        "variable": "myocardial_infarction",
+        "window": {
+          "months": 6
+        }
+      },
+      "text": "No myocardial infarction in the 6 months before randomization.",
+      "textZh": "随机化前 6 个月内无心肌梗死。",
+      "sources": [
+        "nct03529110",
+        "nct02819518",
+        "nct03036488",
+        "nct04622319"
+      ]
+    },
+    {
+      "id": "c_no_nyha_ii_iv_heart_failure",
+      "kind": "exclusion",
+      "criterionType": "comorbidity",
+      "requirement": {
+        "op": "absent",
+        "variable": "heart_failure_nyha_ii_iv"
+      },
+      "text": "No congestive heart failure of NYHA class II to IV (several trials say symptomatic).",
+      "textZh": "无 NYHA II–IV 级的充血性心力衰竭（若干试验表述为症状性）。",
+      "sources": [
+        "nct03529110",
+        "nct02819518",
+        "nct03036488",
+        "nct04622319"
+      ]
+    },
+    {
+      "id": "c_lvef_50",
+      "kind": "inclusion",
+      "criterionType": "lab",
+      "requirement": {
+        "op": "compare",
+        "variable": "lvef",
+        "comparator": "gte",
+        "value": 50,
+        "unit": "%"
+      },
+      "text": "Left ventricular ejection fraction of at least 50%; some trials state it as an inclusion, others as an exclusion below 50%.",
+      "textZh": "左心室射血分数不低于 50%；部分试验将其列为纳入标准，另一些试验列为 <50% 的排除标准。",
+      "sources": [
+        "nct03529110",
+        "nct04622319",
+        "nct02614794",
+        "nct01958021"
+      ]
+    },
+    {
+      "id": "c_no_ild",
+      "kind": "exclusion",
+      "criterionType": "comorbidity",
+      "requirement": {
+        "op": "absent",
+        "variable": "interstitial_lung_disease"
+      },
+      "text": "No non-infectious interstitial lung disease or pneumonitis that needed corticosteroids, and none current.",
+      "textZh": "无需要糖皮质激素治疗的非感染性间质性肺病或肺炎史，且当前无间质性肺病或肺炎。",
+      "sources": [
+        "nct03529110",
+        "nct03734029",
+        "nct04494425",
+        "nct04622319",
+        "nct02819518",
+        "nct03036488"
+      ]
+    },
+    {
+      "id": "c_investigational_washout",
+      "kind": "exclusion",
+      "criterionType": "prior_treatment",
+      "requirement": {
+        "op": "elapsed_since",
+        "variable": "investigational_agent",
+        "days": 28
+      },
+      "text": "At least 4 weeks (28 days) since the last investigational agent or device.",
+      "textZh": "距最近一次使用研究性药物或器械至少 4 周（28 天）。",
+      "sources": [
+        "nct02819518",
+        "nct03036488",
+        "nct01772472"
+      ]
+    },
+    {
+      "id": "c_anc",
+      "kind": "inclusion",
+      "criterionType": "lab",
+      "requirement": {
+        "op": "compare",
+        "variable": "anc",
+        "comparator": "gte",
+        "value": 1500,
+        "unit": "cells/mm3"
+      },
+      "text": "Absolute neutrophil count of at least 1,500 per mm3 (equal to per microlitre); a third trial writes it as strictly above 1,500.",
+      "textZh": "中性粒细胞绝对计数不低于 1,500/mm3（即每微升）；另有一项试验写作严格大于 1,500。",
+      "sources": [
+        "nct02513394",
+        "nct03901339",
+        "nct02574455"
+      ]
+    },
+    {
+      "id": "c_platelets",
+      "kind": "inclusion",
+      "criterionType": "lab",
+      "requirement": {
+        "op": "compare",
+        "variable": "platelet_count",
+        "comparator": "gte",
+        "value": 100000,
+        "unit": "cells/mm3"
+      },
+      "text": "Platelet count of at least 100,000 per mm3; a third trial writes it as strictly above 100,000.",
+      "textZh": "血小板计数不低于 100,000/mm3；另有一项试验写作严格大于 100,000。",
+      "sources": [
+        "nct02513394",
+        "nct03901339",
+        "nct02574455"
+      ]
+    }
+  ],
+  "mappings": [
+    {
+      "id": "m_age",
+      "concept": "age",
+      "label": "Age",
+      "labelZh": "年龄",
+      "type": "number",
+      "role": "covariate",
+      "unit": "years",
+      "fieldNames": [
+        "AGE",
+        "age",
+        "age_years",
+        "AGEYR",
+        "age_at_diagnosis",
+        "年龄",
+        "入组年龄"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_sex",
+      "concept": "sex",
+      "label": "Sex",
+      "labelZh": "性别",
+      "type": "code",
+      "role": "covariate",
+      "fieldNames": [
+        "SEX",
+        "sex",
+        "gender",
+        "GENDER",
+        "性别"
+      ],
+      "codes": [
+        {
+          "means": "female",
+          "accepts": [
+            "F",
+            "f",
+            "female",
+            "Female",
+            "FEMALE",
+            "女",
+            "女性"
+          ]
+        },
+        {
+          "means": "male",
+          "accepts": [
+            "M",
+            "m",
+            "male",
+            "Male",
+            "MALE",
+            "男",
+            "男性"
+          ]
+        }
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_breast_cancer",
+      "concept": "breast_cancer",
+      "label": "Breast cancer diagnosis",
+      "labelZh": "乳腺癌诊断",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "breast_cancer",
+        "bc",
+        "DIAGNOSIS",
+        "diagnosis",
+        "DX",
+        "disease",
+        "诊断",
+        "乳腺癌"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_metastatic_disease",
+      "concept": "metastatic_disease",
+      "label": "Metastatic disease",
+      "labelZh": "转移性疾病",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "metastatic",
+        "metastasis",
+        "M_STAGE",
+        "mstage",
+        "distant_metastasis",
+        "stage_iv",
+        "转移",
+        "远处转移"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_unresectable_locoregional_disease",
+      "concept": "unresectable_locoregional_disease",
+      "label": "Locally advanced or locally recurrent disease not amenable to cure",
+      "labelZh": "无法根治的局部晚期或局部复发疾病",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "locally_advanced",
+        "unresectable",
+        "locoregional_recurrence",
+        "local_recurrence",
+        "inoperable",
+        "局部晚期",
+        "局部复发",
+        "不可切除"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_measurable_disease",
+      "concept": "measurable_disease",
+      "label": "Measurable disease (RECIST 1.1)",
+      "labelZh": "可测量病灶（RECIST 1.1）",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "measurable_disease",
+        "measurable",
+        "recist_measurable",
+        "TRGRL",
+        "可测量病灶"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_er_status",
+      "concept": "er_status",
+      "label": "Estrogen receptor status",
+      "labelZh": "雌激素受体状态",
+      "type": "code",
+      "role": "covariate",
+      "fieldNames": [
+        "ER",
+        "er_status",
+        "ER_STATUS",
+        "esr1_ihc",
+        "estrogen_receptor",
+        "雌激素受体",
+        "ER状态"
+      ],
+      "codes": [
+        {
+          "means": "positive",
+          "accepts": [
+            "positive",
+            "pos",
+            "+",
+            "Positive",
+            "POSITIVE",
+            "阳性"
+          ]
+        },
+        {
+          "means": "negative",
+          "accepts": [
+            "negative",
+            "neg",
+            "-",
+            "Negative",
+            "NEGATIVE",
+            "阴性"
+          ]
+        }
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_pr_status",
+      "concept": "pr_status",
+      "label": "Progesterone receptor status",
+      "labelZh": "孕激素受体状态",
+      "type": "code",
+      "role": "covariate",
+      "fieldNames": [
+        "PR",
+        "PgR",
+        "pr_status",
+        "PR_STATUS",
+        "progesterone_receptor",
+        "孕激素受体",
+        "PR状态"
+      ],
+      "codes": [
+        {
+          "means": "positive",
+          "accepts": [
+            "positive",
+            "pos",
+            "+",
+            "Positive",
+            "POSITIVE",
+            "阳性"
+          ]
+        },
+        {
+          "means": "negative",
+          "accepts": [
+            "negative",
+            "neg",
+            "-",
+            "Negative",
+            "NEGATIVE",
+            "阴性"
+          ]
+        }
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_hormone_receptor_status",
+      "concept": "hormone_receptor_status",
+      "label": "Hormone receptor status (ER and/or PR)",
+      "labelZh": "激素受体状态（ER 和/或 PR）",
+      "type": "code",
+      "role": "covariate",
+      "fieldNames": [
+        "HR",
+        "HR_STATUS",
+        "hr_status",
+        "hormone_receptor",
+        "hormone_receptor_status",
+        "激素受体",
+        "HR状态"
+      ],
+      "codes": [
+        {
+          "means": "positive",
+          "accepts": [
+            "positive",
+            "pos",
+            "+",
+            "Positive",
+            "POSITIVE",
+            "阳性"
+          ]
+        },
+        {
+          "means": "negative",
+          "accepts": [
+            "negative",
+            "neg",
+            "-",
+            "Negative",
+            "NEGATIVE",
+            "阴性"
+          ]
+        }
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_her2_status",
+      "concept": "her2_status",
+      "label": "HER2 status",
+      "labelZh": "HER2 状态",
+      "type": "code",
+      "role": "covariate",
+      "fieldNames": [
+        "HER2",
+        "her2_status",
+        "HER2_STATUS",
+        "her2neu",
+        "erbb2",
+        "HER2状态",
+        "HER2表达"
+      ],
+      "codes": [
+        {
+          "means": "positive",
+          "accepts": [
+            "positive",
+            "pos",
+            "+",
+            "Positive",
+            "POSITIVE",
+            "阳性"
+          ]
+        },
+        {
+          "means": "negative",
+          "accepts": [
+            "negative",
+            "neg",
+            "-",
+            "Negative",
+            "NEGATIVE",
+            "阴性"
+          ]
+        }
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_her2_ihc_score",
+      "concept": "her2_ihc_score",
+      "label": "HER2 immunohistochemistry score (0 to 3)",
+      "labelZh": "HER2 免疫组化评分（0–3）",
+      "type": "number",
+      "role": "covariate",
+      "fieldNames": [
+        "HER2_IHC",
+        "her2_ihc",
+        "ihc_score",
+        "her2_ihc_score",
+        "IHC",
+        "HER2免疫组化",
+        "HER2 IHC评分"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_her2_ish_status",
+      "concept": "her2_ish_status",
+      "label": "HER2 in situ hybridization result",
+      "labelZh": "HER2 原位杂交结果",
+      "type": "code",
+      "role": "covariate",
+      "fieldNames": [
+        "HER2_ISH",
+        "her2_ish",
+        "her2_fish",
+        "FISH",
+        "ISH",
+        "HER2_FISH_RESULT",
+        "HER2原位杂交",
+        "FISH结果"
+      ],
+      "codes": [
+        {
+          "means": "positive",
+          "accepts": [
+            "positive",
+            "pos",
+            "+",
+            "Positive",
+            "POSITIVE",
+            "阳性"
+          ]
+        },
+        {
+          "means": "negative",
+          "accepts": [
+            "negative",
+            "neg",
+            "-",
+            "Negative",
+            "NEGATIVE",
+            "阴性"
+          ]
+        }
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_germline_brca_mutation",
+      "concept": "germline_brca_mutation",
+      "label": "Germline BRCA1/2 pathogenic variant",
+      "labelZh": "胚系 BRCA1/2 致病性变异",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "gBRCA",
+        "germline_brca",
+        "brca_mutation",
+        "BRCA",
+        "brca1_2",
+        "BRCA突变",
+        "胚系BRCA"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_pik3ca_mutation",
+      "concept": "pik3ca_mutation",
+      "label": "PIK3CA mutation",
+      "labelZh": "PIK3CA 突变",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "PIK3CA",
+        "pik3ca_mutation",
+        "pik3ca_status",
+        "PIK3CA突变"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_esr1_mutation",
+      "concept": "esr1_mutation",
+      "label": "ESR1 mutation",
+      "labelZh": "ESR1 突变",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "ESR1",
+        "esr1_mutation",
+        "esr1_status",
+        "ESR1突变"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_pdl1_cps",
+      "concept": "pdl1_cps",
+      "label": "PD-L1 combined positive score",
+      "labelZh": "PD-L1 联合阳性评分",
+      "type": "number",
+      "role": "covariate",
+      "fieldNames": [
+        "PDL1_CPS",
+        "cps",
+        "pdl1_cps",
+        "PD-L1_CPS",
+        "combined_positive_score",
+        "PD-L1 CPS",
+        "联合阳性评分"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_menopausal_status",
+      "concept": "menopausal_status",
+      "label": "Menopausal status",
+      "labelZh": "绝经状态",
+      "type": "code",
+      "role": "covariate",
+      "fieldNames": [
+        "MENOSTAT",
+        "menopausal_status",
+        "menopause",
+        "MENOPAUSE",
+        "meno_status",
+        "绝经状态",
+        "月经状态"
+      ],
+      "codes": [
+        {
+          "means": "postmenopausal",
+          "accepts": [
+            "postmenopausal",
+            "post-menopausal",
+            "post",
+            "Postmenopausal",
+            "绝经后"
+          ]
+        },
+        {
+          "means": "premenopausal",
+          "accepts": [
+            "premenopausal",
+            "pre-menopausal",
+            "pre",
+            "Premenopausal",
+            "绝经前"
+          ]
+        }
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_ecog",
+      "concept": "ecog",
+      "label": "ECOG performance status (0 to 5)",
+      "labelZh": "ECOG 体能状态评分（0–5）",
+      "type": "number",
+      "role": "covariate",
+      "fieldNames": [
+        "ECOG",
+        "ecog",
+        "ECOGPS",
+        "ecog_ps",
+        "ecog_score",
+        "performance_status",
+        "PS",
+        "ECOG评分",
+        "体能状态评分"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_prior_systemic_therapy_advanced",
+      "concept": "prior_systemic_therapy_advanced",
+      "label": "Prior systemic therapy for locally advanced or metastatic disease",
+      "labelZh": "晚期或转移性疾病既往全身治疗",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "prior_systemic_advanced",
+        "prior_systemic_therapy_mbc",
+        "prior_therapy_metastatic",
+        "first_line",
+        "systemic_therapy_line",
+        "既往晚期全身治疗",
+        "晚期一线"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_definitive_breast_surgery",
+      "concept": "definitive_breast_surgery",
+      "label": "Definitive breast surgery completed",
+      "labelZh": "已完成确定性乳腺手术",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "definitive_surgery",
+        "breast_surgery",
+        "mastectomy_or_lumpectomy",
+        "surgery_done",
+        "SURGERY",
+        "手术",
+        "根治性手术"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_prior_cdk4_6_inhibitor",
+      "concept": "prior_cdk4_6_inhibitor",
+      "label": "Prior CDK4/6 inhibitor",
+      "labelZh": "既往使用 CDK4/6 抑制剂",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "prior_cdk46",
+        "cdk46_prior",
+        "prior_cdk4_6",
+        "palbociclib_prior",
+        "cdk4/6",
+        "CDK4/6抑制剂",
+        "既往CDK4/6"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_prior_parp_inhibitor",
+      "concept": "prior_parp_inhibitor",
+      "label": "Prior PARP inhibitor",
+      "labelZh": "既往使用 PARP 抑制剂",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "prior_parp",
+        "parp_prior",
+        "prior_parp_inhibitor",
+        "olaparib_prior",
+        "PARP抑制剂",
+        "既往PARP"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_prior_adjuvant_nsai",
+      "concept": "prior_adjuvant_nsai",
+      "label": "Prior (neo)adjuvant nonsteroidal aromatase inhibitor (letrozole or anastrozole), end date",
+      "labelZh": "既往（新）辅助非甾体芳香化酶抑制剂（来曲唑或阿那曲唑）停药日期",
+      "type": "date",
+      "role": "other",
+      "fieldNames": [
+        "adjuvant_ai_end_date",
+        "prior_ai_end",
+        "aromatase_inhibitor_end_date",
+        "letrozole_end_date",
+        "anastrozole_end_date",
+        "辅助内分泌停药日期",
+        "芳香化酶抑制剂停药日期"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_brain_metastases",
+      "concept": "brain_metastases",
+      "label": "Brain metastases",
+      "labelZh": "脑转移",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "brain_mets",
+        "brain_metastases",
+        "cns_metastases",
+        "CNS_MET",
+        "BRAINMET",
+        "脑转移",
+        "中枢神经系统转移"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_other_malignancy",
+      "concept": "other_malignancy",
+      "label": "Other malignancy (excluding adequately treated non-melanoma skin cancer and cervical carcinoma in situ), diagnosis date",
+      "labelZh": "其他恶性肿瘤（不含充分治疗的非黑色素瘤皮肤癌和宫颈原位癌）诊断日期",
+      "type": "date",
+      "role": "other",
+      "fieldNames": [
+        "other_cancer_date",
+        "second_primary_date",
+        "prior_malignancy_date",
+        "MHSTDTC_MALIGN",
+        "prior_cancer",
+        "其他恶性肿瘤日期",
+        "既往肿瘤诊断日期"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_hiv_infection",
+      "concept": "hiv_infection",
+      "label": "HIV infection",
+      "labelZh": "HIV 感染",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "HIV",
+        "hiv_status",
+        "hiv_infection",
+        "HIV_POS",
+        "HIV感染",
+        "HIV抗体"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_hepatitis_b",
+      "concept": "hepatitis_b",
+      "label": "Active hepatitis B infection",
+      "labelZh": "活动性乙型肝炎",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "HBV",
+        "hepatitis_b",
+        "hbsag",
+        "HBSAG",
+        "hbv_dna",
+        "乙肝",
+        "乙型肝炎",
+        "HBsAg"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_hepatitis_c",
+      "concept": "hepatitis_c",
+      "label": "Active hepatitis C infection",
+      "labelZh": "活动性丙型肝炎",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "HCV",
+        "hepatitis_c",
+        "hcv_ab",
+        "hcv_rna",
+        "丙肝",
+        "丙型肝炎",
+        "HCV抗体"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_pregnancy",
+      "concept": "pregnancy",
+      "label": "Pregnancy",
+      "labelZh": "妊娠",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "PREGNANT",
+        "pregnancy",
+        "pregnancy_status",
+        "HCG",
+        "pregnancy_test",
+        "妊娠",
+        "怀孕"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_breastfeeding",
+      "concept": "breastfeeding",
+      "label": "Breastfeeding or lactation",
+      "labelZh": "哺乳",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "LACTATING",
+        "breastfeeding",
+        "lactation",
+        "nursing",
+        "哺乳",
+        "哺乳期"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_myocardial_infarction",
+      "concept": "myocardial_infarction",
+      "label": "Myocardial infarction, event date",
+      "labelZh": "心肌梗死发生日期",
+      "type": "date",
+      "role": "other",
+      "fieldNames": [
+        "mi_date",
+        "myocardial_infarction_date",
+        "MI_DATE",
+        "mi",
+        "MHSTDTC_MI",
+        "心肌梗死日期",
+        "心梗日期"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_heart_failure_nyha_ii_iv",
+      "concept": "heart_failure_nyha_ii_iv",
+      "label": "Congestive heart failure, NYHA class II to IV",
+      "labelZh": "充血性心力衰竭（NYHA II–IV 级）",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "chf",
+        "heart_failure",
+        "nyha_class",
+        "NYHA",
+        "chf_nyha_ii_iv",
+        "心力衰竭",
+        "心衰",
+        "NYHA分级"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_lvef",
+      "concept": "lvef",
+      "label": "Left ventricular ejection fraction",
+      "labelZh": "左心室射血分数",
+      "type": "number",
+      "role": "measurement",
+      "unit": "%",
+      "fieldNames": [
+        "LVEF",
+        "lvef",
+        "LVEFPCT",
+        "ejection_fraction",
+        "EF",
+        "lvef_percent",
+        "射血分数",
+        "左室射血分数"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_interstitial_lung_disease",
+      "concept": "interstitial_lung_disease",
+      "label": "Interstitial lung disease or pneumonitis (non-infectious, history requiring steroids or current)",
+      "labelZh": "间质性肺病或肺炎（非感染性，需激素治疗的既往史或当前）",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "ild",
+        "pneumonitis",
+        "interstitial_lung_disease",
+        "ILD_HISTORY",
+        "ild_pneumonitis",
+        "间质性肺病",
+        "肺炎",
+        "间质性肺炎"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_investigational_agent",
+      "concept": "investigational_agent",
+      "label": "Last investigational agent or device, end date",
+      "labelZh": "最近一次研究性药物或器械使用结束日期",
+      "type": "date",
+      "role": "other",
+      "fieldNames": [
+        "last_investigational_date",
+        "investigational_end_date",
+        "prior_trial_end",
+        "trial_drug_last_date",
+        "研究药物末次日期",
+        "既往临床试验结束日期"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_anc",
+      "concept": "anc",
+      "label": "Absolute neutrophil count",
+      "labelZh": "中性粒细胞绝对计数",
+      "type": "number",
+      "role": "measurement",
+      "unit": "cells/mm3",
+      "fieldNames": [
+        "ANC",
+        "anc",
+        "NEUT",
+        "neutrophils",
+        "absolute_neutrophil_count",
+        "中性粒细胞",
+        "中性粒细胞绝对值"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_platelet_count",
+      "concept": "platelet_count",
+      "label": "Platelet count",
+      "labelZh": "血小板计数",
+      "type": "number",
+      "role": "measurement",
+      "unit": "cells/mm3",
+      "fieldNames": [
+        "PLT",
+        "platelets",
+        "PLAT",
+        "platelet_count",
+        "plt_count",
+        "血小板",
+        "血小板计数"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    }
+  ],
+  "background": [
+    {
+      "id": "b_subtypes_and_settings",
+      "text": "Breast cancer trials are organised around receptor-defined subtypes (hormone receptor-positive/HER2-negative, HER2-positive and triple-negative) and around setting: neoadjuvant or adjuvant treatment of early disease versus treatment of advanced or metastatic disease.",
+      "textZh": "乳腺癌试验围绕受体定义的亚型（激素受体阳性/HER2 阴性、HER2 阳性、三阴性）和治疗场景展开：早期疾病的新辅助或辅助治疗，与晚期或转移性疾病的治疗。",
+      "sources": [
+        "nct02246621",
+        "nct03529110",
+        "nct02819518",
+        "nct03036488",
+        "nct03155997",
+        "nct01958021"
+      ]
+    },
+    {
+      "id": "b_her2_testing",
+      "text": "HER2-low (immunohistochemistry 1+, or 2+ with negative in situ hybridization) is a trial-defined population within HER2-negative disease; the 2023 ASCO-CAP update affirmed the 2018 HER2 testing recommendations and noted that data on immunohistochemistry 0 tumours are limited.",
+      "textZh": "HER2 低表达（免疫组化 1+，或免疫组化 2+ 且原位杂交阴性）是 HER2 阴性乳腺癌中由试验定义的人群；2023 年 ASCO-CAP 更新重申了 2018 年 HER2 检测建议，并指出免疫组化 0 肿瘤的数据有限。",
+      "sources": [
+        "asco_cap_her2",
+        "nct03734029",
+        "nct04494425"
+      ]
+    },
+    {
+      "id": "b_pcr_guidance",
+      "text": "FDA accepts pathological complete response in the neoadjuvant treatment of high-risk early-stage breast cancer as a surrogate endpoint that may support accelerated approval, with event-free or overall survival needed to confirm benefit; EMA recommends the ypT0/is ypN0 definition and an add-on design in high-risk disease.",
+      "textZh": "FDA 认可高危早期乳腺癌新辅助治疗中的病理完全缓解可作为支持加速批准的替代终点，但须以无事件生存期或总生存期确证获益；EMA 推荐 ypT0/is ypN0 定义，并建议在高危疾病中采用叠加设计。",
+      "sources": [
+        "fda_pcr",
+        "ema_appendix4"
+      ]
+    },
+    {
+      "id": "b_early_endpoints",
+      "text": "FDA names disease-free survival as the basis of past approvals of adjuvant breast cancer hormonal and cytotoxic therapy and event-free survival as the appropriate endpoint for neoadjuvant therapy; EMA calls disease-free survival an appropriate primary endpoint for adjuvant studies.",
+      "textZh": "FDA 指出无病生存期是既往辅助乳腺癌内分泌和细胞毒治疗获批的依据，无事件生存期是新辅助治疗的适当终点；EMA 认为无病生存期是辅助研究的适当主要终点。",
+      "sources": [
+        "fda_endpoints",
+        "ema_appendix4"
+      ]
+    },
+    {
+      "id": "b_advanced_endpoints",
+      "text": "In advanced or metastatic disease EMA expects objective response rate, duration of response and, where relevant, the tumour-stabilisation rate to be reported whichever endpoint is primary; FDA notes that randomized trials of hormonal drugs in breast cancer have used objective response rate as an endpoint supporting traditional approval.",
+      "textZh": "在晚期或转移性疾病中，无论主要终点是什么，EMA 都期望报告客观缓解率、缓解持续时间以及（相关时）肿瘤稳定率；FDA 指出乳腺癌内分泌药物的随机试验曾以客观缓解率作为支持传统批准的终点。",
+      "sources": [
+        "ema_anticancer",
+        "fda_endpoints"
+      ]
+    },
+    {
+      "id": "b_biomarker_populations",
+      "text": "Biomarker-selected populations include germline BRCA1/2 variants (PARP-inhibitor trials), PIK3CA mutations (the alpelisib label requires a mutation found in tumour tissue or plasma) and ESR1 mutations (the elacestrant trial used circulating tumour DNA and ligand-binding-domain missense mutations).",
+      "textZh": "按生物标志物选择的人群包括胚系 BRCA1/2 变异（PARP 抑制剂试验）、PIK3CA 突变（阿培利司标签要求在肿瘤组织或血浆中检出突变）和 ESR1 突变（艾拉司群试验采用循环肿瘤 DNA 及配体结合域错义突变）。",
+      "sources": [
+        "nct02032823",
+        "nct02000622",
+        "nct01945775",
+        "fda_piqray_label",
+        "fda_elacestrant"
+      ]
+    }
+  ]
+}
