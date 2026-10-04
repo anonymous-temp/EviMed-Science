@@ -11,6 +11,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import stat
 import sys
 from contextlib import contextmanager
@@ -139,6 +140,9 @@ def source_tree_evidence(root):
 
 
 DEPLOYMENT_INPUTS = ("Dockerfile", "Dockerfile.evidence", "requirements.txt")
+#: What the manifest pinned at image build can say about the adapter on disk
+#: that is worth writing down (see `pinned_manifest_status`).
+PINNED_FINDINGS = ("mismatch", "unreadable")
 
 
 def adapter_manifest(adapter_package=PACKAGE):
@@ -150,22 +154,113 @@ def adapter_manifest(adapter_package=PACKAGE):
     return {"schemaVersion": 1, "package": source_tree_evidence(package), "deploymentInputs": files}
 
 
-def adapter_evidence(adapter_package=PACKAGE):
-    manifest = adapter_manifest(adapter_package)
-    pinned = Path(adapter_package).parent / "adapter-evidence.json"
-    if pinned.exists() or pinned.is_symlink():
-        if json.loads(_read_file(pinned.parent, pinned.name, 64 * 1024)) != manifest:
-            raise AuditReceiptUnavailable("audit_adapter_manifest_changed")
+def pinned_manifest_status(adapter_package=None, manifest=None):
+    """Whether the manifest pinned when the image was built still describes the adapter on disk.
+
+    ``absent`` (nothing was pinned: a checkout, a test), ``matches``, ``mismatch`` or
+    ``unreadable``. It never raises: a stale pin is a finding about the image, not a
+    reason to refuse anyone's job (owner ruling 2026-10-04). On 2026-09-27 an engine
+    delta copied a changed package over its base image's pin and every MR start
+    answered HTTP 500 until the next release.
+    """
+    package = Path(adapter_package or PACKAGE)
+    pinned = package.parent / "adapter-evidence.json"
+    try:
+        if not (pinned.exists() or pinned.is_symlink()):
+            return "absent"
+        recorded = json.loads(_read_file(pinned.parent, pinned.name, 64 * 1024))
+        if manifest is None:
+            manifest = adapter_manifest(package)
+    except (OSError, ValueError, TypeError):
+        return "unreadable"
+    return "matches" if recorded == manifest else "mismatch"
+
+
+def _adapter_evidence(manifest):
     return {"sha256": digest(canonical(manifest)), "files": manifest["package"]["files"] + len(DEPLOYMENT_INPUTS)}
+
+
+def _execution_evidence(tree, adapter_package):
+    return {"schemaVersion": 1, "agentSourceSha256": tree["sha256"],
+        "agentSourceFiles": tree["files"], "adapterSha256": digest(_read_file(adapter_package, "service.py")),
+        "evidenceModuleSha256": digest(_read_file(adapter_package, "audit_receipt.py")),
+        "model": "deepseek-flash", "thinking": True, "reasoningEffort": "high"}
+
+
+def adapter_evidence(adapter_package=PACKAGE):
+    """Strict: the clean-checkout verifier and the release audit need the pin to hold.
+
+    A running job never calls this; it calls `observe_evidence`.
+    """
+    manifest = adapter_manifest(adapter_package)
+    status = pinned_manifest_status(adapter_package, manifest)
+    if status == "mismatch":
+        raise AuditReceiptUnavailable("audit_adapter_manifest_changed")
+    if status == "unreadable":
+        raise AuditReceiptUnavailable("audit_adapter_manifest_unreadable")
+    return _adapter_evidence(manifest)
 
 
 def current_evidence(agent_root, adapter_package=PACKAGE):
     tree = source_tree_evidence(agent_root)
-    return {"executionEvidence": {"schemaVersion": 1, "agentSourceSha256": tree["sha256"],
-        "agentSourceFiles": tree["files"], "adapterSha256": digest(_read_file(adapter_package, "service.py")),
-        "evidenceModuleSha256": digest(_read_file(adapter_package, "audit_receipt.py")),
-        "model": "deepseek-flash", "thinking": True, "reasoningEffort": "high"},
+    return {"executionEvidence": _execution_evidence(tree, adapter_package),
         "adapterEvidence": adapter_evidence(adapter_package)}
+
+
+def observe_evidence(agent_root, adapter_package=None):
+    """The evidence a job's record can carry, or the reason it cannot: never an exception.
+
+    The evidence is a label on the audit record, and nothing it does may fail a user's
+    job (owner ruling 2026-10-04: the receipt is our own mechanism, not a gate). So
+    where `current_evidence` raises, this answers
+    ``{"evidence": None, "unavailable": <code>, "pinnedManifest": <status>}``, and
+    where it succeeds, the same two blocks plus the pin's status. A stale pin does
+    not stop the evidence being computed: the digest is of the adapter on disk.
+    """
+    package = Path(adapter_package or PACKAGE)
+    pinned = "unreadable"
+    try:
+        manifest = adapter_manifest(package)
+        pinned = pinned_manifest_status(package, manifest)
+        tree = source_tree_evidence(agent_root)
+        evidence = {"executionEvidence": _execution_evidence(tree, package),
+            "adapterEvidence": _adapter_evidence(manifest)}
+    except AuditReceiptUnavailable as error:
+        code = str(error)
+        return {"evidence": None, "pinnedManifest": pinned,
+            "unavailable": code if re.fullmatch(r"[a-z][a-z0-9_]{0,79}", code) else "audit_evidence_unavailable"}
+    except (OSError, ValueError, TypeError):
+        return {"evidence": None, "unavailable": "audit_source_unreadable", "pinnedManifest": pinned}
+    return {"evidence": evidence, "unavailable": None, "pinnedManifest": pinned}
+
+
+def admission_note(observed):
+    """What the record says at admission about evidence it could not take or whose pin is stale; None when clean."""
+    note = {}
+    if observed.get("evidence") is None:
+        note["unavailable"] = observed.get("unavailable") or "audit_evidence_unavailable"
+    if observed.get("pinnedManifest") in PINNED_FINDINGS:
+        note["pinnedManifest"] = observed["pinnedManifest"]
+    return note or None
+
+
+def evidence_note(admission, carried, observed):
+    """What a finished job's record says about its own evidence; None when the evidence is clean.
+
+    ``admission`` is the evidence taken when the job was admitted (None when it could
+    not be), ``carried`` the note written then, ``observed`` what `observe_evidence`
+    sees now. The job's status is never an input: a changed source is recorded as
+    ``changed`` with both evidence blocks, next to the digests it differs by, and the
+    job stands.
+    """
+    note = dict(carried) if isinstance(carried, dict) else {}
+    if observed.get("pinnedManifest") in PINNED_FINDINGS:
+        note["pinnedManifest"] = observed["pinnedManifest"]
+    if isinstance(admission, dict) and observed.get("evidence") != admission:
+        note.update(changed=True, admission=admission,
+            completion=observed["evidence"] if observed.get("evidence") is not None
+            else {"unavailable": observed.get("unavailable") or "audit_evidence_unavailable"})
+    return note or None
 
 
 def _fixture_contract(manifest):
@@ -237,11 +332,17 @@ def produce(state, outcome, data_root):
         proof = {"schemaVersion": 1, "tool": "mendelian_randomization", "jobId": state["jobId"],
             "jobStatus": "succeeded", "scope": scope, "requestSha256": digest(canonical(request)),
             **state["sourceEvidence"], "inputs": _receipt_rows(outcome["inputReceipts"]),
-            "artifacts": artifacts, "completedAt": state["finishedAt"], "fixture": fixture}
+            "artifacts": artifacts, "completedAt": state["finishedAt"], "fixture": fixture,
+            **_evidence_note_of(state)}
         return _worker_observation(proof)
     except (OSError, ValueError, TypeError, KeyError, ImportError):
         # Optional audit eligibility is narrower than normal MR eligibility.
         return None
+
+
+def _evidence_note_of(state):
+    """The record's own word on its evidence travels with the record it describes."""
+    return {"evidenceNote": state["evidenceNote"]} if state.get("evidenceNote") else {}
 
 
 def _worker_observation(proof):
@@ -279,7 +380,8 @@ def produce_job_receipt(state, *, tool, output_prefix, inputs, artifacts, data_r
             return None
         proof = {"schemaVersion": 1, "tool": tool, "jobId": state["jobId"], "jobStatus": "succeeded",
             "scope": job_scope(state, data_root), "requestSha256": request_sha, **state["sourceEvidence"],
-            "inputs": _receipt_rows(inputs) if inputs else [], "artifacts": rows, "completedAt": state["finishedAt"]}
+            "inputs": _receipt_rows(inputs) if inputs else [], "artifacts": rows, "completedAt": state["finishedAt"],
+            **_evidence_note_of(state)}
         return _worker_observation(proof)
     except (OSError, ValueError, TypeError, KeyError, ImportError):
         return None

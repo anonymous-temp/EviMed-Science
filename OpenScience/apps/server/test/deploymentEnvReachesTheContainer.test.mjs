@@ -605,6 +605,37 @@ test("all six engines use the gateway by default and have a keyless overlay", as
   }
 });
 
+test("the specialist job cap reaches all six engines, on a data volume they all hold writable", async () => {
+  // A deployment-wide cap on specialist jobs that run at once (2026-10-04): the
+  // host is shared and an engine may use 2 GB while a job runs. The cap is
+  // flock-ed files on the data volume every engine mounts, so it means nothing
+  // unless (a) each engine receives the lever under the name the code reads,
+  // (b) each mounts that one volume writable, and (c) an operator can set it
+  // from .env. Compose passes environment item by item: a lever missing from
+  // one engine would leave that engine uncapped while /health on the others
+  // reported a cap, and nothing would say so.
+  const base = YAML.parse(await readFile(path.join(deployDir, "docker-compose.yml"), "utf8"));
+  const example = await readFile(path.join(deployDir, ".env.example"), "utf8");
+  const slots = await readFile(path.join(repoRoot, "deploy/specialist-adapter/evimed_specialist_adapter/job_slots.py"), "utf8");
+  const engines = ["meta", "mr", "bibliometric", "research-topic", "peer-review", "drug-safety"];
+  for (const name of ["EVIMED_SPECIALIST_MAX_CONCURRENT_JOBS", "EVIMED_SPECIALIST_SLOT_WAIT_SECONDS"]) {
+    assert.match(slots, new RegExp(`"${name}"`), `job_slots.py does not read ${name}`);
+  }
+  for (const name of engines) {
+    const service = base.services[`evimed-${name}-agent`];
+    assert.equal(service.environment.EVIMED_SPECIALIST_MAX_CONCURRENT_JOBS, "${OPEN_SCIENCE_SPECIALIST_MAX_CONCURRENT_JOBS:-0}", `${name}: the cap`);
+    assert.equal(service.environment.EVIMED_SPECIALIST_SLOT_WAIT_SECONDS, "${OPEN_SCIENCE_SPECIALIST_SLOT_WAIT_SECONDS:-10800}", `${name}: the wait bound`);
+    assert.ok(service.volumes.includes("open-science-data:/data"), `${name} does not mount the shared data volume writable, so it cannot hold a slot`);
+  }
+  assert.match(example, /^OPEN_SCIENCE_SPECIALIST_MAX_CONCURRENT_JOBS=0$/m);
+  assert.match(example, /^OPEN_SCIENCE_SPECIALIST_SLOT_WAIT_SECONDS=10800$/m);
+  // The drug-evidence adapter answers requests and runs no jobs: it mounts the
+  // volume read-only, holds no cap, and has no slot to take.
+  const evidence = base.services["evimed-drug-evidence-adapter"];
+  assert.ok(evidence.volumes.includes("open-science-data:/data:ro"));
+  assert.equal(evidence.environment.EVIMED_SPECIALIST_MAX_CONCURRENT_JOBS, undefined);
+});
+
 test("only MR receives the read-only ancestry reference and its actual clumping executable", async () => {
   const base = (await composeFiles()).find(({ name }) => name === "docker-compose.yml");
   const services = YAML.parse(base.text).services;

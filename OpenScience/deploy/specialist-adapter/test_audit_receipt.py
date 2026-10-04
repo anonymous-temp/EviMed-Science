@@ -186,16 +186,34 @@ def test_artifact_mutation_is_detected_without_resigning(tmp_path, monkeypatch):
             expected=setup[0]._source_evidence(tmp_path / "agent"), trustedPublicKey=setup[6])
 
 
-def test_full_agent_source_change_after_enqueue_fails_before_execution(tmp_path, monkeypatch):
+def test_agent_source_change_after_enqueue_is_recorded_and_the_job_still_runs(tmp_path, monkeypatch):
+    # Owner ruling 2026-10-04: the receipt is our own mechanism, not a gate. This
+    # used to fail the job as `mr_input_changed` before it ran. Now it runs, and
+    # the record says the evidence moved, next to both digests.
     setup = setup_audit(tmp_path, monkeypatch)
+    service, _, _, workspace, _, receipts, public, _ = setup
     source = tmp_path / "agent/mr_agent/algorithm.py"
     source.write_text("VERSION = 1\n")
     state_path, job_id = start_job(setup, monkeypatch)
+    admitted = service._read_state(state_path)["sourceEvidence"]
     source.write_text("VERSION = 2\n")
-    assert setup[0].run_job(str(state_path)) != 0
-    result = setup[0]._status({"jobId": job_id}, setup[3])
-    assert result["status"] == "error"
-    assert "auditReceipt" not in result.get("data", {})
+    assert service.run_job(str(state_path)) == 0
+    result = service._status({"jobId": job_id}, workspace)
+    assert result["status"] == "success" and result["artifacts"], result
+    note = result["data"]["auditReceipt"]["evidenceNote"]
+    assert note["changed"] is True
+    assert note["admission"] == admitted
+    assert note["completion"] == service._source_evidence(tmp_path / "agent")
+    assert (note["admission"]["executionEvidence"]["agentSourceSha256"]
+            != note["completion"]["executionEvidence"]["agentSourceSha256"])
+    state = service._read_state(state_path)
+    assert state["status"] == "succeeded" and state["evidenceNote"] == note
+    assert state["sourceEvidence"] == admitted, "accepted MR authority is never rewritten"
+    assert "errorCode" not in state
+    # The release reader will not certify a record whose digests describe two sources.
+    with pytest.raises(receipts.ReceiptError, match="source_changed"):
+        receipts.validate_receipt(wrapper(setup, result), workspace, "mendelian_randomization", 1,
+                                  expected=service._source_evidence(tmp_path / "agent"), trustedPublicKey=public)
 
 
 def test_worker_receipts_keep_original_bytes_after_workspace_input_changes(tmp_path, monkeypatch):
@@ -277,7 +295,7 @@ def test_untrusted_or_unsafe_material_has_no_job_observation(tmp_path, monkeypat
     assert "auditReceipt" not in result["data"]
 
 
-def test_source_change_during_runner_fails_without_signed_output(tmp_path, monkeypatch):
+def test_source_change_during_runner_does_not_fail_the_finished_job(tmp_path, monkeypatch):
     setup = setup_audit(tmp_path, monkeypatch)
     service = setup[0]
     original_jobs = service._mr_job
@@ -296,10 +314,13 @@ def test_source_change_during_runner_fails_without_signed_output(tmp_path, monke
 
     monkeypatch.setattr(service, "_mr_job", wrapped_jobs)
     state, job_id = start_job(setup, monkeypatch)
-    assert service.run_job(str(state)) == 1
+    assert service.run_job(str(state)) == 0
     result = service._status({"jobId": job_id}, setup[3])
-    assert result["status"] == "error"
-    assert "auditReceipt" not in result.get("data", {})
+    assert result["status"] == "success" and result["artifacts"], result
+    # The engine finished and its outputs are the job's: only the record's word on
+    # its own evidence changed. (This is what used to end as `mr_input_changed`.)
+    assert result["data"]["auditReceipt"]["evidenceNote"]["changed"] is True
+    assert service._read_state(state)["status"] == "succeeded"
 
 
 def test_checked_in_fixture_contract_and_clean_source_evidence_share_producer(tmp_path, monkeypatch):

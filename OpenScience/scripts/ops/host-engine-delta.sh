@@ -106,9 +106,10 @@ while IFS='|' read -r service variable fallback agent extra; do
     if [ "$agent" != "-" ]; then printf 'COPY %s /agent\n' "$agent"; fi
     printf 'COPY OpenScience/deploy/specialist-adapter/evimed_specialist_adapter /adapter/evimed_specialist_adapter\n'
     # Re-pin the adapter manifest for the package this delta ships, as the full
-    # build does: the MR engine compares the two before admitting a job, and a
-    # changed package under the base image's manifest refuses every MR start
-    # with audit_adapter_manifest_changed.
+    # build does. A stale pin no longer refuses a job (on 2026-09-27 it answered
+    # every MR start with audit_adapter_manifest_changed); it shows on /health as
+    # adapterManifest "mismatch" and in each job's evidenceNote, and the release
+    # audit will not certify a record that carries one.
     if [ "$agent_lock" = 1 ]; then printf 'RUN pip install --index-url %s --no-cache-dir -r /agent/requirements.lock\n' "$PIP_INDEX_URL"; fi
     printf 'COPY OpenScience/deploy/specialist-adapter/Dockerfile OpenScience/deploy/specialist-adapter/Dockerfile.evidence OpenScience/deploy/specialist-adapter/requirements.txt /adapter/\n'
     if [ "$adapter_lock" = 1 ]; then
