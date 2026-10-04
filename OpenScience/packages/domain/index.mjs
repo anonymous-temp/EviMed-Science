@@ -888,6 +888,27 @@ export {
   doiOf,
   sourceUpdatesFromCrossref,
 } from './src/sourceUpdates.mjs'
+// knowledgeChange — what depends on a changed source: the closed record of the calculations, memories and learned methods
+// found by their recorded links, the state a link takes from a check, and the label a method carries (plan 2026-10-02
+// §11.3 N15). A notice is a label, never a verdict.
+export {
+  AFFECTED_CLASSES,
+  AFFECTED_LIST_LIMIT,
+  AFFECTED_LOOKUP_STATES,
+  AFFECTED_VIA,
+  METHOD_SOURCE_CHANGE_LIMIT,
+  METHOD_SOURCE_RELATIONS,
+  SOURCE_CHANGE_LINK_STATES,
+  SOURCE_REPLACED_KIND,
+  affectedClass,
+  affectedCounts,
+  foldSourceChange,
+  linkReasonOf,
+  linkStateOf,
+  linkStatesLeftFor,
+  methodSourceChanges,
+  projectAffected,
+} from './src/knowledgeChange.mjs'
 // sourceDocuments — 12 exports: what the knowledge base accepts, where each
 // format is read, where its pages begin, how a quotation's offset becomes a
 // page number, and what a personal-library document's state reads as.

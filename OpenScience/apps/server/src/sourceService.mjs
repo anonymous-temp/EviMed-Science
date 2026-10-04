@@ -476,13 +476,21 @@ function retiredSourceRun(payload) {
 /** Durable source manifests and coverage, built on the account-scoped product
  * document ledger and its leased job queue. */
 export class SourceService {
-  /** @param {any} documents @param {any} jobs @param {{extractorVersion?:string,now?:()=>Date}} options */
-  constructor(documents, jobs, { extractorVersion = "evimed-analysis-1.0.0", now = () => new Date() } = {}) {
+  /**
+   * `afterReplace` is told, once the new document is registered and its parse is queued, that a file the project already
+   * held now has new bytes: the document it replaces and the one that replaces it (N15 — the work that rests on the old
+   * one is labelled, `ResultImpactService.reconcileReplacement`). It records and never decides: whatever it does or fails
+   * to do leaves the registration exactly as it is.
+   * @param {any} documents @param {any} jobs
+   * @param {{extractorVersion?:string,now?:()=>Date,afterReplace?:((event:{userId:string,projectId:string,replaced:{sourceId:string,sha256:string,version:number},by:{sourceId:string,version:number,at:string}})=>Promise<any>)|null,report?:(code:string)=>void}} options */
+  constructor(documents, jobs, { extractorVersion = "evimed-analysis-1.0.0", now = () => new Date(), afterReplace = null, report = () => {} } = {}) {
     if (!documents || !jobs) throw new TypeError("SourceService requires product documents and jobs.");
     this.documents = documents;
     this.jobs = jobs;
     this.extractorVersion = text(extractorVersion, "extractor version", 80);
     this.now = now;
+    this.afterReplace = afterReplace;
+    this.report = report;
     /** @type {Map<string,any>} */
     this.connectors = new Map();
   }
@@ -524,7 +532,7 @@ export class SourceService {
     const providerHash = input.providerHash == null ? null : text(input.providerHash, "provider hash", 256);
     const sourceId = sourceIdFor(projectId, sha256);
     const familyId = `fam_${digest(`${projectId}\0${sourceConnector.type}\0${sourceConnector.id}\0${file}`).slice(0, 32)}`;
-    return this.withRegistrationLocks([`source:${userId}:${sourceId}`, `family:${userId}:${familyId}`], async () => {
+    const { replaces, ...registered } = await this.withRegistrationLocks([`source:${userId}:${sourceId}`, `family:${userId}:${familyId}`], async () => {
     let exact = await this.documents.get(userId, "source", sourceId);
     if (exact) {
       if (exact.projectId !== projectId) throw new HttpError(409, "source_scope_conflict", "Source digest belongs to another project.");
@@ -574,8 +582,18 @@ export class SourceService {
       return { source: exact, duplicate: true, job: null };
     }
     const job = await this.enqueue(exact, userId);
-    return { source: exact, duplicate: false, job };
+    // The newest version this one follows: what rests on an older one was told when that one was replaced.
+    const previous = family.items.filter((item) => item.payload.fingerprint?.sha256 && item.id !== sourceId)
+      .sort((a, b) => (Number(b.payload.version) || 0) - (Number(a.payload.version) || 0))[0];
+    return { source: exact, duplicate: false, job, replaces: previous ? { replaced: { sourceId: previous.id, sha256: previous.payload.fingerprint.sha256,
+      version: Number(previous.payload.version) || 1 }, by: { sourceId, version: Number(payload.version) || 1, at: payload.createdAt } } : null };
     });
+    // Outside the registration locks: it reads results and memories, and the registration is complete without it.
+    if (replaces && this.afterReplace) {
+      try { await this.afterReplace({ userId, projectId, ...replaces }); }
+      catch (error) { this.report(typeof error?.code === "string" ? error.code : "source_replacement_unrecorded"); }
+    }
+    return registered;
   }
 
   /** @param {string} userId @param {string} sourceId @param {Record<string,any>} input */

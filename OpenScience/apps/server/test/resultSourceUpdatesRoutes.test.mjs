@@ -107,3 +107,24 @@ test("access narrowed while recording impacts cannot publish the earlier source-
   assert.equal(JSON.stringify(reply).includes("10.1234/OLD"), false);
   assert.equal(JSON.stringify(reply).includes("10.1234/fix"), false);
 });
+
+test("a result's numbers are checked against the sources of the calculations they are bound to, once each, and a calculation nobody may read is skipped", async () => {
+  const f = fixture();
+  const calc = `rv_${"1".repeat(64)}`; const gone = `rv_${"2".repeat(64)}`;
+  const reportInputs = f.sourceInputs;
+  const shared = { ...reportInputs[0] };
+  const calcInputs = [shared, { kind: "source", id: "10.1234/CALC", digest: "f".repeat(64), availability: "captured" }, { kind: "code", id: "pool.py", availability: "captured" }];
+  f.results.get = async (_user, _project, id) => {
+    f.calls.push(["result", id]);
+    if (id === versionId) return { versionId, digest, inputs: reportInputs, bindings: { calculations: [{ versionId: calc }, { versionId: gone }, { versionId }] } };
+    if (id === calc) return { versionId: calc, digest: "9".repeat(64), inputs: calcInputs };
+    throw Object.assign(new Error("gone"), { status: 404 });
+  };
+  const reply = await f.invoke();
+  const looked = f.calls.find(call => call[0] === "lookup")[1];
+  assert.deepEqual(looked.sort(), ["10.1234/calc", "10.1234/old"], "the calculation's DOI is looked up with the report's own");
+  assert.deepEqual(reply.statuses.map(row => [row.source.id, row.viaCalculation ?? null]), [
+    ["10.1234/OLD", null], ["evidence/no-doi.md", null], ["unavailable-source", null], ["10.1234/CALC", calc]], "a source both name is listed once, as the report's own");
+  const reconciled = f.calls.filter(call => call[0] === "reconcile").map(call => call[2].source.id);
+  assert.deepEqual(reconciled.sort(), ["10.1234/CALC", "10.1234/OLD", "evidence/no-doi.md"].sort());
+});

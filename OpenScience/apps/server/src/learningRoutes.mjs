@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { cleanMethodDisplay, methodScientific, mountedMethodDigest, parseSkillFrontmatter, promotionVerdict, successfulFamilies } from "@evimed/domain";
+import { cleanMethodDisplay, methodScientific, methodSourceChanges, mountedMethodDigest, parseSkillFrontmatter, promotionVerdict, successfulFamilies } from "@evimed/domain";
 import { bodyVersionOf, effectiveStatusReason, methodRecordFrom, methodScopeOf, methodStepsOf } from "./learningService.mjs";
 import { HttpError, readJson, sendJson } from "./security.mjs";
 
@@ -104,6 +104,8 @@ export function methodView(document) {
     // are about deliveries. What it says is association; `causalBenefit` is always `unproven` and `applicability`
     // `unknown` until the engine's own diagnostics say otherwise.
     scientific: methodScientific(payload.scientific, payload.contentDigest),
+    // A source a result it was learnt from or used for rests on has changed (N15): a label beside the method, never a verdict on it.
+    sourceChanges: methodSourceChanges(payload.sourceChanges),
     // The situation it is for and the ones it must not be loaded into, as declared when it was learnt.
     scope: methodScopeOf(payload),
     // The result versions it was learnt from, and what was left when it was returned to an earlier body or stopped.
