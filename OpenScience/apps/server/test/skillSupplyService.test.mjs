@@ -115,7 +115,9 @@ test("the availability projection carries the skills and the capabilities' softw
   assert.ok(cheminformatics.package.unknown.some((entry) => entry.field === "source.commit"));
   const capability = body.capabilities.find((entry) => entry.id === "statistical-analysis");
   assert.equal(capability.package.id, "capability/statistical-analysis");
-  assert.equal(capability.package.version, "1.1.0");
+  // The shipped version, read from the registry: a capability's version moves with every edit of its skill.
+  assert.equal(capability.package.version, (await registry).get("statistical-analysis").version);
+  assert.match(capability.package.version, /^\d+\.\d+\.\d+$/);
   assert.equal(body.capabilities.length, (await service.capabilities(alice)).length, "no capability is hidden");
   assert.equal(JSON.stringify(body).includes("sha256\":\"" + "0".repeat(64)), false);
   // A capability whose own scripts need software the image lacks says so, and is still listed and still asked.

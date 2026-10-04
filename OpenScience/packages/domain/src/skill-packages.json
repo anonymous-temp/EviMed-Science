@@ -231,7 +231,7 @@
       "origin": "capability",
       "version": "2.16.0",
       "source": {"kind":"release"},
-      "digest": "sha256:91b2be050a458fbd8cfdd0291997eb8e95803508c395c21af0c4655988ef3fb0",
+      "digest": "sha256:df6c8f990d37c8112ec09d7bc2e50e2465e689c8b88e03f6ac1c3967cfad3e26",
       "digestAlgorithm": "release-directory-v1",
       "references": [{"path":"capability.yaml","sha256":"d1e839f162e49f4680da6be4e45f3b106f40bba1cf50af8f36e9053c8eae1fa2"}],
       "dependencies": [
@@ -325,7 +325,7 @@
       "origin": "capability",
       "version": "1.9.0",
       "source": {"kind":"release"},
-      "digest": "sha256:0975517f560a07a070c5b715d4ee3519f64728123419a0c407fdea58131e5986",
+      "digest": "sha256:a53c557b95478e50120adfc880b0d81fc878f14175b120280d8d81021257bb68",
       "digestAlgorithm": "release-directory-v1",
       "scripts": [
         {"path":"scripts/evidence_floor.py","sha256":"ddc4d2e25ddd51e69aeae1c0443cb103cb8488d2e40d331234d00334ff1f07d0"},
@@ -698,7 +698,7 @@
       "origin": "capability",
       "version": "1.1.0",
       "source": {"kind":"release"},
-      "digest": "sha256:37ddd8714c9b2f21bcfde227bf4208abc6eab29e77ac3d43a55dd3e6b3931753",
+      "digest": "sha256:7a97ecab95ddec5dc7fac0573b1bc224a0c152761ec59734931bdf4b3341674d",
       "digestAlgorithm": "release-directory-v1",
       "references": [{"path":"capability.yaml","sha256":"5723b8898011341ba72f06d4b482b7971cbdb7d1976df03d3c6b7533db029c8d"}],
       "operations": [
@@ -851,7 +851,7 @@
       "origin": "capability",
       "version": "1.4.0",
       "source": {"kind":"release"},
-      "digest": "sha256:0cdb23b550c6cb6464a5eeb3ec491af048979d4dccbc1c72a909629204fb78c7",
+      "digest": "sha256:c34113e6222dc6d1d2c2f488aec5a0e5b2c31a72d5550bd75e212e9d252d53cb",
       "digestAlgorithm": "release-directory-v1",
       "scripts": [
         {"path":"scripts/evidence_floor.py","sha256":"ddc4d2e25ddd51e69aeae1c0443cb103cb8488d2e40d331234d00334ff1f07d0"},
@@ -908,20 +908,21 @@
       "id": "capability/statistical-analysis",
       "name": "statistical-analysis",
       "origin": "capability",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "source": {"kind":"release"},
-      "digest": "sha256:f6267dd08ef8351ab2d6a04ec5690111dff8020bd144679ccc78599e22ca8cf6",
+      "digest": "sha256:d5e502e92b0a34c4b3a3b357060f20ddbba322dc32b9d42ee9a09ec67ddf9d0f",
       "digestAlgorithm": "release-directory-v1",
       "scripts": [
         {"path":"scripts/analysis_methods.py","sha256":"e71ff10c840b7fb96003b341da4dd56d3d77ac9ea0d6023cdc712783fe5fd0c2"},
         {"path":"scripts/run_analysis.py","sha256":"ec1666014d8a9bcb4cb223653977601d2449f41fb485ceca0334e9fb634ff321"}
       ],
       "references": [
-        {"path":"capability.yaml","sha256":"4e4a3ee3903fd45f78c7731a0a2af1543fdf9daf5ca2ecf0bab369b4d4d7a8d0"},
+        {"path":"capability.yaml","sha256":"6e8e90649ef6dc6784748f5e6ad7fed88b7abc6818b60a49f04bdb36e2355c3c"},
         {"path":"scripts/analysis_method_records.json","sha256":"e6322249429c5b9ca80216314ea41480f70de1985150b7ba94658ec5d47664d2"}
       ],
       "dependencies": [
         {"kind":"platform-tool","name":"dataset_semantics","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
+        {"kind":"platform-tool","name":"research_calculate","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"python-package","name":"numpy","supply":"image","basis":"observed","evidence":"scripts/analysis_methods.py"},
         {"kind":"python-package","name":"pandas","supply":"image","basis":"observed","evidence":"scripts/analysis_methods.py"},
         {"kind":"python-package","name":"scipy","supply":"image","basis":"observed","evidence":"scripts/analysis_methods.py"},
@@ -946,7 +947,7 @@
       "origin": "capability",
       "version": "1.1.0",
       "source": {"kind":"release"},
-      "digest": "sha256:e09f254023ef66a07f41314fbc79bd0c07d2cd9286bb20eda547b899535d3fce",
+      "digest": "sha256:feef7621b9d7ebc3e87d5af2bc4b19b950522fe65863638c2b21c5f90c5a7134",
       "digestAlgorithm": "release-directory-v1",
       "references": [{"path":"capability.yaml","sha256":"92261460fa8a70ca3f48f30716fcc871f93d4503887b85f2050b04bdca5981fc"}],
       "dependencies": [
@@ -1072,9 +1073,9 @@
       "origin": "capability",
       "version": "1.0.0",
       "source": {"kind":"release"},
-      "digest": "sha256:975cbe30faf60653423ce6a910e687a147b98783dd45f6e24fb210f5a7db4e87",
+      "digest": "sha256:95600fc905882d47c23cb2a97a5b95d7e5b3a22e043790ea67fae90098de6d59",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"780dc8120afe533e27afc7e0368b0b9cea600bae19006984cb287a6f4f6602f5"}],
+      "references": [{"path":"capability.yaml","sha256":"d9fd8cad37b5a0e01d9f4f7d70897db9bd52a1872567b198aaf355efbbcdcdfc"}],
       "dependencies": [
         {"kind":"platform-tool","name":"kb_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
         {"kind":"platform-tool","name":"literature_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
@@ -1090,7 +1091,7 @@
           "summaryZh": "把研究的定义、假设、结果与执行记录写成可检查、可复现的研究包，数字由结果渲染。",
           "accepts": ["studyId","kind","audience","outputLanguage"],
           "produces": ["study-package.md","results.json","assumption-register.md","execution-record.md","cde-communication-pack.md"],
-          "limits": ["报告里的数由平台按保存的结果渲染；手打的数字会被写成「未计算」并标出来。","过期的结果不会被删掉：要么重算，要么在封面上照实写明。"]
+          "limits": ["报告里的数由平台按保存的结果渲染；手打的数字会被写成「未计算」并标出来。","过期的结果不会被删掉：要么重算，要么在封面上照实写明。","模型分析计划与报告只接受规定的几节文字；表格、登记项和数字由平台按研究记录写，冻结的计划不会被改写。"]
         }
       ]
     },
