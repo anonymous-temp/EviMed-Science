@@ -286,9 +286,7 @@ export class AvailabilityService {
     try { views = await this.extensionViews(user); } catch { return []; }
     const facts = await this.evidence();
     const runtime = { mode: String(this.config.runtimeMode ?? "kernel") };
-    // Use of an extension is not collected yet, so a prepared one can be installed but never shown as run: the
-    // honest label for "we do not look" is unverified, not installed.
-    const collector = { state: facts.state === "ready" || facts.state === "pending" ? "off" : facts.state };
+    const collector = { state: facts.state };
     return views.map((view) => {
       /** @type {import("@evimed/domain").AvailabilityReason[]} */
       const reasons = [];
@@ -298,9 +296,14 @@ export class AvailabilityService {
       else if (view.phase === "unsupported") reasons.push({ code: "unsupported", detail: String(view.executionClass ?? "local-only"), source, facts: facts_ });
       else if (view.phase === "failed") reasons.push({ code: "preparation-failed", detail: String(view.preparation?.refusalCode ?? "extension_contract_invalid"), source, facts: facts_ });
       else if (view.phase === "preparing" || view.phase === "saved") reasons.push({ code: "installing", source, facts: facts_ });
+      // The operation ledger names an extension's descriptor and not the installed version, so crediting a version
+      // with a success would credit a new one with an old one's: an extension's use is not collected, and a prepared
+      // one says exactly that rather than reading as installed or as run.
+      const operations = facts.records.get(recordKey("extension", String(view.catalogueId ?? view.id), coordinateVersion(view.coordinate) ?? "")) ?? null;
+      if (!reasons.length && !operations) reasons.push({ code: "use-not-collected", source: "collector", facts: facts_ });
       return projectAvailability({
         subject: { kind: "extension", id: String(view.catalogueId ?? view.id), version: coordinateVersion(view.coordinate) },
-        reasons, operations: facts.records.get(recordKey("extension", String(view.catalogueId ?? view.id), String(view.integrity ?? ""))) ?? null, collector, runtime,
+        reasons, operations, collector, runtime,
       });
     });
   }

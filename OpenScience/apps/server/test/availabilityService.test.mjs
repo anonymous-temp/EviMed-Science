@@ -202,6 +202,8 @@ test("the account's extensions read their exact version and lifecycle, with the 
   const by = Object.fromEntries(entries.map((entry) => [entry.id, entry]));
   assert.equal(by["cowork-docs"].version, "1.2.0");
   assert.equal(by["cowork-docs"].state, "unverified", "use of an extension is not collected: waiting and prepared is not shown as run");
+  assert.equal(by["cowork-docs"].reason.code, "use-not-collected");
+  assert.match(by["cowork-docs"].text, /1\.2\.0 版已准备好/);
   assert.equal(by.viewer.version, "ffffffffffff");
   assert.equal(by.viewer.state, "unavailable");
   assert.equal(by.viewer.reason.code, "removed");

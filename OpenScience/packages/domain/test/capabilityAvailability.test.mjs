@@ -242,6 +242,11 @@ test('install, use, update, remove, rollback and restart of an extension each mo
   assert.equal(read('1.0.0', [{ code: 'installing', source: 'extension-installation' }]).state, 'source-planned')
   // prepared and waiting: carried, never used
   assert.equal(read('1.0.0').state, 'installed')
+  // a prepared extension whose use nobody collects is unverified, with its own reason, even with the collector working
+  const unproven = read('1.0.0', [{ code: 'use-not-collected', source: 'collector' }])
+  assert.equal(unproven.state, 'unverified')
+  assert.equal(unproven.reason.code, 'use-not-collected')
+  assert.match(unproven.text, /还没有统计/)
   // use: a real operation of exactly this version
   fold(run('1.0.0', '2026-10-03T01:00:00.000Z'))
   assert.equal(read('1.0.0').state, 'executable')

@@ -166,6 +166,8 @@ const REASONS = Object.freeze({
   'preparation-failed': ['unavailable', (d) => `准备没有成功（${errorCodeMessage(String(d ?? ''))}）。`],
   // Nothing here can be believed either way.
   'mock-runtime': ['unverified', () => '当前是模拟运行环境，不能证明真实可运行。'],
+  // Carried and prepared, but this kind of subject's use is not collected, so nothing here proves it runs.
+  'use-not-collected': ['unverified', (_d, c) => `${versionPhrase(c)}已准备好，但${nounOf(c.kind)}的实际使用还没有统计，无法确认能否运行。`],
   'collector-off': ['unverified', () => '这个部署没有统计实际运行的情况，无法确认。'],
   'collector-pending': ['unverified', () => '正在整理这个部署上已完成的运行，暂时无法确认。'],
   'records-unreadable': ['unverified', () => '实际运行的情况暂时读不到，无法确认。'],
@@ -457,7 +459,7 @@ export function operationOutcomeOfRun(run) {
  *   6  its own record         -> the runtime says it is not mounted: unavailable;
  *                                a success not older than the last failure: executable;
  *                                otherwise the last operation failed: limited
- *   7  record still forming   -> unverified
+ *   7  a caller's own unproven reason, then a record still forming -> unverified
  *   8  nothing against it     -> installed
  *
  * Rung 3 sits above 6 on purpose: a missing engine or data source is a fact about
@@ -502,6 +504,9 @@ export function projectAvailability(input) {
   if (lastFailure) {
     return decided('limited', { code: 'last-operation-failed', detail: lastFailure.code ?? 'unknown', source: 'operation-record', facts: { at: lastFailure.at } })
   }
+  // A reason the caller already knows says nothing can be proven for this subject, whichever way the collector stands.
+  const [unproven] = of('unverified')
+  if (unproven) return decided('unverified', unproven)
   if (collector === 'pending') return decided('unverified', { code: 'collector-pending', source: 'collector' })
   return decided('installed', { code: 'no-successful-operation', source: 'operation-record' })
 }
