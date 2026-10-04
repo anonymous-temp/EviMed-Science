@@ -4,6 +4,8 @@ import {Buffer} from 'node:buffer';
 import {constants} from 'node:fs';
 import {setTimeout as pause} from 'node:timers/promises';
 import {sendWithFreshWorkloadToken} from '../../src/workloadRequest.mjs';
+import {describeOperationParam,normalizeSkillOperation,renderOperationSummary} from '@evimed/domain';
+import {COWORK_OPERATIONS,toolParameters} from './operations.mjs';
 
 const Schema=await configSchema();
 export const name='evimed-cowork-bridge';
@@ -55,9 +57,13 @@ export async function callCoworkGateway(config,invocation,request,signal,transpo
   }
 }
 
+/** Read through the domain's own reader, so a field it would drop is not in the help either. */
+const OPERATIONS=new Map(COWORK_OPERATIONS.map(raw=>normalizeSkillOperation(raw)).filter(operation=>operation!==null).map(operation=>[operation.name,operation]));
+/** The keys a request may carry are the operation schema's own top-level names: one list, so a key cannot be accepted here and absent from the help. @param {string} operation */
+const requestKeys=operation=>[...new Set(OPERATIONS.get(operation).params.map(param=>String(param.name).split('.')[0]))];
 /** @param {Record<string,any>} args @param {string} operation */
 function boundedRequest(args,operation){
-  const keys=operation==='doc_read'?['resourceId','options']:['targetId','format','spec'];
+  const keys=requestKeys(operation);
   if(!args||typeof args!=='object'||Array.isArray(args)||Object.getPrototypeOf(args)!==Object.prototype
     ||Reflect.ownKeys(args).some(key=>typeof key!=='string'||!keys.includes(key))
     ||Object.values(Object.getOwnPropertyDescriptors(args)).some(field=>!Object.hasOwn(field,'value')||!field.enumerable))throw new Error('extension_contract_invalid');
@@ -65,14 +71,17 @@ function boundedRequest(args,operation){
   if(typeof id!=='string'||!/^[A-Za-z0-9][A-Za-z0-9_-]{0,99}$/.test(id))throw new Error('extension_contract_invalid');
   return{operation,...args};
 }
+/** The tool as the model meets it: its description and every parameter's help are written from the operation schema, never typed beside it. @param {string} operation */
+const toolHelp=operation=>({description:renderOperationSummary(OPERATIONS.get(operation),{locale:'zh',maxChars:480}),
+  parameters:toolParameters(OPERATIONS.get(operation),param=>describeOperationParam(param,'zh'))});
 /** Platform-only injection: gateway independently authorizes the actual calling agent and opaque resources. No vendor module or secret lives here.
  * @param {(input:{request:Record<string,any>,call:any})=>Promise<any>} callGateway */
 export function coworkToolSpecs(callGateway){
   return[
-    {name:'doc_read',description:'Inspect a permitted document resource using bounded pages, cells or rows.',timeoutMs:30000,concurrencySafe:true,
-      parameters:{resourceId:{type:'string',required:true},options:{type:'object',properties:{},additionalProperties:true}},execute:async(args,call)=>callGateway({request:boundedRequest(args,'doc_read'),call})},
-    {name:'doc_write',description:'Create a new permitted XLSX or inert notebook document; does not execute notebook code or generate DOCX/PDF.',timeoutMs:30000,concurrencySafe:false,
-      parameters:{targetId:{type:'string',required:true},format:{type:'string',required:true,enum:['xlsx','ipynb']},spec:{type:'object',properties:{},additionalProperties:true,required:true}},execute:async(args,call)=>callGateway({request:boundedRequest(args,'doc_write'),call})},
+    {name:'doc_read',...toolHelp('doc_read'),timeoutMs:30000,concurrencySafe:true,
+      execute:async(args,call)=>callGateway({request:boundedRequest(args,'doc_read'),call})},
+    {name:'doc_write',...toolHelp('doc_write'),timeoutMs:30000,concurrencySafe:false,
+      execute:async(args,call)=>callGateway({request:boundedRequest(args,'doc_write'),call})},
   ];
 }
 /** @param {any} ctx @param {(input:{request:Record<string,any>,call:any})=>Promise<any>} callGateway */

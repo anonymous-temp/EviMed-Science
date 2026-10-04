@@ -58,23 +58,38 @@ const length = (value) => [...value].length
 const shown = (value) => (typeof value === 'string' ? value : JSON.stringify(value))
 
 /**
- * One parameter, as a phrase: its name, type, whether it is required, its
- * default, its closed values and its range.
- * @param {SkillOperationParam} param @param {'zh' | 'en'} locale @param {boolean} [full]
+ * What a parameter is, without its name: type, whether it is required, default,
+ * closed values, range and condition, then its own description. The one place a
+ * parameter's help is written — the tool schema's per-parameter description and
+ * the operation help both read it.
+ * @param {SkillOperationParam} param @param {'zh' | 'en'} [locale]
  * @returns {string}
  */
-function paramPhrase(param, locale, full = true) {
+export function describeOperationParam(param, locale = 'zh') {
   const w = WORDS[locale]
-  if (!full) return `${param.name}${param.required ? '*' : ''}`
-  const parts = [w[param.type] ?? param.type, param.required ? w.required : w.optional]
+  const need = param.required ? w.required : w.optional
+  const condition = param.when ? `${param.when.param}=${param.when.equals}` : ''
+  const parts = [w[param.type] ?? param.type, param.when ? (locale === 'zh' ? `${condition} 时${need}` : `${need} when ${condition}`) : need]
   if (param.default !== null && param.default !== undefined) parts.push(`${w.default} ${shown(param.default)}`)
   if (param.values) parts.push(`${w.values} ${param.values.join(' / ')}`)
   const unit = param.unit ? ` ${param.unit}` : ''
   if (param.min !== null && param.max !== null) parts.push(`${w.range} ${param.min}–${param.max}${unit}`)
   else if (param.min !== null) parts.push(`≥ ${param.min}${unit}`)
   else if (param.max !== null) parts.push(`≤ ${param.max}${unit}`)
-  const phrase = `${param.name}${w.open}${parts.join(w.comma)}${w.close}`
-  return param.description ? `${phrase} ${param.description}` : phrase
+  const detail = parts.join(w.comma)
+  return param.description ? `${detail}${w.semi}${param.description}` : detail
+}
+
+/**
+ * One parameter, as a phrase: its name and its detail, or just the name (`name*`
+ * when required) when the budget is short.
+ * @param {SkillOperationParam} param @param {'zh' | 'en'} locale @param {boolean} [full]
+ * @returns {string}
+ */
+function paramPhrase(param, locale, full = true) {
+  if (!full) return `${param.name}${param.required && !param.when ? '*' : ''}`
+  const w = WORDS[locale]
+  return `${param.name}${w.open}${describeOperationParam(param, locale)}${w.close}`
 }
 
 /**
@@ -86,8 +101,10 @@ function paramPhrase(param, locale, full = true) {
  */
 export function operationExample(operation) {
   /** @type {Record<string, any>} */ const call = {}
-  for (const param of operation.params) {
-    if (!param.required) continue
+  /** @param {string} name @returns {unknown} */
+  const read = (name) => name.split('.').reduce((/** @type {any} */ cursor, key) => (cursor && typeof cursor === 'object' ? cursor[key] : undefined), call)
+  /** @param {SkillOperationParam} param */
+  const place = (param) => {
     /** @type {unknown} */
     let value
     if (param.default !== null && param.default !== undefined) value = param.default
@@ -106,6 +123,9 @@ export function operationExample(operation) {
     }
     cursor[/** @type {string} */ (keys.at(-1))] = value
   }
+  // A parameter that applies only under a condition is placed after the ones that settle it.
+  for (const param of operation.params) if (param.required && !param.when) place(param)
+  for (const param of operation.params) if (param.required && param.when && read(param.when.param) === param.when.equals) place(param)
   return call
 }
 
@@ -158,6 +178,30 @@ export function renderOperationHelp(operation, { locale = 'zh', maxChars = OPERA
     if (length(rendered) <= maxChars) return rendered
   }
   return [...head].slice(0, Math.max(1, maxChars - 1)).join('') + '…'
+}
+
+/**
+ * The part of an operation's help that is not its parameters: heading with
+ * summary, what it accepts and produces, and its limits. A tool whose parameters
+ * are described in its schema carries this as its description, so each fact is
+ * stated once.
+ * @param {SkillOperation} operation @param {{ locale?: 'zh' | 'en', maxChars?: number }} [options]
+ * @returns {string}
+ */
+export function renderOperationSummary(operation, { locale = 'zh', maxChars = OPERATION_HELP_BUDGET } = {}) {
+  const w = WORDS[locale]
+  const summary = (locale === 'zh' ? operation.summaryZh ?? operation.summary : operation.summary ?? operation.summaryZh)
+  const lines = [
+    summary ?? operation.name,
+    operation.accepts.length ? `${w.accepts}${w.colon}${operation.accepts.join(w.sep)}` : null,
+    operation.produces.length ? `${w.produces}${w.colon}${operation.produces.join(w.sep)}` : null,
+    operation.limits.length ? `${w.limits}${w.colon}${operation.limits.join(w.semi)}` : null,
+  ].filter((line) => line !== null)
+  for (let keep = lines.length; keep >= 1; keep -= 1) {
+    const rendered = lines.slice(0, keep).join('\n')
+    if (length(rendered) <= maxChars) return rendered
+  }
+  return [...lines[0]].slice(0, Math.max(1, maxChars - 1)).join('') + '…'
 }
 
 /**

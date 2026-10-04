@@ -134,6 +134,7 @@ const CONSTRAINT = /^(?:==|>=|<=|~=|!=|>|<)[0-9A-Za-z.*+_-]{1,63}$/u
  * @property {number | null} max
  * @property {string | null} unit
  * @property {string | null} description
+ * @property {{ param: string, equals: string } | null} when the parameter applies only when another one has this value
  *
  * @typedef {object} SkillOperation
  * @property {string} name
@@ -308,6 +309,9 @@ function normalizeParam(value) {
     max: finite(value.max),
     unit: text(value.unit, 24),
     description: text(value.description, 200),
+    when: isObject(value.when) && matching(value.when.param, /^[A-Za-z_][A-Za-z0-9_.[\]-]{0,79}$/u) && typeof value.when.equals === 'string' && value.when.equals.length <= 80
+      ? { param: value.when.param, equals: value.when.equals }
+      : null,
   }
 }
 

@@ -5,7 +5,7 @@ import test from 'node:test'
 
 import * as domain from '../index.mjs'
 
-const { normalizeSkillOperation, operationExample, renderOperationHelp, renderPackageHelp, OPERATION_HELP_BUDGET } = domain
+const { describeOperationParam, normalizeSkillOperation, operationExample, renderOperationHelp, renderOperationSummary, renderPackageHelp, OPERATION_HELP_BUDGET } = domain
 const operation = /** @type {(value: any) => any} */ (normalizeSkillOperation)
 
 const docRead = operation({
@@ -22,7 +22,7 @@ const docRead = operation({
 test('the help states each parameter\'s type, whether it is required, its default, closed values and range from the schema', () => {
   const help = renderOperationHelp(docRead, { maxChars: 2000 })
   assert.match(help, /^doc_read：查看一个已授权的文档资源。/)
-  assert.match(help, /resourceId（文本，必填）/)
+  assert.match(help, /resourceId（文本，必填；资源编号）/)
   assert.match(help, /options\.pages（整数，可选，默认 1，范围 1–5 页）/)
   assert.match(help, /options\.rows（整数，可选，范围 1–100）/)
   assert.match(help, /format（文本，必填，取值 xlsx \/ ipynb）/)
@@ -73,4 +73,23 @@ test('a package\'s help is within its budget and counts the operations it did no
   assert.match(help, /and 4 more/)
   assert.ok(help.includes('op0') && help.includes('op7') && !help.includes('op8'))
   assert.equal(renderPackageHelp([], { locale: 'en' }), '')
+})
+
+test('a parameter that applies only under a condition says so and is placed in the example only when the condition holds', () => {
+  const write = operation({ name: 'doc_write', kind: 'tool', params: [
+    { name: 'format', type: 'string', required: true, values: ['xlsx', 'ipynb'] },
+    { name: 'spec.sheets', type: 'array', required: true, when: { param: 'format', equals: 'xlsx' } },
+    { name: 'spec.cells', type: 'array', required: true, when: { param: 'format', equals: 'ipynb' } },
+  ] })
+  assert.equal(describeOperationParam(write.params[1]), '列表，format=xlsx 时必填')
+  assert.equal(describeOperationParam(write.params[1], 'en'), 'array, required when format=xlsx')
+  assert.deepEqual(operationExample(write), { format: 'xlsx', spec: { sheets: [] } })
+})
+
+test('the summary is the operation without its parameters, bounded the same way', () => {
+  const text = renderOperationSummary(docRead, { maxChars: 2000 })
+  assert.match(text, /^查看一个已授权的文档资源。\n接受：xlsx、ipynb、docx、pdf\n产出：一个有大小上限的文本窗口|^查看一个已授权的文档资源。\n接受：xlsx、ipynb、docx、pdf\n产出：bounded text window/)
+  assert.ok(!text.includes('options.pages'))
+  assert.ok([...renderOperationSummary(docRead, { maxChars: 20 })].length <= 20)
+  assert.equal(renderOperationSummary(docRead, { maxChars: 20 }).split('\n').length, 1)
 })

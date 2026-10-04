@@ -362,8 +362,10 @@ export {
 export {
   OPERATION_HELP_BUDGET,
   PACKAGE_HELP_BUDGET,
+  describeOperationParam,
   operationExample,
   renderOperationHelp,
+  renderOperationSummary,
   renderPackageHelp,
 } from './src/operationHelp.mjs'
 
