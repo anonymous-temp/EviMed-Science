@@ -15,9 +15,10 @@ export function TaskTimeline({ agenda, episodes, onOpen }: { agenda: AgendaRecor
   const zone = scheduleOf(agenda).timeZone;
   // Episodes preserve complete follow-ups even after the agenda's latest-20 message window rotates.
   const timeline = [
-    ...episodes.map(episode => ({ key: episode.id, at: episode.payload.createdAt || episode.payload.date, episode, note: episode.payload.followUpNote })),
+    ...episodes.map(episode => ({ key: episode.id, at: episode.payload.createdAt || episode.payload.date, episode, note: episode.payload.followUpNote, paused: false })),
+    // A message that asked to hold the research has no episode: the task was paused in answer to it.
     ...(agenda.payload.messages ?? []).filter(message => !episodes.some(episode => episode.id === message.runEpisodeId))
-      .map(message => ({ key: message.requestId, at: message.at, note: message.note, episode: null })),
+      .map(message => ({ key: message.requestId, at: message.at, note: message.note, episode: null, paused: message.outcome === "paused" })),
   ].sort((a, b) => a.at.localeCompare(b.at));
   return <div className="space-y-8">
     {timeline.length === 0 && <p className="text-ui text-text-3">还没有运行结果。</p>}
@@ -27,7 +28,7 @@ export function TaskTimeline({ agenda, episodes, onOpen }: { agenda: AgendaRecor
       const deferrals = Object.values(payload?.resourceDeferrals ?? {}).filter(Boolean);
       const waiting = deferrals.find(value => value?.status === "waiting");
       const exhausted = deferrals.find(value => value?.status === "exhausted");
-      const state = waiting ? (waitsForBalance(waiting.code) ? "等待余额" : "等待运行资源")
+      const state = item.paused ? "已按你的要求暂停" : waiting ? (waitsForBalance(waiting.code) ? "等待余额" : "等待运行资源")
         : exhausted ? (waitsForBalance(exhausted.code) ? "余额不足" : "运行资源暂不可用") : STATES[payload?.status ?? ""] ?? "正在安排";
       const artifacts = (payload?.artifactRefs ?? []).filter(ref => ref.projectId === agenda.projectId && ref.runId === payload?.runId
         && ref.sessionId === payload?.sessionId && /^[A-Za-z0-9_-]{1,160}$/.test(ref.runId) && safeWorkspacePath(ref.path));

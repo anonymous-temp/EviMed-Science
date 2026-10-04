@@ -1,5 +1,5 @@
 {
-  "about": "The four situations the plan's N10 row names (counterevidence, repeated failed attempts, missing inputs, stopping) and the one boundary around stopping, as inputs to the next-action decision. Each case is the progress snapshot `autopilotProgress.mjs` builds plus the agenda's own fields; `expect` lists the decisions that are right (any one passes), the model's wording is not judged. They are written situations, not production incidents: the first live runs on the deployment are what turn real ones into cases.",
+  "about": "The four situations the plan's N10 row names (counterevidence, repeated failed attempts, missing inputs, stopping) and the one boundary around stopping, as inputs to the next-action decision. Each case is the progress snapshot `autopilotProgress.mjs` builds plus the agenda's own fields; `expect` lists the decisions that are right (any one passes), the model's wording is not judged. They are written situations, not production incidents: the first live runs on the deployment are what turn real ones into cases. The last four (N11, plan §11.3) are what a researcher's own words and files do to the decision: material added after a needs_input stop, a correction of the denominator, a message that only asks to pause, and one that only uses the word while redirecting the work. They carry `trigger` and `note` (the request the decision answers) and `pauseAllowed`, and their progress carries `researcherNotes`, `materials` and `lastStop` as `autopilotProgress.mjs` builds them.",
   "cases": [
     {
       "id": "counterevidence-changes-the-next-step",
@@ -68,6 +68,76 @@
       "agenda": { "title": "二甲双胍与维生素 B12", "prompt": "Is long-term metformin use associated with vitamin B12 deficiency? This is a one-off question; I only need a supported answer with its limits.", "taskTypes": ["literature-sentinel", "evidence-update"] },
       "progress": { "followUps": [], "rejectedDirections": [], "truncated": false, "episodes": [] },
       "expect": [{ "action": "run", "taskType": "literature-sentinel" }, { "action": "run", "taskType": "evidence-update" }]
+    },
+    {
+      "id": "material-added-after-needs-input-is-read",
+      "why": "The decision stopped last time because it needed the cohort's age distribution; the researcher has since added a spreadsheet of exactly that, ready to read, and started the question again (so a stop is not allowed). Another literature search or a new hypothesis ignores what was asked for and supplied; reading the data is the change.",
+      "stopAllowed": false,
+      "agenda": {"title": "SGLT2 抑制剂与老年心衰", "prompt": "Does adding an SGLT2 inhibitor reduce all-cause mortality in HFpEF patients over 75? Use the cohort I hold where it is relevant.", "taskTypes": ["literature-sentinel", "evidence-update", "data-prospecting"]},
+      "progress": {
+        "followUps": [], "rejectedDirections": [], "truncated": false,
+        "researcherNotes": [],
+        "materials": [{"sourceId": "src_eval", "name": "受试者年龄分布.xlsx", "addedAt": "2026-10-04T01:00:00Z", "state": "ready", "path": ".evimed-knowledge/受试者年龄分布.xlsx"}],
+        "lastStop": {"kind": "needs_input", "reason": "需要这批受试者的年龄分布数据，才能判断 75 岁以上亚组的结论能否适用于研究者的人群。", "at": "2026-10-03T09:00:00Z"},
+        "episodes": [
+          {"date": "2026-10-02", "status": "merged", "taskType": "evidence-update", "errorCode": null, "artifactRefs": [{"path": "reports/sglt2-hfpef-mortality.md"}], "claims": [{"statement": "在意向治疗人群中，SGLT2 抑制剂降低 HFpEF 患者全因死亡率。", "tier": "gated", "refutation": "stands", "sources": ["doi:10.1000/a", "doi:10.1000/b"], "verification": {"status": "recorded"}}]}
+        ]
+      },
+      "expect": [{"action": "run", "taskType": "data-prospecting"}]
+    },
+    {
+      "id": "a-correction-is-not-re-proved-and-not-ignored",
+      "why": "The researcher wrote that the denominator was wrong: the earlier finding was read in the intention-to-treat population and they need the randomised one, and that finding is the one still standing in the history. Stopping (the question is not answered) and an unrelated new direction both ignore the correction; re-checking the evidence on the corrected denominator is the change.",
+      "stopAllowed": true,
+      "agenda": {"title": "SGLT2 抑制剂与老年心衰", "prompt": "Does adding an SGLT2 inhibitor reduce all-cause mortality in HFpEF patients over 75? Track what the evidence supports and what is still unexplained.", "taskTypes": ["literature-sentinel", "evidence-update", "hypothesis-suggestion", "writing-pipeline"]},
+      "progress": {
+        "followUps": [], "rejectedDirections": [], "truncated": false,
+        "researcherNotes": [{"note": "分母不对：我需要的是随机化人群，不是意向治疗人群。之前按意向治疗人群得到的死亡率结论请不要沿用。", "at": "2026-10-03T08:00:00Z"}],
+        "materials": [],
+        "lastStop": null,
+        "episodes": [
+          {"date": "2026-10-02", "status": "merged", "taskType": "evidence-update", "errorCode": null, "artifactRefs": [{"path": "reports/sglt2-hfpef-mortality.md"}], "claims": [{"statement": "在意向治疗人群中，SGLT2 抑制剂降低 HFpEF 患者全因死亡率。", "tier": "gated", "refutation": "stands", "sources": ["doi:10.1000/a", "doi:10.1000/b"], "verification": {"status": "recorded"}}]}
+        ]
+      },
+      "expect": [{"action": "run", "taskType": "evidence-update"}, {"action": "run", "taskType": "literature-sentinel"}]
+    },
+    {
+      "id": "a-message-that-only-asks-to-pause-pauses",
+      "why": "The researcher writes to the question now and asks for nothing to be looked into: they want it held while they check where the data came from. A stop is not otherwise allowed here, but their own pause is. Running another episode spends money on the research they just asked to hold.",
+      "stopAllowed": false,
+      "pauseAllowed": true,
+      "trigger": "follow-up",
+      "note": "先暂停一下，我要先去核对这批数据的来源，核对完再说。",
+      "agenda": {"title": "SGLT2 抑制剂与老年心衰", "prompt": "Does adding an SGLT2 inhibitor reduce all-cause mortality in HFpEF patients over 75? Track what the evidence supports and what is still unexplained.", "taskTypes": ["literature-sentinel", "evidence-update", "hypothesis-suggestion"]},
+      "progress": {
+        "followUps": [], "rejectedDirections": [], "truncated": false,
+        "researcherNotes": [],
+        "materials": [],
+        "lastStop": null,
+        "episodes": [
+          {"date": "2026-10-02", "status": "merged", "taskType": "evidence-update", "errorCode": null, "artifactRefs": [{"path": "reports/sglt2-hfpef-mortality.md"}], "claims": [{"statement": "在意向治疗人群中，SGLT2 抑制剂降低 HFpEF 患者全因死亡率。", "tier": "gated", "refutation": "stands", "sources": ["doi:10.1000/a", "doi:10.1000/b"], "verification": {"status": "recorded"}}]}
+        ]
+      },
+      "expect": [{"action": "stop", "stopKind": "paused_by_researcher"}]
+    },
+    {
+      "id": "a-redirect-that-says-pause-is-work-to-do",
+      "why": "The message uses the word 暂停 but asks for something to be looked into: stop tracking one drug class and check another. It is a redirection with a request, never a pause; pausing would leave the request unanswered.",
+      "stopAllowed": false,
+      "pauseAllowed": true,
+      "trigger": "follow-up",
+      "note": "请先暂停对 SGLT2 抑制剂的追踪，改为查一下 GLP-1 受体激动剂在心衰患者中的证据。",
+      "agenda": {"title": "SGLT2 抑制剂与老年心衰", "prompt": "Does adding an SGLT2 inhibitor reduce all-cause mortality in HFpEF patients over 75? Track what the evidence supports and what is still unexplained.", "taskTypes": ["literature-sentinel", "evidence-update", "hypothesis-suggestion"]},
+      "progress": {
+        "followUps": [], "rejectedDirections": [], "truncated": false,
+        "researcherNotes": [],
+        "materials": [],
+        "lastStop": null,
+        "episodes": [
+          {"date": "2026-10-02", "status": "merged", "taskType": "evidence-update", "errorCode": null, "artifactRefs": [{"path": "reports/sglt2-hfpef-mortality.md"}], "claims": [{"statement": "在意向治疗人群中，SGLT2 抑制剂降低 HFpEF 患者全因死亡率。", "tier": "gated", "refutation": "stands", "sources": ["doi:10.1000/a", "doi:10.1000/b"], "verification": {"status": "recorded"}}]}
+        ]
+      },
+      "expect": [{"action": "run", "taskType": "literature-sentinel"}, {"action": "run", "taskType": "evidence-update"}]
     }
   ]
 }

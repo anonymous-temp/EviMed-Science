@@ -1,4 +1,4 @@
-import type { AgendaRecord, AgendaSchedule } from "@/lib/autopilotClient";
+import type { AgendaRecord, AgendaSchedule, ResearchState } from "@/lib/autopilotClient";
 export const WEEKDAYS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
 export const TASK_TYPES = [
   ["literature-sentinel", "文献追踪"], ["evidence-update", "证据更新"], ["signal-monitoring", "安全信号监测"],
@@ -41,3 +41,21 @@ export function pauseNotes(agenda: AgendaRecord): string[] {
 export function revisionConflict(error: unknown): boolean {
   return typeof error === "object" && error !== null && "status" in error && error.status === 409;
 }
+/** A task the planner paused (the question is answered, the evidence is used up, material is needed, or the researcher asked to hold). Their next message or added material can continue it; nothing else paused it this way. */
+export function resumableByReply(agenda: AgendaRecord): boolean {
+  return !activeAgenda(agenda) && !agenda.payload.archivedAt && agenda.payload.status === "paused" && Boolean(agenda.payload.plannerStop);
+}
+/** The planner stopped because it needs something only the researcher has. */
+export function needsMaterial(agenda: AgendaRecord): boolean {
+  return resumableByReply(agenda) && agenda.payload.plannerStop?.kind === "needs_input";
+}
+export const FOUND_PREFIX: Record<ResearchState["found"][number]["check"], string> = { reproduced: "已复现：", stands: "独立复核后仍成立：", refuted: "已被推翻：" };
+const UNRESOLVED_PREFIX: Record<Exclude<ResearchState["unresolved"][number]["kind"], "not_run">, string> = {
+  unchecked: "尚未独立复核：", check_unavailable: "复核未能进行：", weakened: "被复核削弱：", question: "你的问题：",
+};
+export function unresolvedText(item: ResearchState["unresolved"][number]): string {
+  // A run that did not run says nothing about the question, and the line says so.
+  return item.kind === "not_run" ? "最近一次研究没有完成，结果未知。" : `${UNRESOLVED_PREFIX[item.kind]}${item.text ?? ""}`;
+}
+/** What a researcher is told about an added document; a usable one needs no word. */
+export const MATERIAL_STATE: Record<ResearchState["materials"][number]["state"], string> = { ready: "", reading: "正在读取", attention: "需要处理", unavailable: "无法使用" };

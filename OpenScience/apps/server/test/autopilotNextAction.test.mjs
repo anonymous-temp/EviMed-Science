@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { AUTOPILOT_TASK_TYPES } from "@evimed/domain";
-import { AutopilotPlanner, PLANNER_INPUT_MAX_CHARS, PLANNER_STOP_KINDS, TASK_TYPE_SUMMARIES, buildPlannerContext,
-  eligibleTaskTypes, parsePlannerAnswer, rotationTaskType } from "../src/autopilotNextAction.mjs";
+import { AutopilotPlanner, PLANNER_INPUT_MAX_CHARS, PLANNER_STOP_KINDS, RESEARCHER_PAUSE_KIND, TASK_TYPE_SUMMARIES, buildPlannerContext,
+  eligibleTaskTypes, parsePlannerAnswer, plannerInstructions, rotationTaskType } from "../src/autopilotNextAction.mjs";
 
 const config = (extra = {}) => ({ deepseekProviderEnabled: true, deepseekApiKey: "k", deepseekModel: "deepseek-flash",
   userDailySpendLimit: 0, userWeeklySpendLimit: 0, ...extra });
@@ -92,8 +92,41 @@ test("the answer is held to the closed vocabulary and nothing nearby is accepted
   assert.throws(() => parsePlannerAnswer(JSON.stringify({ action: "stop", stopKind: "answered", reason: "done" }), { ...options, stopAllowed: false }),
     { code: "autopilot_planner_invalid" }, "a stop where none is allowed is dropped, not turned into a run");
   for (const stopKind of PLANNER_STOP_KINDS) {
-    assert.deepEqual(parsePlannerAnswer(JSON.stringify({ action: "stop", stopKind, reason: "没有更多可做" }), options), { action: "stop", stopKind, reason: "没有更多可做" });
+    assert.deepEqual(parsePlannerAnswer(JSON.stringify({ action: "stop", stopKind, reason: "没有更多可做" }), { ...options, pauseAllowed: true }), { action: "stop", stopKind, reason: "没有更多可做" });
   }
+});
+
+test("a researcher's pause is the one stop their own message allows, and the scheduler's stops are not theirs to bring", () => {
+  const pause = JSON.stringify({ action: "stop", stopKind: RESEARCHER_PAUSE_KIND, reason: "你要求先暂停" });
+  const answered = JSON.stringify({ action: "stop", stopKind: "answered", reason: "已回答" });
+  const base = { eligible: ["evidence-update"] };
+  // Only where the message is the researcher's (a follow-up with a note): a scheduled occurrence cannot pause itself in their name.
+  assert.deepEqual(parsePlannerAnswer(pause, { ...base, stopAllowed: false, pauseAllowed: true }), { action: "stop", stopKind: RESEARCHER_PAUSE_KIND, reason: "你要求先暂停" });
+  assert.throws(() => parsePlannerAnswer(pause, { ...base, stopAllowed: true, pauseAllowed: false }), { code: "autopilot_planner_invalid" });
+  assert.throws(() => parsePlannerAnswer(pause, { ...base, stopAllowed: true }), { code: "autopilot_planner_invalid" });
+  // The other stops still need their own permission, whatever the message asked.
+  assert.throws(() => parsePlannerAnswer(answered, { ...base, stopAllowed: false, pauseAllowed: true }), { code: "autopilot_planner_invalid" });
+  assert.deepEqual(parsePlannerAnswer(answered, { ...base, stopAllowed: true, pauseAllowed: false }), { action: "stop", stopKind: "answered", reason: "已回答" });
+});
+
+test("the context carries the researcher's own words and files for this question and what the planner last stopped for, and nothing else", () => {
+  const progress = { truncated: false, followUps: [], rejectedDirections: [], episodes: [],
+    researcherNotes: [{ note: "分母应该是随机化人群，不是意向治疗人群", at: "2026-10-03T08:00:00Z" }],
+    materials: [{ sourceId: "src_a", name: "年龄分布.xlsx", addedAt: "2026-10-04T01:00:00Z", state: "ready", path: ".evimed-knowledge/年龄分布.xlsx" },
+      { sourceId: "src_b", name: "scan.pdf", addedAt: "2026-10-04T01:01:00Z", state: "reading" }],
+    lastStop: { kind: "needs_input", reason: "需要受试者年龄分布", at: "2026-10-03T09:00:00Z" } };
+  const context = buildPlannerContext({ agenda: agenda(), progress, eligible: ["evidence-update"], date: "2026-10-04", trigger: "follow-up",
+    note: "先暂停一下", reducedPriority: false, stopAllowed: false, pauseAllowed: true });
+  assert.deepEqual(context.researcherMessages, [{ note: "分母应该是随机化人群，不是意向治疗人群", at: "2026-10-03T08:00:00Z" }]);
+  assert.deepEqual(context.materials.map(item => [item.name, item.state]), [["年龄分布.xlsx", "ready"], ["scan.pdf", "reading"]]);
+  assert.equal(Object.hasOwn(context.materials[0], "sourceId"), false, "the decision reads the material, not our identifiers");
+  assert.equal(context.earlierStop.kind, "needs_input");
+  assert.equal(context.pauseAllowed, true);
+  assert.equal(context.request.note, "先暂停一下");
+  // A question with no history of its own reads none: the fields are absent, never another question's.
+  const fresh = buildPlannerContext({ agenda: agenda(), progress: { episodes: [], followUps: [], rejectedDirections: [] }, eligible: ["evidence-update"],
+    date: "2026-10-04", trigger: "scheduled", reducedPriority: false, stopAllowed: false });
+  assert.deepEqual(["researcherMessages", "materials", "earlierStop", "pauseAllowed"].filter((field) => Object.hasOwn(fresh, field)), [], "nothing of another question, and no empty field in the prompt");
 });
 
 function planner(handler, extra = {}, options = {}) {
@@ -137,6 +170,25 @@ test("a stop is returned as a stop with its kind, only where one is allowed", as
   await assert.rejects(() => instance.decide(input({ stopAllowed: false })), { code: "autopilot_planner_invalid" });
   assert.equal(instance.counters.stops, 1);
   assert.equal(instance.counters.invalid, 1);
+});
+
+test("the decision is told about the researcher's words, files and pause only when the data has them", () => {
+  const plain = plannerInstructions({ today: "2026-10-04", stopAllowed: true });
+  for (const absent of ["researcherMessages", "materials", "earlierStop", "pauseAllowed", "paused_by_researcher"]) assert.equal(plain.includes(absent), false, `${absent} is not in a decision that has none`);
+  assert.match(plain, /"stopKind":"answered"\|"exhausted"\|"needs_input"\}/, "a decision nobody wrote to is offered the scheduler's three stops only");
+  const full = plannerInstructions({ researcherMessages: [{ note: "x" }], materials: [{ name: "a" }], earlierStop: { kind: "needs_input" }, pauseAllowed: true });
+  for (const present of ["researcherMessages is", "materials are", "earlierStop is", "pauseAllowed is true", "paused_by_researcher"]) assert.ok(full.includes(present), present);
+  assert.equal(plannerInstructions({ researcherMessages: [] }).includes("researcherMessages is"), false, "an empty field is no field");
+  // Only the lines whose data is there: a correction alone does not bring the pause.
+  const some = plannerInstructions({ researcherMessages: [{ note: "x" }] });
+  assert.ok(some.includes("researcherMessages is")); assert.equal(some.includes("paused_by_researcher"), false);
+});
+
+test("a pause the researcher asked for is returned as a stop only for their own message", async () => {
+  const pause = { action: "stop", stopKind: RESEARCHER_PAUSE_KIND, reason: "你说先暂停，等你补充后再继续" };
+  const { instance } = planner(async () => answer(pause));
+  assert.deepEqual(await instance.decide(input({ stopAllowed: false, pauseAllowed: true })), { ...pause, model: "deepseek-flash" });
+  await assert.rejects(() => instance.decide(input({ stopAllowed: true })), { code: "autopilot_planner_invalid" });
 });
 
 test("a planner that is switched off or has no provider says so and calls nothing", async () => {

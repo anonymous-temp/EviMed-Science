@@ -2,9 +2,10 @@ import { createHash, randomUUID } from "node:crypto";
 import { ALLOWED_EFFECT_MEASURES, AUTOPILOT_TASK_TYPES, digestPlacement, directionVerdict, REFUTATION_VERDICTS,
   agendaDueOccurrence, agendaNextOccurrence, agendaLocalDate, normalizeAgendaSchedule, validateAgendaSchedule, validAgendaDate,
   STOPPING_RULES, standingVerdict, tierRaiseAllowed, userSignalScore, validateAgendaClaim } from "@evimed/domain";
-import { loadAutopilotProgress, renderAutopilotProgress, safeAutopilotArtifactRefs } from "./autopilotProgress.mjs";
-import { buildPlannerContext, eligibleTaskTypes, rotationTaskType } from "./autopilotNextAction.mjs";
+import { AUTOPILOT_MATERIALS_MAX, loadAutopilotProgress, projectResearchState, renderAutopilotProgress, safeAutopilotArtifactRefs } from "./autopilotProgress.mjs";
+import { RESEARCHER_PAUSE_KIND, buildPlannerContext, eligibleTaskTypes, rotationTaskType } from "./autopilotNextAction.mjs";
 import { foldOutcome, reducedPriority } from "./autopilotOutcome.mjs";
+import { sourceIdFor } from "./sourceService.mjs";
 import { HttpError } from "./security.mjs";
 
 /** @param {unknown} value @param {string} field @param {number} max */
@@ -1191,8 +1192,96 @@ export class AutopilotService {
       // A researcher's start is a fresh authorization: the pauses automatic rules
       // put on task types and the stop the planner chose are lifted with it.
       consecutiveFailures: 0, taskTypeState: {}, plannerStop: null,
+      // The stop that was lifted is what the next decision reads beside any material
+      // added since, until an episode has run (`autopilotProgress.mjs`, `lastStop`).
+      lastStop: agenda.payload.plannerStop ? { ...agenda.payload.plannerStop, clearedAt: this.now().toISOString() } : agenda.payload.lastStop ?? null,
       lastStartedAt: this.now().toISOString(), updatedAt: this.now().toISOString(),
     }, { expectedRevision: agenda.revision, projectId: agenda.projectId });
+  }
+
+  /**
+   * What the researcher reads about this question: found, unresolved, and the
+   * material they added. The projection of the same progress the next decision
+   * reads, taken now (`projectResearchState`); nothing is asked of a model.
+   * @param {string} userId @param {string} agendaId
+   */
+  async researchState(userId, agendaId) {
+    const agenda = await this.get(userId, agendaId);
+    this.assertNotArchived(agenda);
+    const at = this.now();
+    const progress = await loadAutopilotProgress(this.documents, {
+      userId, agenda, date: agendaLocalDate(normalizeAgendaSchedule(agenda.payload).timeZone, at), episodeId: "", asOf: at.toISOString(),
+    });
+    return projectResearchState(progress);
+  }
+
+  /**
+   * Associate sources of this project with this question: the material the
+   * researcher adds to answer what the question lacks. The files themselves go
+   * through the ordinary knowledge-base intake (the upload registers them as
+   * sources); what is recorded here is only which of them belong to which
+   * question, so the next decision and the episode it chooses read them and the
+   * agenda continues without anything being set up again.
+   *
+   * A source is named by its id (one already in the knowledge base) or by the
+   * SHA-256 of the bytes just uploaded (a source's id is derived from the
+   * project and those bytes, so the digest names it exactly). Only this
+   * account's sources of this question's own project can be associated; any
+   * other is a 404 that says nothing about whether it exists. All or nothing.
+   *
+   * @param {string} userId @param {string} agendaId @param {{sourceIds?: unknown, sha256?: unknown}} input
+   */
+  async addMaterials(userId, agendaId, input) {
+    const agenda = await this.get(userId, agendaId);
+    this.assertNotArchived(agenda);
+    const list = (/** @type {unknown} */ value, /** @type {RegExp} */ shape) => {
+      if (value === undefined) return [];
+      if (!Array.isArray(value) || value.some(item => typeof item !== "string" || !shape.test(item))) throw new HttpError(400, "autopilot_payload_invalid", "Material identifiers are invalid.");
+      return value;
+    };
+    const ids = [...new Set([...list(input.sourceIds, /^src_[a-f0-9]{32}$/), ...list(input.sha256, /^[a-f0-9]{64}$/).map(digest => sourceIdFor(agenda.projectId, digest))])];
+    if (ids.length === 0 || ids.length > 10) throw new HttpError(400, "autopilot_payload_invalid", "Name between one and ten sources to add.");
+    for (const id of ids) {
+      const source = await this.documents.get(userId, "source", id);
+      if (!source || source.projectId !== agenda.projectId) throw new HttpError(404, "autopilot_material_not_found", "That source is not in this question's project.");
+    }
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const current = await this.get(userId, agenda.id);
+      this.assertNotArchived(current);
+      const have = current.payload.materials ?? [];
+      const fresh = ids.filter(id => !have.some((/** @type {any} */ item) => item.sourceId === id));
+      if (fresh.length === 0) return current;
+      if (have.length + fresh.length > AUTOPILOT_MATERIALS_MAX) throw new HttpError(409, "autopilot_materials_full", "This question already has as much material as it keeps.");
+      const at = this.now().toISOString();
+      try {
+        return await this.documents.put(userId, "agenda", current.id, { ...current.payload,
+          materials: [...have, ...fresh.map(sourceId => ({ sourceId, addedAt: at }))], updatedAt: at,
+        }, { expectedRevision: current.revision, projectId: current.projectId });
+      } catch (error) {
+        if (!isConflict(error) || attempt === 4) throw error;
+      }
+    }
+    throw new HttpError(409, "autopilot_activity_conflict", "The question changed repeatedly; try again.");
+  }
+
+  /** Take one source out of this question's material; the source itself stays in the knowledge base. Idempotent.
+   * @param {string} userId @param {string} agendaId @param {string} sourceId */
+  async removeMaterial(userId, agendaId, sourceId) {
+    const id = text(sourceId, "source id", 160);
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      const current = await this.get(userId, agendaId);
+      this.assertNotArchived(current);
+      const have = current.payload.materials ?? [];
+      if (!have.some((/** @type {any} */ item) => item.sourceId === id)) return current;
+      try {
+        return await this.documents.put(userId, "agenda", current.id, { ...current.payload,
+          materials: have.filter((/** @type {any} */ item) => item.sourceId !== id), updatedAt: this.now().toISOString(),
+        }, { expectedRevision: current.revision, projectId: current.projectId });
+      } catch (error) {
+        if (!isConflict(error) || attempt === 4) throw error;
+      }
+    }
+    throw new HttpError(409, "autopilot_activity_conflict", "The question changed repeatedly; try again.");
   }
 
   /** @param {string} userId @param {string} agendaId @param {{expectedRevision:number}} input */
@@ -1402,7 +1491,10 @@ export class AutopilotService {
     }) : null);
     const selection = existingEpisode ? existingEpisode.payload.selection ?? null
       : await this.chooseNextAction(userId, agenda, { episodeId, date, trigger, note: input.note, progress, eligible, reduced, manual });
-    if (selection?.action === "stop") return this.stopOnDecision(userId, agenda, selection, { episodeId });
+    if (selection?.action === "stop") {
+      return this.stopOnDecision(userId, agenda, selection, { episodeId,
+        message: trigger === "follow-up" ? { requestId: input.requestId, note: input.note, episodeId: input.episodeId ?? null } : null });
+    }
     const taskType = existingEpisode ? existingEpisode.payload.taskType : selection.taskType;
     // A direction at reduced priority gets half of what a scheduled episode may
     // spend; a researcher's own request for work now is never halved.
@@ -1418,6 +1510,8 @@ export class AutopilotService {
       `Maximum episode budget: CNY ${budgetCny.toFixed(2)}.`,
       ...(trigger === "follow-up" ? ["Researcher's follow-up for this episode:", input.note] : []),
       ...(followUps.length ? [`Researcher follow-up questions to answer first: ${followUps.map((item, position) => `(${position + 1}) ${item.note}`).join(" ")}`] : []),
+      ...(progress?.researcherNotes?.length ? ["The researcher has written to this question before (researcherNotes below). A correction there stands over the findings it corrects until they say otherwise; do not re-derive what they corrected."] : []),
+      ...(progress?.materials?.length ? ["The researcher added material for this question (materials below, in the project's knowledge base). Read the material that is ready before searching elsewhere; if one is still being read or could not be read fully, say so instead of assuming what it holds."] : []),
       ...(progress ? [renderAutopilotProgress(progress)] : []),
       "Use the ordinary capability contract and delivery gate. Do not send anything externally. Stop when the budget or two-hour wall clock limit is reached.",
     ].join("\n");
@@ -1535,10 +1629,13 @@ export class AutopilotService {
     const completedSinceStart = (agenda.payload.outcomes ?? []).some((/** @type {any} */ outcome) => outcome.status === "succeeded"
       && (!Number.isFinite(since) || Date.parse(outcome.at) >= since));
     const stopAllowed = !manual && completedSinceStart;
+    // A researcher writing to the question may be asking it to hold; that is the
+    // one stop their own message can bring, and only the model reads it as such.
+    const pauseAllowed = trigger === "follow-up" && typeof note === "string" && note.trim().length > 0;
     try {
       const decision = await this.planner.decide({
-        userId, projectId: agenda.projectId, episodeId, eligible, stopAllowed,
-        context: buildPlannerContext({ agenda, progress, eligible, date, trigger, note, reducedPriority: reduced, stopAllowed }),
+        userId, projectId: agenda.projectId, episodeId, eligible, stopAllowed, pauseAllowed,
+        context: buildPlannerContext({ agenda, progress, eligible, date, trigger, note, reducedPriority: reduced, stopAllowed, pauseAllowed }),
         limits: { daily: agenda.payload.dailyBudgetCny, weekly: agenda.payload.weeklyBudgetCny },
       });
       return decision.action === "stop"
@@ -1557,9 +1654,13 @@ export class AutopilotService {
    * the model's reason and tell the researcher. Nothing is deleted or canceled —
    * results, digests and earlier episodes stay as they are — and the
    * researcher's own start resumes it (`start` clears `plannerStop`).
-   * @param {string} userId @param {any} agenda @param {any} selection @param {{episodeId:string}} input
+   * When the stop answers a message of the researcher's (they asked to hold the
+   * research), that message is kept with the question's other messages — there is
+   * no episode to carry it — and they are not told by notice what they just said.
+   * @param {string} userId @param {any} agenda @param {any} selection
+   * @param {{episodeId:string, message?: {requestId:string, note:string, episodeId:string|null}|null}} input
    */
-  async stopOnDecision(userId, agenda, selection, { episodeId }) {
+  async stopOnDecision(userId, agenda, selection, { episodeId, message = null }) {
     const at = this.now().toISOString();
     const plannerStop = { kind: selection.stopKind, reason: selection.reason, at, episodeId };
     for (let attempt = 0; attempt < 5; attempt += 1) {
@@ -1568,8 +1669,11 @@ export class AutopilotService {
       // was being made: the researcher's own state wins and nothing is written.
       if (current.payload.archivedAt || !current.payload.enabled || current.payload.status !== "active") return { episode: null, job: null, stopped: null };
       try {
+        const messages = current.payload.messages ?? [];
         await this.documents.put(userId, "agenda", current.id, {
           ...current.payload, enabled: false, status: "paused", pauseReason: selection.reason, plannerStop, updatedAt: at,
+          ...(message && !messages.some((/** @type {any} */ item) => item.requestId === message.requestId)
+            ? { messages: [...messages, { ...message, runEpisodeId: null, outcome: "paused", at }].slice(-20) } : {}),
         }, { expectedRevision: current.revision, projectId: current.projectId });
         break;
       } catch (error) {
@@ -1578,7 +1682,7 @@ export class AutopilotService {
     }
     // Best effort: an inbox that cannot be reached must not undo the stop, and a
     // replay of the same occurrence says nothing twice.
-    if (this.notifications) await this.notifications.create(userId, {
+    if (this.notifications && selection.stopKind !== RESEARCHER_PAUSE_KIND) await this.notifications.create(userId, {
       noticeType: "notify", title: `主动科研已暂停：${agenda.payload.title}`.slice(0, 150),
       body: String(selection.reason).slice(0, 1000), projectId: agenda.projectId,
       source: { type: "system", id: `autopilot-stop-${agenda.id}` }, idempotencyKey: `autopilot-stop:${agenda.id}:${episodeId}`,

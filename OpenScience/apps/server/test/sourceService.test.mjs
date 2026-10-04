@@ -4,7 +4,7 @@ import test from "node:test";
 import { HttpError } from "../src/security.mjs";
 import { normalizeSourceText, projectSourceUnderstandingOutput, sourceUnderstandingAuditSample, sourceUnderstandingSchema,
   validateSourceUnderstanding } from "@evimed/domain";
-import { projectSourceDerivedRecord, projectSourceManifestRecord, readCopyOf, sourceIndexDocument, sourceOmissionRecord, sourceReadable, SOURCE_DEPTHS, SOURCE_STATES, SOURCE_TYPES,
+import { projectSourceDerivedRecord, projectSourceManifestRecord, readCopyOf, sourceIdFor, sourceIndexDocument, sourceOmissionRecord, sourceReadable, sourceStateOf, SOURCE_DEPTHS, SOURCE_STATES, SOURCE_TYPES,
   SourceService } from "../src/sourceService.mjs";
 
 // The lease, replay and account-generation fences need a real database, so they
@@ -170,6 +170,25 @@ test("registering an upload creates a traceable manifest and one idempotent inge
   assert.equal(jobs.enqueued.length, 1);
   assert.equal(jobs.enqueued[0].kind, "ingest");
   assert.equal(jobs.enqueued[0].options.projectId, "project-one");
+});
+
+test("a source's id is named by its project and its bytes' digest, which is how a caller that holds the bytes finds the source its upload became", async () => {
+  const { service } = fixture();
+  const sha256 = "c".repeat(64);
+  const { source } = await service.register("user-one", upload({ sha256 }));
+  assert.equal(source.id, sourceIdFor("project-one", sha256));
+  assert.notEqual(sourceIdFor("project-two", sha256), source.id, "the same bytes in another project are another source");
+  assert.match(source.id, /^src_[a-f0-9]{32}$/);
+});
+
+test("a source's state is the page's three words, and a document that cannot be used and will not be read is none of them", () => {
+  assert.deepEqual(["queued", "parsing", "complete", "needs_attention", "failed", "missing", "canceled"].map((status) => sourceStateOf({ status })),
+    ["reading", "reading", "ready", "attention", "attention", "unavailable", "unavailable"]);
+  // Read as soon as the text is captured, while the understanding still runs; and a read generation the source moved past is not readable.
+  assert.equal(sourceStateOf({ status: "parsing", generation: 2, analysis: { readAt: "2026-09-06T00:00:00Z", generation: 2 } }), "ready");
+  assert.equal(sourceStateOf({ status: "parsing", generation: 3, analysis: { readAt: "2026-09-06T00:00:00Z", generation: 2 } }), "reading");
+  assert.equal(sourceStateOf(null), "unavailable");
+  for (const state of SOURCE_STATES) assert.ok(["reading", "ready", "attention"].includes(state));
 });
 
 test("exact content is deduplicated while a changed path remains in one version family", async () => {

@@ -29,6 +29,9 @@ async function fixture(t, digestProjectId = "owned-project") {
     getDigest: async () => digest,
     markDigestOpened: async (userId, id) => { calls.push({ method: "opened", userId, id }); return digest; },
     decide: async (userId, id, body) => { calls.push({ method: "decide", userId, id, body }); return digest; },
+    researchState: async (userId, id) => { calls.push({ method: "researchState", userId, id }); return { found: [], unresolved: [], materials: [] }; },
+    addMaterials: async (userId, id, body) => { calls.push({ method: "addMaterials", userId, id, body }); return agenda; },
+    removeMaterial: async (userId, id, sourceId) => { calls.push({ method: "removeMaterial", userId, id, sourceId }); return agenda; },
   };
   const store = {
     ensureSessionUser: async (req) => {
@@ -127,4 +130,26 @@ test('task detail, edit, deletion and immediate follow-ups enforce auth, CSRF an
   }
   assert.deepEqual(calls.filter(call => ['update', 'archive', 'runNow', 'followUp'].includes(call.method)).map(call => [call.method, call.userId]),
     [['update', 'owner'], ['archive', 'owner'], ['runNow', 'owner'], ['followUp', 'owner']]);
+});
+
+test("the question's progress and material are read and changed only through an owned agenda, with CSRF and declared fields", async (t) => {
+  const { base, headers, calls } = await fixture(t);
+  const { cookie } = headers;
+  assert.equal((await fetch(`${base}/api/autopilot/agendas/agenda-one/progress`, { headers: { cookie } })).status, 200);
+  assert.equal((await fetch(`${base}/api/autopilot/agendas/agenda-other/progress`, { headers: { cookie } })).status, 404);
+  assert.equal((await fetch(`${base}/api/autopilot/agendas/agenda-one/progress`)).status, 401);
+  assert.deepEqual(calls.filter((call) => call.method === "researchState"), [{ method: "researchState", userId: "owner", id: "agenda-one" }]);
+
+  const add = (body, extra = {}) => fetch(`${base}/api/autopilot/agendas/agenda-one/materials`, { method: "POST", headers: { ...headers, ...extra }, body: JSON.stringify(body) });
+  assert.equal((await add({ sha256: ["a".repeat(64)] })).status, 200);
+  assert.equal((await add({ sourceIds: ["src_" + "a".repeat(32)] })).status, 200);
+  assert.deepEqual(calls.filter((call) => call.method === "addMaterials").map((call) => call.body), [{ sha256: ["a".repeat(64)] }, { sourceIds: ["src_" + "a".repeat(32)] }]);
+  assert.equal((await add({ sourceIds: [], projectId: "other" })).status, 400, "a project is never named by the browser: the question's own is used");
+  assert.equal((await add({ sha256: ["a".repeat(64)] }, { "x-open-science-csrf": "wrong" })).status, 403);
+  assert.equal((await fetch(`${base}/api/autopilot/agendas/agenda-other/materials`, { method: "POST", headers, body: JSON.stringify({ sha256: ["a".repeat(64)] }) })).status, 404);
+
+  const remove = await fetch(`${base}/api/autopilot/agendas/agenda-one/materials/${encodeURIComponent("src_" + "a".repeat(32))}`, { method: "DELETE", headers });
+  assert.equal(remove.status, 200);
+  assert.deepEqual(calls.find((call) => call.method === "removeMaterial"), { method: "removeMaterial", userId: "owner", id: "agenda-one", sourceId: "src_" + "a".repeat(32) });
+  assert.equal((await fetch(`${base}/api/autopilot/agendas/agenda-one/materials`, { method: "GET", headers })).status, 404);
 });

@@ -1036,6 +1036,18 @@ const sourceIntakeErrorCodes = Object.freeze([
 ])
 
 /**
+ * Codes the scheduled research's material routes answer with
+ * (`AutopilotService.addMaterials`): shown on a question's page where the
+ * researcher adds a document to it. A source that is not this question's
+ * project's, and one that is not there, answer the same way on purpose. Private
+ * for the same reason as the intake list.
+ */
+const autopilotMaterialErrorCodes = Object.freeze([
+  'autopilot_material_not_found',
+  'autopilot_materials_full',
+])
+
+/**
  * Codes the personal library answers with (`libraryService.mjs`): shown where
  * a document is added to the library, removed from it, or published from it
  * into the capsule. Private for the same reason as the intake list.
@@ -1411,6 +1423,7 @@ export const ALL_ERROR_CODES = Object.freeze([...new Set([
   ...recoverableEvidenceSourceErrorCodes,
   ...terminalEvidenceSourceErrorCodes,
   ...sourceIntakeErrorCodes,
+  ...autopilotMaterialErrorCodes,
   ...libraryErrorCodes,
   ...capsuleTransferErrorCodes,
   ...GEO_ROUTE_ERROR_CODES,
@@ -1975,6 +1988,8 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   library_unavailable: '个人资料库暂时不可用，稍后再试。',
   library_payload_invalid: '资料库请求的内容不完整，刷新页面后再试。',
   library_source_invalid: '没有找到这份资料，刷新知识库后再试。',
+  autopilot_material_not_found: '找不到这份资料，或它不属于这个研究问题所在的项目。先把文件加入这个项目的知识库，再关联到问题。',
+  autopilot_materials_full: '这个研究问题已关联了足够多的资料。先移除不再需要的，再添加新的。',
   library_item_not_found: '这份资料不在个人资料库里。',
   library_full: '个人资料库已满。先移出不再需要的资料，再加入新的。',
   library_source_removed: '这份资料在各个项目里都已删除，它的资料理解结果也随之删除，没有可以发布到记忆胶囊的内容；资料库里的正文副本仍然可以阅读和检索。',
@@ -2259,6 +2274,10 @@ export function errorCodeOutcome(code) {
   // library and a publication already running are ceilings, and everything
   // else names a document that is not there to act on.
   if (text === 'library_full' || text === 'library_publish_busy') return 'capped'
+  // A question's material is a list the researcher keeps: a full list is a
+  // ceiling, and a source that is not there is nothing to act on.
+  if (text === 'autopilot_materials_full') return 'capped'
+  if (autopilotMaterialErrorCodes.includes(text)) return 'upstream'
   if (libraryErrorCodes.includes(text)) return 'upstream'
   // Sharing a capsule refuses for what the pack holds or who it is for —
   // nothing to share yet, an account that is not here, a missing password —

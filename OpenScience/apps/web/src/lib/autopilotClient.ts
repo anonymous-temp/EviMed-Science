@@ -1,7 +1,8 @@
 import { productRequest, type ProductPage, type ProductRecord } from "./productClient";
 
 export interface AgendaSchedule { kind: "once" | "daily" | "weekly"; timeZone: string; time: string; date?: string; weekdays?: number[] }
-export interface AgendaMessage { requestId: string; note: string; episodeId?: string | null; runEpisodeId: string; at: string }
+/** What the researcher wrote to the question; `paused` marks a message that asked to hold the research and was answered by pausing it (no episode ran). */
+export interface AgendaMessage { requestId: string; note: string; episodeId?: string | null; runEpisodeId: string | null; outcome?: "paused"; at: string }
 export interface AgendaPayload {
   prompt?: string; schedule?: AgendaSchedule; nextRunAt?: string | null;
   scheduleState?: "paused" | "scheduled" | "completed" | "archived"; archivedAt?: string | null;
@@ -13,8 +14,17 @@ export interface AgendaPayload {
   /** Task types paused after repeated failures to run; the others go on. */
   taskTypeState?: Record<string, { consecutiveFailures?: number; pausedAt?: string | null; pauseReason?: string | null }>;
   /** Why the agenda was paused because another episode would add nothing, until the researcher starts it again. */
-  plannerStop?: { kind: "answered" | "exhausted" | "needs_input"; reason: string; at: string } | null;
+  plannerStop?: { kind: "answered" | "exhausted" | "needs_input" | "paused_by_researcher"; reason: string; at: string } | null;
+  /** The sources the researcher associated with this question (the files are in the project's knowledge base). */
+  materials?: Array<{ sourceId: string; addedAt: string }>;
   followUps?: Array<{ digestId: string; claimId: string; note: string; at: string; consumedBy?: string }> }
+/** What the researcher reads about one question: what was found, what is unresolved, and the material they added. */
+export interface ResearchState {
+  agendaId: string; asOf: string; truncated: boolean;
+  found: Array<{ statement: string; check: "reproduced" | "stands" | "refuted"; sources: number; date: string }>;
+  unresolved: Array<{ kind: "unchecked" | "check_unavailable" | "weakened" | "question" | "not_run"; text?: string; date?: string }>;
+  materials: Array<{ sourceId: string; name: string; addedAt: string; state: "reading" | "ready" | "attention" | "unavailable" }>;
+}
 export interface AutopilotArtifactRef { projectId: string; runId: string; sessionId: string; path: string }
 export interface DigestClaim { id: string; statement: string;
   /** How far the claim has been checked: only an independent rerun reaches `reproduced`. */
@@ -49,7 +59,12 @@ export function getAgenda(id: string) { return productRequest<AgendaRecord>(`/au
 export function updateAgenda(id: string, input: Record<string, unknown>) { return productRequest<AgendaRecord>(`/autopilot/agendas/${encodeURIComponent(id)}`, "PATCH", input); }
 export function archiveAgenda(id: string, revision: number) { return productRequest<AgendaRecord>(`/autopilot/agendas/${encodeURIComponent(id)}`, "DELETE", { expectedRevision: revision }); }
 export function runAgendaNow(id: string, requestId: string) { return productRequest<{ episode: EpisodeRecord }>(`/autopilot/agendas/${encodeURIComponent(id)}/run-now`, "POST", { requestId }); }
-export function followUpAgenda(id: string, input: { requestId: string; note: string; episodeId?: string }) { return productRequest<{ episode: EpisodeRecord }>(`/autopilot/agendas/${encodeURIComponent(id)}/follow-ups`, "POST", input); }
+/** `episode` is null when the researcher's message asked to hold the research and it was paused instead. */
+export function followUpAgenda(id: string, input: { requestId: string; note: string; episodeId?: string }) { return productRequest<{ episode: EpisodeRecord | null }>(`/autopilot/agendas/${encodeURIComponent(id)}/follow-ups`, "POST", input); }
+export function getResearchState(id: string) { return productRequest<ResearchState>(`/autopilot/agendas/${encodeURIComponent(id)}/progress`); }
+/** Associate sources of the question's project with it: by id (already in the knowledge base) or by the SHA-256 of the bytes just uploaded. */
+export function addAgendaMaterials(id: string, input: { sourceIds?: string[]; sha256?: string[] }) { return productRequest<AgendaRecord>(`/autopilot/agendas/${encodeURIComponent(id)}/materials`, "POST", input); }
+export function removeAgendaMaterial(id: string, sourceId: string) { return productRequest<AgendaRecord>(`/autopilot/agendas/${encodeURIComponent(id)}/materials/${encodeURIComponent(sourceId)}`, "DELETE"); }
 export function startAgenda(id: string, revision: number) { return productRequest<AgendaRecord>(`/autopilot/agendas/${encodeURIComponent(id)}/start`, "POST", { expectedRevision: revision }); }
 export function stopAgenda(id: string, revision: number) { return productRequest<AgendaRecord>(`/autopilot/agendas/${encodeURIComponent(id)}/stop`, "POST", { expectedRevision: revision }); }
 export function scheduleAgenda(id: string, date: string) { return productRequest<{ episode: { id: string } }>(`/autopilot/agendas/${encodeURIComponent(id)}/schedule`, "POST", { date }); }
