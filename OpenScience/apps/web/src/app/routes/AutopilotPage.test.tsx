@@ -2,6 +2,7 @@ import { act, fireEvent, render as renderView, screen, waitFor, within } from "@
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { WebApiError } from "@/lib/apiClient";
 import { useProjectStore } from "@/lib/projects";
 import { AutopilotPage } from "./AutopilotPage";
 
@@ -155,6 +156,40 @@ describe("scheduled tasks", () => {
     await userEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "立即运行" }));
     await waitFor(() => expect(mocks.runAgendaNow).toHaveBeenCalledTimes(3));
     expect(mocks.runAgendaNow.mock.calls[2][1]).not.toEqual(mocks.runAgendaNow.mock.calls[0][1]);
+  });
+  // 2026-10-04: a task with ¥3 a day was refused in the account's words (近 24 小时额度已达上限 / 超出账户设定的用量上限) by an
+  // account whose other research had cost ¥16, while the task had spent nothing. The task's own cap now has its own refusal.
+  it("says a spent task budget is the task's own, that raising it is editing the task, and when it frees", async () => {
+    mocks.runAgendaNow.mockRejectedValueOnce(new WebApiError("This task's own daily budget is spent.", { status: 402, code: "autopilot_daily_budget_spent", retryAfterSeconds: 19 * 3600 + 60 }));
+    render(); const panel = await detail();
+    await userEvent.click(within(panel).getByRole("button", { name: "立即运行" }));
+    await userEvent.click(within(screen.getByRole("alertdialog")).getByRole("button", { name: "立即运行" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("这个任务近 24 小时的花费已达它自己设定的“每日上限”");
+    expect(alert).toHaveTextContent("账户里其他研究的花费不占用它");
+    expect(alert).toHaveTextContent("在“编辑任务”里调高每日上限");
+    expect(alert).toHaveTextContent(/请在约 19 小时 1 分后重试/);
+    expect(alert).not.toHaveTextContent(/账户设定的用量上限|近 24 小时额度|额度开始释放/);
+    expect(mocks.listEpisodes).toHaveBeenCalled(); // the page itself is still there, the refusal is not a failed load
+  });
+  it("says the weekly cap as the week's, for a follow-up as for a run", async () => {
+    mocks.followUpAgenda.mockRejectedValueOnce(new WebApiError("This task's own weekly budget is spent.", { status: 402, code: "autopilot_weekly_budget_spent", retryAfterSeconds: 3 * 86400 }));
+    render(); const panel = await detail();
+    await userEvent.type(within(panel).getByLabelText("针对任务追问"), "补充肾病亚组");
+    await userEvent.click(within(panel).getByRole("button", { name: "发送追问" }));
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("这个任务近 7 天的花费已达它自己设定的“每周上限”");
+    expect(alert).toHaveTextContent("在“编辑任务”里调高每周上限");
+    expect(alert).toHaveTextContent(/请在约 3 天后重试/);
+    expect(alert).not.toHaveTextContent(/账户设定的用量上限|近 7 天额度|额度开始释放/);
+  });
+  it("shows an episode the task's budget did not allow to start as that, not as an unexplained failure", async () => {
+    mocks.listEpisodes.mockResolvedValue({ items: [{ ...episode, payload: { ...episode.payload, status: "failed", digestId: null, runId: null, sessionId: null,
+      error: { code: "autopilot_daily_budget_spent" } } }] });
+    render(); const panel = await detail();
+    expect(await within(panel).findByText("任务预算已用完")).toBeInTheDocument();
+    expect(panel).toHaveTextContent("账户里其他研究的花费不占用它");
+    expect(panel).not.toHaveTextContent("未完成");
   });
   it("sends a real follow-up and immediately shows its queued episode", async () => {
     render(); const panel = await detail();

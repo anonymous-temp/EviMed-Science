@@ -1,5 +1,5 @@
 import { Link } from "react-router";
-import { BALANCE_REFUSAL_CODES } from "@evimed/domain";
+import { AUTOPILOT_BUDGET_ERROR_CODES, BALANCE_REFUSAL_CODES, knownErrorCodeMessage } from "@evimed/domain";
 import type { AgendaRecord, EpisodeRecord } from "@/lib/autopilotClient";
 import { safeWorkspacePath } from "@/lib/claimCitations";
 import { artifactDisplayName } from "@/lib/artifactNames";
@@ -28,7 +28,9 @@ export function TaskTimeline({ agenda, episodes, onOpen }: { agenda: AgendaRecor
       const deferrals = Object.values(payload?.resourceDeferrals ?? {}).filter(Boolean);
       const waiting = deferrals.find(value => value?.status === "waiting");
       const exhausted = deferrals.find(value => value?.status === "exhausted");
-      const state = item.paused ? "已按你的要求暂停" : waiting ? (waitsForBalance(waiting.code) ? "等待余额" : "等待运行资源")
+      // The task's own budget was spent between scheduling and starting: nothing ran, and the sentence says whose budget it is.
+      const budgetSpent = payload?.status === "failed" && AUTOPILOT_BUDGET_ERROR_CODES.includes(payload.error?.code ?? "") ? payload.error?.code ?? null : null;
+      const state = item.paused ? "已按你的要求暂停" : budgetSpent ? "任务预算已用完" : waiting ? (waitsForBalance(waiting.code) ? "等待余额" : "等待运行资源")
         : exhausted ? (waitsForBalance(exhausted.code) ? "余额不足" : "运行资源暂不可用") : STATES[payload?.status ?? ""] ?? "正在安排";
       const artifacts = (payload?.artifactRefs ?? []).filter(ref => ref.projectId === agenda.projectId && ref.runId === payload?.runId
         && ref.sessionId === payload?.sessionId && /^[A-Za-z0-9_-]{1,160}$/.test(ref.runId) && safeWorkspacePath(ref.path));
@@ -37,6 +39,7 @@ export function TaskTimeline({ agenda, episodes, onOpen }: { agenda: AgendaRecor
         {item.note && <p className="ml-auto max-w-body whitespace-pre-wrap break-words rounded-panel bg-surface-2 px-5 py-4 text-ui text-text">{item.note}</p>}
         <div className="space-y-3 text-ui text-text">
           <div className="flex flex-wrap items-center gap-2"><span className="font-medium">{state}</span><span className="text-caption text-text-3">{payload?.trigger === "manual" ? "手动运行" : payload?.trigger === "follow-up" ? "任务追问" : payload ? "定时运行" : "任务追问"}</span></div>
+          {budgetSpent && <p className="text-caption text-text-3">{knownErrorCodeMessage(budgetSpent)}</p>}
           {waiting?.retryAt && <p className="text-caption text-text-3">预计重试 {instant(waiting.retryAt, zone)}</p>}
           {payload?.selection?.source === "model" && (payload.selection.focus || payload.selection.reason) && <p className="whitespace-pre-wrap break-words text-caption text-text-2">本次关注：{payload.selection.focus || payload.selection.reason}</p>}
           {(payload?.claims ?? []).map(claim => <p key={claim.id} className="whitespace-pre-wrap break-words leading-relaxed">{claim.tier === "reproduced" && claim.verification?.status === "recorded" && claim.verification.reproductionMatched && claim.verification.isolationEnforced ? "已复现：" : "研究线索："}{claim.statement}</p>)}
