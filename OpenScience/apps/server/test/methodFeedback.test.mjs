@@ -222,25 +222,26 @@ test("a trusted recalculation is carried to the same revision, with what the eng
   assert.equal((await f.service.fromReplay({ project: PROJECT, original: { ...originalVersion(4), producer: { kind: "tool", runId: null } }, replayId: "r4", output, comparison: replayOf() })).skipped, "run_unknown");
 });
 
-test("three results found wrong under the body in force return the method to the exact earlier body, and say why without claiming cause", async () => {
+test("four results found wrong under the body in force return the method to the exact earlier body, and say why without claiming cause", async () => {
   const f = fixture();
   const first = await f.method("quote-first", "1. Quote the sentence.");
   const second = await f.amend("quote-first", "1. Quote the sentence.\n2. Then restate it in the table.");
   // A newer body's runs.
-  for (const [index, kind] of [[1, "analytic"], [2, "evidence"], [3, "analytic"]]) {
+  for (const [index, kind] of [[1, "analytic"], [2, "evidence"], [3, "analytic"], [4, "evidence"]]) {
     f.run({ id: `run-${index}`, invoked: [second] });
     const joined = await f.service.fromCorrection(PROJECT, f.correction({ runId: `run-${index}`, original: index * 10, successor: index * 10 + 1, kind }));
-    assert.equal(joined.recorded[0].acted, index === 3 ? "rollback" : undefined);
+    // Three corrections are ordinary work; the fourth, with nothing reproduced in between, is the regression.
+    assert.equal(joined.recorded[0].acted, index === 4 ? "rollback" : undefined);
   }
   const returned = await f.learning.getMethod(USER, first.id);
   assert.equal(returned.payload.contentDigest, first.payload.contentDigest);
   assert.equal(returned.payload.status, "approved");
   const link = returned.payload.links.at(-1);
-  assert.deepEqual([link.type, link.fromDigest, link.toDigest, link.results, link.against], ["rolled_back_for_regression", second.payload.contentDigest, first.payload.contentDigest, 3, 3]);
-  assert.equal(link.evidence.length, 3);
+  assert.deepEqual([link.type, link.fromDigest, link.toDigest, link.results, link.against], ["rolled_back_for_regression", second.payload.contentDigest, first.payload.contentDigest, 4, 4]);
+  assert.equal(link.evidence.length, 4);
   // The record keeps what happened under the body it left; the reader is told, in their words, what it is and is not.
-  assert.equal(returned.payload.scientific.entries.length, 3);
-  assert.match(returned.payload.statusReason, /3 个结果里有 3 个/);
+  assert.equal(returned.payload.scientific.entries.length, 4);
+  assert.match(returned.payload.statusReason, /4 个结果里有 4 个/);
   assert.match(returned.payload.statusReason, /不证明是这条做法造成的/);
   // And the history keeps both bodies: it is one click to undo.
   assert.equal((await f.learning.history(USER, first.id)).length >= 2, true);
@@ -249,13 +250,13 @@ test("three results found wrong under the body in force return the method to the
 test("a method with no sound earlier body is stopped, never returned to one", async () => {
   const f = fixture();
   const only = await f.method();
-  for (let index = 1; index <= 3; index += 1) {
+  for (let index = 1; index <= 4; index += 1) {
     f.run({ id: `run-${index}`, invoked: [only] });
     await f.service.fromReplay({ project: PROJECT, original: originalVersion(index, `run-${index}`), replayId: `replay-${index}`, output: { versionId: version(50 + index) }, comparison: replayOf("changed") });
   }
   const stopped = await f.learning.getMethod(USER, only.id);
   assert.equal(stopped.payload.status, "retired");
-  assert.match(stopped.payload.statusReason, /3 个没能被重算复现或被你改正过/);
+  assert.match(stopped.payload.statusReason, /4 个没能被重算复现或被你改正过/);
   assert.equal(stopped.payload.links.at(-1).type, "retired_for_regression");
   assert.equal(stopped.payload.links.at(-1).toDigest, null);
 });
@@ -263,13 +264,13 @@ test("a method with no sound earlier body is stopped, never returned to one", as
 test("a researcher's own method is never changed by the join, and agreement and restyling never read as a regression", async () => {
   const explicit = fixture({ provenance: { origin: "explicit" } });
   const mine = await explicit.method();
-  for (let index = 1; index <= 3; index += 1) {
+  for (let index = 1; index <= 4; index += 1) {
     explicit.run({ id: `run-${index}`, invoked: [mine] });
     await explicit.service.fromCorrection(PROJECT, explicit.correction({ runId: `run-${index}`, original: index, successor: index + 10, kind: "analytic" }));
   }
   const stillMine = await explicit.learning.getMethod(USER, mine.id);
   assert.equal(stillMine.payload.status, "approved");
-  assert.equal(stillMine.payload.scientific.entries.length, 3);
+  assert.equal(stillMine.payload.scientific.entries.length, 4);
   // ... and it is a proposal the nightly pass can show.
   const [proposal] = await explicit.learning.retirementProposals(USER);
   assert.deepEqual([proposal.proposal.code, proposal.proposal.immediate], ["scientific_regression", false]);

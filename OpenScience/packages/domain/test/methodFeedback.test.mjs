@@ -32,21 +32,28 @@ import {
   scientificRegression,
 } from "@evimed/domain";
 
+/** @param {string} character @param {number} [length] */
 const hex = (character, length = 64) => character.repeat(length);
 const A = `sha256:${hex("a")}`;
 const B = `sha256:${hex("b")}`;
 const C = `sha256:${hex("c")}`;
+/** @param {number} n */
 const version = (n) => `rv_${String(n).padStart(64, "0")}`;
+/** @param {number} n */
 const entryId = (n) => `sf_${String(n).padStart(32, "0")}`;
 let counter = 0;
 
-/** One entry, as the join writes it. */
+/**
+ * One entry, as the join writes it.
+ * @param {{ signal?: string, digest?: string, result?: number, at?: string | null, applicability?: any, kind?: string | null }} [options]
+ */
 function entry({ signal = "replay_differed", digest = A, result = counter + 1, at = null, applicability = null, kind = null } = {}) {
   counter += 1;
   return { id: entryId(counter), signal, at: at ?? new Date(Date.UTC(2026, 9, 4, 0, counter)).toISOString(), digest, used: "invoked", runId: "run-1",
     result: { versionId: version(result), digest: hex("d") }, successor: null, replay: null, event: null, kind, applicability: applicability ?? { state: "unknown", basis: "none", codes: [] } };
 }
 
+/** @param {...any} entries */
 const record = (...entries) => entries.reduce((scientific, item) => foldMethodFeedback(scientific, item), emptyScientific());
 
 test("a correction is the signal its kind says, and a kind nobody knows is unreadable, not a finding", () => {
@@ -160,32 +167,41 @@ test("a summary says what happened and never what caused it", () => {
 
 test("results nobody recalculated or corrected are not trials, and agreement alone never reads as a regression", () => {
   assert.equal(scientificRegression({ digest: A, scientific: emptyScientific() }).state, "watching");
-  // One correction is something to watch, not a regression: the test needs its minimum number of results.
+  // One correction is something to watch, not a regression: the test needs its minimum number of results, and three corrections in a row are not enough.
   assert.equal(scientificRegression({ digest: A, scientific: record(entry({ signal: "analytic_corrected", result: 1 })) }).state, "watching");
+  assert.equal(scientificRegression({ digest: A, scientific: record(...[1, 2, 3].map((n) => entry({ signal: "analytic_corrected", result: n }))) }).state, "watching");
+  // A trusted agreement between the corrections takes weight back: three of the first five is not four of four.
+  assert.equal(scientificRegression({ digest: A, scientific: record(...["analytic_corrected", "replay_agreed", "analytic_corrected", "analytic_corrected", "replay_agreed", "analytic_corrected"]
+    .map((signal, n) => entry({ signal, result: n + 1 }))) }).state, "watching");
   const agreed = record(...[1, 2, 3, 4, 5].map((n) => entry({ signal: "replay_agreed", result: n })));
   assert.notEqual(scientificRegression({ digest: A, scientific: agreed }).state, "regression");
   // A method nobody corrected or recalculated has no regression, whatever its delivery record says.
   assert.equal(scientificRegression({ digest: A, scientific: record(entry({ signal: "presentation_corrected", result: 1 })) }).action, null);
 });
 
-test("three results found wrong under one body are a regression of that body, answered with the exact earlier body that is not itself harmful", () => {
+test("four results found wrong under one body are a regression of that body, answered with the exact earlier body that is not itself harmful", () => {
   const scientific = record(
     // The earlier body A: results that held.
     entry({ signal: "replay_agreed", result: 1, digest: A }), entry({ signal: "replay_agreed", result: 2, digest: A }),
     // The current body B.
-    entry({ signal: "replay_differed", result: 3, digest: B }), entry({ signal: "analytic_corrected", result: 4, digest: B }), entry({ signal: "evidence_corrected", result: 5, digest: B }));
+    entry({ signal: "replay_differed", result: 3, digest: B }), entry({ signal: "analytic_corrected", result: 4, digest: B }), entry({ signal: "evidence_corrected", result: 5, digest: B }),
+    entry({ signal: "analytic_corrected", result: 6, digest: B }));
+  // Three are not enough: a correction is ordinary work, and the background rate this axis is tested against says so.
+  const three = record(...scientific.entries.slice(0, 5));
+  assert.equal(scientificRegression({ digest: B, revisions: [B, A], scientific: three }).state, "watching");
   const decided = scientificRegression({ digest: B, revisions: [B, A], scientific });
   assert.equal(decided.state, "regression");
   assert.equal(decided.action, "rollback");
   assert.equal(decided.rollbackToDigest, A);
-  assert.equal(decided.harm.bad, 3);
-  assert.equal(decided.evidence.length, 3);
+  assert.equal(decided.harm.bad, 4);
+  assert.equal(decided.evidence.length, 4);
   // The earlier body's own record is what is read, never the current body's: A is not itself harmful.
   assert.notEqual(scientificRegression({ digest: A, revisions: [B, A], scientific }).state, "regression");
 });
 
 test("the newest earlier body that is itself harmful is passed over, and a method with no sound body is stopped, not returned to one", () => {
-  const harmful = (digest, first) => [1, 2, 3].map((n) => entry({ signal: "replay_differed", result: first + n, digest }));
+  /** @param {string} digest @param {number} first */
+  const harmful = (digest, first) => [1, 2, 3, 4].map((n) => entry({ signal: "replay_differed", result: first + n, digest }));
   const scientific = record(...harmful(A, 10), ...harmful(B, 20), ...harmful(C, 30));
   assert.equal(scientificRegression({ digest: C, revisions: [C, B, A], scientific }).action, "retire");
   assert.equal(scientificRegression({ digest: C, revisions: [C, B, A], scientific }).rollbackToDigest, null);
@@ -198,12 +214,12 @@ test("the newest earlier body that is itself harmful is passed over, and a metho
 });
 
 test("the lifecycle reads the scientific axis beside the delivery axis, and a researcher's own method is proposed for a stop, never made one", () => {
-  const harmful = record(...[1, 2, 3].map((n) => entry({ signal: "replay_differed", result: n, digest: B })));
+  const harmful = record(...[1, 2, 3, 4].map((n) => entry({ signal: "replay_differed", result: n, digest: B })));
   const base = { id: "method:learned:m", name: "m", digest: B, status: "approved", dependencies: [], learning: emptyLearning(B),
     provenance: { origin: "inferred" }, scientific: harmful, revisions: [B, A] };
   const proposal = retirementProposal(base, { nowMs: Date.UTC(2026, 9, 5) });
   assert.deepEqual([proposal.propose, proposal.immediate, proposal.code, proposal.action, proposal.rollbackToDigest], [true, true, "scientific_regression", "rollback", A]);
-  assert.equal(proposal.rejected, 3);
+  assert.equal(proposal.rejected, 4);
   assert.match(proposal.reason, /association, not cause/);
   const explicit = retirementProposal({ ...base, provenance: { origin: "explicit" } }, { nowMs: Date.UTC(2026, 9, 5) });
   assert.deepEqual([explicit.propose, explicit.immediate, explicit.code], [true, false, "scientific_regression"]);
@@ -219,11 +235,12 @@ test("a declared scope is the distillation's own words, bounded, and a sensitive
   assert.equal(cleanMethodScope(null), null);
   assert.equal(cleanMethodScope({ applicability: "", counterexamples: [] }), null);
   const scope = cleanMethodScope({ applicability: "  A random-effects pool of\n trials.  ", counterexamples: ["Fewer than three studies.", "", 7, "x".repeat(900)] });
+  assert.ok(scope);
   assert.equal(scope.applicability, "A random-effects pool of trials.");
   assert.equal(scope.counterexamples.length, 2);
   assert.equal(scope.counterexamples[1].length, 300);
-  assert.equal(cleanMethodScope({ applicability: "Use the password of the registry.", counterexamples: ["Fewer than three studies."] }).applicability, "");
-  assert.equal(cleanMethodScope({ counterexamples: Array.from({ length: 20 }, (_, index) => `case ${index}`) }).counterexamples.length, 8);
+  assert.equal(cleanMethodScope({ applicability: "Use the password of the registry.", counterexamples: ["Fewer than three studies."] })?.applicability, "");
+  assert.equal(cleanMethodScope({ counterexamples: Array.from({ length: 20 }, (_, index) => `case ${index}`) })?.counterexamples.length, 8);
 });
 
 test("the results a method was learnt from are immutable identities, once each, and the list is bounded", () => {
@@ -235,7 +252,7 @@ test("the results a method was learnt from are immutable identities, once each, 
   const merged = mergeMethodResultLinks(links, [{ role: "original", versionId: version(1) }, { role: "original", versionId: version(9) }]);
   assert.deepEqual(merged.map((item) => item.versionId), [version(1), version(2), version(9)]);
   assert.equal(mergeMethodResultLinks(Array.from({ length: 8 }, (_, n) => ({ role: "original", versionId: version(n + 1) })),
-    [{ role: "original", versionId: version(99) }]).at(-1).versionId, version(99));
+    [{ role: "original", versionId: version(99) }]).at(-1)?.versionId, version(99));
 });
 
 test("a revision link names what was left, and the list keeps the newest", () => {
@@ -243,6 +260,7 @@ test("a revision link names what was left, and the list keeps the newest", () =>
   assert.deepEqual(projectMethodLink(link), { ...link, evidence: [entryId(1)] });
   assert.throws(() => projectMethodLink({ ...link, type: "deleted" }));
   assert.throws(() => projectMethodLink({ ...link, fromDigest: "x" }));
+  /** @type {any[]} */
   let links = [];
   for (let index = 0; index < METHOD_LINK_LIMIT + 3; index += 1) links = appendMethodLink(links, { ...link, results: index });
   assert.equal(links.length, METHOD_LINK_LIMIT);

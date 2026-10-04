@@ -330,6 +330,21 @@ its switch is on; the rest are changes inside existing layers.
   budget (`OPEN_SCIENCE_MOUNTED_METHOD_PROMPT_BYTES`, 32 KiB) is spent on what is injected: a
   learned method costs its card, and what the budget leaves out is counted
   (`open_science_mounted_methods_left_out_total`).
+- **A learned method has a second record: what became of the results it was read for**
+  (`methodFeedback.mjs`, `@evimed/domain/methodFeedback`). The delivery axis (accepted, repaired,
+  rejected) is unchanged; beside it, a trusted recalculation of a result (same code, environment and
+  method record: reproduced or not), the researcher's correction of it (`result-corrected`) and the
+  engine's own diagnostics are written to the method the producing run **read** — never one that was only
+  mounted — under the revision that file was, by the result version's immutable identity. The method
+  keeps its declared scope (`applicability`, `counterexamples`) and the result versions it was learnt
+  from; a lesson from a correction is told which methods the run read. It is association, never cause
+  (`causalBenefit` is always `unproven`; applicability is `unknown` until the engine's diagnostics say
+  otherwise). Results of one revision found wrong, by the harm test's sequential machinery read with its
+  own background rate for corrections (`METHOD_SCIENTIFIC_HARM_TEST`: four in a row, trusted
+  agreements taking weight back), return the method to the exact earlier body that is not itself
+  harmful, or stop it when there is none
+  (`scientificRegression`, `retirementProposal` code `scientific_regression`); the link stays on the
+  record and one click restores it. No model call, lever or approval step is involved.
 - **The run answers its review at delivery** (`packages/socket/src/review.mjs`): the
   independent reviewer's findings come back to the run's submission with ids, and the run
   answers each answer-required one in the next submission's `responses` — `fixed`, or

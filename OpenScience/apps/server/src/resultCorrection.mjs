@@ -31,6 +31,10 @@
  * - **The run that is learnt from is the one whose work was corrected.** The distillation reads the original's run (its
  *   transcript, and through the availability records the method digest it used); only an original with no run falls back
  *   to the run that made the successor.
+ * - **The correction is also carried to the methods that run read** (`methods`, `MethodFeedbackService.fromCorrection`,
+ *   N14): written to each learned method the original's run opened, under the revision it opened, as one entry of that
+ *   method's scientific record. It is idempotent by the pair, a join that cannot be made is skipped with its reason, and
+ *   nothing it does or fails to do costs the event or the version its record.
  */
 import { bindableKind, correctionCalculations, correctionEffects, projectCorrectionOutcome, projectResultCorrection, renderingFormat } from "@evimed/domain";
 

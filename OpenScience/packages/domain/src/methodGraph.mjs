@@ -40,6 +40,7 @@ import {
   METHOD_CONTRIBUTION_RETIRE_AT,
   METHOD_HARM_TEST,
   METHOD_INDUCTION_MIN_TRAJECTORIES,
+  METHOD_SCIENTIFIC_HARM_TEST,
 } from './constants.mjs'
 import { isMethodDigest } from './methodSkill.mjs'
 import { scientificOutcomes } from './methodFeedback.mjs'
@@ -421,18 +422,18 @@ export function methodHarmTest(learning, options = {}) {
 /**
  * Whether the results produced under one revision of a method show it regressing, and what the precise answer is.
  *
- * The same sequential test the delivery axis uses (`methodHarmTest`, `METHOD_HARM_TEST`), read over the other axis:
- * each result version produced while the method was read is one trial, bad when a trusted recalculation did not
- * reproduce it or the researcher corrected it, good when a trusted recalculation did. A result nobody recalculated or
- * corrected is not a trial: it is unknown, and a missing check never reads as clean. No new threshold is invented here;
- * the numbers are the ones the harm test already carries.
+ * The same sequential test the delivery axis uses (`methodHarmTest`), read over the other axis with its own background
+ * rate (`METHOD_SCIENTIFIC_HARM_TEST`: a researcher's correction is ordinary work and a rejected delivery is not): each
+ * result version produced while the method was read is one trial, bad when a trusted recalculation did not reproduce it or
+ * the researcher corrected it, good when a trusted recalculation did. A result nobody recalculated or corrected is not a
+ * trial: it is unknown, and a missing check never reads as clean.
  *
  * Precise means to the revision. Entries are kept under the digest they were made under, so the answer names that one
  * body: the method is returned to the newest earlier body whose own record is not itself harmful (`rollback`, to its
  * digest), and stopped only when it has none (`retire`). It is a regression of this body against its predecessors, and
  * never a finding that the method caused anything: `methodFeedback.mjs` says why.
  *
- * @param {{ digest: string, revisions?: readonly string[], scientific: any, options?: Partial<typeof METHOD_HARM_TEST> }} input
+ * @param {{ digest: string, revisions?: readonly string[], scientific: any, options?: Partial<typeof METHOD_SCIENTIFIC_HARM_TEST> }} input
  *   `revisions`: every body the method has held, newest first (the current one among them)
  * @returns {{ state: 'regression' | 'watching' | 'clear', harm: ReturnType<typeof methodHarmTest>, action: 'rollback' | 'retire' | null,
  *   rollbackToDigest: string | null, evidence: string[] }}
@@ -441,8 +442,10 @@ export function scientificRegression({ digest, revisions = [], scientific, optio
   /** @param {string} body */
   const read = (body) => {
     const outcomes = scientificOutcomes(scientific, body)
-    return { outcomes, harm: methodHarmTest({ observations: outcomes.map((outcome) => ({
-      outcome: outcome.polarity === 'against' ? 'rejected' : 'accepted', invoked: true, at: outcome.at })) }, options) }
+    // One result version is one trial: the version stands for the run and the family a delivery's observation carries.
+    return { outcomes, harm: methodHarmTest({ ...emptyLearning(body), observations: outcomes.map((outcome) => ({
+      runId: outcome.versionId, family: outcome.versionId, outcome: outcome.polarity === 'against' ? 'rejected' : 'accepted', invoked: true, at: outcome.at })) },
+    { ...METHOD_SCIENTIFIC_HARM_TEST, ...options }) }
   }
   const current = read(digest)
   if (current.harm.state !== 'harm') {

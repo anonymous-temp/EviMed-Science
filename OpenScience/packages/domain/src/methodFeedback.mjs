@@ -23,8 +23,8 @@
  *   after a method was used. Nothing here says the method caused the error or that a method that was used when nothing
  *   went wrong caused the numbers to be right: `causalBenefit` is `unproven` in every summary, and a paid on/off study
  *   is not proposed to settle it. What the record can support is the sequential test the delivery axis already uses
- *   (`methodHarmTest`): whether the results produced under one revision were found wrong at a rate that revision's
- *   neighbours were not.
+ *   (`methodHarmTest`, with this axis's own background rate, `METHOD_SCIENTIFIC_HARM_TEST`): whether the results produced
+ *   under one revision were found wrong more often than ordinary work is, and whether the revision before it was not.
  * - **Unknown is a value.** A replay on another engine than the original's, a replay whose numbers were not compared,
  *   a correction whose two versions could not be read and a result with no engine diagnostics are recorded as what they
  *   are or not recorded; none is read as agreement. Applicability is `unknown` unless the engine raised or ran its own
@@ -260,11 +260,26 @@ export function scientificOutcomes(scientific, digest) {
 }
 
 /**
+ * @typedef {object} MethodScientific
+ * @property {string} digest
+ * @property {number} results  distinct result versions with any entry under this revision
+ * @property {number} supports  of them, reproduced by a trusted recalculation
+ * @property {number} against  of them, not reproduced or corrected (against outranks supports for one version)
+ * @property {number} assessed  `supports + against`: the trials the lifecycle reads
+ * @property {number} neutral  versions with only a neutral signal
+ * @property {'unknown' | 'flagged' | 'unflagged'} applicability
+ * @property {'unproven'} causalBenefit
+ * @property {{ versionId: string, signal: string, kind: string | null, at: string, eventId?: string, replayId?: string }[]} counterexamples
+ * @property {{ versionId: string, codes: string[], at: string }[]} limits
+ */
+
+/**
  * What one revision's record says, for a reader: how many results it was used for, how many were reproduced and how
  * many were not or were corrected, the applicability the engine's diagnostics gave, and the results that count against
  * it. `causalBenefit` is `unproven` in every summary: this is what happened after the method was used, not what the
  * method did.
  * @param {any} scientific @param {string} digest
+ * @returns {MethodScientific}
  */
 export function methodScientific(scientific, digest) {
   const entries = (Array.isArray(scientific?.entries) ? scientific.entries : []).filter((/** @type {any} */ entry) => entry?.digest === digest)
