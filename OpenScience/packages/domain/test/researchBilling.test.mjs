@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { researchMoneyUnits, researchMoneyDecimal, researchTaskCharge } from '../src/researchBilling.mjs';
+import {
+  researchMoneyUnits, researchMoneyDecimal, researchTaskCharge,
+  SIMULATED_LOW_CREDITS, SIMULATED_START_CREDITS, SIMULATED_TOPUP_PACKAGES, SIMULATED_WALLET_LABEL, SIMULATED_WALLET_PAGES,
+} from '../src/researchBilling.mjs';
+import { ALL_ERROR_CODES, CREDIT_ERROR_CODES, errorCodeMessage, errorCodeOutcome } from '../index.mjs';
 test('money retains fractional precision without binary rounding', () => {
   assert.equal(researchMoneyDecimal(researchMoneyUnits('0.00000001')), '0.00000001');
   assert.throws(() => researchMoneyUnits('0.000000001'));
@@ -31,4 +35,32 @@ test('waivers exclude background overhead and pre-policy requests', () => {
   const platform = researchTaskCharge([{ ...research, billing_eligible: false, not_billable_reason: 'platform_task' }]);
   assert.equal(platform.waivedCny, '0.00000000');
   assert.equal(platform.platformCostCny, '2.75000000');
+});
+
+test('the simulated wallet vocabulary is closed, whole-credit and labelled', () => {
+  assert.equal(SIMULATED_WALLET_LABEL, '模拟');
+  assert.ok(Number.isSafeInteger(SIMULATED_START_CREDITS) && SIMULATED_START_CREDITS > SIMULATED_LOW_CREDITS);
+  const ids = SIMULATED_TOPUP_PACKAGES.map((entry) => entry.id);
+  assert.equal(new Set(ids).size, ids.length);
+  assert.deepEqual(SIMULATED_TOPUP_PACKAGES.map((entry) => entry.credits), [...SIMULATED_TOPUP_PACKAGES.map((entry) => entry.credits)].sort((a, b) => a - b));
+  for (const entry of SIMULATED_TOPUP_PACKAGES) {
+    assert.match(entry.id, /^topup-[1-9]\d*$/);
+    assert.ok(Number.isSafeInteger(entry.credits) && entry.credits > 0, 'a package is a whole number of credits');
+    assert.equal(entry.id, `topup-${entry.credits}`);
+  }
+  assert.deepEqual(Object.keys(SIMULATED_WALLET_PAGES), ['recharge', 'membership', 'orders', 'refunds']);
+  for (const path of Object.values(SIMULATED_WALLET_PAGES)) assert.match(path, /^\/app\/account\/simulated\/[a-z]+$/);
+  assert.ok(Object.isFrozen(SIMULATED_TOPUP_PACKAGES) && Object.isFrozen(SIMULATED_TOPUP_PACKAGES[0]) && Object.isFrozen(SIMULATED_WALLET_PAGES));
+});
+
+test('a refusal on a simulated allowance says 模拟 and is a ceiling', () => {
+  assert.ok(CREDIT_ERROR_CODES.includes('simulated_credits_exhausted'));
+  assert.equal(errorCodeOutcome('simulated_credits_exhausted'), 'capped');
+  assert.match(errorCodeMessage('simulated_credits_exhausted'), /模拟/);
+  assert.doesNotMatch(errorCodeMessage('simulated_credits_exhausted'), /^额度已用尽/);
+  for (const code of ['simulated_wallet_not_enabled', 'simulated_wallet_request_invalid']) {
+    assert.ok(ALL_ERROR_CODES.includes(code), code);
+    assert.match(errorCodeMessage(code), /模拟/, code);
+    assert.equal(errorCodeOutcome(code), 'upstream', code);
+  }
 });

@@ -791,6 +791,9 @@ export const ANALYSIS_ERROR_CODES = Object.freeze([
 /** Codes the credit and metering layer raises (§25). */
 export const CREDIT_ERROR_CODES = Object.freeze([
   'credits_exhausted',
+  // The same refusal on a deployment whose wallet is simulated: its own code so
+  // the sentence a reader sees says 模拟 and never offers a real top-up.
+  'simulated_credits_exhausted',
   'credits_daily_limit_reached',
   'credits_weekly_limit_reached',
   'usage_metering_unavailable',
@@ -1265,6 +1268,10 @@ export const GEO_ROUTE_ERROR_CODES = Object.freeze([
 export const EVIMED_CREDITS_ROUTE_ERROR_CODES = Object.freeze([
   'evimed_credits_not_enabled',
   'evimed_credits_request_invalid',
+  // The simulated wallet's own pages (`/api/simulated-wallet/*`): off, and a
+  // top-up the page built wrong.
+  'simulated_wallet_not_enabled',
+  'simulated_wallet_request_invalid',
 ])
 
 /**
@@ -1656,6 +1663,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   source_duplicate: '这份资料已经存在。',
   source_missing: '原始库里找不到这份资料了，派生内容已保留。',
   credits_exhausted: '额度已用尽，充值后即可继续。',
+  simulated_credits_exhausted: '模拟额度不足，这次没有开始。到“设置 → 科研额度”做一次模拟充值后即可继续。',
   credits_daily_limit_reached: '今日额度上限已到，这次请求没有开始。窗口重置后自动恢复，也可以在“设置 → 用量”调高上限。',
   credits_weekly_limit_reached: '本周额度上限已到，这次请求没有开始。下一个计费周期自动恢复，也可以在“设置 → 用量”调高上限。',
   // 灵豆 settlement (fusion plan §9.6). A deployment that has not joined
@@ -1663,6 +1671,8 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   // read by a client that asked anyway rather than by a person.
   evimed_credits_not_enabled: '这个部署还没有接入灵豆计费，因此没有余额和预计消耗可看。',
   evimed_credits_request_invalid: '这次查询的参数不对，没有得到预计消耗。换一个科研工具再看即可。',
+  simulated_wallet_not_enabled: '这个部署没有开启模拟额度，没有可以充值的内容。',
+  simulated_wallet_request_invalid: '这次模拟充值的内容不对，没有入账。换一个充值额度再试。',
   usage_metering_unavailable: '计量暂时不可用，本次用量稍后补记。',
   illegal_state_transition: '状态变更不合法，已拒绝。',
 
@@ -2055,6 +2065,8 @@ const ERROR_CODE_OUTCOMES = Object.freeze({
   // malformed. Neither is a ceiling — the ceiling is `credits_exhausted`.
   evimed_credits_not_enabled: 'upstream',
   evimed_credits_request_invalid: 'upstream',
+  simulated_wallet_not_enabled: 'upstream',
+  simulated_wallet_request_invalid: 'upstream',
 })
 
 /**
