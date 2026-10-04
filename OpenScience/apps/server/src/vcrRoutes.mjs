@@ -63,7 +63,7 @@ import {
   VCR_MEMBER_ROLES, VCR_REVIEW_KINDS, VCR_STEPS, VCR_STUDY_STATUSES, VCR_TABS, VCR_VALUE_SOURCES, roleAllows } from "@evimed/domain";
 
 import { HttpError, readJson, sendJson } from "./security.mjs";
-import { fileView, snapshotView, sourceView, tableView } from "./vcrDataPlane.mjs";
+import { fileView, snapshotView, sourceView, tableView, uploadAttemptAuditDetail, uploadAuditDetail } from "./vcrDataPlane.mjs";
 import { abilitiesOfRoles } from "./vcrMembers.mjs";
 import { isSiteScopedRole } from "./vcrRecruit.mjs";
 
@@ -550,8 +550,11 @@ export function createVcrRoutes(dependencies) {
             if (value != null && value.length > max) throw new HttpError(400, "vcr_payload_invalid", `${key} is at most ${max} characters.`);
             return value;
           };
-          const stored = await audited("vcr.data.file.upload", (result) => ({ code: String(result.file?.id ?? ""), detail: named }),
-            { code: id, detail: named },
+          // The audit line says what was uploaded — its role, format, size and hash —
+          // and never its name: a chart's file name is the patient's, the plane
+          // discards it, and audit rows outlive the study (`uploadAuditDetail`).
+          const stored = await audited("vcr.data.file.upload", (result) => ({ code: String(result.file?.id ?? ""), detail: uploadAuditDetail(result) }),
+            { code: id, detail: uploadAttemptAuditDetail(role, Number.isFinite(declared) ? declared : null) },
             () => plane().storeUpload({ ...S, sourceId: parts[4], name: named, role, stream: req,
               declaredLength: Number.isFinite(declared) ? declared : null, subject: single("subject", 120),
               visibleAt: single("visibleAt", 40), sheet: single("sheet", 120) }));

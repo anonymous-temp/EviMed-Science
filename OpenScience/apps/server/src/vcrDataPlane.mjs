@@ -314,6 +314,17 @@ function dateOf(value) {
 }
 
 /**
+ * What an audit line may say of a refused analysis table: the defects, named and
+ * counted, and never their example values — those are cells of people's rows,
+ * and an audit row outlives the study it describes. The caller who uploaded the
+ * data is told the examples in the refusal itself.
+ * @param {string} shape @param {{ issue: string, column: string | null, rows: number }[]} blocking
+ */
+export function refusedTableAuditDetail(shape, blocking) {
+  return { shape, issues: blocking.map(({ issue, column, rows }) => ({ issue, column, rows })) };
+}
+
+/**
  * Every defect of one analysis table, each named and counted, worst first.
  * Pure: the caller decides what to do with them.
  * @param {string} shape one of `subject` | `longitudinal` | `events`
@@ -1906,6 +1917,12 @@ export class VcrDataPlane {
    * twice, profiled once so the run has the shape to propose a field map from,
    * and stored under their own hash. The same bytes twice are the same file.
    *
+   * Answers the stored file and whether it is new, and `upload`: what THIS request
+   * delivered — its role, the format it arrived in, its size and the SHA-256 of
+   * its bytes. They can differ from the stored row's (a re-saved PDF with the same
+   * text is the file already held), and they are what an audit line may say of the
+   * upload (`uploadAuditDetail`), since it may not say the file's name.
+   *
    * @param {{ actor: string, studyId: string, sourceId: string, name: string, role?: string,
    *   stream: AsyncIterable<Buffer | Uint8Array>, declaredLength?: number | null, subject?: string | null,
    *   visibleAt?: string | null, sheet?: string | null }} entry
@@ -2070,7 +2087,7 @@ export class VcrDataPlane {
       if (originalLocation && stored.file.detail?.original?.location !== originalLocation) {
         await this.#dropUnnamedOriginal(entry.studyId, originalLocation);
       }
-      return stored;
+      return { ...stored, upload: { role, format: named.format, bytes: total, sha256: originalSha256 } };
     } finally {
       for (const file of scratch) await fs.rm(file, { force: true }).catch(() => {});
     }
@@ -2351,7 +2368,7 @@ export class VcrDataPlane {
         await this.store.audit({
           studyId: entry.studyId, userId: snapshot.userId, actor: String(entry.userId),
           action: "analysis_table.refused", object: `${snapshot.id}:${shape}`, outcome: "denied",
-          reason: blocking.map((issue) => issue.issue).join(","), detail: { shape, issues: blocking },
+          reason: blocking.map((issue) => issue.issue).join(","), detail: refusedTableAuditDetail(shape, blocking),
         });
         refused.push({ shape, issues });
         continue;
@@ -2990,6 +3007,45 @@ export function sourceView(source) {
     visibleWindow: source.visibleWindow, retention: source.retention, valueSource: source.valueSource, status: source.status,
     fieldMapState: source.fieldMapState, fieldMapHash: source.fieldMapHash, createdAt: source.createdAt,
   };
+}
+
+/**
+ * What an audit line may say of an upload: its role, the format it arrived in,
+ * its size and the SHA-256 of its bytes — never its name. A file's name is the
+ * uploader's, and a chart's is the patient's name or number more often than not;
+ * the plane discards a document's (`document-<hash>.txt`), and audit rows outlive
+ * the study they describe, so no role's name is written there. The ledger row,
+ * which goes with the study, is where a data file's display name is kept. Every
+ * part is checked against its own closed shape, so nothing a caller typed can
+ * pass through this.
+ * @param {{ upload?: { role?: unknown, format?: unknown, bytes?: unknown, sha256?: unknown }, file?: any } | null | undefined} stored
+ */
+export function uploadAuditDetail(stored) {
+  const file = stored?.file ?? {};
+  const upload = stored?.upload ?? {};
+  const role = upload.role ?? file.role;
+  const format = upload.format ?? file.detail?.original?.format ?? file.format;
+  const bytes = upload.bytes ?? file.detail?.originalBytes;
+  const sha256 = upload.sha256 ?? file.detail?.originalSha256;
+  return [
+    VCR_SOURCE_FILE_ROLES.includes(/** @type {any} */ (role)) ? role : null,
+    typeof format === "string" && /^[a-z0-9]{1,8}$/.test(format) ? format : null,
+    Number.isSafeInteger(bytes) ? `${bytes}B` : null,
+    typeof sha256 === "string" && /^[a-f0-9]{64}$/.test(sha256) ? `sha256:${sha256}` : null,
+  ].filter(Boolean).join(" ");
+}
+
+/**
+ * What an audit line may say of an upload that did not complete: its role, when
+ * that is one of the three, and the length the client declared. Nothing the
+ * caller typed is passed through (see `uploadAuditDetail`).
+ * @param {unknown} role @param {unknown} declaredLength
+ */
+export function uploadAttemptAuditDetail(role, declaredLength) {
+  return [
+    VCR_SOURCE_FILE_ROLES.includes(/** @type {any} */ (role)) ? role : "other",
+    Number.isSafeInteger(declaredLength) && /** @type {number} */ (declaredLength) >= 0 ? `${declaredLength}B declared` : null,
+  ].filter(Boolean).join(" ");
 }
 
 /** A stored file as a route answers it. @param {any} file @param {boolean} [withColumns] */

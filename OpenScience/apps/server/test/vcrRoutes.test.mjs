@@ -67,6 +67,8 @@ function fixture({ who = OWNER, roles = {}, overrides = {} } = {}) {
   const calls = [];
   /** @type {any[]} */
   const audits = [];
+  /** Every audit line whole, as the sink receives it. @type {any[]} */
+  const auditLines = [];
   let current = who;
   const vcrStore = {
     async rolesOf(/** @type {string} */ _studyId, /** @type {string} */ userId) { calls.push(["vcr.rolesOf", userId]); return roles[userId] ?? []; },
@@ -109,7 +111,7 @@ function fixture({ who = OWNER, roles = {}, overrides = {} } = {}) {
   const routes = createVcrRoutes({
     store: /** @type {any} */ (platformStore({ calls, who: () => current })),
     vcrStore, service, config, maxJsonBytes: 65_536,
-    audit: async (event, status, details) => { audits.push([event, status, details.code ?? null]); },
+    audit: async (event, status, details) => { audits.push([event, status, details.code ?? null]); auditLines.push({ event, status, ...details }); },
     // The matching seam's two person-only acts, keyed to the session's account.
     assessments: {
       async overrideJudgment(/** @type {any} */ user, /** @type {any} */ found, /** @type {any} */ input) {
@@ -123,7 +125,7 @@ function fixture({ who = OWNER, roles = {}, overrides = {} } = {}) {
     },
     ...overrides,
   });
-  return { calls, audits, service, vcrStore, routes, as(/** @type {string} */ id) { current = id; } };
+  return { calls, audits, auditLines, service, vcrStore, routes, as(/** @type {string} */ id) { current = id; } };
 }
 
 test("a person re-judges a criterion and countersigns an assessment as themselves; a state outside the vocabulary is refused by name", async () => {
@@ -684,4 +686,55 @@ test('public reviews cannot impersonate trusted AI model identity or completion'
     await assert.rejects(routes(request('POST', '/api/vcr/studies/std_1/reviews', { kind: 'clinical', nodes: ['result:res_1@1'], [key]: 'forged' }), response()),
       { status: 400, code: 'vcr_payload_invalid' });
   }
+});
+
+// --- an audit line outlives the study: it never carries a file name ------------------
+
+const PATIENT_FILE = "张三-住院病历 2024.pdf";
+const UPLOAD_QUERY = `name=${encodeURIComponent(PATIENT_FILE)}&role=document`;
+const UPLOAD_URL = `/api/vcr/studies/std_1/data/sources/src_1/files?${UPLOAD_QUERY}`;
+
+test("an upload's audit line says its role, format, size and hash, and never the file's name — completed, refused or failed", async () => {
+  const sha256 = "ab".repeat(32);
+  const planeWith = (/** @type {() => Promise<any>} */ storeUpload) => ({ ...composedHooks(), dataPlane: { ...composedHooks().dataPlane, storeUpload } });
+
+  const done = fixture({ overrides: planeWith(async () => ({
+    created: true, upload: { role: "document", format: "pdf", bytes: 48_213, sha256 },
+    // The stored row is the text it was converted to, under a pseudonymous name.
+    file: { id: "sfl_9", sourceId: "src_1", name: "document-1a2b3c4d.txt", role: "document", format: "txt", bytes: 9_000, sha256: "cd".repeat(32), detail: {} },
+  })) });
+  const ok = response();
+  await done.routes(request("POST", UPLOAD_URL), ok);
+  assert.equal(ok.status, 201);
+  const completed = done.auditLines.find((line) => line.event === "vcr.data.file.upload");
+  assert.equal(completed.status, "completed");
+  assert.equal(completed.code, "sfl_9");
+  assert.equal(completed.detail, `document pdf 48213B sha256:${sha256}`, "what was uploaded in this request, not the stored row's text");
+
+  // A re-save of the same text is the file already held: the audit still says what THIS request uploaded, and without `upload` it falls back to the row's own.
+  const row = fixture({ overrides: planeWith(async () => ({ created: false,
+    file: { id: "sfl_2", name: "document-0000aaaa.txt", role: "document", format: "txt", bytes: 5, sha256: "ef".repeat(32), detail: { original: { format: "docx" }, originalBytes: 777, originalSha256: "12".repeat(32) } } })) });
+  await row.routes(request("POST", UPLOAD_URL), response());
+  assert.equal(row.auditLines.find((line) => line.event === "vcr.data.file.upload").detail, `document docx 777B sha256:${"12".repeat(32)}`);
+
+  for (const [thrown, status, code] of [[new HttpError(422, "vcr_document_needs_text", "scan"), "refused", "vcr_document_needs_text"], [new Error("boom"), "failed", "Error"]]) {
+    const bad = fixture({ overrides: planeWith(async () => { throw thrown; }) });
+    await assert.rejects(bad.routes(request("POST", UPLOAD_URL), response()));
+    const line = bad.auditLines.find((entry) => entry.event === "vcr.data.file.upload");
+    assert.deepEqual([line.status, line.code], [status, code]);
+    assert.equal(line.detail, "std_1 document", "the study it was tried on, and the role");
+  }
+
+  // Not one audit line of any of them holds the name, any part of it, or its extension typed as a role.
+  for (const world of [done, row]) assert.ok(!JSON.stringify(world.auditLines).includes("张三"), JSON.stringify(world.auditLines));
+});
+
+test("what a caller typed as a role or a length never reaches an audit line", async () => {
+  const { routes, auditLines } = fixture({ overrides: { ...composedHooks(), dataPlane: { ...composedHooks().dataPlane,
+    storeUpload: async () => { throw new HttpError(400, "vcr_payload_invalid", "role is one of: data, dictionary, document."); } } } });
+  const url = `/api/vcr/studies/std_1/data/sources/src_1/files?name=a.csv&role=${encodeURIComponent("李四的随访")}`;
+  await assert.rejects(routes(Object.assign(request("POST", url), { headers: { "content-type": "application/json", "content-length": "2048" } }), response()));
+  const line = auditLines.find((entry) => entry.event === "vcr.data.file.upload");
+  assert.equal(line.detail, "std_1 other 2048B declared");
+  assert.ok(!JSON.stringify(auditLines).includes("李四"));
 });

@@ -491,7 +491,9 @@ export class VcrMatchStore extends VcrStoreBase {
       if (!result.rowCount) return null;
       await this.audit({
         client, studyId, userId, actor: by, action: "vcr.judgment.override",
-        object: `${assessmentId}:${criterionId}`, detail: { state, note, evaluationCase },
+        // The reviewer's note is free text about one person and lives on the judgment
+        // row (`override_note`), which goes with the study; an audit row outlives it.
+        object: `${assessmentId}:${criterionId}`, detail: { state, noted: String(note ?? "").trim() !== "", evaluationCase },
       });
       return judgmentOf(result.rows[0]);
     });
@@ -978,7 +980,9 @@ export class VcrMatchStore extends VcrStoreBase {
           WHERE id = $1 AND study_id = $2 RETURNING *`, [referralId, studyId, name])).rows[0];
       await this.audit({
         client: c, studyId, userId, actor: name,
-        action: "vcr.referral.contact_approved", object: referralId, detail: { note },
+        // The coordinator's note is free text about a candidate; it is on the referral's
+        // event row, which goes with the study, and an audit row outlives it.
+        action: "vcr.referral.contact_approved", object: referralId, detail: { noted: String(note ?? "").trim() !== "" },
       });
       return referralOf(row);
     };
