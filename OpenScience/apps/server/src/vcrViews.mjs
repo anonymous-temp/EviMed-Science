@@ -572,8 +572,8 @@ export function presentStudy(bundle) {
     budget: budgetView(budget),
     jobs: jobs.slice(0, 12).map((/** @type {any} */ job) => jobView(job, now)),
     ceiling: useCeilingOf({ study, results, reviews, stale, current: bundle.currentNodes ?? null, dependsOn }),
-    // The pack the study works from and the library definitions it used (null where the package is not composed).
-    knowledge: bundle.knowledge ?? null,
+    // The pack the study works from and the library definitions it used (absent where the package is not composed).
+    ...(bundle.knowledge ? { knowledge: bundle.knowledge } : {}),
     overview,
     updatedAt: zhTime(study.updatedAt, now),
     createdAt: study.createdAt,
