@@ -1427,7 +1427,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_number_unparsed: '报告里有读不成数字引用的 {{n:…}}；写成 {{n:路径|格式}}，格式用小写。',
   vcr_interval_unnamed: '区间没有写明是哪一种（置信、可信、预测或蒙特卡洛），补上再写。',
   // The trial registry channel.
-  registry_not_configured: '本部署没有配置试验登记库，登记信息取不到；报告会写「不可得」，不会编造。',
+  registry_not_configured: '这个试验登记库没有可用的凭据，登记信息取不到；可以在「设置 → 数据源」添加 EviMed 证据库的凭据。报告会写「不可得」，不会编造。',
   registry_not_found: '登记库里没有这条记录；报告会写「不可得」，不会编造。',
   registry_id_invalid: '登记号的格式不对；核对后重查。',
   registry_record_unreadable: '这条登记记录读不出来；报告会写「不可得」。',

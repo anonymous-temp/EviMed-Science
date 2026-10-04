@@ -1783,6 +1783,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     audit: (event, status, details) => securityAudit(config, event, status, details),
     report: (code) => process.stderr.write(`vcr: ${code}\n`),
     fetchImpl: overrides.vcrFetch ?? globalThis.fetch,
+    // A researcher's own EviMed evidence key, where the deployment holds none:
+    // the ChiCTR listing is theirs to enable (2026-10-04).
+    connectorCredentials,
   });
 
   /**

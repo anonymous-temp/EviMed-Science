@@ -536,14 +536,14 @@ test("E-9 a confidence bound is anchored by the field it came from, and only whe
   assert.deepEqual(unread.detail.limitsAreNotACi, { lower: 15.2, upper: 21.4 }, "still on the record, named for what they are");
 });
 
-test("PA-41 ChiCTR is reached through the evidence API with the control plane's own credential, or not at all", async () => {
+test("PA-41 ChiCTR is reached through the evidence API with the deployment's credential or the researcher's own, or not at all", async () => {
   /** @type {any[]} */
   const seen = [];
   const fetchImpl = async (url, init) => {
     seen.push({ url: String(url), init });
     return new Response(JSON.stringify({ code: 200, data: { total: 1, list: [{ registrationNo: "ChiCTR2000030000", title: "试验", sampleSize: 96 }] } }), { status: 200 });
   };
-  assert.equal(vcrChictrAdapter({ config: {}, fetchImpl }), null, "no credential, no seat");
+  assert.equal(vcrChictrAdapter({ config: {}, fetchImpl }), null, "no deployment credential and no store to read a researcher's from: no seat");
   const adapter = vcrChictrAdapter({ config: { publicSourceCredentials: { evimedEvidence: "key-not-echoed" } }, fetchImpl });
   assert.equal(typeof adapter, "function");
   const client = createTrialRegistryClient({ fetchImpl, sleep: noSleep, chictrAdapter: adapter });
@@ -561,4 +561,59 @@ test("PA-41 ChiCTR is reached through the evidence API with the control plane's 
   const unreadable = createTrialRegistryClient({ fetchImpl, sleep: noSleep, chictrAdapter: createChictrAdapter({ search: async () => ({ data: { total: 0 } }) }) });
   assert.equal((await unreadable.searchChictr({ query: "x" })).reason, "registry_answer_unreadable", "an answer with no list is not an empty library");
   assert.throws(() => createChictrAdapter({ search: null }), TypeError);
+});
+
+test("ChiCTR takes the EviMed key like every connector: the deployment's first, else the researcher's own, else by name", async () => {
+  // 2026-10-04: the evidence API's key is a connector a researcher may bring
+  // (设置 → 数据源), where it used to be the deployment's alone. A researcher who
+  // did gets the listing; one who did not is told so for that read, and neither
+  // is a statement about the registry.
+  /** @type {any[]} */
+  const seen = [];
+  const fetchImpl = async (/** @type {any} */ url, /** @type {any} */ init) => {
+    seen.push({ url: String(url), authorization: init.headers.authorization });
+    return new Response(JSON.stringify({ code: 200, data: { total: 1, list: [{ registrationNo: "ChiCTR2000030000", title: "试验" }] } }), { status: 200 });
+  };
+  /** @type {string[][]} */
+  const asked = [];
+  const store = {
+    async resolveOwn(/** @type {string} */ userId, /** @type {string} */ connector) {
+      asked.push([userId, connector]);
+      return userId === "alice" && connector === "evimed-evidence" ? "alice-own-key" : null;
+    },
+  };
+  const adapter = vcrChictrAdapter({ config: {}, fetchImpl, connectorCredentials: store });
+  assert.equal(typeof adapter, "function", "a store to read a researcher's key from is a seat");
+  const client = createTrialRegistryClient({ fetchImpl, sleep: noSleep, chictrAdapter: adapter });
+
+  const alice = await client.searchChictr({ query: "ChiCTR2000030000", limit: 5, userId: "alice" });
+  assert.equal(alice.status, "ok");
+  assert.equal(alice.items[0].precedent.registryId, "ChiCTR2000030000");
+  assert.deepEqual(seen.map((call) => call.authorization), ["Bearer alice-own-key"]);
+
+  // Bob brought none: told by name, nothing sent, and the registry is not marked down for everyone.
+  const before = JSON.stringify(client.coverage());
+  const bob = await client.searchChictr({ query: "ChiCTR2000030000", limit: 5, userId: "bob" });
+  assert.equal(bob.status, REGISTRY_UNAVAILABLE);
+  assert.equal(bob.reason, "registry_not_configured");
+  assert.deepEqual(bob.items, [], "never an empty library");
+  assert.equal(seen.length, 1);
+  assert.equal(JSON.stringify(client.coverage()), before, "no credential for one researcher is a fact about them, not about ChiCTR");
+  // No researcher at all (an unattributed read): the same, and the store is not asked about nobody.
+  asked.length = 0;
+  assert.equal((await client.searchChictr({ query: "x" })).reason, "registry_not_configured");
+  assert.deepEqual(asked, []);
+
+  // Deployment first: with its own key the store is never consulted.
+  const configured = vcrChictrAdapter({ config: { publicSourceCredentials: { evimedEvidence: "deployment-key" } }, fetchImpl, connectorCredentials: store });
+  const withKey = createTrialRegistryClient({ fetchImpl, sleep: noSleep, chictrAdapter: configured });
+  seen.length = 0;
+  assert.equal((await withKey.searchChictr({ query: "ChiCTR2000030000", userId: "alice" })).status, "ok");
+  assert.deepEqual(seen.map((call) => call.authorization), ["Bearer deployment-key"]);
+  assert.deepEqual(asked, []);
+
+  // A store that cannot be read is "no key for this researcher", not a thrown fault.
+  const broken = vcrChictrAdapter({ config: {}, fetchImpl, connectorCredentials: { async resolveOwn() { throw new Error("database down"); } } });
+  const failing = createTrialRegistryClient({ fetchImpl, sleep: noSleep, chictrAdapter: broken });
+  assert.equal((await failing.searchChictr({ query: "x", userId: "alice" })).reason, "registry_not_configured");
 });

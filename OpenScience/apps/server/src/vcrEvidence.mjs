@@ -1114,14 +1114,15 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
   };
 
   /**
-   * One registry record, fetched and built — or the failure to.
-   * @param {string} registryName @param {string} registryId
+   * One registry record, fetched and built — or the failure to. `userId` is whose
+   * own EviMed key the ChiCTR seat may fall back to where the deployment has none.
+   * @param {string} registryName @param {string} registryId @param {string} [userId]
    */
-  async function fetchRecord(registryName, registryId) {
+  async function fetchRecord(registryName, registryId, userId = "") {
     if (!registry) return { failure: { status: REGISTRY_UNAVAILABLE, reason: "registry_not_configured" } };
     const wanted = String(registryId ?? "").trim().toLowerCase();
     const fetched = registryName === "chictr"
-      ? await registry.searchChictr({ query: String(registryId ?? ""), limit: 5 })
+      ? await registry.searchChictr({ query: String(registryId ?? ""), limit: 5, userId })
       : await registry.record(String(registryId ?? ""));
     // A search answers the nearest records, not the record: the one asked for is
     // the one whose own registration number it is, and none of them being it is
@@ -1167,7 +1168,7 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
       }
 
       if (includeChictr) {
-        const chictr = await registry.searchChictr({ query: target?.condition || target?.intervention || "", limit });
+        const chictr = await registry.searchChictr({ query: target?.condition || target?.intervention || "", limit, userId });
         registries.push({ registry: "chictr", status: chictr.status, reason: chictr.reason ?? null, total: chictr.total ?? null });
         for (const built of chictr.items ?? []) {
           candidates.push({
@@ -1211,7 +1212,7 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
     async readRegistryRecord({ userId = "", studyId = null, registry: registryName = "clinicaltrials.gov", registryId }) {
       const fetchedAt = now().toISOString();
       try {
-        const { built, failure } = await fetchRecord(registryName, String(registryId ?? ""));
+        const { built, failure } = await fetchRecord(registryName, String(registryId ?? ""), userId);
         if (!built) return registryFailure(failure ?? {}, registryName, String(registryId ?? ""), fetchedAt);
 
         const checked = (built.extractions ?? []).map((/** @type {any} */ item) => verifyExtraction({
@@ -1290,7 +1291,7 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
      *   applicability?: any, endpointKeys?: Record<string, string>, armRoles?: Record<string, string> }} input
      */
     async extractPrecedent({ userId, studyId = null, registry: registryName = "clinicaltrials.gov", registryId, applicability = {}, endpointKeys = {}, armRoles = {} }) {
-      const { built, failure } = await fetchRecord(registryName, String(registryId ?? ""));
+      const { built, failure } = await fetchRecord(registryName, String(registryId ?? ""), userId);
       if (!built) {
         const notFound = failure?.status === REGISTRY_NOT_FOUND;
         return { status: notFound ? REGISTRY_NOT_FOUND : (failure?.status ?? REGISTRY_UNAVAILABLE), reason: failure?.reason ?? "registry_record_unreadable", registryId };

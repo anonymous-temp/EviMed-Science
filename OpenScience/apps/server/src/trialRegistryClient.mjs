@@ -836,7 +836,7 @@ export const CTGOV_SEARCH_FIELDS = Object.freeze([
 /**
  * @param {{ baseUrl?: string, timeoutMs?: number, maxAttempts?: number, fetchImpl?: typeof fetch,
  *   now?: () => Date, sleep?: (ms: number) => Promise<unknown>,
- *   chictrAdapter?: ((request: { query: string, limit: number }) => Promise<any>) | null }} [options]
+ *   chictrAdapter?: ((request: { query: string, limit: number, userId?: string }) => Promise<any>) | null }} [options]
  */
 export function createTrialRegistryClient({
   baseUrl = CTGOV_BASE_URL,
@@ -1038,13 +1038,20 @@ export function createTrialRegistryClient({
      * The ChiCTR / 一级注册库 seat. With no adapter this answers
      * `registry_unavailable`; it never answers an empty list, because 「没查」
      * and 「查不到」 are different findings (plan §6.2).
-     * @param {{ query: string, limit?: number }} request
+     *
+     * `userId` is whose credential the seat may use: the deployment's key is
+     * the adapter's first choice and the researcher's own EviMed key (saved
+     * under 设置 → 数据源) its second, so a researcher who brought one gets the
+     * listing and one who did not is told by name. That "no credential for this
+     * researcher" is a fact about them and not about the registry, so it does
+     * not mark the shared coverage unavailable.
+     * @param {{ query: string, limit?: number, userId?: string }} request
      */
-    async searchChictr({ query, limit = 20 } = { query: "" }) {
+    async searchChictr({ query, limit = 20, userId = "" } = { query: "" }) {
       if (typeof chictrAdapter !== "function") return unavailable("registry_not_configured");
       counters.searches += 1;
       try {
-        const answer = await chictrAdapter({ query: text(query), limit: Math.max(1, Math.min(100, Math.floor(limit))) });
+        const answer = await chictrAdapter({ query: text(query), limit: Math.max(1, Math.min(100, Math.floor(limit))), userId: text(userId) });
         const items = Array.isArray(answer?.items) ? answer.items : Array.isArray(answer) ? answer : null;
         if (!items) return unavailable("registry_answer_unreadable", "chictr");
         const retrievedAt = now().toISOString();
@@ -1058,7 +1065,9 @@ export function createTrialRegistryClient({
           items: items.map((/** @type {any} */ item) => chictrPrecedent(item, { retrievedAt })),
         };
       } catch (error) {
-        lastError = text(/** @type {any} */ (error)?.code) || "request_failed";
+        const code = text(/** @type {any} */ (error)?.code) || "request_failed";
+        if (code === "registry_not_configured") return unavailable(code);
+        lastError = code;
         return unavailable(lastError, "chictr");
       }
     },
@@ -1073,7 +1082,7 @@ export function createTrialRegistryClient({
  * API's `{ data: { total, list } }`), and this only names the registry and reads
  * the answer. Without such a function the client has no ChiCTR seat and answers
  * `registry_not_configured`, as it always did — the credential is the
- * deployment's, not this module's.
+ * deployment's or the researcher's own, not this module's.
  *
  * @param {{ search: (body: { query: string, count: number, registry: 0 }) => Promise<any> }} options
  * @returns {(request: { query: string, limit: number }) => Promise<{ items: any[], total: number | null }>}
