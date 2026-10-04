@@ -241,7 +241,7 @@ test("a table's exact source version rebinds without losing the one it replaced"
   assert.equal(fromPage.asset.bindings[0].sha256, HASH_A);
 });
 
-test("a binding keeps aggregates only: no summary under the small-cell floor, no long vocabulary, no malformed hash", () => {
+test("a binding keeps aggregates only: no summary under the small-cell floor, no values, no malformed hash", () => {
   /** The one column profile a binding of this shape keeps. @param {any} extra @returns {any} */
   const profile = (extra) => {
     const result = normalizeBinding({ table: "t.csv", path: "t.csv", sha256: HASH_A, bytes: 1, rows: 5, columns: [{ name: "c", type: "number", missing: 0, distinct: 5, ...extra }] }, T0);
@@ -250,10 +250,8 @@ test("a binding keeps aggregates only: no summary under the small-cell floor, no
   };
   assert.equal(profile({ numeric: { n: DATA_DRIFT_BOUNDS.minCell - 1, min: 1, p25: 2, median: 3, p75: 4, max: 5, mean: 3 } }).numeric, undefined);
   assert.equal(profile({ numeric: { n: DATA_DRIFT_BOUNDS.minCell, min: 1, p25: 2, median: 3, p75: 4, max: 5, mean: 3 } }).numeric.n, DATA_DRIFT_BOUNDS.minCell);
-  const many = profile({ type: "text", codes: Array.from({ length: DATA_DRIFT_BOUNDS.vocabularyMax + 1 }, (_, index) => `c${index}`) });
-  assert.equal(many.codes, undefined);
-  assert.equal(many.codesWithheld, "high_cardinality");
-  assert.equal(profile({ codes: ["M", "F"], type: "text" }).codes.length, 2);
+  // A column profile holds no value and no code list; a code list is an allowedValues fact with a basis.
+  assert.ok("problem" in normalizeBinding({ table: "t.csv", path: "t.csv", sha256: HASH_A, bytes: 1, rows: 1, columns: [{ name: "c", type: "text", missing: 0, codes: ["M", "F"] }] }, T0));
   assert.ok("problem" in normalizeBinding({ table: "t.csv", path: "../t.csv", sha256: HASH_A, bytes: 1, rows: 1, columns: [] }, T0));
   assert.ok("problem" in normalizeBinding({ table: "t.csv", path: "t.csv", sha256: "xyz", bytes: 1, rows: 1, columns: [] }, T0));
   assert.ok("problem" in normalizeBinding({ table: "t.csv", path: "t.csv", sha256: HASH_A, bytes: 1, rows: 1, columns: [{ name: "c", type: "number", missing: 0, row: [1, 2] }] }, T0));

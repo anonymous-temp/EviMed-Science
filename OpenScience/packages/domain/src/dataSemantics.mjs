@@ -27,8 +27,8 @@
  * - **The exact source versions the meaning was read from** — a content hash per
  *   table, with an aggregate profile of each column. Aggregates only, and no
  *   aggregate small enough to be a person: a numeric summary exists only for a
- *   column of at least `VCR_MIN_CELL_SIZE` values, a vocabulary only for a
- *   column that does not identify anyone. There is no patient row in the asset
+ *   column of at least `VCR_MIN_CELL_SIZE` values, and no profile holds a value
+ *   (a code list is an `allowedValues` fact instead). There is no patient row in the asset
  *   and no patient-data store behind it; the rows stay in the runtime's
  *   workspace, where the deterministic checks read them.
  * - **Transformations**, versioned: a derived variable or a filter is recorded
@@ -145,7 +145,7 @@ export const DATA_DRIFT_BOUNDS = Object.freeze({
   missingRateDelta: 0.1,
   /** A numeric summary or a vocabulary is recorded only from at least this many values (the 虚拟临研 small-cell floor). */
   minCell: VCR_MIN_CELL_SIZE,
-  /** A vocabulary is recorded only up to this many distinct values. */
+  /** A column's observed values are offered as a code list only up to this many distinct values. */
   vocabularyMax: 30,
   /** At most this many example rows or keys per finding. */
   sampleRows: 20,
@@ -467,7 +467,7 @@ function makeFact(value, provenance) {
 /**
  * @typedef {{ name: string, type: string, missing: number, distinct: number | null,
  *   numeric?: { n: number, min: number, p25: number, median: number, p75: number, max: number, mean: number },
- *   codes?: string[], codesWithheld?: string, headerUnit?: string }} ColumnProfile
+ *   headerUnit?: string }} ColumnProfile
  * @typedef {{ table: string, path: string, sha256: string, bytes: number, rows: number, boundAt: string, columns: ColumnProfile[], profileTrimmed?: boolean }} Binding
  * @typedef {Record<string, SemanticFact>} FactMap
  * @typedef {{ name: string, facts: FactMap }} VariableRecord
@@ -682,9 +682,10 @@ export function applySemanticsPatch(current, input, { now, via }) {
 
 /**
  * One table's exact source version, as the tool that read the file states it.
- * Profiles are aggregates: a numeric summary only from enough values, a
- * vocabulary only when the tool vouched the column does not identify anyone, and
- * never both for an identifier.
+ * Profiles are aggregates: names, observed types, counts, and a numeric summary
+ * only from enough values — never a value, and never a vocabulary: a code list
+ * enters the asset as an `allowedValues` fact, with a basis the researcher can
+ * confirm or correct.
  * @param {unknown} raw @param {string} now
  * @returns {{ binding: Binding } | { problem: string }}
  */
@@ -717,7 +718,7 @@ export function normalizeBinding(raw, now) {
 /** @param {unknown} raw @returns {ColumnProfile | null} */
 function normalizeColumnProfile(raw) {
   if (!isRecord(raw)) return null
-  const allowed = ['name', 'type', 'missing', 'distinct', 'numeric', 'codes', 'codesWithheld', 'headerUnit']
+  const allowed = ['name', 'type', 'missing', 'distinct', 'numeric', 'headerUnit']
   if (Object.keys(raw).some((key) => !allowed.includes(key))) return null
   const name = asText(raw.name, 128)
   if (!name || !(DATA_VARIABLE_TYPES.includes(raw.type) || raw.type === 'empty')) return null
@@ -732,18 +733,6 @@ function normalizeColumnProfile(raw) {
     if (numeric.n >= DATA_DRIFT_BOUNDS.minCell) {
       profile.numeric = { n: numeric.n, min: numeric.min, p25: numeric.p25, median: numeric.median, p75: numeric.p75, max: numeric.max, mean: numeric.mean }
     }
-  }
-  if (raw.codes != null) {
-    if (!Array.isArray(raw.codes)) return null
-    const codes = raw.codes.map((code) => asText(typeof code === 'number' ? String(code) : code, 40))
-    if (codes.some((code) => code === null)) return null
-    // A long vocabulary is not a code list: it is not kept, and the column says why.
-    if (codes.length <= DATA_DRIFT_BOUNDS.vocabularyMax) profile.codes = /** @type {string[]} */ (codes)
-    else profile.codesWithheld = 'high_cardinality'
-  }
-  if (raw.codesWithheld != null && !profile.codesWithheld) {
-    if (!['identifying', 'high_cardinality'].includes(raw.codesWithheld)) return null
-    profile.codesWithheld = raw.codesWithheld
   }
   if (raw.headerUnit != null) {
     const unit = asText(raw.headerUnit, 32)
