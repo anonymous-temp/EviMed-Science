@@ -224,7 +224,7 @@ export function runFinishedNotice(run) {
     const where = files > 0 ? `报告和 ${files} 个文件已在对话里` : "结果已在对话里";
     body = pending > 0 ? `${where}，${pending} 处引用待核对` : where;
     // A finished run that left a source out says so, and that it can be added.
-    if (left.length > 0) body += `；${left.map((spec) => spec.title).join("、")}未配置，相关部分已跳过，可在「设置 → 数据源」填入后继续`;
+    if (left.length > 0) body += `；${left.map((spec) => spec.title).join("、")} 未配置，相关部分已跳过，可在「设置 → 数据源」填入后继续`;
   }
   // Only clinical safety may interrupt (C1); something the reader must check,
   // or a run that did not finish, is attention; a clean delivery is

@@ -122,12 +122,12 @@ test("every other tool failure still fails the run, and a code that only looks l
 test("the inbox says a finished run left a source out and where to add it, and says nothing when it did not", () => {
   const notice = runFinishedNotice({ status: "succeeded", connectorNeeds: ["opengwas"], title: "孟德尔随机化分析", qualityNotices: [], artifacts: [] });
   assert.equal(notice.title, "孟德尔随机化分析 已完成", "the run finished; a source it went without does not make it 未完成");
-  assert.match(notice.body, /OpenGWAS未配置，相关部分已跳过/);
+  assert.match(notice.body, /OpenGWAS 未配置，相关部分已跳过/);
   // Where the page is now (plan 2026-09-23 §5.9), not 「账户与额度 → 数据源凭据」.
   assert.match(notice.body, /「设置 → 数据源」/);
   assert.equal(notice.severity, "attention", "a source the researcher can add is theirs to act on");
   const several = runFinishedNotice({ status: "succeeded", connectorNeeds: ["umls", "core"], qualityNotices: [], artifacts: [] });
-  assert.match(several.body, /UMLS、CORE未配置/);
+  assert.match(several.body, /UMLS、CORE 未配置/);
   const plain = runFinishedNotice({ status: "succeeded", qualityNotices: [], artifacts: [] });
   assert.doesNotMatch(plain.body, /未配置|数据源/);
   assert.equal(plain.severity, "info");

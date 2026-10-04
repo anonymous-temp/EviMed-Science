@@ -114,7 +114,7 @@ test("a finished run that left a data source out names it and where to add it, a
   // what was left out.
   const notice = runFinishedNotice({ status: "succeeded", connectorNeeds: ["opengwas"], title: "孟德尔随机化分析", qualityNotices: [], artifacts: ["deliverables/report.md"] });
   assert.equal(notice.title, "孟德尔随机化分析 已完成");
-  assert.equal(notice.body, "报告和 1 个文件已在对话里；OpenGWAS未配置，相关部分已跳过，可在「设置 → 数据源」填入后继续");
+  assert.equal(notice.body, "报告和 1 个文件已在对话里；OpenGWAS 未配置，相关部分已跳过，可在「设置 → 数据源」填入后继续");
   assert.equal(notice.severity, "attention");
   // The need is read from the closed registry: an id it does not hold is dropped.
   assert.equal(runFinishedNotice({ status: "succeeded", connectorNeeds: ["nope"], qualityNotices: [], artifacts: [] }).severity, "info");

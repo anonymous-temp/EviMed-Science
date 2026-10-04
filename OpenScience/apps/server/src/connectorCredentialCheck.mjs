@@ -52,7 +52,7 @@ const MAX_PROBE_BODY_BYTES = 64 * 1024;
  * `decide` is only for the two that answer a refusal in a 200 body.
  * @type {ReadonlyMap<string, Probe>}
  */
-const PROBES = new Map([
+const PROBES = new Map(/** @type {[string, Probe][]} */ ([
   // EviMed answers its own envelope: a 200 carries `code`, and a refused key is
   // `code: 401` or `403` there as well as in the status (`_evimed_post` reads it
   // the same way).
@@ -92,7 +92,7 @@ const PROBES = new Map([
   ["openfda", { url: "https://api.fda.gov/drug/event.json?limit=1", query: "api_key", rejected: [401, 403] }],
   // BioGRID is deliberately absent: how its web service answers a bad access key
   // is not known to be a refusal, so it is `unchecked` rather than guessed.
-]);
+]));
 
 /** The connectors this module can ask about; every other one is `unchecked`. */
 export const CHECKABLE_CONNECTORS = Object.freeze([...PROBES.keys()]);

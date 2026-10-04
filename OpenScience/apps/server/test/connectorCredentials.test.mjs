@@ -281,9 +281,9 @@ test("saving asks the source once, keeps the value whatever it says, and remembe
 
 test("a second save while the first is still being checked keeps its own answer", async () => {
   const database = fakeDatabase();
-  let store;
   let nested = false;
-  store = new ConnectorCredentialStore({
+  /** @type {ConnectorCredentialStore} */
+  const store = new ConnectorCredentialStore({
     database, secret: SECRET, config: {},
     check: async (connector, value) => {
       if (value === "first-key" && !nested) {
