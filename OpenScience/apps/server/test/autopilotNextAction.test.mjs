@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { AUTOPILOT_TASK_TYPES } from "@evimed/domain";
 import { AutopilotPlanner, PLANNER_INPUT_MAX_CHARS, PLANNER_STOP_KINDS, RESEARCHER_PAUSE_KIND, TASK_TYPE_SUMMARIES, buildPlannerContext,
-  eligibleTaskTypes, parsePlannerAnswer, rotationTaskType } from "../src/autopilotNextAction.mjs";
+  eligibleTaskTypes, parsePlannerAnswer, plannerInstructions, rotationTaskType } from "../src/autopilotNextAction.mjs";
 
 const config = (extra = {}) => ({ deepseekProviderEnabled: true, deepseekApiKey: "k", deepseekModel: "deepseek-flash",
   userDailySpendLimit: 0, userWeeklySpendLimit: 0, ...extra });
@@ -123,10 +123,10 @@ test("the context carries the researcher's own words and files for this question
   assert.equal(context.earlierStop.kind, "needs_input");
   assert.equal(context.pauseAllowed, true);
   assert.equal(context.request.note, "先暂停一下");
-  // A question with no history of its own reads none: the fields exist and are empty, never another question's.
+  // A question with no history of its own reads none: the fields are absent, never another question's.
   const fresh = buildPlannerContext({ agenda: agenda(), progress: { episodes: [], followUps: [], rejectedDirections: [] }, eligible: ["evidence-update"],
     date: "2026-10-04", trigger: "scheduled", reducedPriority: false, stopAllowed: false });
-  assert.deepEqual([fresh.researcherMessages, fresh.materials, fresh.earlierStop, fresh.pauseAllowed], [[], [], null, false]);
+  assert.deepEqual(["researcherMessages", "materials", "earlierStop", "pauseAllowed"].filter((field) => Object.hasOwn(fresh, field)), [], "nothing of another question, and no empty field in the prompt");
 });
 
 function planner(handler, extra = {}, options = {}) {
@@ -170,6 +170,18 @@ test("a stop is returned as a stop with its kind, only where one is allowed", as
   await assert.rejects(() => instance.decide(input({ stopAllowed: false })), { code: "autopilot_planner_invalid" });
   assert.equal(instance.counters.stops, 1);
   assert.equal(instance.counters.invalid, 1);
+});
+
+test("the decision is told about the researcher's words, files and pause only when the data has them", () => {
+  const plain = plannerInstructions({ today: "2026-10-04", stopAllowed: true });
+  for (const absent of ["researcherMessages", "materials", "earlierStop", "pauseAllowed", "paused_by_researcher"]) assert.equal(plain.includes(absent), false, `${absent} is not in a decision that has none`);
+  assert.match(plain, /"stopKind":"answered"\|"exhausted"\|"needs_input"\}/, "a decision nobody wrote to is offered the scheduler's three stops only");
+  const full = plannerInstructions({ researcherMessages: [{ note: "x" }], materials: [{ name: "a" }], earlierStop: { kind: "needs_input" }, pauseAllowed: true });
+  for (const present of ["researcherMessages is", "materials are", "earlierStop is", "pauseAllowed is true", "paused_by_researcher"]) assert.ok(full.includes(present), present);
+  assert.equal(plannerInstructions({ researcherMessages: [] }).includes("researcherMessages is"), false, "an empty field is no field");
+  // Only the lines whose data is there: a correction alone does not bring the pause.
+  const some = plannerInstructions({ researcherMessages: [{ note: "x" }] });
+  assert.ok(some.includes("researcherMessages is")); assert.equal(some.includes("paused_by_researcher"), false);
 });
 
 test("a pause the researcher asked for is returned as a stop only for their own message", async () => {

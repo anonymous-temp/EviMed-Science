@@ -1,8 +1,10 @@
 #!/usr/bin/env node
 /**
  * The next-action decision's situations as an eval (principle 6; plan 2026-10-02
- * §11.3 N10): counterevidence, a failure to run, a missing input, an answered
- * question and the boundary around stopping. It calls the live model through the
+ * §11.3 N10 and N11): counterevidence, a failure to run, a missing input, an
+ * answered question and the boundary around stopping; and what the researcher's
+ * own words and files do to it (material added after a stop, a correction, a
+ * message that asks to pause and one that only says the word). It calls the live model through the
  * platform's own `AutopilotPlanner` and builds each case's context with the same
  * `buildPlannerContext` the scheduler uses, so the prompt under test is the one
  * that ships. A case passes a run when the decision is one of `expect` — the
@@ -39,12 +41,13 @@ const results = [];
 for (const item of cases.filter((/** @type {{ id: string }} */ candidate) => !values.only || candidate.id === values.only)) {
   const agenda = { id: "agenda-eval", projectId: "eval", payload: { ...item.agenda, taskTypeState: {} } };
   const eligible = eligibleTaskTypes(agenda.payload);
-  const context = buildPlannerContext({ agenda, progress: item.progress, eligible, date: "2026-10-04", trigger: "scheduled",
-    reducedPriority: false, stopAllowed: item.stopAllowed });
+  const pauseAllowed = item.pauseAllowed === true;
+  const context = buildPlannerContext({ agenda, progress: item.progress, eligible, date: "2026-10-04", trigger: item.trigger ?? "scheduled", note: item.note ?? null,
+    reducedPriority: false, stopAllowed: item.stopAllowed, pauseAllowed });
   const answers = [];
   for (let run = 0; run < runs; run += 1) {
     try {
-      const decision = /** @type {any} */ (await planner.decide({ userId: "eval", projectId: "eval", episodeId: `episode-eval-${run}`, context, eligible, stopAllowed: item.stopAllowed }));
+      const decision = /** @type {any} */ (await planner.decide({ userId: "eval", projectId: "eval", episodeId: `episode-eval-${run}`, context, eligible, stopAllowed: item.stopAllowed, pauseAllowed }));
       answers.push(decision.action === "stop" ? { action: "stop", stopKind: decision.stopKind, reason: decision.reason } : { action: "run", taskType: decision.taskType, focus: decision.focus });
     } catch (error) {
       answers.push({ error: /** @type {any} */ (error)?.code ?? "autopilot_planner_failed" });

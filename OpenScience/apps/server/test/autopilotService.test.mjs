@@ -1706,7 +1706,7 @@ test("what was said and added to a question reaches its next decision and its br
   // A new subject in the same project starts from nothing of this one's.
   const fresh = await service.runNow("user-one", second.id, { requestId: "ask-other" });
   const other = planner.calls.at(-1).context;
-  assert.deepEqual([other.researcherMessages, other.materials, other.earlierStop, other.episodes], [[], [], null, []]);
+  assert.deepEqual([other.researcherMessages, other.materials, other.earlierStop, other.episodes], [undefined, undefined, undefined, []]);
   assert.doesNotMatch(fresh.episode.payload.prompt, /年龄分布|随机化人群|researcherNotes below|materials below/);
   assert.equal(fresh.episode.payload.progress.materials.length, 0);
 });

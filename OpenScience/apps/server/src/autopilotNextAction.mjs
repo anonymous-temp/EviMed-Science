@@ -102,15 +102,37 @@ const instructions = [
   "- A claim that an independent check refuted or weakened is a valid negative result. Build on it; do not queue work to re-prove it.",
   "- An episode with outcome did_not_run or canceled, or a claim whose check was unavailable, says nothing about whether a hypothesis is true. Never treat it as evidence against one. If one task type keeps failing to run, prefer another.",
   "- Do not repeat work an earlier episode completed unless its result is stale or contradicted. Episodes still in progress will report themselves.",
-  "- Choose stop only when another episode cannot add anything: the question is answered (answered), the evidence within reach is used up (exhausted), or what is missing has to come from the researcher (needs_input; say what is needed in reason). Stopping is a legitimate result. When stopAllowed is false you must choose run (the one exception is the pause below).",
+  "- Choose stop only when another episode cannot add anything: the question is answered (answered), the evidence within reach is used up (exhausted), or what is missing has to come from the researcher (needs_input; say what is needed in reason). Stopping is a legitimate result. When stopAllowed is false you must choose run.",
   "- When priority is reduced, recent episodes added little: prefer the narrowest worthwhile step, or stop.",
-  "- researcherMessages is what the researcher has written to this question, oldest first. A correction there stands over the findings it corrects: do not queue work to re-prove what they corrected unless new evidence is in reach, and say in focus what the correction changes. A question there is open until an episode answered it.",
-  "- materials are files the researcher added for this question. Pick the task type that reads a material whose state is ready; one that is reading is not usable yet, and one that needs attention could not be read fully. When earlierStop says input was needed, the material added after it is what was asked for.",
-  "- When request.trigger is follow-up and pauseAllowed is true, the researcher is writing to you now. If the note only asks to pause, hold or stop the research for the time being and asks for nothing to be looked into, choose stop with stopKind paused_by_researcher and say so in reason. A question, a correction, an added requirement or a request with a condition is never a pause: choose run.",
+].join("\n");
+
+/**
+ * What the decision is told about the researcher's own words and files, only
+ * when the context has any (plan 2026-10-02 §11.3 N11). A decision with none of
+ * them reads exactly what it read before they existed: measured on the live
+ * model, adding these lines to every decision moved a settled question from
+ * stopping eight times in eight to running seven times in eight, so a line is
+ * in the prompt only when its field is in the data.
+ */
+const researcherInstructions = Object.freeze({
+  researcherMessages: "- researcherMessages is what the researcher has written to this question, oldest first. A correction there stands over the findings it corrects: do not queue work to re-prove what they corrected unless new evidence is in reach, and say in focus what the correction changes. A question there is open until an episode answered it.",
+  materials: "- materials are files the researcher added for this question. Pick the task type that reads a material whose state is ready; one that is reading is not usable yet, and one that needs attention could not be read fully.",
+  earlierStop: "- earlierStop is what an earlier decision stopped for. When it asked for input, the material added after it (see materials) is what was asked for.",
+  pauseAllowed: "- pauseAllowed is true: request.trigger is follow-up and the researcher is writing to you now. If the note only asks to pause, hold or stop the research for the time being and asks for nothing to be looked into, choose stop with stopKind paused_by_researcher and say so in reason; this is the one stop allowed when stopAllowed is false. A question, a correction, an added requirement or a request with a condition is never a pause: choose run.",
+});
+
+const answerFormat = (/** @type {boolean} */ pause) => [
   "Answer with one JSON object and nothing else:",
-  '{"action":"run"|"stop","taskType":"<an available id; required for run>","focus":"<for run: one or two sentences saying what this episode should look into>","reason":"<one or two sentences saying why, from the progress>","stopKind":"answered"|"exhausted"|"needs_input"|"paused_by_researcher"}',
+  `{"action":"run"|"stop","taskType":"<an available id; required for run>","focus":"<for run: one or two sentences saying what this episode should look into>","reason":"<one or two sentences saying why, from the progress>","stopKind":"answered"|"exhausted"|"needs_input"${pause ? '|"paused_by_researcher"' : ""}}`,
   "Include stopKind only for stop. Write focus and reason in Simplified Chinese.",
 ].join("\n");
+
+/** @param {any} context what `buildPlannerContext` made @returns {string} the system message for it */
+export function plannerInstructions(context) {
+  const present = (/** @type {unknown} */ value) => Array.isArray(value) ? value.length > 0 : Boolean(value);
+  const extra = Object.entries(researcherInstructions).filter(([field]) => present(context?.[field])).map(([, line]) => line);
+  return [instructions, ...extra, answerFormat(Boolean(context?.pauseAllowed))].join("\n");
+}
 
 /** @param {unknown} value @param {number} max */
 function cut(value, max) {
@@ -183,7 +205,7 @@ export function buildPlannerContext({ agenda, progress, eligible, date, trigger,
     request: { trigger, ...(note ? { note: cut(note, NOTE_CHARS) } : {}) },
     priority: reducedPriority ? "reduced" : "normal",
     stopAllowed,
-    pauseAllowed,
+    ...(pauseAllowed ? { pauseAllowed } : {}),
     taskTypes: (agenda.payload.taskTypes ?? []).filter((/** @type {string} */ type) => AUTOPILOT_TASK_TYPES.includes(/** @type {any} */ (type))).map((/** @type {string} */ type) => ({
       id: type, does: TASK_TYPE_SUMMARIES[/** @type {keyof typeof TASK_TYPE_SUMMARIES} */ (type)],
       state: eligible.includes(type) ? "available" : "paused_after_repeated_failures",
@@ -191,10 +213,10 @@ export function buildPlannerContext({ agenda, progress, eligible, date, trigger,
       lastEpisodeDate: lastRun.get(type) ?? null,
     })),
     openQuestions: (progress?.followUps ?? []).map((/** @type {any} */ item) => ({ note: item.note, at: item.at })),
-    // The researcher's own words and files for this question; never another question's.
-    researcherMessages: (progress?.researcherNotes ?? []).map((/** @type {any} */ item) => ({ note: item.note, at: item.at })),
-    materials: (progress?.materials ?? []).map((/** @type {any} */ item) => ({ name: item.name, addedAt: item.addedAt, state: item.state })),
-    earlierStop: progress?.lastStop ? { kind: progress.lastStop.kind, reason: progress.lastStop.reason, at: progress.lastStop.at } : null,
+    // The researcher's own words and files for this question, never another question's; a field with nothing in it is left out of the prompt.
+    ...(progress?.researcherNotes?.length ? { researcherMessages: progress.researcherNotes.map((/** @type {any} */ item) => ({ note: item.note, at: item.at })) } : {}),
+    ...(progress?.materials?.length ? { materials: progress.materials.map((/** @type {any} */ item) => ({ name: item.name, addedAt: item.addedAt, state: item.state })) } : {}),
+    ...(progress?.lastStop ? { earlierStop: { kind: progress.lastStop.kind, reason: progress.lastStop.reason, at: progress.lastStop.at } } : {}),
     rejectedDirections: (progress?.rejectedDirections ?? []).map((/** @type {any} */ item) => ({ statement: item.statement, note: item.note })),
     episodes,
     progressTruncated: Boolean(progress?.truncated),
@@ -314,7 +336,7 @@ export class AutopilotPlanner {
           max_tokens: PLANNER_MAX_TOKENS,
           response_format: { type: "json_object" },
           messages: [
-            { role: "system", content: instructions },
+            { role: "system", content: plannerInstructions(context) },
             { role: "user", content: JSON.stringify(context) },
           ],
         },
