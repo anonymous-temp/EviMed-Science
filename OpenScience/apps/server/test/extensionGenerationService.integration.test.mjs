@@ -95,6 +95,43 @@ test('an unqualified optional package joins the generation, activates, and is la
     for(const row of stray.rows)await service.jobs.cancel(a.id,row.id);
   }finally{proofEnabled=true;}
 });
+test('what still refuses is the integrity of the package, not its record: a changed digest, artifact or preparation is refused with no record involved',options,async()=>{
+  // The counterpart of the test above. With the qualification record gone, every check that proves the pinned package
+  // is the admitted one still bites, on the operation path and when a generation is assembled.
+  proofEnabled=false;
+  const originalGeneration=runtime.runtimeGeneration,originalReplace=runtime.replaceGeneration,originalCurrent=current;let applied=false;
+  const row=extensions.entries.get(entry.id),admitted=service.artifacts.get(entry.id);
+  try{
+    await db.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'integrity-project','Integrity',1048576)",[a.id]);
+    await add('integrity-project','integrity-install');
+    const desired=await extensions.project(a,'integrity-project'),state=await service.reconcile(a,'integrity-project',{expectedRevision:desired.revision});
+    runtime.runtimeGeneration=()=>applied?'fixture-runtime':null;
+    runtime.replaceGeneration=async(_project,candidate)=>{current=candidate;applied=true;return{joined:true};};
+    assert.equal((await worker.runClaimed(await claim(state))).result.phase,'effective');
+    const admit=()=>service.operationIdentity(a,'integrity-project',entry.id,'fixture-runtime','doc_read');
+    assert.equal((await admit()).descriptorId,entry.id,'admitted with no record');
+    // A package whose digest is not the one the project pinned.
+    const integrity=row.integrity;row.integrity=d('a-different-package');
+    try{await assert.rejects(admit(),{status:404});}finally{row.integrity=integrity;}
+    // An artifact whose digest is not the one the deployment admitted.
+    const artifactDigest=admitted.artifactDigest;admitted.artifactDigest=d('a-different-artifact');
+    try{await assert.rejects(admit(),{status:404});}finally{admitted.artifactDigest=artifactDigest;}
+    // A preparation that did not produce the artifact the generation pins.
+    const preparation=(await db.query("SELECT id FROM evimed_product.jobs WHERE user_id=$1 AND kind='extension-prepare' AND payload->>'installationId'=$2",[a.id,desired.selections[0].installationId])).rows[0].id;
+    await db.query("UPDATE evimed_product.jobs SET result=jsonb_set(result,'{artifactDigest}',to_jsonb($2::text)) WHERE id=$1",[preparation,d('another-preparation-result')]);
+    try{await assert.rejects(admit(),{code:'extension_contract_invalid'});}finally{await db.query("UPDATE evimed_product.jobs SET result=jsonb_set(result,'{artifactDigest}',to_jsonb($2::text)) WHERE id=$1",[preparation,artifactDigest]);}
+    assert.equal((await admit()).descriptorId,entry.id,'and admitted again once the bytes agree, still with no record');
+    // The same checks keep a package out of a generation as it is assembled, and say so by its integrity finding.
+    row.integrity=d('a-different-package');
+    try{
+      const rebuilt=await db.transaction(client=>db.withTransactionClient(client,()=>service.snapshot(a,'integrity-project',client)));
+      assert.deepEqual(rebuilt.manifest.projection.plugins.map(plugin=>plugin.extensionId),['dsh-cite']);
+      assert.deepEqual(rebuilt.manifest.findings,[{extensionId:entry.id,code:'extension_contract_invalid'}]);
+    }finally{row.integrity=integrity;}
+    const stray=await db.query("SELECT id FROM evimed_product.jobs WHERE user_id=$1 AND project_id='integrity-project' AND kind='plugin-apply' AND status='queued'",[a.id]);
+    for(const queued of stray.rows)await service.jobs.cancel(a.id,queued.id);
+  }finally{runtime.runtimeGeneration=originalGeneration;runtime.replaceGeneration=originalReplace;current=originalCurrent;proofEnabled=true;}
+});
 test('what is mounted decides whether a generation is current, not the evidence it was assembled under',options,async()=>{
   // A release moves the adapter and permission source revisions and a re-measurement moves the receipt. Neither says
   // anything about which code a runtime runs, so neither may unmount an extension that is still what the project selected.

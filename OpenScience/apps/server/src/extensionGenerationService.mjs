@@ -20,7 +20,7 @@ export function validateExtensionGenerationReference(project,value){
 }
 /** No request-provided paths participate. @param {any} config @param {any} reference */
 export function extensionGenerationRoot(config,reference){if(!['ownerHash','projectHash','generationHash'].every(key=>HEX.test(reference?.[key])))throw invalid();return path.join(config.dataDir,'.openscience','extension-generations',reference.ownerHash,reference.projectHash,reference.generationHash);}
-/** Domain identity is part of the complete immutable manifest bond, including epochs, proof receipts and settings. @param {any} manifest */
+/** Domain identity is part of the complete immutable manifest bond, including epochs, any proof receipt and settings. @param {any} manifest */
 function generationHash(manifest){const {reference:_reference,...content}=manifest;return sha(canonicalJson({...content,domainIdentity:extensionGenerationIdentity(manifest.identity,{ownerId:manifest.scope.ownerId,projectId:manifest.scope.projectId},sha)}));}
 /** What a generation mounts, without the evidence it was assembled under. The source revisions of the adapter and
  * permission code, the proof adapter revision and a legacy qualification receipt digest are labels (owner ruling
@@ -196,7 +196,7 @@ export class ExtensionGenerationService{
         {idempotencyKey:`extension-apply:${project.id}:${state.revision}`,projectId:project.id,maxAttempts:10,transactionClient:client});return state;
     })));
   }
-  /** Recheck desired settings, grants, proof freshness and proven personal state inside the project fence. @param {any} job @param {any} candidate @param {any} client */
+  /** Recheck desired settings, grants and proven personal state inside the project fence. What is compared is what the generation mounts (`extensionMountIdentity`), not the evidence it was assembled under. @param {any} job @param {any} candidate @param {any} client */
   async assertCurrent(job,candidate,client){const actor={id:job.payload.actorId,accountCreatedAt:job.payload.actorAccountCreatedAt};const {project,manifest}=await this.snapshot(actor,job.projectId,client);
     if(project.userId!==job.userId||manifest.scope.ownerAccountCreatedAt!==job.payload.accountCreatedAt||manifest.scope.projectCreatedAt!==job.payload.projectCreatedAt)throw new HttpError(409,'plugin_generation_changed','Project ownership changed.');
     const state=await this.current(project);if(state?.payload.desired?.reference.generationHash!==candidate.reference.generationHash||extensionMountIdentity(manifest)!==extensionMountIdentity(candidate))throw new HttpError(409,'product_revision_conflict','The extension generation changed.');return project;}

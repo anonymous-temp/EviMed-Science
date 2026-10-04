@@ -314,6 +314,22 @@ test('default controller composition independently validates actual ledger/grant
     assert.equal(output.status, 'succeeded');
     assert.equal(output.result.artifactPath, 'outputs/extensions/result_xlsx.xlsx');
     assert.equal(hash(await fs.readFile(path.join(publicRoot, output.result.artifactPath))), output.result.sha256);
+    // The qualification record is a label (owner ruling 2026-10-04). With it gone neither the web side's per-operation
+    // check nor the controller's `authorize` refuses an admitted, pinned extension under a live grant; before, the
+    // controller re-read the signed record and answered 403 `extension_access_denied` for a missing or changed one.
+    await fs.rm(path.join(deployment.qualificationRoot, hash(entry.id) + '.json'));
+    const unlabelled = {
+      ...auth,
+      invocation: 'read-without-record'
+    };
+    const withoutRecord = await service.submit(unlabelled, {
+      ...readRequest,
+      idempotencyKey: 'read-without-record'
+    });
+    await worker.tick();
+    const withoutRecordResult = await service.status(unlabelled, withoutRecord.jobId);
+    assert.equal(withoutRecordResult.status, 'succeeded');
+    assert(JSON.stringify(withoutRecordResult.result).includes('公开文档'));
     const rejectAttempt = async (key, mutate) => {
       const actor = {
         ...auth,
