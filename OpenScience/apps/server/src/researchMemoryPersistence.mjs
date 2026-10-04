@@ -34,6 +34,18 @@ export const MEMORY_KIND_LABELS_ZH = Object.freeze({
 });
 export const MEMORY_ORIGINS = Object.freeze(["explicit", "inferred", "system", "manual"]);
 export const MEMORY_STATUSES = Object.freeze(["active", "pending", "superseded", "archived"]);
+/** What a recorded dependency on a source says about it now. `current` is what a
+ *  link starts as: the source was read when the memory was written. `unknown`
+ *  is a check that could not answer, and stays unknown (it is not `current`). */
+export const MEMORY_SOURCE_STATES = Object.freeze(["current", "changed", "retracted", "expired", "unknown"]);
+/** The kinds of source a memory can record a dependency on: a knowledge-base
+ *  document by its `src_` id, or a published work by its DOI. */
+export const MEMORY_SOURCE_TYPES = Object.freeze(["knowledge_source", "doi"]);
+/** Whether two statements that disagree still do: `open` until one replaces
+ *  the other (or the researcher settles it), then `resolved`. */
+export const MEMORY_CONFLICT_STATES = Object.freeze(["open", "resolved"]);
+/** How many sources one memory records a dependency on. */
+export const MEMORY_SOURCE_LINK_LIMIT = 16;
 
 /** How much history one record carries. Both are enforced twice on purpose: in
  *  the store, which trims before writing, and here, so a second writer — the
@@ -93,9 +105,63 @@ CREATE TABLE IF NOT EXISTS evimed_memory.records (
 ALTER TABLE evimed_memory.records ADD COLUMN IF NOT EXISTS superseded_by text
   CHECK (superseded_by IS NULL OR superseded_by ~ '^[a-zA-Z0-9][a-zA-Z0-9_-]{0,127}$');
 ALTER TABLE evimed_memory.records ADD COLUMN IF NOT EXISTS invalid_since timestamptz(3);
+-- When the fact began to hold in the world, when that is known (2026-10-04).
+-- Null means unknown, never "always": a recall reads an unknown start as the
+-- moment the platform recorded it. \`invalid_since\` is the other end of the
+-- same interval — the instant the fact stopped, or will stop, holding — so a
+-- fact's validity is [valid_from, invalid_since) and there is no second
+-- "valid until" column to disagree with it. Added in place with no default and
+-- no rewrite: every existing row reads as "valid, start unknown".
+ALTER TABLE evimed_memory.records ADD COLUMN IF NOT EXISTS valid_from timestamptz(3);
+-- The predecessor of a record is the row whose \`superseded_by\` names it.
+CREATE INDEX IF NOT EXISTS memory_records_successor_idx ON evimed_memory.records (user_id, superseded_by)
+  WHERE superseded_by IS NOT NULL;
 CREATE INDEX IF NOT EXISTS memory_records_rank_idx ON evimed_memory.records
   (user_id, status, importance DESC, confidence DESC, updated_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS memory_records_scope_idx ON evimed_memory.records (user_id, scope, scope_id, kind);
+-- Two statements that disagree, kept as a relation instead of being resolved by
+-- whichever was written last (2026-10-04). One row per unordered pair
+-- (\`record_id < other_id\`), so a pair is never recorded twice or in two
+-- directions. A conflict is a label on recall, never a deletion: both records
+-- stay in force until one replaces the other or the researcher settles it, and
+-- a record that is forgotten, archived or deleted takes its conflicts with it
+-- (the foreign keys cascade).
+CREATE TABLE IF NOT EXISTS evimed_memory.record_conflicts (
+  user_id text NOT NULL,
+  record_id text NOT NULL,
+  other_id text NOT NULL,
+  state text NOT NULL DEFAULT 'open' CHECK (state IN (${vocabulary(MEMORY_CONFLICT_STATES)})),
+  reason text NOT NULL DEFAULT '' CHECK (char_length(reason) <= 500),
+  resolution text NOT NULL DEFAULT '' CHECK (char_length(resolution) <= 500),
+  created_at timestamptz(3) NOT NULL DEFAULT date_trunc('second', clock_timestamp()),
+  resolved_at timestamptz(3),
+  PRIMARY KEY (user_id, record_id, other_id),
+  CHECK (record_id < other_id),
+  FOREIGN KEY (user_id, record_id) REFERENCES evimed_memory.records (user_id, id) ON DELETE CASCADE,
+  FOREIGN KEY (user_id, other_id) REFERENCES evimed_memory.records (user_id, id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS memory_conflicts_other_idx ON evimed_memory.record_conflicts (user_id, other_id);
+-- What a memory rests on, by a recorded identifier — never by a name. A
+-- knowledge-base document is its \`src_\` id and a published work is its DOI;
+-- \`source_version\` is the version or digest the memory was written against
+-- when the writer knew one (null: unknown). \`state\` is what a later check
+-- found, set by whatever learns that the source changed (\`markSourceLinks\`),
+-- and recall labels the memory by it; it never withholds one. The lookup the
+-- other way — which memories depend on this source — is the index below.
+CREATE TABLE IF NOT EXISTS evimed_memory.record_sources (
+  user_id text NOT NULL,
+  record_id text NOT NULL,
+  source_type text NOT NULL CHECK (source_type IN (${vocabulary(MEMORY_SOURCE_TYPES)})),
+  source_id text NOT NULL CHECK (char_length(source_id) BETWEEN 1 AND 300),
+  source_version text CHECK (source_version IS NULL OR char_length(source_version) <= 200),
+  state text NOT NULL DEFAULT 'current' CHECK (state IN (${vocabulary(MEMORY_SOURCE_STATES)})),
+  state_reason text NOT NULL DEFAULT '' CHECK (char_length(state_reason) <= 500),
+  state_at timestamptz(3),
+  linked_at timestamptz(3) NOT NULL DEFAULT date_trunc('second', clock_timestamp()),
+  PRIMARY KEY (user_id, record_id, source_type, source_id),
+  FOREIGN KEY (user_id, record_id) REFERENCES evimed_memory.records (user_id, id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS memory_sources_source_idx ON evimed_memory.record_sources (user_id, source_type, source_id);
 -- 「你写下的笔记」 is gone (2026-09-20). It was the third user-writable store of
 -- "what to know about me" beside the records and the capsule's own entries, and
 -- the one the researcher had to fill by hand — a composer for exactly what the

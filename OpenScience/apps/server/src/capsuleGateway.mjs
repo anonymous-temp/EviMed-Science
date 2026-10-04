@@ -55,7 +55,7 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, me
       windows.set(key, window);
       if (++window.count > 120) throw new HttpError(429, "capsule_rate_limited", "Too many memory operations.");
       const body = await readJson(req, 64 * 1024);
-      const allowed = action === "recall" ? ["query", "factKinds", "since", "scope"]
+      const allowed = action === "recall" ? ["query", "factKinds", "since", "scope", "asOf"]
         : action === "handbook-context" ? ["sessionId", "inputs"]
           : action === "handbook-attached" ? ["sessionId", "receipts"]
         : action === "session" ? ["sessionId"] : ["factKind", "content", "origin"];

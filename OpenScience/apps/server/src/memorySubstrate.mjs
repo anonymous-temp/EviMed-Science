@@ -6,6 +6,7 @@ import {
   recallTargets,
 } from "./openVikingClient.mjs";
 import { recallContent, selectWithinBudget } from "./memoryRecallPolicy.mjs";
+import { annotateVersions, versionFields, versionsInForce } from "./memoryValidity.mjs";
 import { MEMORY_KINDS, memoryPausedFor } from "./researchMemory.mjs";
 import { HttpError } from "./security.mjs";
 import { TERMINAL_INDEX_FAILURES } from "./memoryIndexWorker.mjs";
@@ -202,12 +203,14 @@ export class MemorySubstrate {
    *
    * @param {string} userId
    * @param {string} query
-   * @param {{ projectId?: string|null, sessionId?: string|null, countUsage?: boolean }} scope
+   * @param {{ projectId?: string|null, sessionId?: string|null, countUsage?: boolean, asOf?: number|null, now?: number }} scope
    *   `countUsage: false` for a read that is not a run being handed memories —
    *   the memory page's own search goes through this port for its ranking, and
    *   a researcher looking for a memory is not the platform using one.
+   *   `asOf`: the moment the question is about, in epoch milliseconds, when it
+   *   is not now (`parseAsOf`); `now` is injectable.
    */
-  async recall(userId, query, { projectId = null, sessionId = null, countUsage = true } = {}) {
+  async recall(userId, query, { projectId = null, sessionId = null, countUsage = true, asOf = null, now = Date.now() } = {}) {
     // The deployment's switch, before the researcher's: off means no memory
     // reaches a run from this port, which is what makes "memory off" a control
     // arm rather than an account whose records happen not to match.
@@ -217,7 +220,7 @@ export class MemorySubstrate {
     // whichever index is serving.
     const pause = await memoryPausedFor(this.store, userId, projectId, sessionId);
     if (pause.recall) return [];
-    const served = await this.#served(userId, query, { projectId, sessionId });
+    const served = await this.#served(userId, query, { projectId, sessionId, asOf, now });
     // What the page means by 「用过 7 次，上次 9月18日」, counted at the one port
     // every recall passes through. Never awaited and never able to throw: a
     // bookkeeping row must not be able to decide whether a run gets its
@@ -269,21 +272,24 @@ export class MemorySubstrate {
   }
 
   /** @param {string} userId @param {string} query
-   *  @param {{ projectId: string|null, sessionId: string|null }} scope */
-  async #served(userId, query, { projectId, sessionId }) {
-    if (!this.active) return this.store.relevant(userId, query, { projectId, sessionId });
+   *  @param {{ projectId: string|null, sessionId: string|null, asOf: number|null, now: number }} scope */
+  async #served(userId, query, { projectId, sessionId, asOf, now }) {
+    // The index holds what is in force now, as text, and nothing about when or
+    // what replaced it. A question about another time is answered from the
+    // authority, where the versions that held then still are.
+    if (!this.active || (asOf != null && asOf < now)) return this.store.relevant(userId, query, { projectId, sessionId, asOf, now });
     try {
-      return await this.#rankedRecall(userId, query, { projectId, sessionId });
+      return await this.#rankedRecall(userId, query, { projectId, sessionId, now });
     } catch (error) {
       this.lastError = error?.code ?? "memory_index_unavailable";
       if (this.strict) throw error;
       // Fall back rather than fail: the term matcher needs no index and reads
       // the same authoritative records.
-      return this.store.relevant(userId, query, { projectId, sessionId });
+      return this.store.relevant(userId, query, { projectId, sessionId, now });
     }
   }
 
-  async #rankedRecall(userId, query, { projectId, sessionId }) {
+  async #rankedRecall(userId, query, { projectId, sessionId, now }) {
     if (this.contextLimit === 0 || this.contextMaxChars === 0) return [];
     const hits = await this.openViking.find(userId, query, {
       targets: recallTargets(userId, { projectId, sessionId }),
@@ -306,8 +312,7 @@ export class MemorySubstrate {
     // Hydrate from the store. A nomination is a claim about relevance, not
     // about content: the record read here is the one the user could edit or
     // delete a moment ago, so a stale index cannot show stale text.
-    const now = Date.now();
-    const records = (await Promise.all(
+    const hydrated = (await Promise.all(
       nominated.map(async ({ recordId, score }) => {
         try {
           const record = await this.store.getRecord(userId, recordId);
@@ -317,33 +322,34 @@ export class MemorySubstrate {
         }
       }),
     ))
-      .filter(Boolean)
-      .filter(({ record }) => record.status === "active")
-      .filter(({ record }) => record.kind !== "run_summary")
-      .filter(({ record }) => !record.sensitive)
-      .filter(({ record }) => !record.expiresAt || Date.parse(record.expiresAt) > now)
-      .filter(({ record }) => !record.invalidSince || Date.parse(record.invalidSince) > now)
-      // The index is asked only for subtrees this caller may read, but the
-      // check is repeated against the record itself: a scope is a permission,
-      // and a permission proved by the thing being read beats one proved by
-      // the path it was found at.
-      .filter(({ record }) => record.scope === "user"
-        || (record.scope === "project" && record.scopeId === projectId)
-        || (record.scope === "session" && record.scopeId === sessionId));
+      .filter(Boolean);
 
-    const structured = records.map(({ record, score }) => ({
+    // Which of them hold: in force and recallable, inside the validity
+    // interval, in this project, one version of each fact. The index is asked
+    // only for subtrees this caller may read, but the check is repeated against
+    // the record itself — a scope is a permission, and a permission proved by
+    // the thing being read beats one proved by the path it was found at — and
+    // it is the decision the term matcher makes, because both arms end here.
+    const context = { now, asOf: null, projectId, sessionId };
+    const inForce = versionsInForce(hydrated.map(({ record }) => record), context);
+    const scoreOf = new Map(hydrated.map(({ record, score }) => [record.id, score]));
+    const links = await this.#linksOf(userId, inForce.map(({ record }) => record.id));
+    const labelled = annotateVersions(inForce, links, context);
+
+    const structured = labelled.map((version) => ({
       memo: {
-        id: `record:${record.id}`,
-        content: recallContent(record),
-        updatedAt: record.updatedAt,
+        id: `record:${version.record.id}`,
+        content: recallContent(version.record),
+        updatedAt: version.record.updatedAt,
         memoryType: "structured",
-        kind: record.kind,
-        scope: record.scope,
-        origin: record.origin,
-        confidence: record.confidence,
-        importance: record.importance,
+        kind: version.record.kind,
+        scope: version.record.scope,
+        origin: version.record.origin,
+        confidence: version.record.confidence,
+        importance: version.record.importance,
+        ...versionFields(version),
       },
-      score,
+      score: scoreOf.get(version.record.id) ?? 0,
     })).filter((row) => row.memo.content);
 
     // One list, since 2026-09-20. It used to be fused with a second: the
@@ -356,6 +362,24 @@ export class MemorySubstrate {
       contextLimit: this.contextLimit,
       contextMaxChars: this.contextMaxChars,
     });
+  }
+
+  /**
+   * What the hydrated records are to be labelled with: their open disagreements
+   * and the sources they rest on that are no longer as they were. Read from the
+   * store that holds them. A store that cannot say (a double that predates the
+   * relations, a read that failed) leaves the memories unlabelled and says so in
+   * `lastError` — the recall is not failed by it, and it is not claimed clean.
+   * @param {string} userId @param {string[]} recordIds
+   */
+  async #linksOf(userId, recordIds) {
+    if (recordIds.length === 0 || typeof this.store?.recallLinks !== "function") return undefined;
+    try {
+      return await this.store.recallLinks(userId, recordIds);
+    } catch (error) {
+      this.lastError = error?.code ?? "memory_links_unavailable";
+      return undefined;
+    }
   }
 
   /** Reorder the hydrated candidates, if a reranker is configured.

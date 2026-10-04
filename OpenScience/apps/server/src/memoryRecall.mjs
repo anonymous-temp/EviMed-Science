@@ -24,9 +24,21 @@
  * a capsule from a record the platform inferred, and `contextOnly`, because
  * neither is permission.
  *
+ * A memory record is the version that held at the time the question is about —
+ * now, or `asOf` when the question names another — and in the project it is
+ * asked in. Where that version is uncertain the item says why (`caveats`:
+ * a statement that disagrees with it, a source it rests on that was retracted,
+ * corrected or has lapsed, a version that begins after the time asked, an
+ * inference with nothing behind it) and carries the other side
+ * (`conflictsWith`) or the sources (`staleSources`); a caller that reads
+ * `uncertain: true` is not being told the record is wrong, it is being told
+ * not to state it as settled. `asOf` is applied to the research-memory
+ * records; a capsule fact has no interval of its own and is returned as it is.
+ *
  * @module
  */
 
+import { parseAsOf } from "./memoryValidity.mjs";
 import { HttpError } from "./security.mjs";
 
 export const MEMORY_RECALL_SCOPES = Object.freeze(["all", "capsule", "conversation"]);
@@ -43,8 +55,9 @@ const CAPSULE_RECALL_MAX_LIMIT = 30;
  * @param {{ capsules?: { recall: Function } | null, memorySubstrate?: { recall: Function, recallEnabled?: boolean } | null }} services
  * @param {{ id: string, accountCreatedAt?: string }} user
  * @param {{ query: string, projectId?: string | null, sessionId?: string | null, limit?: number, factKinds?: readonly string[], since?: string | null, scope?: string,
- *   countUsage?: boolean }} input
+ *   asOf?: string | null, now?: number, countUsage?: boolean }} input
  *   `countUsage: false` for a read that is not a run being handed memories.
+ *   `asOf`: an ISO date or instant the question is about; refused when it is not one.
  * @returns {Promise<{ items: Record<string, any>[], mode: string, contextOnly: true, sources: { memory: number, capsule: number } }>}
  */
 export async function recallAcrossMemory({ capsules = null, memorySubstrate = null }, user, input) {
@@ -64,13 +77,20 @@ export async function recallAcrossMemory({ capsules = null, memorySubstrate = nu
   const since = input.since ?? null;
   const sinceMs = since ? Date.parse(since) : Number.NaN;
   const projectId = input.projectId ?? null;
+  const asOf = parseAsOf(input.asOf);
+  if (asOf === undefined) throw new HttpError(400, "memory_as_of_invalid", "asOf must be an ISO date such as 2025-06-30.");
 
   const [capsule, memory] = await Promise.all([
     scope !== "conversation" && capsules
       ? capsules.recall(user.id, { query: input.query, projectId, limit: Math.min(CAPSULE_RECALL_MAX_LIMIT, limit), factKinds, since, scope: "capsule", accountCreatedAt: user.accountCreatedAt })
       : { items: [], mode: "none" },
     scope !== "capsule" && memorySubstrate
-      ? memorySubstrate.recall(user.id, input.query, { projectId, sessionId: input.sessionId ?? null, countUsage: input.countUsage !== false })
+      ? memorySubstrate.recall(user.id, input.query, {
+        projectId, sessionId: input.sessionId ?? null, countUsage: input.countUsage !== false,
+        // Only when the question names a time: a recall about now is the call it always was.
+        ...(asOf != null ? { asOf } : {}),
+        ...(Number.isFinite(input.now) ? { now: input.now } : {}),
+      })
       : [],
   ]);
 
@@ -90,6 +110,12 @@ export async function recallAcrossMemory({ capsules = null, memorySubstrate = nu
       updatedAt: memo.updatedAt ?? null,
       confidence: memo.confidence ?? null,
       importance: memo.importance ?? null,
+      // Only what is there: a memory with no history, conflict or source
+      // finding is the item it always was.
+      ...(Array.isArray(memo.caveats) && memo.caveats.length ? { uncertain: true, caveats: memo.caveats } : {}),
+      ...(memo.validity ? { validity: memo.validity } : {}),
+      ...(memo.conflictsWith ? { conflictsWith: memo.conflictsWith } : {}),
+      ...(memo.staleSources ? { staleSources: memo.staleSources } : {}),
       contextOnly: true,
     }));
   const capsuleItems = (Array.isArray(capsule?.items) ? capsule.items : [])
@@ -97,6 +123,7 @@ export async function recallAcrossMemory({ capsules = null, memorySubstrate = nu
   return {
     items: [...memoryItems, ...capsuleItems].slice(0, limit),
     mode: typeof capsule?.mode === "string" ? capsule.mode : "none",
+    ...(asOf != null ? { asOf: new Date(asOf).toISOString() } : {}),
     contextOnly: true,
     sources: { memory: memoryItems.length, capsule: capsuleItems.length },
   };
