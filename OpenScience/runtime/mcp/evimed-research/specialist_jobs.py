@@ -213,11 +213,7 @@ def _workspace():
 
 def _execution_timeout_seconds():
     """Wall clock for one specialist process, bounded well inside the server's run monitor."""
-    try:
-        configured = float(os.environ.get("EVIMED_SPECIALIST_EXECUTION_TIMEOUT_SECONDS", "10800"))
-    except ValueError:
-        configured = 10800.0
-    return int(min(max(configured, 60.0), 14400.0))
+    return job_heartbeat.execution_timeout_seconds()
 
 
 def _root(spec):

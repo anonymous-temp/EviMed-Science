@@ -348,6 +348,39 @@ raise SystemExit(EXIT_CODE)
         self.assertEqual(state["status"], "succeeded")
         self.assertEqual(state["evidenceNote"], {"unavailable": "execution_evidence_unavailable"})
 
+    # A MetaAgent process that hangs had no wall clock of its own, like the other
+    # specialists before it (`EVIMED_SPECIALIST_EXECUTION_TIMEOUT_SECONDS`, one key).
+    def test_a_hung_engine_is_stopped_by_the_wall_clock_and_its_files_are_kept(self):
+        (self.meta_root / "new_meta" / "main.py").write_text(
+            FAKE_MAIN + "\nimport time\ntime.sleep(600)\n", encoding="utf-8")
+        state_path = self.queued_state()
+        started = time.monotonic()
+        with mock.patch.object(self.meta_agent.job_heartbeat, "execution_timeout_seconds", return_value=1):
+            self.assertEqual(self.meta_agent._run_job(str(state_path)), 124)
+        self.assertLess(time.monotonic() - started, 30)
+
+        state = self.meta_agent._read_json_no_follow(state_path)
+        self.assertEqual(state["status"], "failed")
+        self.assertEqual(state["errorCode"], "meta_agent_job_timeout")
+        self.assertIs(state["retryable"], True)
+        self.assertIn("stopped after 1 seconds", state["error"])
+        # What the engine wrote before it was stopped is named, and still there.
+        self.assertTrue(any(item["path"].endswith("manuscript/draft.md") for item in state["artifacts"]), state["artifacts"])
+        job_id = state["jobId"]
+        self.assertTrue((self.workspace / "meta-analysis-runs" / job_id / "output" / "fake-project" / "manuscript" / "draft.md").is_file())
+        polled = self.meta_agent.status_job({"jobId": job_id})
+        self.assertEqual(polled["status"], "error")
+        self.assertEqual(polled["error"]["code"], "meta_agent_job_timeout")
+        self.assertTrue(polled["artifacts"])
+
+    def test_the_wall_clock_is_one_key_with_a_floor_and_a_ceiling(self):
+        heartbeat = self.meta_agent.job_heartbeat
+        os.environ.pop("EVIMED_SPECIALIST_EXECUTION_TIMEOUT_SECONDS", None)
+        self.assertEqual(heartbeat.execution_timeout_seconds(), 10800)
+        for raw, expected in (("600", 600), ("1", 60), ("999999", 14400), ("soon", 10800), ("nan", 10800)):
+            os.environ["EVIMED_SPECIALIST_EXECUTION_TIMEOUT_SECONDS"] = raw
+            self.assertEqual(heartbeat.execution_timeout_seconds(), expected, raw)
+
     def test_workspace_relative_inputs_cannot_escape_the_project(self):
         outside = self.root / "outside.json"
         outside.write_text("{}", encoding="utf-8")

@@ -626,7 +626,7 @@ def status_job(arguments):
             "artifacts": state.get("artifacts") or [],
             "next_actions": state.get("nextActions") or ["Review the protected job log, correct the reported input or service issue, and start a new job."],
             "error": {
-                "code": "meta_agent_execution_failed",
+                "code": "meta_agent_job_timeout" if state.get("errorCode") == "meta_agent_job_timeout" else "meta_agent_execution_failed",
                 "message": message,
                 "retryable": bool(state.get("retryable", False)),
                 "stopReason": "Stop until the failed MetaAgent job is reviewed.",
@@ -760,19 +760,27 @@ def _run_job(state_path):
         os.O_WRONLY | os.O_CREAT | os.O_APPEND | getattr(os, "O_NOFOLLOW", 0),
         0o600,
     )
+    timed_out = False
     with os.fdopen(log_descriptor, "ab", buffering=0) as log, job_heartbeat.heartbeat(
         state_path, state, read=_read_json_no_follow, write=_atomic_json, log_path=log_path,
         progress=lambda: job_heartbeat.step_manifest_progress(output_root),
     ):
-        completed = subprocess.run(
-            command,
-            cwd=str(root),
-            env=environment,
-            stdin=subprocess.DEVNULL,
-            stdout=log,
-            stderr=subprocess.STDOUT,
-            check=False,
-        )
+        try:
+            completed = subprocess.run(
+                command,
+                cwd=str(root),
+                env=environment,
+                stdin=subprocess.DEVNULL,
+                stdout=log,
+                stderr=subprocess.STDOUT,
+                check=False,
+                # A MetaAgent process that hangs had no wall clock of its own, like
+                # the other specialists before it: the same key bounds them all.
+                timeout=job_heartbeat.execution_timeout_seconds(),
+            )
+        except subprocess.TimeoutExpired:
+            completed = subprocess.CompletedProcess(command, 124)
+            timed_out = True
     # The engine has ended, either way: what its source evidence did since the job
     # was queued goes in the record, and decides nothing about the outcome.
     _note_evidence(state, root)
@@ -781,6 +789,24 @@ def _run_job(state_path):
         key=lambda entry: entry.stat().st_mtime_ns,
         reverse=True,
     )
+    if timed_out:
+        # Principle 19: whatever the engine had finished stays in the workspace and is named.
+        latest = projects[0].resolve() if projects else None
+        inside = latest is not None and os.path.commonpath([str(output_root), str(latest)]) == str(output_root)
+        state.update({
+            "status": "failed",
+            "updatedAt": _now(),
+            "finishedAt": _now(),
+            "returnCode": 124,
+            "retryable": True,
+            "errorCode": "meta_agent_job_timeout",
+            "error": "MetaAgent was stopped after %d seconds without finishing (the execution limit for one job). "
+                     "Files it had already written are kept; starting it again, with a narrower request if it is "
+                     "a large one, may finish." % job_heartbeat.execution_timeout_seconds(),
+            "artifacts": _relative_artifacts(workspace, latest) if inside else [],
+        })
+        _atomic_json(state_path, state)
+        return 124
     if not projects:
         state.update({
             "status": "failed",
