@@ -101,7 +101,10 @@ test('R machine metadata singleton arrays preserve exact method identity when au
       }
     }
   }
-  assert.ok(unboxed >= 20, 'The real R report unboxes these registry fields');
+  // The registry fields R's auto-unboxing turns into scalars: every one-element `endpoints` and `crossChecks` array of the domain's methods.
+  const singletons = Object.values(VCR_ENGINE_METHODS).reduce((n, method) => n + (method.endpoints.length === 1 ? 1 : 0) + (method.crossChecks.length === 1 ? 1 : 0), 0);
+  assert.ok(singletons > 0, 'the walk proves it walked');
+  assert.equal(unboxed, singletons, 'The real R report unboxes these registry fields');
   const original = JSON.stringify(input.report);
   const evidence = generate(input);
   assert.equal(evidence.methods.length, Object.keys(input.source.methods).length);
