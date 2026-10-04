@@ -234,6 +234,12 @@
             "maxBytes": null,
             "maxText": null,
             "converter": false
+          },
+          "imports": {
+            "available": false,
+            "formats": [],
+            "maxBytes": null,
+            "maxText": null
           }
         },
         "files": [],
@@ -283,6 +289,12 @@
             "maxBytes": null,
             "maxText": null,
             "converter": false
+          },
+          "imports": {
+            "available": false,
+            "formats": [],
+            "maxBytes": null,
+            "maxText": null
           }
         },
         "files": [],

@@ -1123,7 +1123,9 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
     const wanted = String(registryId ?? "").trim().toLowerCase();
     const fetched = registryName === "chictr"
       ? await registry.searchChictr({ query: String(registryId ?? ""), limit: 5, userId })
-      : await registry.record(String(registryId ?? ""));
+      : registryName === "ctis"
+        ? (typeof registry.recordCtis === "function" ? await registry.recordCtis(String(registryId ?? "")) : { status: REGISTRY_UNAVAILABLE, reason: "registry_not_configured" })
+        : await registry.record(String(registryId ?? ""));
     // A search answers the nearest records, not the record: the one asked for is
     // the one whose own registration number it is, and none of them being it is
     // 「没有这条记录」, never the closest one taken instead.
@@ -1146,9 +1148,9 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
      * Step 1 — candidates. Registry answers are ranked by similarity and
      * nothing is decided here; a registry that could not be reached is
      * reported, never rendered as an empty library.
-     * @param {{ userId: string, studyId?: string | null, target: any, limit?: number, includeChictr?: boolean }} input
+     * @param {{ userId: string, studyId?: string | null, target: any, limit?: number, includeChictr?: boolean, includeCtis?: boolean }} input
      */
-    async findPrecedents({ userId, studyId = null, target, limit = 20, includeChictr = true }) {
+    async findPrecedents({ userId, studyId = null, target, limit = 20, includeChictr = true, includeCtis = true }) {
       if (!registry) return { status: REGISTRY_UNAVAILABLE, reason: "registry_not_configured", candidates: [], registries: [] };
       /** @type {any[]} */
       const registries = [];
@@ -1169,8 +1171,16 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
         candidates.push({ ...item, similarity: precedentSimilarity({ pico: { conditions: item.conditions, interventions: item.interventions.map((/** @type {string} */ name) => ({ name })) }, design: { phases: item.phases, allocation: item.allocation, hasResults: item.hasResults } }, target) });
       }
 
-      if (includeChictr) {
-        const chictr = await registry.searchChictr({ query: target?.condition || target?.intervention || "", limit, userId });
+      // The other registries are asked together: one that does not answer (a host this deployment cannot
+      // reach waits out its deadline) must not hold the others, and its row says so rather than reading as empty.
+      const [chictr, ctis] = await Promise.all([
+        includeChictr ? registry.searchChictr({ query: target?.condition || target?.intervention || "", limit, userId }) : null,
+        includeCtis && typeof registry.searchCtis === "function" ? registry.searchCtis({
+          condition: target?.condition ?? "", intervention: target?.intervention ?? "", phases: target?.phases ?? [],
+          hasResults: target?.hasResults ?? null, limit,
+        }) : null,
+      ]);
+      if (chictr) {
         registries.push({ registry: "chictr", status: chictr.status, reason: chictr.reason ?? null, total: chictr.total ?? null });
         for (const built of chictr.items ?? []) {
           candidates.push({
@@ -1183,6 +1193,14 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
             url: built.record.url,
             similarity: precedentSimilarity(built.precedent, target),
           });
+        }
+      }
+
+      if (ctis) {
+        registries.push({ registry: "ctis", status: ctis.status, reason: ctis.reason ?? null, total: ctis.total ?? null });
+        for (const item of ctis.items ?? []) {
+          candidates.push({ ...item, similarity: precedentSimilarity({ pico: { conditions: item.conditions, interventions: item.interventions.map((/** @type {string} */ name) => ({ name })) },
+            design: { phases: item.phases, allocation: "", hasResults: item.hasResults } }, target) });
         }
       }
 

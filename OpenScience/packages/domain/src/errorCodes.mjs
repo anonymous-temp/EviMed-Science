@@ -1198,7 +1198,7 @@ export const VCR_MODULE_ERROR_CODES = Object.freeze([
   'review_proof_stale', 'document_review_conversion_incomplete', 'document_review_conversion_failed',
   'vcr_evaluation_input_restricted', 'vcr_evaluation_input_changed', 'vcr_evaluation_input_unavailable',
   'vcr_evaluation_dataset_not_found', 'vcr_evaluation_request_invalid', 'vcr_evaluation_holdout_unavailable',
-  'vcr_matching_vocabulary_unavailable', 'registry_unsupported',
+  'vcr_matching_vocabulary_unavailable', 'registry_unsupported', 'registry_terms_forbid_commercial_use',
   // data intake (the data tab and its routes; plan §8.1)
   'vcr_data_file_name_invalid', 'vcr_data_file_too_large', 'vcr_data_file_unreadable', 'vcr_data_format_unsupported',
   'vcr_source_file_not_found', 'vcr_source_file_frozen', 'vcr_source_file_changed',
@@ -1209,6 +1209,9 @@ export const VCR_MODULE_ERROR_CODES = Object.freeze([
   // disposable container that does it (vcrRecordExtract.mjs, vcrIntakeController.mjs)
   'vcr_document_needs_text', 'vcr_document_unreadable', 'vcr_document_too_long', 'vcr_document_converter_unavailable',
   'vcr_intake_busy', 'vcr_intake_timeout', 'vcr_intake_failed', 'vcr_intake_input_invalid',
+  // a source held in FHIR, OMOP or ADaM, converted to the module's tables in the same container (vcrImport.mjs)
+  'vcr_import_not_this_format', 'vcr_import_nothing_to_import', 'vcr_import_unreadable', 'vcr_import_version_unsupported',
+  'vcr_import_converter_unavailable',
   // evidence and matching
   'vcr_asof_invalid', 'vcr_assessment_not_found', 'vcr_criteria_missing', 'vcr_pool_endpoint_key_required',
   'vcr_precedent_not_in_study', 'vcr_protocol_version_not_found',
@@ -1556,6 +1559,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_matching_vocabulary_unavailable: '这次匹配记录的词表版本不受支持，不能按当前映射重新解释。',
   vcr_model_not_found: '所选模型的这个版本不可用，请从模型库选择确切的模型版本；其他研究继续。',
   registry_unsupported: '本部署尚未接入这个注册库，不把未查询当成没有记录。',
+  registry_terms_forbid_commercial_use: '这个注册库的使用条款禁止商业使用，所以不接入；它没有被查询，不等于没有记录。',
   vcr_evidence_unverified: '这条证据没能对上它引用的登记记录或文献原文，没有保存；重新核对原文位置后再写。',
   vcr_number_format_unknown: '报告里引用的数字格式不认识；改用平台支持的写法。',
   vcr_number_mcse_missing: '这个数字来自仿真，引用它必须带蒙特卡洛标准误。',
@@ -1675,6 +1679,11 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_intake_timeout: '文件转换用时过长，已经停止。请拆小文件，或另存为文字版后再试。',
   vcr_intake_failed: '文件转换没有完成。请另存为 .txt 或可复制文字的 PDF 后再试。',
   vcr_intake_input_invalid: '待转换的文件不完整或已发生变化，请重新上传。',
+  vcr_import_not_this_format: '这个文件不是你选的那种标准格式：FHIR 要是 NDJSON 或 Bundle（JSON），OMOP 要是 CSV 表的 .zip，ADaM 要是 SAS 传输文件（.xpt）。请确认格式后再上传。',
+  vcr_import_nothing_to_import: '这个文件里没有可导入的内容：没有受支持的资源类型、数据表或数据集。支持的范围见导入面板的说明。',
+  vcr_import_unreadable: '这个文件打不开：可能已损坏或加密。请重新导出后再上传。',
+  vcr_import_version_unsupported: '这个文件的格式版本暂不支持（SAS 传输文件需为 V5 版）。请重新导出为 V5 的 .xpt 后再上传。',
+  vcr_import_converter_unavailable: '本部署暂时不能转换这种标准格式。请先导出为 CSV 后按普通数据文件上传。',
   vcr_source_file_not_found: '这个数据文件不存在或已删除。',
   vcr_source_file_frozen: '这个文件已被冻结进快照，不能删除。',
   vcr_source_file_changed: '文件内容与上传时记录的哈希不一致，已拒绝使用。',

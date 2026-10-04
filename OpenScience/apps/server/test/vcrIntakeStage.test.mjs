@@ -5,8 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { HttpError } from '../src/security.mjs';
-import { parseVcrIntakeInput } from '../src/vcrIntakeLayout.mjs';
-import { resetIntakeSweep, runPlaneExtraction, sweepStalePlaneScratch } from '../src/vcrIntakeStage.mjs';
+import { parseVcrIntakeImportInput, parseVcrIntakeInput } from '../src/vcrIntakeLayout.mjs';
+import { resetIntakeSweep, runPlaneExtraction, runPlaneImport, sweepStalePlaneScratch } from '../src/vcrIntakeStage.mjs';
 
 const STUDY = 'std_stage_test';
 const sha = value => createHash('sha256').update(value).digest('hex');
@@ -149,4 +149,78 @@ test('a crash leaves an attempt in the plane, and the sweep removes the old ones
   // A plane with no studies directory is not an error.
   resetIntakeSweep();
   assert.equal(await sweepStalePlaneScratch(path.join(w.root, 'no-such-plane')), 0);
+});
+
+// --- an import: the upload is streamed into the attempt, and tables are read back out of it -------------------------
+
+async function* chunks(...parts) { for (const part of parts) yield Buffer.from(part); }
+
+test('an import is streamed into a read-only file of the plane, hashed on the way in, and the controller is told a path, a digest, a size and the standard', async t => {
+  const w = await world(t);
+  let told = null;
+  let seen = null;
+  const controller = { runVcrIntake: async (kind, reference, options) => {
+    const { input, output } = parseVcrIntakeImportInput(reference.path);
+    told = { kind, reference, options };
+    seen = { inputMode: await MODE(path.join(w.plane, input)), outputMode: await MODE(path.join(w.plane, output)), copy: await fs.readFile(path.join(w.plane, input)),
+      outputEntries: await fs.readdir(path.join(w.plane, output)), scratchMode: await MODE(scratchOf(w.plane)) };
+    await fs.writeFile(path.join(w.plane, output, 'result.json'), '{"ok":true}');
+    await fs.writeFile(path.join(w.plane, output, 'table.csv'), 'a,b\n1,2\n');
+    return { finished: true };
+  } };
+  const signal = new AbortController().signal;
+  const body = ['{"resourceType":"Patient"}\n', '{"resourceType":"Patient","id":"2"}\n'];
+  const bytes = Buffer.from(body.join(''));
+  const answer = await runPlaneImport({ root: w.plane, studyId: STUDY, controller, format: 'fhir', extension: 'ndjson', stream: chunks(...body), cap: 1024, signal }, async attempt => {
+    assert.equal(attempt.fileSha256, sha(bytes));
+    assert.equal(attempt.bytes, bytes.length);
+    const opened = await attempt.openTable('table.csv', 8);
+    const hash = await opened.sha256();
+    let text = '';
+    for await (const block of opened.stream()) text += block;
+    await opened.close();
+    return { result: (await attempt.read('result.json', 1024)).toString(), hash, text };
+  });
+  assert.deepEqual(answer, { result: '{"ok":true}', hash: sha('a,b\n1,2\n'), text: 'a,b\n1,2\n' });
+  assert.equal(told.kind, 'convert');
+  assert.deepEqual(Object.keys(told.reference).sort(), ['bytes', 'format', 'path', 'sha256']);
+  assert.deepEqual([told.reference.format, told.reference.bytes, told.reference.sha256], ['fhir', bytes.length, sha(bytes)]);
+  assert.match(told.reference.path, new RegExp(`^studies/${STUDY}/\\.intake/[a-f0-9-]{36}/in/import\\.ndjson$`));
+  assert.equal(told.options.signal, signal);
+  // The container saw the bytes as received, in a file nobody else may write, and an empty output directory of its own.
+  assert.deepEqual(seen.copy, bytes);
+  assert.deepEqual(seen.outputEntries, []);
+  assert.deepEqual([seen.inputMode, seen.outputMode, seen.scratchMode], [0o400, 0o700, 0o700]);
+  assert.deepEqual(await fs.readdir(scratchOf(w.plane)), [], 'the attempt is gone afterwards');
+});
+
+test('an import that outgrows its cap, is empty, is interrupted, or fails anywhere leaves no attempt behind', async t => {
+  const w = await world(t);
+  let asked = false;
+  const idle = { runVcrIntake: async () => { asked = true; return { finished: true }; } };
+  const run = (stream, extra = {}) => runPlaneImport({ root: w.plane, studyId: STUDY, controller: idle, format: 'omop', extension: 'zip', stream, cap: 8, ...extra }, async () => 'ok');
+  await assert.rejects(run(chunks('12345', '67890')), { status: 413, code: 'vcr_data_file_too_large' });
+  await assert.rejects(run(chunks()), { status: 422, code: 'vcr_data_file_unreadable' });
+  await assert.rejects(run((async function* () { yield Buffer.from('1234'); throw new Error('reset'); })()), { status: 400, code: 'vcr_data_file_unreadable' });
+  assert.equal(asked, false, 'no container was asked for a file that did not arrive');
+  assert.deepEqual(await fs.readdir(scratchOf(w.plane)), []);
+  await assert.rejects(run(chunks('1234'), { controller: { runVcrIntake: async () => { throw new HttpError(502, 'vcr_intake_failed', 'x'); } } }), { code: 'vcr_intake_failed' });
+  await assert.rejects(runPlaneImport({ root: w.plane, studyId: STUDY, controller: idle, format: 'omop', extension: 'zip', stream: chunks('1234'), cap: 8 }, async () => { throw new Error('the consumer failed'); }), /the consumer failed/);
+  assert.deepEqual(await fs.readdir(scratchOf(w.plane)), []);
+  // A study id or an extension the layout cannot spell is refused by name before anything is created.
+  await assert.rejects(runPlaneImport({ root: w.plane, studyId: '../x', controller: idle, format: 'omop', extension: 'zip', stream: chunks('1'), cap: 8 }, async () => 'never'), { code: 'vcr_intake_input_invalid' });
+  await assert.rejects(runPlaneImport({ root: w.plane, studyId: STUDY, controller: idle, format: 'omop', extension: 'exe', stream: chunks('1'), cap: 8 }, async () => 'never'), { code: 'vcr_intake_input_invalid' });
+});
+
+test('a table of the output is opened only as the file and the size the result named, never through a link', async t => {
+  const w = await world(t);
+  const opening = (name, bytes, write) => runPlaneImport({ root: w.plane, studyId: STUDY, format: 'fhir', extension: 'json', stream: chunks('{}'), cap: 64,
+    controller: { runVcrIntake: async (kind, reference) => { await write(path.join(w.plane, parseVcrIntakeImportInput(reference.path).output)); return { finished: true }; } } },
+  async attempt => { const opened = await attempt.openTable(name, bytes); await opened.close(); return opened.bytes; });
+  assert.equal(await opening('a.csv', 3, async dir => { await fs.writeFile(path.join(dir, 'a.csv'), 'abc'); }), 3);
+  await assert.rejects(opening('a.csv', 4, async dir => { await fs.writeFile(path.join(dir, 'a.csv'), 'abc'); }), { status: 502, code: 'vcr_intake_failed' });
+  await assert.rejects(opening('a.csv', 3, async () => {}), { status: 502, code: 'vcr_intake_failed' });
+  await assert.rejects(opening('a.csv', 3, async dir => { await fs.symlink('/etc/hostname', path.join(dir, 'a.csv')); }), { status: 502, code: 'vcr_intake_failed' });
+  await assert.rejects(opening('../../etc/hostname', 3, async () => {}), { status: 502, code: 'vcr_intake_failed' });
+  assert.deepEqual(await fs.readdir(scratchOf(w.plane)), []);
 });

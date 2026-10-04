@@ -63,7 +63,7 @@ import {
   VCR_MEMBER_ROLES, VCR_REVIEW_KINDS, VCR_STEPS, VCR_STUDY_STATUSES, VCR_TABS, VCR_VALUE_SOURCES, roleAllows } from "@evimed/domain";
 
 import { HttpError, readJson, sendJson } from "./security.mjs";
-import { fileView, snapshotView, sourceView, tableView, uploadAttemptAuditDetail, uploadAuditDetail } from "./vcrDataPlane.mjs";
+import { fileView, importAttemptAuditDetail, importAuditDetail, snapshotView, sourceView, tableView, uploadAttemptAuditDetail, uploadAuditDetail } from "./vcrDataPlane.mjs";
 import { abilitiesOfRoles } from "./vcrMembers.mjs";
 import { isSiteScopedRole } from "./vcrRecruit.mjs";
 
@@ -646,6 +646,29 @@ export function createVcrRoutes(dependencies) {
         } catch (error) {
           // A refusal before the body was read: let the client finish sending, so
           // it reads the answer instead of a reset connection.
+          req.resume();
+          throw error;
+        }
+      }
+
+      // A source held in FHIR, OMOP or ADaM: converted inside the deployment into the
+      // module's own tables, a dictionary and a proposed field map (`importStandard`).
+      if (kind === "sources" && parts.length === 6 && parts[5] === "imports" && method === "POST") {
+        try {
+          await authorize(id, "manage_data");
+          const named = url.searchParams.get("name") ?? "";
+          if (!named || named.length > 200) throw new HttpError(400, "vcr_data_file_name_invalid", "name is the file's name, 1 to 200 characters.");
+          const format = url.searchParams.get("format") ?? "";
+          const declared = Number(req.headers["content-length"]);
+          const controller = new AbortController();
+          res.once("close", () => { if (!res.writableEnded) controller.abort(); });
+          // The audit line says the standard, the count of tables and the upload's hash, never its name.
+          const imported = await audited("vcr.data.import", (result) => ({ code: parts[4], detail: importAuditDetail(result) }),
+            { code: id, detail: importAttemptAuditDetail(format, Number.isFinite(declared) ? declared : null) },
+            () => plane().importStandard({ ...S, sourceId: parts[4], name: named, format, stream: req,
+              declaredLength: Number.isFinite(declared) ? declared : null, signal: controller.signal }));
+          return reply({ ...imported, files: imported.files.map((file) => fileView(file)) }, 201);
+        } catch (error) {
           req.resume();
           throw error;
         }

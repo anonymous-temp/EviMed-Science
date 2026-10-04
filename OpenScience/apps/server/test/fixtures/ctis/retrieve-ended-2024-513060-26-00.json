@@ -1,0 +1,3283 @@
+{
+ "ctNumber": "2024-513060-26-00",
+ "ctStatus": "Ended",
+ "startDateEU": "2021-04-07",
+ "endDateEU": "2024-09-17",
+ "decisionDate": "2024-06-03T10:22:52.087",
+ "publishDate": "2025-02-19T02:08:49.380560019",
+ "ctPublicStatusCode": 8,
+ "authorizedApplication": {
+  "authorizedPartI": {
+   "id": 39126,
+   "rowSubjectCount": 26,
+   "rowCountriesInfo": [
+    {
+     "eutctId": 100000000557,
+     "name": "United States",
+     "isoNumber": 840,
+     "isoAlpha2Code": "US",
+     "isoAlpha3Code": "USA",
+     "current": true
+    },
+    {
+     "eutctId": 100000000556,
+     "name": "United Kingdom",
+     "isoNumber": 826,
+     "isoAlpha2Code": "GB",
+     "isoAlpha3Code": "GBR",
+     "current": true
+    }
+   ],
+   "products": [
+    {
+     "id": 151422,
+     "part1MpRoleTypeCode": "1",
+     "productDictionaryInfo": {
+      "productPk": "11121842",
+      "productPharmForm": "CONCENTRATE FOR SOLUTION FOR INFUSION",
+      "euMpNumber": "PRD4323105",
+      "marketingAuthNumber": "EU/1/15/1024/002",
+      "prodAuthStatus": 2,
+      "prodName": "KEYTRUDA 25 mg/mL concentrate for solution for infusion",
+      "pharmForm": "SOLUTION FOR INFUSION",
+      "activeSubstanceName": "PEMBROLIZUMAB",
+      "euSubstNumber": "SUB167136",
+      "authorisationCountryCode": "EU",
+      "mrpNumber": "EMEA/H/C/003820",
+      "nameOrg": "MERCK SHARP & DOHME B.V.",
+      "productSubstances": [
+       {
+        "productPk": "11121842",
+        "substancePk": "367503",
+        "nameOrg": "MERCK SHARP & DOHME B.V.",
+        "substanceOrigin": "Protein - Other",
+        "actSubstOrigin": "Protein - Other",
+        "actSubstName": "PEMBROLIZUMAB",
+        "substanceEvCode": "SUB167136"
+       }
+      ],
+      "atcCode": "L01FF02",
+      "atcName": "-",
+      "atcTermLevel": "5",
+      "activeSubstanceOtherDescriptiveName": ""
+     },
+     "isPaediatricFormulation": false,
+     "mpRoleInTrial": "1",
+     "orphanDrugEdit": false,
+     "productChangedRelationMA": false,
+     "evCode": "PRD4323105",
+     "devices": [],
+     "characteristics": [
+      "7"
+     ],
+     "routes": [
+      "INTRAVENOUS USE"
+     ],
+     "allSubstancesChemicals": false,
+     "productName": "KEYTRUDA 25 mg/mL concentrate for solution for infusion",
+     "jsonActiveSubstanceNames": "pembrolizumab",
+     "pharmaceuticalFormDisplay": "SOLUTION FOR INFUSION"
+    },
+    {
+     "id": 151421,
+     "part1MpRoleTypeCode": "1",
+     "productDictionaryInfo": {
+      "productPk": "10741713",
+      "productPharmForm": "DISPERSION FOR INFUSION",
+      "euMpNumber": "PRD6436533",
+      "prodAuthStatus": 1,
+      "prodName": "ATL001",
+      "pharmForm": "DISPERSION FOR INFUSION",
+      "activeSubstanceName": "ATL001",
+      "euSubstNumber": "SUB282178",
+      "nameOrg": "ACHILLES THERAPEUTICS UK LIMITED",
+      "productSubstances": [
+       {
+        "productPk": "10741713",
+        "substancePk": "282180",
+        "nameOrg": "ACHILLES THERAPEUTICS UK LIMITED",
+        "substanceOrigin": "Structurally Diverse Substance - Cell therapy",
+        "actSubstOrigin": "Structurally Diverse Substance - Cell therapy",
+        "actSubstName": "ATL001",
+        "substanceEvCode": "SUB282178"
+       }
+      ],
+      "activeSubstanceOtherDescriptiveName": ""
+     },
+     "isPaediatricFormulation": false,
+     "mpRoleInTrial": "1",
+     "orphanDrugEdit": false,
+     "otherMedicinalProduct": "Advanced Therapy Medicinal Product (ATMP)",
+     "evCode": "PRD6436533",
+     "sponsorProductCodeEdit": "ATL001",
+     "therapies": [
+      {
+       "id": 1482,
+       "catReferenceNumber": "EMA/420999/2019",
+       "advancedTherapyType": "1",
+       "cellOriginCode": "1",
+       "cellTypeCode": "3",
+       "cellTypeOtherSomatic": "T cells"
+      }
+     ],
+     "devices": [],
+     "characteristics": [
+      "11"
+     ],
+     "routes": [
+      "INTRAVENOUS USE"
+     ],
+     "allSubstancesChemicals": false,
+     "productName": "ATL001",
+     "jsonActiveSubstanceNames": "atl001",
+     "pharmaceuticalFormDisplay": "DISPERSION FOR INFUSION"
+    }
+   ],
+   "trialDetails": {
+    "clinicalTrialIdentifiers": {
+     "fullTitle": "An open-label, multi-centre, phase I/IIa study evaluating the safety and clinical activity of neoantigen reactive T cells in patients with advanced non-small cell lung cancer",
+     "fullTitleTranslations": [
+      {
+       "id": 2521579,
+       "uuid": "819b087c-f7fd-49ba-8abf-c6d0972f101e",
+       "attributeTranslation": "Étude multicentrique de phase I/IIa, en ouvert, évaluant la sécurité d’emploi et l’activité des lymphocytes T réactifs aux néoantigènes chez les patients atteints d’un cancer bronchopulmonaire non à petites cellules de stade avancé",
+       "language": 10,
+       "languageDescription": "French"
+      },
+      {
+       "id": 2521578,
+       "uuid": "819b087c-f7fd-49ba-8abf-c6d0972f101e",
+       "attributeTranslation": "Estudio en fase I/IIa abierto y multicéntrico para evaluar la seguridad y la actividad clínica de los linfocitos T reactivos a los neoantígenos en pacientes con carcinoma broncopulmonar no microcítico avanzado",
+       "language": 7,
+       "languageDescription": "Spanish"
+      },
+      {
+       "id": 2521580,
+       "uuid": "819b087c-f7fd-49ba-8abf-c6d0972f101e",
+       "attributeTranslation": "Offene, multizentrische Phase-I/IIa-Studie zur Bewertung der Sicherheit und klinischen Aktivität von Neoantigen-reaktiven T-Zellen bei Patienten mit fortgeschrittenem nicht-kleinzelligem Lungenkarzinom",
+       "language": 4,
+       "languageDescription": "German"
+      }
+     ],
+     "publicTitle": "A first-in-human clinical trial in adult patients with advanced non-small cell lung cancer of a personalised therapy targeting specific mutations that occur in all cancer cells within a single patient",
+     "publicTitleTranslations": [
+      {
+       "id": 2521629,
+       "uuid": "79f3716a-ca51-47d5-a6af-22f7dc4d7ac9",
+       "attributeTranslation": "Eine erste klinische Studie am Menschen mit erwachsenen Patienten mit fortgeschrittenem nicht-kleinzelligem Lungenkarzinom in einer personalisierten Therapie, die auf spezifische Mutationen abzielt, die in allen Krebszellen eines einzelnen Patienten auftreten",
+       "language": 4,
+       "languageDescription": "German"
+      },
+      {
+       "id": 2521630,
+       "uuid": "79f3716a-ca51-47d5-a6af-22f7dc4d7ac9",
+       "attributeTranslation": "Un premier essai clinique chez l'homme chez des patients adultes atteints d'un cancer bronchique non à petites cellules avancé, par une thérapie personnalisée pour un seul patient, ciblant des mutations spécifiques se produisant dans toutes les cellules cancéreuses",
+       "language": 10,
+       "languageDescription": "French"
+      },
+      {
+       "id": 2521631,
+       "uuid": "79f3716a-ca51-47d5-a6af-22f7dc4d7ac9",
+       "attributeTranslation": "Ensayo clínico de primera prueba en humanos con pacientes adultos con cáncer avanzado de pulmón de células no pequeñas con una terapia personalizada dirigida a mutaciones específicas que ocurren en todas las células cancerosas dentro de un solo paciente",
+       "language": 7,
+       "languageDescription": "Spanish"
+      }
+     ],
+     "shortTitle": "ATX-NS-001",
+     "secondaryIdentifyingNumbers": {
+      "nctNumber": {
+       "id": 202845,
+       "number": "NCT04032847"
+      },
+      "additionalRegistries": []
+     }
+    },
+    "trialInformation": {
+     "trialCategory": {
+      "isLowIntervention": false,
+      "trialPhase": "7",
+      "trialCategory": "2",
+      "justificationForTrialCategory": "According to the Revised CTIS Transparency Rules (05 October 2023), category 2 trials (therapeutic exploratory and confirmatory clinical trials) include: a) Phase I and phase II integrated clinical trials; b) Phase II clinical trials; and c) phase III clinical trials. As the ATX-NS-001 study is a Phase I/II trial, it is considered a Category 2 trial",
+      "trialCategoryId": 31682
+     },
+     "medicalCondition": {
+      "partIMedicalConditions": [
+       {
+        "id": 36759,
+        "medicalCondition": "Non-small cell lung cancer",
+        "medicalConditionTranslations": [
+         {
+          "id": 2521484,
+          "uuid": "8fd1ba48-93e4-4a1f-b695-8dc26d582737",
+          "attributeTranslation": "Cáncer de pulmón de células no pequeñas",
+          "language": 7,
+          "languageDescription": "Spanish"
+         },
+         {
+          "id": 2521482,
+          "uuid": "8fd1ba48-93e4-4a1f-b695-8dc26d582737",
+          "attributeTranslation": "Nicht-kleinzelliges Lungenkarzinom",
+          "language": 4,
+          "languageDescription": "German"
+         },
+         {
+          "id": 2521483,
+          "uuid": "8fd1ba48-93e4-4a1f-b695-8dc26d582737",
+          "attributeTranslation": "Cancer bronchique non à petites cellules",
+          "language": 10,
+          "languageDescription": "French"
+         }
+        ],
+        "isConditionRareDisease": false
+       }
+      ],
+      "meddraConditionTerms": [
+       {
+        "termId": 100000015857,
+        "version": "21.1",
+        "level": "PT",
+        "termName": "Non-small cell lung cancer metastatic",
+        "classificationCode": "10059515",
+        "organClass": 100000004864,
+        "active": false
+       },
+       {
+        "termId": 100000061085,
+        "version": "20.0",
+        "level": "LLT",
+        "termName": "Lung cancer non-small cell stage IIIA",
+        "classificationCode": "10025053",
+        "organClass": 10029104,
+        "active": false
+       },
+       {
+        "termId": 100000015841,
+        "version": "21.1",
+        "level": "PT",
+        "termName": "Non-small cell lung cancer stage IV",
+        "classificationCode": "10029522",
+        "organClass": 100000004864,
+        "active": false
+       },
+       {
+        "termId": 100000038186,
+        "version": "20.0",
+        "level": "LLT",
+        "termName": "Lung cancer",
+        "classificationCode": "10025044",
+        "organClass": 10029104,
+        "active": false
+       },
+       {
+        "termId": 100000015819,
+        "version": "21.1",
+        "level": "PT",
+        "termName": "Large cell lung cancer stage IV",
+        "classificationCode": "10023780",
+        "organClass": 100000004864,
+        "active": false
+       },
+       {
+        "termId": 100000015812,
+        "version": "21.1",
+        "level": "PT",
+        "termName": "Adenosquamous cell lung cancer stage IV",
+        "classificationCode": "10001254",
+        "organClass": 100000004864,
+        "active": false
+       },
+       {
+        "termId": 100000015840,
+        "version": "21.1",
+        "level": "PT",
+        "termName": "Non-small cell lung cancer stage IIIB",
+        "classificationCode": "10029521",
+        "organClass": 100000004864,
+        "active": false
+       },
+       {
+        "termId": 100000015814,
+        "version": "21.1",
+        "level": "PT",
+        "termName": "Large cell lung cancer recurrent",
+        "classificationCode": "10023775",
+        "organClass": 100000004864,
+        "active": false
+       },
+       {
+        "termId": 100000061045,
+        "version": "21.1",
+        "level": "LLT",
+        "termName": "Adenosquamous cell lung cancer stage IIIA",
+        "classificationCode": "10001252",
+        "organClass": 10029104,
+        "active": false
+       },
+       {
+        "termId": 100000015839,
+        "version": "21.1",
+        "level": "PT",
+        "termName": "Non-small cell lung cancer stage IIIA",
+        "classificationCode": "10029520",
+        "organClass": 100000004864,
+        "active": false
+       },
+       {
+        "termId": 100000056112,
+        "version": "21.1",
+        "level": "LLT",
+        "termName": "Non-small cell lung cancer NOS",
+        "classificationCode": "10029514",
+        "organClass": 10029104,
+        "active": false
+       },
+       {
+        "termId": 100000015807,
+        "version": "21.1",
+        "level": "PT",
+        "termName": "Adenosquamous cell lung cancer",
+        "classificationCode": "10001245",
+        "organClass": 100000004864,
+        "active": false
+       },
+       {
+        "termId": 100000015811,
+        "version": "21.1",
+        "level": "PT",
+        "termName": "Adenosquamous cell lung cancer stage III",
+        "classificationCode": "10001251",
+        "organClass": 100000004864,
+        "active": false
+       },
+       {
+        "termId": 100000015808,
+        "version": "21.1",
+        "level": "PT",
+        "termName": "Adenosquamous cell lung cancer recurrent",
+        "classificationCode": "10001247",
+        "organClass": 100000004864,
+        "active": false
+       },
+       {
+        "termId": 100000015851,
+        "version": "26.1",
+        "level": "PT",
+        "termName": "Lung cancer metastatic",
+        "classificationCode": "10050017",
+        "organClass": 100000004864,
+        "active": false
+       },
+       {
+        "termId": 100000061077,
+        "version": "20.0",
+        "level": "LLT",
+        "termName": "Lung cancer non-small cell stage IIIB",
+        "classificationCode": "10025054",
+        "organClass": 10029104,
+        "active": false
+       },
+       {
+        "termId": 100000071492,
+        "version": "21.1",
+        "level": "LLT",
+        "termName": "Progression of non-small cell lung cancer",
+        "classificationCode": "10066490",
+        "organClass": 10029104,
+        "active": false
+       },
+       {
+        "termId": 100000061076,
+        "version": "20.0",
+        "level": "LLT",
+        "termName": "Lung cancer non-small cell stage III",
+        "classificationCode": "10025052",
+        "organClass": 10029104,
+        "active": false
+       },
+       {
+        "termId": 100000015818,
+        "version": "21.1",
+        "level": "PT",
+        "termName": "Large cell lung cancer stage III",
+        "classificationCode": "10023779",
+        "organClass": 100000004864,
+        "active": false
+       },
+       {
+        "termId": 100000061086,
+        "version": "20.0",
+        "level": "LLT",
+        "termName": "Lung cancer non-small cell stage IV",
+        "classificationCode": "10025055",
+        "organClass": 10029104,
+        "active": false
+       },
+       {
+        "termId": 100000061074,
+        "version": "20.1",
+        "level": "LLT",
+        "termName": "Lung cancer non-small cell recurrent",
+        "classificationCode": "10025048",
+        "organClass": 10029104,
+        "active": false
+       },
+       {
+        "termId": 100000110015,
+        "version": "21.1",
+        "level": "PT",
+        "termName": "Large cell lung cancer metastatic",
+        "classificationCode": "10069730",
+        "organClass": 100000004864,
+        "active": false
+       },
+       {
+        "termId": 100000061038,
+        "version": "21.1",
+        "level": "PT",
+        "termName": "Large cell lung cancer",
+        "classificationCode": "10023774",
+        "organClass": 100000004864,
+        "active": false
+       },
+       {
+        "termId": 100000061037,
+        "version": "21.1",
+        "level": "LLT",
+        "termName": "Adenosquamous cell lung cancer stage IIIB",
+        "classificationCode": "10001253",
+        "organClass": 10029104,
+        "active": false
+       },
+       {
+        "termId": 100000056111,
+        "version": "21.1",
+        "level": "LLT",
+        "termName": "Adenosquamous cell lung cancer NOS",
+        "classificationCode": "10001246",
+        "organClass": 10029104,
+        "active": false
+       },
+       {
+        "termId": 100000015834,
+        "version": "21.1",
+        "level": "PT",
+        "termName": "Non-small cell lung cancer recurrent",
+        "classificationCode": "10029515",
+        "organClass": 100000004864,
+        "active": false
+       },
+       {
+        "termId": 100000015838,
+        "version": "21.1",
+        "level": "PT",
+        "termName": "Non-small cell lung cancer stage III",
+        "classificationCode": "10029519",
+        "organClass": 100000004864,
+        "active": false
+       }
+      ]
+     },
+     "trialObjective": {
+      "trialScopes": [
+       {
+        "code": "4",
+        "trialScopeId": 106394
+       },
+       {
+        "code": "5",
+        "trialScopeId": 106392
+       },
+       {
+        "code": "9",
+        "trialScopeId": 106393
+       },
+       {
+        "code": "3",
+        "trialScopeId": 106391
+       }
+      ],
+      "mainObjective": "To assess the safety and tolerability of ATL001 as a monotherapy and in combination with pembrolizumab",
+      "mainObjectiveTranslations": [
+       {
+        "id": 2521626,
+        "uuid": "ad5984e8-bb74-433e-a1ad-d9ca634da09e",
+        "attributeTranslation": "Évaluer la sécurité et la tolérabilité de l’ATL001 en monothérapie et en association avec du pembrolizumab",
+        "language": 10,
+        "languageDescription": "French"
+       },
+       {
+        "id": 2521628,
+        "uuid": "ad5984e8-bb74-433e-a1ad-d9ca634da09e",
+        "attributeTranslation": "Evaluar la seguridad y tolerabilidad de ATL001 como monoterapia y en combinación con pembrolizumab",
+        "language": 7,
+        "languageDescription": "Spanish"
+       },
+       {
+        "id": 2521627,
+        "uuid": "ad5984e8-bb74-433e-a1ad-d9ca634da09e",
+        "attributeTranslation": "Beurteilung der Sicherheit und Verträglichkeit von ATL001 in Monotherapie sowie in Kombination mit Pembrolizumab",
+        "language": 4,
+        "languageDescription": "German"
+       }
+      ],
+      "secondaryObjectives": [
+       {
+        "id": 116393,
+        "number": 1,
+        "secondaryObjective": "To evaluate the clinical efficacy of ATL001 treatment as a monotherapy and in combination with pembrolizumab",
+        "secondaryObjectiveTranslations": [
+         {
+          "id": 2521633,
+          "uuid": "9277b5ff-bff7-41ac-aa0c-cb770228b54d",
+          "attributeTranslation": "Evaluar la eficacia clínica del tratamiento con ATL001 como monoterapia y en combinación con pembrolizumab",
+          "language": 7,
+          "languageDescription": "Spanish"
+         },
+         {
+          "id": 2521632,
+          "uuid": "9277b5ff-bff7-41ac-aa0c-cb770228b54d",
+          "attributeTranslation": "Évaluer l’efficacité clinique du traitement par ATL001 en monothérapie et en association avec le pembrolizumab",
+          "language": 10,
+          "languageDescription": "French"
+         },
+         {
+          "id": 2521634,
+          "uuid": "9277b5ff-bff7-41ac-aa0c-cb770228b54d",
+          "attributeTranslation": "Bewertung der klinischen Wirksamkeit von ATL001 in Monotherapie sowie in Kombination mit Pembrolizumab",
+          "language": 4,
+          "languageDescription": "German"
+         }
+        ]
+       }
+      ]
+     },
+     "eligibilityCriteria": {
+      "principalInclusionCriteria": [
+       {
+        "id": 225896,
+        "number": 1,
+        "principalInclusionCriteria": "Patient must be between 18 and 75 years old at the screening visit",
+        "principalInclusionCriteriaTranslations": [
+         {
+          "id": 2521583,
+          "uuid": "89a64b5c-1a8d-488c-bff3-aa29a92df1f3",
+          "attributeTranslation": "Les patients doivent avoir entre 18 et 75 ans lors de la visite de sélection",
+          "language": 10,
+          "languageDescription": "French"
+         },
+         {
+          "id": 2521582,
+          "uuid": "89a64b5c-1a8d-488c-bff3-aa29a92df1f3",
+          "attributeTranslation": "El paciente debe tener entre 18 y 75 años en la visita de selección",
+          "language": 7,
+          "languageDescription": "Spanish"
+         },
+         {
+          "id": 2521581,
+          "uuid": "89a64b5c-1a8d-488c-bff3-aa29a92df1f3",
+          "attributeTranslation": "Der Patient muss beim Screening-Termin zwischen 18 und 75 Jahre alt sein",
+          "language": 4,
+          "languageDescription": "German"
+         }
+        ]
+       },
+       {
+        "id": 225897,
+        "number": 10,
+        "principalInclusionCriteria": "Anticipated life expectancy ≥ 6 months at the time of tissue procurement",
+        "principalInclusionCriteriaTranslations": [
+         {
+          "id": 2521584,
+          "uuid": "208d2095-1bfe-4639-916d-9d8af84085ab",
+          "attributeTranslation": "Espérance de vie prévue ≥ 6 mois au moment du prélèvement de tissus",
+          "language": 10,
+          "languageDescription": "French"
+         },
+         {
+          "id": 2521585,
+          "uuid": "208d2095-1bfe-4639-916d-9d8af84085ab",
+          "attributeTranslation": "Voraussichtliche Lebenserwartung ≥ 6 Monate zum Zeitpunkt der Gewebegewinnung",
+          "language": 4,
+          "languageDescription": "German"
+         },
+         {
+          "id": 2521586,
+          "uuid": "208d2095-1bfe-4639-916d-9d8af84085ab",
+          "attributeTranslation": "Esperanza de vida prevista ≥ 6 meses en el momento de obtención del tejido",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       },
+       {
+        "id": 225898,
+        "number": 11,
+        "principalInclusionCriteria": "Patients must have locally advanced unresectable or metastatic NSCLC and: a. Whose disease has progressed or recurred following standard of care. This includes patients who have received a component of standard of care therapy as part of a previous clinical trial in first line treatment; or b. Who are ineligible for, or who cannot tolerate, standard of care therapies. Patients who stop treatment due to immunotherapy toxicities do not need to progress in order to receive treatment with ATL001",
+        "principalInclusionCriteriaTranslations": [
+         {
+          "id": 2521589,
+          "uuid": "35a596b8-2cc0-4b4e-b263-200ec5979eb5",
+          "attributeTranslation": "Les patients doivent présenter un CBNPC non résécable localement avancé ou métastatique et :\na. présenter une maladie ayant progressé ou récidivé après le traitement standard. Les patients ayant reçu un élément du traitement standard dans le cadre d’une étude clinique antérieure en traitement de première intention sont également concernés ; ou\nb. ne pas être éligibles aux traitements standard ou ne pas les tolérer. Si le patient a interrompu une immunothérapie pour cause de toxicité, la progression n’est pas obligatoire pour recevoir le traitement par ATL001",
+          "language": 10,
+          "languageDescription": "French"
+         },
+         {
+          "id": 2521588,
+          "uuid": "35a596b8-2cc0-4b4e-b263-200ec5979eb5",
+          "attributeTranslation": "Bei den Patienten liegt ein lokal fortgeschrittenes inoperables oder metastasiertes NSCLC vor und:\na. deren Krankheit ist nach der Standardtherapie fortgeschritten oder erneut aufgetreten. Dies schließt Patienten ein, die eine Komponente der Standardtherapie im Rahmen einer früheren klinischen Studie als Erstlinienbehandlung erhalten haben; oder\nb. sie kommen für die Standardtherapien nicht in Frage oder vertragen diese nicht. Bei Patienten, die die Behandlung aufgrund von Toxizitäten der Immuntherapie abbrechen, muss es nicht zu einem Fortschreiten der Krankheit kommen, damit sie eine Behandlung mit ATL001 erhalten",
+          "language": 4,
+          "languageDescription": "German"
+         },
+         {
+          "id": 2521587,
+          "uuid": "35a596b8-2cc0-4b4e-b263-200ec5979eb5",
+          "attributeTranslation": "Los pacientes deben tener NSCLC irresecable o metastásico localmente avanzado y:\na. su enfermedad debe haber progresado o reaparecido después del tratamiento de referencia. Esto incluye a pacientes que han recibido parte de un tratamiento de referencia como parte de un ensayo clínico previo en el tratamiento de primera línea; o\nb. no reunir los requisitos para, o no puedan tolerar, los tratamientos de referencia. Los pacientes que deben interrumpir el tratamiento debido a efectos secundarios de la inmunoterapia no tienen que avanzar para recibir el tratamiento con ATL001",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       },
+       {
+        "id": 225899,
+        "number": 12,
+        "principalInclusionCriteria": "Patients must have measurable disease according to RECIST v1.1 criteria prior to lymphodepletion",
+        "principalInclusionCriteriaTranslations": [
+         {
+          "id": 2521592,
+          "uuid": "b113da57-0d2c-4e14-b0c1-735def1733ae",
+          "attributeTranslation": "Vor der Lymphodepletion muss ein messbarer Tumor nach RECIST v1.1 vorliegen",
+          "language": 4,
+          "languageDescription": "German"
+         },
+         {
+          "id": 2521590,
+          "uuid": "b113da57-0d2c-4e14-b0c1-735def1733ae",
+          "attributeTranslation": "Les patients doivent avoir une maladie mesurable selon les critères RECIST v1.1 avant la lymphodéplétion",
+          "language": 10,
+          "languageDescription": "French"
+         },
+         {
+          "id": 2521591,
+          "uuid": "b113da57-0d2c-4e14-b0c1-735def1733ae",
+          "attributeTranslation": "Los pacientes deben tener enfermedad mensurable de acuerdo con los criterios RECIST v1.1 antes de la linfodepleción",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       },
+       {
+        "id": 225900,
+        "number": 13,
+        "principalInclusionCriteria": "Patient is considered, in the opinion of the Investigator, well enough (i.e. ECOG Performance Status 0-1) to receive ATL001 treatment (This will be checked prior to lymphodepletion and again prior to receiving ATL001)",
+        "principalInclusionCriteriaTranslations": [
+         {
+          "id": 2521595,
+          "uuid": "54ff7e4e-41e2-4235-9e0a-e5d2a51ef020",
+          "attributeTranslation": "Les patients sont considérés, de l’avis de l’investigateur, comme médicalement aptes (c.-à-d., score de performance ECOG 0-1) à recevoir le traitement par ATL001 (ce critère sera vérifié avant la lymphodéplétion, puis à nouveau avant l’administration d’ATL001)",
+          "language": 10,
+          "languageDescription": "French"
+         },
+         {
+          "id": 2521594,
+          "uuid": "54ff7e4e-41e2-4235-9e0a-e5d2a51ef020",
+          "attributeTranslation": "Der Patient wird nach Meinung des Prüfarztes als gesund genug (d. h. ECOG Performance-Status 0-1) für die Durchführung der ATL001-Therapie angesehen. (Dies wird von der Lymphodepletion und noch einmal vor der ATL001-Infusion überprüft)",
+          "language": 4,
+          "languageDescription": "German"
+         },
+         {
+          "id": 2521593,
+          "uuid": "54ff7e4e-41e2-4235-9e0a-e5d2a51ef020",
+          "attributeTranslation": "Se considera, a juicio del investigador, que el paciente está lo suficientemente bien (es decir, estado funcional 0-1 según ECOG) como para recibir ATL001 (esto se comprobará antes de la linfodepleción y, de nuevo, antes de recibir ATL001)",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       },
+       {
+        "id": 225901,
+        "number": 14,
+        "principalInclusionCriteria": "Prior to treatment with ATL001, the treatment regimen must have included a PD-1/PD-L1 inhibitor and patients should have experienced: a. Radiological disease progression; or b. Stable disease following at least 4 doses of a PD-1/PD-L1 inhibitor",
+        "principalInclusionCriteriaTranslations": [
+         {
+          "id": 2521598,
+          "uuid": "6f83fdc9-2669-4211-b41b-75ab67019f45",
+          "attributeTranslation": "Das Therapieregime vor der ATL001-Therapie muss einen PD-1-/PD-L1-Inhibitor enthalten haben, und unter diesem Regime muss es zu Folgendem gekommen sein:\na. Fortschreiten der radiologischen Krankheit; oder\nb. mstabile Krankheit nach mindestens 4 Gaben eines PD-1-/PD-L1-Inhibitors",
+          "language": 4,
+          "languageDescription": "German"
+         },
+         {
+          "id": 2521596,
+          "uuid": "6f83fdc9-2669-4211-b41b-75ab67019f45",
+          "attributeTranslation": "Antes del tratamiento con ATL001, la pauta de tratamiento debe haber incluido un inhibidor de PD-1/PD-L1 y los pacientes deben haber experimentado:\na. Progresión de la enfermedad radiológica; o\nb. Enfermedad estable tras al menos cuatro dosis de un inhibidor de PD-1/PD-L1",
+          "language": 7,
+          "languageDescription": "Spanish"
+         },
+         {
+          "id": 2521597,
+          "uuid": "6f83fdc9-2669-4211-b41b-75ab67019f45",
+          "attributeTranslation": "Le schéma thérapeutique doit avoir inclus un inhibiteur de PD-1/PD-L1 et les patients doivent avoir présenté:\na. une progression radiologique de la maladie ; ou\nb. une maladie stable après au moins 4 doses d’inhibiteur de PD-1/PD-L1",
+          "language": 10,
+          "languageDescription": "French"
+         }
+        ]
+       },
+       {
+        "id": 225902,
+        "number": 15,
+        "principalInclusionCriteria": "In addition to the need for highly effective contraception as outlined in Inclusion Criterion 8 above, female patients in Cohort B of childbearing potential must agree to use effective contraception during treatment with pembrolizumab and for at least 4 months after the last dose of pembrolizumab. Patients must also agree to provide a serum or urine pregnancy test before each pembrolizumab administration during the treatment period in Cohort B",
+        "principalInclusionCriteriaTranslations": [
+         {
+          "id": 2521600,
+          "uuid": "64058d99-c8cd-454f-81a8-60c940957ecf",
+          "attributeTranslation": "Zusätzlich zum Bedarf einer hochwirksamen Kontrazeption, wie im obigen Einschlusskriterium 8 dargestellt, müssen gebärfähige Patientinnen in der Kohorte B sich einverstanden erklären, während der Behandlung mit Pembrolizumab und für mindestens 4 Monate nach der letzten Dosis von Pembrolizumab eine wirksame Kontrazeption zu praktizieren. Die Patientinnen müssen sich auch mit der Durchführung eines Schwangerschaftstests im Urin oder Serum vor jeder Gabe von Pembrolizumab während des Behandlungszeitraums in Kohorte B einverstanden erklären",
+          "language": 4,
+          "languageDescription": "German"
+         },
+         {
+          "id": 2521601,
+          "uuid": "64058d99-c8cd-454f-81a8-60c940957ecf",
+          "attributeTranslation": "Outre la nécessité d’une contraception très efficace telle que décrite dans le critère d’inclusion 8 ci-dessus, les patientes de la Cohorte B en âge de procréer doivent accepter d’utiliser une contraception efficace pendant le traitement par pembrolizumab et pendant au moins 4 mois après la dernière dose de pembrolizumab. Les patientes doivent également accepter de fournir un test de grossesse sérique ou urinaire avant chaque administration de pembrolizumab pendant la période de traitement dans la Cohorte B",
+          "language": 10,
+          "languageDescription": "French"
+         },
+         {
+          "id": 2521599,
+          "uuid": "64058d99-c8cd-454f-81a8-60c940957ecf",
+          "attributeTranslation": "Además de tener que utilizar métodos anticonceptivos de alta eficacia, tal como se indica en el criterio de inclusión 8 anterior, las pacientes de la Cohorte B en edad fértil deben aceptar utilizar métodos anticonceptivos eficaces durante el tratamiento con pembrolizumab y durante un mínimo de 4 meses tras la última dosis de pembrolizumab. Las pacientes también deben aceptar someterse a una prueba de embarazo en orina o en sangre antes de cada administración de pembrolizumab durante el período de tratamiento en la Cohorte B",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       },
+       {
+        "id": 225903,
+        "number": 2,
+        "principalInclusionCriteria": "Patient must have given written informed consent to participate in the study",
+        "principalInclusionCriteriaTranslations": [
+         {
+          "id": 2521604,
+          "uuid": "13962127-7303-4c9b-870c-d45fbebc5930",
+          "attributeTranslation": "Les patients doivent avoir donné leur consentement éclairé écrit pour participer à l’étude",
+          "language": 10,
+          "languageDescription": "French"
+         },
+         {
+          "id": 2521603,
+          "uuid": "13962127-7303-4c9b-870c-d45fbebc5930",
+          "attributeTranslation": "El paciente debe haber otorgado el consentimiento informado por escrito para participar en el estudio",
+          "language": 7,
+          "languageDescription": "Spanish"
+         },
+         {
+          "id": 2521602,
+          "uuid": "13962127-7303-4c9b-870c-d45fbebc5930",
+          "attributeTranslation": "Der Patient muss schriftlich in die Studienteilnahme eingewilligt haben",
+          "language": 4,
+          "languageDescription": "German"
+         }
+        ]
+       },
+       {
+        "id": 225904,
+        "number": 3,
+        "principalInclusionCriteria": "Patients must have histologically confirmed diagnosis of non-small cell lung cancer that is considered to be smoking-related",
+        "principalInclusionCriteriaTranslations": [
+         {
+          "id": 2521607,
+          "uuid": "1c3bac6b-ec87-4e1f-8b3d-92cc1ea740fd",
+          "attributeTranslation": "Los pacientes deben tener un diagnóstico confirmado histológicamente de carcinoma broncopulmonar no microcítico que se considere relacionado con el tabaquismo",
+          "language": 7,
+          "languageDescription": "Spanish"
+         },
+         {
+          "id": 2521605,
+          "uuid": "1c3bac6b-ec87-4e1f-8b3d-92cc1ea740fd",
+          "attributeTranslation": "Der Patient muss ein histologisch diagnostiziertes nicht-kleinzelliges Lungenkarzinom haben, das auf Rauchen zurückgeführt wird",
+          "language": 4,
+          "languageDescription": "German"
+         },
+         {
+          "id": 2521606,
+          "uuid": "1c3bac6b-ec87-4e1f-8b3d-92cc1ea740fd",
+          "attributeTranslation": "Les patients doivent avoir reçu un diagnostic histologiquement confirmé de cancer bronchopulmonaire non à petites cellules considéré comme lié à la consommation de tabac",
+          "language": 10,
+          "languageDescription": "French"
+         }
+        ]
+       },
+       {
+        "id": 225905,
+        "number": 4,
+        "principalInclusionCriteria": "Patient is considered medically fit enough to undergo all study procedures and interventions: procedures to procure blood and tumour tissue, including a general anaesthetic if required, and to receive fludarabine, cyclophosphamide and IL-2 at protocol doses and schedules",
+        "principalInclusionCriteriaTranslations": [
+         {
+          "id": 2521609,
+          "uuid": "d3442910-c3ba-4ace-9881-67456c72a6a4",
+          "attributeTranslation": "Der Patient wird als gesund genug erachtet, um alle Studienmaßnahmen und Eingriffe zu absolvieren: Maßnahmen zur Gewinnung von Blut und Tumorgewebe (einschließlich einer Vollnarkose, falls erforderlich) und Behandlung mit Fludarabin, Cyclophosphamid und IL-2 nach dem im Protokoll festgelegten Dosis- und Zeitplan",
+          "language": 4,
+          "languageDescription": "German"
+         },
+         {
+          "id": 2521608,
+          "uuid": "d3442910-c3ba-4ace-9881-67456c72a6a4",
+          "attributeTranslation": "Les patients doivent être considérés comme médicalement aptes à bénéficier des procédures et interventions de l’étude : procédures de prélèvement de sang et de tissu tumoral, sous anesthésie générale si nécessaire, et d’administration de fludarabine, de cyclophosphamide et d’IL-2 selon la posologie et les calendriers définis dans le protocole",
+          "language": 10,
+          "languageDescription": "French"
+         },
+         {
+          "id": 2521610,
+          "uuid": "d3442910-c3ba-4ace-9881-67456c72a6a4",
+          "attributeTranslation": "Se considera que el paciente presenta un estado médico suficiente para someterse a todos los procedimientos e intervenciones del estudio: procedimientos para obtener sangre y tejido tumoral, incluida una anestesia general en caso necesario, y para recibir fludarabina, ciclofosfamida e IL-2 a la dosis y con las pautas del protocolo",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       },
+       {
+        "id": 225906,
+        "number": 5,
+        "principalInclusionCriteria": "Patient is considered, in the opinion of the Investigator, capable of adhering to the protocol",
+        "principalInclusionCriteriaTranslations": [
+         {
+          "id": 2521612,
+          "uuid": "a48e80c0-280b-450a-ba7f-634d07b743e3",
+          "attributeTranslation": "Les patients sont considérés, selon l’avis de l’investigateur, comme capables de respecter le protocole",
+          "language": 10,
+          "languageDescription": "French"
+         },
+         {
+          "id": 2521611,
+          "uuid": "a48e80c0-280b-450a-ba7f-634d07b743e3",
+          "attributeTranslation": "Der Patient ist nach Einschätzung des Prüfers in der Lage, das Protokoll einzuhalten",
+          "language": 4,
+          "languageDescription": "German"
+         },
+         {
+          "id": 2521613,
+          "uuid": "a48e80c0-280b-450a-ba7f-634d07b743e3",
+          "attributeTranslation": "En opinión del investigador, se considera al paciente capaz de cumplir el protocolo",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       },
+       {
+        "id": 225907,
+        "number": 6,
+        "principalInclusionCriteria": "Eastern Cooperative Oncology Group (ECOG) Performance Status 0-1",
+        "principalInclusionCriteriaTranslations": [
+         {
+          "id": 2521616,
+          "uuid": "95d0f23c-8d75-4515-9e03-1a232c28fe73",
+          "attributeTranslation": "Leistungsstatus 0–1 nach ECOG (Eastern Cooperative Oncology Group)",
+          "language": 4,
+          "languageDescription": "German"
+         },
+         {
+          "id": 2521614,
+          "uuid": "95d0f23c-8d75-4515-9e03-1a232c28fe73",
+          "attributeTranslation": "Score de performance ECOG (Eastern Cooperative Oncology Group) de 0-1",
+          "language": 10,
+          "languageDescription": "French"
+         },
+         {
+          "id": 2521615,
+          "uuid": "95d0f23c-8d75-4515-9e03-1a232c28fe73",
+          "attributeTranslation": "Estado de rendimiento del Grupo Oncológico Cooperativo de la Costa Este (ECOG) 0-1",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       },
+       {
+        "id": 225908,
+        "number": 7,
+        "principalInclusionCriteria": "Adequate organ function indicated by the following laboratory parameters: a. Haemoglobin ≥ 10.0 g/dL. b. White Blood Cell Count (WBC) ≥ 3.0 x10⁹/L. c. Absolute Neutrophil Count (ANC) ≥ 1.5 x10⁹/L (without support of filgrastim (G-CSF)). d. Platelets ≥ 100 x10⁹/L. e. INR/PT and APTR/APTT < 1.5x ULN, unless receiving therapeutic anticoagulation. Investigator discretion is required to ensure surgery is safe or that anticoagulants can be safely stopped. f. AST or ALT ≤ 2.5x ULN. g. Bilirubin < 1.5x ULN (< 3x ULN in Gilbert’s Syndrome). h. Creatinine clearance/estimated glomerular filtration rate (GFR) ≥ 50 mL/min",
+        "principalInclusionCriteriaTranslations": [
+         {
+          "id": 2521617,
+          "uuid": "59292fe7-8057-476a-bd47-1167a54049bd",
+          "attributeTranslation": "Fonction organique adéquate confirmée par les paramètres biologiques suivants:\na. Hémoglobine ≥ 10,0 g/dl.\nb. Leucocytes ≥ 3,0 x10⁹/l.\nc. Nombre absolu de neutrophiles (NAN) ≥ 1,5 x10⁹/l (sans filgrastim [G-CSF]).\nd. Plaquettes ≥ 100 x10⁹/l.\ne. TP/INR et rTCA/TCA < 1,5x LSN, sauf en cas d’administration d’un traitement anticoagulant. L’investigateur doit s’assurer que l’intervention chirurgicale est sûre ou que le traitement anticoagulant peut être interrompu en toute sécurité.\nf. ASAT ou ALAT ≤ 2,5x LSN.\ng. Bilirubine < 1,5x LSN (< 3x LSN en cas de syndrome de Gilbert).\nh. Taux de clairance de la créatinine/débit de filtration glomérulaire estimé (DFG) ≥ 50 ml/min",
+          "language": 10,
+          "languageDescription": "French"
+         },
+         {
+          "id": 2521619,
+          "uuid": "59292fe7-8057-476a-bd47-1167a54049bd",
+          "attributeTranslation": "Ausreichende Organfunktionen, ausweislich der folgenden Laborwerte:\na. Hämoglobin ≥ 10,0 g/dl\nb. Leukozytenzahl (white blood cell count, WBC) ≥ 3,0 x 109/l\nc. Absolute Neutrophilenzahl (absolute neutrophil count, ANC) ≥ 1,5 x 109/l (ohne Unterstützung durch Filgrastim (G-CSF))\nd. Thrombozyten ≥ 100 x 109/l\ne. INR/PT und APTR/APTT < 1,5 x oberer Normgrenzwert (upper limit of normal, ULN) (Ausnahme: therapeutische Antikoagulation). Damit gewährleistet ist, dass der chirurgische Eingriff oder das Abbrechen der Verabreichung von Antikoagulanzien ohne Sicherheitsbedenken erfolgen kann, muss dies nach Ermessen des Prüfarztes erfolgen.\nf. AST und ALT ≤ 2,5 x ULN\ng. Bilirubin < 1,5 x ULN (< 3 x ULN bei Gilbert-Syndrom)\nh. Kreatinin-Clearance/glomeruläre Filtrationsrate (GFR, rechnerisch) ≥ 50 ml/min",
+          "language": 4,
+          "languageDescription": "German"
+         },
+         {
+          "id": 2521618,
+          "uuid": "59292fe7-8057-476a-bd47-1167a54049bd",
+          "attributeTranslation": "Función orgánica adecuada indicada mediante los siguientes parámetros de laboratorio:\na. Hemoglobina ≥ 10,0 g/dl.\nb. Recuento de leucocitos ≥ 3,0 x10⁹/l.\nc. Cifra absoluta de neutrófilos (CAN) ≥ 1,5 x10⁹/l (sin apoyo de filgastrim [G-CSF]).\nd. Plaquetas ≥ 100 x10⁹/l.\ne. CIN/TP y APTR/TTPa <1,5x LSN (a menos que reciba anticoagulación terapéutica). El investigador determinará bajo su discreción si la cirugía es segura o si se pueden suspender de forma segura los anticoagulantes.\nf. AST o ALT ≤ 2,5x LSN.\ng. Bilirrubina <1,5x LSN (< 3x LSN en el síndrome de Gilbert).\nh. Aclaramiento de la creatinina/ filtración glomerular estimada (FGe) ≥ 50 ml/min",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       },
+       {
+        "id": 225909,
+        "number": 8,
+        "principalInclusionCriteria": "Female patients who are of childbearing potential must agree to use a highly effective method of contraception during the study and for at least 12 months after the ATL001 infusion. Non-sterilised male participants who intend to be sexually active with a female partner of childbearing potential must use an acceptable method of contraception from the time of screening, throughout the duration of the study and for at least 6 months after the ATL001 infusion",
+        "principalInclusionCriteriaTranslations": [
+         {
+          "id": 2521621,
+          "uuid": "6349639a-e10d-46b5-877f-ac0c44e47af9",
+          "attributeTranslation": "Gebärfähige Patientinnen müssen sich verpflichten, während der Studie sowie über mindestens 12 Monate nach der ATL001-Infusion hochzuverlässige Kontrazeptionsmethoden anzuwenden. Nichtsterilisierte männliche Patienten, die mit einer gebärfähigen Partnerin sexuell aktiv sein möchten, müssen ab dem Zeitpunkt des Screenings, über den gesamten Verlauf der Studie und über mindestens 6 Monate nach der ATL001-Infusion eine akzeptable Kontrazeptionsmethode anwenden",
+          "language": 4,
+          "languageDescription": "German"
+         },
+         {
+          "id": 2521620,
+          "uuid": "6349639a-e10d-46b5-877f-ac0c44e47af9",
+          "attributeTranslation": "Las mujeres con capacidad de tener hijos deben aceptar utilizar un método anticonceptivo de alta eficacia durante el estudio y durante, al menos, los 12 meses siguientes a la infusión de ATL001. Los participantes hombres no esterilizados que tienen previsto tener relaciones sexuales con una pareja de sexo femenino con capacidad de tener hijos deben utilizar un método anticonceptivo aceptable desde la selección y durante todo el estudio y, al menos, durante los 6 meses siguientes a la infusión de ATL001",
+          "language": 7,
+          "languageDescription": "Spanish"
+         },
+         {
+          "id": 2521622,
+          "uuid": "6349639a-e10d-46b5-877f-ac0c44e47af9",
+          "attributeTranslation": "Les femmes en âge de procréer doivent accepter d’utiliser une méthode contraceptive très efficace pendant l’étude et pendant au moins 12 moins après la perfusion d’ATL001. Les hommes non stérilisés qui ont une partenaire de sexe féminin en âge de procréer doivent utiliser une méthode contraceptive acceptable à partir de la sélection, pendant toute la durée de l’étude et pendant au moins 6 mois après la perfusion d’ATL001",
+          "language": 10,
+          "languageDescription": "French"
+         }
+        ]
+       },
+       {
+        "id": 225910,
+        "number": 9,
+        "principalInclusionCriteria": "To be eligible to enter this study for procurement, the patient must fall into one of the following groups: a. Patients with advanced stage (III-IV) NSCLC who have accessible sites of disease suitable for collection of adequate tissue for ATL001 manufacture prior to starting standard treatment.  b. Patients with advanced stage (III-IV) NSCLC who have received or are receiving standard treatments and have accessible sites of residual disease suitable for collection of adequate tissue for ATL001 manufacture. c. Other patients with advanced stage disease for whom no other alternative approved treatments are available, may be considered on a case-by-case basis and should be discussed with the Sponsor prior to enrolment",
+        "principalInclusionCriteriaTranslations": [
+         {
+          "id": 2521624,
+          "uuid": "0b7fc7be-1178-49bc-9148-1e9df2edf395",
+          "attributeTranslation": "Für die Aufnahme in die Studie zur Gewebegewinnung muss der Patient in eine der folgenden Kategorien fallen:\na. Patienten mit fortgeschrittenem (Stadium III-IV) NSCLC, bei denen vor Beginn der Standardtherapie hinreichend Gewebe für die Herstellung von ATL001 an zugänglichen und für die Entnahme geeigneten Stellen vorhanden ist. \nb. Patienten mit fortgeschrittenen (Stadium III-IV) NSCLC, die die Standardtherapie erhalten oder erhalten haben und bei denen hinreichend Gewebe für die Herstellung von ATL001 an zugänglichen und für die Entnahme geeigneten Stellen vorhanden ist.\nc. Andere Patienten mit fortgeschrittenen Tumorerkrankungen, für die keine zugelassenen Therapien verfügbar sind, können aufgrund von Einzelfallentscheidungen für die Teilnahme infrage kommen; dies ist vor der Aufnahme mit dem Sponsor zu besprechen",
+          "language": 4,
+          "languageDescription": "German"
+         },
+         {
+          "id": 2521625,
+          "uuid": "0b7fc7be-1178-49bc-9148-1e9df2edf395",
+          "attributeTranslation": "Para cumplir los requisitos para el estudio de obtención, el paciente debe encontrarse en uno de los siguientes grupos:\na. Pacientes con NSCLC en estadio avanzado (III-IV) que tengan sitios de enfermedad accesibles e idóneos para la obtención de tejido adecuado para la fabricación de ATL001 antes de iniciar el tratamiento estándar.\nb. Pacientes con NSCLC en estadio avanzado (III-IV) que hayan recibido o estén recibiendo tratamientos estándar y tengan sitios de enfermedad residual accesibles e idóneos para la obtención de tejido adecuado para la fabricación de ATL001.\nc. Otros pacientes con enfermedad en estadio avanzado para los que no estén disponibles otros tratamientos alternativos aprobados pueden ser considerados caso por caso y debe analizarse la situación con el promotor antes de la inscripción",
+          "language": 7,
+          "languageDescription": "Spanish"
+         },
+         {
+          "id": 2521623,
+          "uuid": "0b7fc7be-1178-49bc-9148-1e9df2edf395",
+          "attributeTranslation": "Pour pouvoir participer au prélèvement de tissus dans le cadre de cette étude, les patients doivent faire partie de l’un des groupes suivants :\na. Patients atteints d’un CBNPC de stade avancé (III-IV), qui ont des sites tumoraux accessibles pour le prélèvement des tissus nécessaires à la fabrication d’ATL001 avant de commencer le traitement standard.\nb. Patients atteints d’un CBNPC de stade avancé (III-IV) qui ont reçu ou reçoivent des traitements standard et présentent des sites accessibles de maladie résiduelle, adaptés au prélèvement des tissus nécessaires à la fabrication d’ATL001.\nc. L’inclusion d’autres patients atteints d’une maladie de stade avancé pour lesquels il n’existe aucune alternative thérapeutique approuvée peut être envisagée au cas par cas et doit faire l’objet d’une discussion avec le promoteur avant le recrutement",
+          "language": 10,
+          "languageDescription": "French"
+         }
+        ]
+       }
+      ],
+      "principalExclusionCriteria": [
+       {
+        "id": 394222,
+        "number": 1,
+        "principalExclusionCriteria": "Patients with known central nervous system (CNS) metastases that are untreated or symptomatic or progressing. Lesions should be clinically and radiologically stable for 2 months after treatment, as determined by MRI or CT evaluation, in line with accepted standard of care procedures, and should not require steroids",
+        "principalExclusionCriteriaTranslations": [
+         {
+          "id": 2521509,
+          "uuid": "0d092ac3-35e3-4d82-ac89-628a8313ce96",
+          "attributeTranslation": "Patients présentant des métastases du système nerveux central (SNC) non traitées ou symptomatiques ou en progression. Selon l’évaluation réalisée par IRM ou tomodensitométrie, les lésions doivent être stables sur le plan clinique et radiologique pendant 2 mois après le traitement, en accord avec les procédures de soins standard acceptées, et ne doivent pas nécessiter de stéroïdes",
+          "language": 10,
+          "languageDescription": "French"
+         },
+         {
+          "id": 2521511,
+          "uuid": "0d092ac3-35e3-4d82-ac89-628a8313ce96",
+          "attributeTranslation": "Patienten mit bekannten Metastasen des zentralen Nervensystems (ZNS), die unbehandelt, symptomatisch oder fortschreitend sind. Läsionen sollten 2 Monate nach der Behandlung klinisch und radiologisch stabil sein, was anhand von MRT- oder CT-Untersuchungen nach anerkannten Standardtherapieverfahren festgestellt wird, und sie sollten keine Steroide erfordern",
+          "language": 4,
+          "languageDescription": "German"
+         },
+         {
+          "id": 2521510,
+          "uuid": "0d092ac3-35e3-4d82-ac89-628a8313ce96",
+          "attributeTranslation": "Pacientes con metástasis del sistema nervioso central (SNC) conocidas sin tratar, sintomáticas o en evolución. Las lesiones deben ser clínica y radiológicamente estables en los 2 meses posteriores al tratamiento, según se determine mediante evaluación de RM o TAC, conforme a los procedimientos habituales de atención aceptados, y no deben requerir esteroides",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       },
+       {
+        "id": 394223,
+        "number": 10,
+        "principalExclusionCriteria": "Patients with a history of ≥ Grade 2 diarrhoea/colitis caused by previous immunotherapy within 6 months of screening. Patients that have been asymptomatic for at least 6 months or have had a normal colonoscopy post-immunotherapy (with uninflamed mucosa by visual assessment following discontinuation of immune suppression other than permitted modified release steroids) are not excluded",
+        "principalExclusionCriteriaTranslations": [
+         {
+          "id": 2521512,
+          "uuid": "0bb88eea-caa0-4ca6-8d3f-8ab83f426d2a",
+          "attributeTranslation": "Pacientes con antecedentes de diarrea o colitis de grado ≥2 causada por inmunoterapia previa en los 6 meses anteriores a la selección. No se excluyen los pacientes que hayan sido asintomáticos durante al menos 6 meses o con una colonoscopia normal después de la inmunoterapia (con mucosa sin inflamación según examen visual tras la interrupción de la inmunosupresión distinta a los esteroides de liberación modificada permitidos)",
+          "language": 7,
+          "languageDescription": "Spanish"
+         },
+         {
+          "id": 2521513,
+          "uuid": "0bb88eea-caa0-4ca6-8d3f-8ab83f426d2a",
+          "attributeTranslation": "Patienten mit einer Vorgeschichte von Diarrhoe/Colitis ≥ Grad 2, die durch eine vorhergehende Immuntherapie innerhalb von 6 Monaten vor dem Screening verursacht wurde. Patienten, die für mindestens 6 Monate asymptomatisch waren oder nach der Immuntherapie normale Kolonoskopie-Befunde aufwiesen (mit nicht entzündlicher Schleimhaut gemäß visueller Bewertung nach Abbruch der Immunsuppression mit Ausnahme der zulässigen Steroide mit modifizierter Freisetzung) werden nicht ausgeschlossen",
+          "language": 4,
+          "languageDescription": "German"
+         },
+         {
+          "id": 2521514,
+          "uuid": "0bb88eea-caa0-4ca6-8d3f-8ab83f426d2a",
+          "attributeTranslation": "Patients ayant des antécédents de diarrhée/colite de ≥ Grade 2 due à une immunothérapie antérieure dans les 6 mois précédant la sélection. Les patients qui sont asymptomatiques depuis au moins 6 mois ou qui ont eu une coloscopie post-immunothérapie (avec muqueuse non inflammée selon l’évaluation visuelle après l’arrêt d’une immunosuppression autre que les stéroïdes à libération modifiée autorisés) ne sont pas exclus",
+          "language": 10,
+          "languageDescription": "French"
+         }
+        ]
+       },
+       {
+        "id": 394224,
+        "number": 11,
+        "principalExclusionCriteria": "Patients who are pregnant or breastfeeding",
+        "principalExclusionCriteriaTranslations": [
+         {
+          "id": 2521517,
+          "uuid": "8cece4e4-845e-4448-80f7-c2765afdda76",
+          "attributeTranslation": "Patientes enceintes ou allaitantes",
+          "language": 10,
+          "languageDescription": "French"
+         },
+         {
+          "id": 2521515,
+          "uuid": "8cece4e4-845e-4448-80f7-c2765afdda76",
+          "attributeTranslation": "Pacientes embarazadas o en período de lactancia",
+          "language": 7,
+          "languageDescription": "Spanish"
+         },
+         {
+          "id": 2521516,
+          "uuid": "8cece4e4-845e-4448-80f7-c2765afdda76",
+          "attributeTranslation": "Schwangere und stillende Frauen",
+          "language": 4,
+          "languageDescription": "German"
+         }
+        ]
+       },
+       {
+        "id": 394225,
+        "number": 12,
+        "principalExclusionCriteria": "Patients who have undergone major surgery in the previous 3 weeks",
+        "principalExclusionCriteriaTranslations": [
+         {
+          "id": 2521518,
+          "uuid": "5c6dd6fc-a19e-4c59-a436-7fb3ecf3433e",
+          "attributeTranslation": "Pacientes que se han sometido a una intervención quirúrgica mayor en las 3 semanas previas",
+          "language": 7,
+          "languageDescription": "Spanish"
+         },
+         {
+          "id": 2521520,
+          "uuid": "5c6dd6fc-a19e-4c59-a436-7fb3ecf3433e",
+          "attributeTranslation": "Patienten, bei denen in den zurückliegenden 3 Wochen größere chirurgische Eingriffe durchgeführt wurden",
+          "language": 4,
+          "languageDescription": "German"
+         },
+         {
+          "id": 2521519,
+          "uuid": "5c6dd6fc-a19e-4c59-a436-7fb3ecf3433e",
+          "attributeTranslation": "Patients ayant eu une intervention chirurgicale au cours des 3 dernières semaines",
+          "language": 10,
+          "languageDescription": "French"
+         }
+        ]
+       },
+       {
+        "id": 394226,
+        "number": 13,
+        "principalExclusionCriteria": "Patients with an active concurrent cancer or a history of cancer within the past 3 years (except for in situ carcinomas, early prostate cancer with normal Prostate-Specific Antigen (PSA) or non-melanomatous skin cancers)",
+        "principalExclusionCriteriaTranslations": [
+         {
+          "id": 2521523,
+          "uuid": "634c058d-c1ca-4eb3-844a-e8ff3940d985",
+          "attributeTranslation": "Patienten mit aktiven, aktuell vorliegenden Krebserkrankungen oder anamnestisch bekannten Krebserkrankungen innerhalb der letzten 3 Jahre (mit Ausnahme von Carcinomata in situ, Frühstadien eines Prostatakarzinoms mit normalem prostataspezifischem Antigen (PSA)-Wert und Nicht-Melanom-Hautkrebs)",
+          "language": 4,
+          "languageDescription": "German"
+         },
+         {
+          "id": 2521521,
+          "uuid": "634c058d-c1ca-4eb3-844a-e8ff3940d985",
+          "attributeTranslation": "Pacientes con cáncer concurrente activo o antecedentes de cáncer en los últimos 3 años (excepto carcinomas in situ, cáncer de próstata temprano con un antígeno prostático (Prostate-Specific Antigen, PSA) específico normal o cáncer de piel distinto de melanoma)",
+          "language": 7,
+          "languageDescription": "Spanish"
+         },
+         {
+          "id": 2521522,
+          "uuid": "634c058d-c1ca-4eb3-844a-e8ff3940d985",
+          "attributeTranslation": "Patients ayant un cancer concomitant actif ou des antécédents de cancer au cours des 3 dernières années (hormis les carcinomes in situ, le cancer de la prostate au stade précoce avec PSA (Prostate-Specific Antigen) normal ou les cancers cutanés sans présence de mélanome)",
+          "language": 10,
+          "languageDescription": "French"
+         }
+        ]
+       },
+       {
+        "id": 394227,
+        "number": 14,
+        "principalExclusionCriteria": "Patients with a history of organ transplantation",
+        "principalExclusionCriteriaTranslations": [
+         {
+          "id": 2521526,
+          "uuid": "91ee03ad-1c50-4f94-9674-a45d72aeb085",
+          "attributeTranslation": "Organtransplantierte Patienten",
+          "language": 4,
+          "languageDescription": "German"
+         },
+         {
+          "id": 2521524,
+          "uuid": "91ee03ad-1c50-4f94-9674-a45d72aeb085",
+          "attributeTranslation": "Pacientes con antecedentes de trasplante de órganos",
+          "language": 7,
+          "languageDescription": "Spanish"
+         },
+         {
+          "id": 2521525,
+          "uuid": "91ee03ad-1c50-4f94-9674-a45d72aeb085",
+          "attributeTranslation": "Patients ayant des antécédents de transplantation d’organe",
+          "language": 10,
+          "languageDescription": "French"
+         }
+        ]
+       },
+       {
+        "id": 394228,
+        "number": 15,
+        "principalExclusionCriteria": "Patients who have previously received any investigational cell or gene therapies",
+        "principalExclusionCriteriaTranslations": [
+         {
+          "id": 2521527,
+          "uuid": "ba4aaa0f-7941-46c8-a1e6-6dd2de3fd4e8",
+          "attributeTranslation": "Patienten, die schon einmal experimentelle Zell- oder Gentherapien erhalten haben",
+          "language": 4,
+          "languageDescription": "German"
+         },
+         {
+          "id": 2521529,
+          "uuid": "ba4aaa0f-7941-46c8-a1e6-6dd2de3fd4e8",
+          "attributeTranslation": "Patients ayant précédemment reçu une thérapie cellulaire ou génique expérimentale",
+          "language": 10,
+          "languageDescription": "French"
+         },
+         {
+          "id": 2521528,
+          "uuid": "ba4aaa0f-7941-46c8-a1e6-6dd2de3fd4e8",
+          "attributeTranslation": "Pacientes que hayan recibido previamente cualquier tratamiento celular o genético en fase de investigación",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       },
+       {
+        "id": 394229,
+        "number": 16,
+        "principalExclusionCriteria": "Patients with contraindications for cyclophosphamide, fludarabine and IL-2 at per protocol doses",
+        "principalExclusionCriteriaTranslations": [
+         {
+          "id": 2521532,
+          "uuid": "6cf9f66c-cdb5-4fbb-8ffc-ff55675c9b44",
+          "attributeTranslation": "Patients présentant des contre-indications aux cyclophosphamides, à la fludarabine et à l’IL-2 aux posologies per protocole",
+          "language": 10,
+          "languageDescription": "French"
+         },
+         {
+          "id": 2521531,
+          "uuid": "6cf9f66c-cdb5-4fbb-8ffc-ff55675c9b44",
+          "attributeTranslation": "Patienten mit Kontraindikationen gegen Cyclophosphamid, Fludarabin oder IL-2 in den im Protokoll festgelegten Dosierungen",
+          "language": 4,
+          "languageDescription": "German"
+         },
+         {
+          "id": 2521530,
+          "uuid": "6cf9f66c-cdb5-4fbb-8ffc-ff55675c9b44",
+          "attributeTranslation": "Pacientes con contraindicaciones para la ciclofosfamida, la fludarabina e IL-2 a las dosis del protocolo",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       },
+       {
+        "id": 394230,
+        "number": 17,
+        "principalExclusionCriteria": "Patients who have received any cytotoxic chemotherapy or anti-angiogenesis agent within the 3 weeks prior to tissue and blood procurement",
+        "principalExclusionCriteriaTranslations": [
+         {
+          "id": 2521534,
+          "uuid": "ae2348c8-8653-4354-908f-f5481e595f89",
+          "attributeTranslation": "Patients qui ont reçu une chimiothérapie cytotoxique ou un agent anti-angiogénique dans les 3 semaines précédant le prélèvement de tissus et de sang",
+          "language": 10,
+          "languageDescription": "French"
+         },
+         {
+          "id": 2521535,
+          "uuid": "ae2348c8-8653-4354-908f-f5481e595f89",
+          "attributeTranslation": "Patienten, die in den 3 Wochen vor der Gewebe- und Blutgewinnung Zytostatika oder Angiogenesehemmer erhalten haben",
+          "language": 4,
+          "languageDescription": "German"
+         },
+         {
+          "id": 2521533,
+          "uuid": "ae2348c8-8653-4354-908f-f5481e595f89",
+          "attributeTranslation": "Pacientes que han recibido quimioterapia citotóxica o un agente antiangiogénico en las 3 semanas previas a la obtención de tejido o sangre",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       },
+       {
+        "id": 394231,
+        "number": 18,
+        "principalExclusionCriteria": "Patients with evidence of disease progression at the first scan after commencing standard first line therapy (i.e. primary refractory disease), unless responsive to subsequent lines of therapy. Patients who are refractory to pembrolizumab monotherapy are not excluded",
+        "principalExclusionCriteriaTranslations": [
+         {
+          "id": 2521537,
+          "uuid": "14f68d85-fb4a-406c-b335-23215eb8dcd4",
+          "attributeTranslation": "Patients présentant des preuves de progression de la maladie au premier scanner après l’instauration du traitement standard de première intention (c.-à-d., maladie réfractaire primaire), sauf en cas de réponse aux traitements suivants. Les patients réfractaires au pembrolizumab en monothérapie ne sont pas exclus",
+          "language": 10,
+          "languageDescription": "French"
+         },
+         {
+          "id": 2521538,
+          "uuid": "14f68d85-fb4a-406c-b335-23215eb8dcd4",
+          "attributeTranslation": "Patienten, bei denen die erste Bildgebung nach dem Beginn der Standard-Erstlinientherapie eine Progression anzeigt (d. h. eine primär refraktäre Erkrankung), es sei denn, sie sprechen auf nachfolgende Therapielinien an. Patienten, die gegenüber einer Pembrolizumab-Monotherapie refraktär sind, werden nicht ausgeschlossen)",
+          "language": 4,
+          "languageDescription": "German"
+         },
+         {
+          "id": 2521536,
+          "uuid": "14f68d85-fb4a-406c-b335-23215eb8dcd4",
+          "attributeTranslation": "Pacientes con evidencias de progresión de la enfermedad en la primera exploración tras comenzar el tratamiento estándar de primera línea (p. ej., enfermedad con resistencia primaria al tratamiento), a menos que responda a otros tratamientos posteriores. No se excluyen los pacientes con resistencia a la monoterapia con pembrolizumab",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       },
+       {
+        "id": 394232,
+        "number": 19,
+        "principalExclusionCriteria": "Patients with a confirmed history of allergic reactions to amphotericin b, penicillin and/or streptomycin",
+        "principalExclusionCriteriaTranslations": [
+         {
+          "id": 2521540,
+          "uuid": "cc12263f-3176-4fd5-b906-84b5bf7e93e1",
+          "attributeTranslation": "Pacientes con antecedentes confirmados de reacciones alérgicas a la anfotericina B, la penicilina o la estreptomicina",
+          "language": 7,
+          "languageDescription": "Spanish"
+         },
+         {
+          "id": 2521541,
+          "uuid": "cc12263f-3176-4fd5-b906-84b5bf7e93e1",
+          "attributeTranslation": "Patients ayant des antécédents confirmés de réactions allergiques à l’amphotéricine b, la pénicilline et/ou la streptomycine",
+          "language": 10,
+          "languageDescription": "French"
+         },
+         {
+          "id": 2521539,
+          "uuid": "cc12263f-3176-4fd5-b906-84b5bf7e93e1",
+          "attributeTranslation": "Patienten mit nachgewiesenen Allergien gegen Amphotericin B, Penicillin und/oder Streptomycin",
+          "language": 4,
+          "languageDescription": "German"
+         }
+        ]
+       },
+       {
+        "id": 394233,
+        "number": 2,
+        "principalExclusionCriteria": "Patients with hepatitis B or C, human immunodeficiency virus infection (HIV1/2), syphilis or HTLVI/II infection",
+        "principalExclusionCriteriaTranslations": [
+         {
+          "id": 2521542,
+          "uuid": "110595c8-f160-41c8-b58f-85d0f1e9200f",
+          "attributeTranslation": "Pacientes con hepatitis B o C, infección por el virus de inmunodeficiencia humana (VIH1/2), sífilis o infección por el virus linfotrópico de linfocitos T humanos I/II (HTLV-I/II)",
+          "language": 7,
+          "languageDescription": "Spanish"
+         },
+         {
+          "id": 2521544,
+          "uuid": "110595c8-f160-41c8-b58f-85d0f1e9200f",
+          "attributeTranslation": "Patienten mit Hepatitis B oder C, HIV-1/2-Infektion, Syphilis oder HTLV-1/2-Infektion",
+          "language": 4,
+          "languageDescription": "German"
+         },
+         {
+          "id": 2521543,
+          "uuid": "110595c8-f160-41c8-b58f-85d0f1e9200f",
+          "attributeTranslation": "Patients atteints d’hépatite B ou C, d’une infection par le virus de l’immunodéficience humaine (VIH1/2), de syphilis ou d’une infection à HTLVI/II",
+          "language": 10,
+          "languageDescription": "French"
+         }
+        ]
+       },
+       {
+        "id": 394234,
+        "number": 20,
+        "principalExclusionCriteria": "Patients with any contraindications for pembrolizumab",
+        "principalExclusionCriteriaTranslations": [
+         {
+          "id": 2521545,
+          "uuid": "71247258-db82-4d88-8305-5c3682ad2766",
+          "attributeTranslation": "Patienten mit Kontraindikationen für Pembrolizumab",
+          "language": 4,
+          "languageDescription": "German"
+         },
+         {
+          "id": 2521546,
+          "uuid": "71247258-db82-4d88-8305-5c3682ad2766",
+          "attributeTranslation": "Pacientes con alguna contraindicación para pembrolizumab",
+          "language": 7,
+          "languageDescription": "Spanish"
+         },
+         {
+          "id": 2521547,
+          "uuid": "71247258-db82-4d88-8305-5c3682ad2766",
+          "attributeTranslation": "Patients présentant une contre-indication au pembrolizumab",
+          "language": 10,
+          "languageDescription": "French"
+         }
+        ]
+       },
+       {
+        "id": 394235,
+        "number": 21,
+        "principalExclusionCriteria": "Patients who have received a live vaccination within the 28 days prior to lymphodepletion",
+        "principalExclusionCriteriaTranslations": [
+         {
+          "id": 2521549,
+          "uuid": "73c459b7-31f3-44ad-b762-41d20358c989",
+          "attributeTranslation": "Patients ayant reçu un vaccin vivant dans les 28 jours précédant la lymphodéplétion",
+          "language": 10,
+          "languageDescription": "French"
+         },
+         {
+          "id": 2521548,
+          "uuid": "73c459b7-31f3-44ad-b762-41d20358c989",
+          "attributeTranslation": "Patienten, die innerhalb von 28 Tagen vor der Lymphodepletion einen Lebendimpfstoff erhalten haben",
+          "language": 4,
+          "languageDescription": "German"
+         },
+         {
+          "id": 2521550,
+          "uuid": "73c459b7-31f3-44ad-b762-41d20358c989",
+          "attributeTranslation": "Pacientes que recibieron una vacuna elaborada con microbios vivos en los 28 días previos a la linfodepleción",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       },
+       {
+        "id": 394236,
+        "number": 22,
+        "principalExclusionCriteria": "Patients with an active infection requiring antibiotics",
+        "principalExclusionCriteriaTranslations": [
+         {
+          "id": 2521551,
+          "uuid": "291280b6-511f-4915-87e4-086b03840f88",
+          "attributeTranslation": "Pacientes con una infección activa que requiera antibióticos",
+          "language": 7,
+          "languageDescription": "Spanish"
+         },
+         {
+          "id": 2521553,
+          "uuid": "291280b6-511f-4915-87e4-086b03840f88",
+          "attributeTranslation": "Patienten mit aktiven, antibiotikapflichtigen Infektionen",
+          "language": 4,
+          "languageDescription": "German"
+         },
+         {
+          "id": 2521552,
+          "uuid": "291280b6-511f-4915-87e4-086b03840f88",
+          "attributeTranslation": "Patients atteints d’une infection active nécessitant une antibiothérapie",
+          "language": 10,
+          "languageDescription": "French"
+         }
+        ]
+       },
+       {
+        "id": 394237,
+        "number": 23,
+        "principalExclusionCriteria": "Patients who have received any cytotoxic chemotherapy within the 3 weeks prior to lymphodepletion",
+        "principalExclusionCriteriaTranslations": [
+         {
+          "id": 2521556,
+          "uuid": "d819eb2b-881f-47df-bf68-bdca189ea829",
+          "attributeTranslation": "Patienten, die innerhalb von 3 Wochen vor der Lymphodepletion irgendwelche Zytostatika erhalten haben",
+          "language": 4,
+          "languageDescription": "German"
+         },
+         {
+          "id": 2521554,
+          "uuid": "d819eb2b-881f-47df-bf68-bdca189ea829",
+          "attributeTranslation": "Pacientes que hayan recibido quimioterapia citotóxica en las 3 semanas previas a la linfodepleción",
+          "language": 7,
+          "languageDescription": "Spanish"
+         },
+         {
+          "id": 2521555,
+          "uuid": "d819eb2b-881f-47df-bf68-bdca189ea829",
+          "attributeTranslation": "Patients qui ont reçu une chimiothérapie cytotoxique dans les 3 semaines précédant la lymphodéplétion",
+          "language": 10,
+          "languageDescription": "French"
+         }
+        ]
+       },
+       {
+        "id": 394238,
+        "number": 3,
+        "principalExclusionCriteria": "Patients who have never smoked (defined as having smoked < 100 cigarettes in their lifetime, per WHO criteria)",
+        "principalExclusionCriteriaTranslations": [
+         {
+          "id": 2521558,
+          "uuid": "10f36332-9ddc-4eed-aa20-859f94f2e8eb",
+          "attributeTranslation": "Patients n’ayant jamais fumé (définis comme ayant consommé moins de 100 cigarettes au cours de leur vie, selon les critères de l’OMS)",
+          "language": 10,
+          "languageDescription": "French"
+         },
+         {
+          "id": 2521557,
+          "uuid": "10f36332-9ddc-4eed-aa20-859f94f2e8eb",
+          "attributeTranslation": "Los pacientes nunca han fumado (se define como haber fumado <100 cigarrillos en su vida, conforme a los criterios de la OMS)",
+          "language": 7,
+          "languageDescription": "Spanish"
+         },
+         {
+          "id": 2521559,
+          "uuid": "10f36332-9ddc-4eed-aa20-859f94f2e8eb",
+          "attributeTranslation": "Patienten, die niemals geraucht haben (d. h. gemäß WHO-Definition im Laufe ihres Lebens < 100 Zigaretten geraucht haben)",
+          "language": 4,
+          "languageDescription": "German"
+         }
+        ]
+       },
+       {
+        "id": 394239,
+        "number": 4,
+        "principalExclusionCriteria": "Patients for whom there is documented evidence of an actionable tumour driver oncogene mutation (EGFR, ALK or ROS-1) at the time of initial screening. Patients who have progressed on standard targeted therapies, or for whom no approved targeted treatments are available, are not excluded",
+        "principalExclusionCriteriaTranslations": [
+         {
+          "id": 2521562,
+          "uuid": "780f24f4-e8b9-4d1f-9010-b5d5d01b6d55",
+          "attributeTranslation": "Los pacientes para los que existen evidencias documentadas de una mutación conductora de oncogenes tumorales aprovechable (EGFR, ALK o ROS-1) en el momento de la selección inicial. No se excluye a los pacientes que hayan progresado al recibir el tratamiento dirigido habitual, o para los que no haya tratamientos dirigidos aprobados",
+          "language": 7,
+          "languageDescription": "Spanish"
+         },
+         {
+          "id": 2521561,
+          "uuid": "780f24f4-e8b9-4d1f-9010-b5d5d01b6d55",
+          "attributeTranslation": "Patients pour lesquels existent des preuves documentées d’une mutation oncogénique activant la tumeur (EGFR, ALK ou ROS-1) actionnable au moment de la sélection initiale. Les patients qui ont connu une progression avec les thérapies ciblées standard, ou pour lesquels aucun traitement ciblé approuvé n’est disponible, ne sont pas exclus",
+          "language": 10,
+          "languageDescription": "French"
+         },
+         {
+          "id": 2521560,
+          "uuid": "780f24f4-e8b9-4d1f-9010-b5d5d01b6d55",
+          "attributeTranslation": "Patienten, bei denen zum Zeitpunkt des Screenings eine dokumentierte onkogene Treibermutation vorliegt, die einen therapeutischen Angriffspunkt darstellt (EGFR, ALK oder ROS-1). Patienten, bei denen es unter den zielgerichteten Standardtherapien zu einer Progression gekommen ist oder für die keine zugelassenen zielgerichteten Therapien zur Verfügung stehen, sind nicht ausgeschlossen",
+          "language": 4,
+          "languageDescription": "German"
+         }
+        ]
+       },
+       {
+        "id": 394240,
+        "number": 5,
+        "principalExclusionCriteria": "Patients with active, known, or suspected autoimmune disease requiring immunosuppressive treatments",
+        "principalExclusionCriteriaTranslations": [
+         {
+          "id": 2521563,
+          "uuid": "d53f43c0-2ca2-486f-a3f2-7535dca41e46",
+          "attributeTranslation": "Patienten mit aktiven, bekannten Autoimmunerkrankungen oder Verdacht auf diese, für die eine immunsuppressive Therapie erforderlich ist",
+          "language": 4,
+          "languageDescription": "German"
+         },
+         {
+          "id": 2521565,
+          "uuid": "d53f43c0-2ca2-486f-a3f2-7535dca41e46",
+          "attributeTranslation": "Pacientes con enfermedad autoinmunitaria activa, confirmada o presunta, que requiere tratamientos inmunodepresores",
+          "language": 7,
+          "languageDescription": "Spanish"
+         },
+         {
+          "id": 2521564,
+          "uuid": "d53f43c0-2ca2-486f-a3f2-7535dca41e46",
+          "attributeTranslation": "Patients atteints d’une maladie auto-immune active, connue ou suspectée, nécessitant des traitements immunosuppresseurs",
+          "language": 10,
+          "languageDescription": "French"
+         }
+        ]
+       },
+       {
+        "id": 394241,
+        "number": 6,
+        "principalExclusionCriteria": "Patients requiring regular treatment with steroids at a dose higher than prednisolone 10 mg/day (or equivalent)",
+        "principalExclusionCriteriaTranslations": [
+         {
+          "id": 2521567,
+          "uuid": "b21c2fac-12ad-410b-bf97-e19bb7a13b7e",
+          "attributeTranslation": "Patienten, die regelmäßig Steroide in Dosen über 10 mg Prednisolon (oder Äquivalent) pro Tag erhalten",
+          "language": 4,
+          "languageDescription": "German"
+         },
+         {
+          "id": 2521568,
+          "uuid": "b21c2fac-12ad-410b-bf97-e19bb7a13b7e",
+          "attributeTranslation": "Patients ayant besoin d’un traitement régulier par corticoïdes à une dose supérieure à 10 mg/jour de prednisolone (ou équivalent)",
+          "language": 10,
+          "languageDescription": "French"
+         },
+         {
+          "id": 2521566,
+          "uuid": "b21c2fac-12ad-410b-bf97-e19bb7a13b7e",
+          "attributeTranslation": "Pacientes que requieren tratamiento regular con esteroides a una dosis superior a 10 mg/día de prednisolona (o equivalente)",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       },
+       {
+        "id": 394242,
+        "number": 7,
+        "principalExclusionCriteria": "Patients with superior vena cava syndrome",
+        "principalExclusionCriteriaTranslations": [
+         {
+          "id": 2521571,
+          "uuid": "131a4cd9-64fb-4272-9616-7a2bcdd615ef",
+          "attributeTranslation": "Patienten mit oberer Einflussstauung (Vena-cava-superior-Syndrom)",
+          "language": 4,
+          "languageDescription": "German"
+         },
+         {
+          "id": 2521570,
+          "uuid": "131a4cd9-64fb-4272-9616-7a2bcdd615ef",
+          "attributeTranslation": "Pacientes con síndrome de la vena cava superior",
+          "language": 7,
+          "languageDescription": "Spanish"
+         },
+         {
+          "id": 2521569,
+          "uuid": "131a4cd9-64fb-4272-9616-7a2bcdd615ef",
+          "attributeTranslation": "Patients atteints d’un syndrome de veine cave supérieure",
+          "language": 10,
+          "languageDescription": "French"
+         }
+        ]
+       },
+       {
+        "id": 394243,
+        "number": 8,
+        "principalExclusionCriteria": "Patients with a current or recent history, as determined by the Investigator, of clinically significant, progressive, and/or uncontrolled renal, hepatic, haematological, endocrine, pulmonary, cardiac, gastroenterological or neurological disease. Additionally, the following criteria apply: a. Patients with a Left Ventricular Ejection Fraction (LVEF) < 45%. b. Patients with a history of coronary revascularization. c. Patients with clinically significant atrial and/or ventricular arrhythmias including but not limited to: atrial fibrillation, ventricular tachycardia, 2° or 3° heart block. d. Patients with a forced expiratory volume in one second (FEV1) of less than or equal to 60% of their predicted normal",
+        "principalExclusionCriteriaTranslations": [
+         {
+          "id": 2521573,
+          "uuid": "91fc2862-fb2c-4119-a02b-9af36321bc3e",
+          "attributeTranslation": "Patients présentant des antécédents, tels que déterminés par l’investigateur, de maladie rénale, hépatique, hématologique, endocrinienne, pulmonaire, cardiaque, gastroentérologique ou neurologique cliniquement significative, évolutive, actuelle ou récente et/ou non contrôlée. Les critères suivants s’appliquent également:\na. Patients ayant une fraction d’éjection ventriculaire gauche (FEVG) < 45 %.\nb. Patients présentant des antécédents de revascularisation coronaire.\nc. Patients présentant une arythmie auriculaire et/ou ventriculaire significative sur le plan clinique avec notamment : fibrillation auriculaire, tachycardie ventriculaire, bloc auriculo-ventriculaire du 2ème ou 3ème degré.\nd. Patients ayant un volume expiratoire maximal par seconde (VEMS) inférieur ou égal à 60 % de la valeur normale prédite",
+          "language": 10,
+          "languageDescription": "French"
+         },
+         {
+          "id": 2521574,
+          "uuid": "91fc2862-fb2c-4119-a02b-9af36321bc3e",
+          "attributeTranslation": "Patienten mit aktuell vorliegenden oder kurz zurückliegenden renalen, hepatischen, hämatologischen, endokrinen, pulmonalen, kardialen, gastroenterologischen oder neurologischen Erkrankungen, die nach dem Urteil des Prüfers klinisch relevant, progredient und/oder nicht ausreichend kontrolliert sind. Zusätzlich gelten die folgenden Kriterien:\na. Patienten mit einer linksventrikulären Ejektionsfraktion (LVEF) < 45 %\nb. Patienten mit einer Vorgeschichte einer koronaren Revaskularisation\nc. Patienten mit klinisch signifikanten atrialen und/oder ventrikulären Arrhythmien, unter anderem: Vorhofflimmern, ventrikuläre Tachykardie, Herzblock 2. oder 3. Grades\nd. Patienten mit einer forcierten Einsekundenkapazität (FEV1) von weniger oder gleich 60 % des prognostizierten Normalwerts",
+          "language": 4,
+          "languageDescription": "German"
+         },
+         {
+          "id": 2521572,
+          "uuid": "91fc2862-fb2c-4119-a02b-9af36321bc3e",
+          "attributeTranslation": "Pacientes con presencia actual o antecedentes recientes, según determine el investigador, de enfermedad renal, hepática, hematológica, endocrina, pulmonar, cardíaca, gastroenterológica o neurológica clínicamente significativa, progresiva o no controlada. Además, se aplican los siguientes criterios:\na. Pacientes con una fracción de expulsión del ventrículo izquierdo (FEVI) <45 %.\nb. Pacientes con antecedentes de revascularización coronaria.\nc. Pacientes con arritmias auriculares o ventriculares clínicamente significativas, incluidas entre otras las siguientes: fibrilación auricular, taquicardia ventricular o bloqueo auriculoventricular de segundo o tercer grado.\nd. Pacientes con un volumen espiratorio máximo en el primer segundo (VEMS) inferior o igual al 60 % del valor normal previsto",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       },
+       {
+        "id": 394244,
+        "number": 9,
+        "principalExclusionCriteria": "Patients with a history of immune mediated central nervous system toxicity that was caused by, or suspected to be caused by, immunotherapy",
+        "principalExclusionCriteriaTranslations": [
+         {
+          "id": 2521577,
+          "uuid": "c2886d3a-e68a-4a67-9eb5-e4232191850d",
+          "attributeTranslation": "Pacientes con antecedentes de toxicidad del sistema nervioso central mediada por el sistema inmunitario que provocó, o se sospecha que provocó, la inmunoterapia",
+          "language": 7,
+          "languageDescription": "Spanish"
+         },
+         {
+          "id": 2521576,
+          "uuid": "c2886d3a-e68a-4a67-9eb5-e4232191850d",
+          "attributeTranslation": "Patienten mit bekannten immunvermittelten ZNS-toxischen Wirkungen, die mutmaßlich oder sicher durch eine Immuntherapie verursacht wurden",
+          "language": 4,
+          "languageDescription": "German"
+         },
+         {
+          "id": 2521575,
+          "uuid": "c2886d3a-e68a-4a67-9eb5-e4232191850d",
+          "attributeTranslation": "Patients ayant des antécédents de toxicité du système nerveux central d’origine immunitaire due, ou probablement due, à une immunothérapie",
+          "language": 10,
+          "languageDescription": "French"
+         }
+        ]
+       }
+      ]
+     },
+     "endPoint": {
+      "primaryEndPoints": [
+       {
+        "id": 265627,
+        "number": 1,
+        "endPoint": "Frequency and severity of adverse events (AEs) and serious adverse events (SAEs) following tissue procurement and administration of lymphodepletion agents, ATL001 (monotherapy or in combination with pembrolizumab) and IL-2.",
+        "isPrimary": true,
+        "endPointTranslations": [
+         {
+          "id": 2521485,
+          "uuid": "aec48f3a-c2ce-4b94-89c2-aea1e51a2a6f",
+          "attributeTranslation": "Frecuencia y gravedad de los acontecimientos adversos (AA) y los acontecimientos adversos graves (AAG) después de la obtención de tejido y la administración de agentes de linfodepleción, ATL001 (como monoterapia o en combinación con pembrolizumab) e IL-2",
+          "language": 7,
+          "languageDescription": "Spanish"
+         },
+         {
+          "id": 2521487,
+          "uuid": "aec48f3a-c2ce-4b94-89c2-aea1e51a2a6f",
+          "attributeTranslation": "Fréquence et gravité des événements indésirables (EI) et des événements indésirables graves (EIG) après prélèvement de tissus et administration d’agents de lymphodéplétion, d’ATL001 (en monothérapie ou en association avec du pembrolizumab) et d’IL-2",
+          "language": 10,
+          "languageDescription": "French"
+         },
+         {
+          "id": 2521486,
+          "uuid": "aec48f3a-c2ce-4b94-89c2-aea1e51a2a6f",
+          "attributeTranslation": "Häufigkeit und Schweregrad unerwünschter Ereignisse (UE) und schwerwiegender unerwünschter Ereignisse (SUE) nach der Gewebegewinnung und Anwendung von lymphodepletierenden Substanzen, ATL001 (Monotherapie oder in Kombination mit Pembrolizumab) und IL-2",
+          "language": 4,
+          "languageDescription": "German"
+         }
+        ]
+       }
+      ],
+      "secondaryEndPoints": [
+       {
+        "id": 265628,
+        "number": 1,
+        "endPoint": "Percentage change from baseline in tumour size at 6 weeks, 12 weeks and best change from baseline",
+        "isPrimary": false,
+        "endPointTranslations": [
+         {
+          "id": 2521488,
+          "uuid": "f82fc50b-48b3-4188-b523-eec1d0b2e56c",
+          "attributeTranslation": "Cambio porcentual desde el inicio en el tamaño tumoral a las 6 semanas, a las 12 semanas y mejor cambio desde el inicio",
+          "language": 7,
+          "languageDescription": "Spanish"
+         },
+         {
+          "id": 2521490,
+          "uuid": "f82fc50b-48b3-4188-b523-eec1d0b2e56c",
+          "attributeTranslation": "Prozentuale Änderung der Tumorgröße nach 6 Wochen und 12 Wochen, sowie beste erzielte Änderung gegenüber dem Ausgangswert",
+          "language": 4,
+          "languageDescription": "German"
+         },
+         {
+          "id": 2521489,
+          "uuid": "f82fc50b-48b3-4188-b523-eec1d0b2e56c",
+          "attributeTranslation": "Pourcentage de variation de la tumeur par rapport à l’inclusion à 6 semaines et 12 semaines et meilleure variation par rapport à l’inclusion",
+          "language": 10,
+          "languageDescription": "French"
+         }
+        ]
+       },
+       {
+        "id": 265629,
+        "number": 2,
+        "endPoint": "Overall Response Rate (ORR) (based on RECIST v1.1 and imRECIST)",
+        "isPrimary": false,
+        "endPointTranslations": [
+         {
+          "id": 2521492,
+          "uuid": "f779fec1-1002-4f98-944e-f4c6860aa9d0",
+          "attributeTranslation": "Gesamtansprechrate (overall response rate, ORR) (nach RECIST v1.1 und imRECIST)",
+          "language": 4,
+          "languageDescription": "German"
+         },
+         {
+          "id": 2521491,
+          "uuid": "f779fec1-1002-4f98-944e-f4c6860aa9d0",
+          "attributeTranslation": "Taux de réponse globale (TRG) (basé sur RECIST v1.1 et imRECIST)",
+          "language": 10,
+          "languageDescription": "French"
+         },
+         {
+          "id": 2521493,
+          "uuid": "f779fec1-1002-4f98-944e-f4c6860aa9d0",
+          "attributeTranslation": "Tasa de respuesta global (TRG) (basada en los criterios RECIST v1.1 e imRECIST)",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       },
+       {
+        "id": 265630,
+        "number": 3,
+        "endPoint": "Time to response (based on RECIST v1.1 and imRECIST)",
+        "isPrimary": false,
+        "endPointTranslations": [
+         {
+          "id": 2521494,
+          "uuid": "a9ffdbef-9067-4a13-805a-a91280ddee7c",
+          "attributeTranslation": "Tiempo hasta la respuesta (basado en los criterios RECIST v1.1 e imRECIST)",
+          "language": 7,
+          "languageDescription": "Spanish"
+         },
+         {
+          "id": 2521495,
+          "uuid": "a9ffdbef-9067-4a13-805a-a91280ddee7c",
+          "attributeTranslation": "Délai jusqu’à réponse (basé sur RECIST v1.1 et imRECIST)",
+          "language": 10,
+          "languageDescription": "French"
+         },
+         {
+          "id": 2521496,
+          "uuid": "a9ffdbef-9067-4a13-805a-a91280ddee7c",
+          "attributeTranslation": "Zeitdauer bis zum Ansprechen (nach RECIST v1.1 und imRECIST)",
+          "language": 4,
+          "languageDescription": "German"
+         }
+        ]
+       },
+       {
+        "id": 265631,
+        "number": 4,
+        "endPoint": "Duration of response (based on RECIST v1.1 and imRECIST)",
+        "isPrimary": false,
+        "endPointTranslations": [
+         {
+          "id": 2521497,
+          "uuid": "d491dd06-df55-4180-b9ae-be7ad361359a",
+          "attributeTranslation": "Duración de la respuesta (basada en los criterios RECIST v1.1 e imRECIST)",
+          "language": 7,
+          "languageDescription": "Spanish"
+         },
+         {
+          "id": 2521499,
+          "uuid": "d491dd06-df55-4180-b9ae-be7ad361359a",
+          "attributeTranslation": "Dauer des Ansprechens (nach RECIST v1.1 und imRECIST)",
+          "language": 4,
+          "languageDescription": "German"
+         },
+         {
+          "id": 2521498,
+          "uuid": "d491dd06-df55-4180-b9ae-be7ad361359a",
+          "attributeTranslation": "Durée de réponse (basée sur RECIST v1.1 et imRECIST)",
+          "language": 10,
+          "languageDescription": "French"
+         }
+        ]
+       },
+       {
+        "id": 265632,
+        "number": 5,
+        "endPoint": "Disease Control Rate (CR + PR + durable SD) (based on RECIST v1.1)",
+        "isPrimary": false,
+        "endPointTranslations": [
+         {
+          "id": 2521501,
+          "uuid": "8b9d8fd4-8525-45e1-b00f-c39e5a513526",
+          "attributeTranslation": "Tumorkontrollrate (CR + PR + dauerhafte SD) (nach RECIST v1.1)",
+          "language": 4,
+          "languageDescription": "German"
+         },
+         {
+          "id": 2521502,
+          "uuid": "8b9d8fd4-8525-45e1-b00f-c39e5a513526",
+          "attributeTranslation": "Taux de contrôle de la maladie (RC + RP + SD durable) (basé sur RECIST v1.1)",
+          "language": 10,
+          "languageDescription": "French"
+         },
+         {
+          "id": 2521500,
+          "uuid": "8b9d8fd4-8525-45e1-b00f-c39e5a513526",
+          "attributeTranslation": "Tasa de control de la enfermedad (RC + RP + EE duradera) (basada en los criterios RECIST v1.1)",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       },
+       {
+        "id": 265633,
+        "number": 6,
+        "endPoint": "Progression free survival (PFS) (based on RECIST v1.1 and imRECIST)",
+        "isPrimary": false,
+        "endPointTranslations": [
+         {
+          "id": 2521505,
+          "uuid": "80d9faeb-b38c-494f-8ddc-eba515a0dffc",
+          "attributeTranslation": "Progressionsfreies Überleben (progression-free survival, PFS) (nach RECIST v1.1 und imRECIST)",
+          "language": 4,
+          "languageDescription": "German"
+         },
+         {
+          "id": 2521503,
+          "uuid": "80d9faeb-b38c-494f-8ddc-eba515a0dffc",
+          "attributeTranslation": "Survie sans progression (SSP) (basée sur RECIST v1.1 et imRECIST)",
+          "language": 10,
+          "languageDescription": "French"
+         },
+         {
+          "id": 2521504,
+          "uuid": "80d9faeb-b38c-494f-8ddc-eba515a0dffc",
+          "attributeTranslation": "Supervivencia sin progresión (SSP) (basada en los criterios RECIST v1.1 e imRECIST)",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       },
+       {
+        "id": 265634,
+        "number": 7,
+        "endPoint": "Overall survival (OS)",
+        "isPrimary": false,
+        "endPointTranslations": [
+         {
+          "id": 2521506,
+          "uuid": "e88068b7-cdcb-4620-a3fa-3f052dfcb572",
+          "attributeTranslation": "Gesamtüberleben (overall survival, OS)",
+          "language": 4,
+          "languageDescription": "German"
+         },
+         {
+          "id": 2521508,
+          "uuid": "e88068b7-cdcb-4620-a3fa-3f052dfcb572",
+          "attributeTranslation": "Survie globale (SG)",
+          "language": 10,
+          "languageDescription": "French"
+         },
+         {
+          "id": 2521507,
+          "uuid": "e88068b7-cdcb-4620-a3fa-3f052dfcb572",
+          "attributeTranslation": "Supervivencia global (SG)",
+          "language": 7,
+          "languageDescription": "Spanish"
+         }
+        ]
+       }
+      ]
+     },
+     "trialDuration": {
+      "estimatedGlobalEndDate": "2027-07-31",
+      "estimatedEndDate": "2027-07-31",
+      "estimatedRecruitmentStartDate": "2021-09-21"
+     },
+     "sourceOfMonetarySupport": [
+      {
+       "id": 26450,
+       "organisationName": "Achilles Therapeutics UK Limited"
+      }
+     ],
+     "populationOfTrialSubjects": {
+      "ageRanges": [
+       {
+        "id": 103255,
+        "ageRangeCategoryCode": "3",
+        "ageRangeCategory": "3"
+       },
+       {
+        "id": 103254,
+        "ageRangeCategoryCode": "4",
+        "ageRangeCategory": "4"
+       }
+      ],
+      "ageRangeSecondaryIds": [],
+      "clinicalTrialGroups": [
+       {
+        "code": "2",
+        "name": "Patients"
+       }
+      ],
+      "isFemaleSubjects": true,
+      "isMaleSubjects": true,
+      "isVulnerablePopulationSelected": true
+     },
+     "individualParticipantData": {
+      "planToShareIPD": "2"
+     }
+    },
+    "protocolInformation": {
+     "studyDesign": {
+      "periodDetails": []
+     }
+    },
+    "scientificAdviceAndPip": {
+     "scientificAdvices": [
+      {
+       "id": 15080,
+       "competentAuthority": {
+        "id": 422262,
+        "organisation": {
+         "id": 454148,
+         "type": "Non-EEA National Competent authority",
+         "typeCode": "17",
+         "name": "Medicines And Healthcare Products Regulatory Agency",
+         "commercial": false,
+         "isBusinessKeyValidated": true,
+         "businessKey": "ORG-100003945",
+         "organisationLocationStatus": "Active"
+        },
+        "address": {
+         "addressId": 451729,
+         "oneLine": "10 South Colonnade",
+         "addressLine1": "10 South Colonnade",
+         "addressLine2": "",
+         "addressLine3": "",
+         "addressLine4": "",
+         "city": "London",
+         "postcode": "E14 4PU",
+         "country": 826,
+         "countryName": "United Kingdom"
+        },
+        "isBusinessKeyValidated": true,
+        "businessKey": "ORG-100003945"
+       }
+      },
+      {
+       "id": 15081,
+       "competentAuthority": {
+        "id": 422278,
+        "organisation": {
+         "id": 454164,
+         "type": "EEA National Competent authority",
+         "typeCode": "16",
+         "name": "Paul-Ehrlich-Institut",
+         "commercial": false,
+         "isBusinessKeyValidated": true,
+         "businessKey": "ORG-100003922",
+         "organisationLocationStatus": "Active"
+        },
+        "address": {
+         "addressId": 451746,
+         "oneLine": "Paul-Ehrlich-Strasse 51-59, Industriegebiet",
+         "addressLine1": "Paul-Ehrlich-Strasse 51-59",
+         "addressLine2": "Industriegebiet",
+         "addressLine3": "",
+         "addressLine4": "",
+         "city": "Langen (Hesse)",
+         "postcode": "63225",
+         "country": 2013,
+         "countryName": "Germany"
+        },
+        "isBusinessKeyValidated": true,
+        "businessKey": "ORG-100003922"
+       }
+      }
+     ],
+     "paediatricInvestigationPlan": []
+    },
+    "associatedClinicalTrials": [],
+    "references": [],
+    "pubmedCode": [],
+    "pubmedUrl": []
+   },
+   "assessmentOutcome": "acceptable",
+   "assessmentOutcomeDate": "2024-06-03",
+   "conclusionDate": "2024-06-03",
+   "therapeuticAreas": [
+    {
+     "code": "4",
+     "name": "Diseases [C] - Neoplasms [C04]"
+    }
+   ],
+   "medicalConditions": [
+    {
+     "id": 36759,
+     "medicalCondition": "Non-small cell lung cancer",
+     "isConditionRareDisease": false
+    }
+   ],
+   "sponsors": [
+    {
+     "id": 41159,
+     "primary": true,
+     "publicContacts": [
+      {
+       "id": 114668,
+       "type": "Public",
+       "functionalName": "Achilles Therapeutics UK Limited",
+       "functionalEmailAddress": "[redacted]",
+       "telephone": "[redacted]",
+       "organisation": {
+        "id": 418511,
+        "type": "Pharmaceutical company",
+        "typeCode": "10",
+        "name": "Achilles Therapeutics UK Limited",
+        "commercial": true,
+        "isBusinessKeyValidated": true,
+        "businessKey": "ORG-100011446",
+        "organisationLocationStatus": "Active"
+       }
+      }
+     ],
+     "scientificContacts": [
+      {
+       "id": 114669,
+       "type": "Scientific",
+       "functionalName": "Achilles Therapeutics UK Limited",
+       "functionalEmailAddress": "[redacted]",
+       "telephone": "[redacted]",
+       "organisation": {
+        "id": 418511,
+        "type": "Pharmaceutical company",
+        "typeCode": "10",
+        "name": "Achilles Therapeutics UK Limited",
+        "commercial": true,
+        "isBusinessKeyValidated": true,
+        "businessKey": "ORG-100011446",
+        "organisationLocationStatus": "Active"
+       }
+      }
+     ],
+     "thirdParties": [
+      {
+       "id": 162121,
+       "organisationAddress": {
+        "id": 403962,
+        "organisation": {
+         "id": 435794,
+         "type": "Pharmaceutical company",
+         "typeCode": "10",
+         "name": "PPD Global Limited",
+         "commercial": true,
+         "isBusinessKeyValidated": true,
+         "businessKey": "ORG-100007533",
+         "organisationLocationStatus": "Active"
+        },
+        "address": {
+         "addressId": 431918,
+         "oneLine": "Granta Park, Great Abington",
+         "addressLine1": "Granta Park",
+         "addressLine2": "Great Abington",
+         "addressLine3": "",
+         "addressLine4": "",
+         "city": "Cambridge",
+         "postcode": "CB21 6GQ",
+         "country": 826,
+         "countryName": "United Kingdom"
+        },
+        "phone": "+12026695988",
+        "email": "[redacted]",
+        "isBusinessKeyValidated": true,
+        "businessKey": "ORG-100007533"
+       },
+       "sponsorDuties": [
+        {
+         "id": 256471,
+         "code": "1"
+        },
+        {
+         "id": 256472,
+         "code": "11"
+        },
+        {
+         "id": 256473,
+         "code": "13"
+        },
+        {
+         "id": 256474,
+         "code": "2"
+        },
+        {
+         "id": 256475,
+         "code": "5"
+        },
+        {
+         "id": 256476,
+         "code": "8"
+        },
+        {
+         "id": 256477,
+         "code": "9"
+        }
+       ],
+       "phoneNumber": "+12026695988",
+       "email": "[redacted]"
+      },
+      {
+       "id": 162122,
+       "organisationAddress": {
+        "id": 403974,
+        "organisation": {
+         "id": 435806,
+         "type": "Pharmaceutical company",
+         "typeCode": "10",
+         "name": "Veristat LLC",
+         "commercial": true,
+         "isBusinessKeyValidated": true,
+         "businessKey": "ORG-100032404",
+         "organisationLocationStatus": "Active"
+        },
+        "address": {
+         "addressId": 431931,
+         "oneLine": "134 Turnpike Road Ste 200",
+         "addressLine1": "134 Turnpike Road Ste 200",
+         "addressLine2": "",
+         "addressLine3": "",
+         "addressLine4": "",
+         "city": "Southborough",
+         "postcode": "01772-2136",
+         "country": 840,
+         "countryName": "United States"
+        },
+        "phone": "+441565733772",
+        "email": "[redacted]",
+        "isBusinessKeyValidated": true,
+        "businessKey": "ORG-100032404"
+       },
+       "sponsorDuties": [
+        {
+         "id": 256478,
+         "code": "10"
+        },
+        {
+         "id": 256479,
+         "code": "6"
+        },
+        {
+         "id": 256480,
+         "code": "7"
+        }
+       ],
+       "phoneNumber": "+441565733772",
+       "email": "[redacted]"
+      },
+      {
+       "id": 162123,
+       "organisationAddress": {
+        "id": 412744,
+        "organisation": {
+         "id": 444603,
+         "type": "Pharmaceutical company",
+         "typeCode": "10",
+         "name": "Median Technologies",
+         "commercial": true,
+         "isBusinessKeyValidated": true,
+         "businessKey": "ORG-100041462",
+         "organisationLocationStatus": "Active"
+        },
+        "address": {
+         "addressId": 441414,
+         "oneLine": "Les Deux Arcs Sophia Antipolis, 1800 Route Des Cretes",
+         "addressLine1": "Les Deux Arcs Sophia Antipolis",
+         "addressLine2": "1800 Route Des Cretes",
+         "addressLine3": "",
+         "addressLine4": "",
+         "city": "Valbonne",
+         "postcode": "06560",
+         "country": 2012,
+         "countryName": "France"
+        },
+        "phone": "+33493333777",
+        "email": "[redacted]",
+        "isBusinessKeyValidated": true,
+        "businessKey": "ORG-100041462"
+       },
+       "sponsorDuties": [
+        {
+         "id": 256481,
+         "code": "4"
+        }
+       ],
+       "phoneNumber": "+33493333777",
+       "email": "[redacted]"
+      }
+     ],
+     "organisation": {
+      "id": 418511,
+      "type": "Pharmaceutical company",
+      "typeCode": "10",
+      "name": "Achilles Therapeutics UK Limited",
+      "commercial": true,
+      "isBusinessKeyValidated": true,
+      "businessKey": "ORG-100011446",
+      "organisationLocationStatus": "Active"
+     },
+     "addresses": [
+      {
+       "id": 388832,
+       "organisation": {
+        "id": 418511,
+        "type": "Pharmaceutical company",
+        "typeCode": "10",
+        "name": "Achilles Therapeutics UK Limited",
+        "commercial": true,
+        "isBusinessKeyValidated": true,
+        "businessKey": "ORG-100011446",
+        "organisationLocationStatus": "Active"
+       },
+       "address": {
+        "addressId": 415582,
+        "oneLine": "245 Hammersmith Road",
+        "addressLine1": "245 Hammersmith Road",
+        "addressLine2": "",
+        "addressLine3": "",
+        "addressLine4": "",
+        "city": "London",
+        "postcode": "W6 8PW",
+        "country": 826,
+        "countryName": "United Kingdom"
+       },
+       "isBusinessKeyValidated": true,
+       "businessKey": "ORG-100011446"
+      }
+     ],
+     "isCommercial": true,
+     "commercial": "Commercial"
+    }
+   ],
+   "trialCategoryCode": "2",
+   "trialCategoryJustificationComment": "According to the Revised CTIS Transparency Rules (05 October 2023), category 2 trials (therapeutic exploratory and confirmatory clinical trials) include: a) Phase I and phase II integrated clinical trials; b) Phase II clinical trials; and c) phase III clinical trials. As the ATX-NS-001 study is a Phase I/II trial, it is considered a Category 2 trial",
+   "partOneTherapeuticAreas": [
+    {
+     "id": 422112,
+     "therapeuticArea": {
+      "code": "4",
+      "name": "Diseases [C] - Neoplasms [C04]"
+     }
+    }
+   ],
+   "productRoleGroupInfos": [
+    {
+     "id": 120195,
+     "comments": "ATL001, KEYTRUDA 25 mg/mL concentrate for solution for infusion",
+     "productRoleCode": "1",
+     "productRoleName": "Test",
+     "products": [
+      {
+       "id": 151421,
+       "part1MpRoleTypeCode": "1",
+       "productDictionaryInfo": {
+        "productPk": "10741713",
+        "productPharmForm": "DISPERSION FOR INFUSION",
+        "euMpNumber": "PRD6436533",
+        "prodAuthStatus": 1,
+        "prodName": "ATL001",
+        "pharmForm": "DISPERSION FOR INFUSION",
+        "activeSubstanceName": "ATL001",
+        "euSubstNumber": "SUB282178",
+        "nameOrg": "ACHILLES THERAPEUTICS UK LIMITED",
+        "productSubstances": [
+         {
+          "productPk": "10741713",
+          "substancePk": "282180",
+          "nameOrg": "ACHILLES THERAPEUTICS UK LIMITED",
+          "substanceOrigin": "Structurally Diverse Substance - Cell therapy",
+          "actSubstOrigin": "Structurally Diverse Substance - Cell therapy",
+          "actSubstName": "ATL001",
+          "substanceEvCode": "SUB282178"
+         }
+        ],
+        "activeSubstanceOtherDescriptiveName": ""
+       },
+       "isPaediatricFormulation": false,
+       "mpRoleInTrial": "1",
+       "orphanDrugEdit": false,
+       "otherMedicinalProduct": "Advanced Therapy Medicinal Product (ATMP)",
+       "evCode": "PRD6436533",
+       "sponsorProductCodeEdit": "ATL001",
+       "therapies": [
+        {
+         "id": 1482,
+         "catReferenceNumber": "EMA/420999/2019",
+         "advancedTherapyType": "1",
+         "cellOriginCode": "1",
+         "cellTypeCode": "3",
+         "cellTypeOtherSomatic": "T cells"
+        }
+       ],
+       "devices": [],
+       "characteristics": [
+        "11"
+       ],
+       "routes": [
+        "INTRAVENOUS USE"
+       ],
+       "allSubstancesChemicals": false,
+       "productName": "ATL001",
+       "jsonActiveSubstanceNames": "atl001",
+       "pharmaceuticalFormDisplay": "DISPERSION FOR INFUSION"
+      },
+      {
+       "id": 151422,
+       "part1MpRoleTypeCode": "1",
+       "productDictionaryInfo": {
+        "productPk": "11121842",
+        "productPharmForm": "CONCENTRATE FOR SOLUTION FOR INFUSION",
+        "euMpNumber": "PRD4323105",
+        "marketingAuthNumber": "EU/1/15/1024/002",
+        "prodAuthStatus": 2,
+        "prodName": "KEYTRUDA 25 mg/mL concentrate for solution for infusion",
+        "pharmForm": "SOLUTION FOR INFUSION",
+        "activeSubstanceName": "PEMBROLIZUMAB",
+        "euSubstNumber": "SUB167136",
+        "authorisationCountryCode": "EU",
+        "mrpNumber": "EMEA/H/C/003820",
+        "nameOrg": "MERCK SHARP & DOHME B.V.",
+        "productSubstances": [
+         {
+          "productPk": "11121842",
+          "substancePk": "367503",
+          "nameOrg": "MERCK SHARP & DOHME B.V.",
+          "substanceOrigin": "Protein - Other",
+          "actSubstOrigin": "Protein - Other",
+          "actSubstName": "PEMBROLIZUMAB",
+          "substanceEvCode": "SUB167136"
+         }
+        ],
+        "atcCode": "L01FF02",
+        "atcName": "-",
+        "atcTermLevel": "5",
+        "activeSubstanceOtherDescriptiveName": ""
+       },
+       "isPaediatricFormulation": false,
+       "mpRoleInTrial": "1",
+       "orphanDrugEdit": false,
+       "productChangedRelationMA": false,
+       "evCode": "PRD4323105",
+       "devices": [],
+       "characteristics": [
+        "7"
+       ],
+       "routes": [
+        "INTRAVENOUS USE"
+       ],
+       "allSubstancesChemicals": false,
+       "productName": "KEYTRUDA 25 mg/mL concentrate for solution for infusion",
+       "jsonActiveSubstanceNames": "pembrolizumab",
+       "pharmaceuticalFormDisplay": "SOLUTION FOR INFUSION"
+      }
+     ]
+    }
+   ],
+   "isLowIntervention": false
+  },
+  "authorizedPartsII": [
+   {
+    "id": 98526,
+    "mscId": 28062,
+    "mscInfo": {
+     "id": 28062,
+     "clinicalTrialId": 13871,
+     "countryOrganisationId": 2012,
+     "reportingStatusCode": "Ended",
+     "fromDate": "2024-05-13",
+     "toDate": "2024-05-13",
+     "isProposedRms": false,
+     "expressDecision": "unwilling",
+     "countryName": "France",
+     "organisationInfo": {},
+     "firstDecisionDate": "2024-06-07",
+     "trialStatus": "Ended",
+     "trialPeriod": [
+      {
+       "id": 22940,
+       "trialStartDate": "2022-03-31",
+       "fromDate": "2024-06-19"
+      },
+      {
+       "id": 22941,
+       "trialStartDate": "2022-03-31",
+       "fromDate": "2024-06-19"
+      }
+     ],
+     "trialRecruitmentPeriod": [
+      {
+       "id": 28527,
+       "recruitmentStartDate": "2022-08-24",
+       "fromDate": "2024-06-19"
+      },
+      {
+       "id": 28528,
+       "recruitmentStartDate": "2022-08-24",
+       "fromDate": "2024-06-19"
+      }
+     ],
+     "hasRecruitmentStarted": true,
+     "activeTrialPeriod": {
+      "id": 30333,
+      "trialStartDate": "2022-03-31",
+      "fromDate": "2024-06-19"
+     },
+     "activeTrialRecruitmentPeriod": {
+      "recruitmentStartDate": "2022-08-24"
+     },
+     "isWillingAtDayThreeView": false,
+     "clinicalTrialStatusHistory": [
+      {
+       "id": 32032,
+       "mscId": 28062,
+       "trialStatus": "Under evaluation",
+       "trialStatusDate": "2024-04-26T17:06:55.331"
+      },
+      {
+       "id": 37689,
+       "mscId": 28062,
+       "trialStatus": "Authorised",
+       "trialStatusDate": "2024-06-07T14:32:12.409"
+      },
+      {
+       "id": 54867,
+       "mscId": 28062,
+       "trialStatus": "Ended",
+       "trialStatusDate": "2024-10-02T12:13:54.79"
+      }
+     ],
+     "applicationTypeMsc": "1",
+     "mscName": "France",
+     "assessmentOutcome": "acceptable",
+     "assessmentOutcomeDate": "2024-05-24",
+     "decision": "authorized",
+     "decisionDate": "2024-06-07"
+    },
+    "decisionDate": "2024-06-07",
+    "recruitmentSubjectCount": 8,
+    "trialSites": [
+     {
+      "id": 647162,
+      "organisationAddressInfo": {
+       "id": 412348,
+       "organisation": {
+        "id": 444207,
+        "type": "Hospital/Clinic/Other health care facility",
+        "typeCode": "8",
+        "name": "Hospices Civils De Lyon",
+        "commercial": false,
+        "isBusinessKeyValidated": true,
+        "businessKey": "ORG-100006597",
+        "organisationLocationStatus": "Active"
+       },
+       "address": {
+        "addressId": 440996,
+        "oneLine": "165 Chemin Du Grand Revoyet",
+        "addressLine1": "165 Chemin Du Grand Revoyet",
+        "addressLine2": "",
+        "addressLine3": "",
+        "addressLine4": "",
+        "city": "Pierre Benite",
+        "postcode": "69310",
+        "country": 2012,
+        "countryName": "France"
+       },
+       "phone": "+33478864405",
+       "email": "[redacted]",
+       "isBusinessKeyValidated": true,
+       "businessKey": "ORG-100006597"
+      },
+      "personInfo": {
+       "id": 724748,
+       "firstName": "Sébastien",
+       "lastName": "Couraud",
+       "telephone": "[redacted]",
+       "email": "[redacted]",
+       "title": "1"
+      },
+      "departmentName": "Service de Pneumologie"
+     },
+     {
+      "id": 647163,
+      "organisationAddressInfo": {
+       "id": 412340,
+       "organisation": {
+        "id": 444199,
+        "type": "Hospital/Clinic/Other health care facility",
+        "typeCode": "8",
+        "name": "Institut Gustave Roussy",
+        "commercial": false,
+        "isBusinessKeyValidated": true,
+        "businessKey": "ORG-100010022",
+        "organisationLocationStatus": "Active"
+       },
+       "address": {
+        "addressId": 440984,
+        "oneLine": "114 Rue Edouard Vaillant",
+        "addressLine1": "114 Rue Edouard Vaillant",
+        "addressLine2": "",
+        "addressLine3": "",
+        "addressLine4": "",
+        "city": "Villejuif",
+        "postcode": "94800",
+        "country": 2012,
+        "countryName": "France"
+       },
+       "phone": "+33142114322",
+       "email": "[redacted]",
+       "isBusinessKeyValidated": true,
+       "businessKey": "ORG-100010022"
+      },
+      "personInfo": {
+       "id": 724749,
+       "firstName": "Benjamin",
+       "lastName": "Besse",
+       "telephone": "[redacted]",
+       "email": "[redacted]",
+       "title": "1"
+      },
+      "departmentName": "Département De Médecine"
+     }
+    ],
+    "applicationStatusCode": "Authorised"
+   },
+   {
+    "id": 102440,
+    "mscId": 28063,
+    "mscInfo": {
+     "id": 28063,
+     "clinicalTrialId": 13871,
+     "countryOrganisationId": 2013,
+     "reportingStatusCode": "Ended",
+     "fromDate": "2024-05-23",
+     "toDate": "2024-05-23",
+     "isProposedRms": false,
+     "expressDecision": "unwilling",
+     "countryName": "Germany",
+     "organisationInfo": {},
+     "firstDecisionDate": "2024-06-10",
+     "trialStatus": "Ended",
+     "trialPeriod": [
+      {
+       "id": 22942,
+       "trialStartDate": "2022-08-17",
+       "fromDate": "2024-06-19"
+      },
+      {
+       "id": 22943,
+       "trialStartDate": "2022-08-17",
+       "fromDate": "2024-06-19"
+      }
+     ],
+     "trialRecruitmentPeriod": [
+      {
+       "id": 28529,
+       "recruitmentStartDate": "2022-08-25",
+       "fromDate": "2024-06-19"
+      },
+      {
+       "id": 28530,
+       "recruitmentStartDate": "2022-08-25",
+       "fromDate": "2024-06-19"
+      }
+     ],
+     "hasRecruitmentStarted": true,
+     "activeTrialPeriod": {
+      "id": 30335,
+      "trialStartDate": "2022-08-17",
+      "fromDate": "2024-06-19"
+     },
+     "activeTrialRecruitmentPeriod": {
+      "recruitmentStartDate": "2022-08-25"
+     },
+     "isWillingAtDayThreeView": false,
+     "clinicalTrialStatusHistory": [
+      {
+       "id": 32033,
+       "mscId": 28063,
+       "trialStatus": "Under evaluation",
+       "trialStatusDate": "2024-04-26T17:06:55.402"
+      },
+      {
+       "id": 37971,
+       "mscId": 28063,
+       "trialStatus": "Authorised",
+       "trialStatusDate": "2024-06-10T16:50:42.875"
+      },
+      {
+       "id": 54868,
+       "mscId": 28063,
+       "trialStatus": "Ended",
+       "trialStatusDate": "2024-10-02T12:13:55.03"
+      }
+     ],
+     "applicationTypeMsc": "1",
+     "mscName": "Germany",
+     "assessmentOutcome": "acceptable",
+     "assessmentOutcomeDate": "2024-05-24",
+     "decision": "authorized",
+     "decisionDate": "2024-06-10"
+    },
+    "decisionDate": "2024-06-10",
+    "recruitmentSubjectCount": 8,
+    "trialSites": [
+     {
+      "id": 674453,
+      "organisationAddressInfo": {
+       "id": 412357,
+       "organisation": {
+        "id": 444216,
+        "type": "Hospital/Clinic/Other health care facility",
+        "typeCode": "8",
+        "name": "Universitaetsklinikum Essen AöR",
+        "commercial": false,
+        "isBusinessKeyValidated": true,
+        "businessKey": "ORG-100009964",
+        "organisationLocationStatus": "Active"
+       },
+       "address": {
+        "addressId": 441006,
+        "oneLine": "Hufelandstrasse 55, Holsterhausen",
+        "addressLine1": "Hufelandstrasse 55",
+        "addressLine2": "Holsterhausen",
+        "addressLine3": "",
+        "addressLine4": "",
+        "city": "Essen",
+        "postcode": "45147",
+        "country": 2013,
+        "countryName": "Germany"
+       },
+       "phone": "+492017232000",
+       "email": "[redacted]",
+       "isBusinessKeyValidated": true,
+       "businessKey": "ORG-100009964"
+      },
+      "personInfo": {
+       "id": 754379,
+       "firstName": "Martin",
+       "lastName": "Schuler",
+       "telephone": "[redacted]",
+       "email": "[redacted]",
+       "title": "1"
+      },
+      "departmentName": "Westdeutsches Tumorzentrum, Innere Klinik (Tumorforschung)"
+     },
+     {
+      "id": 674452,
+      "organisationAddressInfo": {
+       "id": 412361,
+       "organisation": {
+        "id": 444220,
+        "type": "Hospital/Clinic/Other health care facility",
+        "typeCode": "8",
+        "name": "Universitaetsklinikum Carl Gustav Carus Dresden an der Technischen Universitaet Dresden AöR",
+        "commercial": false,
+        "isBusinessKeyValidated": true,
+        "businessKey": "ORG-100022312",
+        "organisationLocationStatus": "Active"
+       },
+       "address": {
+        "addressId": 441010,
+        "oneLine": "Fetscherstrasse 74, Johannstadt-Nord",
+        "addressLine1": "Fetscherstrasse 74",
+        "addressLine2": "Johannstadt-Nord",
+        "addressLine3": "",
+        "addressLine4": "",
+        "city": "Dresden",
+        "postcode": "01307",
+        "country": 2013,
+        "countryName": "Germany"
+       },
+       "phone": "+493514584695",
+       "email": "[redacted]",
+       "isBusinessKeyValidated": true,
+       "businessKey": "ORG-100022312"
+      },
+      "personInfo": {
+       "id": 754378,
+       "firstName": "Martin",
+       "lastName": "Wermke",
+       "telephone": "[redacted]",
+       "email": "[redacted]",
+       "title": "1"
+      },
+      "departmentName": "Medizinische Klinik I, Trial Management / NCT/UCC Early Clinical Trial Unit"
+     }
+    ],
+    "applicationStatusCode": "Authorised"
+   },
+   {
+    "id": 98528,
+    "mscId": 28064,
+    "mscInfo": {
+     "id": 28064,
+     "clinicalTrialId": 13871,
+     "countryOrganisationId": 2027,
+     "reportingStatusCode": "Ended",
+     "fromDate": "2024-05-13",
+     "toDate": "2024-05-13",
+     "isProposedRms": true,
+     "expressDecision": "unwilling",
+     "countryName": "Spain",
+     "organisationInfo": {},
+     "firstDecisionDate": "2024-06-03",
+     "trialStatus": "Ended",
+     "trialPeriod": [
+      {
+       "id": 22938,
+       "trialStartDate": "2021-04-07",
+       "fromDate": "2024-06-19"
+      },
+      {
+       "id": 22939,
+       "trialStartDate": "2021-04-07",
+       "fromDate": "2024-06-19"
+      }
+     ],
+     "trialRecruitmentPeriod": [
+      {
+       "id": 28525,
+       "recruitmentStartDate": "2021-09-21",
+       "fromDate": "2024-06-19"
+      },
+      {
+       "id": 28526,
+       "recruitmentStartDate": "2021-09-21",
+       "fromDate": "2024-06-19"
+      }
+     ],
+     "hasRecruitmentStarted": true,
+     "activeTrialPeriod": {
+      "id": 30331,
+      "trialStartDate": "2021-04-07",
+      "fromDate": "2024-06-19"
+     },
+     "activeTrialRecruitmentPeriod": {
+      "recruitmentStartDate": "2021-09-21"
+     },
+     "isWillingAtDayThreeView": false,
+     "clinicalTrialStatusHistory": [
+      {
+       "id": 32034,
+       "mscId": 28064,
+       "trialStatus": "Under evaluation",
+       "trialStatusDate": "2024-04-26T17:06:55.462"
+      },
+      {
+       "id": 36838,
+       "mscId": 28064,
+       "trialStatus": "Authorised",
+       "trialStatusDate": "2024-06-03T10:22:49.829"
+      },
+      {
+       "id": 54869,
+       "mscId": 28064,
+       "trialStatus": "Ended",
+       "trialStatusDate": "2024-10-02T12:13:55.248"
+      }
+     ],
+     "applicationTypeMsc": "1",
+     "mscName": "Spain",
+     "assessmentOutcome": "acceptable",
+     "assessmentOutcomeDate": "2024-06-03",
+     "decision": "authorized",
+     "decisionDate": "2024-06-03"
+    },
+    "decisionDate": "2024-06-03",
+    "recruitmentSubjectCount": 8,
+    "trialSites": [
+     {
+      "id": 647168,
+      "organisationAddressInfo": {
+       "id": 412329,
+       "organisation": {
+        "id": 444188,
+        "type": "Hospital/Clinic/Other health care facility",
+        "typeCode": "8",
+        "name": "Hospital Universitario Fundacion Jimenez Diaz",
+        "commercial": false,
+        "isBusinessKeyValidated": true,
+        "businessKey": "ORG-100028994",
+        "organisationLocationStatus": "Active"
+       },
+       "address": {
+        "addressId": 440972,
+        "oneLine": "Avenida De Los Reyes Catolicos 2",
+        "addressLine1": "Avenida De Los Reyes Catolicos 2",
+        "addressLine2": "",
+        "addressLine3": "",
+        "addressLine4": "",
+        "city": "Madrid",
+        "postcode": "28040",
+        "country": 2027,
+        "countryName": "Spain"
+       },
+       "phone": "+34915504800",
+       "email": "[redacted]",
+       "isBusinessKeyValidated": true,
+       "businessKey": "ORG-100028994"
+      },
+      "personInfo": {
+       "id": 724754,
+       "firstName": "Víctor",
+       "lastName": "Moreno García",
+       "telephone": "[redacted]",
+       "email": "[redacted]",
+       "title": "1"
+      },
+      "departmentName": "Oncologia"
+     },
+     {
+      "id": 647166,
+      "organisationAddressInfo": {
+       "id": 412333,
+       "organisation": {
+        "id": 444192,
+        "type": "Hospital/Clinic/Other health care facility",
+        "typeCode": "8",
+        "name": "Hospital Clinic De Barcelona",
+        "commercial": false,
+        "isBusinessKeyValidated": true,
+        "businessKey": "ORG-100009329",
+        "organisationLocationStatus": "Active"
+       },
+       "address": {
+        "addressId": 440976,
+        "oneLine": "Calle Villarroel 170",
+        "addressLine1": "Calle Villarroel 170",
+        "addressLine2": "",
+        "addressLine3": "",
+        "addressLine4": "",
+        "city": "Barcelona",
+        "postcode": "08036",
+        "country": 2027,
+        "countryName": "Spain"
+       },
+       "phone": "+34669090659",
+       "email": "[redacted]",
+       "isBusinessKeyValidated": true,
+       "businessKey": "ORG-100009329"
+      },
+      "personInfo": {
+       "id": 724752,
+       "firstName": "Laura",
+       "lastName": "Mezquita Pérez",
+       "telephone": "[redacted]",
+       "email": "[redacted]",
+       "title": "1"
+      },
+      "departmentName": "Oncología Médica, Instituto Clínico de Enfermedades Hematológicas y Oncológicas"
+     },
+     {
+      "id": 647167,
+      "organisationAddressInfo": {
+       "id": 412332,
+       "organisation": {
+        "id": 444191,
+        "type": "Hospital/Clinic/Other health care facility",
+        "typeCode": "8",
+        "name": "Hospital Clinico Universitario De Valencia",
+        "commercial": false,
+        "isBusinessKeyValidated": true,
+        "businessKey": "ORG-100032606",
+        "organisationLocationStatus": "Active"
+       },
+       "address": {
+        "addressId": 440975,
+        "oneLine": "Avenida Blasco Ibanez 17",
+        "addressLine1": "Avenida Blasco Ibanez 17",
+        "addressLine2": "",
+        "addressLine3": "",
+        "addressLine4": "",
+        "city": "Valencia",
+        "postcode": "46010",
+        "country": 2027,
+        "countryName": "Spain"
+       },
+       "phone": "+34961973528",
+       "email": "[redacted]",
+       "isBusinessKeyValidated": true,
+       "businessKey": "ORG-100032606"
+      },
+      "personInfo": {
+       "id": 724753,
+       "firstName": "Valentina",
+       "lastName": "Gambardella",
+       "telephone": "[redacted]",
+       "email": "[redacted]",
+       "title": "1"
+      },
+      "departmentName": "INCLIVA - Biomedical Research Institute"
+     },
+     {
+      "id": 647169,
+      "organisationAddressInfo": {
+       "id": 412330,
+       "organisation": {
+        "id": 444189,
+        "type": "Hospital/Clinic/Other health care facility",
+        "typeCode": "8",
+        "name": "Hospital Universitario Hm Sanchinarro",
+        "commercial": false,
+        "isBusinessKeyValidated": true,
+        "businessKey": "ORG-100041243",
+        "organisationLocationStatus": "Active"
+       },
+       "address": {
+        "addressId": 440973,
+        "oneLine": "Calle Ona 10",
+        "addressLine1": "Calle Ona 10",
+        "addressLine2": "",
+        "addressLine3": "",
+        "addressLine4": "",
+        "city": "Madrid",
+        "postcode": "28050",
+        "country": 2027,
+        "countryName": "Spain"
+       },
+       "phone": "+34917567825",
+       "email": "[redacted]",
+       "isBusinessKeyValidated": true,
+       "businessKey": "ORG-100041243"
+      },
+      "personInfo": {
+       "id": 724755,
+       "firstName": "Maria",
+       "lastName": "José de Miguel",
+       "telephone": "[redacted]",
+       "email": "[redacted]",
+       "title": "1"
+      },
+      "departmentName": "Ensayos Clínicos Fases I START"
+     }
+    ],
+    "applicationStatusCode": "Authorised"
+   }
+  ],
+  "applicationInfo": [
+   {
+    "id": 22690,
+    "type": "INITIAL",
+    "status": "Authorised",
+    "ctNumber": "2024-513060-26-00",
+    "trialStatus": "Ended",
+    "submissionDate": "2024-04-26",
+    "partI": {
+     "assessmentOutcome": "acceptable",
+     "assessmentOutcomeDate": "2024-06-03"
+    },
+    "partIIInfo": [
+     {
+      "id": 98526,
+      "mscId": 28062,
+      "mscInfo": {
+       "id": 28062,
+       "mscName": "France",
+       "countryOrganisationId": 2012,
+       "assessmentOutcome": "acceptable",
+       "assessmentOutcomeDate": "2024-05-24",
+       "decision": "authorized",
+       "decisionDate": "2024-06-07",
+       "reportingStatusCode": "Ended",
+       "countryName": "France",
+       "trialStatus": "Ended",
+       "firstDecisionDate": "2024-06-07"
+      },
+      "applicationStatusCode": "Authorised"
+     },
+     {
+      "id": 102440,
+      "mscId": 28063,
+      "mscInfo": {
+       "id": 28063,
+       "mscName": "Germany",
+       "countryOrganisationId": 2013,
+       "assessmentOutcome": "acceptable",
+       "assessmentOutcomeDate": "2024-05-24",
+       "decision": "authorized",
+       "decisionDate": "2024-06-10",
+       "reportingStatusCode": "Ended",
+       "countryName": "Germany",
+       "trialStatus": "Ended",
+       "firstDecisionDate": "2024-06-10"
+      },
+      "applicationStatusCode": "Authorised"
+     },
+     {
+      "id": 98528,
+      "mscId": 28064,
+      "mscInfo": {
+       "id": 28064,
+       "mscName": "Spain",
+       "countryOrganisationId": 2027,
+       "assessmentOutcome": "acceptable",
+       "assessmentOutcomeDate": "2024-06-03",
+       "decision": "authorized",
+       "decisionDate": "2024-06-03",
+       "reportingStatusCode": "Ended",
+       "countryName": "Spain",
+       "trialStatus": "Ended",
+       "firstDecisionDate": "2024-06-03"
+      },
+      "applicationStatusCode": "Authorised"
+     }
+    ],
+    "decisionDate": "2024-06-03",
+    "ctMSCsByApplication": [
+     {
+      "id": 28062,
+      "mscName": "France",
+      "reportingStatusCode": "Ended"
+     },
+     {
+      "id": 28063,
+      "mscName": "Germany",
+      "reportingStatusCode": "Ended"
+     },
+     {
+      "id": 28064,
+      "mscName": "Spain",
+      "reportingStatusCode": "Ended"
+     }
+    ],
+    "businessKey": "IN",
+    "allPartTwosOutOfScope": false,
+    "applicationTrialDecisionByMsc": {},
+    "decisions": [
+     {
+      "id": 23627,
+      "applicationId": 22690,
+      "mscId": 28064,
+      "mscName": "Spain",
+      "decisionDate": "2024-06-03T10:22:52.087",
+      "decision": "authorized",
+      "assessmentOutcome": "acceptable",
+      "eventType": "decision",
+      "part2Id": 98528,
+      "part1Id": 39126,
+      "applicationType": "INITIAL",
+      "isRMS": true
+     },
+     {
+      "id": 24626,
+      "applicationId": 22690,
+      "mscId": 28063,
+      "mscName": "Germany",
+      "decisionDate": "2024-06-10T16:50:43.546",
+      "decision": "authorized",
+      "assessmentOutcome": "acceptable",
+      "eventType": "decision",
+      "part2Id": 102440,
+      "part1Id": 39126,
+      "applicationType": "INITIAL",
+      "isRMS": false
+     },
+     {
+      "id": 24371,
+      "applicationId": 22690,
+      "mscId": 28062,
+      "mscName": "France",
+      "decisionDate": "2024-06-07T14:32:13.143",
+      "decision": "authorized",
+      "assessmentOutcome": "acceptable",
+      "eventType": "decision",
+      "part2Id": 98526,
+      "part1Id": 39126,
+      "applicationType": "INITIAL",
+      "isRMS": false
+     }
+    ],
+    "productRoleGroupDocument": [
+     {
+      "documentUuid": "1a167845-7c48-4906-bc8a-c88582d4d206",
+      "productRoleGroupId": 120195
+     },
+     {
+      "documentUuid": "def95d62-2bb7-4ef9-858e-7fa94d5bd06d",
+      "productRoleGroupId": 120195
+     },
+     {
+      "documentUuid": "3e07c9e0-746f-441b-8398-af839122511d",
+      "productRoleGroupId": 120195
+     }
+    ]
+   }
+  ],
+  "trialGlobalEnd": [],
+  "memberStatesConcerned": [
+   {
+    "mscName": "Spain",
+    "mscId": 28064,
+    "firstDecisionDate": "2024-06-03T10:22:52.087",
+    "lastDecisionDate": "2024-06-03T10:22:52.087",
+    "mscPublicStatusCode": 8
+   },
+   {
+    "mscName": "Germany",
+    "mscId": 28063,
+    "firstDecisionDate": "2024-06-10T16:50:43.546",
+    "lastDecisionDate": "2024-06-10T16:50:43.546",
+    "mscPublicStatusCode": 8
+   },
+   {
+    "mscName": "France",
+    "mscId": 28062,
+    "firstDecisionDate": "2024-06-07T14:32:13.143",
+    "lastDecisionDate": "2024-06-07T14:32:13.143",
+    "mscPublicStatusCode": 8
+   }
+  ],
+  "eudraCt": {
+   "isTransitioned": true,
+   "eudraCtCode": "2018-001005-85"
+  }
+ },
+ "events": {
+  "temporaryHaltList": [],
+  "trialEvents": [
+   {
+    "mscId": 28062,
+    "mscName": "France",
+    "events": [
+     {
+      "notificationType": "START_OF_TRIAL",
+      "date": "2022-03-31"
+     },
+     {
+      "notificationType": "START_OF_RECRUITMENT",
+      "date": "2022-08-24"
+     },
+     {
+      "notificationType": "EARLY_TERMINATION",
+      "date": "2024-09-17"
+     }
+    ],
+    "earlyTerminationReason": {
+     "code": "1",
+     "name": "Sponsor Decision",
+     "isLateCandidate": true
+    }
+   },
+   {
+    "mscId": 28063,
+    "mscName": "Germany",
+    "events": [
+     {
+      "notificationType": "START_OF_TRIAL",
+      "date": "2022-08-17"
+     },
+     {
+      "notificationType": "START_OF_RECRUITMENT",
+      "date": "2022-08-25"
+     },
+     {
+      "notificationType": "EARLY_TERMINATION",
+      "date": "2024-09-17"
+     }
+    ],
+    "earlyTerminationReason": {
+     "code": "1",
+     "name": "Sponsor Decision",
+     "isLateCandidate": true
+    }
+   },
+   {
+    "mscId": 28064,
+    "mscName": "Spain",
+    "events": [
+     {
+      "notificationType": "START_OF_TRIAL",
+      "date": "2021-04-07"
+     },
+     {
+      "notificationType": "START_OF_RECRUITMENT",
+      "date": "2021-09-21"
+     },
+     {
+      "notificationType": "EARLY_TERMINATION",
+      "date": "2024-09-17"
+     }
+    ],
+    "earlyTerminationReason": {
+     "code": "1",
+     "name": "Sponsor Decision",
+     "isLateCandidate": true
+    }
+   }
+  ],
+  "trialGlobalEndDate": "2024-09-18",
+  "unexpectedEvents": [],
+  "seriousBreaches": [],
+  "urgentSafetyMeasures": []
+ },
+ "results": {
+  "summaryResults": [
+   {
+    "id": 824,
+    "ctNumber": "2024-513060-26-00",
+    "title": "Clinical Study Report",
+    "status": "Submitted",
+    "summaryType": "Summary of Results",
+    "versionType": "Final",
+    "isFinalResult": true,
+    "notificationId": 71406,
+    "updatedOn": "2025-02-18T21:36:31.238692",
+    "createdOn": "2025-02-18T21:38:29.265",
+    "submissionDate": "2025-02-18T21:38:33",
+    "ctId": 13871,
+    "businessKey": "SUM-71406"
+   }
+  ],
+  "laypersonResults": [
+   {
+    "id": 825,
+    "ctNumber": "2024-513060-26-00",
+    "title": "Summary of Results",
+    "status": "Submitted",
+    "summaryType": "Laypersons Summary of Results",
+    "versionType": "Final",
+    "isFinalResult": true,
+    "notificationId": 71407,
+    "updatedOn": "2025-02-18T21:39:27.53759",
+    "createdOn": "2025-02-18T21:41:28.996",
+    "submissionDate": "2025-02-18T21:41:29",
+    "ctId": 13871,
+    "businessKey": "SUM-71407"
+   }
+  ]
+ },
+ "documents": [
+  {
+   "title": "Achilles_CHIRON_ATX-NS-001_Abbreviated Clinical Study Report_Final",
+   "uuid": "5015ec7a-e4c1-4c48-84e8-d593a826dd9a",
+   "documentType": "103",
+   "documentTypeLabel": "Summary of results (for publication)",
+   "fileType": "PDF",
+   "associatedEntityId": 824,
+   "manualVersion": "1",
+   "systemVersion": "1"
+  },
+  {
+   "title": "Summary of CHIRON CSR, French",
+   "uuid": "ca781de1-a10f-4bfb-baf7-3c2f071f1b45",
+   "documentType": "46",
+   "documentTypeLabel": "Laypersons summary of results (for publication)",
+   "fileType": "PDF",
+   "associatedEntityId": 825,
+   "manualVersion": "1",
+   "systemVersion": "1"
+  },
+  {
+   "title": "Summary of CHIRON CSR, English",
+   "uuid": "092c356a-3d4c-47ed-bbc3-bde5dbc60389",
+   "documentType": "46",
+   "documentTypeLabel": "Laypersons summary of results (for publication)",
+   "fileType": "PDF",
+   "associatedEntityId": 825,
+   "manualVersion": "1",
+   "systemVersion": "1"
+  },
+  {
+   "title": "Summary of CHIRON CSR, Spanish",
+   "uuid": "dfe47c17-4cd0-4411-81a4-ff372bd38730",
+   "documentType": "46",
+   "documentTypeLabel": "Laypersons summary of results (for publication)",
+   "fileType": "PDF",
+   "associatedEntityId": 825,
+   "manualVersion": "1",
+   "systemVersion": "1"
+  },
+  {
+   "title": "Summary of CHIRON CSR, German",
+   "uuid": "dbfa5192-3021-4931-9b20-5ebd4d9a2e86",
+   "documentType": "46",
+   "documentTypeLabel": "Laypersons summary of results (for publication)",
+   "fileType": "PDF",
+   "associatedEntityId": 825,
+   "manualVersion": "1",
+   "systemVersion": "1"
+  }
+ ],
+ "trialRegion": "Both",
+ "trialRegionCode": 3,
+ "correctiveMeasures": []
+}

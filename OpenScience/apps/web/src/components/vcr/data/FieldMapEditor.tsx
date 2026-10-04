@@ -107,6 +107,7 @@ export function FieldMapEditor({ studyId, source, options, canManage, onChanged 
                     <span className="text-text">{row.column}</span>
                     {source.files.filter((file) => file.role === "data" && file.latest !== false).length > 1 && <span className="block text-caption text-text-3">{row.table}</span>}
                     {row.identifying && <Tag tone="warn" className="mt-1">疑似标识</Tag>}
+                    {row.valueSource && <Tag title="这一列的值是什么来源" className="mt-1">{options.valueSources.find((option) => option.value === row.valueSource)?.label ?? row.valueSource}</Tag>}
                   </th>
                   <td className="py-2 pr-3">
                     <select
@@ -157,7 +158,7 @@ export function FieldMapEditor({ studyId, source, options, canManage, onChanged 
                     <Input aria-label={`${row.column} 的单位`} value={row.unit} disabled={!editable} onChange={(event) => change(row.key, { unit: event.target.value })} />
                   </td>
                   <td className="py-2">
-                    <Disclosure summary="时间与缺失" summaryClassName="text-caption">
+                    <Disclosure summary="时间、缺失与来源" summaryClassName="text-caption">
                       <div className="flex min-w-40 flex-col gap-2">
                         <select
                           aria-label={`${row.column} 的时间种类`} value={row.timeKind} disabled={!editable}
@@ -172,6 +173,13 @@ export function FieldMapEditor({ studyId, source, options, canManage, onChanged 
                         >
                           <option value="">空白含义未说明</option>
                           {options.missingReasons.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                        </select>
+                        <select
+                          aria-label={`${row.column} 的值来源`} value={row.valueSource} disabled={!editable}
+                          onChange={(event) => change(row.key, { valueSource: event.target.value })} className={inputClasses({ size: "sm" })}
+                        >
+                          <option value="">值来源同数据源</option>
+                          {options.valueSources.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                         </select>
                         {(row.role === "covariate" || row.role === "measurement") && (
                           <label className="flex items-center gap-2 text-caption text-text-2">

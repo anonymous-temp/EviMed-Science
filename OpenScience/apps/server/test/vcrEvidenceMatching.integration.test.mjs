@@ -10,6 +10,7 @@
 // and that the flow's control-plane half (facts → job → assessments →
 // referrals → notice) works on the tables it writes to.
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { Readable } from "node:stream";
 import { after, before, test } from "node:test";
@@ -64,6 +65,11 @@ before(async () => {
   isolated = await createGeoTestDatabase(databaseUrl, "vcrevm");
   database = new ControlPlaneDatabase({ databaseUrl: isolated.url, databasePoolMax: 6, databaseConnectionTimeoutMs: 3_000 });
   const registry = async (url) => {
+    // The EU CTIS portal's recorded answers (fixtures/ctis): an unknown number is 200 and an empty object, as on the wire.
+    if (String(url).includes("euclinicaltrials.eu")) {
+      const known = /\/retrieve\/(2024-513060-26-00)$/.exec(String(url));
+      return new Response(known ? readFileSync(new URL(`./fixtures/ctis/retrieve-ended-${known[1]}.json`, import.meta.url), "utf8") : "{}", { status: 200 });
+    }
     if (!String(url).includes("NCT02296125")) return new Response("{}", { status: 404 });
     return new Response(JSON.stringify(FLAURA), { status: 200 });
   };
@@ -878,4 +884,25 @@ test("simulate match_criteria hands the queue the platform's own frozen scenario
   assert.equal(accrual.json().data.notes.screenFailureUnavailable, true, "what the study cannot supply is said, not zeroed");
   const smuggled = await gateway("simulate", { action: "start", kind: "accrual_forecast", scenario: { target: 40, sites: [{ id: "x", alpha: 1, beta: 1, startTime: 0 }] } }, { jobs });
   assert.equal(smuggled.status, 400, "the rates of a site come from the ledger, not from the run");
+});
+
+// Last on purpose: the earlier tests read the account's first precedent and expect it to be the ClinicalTrials.gov one.
+test("an EU CTIS precedent is fetched through the same write, its planned enrolment kept apart from any actual one, and a missing number is named", options, async () => {
+  const fetched = await write("precedent", [
+    { registry: "ctis", registryId: "2024-513060-26-00", line: "first" },
+    { registry: "ctis", registryId: "2099-000000-00-00" },
+    { registry: "ctis", registryId: "not a number" },
+  ]);
+  assert.equal(fetched.ids.length, 1);
+  assert.equal(fetched.results[0].extracted, 18);
+  assert.equal(fetched.results[0].verified, 18, "every value the client copied or counted passes its own check against the preserved record");
+  assert.deepEqual(fetched.issues.map((issue) => [issue.index, issue.code]), [[1, "registry_not_found"], [2, "vcr_write_value_invalid"]]);
+  const row = (await vcr.evidenceStore.listPrecedents({ userId: USER, studyId: study.id, registry: "ctis" }))[0];
+  assert.equal(row.registry, "ctis");
+  assert.equal(row.registry_id, "2024-513060-26-00");
+  assert.equal(row.enrollment_kind, "estimated");
+  assert.match((await vcr.evidenceStore.getPrecedent(USER, row.id, { withText: true })).record_text, /authorizedPartsII\[0\]\.recruitmentSubjectCount: 8\n/);
+  const items = await vcr.evidenceStore.listEvidenceItems({ userId: USER, studyId: study.id, parameter: "enrollment_estimated" });
+  assert.deepEqual(items.map((item) => [Number(item.value), item.enrollment_kind ?? item.enrollmentKind]).sort(), [[8, "estimated"], [8, "estimated"], [8, "estimated"]]);
+  assert.ok(items.every((item) => item.historical_baseline === false || item.historicalBaseline === false), "a plan is never a baseline");
 });

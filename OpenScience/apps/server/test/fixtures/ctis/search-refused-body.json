@@ -1,0 +1,11 @@
+{
+ "showWarning": true,
+ "pagination": {
+  "totalRecords": 0,
+  "currentPage": 0,
+  "totalPages": 0,
+  "nextPage": false,
+  "prevPage": false
+ },
+ "data": []
+}

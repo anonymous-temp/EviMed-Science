@@ -250,6 +250,74 @@ describe("数据接入 — what the page sends", () => {
     expect(toasts.error).toHaveBeenCalled();
   });
 
+  it("offers a FHIR, OMOP or ADaM import only where the deployment converts them, and sends the file with its standard", async () => {
+    drawTab();
+    await screen.findAllByLabelText("选择要上传的文件");
+    expect(Array.from((screen.getAllByLabelText("文件类型")[0] as HTMLSelectElement).options).map((option) => option.value)).not.toContain("import");
+    cleanup();
+
+    const imports = {
+      available: true, maxBytes: 25 * 1024 * 1024, maxText: "25 MB",
+      formats: [{ value: "fhir", extensions: ["ndjson", "json", "zip"] }, { value: "omop", extensions: ["zip"] }, { value: "adam", extensions: ["xpt", "zip"] }],
+    };
+    load("data-sealed.json", (raw) => { raw.intake.sources[0].upload.imports = imports; });
+    drawTab();
+    const chooser = (await screen.findAllByLabelText("选择要上传的文件"))[0] as HTMLInputElement;
+    await person().selectOptions(screen.getAllByLabelText("文件类型")[0], "import");
+    const standard = screen.getAllByLabelText("标准格式")[0] as HTMLSelectElement;
+    expect(Array.from(standard.options).map((option) => option.textContent)).toEqual(["FHIR", "OMOP CDM", "CDISC ADaM"]);
+    expect(chooser.accept).toBe(".ndjson,.json,.zip");
+    await person().selectOptions(standard, "omop");
+    expect(chooser.accept).toBe(".zip");
+    expect(document.body.textContent).toContain("在平台内转成数据表，不会发给外部服务");
+
+    // A file the standard is not uploaded as is refused on the page, and never sent.
+    await person().upload(chooser, new File(["x"], "person.csv"));
+    expect(await screen.findByText("这一种格式支持：zip。")).toBeInTheDocument();
+    expect(upload.fetchWithWebAuth).not.toHaveBeenCalled();
+
+    // The upload is sent as the standard it is declared to be; the answer is read, imported and left, in sentences.
+    upload.fetchWithWebAuth.mockResolvedValue(new Response(JSON.stringify({ data: {
+      format: "omop", standard: { name: "OMOP CDM" },
+      tables: [{ name: "omop_person", file: "omop_person.csv", rows: 28, columns: 11, stored: true }, { name: "omop_measurement", file: "omop_measurement.csv", rows: 10040, columns: 9, stored: false, reason: "table_too_large" }],
+      fieldMap: { hash: "a".repeat(64), entries: 40, trimmed: 0, columnSourcesDeclared: true },
+      coverage: {
+        inputs: [{ kind: "procedure_occurrence", records: 1649, imported: 0, status: "skipped", reason: "unsupported_table", skipped: {} }, { kind: "person", records: 28, imported: 28, status: "imported", reason: null, skipped: {} }],
+        skippedTables: [], notices: [{ code: "zero_follow_up", count: 2 }],
+      },
+    } }), { status: 201 }));
+    await person().upload(chooser, new File(["PK"], "Synthea27Nj_5.4.zip"));
+    await waitFor(() => expect(upload.fetchWithWebAuth).toHaveBeenCalledTimes(1));
+    const [url, init] = upload.fetchWithWebAuth.mock.calls[0];
+    expect(String(url)).toContain("/data/sources/src_1/imports?");
+    const query = new URL(String(url), "http://x").searchParams;
+    expect([query.get("name"), query.get("format"), query.get("role")]).toEqual(["Synthea27Nj_5.4.zip", "omop", null]);
+    expect(init.method).toBe("POST");
+    const report = await screen.findByText(/已按 OMOP CDM 导入 1 张表，并提出了字段映射。/);
+    const text = report.closest("[data-vcr-import-report]")?.textContent ?? "";
+    expect(text).toContain("omop_person：28 行，11 列");
+    expect(text).toContain("omop_measurement：没有保存（超过文件大小上限）");
+    expect(text).toContain("procedure_occurrence：读到 1649 条，导入 0 条（本版本不读这张表）");
+    expect(text).toContain("2 位患者的随访时间为 0 天");
+    expect(text).toContain("每一列都标明了值的来源");
+    expect(toasts.success).toHaveBeenCalled();
+
+    // A file that is not the standard it was declared as is refused with the registry's own words.
+    upload.fetchWithWebAuth.mockResolvedValue(new Response(JSON.stringify({ error: "x", code: "vcr_import_not_this_format" }), { status: 422 }));
+    await person().upload(chooser, new File(["PK"], "other.zip"));
+    expect(await screen.findAllByText(/这个文件不是你选的那种标准格式/)).not.toHaveLength(0);
+    expect(toasts.error).toHaveBeenCalled();
+  });
+
+  it("shows which standard an imported table came from", async () => {
+    load("data-sealed.json", (raw) => {
+      raw.intake.sources[0].files[0].importFormat = "fhir";
+    });
+    drawTab();
+    const rows = await screen.findAllByText("cohort.csv");
+    expect(rows.some((row) => row.closest("li")?.textContent?.includes("来自 FHIR 导入"))).toBe(true);
+  });
+
   it("shows a converted record's origin and how many of its pages had no text", async () => {
     load("data-sealed.json", (raw) => {
       raw.intake.sources[0].files.push({

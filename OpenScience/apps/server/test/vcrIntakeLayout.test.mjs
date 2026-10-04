@@ -3,7 +3,8 @@ import test from 'node:test';
 import { vcrLocationIsValid } from '@evimed/domain';
 import { assertDataPlaneLocation } from '../src/vcrDataPlane.mjs';
 import {
-  VCR_INTAKE_DOCUMENT_FORMATS, VCR_INTAKE_LIMITS, VCR_INTAKE_SCRATCH, isVcrIntakeScratchLocation, parseVcrIntakeInput, vcrIntakeScratchPaths,
+  VCR_IMPORT_EXTENSIONS, VCR_IMPORT_FORMATS, VCR_INTAKE_DOCUMENT_FORMATS, VCR_INTAKE_LIMITS, VCR_INTAKE_LONG_KINDS, VCR_INTAKE_SCRATCH, VCR_TABLE_LIMITS,
+  isVcrIntakeScratchLocation, parseVcrIntakeImportInput, parseVcrIntakeInput, vcrIntakeImportPaths, vcrIntakeScratchPaths,
 } from '../src/vcrIntakeLayout.mjs';
 
 const STUDY = 'std_0123abcd-EF';
@@ -66,4 +67,38 @@ test('no engine job can be pointed at the scratch: the domain grammar cannot spe
 test('the ceilings the container is told besides the page count are fixed here, for the API and the controller alike', () => {
   assert.deepEqual({ ...VCR_INTAKE_LIMITS }, { maxChars: 1024 * 1024, maxXmlBytes: 24 * 1024 * 1024 });
   assert.throws(() => { /** @type {any} */ (VCR_INTAKE_LIMITS).maxChars = 1; }, TypeError);
+});
+
+test('an import is staged in the same scratch area under a file name of its own, and the two parsers refuse each other\'s file', () => {
+  const paths = vcrIntakeImportPaths(STUDY, ATTEMPT, 'zip');
+  assert.deepEqual(paths, {
+    scratch: `studies/${STUDY}/.intake`, attempt: `studies/${STUDY}/.intake/${ATTEMPT}`, inputDirectory: `studies/${STUDY}/.intake/${ATTEMPT}/in`,
+    input: `studies/${STUDY}/.intake/${ATTEMPT}/in/import.zip`, output: `studies/${STUDY}/.intake/${ATTEMPT}/out`,
+  });
+  assert.deepEqual({ ...VCR_IMPORT_FORMATS }, { fhir: ['ndjson', 'json', 'zip'], omop: ['zip'], adam: ['xpt', 'zip'] });
+  assert.deepEqual([...VCR_IMPORT_EXTENSIONS].sort(), ['json', 'ndjson', 'xpt', 'zip']);
+  for (const extension of VCR_IMPORT_EXTENSIONS) {
+    const { input } = vcrIntakeImportPaths(STUDY, ATTEMPT, extension);
+    assert.deepEqual(parseVcrIntakeImportInput(input), { studyId: STUDY, attemptId: ATTEMPT, extension, ...vcrIntakeImportPaths(STUDY, ATTEMPT, extension) });
+    assert.throws(() => parseVcrIntakeInput(input), { code: 'vcr_intake_input_invalid' }, 'a record\'s parser does not take an import');
+  }
+  assert.throws(() => parseVcrIntakeImportInput(vcrIntakeScratchPaths(STUDY, ATTEMPT, 'pdf').input), { code: 'vcr_intake_input_invalid' }, 'an import\'s parser does not take a record');
+  const good = vcrIntakeImportPaths(STUDY, ATTEMPT, 'xpt').input;
+  for (const bad of ['', `${good}/`, `${good},readonly`, `${good}\n`, good.replace('import.xpt', 'import.exe'), good.replace('import.xpt', 'document.xpt'), good.replace('/in/', '/out/'),
+    good.replace(STUDY, '..'), good.replace(ATTEMPT, 'x'), good.replace('.intake', 'incoming'), good.replace('studies/', ''), undefined, null, 7, {}]) {
+    assert.throws(() => parseVcrIntakeImportInput(bad), { status: 400, code: 'vcr_intake_input_invalid' }, JSON.stringify(bad));
+  }
+  for (const [study, attempt, extension] of [['', ATTEMPT, 'zip'], [STUDY, 'x', 'zip'], [STUDY, ATTEMPT, 'csv'], [STUDY, ATTEMPT, 'ZIP'], [STUDY, ATTEMPT, 'pdf']]) {
+    assert.throws(() => vcrIntakeImportPaths(study, attempt, extension), { code: 'vcr_intake_input_invalid' }, `${study}/${attempt}/${extension}`);
+  }
+  // It is under the same hidden segment: no engine location can spell it and the plane refuses it.
+  assert.equal(vcrLocationIsValid(paths.input), false);
+  assert.equal(isVcrIntakeScratchLocation(paths.input), true);
+  assert.throws(() => assertDataPlaneLocation('/srv/evimed/vcr-plane', paths.input), { code: 'vcr_data_plane_location_outside' });
+});
+
+test('the table ceilings and the long operations are one definition, read by the plane, the container and the client', () => {
+  assert.deepEqual({ ...VCR_TABLE_LIMITS }, { columns: 500, rows: 2_000_000 });
+  assert.deepEqual([...VCR_INTAKE_LONG_KINDS], ['materials', 'convert']);
+  assert.throws(() => { /** @type {any} */ (VCR_TABLE_LIMITS).rows = 1; }, TypeError);
 });

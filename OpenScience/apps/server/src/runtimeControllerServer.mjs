@@ -703,9 +703,10 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
         } finally { res.removeListener("close", disconnected); }
         return;
       }
-      if (req.method === "POST" && ["/v1/vcr/extract", "/v1/vcr/digitize", "/v1/vcr/materials"].includes(url.pathname)) {
-        // 「虚拟临研」 intake (protocol 9) and the source-material read (protocol
-        // 10): a fixed operation over one staged attempt.
+      if (req.method === "POST" && ["/v1/vcr/extract", "/v1/vcr/digitize", "/v1/vcr/materials", "/v1/vcr/convert"].includes(url.pathname)) {
+        // 「虚拟临研」 intake (protocol 9), the source-material read (protocol
+        // 10) and the standard-format import (protocol 11): a fixed operation
+        // over one staged attempt.
         // A figure, or a knowledge-base source's PDF or spreadsheet, is staged on the
         // data volume the API and this process share and is
         // named by its attempt and the digest of its request. A record is staged in
@@ -717,7 +718,8 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
           throw controllerFailure(415, "runtime_controller_content_type_invalid", "Runtime controller requires JSON requests.");
         }
         const payload = await readJson(req, 4096);
-        assertExactKeys(payload, url.pathname === "/v1/vcr/extract" ? ["path", "sha256", "bytes"] : ["attemptId", "inputDigest"]);
+        assertExactKeys(payload, url.pathname === "/v1/vcr/extract" ? ["path", "sha256", "bytes"]
+          : url.pathname === "/v1/vcr/convert" ? ["path", "sha256", "bytes", "format"] : ["attemptId", "inputDigest"]);
         const abort = new AbortController();
         const disconnected = () => { if (!res.writableEnded) abort.abort(); };
         req.once("aborted", disconnected);

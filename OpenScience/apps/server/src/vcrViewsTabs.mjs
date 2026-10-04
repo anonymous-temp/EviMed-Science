@@ -1298,7 +1298,7 @@ function presentPrecedentRow(row) {
   return {
     id: String(row.id),
     registryId: String(row.registry_id ?? ""),
-    registry: (/** @type {Record<string, string>} */ ({ "clinicaltrials.gov": "ClinicalTrials.gov", chictr: "ChiCTR", cde: "CDE 登记" }))[String(row.registry)] ?? text(row.registry),
+    registry: (/** @type {Record<string, string>} */ ({ "clinicaltrials.gov": "ClinicalTrials.gov", chictr: "ChiCTR", ctis: "EU CTIS", cde: "CDE 登记" }))[String(row.registry)] ?? text(row.registry),
     title: text(row.title),
     population: list(pico.conditions).length ? list(pico.conditions).join("、") : null,
     design: [list(design.phases).join("/"), text(design.allocation), text(design.masking)].filter(Boolean).join(" · ") || null,
@@ -1451,6 +1451,12 @@ export function presentIntake(bundle) {
           maxText: byteText(numeric(object(upload.documents).convertedMaxBytes)),
           converter: object(upload.documents).converter === true,
         },
+        // A source held in FHIR, OMOP or ADaM: what this deployment converts, and what each is uploaded as.
+        imports: {
+          available: object(upload.imports).available === true,
+          formats: list(object(upload.imports).formats).map((format) => ({ value: String(object(format).value), extensions: list(object(format).extensions).map(String) })),
+          maxBytes: numeric(object(upload.imports).maxBytes), maxText: byteText(numeric(object(upload.imports).maxBytes)),
+        },
       },
       files: files.map((file) => ({
         id: String(file.id), name: String(file.name), role: String(file.role), roleLabel: FILE_ROLE_ZH[String(file.role)] ?? String(file.role),
@@ -1464,10 +1470,12 @@ export function presentIntake(bundle) {
         subjectKey: text(file.subjectKey), visibleAt: text(file.visibleAt),
         // A record converted from PDF or Word: what it was, how many pages, how many had no text layer.
         sourceFormat: text(file.sourceFormat), pages: numeric(file.pages), blankPages: numeric(file.blankPages),
+        // A table a FHIR, OMOP or ADaM import produced.
+        importFormat: text(file.importFormat),
       })),
       fieldMap: {
         state: String(fieldMap.state ?? "none"), stateLabel: FIELD_MAP_STATE_ZH[String(fieldMap.state)] ?? "",
-        hash: text(fieldMap.hash), by: text(fieldMap.by) === "run" ? "AI 提议" : text(fieldMap.by) ? "人工填写" : null,
+        hash: text(fieldMap.hash), by: text(fieldMap.by) === "run" ? "AI 提议" : text(fieldMap.by) === "import" ? "按标准格式生成" : text(fieldMap.by) ? "人工填写" : null,
         confirmedBy: text(fieldMap.confirmedBy), confirmedByName: personName(bundle.people, fieldMap.confirmedBy),
         confirmedAt: zhTime(fieldMap.confirmedAt, now),
         columns: list(fieldMap.columns).map((column) => ({ ...object(column), codes: object(object(column).codes) })),

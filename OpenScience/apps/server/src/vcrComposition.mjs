@@ -86,6 +86,7 @@ import { createVcrSeal } from "./vcrSeal.mjs";
 import { VcrService } from "./vcrService.mjs";
 import { VcrStore } from "./vcrStore.mjs";
 import { createChictrAdapter, createTrialRegistryClient } from "./trialRegistryClient.mjs";
+import { createVcrImporter } from "./vcrImport.mjs";
 import {
   VCR_ACCRUAL_MEASURES, accrualBacktestSlices, accrualForecastScenario, backtestAccrualCoverage, candidateReferrals,
   parseProbabilityByMonth, readAccrualForecast, referralFunnel, screenFailuresByCriterion, siteProfileStatus,
@@ -857,8 +858,10 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   // set serves both, so an operator reads one family of numbers.
   const intakeCounters = createIntakeCounters();
   const extractor = createVcrRecordExtractor({ config, controller: intakeController, counters: intakeCounters, report });
+  // A source held in FHIR, OMOP or ADaM is converted in the same container (operation `convert`).
+  const importer = createVcrImporter({ config, controller: intakeController, counters: intakeCounters, report });
   const dataPlane = String(config.vcrDataPlaneDir ?? "").trim()
-    ? new VcrDataPlane({ store: dataStore, config, access, extractor })
+    ? new VcrDataPlane({ store: dataStore, config, access, extractor, importer })
     : null;
 
   const engineStatus = vcrEngineStatus(config);
@@ -936,7 +939,7 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   composed = {
     store, dataStore, matchStore, evidenceStore, corrections, knowledge, knowledgeStore,
     access, members, contact, dataPlane, dataPlaneSeam, documents, engine, engineStatus, removeEngineJob, jobs, seal, evidence, matching, registry, service,
-    intake: { counters: intakeCounters, extractor, digitizer },
+    intake: { counters: intakeCounters, extractor, importer, digitizer },
     // Composed later, beside the other modules' workers (server.mjs).
     notifier: null, orchestrator: null, worker: null, exporter: null, review: null,
     audit,

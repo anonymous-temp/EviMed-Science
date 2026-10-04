@@ -56,9 +56,10 @@ test("registry coverage names configured, missing and unsupported sources withou
   assert.deepEqual(coverage, [
     { key: "clinicaltrials.gov", label: "ClinicalTrials.gov", configured: true, coverage: "structured", availability: "not_queried", reason: null, lastCheckedAt: null },
     { key: "chictr", label: "ChiCTR", configured: false, coverage: "list_only", availability: "unavailable", reason: "registry_not_configured", lastCheckedAt: null },
-    ...[["cde", "CDE"], ["ctis", "CTIS"], ["ictrp", "WHO ICTRP"]].map(([key, label]) => ({
-      key, label, configured: false, coverage: "unsupported", availability: "unavailable", reason: "registry_unsupported", lastCheckedAt: null,
-    })),
+    { key: "ctis", label: "EU CTIS", configured: true, coverage: "structured", availability: "not_queried", reason: null, lastCheckedAt: null },
+    { key: "cde", label: "CDE", configured: false, coverage: "unsupported", availability: "unavailable", reason: "registry_unsupported", lastCheckedAt: null },
+    // WHO ICTRP is left out by its own terms (no commercial use), and the row says that and not "unsupported".
+    { key: "ictrp", label: "WHO ICTRP", configured: false, coverage: "unsupported", availability: "unavailable", reason: "registry_terms_forbid_commercial_use", lastCheckedAt: null },
   ]);
   assert.equal((await client.searchChictr({ query: "lung cancer" })).reason, "registry_not_configured");
   assert.deepEqual(client.coverage(), coverage, "a missing credential is not an observed network check");

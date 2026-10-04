@@ -272,6 +272,9 @@ const operatorLevers = {
   OPEN_SCIENCE_VCR_INTAKE_MEMORY: ["open-science-web", "open-science-runtime-controller"],
   OPEN_SCIENCE_VCR_INTAKE_CONCURRENCY: ["open-science-web", "open-science-runtime-controller"],
   OPEN_SCIENCE_VCR_DIGITIZE_MAX_PIXELS: ["open-science-web", "open-science-runtime-controller"],
+  // The largest table the API takes from an upload is the largest one an import
+  // may produce: the controller hands it to the converter as its table ceiling.
+  OPEN_SCIENCE_VCR_DATA_MAX_BYTES: ["open-science-web", "open-science-runtime-controller"],
   // The data plane's HOST path reaches the controller alone: it binds a record's
   // staged file and output directory out of the plane's scratch area by this path
   // (the Docker socket resolves a bind source on the host). Without it every PDF

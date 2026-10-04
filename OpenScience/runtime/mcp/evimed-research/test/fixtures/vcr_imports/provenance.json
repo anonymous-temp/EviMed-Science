@@ -1,0 +1,71 @@
+{
+ "note": "Public samples the import converters are tested against. Each fixture is committed byte for byte as downloaded (no trimming, no re-encoding) unless its entry says otherwise; the SHA-256 is checked by test_vcr_import_convert.py. Fetched from this host on the date given.",
+ "fixtures": [
+  {
+   "file": "smart-10-patients.zip",
+   "format": "fhir",
+   "source": "https://github.com/smart-on-fhir/sample-bulk-fhir-datasets/archive/refs/heads/10-patients.zip (SMART on FHIR sample-bulk-fhir-datasets, branch 10-patients, 11 Patient rows, 18 resource types as bulk-export NDJSON, generated with Synthea and US Core, FHIR R4)",
+   "licence": "CC0 1.0 (the repository README, section License: \"datasets themselves can be treated as CC0\"; scripts Apache-2.0)",
+   "fetchedAt": "2026-10-04",
+   "sha256": "a9eba7c2b15ab2e027b633584669fc0ae08808056c1caddb3825e04764006bd7"
+  },
+  {
+   "file": "synthea27nj-5.4.zip",
+   "format": "omop",
+   "source": "https://raw.githubusercontent.com/OHDSI/EunomiaDatasets/main/datasets/Synthea27Nj/Synthea27Nj_5.4.zip (OHDSI EunomiaDatasets, Synthea27Nj, OMOP CDM 5.4, CSV tables with lowercase headers: 28 persons, 3 deaths)",
+   "licence": "Apache-2.0 (the OHDSI/EunomiaDatasets repository LICENSE; GitHub licence API, 2026-10-04)",
+   "fetchedAt": "2026-10-04",
+   "sha256": "cdd3971be325e17b0e872bf4560711ab4c346917ecb079e2faf32badb55cb693"
+  },
+  {
+   "file": "gibleed-5.3-first150.zip",
+   "format": "omop",
+   "source": "https://raw.githubusercontent.com/OHDSI/EunomiaDatasets/main/datasets/GiBleed/GiBleed_5.3.zip (OHDSI EunomiaDatasets, GiBleed, OMOP CDM 5.3.1, uppercase headers: 2,694 persons, empty DEATH), reduced",
+   "licence": "Apache-2.0 (the OHDSI/EunomiaDatasets repository LICENSE; GitHub licence API, 2026-10-04). Modified: reduced to the first 150 persons by trim_gibleed.py (rows kept byte for byte), as that licence permits.",
+   "fetchedAt": "2026-10-04",
+   "sha256": "cf815e0839bcbd3726556e970a9cd05fdd979628b6373722bbae9be5a2aab046",
+   "derivedFrom": {
+    "sha256": "081b82e84c90e2904e02c26546e46412b01cce566071c77e0c4a355c2d0612f9",
+    "script": "trim_gibleed.py"
+   }
+  },
+  {
+   "file": "adam-pharmaverse.zip",
+   "format": "adam",
+   "source": "https://cran.r-project.org/src/contrib/pharmaverseadam_1.3.0.tar.gz (pharmaverseadam 1.3.0, CRAN 2026-02-20: ADSL 306 subjects x 55 variables, ADAE 1,191 records x 107, and adtte_onco 512 records x 20, which derive from the CDISC pilot study CDISCPILOT01 through the admiral templates)",
+   "licence": "Apache-2.0 (the package's DESCRIPTION: License: Apache License (>= 2)). The data were converted to SAS transport V5 by export_pharmaverseadam.R and make_adam_fixtures.py (dates as SAS day counts, adtte_onco written as ADTTE); reading the files back with R's foreign::read.xport gives the datasets' own row counts.",
+   "fetchedAt": "2026-10-04",
+   "sha256": "ece3754460f459ea1ede13e87c69d748aff9f1c9a2179069c4ea3bfb21a73aa8",
+   "derivedFrom": {
+    "sha256": "see the tarball at the URL above (4,415,376 bytes)",
+    "script": "make_adam_fixtures.py"
+   }
+  },
+  {
+   "file": "adsl.xpt",
+   "format": "adam",
+   "source": "the ADSL member of adam-pharmaverse.zip, as a single transport file (same bytes)",
+   "licence": "Apache-2.0 (as adam-pharmaverse.zip)",
+   "fetchedAt": "2026-10-04",
+   "sha256": "892b80849c76c35cba1d02265bf0efc6a6c1b29390b6ab0f7988ad0e081e0704"
+  },
+  {
+   "file": "adtte.xpt",
+   "format": "adam",
+   "source": "the ADTTE member of adam-pharmaverse.zip (pharmaverseadam's adtte_onco: OS, PFS and RSD records), as a single transport file (same bytes)",
+   "licence": "Apache-2.0 (as adam-pharmaverse.zip)",
+   "fetchedAt": "2026-10-04",
+   "sha256": "906268a6cba95a76907d4f28b94ab1db7031c743c9aec6440f1d894870b6377a"
+  }
+ ],
+ "referenceNotCommitted": [
+  {
+   "file": "adtte.xpt (CDISC pilot, CDISCPILOT01)",
+   "source": "https://raw.githubusercontent.com/cdisc-org/sdtm-adam-pilot-project/master/updated-pilot-submission-package/900172/m5/datasets/cdiscpilot01/analysis/adam/datasets/adtte.xpt",
+   "licence": "CDISC's own terms (the repository README, \"Terms of Use\": no modification or alteration of the data; redistribution only unmodified and with attribution) -- so it is NOT committed. A CI step downloads it and sets EVIMED_CDISC_PILOT_ADTTE; test_vcr_import_convert.py checks it against R's foreign::read.xport values (254 subjects, 152 events, PARAMCD TTDE) and skips when the variable is unset.",
+   "fetchedAt": "2026-10-04",
+   "sha256": "68513fc4126744b6b2c7328eb70eb7b9683865d12c58b36539325f3c0c0ab93d",
+   "bytes": 91840
+  }
+ ]
+}

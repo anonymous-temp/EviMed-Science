@@ -1949,11 +1949,11 @@ export function useVcrFeature(): VcrFeature {
 
 import { fetchWithWebAuth, webApiBase } from "./apiClient";
 import {
-  confirmFieldMapBody, fieldMapBody, freezeBody, grantBody, sourceBody, uploadQuery,
-  type VcrFieldMapEntry, type VcrGrantBody, type VcrSourceBody,
+  confirmFieldMapBody, fieldMapBody, freezeBody, grantBody, importQuery, sourceBody, uploadQuery,
+  type VcrFieldMapEntry, type VcrGrantBody, type VcrImportFormat, type VcrSourceBody,
 } from "./vcrIntakeBodies";
 
-export type { VcrFieldMapEntry, VcrFieldRole, VcrGrantBody, VcrSourceBody } from "./vcrIntakeBodies";
+export type { VcrFieldMapEntry, VcrFieldRole, VcrGrantBody, VcrImportFormat, VcrSourceBody } from "./vcrIntakeBodies";
 
 export interface VcrIntakeOption { value: string; label: string }
 
@@ -1979,6 +1979,8 @@ export interface VcrIntakeFile {
   sourceFormat: string | null;
   pages: number | null;
   blankPages: number | null;
+  /** A table a FHIR, OMOP or ADaM import produced: which standard it came from. */
+  importFormat: string | null;
 }
 
 export interface VcrIntakeIssue { code: string; message: string; table: string | null; column: string | null }
@@ -2016,6 +2018,8 @@ export interface VcrIntakeSource {
     formats: string[]; maxBytes: number | null; maxText: string | null;
     /** A patient record: text, and PDF or Word where the deployment converts them (the page offers only what would be taken). */
     documents: { formats: string[]; maxBytes: number | null; maxText: string | null; converter: boolean };
+    /** A source held in FHIR, OMOP or ADaM: what this deployment converts, and what each standard is uploaded as. */
+    imports: { available: boolean; formats: Array<{ value: VcrImportFormat; extensions: string[] }>; maxBytes: number | null; maxText: string | null };
   };
   files: VcrIntakeFile[];
   fieldMap: {
@@ -2105,7 +2109,7 @@ function readIntakeFile(raw: Loose): VcrIntakeFile {
       name: text(column.name) ?? "", type: text(column.type), filled: finite(column.filled), distinct: finite(column.distinct), identifying: column.identifying === true,
     })),
     entries: finite(raw.entries), sheets: strings(raw.sheets), sheetUsed: text(raw.sheetUsed), subjectKey: text(raw.subjectKey), visibleAt: text(raw.visibleAt),
-    sourceFormat: text(raw.sourceFormat), pages: finite(raw.pages), blankPages: finite(raw.blankPages),
+    sourceFormat: text(raw.sourceFormat), pages: finite(raw.pages), blankPages: finite(raw.blankPages), importFormat: text(raw.importFormat),
   };
 }
 
@@ -2123,6 +2127,14 @@ function readIntakeSource(raw: Loose): VcrIntakeSource {
       documents: {
         formats: strings(obj(upload.documents).formats), maxBytes: finite(obj(upload.documents).maxBytes),
         maxText: text(obj(upload.documents).maxText), converter: obj(upload.documents).converter === true,
+      },
+      imports: {
+        available: obj(upload.imports).available === true,
+        formats: arr(obj(upload.imports).formats).flatMap((format) => {
+          const value = text(format.value);
+          return value === "fhir" || value === "omop" || value === "adam" ? [{ value: value as VcrImportFormat, extensions: strings(format.extensions) }] : [];
+        }),
+        maxBytes: finite(obj(upload.imports).maxBytes), maxText: text(obj(upload.imports).maxText),
       },
     },
     files: arr(raw.files).map(readIntakeFile),
@@ -2200,6 +2212,38 @@ export async function uploadVcrFile(
     throw new WebApiError(value?.error ?? "The upload was refused.", { status: response.status, code: value?.code });
   }
   return value.data as { file: VcrIntakeFile; created: boolean };
+}
+
+/** What a standard-format import answers: the tables it produced, the field map it proposed and what it read, imported and skipped. */
+export interface VcrImportResult {
+  format: VcrImportFormat;
+  standard: Record<string, string>;
+  tables: Array<{ name: string; file: string; rows: number; columns: number; stored: boolean; reason?: string }>;
+  fieldMap: { hash: string; entries: number; trimmed: number; columnSourcesDeclared: boolean };
+  coverage: {
+    inputs: Array<{ kind: string; records: number | null; imported: number; status: "imported" | "skipped"; reason: string | null; skipped: Record<string, number> }>;
+    skippedTables: Array<{ table: string; reason: string }>;
+    notices: Array<{ code: string; count: number; examples?: string[] }>;
+  };
+}
+
+/**
+ * Import a source held in FHIR, OMOP or ADaM: the raw file as the request body,
+ * its name and the standard in the query — streamed by the browser, converted
+ * inside the deployment into the module's own tables, a dictionary and a proposed
+ * field map. A refusal is a `WebApiError` with the plane's own code
+ * (`vcr_import_not_this_format`, `vcr_import_nothing_to_import`, …).
+ */
+export async function importVcrSource(studyId: string, sourceId: string, file: Blob, input: { name: string; format: VcrImportFormat }) {
+  const root = webApiBase.endsWith("/api") ? webApiBase : `${webApiBase}/api`;
+  const response = await fetchWithWebAuth(`${root}${dataRoute(studyId)}/sources/${id(sourceId)}/imports?${importQuery(input)}`, {
+    method: "POST", headers: { "Content-Type": "application/octet-stream" }, body: file,
+  });
+  const value = await response.json().catch(() => null) as { data?: VcrImportResult; error?: string; code?: string } | null;
+  if (!response.ok || !value || !("data" in value)) {
+    throw new WebApiError(value?.error ?? "The import was refused.", { status: response.status, code: value?.code });
+  }
+  return value.data as VcrImportResult;
 }
 
 export function removeVcrFile(studyId: string, fileId: string) {
