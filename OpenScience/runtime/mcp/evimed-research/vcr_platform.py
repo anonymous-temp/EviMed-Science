@@ -220,10 +220,8 @@ def tool_definitions():
                 "exists only for a time_to_event endpoint; alpha is the total, "
                 "sided is 1 or 2. Patient-level kinds (profile_snapshot, build_cohort, weight_comparator, ...) name "
                 "their data as inputs [{kind:'snapshot', id}] and nothing else. pool_evidence and match_criteria are "
-                "built by the platform. The other comparators (weighted_cox, aipw, covariate_set, maic_time_to_event "
-                "_comparator) and the robustness analyses (negative_control_comparator, tipping_point, "
-                "prognostic_adjustment_comparator) and all shapes are in the vcr-analysis skill; "
-                "maic_time_to_event_comparator takes reconstructionResultId, never rows."
+                "built by the platform. The other comparator and robustness kinds and all shapes are in the "
+                "vcr-analysis skill; maic_time_to_event_comparator takes reconstructionResultId, never rows."
             ),
             "inputSchema": {
                 "type": "object",
