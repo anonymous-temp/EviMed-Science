@@ -3,6 +3,7 @@ import { MemoryRouter } from "react-router";
 import { describe, expect, it } from "vitest";
 import { parseClaimMatrix } from "@/lib/claimCitations";
 import { EvidenceMatrixTable } from "./EvidenceMatrixTable";
+import type { VerifiedClaim } from "@/components/markdown-viewer/ClaimCitation";
 
 const claims = parseClaimMatrix(JSON.stringify({ claims: [
   { claimId: "CLM-001", claim: "不降低主要心血管事件。", claimType: "direct", referenceNumber: 12, sourceType: "rct", accessLevel: "full_text",
@@ -57,7 +58,7 @@ describe("EvidenceMatrixTable", () => {
   });
 
   it("shows each quotation's place in its source beside it: the table and cell, the page, or that it is not known", () => {
-    const placed = new Map([
+    const placed = new Map<string, VerifiedClaim>([
       ["CLM-001", { claimId: "CLM-001", claimType: "direct", status: "verified", sources: [{ artifactPath: ".evimed-sources/aspree/fulltext.md", status: "verified", location: {
         status: "located", table: { id: "tbl-1", index: 1, label: "Table 2" }, row: 3, cell: { row: 3, column: 2 }, page: { status: "located", pages: [7] } } }] }],
       ["CLM-003", { claimId: "CLM-003", claimType: "synthesized", status: "quote_not_found", sources: [

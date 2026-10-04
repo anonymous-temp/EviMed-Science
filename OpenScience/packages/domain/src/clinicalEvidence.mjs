@@ -2316,9 +2316,10 @@ const LOCATION_MAX_CHARS = 4 * 1024 * 1024;
  * above it vouches for. Best effort by contract: a source too large to derive
  * from is `unknown`, and nothing here can change a status.
  *
- * @param {{ claims?: any[] }} verdict the result of `claimVerification`, completed in place
+ * @template {{ claims?: any[] }} V
+ * @param {V} verdict the result of `claimVerification`, completed in place
  * @param {{ matrix?: any, sourceArtifacts?: Map<string, string> | Record<string, string> }} input
- * @returns {typeof verdict}
+ * @returns {V}
  */
 export function attachClaimSourceLocations(verdict, { matrix, sourceArtifacts = {} } = {}) {
   const artifactText = sourceArtifacts instanceof Map

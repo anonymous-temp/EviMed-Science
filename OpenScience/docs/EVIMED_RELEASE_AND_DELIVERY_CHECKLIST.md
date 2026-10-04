@@ -196,7 +196,7 @@ pnpm smoke:deployment
      0400 的文件、写得了那个 0700 的目录（即与 web 用户同一个 uid，或 `OPEN_SCIENCE_RUNTIME_CONTAINER_USER` 指向它）。
      控制器环境里有这个主机路径（`docker exec <控制器> printenv OPEN_SCIENCE_VCR_DATA_PLANE_HOST_DIR`）；没有它，
      上传 PDF / Word 会得到「本部署暂时不能转换」。镜像里要有 `/opt/evimed/mcp/evimed-research/vcr_record_extract.py`
-     与 `vcr_curve_digitize.py`（随研究 MCP 的 Python 源码一起发，增量发布即可），控制器协议版本为 9。曲线数字化
+     与 `vcr_curve_digitize.py`、`source_material_extract.py`（随研究 MCP 的 Python 源码一起发，增量发布即可），控制器协议版本为 10（第三个操作 `materials`，见下文「知识库资料的表格与页码」）。曲线数字化
      的暂存是已发表的图、不是患者数据，仍在 `/data/vcr-intake/digitize/`，转换后为空。
    - **通过：** 上面每条都成立，且探针文件已删。
 
@@ -234,6 +234,28 @@ pnpm smoke:deployment
 | 4 五个能力真实运行 | | | | |
 | 5 AC-35 计时 | | | | |
 | 6 生产副本上的迁移 | | | | |
+
+## 知识库资料的表格与页码（2026-10-04）
+
+知识库资料解析后，平台还从解析服务给的 Markdown 里确定性地读出表格（表号、表头、行列地址、图注与脚注、n/N (%) 等封闭格式的数值），
+并对 PDF 用**原件字节**在一次性容器里（运行时控制器的 intake 容器，第三个操作 `materials`，无网络、一份只读副本）读出每页文字，
+把每张表的每一行对到它所在的页；电子表格（`.xlsx`）在同一个容器里读单元格，CSV 在本进程里按行列读。解析服务不给页、不给区域、不给合并单元格，
+这些在记录里就是「未知」，不会被猜出来。每份资料的账本在源记录的 `coverage.materials`：抽取版本、原件 SHA-256、数值的
+已定位 / 页码待定 / 页码未知 / 未能提取 / 失败各多少。部署后要做的检查：
+
+1. 容器与配置：控制器环境里 `OPEN_SCIENCE_VCR_INTAKE_*` 与 web 一致；镜像里有 `/opt/evimed/mcp/evimed-research/source_material_extract.py`；
+   `OPEN_SCIENCE_SOURCE_MATERIALS_ENABLED` 未设或为 true。运行时控制器的 `/v1/health` 报告协议版本 10。
+2. 用一个普通账号向知识库上传一份含临床表格（含 n (%)、脚注）的可复制文字 PDF，等它读完：
+   `GET /api/sources/<id>` 的 `payload.coverage.materials` 里 `status` 是 `extracted` 或 `partial`、`pages.status` 是 `mapped`、`extraction` 带解析服务版本、
+   `sourceSha256` 与文件 SHA-256 相同；`GET /api/sources/<id>/materials` 列出表与图，`GET /api/sources/<id>/materials/tbl-1` 的每个单元格有 `r`、`c`、
+   字符区间 `s`–`e`，每个数值所在行有 `rowPages`；挑 5 个数值，在 PDF 里翻到该页核对（定位到的页必须是它真在的页）。
+3. 再上传一份续表（同一张表跨页）、一份扫描件 PDF、一份补充材料 `.xlsx`：续表在账本里是 `continued`（同表头 `ambiguous`，文字写了「续」才是 `stated`），
+   扫描件 `pages.status` 是 `no_text_layer`、`origin` 是 `ocr`、数值全是「页码未知」，`.xlsx` 的每个单元格地址是 `Sheet!B7` 这样的真实地址、公式没有缓存值的单元格没有数值。
+4. 用一份这样的资料做一次带引文的证据报告：打开报告里的「依据」，被核对通过的引文下一行是「位置：表 2 第 3 行第 2 列 · 页码未知」这样的位置（保存的原文没有分页标记时页码是未知，
+   不是错）；找不到的位置写「位置未知」。
+5. 停掉控制器（或设 `OPEN_SCIENCE_SOURCE_MATERIALS_ENABLED=false`）再上传一份 PDF：资料照常读完、可检索、可理解，账本里 `pages.reason` 是 `locator_unavailable`，
+   数值计入「页码未知」，不是失败，也不影响该资料的任何其他功能。
+6. 宿主机上 `docker ps -a --filter label=open-science.vcr-intake` 在读完后为空，`/data/vcr-intake/materials/` 为空。
 
 ## 可延期但不阻断首发
 

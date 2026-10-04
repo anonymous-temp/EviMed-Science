@@ -2,6 +2,7 @@ import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { knownErrorCodeMessage } from "@evimed/domain";
+import type { SourceMaterialsLedger } from "@/lib/sourceMaterials";
 import { MaterialsNotice, SourcesPage } from "./SourcesPage";
 
 const mocks = vi.hoisted(() => ({
@@ -627,13 +628,13 @@ describe("SourcesPage", () => {
 });
 
 describe("MaterialsNotice", () => {
-  const ledger = {
+  const ledger: SourceMaterialsLedger = {
     version: 1, status: "partial", format: "pdf", pagination: "paginated", origin: "reported",
     extraction: { materials: "evimed-materials@1", parser: "evimed-extract@0.5.0" }, sourceSha256: "a".repeat(64), textSha256: "b".repeat(64),
     pages: { status: "mapped", pageCount: 9 }, tables: { total: 2, structured: 2, unextracted: 0, failed: 0, continued: 0, continuedAmbiguous: 0 },
     values: { total: 12, located: 9, ambiguous: 1, unlocated: 1, unextracted: 1, failed: 0 },
     figures: { total: 0, captioned: 0, valuesKnown: 0 }, footnotes: { linked: 0, orphanMarkers: 0, orphanNotes: 0 }, supplements: { referenced: 0, linked: 0 }, reasons: [],
-  } as const;
+  };
 
   it("states how many of a document's numbers were found and where each stands", () => {
     render(<MaterialsNotice ledger={ledger} />);

@@ -113,6 +113,24 @@ test("a table too large for one record loses its last cells to the bound, and sa
   assert.equal(result.coverage.status, "partial");
 });
 
+test("past the total a source's tables may take, the rest are counted unextracted and the ledger says the table limit was reached", async t => {
+  const w = await world(t);
+  const text = fixtureText("clinical-table.md");
+  const whole = await w.materials.extract({ text, name: "paper.md", sha256: "a".repeat(64), parserRevision: PARSER });
+  // A limit that holds the first table and not the second.
+  const small = createSourceMaterials({ config: w.config, tablesTotalLimit: Buffer.byteLength(JSON.stringify(whole.tables[0])) + 200 });
+  const result = await small.extract({ text, name: "paper.md", sha256: "a".repeat(64), parserRevision: PARSER });
+  assert.equal(result.tables.length, 1, "the first table fit; the second did not");
+  assert.equal(result.coverage.tables.structured, 1);
+  assert.equal(result.coverage.tables.unextracted, 1);
+  assert.ok(result.coverage.reasons.includes("table_limit"));
+  assert.equal(result.coverage.status, "partial");
+  const overflow = result.structure.tables[1];
+  assert.deepEqual([overflow.status, overflow.reason], ["unextracted", "table_limit"]);
+  assert.ok(overflow.values.unextracted > 0, "its values are counted, not lost");
+  assert.equal(result.coverage.values.total, result.structure.tables.reduce((total, table) => total + table.values.total, 0));
+});
+
 test("a scanned PDF has no text layer: its tables are the parser's OCR reading, every value is unlocated, and the ledger says so", { skip: !python }, async t => {
   const w = await world(t);
   const files = await writeMaterialFixtures(w.root, { pdfs: { "scan.pdf": [[], []] } });

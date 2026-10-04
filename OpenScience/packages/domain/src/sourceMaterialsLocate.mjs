@@ -209,6 +209,17 @@ export function materialTableCounts(table, pagination) {
 }
 
 /**
+ * Where a source's values were read from: the parser's reading of the text layer
+ * (`reported`), or of pixels (`ocr`) — an image, or a PDF none of whose pages has
+ * a text layer. The uncertainty of an OCR reading is unknown, and a value read off
+ * a figure (`graph_estimated`, never produced here) states its own.
+ * @param {{ pagination: string, pages: { status: string } }} input @returns {'reported' | 'ocr'}
+ */
+export function materialOrigin({ pagination, pages }) {
+  return pagination === 'image' || pages.status === 'no_text_layer' ? 'ocr' : 'reported'
+}
+
+/**
  * The per-source ledger of structured materials: the extraction version, the
  * source hash, and what was located, ambiguous, unlocated, unextracted or failed.
  * Every count is derived here from the units themselves, so the ledger and the
@@ -242,7 +253,7 @@ export function sourceMaterialsCoverage({ tables, figures = [], supplements = []
   if (pages.reason && !reasons.includes(pages.reason)) reasons.push(pages.reason)
   if (pages.status === 'no_text_layer' || pagination === 'image') reasons.push('scanned_or_image_source')
   if (figures.length) reasons.push('figures_not_digitized')
-  const origin = pagination === 'image' || pages.status === 'no_text_layer' ? 'ocr' : 'reported'
+  const origin = materialOrigin({ pagination, pages })
   const trouble = tableCounts.unextracted + tableCounts.failed + values.unextracted + values.failed
   const status = failure ? 'failed' : unavailable ? 'unavailable' : trouble > 0 || limits.length ? 'partial' : 'extracted'
   return {

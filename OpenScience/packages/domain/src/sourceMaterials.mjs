@@ -70,11 +70,13 @@ export const SOURCE_VALUE_KINDS = Object.freeze([
   'number', 'percent', 'count_percent', 'fraction', 'fraction_percent', 'estimate_interval',
   'mean_sd', 'paren_pair', 'interval', 'p_value', 'bound', 'date', 'boolean', 'error', 'missing',
 ])
+/** What the parser's output says about where on the page a unit is: nothing. Written on every table and figure so the absence is a stated fact, not a silence. */
+export const SOURCE_MATERIAL_REGION_UNKNOWN = Object.freeze({ status: 'unknown', reason: 'parser_sends_no_regions' })
 /** The kinds that count as a value in the ledger: a date, a flag, an error and a missing marker are typed cells, not values. */
 const NON_VALUE_KINDS = new Set(['date', 'boolean', 'error', 'missing'])
 export const SOURCE_TABLE_STATUSES = Object.freeze(['structured', 'unextracted'])
-export const SOURCE_TABLE_UNEXTRACTED_REASONS = Object.freeze(['html_table', 'invalid_table', 'table_limit', 'derivation_failed'])
-export const SOURCE_CONTINUATION_BASES = Object.freeze(['caption_marker', 'same_header'])
+export const SOURCE_TABLE_UNEXTRACTED_REASONS = Object.freeze(['html_table', 'invalid_table', 'headerless_rows', 'table_limit', 'derivation_failed'])
+export const SOURCE_CONTINUATION_BASES = Object.freeze(['caption_marker', 'same_header', 'same_columns'])
 export const SOURCE_CONTINUATION_CERTAINTIES = Object.freeze(['stated', 'ambiguous'])
 
 /** @typedef {{ status: 'located' | 'ambiguous' | 'unknown', pages?: number[], candidates?: number[], basis?: string, reason?: string }} MaterialPage */
@@ -317,6 +319,7 @@ const PATTERNS = {
   interval: new RegExp(String.raw`^(${NUM})\s*%?${SEP_BARE}(${NUM})\s*%?$`),
   percent: new RegExp(String.raw`^(${NUM})\s*%$`),
   number: new RegExp(String.raw`^(${NUM})$`),
+  groupSize: new RegExp(String.raw`^n\s*=\s*(${INT})$`, 'i'),
   bound: new RegExp(String.raw`^([<>≤≥]|<=|>=)\s*(${NUM})\s*(%?)$`),
   pValue: new RegExp(String.raw`^p\s*([<>=≤≥]|<=|>=)?\s*(${NUM})$`, 'i'),
 }
@@ -398,7 +401,8 @@ export function parseMaterialCell(cellText, context = {}, rowTimepoint = null) {
   const raw = cellText.replace(/\\\|/g, '|').trim()
   if (!raw) return undefined
   const { core: marked, markers } = materialCellMarkers(raw)
-  const core = marked.normalize('NFKC').replace(/\\\*/g, '*').trim()
+  // The parser may emit the four HTML entities Markdown text needs; they are decoded, nothing else is.
+  const core = marked.normalize('NFKC').replace(/\\\*/g, '*').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>').replace(/&nbsp;/gi, ' ').replace(/&amp;/gi, '&').trim()
   const hints = context.hints ?? new Set()
   /** @param {Record<string, any> | null} value */
   const result = (value) => ({ value: value ? withContext(value, context, rowTimepoint) : null, markers, core })
@@ -410,6 +414,10 @@ export function parseMaterialCell(cellText, context = {}, rowTimepoint = null) {
     const check = percentCheck(n, N, p, match[3])
     return result({ kind: 'fraction_percent', n, N, percent: p, denominator: { n: N, basis: 'cell' }, ...(check ? { percentCheck: check } : {}) })
   }
+  // A date is a typed cell and not a value; a group size ("n = 45") is a count that says what it is.
+  if (/^\d{4}[-/.]\d{1,2}(?:[-/.]\d{1,2})?$/.test(core)) return { value: { kind: 'date', text: core }, markers, core }
+  match = PATTERNS.groupSize.exec(core)
+  if (match) return result({ kind: 'number', x: toNumber(match[1]), quantity: 'n' })
   match = PATTERNS.fraction.exec(core)
   if (match) return result({ kind: 'fraction', n: toNumber(match[1]), N: toNumber(match[2]), denominator: { n: toNumber(match[2]), basis: 'cell' } })
   match = PATTERNS.estimateInterval.exec(core)
@@ -594,14 +602,28 @@ export function deriveMarkdownStructure({ text: rawText }) {
       const last = Math.min(j, lines.length - 1)
       const block = text.slice(line.start, lines[last].end)
       const digits = [...block.matchAll(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi)].filter((cell) => looksNumeric(cell[1])).length
-      tables.push({ kind: 'table', status: 'unextracted', reason: 'html_table', start: line.start, end: lines[last].end, firstLine: i, lastLine: last, valueCandidates: digits })
+      tables.push({ kind: 'table', status: 'unextracted', reason: 'html_table', start: line.start, end: lines[last].end, firstLine: i, lastLine: last, region: SOURCE_MATERIAL_REGION_UNKNOWN, valueCandidates: digits })
       i = last
       continue
     }
     if (!hasPipe(line.text) || i + 1 >= lines.length || !hasPipe(lines[i + 1].text)) continue
     const headerCells = splitRow(text, line.start, line.end)
     const delimiter = splitRow(text, lines[i + 1].start, lines[i + 1].end)
-    if (!isDelimiterRow(delimiter)) continue
+    if (!isDelimiterRow(delimiter)) {
+      // Rows with no header above them: a table that went on past a page break
+      // without repeating its header. They cannot be read (what a column holds is
+      // not stated), so they are one unextracted unit with the digits they hold,
+      // and the continuation pass says what they may continue.
+      if (headerCells.length < 2 || splitRow(text, lines[i + 1].start, lines[i + 1].end).length < 2) continue
+      let last = i + 1
+      while (last + 1 < lines.length && !blank(lines[last + 1].text) && hasPipe(lines[last + 1].text)) last += 1
+      let digits = 0
+      for (let k = i; k <= last; k += 1) for (const cell of splitRow(text, lines[k].start, lines[k].end)) if (looksNumeric(cell.t)) digits += 1
+      tables.push({ kind: 'table', status: 'unextracted', reason: 'headerless_rows', start: line.start, end: lines[last].end, firstLine: i, lastLine: last,
+        region: SOURCE_MATERIAL_REGION_UNKNOWN, columns: headerCells.length, valueCandidates: digits })
+      i = last
+      continue
+    }
     let last = i + 1
     while (last + 1 < lines.length && !blank(lines[last + 1].text) && hasPipe(lines[last + 1].text)) last += 1
     const start = line.start
@@ -625,7 +647,7 @@ export function deriveMarkdownStructure({ text: rawText }) {
       const built = buildMarkdownCells(rows)
       if (built.truncated && !limits.includes('cell_limit')) limits.push('cell_limit')
       tables.push({
-        kind: 'table', status: 'structured', start, end, firstLine: i, lastLine: last,
+        kind: 'table', status: 'structured', start, end, firstLine: i, lastLine: last, region: SOURCE_MATERIAL_REGION_UNKNOWN,
         rows: rows.length, columns: headerCells.length, labelColumn: 1,
         // What Markdown cannot say stays unknown on the record rather than absent.
         spans: 'unknown', headerLevels: 'unknown', header: built.header, cells: built.cells,
@@ -698,16 +720,18 @@ export function deriveMarkdownStructure({ text: rawText }) {
   for (let index = 1; index < tables.length; index += 1) {
     const previous = tables[index - 1]
     const table = tables[index]
-    if (previous.status !== 'structured' || table.status !== 'structured') continue
+    if (previous.status !== 'structured' || (table.status !== 'structured' && table.reason !== 'headerless_rows')) continue
     const gap = lines.slice(previous.lastLine + 1, table.firstLine).map((entry) => entry.text.trim()).filter(Boolean)
     if (gap.length > 6) continue
     const marked = Boolean(table.caption && CONTINUED_MARK.test(table.caption.text))
       || gap.some((entry) => entry.length <= 120 && CONTINUED_MARK.test(entry))
-    const sameHeader = previous.columns === table.columns
+    // Rows with no header can only be the same width as the table above them.
+    const sameHeader = table.reason !== 'headerless_rows' && previous.columns === table.columns
       && previous.header.every((/** @type {{ t: string }} */ cell, /** @type {number} */ position) => materialSkeleton(cell.t) === materialSkeleton(table.header[position].t))
     const quiet = gap.length <= 3 && gap.every((entry) => PAGE_FOOTER.test(entry) || (entry.length <= 120 && (CONTINUED_MARK.test(entry) || TABLE_LABEL.test(entry))))
     if (marked) table.continuation = { prior: previous.id, basis: 'caption_marker', certainty: sameHeader ? 'stated' : 'ambiguous' }
     else if (sameHeader && quiet) table.continuation = { prior: previous.id, basis: 'same_header', certainty: 'ambiguous' }
+    else if (table.reason === 'headerless_rows' && table.columns === previous.columns && quiet) table.continuation = { prior: previous.id, basis: 'same_columns', certainty: 'ambiguous' }
     if (table.continuation) previous.continuedBy = table.id
   }
 
@@ -724,7 +748,7 @@ export function deriveMarkdownStructure({ text: rawText }) {
       kind: 'figure', index: figures.length + 1, id: `fig-${figures.length + 1}`,
       ...(label ? { label, caption: { text: caption, start: line.start, end: lines[last].end } } : {}),
       ...(image ? { image: { alt: image[1].slice(0, 300), ref: image[2].slice(0, 300) } } : {}),
-      start: line.start, end: lines[last].end,
+      start: line.start, end: lines[last].end, region: SOURCE_MATERIAL_REGION_UNKNOWN,
       // No digitization here: what a figure plots is unknown, said so, and a
       // value later read off it carries the origin `graph_estimated`.
       axes: { status: 'unknown', reason: 'no_digitization' }, values: { status: 'unknown', reason: 'no_digitization' },

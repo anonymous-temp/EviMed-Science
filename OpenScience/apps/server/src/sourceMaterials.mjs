@@ -7,6 +7,7 @@ import {
   deriveSheetStructure,
   locateUnitsOnPages,
   materialCaptureText,
+  materialOrigin,
   materialTableCounts,
   sourceFileFormat,
   sourceMaterialsCoverage,
@@ -56,6 +57,8 @@ const RESULT_LIMIT = 16 * 1024 * 1024;
 const PAGES_LIMIT = 24 * 1024 * 1024;
 /** A table record stays under the product ledger's 256 KiB with room for its identity. */
 const TABLE_RECORD_LIMIT = 230_000;
+/** All of one source's table records together: past it the remaining tables are counted, not stored (one transaction carries them all). */
+const TABLES_TOTAL_LIMIT = 16 * 1024 * 1024;
 const SUMMARY_RECORD_LIMIT = 230_000;
 /** Formats the knowledge base reads as text that are not documents: they have no tables to structure. */
 const NOT_DOCUMENTS = new Set(["json", "yaml", "yml", "xml", "r", "py", "sql"]);
@@ -127,9 +130,9 @@ export function materialsRecords(materials, { sourceId, generation }) {
 }
 
 /**
- * @param {{ config: any, controller?: { runVcrIntake?: Function } | null, report?: (code: string) => void, now?: () => Date }} dependencies
+ * @param {{ config: any, controller?: { runVcrIntake?: Function } | null, report?: (code: string) => void, now?: () => Date, tablesTotalLimit?: number }} dependencies
  */
-export function createSourceMaterials({ config, controller = null, report = () => {}, now = () => new Date() }) {
+export function createSourceMaterials({ config, controller = null, report = () => {}, now = () => new Date(), tablesTotalLimit = TABLES_TOTAL_LIMIT }) {
   const enabled = () => config.sourceMaterialsEnabled !== false;
   const locatorAvailable = () => typeof controller?.runVcrIntake === "function";
   /** @param {string} code */
@@ -197,7 +200,7 @@ export function createSourceMaterials({ config, controller = null, report = () =
     /** @type {{ materials?: string, parser?: string, locator?: string }} */
     const extraction = { parser: parserRevision };
     const identity = { format, pagination, sourceSha256, textSha256, extraction, now: at };
-    /** None was attempted, and the ledger says why. @param {string} why @param {Record<string, any>} [pages] */
+    /** None was attempted, and the ledger says why. @param {string} why @param {{ status: string, reason?: string }} [pages] */
     const notAttempted = (why, pages = { status: "unavailable", reason: why }) => ({
       coverage: sourceMaterialsCoverage({ tables: [], pages, unavailable: why, ...identity }), structure: null, tables: [],
     });
@@ -207,7 +210,7 @@ export function createSourceMaterials({ config, controller = null, report = () =
     try {
       /** @type {{ tables: Record<string, any>[], figures: Record<string, any>[], supplements: Record<string, any>[], limits: string[] }} */
       let derived;
-      /** @type {Record<string, any>} */
+      /** @type {{ status: string, pageCount?: number, textLayerPages?: number, noTextLayerPages?: number[], reason?: string }} */
       let pages = pagination === "paginated"
         ? { status: "unavailable", reason: format === "pdf" ? "not_requested" : "format_without_page_source" } : { status: "not_paginated" };
       /** @type {string[]} */
@@ -271,15 +274,32 @@ export function createSourceMaterials({ config, controller = null, report = () =
         }
       }
 
-      tables = tables.map(fitTable);
+      // Where the values were read from: the text layer, or pixels (a scan, an
+      // image) — and an OCR reading's uncertainty is unknown, on every table.
+      const origin = materialOrigin({ pagination, pages });
+      let stored = 0;
+      /** @type {string[]} */
+      const budgetLimits = [];
+      tables = tables.map(fitTable).map((table) => {
+        if (table.status !== "structured") return table;
+        stored += bytesOf(table);
+        if (stored > tablesTotalLimit) {
+          if (!budgetLimits.length) budgetLimits.push("table_limit");
+          const { cells, rowPages: _rows, ...rest } = table;
+          return { ...rest, status: "unextracted", reason: "table_limit", valueCandidates: cells.filter((/** @type {{ v?: unknown }} */ cell) => cell.v).length + (table.unextracted ?? 0) };
+        }
+        return { ...table, origin, ...(origin === "ocr" ? { uncertainty: "unknown" } : {}) };
+      });
       const coverage = sourceMaterialsCoverage({
-        tables, figures, supplements: derived.supplements, pages, limits: [...derived.limits, ...extraLimits], ...identity,
+        tables, figures, supplements: derived.supplements, pages, limits: [...derived.limits, ...extraLimits, ...budgetLimits], ...identity,
       });
       // A ledger that does not hold together is not stored as one: it is a failure, and says so.
       if (sourceMaterialsCoverageIssues(coverage).length) throw new Error("materials_coverage_invalid");
       const structure = {
-        version: coverage.version, extraction: coverage.extraction, sourceSha256, textSha256, format, pagination, origin: coverage.origin,
-        ...(coverage.origin === "ocr" ? { uncertainty: "unknown" } : {}), pages, limits: [...new Set([...derived.limits, ...extraLimits])],
+        version: coverage.version,
+        // Parsed facts, kept apart from what source understanding states as an inference about them.
+        basis: "deterministic_parse", extraction: coverage.extraction, sourceSha256, textSha256, format, pagination, origin: coverage.origin,
+        ...(coverage.origin === "ocr" ? { uncertainty: "unknown" } : {}), pages, limits: [...new Set([...derived.limits, ...extraLimits, ...budgetLimits])],
         tables: tables.map((table) => summarizeTable(table, pagination)), figures: figures.slice(0, SOURCE_MATERIAL_LIMITS.maxFigures),
         supplements: derived.supplements, at,
       };

@@ -30,7 +30,7 @@ const clinical = deriveMarkdownStructure({ text: fixture("clinical-table.md") })
 /** @param {any[]} tables @param {string} id */
 const table = (tables, id) => tables.find((entry) => entry.id === id);
 /** @param {any} entry @param {number} r @param {number} c */
-const cellAt = (entry, r, c) => entry.cells.find((cell) => cell.r === r && cell.c === c);
+const cellAt = (/** @type {any} */ entry, /** @type {number} */ r, /** @type {number} */ c) => entry.cells.find((/** @type {any} */ cell) => cell.r === r && cell.c === c);
 
 test("every cell of a parsed table resolves to its exact characters in the captured text", () => {
   const raw = fixture("clinical-table.md");
@@ -58,7 +58,7 @@ test("a clinical table keeps its caption, header, spans and what Markdown cannot
   assert.equal(baseline.caption.placement, "before");
   assert.equal(baseline.rows, 9, "the header row is row 1");
   assert.equal(baseline.columns, 4);
-  assert.deepEqual(baseline.header.map((cell) => cell.t), ["Characteristic", "Placebo (n=120)", "Study drug (n=118)", "P value"]);
+  assert.deepEqual(baseline.header.map((/** @type {any} */ cell) => cell.t), ["Characteristic", "Placebo (n=120)", "Study drug (n=118)", "P value"]);
   // Markdown has no merged cells and one header row; both are said to be unknown rather than assumed.
   assert.equal(baseline.spans, "unknown");
   assert.equal(baseline.headerLevels, "unknown");
@@ -95,13 +95,13 @@ test("unit, denominator, timepoint and statistic are read from the header and th
 
 test("a footnote marker is linked to its note by the cells that carry it, and an unlinked note is counted", () => {
   const baseline = table(clinical.tables, "tbl-1");
-  const linked = baseline.footnotes.find((note) => note.marker === "a");
+  const linked = baseline.footnotes.find((/** @type {any} */ note) => note.marker === "a");
   assert.deepEqual(linked.cells, ["4:1"]);
   assert.match(linked.text, /^Systolic blood pressure/);
   assert.deepEqual(cellAt(baseline, 4, 1).fn, ["a"]);
   assert.equal(clinical.text.slice(linked.start, linked.end).includes("Systolic blood pressure"), true);
   // The `*` line has no cell carrying `*`: it stays a note, unlinked, and the table says so.
-  assert.deepEqual(baseline.footnotes.find((note) => note.marker === "*").cells, []);
+  assert.deepEqual(baseline.footnotes.find((/** @type {any} */ note) => note.marker === "*").cells, []);
   assert.equal(baseline.orphanNotes, 1);
   assert.deepEqual(baseline.orphanMarkers, []);
   // A table-level note is kept as text, never read for meaning.
@@ -116,11 +116,11 @@ test("a cell that looks numeric and fits no closed format is counted unextracted
   assert.equal(stray.v, undefined);
   // "not estimable" is a missing marker, a typed cell that is not a value.
   assert.deepEqual(cellAt(outcomes, 5, 4).v, { kind: "missing", mark: "not estimable" });
-  assert.ok(!materialTableValues(outcomes).some((cell) => cell.v.kind === "missing"));
+  assert.ok(!materialTableValues(outcomes).some((cell) => cell.v?.kind === "missing"));
 });
 
 test("closed formats: what each cell shape parses to, and what it never guesses", () => {
-  const parse = (text, context, row) => parseMaterialCell(text, context, row)?.value;
+  const parse = (/** @type {string} */ text, /** @type {any} */ context = undefined, /** @type {any} */ row = undefined) => /** @type {any} */ (parseMaterialCell(text, context, row)?.value);
   assert.deepEqual(parse("12 (34.5%)"), { kind: "count_percent", n: 12, percent: 34.5 });
   assert.deepEqual(parse("1,234"), { kind: "number", x: 1234 });
   assert.deepEqual(parse("−0.5"), { kind: "number", x: -0.5 });
@@ -144,10 +144,11 @@ test("closed formats: what each cell shape parses to, and what it never guesses"
   assert.equal(parse("improved"), null);
   assert.equal(parseMaterialCell("   "), undefined);
   // A trailing footnote marker is not part of the number.
-  assert.deepEqual(parseMaterialCell("0.03*").value, { kind: "number", x: 0.03 });
-  assert.deepEqual(parseMaterialCell("0.03*").markers, ["*"]);
-  assert.deepEqual(parseMaterialCell("12<sup>a,b</sup>").markers, ["a", "b"]);
-  assert.deepEqual(parseMaterialCell("12ᵃ").markers, ["a"]);
+  const starred = /** @type {any} */ (parseMaterialCell("0.03*"));
+  assert.deepEqual(starred.value, { kind: "number", x: 0.03 });
+  assert.deepEqual(starred.markers, ["*"]);
+  assert.deepEqual(/** @type {any} */ (parseMaterialCell("12<sup>a,b</sup>")).markers, ["a", "b"]);
+  assert.deepEqual(/** @type {any} */ (parseMaterialCell("12ᵃ")).markers, ["a"]);
 });
 
 test("a table that continues over a page is a possible continuation unless the text says so", () => {
@@ -287,7 +288,7 @@ test("a format is located by page, sheet address, delimited position, place in t
 function rowsText(found, map = (cell) => cell.t) {
   const lines = new Map();
   for (const cell of found.cells) lines.set(cell.r, [...(lines.get(cell.r) ?? []), cell]);
-  return [...lines.values()].map((cells) => cells.sort((a, b) => a.c - b.c).map(map).join(" ")).join("\n");
+  return [...lines.values()].map((/** @type {any[]} */ cells) => cells.sort((a, b) => a.c - b.c).map(map).join(" ")).join("\n");
 }
 
 test("a row found on exactly one page is on that page; on several it is ambiguous with the candidates; nowhere, unknown", () => {
@@ -431,13 +432,13 @@ test("a failed derivation is counted failed, and the ledger refuses what does no
 
 test("a quotation inside one cell resolves to that table, row and cell; across a row, to the row", () => {
   const text = fixture("clinical-table.md");
-  const found = locateQuoteInText({ text, quote: "69 (58.5)", matches: quoteIsPresent });
+  const found = /** @type {any} */ (locateQuoteInText({ text, quote: "69 (58.5)", matches: quoteIsPresent }));
   assert.equal(found.status, "located");
   assert.equal(found.table.label, "Table 2");
   assert.equal(found.row, 3);
   assert.deepEqual(found.cell, { row: 3, column: 3, header: "Study drug (n=118)" });
   assert.deepEqual(found.page, { status: "unknown", reason: "no_page_markers" });
-  const across = locateQuoteInText({ text, quote: "Male sex, n (%) 72 (60.0)", matches: quoteIsPresent });
+  const across = /** @type {any} */ (locateQuoteInText({ text, quote: "Male sex, n (%) 72 (60.0)", matches: quoteIsPresent }));
   assert.equal(across.row, 3);
   assert.equal(across.cell, undefined);
   assert.equal(across.table.id, "tbl-1");
@@ -447,14 +448,14 @@ test("a quotation that appears in prose has no table and says so; one in two tab
   const text = fixture("clinical-table.md");
   const prose = locateQuoteInText({ text, quote: "Participants were randomised 1:1 to the study drug or placebo for 24 weeks", matches: quoteIsPresent });
   assert.deepEqual(prose, { status: "unknown", page: { status: "unknown", reason: "no_page_markers" }, reason: "not_in_a_table" });
-  const twice = locateQuoteInText({ text: "| a | b |\n| - | - |\n| shared value 42 | x |\n\n| c | d |\n| - | - |\n| shared value 42 | y |\n", quote: "shared value 42", matches: quoteIsPresent });
+  const twice = /** @type {any} */ (locateQuoteInText({ text: "| a | b |\n| - | - |\n| shared value 42 | x |\n\n| c | d |\n| - | - |\n| shared value 42 | y |\n", quote: "shared value 42", matches: quoteIsPresent }));
   assert.equal(twice.status, "ambiguous");
-  assert.deepEqual(twice.candidates.map((entry) => entry.id), ["tbl-1", "tbl-2"]);
+  assert.deepEqual(twice.candidates.map((/** @type {any} */ entry) => entry.id), ["tbl-1", "tbl-2"]);
 });
 
 test("a text with page markers gives a quotation its page, and a quotation spanning a page break none", () => {
   const text = "<!-- page 1 -->\nIntro line one.\n<!-- page 2 -->\n| a | b |\n| - | - |\n| Total events | 41 (34.7) |\n<!-- page 3 -->\nClosing remarks about adverse events.\n";
-  const cell = locateQuoteInText({ text, quote: "41 (34.7)", matches: quoteIsPresent });
+  const cell = /** @type {any} */ (locateQuoteInText({ text, quote: "41 (34.7)", matches: quoteIsPresent }));
   assert.deepEqual(cell.page, { status: "located", pages: [2], basis: "page_marker" });
   assert.equal(cell.cell.address, undefined);
   assert.equal(cell.cell.column, 2);
@@ -475,4 +476,39 @@ test("a stored page for a row is reported with the cell it places", () => {
 test("a skeleton compares letters and digits and nothing else", () => {
   assert.equal(materialSkeleton("Dis-\nease  (n = 12)."), "disease" + "n12");
   assert.equal(materialSkeleton("ﬁrst １２ 表 2"), "first12表2");
+});
+
+test("an HTML entity the parser wrote, a date and a group size are read for what they are", () => {
+  const parse = (/** @type {string} */ text) => parseMaterialCell(text)?.value;
+  assert.deepEqual(parse("&lt;0.001"), { kind: "bound", operator: "<", x: 0.001 });
+  assert.deepEqual(parse("P&lt;0.05"), { kind: "p_value", operator: "<", p: 0.05 });
+  // A date is a typed cell, not a value, and so is not counted as an unread number.
+  assert.deepEqual(parse("2019-03-04"), { kind: "date", text: "2019-03-04" });
+  assert.deepEqual(parse("n = 45"), { kind: "number", x: 45, quantity: "n" });
+  const dated = deriveMarkdownStructure({ text: "| Visit | Date |\n| - | - |\n| Baseline | 2019-03 |\n" });
+  assert.equal(dated.tables[0].unextracted, 0);
+  assert.equal(materialTableValues(dated.tables[0]).length, 0);
+});
+
+test("every table and figure states that the parser gave it no region", () => {
+  for (const unit of [...clinical.tables, ...clinical.figures]) assert.deepEqual(unit.region, { status: "unknown", reason: "parser_sends_no_regions" });
+});
+
+test("rows that continue a table past a page break with no header of their own are one unextracted unit, said to be a possible continuation", () => {
+  const text = [
+    "Table 6. Laboratory values", "", "| Test | Drug | Placebo |", "| --- | --- | --- |", "| ALT, U/L | 24 | 22 |", "| AST, U/L | 21 | 20 |", "", "9/ 12", "",
+    "| Creatinine, mg/dL | 0.9 | 0.9 |", "| Urea, mmol/L | 5.1 | 5.3 |", "", "Prose after the rows.",
+  ].join("\n");
+  const found = deriveMarkdownStructure({ text });
+  const [first, rest] = found.tables;
+  assert.equal(first.status, "structured");
+  assert.deepEqual([rest.status, rest.reason, rest.columns, rest.valueCandidates], ["unextracted", "headerless_rows", 3, 4]);
+  assert.deepEqual(rest.continuation, { prior: "tbl-1", basis: "same_columns", certainty: "ambiguous" });
+  assert.equal(found.text.slice(rest.start, rest.end).startsWith("| Creatinine"), true);
+  // The ledger counts what could not be read, and the table count says one table could not be.
+  const coverage = sourceMaterialsCoverage({ tables: found.tables, pagination: "flow", format: "md", pages: { status: "not_paginated" }, extraction: {} });
+  assert.equal(coverage.values.unextracted, 4);
+  assert.deepEqual([coverage.tables.structured, coverage.tables.unextracted, coverage.tables.continuedAmbiguous], [1, 1, 1]);
+  // A single stray line with a pipe in it is prose, not a table.
+  assert.equal(deriveMarkdownStructure({ text: "Choose a | b as the option.\n\nNext paragraph." }).tables.length, 0);
 });

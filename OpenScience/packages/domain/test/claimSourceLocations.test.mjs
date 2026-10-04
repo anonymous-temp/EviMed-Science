@@ -19,13 +19,13 @@ const TEXT = [
   "Closing discussion of the adverse events observed in both treatment groups over the whole study.",
 ].join("\n");
 
-const claim = (overrides) => ({ claimId: "CLM-001", claim: "A claim.", claimType: "direct", artifactPath: PATH, accessLevel: "full_text", ...overrides });
+const claim = (/** @type {Record<string, any>} */ overrides) => ({ claimId: "CLM-001", claim: "A claim.", claimType: "direct", artifactPath: PATH, accessLevel: "full_text", ...overrides });
 
 /** @param {any[]} claims @param {Record<string, string>} [artifacts] */
 function verify(claims, artifacts = { [PATH]: TEXT }) {
   const matrix = { claims };
   const verdict = claimVerification({ matrix, sourceArtifacts: artifacts });
-  return attachClaimSourceLocations(verdict, { matrix, sourceArtifacts: artifacts });
+  return /** @type {any} */ (attachClaimSourceLocations(verdict, { matrix, sourceArtifacts: artifacts }));
 }
 
 test("a verified quotation inside a table cell resolves to its table, row, cell and the page its text carries", () => {
@@ -63,7 +63,7 @@ test("a quotation that was not found, a source not preserved and a claim with no
     claim({ claimId: "CLM-002", artifactPath: OTHER, supportQuote: "Anything." }),
     claim({ claimId: "CLM-003", supportQuote: "" }),
   ]);
-  const locations = verdict.claims.map((entry) => [entry.sources[0].status, entry.sources[0].location.status, entry.sources[0].location.reason]);
+  const locations = verdict.claims.map((/** @type {any} */ entry) => [entry.sources[0].status, entry.sources[0].location.status, entry.sources[0].location.reason]);
   assert.deepEqual(locations, [["quote_not_found", "unknown", "quote_not_found"], ["source_unavailable", "unknown", "source_unavailable"], ["no_quote", "unknown", "no_quote"]]);
   for (const entry of verdict.claims) assert.deepEqual(entry.sources[0].location.page, { status: "unknown", reason: "quote_not_verified" });
 });
@@ -87,7 +87,7 @@ test("a derived claim has no sources to locate, and the verdict's statuses are e
   const claims = [claim({ supportQuote: "22/118 (18.6)" }), { claimId: "CLM-020", claim: "An estimate.", claimType: "derived" }];
   const before = claimVerification({ matrix: { claims }, sourceArtifacts: { [PATH]: TEXT } });
   const after = verify(claims);
-  assert.deepEqual(after.claims.map((entry) => [entry.claimId, entry.status]), before.claims.map((entry) => [entry.claimId, entry.status]));
+  assert.deepEqual(after.claims.map((/** @type {any} */ entry) => [entry.claimId, entry.status]), before.claims.map((/** @type {any} */ entry) => [entry.claimId, entry.status]));
   assert.deepEqual(after.counts, before.counts);
   assert.deepEqual(after.claims[1].sources, []);
 });
@@ -97,7 +97,7 @@ test("a source too large to derive from is unknown for that reason, and nothing 
   const verdict = verify([claim({ supportQuote: "22/118 (18.6)" })], { [PATH]: huge });
   assert.equal(verdict.claims[0].sources[0].status, "verified");
   assert.equal(verdict.claims[0].sources[0].location.reason, "source_too_large");
-  assert.doesNotThrow(() => attachClaimSourceLocations({ claims: [{ claimId: "x", sources: [{ status: "verified", artifactPath: PATH }] }] }, { matrix: null, sourceArtifacts: null }));
+  assert.doesNotThrow(() => attachClaimSourceLocations({ claims: [{ claimId: "x", sources: [{ status: "verified", artifactPath: PATH }] }] }, /** @type {any} */ ({ matrix: null, sourceArtifacts: null })));
   assert.doesNotThrow(() => attachClaimSourceLocations({}, {}));
   assert.doesNotThrow(() => attachClaimSourceLocations(/** @type {any} */ (null), {}));
 });

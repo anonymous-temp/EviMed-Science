@@ -173,7 +173,10 @@ function mapMetadata(data) {
  * The parser's `pages` as a page map in UTF-16 offsets of `text`.
  *
  * Nothing sends `pages` yet; it was asked for (plan §2.4) and this is what makes
- * jump-to-page light up the day it arrives. The service is Python, where a
+ * jump-to-page light up the day it arrives. Until it does, the page of a parsed
+ * table's rows is computed here from the original bytes instead
+ * (`sourceMaterials.mjs`), as a per-unit ledger — never as a page map, which
+ * would put a page on every character of the text. The service is Python, where a
  * string offset counts code points while ours count UTF-16 units, so offsets
  * are converted unless the answer says they are UTF-16 already. The two agree
  * on any text without characters outside the BMP, which is nearly all of it.

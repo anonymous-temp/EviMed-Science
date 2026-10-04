@@ -4,6 +4,7 @@ import { claimVerification } from "@evimed/domain/clinical-evidence";
 import { MemoryRouter } from "react-router";
 import { describe, expect, it } from "vitest";
 import { MarkdownViewer } from "./MarkdownViewer";
+import type { VerifiedClaim } from "./ClaimCitation";
 import { parseClaimMatrix } from "@/lib/claimCitations";
 
 const report = "MIMIC-IV 为单一机构来源的公开衍生数据库 [1]<!-- claim:CLM-001 --><!-- claim:CLM-404 -->。";
@@ -86,14 +87,14 @@ describe("a report sentence opens what it rests on", () => {
   });
 
   it("shows where the quotation sits in its source, the page as unknown where only the table is, and the place as unknown where it is", async () => {
-    const located = new Map([["CLM-001", { claimId: "CLM-001", claimType: "direct", status: "verified", sources: [{ artifactPath: null, status: "verified", location: {
+    const located = new Map<string, VerifiedClaim>([["CLM-001", { claimId: "CLM-001", claimType: "direct", status: "verified", sources: [{ artifactPath: null, status: "verified", location: {
       status: "located", table: { id: "tbl-1", index: 1, label: "Table 2" }, row: 3, cell: { row: 3, column: 2, header: "Placebo (n=120)" }, page: { status: "unknown", reason: "no_page_markers" },
     } }] }]]);
     const { unmount } = render(<MarkdownViewer variant="document" claims={claims} reading={{ verified: located }}>{"x [1]<!-- claim:CLM-001 -->"}</MarkdownViewer>);
     await userEvent.click(screen.getByRole("button", { name: /查看这句话的依据/ }));
     expect(await screen.findByText("位置：Table 2 第 3 行第 2 列 · 页码未知")).toBeInTheDocument();
     unmount();
-    const unknown = new Map([["CLM-001", { claimId: "CLM-001", claimType: "direct", status: "verified", sources: [{ artifactPath: null, status: "verified", location: {
+    const unknown = new Map<string, VerifiedClaim>([["CLM-001", { claimId: "CLM-001", claimType: "direct", status: "verified", sources: [{ artifactPath: null, status: "verified", location: {
       status: "unknown", page: { status: "unknown", reason: "no_page_markers" }, reason: "not_in_a_table" } }] }]]);
     render(<MarkdownViewer variant="document" claims={claims} reading={{ verified: unknown }}>{"x [1]<!-- claim:CLM-001 -->"}</MarkdownViewer>);
     await userEvent.click(screen.getByRole("button", { name: /查看这句话的依据/ }));
@@ -101,7 +102,7 @@ describe("a report sentence opens what it rests on", () => {
   });
 
   it("a verification that carries no location shows no location line", async () => {
-    const old = new Map([["CLM-001", { claimId: "CLM-001", claimType: "direct", status: "verified", sources: [{ artifactPath: null, status: "verified" }] }]]);
+    const old = new Map<string, VerifiedClaim>([["CLM-001", { claimId: "CLM-001", claimType: "direct", status: "verified", sources: [{ artifactPath: null, status: "verified" }] }]]);
     render(<MarkdownViewer variant="document" claims={claims} reading={{ verified: old }}>{"x [1]<!-- claim:CLM-001 -->"}</MarkdownViewer>);
     await userEvent.click(screen.getByRole("button", { name: /查看这句话的依据/ }));
     expect(await screen.findByText("MIMIC-IV 是单一机构常规诊疗数据的公开衍生数据库。")).toBeInTheDocument();

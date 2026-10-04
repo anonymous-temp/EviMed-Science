@@ -819,13 +819,14 @@ export {
   sourceFormatRoute,
   sourcePageForOffset,
 } from './src/sourceDocuments.mjs'
-// sourceMaterials — 25 exports: what a parsed document's tables, figures and spreadsheets say about themselves (cell addresses, closed-format values, captions, footnotes, continuations), derived from the parser's text and never guessed
+// sourceMaterials — 26 exports: what a parsed document's tables, figures and spreadsheets say about themselves (cell addresses, closed-format values, captions, footnotes, continuations), derived from the parser's text and never guessed
 export {
   SOURCE_CONTINUATION_BASES,
   SOURCE_CONTINUATION_CERTAINTIES,
   SOURCE_MATERIALS_EXTRACTOR,
   SOURCE_MATERIALS_VERSION,
   SOURCE_MATERIAL_LIMITS,
+  SOURCE_MATERIAL_REGION_UNKNOWN,
   SOURCE_PAGINATIONS,
   SOURCE_TABLE_STATUSES,
   SOURCE_TABLE_UNEXTRACTED_REASONS,
@@ -847,7 +848,7 @@ export {
   parseMaterialCell,
   sourceMaterialsPagination,
 } from './src/sourceMaterials.mjs'
-// sourceMaterialsLocate — 12 exports: the page a structured unit is on, found in the document's own text layer, the ledger of what was located, ambiguous, unlocated, unextracted or failed, and where a quotation sits
+// sourceMaterialsLocate — 13 exports: the page a structured unit is on, found in the document's own text layer, the ledger of what was located, ambiguous, unlocated, unextracted or failed, and where a quotation sits
 export {
   SOURCE_LOCATE_LIMITS,
   SOURCE_MATERIAL_COVERAGE_STATUSES,
@@ -857,6 +858,7 @@ export {
   locateQuoteInText,
   locateUnitsOnPages,
   materialPageSegments,
+  materialOrigin,
   materialRowPage,
   materialTableCounts,
   sourceMaterialsCoverage,
