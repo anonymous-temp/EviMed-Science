@@ -58,6 +58,32 @@ export const numeric = (value) => {
 /** @param {unknown} value @returns {string | null} */
 export const text = (value) => (typeof value === "string" && value.trim() ? value : null);
 
+// --- people ------------------------------------------------------------------------
+
+/** What a person whose account no longer exists is called: what they did stays on the study, their id never reaches a reader. */
+export const VCR_PERSON_GONE_ZH = "已注销的账号";
+/** What the platform's own hand is called where an account would be (the referral ledger's `control-plane`). */
+export const VCR_PLATFORM_ACTOR_ZH = "平台";
+/** The actors the platform writes in the place of an account. */
+const PLATFORM_ACTORS = new Set(["control-plane", "system", "platform"]);
+
+/**
+ * A person as a reader sees them — by name, never by account id. `people` is the
+ * names one page resolved (`VcrStoreBase.personNames`, the join `reviews()` makes):
+ * the account's name; the platform's own label for the platform's own hand; a
+ * neutral label for an account that no longer exists. Where nothing was resolved
+ * at all (a presenter given a bundle without names) it says nothing, rather than
+ * the id: an id in a person's place is the defect this exists to end.
+ * @param {ReadonlyMap<string, string> | null | undefined} people @param {unknown} id @returns {string | null}
+ */
+export function personName(people, id) {
+  const key = text(id);
+  if (!key) return null;
+  if (PLATFORM_ACTORS.has(key)) return VCR_PLATFORM_ACTOR_ZH;
+  if (!(people instanceof Map)) return null;
+  return people.get(key) ?? VCR_PERSON_GONE_ZH;
+}
+
 /** Round to a number of decimals without a string round-trip surprise. @param {number} value @param {number} decimals */
 export function roundTo(value, decimals) {
   const scale = 10 ** decimals;

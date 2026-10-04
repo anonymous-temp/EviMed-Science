@@ -161,7 +161,7 @@ describe("数据接入 — what the page sends", () => {
     drawTab();
     const chooser = (await screen.findAllByLabelText("选择要上传的文件"))[0] as HTMLInputElement;
     await person().upload(chooser, new File(["x"], "cohort.parquet"));
-    expect(await screen.findByText(/Parquet 文件暂时不能接入/)).toBeInTheDocument();
+    expect(await screen.findByText(/Parquet 文件目前不能直接接入/)).toBeInTheDocument();
     await person().upload(chooser, new File(["a,b\n1,2\n"], "noextension"));
     expect(await screen.findByText("文件名需要带扩展名，例如 cohort.csv。")).toBeInTheDocument();
     const big = new File(["x"], "big.csv");

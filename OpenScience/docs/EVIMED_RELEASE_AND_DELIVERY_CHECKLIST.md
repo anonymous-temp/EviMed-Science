@@ -159,7 +159,9 @@ pnpm smoke:deployment
      存在且各不少于 32 字节。
    - **通过：** `/api/ready` 的 `vcr` 一项 `status: "ok"`、`engine: "wired"`，`warnings` 里没有
      `vcr_engine_unconfigured`（它的 `engineReason` 会指出是哪个文件）、`vcr_data_plane_not_configured`、
-     `vcr_engine_catalogue_mismatch`。
+     `vcr_engine_catalogue_mismatch`。回执密钥配了却读不到或不足 32 字节时，这一项是失败的
+     （`vcr_engine_receipt_key_unusable`，`details.reason` 是文件的原因）——但引擎照常可用，结果按输出哈希核对，
+     只是没有用密钥验回执；口令文件有问题才会让引擎按未配置处理。
 
 2. **引擎镜像构建与锁核对。** 生产主机连不上 Debian、PyPI、CRAN，走镜像：`OPEN_SCIENCE_APT_MIRROR`、
    `OPEN_SCIENCE_PIP_INDEX_URL`、`OPEN_SCIENCE_VCR_CRAN_MIRROR`，且 CRAN 镜像必须是同一个快照日期

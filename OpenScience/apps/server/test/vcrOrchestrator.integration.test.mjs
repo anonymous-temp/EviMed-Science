@@ -168,7 +168,8 @@ function compose({ resultFor = (job) => engineResult(job), now = () => new Date(
   };
   const cfg = config();
   const jobs = new VcrJobs({ store, config: cfg, engine, dataPlane });
-  const curves = createVcrCurveEvidence({ store: new VcrEvidenceStore({ database }), studyStore: store,
+  const evidenceStore = new VcrEvidenceStore({ database });
+  const curves = createVcrCurveEvidence({ store: evidenceStore, studyStore: store,
     access: new VcrAccess({ store: new VcrDataStore({ database }) }), resolveProject: async () => ({ workspaceDir: scratch }) });
   jobs.curveVerifier = curves.curveVerifier;
   const notifier = createVcrNotifier({
@@ -186,7 +187,7 @@ function compose({ resultFor = (job) => engineResult(job), now = () => new Date(
   jobs.notifier = notifier;
   const service = new VcrService({ store, config: cfg, engine, jobs });
   const loops = createVcrWorkerLoops({ jobs, orchestrator, store });
-  return { dispatched, notices, engine, jobs, notifier, seal, orchestrator, service, loops, curves };
+  return { dispatched, notices, engine, jobs, notifier, seal, orchestrator, service, loops, curves, evidenceStore };
 }
 
 /** Run the worker's own queue loop until nothing is queued or running, and the orchestrator has nothing more to enqueue. @param {any} module @param {any} study */
@@ -230,7 +231,7 @@ async function runTurn(module, study, body) {
   /** @param {string} what @param {any} payload */
   const write = async (what, payload) => {
     const written = await vcrRuntimeWrite({
-      store, service: module.service, orchestrator: module.orchestrator, study,
+      store, service: module.service, orchestrator: module.orchestrator, study, evidenceStore: module.evidenceStore,
       what, items: Array.isArray(payload) ? payload : null, data: Array.isArray(payload) ? null : payload,
     });
     assert.deepEqual(written.issues, [], `${what} was refused: ${JSON.stringify(written.issues)}`);
@@ -300,25 +301,38 @@ test("AC-01 AC-35 a T0 study runs from one sentence to a finished package, and e
 
   await vcrRuntimeWrite({ store, service: module.service, orchestrator: module.orchestrator, study,
     what: "definition", items: null, data: definition });
+  // The live shape (acceptance 2026-10-03): the protocol run states scenario cards of its own under the definition.
+  const stated = await vcrRuntimeWrite({ store, service: module.service, orchestrator: module.orchestrator, study, what: "assumption", data: null,
+    items: [{ key: "hazard_ratio", name: "风险比", pointValue: 0.7, sourceKind: "scenario", valueSource: "assumed",
+      distribution: { family: "lognormal", params: { meanlog: Math.log(0.7), sdlog: 0.15 } } },
+    { key: "dropout_rate", name: "脱落率", pointValue: 0.1, sourceKind: "expert_set", valueSource: "assumed" }] });
+  assert.equal(stated.ok, true);
   await module.orchestrator.onRunFinished({ userId: study.userId, id: study.projectId },
     { id: "run_1", dispatchId: module.dispatched[0].dispatchId, status: "succeeded" });
 
   let current = await store.studyById(study.id);
   assert.equal(current.steps.definition.status, "done", "read from the definition row, not from the run's word");
+  assert.equal(module.dispatched[1].capabilityId, "vcr-evidence",
+    "cards the protocol run stated are not parameters taken from evidence: the evidence run is the next step, not skipped");
+  assert.notEqual(current.steps.evidence.status, "done", "the page does not say 已完成 for a step that has not run");
 
   await runTurn(module, study, async (write) => {
+    // What the registry extraction stores for one control-arm median: verified against the preserved record, with its quotation.
+    const extracted = await module.evidenceStore.appendEvidenceItems({ userId: study.userId, studyId: study.id, items: [{
+      parameter: "median_time", arm: "SoC", armRole: "control", endpointKey: "pfs-blinded", value: 6, unit: "月", valueSource: "extracted",
+      quote: "Median progression-free survival was 6 months.", locator: { verification: "verified", field: "outcomeMeasures[0]" } }] });
+    assert.equal(extracted.verified, 1);
     const written = await write("assumption", [
-      { key: "control_median_pfs", name: "对照组中位 PFS", pointValue: 6, unit: "月", sourceKind: "expert_set", valueSource: "assumed" },
+      { key: "control_median_pfs", name: "对照组中位 PFS", unit: "月", parameter: "median_time", sourceKind: "external_evidence", evidenceIds: extracted.verifiedIds },
       { key: "hazard_ratio", name: "风险比", pointValue: 0.7, sourceKind: "expert_set", valueSource: "assumed",
         distribution: { family: "lognormal", params: { meanlog: Math.log(0.7), sdlog: 0.15 } } },
       { key: "dropout_rate", name: "脱落率", pointValue: 0.1, sourceKind: "expert_set", valueSource: "assumed" },
     ]);
-    assert.equal(written.ok, true);
+    assert.deepEqual(written.issues, []);
     assert.equal(written.ids.length, 3);
   });
-  assert.equal(module.dispatched[1].capabilityId, "vcr-evidence");
   current = await store.studyById(study.id);
-  assert.equal(current.steps.evidence.status, "done");
+  assert.equal(current.steps.evidence.status, "done", "done by a card that cites a verified extraction");
 
   // The analysis run covers the four steps it is wanted for, in one turn.
   /** @type {string} */

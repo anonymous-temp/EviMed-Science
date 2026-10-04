@@ -539,15 +539,21 @@ function vcrSettings(overrides) {
     vcrBackupStateFile: String(overrides.vcrBackupStateFile ?? process.env.OPEN_SCIENCE_VCR_BACKUP_STATE_FILE ?? '').trim(),
     vcrBackupMaxAgeSeconds: integer('vcrBackupMaxAgeSeconds', 'OPEN_SCIENCE_VCR_BACKUP_MAX_AGE_SECONDS', 90_000, 60, 604_800),
     vcrEngineTimeoutMs: integer("vcrEngineTimeoutMs", "OPEN_SCIENCE_VCR_ENGINE_TIMEOUT_MS", 120_000, 5_000, 900_000),
-    // Request authentication is required; receipt signing is optional. An
-    // explicitly configured unreadable or invalid key is an error, never an
-    // invitation to fall back to unsigned verification. Readiness names only
-    // the error, never the secret. Hash and job identity checks always apply.
+    // Request authentication is required; receipt signing is optional, and a
+    // receipt is our own evidence of what the engine ran — it labels a result,
+    // it never decides whether a person may have one (owner ruling 2026-10-04).
+    // A receipt key that is configured and unreadable or short is therefore a
+    // readiness failure and a log line, not a reason to refuse every engine step:
+    // the key stays empty, results are verified by the output hash and the job's
+    // echoed identity (which always run), and each is recorded `signed: false`.
+    // The request token is not like that: it authenticates the engine's caller,
+    // and a bad one leaves the engine unconfigured. Readiness names only the
+    // error, never the secret.
     vcrEngineToken: engineToken.value,
     vcrEngineTokenError: engineToken.error,
     vcrEngineReceiptKey: engineReceiptKey.value,
     vcrEngineReceiptKeyError: engineReceiptKey.error,
-    vcrEngineConfigured: Boolean(engineUrl) && Boolean(engineToken.value) && !engineToken.error && !engineReceiptKey.error,
+    vcrEngineConfigured: Boolean(engineUrl) && Boolean(engineToken.value) && !engineToken.error,
     // One at a time on the shared host (plan §11.4).
     vcrMaxConcurrentJobs: integer("vcrMaxConcurrentJobs", "OPEN_SCIENCE_VCR_MAX_CONCURRENT_JOBS", 1, 1, 64),
     // Every job's own CPU ceiling; over it, the job stops at a checkpoint.

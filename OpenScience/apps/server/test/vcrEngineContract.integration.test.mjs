@@ -278,8 +278,14 @@ async function seedT0(label, patch = {}) {
   await store.saveAssumption({ studyId: study.id, userId: study.userId, key: "hazard_ratio", name: "风险比", pointValue: 0.7,
     sourceKind: "expert_set", valueSource: "assumed",
     distribution: { family: "lognormal", params: { meanlog: Math.log(0.7), sdlog: 0.15 }, range: { kind: "prediction", low: 0.52, high: 0.94 } } });
+  // The evidence run's own product — one verified extraction and the card that cites it — beside the two settings the runs state
+  // by themselves: the evidence step reads done from the first, and from none of the others.
+  const extracted = await new VcrEvidenceStore({ database }).appendEvidenceItems({ userId: study.userId, studyId: study.id, items: [{
+    parameter: "median_time", arm: "SoC", armRole: "control", endpointKey: "pfs-blinded", value: 6, unit: "月", valueSource: "extracted",
+    quote: "Median progression-free survival was 6 months.", locator: { verification: "verified", field: "outcomeMeasures[0]" } }] });
   await store.saveAssumption({ studyId: study.id, userId: study.userId, key: "control_median_pfs", name: "对照组中位 PFS", pointValue: 6, unit: "月",
-    sourceKind: "expert_set", valueSource: "assumed" });
+    sourceKind: "external_evidence", valueSource: "extracted", poolingMethod: "single_study", evidenceIds: extracted.verifiedIds,
+    pooling: { k: 1, note: "单项研究直接取值，没有预测区间" } });
   await store.saveAssumption({ studyId: study.id, userId: study.userId, key: "dropout_rate", name: "脱落率", pointValue: 0.1,
     sourceKind: "expert_set", valueSource: "assumed" });
   const population = await store.savePopulation({ studyId: study.id, userId: study.userId, name: "情景人群", kind: "scenario",

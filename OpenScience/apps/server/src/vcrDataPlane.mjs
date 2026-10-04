@@ -104,7 +104,7 @@ import { fileURLToPath } from "node:url";
 import {
   RUNTIME_WORKSPACE_ROOT, VCR_ANALYSIS_TABLES, VCR_JOB_METHODS, VCR_MEMBER_ROLES, VCR_MIN_CELL_SIZE, VCR_MISSING_REASONS,
   VCR_QUALITY_CATEGORIES, VCR_REAL_PATIENT_SOURCES, VCR_SOURCE_FORMATS, VCR_TIME_KINDS, VCR_VALUE_SOURCES, canonicalScenarioJson,
-  suppressForModel, workspaceLayout,
+  suppressForModel, vcrTierSupportedBy, workspaceLayout,
 } from "@evimed/domain";
 
 import { HttpError, openScopedFileNoFollow, readStableFileHandle } from "./security.mjs";
@@ -1006,8 +1006,12 @@ export const VCR_UPLOAD_FORMATS = Object.freeze({
   dictionary: Object.freeze({ csv: "csv", tsv: "tsv", json: "json", xlsx: "xlsx" }),
   document: Object.freeze({ txt: "txt", md: "txt" }),
 });
-/** Extensions refused with a reason a person can act on. */
-const UNSUPPORTED_FORMAT_HINTS = Object.freeze({
+/**
+ * Extensions refused with a reason a person can act on. The browser says the
+ * same sentence before an upload is sent (`intakeState.ts`), and a test holds the
+ * two equal: the form's refusal and the plane's are one answer.
+ */
+export const VCR_UNSUPPORTED_FORMAT_HINTS = Object.freeze({
   parquet: "Parquet 文件目前不能直接接入：请在导出时改为 CSV，或用 Excel、Python 转成 CSV 后上传。",
   xls: "旧版 .xls 不能接入：请另存为 .xlsx 或 CSV 后上传。",
   zip: "请先解压，再逐个上传数据文件。",
@@ -1037,7 +1041,7 @@ export function safeUploadName(raw, role) {
   }
   const formats = /** @type {Record<string, string>} */ (/** @type {any} */ (VCR_UPLOAD_FORMATS)[role] ?? {});
   if (!Object.hasOwn(formats, ext)) {
-    const hint = /** @type {Record<string, string>} */ (UNSUPPORTED_FORMAT_HINTS)[ext];
+    const hint = /** @type {Record<string, string>} */ (VCR_UNSUPPORTED_FORMAT_HINTS)[ext];
     throw refuse(415, VCR_DATA_PLANE_CODES.formatUnsupported,
       hint ?? `A ${role} file is one of: ${Object.keys(formats).join(", ")}.`, { ext });
   }
@@ -2775,6 +2779,20 @@ export class VcrDataPlane {
   // -------------------------------------------------------------------------
   // What the page shows
   // -------------------------------------------------------------------------
+
+  /**
+   * The data tier this study's frozen sources can claim, from the analysis
+   * tables the plane registered when it derived them: their shapes, row counts,
+   * whether treatment was recorded and whether one carries an outcome
+   * (`vcrTierSupportedBy`). Metadata the plane already holds — no file is opened,
+   * no value of a sealed column is consulted, and nothing is written. The study
+   * page offers the move and the study route refuses a rise this does not
+   * support; neither lowers a tier.
+   * @param {string} studyId
+   */
+  async tierSupport(studyId) {
+    return vcrTierSupportedBy(await this.store.listAnalysisTables({ studyId }));
+  }
 
   /**
    * The intake half of the data tab for one viewer: every source of the study

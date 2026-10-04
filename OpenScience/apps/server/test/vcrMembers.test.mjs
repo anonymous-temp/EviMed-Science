@@ -94,6 +94,25 @@ test("AC-17 the owner is a lead without a member row, and is listed as the owner
   assert.ok(people[0].abilities.includes("manage_members"));
 });
 
+test("a member is listed by name, never by account id: the name when there is one, the neutral label for an account that is gone, nothing where no join exists", async () => {
+  const { store, members } = scene();
+  await members.add({ actor: "owner", studyId: "std_1", userId: "usr_5c8e1f2a", role: "statistical_reviewer" });
+  await members.add({ actor: "owner", studyId: "std_1", userId: "wang.dm", role: "data_manager" });
+  // The same join `reviews()` makes, as the store's `personNames`: an account that no longer exists is absent from the answer.
+  /** @type {any[]} */
+  const asked = [];
+  store.personNames = async (/** @type {Iterable<string>} */ ids) => { asked.push([...ids].sort()); return new Map([["owner", "刘负责人"], ["wang.dm", "王数据"]]); };
+  const people = await members.list({ actor: "owner", studyId: "std_1" });
+  assert.deepEqual(asked, [["owner", "usr_5c8e1f2a", "wang.dm"]], "one question for everyone on the study, the owner included");
+  assert.deepEqual(people.map((person) => [person.userId, person.name]), [["owner", "刘负责人"], ["usr_5c8e1f2a", "已注销的账号"], ["wang.dm", "王数据"]]);
+  assert.equal(JSON.stringify(people.map((person) => person.name)).includes("usr_"), false);
+  // A store with no such join, or one that cannot answer: no name, and still the list (the page says nothing of the person rather than their id).
+  delete store.personNames;
+  assert.deepEqual((await members.list({ actor: "owner", studyId: "std_1" })).map((person) => person.name), [null, null, null]);
+  store.personNames = async () => { throw new Error("users table down"); };
+  assert.equal((await members.list({ actor: "owner", studyId: "std_1" })).length, 3);
+});
+
 test("AC-17 a non-member cannot list the members and is told the study does not exist", async () => {
   const { members } = scene();
   await assert.rejects(() => members.list({ actor: "outsider", studyId: "std_1" }),

@@ -37,8 +37,9 @@
 import { VCR_PRIVATE_MATCHING_PROVENANCE_KEYS } from './vcrMatching.mjs';
 import { loadMethodValidation, validatedMethods } from './vcrMethodValidation.mjs';
 import {
-  VCR_COMPARATOR_ROUTES, VCR_COUNT_KEYS, VCR_DATA_TIERS, VCR_ENGINE_METHODS, VCR_MIN_CELL_SIZE, VCR_ROUTE_MIN_TIER, VCR_SCENARIO_SCHEMAS,
-  VCR_STEPS, VCR_STEP_CAPABILITIES, VCR_TABS, reviewStateFor, roleAllows, suppressForModel, twinLabel, whenHolds,
+  VCR_COMPARATOR_ROUTES, VCR_COUNT_KEYS, VCR_DATA_TIERS, VCR_DATA_TIER_LABELS_ZH, VCR_ENGINE_METHODS, VCR_MIN_CELL_SIZE, VCR_ROUTE_MIN_TIER,
+  VCR_SCENARIO_SCHEMAS, VCR_STEPS, VCR_STEP_CAPABILITIES, VCR_TABS, reviewStateFor, roleAllows, suppressForModel, twinLabel, vcrTierIsSupported,
+  vcrTierNeedsSupport, vcrTierOffer, whenHolds,
 } from "@evimed/domain";
 
 import { HttpError } from "./security.mjs";
@@ -368,6 +369,27 @@ export function vcrRouteOptions(dataTier) {
   });
 }
 
+/**
+ * The accounts the matching page names: whoever countersigned the assessment on
+ * show, and whoever moved the referral. The platform's own hand is not an account.
+ * @param {any} match
+ */
+function matchingPeopleOf(match) {
+  return [match?.selected?.reviewedBy, ...list(match?.referralEvents).map((event) => object(event).actor)].filter(Boolean);
+}
+
+/**
+ * The accounts the data page names: whoever confirmed a source's field map, and
+ * each account a source is granted to (a role or the whole study is not one).
+ * @param {any} dataPlane
+ */
+function dataPeopleOf(dataPlane) {
+  return list(dataPlane?.sources).flatMap((source) => [
+    object(source.fieldMap).confirmedBy,
+    ...list(source.grants).map((grant) => object(grant).grantee).filter((grantee) => typeof grantee === "string" && !/^(role|study):/.test(grantee)),
+  ]).filter(Boolean);
+}
+
 export class VcrService {
   /**
    * @param {{ store: import("./vcrStore.mjs").VcrStore, config: Record<string, any>, engine?: any, now?: () => Date,
@@ -526,10 +548,63 @@ export class VcrService {
     };
   }
 
+  /**
+   * The tier this study's frozen sources support, or tier T0 where nothing does
+   * or the plane is not composed here. Derived (`vcrTierSupportedBy`), never
+   * stored: the data a study holds can change, and the offer follows it.
+   * @param {any} study
+   */
+  async #tierSupport(study) {
+    const seam = this.packages.dataPlane;
+    if (typeof seam?.tierSupport !== "function") return { tier: "T0", subjects: 0, treatment: false, outcomes: false };
+    return seam.tierSupport(study).catch(() => ({ tier: "T0", subjects: 0, treatment: false, outcomes: false }));
+  }
+
+  /**
+   * The move the study's data offers, for the lead who may make it: the highest
+   * tier the frozen sources support when that is above the study's own. Null for
+   * a reader who may not (`manage_study`) — the page shows only what will not be
+   * refused — and where the data supports nothing more.
+   * @param {any} study @param {readonly string[]} roles
+   */
+  async #tierOffer(study, roles) {
+    if (!roles.some((role) => roleAllows(role, "manage_study"))) return null;
+    // T2 is the most the data can show (T3 is declared, not derived): nothing above it to offer, so nothing to ask.
+    if (VCR_DATA_TIERS.indexOf(study.dataTier) >= VCR_DATA_TIERS.indexOf("T2")) return null;
+    const support = await this.#tierSupport(study);
+    const offer = vcrTierOffer(study.dataTier, support);
+    if (!offer) return null;
+    const label = /** @type {Record<string, string>} */ (VCR_DATA_TIER_LABELS_ZH);
+    return {
+      tier: offer.tier, label: label[offer.tier] ?? offer.tier, unlocks: offer.unlocks,
+      basis: { subjects: support.subjects, treatment: support.treatment, outcomes: support.outcomes },
+    };
+  }
+
+  /**
+   * A rise in tier is a claim about data, so it needs data: the frozen sources
+   * must support the tier asked for (T3, which no column map can show, needs the
+   * data that qualifies as T2 and is then the lead's declaration). A lowering,
+   * or the same tier, is not held to it — lowering is an explicit act of the
+   * lead's and this never does it. The role check is the route's and unchanged.
+   * @param {any} study @param {string} tier
+   */
+  async #assertTierSupported(study, tier) {
+    if (VCR_DATA_TIERS.indexOf(tier) <= VCR_DATA_TIERS.indexOf(study.dataTier)) return;
+    const support = await this.#tierSupport(study);
+    if (vcrTierIsSupported(tier, support.tier)) return;
+    const labels = /** @type {Record<string, string>} */ (VCR_DATA_TIER_LABELS_ZH);
+    const needs = vcrTierNeedsSupport(tier);
+    throw failure(409, "vcr_tier_unsupported",
+      `研究里已冻结的数据还达不到「${labels[needs] ?? needs}」：${support.tier === "T0" ? "还没有可用的患者级数据" : `现有数据只到「${labels[support.tier] ?? support.tier}」`}。`
+      + `先在「数据与证据」里接入并冻结数据，再升档位。`);
+  }
+
   /** `PATCH /api/vcr/studies/:id`. @param {{ id: string }} user @param {string} id @param {Record<string, any>} patch */
   async updateStudy(user, id, patch) {
     const study = await this.requireStudy(user, id);
     const { action, ...fields } = patch ?? {};
+    if (fields.dataTier !== undefined) await this.#assertTierSupported(study, String(fields.dataTier));
     let updated = await this.store.updateStudy(study.id, fields, String(user.id));
     if (!updated) throw failure(404, "vcr_study_not_found", "Study not found.");
     if (action !== undefined) {
@@ -755,7 +830,23 @@ export class VcrService {
     if (tab === "data" || tab === "overview") bundle.evidence = await this.#evidence(study);
     if (tab === "data") bundle.dataPlane = await this.#dataPlane(study, user);
     if (tab === "matching") bundle.match = await this.#match(study, query);
+    // The people a page names are shown by name: resolved once for the page, through the one join the module has.
+    if (tab === "data") bundle.people = await this.#people(dataPeopleOf(bundle.dataPlane));
+    if (tab === "matching") bundle.people = await this.#people(matchingPeopleOf(bundle.match));
+    // The header's one offer, read for the page that has a header (the overview is the study's own payload).
+    if (tab === "overview") bundle.tierOffer = await this.#tierOffer(study, roles);
     return bundle;
+  }
+
+  /**
+   * The names of the accounts a page mentions, or null where this service has no
+   * way to resolve them (a double without the join): the presenters then say
+   * nothing of a person rather than their id.
+   * @param {Iterable<unknown>} ids @returns {Promise<Map<string, string> | null>}
+   */
+  async #people(ids) {
+    if (typeof this.store.personNames !== "function") return null;
+    return this.store.personNames(ids).catch(() => null);
   }
 
   /** What each finished job ran: method, version, seed, replicates, cost. @param {string} studyId */
@@ -1199,9 +1290,9 @@ function readinessFailure(code, details = null) {
 
 /**
  * The `vcr` readiness check. Red only for this module's own invariants: it is
- * on, and the schema is there. The engine not being composed is a warning, not
- * a failure — the study's AI steps and its conversation work without it (plan
- * §10.5).
+ * on, the schema is there, and a receipt key the operator configured is one the
+ * process can use. The engine not being composed is a warning, not a failure —
+ * the study's AI steps and its conversation work without it (plan §10.5).
  * @param {{ config: Record<string, any>, vcr: any, database: any }} input
  */
 export async function vcrReadiness({ config, vcr, database }) {
@@ -1213,6 +1304,13 @@ export async function vcrReadiness({ config, vcr, database }) {
     throw readinessFailure("vcr_migration_failed", {
       reason: typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : "migration_error",
     });
+  }
+  // A receipt key the operator configured and the process cannot use. The engine
+  // stays composed and every step runs — a receipt labels a result and never
+  // decides whether a person has one — but the deployment is not what its
+  // configuration says, and that is what a readiness check is for.
+  if (config.vcrEngineReceiptKeyError) {
+    throw readinessFailure("vcr_engine_receipt_key_unusable", { reason: String(config.vcrEngineReceiptKeyError) });
   }
   const warnings = [
     ...(vcr.engine?.configured?.() ? [] : ["vcr_engine_not_composed"]),

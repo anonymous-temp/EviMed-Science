@@ -368,6 +368,7 @@
           "hash": "fcf170a78dd00685c22cbf5879c9c62b6ae17df11d2c0d5c666620856d69003f",
           "by": "AI 提议",
           "confirmedBy": "view-manager",
+          "confirmedByName": "视图数据管理",
           "confirmedAt": "9 月 27 日 15:00",
           "columns": [
             {
@@ -588,7 +589,7 @@
           {
             "id": "grt_1",
             "grantee": "view-owner",
-            "granteeLabel": "view-owner",
+            "granteeLabel": "视图负责人",
             "role": "lead",
             "fields": [
               "AGE",
@@ -695,6 +696,7 @@
           "hash": "e79b988872f435455069db80228909bf6bb3df5a13cc7b9ad8c0f97e48478f11",
           "by": "人工填写",
           "confirmedBy": null,
+          "confirmedByName": null,
           "confirmedAt": null,
           "columns": [
             {

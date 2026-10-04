@@ -14,6 +14,7 @@ import YAML from "yaml";
 import { validateEngineResult, validateEngineJob } from "@evimed/domain";
 
 import { loadConfig } from "../src/config.mjs";
+import { vcrReadiness } from "../src/vcrService.mjs";
 import { removeVcrArtifacts } from "../src/vcrStoreBase.mjs";
 import {
   composeVcr, createVcrEngineJobRemover, matchingContextOf, vcrDataPlaneSeam, vcrDocumentsSeam, vcrEngineStatus,
@@ -338,14 +339,14 @@ test("CS-9 the engine requires request authentication and supports optional rece
   const good = configWith({ vcrEngineUrl: url, vcrEngineTokenFile: files.token, vcrEngineReceiptKeyFile: files.receipt });
   assert.equal(good.vcrEngineToken.length, 40, "read from the file, its terminator removed");
   assert.equal(good.vcrEngineConfigured, true);
-  assert.deepEqual(vcrEngineStatus(good), { configured: true, reason: null });
+  assert.deepEqual(vcrEngineStatus(good), { configured: true, reason: null, receiptKeyError: null });
   const composed = composeVcr({ config: good, productDatabase: database });
   assert.equal(composed?.engine?.configured(), true);
   assert.equal(typeof composed?.removeEngineJob, "function", "and the job cleanup can reach it");
   for (const vcrEngineReceiptKeyFile of [undefined, "/dev/null"]) {
     const authenticated = configWith({ vcrEngineUrl: url, vcrEngineTokenFile: files.token, vcrEngineReceiptKeyFile });
     assert.equal(authenticated.vcrEngineConfigured, true);
-    assert.deepEqual(vcrEngineStatus(authenticated), { configured: true, reason: null });
+    assert.deepEqual(vcrEngineStatus(authenticated), { configured: true, reason: null, receiptKeyError: null });
     const unsigned = composeVcr({ config: authenticated, productDatabase: database });
     assert.equal(unsigned?.engine?.configured(), true);
     assert.equal(typeof unsigned?.removeEngineJob, "function");
@@ -355,8 +356,6 @@ test("CS-9 the engine requires request authentication and supports optional rece
   /** @type {[string, Record<string, unknown>, string][]} */
   const cases = [
     ["a token file that is not there", { vcrEngineTokenFile: path.join(dir, "absent"), vcrEngineReceiptKeyFile: files.receipt }, "vcr_engine_token_file_unavailable"],
-    ["a receipt key shorter than 32 bytes", { vcrEngineTokenFile: files.token, vcrEngineReceiptKeyFile: files.short }, "vcr_engine_receipt_key_file_short"],
-    ["an explicitly configured missing receipt key", { vcrEngineTokenFile: files.token, vcrEngineReceiptKeyFile: path.join(dir, "absent") }, "vcr_engine_receipt_key_file_unavailable"],
     ["a token file others can read", { vcrEngineTokenFile: files.open, vcrEngineReceiptKeyFile: files.receipt }, "vcr_engine_token_file_permissions"],
     ["a token file that is a symlink", { vcrEngineTokenFile: files.linked, vcrEngineReceiptKeyFile: files.receipt }, "vcr_engine_token_file_symlink"],
     ["a URL with no secret named at all", {}, "vcr_engine_secret_missing"],
@@ -374,11 +373,54 @@ test("CS-9 the engine requires request authentication and supports optional rece
   }
   // No URL is a valid deployment, not a misconfiguration, and adds no warning.
   const none = configWith({});
-  assert.deepEqual(vcrEngineStatus(none), { configured: false, reason: "not_configured" });
+  assert.deepEqual(vcrEngineStatus(none), { configured: false, reason: "not_configured", receiptKeyError: null });
   const unchanged = { enabled: true, status: "ok", engine: "missing", warnings: ["vcr_engine_not_composed"] };
   assert.deepEqual(withVcrEngineWarnings(unchanged, none), unchanged);
   assert.deepEqual(withVcrEngineWarnings({ enabled: false, status: "off" }, none), { enabled: false, status: "off" });
   assert.throws(() => configWith({ vcrEngineUrl: url, vcrEngineTokenFile: "relative/token" }), /must be an absolute path/);
+});
+
+test("a receipt key that is configured and unusable fails readiness and writes a log line, and leaves the engine composed on the output-hash check", async (t) => {
+  const { dir, files } = await secretFiles({ token: {}, receipt: {}, short: { size: 12 }, open: { mode: 0o644 }, linked: { link: true } });
+  t.after(() => rm(dir, { recursive: true, force: true }));
+  const database = { async transaction(run) { return run({ async query() { return { rows: [] }; } }); }, async query() { return { rows: [] }; } };
+  const url = "http://evimed-vcr-engine:8080";
+  /** @type {[string, Record<string, unknown>, string][]} */
+  const unusable = [
+    ["shorter than the 32 bytes the engine itself enforces", { vcrEngineReceiptKeyFile: files.short }, "vcr_engine_receipt_key_file_short"],
+    ["named and not there", { vcrEngineReceiptKeyFile: path.join(dir, "absent") }, "vcr_engine_receipt_key_file_unavailable"],
+    ["readable by others", { vcrEngineReceiptKeyFile: files.open }, "vcr_engine_receipt_key_file_permissions"],
+    ["a symlink", { vcrEngineReceiptKeyFile: files.linked }, "vcr_engine_receipt_key_file_symlink"],
+  ];
+  for (const [label, extra, code] of unusable) {
+    const config = configWith({ vcrEngineUrl: url, vcrEngineTokenFile: files.token, ...extra });
+    // The old rule: any bad receipt key made every engine step answer 「引擎不可用」.
+    assert.equal(config.vcrEngineConfigured, true, `${label}: the engine is still configured`);
+    assert.equal(config.vcrEngineReceiptKey, "", `${label}: and nothing is signed with a key that could not be read`);
+    assert.equal(config.vcrEngineReceiptKeyError, code, label);
+    assert.deepEqual(vcrEngineStatus(config), { configured: true, reason: null, receiptKeyError: code }, label);
+    /** @type {string[]} */
+    const logged = [];
+    const composed = composeVcr({ config, productDatabase: database, report: (line) => logged.push(line) });
+    assert.equal(composed?.engine?.configured(), true, `${label}: the engine client is made`);
+    assert.equal(typeof composed?.removeEngineJob, "function", label);
+    assert.deepEqual(logged, [`vcr_engine_receipt_key_unusable:${code}`], `${label}: a log line says why results are unsigned`);
+    // The check that is red is the readiness check, by name, with the reason and never the key.
+    const vcr = { service: { async ready() {}, engineMismatch: null }, engine: composed?.engine };
+    await assert.rejects(vcrReadiness({ config, vcr, database }), (error) => {
+      assert.equal(/** @type {any} */ (error).code, "vcr_engine_receipt_key_unusable", label);
+      assert.deepEqual(/** @type {any} */ (error).details, { reason: code }, label);
+      assert.equal(JSON.stringify(error.details).includes("kkkk"), false, "no secret in it");
+      return true;
+    }, label);
+  }
+  // A key that is fine, or none at all, is a green check; a bad request token still leaves the engine unconfigured (it authenticates the caller).
+  const fine = configWith({ vcrEngineUrl: url, vcrEngineTokenFile: files.token, vcrEngineReceiptKeyFile: files.receipt });
+  const composed = composeVcr({ config: fine, productDatabase: database });
+  const ready = await vcrReadiness({ config: fine, vcr: { service: { async ready() {}, engineMismatch: null }, engine: composed?.engine }, database });
+  assert.equal(ready.status, "ok");
+  assert.equal(ready.engine, "wired");
+  assert.equal(configWith({ vcrEngineUrl: url, vcrEngineTokenFile: files.short, vcrEngineReceiptKeyFile: files.receipt }).vcrEngineConfigured, false);
 });
 
 test("the engine's secrets have no value form in the environment", async () => {

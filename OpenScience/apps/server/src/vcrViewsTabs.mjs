@@ -46,7 +46,7 @@ import {
 } from "./vcrViews.mjs";
 import {
   allResultsOf, countsView, finite, intervalView, letterCode, list, markFor, measureLabel, measureValue, naturalScale, numeric, object,
-  plainText, PARAMETER_LABELS, roundTo, scaledSeries, staleNote, text, zhDate, zhTime,
+  personName, plainText, PARAMETER_LABELS, roundTo, scaledSeries, staleNote, text, zhDate, zhTime,
 } from "./vcrViewsKit.mjs";
 
 /** A plain value (a number or `{ value, unit, … }` a row stored) as a page value. @param {unknown} raw @param {Record<string, any>} defaults */
@@ -997,11 +997,14 @@ export function presentMatchingTab(bundle, query = {}) {
       referralId: referral?.id ?? null,
       referralState: referral?.state ?? null,
       priority: chosen.priority,
+      // The id says that somebody countersigned (the page offers the countersignature only where nobody has); the name is what is shown.
       reviewedBy: selectedAssessment.reviewedBy ?? null,
+      reviewedByName: personName(bundle.people, selectedAssessment.reviewedBy),
       // Every move on the person's referral, oldest first: to where, when, by
-      // whom (an account id or the control plane) and what was said with it.
+      // whom — a name, the platform's own hand, or the neutral label for an
+      // account that is gone; never an account id — and what was said with it.
       trace: list(match.referralEvents).map((/** @type {any} */ event) => ({
-        state: event.toState, at: zhTime(event.occurredAt, now), by: text(event.actor), note: text(event.note),
+        state: event.toState, at: zhTime(event.occurredAt, now), by: personName(bundle.people, event.actor), note: text(event.note),
       })),
     };
   })() : null;
@@ -1376,7 +1379,7 @@ export function presentIntake(bundle) {
   if (!dataPlane || dataPlane.available === false) {
     return {
       available: false,
-      message: text(dataPlane?.message) ?? (study.dataTier === "T0" ? "T0 档不需要患者级数据；升到 T1 及以上后在这里接入。" : "本部署未接入数据平面，暂不能接入患者级数据。"),
+      message: text(dataPlane?.message) ?? (study.dataTier === "T0" ? "T0 档不需要患者级数据；有了数据，在这里接入并冻结后，研究页会提示升到 T1 及以上。" : "本部署未接入数据平面，暂不能接入患者级数据。"),
       formats: [], maxBytes: null, seal: null, sources: [], snapshots: [],
     };
   }
@@ -1417,7 +1420,8 @@ export function presentIntake(bundle) {
       fieldMap: {
         state: String(fieldMap.state ?? "none"), stateLabel: FIELD_MAP_STATE_ZH[String(fieldMap.state)] ?? "",
         hash: text(fieldMap.hash), by: text(fieldMap.by) === "run" ? "AI 提议" : text(fieldMap.by) ? "人工填写" : null,
-        confirmedBy: text(fieldMap.confirmedBy), confirmedAt: zhTime(fieldMap.confirmedAt, now),
+        confirmedBy: text(fieldMap.confirmedBy), confirmedByName: personName(bundle.people, fieldMap.confirmedBy),
+        confirmedAt: zhTime(fieldMap.confirmedAt, now),
         columns: list(fieldMap.columns).map((column) => ({ ...object(column), codes: object(object(column).codes) })),
         issues: list(fieldMap.issues).map((issue) => ({
           code: String(object(issue).code), message: String(object(issue).message ?? ""), table: text(object(issue).table), column: text(object(issue).column),
@@ -1428,7 +1432,8 @@ export function presentIntake(bundle) {
         const grantee = String(grant.grantee ?? "");
         const role = grantee.startsWith("role:") ? (/** @type {Record<string, string>} */ (VCR_MEMBER_ROLE_LABELS_ZH))[grantee.slice(5)] : null;
         return {
-          id: String(grant.id), grantee, granteeLabel: role ? `角色：${role}` : grantee.startsWith("study:") ? "本研究的所有成员" : grantee,
+          // A role and the whole study are words; an account is its name, or the neutral label once the account is gone — never its id.
+          id: String(grant.id), grantee, granteeLabel: role ? `角色：${role}` : grantee.startsWith("study:") ? "本研究的所有成员" : personName(bundle.people, grantee) ?? "",
           role: text(grant.role), fields: list(grant.fields).map(String), fieldMode: String(grant.fieldMode ?? "allow"),
           window: windowText({ start: grant.windowStart, end: grant.windowEnd }), purposes: list(grant.purposes).map(String),
           revoked: Boolean(grant.revokedAt), revokedAt: zhTime(grant.revokedAt, now), createdAt: zhTime(grant.createdAt, now),

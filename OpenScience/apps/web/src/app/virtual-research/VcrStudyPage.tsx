@@ -33,6 +33,7 @@ import { VcrOffPage, VcrStudySkeleton } from "@/components/vcr/VcrStates";
 import { cpuTimeText, jobsAwaitingBudget, VcrBudgetDialog } from "@/components/vcr/VcrBudgetDialog";
 import { VcrMembersDialog } from "@/components/vcr/VcrMembersDialog";
 import { VcrPackageReader } from "@/components/vcr/VcrPackageReader";
+import { VcrTierOffer } from "@/components/vcr/VcrTierOffer";
 import { useOpenVcrConversation } from "@/components/vcr/useOpenVcrConversation";
 import { useVcrRun } from "@/components/vcr/useVcrRun";
 import { VcrTabBoundary } from "@/components/vcr/vcrTabKit";
@@ -46,7 +47,8 @@ import { DataTab } from "@/components/vcr/tabs/DataTab";
 import { jobStateLabel, numberText, stepLabel, stepStatusLabel } from "@/components/vcr/vcrText";
 import { resolveVcrTab, VCR_HOME_PATH, VCR_RAIL_STEPS, VCR_STEP_TABS, VCR_TAB_ITEMS, vcrTabPath } from "@/components/vcr/vcrTabs";
 
-type TabComponent = ComponentType<{ studyId: string; study: VcrStudy }>;
+/** `onStudyChanged`: a tab that changes what the header shows (the data tab's intake moves the tier offer) asks the page to read the study again. */
+type TabComponent = ComponentType<{ studyId: string; study: VcrStudy; onStudyChanged?: () => void }>;
 
 const TABS: Record<VcrTabKey, TabComponent> = {
   overview: OverviewTab,
@@ -241,6 +243,8 @@ function StudyView({ studyId, study, tab, reload }: { studyId: string; study: Vc
         </>
       )}
     >
+      {study.tierOffer && can("manage_study") && <VcrTierOffer studyId={studyId} offer={study.tierOffer} onMoved={reload} />}
+
       <ProgressRail label="七步进度" steps={railSteps(study, studyId)} className="mb-6" />
 
       <JobStrip studyId={studyId} study={study} onBudget={() => setBudgetOpen(true)} onChanged={reload} />
@@ -263,7 +267,7 @@ function StudyView({ studyId, study, tab, reload }: { studyId: string; study: Vc
           />
           <div id="vcr-tab-panel" role="tabpanel" aria-labelledby={`vcr-tab-panel-tab-${tab}`} className="pt-6">
             <VcrTabBoundary key={tab}>
-              <Tab studyId={studyId} study={study} />
+              <Tab studyId={studyId} study={study} onStudyChanged={reload} />
             </VcrTabBoundary>
           </div>
         </>

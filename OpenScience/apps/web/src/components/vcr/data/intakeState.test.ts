@@ -74,6 +74,7 @@ describe("what the page refuses before the plane has to", () => {
     expect(uploadProblem({ name: "a.XLSX", size: 10 }, "data", max)).toBeNull();
     expect(uploadProblem({ name: "a.parquet", size: 10 }, "data", max)).toMatch(/Parquet/);
     expect(uploadProblem({ name: "a.xls", size: 10 }, "data", max)).toMatch(/xlsx/);
+    expect(uploadProblem({ name: "a.zip", size: 10 }, "data", max)).toMatch(/解压/);
     expect(uploadProblem({ name: "a.pdf", size: 10 }, "data", max)).toMatch(/支持/);
     expect(uploadProblem({ name: "a", size: 10 }, "data", max)).toMatch(/扩展名/);
     expect(uploadProblem({ name: "a.csv", size: 0 }, "data", max)).toBe("文件是空的。");

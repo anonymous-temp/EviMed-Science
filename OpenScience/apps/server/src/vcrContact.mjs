@@ -43,6 +43,7 @@ import { VCR_CONTACT_STATES, VCR_REFERRAL_STATES, roleAllows } from "@evimed/dom
 import { HttpError } from "./security.mjs";
 import { VCR_SCHEMA } from "./vcrPersistence.mjs";
 import { decideContactApproval, decideReferralTransition, isSiteScopedRole } from "./vcrRecruit.mjs";
+import { personName } from "./vcrViewsKit.mjs";
 
 /**
  * Every refusal this module answers with, and the HTTP status it is answered
@@ -270,12 +271,17 @@ export function createVcrContact({ store }) {
     async listReferrals(user, study, filter = {}) {
       const { roles, siteId } = await store.transaction((client) => actorOf(client, study.id, String(user.id)));
       const state = filter.state && VCR_REFERRAL_STATES.includes(filter.state) ? filter.state : null;
+      /** The coordinator who confirmed each contact is shown by name; the id stays beside it for the ledger's own logic. */
+      const named = async (/** @type {any[]} */ referrals) => {
+        const names = typeof store.personNames === "function" ? await store.personNames(referrals.map((referral) => referral.contactApprovedBy)).catch(() => null) : null;
+        return referrals.map((referral) => ({ ...referral, contactApprovedByName: personName(names, referral.contactApprovedBy) }));
+      };
       if (roles.some((role) => roleAllows(role, "read"))) {
-        return { referrals: await store.listReferrals({ studyId: study.id, state }) };
+        return { referrals: await named(await store.listReferrals({ studyId: study.id, state })) };
       }
       if (roles.some((role) => roleAllows(role, "read_referrals"))) {
         // A site-scoped account without a site sees nothing rather than everything.
-        return { referrals: siteId ? await store.listReferrals({ studyId: study.id, state, siteId }) : [] };
+        return { referrals: siteId ? await named(await store.listReferrals({ studyId: study.id, state, siteId })) : [] };
       }
       throw new HttpError(403, "vcr_forbidden", "你在这个研究里没有读取转诊的权限。");
     },

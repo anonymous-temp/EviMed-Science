@@ -337,6 +337,65 @@ describe("the 「⋯」 menu", () => {
   });
 });
 
+// The tier is a claim about data. The page only offers the move the server derived
+// from the frozen sources, once, to the lead; one click makes it.
+describe("the offer to move up a data tier", () => {
+  const offer = { tier: "T1", label: "T1 基线与招募资料", unlocks: ["用你的数据筛真实队列、做患者匹配与招募"], basis: { subjects: 240, treatment: false, outcomes: false } };
+  const serve = (patch: Record<string, unknown>, overrides: Record<string, unknown> = {}) => {
+    const study = { ...fixture("ev201/study.json"), ...patch };
+    server = installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}`]: study, ...overrides });
+  };
+
+  it("says what the data open and what moving does, with one button — and moves with one request, then re-reads the study", async () => {
+    serve({ tierOffer: offer });
+    draw();
+    await heading();
+    const card = document.querySelector("[data-vcr-tier-offer]") as HTMLElement;
+    expect(card).not.toBeNull();
+    expect(card).toHaveTextContent("你接入的数据已够 T1：用你的数据筛真实队列、做患者匹配与招募。");
+    const reads = () => server.calls.filter((call) => call.method === "GET" && call.path === `/vcr/studies/${STUDY_ID}`).length;
+    expect(reads()).toBe(1);
+    await userEvent.click(within(card).getByRole("button", { name: "升到 T1" }));
+    await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith("/vcr/studies/std_1", "PATCH", { dataTier: "T1" }));
+    await waitFor(() => expect(toasts.success).toHaveBeenCalledWith("已升到 T1。"));
+    expect(server.calls.filter((call) => call.method === "PATCH")).toHaveLength(1);
+    await waitFor(() => expect(reads()).toBe(2));
+  });
+
+  it("says both steps when the data reach T2 from T0, and offers nothing when the server sent no offer", async () => {
+    serve({ tierOffer: { ...offer, tier: "T2", label: "T2 完整治疗与纵向结局", unlocks: [...offer.unlocks, "走真实外部对照，用真实结局分布做仿真"] } });
+    draw();
+    await heading();
+    expect(document.querySelector("[data-vcr-tier-offer]")).toHaveTextContent("你接入的数据已够 T2：用你的数据筛真实队列、做患者匹配与招募；走真实外部对照，用真实结局分布做仿真。");
+  });
+
+  it("shows nothing without an offer, and nothing to a reader who may not change the study", async () => {
+    draw();
+    await heading();
+    expect(document.querySelector("[data-vcr-tier-offer]")).toBeNull();
+  });
+
+  it("is not shown to an account without manage_study even if the payload carries one", async () => {
+    serve({ tierOffer: offer, abilities: ["read", "write", "run"] });
+    draw();
+    await heading();
+    expect(document.querySelector("[data-vcr-tier-offer]")).toBeNull();
+  });
+
+  it("says why when the server refuses, and leaves the tier where it was", async () => {
+    serve({ tierOffer: offer }, {
+      [`PATCH /vcr/studies/${STUDY_ID}`]: () => { throw new WebApiError("研究里已冻结的数据还达不到「T1 基线与招募资料」", { status: 409, code: "vcr_tier_unsupported" }); },
+    });
+    draw();
+    await heading();
+    await userEvent.click(screen.getByRole("button", { name: "升到 T1" }));
+    await waitFor(() => expect(toasts.error).toHaveBeenCalled());
+    expect(toasts.success).not.toHaveBeenCalled();
+    expect(screen.getByText("T0 公开资料")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "升到 T1" })).toBeEnabled();
+  });
+});
+
 // The menu offers only what will not be refused: the study answers with the
 // abilities of the roles the reader holds, and the routes check them again.
 describe("the 「⋯」 menu follows the reader's abilities", () => {
@@ -405,8 +464,8 @@ describe("the delete confirmation holds still while it works", () => {
 describe("成员与角色", () => {
   const members = {
     members: [
-      { userId: "owner_1", owner: true, roles: ["lead"], roleLabels: ["研究负责人"], invitedBy: null, createdAt: null },
-      { userId: "u_stat", owner: false, roles: ["clinical_reviewer", "statistical_reviewer"], roleLabels: ["临床复核", "统计复核"], invitedBy: "owner_1", createdAt: "2026-09-20T00:00:00Z" },
+      { userId: "owner_1", name: "刘负责人", owner: true, roles: ["lead"], roleLabels: ["研究负责人"], invitedBy: null, createdAt: null },
+      { userId: "u_stat", name: "陈统计", owner: false, roles: ["clinical_reviewer", "statistical_reviewer"], roleLabels: ["临床复核", "统计复核"], invitedBy: "owner_1", createdAt: "2026-09-20T00:00:00Z" },
     ],
   };
   async function openMembers(extra: Record<string, unknown> = {}) {
@@ -426,14 +485,31 @@ describe("成员与角色", () => {
     expect(owner).toHaveTextContent("研究负责人");
     expect(within(owner).queryByRole("button")).toBeNull();
     const stat = dialog.querySelector("[data-vcr-member='u_stat']") as HTMLElement;
-    expect(within(stat).getByRole("button", { name: "移除 u_stat 的“临床复核”" })).toBeInTheDocument();
-    expect(within(stat).getByRole("button", { name: "移除 u_stat 的“统计复核”" })).toBeInTheDocument();
+    expect(within(stat).getByRole("button", { name: "移除 陈统计 的“临床复核”" })).toBeInTheDocument();
+    expect(within(stat).getByRole("button", { name: "移除 陈统计 的“统计复核”" })).toBeInTheDocument();
+  });
+
+  // A person is shown by name. The account id is the remove call's address and is never printed in a person's place.
+  it("shows each member by name and never by account id, in the list and in the controls' names", async () => {
+    const dialog = await openMembers();
+    await within(dialog).findByText("陈统计");
+    expect(within(dialog).getByText("刘负责人")).toBeInTheDocument();
+    expect(dialog.textContent).not.toMatch(/u_stat|owner_1/);
+    for (const button of within(dialog).getAllByRole("button")) expect(button.getAttribute("aria-label") ?? "").not.toMatch(/u_stat|owner_1/);
+  });
+
+  it("says nothing of a person it has no name for, rather than their id", async () => {
+    const dialog = await openMembers({
+      [`GET /vcr/studies/${STUDY_ID}/members`]: { members: [{ userId: "usr_77aa", owner: false, roles: ["viewer"], roleLabels: ["只读查看者"], invitedBy: null, createdAt: null }] },
+    });
+    await waitFor(() => expect(dialog.querySelector("[data-vcr-member='usr_77aa']")).not.toBeNull());
+    expect(dialog.textContent).not.toMatch(/usr_77aa/);
   });
 
   // The route takes `{ userId, role }` and removes through `?role=`.
   it("adds an account with exactly { userId, role }", async () => {
     const dialog = await openMembers();
-    await within(dialog).findByText("u_stat");
+    await within(dialog).findByText("陈统计");
     await userEvent.type(within(dialog).getByLabelText("成员账号 ID"), " u_recruit ");
     await userEvent.selectOptions(within(dialog).getByLabelText("角色"), "recruiter");
     await userEvent.click(within(dialog).getByRole("button", { name: "添加" }));
@@ -444,14 +520,14 @@ describe("成员与角色", () => {
 
   it("takes an id the route would refuse as not addable, without asking it", async () => {
     const dialog = await openMembers();
-    await within(dialog).findByText("u_stat");
+    await within(dialog).findByText("陈统计");
     await userEvent.type(within(dialog).getByLabelText("成员账号 ID"), "a b/c");
     expect(within(dialog).getByRole("button", { name: "添加" })).toBeDisabled();
   });
 
   it("names the site a site member belongs to, from the study's own sites", async () => {
     const dialog = await openMembers();
-    await within(dialog).findByText("u_stat");
+    await within(dialog).findByText("陈统计");
     await userEvent.type(within(dialog).getByLabelText("成员账号 ID"), "u_site");
     await userEvent.selectOptions(within(dialog).getByLabelText("角色"), "site");
     const site = await within(dialog).findByLabelText("所属中心");
@@ -470,7 +546,7 @@ describe("成员与角色", () => {
       expect(found).not.toBeNull();
       return found as HTMLElement;
     });
-    await userEvent.click(within(stat).getByRole("button", { name: "移除 u_stat 的“统计复核”" }));
+    await userEvent.click(within(stat).getByRole("button", { name: "移除 陈统计 的“统计复核”" }));
     await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith("/vcr/studies/std_1/members/u_stat?role=statistical_reviewer", "DELETE"));
     await waitFor(() => expect(toasts.success).toHaveBeenCalledWith("已移除。"));
   });
@@ -479,11 +555,11 @@ describe("成员与角色", () => {
     const dialog = await openMembers({
       [`POST /vcr/studies/${STUDY_ID}/members`]: () => { throw new WebApiError("no", { status: 403, code: "vcr_forbidden" }); },
     });
-    await within(dialog).findByText("u_stat");
+    await within(dialog).findByText("陈统计");
     await userEvent.type(within(dialog).getByLabelText("成员账号 ID"), "u_x");
     await userEvent.click(within(dialog).getByRole("button", { name: "添加" }));
     await waitFor(() => expect(toasts.error).toHaveBeenCalled());
     expect(within(dialog).getByLabelText("成员账号 ID")).toHaveValue("u_x");
-    expect(within(dialog).getByText("u_stat")).toBeInTheDocument();
+    expect(within(dialog).getByText("陈统计")).toBeInTheDocument();
   });
 });

@@ -4,12 +4,14 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
-import { stringify } from "yaml";
+import { parse as parseYaml, stringify } from "yaml";
 import {
   DELEGATION_BASE_TOOLS,
   MAX_DELEGATION_DEPTH,
   MCP_TOOL_NAMES,
   SOCKET_TOOL_NAME_LIST,
+  VCR_STEP_CAPABILITIES,
+  VCR_STEP_PRODUCTS,
   delegationToolFilter,
   validateCapabilityManifest,
 } from "@evimed/domain";
@@ -606,4 +608,75 @@ test("an answer-only package keeps its reply contract: the reply is the delivera
   assert.deepEqual(answer.outputs, []);
   assert.equal(answer.completionChecks.includes("requiredOutputsExist"), false);
   assert.deepEqual(answer.completionChecks, ["skillsLoaded", "citationsResolvable", "citationIntegrity"]);
+});
+
+// --- a run for one product is held to that product -----------------------------------------------
+
+/** @param {{ outputs: readonly { path: string, required: boolean }[] }} agent */
+const requiredPaths = (agent) => agent.outputs.filter((output) => output.required).map((output) => output.path).sort();
+
+test("a run dispatched for one product of vcr-analysis is held to that product's files and checks, not to everything the capability can produce", async () => {
+  const registry = await loadAgentRegistry({ packageDirs: [officialPackageRoot], capabilityDirs: [officialCapabilityRoot] });
+  const whole = registry.get("vcr-analysis");
+  // Unscoped is what it was: every product's files, flattened.
+  assert.deepEqual(requiredPaths(whole), ["analysis-report.md", "comparability.md", "results.json", "simulation.json"]);
+
+  // The live acceptance's second analysis run was sent for the patients alone (the cohort snapshot) and was marked unverified for
+  // comparability.md, a file of another product.
+  const patients = registry.get("vcr-analysis", { products: ["vcr-cohort-snapshot"] });
+  assert.deepEqual(requiredPaths(patients), ["analysis-report.md", "results.json"]);
+  assert.deepEqual(registry.get("vcr-analysis", { products: ["vcr-comparator-analysis"] }).outputs, [{ path: "comparability.md", required: true }]);
+  assert.deepEqual(registry.get("vcr-analysis", { products: ["vcr-simulation-report"] }).outputs, [{ path: "simulation.json", required: true }]);
+  assert.deepEqual(requiredPaths(registry.get("vcr-analysis", { products: ["vcr-comparator-analysis", "vcr-simulation-report"] })), ["comparability.md", "simulation.json"],
+    "two products owe both products' files and not the third's");
+  for (const kinds of [["vcr-cohort-snapshot"], ["vcr-comparator-analysis", "vcr-simulation-report"]]) {
+    const scoped = registry.get("vcr-analysis", { products: kinds });
+    assert.deepEqual([...scoped.completionChecks].sort(), ["requiredOutputsExist", "skillsLoaded"], "the products' checks are held too");
+    for (const field of ["id", "version", "runtimeAgent", "skill", "companionSkills"]) assert.deepEqual(scoped[field], whole[field], field);
+    assert.ok(Object.isFrozen(scoped) && Object.isFrozen(scoped.outputs), "a view is as frozen as the manifest");
+    assert.equal(registry.get("vcr-analysis", { products: [...kinds].reverse() }), scoped, "the same products, in either order, are one view");
+  }
+
+  // Nothing to narrow is the whole manifest, the very same object: no products named, none this capability makes, or all of them.
+  for (const products of [undefined, null, [], ["no-such-contract"], ["vcr-cohort-snapshot", "vcr-comparator-analysis", "vcr-simulation-report"]]) {
+    assert.equal(registry.get("vcr-analysis", { products }), whole, JSON.stringify(products));
+  }
+  assert.equal(registry.get("no-such-capability", { products: ["vcr-cohort-snapshot"] }), null);
+  // A capability with one product ignores the names: its own files are all it owes.
+  assert.equal(registry.get("vcr-evidence", { products: ["vcr-cohort-snapshot"] }), registry.get("vcr-evidence"));
+  assert.equal(registry.get("vcr-evidence", { products: ["vcr-study-package"] }), registry.get("vcr-evidence"));
+});
+
+test("the products the VCR steps name are the products vcr-analysis produces, and the step-to-product map covers exactly the capability's steps", async () => {
+  const registry = await loadAgentRegistry({ packageDirs: [officialPackageRoot], capabilityDirs: [officialCapabilityRoot] });
+  const catalogue = await dshCapabilities();
+  const produced = catalogue.find((entry) => entry.id === "vcr-analysis").manifest.produces.map((/** @type {any} */ product) => product.contractKind);
+  assert.deepEqual([...new Set(Object.values(VCR_STEP_PRODUCTS))].sort(), [...produced].sort(), "every product is some step's, and no step names another capability's");
+  for (const [step, kind] of Object.entries(VCR_STEP_PRODUCTS)) {
+    assert.equal(VCR_STEP_CAPABILITIES[/** @type {keyof typeof VCR_STEP_CAPABILITIES} */ (step)], "vcr-analysis", `${step} is a vcr-analysis step`);
+    assert.ok(registry.get("vcr-analysis", { products: [kind] }).outputs.length > 0, `${kind} owes something`);
+  }
+});
+
+test("any capability that produces several contract kinds gets the same narrowing, not only vcr: a manifest written here with two products", async t => {
+  const root = await mkdtemp(path.join(tmpdir(), "evimed-two-products-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  // The shipped capability the fixture is made from: its one product, and a second one (a contract kind of another capability) added.
+  const source = parseYaml(await readFile(path.join(officialCapabilityRoot, "statistical-analysis", "capability.yaml"), "utf8"));
+  const second = parseYaml(await readFile(path.join(officialCapabilityRoot, "vcr-matching", "capability.yaml"), "utf8")).produces[0];
+  source.produces = [source.produces[0], { ...second, outputs: [{ path: "second-product.md", required: true }, { path: "second-notes.md", required: false }], checks: ["requiredOutputsExist"] }];
+  const directory = path.join(root, "statistical-analysis");
+  await mkdir(directory, { recursive: true });
+  await writeFile(path.join(directory, "capability.yaml"), stringify(source), "utf8");
+  await writeFile(path.join(directory, "SKILL.md"), await readFile(path.join(officialCapabilityRoot, "statistical-analysis", "SKILL.md"), "utf8"), "utf8");
+  const registry = await loadAgentRegistry({ packageDirs: [officialPackageRoot], capabilityDirs: [root] });
+  const first = source.produces[0];
+  const whole = registry.get("statistical-analysis");
+  assert.deepEqual(requiredPaths(whole), [...first.outputs.filter((/** @type {any} */ output) => output.required !== false).map((/** @type {any} */ output) => output.path), "second-product.md"].sort());
+  const onlySecond = registry.get("statistical-analysis", { products: [second.contractKind] });
+  assert.deepEqual(onlySecond.outputs, [{ path: "second-product.md", required: true }, { path: "second-notes.md", required: false }]);
+  assert.deepEqual(onlySecond.completionChecks, ["requiredOutputsExist"], "only the second product's checks");
+  const onlyFirst = registry.get("statistical-analysis", { products: [first.contractKind] });
+  assert.equal(onlyFirst.outputs.some((output) => output.path.startsWith("second-")), false);
+  assert.deepEqual([...onlyFirst.completionChecks].sort(), [...new Set(first.checks)].sort());
 });

@@ -18,6 +18,7 @@ import {
   ledgerTextForTest,
   loadedOrInjectedSkillsForTest,
   readDelegatedAssistantMessagesForTest,
+  requiredSpecialistArtifactsForTest,
   MAX_RUN_CORRECTIONS,
   scopeNativeProjectionForTest, scopeNativeReceiptForTest,
   snapshotAcceptedPackageForRepairForTest,
@@ -27,6 +28,7 @@ import {
   terminalEvidenceSourceErrorCodes,
 } from "../src/agentRuns.mjs";
 import { CONNECTOR_MISSING_CODES, runStateFileFor, workspaceLayout } from "@evimed/domain";
+import { loadAgentRegistry } from "../src/agentRegistry.mjs";
 import { deepResearchPackage, researchBrief } from "./fixtures/clinicalEvidencePackage.mjs";
 import { validateClinicalEvidencePackage } from "../src/clinicalEvidenceQuality.mjs";
 import { HttpError } from "../src/security.mjs";
@@ -98,6 +100,112 @@ test("specialist dispatch preserves managed GEO provenance for learning and rele
   } finally {
     await store.cancelSession(project, binding.sessionId);
     await store.closeProject(project);
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("a dispatch names the products its run is sent for, the ledger keeps them, and a dispatch that names none leaves the record as it was", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "os-run-products-"));
+  const project = { id: "vcr-products", userId: "researcher", rootDir: root,
+    workspaceDir: path.join(root, "workspace"), metaDir: path.join(root, ".openscience") };
+  const binding = { sessionId: "ses_vcr", mode: "specialist", agentId: "vcr-analysis", agentVersion: "1.0.0", runtimeAgent: "evimed-vcr-analysis" };
+  await mkdir(project.workspaceDir, { recursive: true });
+  await mkdir(project.metaDir, { recursive: true });
+  const createStore = () => new AgentRunStore({ get: async () => binding }, {
+    model: "deepseek/deepseek-v4-flash", readSessionHistory: async () => [], monitorIntervalMs: 60_000,
+  });
+  const store = createStore();
+  const restarted = createStore();
+  const route = { sessionId: binding.sessionId, automated: true, effectiveRouteReason: "vcr:patients", effectiveAgentId: binding.agentId,
+    effectiveAgentVersion: binding.agentVersion, effectiveRuntimeAgent: binding.runtimeAgent };
+  try {
+    // A name that is not a contract kind, a list that is not a list, and products with no specialist to belong to are refused.
+    for (const effectiveProducts of ["vcr-cohort-snapshot", [7], ["Not A Kind"], Array.from({ length: 9 }, (_, index) => `kind-${index}`)]) {
+      await assert.rejects(store.dispatch(project, { ...route, dispatchId: "vcr-bad", effectiveProducts }, async () => ({ accepted: true })),
+        (error) => error instanceof HttpError && error.status === 400 && /products/i.test(error.message), JSON.stringify(effectiveProducts));
+    }
+    await assert.rejects(store.dispatch(project, { sessionId: binding.sessionId, dispatchId: "vcr-orphan", effectiveProducts: ["vcr-cohort-snapshot"] }, async () => ({ accepted: true })),
+      (error) => error instanceof HttpError && error.status === 400 && /specialist/i.test(error.message));
+
+    const scoped = await store.dispatch(project, { ...route, dispatchId: "vcr-scoped", effectiveProducts: ["vcr-cohort-snapshot", "vcr-cohort-snapshot", "vcr-simulation-report"] }, async () => ({ accepted: true }));
+    assert.deepEqual(scoped.effectiveProducts, ["vcr-cohort-snapshot", "vcr-simulation-report"], "named once each");
+    const ledger = path.join(project.metaDir, "runs.jsonl");
+    const events = (await readFile(ledger, "utf8")).trim().split("\n").map((line) => JSON.parse(line));
+    assert.deepEqual(events.find((event) => event.event === "started").effectiveProducts, ["vcr-cohort-snapshot", "vcr-simulation-report"]);
+    await store.cancelSession(project, binding.sessionId);
+    await store.closeProject(project);
+    assert.deepEqual((await restarted.list(project)).find((run) => run.id === scoped.id).effectiveProducts, ["vcr-cohort-snapshot", "vcr-simulation-report"], "a restart reads them back");
+
+    // No products named: the run record has no such key, so every older reader and every older run is unchanged.
+    const plain = await restarted.dispatch(project, { ...route, dispatchId: "vcr-plain" }, async () => ({ accepted: true }));
+    assert.equal(Object.hasOwn(plain, "effectiveProducts"), false);
+    const text = await readFile(ledger, "utf8");
+    assert.equal(text.trim().split("\n").map((line) => JSON.parse(line)).filter((event) => event.event === "started" && Object.hasOwn(event, "effectiveProducts")).length, 1);
+    // A ledger line that carries them badly reads as naming none rather than making the run unreadable.
+    const damaged = text.trim().split("\n").map((line) => JSON.parse(line)).map((event) => (event.event === "started" && event.dispatchId === "vcr-scoped" ? { ...event, effectiveProducts: "all" } : event));
+    await writeFile(ledger, damaged.map((event) => JSON.stringify(event)).join("\n") + "\n");
+    await restarted.closeProject(project);
+    const reread = createStore();
+    try {
+      const run = (await reread.list(project)).find((item) => item.id === scoped.id);
+      assert.equal(run.id, scoped.id);
+      assert.equal(Object.hasOwn(run, "effectiveProducts"), false);
+    } finally { await reread.closeProject(project); }
+  } finally {
+    await store.closeProject(project);
+    await restarted.closeProject(project);
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test("the delivery gate holds a run to the products it was dispatched for: a retry for the patients alone does not owe the comparability table or the simulation report", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "os-run-product-gate-"));
+  const project = { id: "vcr-product-gate", userId: "researcher", rootDir: root, workspaceDir: path.join(root, "workspace"), metaDir: path.join(root, ".openscience") };
+  await mkdir(project.workspaceDir, { recursive: true });
+  await mkdir(project.metaDir, { recursive: true });
+  const registry = await loadAgentRegistry({ packageDirs: [new URL("../../../runtime/skills/evimed", import.meta.url).pathname], capabilityDirs: [new URL("../../../capabilities", import.meta.url).pathname] });
+  const analysis = registry.get("vcr-analysis");
+  const startedAt = new Date(Date.now() - 60_000).toISOString();
+  /** @param {string[] | undefined} products */
+  const run = (products) => ({ id: "run_x", sessionId: "ses_x", effectiveAgentId: analysis.id, effectiveAgentVersion: analysis.version, effectiveRuntimeAgent: analysis.runtimeAgent,
+    startedAt, mountedSkills: [analysis.skill, ...analysis.companionSkills], ...(products ? { effectiveProducts: products } : {}) });
+  /** @param {string[]} files @param {number} [ageMs] */
+  const write = async (files, ageMs = 0) => {
+    for (const file of files) {
+      const target = path.join(project.workspaceDir, file);
+      await writeFile(target, `# ${file}\n内容。\n`);
+      const when = new Date(Date.now() - ageMs);
+      await utimes(target, when, when);
+    }
+  };
+  try {
+    // The live acceptance, as it was: comparability.md is the previous run's file, and this run (sent for the patients) wrote its own report and results.
+    await write(["comparability.md"], 3_600_000);
+    await write(["analysis-report.md", "results.json"]);
+    const held = await requiredSpecialistArtifactsForTest(project, run(undefined), registry);
+    assert.equal(held.errorCode, "specialist_required_output_stale", "unscoped: held to every product's files");
+    assert.match(held.qualityIssues.join("\n"), /comparability\.md predates this run/);
+
+    const patients = await requiredSpecialistArtifactsForTest(project, run(["vcr-cohort-snapshot"]), registry);
+    assert.equal(patients.errorCode, null, "scoped to the cohort snapshot: its two files are all it owes");
+    assert.deepEqual([...patients.artifacts].sort(), ["analysis-report.md", "results.json"]);
+    assert.equal(patients.qualityUnverified, undefined);
+
+    // A product the run was not sent for is not a reason to withhold what it did write; one it was sent for still is.
+    await rm(path.join(project.workspaceDir, "analysis-report.md"));
+    const missing = await requiredSpecialistArtifactsForTest(project, run(["vcr-cohort-snapshot"]), registry);
+    assert.equal(missing.errorCode, "specialist_required_output_missing");
+    assert.match(missing.qualityIssues.join("\n"), /analysis-report\.md/);
+    assert.deepEqual(missing.artifacts, ["results.json"], "what it wrote is delivered and marked, as before");
+
+    // Sent for the trial alone: simulation.json, nothing else.
+    await write(["simulation.json"]);
+    const trial = await requiredSpecialistArtifactsForTest(project, run(["vcr-simulation-report"]), registry);
+    assert.equal(trial.errorCode, null);
+    assert.deepEqual(trial.artifacts, ["simulation.json"]);
+    // Names that are not this capability's change nothing: the run is held to all of it, as it was.
+    assert.equal((await requiredSpecialistArtifactsForTest(project, run(["vcr-study-package"]), registry)).errorCode, "specialist_required_output_missing");
+  } finally {
     await rm(root, { recursive: true, force: true });
   }
 });

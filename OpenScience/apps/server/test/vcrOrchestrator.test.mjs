@@ -8,9 +8,9 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import {
   VCR_ACCRUAL_TOLERANCE, VCR_ANALYSIS_STEPS, VCR_ASSUMPTION_BINDINGS, VCR_EXPORT_OUTLINES, VCR_RUN_CAPABILITIES, VcrOrchestrator,
-  vcrAssumptionConflicts, vcrBindAssumptions, vcrBuildStages, vcrDefaultBrief, vcrDesignPriorFrom, vcrDispatchId, vcrExportBriefLines,
+  vcrAssumptionConflicts, vcrBindAssumptions, vcrBuildStages, vcrDefaultBrief, vcrDesignPriorFrom, vcrDispatchId, vcrEvidenceProduct, vcrExportBriefLines,
   vcrGapsForRule, vcrIdleStepStatus, vcrJobKindFor, vcrModelApplicabilityIssues, vcrPopulationVariables,
-  vcrProgramSteps, vcrProjectScenario, vcrReviewRepairBrief, vcrRunId, vcrRunPrompt, vcrSimpleStepStatus, vcrStepUpdates, vcrStepsInFlight,
+  vcrProductsOfSteps, vcrProgramSteps, vcrProjectScenario, vcrReviewRepairBrief, vcrRunId, vcrRunPrompt, vcrSimpleStepStatus, vcrStepUpdates, vcrStepsInFlight,
   vcrSupersededNodes, wantedVcrSteps,
 } from "../src/vcrOrchestrator.mjs";
 import { VCR_NOTICE_KINDS, createVcrNotifier, vcrNoticeHref, vcrStudyName } from "../src/vcrNotify.mjs";
@@ -729,4 +729,153 @@ test("C3-09 a model answers only for what it declares it covers: the endpoint, t
   const covered = /** @type {any} */ (vcrBuildStages({ kind: "patient_set", row: { ...patientRow, modelId: "reference-time-to-event" } },
     { ...context, populations: [population], models: [{ id: "mdl_3", name: "reference-time-to-event", version: "1.0.0", endpointType: "time_to_event", applicability: { endpoints: ["time_to_event"] }, card: {} }] }));
   assert.equal(covered.ok, true);
+});
+
+// --- the evidence step is read from what only it produces ----------------------------------------
+
+test("an assumption card is the evidence step's product only when it cites its evidence: a pooled card, one study taken as it stands, or an expert setting widened from them", () => {
+  // What evidence parameterization writes.
+  assert.equal(vcrEvidenceProduct({ key: "control_median_pfs", sourceKind: "external_evidence", poolingMethod: "random_effects_reml", evidenceIds: ["evd_1", "evd_2"], pooling: { calibre: "closest" } }), true, "a pooled card");
+  assert.equal(vcrEvidenceProduct({ key: "single", sourceKind: "external_evidence", poolingMethod: "single_study", evidenceIds: ["evd_3"], pooling: {} }), true, "one study taken as it stands");
+  assert.equal(vcrEvidenceProduct({ key: "dropout_rate", sourceKind: "expert_set", evidenceIds: [], pooling: { basedOn: "evidence:evd_4", widenedBy: 2, reason: "只有一项中国人群研究" } }), true, "widened from the nearest verified value");
+  assert.equal(vcrEvidenceProduct({ key: "k2", sourceKind: "expert_set", evidenceIds: [], pooling: { basedOn: { evidenceIds: ["evd_5"], calibre: "overall", k: 2 }, widenedBy: 2 } }), true, "widened from a pool with fewer than three studies");
+
+  // What the protocol run and the analysis run state by themselves: nothing a simulation draws from is anchored in a source.
+  assert.equal(vcrEvidenceProduct({ key: "hazard_ratio", sourceKind: "scenario", pointValue: 0.7, evidenceIds: [], pooling: {} }), false, "a scenario the run stated");
+  assert.equal(vcrEvidenceProduct({ key: "dropout_rate", sourceKind: "expert_set", pointValue: 0.1, evidenceIds: [], pooling: {} }), false, "an expert setting with nothing behind it");
+  assert.equal(vcrEvidenceProduct({ key: "dropout_rate", sourceKind: "expert_set", pointValue: 0.1 }), false, "no pooling record at all");
+  assert.equal(vcrEvidenceProduct({ key: "x", sourceKind: "external_evidence", evidenceIds: [] }), false, "a citation that names nothing");
+  for (const sourceKind of ["local_observation", "model_prediction"]) assert.equal(vcrEvidenceProduct({ sourceKind, evidenceIds: ["evd_1"], pooling: { basedOn: "x" } }), false, sourceKind);
+  for (const nothing of [null, undefined, "card", 7, []]) assert.equal(vcrEvidenceProduct(nothing), false, String(nothing));
+});
+
+/**
+ * One study in memory, answering exactly what one `advance` pass reads of the
+ * store, so the orchestrator's own pass runs without a database: the live shape
+ * of a study whose definition is done and whose cards are whatever the caller
+ * says. Nothing is dispatched but through the orchestrator's own `#dispatch`.
+ * @param {{ assumptions?: any[], openJobs?: any[], steps?: Record<string, any> }} [options]
+ */
+function studyInMemory({ assumptions = [], openJobs = [], steps = {} } = {}) {
+  const state = {
+    study: /** @type {Record<string, any>} */ ({
+      id: "std_live", userId: "u_live", projectId: "prj_live", name: "EV-201", question: "单臂 II 期能不能用外部对照？", dataTier: "T0",
+      intendedUse: "exploratory", status: "active",
+      steps: Object.fromEntries(VCR_STEPS.map((step) => [step, { status: step === "definition" ? "done" : "none", requested: true, note: null, ...(steps[step] ?? {}) }])),
+    }),
+    assumptions, openJobs,
+    /** @type {any[]} */ claims: [],
+  };
+  const client = {
+    async query(/** @type {string} */ sql, /** @type {any[]} */ params = []) {
+      if (/INSERT INTO [\w.]*schedule_marks/.test(sql)) {
+        state.claims.push({ key: params[1], dispatchId: params[3], detail: JSON.parse(params[4]) });
+        return { rows: [{ study_id: params[0], key: params[1], dispatch_id: params[3], attempts: 0, detail: JSON.parse(params[4]) }] };
+      }
+      if (/SELECT status FROM/.test(sql)) return { rows: [{ status: "active" }] };
+      return { rows: [] };
+    },
+  };
+  const store = {
+    async studyById() { return state.study; },
+    async edges() { return []; },
+    async latestDefinition() { return { id: "def_1", studyId: "std_live", version: 1, pico: { population: "二线 NSCLC" }, estimand: {}, endpointType: "time_to_event" }; },
+    async assumptions() { return state.assumptions; },
+    async populations() { return []; },
+    async patientSets() { return []; },
+    async comparatorDesigns() { return []; },
+    async trialScenarios() { return []; },
+    async latestDesignGrid() { return null; },
+    async latestProtocolVersion() { return null; },
+    async staleMarks() { return []; },
+    async setStep(/** @type {string} */ _id, /** @type {string} */ step, /** @type {Record<string, any>} */ fields) {
+      state.study = { ...state.study, steps: { ...state.study.steps, [step]: { ...state.study.steps[step], ...fields } } };
+      return state.study;
+    },
+    async rows(/** @type {string} */ sql) {
+      if (/FROM [\w.]*jobs\s+WHERE study_id = \$1 AND state IN \('queued', 'running', 'awaiting_budget'\)/.test(sql)) return state.openJobs;
+      return [];
+    },
+    async one(/** @type {string} */ sql) {
+      if (/matching_assessments/.test(sql)) return { n: 0 };
+      if (/UPDATE [\w.]*schedule_marks/.test(sql)) return { key: "run", state: "running" };
+      return null;
+    },
+    async transaction(/** @type {(client: any) => Promise<any>} */ work) { return work(client); },
+  };
+  /** @type {any[]} */
+  const dispatched = [];
+  const orchestrator = new VcrOrchestrator({
+    store: /** @type {any} */ (store), jobs: /** @type {any} */ ({}),
+    dispatchRun: async (input) => { dispatched.push(input); return { runId: `run_${dispatched.length}`, sessionId: null }; },
+  });
+  return { state, dispatched, orchestrator, steps: () => /** @type {Record<string, any>} */ (state.study.steps) };
+}
+
+test("the live shape: the protocol run wrote scenario cards, so cards exist and no evidence product does — the evidence step is not done, and vcr-evidence is the next run", async () => {
+  const live = studyInMemory({ assumptions: [
+    { key: "hazard_ratio", version: 1, name: "风险比", pointValue: 0.7, sourceKind: "scenario", valueSource: "assumed", evidenceIds: [], pooling: {}, reviewState: "ai_set" },
+    { key: "control_median_pfs", version: 1, name: "对照组中位 PFS", pointValue: 6, sourceKind: "expert_set", valueSource: "assumed", evidenceIds: [], pooling: {}, reviewState: "ai_set" },
+    { key: "dropout_rate", version: 1, name: "脱落率", pointValue: 0.1, sourceKind: "expert_set", valueSource: "assumed", evidenceIds: [], pooling: {}, reviewState: "ai_set" },
+  ] });
+  await live.orchestrator.advance("std_live");
+  assert.equal(live.dispatched.length, 1, "one run out, and it is the next step");
+  assert.equal(live.dispatched[0].capabilityId, "vcr-evidence", "the cards the protocol run wrote did not make the evidence step done");
+  assert.equal(live.dispatched[0].reason, "vcr:evidence");
+  assert.equal(live.steps().definition.status, "done");
+  assert.equal(live.steps().evidence.status, "running", "run out for it now, and the page says so rather than 已完成");
+  assert.deepEqual(live.state.claims.map((claim) => claim.key), ["run:evidence"]);
+  assert.deepEqual(live.state.claims[0].detail.scope, [{ step: "evidence", fidelity: "full" }]);
+});
+
+test("a card that cites verified evidence, or is widened from it, is what makes the evidence step done — and then the programme moves on to the analysis run", async () => {
+  for (const card of [
+    { key: "control_median_pfs", version: 1, name: "对照组中位 PFS", sourceKind: "external_evidence", valueSource: "aggregate", poolingMethod: "random_effects_reml", evidenceIds: ["evd_1", "evd_2", "evd_3"], pooling: { calibre: "closest" } },
+    { key: "dropout_rate", version: 1, name: "脱落率", sourceKind: "expert_set", valueSource: "assumed", evidenceIds: [], pooling: { basedOn: "evidence:evd_4", widenedBy: 2 } },
+  ]) {
+    const live = studyInMemory({ assumptions: [{ key: "hazard_ratio", version: 1, sourceKind: "scenario", evidenceIds: [], pooling: {} }, card] });
+    await live.orchestrator.advance("std_live");
+    assert.equal(live.steps().evidence.status, "done", card.key);
+    assert.deepEqual(live.dispatched.map((run) => run.capabilityId), ["vcr-analysis"], `${card.key}: evidence needs no run; the analysis run is next`);
+  }
+});
+
+test("while the platform pools this study's evidence the step reads running, and with no card yet it is neither done nor sent again", async () => {
+  const live = studyInMemory({ assumptions: [], openJobs: [{ kind: "pool_evidence", state: "running", node: null }] });
+  await live.orchestrator.advance("std_live");
+  assert.equal(live.steps().evidence.status, "running", "a job of its own is open");
+  assert.equal(live.dispatched.some((run) => run.capabilityId === "vcr-evidence"), false, "a step that reads running is not sent a second run");
+});
+
+// --- a run is dispatched for the products of the steps it is out for -----------------------------
+
+test("a run names the contract kinds of the steps it covers, once each; a step whose capability produces one kind names none", () => {
+  assert.deepEqual(vcrProductsOfSteps(["population", "patients", "comparator", "trial"]), ["vcr-cohort-snapshot", "vcr-comparator-analysis", "vcr-simulation-report"]);
+  assert.deepEqual(vcrProductsOfSteps(["patients"]), ["vcr-cohort-snapshot"]);
+  assert.deepEqual(vcrProductsOfSteps(["population", "patients"]), ["vcr-cohort-snapshot"], "two steps of one product are one product");
+  assert.deepEqual(vcrProductsOfSteps(["trial", "comparator"]), ["vcr-comparator-analysis", "vcr-simulation-report"], "in the capability's order, not the caller's");
+  for (const step of ["definition", "evidence", "matching", "not_a_step"]) assert.deepEqual(vcrProductsOfSteps([step]), [], step);
+  assert.deepEqual(vcrProductsOfSteps([]), []);
+});
+
+test("a retry scoped to the patients is dispatched for the cohort snapshot alone; the first run for all four steps for all three products; the other steps' runs name none", async () => {
+  // The live acceptance: the first analysis run left the patients failed, and the second was sent for them alone.
+  const retry = studyInMemory({ assumptions: [{ key: "control_median_pfs", sourceKind: "external_evidence", evidenceIds: ["evd_1"], pooling: {} }],
+    steps: { evidence: { status: "done" }, population: { status: "done" }, patients: { status: "failed" }, comparator: { status: "done" }, trial: { status: "done" }, matching: { status: "done" } } });
+  await retry.orchestrator.advance("std_live");
+  assert.equal(retry.dispatched.length, 1);
+  assert.equal(retry.dispatched[0].capabilityId, "vcr-analysis");
+  assert.equal(retry.dispatched[0].reason, "vcr:patients");
+  assert.deepEqual(retry.dispatched[0].products, ["vcr-cohort-snapshot"], "the delivery gate holds this run to the cohort snapshot's files");
+  assert.deepEqual(retry.state.claims[0].detail.scope, [{ step: "patients", fidelity: "full" }]);
+
+  const first = studyInMemory({ assumptions: [{ key: "control_median_pfs", sourceKind: "external_evidence", evidenceIds: ["evd_1"], pooling: {} }], steps: { evidence: { status: "done" } } });
+  await first.orchestrator.advance("std_live");
+  assert.deepEqual(first.dispatched.map((run) => [run.capabilityId, run.products]), [["vcr-analysis", ["vcr-cohort-snapshot", "vcr-comparator-analysis", "vcr-simulation-report"]]]);
+
+  // Definition, evidence and matching are single-product capabilities: nothing to narrow, so nothing named.
+  const evidence = studyInMemory({ assumptions: [] });
+  await evidence.orchestrator.advance("std_live");
+  assert.equal(evidence.dispatched[0].capabilityId, "vcr-evidence");
+  assert.equal(Object.hasOwn(evidence.dispatched[0], "products"), false);
 });

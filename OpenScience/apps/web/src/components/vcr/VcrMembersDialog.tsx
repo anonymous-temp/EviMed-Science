@@ -17,10 +17,13 @@ import { Input, inputClasses } from "@/components/ui/Input";
 import { Tag } from "@/components/ui/Tag";
 import { VcrTabSkeleton } from "./VcrStates";
 import { useVcrLoad, VcrTabError } from "./vcrTabKit";
-import { memberRoleLabel } from "./vcrText";
+import { memberRoleLabel, NO_VALUE } from "./vcrText";
 
 /** The account ids a route takes: the same pattern the server checks a path segment against. */
 const ACCOUNT_ID = /^[A-Za-z0-9_-]{1,80}$/;
+
+/** A member is shown by name; the account id is for the remove call and is never printed in a person's place. */
+const memberName = (member: { name?: string | null }) => member.name ?? NO_VALUE;
 
 /**
  * 成员与角色: who is on this study and what each of them may do (plan §11.2).
@@ -85,7 +88,7 @@ export function VcrMembersDialog({ studyId, onClose }: { studyId: string; onClos
               <ul className="divide-y divide-faint">
                 {state.data.map((member) => (
                   <li key={member.userId} data-vcr-member={member.userId} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 py-3">
-                    <span className="min-w-0 flex-1 truncate text-ui text-text">{member.userId}</span>
+                    <span className="min-w-0 flex-1 truncate text-ui text-text">{memberName(member)}</span>
                     <span className="flex flex-wrap items-center gap-1.5">
                       {member.roles.map((each) => (
                         <span key={each} className="inline-flex items-center gap-0.5">
@@ -94,7 +97,7 @@ export function VcrMembersDialog({ studyId, onClose }: { studyId: string; onClos
                             <IconButton
                               icon={X}
                               size="sm"
-                              label={`移除 ${member.userId} 的“${memberRoleLabel(each)}”`}
+                              label={`移除 ${memberName(member)} 的“${memberRoleLabel(each)}”`}
                               disabled={busy !== null}
                               onClick={() => work(`remove:${member.userId}:${each}`, () => removeVcrMember(studyId, member.userId, each),
                                 "已移除。", "成员角色暂时无法移除，请稍后重试。")}

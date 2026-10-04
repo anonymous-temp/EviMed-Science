@@ -13,6 +13,8 @@ import {
   VCR_CONCLUSIONS,
   VCR_COUNT_KEYS,
   VCR_CRITERION_STATES,
+  VCR_DATA_TIERS,
+  VCR_DATA_TIER_UNLOCKS_ZH,
   VCR_ENGINE_METHODS,
   VCR_ENGINE_METHOD_IDS,
   VCR_ENGINE_PROTOCOL_VERSION,
@@ -47,6 +49,10 @@ import {
   vcrMatchingFindings,
   vcrSimulationReportFindings,
   vcrStudyPackageFindings,
+  vcrTierIsSupported,
+  vcrTierNeedsSupport,
+  vcrTierOffer,
+  vcrTierSupportedBy,
 } from "@evimed/domain";
 
 // --- vocabulary -------------------------------------------------------------
@@ -366,4 +372,61 @@ test("review perspective, actor provenance and lifecycle are separate closed voc
   assert.deepEqual(VCR_REVIEWER_KINDS, ['ai', 'human']);
   assert.deepEqual(VCR_REVIEW_LIFECYCLE, ['queued', 'running', 'done', 'failed']);
   assert.deepEqual(VCR_REVIEW_KINDS, ['clinical', 'statistical', 'data']);
+});
+
+// --- the data tier a study's frozen data can claim -----------------------------------------------
+
+/** @param {Record<string, any>} table */
+const analysisTable = (table) => ({ shape: "subject", rowCount: 240, outcomeBearing: false, valueSource: "observed", derivedFrom: {}, ...table });
+const treated = { arm: { recorded: 180, unknown: 60, notApplicable: 0, missingReason: "not_recorded" } };
+
+test("the data tier a study's frozen data supports is read from the registered analysis tables: baseline records are T1, recorded treatment and an outcome are T2", () => {
+  assert.deepEqual(vcrTierSupportedBy([]), { tier: "T0", subjects: 0, treatment: false, outcomes: false });
+  assert.deepEqual(vcrTierSupportedBy(null), { tier: "T0", subjects: 0, treatment: false, outcomes: false });
+  // Baseline records of real people: T1. The partner's trial-period data is exactly this — treatment `not_shared`, no outcome.
+  assert.deepEqual(vcrTierSupportedBy([analysisTable({ derivedFrom: { treatment: { arm: { recorded: 0, unknown: 240, notApplicable: 0, missingReason: "not_shared" } } } })]),
+    { tier: "T1", subjects: 240, treatment: false, outcomes: false });
+  assert.equal(vcrTierSupportedBy([analysisTable({ valueSource: "extracted" })]).tier, "T1", "an extracted, calculated or imputed row is still a real person's");
+  // Treatment recorded for someone, but no outcome anywhere: not T2. And an outcome with no treatment record: not T2.
+  assert.equal(vcrTierSupportedBy([analysisTable({ derivedFrom: { treatment: treated } })]).tier, "T1");
+  assert.equal(vcrTierSupportedBy([analysisTable({ outcomeBearing: true })]).tier, "T1");
+  // Both, on any real tables: T2.
+  const events = analysisTable({ shape: "events", rowCount: 240, outcomeBearing: true });
+  assert.deepEqual(vcrTierSupportedBy([analysisTable({ derivedFrom: { treatment: treated } }), events]),
+    { tier: "T2", subjects: 240, treatment: true, outcomes: true });
+  assert.equal(vcrTierSupportedBy([analysisTable({ derivedFrom: { treatment: treated }, outcomeBearing: true })]).tier, "T2", "the outcome may sit in the subject table itself");
+  // T3 is never derived, whatever the data look like.
+  for (const tables of [[analysisTable({ derivedFrom: { treatment: treated } }), events]]) assert.notEqual(vcrTierSupportedBy(tables).tier, "T3");
+});
+
+test("only the records of real people count: a synthetic, aggregate, predicted or empty table supports nothing, and an events table alone has no baseline", () => {
+  for (const valueSource of ["synthetic", "aggregate", "predicted", "assumed", "reconstructed"]) {
+    assert.equal(vcrTierSupportedBy([analysisTable({ valueSource, derivedFrom: { treatment: treated }, outcomeBearing: true })]).tier, "T0", valueSource);
+  }
+  assert.equal(vcrTierSupportedBy([analysisTable({ rowCount: 0 })]).tier, "T0");
+  assert.equal(vcrTierSupportedBy([analysisTable({ rowCount: null })]).tier, "T0");
+  assert.equal(vcrTierSupportedBy([analysisTable({ shape: "events", outcomeBearing: true }), analysisTable({ shape: "longitudinal" })]).tier, "T0", "no subject table, no baseline");
+  // A real subject table with a synthetic outcome table beside it does not reach T2 on the synthetic one.
+  assert.equal(vcrTierSupportedBy([analysisTable({ derivedFrom: { treatment: treated } }), analysisTable({ shape: "events", valueSource: "synthetic", outcomeBearing: true })]).tier, "T1");
+  // Junk rows read as nothing and never throw.
+  assert.equal(vcrTierSupportedBy([null, "x", 7, {}, { shape: "subject" }]).tier, "T0");
+});
+
+test("the offer is the highest tier the data supports above where the study stands, with what each step on the way unlocks — and never a lowering", () => {
+  assert.deepEqual(vcrTierOffer("T0", { tier: "T1" }), { tier: "T1", unlocks: [VCR_DATA_TIER_UNLOCKS_ZH.T1] });
+  assert.deepEqual(vcrTierOffer("T0", { tier: "T2" }), { tier: "T2", unlocks: [VCR_DATA_TIER_UNLOCKS_ZH.T1, VCR_DATA_TIER_UNLOCKS_ZH.T2] }, "one move, and it says everything it opens");
+  assert.deepEqual(vcrTierOffer("T1", { tier: "T2" }), { tier: "T2", unlocks: [VCR_DATA_TIER_UNLOCKS_ZH.T2] });
+  for (const [current, tier] of [["T1", "T1"], ["T2", "T1"], ["T2", "T2"], ["T3", "T2"], ["T0", "T0"], ["T2", "T0"]]) assert.equal(vcrTierOffer(current, { tier }), null, `${current} with ${tier}-data`);
+  assert.equal(vcrTierOffer("T9", { tier: "T2" }), null);
+  assert.equal(vcrTierOffer("T0", null), null);
+  for (const tier of VCR_DATA_TIERS.slice(1, 3)) assert.ok(VCR_DATA_TIER_UNLOCKS_ZH[/** @type {"T1"} */ (tier)], `${tier} has words`);
+});
+
+test("a claim to a tier needs data that supports it; T3 is the lead's declaration over data that qualifies as T2", () => {
+  assert.equal(vcrTierNeedsSupport("T3"), "T2");
+  for (const tier of ["T0", "T1", "T2"]) assert.equal(vcrTierNeedsSupport(tier), tier);
+  assert.deepEqual(["T0", "T1", "T2", "T3"].map((tier) => vcrTierIsSupported(tier, "T0")), [true, false, false, false]);
+  assert.deepEqual(["T0", "T1", "T2", "T3"].map((tier) => vcrTierIsSupported(tier, "T1")), [true, true, false, false]);
+  assert.deepEqual(["T0", "T1", "T2", "T3"].map((tier) => vcrTierIsSupported(tier, "T2")), [true, true, true, true]);
+  assert.equal(vcrTierIsSupported("T7", "T2"), false);
 });

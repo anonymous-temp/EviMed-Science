@@ -497,6 +497,21 @@ class Item {
   }
 }
 
+/**
+ * Whether a card's part says anything at all: some leaf of it holds a word or a number. An object of
+ * empty strings, empty lists and empty objects states nothing.
+ * @param {unknown} value
+ * @returns {boolean}
+ */
+function statesSomething(value) {
+  if (typeof value === "string") return value.trim().length > 0;
+  if (typeof value === "number") return Number.isFinite(value);
+  if (typeof value === "boolean") return true;
+  if (Array.isArray(value)) return value.some(statesSomething);
+  if (value && typeof value === "object") return Object.values(value).some(statesSomething);
+  return false;
+}
+
 /** The numbers a distribution's parameters are: finite, bounded. @param {Item} item @param {string} field @param {unknown} value */
 function distributionOf(item, field, value) {
   if (value == null) return undefined;
@@ -608,6 +623,13 @@ const WRITERS = {
     const endpointType = item.choice("endpointType", VCR_ENDPOINT_TYPES);
     const intendedUse = item.choice("intendedUse", VCR_INTENDED_USES, { fallback: "exploratory" });
     const fieldSources = item.obj("fieldSources") ?? {};
+    // The step reads done from the row's existence, so a card that states
+    // nothing would stand in for the question the whole programme rests on. Said
+    // here, where the run can repair it: name who is studied and what is given,
+    // or ask the researcher (the skill's one reason to ask).
+    if (item.ok && !statesSomething(pico) && !statesSomething(estimand)) {
+      item.bad("pico", "研究定义至少要写出研究的人群或处理（pico.population、pico.intervention），或估计目标的一项；一张空卡不算定义。认不出要研究谁时，向研究者问一句。");
+    }
     if (!item.ok) return null;
     const saved = await store.saveDefinition({
       studyId: study.id, userId: study.userId, pico, estimand, endpointType: endpointType ?? null, intendedUse, fieldSources, reviewState: "ai_set",

@@ -44,10 +44,13 @@
  *   check; handing it to both was the defect the review of 2026-09-29 named
  *   first (CS-1).
  * - **An engine that would answer anybody is not composed.** With the engine's
- *   URL set and its token or receipt key missing, unreadable or short, the
- *   client is not created and readiness says why (`vcrEngineStatus`): a
- *   deployment that reaches an unauthenticated engine, or accepts a result no
- *   key signed, has a number nobody can vouch for.
+ *   URL set and its token missing, unreadable or short, the client is not
+ *   created and readiness says why (`vcrEngineStatus`): a deployment that
+ *   reaches an unauthenticated engine has a number nobody can vouch for. The
+ *   receipt key is the other secret and is not like that: a receipt is our own
+ *   evidence, so a key that is configured and unusable is a failed readiness
+ *   check and a log line, and the engine stays composed on the output-hash
+ *   check that always runs (`verifyVcrReceipt`, recorded `signed: false`).
  * - **Metrics beside GEO's, in the platform's prefix.** `vcrMetricFamilies`
  *   reads a snapshot (`vcrMetricsSnapshot`) and answers `open_science_vcr_*`
  *   families in `addMetric`'s shape, queue gauges included: a study waiting
@@ -110,6 +113,15 @@ export function vcrDataPlaneSeam({ dataPlane, access }) {
       // filesystem path of the server leaves through it — a location is the
       // data plane's own business (CS-49).
       return dataPlane.tabFor(study, user);
+    },
+    /**
+     * The tier the study's frozen sources support (`vcrTierSupportedBy`): what the
+     * study header offers and what the study route holds a rise to. Derived from
+     * registered analysis tables, never from a file.
+     * @param {any} study
+     */
+    async tierSupport(study) {
+      return dataPlane.tierSupport(study.id);
     },
     /** The whole plane, for the routes' intake operations (`vcrRoutes.mjs`). */
     intake: dataPlane,
@@ -752,18 +764,25 @@ export function vcrMatchingSeam({ matchStore, store, jobs = null, getNotifier = 
  * Whether the engine is composed, and if it is not, why — never the secret.
  * `configured` is what decides whether a client is made; `reason` is one of
  * `not_configured` (no URL: the module simply has no engine, which is a valid
- * deployment), or a secret file's own failure code (`vcr_engine_token_file_short`,
- * `vcr_engine_receipt_key_file_unavailable`, …), or `vcr_engine_secret_missing`
- * when the URL is set and no file was named.
+ * deployment), or the request token file's own failure code
+ * (`vcr_engine_token_file_short`, …), or `vcr_engine_secret_missing` when the
+ * URL is set and no token file was named.
+ *
+ * The receipt key is not one of those. It is optional, and a configured one
+ * that cannot be read leaves the engine composed — results are still checked by
+ * their output hash — and is named apart in `receiptKeyError` for readiness and
+ * the log, the way a receipt is always treated: a label on a result, never a
+ * reason a person cannot have one.
  * @param {Record<string, any>} config
- * @returns {{ configured: boolean, reason: string | null }}
+ * @returns {{ configured: boolean, reason: string | null, receiptKeyError: string | null }}
  */
 export function vcrEngineStatus(config) {
-  if (!String(config?.vcrEngineUrl ?? "").trim()) return { configured: false, reason: "not_configured" };
-  const error = config.vcrEngineTokenError || config.vcrEngineReceiptKeyError || null;
-  if (error) return { configured: false, reason: String(error) };
-  if (!config.vcrEngineToken) return { configured: false, reason: "vcr_engine_secret_missing" };
-  return { configured: true, reason: null };
+  const receiptKeyError = config?.vcrEngineReceiptKeyError ? String(config.vcrEngineReceiptKeyError) : null;
+  if (!String(config?.vcrEngineUrl ?? "").trim()) return { configured: false, reason: "not_configured", receiptKeyError };
+  const error = config.vcrEngineTokenError || null;
+  if (error) return { configured: false, reason: String(error), receiptKeyError };
+  if (!config.vcrEngineToken) return { configured: false, reason: "vcr_engine_secret_missing", receiptKeyError };
+  return { configured: true, reason: null, receiptKeyError };
 }
 
 /**
@@ -841,6 +860,8 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
     })
     : null;
   if (!engine && engineStatus.reason && engineStatus.reason !== "not_configured") report(engineStatus.reason);
+  // The engine runs on the output-hash check alone; the log says why results are unsigned, once, at composition.
+  if (engine && engineStatus.receiptKeyError) report(`vcr_engine_receipt_key_unusable:${engineStatus.receiptKeyError}`);
   const removeEngineJob = createVcrEngineJobRemover({ config, fetchImpl, engine });
 
   // Patient documents are read through the plane's own judged, audited reader;

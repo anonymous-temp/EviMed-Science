@@ -59,6 +59,8 @@ export function vcrId(kind) {
 
 /** Table names this module may address, checked before any splice. */
 const TABLE = /^[a-z_]+$/;
+/** An account id as the control plane mints and accepts one (`security.mjs`): what `personNames` may ask for. */
+const ACCOUNT_ID = /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$/;
 
 /**
  * The shared store. Each package extends it with its own queries rather than
@@ -108,6 +110,23 @@ export class VcrStoreBase {
   async one(sql, values = []) {
     const rows = await this.rows(sql, values);
     return rows[0] ?? null;
+  }
+
+  /**
+   * The names of some accounts, from the control plane's own users table — the
+   * join `reviews()` has always made, as one question for any number of people:
+   * a person is shown by name and never by account id. An account that no longer
+   * exists is simply absent from the answer (deleting an account removes its
+   * row; what it did stays on the study), and the caller says so with
+   * `personName`'s neutral label rather than with the id. Ids that are not
+   * account-id shaped (a role grantee, the platform's own actor) are not asked.
+   * @param {Iterable<unknown>} ids @returns {Promise<Map<string, string>>}
+   */
+  async personNames(ids) {
+    const wanted = [...new Set([...ids].map((id) => String(id ?? "")).filter((id) => ACCOUNT_ID.test(id)))];
+    if (!wanted.length) return new Map();
+    const rows = await this.rows("SELECT id, name FROM evimed_control.users WHERE id = ANY($1::text[])", [wanted]);
+    return new Map(rows.filter((row) => String(row.name ?? "").trim()).map((row) => [String(row.id), String(row.name).trim()]));
   }
 
   /**
