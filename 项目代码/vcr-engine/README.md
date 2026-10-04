@@ -26,7 +26,7 @@ language model never enters this path.
 | Interruptible and resumable | a checkpoint per batch, carrying the scenario hash and the next stream state | N06, E03 |
 | Cancel keeps finished batches and is honoured everywhere a job loops | a cancel file checked between simulation batches, bootstrap batches, accrual batches and synthetic copies | E03, E10b |
 | A job returns its partial result before the kernel kills it | the R-side CPU budget is 0.9 of the smaller of the job's `cpuSecondsLimit` and `VCR_ENGINE_CPU_LIMIT`; the code `cpu_budget_exhausted` says why | E10b |
-| Every simulated number carries its Monte-Carlo standard error | `vcr_measure(simulated = TRUE)` refuses to construct without one | N03, N04, AC-28 |
+| Every simulated number carries its Monte-Carlo standard error | `vcr_measure(simulated = TRUE)` refuses to construct without one; a bootstrap's standard error is such a measure, and its interval endpoints' errors are in `diagnostics.bootstrap` (`vcr_boot_summary`) | N03, N04, AC-28, N33-N35 |
 | Replicate counts follow from the target precision | `vcr_replicates_for_mcse` + the domain's floors (20,000 null / 5,000 alternative); a run held below its floor by `VCR_ENGINE_MAX_REPLICATES` is `limited` | N05, E10b |
 | Analytic first, simulation as the check | every simulated design carries `diagnostics.analyticCheck` with the difference in MCSE units | E07, N02, N04c |
 | "Not estimable" is a deterministic verdict, never a fabricated 0 | the named rules in `notEstimableRules` (seven at the first release, then `too_few_events` for a Cox model and `nuisance_model_not_estimable` for the doubly robust one); `measures` stays empty | N09, N11, N17, N33, N35 |
@@ -455,7 +455,10 @@ not the headline) and `aipw_difference_se_bootstrap` (rows resampled within arm,
 refitted in every resample**; a `simulated` measure with its `mcse`); `aipw_difference`
 carries the bootstrap interval, `aipw_difference_influence` the influence-function one. A
 binary outcome also gives `aipw_risk_ratio` and `aipw_odds_ratio` (not written when the
-adjusted control risk is not positive, or when it reaches one for the odds ratio), and the
+adjusted control risk is not positive, or when it reaches one for the odds ratio; a
+control mean outside the unit interval is itself flagged,
+`limitedBy: adjusted_control_mean_outside_unit_interval`, because the augmented estimate
+is then outside the parameter space), and the
 outcome-model-only and weighting-only estimates sit beside the augmented one in
 `diagnostics.components`. Overlap is the existing common-support rule and the weighted
 effective sample size the existing floor (both `not_estimable`); balance is a notice

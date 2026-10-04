@@ -187,6 +187,7 @@ vcr_job_aipw <- function(job, output_dir = NULL, cancel_file = NULL, ...) {
                   if (length(tt_limits)) "target_trial_item_cannot_be_emulated",
                   if (smd_notice) "standardized_difference_above_floor",
                   if (isTRUE(core$separation)) "outcome_model_separation",
+                  if (binary && (core$mu0 < 0 || core$mu0 > 1)) "adjusted_control_mean_outside_unit_interval",
                   if (!core$psConverged || !core$outConverged) "nuisance_model_not_converged")
   influence_block <- list(se = se_if, interval = c(tau - z * se_if, tau + z * se_if),
                           riskRatio = if (binary && is.finite(core$influence$seLogRiskRatio)) list(se = core$influence$seLogRiskRatio, scale = "log risk ratio") else NULL,

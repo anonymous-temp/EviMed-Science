@@ -168,7 +168,22 @@ vcr_case("N33c", c("AC-07", "AC-08", "AC-12"), function() {
   syn <- vcr_test_run(vcr_test_job("comparator.weighted_cox", list(covariates = list("x1"), treatmentColumn = "arm", tau = 8),
     list(vcr_test_input(d$subj, "snp_n33c_s:subject", "subject", source = "synthetic"), vcr_test_input(d$ev, "snp_n33c_s:events", "event")), job_id = "job_n33c_syn"))
   codes <- function(r) paste(vcr_test_issue_codes(r), collapse = ",")
-  ok <- identical(r_none$status, "not_estimable") && identical(r_none$notEstimableRule, "too_few_events") && length(r_none$measures) == 0L &&
+  # the malformed tables the weighting job refuses are refused by this job under the same codes (the frame is a copy of the
+  # weighting job's prefix, held to it here)
+  malformed <- list(
+    na_covariate = function(x) { x$subj$x2[3] <- NA; x },
+    arm_not_zero_one = function(x) { x$subj$arm[2] <- 2L; x },
+    text_covariate = function(x) { x$subj$x1 <- ifelse(seq_along(x$subj$x1) == 1L, "a", as.character(x$subj$x1)); x },
+    one_trial_patient = function(x) { x$subj$arm[which(x$subj$arm == 1L)[-1]] <- 0L; x },
+    covariate_column_missing = function(x) { x$subj$x2 <- NULL; x })
+  parity <- vapply(names(malformed), function(nm) {
+    dd <- malformed[[nm]](d)
+    mine <- vcr_test_run(.n33_job(dd, paste0("n33c_p_", nm)))
+    theirs <- vcr_test_run(vcr_test_job("comparator.entropy_balance", list(covariates = list("x1", "x2"), treatmentColumn = "arm", endpoint = list(type = "time_to_event"), tau = 8),
+      list(vcr_test_input(dd$subj, paste0("snp_n33c_w_", nm, ":subject"), "subject"), vcr_test_input(dd$ev, paste0("snp_n33c_w_", nm, ":events"), "event")), job_id = paste0("job_n33c_w_", nm)))
+    nzchar(codes(mine)) && identical(codes(mine), codes(theirs)) && identical(mine$status, theirs$status)
+  }, logical(1))
+  ok <- all(parity) && identical(r_none$status, "not_estimable") && identical(r_none$notEstimableRule, "too_few_events") && length(r_none$measures) == 0L &&
     identical(r_far$status, "not_estimable") && identical(r_far$notEstimableRule, "entropy_balance_infeasible") && length(r_far$measures) == 0L &&
     identical(r_tau$status, "succeeded") && identical(r_tau$conclusion, "limited") && "rmst_companion_unavailable" %in% unlist(r_tau$diagnostics$limitedBy) &&
     is.null(vcr_get_measure(r_tau, "rmst_difference")) && !is.null(vcr_get_measure(r_tau, "hazard_ratio")) && identical(r_tau$diagnostics$rmstCompanion$rule, "tau_beyond_followup") &&
@@ -179,8 +194,8 @@ vcr_case("N33c", c("AC-07", "AC-08", "AC-12"), function() {
     identical(syn$status, "failed") && "input_source_not_individual" %in% vcr_test_issue_codes(syn) &&
     all(vapply(list(r_none, r_far, r_tau, r_few, r_na, r_ate, r_ate_ps, syn), function(r) length(vcr_validate_result(r)) == 0L, logical(1)))
   list(pass = ok,
-       detail = sprintf("no event in the trial arm -> %s/%s, 0 measures; trial mean 10 SD outside the controls -> %s; tau 500 beyond follow-up -> HR %.3f kept, conclusion %s, companion %s; 6 trial events -> conclusion %s (%s); NA covariate -> %s; entropy balancing with ATE -> %s; propensity ATE -> %s/%s; synthetic table -> %s",
-                        r_none$status, r_none$notEstimableRule, r_far$notEstimableRule, vcr_measure_value(r_tau, "hazard_ratio"), r_tau$conclusion, r_tau$diagnostics$rmstCompanion$rule,
+       detail = sprintf("no event in the trial arm -> %s/%s, 0 measures; trial mean 10 SD outside the controls -> %s; tau 500 beyond follow-up -> HR %.3f kept, conclusion %s, companion %s; 5 malformed tables refused under the weighting job's codes (%d/5); 6 trial events -> conclusion %s (%s); NA covariate -> %s; entropy balancing with ATE -> %s; propensity ATE -> %s/%s; synthetic table -> %s",
+                        r_none$status, r_none$notEstimableRule, r_far$notEstimableRule, vcr_measure_value(r_tau, "hazard_ratio"), r_tau$conclusion, r_tau$diagnostics$rmstCompanion$rule, sum(parity),
                         r_few$conclusion, paste(unlist(r_few$diagnostics$limitedBy), collapse = "+"), codes(r_na), codes(r_ate), r_ate_ps$status, r_ate_ps$conclusion, codes(syn)))
 })
 
@@ -224,4 +239,32 @@ vcr_case("N33d", c("AC-08", "AC-11", "AC-28", "AC-31"), function() {
        detail = sprintf("true HR %.2f over %d datasets of 500: mean log HR %+.4f off (%.2f MCSE, mcse %.4f); the robust 95%% interval covers the truth in %.3f (+-%.3f); mean robust SE / empirical SD %.3f; bootstrap SE %.4f has MCSE %.4f (%.1f%% of it) from %d draws, interval MCSE %.4f/%.4f; robust/bootstrap SE %.3f; one core and two give the same numbers: %s",
                         truth, K, bias, abs(bias) / mcse_bias, mcse_bias, cover, mcse_cov, ratio_se, se_m$value, se_m$mcse, 100 * se_m$mcse / se_m$value, b$replicates,
                         b$intervalMcse$low, b$intervalMcse$high, rob_boot, same_cores))
+})
+
+vcr_case("N33e", c("AC-12", "AC-30"), function() {
+  # The Cox core this method shares with the time-to-event MAIC, on a weighted fit somebody else published: the maicplus
+  # 0.1.2 unanchored vignette (Apache-2.0, tests/fixtures/maicplus-0.1.2) fits `coxph(Surv(TIME, EVENT) ~ ARM, weights =,
+  # robust = TRUE)` to the 500 weighted patients of arm A and the 300 reconstructed patients of arm B (weight 1) and prints
+  # HR 0.2834780 (0.2074664, 0.3873387), robust se(coef) 0.1593. The weights here are the engine's own entropy-balance
+  # weights at that scale, exp(X' lambda); the hazard ratio is the same under Efron and Breslow ties (no ties in the data).
+  fx <- function(name) utils::read.csv(file.path(VCR_ROOT, "tests", "fixtures", "maicplus-0.1.2", name), stringsAsFactors = FALSE)
+  cov <- c("AGE_CENTERED", "AGE_SQUARED_CENTERED", "SEX_MALE_CENTERED", "ECOG0_CENTERED", "SMOKE_CENTERED", "N_PR_THER_MEDIAN_CENTERED")
+  ipd <- fx("ipd_two_arm.csv"); ps <- fx("pseudo_ipd_two_arm.csv")
+  a <- ipd[ipd$ARM == "A", ]; b <- ps[ps$ARM == "B", ]
+  X <- as.matrix(a[, cov]); f <- vcr_maic_weights(X, stats::setNames(rep(0, length(cov)), cov))
+  wu <- exp(drop(X %*% f$lambda))
+  tm <- c(a$TIME, b$TIME); st <- c(a$EVENT, b$EVENT); arm <- c(rep(1L, nrow(a)), rep(0L, nrow(b))); w <- c(wu, rep(1, nrow(b)))
+  p <- vcr_cox_primary(tm, st, arm, w, ties = "efron", with_ph = FALSE)
+  pb <- vcr_cox_primary(tm, st, arm, w, ties = "breslow", with_ph = FALSE)
+  fast <- vcr_cox_beta(tm, st, arm, w, "efron")
+  z <- stats::qnorm(0.975)
+  ci <- exp(p$beta + c(-1, 1) * z * p$seRobust)
+  # rescaled to the sample size instead, the same data gives 0.2806: the scale of the weights is part of the answer
+  w_n <- c(wu * length(wu) / sum(wu), rep(1, nrow(b)))
+  hr_n <- exp(vcr_cox_beta(tm, st, arm, w_n, "efron"))
+  ok <- abs(exp(p$beta) - 0.2834780) < 1e-6 && all(abs(ci - c(0.2074664, 0.3873387)) < 1e-6) && abs(p$seRobust - 0.1593) < 5e-5 &&
+    abs(exp(pb$beta) - exp(p$beta)) < 1e-9 && abs(fast - p$beta) < 1e-12 && abs(hr_n - 0.2806144) < 1e-6
+  list(pass = ok,
+       detail = sprintf("weighted HR %.7f (vignette 0.2834780), CI [%.7f, %.7f] (0.2074664, 0.3873387), robust se %.4f (0.1593); Breslow gives the same %.7f; the bootstrap loop's fast fit agrees to %.1e; weights rescaled to n give %.7f (0.2806)",
+                        exp(p$beta), ci[1], ci[2], p$seRobust, exp(pb$beta), abs(fast - p$beta), hr_n))
 })

@@ -167,7 +167,8 @@ vcr_case("N35d", c("AC-07", "AC-08", "AC-09"), function() {
     identical(r_few$status, "not_estimable") && identical(r_few$notEstimableRule, "nuisance_model_not_estimable") &&
     identical(r_bad$status, "failed") && "input_shape_invalid" %in% vcr_test_issue_codes(r_bad) && identical(r_na$status, "failed") && "input_shape_invalid" %in% vcr_test_issue_codes(r_na) &&
     identical(r_sep$status, "succeeded") && identical(r_sep$conclusion, "limited") && "outcome_model_separation" %in% unlist(r_sep$diagnostics$limitedBy) && !is.null(vcr_get_measure(r_sep, "aipw_difference")) &&
-    identical(r_neg$status, "succeeded") && vcr_measure_value(r_neg, "outcome_mean_control_adjusted") <= 0 && !is.null(vcr_get_measure(r_neg, "aipw_difference")) &&
+    identical(r_neg$status, "succeeded") && vcr_measure_value(r_neg, "outcome_mean_control_adjusted") < 0 && !is.null(vcr_get_measure(r_neg, "aipw_difference")) &&
+    identical(r_neg$conclusion, "limited") && "adjusted_control_mean_outside_unit_interval" %in% unlist(r_neg$diagnostics$limitedBy) &&
     is.null(vcr_get_measure(r_neg, "aipw_risk_ratio")) && is.null(vcr_get_measure(r_neg, "aipw_odds_ratio")) &&
     all(vapply(list(r_far, r_col, r_few, r_bad, r_na, r_sep, r_neg), function(r) length(vcr_validate_result(r)) == 0L, logical(1)))
   list(pass = ok,
