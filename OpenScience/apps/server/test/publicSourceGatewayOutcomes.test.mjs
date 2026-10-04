@@ -48,7 +48,9 @@ const idconv = { url: "https://pmc.ncbi.nlm.nih.gov/tools/idconv/api/v1/articles
 async function serve(t, config, options) {
   const failures = [];
   const handler = createPublicSourceGatewayHandler(config, runtimeManager, options);
-  const server = createServer((req, res) => handler(req, res, (failure) => failures.push(failure)));
+  // A request to any other path is not this test's: the workspace's port scanner probes
+  // ephemeral listeners with a GET, which the gateway answers `not_found`.
+  const server = createServer((req, res) => handler(req, res, (failure) => { if (failure.code !== "not_found") failures.push(failure); }));
   const base = await listen(server);
   t.after(() => close(server));
   return { base, failures };

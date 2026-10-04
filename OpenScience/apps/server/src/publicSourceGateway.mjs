@@ -1214,7 +1214,8 @@ async function serveDownload(request, { res, fetchImpl, signal, maxBytes }) {
  * again unchecked.
  * @param {{ fetchImpl?: typeof fetch, resolveImpl?: any, connectorCredentials?: any,
  *   webReader?: { read: (url: string, options: { signal?: AbortSignal, runtime?: { userId: string, projectId: string } }) => Promise<any> } | null,
- *   documentParser?: any, pdfTransport?: import("./webReadNetwork.mjs").WebTransport | null, capturePdf?: any, preparePdfCapture?: any }} [options]
+ *   documentParser?: any, pdfTransport?: import("./webReadNetwork.mjs").WebTransport | null, capturePdf?: any, preparePdfCapture?: any,
+ *   sourceIntake?: ((request: { identity: any, group: string, files: string[] }) => Promise<any>) | null }} [options]
  */
 export function createPublicSourceGatewayHandler(config, runtimeManager, {
   fetchImpl = fetch, resolveImpl = dnsLookup, connectorCredentials = null, webReader = null, documentParser = null,
@@ -1293,7 +1294,7 @@ export function createPublicSourceGatewayHandler(config, runtimeManager, {
         // difference between a slow source answering and a timeout every time.
         clearTimeout(timeout);
         timeout = arm(Math.max(1_000, Number(config.publicSourceDownloadTimeoutMs) || 150_000));
-        await serveDownload(request, {
+        await serveDownload(/** @type {{ kind: string, types: Map<string, string>, url: URL }} */ (request), {
           res, fetchImpl, signal: controller.signal,
           maxBytes: Math.max(1024, Number(config.publicSourceGatewayMaxResponseBytes) || 16 * 1024 * 1024),
         });
