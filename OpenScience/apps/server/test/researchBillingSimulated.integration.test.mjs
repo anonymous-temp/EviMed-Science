@@ -78,7 +78,8 @@ async function fixture(t, overrides = {}) {
   };
   /** A research run for the account, with what its model calls really cost, finished the way the ledger finishes one. */
   async function finishedRun(session, costs) {
-    const project = await app.store.projectFor(session.user, "default");
+    // The full account record (the sign-in's `createUser` answers the public one).
+    const project = await app.store.projectFor(await app.store.userById(session.user.id), "default");
     const sessionId = `session_${randomUUID()}`;
     const binding = await app.researchSessions.put(project, sessionId, { mode: "open-domain" });
     const created = await app.agentRuns.createRun(project, binding, { baselineCursor: null });
