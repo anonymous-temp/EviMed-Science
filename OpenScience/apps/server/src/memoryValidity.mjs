@@ -197,7 +197,7 @@ export function versionsInForce(records, context = {}) {
  * @typedef {{ conflicts?: ReadonlyMap<string, readonly ConflictLink[]>,
  *   sources?: ReadonlyMap<string, readonly SourceLink[]> }} RecordLinks
  * @typedef {{ record: Record<string, any>, caveats: string[],
- *   conflictsWith: { id: string, key: string, kind: string, scope: string, summary: string }[],
+ *   conflictsWith: { id: string, key: string, kind: string, scope: string, origin: string, summary: string }[],
  *   staleSources: { type: string, id: string, state: string }[],
  *   validity: { from: string | null, until: string | null } }} RecalledVersion
  */
@@ -229,6 +229,10 @@ export function annotateVersions(entries, links = {}, context = {}) {
       conflictsWith.push({
         id: String(link.other.id), key: String(link.other.key ?? ""), kind: String(link.other.kind ?? ""),
         scope: String(link.other.scope ?? ""),
+        // Whose statement it is — the researcher's, an inference, a platform
+        // or source record — because two statements that disagree are weighed
+        // by who made each.
+        origin: String(link.other.origin ?? ""),
         summary: String(link.other.summary || link.other.value || "").replace(/\s+/gu, " ").trim().slice(0, CONFLICT_EXCERPT),
       });
     }

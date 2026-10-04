@@ -160,7 +160,7 @@ test("two statements that disagree are both served, each marked with the other",
     conflicts: { said: [conflictWith(label)], label: [conflictWith(stated)] },
   }), context());
   assert.deepEqual(labelled.map((item) => [item.record.id, item.caveats]), [["said", ["conflict"]], ["label", ["conflict"]]]);
-  assert.deepEqual(labelled[0].conflictsWith, [{ id: "label", key: "project.dose_label", kind: "project_fact", scope: "project", summary: "说明书 20 mg" }]);
+  assert.deepEqual(labelled[0].conflictsWith, [{ id: "label", key: "project.dose_label", kind: "project_fact", scope: "project", origin: "system", summary: "说明书 20 mg" }]);
   assert.equal(versionFields(labelled[0]).caveats[0], "conflict");
 });
 

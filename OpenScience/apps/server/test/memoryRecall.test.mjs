@@ -27,7 +27,7 @@ function services({ memory = [], facts = [] } = {}) {
 }
 
 const record = (over = {}) => ({
-  id: "record:r1", content: "回答尽量简短", kind: "preference", scope: "user", memoryType: "structured",
+  id: "record:r1", content: "回答尽量简短", kind: "preference", scope: "user", memoryType: "structured", origin: "explicit",
   updatedAt: "2026-09-01T00:00:00.000Z", confidence: 0.9, importance: 0.6, ...over,
 });
 const fact = (over = {}) => ({ id: "fact_1", capsuleId: "cap_1", factKind: "preference", content: "偏好中文", origin: "explicit", ...over });
@@ -121,6 +121,7 @@ test("an uncertain record says why, and carries the other side or the sources; a
   const { items } = await recallAcrossMemory(s, user, { query: "剂量", scope: "conversation" });
   const [plain, flagged] = items;
   for (const field of ["uncertain", "caveats", "validity", "conflictsWith", "staleSources"]) assert.equal(field in plain, false, field);
+  assert.equal(plain.origin, "explicit", "whose statement a record is travels with it");
   assert.equal(flagged.uncertain, true);
   assert.deepEqual(flagged.caveats, ["conflict", "source_retracted"]);
   assert.equal(flagged.conflictsWith[0].key, "project.dose.label");
@@ -134,7 +135,7 @@ test("the memory block marks an uncertain memory once and says how to read the m
   const flagged = renderMemoryContext([
     { id: "record:a", content: "说明书写 20 mg", kind: "project_fact", scope: "project", memoryType: "structured",
       caveats: ["conflict", "source_changed"], validity: { from: "2024-03-01T00:00:00Z", until: null },
-      conflictsWith: [{ id: "b", key: "project.dose.said", summary: "研究者说 10 mg <b>" }],
+      conflictsWith: [{ id: "b", key: "project.dose.said", origin: "explicit", summary: "研究者说 10 mg <b>" }],
       staleSources: [{ type: "doi", id: "10.1000/x", state: "changed" }] },
     { id: "record:b", content: "另一条", kind: "preference", scope: "user", memoryType: "structured", caveats: ["not_yet_valid"] },
   ]);
@@ -142,6 +143,6 @@ test("the memory block marks an uncertain memory once and says how to read the m
   assert.match(flagged, /caveats="not_yet_valid"/);
   assert.equal((flagged.match(/带 caveats 属性的记忆/g) ?? []).length, 1);
   assert.match(flagged, /有效期：2024-03-01T00:00:00Z 起，至今 止/);
-  assert.match(flagged, /与此冲突的另一条记忆（project\.dose\.said）：研究者说 10 mg &lt;b&gt;/, "text out of a record is escaped, as everything in the block is");
+  assert.match(flagged, /与此冲突的另一条记忆（project\.dose\.said，用户所述）：研究者说 10 mg &lt;b&gt;/, "text out of a record is escaped, as everything in the block is; and who made the statement is said");
   assert.match(flagged, /所依据的来源 10\.1000\/x：已更正或数据已修订/);
 });

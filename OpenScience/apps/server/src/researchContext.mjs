@@ -150,7 +150,7 @@ export function renderMemoryContext(memories) {
         ...(memo.validity?.from || memo.validity?.until
           ? [`有效期：${escapeContext(memo.validity.from ?? "起点未知")} 起，${escapeContext(memo.validity.until ?? "至今")} 止`] : []),
         ...(Array.isArray(memo.conflictsWith) ? memo.conflictsWith.map((other) =>
-          `与此冲突的另一条记忆（${escapeContext(other.key)}）：${escapeContext(other.summary)}`) : []),
+          `与此冲突的另一条记忆（${escapeContext(other.key)}${ORIGIN_TEXT[/** @type {keyof typeof ORIGIN_TEXT} */ (other.origin)] ? `，${ORIGIN_TEXT[/** @type {keyof typeof ORIGIN_TEXT} */ (other.origin)]}` : ""}）：${escapeContext(other.summary)}`) : []),
         ...(Array.isArray(memo.staleSources) ? memo.staleSources.map((source) =>
           `所依据的来源 ${escapeContext(source.id)}：${SOURCE_STATE_TEXT[/** @type {keyof typeof SOURCE_STATE_TEXT} */ (source.state)] ?? escapeContext(source.state)}`) : []),
         "</evimed-memory>",
@@ -158,6 +158,9 @@ export function renderMemoryContext(memories) {
     }),
   ].join("\n");
 }
+
+/** Whose statement a memory is, in the words a reader weighs it by. */
+const ORIGIN_TEXT = Object.freeze({ explicit: "用户所述", manual: "用户编辑", inferred: "推断", system: "平台或来源记录" });
 
 /** What a source's recorded state means to a reader. */
 const SOURCE_STATE_TEXT = Object.freeze({ retracted: "已撤稿", changed: "已更正或数据已修订", expired: "已失效" });

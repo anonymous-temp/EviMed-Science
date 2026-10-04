@@ -110,6 +110,10 @@ export async function recallAcrossMemory({ capsules = null, memorySubstrate = nu
       updatedAt: memo.updatedAt ?? null,
       confidence: memo.confidence ?? null,
       importance: memo.importance ?? null,
+      // Whose statement a record is — the researcher's (`explicit`, `manual`),
+      // an inference (`inferred`), or a platform or source record (`system`) —
+      // when the store said.
+      ...(memo.origin ? { origin: memo.origin } : {}),
       // Only what is there: a memory with no history, conflict or source
       // finding is the item it always was.
       ...(Array.isArray(memo.caveats) && memo.caveats.length ? { uncertain: true, caveats: memo.caveats } : {}),
