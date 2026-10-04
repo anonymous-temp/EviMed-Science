@@ -151,7 +151,8 @@ test("a bounded run that has not finished is retried later, not failed", async (
 test("a busy project, a full runtime pool or a reached cap defers the lesson without spending an attempt", async () => {
   // 2026-09-20: three lessons met `usage_budget_exceeded`, retried at 10 s and
   // 20 s, and were failed for good inside thirty seconds.
-  for (const [code, minimum] of [["runtime_busy", 30_000], ["runtime_limit_exceeded", 60_000], ["usage_budget_exceeded", 600_000]]) {
+  // `runtime_yielded`: a researcher's start took the step's runtime back (2026-10-04).
+  for (const [code, minimum] of [["runtime_busy", 30_000], ["runtime_limit_exceeded", 60_000], ["runtime_yielded", 30_000], ["usage_budget_exceeded", 600_000]]) {
     const refusing = { async execute() { const error = new Error(code); /** @type {any} */ (error).code = code; throw error; } };
     const { jobs, worker: instance } = worker({
       distillation: refusing,

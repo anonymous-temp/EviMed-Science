@@ -252,6 +252,33 @@ test("a protected launch without a run stops explicitly instead of spending agai
   assert.equal(f.calls.includes("reserve"), false);
 });
 
+test("a run a researcher's start ended reads as yielded, whatever status it was closed with, and an ordinary end does not", async t => {
+  const f = await fixture(t);
+  await f.runtime.dispatch(f.request);
+  const identity = { ...f.request, runId: "run-one", sessionId: "session-one" };
+  f.state.runs[0].status = "canceled";
+  f.state.runs[0].errorCode = "runtime_yielded";
+  assert.deepEqual(await f.runtime.readResult(identity), { status: "canceled", yielded: true });
+  f.state.runs[0].status = "failed";
+  assert.deepEqual(await f.runtime.readResult(identity), { status: "failed", yielded: true });
+  f.state.runs[0].errorCode = "runtime_canceled";
+  assert.deepEqual(await f.runtime.readResult(identity), { status: "failed" });
+});
+
+test("a launch that failed behind a retirement releases its intent and waits; behind anything else it fails as before", async t => {
+  for (const yielded of [true, false]) {
+    const f = await fixture(t);
+    const released = [];
+    f.dependencies.sources.releaseYieldedUnderstanding = async (_job, run) => { released.push(run.dispatchId); };
+    f.dependencies.runtimeManager.wasYielded = () => yielded;
+    // The launch is bound and the run was never recorded: the session write fails.
+    f.dependencies.researchSessions.put = async () => { throw Object.assign(new Error("the runtime went away"), { code: "runtime_session_error" }); };
+    await assert.rejects(createSourceUnderstandingRuntime(f.dependencies).dispatch(f.request),
+      { code: yielded ? "runtime_yielded" : "runtime_session_error" });
+    assert.deepEqual(released, yielded ? [f.request.dispatchId] : []);
+  }
+});
+
 test("launch-only cancellation requires its protected session and cannot stop a newer scope", async t => {
   const f = await fixture(t);
   await f.runtime.dispatch(f.request);

@@ -6773,7 +6773,15 @@ export class AgentRunStore {
     return children;
   }
 
-  async closeProject(project, status = "canceled") {
+  /**
+   * Close every run the ledger still calls running, because the runtime under
+   * them is gone.
+   * @param {Record<string, any>} project @param {string} [status]
+   * @param {string} [errorCode] why, for a cancel: `runtime_canceled` unless the
+   *   platform stopped the runtime for someone else's start
+   *   (`RUNTIME_YIELDED_CODE`), which the owner of the work reads as "ask again"
+   */
+  async closeProject(project, status = "canceled", errorCode = "runtime_canceled") {
     const runs = await this.list(project);
     for (const run of runs.filter((item) => item.status === "running")) {
       const monitor = this.monitors.get(run.id);
@@ -6802,7 +6810,7 @@ export class AgentRunStore {
       }
       await this.finishInternal(project, run.id, {
         status,
-        errorCode: "runtime_canceled",
+        errorCode,
         artifacts: [],
         // The platform stopping, not the researcher: said, because the inbox
         // tells the one and not the other.

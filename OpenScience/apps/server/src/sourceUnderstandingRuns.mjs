@@ -1,21 +1,29 @@
 import { sourceUnderstandingSchema, validateSourceUnderstanding, projectSourceUnderstandingOutput } from "@evimed/domain";
+import { RUNTIME_YIELDED_CODE } from "./internalProjects.mjs";
 import { HttpError } from "./security.mjs";
-import { createHash } from "node:crypto";
+import { understandingDispatchId } from "./sourceService.mjs";
 
 /** Ordinary bounded DSH run adapter. The server owns runtime reservation,
  * AgentRunStore dispatch/recovery, gateway admission and artifact reads. */
 export class SourceUnderstandingRuns {
-  /** @param {{dispatch:(input:any)=>Promise<any>,readResult:(identity:any)=>Promise<any>}} dependencies */
-  constructor({ dispatch, readResult }) {
+  /**
+   * `releaseYielded` lets go of a run a researcher's start took the runtime
+   * from (`RUNTIME_YIELDED_CODE`), so the next claim launches a new one for the
+   * same capture. Without it such a run reads as the failure it would otherwise
+   * be.
+   * @param {{dispatch:(input:any)=>Promise<any>,readResult:(identity:any)=>Promise<any>,
+   *   releaseYielded?:((request:{job:any,dispatchId:string})=>Promise<any>)|null}} dependencies */
+  constructor({ dispatch, readResult, releaseYielded = null }) {
     if (typeof dispatch !== "function" || typeof readResult !== "function") throw new TypeError("Source understanding requires the bounded run dispatcher and result reader.");
     this.dispatch = dispatch;
     this.readResult = readResult;
+    this.releaseYielded = releaseYielded;
   }
 
   /** @param {{job:any,source:any,parsed:any}} request */
   async execute({ job, source, parsed }) {
     const input = parsed.input;
-    const dispatchId = `source-understanding-${createHash("sha256").update(`${source.id}\0${source.payload.generation}`).digest("hex").slice(0, 32)}`;
+    const dispatchId = understandingDispatchId(source.id, source.payload.generation, Number(source.payload.analysis?.relaunches) || 0);
     const identity = await this.dispatch({ userId: job.userId, projectId: job.projectId, dispatchId, job,
       capabilityId: "source-understanding", contractKind: "source-understanding", input,
       question: `Understand the frozen source in source-understanding-input.json using the source-understanding capability. `
@@ -27,6 +35,12 @@ export class SourceUnderstandingRuns {
     const run = { runId: identity.runId, sessionId: identity.sessionId, dispatchId, userId: job.userId, projectId: job.projectId };
     const result = await this.readResult(run);
     if (!result || result.status === "running" || result.status === "pending") return { state: "pending", ...run };
+    // A researcher's start took the runtime back mid-run. The run is released and
+    // the job waits (`CAPACITY_DEFERRALS`); it is not this document's failure.
+    if (result.yielded === true && this.releaseYielded) {
+      await this.releaseYielded({ job, dispatchId });
+      throw new HttpError(409, RUNTIME_YIELDED_CODE, "A researcher needed the runtime; this document's understanding runs again when there is room.");
+    }
     if (result.status !== "succeeded") throw new HttpError(409, "source_understanding_run_failed", "The source understanding run did not succeed.");
     const issues = validateSourceUnderstanding(result.output, input);
     if (issues.length) throw new HttpError(422, "source_understanding_invalid", issues.slice(0, 3).join(" "));

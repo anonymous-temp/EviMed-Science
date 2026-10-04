@@ -140,6 +140,9 @@ POLL_FAILURE_BACKOFF_CAP_SECONDS = 60
 SETTLE_POLL_SECONDS = 2
 SETTLE_WAIT_SECONDS = 60
 CONTROL_PLANE_OUTAGE_RETRIES = 2
+# What the control plane closes a run with when a researcher's start takes the
+# runtime of background work (`RUNTIME_YIELDED_CODE`, apps/server/src/internalProjects.mjs).
+RUNTIME_YIELDED_CODE = "runtime_yielded"
 CONTROL_PLANE_WAIT_SECONDS = 1800
 CONTROL_PLANE_PROBE_SECONDS = 15
 COMPACTION_POLICIES = ("basic", "structured")
@@ -2192,6 +2195,17 @@ class PairedRunner:
         record["armVerified"] = {"mounted": not not_mounted, "problems": not_mounted}
         if not_mounted and "excluded" not in record:
             record["excluded"] = {"reason": "arm_not_applied", "detail": "; ".join(not_mounted)[:300]}
+        # The platform took the cell's runtime back for a researcher's start
+        # (`runtime_yielded`, `RuntimeManager.makeRoomFor`). Nothing about the
+        # arm happened: scoring it would give whichever arm was running a
+        # reliability of 0 for a run the platform stopped. Last, so the reason
+        # that is true wins over the ones a half-run cell also trips (no
+        # delivery to judge, a transcript that stops short).
+        if str(run.get("errorCode") or "") == RUNTIME_YIELDED_CODE:
+            record["excluded"] = {
+                "reason": RUNTIME_YIELDED_CODE,
+                "detail": "a researcher's start took the runtime back before this cell finished",
+            }
         record["finishedAt"] = now_iso()
         record["complete"] = True
         return record

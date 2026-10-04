@@ -1461,6 +1461,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     understandingRuns: new SourceUnderstandingRuns({
       dispatch: request => sourceUnderstandingRuntime.dispatch(request),
       readResult: identity => sourceUnderstandingRuntime.readResult(identity),
+      releaseYielded: ({ job, dispatchId }) => sourceService.releaseYieldedUnderstanding(job, { dispatchId }),
     }),
     cancelUnderstanding: identity => sourceUnderstandingRuntime.cancel(identity),
     verifyMetadata: (metadata) => verifySourceMetadata(metadata, {
@@ -2239,14 +2240,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         clearTimeout(timer);
       }
     },
-    onRuntimeStop: (project, status) => {
+    onRuntimeStop: (project, status, errorCode) => {
       runtimeEventPump.detach(project);
       // Returned, not fired-and-forgotten here: `notifyRuntimeStop` already
       // wraps this call in its own `.catch()`, and returning the promise is
       // what keeps a rejection — a project whose ledger cannot be read,
       // oversized or corrupted — flowing through that existing handling
       // instead of becoming a second, unguarded unhandled rejection.
-      return agentRuns?.closeProject(project, status);
+      return agentRuns?.closeProject(project, status, errorCode);
     },
     // The researcher's own stop, relayed through the runtime proxy.
     onSessionAbort: (project, sessionId) => agentRuns?.cancelSession(project, sessionId, { by: "user" }),
@@ -7451,6 +7452,38 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
       { value: runtimeStats.limits.maxGlobal ?? 0, labels: { scope: "global" } },
       { value: runtimeStats.limits.maxPerUser ?? 0, labels: { scope: "user" } },
     ],
+  );
+  // The platform's own work among those runtimes (learning, document
+  // understanding, evaluation, acceptance): what it holds, what it may hold
+  // while nobody needs the room, and how often a researcher's start took one
+  // back (`RuntimeManager.makeRoomFor`).
+  addMetric(
+    lines,
+    "open_science_runtime_background",
+    "Runtime instances held by the platform's own background work, running or starting.",
+    "gauge",
+    { value: runtimeStats.background?.active ?? 0 },
+  );
+  addMetric(
+    lines,
+    "open_science_runtime_background_limit",
+    "How many runtimes background work may hold while no researcher needs the room. Zero means no ceiling.",
+    "gauge",
+    { value: runtimeStats.background?.limit ?? 0 },
+  );
+  addMetric(
+    lines,
+    "open_science_runtime_background_yielded_total",
+    "Background runtimes retired because a researcher's start found the deployment at its ceiling.",
+    "counter",
+    { value: runtimeStats.background?.yielded ?? 0 },
+  );
+  addMetric(
+    lines,
+    "open_science_runtime_background_yield_failures_total",
+    "Background runtimes a researcher's start tried to retire and could not.",
+    "counter",
+    { value: runtimeStats.background?.yieldFailures ?? 0 },
   );
   addMetric(lines, "open_science_runtime_proxy_active", "Active runtime proxy requests and streams.", "gauge", {
     value: runtimeStats.proxy?.active ?? 0,

@@ -70,6 +70,16 @@ const EVALUATION_CELL_PROJECT = /^methodeval-[a-f0-9]{24}$/;
  */
 const SELF_MEASUREMENT_PROJECT = /^(?:acceptance|audit)-[a-z0-9-]+$/;
 
+/**
+ * What a background run is closed with when a researcher's start took its
+ * runtime (`RuntimeManager.makeRoomFor`), and what a prompt refused behind that
+ * stop is named. The owner of the work reads it as "ask again later", never as
+ * a failure of the work: the learning loop's job and the source worker's job
+ * wait and resume, and the paired evaluation excludes the cell instead of
+ * scoring it (`evals/method-quality/run_paired.py`).
+ */
+export const RUNTIME_YIELDED_CODE = "runtime_yielded";
+
 /** @param {unknown} projectId @returns {boolean} */
 export function isInternalProject(projectId) {
   const id = String(projectId ?? "");
@@ -87,6 +97,14 @@ export function isInternalProject(projectId) {
  * every one of the four runtimes, so a researcher opening a project was
  * refused. It waits for room instead; a researcher never waits for it. The
  * runtime controller and the control plane compute the same number.
+ *
+ * That share is a ceiling on what background work may *take*, not a promise of
+ * what a researcher will find free: on a deployment with one slot the floor of
+ * one is the whole deployment, and a distillation held it for ten minutes
+ * against a researcher's start (429, 2026-10-04). So a researcher's start that
+ * finds the global ceiling reached retires a background runtime and the work
+ * resumes later (`RuntimeManager.makeRoomFor`, `RUNTIME_YIELDED_CODE`); the
+ * share only decides how many such runtimes may be up while nobody needs them.
  * @param {number | null | undefined} maxGlobal @param {number | null | undefined} maxPerUser
  * @returns {number | null} null when the deployment sets no global ceiling
  */

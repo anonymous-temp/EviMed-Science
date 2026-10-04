@@ -1261,6 +1261,21 @@ class EveryCellMeasuresTheCapabilityItNames(unittest.TestCase):
             self.assertFalse(cell["complete"])
             self.assertIn("test-capability", cell["error"])
 
+    def test_a_run_the_platform_stopped_for_a_researcher_is_excluded_not_scored_as_the_arms_failure(self):
+        # A researcher's start took the cell's runtime back (`runtime_yielded`).
+        # Scored, the run is reliability 0 for whichever arm it happened to hit.
+        outcomes = {
+            ("fam-001-a", "baseline"): succeeded(status="canceled", errorCode="runtime_yielded", artifacts=[]),
+            ("fam-001-a", "candidate"): succeeded(),
+        }
+        backend = FakeBackend(self.harness.briefs, outcomes, artifacts=self.artifacts)
+        cells = {cell["arm"]: cell for cell in self.harness.make_runner(backend, judge_call=self.judge).execute()}
+        self.assertEqual(cells["baseline"]["excluded"]["reason"], "runtime_yielded")
+        self.assertNotIn("excluded", cells["candidate"], "the other arm is a measurement")
+        report = runner.build_report(self.harness.config, list(cells.values()))
+        self.assertEqual(report["cells"]["scored"], 1)
+        self.assertEqual(report["cells"]["excluded"], [{"cell": cells["baseline"]["cell"], "reason": "runtime_yielded"}])
+
     def test_a_cell_the_judge_did_not_score_is_not_a_measurement_whoever_ran_the_batch(self):
         # Legacy-arm batch (no private grant), judge enabled, a run that
         # delivered nothing to read: until 2026-09-16 this was scored with

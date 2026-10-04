@@ -1476,6 +1476,11 @@ export function loadConfig(overrides = {}) {
     runtimeIdleYieldAfterMs: Number(
       overrides.runtimeIdleYieldAfterMs ?? process.env.OPEN_SCIENCE_RUNTIME_IDLE_YIELD_AFTER_MS ?? 30 * 60_000,
     ),
+    // How long a researcher's start waits for a background runtime that is
+    // still coming up or going down before it retires the ones that are up
+    // (`RuntimeManager.yieldBackgroundRuntimes`): a runtime start is seconds.
+    // No environment lever until a deployment needs one.
+    runtimeBackgroundYieldWaitMs: Number(overrides.runtimeBackgroundYieldWaitMs ?? 30_000),
     // How long a deliberate stop may spend reading the transcripts of the runs
     // it is about to finish, before it gives up and closes the container
     // anyway. A bound rather than a budget: the capture is best effort, and a

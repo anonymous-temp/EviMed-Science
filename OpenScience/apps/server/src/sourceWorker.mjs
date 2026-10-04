@@ -1,11 +1,16 @@
 import { randomUUID } from "node:crypto";
+import { RUNTIME_YIELDED_CODE } from "./internalProjects.mjs";
 import { readCopyOf } from "./sourceService.mjs";
 
 /** Codes that mean no runtime or budget was available yet, and how long a
- *  document waits before asking again. */
+ *  document waits before asking again. `runtime_yielded` is the same wait from
+ *  the other side: the document's run had a runtime, and a researcher's start
+ *  took it back (`RuntimeManager.makeRoomFor`); its run is released first
+ *  (`SourceUnderstandingRuns`), so the next claim launches a new one. */
 const CAPACITY_DEFERRALS = new Map([
   ["runtime_limit_exceeded", 60_000],
   ["runtime_proxy_limit_exceeded", 60_000],
+  [RUNTIME_YIELDED_CODE, 60_000],
   ["usage_budget_exceeded", 3_600_000],
 ]);
 
