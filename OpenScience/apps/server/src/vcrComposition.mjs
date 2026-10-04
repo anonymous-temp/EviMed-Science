@@ -69,6 +69,7 @@ import { createVcrEngineClient } from "./vcrEngineClient.mjs";
 import { createVcrEvidencePipeline } from "./vcrEvidence.mjs";
 import { createVcrCorrectionCases } from "./vcrCorrectionCases.mjs";
 import { createVcrCurveEvidence } from "./vcrCurveEvidence.mjs";
+import { createIntakeCounters, createVcrRecordExtractor } from "./vcrRecordExtract.mjs";
 import { VcrEvidenceStore } from "./vcrEvidenceStore.mjs";
 import { VcrJobs } from "./vcrJobs.mjs";
 import { createVcrContact } from "./vcrContact.mjs";
@@ -813,7 +814,7 @@ export function createVcrEngineJobRemover({ config, fetchImpl, engine = null }) 
  *   report?: (code: string) => void,
  * }} input
  */
-export function composeVcr({ config, productDatabase, projectStore = null, audit = async () => {}, fetchImpl, report = () => {} }) {
+export function composeVcr({ config, productDatabase, projectStore = null, audit = async () => {}, fetchImpl, report = () => {}, intakeController = null }) {
   if (!config?.vcrEnabled || !productDatabase) return null;
 
   const store = new VcrStore({ database: productDatabase });
@@ -826,8 +827,13 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   const contact = createVcrContact({ store: matchStore });
   // One judge for the plane and the members' service: a decision the plane makes
   // is the decision the page shows.
+  // The two intake conversions (a record document to text, a figure to curve
+  // points) run in the runtime controller's disposable container. One counter
+  // set serves both, so an operator reads one family of numbers.
+  const intakeCounters = createIntakeCounters();
+  const extractor = createVcrRecordExtractor({ config, controller: intakeController, counters: intakeCounters, report });
   const dataPlane = String(config.vcrDataPlaneDir ?? "").trim()
-    ? new VcrDataPlane({ store: dataStore, config, access })
+    ? new VcrDataPlane({ store: dataStore, config, access, extractor })
     : null;
 
   const engineStatus = vcrEngineStatus(config);
@@ -896,6 +902,7 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   composed = {
     store, dataStore, matchStore, evidenceStore, corrections,
     access, members, contact, dataPlane, dataPlaneSeam, documents, engine, engineStatus, removeEngineJob, jobs, seal, evidence, matching, registry, service,
+    intake: { counters: intakeCounters, extractor },
     // Composed later, beside the other modules' workers (server.mjs).
     notifier: null, orchestrator: null, worker: null, exporter: null, review: null,
     audit,
@@ -966,6 +973,7 @@ export async function vcrMetricsSnapshot(vcr) {
     orchestrator: vcr.orchestrator?.status?.() ?? null,
     worker: vcr.worker?.status?.() ?? null,
     engine: vcr.engineStatus ?? null,
+    intake: vcr.intake ? { counters: { ...vcr.intake.counters } } : null,
   };
 }
 
@@ -1002,6 +1010,10 @@ export function vcrMetricFamilies(enabled, snapshot) {
   if (snapshot.orchestrator?.counters) {
     add("orchestrator_total", "What the orchestrator did since this process started.", "counter",
       Object.entries(snapshot.orchestrator.counters).map(([kind, value]) => ({ labels: { kind }, value: Number(value) })));
+  }
+  if (snapshot.intake?.counters) {
+    add("intake_total", "What the intake conversions did since this process started: record documents converted or refused (needsText, unreadable, tooLong, tooLarge), conversions that timed out, failed or had no converter, and figures digitized or refused.", "counter",
+      Object.entries(snapshot.intake.counters).map(([kind, value]) => ({ labels: { kind }, value: Number(value) })));
   }
   const loops = Object.entries(snapshot.worker?.loops ?? {}).filter(([, loop]) => loop?.wired);
   if (loops.length) {

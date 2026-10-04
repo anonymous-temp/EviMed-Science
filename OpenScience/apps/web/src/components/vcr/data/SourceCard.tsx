@@ -11,7 +11,7 @@ import { IconButton } from "@/components/ui/IconButton";
 import { Input, inputClasses } from "@/components/ui/Input";
 import { Tag } from "@/components/ui/Tag";
 import { FieldMapEditor } from "./FieldMapEditor";
-import { intakeErrorMessage, uploadProblem } from "./intakeState";
+import { documentAccept, intakeErrorMessage, uploadProblem } from "./intakeState";
 
 /** One step of a source's way from a file to an engine input: a number, a name and what it holds. */
 function Step({ number, title, meta, children }: { number: number; title: string; meta?: ReactNode; children: ReactNode }) {
@@ -37,6 +37,8 @@ function FileRow({ file, frozen, canManage, busy, onRemove }: { file: VcrIntakeF
     file.size, file.at,
     file.subjectKey ? `受试者 ${file.subjectKey}` : null, file.visibleAt ? `可见于 ${file.visibleAt.slice(0, 10)}` : null,
     file.sheetUsed ? `工作表“${file.sheetUsed}”` : null,
+    // A record converted from PDF or Word: what it was, and what part of it had no text to read.
+    file.sourceFormat ? `来自 ${file.sourceFormat === "docx" ? "Word" : file.sourceFormat.toUpperCase()}${file.pages ? `，${file.pages} 页` : ""}${file.blankPages ? `，其中 ${file.blankPages} 页没有文字` : ""}` : null,
   ].filter(Boolean).join(" · ");
   return (
     <li data-vcr-file={file.id} className="flex items-center justify-between gap-3 py-2">
@@ -66,7 +68,7 @@ function UploadForm({ studyId, source, onChanged }: { studyId: string; source: V
   const send = (files: FileList | null) => {
     const file = files?.[0];
     if (!file || holding.current) return;
-    const refusal = uploadProblem({ name: file.name, size: file.size }, role, source.upload.maxBytes)
+    const refusal = uploadProblem({ name: file.name, size: file.size }, role, source.upload.maxBytes, source.upload.documents)
       ?? (role === "document" && !subject.trim() ? "患者文档要写明它属于哪位受试者（源数据里的编号）。" : null);
     setProblem(refusal);
     if (refusal) return;
@@ -90,7 +92,7 @@ function UploadForm({ studyId, source, onChanged }: { studyId: string; source: V
         </select>
         <input
           ref={input} type="file" aria-label="选择要上传的文件" disabled={busy}
-          accept={role === "document" ? ".txt,.md" : source.upload.formats.map((format) => `.${format}`).join(",") || undefined}
+          accept={role === "document" ? documentAccept(source.upload.documents) : source.upload.formats.map((format) => `.${format}`).join(",") || undefined}
           onChange={(event) => send(event.target.files)} className="text-ui text-text-2"
         />
         {busy && <span className="text-caption text-text-3">正在上传</span>}
@@ -103,7 +105,9 @@ function UploadForm({ studyId, source, onChanged }: { studyId: string; source: V
       )}
       <p className="text-caption text-text-3">
         {role === "document"
-          ? "病历文本（.txt、.md）只用于匹配：平台按研究派生的假名编号存放，模型只在判断入选条件时按份读取。"
+          ? source.upload.documents.converter
+            ? "病历文件（.txt、.md、PDF、.docx）只用于匹配：PDF 和 Word 在平台内转成文字，不会发给外部服务；扫描件和图片没有文字，请提供文字版。平台按研究派生的假名编号存放，模型只在判断入选条件时按份读取。"
+            : "病历文本（.txt、.md）只用于匹配：平台按研究派生的假名编号存放，模型只在判断入选条件时按份读取。"
           : `支持 ${(source.upload.formats.length ? source.upload.formats : ["csv", "tsv", "json", "xlsx"]).join("、")}${source.upload.maxText ? `，单个文件不超过 ${source.upload.maxText}` : ""}。Excel 取第一张有数据的工作表；文件按内容存放，不进入对话的工作区。`}
       </p>
       {problem && <p role="alert" className="text-ui text-error">{problem}</p>}

@@ -142,6 +142,8 @@ export const VCR_DATA_PLANE_CODES = Object.freeze({
   grantOwnerOnly: "vcr_grant_owner_only",
   grantNotFound: "vcr_grant_not_found",
   documentNotFound: "vcr_document_not_found",
+  documentNeedsText: "vcr_document_needs_text",
+  documentConverterUnavailable: "vcr_document_converter_unavailable",
 });
 
 /**
@@ -1004,13 +1006,21 @@ export function pseudonymOf(key, subjectId) {
 export const VCR_UPLOAD_FORMATS = Object.freeze({
   data: Object.freeze({ csv: "csv", tsv: "tsv", json: "json", xlsx: "xlsx" }),
   dictionary: Object.freeze({ csv: "csv", tsv: "tsv", json: "json", xlsx: "xlsx" }),
-  document: Object.freeze({ txt: "txt", md: "txt" }),
+  // A record document is text as it arrives, or a PDF or Word file converted to
+  // text inside the deployment (vcrRecordExtract.mjs). What is stored, and what
+  // the matching step reads, is the text either way.
+  document: Object.freeze({ txt: "txt", md: "txt", pdf: "pdf", docx: "docx" }),
 });
+/** Extensions of a document that is a picture: it has no text to extract, and says so by name. */
+const IMAGE_DOCUMENT_EXTENSIONS = Object.freeze(["png", "jpg", "jpeg", "gif", "bmp", "tif", "tiff", "webp", "heic", "heif"]);
+/** The formats a record document is converted from rather than read. */
+const CONVERTED_DOCUMENT_FORMATS = Object.freeze(["pdf", "docx"]);
 /** Extensions refused with a reason a person can act on. */
 const UNSUPPORTED_FORMAT_HINTS = Object.freeze({
   parquet: "Parquet 文件目前不能直接接入：请在导出时改为 CSV，或用 Excel、Python 转成 CSV 后上传。",
   xls: "旧版 .xls 不能接入：请另存为 .xlsx 或 CSV 后上传。",
   zip: "请先解压，再逐个上传数据文件。",
+  doc: "旧版 .doc 不能直接转换：请另存为 .docx、可复制文字的 PDF 或 .txt 后上传。",
 });
 /** A file's size ceiling by role, beyond the deployment's own. */
 export const VCR_UPLOAD_ROLE_CAPS = Object.freeze({ dictionary: 2 * 1024 * 1024, document: 1024 * 1024 });
@@ -1036,6 +1046,11 @@ export function safeUploadName(raw, role) {
     throw refuse(400, VCR_DATA_PLANE_CODES.fileNameInvalid, "A file name is a name with an extension, like cohort.csv.");
   }
   const formats = /** @type {Record<string, string>} */ (/** @type {any} */ (VCR_UPLOAD_FORMATS)[role] ?? {});
+  if (role === "document" && IMAGE_DOCUMENT_EXTENSIONS.includes(ext)) {
+    // A picture of a record has no text layer: it is refused for that, by name, and
+    // the reader is told what to bring instead (never sent anywhere to be read).
+    throw refuse(422, VCR_DATA_PLANE_CODES.documentNeedsText, "A picture has no text to extract; supply a text version.", { ext });
+  }
   if (!Object.hasOwn(formats, ext)) {
     const hint = /** @type {Record<string, string>} */ (UNSUPPORTED_FORMAT_HINTS)[ext];
     throw refuse(415, VCR_DATA_PLANE_CODES.formatUnsupported,
@@ -1715,12 +1730,15 @@ export class VcrDataPlane {
   /**
    * @param {{ store: import("./vcrDataStore.mjs").VcrDataStore, config: VcrDataPlaneConfig, profiler?: VcrProfiler | null,
    *   access?: VcrAccess | null, seal?: { recordOutcomeAccess?: (input: any) => Promise<unknown> } | null,
+   *   extractor?: { available: boolean, describe?: () => any, extract: (input: { path: string, format: string, signal?: AbortSignal }) => Promise<{ text: string, extraction: Record<string, any> }> } | null,
    *   now?: () => Date }} options
    *   `access` judges every operation (one is made from the store when none is
    *   given); `seal` records the first outcome read — it is composed after the
-   *   plane, so `attach` also takes it.
+   *   plane, so `attach` also takes it. `extractor` turns a PDF or Word record
+   *   into text inside the deployment; without one those two formats are refused
+   *   by name and plain text is unaffected.
    */
-  constructor({ store, config, profiler = null, access = null, seal = null, now = () => new Date() }) {
+  constructor({ store, config, profiler = null, access = null, seal = null, extractor = null, now = () => new Date() }) {
     if (!store) throw new TypeError("The VCR data plane needs its store.");
     this.store = store;
     this.config = config ?? {};
@@ -1731,6 +1749,7 @@ export class VcrDataPlane {
     // per load; the judgments that matter (a read of rows, a write) go through `access`.
     this.pageAccess = new VcrAccess({ store, now, audit: false });
     this.seal = seal;
+    this.extractor = extractor;
   }
 
   /** Attach a package composed after the plane (the seal). @param {{ seal?: any }} packages */
@@ -1748,6 +1767,21 @@ export class VcrDataPlane {
   get maxBytes() {
     const configured = Number(this.config.vcrDataMaxBytes ?? this.config.maxFileBytes);
     return Number.isSafeInteger(configured) && configured > 0 ? configured : VCR_UPLOAD_DEFAULT_MAX_BYTES;
+  }
+
+  /**
+   * What a patient record document may be on this deployment: text always, PDF
+   * and Word when a converter is composed. The page offers only what would be taken.
+   */
+  documentUpload() {
+    const converter = Boolean(this.extractor?.available);
+    const configured = Number(this.config.vcrIntakeMaxBytes);
+    return {
+      formats: converter ? Object.keys(VCR_UPLOAD_FORMATS.document) : Object.keys(VCR_UPLOAD_FORMATS.document).filter((format) => !CONVERTED_DOCUMENT_FORMATS.includes(format)),
+      textMaxBytes: Math.min(this.maxBytes, VCR_UPLOAD_ROLE_CAPS.document),
+      convertedMaxBytes: converter ? Math.min(this.maxBytes, configured > 0 ? configured : 25 * 1024 * 1024) : null,
+      converter,
+    };
   }
 
   /** The resolved root, or a named refusal. */
@@ -1869,7 +1903,12 @@ export class VcrDataPlane {
     const role = entry.role == null ? "data" : entry.role;
     if (!VCR_SOURCE_FILE_ROLES.includes(role)) throw refuse(400, VCR_DATA_PLANE_CODES.payloadInvalid, `role is one of: ${VCR_SOURCE_FILE_ROLES.join(", ")}.`);
     const named = safeUploadName(entry.name, role);
-    const cap = Math.min(this.maxBytes, /** @type {Record<string, number>} */ (VCR_UPLOAD_ROLE_CAPS)[role] ?? this.maxBytes);
+    const converted = role === "document" && CONVERTED_DOCUMENT_FORMATS.includes(named.format);
+    // A PDF or Word file is bigger than the text in it: it has its own ceiling
+    // (`vcrIntakeMaxBytes`), and the text that comes out is held to the document cap below.
+    const cap = converted
+      ? Math.min(this.maxBytes, Number(this.config.vcrIntakeMaxBytes) > 0 ? Number(this.config.vcrIntakeMaxBytes) : 25 * 1024 * 1024)
+      : Math.min(this.maxBytes, /** @type {Record<string, number>} */ (VCR_UPLOAD_ROLE_CAPS)[role] ?? this.maxBytes);
     if (entry.declaredLength != null && entry.declaredLength > cap) {
       throw refuse(413, VCR_DATA_PLANE_CODES.fileTooLarge, `A ${role} file is at most ${cap} bytes.`, { cap });
     }
@@ -1907,11 +1946,37 @@ export class VcrDataPlane {
       let extension = "csv";
       /** @type {{ header: string[], rows: string[][], renamed?: number } | null} */
       let table = null;
+      /** The converted original's place in the plane, when there is one. @type {string | null} */
+      let originalLocation = null;
       if (role === "document") {
-        const decoded = decodeUploadText(await fs.readFile(raw));
-        bytes = Buffer.from(decoded.text, "utf8");
+        /** @type {string} */
+        let documentText;
+        if (converted) {
+          // Converted inside the deployment, never sent to the external parsing
+          // service: the original goes to a container with no network and comes back
+          // as text (vcrRecordExtract.mjs). The original's bytes stay here, in the
+          // plane, beside the text — provenance, never read by a runtime.
+          if (!this.extractor?.available) {
+            throw refuse(503, VCR_DATA_PLANE_CODES.documentConverterUnavailable, "This deployment cannot convert PDF or Word files; supply a text version.");
+          }
+          const got = await this.extractor.extract({ path: raw, format: named.format });
+          documentText = got.text;
+          const originalBytes = await fs.readFile(raw);
+          const original = await writeContentAddressed(root, path.posix.join(studyRelative(entry.studyId), "documents"), named.format, originalBytes);
+          originalLocation = original.location;
+          detail.original = { sha256: original.sha256, bytes: original.bytes, format: named.format, location: original.location };
+          detail.extraction = got.extraction;
+        } else {
+          const decoded = decodeUploadText(await fs.readFile(raw));
+          documentText = decoded.text;
+          detail.encoding = decoded.encoding;
+        }
+        if (Buffer.byteLength(documentText, "utf8") > VCR_UPLOAD_ROLE_CAPS.document) {
+          throw refuse(413, VCR_DATA_PLANE_CODES.fileTooLarge, `The text of a document is at most ${VCR_UPLOAD_ROLE_CAPS.document} bytes.`, { cap: VCR_UPLOAD_ROLE_CAPS.document });
+        }
+        bytes = Buffer.from(documentText, "utf8");
         extension = "txt";
-        Object.assign(detail, { encoding: decoded.encoding, chars: decoded.text.length });
+        detail.chars = documentText.length;
         if (entry.subject != null && entry.subject !== "") {
           detail.subjectKey = pseudonymOf(await studyPseudonymKey(root, entry.studyId), entry.subject);
         }
@@ -1975,11 +2040,17 @@ export class VcrDataPlane {
       }
       const stored = await this.store.addSourceFile({
         sourceId: entry.sourceId, studyId: entry.studyId, userId: String(entry.actor), role, name: displayName,
-        format: named.format, location: written.location, sha256: written.sha256, bytes: written.bytes, rowCount, columnCount,
+        // What is stored is text, whatever it was converted from: a document row's format is the stored bytes'.
+        format: role === "document" ? "txt" : named.format, location: written.location, sha256: written.sha256, bytes: written.bytes, rowCount, columnCount,
         profile, detail, actor: String(entry.actor),
       });
       if (source.status === "registered" && role === "data") {
         await this.store.setSourceStatus({ sourceId: entry.sourceId, status: "profiled", actor: String(entry.actor), userId: source.userId });
+      }
+      // The same text from a different file (a re-saved PDF) is the file already
+      // held: the original written for this attempt is then not named by any row.
+      if (originalLocation && stored.file.detail?.original?.location !== originalLocation) {
+        await this.#dropUnnamedOriginal(entry.studyId, originalLocation);
       }
       return stored;
     } finally {
@@ -2003,7 +2074,19 @@ export class VcrDataPlane {
     // this row's path is removed, and it is this source's own.
     const stillNamed = (await this.store.listSourceFilesForStudy(entry.studyId)).some((file) => file.location === removed.location);
     if (!stillNamed) await fs.rm(path.join(root, removed.location), { force: true }).catch(() => {});
+    // A converted record's original goes with it, unless another row still names it.
+    if (removed.detail?.original?.location) await this.#dropUnnamedOriginal(entry.studyId, String(removed.detail.original.location));
     return { removed: true, fileId: removed.id };
+  }
+
+  /**
+   * Remove a converted record's original bytes when no file of the study names them.
+   * @param {string} studyId @param {string} location
+   */
+  async #dropUnnamedOriginal(studyId, location) {
+    const root = this.root();
+    const named = (await this.store.listSourceFilesForStudy(studyId)).some((file) => file.detail?.original?.location === location);
+    if (!named) await fs.rm(assertDataPlaneLocation(root, location), { force: true }).catch(() => {});
   }
 
   // -------------------------------------------------------------------------
@@ -2808,7 +2891,7 @@ export class VcrDataPlane {
           id: source.id, name: source.name, ownerParty: source.ownerParty, registeredBy: source.userId, mine: source.userId === String(viewer.id),
           readable, allowedUses: source.allowedUses, visibleWindow: source.visibleWindow, retention: source.retention,
           valueSource: source.valueSource, status: source.status, createdAt: source.createdAt,
-          upload: { formats: Object.keys(VCR_UPLOAD_FORMATS.data), maxBytes: this.maxBytes },
+          upload: { formats: Object.keys(VCR_UPLOAD_FORMATS.data), maxBytes: this.maxBytes, documents: this.documentUpload() },
           // A source the viewer holds no grant on is a name and a state: its files' names, its map and who may read it are not theirs to see.
           files: readable ? own.map((file) => fileView(file)) : [],
           fieldMap: {
@@ -2903,7 +2986,9 @@ export function fileView(file, withColumns = true) {
       })),
     } : {}),
     ...(file.role === "dictionary" ? { entries: (file.detail?.dictionary ?? []).length } : {}),
-    ...(file.role === "document" ? { subjectKey: file.detail?.subjectKey ?? null, visibleAt: file.detail?.visibleAt ?? null, chars: file.detail?.chars ?? null } : {}),
+    ...(file.role === "document" ? { subjectKey: file.detail?.subjectKey ?? null, visibleAt: file.detail?.visibleAt ?? null, chars: file.detail?.chars ?? null,
+      // A converted record says what it was converted from and how much of it had no text layer.
+      ...(file.detail?.extraction ? { sourceFormat: file.detail.extraction.sourceFormat ?? null, pages: file.detail.extraction.pages ?? null, blankPages: file.detail.extraction.blankPages ?? 0 } : {}) } : {}),
     ...(file.detail?.sheets ? { sheets: file.detail.sheets, sheetUsed: file.detail.sheetUsed ?? null } : {}),
   };
 }

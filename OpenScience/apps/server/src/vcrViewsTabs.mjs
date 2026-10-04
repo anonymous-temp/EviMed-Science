@@ -1402,7 +1402,16 @@ export function presentIntake(bundle) {
       allowedUses: list(source.allowedUses).map(String),
       window: windowText(object(source.visibleWindow)),
       retention: [text(object(source.retention).until) ? `保留至 ${String(object(source.retention).until).slice(0, 10)}` : null, text(object(source.retention).note)].filter(Boolean).join("；") || null,
-      upload: { formats: list(upload.formats).map(String), maxBytes: numeric(upload.maxBytes), maxText: byteText(numeric(upload.maxBytes)) },
+      upload: {
+        formats: list(upload.formats).map(String), maxBytes: numeric(upload.maxBytes), maxText: byteText(numeric(upload.maxBytes)),
+        // What a patient record may be: text, and PDF or Word where the deployment converts them.
+        documents: {
+          formats: list(object(upload.documents).formats).map(String),
+          maxBytes: numeric(object(upload.documents).convertedMaxBytes),
+          maxText: byteText(numeric(object(upload.documents).convertedMaxBytes)),
+          converter: object(upload.documents).converter === true,
+        },
+      },
       files: files.map((file) => ({
         id: String(file.id), name: String(file.name), role: String(file.role), roleLabel: FILE_ROLE_ZH[String(file.role)] ?? String(file.role),
         format: String(file.format), size: byteText(numeric(file.bytes)), rows: numeric(file.rowCount), columnCount: numeric(file.columnCount),
@@ -1413,6 +1422,8 @@ export function presentIntake(bundle) {
         })),
         entries: numeric(file.entries), sheets: list(file.sheets).map(String), sheetUsed: text(file.sheetUsed),
         subjectKey: text(file.subjectKey), visibleAt: text(file.visibleAt),
+        // A record converted from PDF or Word: what it was, how many pages, how many had no text layer.
+        sourceFormat: text(file.sourceFormat), pages: numeric(file.pages), blankPages: numeric(file.blankPages),
       })),
       fieldMap: {
         state: String(fieldMap.state ?? "none"), stateLabel: FIELD_MAP_STATE_ZH[String(fieldMap.state)] ?? "",

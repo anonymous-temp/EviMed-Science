@@ -3,7 +3,8 @@ import { WebApiError } from "@/lib/apiClient";
 import { fieldMapBody, freezeBody, grantBody, sourceBody, uploadQuery } from "@/lib/vcrIntakeBodies";
 import { readVcrIntake, type VcrIntakeSource } from "@/lib/vcrClient";
 import { fixture } from "../__fixtures__/serverFixtures";
-import { editorRows, entriesOf, intakeErrorMessage, mapProblem, rowProblem, uploadProblem } from "./intakeState";
+import { documentAccept, editorRows, entriesOf, intakeErrorMessage, mapProblem, rowProblem, uploadProblem } from "./intakeState";
+import { knownErrorCodeMessage } from "@evimed/domain";
 
 /** The second source of the sealed page: one file, a map with problems. */
 function source(change?: (raw: VcrIntakeSource) => void): VcrIntakeSource {
@@ -80,6 +81,40 @@ describe("what the page refuses before the plane has to", () => {
     expect(uploadProblem({ name: "a.csv", size: max + 1 }, "data", max)).toMatch(/50 MB/);
     expect(uploadProblem({ name: "dictionary.csv", size: 3 * 1024 * 1024 }, "dictionary", max)).toMatch(/2 MB/);
     expect(uploadProblem({ name: "a.csv", size: 999_999_999 }, "data", null)).toBeNull();
+  });
+
+  it("holds a patient record to what the deployment would take: text, PDF and Word where they are converted, never a picture", () => {
+    const max = 50 * 1024 * 1024;
+    const converted = { formats: ["txt", "md", "pdf", "docx"], maxBytes: 25 * 1024 * 1024, maxText: "25 MB", converter: true };
+    const textOnly = { formats: ["txt", "md"], maxBytes: null, maxText: null, converter: false };
+    expect(documentAccept(null)).toBe(".txt,.md");
+    expect(documentAccept(textOnly)).toBe(".txt,.md");
+    expect(documentAccept(converted)).toBe(".txt,.md,.pdf,.docx");
+    expect(uploadProblem({ name: "a.txt", size: 10 }, "document", max, converted)).toBeNull();
+    expect(uploadProblem({ name: "a.PDF", size: 20 * 1024 * 1024 }, "document", max, converted)).toBeNull();
+    expect(uploadProblem({ name: "a.docx", size: 26 * 1024 * 1024 }, "document", max, converted)).toMatch(/25 MB/);
+    // The text of a record keeps its own, smaller ceiling.
+    expect(uploadProblem({ name: "a.txt", size: 2 * 1024 * 1024 }, "document", max, converted)).toMatch(/1 MB/);
+    expect(uploadProblem({ name: "a.pdf", size: 10 }, "document", max, textOnly)).toMatch(/暂不转换 PDF 和 Word/);
+    expect(uploadProblem({ name: "a.pdf", size: 10 }, "document", max)).toMatch(/暂不转换 PDF 和 Word/);
+    expect(uploadProblem({ name: "a.pdf", size: 0 }, "document", max, converted)).toBe("文件是空的。");
+    for (const name of ["x.png", "x.JPG", "x.jpeg", "x.tiff", "x.heic"]) {
+      expect(uploadProblem({ name, size: 10 }, "document", max, converted)).toBe(knownErrorCodeMessage("vcr_document_needs_text"));
+    }
+    expect(uploadProblem({ name: "x.doc", size: 10 }, "document", max, converted)).toMatch(/另存为 \.docx/);
+    expect(uploadProblem({ name: "x.csv", size: 10 }, "document", max, converted)).toMatch(/txt、md、pdf、docx/);
+    // Another role is unchanged: a PDF is not a data file, and a picture of one is not a document's problem.
+    expect(uploadProblem({ name: "a.pdf", size: 10 }, "data", max, converted)).toMatch(/支持/);
+  });
+
+  it("says a scan, a damaged file and a missing converter in the registry's words, and the plane's format refusal for both kinds of file", () => {
+    for (const code of ["vcr_document_needs_text", "vcr_document_unreadable", "vcr_document_too_long", "vcr_document_converter_unavailable", "vcr_intake_timeout", "vcr_intake_failed"]) {
+      const sentence = intakeErrorMessage(new WebApiError("x", { status: 422, code }), "f");
+      expect(sentence).toBe(knownErrorCodeMessage(code));
+      expect(sentence).not.toBe("f");
+    }
+    expect(intakeErrorMessage(new WebApiError("x", { status: 422, code: "vcr_document_needs_text" }), "f")).toMatch(/请提供文字版/);
+    expect(intakeErrorMessage(new WebApiError("x", { status: 415, code: "vcr_data_format_unsupported" }), "f")).toMatch(/CSV.*PDF/);
   });
 
   it("says the plane's refusals as sentences, and a code it does not know the way the rest of the page does", () => {

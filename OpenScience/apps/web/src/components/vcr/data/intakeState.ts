@@ -1,3 +1,4 @@
+import { knownErrorCodeMessage } from "@evimed/domain";
 import { WebApiError, webErrorMessage } from "@/lib/apiClient";
 import type { VcrFieldMapEntry, VcrFieldRole, VcrIntakeSource } from "@/lib/vcrClient";
 
@@ -136,19 +137,48 @@ export function mapProblem(rows: readonly EditorRow[]): string | null {
 }
 
 /** The plane's own extension list for a role, mirrored so an upload is not sent to be refused. */
-const EXTENSIONS: Record<"data" | "dictionary" | "document", readonly string[]> = {
-  data: ["csv", "tsv", "json", "xlsx"], dictionary: ["csv", "tsv", "json", "xlsx"], document: ["txt", "md"],
+const EXTENSIONS: Record<"data" | "dictionary", readonly string[]> = {
+  data: ["csv", "tsv", "json", "xlsx"], dictionary: ["csv", "tsv", "json", "xlsx"],
 };
-/** The ceiling a dictionary or a document has beside the deployment's own. */
+/** A patient record is text anywhere, and PDF or Word where the deployment converts them to text itself. */
+const DOCUMENT_TEXT_EXTENSIONS: readonly string[] = ["txt", "md"];
+const DOCUMENT_CONVERTED_EXTENSIONS: readonly string[] = ["pdf", "docx"];
+/** A picture of a record has no text to read: refused for that, never sent. */
+const PICTURE_EXTENSIONS: readonly string[] = ["png", "jpg", "jpeg", "gif", "bmp", "tif", "tiff", "webp", "heic", "heif"];
+/** The ceiling a dictionary or a document's text has beside the deployment's own. */
 const ROLE_CAPS: Record<"dictionary" | "document", number> = { dictionary: 2 * 1024 * 1024, document: 1024 * 1024 };
 
+/** What a source's file chooser accepts for a patient record: what this deployment would take. */
+export function documentAccept(documents: VcrIntakeSource["upload"]["documents"] | null): string {
+  return [...DOCUMENT_TEXT_EXTENSIONS, ...(documents?.converter ? DOCUMENT_CONVERTED_EXTENSIONS : [])].map((extension) => `.${extension}`).join(",");
+}
+
 /** A sentence when a file would be refused, `null` when it would not. */
-export function uploadProblem(file: { name: string; size: number }, role: "data" | "dictionary" | "document", maxBytes: number | null): string | null {
+export function uploadProblem(
+  file: { name: string; size: number }, role: "data" | "dictionary" | "document", maxBytes: number | null,
+  documents: VcrIntakeSource["upload"]["documents"] | null = null,
+): string | null {
   const dot = file.name.lastIndexOf(".");
   const extension = dot > 0 ? file.name.slice(dot + 1).toLowerCase() : "";
   if (!extension) return "文件名需要带扩展名，例如 cohort.csv。";
+  if (role === "document" && PICTURE_EXTENSIONS.includes(extension)) {
+    // The server's own sentence for the same refusal, so the page and the plane never say two things.
+    return knownErrorCodeMessage("vcr_document_needs_text");
+  }
   if (extension === "parquet") return "Parquet 文件暂时不能接入：请在导出时改为 CSV 后上传。";
   if (extension === "xls") return "旧版 .xls 不能接入：请另存为 .xlsx 或 CSV 后上传。";
+  if (role === "document" && extension === "doc") return "旧版 .doc 不能直接转换：请另存为 .docx、可复制文字的 PDF 或 .txt 后上传。";
+  if (role === "document") {
+    const converted = DOCUMENT_CONVERTED_EXTENSIONS.includes(extension);
+    const allowed = [...DOCUMENT_TEXT_EXTENSIONS, ...(documents?.converter ? DOCUMENT_CONVERTED_EXTENSIONS : [])];
+    if (!allowed.includes(extension)) {
+      return converted ? "本部署暂不转换 PDF 和 Word，请先另存为 .txt 后上传。" : `这一类文件支持：${allowed.join("、")}。`;
+    }
+    if (file.size === 0) return "文件是空的。";
+    const cap = Math.min(maxBytes ?? Number.POSITIVE_INFINITY, converted ? documents?.maxBytes ?? Number.POSITIVE_INFINITY : ROLE_CAPS.document);
+    if (Number.isFinite(cap) && file.size > cap) return `文件超过 ${Math.round(cap / 1024 / 1024)} MB 的上限。`;
+    return null;
+  }
   if (!EXTENSIONS[role].includes(extension)) return `这一类文件支持：${EXTENSIONS[role].join("、")}。`;
   if (file.size === 0) return "文件是空的。";
   const cap = role === "data" ? maxBytes : Math.min(maxBytes ?? Number.POSITIVE_INFINITY, ROLE_CAPS[role]);
@@ -160,7 +190,6 @@ export function uploadProblem(file: { name: string; size: number }, role: "data"
 const INTAKE_CODES: Record<string, string> = {
   vcr_data_plane_not_configured: "本部署未接入数据平面，暂不能接入患者级数据。",
   vcr_data_file_too_large: "文件超过了大小上限。",
-  vcr_data_format_unsupported: "这种文件格式暂不支持：请用 CSV、TSV、JSON 或 Excel（.xlsx）。",
   vcr_data_file_unreadable: "这个文件读不出来：请确认它是带表头的表格，列名没有重复。",
   vcr_data_file_name_invalid: "文件名需要带扩展名，例如 cohort.csv，最长 200 个字符。",
   vcr_source_file_not_found: "找不到这个文件，它可能已被删除。",

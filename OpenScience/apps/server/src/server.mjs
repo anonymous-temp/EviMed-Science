@@ -1776,6 +1776,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     audit: (event, status, details) => securityAudit(config, event, status, details),
     report: (code) => process.stderr.write(`vcr: ${code}\n`),
     fetchImpl: overrides.vcrFetch ?? globalThis.fetch,
+    // A record document to text and a figure to curve points run in the runtime
+    // controller's disposable container, like a document export does.
+    intakeController: overrides.vcrIntakeController ?? new RuntimeControllerClient(config),
   });
 
   /**
