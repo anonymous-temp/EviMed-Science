@@ -31,6 +31,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { closureDrift, installKernel } from "./kernel-install.mjs";
+import { ownWireNamespaces, wireSurfaceFindings } from "./wire-surface.mjs";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
 const seamPath = path.join(repoRoot, "packages/harness-port/seam-manifest.json");
@@ -347,10 +348,14 @@ if (methods.size) {
   // report three findings nobody can act on.
   const streams = new Set(Object.values(seams.wire?.streamEndpoints ?? {}).map(String));
   const declared = new Set([...(seams.wire?.unary ?? []), ...(seams.wire?.denied ?? [])]);
-  const unclassified = [...methods.keys()].filter((name) => !declared.has(name) && !streams.has(name)).sort();
-  // Our own plugin's methods are registered by `packages/socket`, not by DSH,
-  // so upstream never ships them and their absence is not a finding.
-  const phantom = [...declared].filter((name) => !methods.has(name) && !name.startsWith("evimedPlugins/")).sort();
+  // The methods this platform registers on the wire itself (`evimedPlugins`,
+  // `evimedSkills`) are never shipped by upstream, so their absence is not a
+  // finding. Read from the services that register them, not from a prefix list:
+  // `evimedSkills/` was missing from one, and its three methods were reported
+  // as phantoms on every run. Proved read, like the surface above it.
+  const own = ownWireNamespaces(path.join(repoRoot, "packages/harness-port/src"));
+  report("the platform's own wire namespaces were read", own.size >= 2, [...own].sort().join(", ") || "none found");
+  const { unclassified, phantom } = wireSurfaceFindings({ declared, shipped: methods.keys(), streams, own });
   report(
     `wire surface classified (${declared.size} declared, ${methods.size} shipped)`,
     unclassified.length === 0,
@@ -359,7 +364,7 @@ if (methods.size) {
   report(
     "no method declared that DSH does not expose",
     phantom.length === 0,
-    phantom.length ? `${phantom.length} phantom method(s) — retired upstream, still in seam-manifest.json wire.denied: ${phantom.join(", ")}` : "",
+    phantom.length ? `${phantom.length} phantom method(s) — retired upstream, still in seam-manifest.json wire.unary or wire.denied: ${phantom.join(", ")}` : "",
   );
 }
 
