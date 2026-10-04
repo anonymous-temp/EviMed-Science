@@ -93,3 +93,12 @@ test('the summary is the operation without its parameters, bounded the same way'
   assert.ok([...renderOperationSummary(docRead, { maxChars: 20 })].length <= 20)
   assert.equal(renderOperationSummary(docRead, { maxChars: 20 }).split('\n').length, 1)
 })
+
+test('a script operation shows the command a reader can copy, with flags as its parameters', () => {
+  const script = operation({ name: 'create docx', kind: 'script', entrypoint: 'scripts/create_docx.py', summary: 'Create a document.', params: [
+    { name: '--output', type: 'path', required: true }, { name: '--text', type: 'string' }, { name: '--dry', type: 'boolean', required: true }, { name: '--mode', type: 'string', required: true, values: ['fast'] },
+  ] })
+  assert.equal(domain.operationExampleText(script), 'python scripts/create_docx.py --output <output> --dry --mode fast')
+  assert.match(renderOperationHelp(script, { locale: 'en', maxChars: 2000 }), /--output \(path, required\)/)
+  assert.equal(domain.operationExampleText(docRead), JSON.stringify(operationExample(docRead)))
+})

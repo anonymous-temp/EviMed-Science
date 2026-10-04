@@ -364,6 +364,7 @@ export {
   PACKAGE_HELP_BUDGET,
   describeOperationParam,
   operationExample,
+  operationExampleText,
   renderOperationHelp,
   renderOperationSummary,
   renderPackageHelp,

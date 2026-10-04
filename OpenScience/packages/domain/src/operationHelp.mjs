@@ -130,6 +130,22 @@ export function operationExample(operation) {
 }
 
 /**
+ * The call a reader can copy: for a script a command line (`python <entrypoint>
+ * --flag <value>`), for anything else the JSON object `operationExample` builds.
+ * Required parameters only, defaults and closed values first.
+ * @param {SkillOperation} operation @returns {string}
+ */
+export function operationExampleText(operation) {
+  if (operation.kind !== 'script') return JSON.stringify(operationExample(operation))
+  const words = operation.params.filter((param) => param.required && !param.when).map((param) => {
+    if (param.type === 'boolean') return param.name
+    const value = param.default ?? param.values?.[0] ?? `<${param.name.replace(/^--/u, '')}>`
+    return `${param.name} ${shown(value)}`
+  })
+  return ['python', operation.entrypoint ?? '<script>', ...words].join(' ')
+}
+
+/**
  * The help for one operation, within `maxChars`.
  *
  * Content, in the order it is dropped when the budget is short (last first):
@@ -150,7 +166,7 @@ export function renderOperationHelp(operation, { locale = 'zh', maxChars = OPERA
   const accepts = operation.accepts.length ? `${w.accepts}${w.colon}${operation.accepts.join(w.sep)}` : null
   const produces = operation.produces.length ? `${w.produces}${w.colon}${operation.produces.join(w.sep)}` : null
   const limits = operation.limits.length ? `${w.limits}${w.colon}${operation.limits.join(w.semi)}` : null
-  const call = `${w.example}${w.colon}${JSON.stringify(operationExample(operation))}`
+  const call = `${w.example}${w.colon}${operationExampleText(operation)}`
   /** @param {boolean} full @param {number} [take] @returns {string | null} */
   const params = (full, take = operation.params.length) => {
     if (!operation.params.length) return `${w.params}${w.colon}${w.none}`

@@ -95,6 +95,8 @@ const ID = /^[A-Za-z0-9][A-Za-z0-9_.:@/+-]{0,199}$/u
 const VERSION = /^[0-9A-Za-z][0-9A-Za-z.+_-]{0,63}$/u
 const LICENCE = /^[A-Za-z0-9][A-Za-z0-9.+() -]{0,79}$/u
 const DEPENDENCY_NAME = /^[A-Za-z0-9][A-Za-z0-9._+/-]{0,99}$/u
+/** A parameter is a name, a dotted or bracketed path into an object, or a command-line flag (`--output-dir`). */
+const PARAM_NAME = /^(?:--)?[A-Za-z_][A-Za-z0-9_.[\]-]{0,79}$/u
 const CONSTRAINT = /^(?:==|>=|<=|~=|!=|>|<)[0-9A-Za-z.*+_-]{1,63}$/u
 
 /**
@@ -295,7 +297,7 @@ function normalizeDependencies(value) {
 /** @param {unknown} value @returns {SkillOperationParam | null} */
 function normalizeParam(value) {
   if (!isObject(value) || !SKILL_PARAM_TYPES.includes(value.type)) return null
-  const name = matching(value.name, /^[A-Za-z_][A-Za-z0-9_.[\]-]{0,79}$/u)
+  const name = matching(value.name, PARAM_NAME)
   if (!name) return null
   const values = Array.isArray(value.values) ? value.values.filter((/** @type {unknown} */ item) => typeof item === 'string' && item.length <= 80).slice(0, 32) : null
   const fallback = value.default
@@ -309,7 +311,7 @@ function normalizeParam(value) {
     max: finite(value.max),
     unit: text(value.unit, 24),
     description: text(value.description, 200),
-    when: isObject(value.when) && matching(value.when.param, /^[A-Za-z_][A-Za-z0-9_.[\]-]{0,79}$/u) && typeof value.when.equals === 'string' && value.when.equals.length <= 80
+    when: isObject(value.when) && matching(value.when.param, PARAM_NAME) && typeof value.when.equals === 'string' && value.when.equals.length <= 80
       ? { param: value.when.param, equals: value.when.equals }
       : null,
   }
