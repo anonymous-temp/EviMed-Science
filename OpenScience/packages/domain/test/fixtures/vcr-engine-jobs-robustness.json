@@ -294,6 +294,120 @@
         ],
         "replicates": 200
       }
+    },
+    {
+      "name": "prognostic_adjustment, binary",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "prognostic_adjustment_comparator",
+        "method": "comparator.prognostic_adjustment",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "binary"
+          },
+          "prognosticScoreColumn": "prognostic_score",
+          "treatmentColumn": "arm",
+          "outcomeColumn": "response",
+          "covariates": [
+            "age",
+            "stratum"
+          ]
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      }
+    },
+    {
+      "name": "prognostic_adjustment, time to event",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "prognostic_adjustment_comparator",
+        "method": "comparator.prognostic_adjustment",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "prognosticScoreColumn": "prognostic_score",
+          "tau": 18,
+          "timeUnit": "months",
+          "parameterCode": "OS"
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          },
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:events",
+            "shape": "events",
+            "location": "std_1/snp_1/events.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      }
+    },
+    {
+      "name": "prognostic_adjustment, a cohort first",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "prognostic_adjustment_comparator",
+        "method": "comparator.prognostic_adjustment",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "binary"
+          },
+          "prognosticScoreColumn": "score",
+          "cohortRules": [
+            {
+              "name": "adult",
+              "rule": {
+                "op": "compare",
+                "column": "age",
+                "comparator": "gte",
+                "value": 18
+              }
+            }
+          ]
+        },
+        "inputs": [
+          {
+            "kind": "snapshot_file",
+            "id": "snp_1:1",
+            "location": "std_1/snp_1/raw1.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      }
     }
   ],
   "invalid": [
@@ -1236,6 +1350,385 @@
             "location": "std_1/snp_1/subject.csv",
             "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             "valueSource": "synthetic"
+          }
+        ]
+      },
+      "expected": [
+        "input_source_not_individual@inputs[0].valueSource"
+      ]
+    },
+    {
+      "name": "prognostic_adjustment: the score is missing",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "prognostic_adjustment_comparator",
+        "method": "comparator.prognostic_adjustment",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "binary"
+          },
+          "treatmentColumn": "arm"
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_missing@scenario.prognosticScoreColumn"
+      ]
+    },
+    {
+      "name": "prognostic_adjustment: tau missing for time to event",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "prognostic_adjustment_comparator",
+        "method": "comparator.prognostic_adjustment",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "prognosticScoreColumn": "score"
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_missing@scenario.tau"
+      ]
+    },
+    {
+      "name": "prognostic_adjustment: tau in a binary scenario",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "prognostic_adjustment_comparator",
+        "method": "comparator.prognostic_adjustment",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "binary"
+          },
+          "prognosticScoreColumn": "score",
+          "tau": 12
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.tau"
+      ]
+    },
+    {
+      "name": "prognostic_adjustment: an outcome column for time to event",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "prognostic_adjustment_comparator",
+        "method": "comparator.prognostic_adjustment",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "prognosticScoreColumn": "score",
+          "tau": 12,
+          "outcomeColumn": "y"
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.outcomeColumn"
+      ]
+    },
+    {
+      "name": "prognostic_adjustment: a continuous endpoint",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "prognostic_adjustment_comparator",
+        "method": "comparator.prognostic_adjustment",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "continuous"
+          },
+          "prognosticScoreColumn": "score"
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "endpoint_not_supported@scenario.endpoint.type"
+      ]
+    },
+    {
+      "name": "prognostic_adjustment: no endpoint",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "prognostic_adjustment_comparator",
+        "method": "comparator.prognostic_adjustment",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "prognosticScoreColumn": "score"
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_missing@scenario.endpoint"
+      ]
+    },
+    {
+      "name": "prognostic_adjustment: a column name that is not a name",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "prognostic_adjustment_comparator",
+        "method": "comparator.prognostic_adjustment",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "binary"
+          },
+          "prognosticScoreColumn": "score; drop"
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.prognosticScoreColumn"
+      ]
+    },
+    {
+      "name": "prognostic_adjustment: covariates repeated",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "prognostic_adjustment_comparator",
+        "method": "comparator.prognostic_adjustment",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "binary"
+          },
+          "prognosticScoreColumn": "score",
+          "covariates": [
+            "age",
+            "age"
+          ]
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.covariates"
+      ]
+    },
+    {
+      "name": "prognostic_adjustment: a key the engine does not read",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "prognostic_adjustment_comparator",
+        "method": "comparator.prognostic_adjustment",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "binary"
+          },
+          "prognosticScoreColumn": "score",
+          "lambda": 0.9
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.lambda"
+      ]
+    },
+    {
+      "name": "prognostic_adjustment: no table, which a patient-level kind needs",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "prognostic_adjustment_comparator",
+        "method": "comparator.prognostic_adjustment",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "binary"
+          },
+          "prognosticScoreColumn": "score"
+        },
+        "inputs": []
+      },
+      "expected": [
+        "patient_input_required@inputs"
+      ]
+    },
+    {
+      "name": "prognostic_adjustment: a synthetic table",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "prognostic_adjustment_comparator",
+        "method": "comparator.prognostic_adjustment",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "binary"
+          },
+          "prognosticScoreColumn": "score"
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "synthetic"
+          }
+        ]
+      },
+      "expected": [
+        "input_source_not_individual@inputs[0].valueSource"
+      ]
+    },
+    {
+      "name": "prognostic_adjustment: an aggregate table",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "prognostic_adjustment_comparator",
+        "method": "comparator.prognostic_adjustment",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "binary"
+          },
+          "prognosticScoreColumn": "score"
+        },
+        "inputs": [
+          {
+            "kind": "snapshot_file",
+            "id": "snp_1:1",
+            "location": "std_1/snp_1/raw1.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "aggregate"
           }
         ]
       },

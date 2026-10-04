@@ -554,6 +554,7 @@ export const METHOD_LABELS = Object.freeze(/** @type {Record<string, string>} */
   "comparator.rmst": "RMST 比较", "comparator.maic": "匹配调整间接比较", "comparator.evalue": "E 值", "comparator.map_prior": "MAP 先验",
   "design.analytic": "方案的解析计算", "design.simulate": "方案的模拟运行", "design.grid": "设计网格", "design.assurance": "成功把握",
   "design.procova": "预后协变量调整", "accrual.poisson_gamma": "Poisson–Gamma 入组预测", "matching.evaluate": "逐条匹配",
+  "comparator.negative_control": "阴性对照结局", "comparator.tipping_point": "缺失数据的临界点分析", "comparator.prognostic_adjustment": "预后评分校正（二分类/事件时间）",
 }));
 
 /** The parameters a precedent is used for, said in words. A key with no word is not printed. */

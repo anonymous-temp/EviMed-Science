@@ -23,7 +23,7 @@ vcr_case("N40a", c("AC-04", "AC-30"), function() {
   missed <- 0L
   for (item in fx$invalid) missed <- missed + sum(!(unlist(item$expected) %in% .n00_issue_keys(vcr_validate_job(item$job))))
   methods <- unique(vapply(fx$valid, function(item) item$job$method, character(1)))
-  want_methods <- c("comparator.negative_control", "comparator.tipping_point")
+  want_methods <- c("comparator.negative_control", "comparator.tipping_point", "comparator.prognostic_adjustment")
   ok <- !length(drift) && !length(unclean) && missed == 0L && all(want_methods %in% methods)
   list(pass = ok,
        detail = sprintf("%d robustness jobs (%d valid, %d invalid, methods %s): %d verdicts differ from the domain's, %d valid jobs refused, %d expected issues missing%s",

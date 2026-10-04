@@ -603,7 +603,7 @@ export const VCR_JOB_KINDS = frozen([
   'evalue', 'rmst', 'design_analytic', 'design_simulation', 'design_grid', 'assurance', 'procova',
   'accrual_forecast', 'map_prior', 'match_criteria',
   // --- appended (2026-10-04): the robustness methods ---
-  'negative_control_comparator', 'tipping_point',
+  'negative_control_comparator', 'tipping_point', 'prognostic_adjustment_comparator',
   // --- end robustness methods ---
 ])
 export const VCR_JOB_STATES = frozen(['queued', 'running', 'succeeded', 'failed', 'canceled', 'awaiting_budget'])
@@ -732,6 +732,15 @@ export const VCR_NEGATIVE_CONTROL_VERDICT_LABELS_ZH = Object.freeze({
   consistent_with_null: '与无效值一致',
   uninformative: '信息不足（区间宽到容得下主要结局的效应大小）',
 })
+/**
+ * What regulators have qualified of prognostic covariate adjustment: continuous
+ * outcomes only (the EMA qualification opinion on PROCOVA, CHMP 15 September 2022).
+ * Every result of `comparator.prognostic_adjustment` carries this word in
+ * `diagnostics.regulatoryStatus.qualification` so the page can say it; the engine
+ * reads it from its snapshot, and a test holds the two equal.
+ */
+export const VCR_PROGNOSTIC_QUALIFICATION = 'none_beyond_continuous'
+export const VCR_PROGNOSTIC_QUALIFICATION_LABEL_ZH = '目前没有监管机构认可将预后协变量调整用于二分类或事件时间终点：EMA 2022 年 9 月的资格认定意见只覆盖连续终点，二分类与事件时间终点留待以后；FDA 2023 年指南称非线性模型调整“可能可以接受”，并要求与审评部门讨论。'
 // --- end robustness methods ---
 export const VCR_MAP_CONFLICT_BOUND = 0.01
 export const VCR_RECONSTRUCTION_TOLERANCE = Object.freeze({

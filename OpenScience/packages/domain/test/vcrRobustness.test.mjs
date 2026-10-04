@@ -22,6 +22,8 @@ import {
   VCR_NOT_ESTIMABLE_RULE_LABELS_ZH,
   VCR_OBSERVED_ONLY_METHODS,
   VCR_PATIENT_LEVEL_JOB_KINDS,
+  VCR_PROGNOSTIC_QUALIFICATION,
+  VCR_PROGNOSTIC_QUALIFICATION_LABEL_ZH,
   VCR_SCENARIO_SCHEMAS,
   validateEngineJob,
 } from "@evimed/domain";
@@ -34,6 +36,7 @@ const keys = (issues) => issues.map((issue) => `${issue.code}@${issue.field}`).s
 const METHODS = /** @type {const} */ ([
   ["comparator.negative_control", "negative_control_comparator"],
   ["comparator.tipping_point", "tipping_point"],
+  ["comparator.prognostic_adjustment", "prognostic_adjustment_comparator"],
 ])
 
 test("the robustness parity jobs: every valid one is clean, every invalid one names what it says, and each method has both", () => {
@@ -85,8 +88,26 @@ test("negative controls: the calibration floor is a domain preset the engine rea
   assert.deepEqual(snapshot.negativeControlVerdicts, [...VCR_NEGATIVE_CONTROL_VERDICTS]);
 });
 
-test("a robustness job kind is not a patient-level kind unless it must carry a snapshot", () => {
-  // negative_control_comparator takes either columns of a table or estimates analysed elsewhere, so a job without a table is valid
+test("which robustness job kinds must carry a snapshot: the ones that always read patient-level rows", () => {
+  // a negative-control job may name only estimates analysed elsewhere, and a binary tipping-point job may give counts
   assert.ok(!VCR_PATIENT_LEVEL_JOB_KINDS.includes("negative_control_comparator"));
+  assert.ok(!VCR_PATIENT_LEVEL_JOB_KINDS.includes("tipping_point"));
+  // prognostic adjustment is a regression on a table
+  assert.ok(VCR_PATIENT_LEVEL_JOB_KINDS.includes("prognostic_adjustment_comparator"));
   assert.ok(ALL_ERROR_CODES.includes("scenario_field_missing"));
+});
+
+test("prognostic adjustment: the word every result carries about regulators is the domain's and the engine reads it from its snapshot", () => {
+  assert.equal(VCR_PROGNOSTIC_QUALIFICATION, "none_beyond_continuous");
+  assert.match(VCR_PROGNOSTIC_QUALIFICATION_LABEL_ZH, /EMA/);
+  assert.match(VCR_PROGNOSTIC_QUALIFICATION_LABEL_ZH, /连续终点/);
+  const url = new URL("../../../../项目代码/vcr-engine/R/domain-snapshot.json", import.meta.url);
+  if (!existsSync(url)) return;
+  assert.equal(JSON.parse(readFileSync(url, "utf8")).prognosticQualification, VCR_PROGNOSTIC_QUALIFICATION);
+});
+
+test("the robustness methods are listed once in the dispatch the engine publishes, so a method added later cannot be skipped by the evidence", () => {
+  // every method of the domain has a schema and a kind: the evidence generator derives its method list from this registry
+  assert.deepEqual(Object.keys(VCR_SCENARIO_SCHEMAS).sort(), Object.keys(VCR_ENGINE_METHODS).sort());
+  assert.deepEqual(new Set(Object.values(VCR_JOB_METHODS)), new Set(Object.keys(VCR_ENGINE_METHODS)));
 });

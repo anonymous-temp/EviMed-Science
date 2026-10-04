@@ -69,6 +69,8 @@ const snapshot = {
   nonIndividualSources: [...vocab.VCR_NON_INDIVIDUAL_SOURCES],
   // robustness methods: what the negative-control bias screen may say of a control
   negativeControlVerdicts: [...vocab.VCR_NEGATIVE_CONTROL_VERDICTS],
+  // robustness methods: the one word every prognostic-adjustment result carries about regulators
+  prognosticQualification: vocab.VCR_PROGNOSTIC_QUALIFICATION,
   populationKinds: [...vocab.VCR_POPULATION_KINDS],
   comparatorRoutes: [...vocab.VCR_COMPARATOR_ROUTES],
   estimands: [...vocab.VCR_ESTIMANDS],

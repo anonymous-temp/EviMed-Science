@@ -724,6 +724,21 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
     }, { reqWhen: BINARY }),
   }, { exactlyOne: [{ keys: ['counts', 'outcomeColumn'], when: BINARY }] }),
 
+  // Prognostic covariate adjustment of a binary or a time-to-event endpoint: a pre-specified score (a column) and optional further
+  // covariates in a logistic or a Cox model, reported as a marginal effect. Every result says that no regulator has qualified it
+  // beyond continuous outcomes (`diagnostics.regulatoryStatus`, `VCR_PROGNOSTIC_QUALIFICATION`).
+  'comparator.prognostic_adjustment': object({
+    endpoint: req(ENDPOINT()),
+    treatmentColumn: { ...COLUMN, default: 'arm' },
+    prognosticScoreColumn: req(COLUMN),
+    covariates: COLUMN_LIST,
+    outcomeColumn: gated({ ...COLUMN, default: 'y' }, BINARY),
+    tau: req(gated(number({ gt: 0, unit: 'time units' }), TIME_TO_EVENT)),
+    timeUnit: gated(string({ maxLength: 20, default: 'months' }), TIME_TO_EVENT),
+    parameterCode: gated(string({ maxLength: 64 }), TIME_TO_EVENT),
+    cohortRules: COHORT_STEPS,
+  }),
+
   // --- end robustness methods ---
 })
 

@@ -101,6 +101,7 @@ export const VCR_ENGINE_METHODS = Object.freeze({
   // --- robustness methods (2026-10-04). A new method is a new entry here, a job kind, a schema and a handler; none of the methods above changed. ---
   'comparator.negative_control': { version: '1.0.0', endpoints: frozen(['binary', 'time_to_event']), crossChecks: frozen(['EmpiricalCalibration 3.1.4 (sccs example)', 'Lipsitch 2010', 'Schuemie 2014']), modelTier: 'data' },
   'comparator.tipping_point': { version: '1.0.0', endpoints: frozen(['binary', 'time_to_event']), crossChecks: frozen(['stats::fisher.test and stats::binom.test', 'closed-form worst case (censoring as event)', 'Jackson et al. 2014']), modelTier: 'data' },
+  'comparator.prognostic_adjustment': { version: '1.0.0', endpoints: frozen(['binary', 'time_to_event']), crossChecks: frozen(['FDA 2023 covariate-adjustment guidance, Table 1', 'M-estimation sandwich by numerical Jacobians', 'survival::coxph and survfit(newdata)']), modelTier: 'data' },
   // --- end robustness methods ---
 })
 
@@ -140,6 +141,7 @@ export const VCR_JOB_METHODS = Object.freeze({
   // --- robustness methods ---
   negative_control_comparator: 'comparator.negative_control',
   tipping_point: 'comparator.tipping_point',
+  prognostic_adjustment_comparator: 'comparator.prognostic_adjustment',
   // --- end robustness methods ---
 })
 
@@ -147,6 +149,7 @@ export const VCR_JOB_METHODS = Object.freeze({
 export const VCR_PATIENT_LEVEL_JOB_KINDS = frozen([
   'profile_snapshot', 'build_cohort', 'synthesize_population', 'population_quality',
   'weight_comparator', 'propensity_weight_comparator', 'rmst', 'match_criteria',
+  'prognostic_adjustment_comparator',
 ])
 
 /**
@@ -168,6 +171,7 @@ export const VCR_INDIVIDUAL_INPUT_SOURCES = Object.freeze({
   // robustness methods
   'comparator.negative_control': VCR_REAL_PATIENT_SOURCES,
   'comparator.tipping_point': VCR_REAL_PATIENT_SOURCES,
+  'comparator.prognostic_adjustment': VCR_REAL_PATIENT_SOURCES,
   'comparator.rmst': frozen([...VCR_REAL_PATIENT_SOURCES, 'reconstructed']),
 })
 /** The methods above, by name (kept for callers that only need the list). */

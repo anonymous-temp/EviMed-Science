@@ -274,6 +274,19 @@
         "Jackson et al. 2014"
       ],
       "modelTier": "data"
+    },
+    "comparator.prognostic_adjustment": {
+      "version": "1.0.0",
+      "endpoints": [
+        "binary",
+        "time_to_event"
+      ],
+      "crossChecks": [
+        "FDA 2023 covariate-adjustment guidance, Table 1",
+        "M-estimation sandwich by numerical Jacobians",
+        "survival::coxph and survfit(newdata)"
+      ],
+      "modelTier": "data"
     }
   },
   "jobMethods": {
@@ -302,7 +315,8 @@
     "map_prior": "comparator.map_prior",
     "match_criteria": "matching.evaluate",
     "negative_control_comparator": "comparator.negative_control",
-    "tipping_point": "comparator.tipping_point"
+    "tipping_point": "comparator.tipping_point",
+    "prognostic_adjustment_comparator": "comparator.prognostic_adjustment"
   },
   "patientLevelJobKinds": [
     "profile_snapshot",
@@ -312,7 +326,8 @@
     "weight_comparator",
     "propensity_weight_comparator",
     "rmst",
-    "match_criteria"
+    "match_criteria",
+    "prognostic_adjustment_comparator"
   ],
   "observedOnlyMethods": [
     "population.synthpop",
@@ -321,6 +336,7 @@
     "comparator.maic",
     "comparator.negative_control",
     "comparator.tipping_point",
+    "comparator.prognostic_adjustment",
     "comparator.rmst"
   ],
   "engineTableInputKeys": [
@@ -369,6 +385,12 @@
       "imputed"
     ],
     "comparator.tipping_point": [
+      "observed",
+      "extracted",
+      "calculated",
+      "imputed"
+    ],
+    "comparator.prognostic_adjustment": [
       "observed",
       "extracted",
       "calculated",
@@ -6097,6 +6119,123 @@
           }
         }
       ]
+    },
+    "comparator.prognostic_adjustment": {
+      "t": "object",
+      "fields": {
+        "endpoint": {
+          "t": "object",
+          "fields": {
+            "type": {
+              "t": "string",
+              "values": [
+                "continuous",
+                "binary",
+                "time_to_event"
+              ],
+              "badValueCode": "endpoint_unknown",
+              "req": true
+            }
+          },
+          "req": true
+        },
+        "treatmentColumn": {
+          "t": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+          "maxLength": 64,
+          "default": "arm"
+        },
+        "prognosticScoreColumn": {
+          "t": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+          "maxLength": 64,
+          "req": true
+        },
+        "covariates": {
+          "t": "array",
+          "items": {
+            "t": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+            "maxLength": 64
+          },
+          "min": 1,
+          "max": 100,
+          "unique": true
+        },
+        "outcomeColumn": {
+          "t": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+          "maxLength": 64,
+          "default": "y",
+          "when": {
+            "path": "endpoint.type",
+            "in": [
+              "binary"
+            ]
+          }
+        },
+        "tau": {
+          "t": "number",
+          "gt": 0,
+          "unit": "time units",
+          "when": {
+            "path": "endpoint.type",
+            "in": [
+              "time_to_event"
+            ]
+          },
+          "req": true
+        },
+        "timeUnit": {
+          "t": "string",
+          "maxLength": 20,
+          "default": "months",
+          "when": {
+            "path": "endpoint.type",
+            "in": [
+              "time_to_event"
+            ]
+          }
+        },
+        "parameterCode": {
+          "t": "string",
+          "maxLength": 64,
+          "when": {
+            "path": "endpoint.type",
+            "in": [
+              "time_to_event"
+            ]
+          }
+        },
+        "cohortRules": {
+          "t": "array",
+          "items": {
+            "t": "object",
+            "fields": {
+              "name": {
+                "t": "string",
+                "minLength": 1,
+                "maxLength": 80,
+                "req": true
+              },
+              "rule": {
+                "t": "rule",
+                "req": true
+              },
+              "unknownAs": {
+                "t": "string",
+                "values": [
+                  "include",
+                  "exclude"
+                ],
+                "default": "exclude"
+              }
+            }
+          },
+          "min": 1,
+          "max": 100
+        }
+      }
     }
   },
   "designSupport": {
@@ -6232,7 +6371,8 @@
     "map_prior",
     "match_criteria",
     "negative_control_comparator",
-    "tipping_point"
+    "tipping_point",
+    "prognostic_adjustment_comparator"
   ],
   "endpointTypes": [
     "continuous",
@@ -6309,6 +6449,7 @@
     "consistent_with_null",
     "uninformative"
   ],
+  "prognosticQualification": "none_beyond_continuous",
   "populationKinds": [
     "real",
     "scenario",

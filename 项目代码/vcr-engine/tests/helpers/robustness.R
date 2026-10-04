@@ -31,6 +31,13 @@ vcr_test_robustness_handler_jobs <- function() {
     tt <- data.frame(USUBJID = sprintf("Q%03d", seq_len(nt)), arm = arm)
     in_tt_s <- vcr_test_input(tt, "snp_e05r:tt_subject", "subject")
     in_tt_e <- vcr_test_input(data.frame(USUBJID = tt$USUBJID, PARAMCD = "OS", AVAL = tm, CNSR = 1L - st), "snp_e05r:tt_event", "event")
+    # a randomized trial with a prognostic score, binary and time to event
+    xs <- stats::rnorm(nt); pa_y <- stats::rbinom(nt, 1L, stats::plogis(-0.6 + 0.8 * arm + 1.2 * xs))
+    pa_t <- stats::rexp(nt, 0.08 * exp(0.7 * xs) * ifelse(arm == 1L, 0.6, 1)); pa_c <- stats::runif(nt, 12, 24)
+    pa_tm <- pmin(pa_t, pa_c); pa_st <- as.integer(pa_t <= pa_c)
+    in_pa_b <- vcr_test_input(data.frame(USUBJID = tt$USUBJID, arm = arm, score = xs, y = pa_y), "snp_e05r:pa_subject", "subject")
+    in_pa_t <- vcr_test_input(data.frame(USUBJID = tt$USUBJID, arm = arm, score = xs), "snp_e05r:pa_tsubject", "subject")
+    in_pa_e <- vcr_test_input(data.frame(USUBJID = tt$USUBJID, PARAMCD = "OS", AVAL = pa_tm, CNSR = 1L - pa_st), "snp_e05r:pa_event", "event")
     list(
       list("comparator.negative_control", list(
         controls = list(list(name = "fracture", estimate = 0.12, se = 0.2), list(name = "cataract", estimate = -0.05, se = 0.15),
@@ -47,7 +54,11 @@ vcr_test_robustness_handler_jobs <- function() {
         analysis = list(method = "fisher_exact", alpha = 0.025, sided = 1)), NULL),
       list("comparator.tipping_point", list(
         endpoint = list(type = "time_to_event"), horizon = 24, treatmentColumn = "arm", deltas = list(1, 1.5, 2, 4)),
-        list(in_tt_s, in_tt_e), 40L)
+        list(in_tt_s, in_tt_e), 40L),
+      list("comparator.prognostic_adjustment", list(
+        endpoint = list(type = "binary"), prognosticScoreColumn = "score", treatmentColumn = "arm", outcomeColumn = "y"), list(in_pa_b)),
+      list("comparator.prognostic_adjustment", list(
+        endpoint = list(type = "time_to_event"), prognosticScoreColumn = "score", treatmentColumn = "arm", tau = 12, timeUnit = "months"), list(in_pa_t, in_pa_e))
     )
   })
 }
