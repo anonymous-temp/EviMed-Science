@@ -567,6 +567,22 @@ export const VCR_STEP_CAPABILITIES = Object.freeze({
   matching: 'vcr-matching',
 })
 
+/**
+ * The contract kind a run delivers for a step, where its capability produces
+ * more than one (`vcr-analysis`: the cohort snapshot, the comparator analysis,
+ * the simulation report — one `produces` entry each). A run dispatched for
+ * some of those steps is held to the files of those products and no others, so
+ * a retry for the patients alone does not owe a comparability table or a
+ * simulation report (the live acceptance of 2026-10-03). Steps whose
+ * capability produces one kind are not listed: there is nothing to narrow.
+ */
+export const VCR_STEP_PRODUCTS = Object.freeze({
+  population: 'vcr-cohort-snapshot',
+  patients: 'vcr-cohort-snapshot',
+  comparator: 'vcr-comparator-analysis',
+  trial: 'vcr-simulation-report',
+})
+
 /** Data-source formats the data plane accepts in the first version (§8.1). */
 export const VCR_SOURCE_FORMATS = frozen(['csv', 'tsv', 'xlsx', 'json'])
 /** The three analysis tables every snapshot derives (ADaM shapes, §8.1). */

@@ -322,9 +322,55 @@ function parseSkillName(text, label) {
   return expectString(frontmatter.name, `${label} frontmatter name`, { max: 63 });
 }
 
+/**
+ * What a capability owes for each contract kind it produces: the files and the
+ * checks of that `produces` entry. The manifest's own `outputs` is the union of
+ * every entry (a duplicate path is refused there), which is right for a
+ * capability asked for everything and wrong for a run sent for one product.
+ * @param {{ produces: readonly { contractKind: string, outputs: readonly { path: string, required: boolean }[], checks: readonly string[] }[] }} source
+ */
+function productsOf(source) {
+  return Object.freeze(source.produces.map((product) => Object.freeze({
+    contractKind: product.contractKind,
+    outputs: Object.freeze(product.outputs.map((output) => Object.freeze({ path: output.path, required: output.required }))),
+    completionChecks: Object.freeze([...product.checks]),
+  })));
+}
+
+/**
+ * The capability as a run dispatched for some of its products is held to it:
+ * the manifest with `outputs` and `completionChecks` narrowed to those
+ * products, in the capability's own order. Null where there is nothing to
+ * narrow — one product, none named, none of the names this capability's, or
+ * every product named — so the caller holds the run to the whole manifest.
+ * @param {{ manifest: Record<string, any>, products?: ReturnType<typeof productsOf> | null }} entry
+ * @param {readonly string[] | null | undefined} kinds
+ */
+function scopedManifest(entry, kinds) {
+  const products = entry.products ?? [];
+  if (products.length < 2 || !Array.isArray(kinds) || kinds.length === 0) return null;
+  const named = products.filter((product) => kinds.includes(product.contractKind));
+  if (named.length === 0 || named.length === products.length) return null;
+  /** @type {Map<string, { path: string, required: boolean }>} */
+  const outputs = new Map();
+  for (const product of named) {
+    for (const output of product.outputs) {
+      const seen = outputs.get(output.path);
+      outputs.set(output.path, seen ? { path: output.path, required: seen.required || output.required } : output);
+    }
+  }
+  return Object.freeze({
+    ...entry.manifest,
+    outputs: Object.freeze([...outputs.values()].map((output) => Object.freeze({ ...output }))),
+    completionChecks: Object.freeze([...new Set(named.flatMap((product) => product.completionChecks))]),
+  });
+}
+
 class AgentRegistry {
   #publicAgents;
   #packagesById;
+  /** @type {Map<string, Readonly<Record<string, any>>>} the scoped views already built, by capability and products */
+  #scoped = new Map();
 
   constructor(packages) {
     const sorted = [...packages].sort((left, right) => left.manifest.id.localeCompare(right.manifest.id, "en"));
@@ -336,8 +382,27 @@ class AgentRegistry {
     return this.#publicAgents.filter(agent => includeInternal || agent.visibility !== "internal");
   }
 
-  get(id) {
-    return this.#packagesById.get(id)?.manifest ?? null;
+  /**
+   * A capability's manifest. With `products` — the contract kinds a run was
+   * dispatched for — a capability that produces several is answered narrowed
+   * to those: a run for one product is held to that product's files and
+   * checks, not to everything the capability can produce (the live acceptance
+   * of 2026-10-03: a retry for the patients alone was marked unverified for a
+   * comparability table it was never asked for). Everything else about the
+   * manifest is the same object's.
+   * @param {string} id @param {{ products?: readonly string[] | null }} [options]
+   */
+  get(id, { products = null } = {}) {
+    const entry = this.#packagesById.get(id);
+    if (!entry) return null;
+    if (!Array.isArray(products) || products.length === 0) return entry.manifest;
+    const key = `${id}\u0000${[...products].sort().join("\u0000")}`;
+    if (!this.#scoped.has(key)) {
+      const view = scopedManifest(entry, products);
+      if (view) this.#scoped.set(key, view);
+      else return entry.manifest;
+    }
+    return this.#scoped.get(key) ?? entry.manifest;
   }
 
   getPackage(id) {
@@ -450,7 +515,7 @@ export async function loadAgentRegistry({
       if (parseSkillName(skillText, `${entry.name}/${skillFileName}`) !== mapped.skill) {
         throw registryError(`${entry.name}/${skillFileName} frontmatter name must be "${mapped.skill}".`);
       }
-      const replacement = { manifest: mapped, packageDir, manifestPath, skillPath, skillText };
+      const replacement = { manifest: mapped, packageDir, manifestPath, skillPath, skillText, products: productsOf(source) };
       const existingIndex = packages.findIndex((candidate) => candidate.manifest.id === mapped.id);
       if (existingIndex >= 0) packages[existingIndex] = replacement;
       else { ids.add(mapped.id); packages.push(replacement); }

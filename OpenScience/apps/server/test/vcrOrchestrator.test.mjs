@@ -10,7 +10,7 @@ import {
   VCR_ACCRUAL_TOLERANCE, VCR_ANALYSIS_STEPS, VCR_ASSUMPTION_BINDINGS, VCR_EXPORT_OUTLINES, VCR_RUN_CAPABILITIES, VcrOrchestrator,
   vcrAssumptionConflicts, vcrBindAssumptions, vcrBuildStages, vcrDefaultBrief, vcrDesignPriorFrom, vcrDispatchId, vcrEvidenceProduct, vcrExportBriefLines,
   vcrGapsForRule, vcrIdleStepStatus, vcrJobKindFor, vcrModelApplicabilityIssues, vcrPopulationVariables,
-  vcrProgramSteps, vcrProjectScenario, vcrReviewRepairBrief, vcrRunId, vcrRunPrompt, vcrSimpleStepStatus, vcrStepUpdates, vcrStepsInFlight,
+  vcrProductsOfSteps, vcrProgramSteps, vcrProjectScenario, vcrReviewRepairBrief, vcrRunId, vcrRunPrompt, vcrSimpleStepStatus, vcrStepUpdates, vcrStepsInFlight,
   vcrSupersededNodes, wantedVcrSteps,
 } from "../src/vcrOrchestrator.mjs";
 import { VCR_NOTICE_KINDS, createVcrNotifier, vcrNoticeHref, vcrStudyName } from "../src/vcrNotify.mjs";
@@ -845,4 +845,37 @@ test("while the platform pools this study's evidence the step reads running, and
   await live.orchestrator.advance("std_live");
   assert.equal(live.steps().evidence.status, "running", "a job of its own is open");
   assert.equal(live.dispatched.some((run) => run.capabilityId === "vcr-evidence"), false, "a step that reads running is not sent a second run");
+});
+
+// --- a run is dispatched for the products of the steps it is out for -----------------------------
+
+test("a run names the contract kinds of the steps it covers, once each; a step whose capability produces one kind names none", () => {
+  assert.deepEqual(vcrProductsOfSteps(["population", "patients", "comparator", "trial"]), ["vcr-cohort-snapshot", "vcr-comparator-analysis", "vcr-simulation-report"]);
+  assert.deepEqual(vcrProductsOfSteps(["patients"]), ["vcr-cohort-snapshot"]);
+  assert.deepEqual(vcrProductsOfSteps(["population", "patients"]), ["vcr-cohort-snapshot"], "two steps of one product are one product");
+  assert.deepEqual(vcrProductsOfSteps(["trial", "comparator"]), ["vcr-comparator-analysis", "vcr-simulation-report"], "in the capability's order, not the caller's");
+  for (const step of ["definition", "evidence", "matching", "not_a_step"]) assert.deepEqual(vcrProductsOfSteps([step]), [], step);
+  assert.deepEqual(vcrProductsOfSteps([]), []);
+});
+
+test("a retry scoped to the patients is dispatched for the cohort snapshot alone; the first run for all four steps for all three products; the other steps' runs name none", async () => {
+  // The live acceptance: the first analysis run left the patients failed, and the second was sent for them alone.
+  const retry = studyInMemory({ assumptions: [{ key: "control_median_pfs", sourceKind: "external_evidence", evidenceIds: ["evd_1"], pooling: {} }],
+    steps: { evidence: { status: "done" }, population: { status: "done" }, patients: { status: "failed" }, comparator: { status: "done" }, trial: { status: "done" }, matching: { status: "done" } } });
+  await retry.orchestrator.advance("std_live");
+  assert.equal(retry.dispatched.length, 1);
+  assert.equal(retry.dispatched[0].capabilityId, "vcr-analysis");
+  assert.equal(retry.dispatched[0].reason, "vcr:patients");
+  assert.deepEqual(retry.dispatched[0].products, ["vcr-cohort-snapshot"], "the delivery gate holds this run to the cohort snapshot's files");
+  assert.deepEqual(retry.state.claims[0].detail.scope, [{ step: "patients", fidelity: "full" }]);
+
+  const first = studyInMemory({ assumptions: [{ key: "control_median_pfs", sourceKind: "external_evidence", evidenceIds: ["evd_1"], pooling: {} }], steps: { evidence: { status: "done" } } });
+  await first.orchestrator.advance("std_live");
+  assert.deepEqual(first.dispatched.map((run) => [run.capabilityId, run.products]), [["vcr-analysis", ["vcr-cohort-snapshot", "vcr-comparator-analysis", "vcr-simulation-report"]]]);
+
+  // Definition, evidence and matching are single-product capabilities: nothing to narrow, so nothing named.
+  const evidence = studyInMemory({ assumptions: [] });
+  await evidence.orchestrator.advance("std_live");
+  assert.equal(evidence.dispatched[0].capabilityId, "vcr-evidence");
+  assert.equal(Object.hasOwn(evidence.dispatched[0], "products"), false);
 });

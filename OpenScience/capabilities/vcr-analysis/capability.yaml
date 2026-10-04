@@ -41,13 +41,16 @@ tools:
 - mcp__evimed__kb_search
 - mcp__evimed__term_normalize
 - mcp__evimed__web_read
-# Three contract kinds, one set of files. The generated runtime manifest
-# flattens every `produces` entry into one `outputs` list, so the paths have to
-# be disjoint and whatever is `required` is required of *every* delivery. That
-# is why the report is `analysis-report.md` rather than three step-specific
-# names: one analysis delivery is one report and one machine-readable result,
-# and the two files a particular step adds are optional here and read by that
-# step's own contract validator.
+# Three contract kinds. A run is held to the entries of the products it was
+# dispatched for (`AgentRegistry.get(id, { products })`; the 虚拟临研
+# orchestrator names them from the steps a run covers, `VCR_STEP_PRODUCTS`): a
+# retry for the patients alone owes the cohort entry's two files and nothing of
+# the comparator or the simulation. A run that names none — a conversation bound
+# to this capability — is held to every entry flattened into one `outputs` list,
+# whose paths have to be disjoint. That is why the report is `analysis-report.md`
+# rather than three step-specific names: one analysis delivery is one report and
+# one machine-readable result, and the file a particular product adds is that
+# product's own entry.
 produces:
 - contractKind: vcr-cohort-snapshot
   outputs:
@@ -62,11 +65,11 @@ produces:
   outputs:
   # Required *of this kind*, which is the only place it is asked for: the run
   # policy resolves a deliverable's expected outputs from the produces entry
-  # whose contractKind it declared, so a comparator delivery owes its
-  # comparability table and a cohort delivery does not. The always-files
-  # (analysis-report.md, results.json) belong to the cohort entry above and
-  # cannot be repeated here — the manifest's flattened output list refuses
-  # a duplicate path (2026-09-28 merge).
+  # whose contractKind it declared, and the control plane's gate does the same
+  # for a run dispatched for named products, so a comparator delivery owes its
+  # comparability table and a cohort delivery does not. The report and the
+  # results file belong to the cohort entry above and cannot be repeated here —
+  # the flattened output list refuses a duplicate path (2026-09-28 merge).
   - path: comparability.md
     required: true
   checks:

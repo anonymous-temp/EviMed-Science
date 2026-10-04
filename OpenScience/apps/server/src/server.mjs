@@ -3819,9 +3819,12 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
    * session bound to the capability, `automated` — in the study's own project,
    * so it shows under that project and takes that project's one run slot. A
    * deterministic step is not a run and does not come through here.
-   * @param {{ userId: string, projectId: string, studyId: string, capabilityId: string, dispatchId: string, reason: string, brief: string }} input
+   * `products` are the contract kinds the run is sent for, when its capability produces several: the delivery gate holds the run to
+   * those products' files and checks (`agentRegistry.get(id, { products })`) rather than to everything the capability can produce.
+   * @param {{ userId: string, projectId: string, studyId: string, capabilityId: string, dispatchId: string, reason: string, brief: string,
+   *   products?: string[] }} input
    */
-  async function dispatchVcrRun({ userId, projectId, capabilityId, dispatchId, reason, brief }) {
+  async function dispatchVcrRun({ userId, projectId, capabilityId, dispatchId, reason, brief, products = [] }) {
     const user = await store.userById(userId);
     if (!user) throw new HttpError(404, "vcr_study_not_found", "The study's account is unavailable.");
     const project = await store.requireProject(user, projectId);
@@ -3843,6 +3846,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       const run = await agentRuns.dispatch(project, {
         sessionId: session.id, dispatchId, automated: true, question: brief,
         effectiveAgentId: selected.id, effectiveAgentVersion: selected.version, effectiveRuntimeAgent: selected.runtimeAgent, effectiveRouteReason: reason,
+        ...(products.length ? { effectiveProducts: products } : {}),
         ...(runEstimate(selected) ? { estimatedMinutes: runEstimate(selected) } : {}),
       }, async (binding, dispatchedRun, repairText = null) => {
         const promptText = typeof repairText === "string" && repairText.trim() ? repairText : brief;

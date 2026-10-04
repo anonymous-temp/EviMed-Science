@@ -128,6 +128,7 @@ const dispatchFields = new Set([
   "effectiveAgentVersion",
   "effectiveRuntimeAgent",
   "effectiveRouteReason",
+  "effectiveProducts",
 ]);
 const dispatchStatuses = new Set(["dispatching", "accepted", "unknown", "rejected"]);
 const defaultMaxRuns = 1000;
@@ -228,6 +229,30 @@ function derivedRunTitle(run) {
   return capabilityTitle(run.effectiveAgentId) ?? "未命名的研究";
 }
 
+const maxEffectiveProducts = 8;
+const productKindPattern = /^[a-z][a-z0-9-]{0,62}$/;
+
+/**
+ * The contract kinds a dispatch names — the products of a capability that
+ * produces several which this run is sent for (`AgentRegistry.get(id,
+ * { products })` narrows the delivery gate to them). Null when none are named,
+ * which is every run of a capability with one product. A dispatch that names
+ * them badly is refused; a record read back that carries them badly reads as
+ * naming none, so an old ledger can never be the reason a run is not listed.
+ * @param {unknown} value @param {{ strict?: boolean }} [options]
+ * @returns {readonly string[] | null}
+ */
+function normalizeEffectiveProducts(value, { strict = false } = {}) {
+  if (value == null) return null;
+  if (!Array.isArray(value) || value.length > maxEffectiveProducts
+    || value.some((kind) => typeof kind !== "string" || !productKindPattern.test(kind))) {
+    if (strict) throw invalid("Effective products must be a short list of contract kinds.");
+    return null;
+  }
+  const unique = [...new Set(value)];
+  return unique.length > 0 ? Object.freeze(unique) : null;
+}
+
 function normalizeDispatchInput(input) {
   assertObject(input, "Agent run dispatch payload must be an object.");
   assertOnlyFields(input, dispatchFields);
@@ -247,6 +272,8 @@ function normalizeDispatchInput(input) {
   if (input.effectiveRouteReason != null && !routeReasonPattern.test(input.effectiveRouteReason)) {
     throw invalid("Effective route reason is invalid.");
   }
+  const effectiveProducts = normalizeEffectiveProducts(input.effectiveProducts, { strict: true });
+  if (effectiveProducts && input.effectiveAgentId == null) throw invalid("Effective products need the specialist they belong to.");
   if (input.automated != null && typeof input.automated !== "boolean") throw invalid("automated must be a boolean.");
   const estimatedMinutes = input.estimatedMinutes == null ? null : normalizeRunEstimate(input.estimatedMinutes);
   if (input.estimatedMinutes != null && !estimatedMinutes) throw invalid("estimatedMinutes must be { min, max } minutes.");
@@ -275,6 +302,7 @@ function normalizeDispatchInput(input) {
     effectiveAgentVersion: input.effectiveAgentVersion ?? null,
     effectiveRuntimeAgent: input.effectiveRuntimeAgent ?? null,
     effectiveRouteReason: input.effectiveRouteReason ?? null,
+    effectiveProducts,
   };
 }
 
@@ -417,6 +445,7 @@ function foldEvents(events) {
         effectiveAgentVersion,
         effectiveRuntimeAgent,
         effectiveRouteReason,
+        ...(normalizeEffectiveProducts(event.effectiveProducts) ? { effectiveProducts: normalizeEffectiveProducts(event.effectiveProducts) } : {}),
         model: event.model,
         // Read through the same preamble rule a new dispatch writes with, so
         // a ledger written before it lists the same way.
@@ -2307,7 +2336,10 @@ async function specialistCompletionOutcome(
 ) {
   if (!run.effectiveAgentId) return { artifacts: [], errorCode: null };
   const registry = await agentRegistry;
-  const agent = registry?.get?.(run.effectiveAgentId);
+  // Held to the products it was dispatched for: a run sent for one product of a
+  // capability that produces several owes that product's files and checks, not
+  // everything the capability can produce. A run that named none is held to all.
+  const agent = registry?.get?.(run.effectiveAgentId, { products: run.effectiveProducts });
   if (!agent || agent.version !== run.effectiveAgentVersion || agent.runtimeAgent !== run.effectiveRuntimeAgent) {
     return { artifacts: [], errorCode: "specialist_contract_unavailable" };
   }
@@ -4088,6 +4120,7 @@ export class AgentRunStore {
     effectiveAgentVersion = session.mode === "specialist" ? session.agentVersion : null,
     effectiveRuntimeAgent = session.mode === "specialist" ? session.runtimeAgent : null,
     effectiveRouteReason = session.mode === "specialist" ? "session-binding" : null,
+    effectiveProducts = null,
     nativeTurn = null,
     kernelRequestIds = null,
     legacyRunId = null,
@@ -4177,6 +4210,7 @@ export class AgentRunStore {
         effectiveAgentVersion,
         effectiveRuntimeAgent,
         effectiveRouteReason,
+        ...(normalizeEffectiveProducts(effectiveProducts) ? { effectiveProducts: normalizeEffectiveProducts(effectiveProducts) } : {}),
         model: this.model,
         question,
         ...(automated === true ? { automated: true } : {}),
@@ -4234,6 +4268,7 @@ export class AgentRunStore {
       effectiveAgentVersion,
       effectiveRuntimeAgent,
       effectiveRouteReason,
+      effectiveProducts,
     } = normalizeDispatchInput(input);
     if (typeof sendPrompt !== "function") throw new TypeError("Agent run dispatch requires a prompt sender.");
     const existing = (await this.list(project)).find((run) => run.dispatchId === dispatchId);
@@ -4252,7 +4287,7 @@ export class AgentRunStore {
           effectiveRouteReason: effectiveRouteReason ?? "session-binding",
         }
       : { effectiveAgentId, effectiveAgentVersion, effectiveRuntimeAgent, effectiveRouteReason };
-    const reservation = await this.reserveRun(project, session, { baselineCursor, dispatchId, automated, estimatedMinutes, question, ...selected });
+    const reservation = await this.reserveRun(project, session, { baselineCursor, dispatchId, automated, estimatedMinutes, question, ...selected, effectiveProducts });
     const record = reservation.run;
     if (!reservation.owner) return this.existingDispatch(project, record);
     this.projects.set(`${project.userId}:${project.id}`, project);
@@ -5256,7 +5291,7 @@ export class AgentRunStore {
         // order a run to patch files it was never asked to write. That line
         // already has the right behaviour for a citation it cannot vouch for:
         // deliver the answer and mark it unverified.
-        const repairAgent = (await this.agentRegistry)?.get?.(run.effectiveAgentId);
+        const repairAgent = (await this.agentRegistry)?.get?.(run.effectiveAgentId, { products: run.effectiveProducts });
         const fileDeliverable = repairAgent?.completionChecks?.includes("requiredOutputsExist") === true;
         const canRepair = fileDeliverable
           && repairableEvidencePackageErrorCodes.has(completion.errorCode)
@@ -6890,6 +6925,12 @@ export function snapshotAcceptedPackageForRepairForTest(project, run, runtimeGen
 /** Test seam: one accepted digest authorizes exactly one revision transition. */
 export function consumeRepairAuthorizationForTest(project, input, options) {
   return consumeRepairAuthorization(project, input, options);
+}
+
+/** Test seam: the delivery gate of a specialist run — which files and checks a run is held to.
+ *  @param {Parameters<typeof requiredSpecialistArtifacts>} args */
+export function requiredSpecialistArtifactsForTest(...args) {
+  return requiredSpecialistArtifacts(...args);
 }
 
 /** Test seam: which files a message claims to have written, without a run

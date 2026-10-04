@@ -60,7 +60,7 @@ import { createHash } from "node:crypto";
 
 import {
   VCR_DESIGN_SUPPORT, VCR_ENGINE_METHODS, VCR_EXPORT_KINDS, VCR_EXPORT_KIND_LABELS_ZH, VCR_JOB_METHODS, VCR_PATIENT_LEVEL_JOB_KINDS,
-  VCR_SCENARIO_SCHEMAS, VCR_STALE_REASONS, VCR_STEPS, VCR_STEP_CAPABILITIES, VCR_STEP_NEEDS, lineageNode, parseLineageNode, recomputePlan,
+  VCR_SCENARIO_SCHEMAS, VCR_STALE_REASONS, VCR_STEPS, VCR_STEP_CAPABILITIES, VCR_STEP_NEEDS, VCR_STEP_PRODUCTS, lineageNode, parseLineageNode, recomputePlan,
   whenHolds,
 } from "@evimed/domain";
 
@@ -85,6 +85,21 @@ export const VCR_OBJECT_RESULT_KINDS = Object.freeze({
 
 /** The four steps one `vcr-analysis` run covers, in order. */
 export const VCR_ANALYSIS_STEPS = Object.freeze(["population", "patients", "comparator", "trial"]);
+
+/**
+ * The contract kinds a run sent for these steps delivers (`VCR_STEP_PRODUCTS`),
+ * once each. The dispatch names them so the delivery gate holds the run to those
+ * products' files and checks: the second analysis run of the live acceptance was
+ * sent for the patients alone and was marked unverified for the comparability
+ * table and the simulation report it had no reason to write. A step whose
+ * capability produces one kind names nothing — there is nothing to narrow.
+ * @param {readonly string[]} steps
+ * @returns {string[]}
+ */
+export function vcrProductsOfSteps(steps) {
+  const named = new Set(steps.map((step) => /** @type {Record<string, string>} */ (VCR_STEP_PRODUCTS)[step]).filter(Boolean));
+  return [...new Set(Object.values(VCR_STEP_PRODUCTS))].filter((kind) => named.has(kind));
+}
 
 /** A step is finished when it is `done` or a deliberate `minimal`. */
 const FINISHED = new Set(["done", "minimal"]);
@@ -1039,7 +1054,7 @@ export class VcrOrchestrator {
    * @param {{ store: import("./vcrStore.mjs").VcrStore, jobs: import("./vcrJobs.mjs").VcrJobs, config?: Record<string, any>,
    *   notifier?: any, seal?: any, queueExport?: any, queueReviews?: ((studyId:string, options?:Record<string,any>) => Promise<unknown>) | null,
    *   dispatchRun?: ((input: { userId: string, projectId: string, studyId: string, capabilityId: string, dispatchId: string,
-   *     reason: string, brief: string }) => Promise<{ runId: string, sessionId: string | null, status?: string | null }>) | null,
+   *     reason: string, brief: string, products?: string[] }) => Promise<{ runId: string, sessionId: string | null, status?: string | null }>) | null,
    *   latestSessionId?: ((input: { userId: string, projectId: string }) => Promise<string | null>) | null,
    *   briefFor?: ((input: { study: any, key: string, scope: string[], detail: Record<string, any>,
    *     fidelity: (step: string) => string }) => string | Promise<string>) | null,
@@ -2185,7 +2200,8 @@ export class VcrOrchestrator {
     }
   }
 
-  /** @typedef {{ key: string, purpose: string, capabilityId: string, reason: string, brief: string, steps: string[], detail?: Record<string, any> }} VcrRunSpec */
+  /** @typedef {{ key: string, purpose: string, capabilityId: string, reason: string, brief: string, steps: string[], detail?: Record<string, any>,
+   *   products?: string[] }} VcrRunSpec */
 
   /** Whether a run key may be tried again. @param {any} mark */
   #allowed(mark) {
@@ -2289,7 +2305,7 @@ export class VcrOrchestrator {
     return {
       key, purpose: "analysis", capabilityId: VCR_STEP_CAPABILITIES.population, reason: `vcr:${scope[0].step}`,
       brief: await this.#brief(study, key, scope.map((entry) => entry.step), { scope }),
-      steps: scope.map((entry) => entry.step), detail: { scope },
+      steps: scope.map((entry) => entry.step), detail: { scope }, products: vcrProductsOfSteps(scope.map((entry) => entry.step)),
     };
   }
 
@@ -2348,6 +2364,7 @@ export class VcrOrchestrator {
       const out = await /** @type {NonNullable<VcrOrchestrator["dispatchRun"]>} */ (this.dispatchRun)({
         userId: study.userId, projectId: study.projectId, studyId: study.id, capabilityId: spec.capabilityId,
         dispatchId: String(mark.dispatch_id), reason: spec.reason, brief: spec.brief,
+        ...(spec.products?.length ? { products: spec.products } : {}),
       });
       const running = await this.#update(study.id, spec.key, {
         state: "running", runId: String(out.runId), sessionId: out.sessionId ?? null, attempts: Number(mark.attempts ?? 0) + 1,
