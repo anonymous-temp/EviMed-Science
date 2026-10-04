@@ -184,7 +184,8 @@
 | 项 | 值 | 依据 |
 |---|---|---|
 | 公共源读超时 | `EVIMED_PUBLIC_SOURCE_TIMEOUT_SECONDS` 默认 20s，钳制 [1,60] | `public_sources.py:94-96`、`:206` |
-| 全文读超时 | 显式 60s | `open_access_fulltext.py:36` |
+| 全文读超时 | 一次调用一个 `Deadline`：全文 110s，带 `supplements` 150s（低于内核工具调用上限 180s）。它覆盖每次尝试、重试之间的等待和流式正文的每一块；`Retry-After` 在剩余时间内遵守，放不下就立即停止并报告对方要求的等待；429/5xx 与连接失败最多 3 次，套接字超时与拒绝不重试。结局是三个具名失败：`source_timeout` / `source_access_denied` / `source_unavailable`（2026-10-04） | `source_transport.py`、`open_access_fulltext.py` `DEADLINE_SECONDS` |
+| 标识符 / 试验记录 / 说明书 | 各自一个 `Deadline`：`identifier_resolve` 45s、`clinical_trial_snapshot` 60s、`dailymed_label` 90s；正文上限按流式读取计，超限为 `truncated`，从不把截断的正文当作文件保存 | `identifier_links.py`、`trial_snapshots.py`、`label_snapshots.py` |
 | 网页读取（`web_read`） | 170s（网关自身总时限 `webReadTimeoutMs` 150s，低于内核工具调用上限 180s） | `web_read.py` `TIMEOUT_SECONDS`、`config.mjs` `webReadTimeoutMs` |
 | OA PDF 读超时 | 经解析模式 150s（`open_access_fulltext.py` `PARSE_TIMEOUT_SECONDS`）；超时后回退到只取 PDF 的原模式 60s，钳制 [1,120] | `public_sources.py:210`、`:236` |
 | 联网检索读超时 | 60s | `web_search.py:102` |
@@ -198,7 +199,7 @@
 | 网关 | 超时 | 性质 | 重试 | 错误码 | 谁会知道 |
 |---|---|---|---|---|---|
 | modelGateway | 300000 ms | **空闲**（每个 chunk 重置） | 无 | `model_gateway_timeout` 504 / `model_gateway_rate_limited` 429 / `model_gateway_upstream_error` 502 / `model_gateway_token_invalid` 401 | 仅调用方；流已开始时**只有一行 stderr** |
-| publicSourceGateway | 60000 ms | **总时限**（含 Unpaywall 解析 + 最多 4 个 PDF 候选） | 候选轮询最多 4 个 | `public_source_gateway_timeout` 504 / `public_source_pdf_not_open_access` 404 / `..._url_forbidden` 403 | 仅调用方，服务端无日志 |
+| publicSourceGateway | 60000 ms | **总时限**（含 Unpaywall 解析 + 最多 4 个 PDF 候选）；**命名下载**（Europe PMC 增补文件包、DailyMed 旧版说明书 zip）另有一个总时限 `publicSourceDownloadTimeoutMs` = 工具调用上限 − 余量 = 150000 ms，且正文流式转发、超限或超时时在线路上截断（不写结束符），运行侧读到的是「正文提前结束」而不是一个看似完整的短文件 | 候选轮询最多 4 个 | `public_source_gateway_timeout` 504（含**正文流式读取中**用尽时限）/ `public_source_gateway_upstream_denied`（源返回 401/403：拒绝，重试无用）/ `public_source_gateway_rate_limited` 429（连同源的 `Retry-After`，头与 `error.retryAfterSeconds`）/ `public_source_pdf_not_open_access` 404 / `..._url_forbidden` 403 | 仅调用方，服务端无日志 |
 | webSearchGateway | 30000 ms | **总时限**（覆盖两次尝试 + 500ms 间隔） | 2 次（共用同一个 AbortController） | `web_search_timeout` 504 / `web_search_unconfigured` 503 / `web_search_rate_limited` 429 | 仅调用方，服务端无日志 |
 | 专科适配器 | 未在服务端设超时（URL 注入容器后由 MCP 侧发起） | — | — | `adapter_unavailable` / `adapter_http_error` / `adapter_circuit_open` | 工具结果 |
 

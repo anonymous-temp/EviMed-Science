@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "comprehensive-drug-evaluation",
-  "version": "sha256:0f24faa41fcb6aa95dcc0b80932fe9f93a5b9466552761bd24aae7055ca2feb4",
+  "version": "sha256:d3104cc0edbdf2532142b10883975aabc2d9ca94102097970e9a330f2174af4e",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 31,
@@ -581,6 +581,12 @@
             "type": "integer",
             "minimum": 0,
             "maximum": 2
+          },
+          "pageToken": {
+            "type": "string",
+            "maxLength": 200,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "ClinicalTrials.gov continuation from data.outcome.next; same query."
           },
           "startYear": {
             "type": "integer",
@@ -1684,6 +1690,12 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 100
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9999,
+            "description": "PubMed route: results to skip. data.outcome says when more exist and what to pass."
           },
           "dateFrom": {
             "type": "string",

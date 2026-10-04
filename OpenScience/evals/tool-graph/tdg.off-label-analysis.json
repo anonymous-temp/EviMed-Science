@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "off-label-analysis",
-  "version": "sha256:20f9e1dfc89fa94605dbec13e74b795abaf16e03c6aab5dff88547d9eef9dd21",
+  "version": "sha256:f6a922a9d7b29998c2b0613a3f50635a3f1f1defe916a915dd3b1b0d9fc7804e",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 30,
@@ -573,6 +573,12 @@
             "type": "integer",
             "minimum": 0,
             "maximum": 2
+          },
+          "pageToken": {
+            "type": "string",
+            "maxLength": 200,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "ClinicalTrials.gov continuation from data.outcome.next; same query."
           },
           "startYear": {
             "type": "integer",
@@ -1223,6 +1229,12 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 100
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9999,
+            "description": "PubMed route: results to skip. data.outcome says when more exist and what to pass."
           },
           "dateFrom": {
             "type": "string",

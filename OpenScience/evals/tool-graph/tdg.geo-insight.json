@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "geo-insight",
-  "version": "sha256:cb10fea2ad1f97d750ae638d54aa57000e0b04f30f4df09f55751e812140165f",
+  "version": "sha256:5c9342d3fc4d7b383bd170b620a1a16539324f482c121bb9d42347689f1c529b",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 32,
@@ -445,6 +445,12 @@
             "type": "integer",
             "minimum": 0,
             "maximum": 2
+          },
+          "pageToken": {
+            "type": "string",
+            "maxLength": 200,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "ClinicalTrials.gov continuation from data.outcome.next; same query."
           },
           "startYear": {
             "type": "integer",
@@ -1050,6 +1056,12 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 100
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9999,
+            "description": "PubMed route: results to skip. data.outcome says when more exist and what to pass."
           },
           "dateFrom": {
             "type": "string",

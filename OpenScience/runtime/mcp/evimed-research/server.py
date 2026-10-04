@@ -514,6 +514,7 @@ TOOL_DEFINITIONS = [
                     ("subject",),
                 ),
                 "limit": EVIMED_SEARCH_LIMIT,
+                "offset": {"type": "integer", "minimum": 0, "maximum": 9999, "description": "PubMed route: results to skip. data.outcome says when more exist and what to pass."},
                 "dateFrom": DATE,
                 "dateTo": DATE,
                 "articleTypes": {
@@ -647,6 +648,7 @@ TOOL_DEFINITIONS = [
                 "recruitmentStatus": SHORT_STRING,
                 "limit": EVIMED_SEARCH_LIMIT,
                 "registry": {"type": "integer", "minimum": 0, "maximum": 2},
+                "pageToken": {"type": "string", "maxLength": 200, "pattern": "^[A-Za-z0-9_-]+$", "description": "ClinicalTrials.gov continuation from data.outcome.next; same query."},
                 "startYear": YEAR,
                 "endYear": YEAR,
                 "status": {"type": "array", "maxItems": 20, "items": SHORT_STRING},

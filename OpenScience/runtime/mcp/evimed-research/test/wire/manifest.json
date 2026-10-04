@@ -361,6 +361,39 @@
    "note": "30153985 exists in PubMed and is not in PMC: the converter says 'Identifier not found in PMC', which is not 'no such PMID'. 99999999 exists nowhere and gets the same words."
   },
   {
+   "file": "pubmed__esearch_no_match.json",
+   "request": "GET https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=zzzqqqxxnonexistentterm12345&retmax=3&retmode=json&sort=relevance&tool=evimed_research",
+   "status": 200,
+   "contentType": "application/json",
+   "origin": "live",
+   "recordedAt": "2026-10-04T10:20:28Z",
+   "bytes": 320,
+   "sha256": "c2e4233086ddc1ef2d8129c4ea5109171abaec5680b93cb0fb703c0b8c01897b",
+   "note": "count \"0\", an empty idlist and outputmessages ['No items found.'], HTTP 200."
+  },
+  {
+   "file": "pubmed__esearch_page1.json",
+   "request": "GET https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=aspirin cardiovascular prevention randomized trial&retmax=3&retmode=json&sort=relevance&tool=evimed_research",
+   "status": 200,
+   "contentType": "application/json",
+   "origin": "live",
+   "recordedAt": "2026-10-04T10:20:24Z",
+   "bytes": 4059,
+   "sha256": "99494c5e66a858c6cdc7b735b8499950e3f64454d347a6ec24ee89e88ff8c9ed",
+   "note": "count \"2618\" (a string), retmax 3, retstart 0."
+  },
+  {
+   "file": "pubmed__esearch_page2.json",
+   "request": "GET https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=aspirin cardiovascular prevention randomized trial&retmax=3&retstart=3&retmode=json&sort=relevance&tool=evimed_research",
+   "status": 200,
+   "contentType": "application/json",
+   "origin": "live",
+   "recordedAt": "2026-10-04T10:20:25Z",
+   "bytes": 4059,
+   "sha256": "805b6a6ca5e3fbd79d66834be2c252f881c07281cbb5bac1ee61fe8cca581aa2",
+   "note": "retstart 3. PMID 33279517 is also on page 1: PubMed's relevance order is not stable between pages."
+  },
+  {
    "file": "pubmed__esummary_three_pmids.json",
    "request": "GET https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&id=29045601,30153985,99999999&retmode=json&tool=evimed_research",
    "status": 200,

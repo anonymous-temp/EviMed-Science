@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "geo-strategy",
-  "version": "sha256:3c7ce8e36ab6f562142d8a696c7bf7b00cada522ee4fcb245d4bc9eac8567218",
+  "version": "sha256:a238a706f56a0a81892378b7ec554cd8d8a7a226418a3013cce526b58dee0978",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 25,
@@ -844,6 +844,12 @@
             "type": "integer",
             "minimum": 1,
             "maximum": 100
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9999,
+            "description": "PubMed route: results to skip. data.outcome says when more exist and what to pass."
           },
           "dateFrom": {
             "type": "string",
