@@ -282,6 +282,82 @@ export const VCR_DATA_TIER_LABELS_ZH = Object.freeze({
   T0: 'T0 公开资料', T1: 'T1 基线与招募资料', T2: 'T2 完整治疗与纵向结局', T3: 'T3 随机试验个体数据',
 })
 
+/** What each tier above T0 lets a study do that the one below it does not (§3.2) — the words an offer to move up says. */
+export const VCR_DATA_TIER_UNLOCKS_ZH = Object.freeze({
+  T1: '用你的数据筛真实队列、做患者匹配与招募',
+  T2: '走真实外部对照，用真实结局分布做仿真',
+})
+
+/**
+ * The highest data tier the analysis tables a study has frozen can claim (§3.2,
+ * §8.1) — read from what the data plane derived, never from a person's word or
+ * a model's, and never from a value of a sealed column:
+ *
+ * - **T1** — a subject table of a real source (`VCR_REAL_PATIENT_SOURCES`) with
+ *   rows: baseline records of real people.
+ * - **T2** — T1, and the subject table says treatment was recorded for someone
+ *   (`derivedFrom.treatment`, which the plane writes from the field map's arm
+ *   column and its missing reasons), and a real table carries an outcome. A
+ *   partner's trial-period data, where treatment is `not_shared`, stays T1.
+ * - **T3** is not derived: that the people were randomized is a fact about how
+ *   the data were collected, which no column map can say. It is the lead's to
+ *   declare, on data that qualifies as T2.
+ *
+ * Synthetic, aggregate, predicted and assumed tables are not people and never
+ * count. Pure: the tables are the plane's registered rows (`shape`, `rowCount`,
+ * `outcomeBearing`, `valueSource`, `derivedFrom`), not their contents.
+ * @param {ReadonlyArray<Record<string, any>> | null | undefined} tables
+ * @returns {{ tier: 'T0' | 'T1' | 'T2', subjects: number, treatment: boolean, outcomes: boolean }}
+ */
+export function vcrTierSupportedBy(tables) {
+  const real = (Array.isArray(tables) ? tables : []).filter((table) => (
+    table && typeof table === 'object' && VCR_REAL_PATIENT_SOURCES.includes(table.valueSource) && Number(table.rowCount) > 0))
+  const subjects = real.filter((table) => table.shape === 'subject')
+  if (!subjects.length) return { tier: 'T0', subjects: 0, treatment: false, outcomes: false }
+  const treatment = subjects.some((table) => Object.values(table.derivedFrom?.treatment ?? {}).some((entry) => Number(entry?.recorded) > 0))
+  const outcomes = real.some((table) => table.outcomeBearing === true)
+  return {
+    tier: treatment && outcomes ? 'T2' : 'T1',
+    subjects: Math.max(...subjects.map((table) => Number(table.rowCount))),
+    treatment, outcomes,
+  }
+}
+
+/**
+ * The data a claim to a tier needs: T3 is the lead's declaration over data that
+ * qualifies as T2, every other tier needs its own.
+ * @param {string} tier
+ */
+export function vcrTierNeedsSupport(tier) {
+  return tier === 'T3' ? 'T2' : tier
+}
+
+/**
+ * Whether the data can support a study claiming `tier`.
+ * @param {string} tier @param {string} supported what `vcrTierSupportedBy` answered
+ */
+export function vcrTierIsSupported(tier, supported) {
+  const need = VCR_DATA_TIERS.indexOf(vcrTierNeedsSupport(tier))
+  return need >= 0 && VCR_DATA_TIERS.indexOf(supported) >= need
+}
+
+/**
+ * The move a study's frozen data offers: the highest tier it supports when that
+ * is above where the study stands, with what each tier on the way unlocks.
+ * Null when the data supports nothing more. It only ever offers a rise: lowering
+ * a tier is the lead's explicit act and never the platform's.
+ * @param {string} current the study's tier @param {{ tier: string }} support what `vcrTierSupportedBy` answered
+ * @returns {{ tier: string, unlocks: string[] } | null}
+ */
+export function vcrTierOffer(current, support) {
+  const from = VCR_DATA_TIERS.indexOf(current)
+  const to = VCR_DATA_TIERS.indexOf(support?.tier)
+  if (from < 0 || to <= from) return null
+  const unlocks = VCR_DATA_TIERS.slice(from + 1, to + 1)
+    .map((tier) => /** @type {Record<string, string>} */ (VCR_DATA_TIER_UNLOCKS_ZH)[tier]).filter(Boolean)
+  return { tier: VCR_DATA_TIERS[to], unlocks }
+}
+
 /** The seven steps, in order (§4). A study page's progress rail is this list. */
 export const VCR_STEPS = frozen(['definition', 'evidence', 'population', 'patients', 'comparator', 'trial', 'matching'])
 export const VCR_STEP_LABELS_ZH = Object.freeze({

@@ -126,6 +126,15 @@ describe("a payload the server never sends is still survivable", () => {
     }
   });
 
+  it("reads the tier offer as the server sent it, and as nothing when it is not one", () => {
+    const sent = { tier: "T2", label: "T2 完整治疗与纵向结局", unlocks: ["a", "b"], basis: { subjects: 240, treatment: true, outcomes: true } };
+    expect(readVcrStudy({ tierOffer: sent }).tierOffer).toEqual(sent);
+    expect(readVcrStudy({ tierOffer: { tier: "T1" } }).tierOffer).toEqual({ tier: "T1", label: "T1", unlocks: [], basis: { subjects: 0, treatment: false, outcomes: false } });
+    // An offer to stay at T0, to go somewhere that is not a tier, or that is not an object is no offer: the page draws nothing.
+    for (const junk of [undefined, null, "T1", 7, [], {}, { tier: "T0" }, { tier: "T9" }, { tier: 1 }]) expect(readVcrStudy({ tierOffer: junk }).tierOffer, JSON.stringify(junk)).toBeNull();
+    expect(readVcrStudy({}).tierOffer).toBeNull();
+  });
+
   it("never turns a missing value into a zero, and never lets an unlabelled one pass for an observation", () => {
     for (const junk of [undefined, null, {}, { value: "4" }, { value: Number.NaN }]) {
       const value = readVcrValue(junk);

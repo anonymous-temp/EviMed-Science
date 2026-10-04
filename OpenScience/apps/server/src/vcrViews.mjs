@@ -553,6 +553,8 @@ export function presentStudy(bundle) {
     steps: study.steps,
     sessionId: null,
     abilities: abilitiesOf(roles ?? []),
+    // What the study's frozen data would let it claim above its own tier, for a lead who may move it (`#tierOffer`); one confirmation.
+    tierOffer: bundle.tierOffer ?? null,
     budget: budgetView(budget),
     jobs: jobs.slice(0, 12).map((/** @type {any} */ job) => jobView(job, now)),
     ceiling: useCeilingOf({ study, results, reviews, stale, current: bundle.currentNodes ?? null, dependsOn }),

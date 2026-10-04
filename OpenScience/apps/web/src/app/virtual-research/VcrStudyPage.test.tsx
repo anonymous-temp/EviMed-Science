@@ -337,6 +337,65 @@ describe("the 「⋯」 menu", () => {
   });
 });
 
+// The tier is a claim about data. The page only offers the move the server derived
+// from the frozen sources, once, to the lead; one click makes it.
+describe("the offer to move up a data tier", () => {
+  const offer = { tier: "T1", label: "T1 基线与招募资料", unlocks: ["用你的数据筛真实队列、做患者匹配与招募"], basis: { subjects: 240, treatment: false, outcomes: false } };
+  const serve = (patch: Record<string, unknown>, overrides: Record<string, unknown> = {}) => {
+    const study = { ...fixture("ev201/study.json"), ...patch };
+    server = installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}`]: study, ...overrides });
+  };
+
+  it("says what the data open and what moving does, with one button — and moves with one request, then re-reads the study", async () => {
+    serve({ tierOffer: offer });
+    draw();
+    await heading();
+    const card = document.querySelector("[data-vcr-tier-offer]") as HTMLElement;
+    expect(card).not.toBeNull();
+    expect(card).toHaveTextContent("你接入的数据已够 T1：用你的数据筛真实队列、做患者匹配与招募。");
+    const reads = () => server.calls.filter((call) => call.method === "GET" && call.path === `/vcr/studies/${STUDY_ID}`).length;
+    expect(reads()).toBe(1);
+    await userEvent.click(within(card).getByRole("button", { name: "升到 T1" }));
+    await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith("/vcr/studies/std_1", "PATCH", { dataTier: "T1" }));
+    await waitFor(() => expect(toasts.success).toHaveBeenCalledWith("已升到 T1。"));
+    expect(server.calls.filter((call) => call.method === "PATCH")).toHaveLength(1);
+    await waitFor(() => expect(reads()).toBe(2));
+  });
+
+  it("says both steps when the data reach T2 from T0, and offers nothing when the server sent no offer", async () => {
+    serve({ tierOffer: { ...offer, tier: "T2", label: "T2 完整治疗与纵向结局", unlocks: [...offer.unlocks, "走真实外部对照，用真实结局分布做仿真"] } });
+    draw();
+    await heading();
+    expect(document.querySelector("[data-vcr-tier-offer]")).toHaveTextContent("你接入的数据已够 T2：用你的数据筛真实队列、做患者匹配与招募；走真实外部对照，用真实结局分布做仿真。");
+  });
+
+  it("shows nothing without an offer, and nothing to a reader who may not change the study", async () => {
+    draw();
+    await heading();
+    expect(document.querySelector("[data-vcr-tier-offer]")).toBeNull();
+  });
+
+  it("is not shown to an account without manage_study even if the payload carries one", async () => {
+    serve({ tierOffer: offer, abilities: ["read", "write", "run"] });
+    draw();
+    await heading();
+    expect(document.querySelector("[data-vcr-tier-offer]")).toBeNull();
+  });
+
+  it("says why when the server refuses, and leaves the tier where it was", async () => {
+    serve({ tierOffer: offer }, {
+      [`PATCH /vcr/studies/${STUDY_ID}`]: () => { throw new WebApiError("研究里已冻结的数据还达不到「T1 基线与招募资料」", { status: 409, code: "vcr_tier_unsupported" }); },
+    });
+    draw();
+    await heading();
+    await userEvent.click(screen.getByRole("button", { name: "升到 T1" }));
+    await waitFor(() => expect(toasts.error).toHaveBeenCalled());
+    expect(toasts.success).not.toHaveBeenCalled();
+    expect(screen.getByText("T0 公开资料")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "升到 T1" })).toBeEnabled();
+  });
+});
+
 // The menu offers only what will not be refused: the study answers with the
 // abilities of the roles the reader holds, and the routes check them again.
 describe("the 「⋯」 menu follows the reader's abilities", () => {

@@ -84,7 +84,7 @@ export function reviewKindsFor(abilities: readonly string[]): VcrReviewKind[] {
  * The card on screen is the address's `?card=` (an id or a key), so a link
  * from a number's drill-down lands on the card it came from.
  */
-export function DataTab({ studyId, study }: { studyId: string; study: VcrStudy }) {
+export function DataTab({ studyId, study, onStudyChanged }: { studyId: string; study: VcrStudy; onStudyChanged?: () => void }) {
   const [filter, setFilter] = useState<Filter>("all");
   const [params, setParams] = useSearchParams();
   const { state, reload } = useVcrLoad(`${studyId}:data`, () => getVcrData(studyId));
@@ -96,7 +96,8 @@ export function DataTab({ studyId, study }: { studyId: string; study: VcrStudy }
   // plane is (or, above T0, whenever it should be), whatever the evidence side holds.
   const intake = readVcrIntake(data.intake);
   const intakePanel = intake.available || (data.intake != null && study.tier !== "T0")
-    ? <IntakePanel studyId={studyId} intake={intake} onChanged={reload} />
+    // Freezing a snapshot can move what the study's data support: the header re-reads, so its offer to move up appears with no further step.
+    ? <IntakePanel studyId={studyId} intake={intake} onChanged={() => { reload(); onStudyChanged?.(); }} />
     : null;
   if (data.assumptions.length === 0 && data.precedents.length === 0) {
     return (

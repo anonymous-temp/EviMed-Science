@@ -114,6 +114,15 @@ export function vcrDataPlaneSeam({ dataPlane, access }) {
       // data plane's own business (CS-49).
       return dataPlane.tabFor(study, user);
     },
+    /**
+     * The tier the study's frozen sources support (`vcrTierSupportedBy`): what the
+     * study header offers and what the study route holds a rise to. Derived from
+     * registered analysis tables, never from a file.
+     * @param {any} study
+     */
+    async tierSupport(study) {
+      return dataPlane.tierSupport(study.id);
+    },
     /** The whole plane, for the routes' intake operations (`vcrRoutes.mjs`). */
     intake: dataPlane,
     /**

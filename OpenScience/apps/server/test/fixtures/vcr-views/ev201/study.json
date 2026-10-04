@@ -77,6 +77,7 @@
     "contact_patients",
     "read_patient_level"
   ],
+  "tierOffer": null,
   "budget": {
     "limitSeconds": 7200,
     "usedSeconds": 222,

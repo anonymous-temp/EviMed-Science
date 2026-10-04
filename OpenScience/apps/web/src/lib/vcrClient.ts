@@ -404,6 +404,20 @@ export interface VcrCeiling {
   reasons: Array<{ code: string; detail: string }>;
 }
 
+/**
+ * The move a study's frozen data supports above its own tier — said to the lead
+ * who may make it (`manage_study`), once: the tier it would move to, what that
+ * opens, and what the data are.
+ */
+export interface VcrTierOffer {
+  tier: VcrDataTier;
+  /** 「T1 基线与招募资料」. */
+  label: string;
+  /** What each tier on the way opens, in the words the plan uses. */
+  unlocks: string[];
+  basis: { subjects: number; treatment: boolean; outcomes: boolean };
+}
+
 /** One study (`GET /api/vcr/studies/:id`). */
 export interface VcrStudy {
   id: string;
@@ -418,6 +432,8 @@ export interface VcrStudy {
   sessionId: string | null;
   /** What this reader may do here (`VCR_ROLE_ABILITIES`); the routes check for themselves. */
   abilities: string[];
+  /** The tier the frozen data supports above the study's own, for the lead who may move it; null (or absent) when there is none. */
+  tierOffer?: VcrTierOffer | null;
   /** The compute budget, when the module meters one. */
   budget: VcrBudget | null;
   jobs: VcrJob[];
@@ -1094,12 +1110,24 @@ function readSteps(raw: unknown): VcrSteps {
   return raw && typeof raw === "object" ? raw as VcrSteps : {};
 }
 
+function readTierOffer(raw: unknown): VcrTierOffer | null {
+  const value = obj(raw);
+  const tier = text(value.tier);
+  if (tier !== "T1" && tier !== "T2" && tier !== "T3") return null;
+  const basis = obj(value.basis);
+  return {
+    tier, label: text(value.label) ?? tier, unlocks: strings(value.unlocks),
+    basis: { subjects: finite(basis.subjects) ?? 0, treatment: basis.treatment === true, outcomes: basis.outcomes === true },
+  };
+}
+
 export function readVcrStudy(raw: unknown): VcrStudy {
   const value = obj(raw);
   return {
     ...(value as unknown as VcrStudy),
     steps: readSteps(value.steps),
     abilities: strings(value.abilities),
+    tierOffer: readTierOffer(value.tierOffer),
     budget: value.budget && typeof value.budget === "object" ? value.budget as VcrBudget : null,
     jobs: arr(value.jobs) as unknown as VcrJob[],
     ceiling: value.ceiling && typeof value.ceiling === "object"

@@ -230,3 +230,92 @@ test('legacy public prediction flags are not presented as a publication capabili
   assert.equal(result.forecasts[0].public, undefined);
   assert.equal(result.forecasts[0].prediction.probability, 0.8);
 });
+
+// --- the data tier: offered from the frozen data, held to it, never lowered ----------------------
+
+/**
+ * A store that answers a page's reads with nothing but the study and what the
+ * test says, so the service's own header logic can be read without a database.
+ * @param {Record<string, any>} study @param {{ roles?: string[] }} [options]
+ */
+function studyOnly(study, { roles = [] } = {}) {
+  /** @type {Array<[string, Record<string, any>]>} */
+  const updates = [];
+  const base = {
+    async getStudy(/** @type {string} */ userId, /** @type {string} */ id) { return id === study.id && (userId === study.userId || roles.length) ? study : null; },
+    async rolesOf() { return roles; },
+    async updateStudy(/** @type {string} */ _id, /** @type {Record<string, any>} */ fields) { updates.push(["update", fields]); return { ...study, ...fields }; },
+    async setStep() { return study; },
+  };
+  const plural = /^(results|allResults|staleMarks|reviews|jobs|assumptions|members|exports|decisions|trialScenarios|comparatorDesigns|populations|patientSets|forecasts|models|edges|criteria|rows|assumptionVersions)$/;
+  const store = new Proxy(base, { get(target, name) { return name in target ? /** @type {any} */ (target)[name] : async () => (plural.test(String(name)) ? [] : null); } });
+  return { store, updates };
+}
+
+const t0Study = { id: "std_tier", userId: "lead", projectId: "prj_tier", name: "EV-201", question: "q", dataTier: "T0", intendedUse: "exploratory", status: "active", steps: {}, budget: {}, outcomeSeal: {} };
+/** @param {string} tier */
+const planeSupporting = (tier) => ({ async tierSupport() { return { tier, subjects: 240, treatment: tier === "T2", outcomes: tier === "T2" }; } });
+
+test("the study header offers the move its frozen data supports, once, to the lead who may make it — and nothing when the data supports nothing more", async () => {
+  /** @param {string} tier @param {Record<string, any>} [study] @param {string[]} [roles] @param {any} [plane] */
+  const view = async (tier, study = t0Study, roles = [], plane = planeSupporting(tier)) => {
+    const { store } = studyOnly(study, { roles });
+    return new VcrService({ store: /** @type {any} */ (store), config: {}, dataPlane: plane }).studyView({ id: roles.length ? "member" : "lead" }, study.id);
+  };
+  const t1 = (await view("T1")).tierOffer;
+  assert.deepEqual([t1.tier, t1.label, t1.unlocks], ["T1", "T1 基线与招募资料", ["用你的数据筛真实队列、做患者匹配与招募"]]);
+  assert.deepEqual(t1.basis, { subjects: 240, treatment: false, outcomes: false });
+  const t2 = (await view("T2")).tierOffer;
+  assert.equal(t2.tier, "T2", "the highest the data supports, in one move");
+  assert.deepEqual(t2.unlocks, ["用你的数据筛真实队列、做患者匹配与招募", "走真实外部对照，用真实结局分布做仿真"]);
+
+  // Nothing to offer where the data supports no more than the study already claims — and a rise is never turned into a lowering.
+  assert.equal((await view("T0")).tierOffer, null);
+  assert.equal((await view("T1", { ...t0Study, dataTier: "T1" })).tierOffer, null);
+  assert.equal((await view("T1", { ...t0Study, dataTier: "T2" })).tierOffer, null);
+  assert.equal((await view("T2", { ...t0Study, dataTier: "T3" })).tierOffer, null);
+  // Roles are unchanged: only the lead (manage_study) is offered an action the route would refuse anyone else.
+  for (const role of ["viewer", "data_manager", "statistical_reviewer", "recruiter"]) assert.equal((await view("T1", t0Study, [role])).tierOffer, null, role);
+  assert.equal((await view("T1", t0Study, ["lead"])).tierOffer?.tier, "T1");
+  // No data plane composed, or one that cannot answer: nothing is offered and nothing breaks.
+  assert.equal((await view("T1", t0Study, [], null)).tierOffer, null);
+  assert.equal((await view("T1", t0Study, [], { async tierSupport() { throw new Error("plane down"); } })).tierOffer, null);
+});
+
+test("a rise in tier needs data that supports it; T3 needs the data that qualifies as T2; a lowering or the same tier is never held to it", async () => {
+  /** @param {string} from @param {string} supports @param {string} to */
+  const move = async (from, supports, to) => {
+    const study = { ...t0Study, dataTier: from };
+    const { store, updates } = studyOnly(study);
+    const service = new VcrService({ store: /** @type {any} */ (store), config: {}, dataPlane: planeSupporting(supports) });
+    return { updated: await service.updateStudy({ id: "lead" }, study.id, { dataTier: to }).catch((/** @type {any} */ error) => error), updates };
+  };
+  // Refused by name, saying what the data reach and what to do, and nothing is written.
+  for (const [from, supports, to, reached] of [["T0", "T0", "T1", "还没有可用的患者级数据"], ["T0", "T1", "T2", "现有数据只到「T1 基线与招募资料」"], ["T1", "T1", "T3", "现有数据只到「T1 基线与招募资料」"], ["T0", "T2", "T3", null]]) {
+    const { updated, updates } = await move(from, supports, to);
+    if (reached === null) { assert.equal(updated.dataTier, "T3", "T3 is the lead's declaration on data that qualifies as T2"); continue; }
+    assert.equal(updated.status, 409, `${from}→${to} on ${supports} data`);
+    assert.equal(updated.code, "vcr_tier_unsupported");
+    assert.ok(updated.message.includes(reached), updated.message);
+    assert.match(updated.message, /数据与证据/);
+    assert.deepEqual(updates, [], "nothing was written");
+  }
+  // Supported: the move is made, as before.
+  for (const [from, supports, to] of [["T0", "T1", "T1"], ["T0", "T2", "T2"], ["T0", "T2", "T1"], ["T1", "T2", "T2"], ["T2", "T2", "T3"]]) {
+    assert.equal((await move(from, supports, to)).updated.dataTier, to, `${from}→${to} on ${supports} data`);
+  }
+  // Lowering and staying put are the lead's explicit acts and never need the data.
+  for (const [from, to] of [["T2", "T1"], ["T3", "T0"], ["T1", "T0"], ["T1", "T1"], ["T0", "T0"]]) {
+    assert.equal((await move(from, "T0", to)).updated.dataTier, to, `${from}→${to} with no data at all`);
+  }
+  // A patch that does not touch the tier does not ask the plane anything.
+  const study = { ...t0Study };
+  const { store } = studyOnly(study);
+  let asked = 0;
+  const service = new VcrService({ store: /** @type {any} */ (store), config: {}, dataPlane: { async tierSupport() { asked += 1; return { tier: "T0" }; } } });
+  await service.updateStudy({ id: "lead" }, study.id, { name: "新名字" });
+  assert.equal(asked, 0);
+  // With no data plane composed a rise is refused like any other the data cannot support.
+  const bare = new VcrService({ store: /** @type {any} */ (studyOnly(study).store), config: {} });
+  await assert.rejects(bare.updateStudy({ id: "lead" }, study.id, { dataTier: "T1" }), (/** @type {any} */ error) => error.code === "vcr_tier_unsupported");
+});

@@ -19,7 +19,7 @@ import {
   analysisTableIssues, asOfIssues, assertDataPlaneLocation, assertDataPlaneRoot, checkedTable, columnSourceIssues, decodeUploadText, deriveAnalysisShapes,
   dictionaryEntries, fieldMapHash, isOutcomeEntry, jsonTable, latestDataFiles, normalizeFieldMap, parseDelimited, parseTable, profilerFieldMap, projectTable, pseudonymOf,
   qualitySummary, rowsVisibleAsOf, safeUploadName, sha256OfFile, snapshotClocks, suppressSmallCells, tablesNeededBy, tableVisibleAsOf, toCsv, treatmentEvidence,
-  validateFieldMap, weakestSource, writeContentAddressed,
+  validateFieldMap, VcrDataPlane, weakestSource, writeContentAddressed,
 } from "../src/vcrDataPlane.mjs";
 
 /** @type {string} */
@@ -781,6 +781,21 @@ test("PA-10 the source-format vocabulary, what an upload accepts, what is refuse
     assert.ok(form.includes(`extension === "${extension}") return "${hint}"`), `the page says ${extension}'s hint word for word`);
   }
   assert.ok(form.includes('data: ["csv", "tsv", "json", "xlsx"]'), "the page's list of data extensions is the door's");
+});
+
+test("the tier a study's frozen data supports is read from the analysis tables the plane registered, for that study, and from nothing else", async () => {
+  /** @type {any[]} */
+  const asked = [];
+  const tables = [
+    { shape: "subject", rowCount: 240, outcomeBearing: false, valueSource: "observed", derivedFrom: { treatment: { arm: { recorded: 200, unknown: 40, notApplicable: 0, missingReason: null } } } },
+    { shape: "events", rowCount: 240, outcomeBearing: true, valueSource: "observed", derivedFrom: {} },
+  ];
+  const plane = { store: { async listAnalysisTables(/** @type {any} */ query) { asked.push(query); return tables; } } };
+  const support = await VcrDataPlane.prototype.tierSupport.call(plane, "std_1");
+  assert.deepEqual(support, { tier: "T2", subjects: 240, treatment: true, outcomes: true });
+  assert.deepEqual(asked, [{ studyId: "std_1" }], "one question, of the registered tables of this study — no file is opened");
+  plane.store.listAnalysisTables = async () => [];
+  assert.equal((await VcrDataPlane.prototype.tierSupport.call(plane, "std_1")).tier, "T0");
 });
 
 test("PA-10 bytes become text whatever a hospital's Excel wrote, or are refused", () => {

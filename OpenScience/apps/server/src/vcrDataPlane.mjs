@@ -104,7 +104,7 @@ import { fileURLToPath } from "node:url";
 import {
   RUNTIME_WORKSPACE_ROOT, VCR_ANALYSIS_TABLES, VCR_JOB_METHODS, VCR_MEMBER_ROLES, VCR_MIN_CELL_SIZE, VCR_MISSING_REASONS,
   VCR_QUALITY_CATEGORIES, VCR_REAL_PATIENT_SOURCES, VCR_SOURCE_FORMATS, VCR_TIME_KINDS, VCR_VALUE_SOURCES, canonicalScenarioJson,
-  suppressForModel, workspaceLayout,
+  suppressForModel, vcrTierSupportedBy, workspaceLayout,
 } from "@evimed/domain";
 
 import { HttpError, openScopedFileNoFollow, readStableFileHandle } from "./security.mjs";
@@ -2779,6 +2779,20 @@ export class VcrDataPlane {
   // -------------------------------------------------------------------------
   // What the page shows
   // -------------------------------------------------------------------------
+
+  /**
+   * The data tier this study's frozen sources can claim, from the analysis
+   * tables the plane registered when it derived them: their shapes, row counts,
+   * whether treatment was recorded and whether one carries an outcome
+   * (`vcrTierSupportedBy`). Metadata the plane already holds — no file is opened,
+   * no value of a sealed column is consulted, and nothing is written. The study
+   * page offers the move and the study route refuses a rise this does not
+   * support; neither lowers a tier.
+   * @param {string} studyId
+   */
+  async tierSupport(studyId) {
+    return vcrTierSupportedBy(await this.store.listAnalysisTables({ studyId }));
+  }
 
   /**
    * The intake half of the data tab for one viewer: every source of the study

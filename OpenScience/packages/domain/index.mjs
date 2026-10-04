@@ -1025,6 +1025,7 @@ export {
   VCR_CRITERION_TYPE_LABELS_ZH,
   VCR_DATA_TIERS,
   VCR_DATA_TIER_LABELS_ZH,
+  VCR_DATA_TIER_UNLOCKS_ZH,
   VCR_DEFAULT_ESTIMAND,
   VCR_DISTRIBUTIONS,
   VCR_E10_CONDITIONS,
@@ -1130,6 +1131,10 @@ export {
   missingModelEvidence,
   roleAllows,
   twinLabel,
+  vcrTierIsSupported,
+  vcrTierNeedsSupport,
+  vcrTierOffer,
+  vcrTierSupportedBy,
   useWithin,
   vcrKnown,
 } from './src/vcrVocabulary.mjs'

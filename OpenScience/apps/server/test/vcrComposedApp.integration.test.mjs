@@ -459,8 +459,29 @@ test("CS-7 the study list does not name a study to an account whose only role is
   assert.equal(budget.status, 200, budget.text);
   assert.equal((await rows(`SELECT budget FROM evimed_vcr.studies WHERE id = $1`, [study.id]))[0].budget.cpuSecondsConfirmed >= 0, true);
   assert.equal((await call("datamanager", "POST", `${S}/budget`, { cpuSeconds: 900 })).status, 403, "spending is confirmed by the lead");
+  // A rise in tier is a claim about data: with nothing frozen, the lead is told what is missing and the tier does not move.
+  const refused = await call("lead", "PATCH", S, { dataTier: "T1" });
+  assert.equal(refused.status, 409, refused.text);
+  assert.equal(refused.body.code, "vcr_tier_unsupported");
+  assert.equal((await rows(`SELECT data_tier FROM evimed_vcr.studies WHERE id = $1`, [study.id]))[0].data_tier, "T0");
+  assert.equal((await call("lead", "GET", S)).body.data.tierOffer, null, "no data, no offer");
+  // A frozen source whose subject table the plane derived is what supports T1; the header then offers exactly that move, to the lead only.
+  const db = context.app.vcr.store.database;
+  await db.query(`INSERT INTO evimed_vcr.sources (id, user_id, study_id, name) VALUES ($1, $2, $3, $4)`, [`src_tier_${suffix}`, accounts.owner, study.id, "合作方基线"]);
+  await db.query(`INSERT INTO evimed_vcr.snapshots (id, source_id, study_id, user_id, version, location, sha256) VALUES ($1, $2, $3, $4, 1, $5, $6)`,
+    [`snp_tier_${suffix}`, `src_tier_${suffix}`, study.id, accounts.owner, "tier/cohort.csv", "a".repeat(64)]);
+  await db.query(`INSERT INTO evimed_vcr.analysis_tables (id, snapshot_id, study_id, user_id, shape, location, sha256, row_count, value_source) VALUES ($1, $2, $3, $4, 'subject', $5, $6, 240, 'observed')`,
+    [`atb_tier_${suffix}`, `snp_tier_${suffix}`, study.id, accounts.owner, "tier/subject.csv", "b".repeat(64)]);
+  const offered = (await call("lead", "GET", S)).body.data.tierOffer;
+  assert.deepEqual([offered.tier, offered.basis.subjects], ["T1", 240]);
+  assert.equal((await call("viewer", "GET", S)).body.data.tierOffer, null, "an account that may not move the tier is not offered the move");
+  assert.equal((await call("datamanager", "PATCH", S, { dataTier: "T1" })).status, 403, "the role check is the route's, unchanged");
+  assert.equal((await call("lead", "PATCH", S, { dataTier: "T2" })).body.code, "vcr_tier_unsupported", "baseline records do not support T2");
   assert.equal((await call("lead", "PATCH", S, { dataTier: "T1" })).status, 200);
   assert.equal((await rows(`SELECT data_tier FROM evimed_vcr.studies WHERE id = $1`, [study.id]))[0].data_tier, "T1");
+  assert.equal((await call("lead", "GET", S)).body.data.tierOffer, null, "the offer is taken");
+  // Lowering is the lead's explicit act and needs no data.
+  assert.equal((await call("lead", "PATCH", S, { dataTier: "T0" })).status, 200);
 });
 
 test("CS-49 creation is atomic, and the data tab never carries a path of the server", options, async () => {
