@@ -3,7 +3,7 @@ import test from "node:test";
 import { SourceIngestionWorker } from "../src/sourceWorker.mjs";
 
 function fixture({ sourceStatus = "queued", sourceRevision = 1, sourceGeneration = sourceRevision,
-  jobRevision = sourceGeneration, parseError = null, afterParse = null, renew = async () => true } = {}) {
+  jobRevision = sourceGeneration, parseError = null, afterParse = null, renew = async () => true, materials = null, reports = [] } = {}) {
   const calls = [];
   const job = { id: "job-one", userId: "user-one", projectId: "project-one", kind: "ingest",
     payload: { sourceId: "source-one", sourceRevision: jobRevision, extractorVersion: "evimed-analysis-1.0.0" },
@@ -55,8 +55,9 @@ function fixture({ sourceStatus = "queued", sourceRevision = 1, sourceGeneration
   const resolveSource = async (...args) => { calls.push({ method: "resolve", args }); return "/data/users/user-one/paper.txt"; };
   const materialize = async (...args) => { calls.push({ method: "materialize", args }); return "knowledge-base/.evimed-derived/source-one/index.md"; };
   const discardMaterialized = async (...args) => { calls.push({ method: "discard", args }); };
-  const worker = new SourceIngestionWorker({ jobs, sources, parser, resolveSource, materialize, discardMaterialized, pollMs: 100, leaseMs: 1000 });
-  return { calls, job, source, sources, worker };
+  const worker = new SourceIngestionWorker({ jobs, sources, parser, resolveSource, materialize, discardMaterialized, materials, pollMs: 100, leaseMs: 1000,
+    report: (event, detail) => reports.push({ event, detail }) });
+  return { calls, job, source, sources, worker, reports };
 }
 
 test("an ingest lease parses, accounts, materializes and finishes exactly once", async () => {
@@ -287,4 +288,54 @@ test("canceling while the parser is streaming aborts owned transport and cannot 
   const failure = f.calls.find(call => call.method === "fail");
   assert.equal(failure.args[3].code, "source_generation_stale");
   assert.equal(failure.args[4].retry, false);
+});
+
+test("the structured materials of a parse are read from the same file under the parse's own cancellation and frozen with the capture", async () => {
+  const seen = [];
+  const materials = { extract: async (input) => { seen.push(input); return { coverage: { values: { total: 3 } }, structure: { textSha256: "f".repeat(64) }, tables: [] }; } };
+  const { calls, worker, sources } = fixture({ materials });
+  let frozen = null;
+  const original = sources.freezeCapture;
+  sources.freezeCapture = async (job, result) => { frozen = result; calls.push({ method: "freeze" }); return original(job, result); };
+  await worker.tick();
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0].file, "/data/users/user-one/paper.txt");
+  assert.equal(seen[0].name, "paper.txt");
+  assert.equal(seen[0].sha256, "a".repeat(64));
+  assert.equal(seen[0].parserRevision, "plain-text@1.0.0");
+  assert.equal(seen[0].text, "Parsed research source.\n\nFinding");
+  assert.ok(seen[0].signal instanceof AbortSignal);
+  assert.deepEqual(frozen.materials.coverage, { values: { total: 3 } });
+  assert.deepEqual(calls.map((call) => call.method).filter((name) => ["parse", "freeze", "materialize"].includes(name)), ["parse", "freeze", "materialize"]);
+  assert.equal(worker.status().lastError, null);
+});
+
+test("a defect in the materials extension is a source with no structure and a report, never a failed ingestion", async () => {
+  const reports = [];
+  const materials = { extract: async () => { throw Object.assign(new Error("boom"), { code: "materials_defect" }); } };
+  const { calls, worker } = fixture({ materials, reports });
+  await worker.tick();
+  assert.deepEqual(calls.map((call) => call.method), ["beginIngestion", "resolve", "parse", "materialize", "publishUnderstanding"]);
+  assert.equal(worker.status().lastError, null);
+  assert.deepEqual(reports, [{ event: "source_materials_failed", detail: { code: "materials_defect" } }]);
+});
+
+test("canceling while the materials are being read stops the ingestion like canceling the parse", async () => {
+  /** @type {AbortSignal | null} */
+  let signal = null;
+  const materials = { extract: async (input) => {
+    signal = input.signal;
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(resolve, 5000);
+      input.signal.addEventListener("abort", () => { clearTimeout(timer); reject(input.signal.reason); }, { once: true });
+    });
+  } };
+  const { calls, source, worker } = fixture({ materials });
+  const running = worker.tick();
+  while (!signal) await new Promise((resolve) => setTimeout(resolve, 10));
+  // The source is superseded: the worker's own check aborts the controller it handed the extension.
+  source.payload.status = "canceled";
+  await running;
+  assert.equal(calls.some((call) => call.method === "materialize"), false);
+  assert.equal(calls.some((call) => call.method === "publishUnderstanding"), false);
 });

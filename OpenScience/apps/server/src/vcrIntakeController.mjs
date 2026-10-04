@@ -10,7 +10,14 @@ import { VCR_INTAKE_LIMITS, parseVcrIntakeInput } from './vcrIntakeLayout.mjs';
 /**
  * The disposable container behind 「虚拟临研」's two intake conversions: a
  * patient record as PDF or Word becomes text (`extract`), and a published
- * figure becomes curve points (`digitize`).
+ * figure becomes curve points (`digitize`) — and, since controller protocol 10,
+ * behind a third that is not 「虚拟临研」's: a knowledge-base source's PDF becomes
+ * its text page by page and a spreadsheet becomes its cells (`materials`), so
+ * the platform can say which page and which sheet cell a parsed value is on
+ * (`sourceMaterials.mjs`). It is the same mechanism, not a second one: a source
+ * document is staged on the data volume exactly as a figure is (it is not
+ * patient data; the external parser is sent the same bytes), and the answer is
+ * read from its output directory.
  *
  * It is the document-export renderer's mechanism (`documentRenderController.mjs`)
  * and deliberately not a second framework: the runtime controller starts a
@@ -44,6 +51,14 @@ import { VCR_INTAKE_LIMITS, parseVcrIntakeInput } from './vcrIntakeLayout.mjs';
  *   controller both see): the API removes the attempt when it has read the answer,
  *   and a leftover from a crash is swept by age. Moving it into the plane would
  *   add nothing; the plane holds patients, not papers.
+ * - **A source document is not patient data either** (`materials`): it is a PDF
+ *   or a spreadsheet the researcher put in the knowledge base, which the
+ *   external parser is sent as well, so its scratch is a copy under
+ *   `<dataDir>/vcr-intake/materials/<attempt>/` like a figure's and is removed
+ *   when the answer has been read. The container measures — a PDF's text page by
+ *   page, a spreadsheet's cells with their addresses — and the control plane
+ *   decides what that says about the parser's tables (`sourceMaterials.mjs`); a
+ *   container that cannot start leaves the document ingested without pages.
  * - **The container is not a research runtime.** The standing rule that
  *   patient-level data is never mounted where a model works is about the
  *   runtime a run executes in. This container has no model, no gateway address,
@@ -63,12 +78,15 @@ import { VCR_INTAKE_LIMITS, parseVcrIntakeInput } from './vcrIntakeLayout.mjs';
  *   process running; the stopped container is pruned by label and age.
  */
 
-export const VCR_INTAKE_KINDS = Object.freeze(['extract', 'digitize']);
+export const VCR_INTAKE_KINDS = Object.freeze(['extract', 'digitize', 'materials']);
+/** The kinds whose scratch lives on the data volume, staged by the API: not a patient record. */
+export const VCR_INTAKE_VOLUME_KINDS = Object.freeze(['digitize', 'materials']);
 /** Where the image keeps the two scripts: the research MCP server's own sources, which a delta release ships. */
 export const VCR_INTAKE_SCRIPT_DIR = '/opt/evimed/mcp/evimed-research';
 const SCRIPTS = Object.freeze({
   extract: `${VCR_INTAKE_SCRIPT_DIR}/vcr_record_extract.py`,
   digitize: `${VCR_INTAKE_SCRIPT_DIR}/vcr_curve_digitize.py`,
+  materials: `${VCR_INTAKE_SCRIPT_DIR}/source_material_extract.py`,
 });
 const LABEL = 'open-science.vcr-intake';
 /** A stopped intake container older than this is a leftover; one prune per interval is enough. */
@@ -84,13 +102,13 @@ export function vcrIntakeRoot(config) {
 }
 
 /**
- * A figure's attempt directory in the data volume. A record has none, and asking
- * for one is refused here rather than answered: no caller can stage patient bytes
- * under the data volume by naming `extract`.
+ * A figure's or a source document's attempt directory in the data volume. A
+ * record has none, and asking for one is refused here rather than answered: no
+ * caller can stage patient bytes under the data volume by naming `extract`.
  * @param {any} config @param {string} kind @param {string} attemptId
  */
 export function vcrIntakeDirectory(config, kind, attemptId) {
-  if (kind !== 'digitize') throw new HttpError(400, 'vcr_intake_input_invalid', 'Only a figure is staged under the data volume.');
+  if (!VCR_INTAKE_VOLUME_KINDS.includes(kind)) throw new HttpError(400, 'vcr_intake_input_invalid', 'Only a figure or a source document is staged under the data volume.');
   return path.join(vcrIntakeRoot(config), kind, safeId(attemptId, 'attemptId'));
 }
 
@@ -156,8 +174,16 @@ export function vcrIntakeHostRoot(config) {
   return root;
 }
 
-/** The seconds the script may run: the controller's timeout less two, so the script ends before it is killed. @param {any} config */
-const deadlineSecondsOf = config => Math.max(5, Math.ceil(Number(config.vcrIntakeTimeoutMs ?? 60_000) / 1000) - 2);
+/**
+ * One container's ceiling in milliseconds: the configured intake timeout, and
+ * twice that for a source document, which is read whole (a few hundred pages of
+ * text) where a record conversion reads a few. Every other limit is shared.
+ * @param {any} config @param {string} kind
+ */
+export const vcrIntakeTimeoutOf = (config, kind) => Math.max(5_000, Number(config.vcrIntakeTimeoutMs) || 60_000) * (kind === 'materials' ? 2 : 1);
+
+/** The seconds the script may run: the controller's timeout less two, so the script ends before it is killed. @param {any} config @param {string} kind */
+const deadlineSecondsOf = (config, kind) => Math.max(5, Math.ceil(vcrIntakeTimeoutOf(config, kind) / 1000) - 2);
 
 /**
  * The hardening both operations share, then the two mounts and the command that
@@ -205,24 +231,24 @@ function extractPlan(config, reference) {
   ], ['--file', target, '--format', scratch.format, '--expect-sha256', sha256, '--expect-bytes', String(bytes),
     '--max-pages', String(Math.max(1, Number(config.vcrIntakeMaxPages) || 300)),
     '--max-chars', String(VCR_INTAKE_LIMITS.maxChars), '--max-xml-bytes', String(VCR_INTAKE_LIMITS.maxXmlBytes),
-    '--output-dir', '/output', '--deadline', String(deadlineSecondsOf(config))]);
+    '--output-dir', '/output', '--deadline', String(deadlineSecondsOf(config, 'extract'))]);
   return { args, dir: null, label, name, kind: 'extract', mounts: { input: hostInput, output: hostOutput } };
 }
 
 /**
- * A figure: its attempt directory under the data volume, the request and the
- * image in a read-only input and an empty output.
- * @param {any} config @param {unknown} reference
+ * A figure or a source document: its attempt directory under the data volume,
+ * the request and the one file in a read-only input and an empty output.
+ * @param {any} config @param {'digitize' | 'materials'} kind @param {unknown} reference
  */
-function digitizePlan(config, reference) {
+function stagedPlan(config, kind, reference) {
   const { attemptId, inputDigest } = checkedReference(reference);
-  const dir = vcrIntakeDirectory(config, 'digitize', attemptId);
-  const label = createHash('sha256').update(`digitize\0${attemptId}\0${inputDigest}`).digest('hex');
-  const { name, args } = containerArgs(config, 'digitize', label, [
+  const dir = vcrIntakeDirectory(config, kind, attemptId);
+  const label = createHash('sha256').update(`${kind}\0${attemptId}\0${inputDigest}`).digest('hex');
+  const { name, args } = containerArgs(config, kind, label, [
     '--mount', `${dockerRuntimeMount(config, path.join(dir, 'input'), '/input')},readonly`,
     '--mount', dockerRuntimeMount(config, path.join(dir, 'output'), '/output'),
-  ], ['--request', '/input/request.json', '--input-dir', '/input', '--output-dir', '/output', '--deadline', String(deadlineSecondsOf(config))]);
-  return { args, dir, label, name, kind: 'digitize' };
+  ], ['--request', '/input/request.json', '--input-dir', '/input', '--output-dir', '/output', '--deadline', String(deadlineSecondsOf(config, kind))]);
+  return { args, dir, label, name, kind };
 }
 
 /**
@@ -234,7 +260,7 @@ function digitizePlan(config, reference) {
  */
 export function vcrIntakePlan(config, kind, reference) {
   if (!VCR_INTAKE_KINDS.includes(kind)) throw new HttpError(400, 'vcr_intake_input_invalid', 'Unknown intake operation.');
-  return kind === 'extract' ? extractPlan(config, reference) : digitizePlan(config, reference);
+  return kind === 'extract' ? extractPlan(config, reference) : stagedPlan(config, /** @type {'digitize' | 'materials'} */ (kind), reference);
 }
 
 /** A small counting semaphore whose waiters leave the queue when their caller does. @param {number} limit */
@@ -270,7 +296,7 @@ function createSlots(limit) {
 }
 
 /**
- * A figure's staged attempt, as the controller finds it on the data volume: a
+ * A staged attempt (a figure's or a source document's), as the controller finds it on the data volume: a
  * request of the digest it was told, one regular file of the size the API
  * allows, no link anywhere, and an output directory that starts empty.
  * @param {any} config @param {string} dir @param {string} inputDigest
@@ -334,7 +360,7 @@ export function createVcrIntakeController(config, { availableMemory = async () =
     // checked here. A record's is in the plane, which this process does not mount:
     // nothing about it can be read from here, and the script holds the file to
     // its digest and size before it reads a byte (see the header).
-    if (kind === 'digitize') await verifyStagedFigure(config, /** @type {string} */ (base.dir), checkedReference(reference).inputDigest);
+    if (VCR_INTAKE_VOLUME_KINDS.includes(kind)) await verifyStagedFigure(config, /** @type {string} */ (base.dir), checkedReference(reference).inputDigest);
     const inspected = docker(['image', 'inspect', '--format', '{{.Id}}', config.runtimeContainerImage]);
     const imageId = inspected.stdout.trim();
     if (inspected.status !== 0 || !imageId) throw new HttpError(503, 'vcr_intake_failed', 'The intake image is not available.');
@@ -370,7 +396,7 @@ export function createVcrIntakeController(config, { availableMemory = async () =
             : new DOMException('Intake canceled.', 'AbortError'));
         };
         signal?.addEventListener('abort', stopRun, { once: true });
-        timer = setTimer(stopRun, Math.max(5_000, Number(config.vcrIntakeTimeoutMs) || 60_000));
+        timer = setTimer(stopRun, vcrIntakeTimeoutOf(config, kind));
         child.once('error', () => reject(new HttpError(503, 'vcr_intake_failed', 'The intake container could not start.')));
         child.once('exit', code => {
           if (timedOut || signal?.aborted) return;

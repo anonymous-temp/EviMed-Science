@@ -180,6 +180,7 @@ import { CapsuleScanner } from "./capsuleScan.mjs";
 import { createSourceRoutes } from "./sourceRoutes.mjs";
 import { SourceIngestionWorker } from "./sourceWorker.mjs";
 import { SourceUnderstandingRuns } from "./sourceUnderstandingRuns.mjs";
+import { createSourceMaterials } from "./sourceMaterials.mjs";
 import { createSourceUnderstandingRuntime } from "./sourceUnderstandingRuntime.mjs";
 import { MethodDescriber } from "./methodDisplay.mjs";
 import { removeSourceCopies, sourceAttemptId, sourceReadCopyDirectory } from "./sourceFiles.mjs";
@@ -1468,10 +1469,16 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   let kbIndex = null;
   /** @type {import("./libraryService.mjs").LibraryService | null} */
   let libraryService = null;
+  // The disposable intake container's client, shared by 「虚拟临研」's conversions
+  // and the source-material read (a PDF's pages, a spreadsheet's cells).
+  const intakeController = overrides.vcrIntakeController ?? new RuntimeControllerClient(config);
   const sourceWorker = sourceService && config.sourceIngestionEnabled ? new SourceIngestionWorker({
     jobs: productJobs,
     sources: sourceService,
     parser: documentParser,
+    // The tables, cells and pages of a parsed source; a failure of it is the
+    // source's ledger entry, never a failed ingestion.
+    materials: createSourceMaterials({ config, controller: intakeController, report: (code) => process.stderr.write(`source-materials: ${code}\n`) }),
     pollMs: config.sourceIngestionPollMs,
     leaseMs: config.sourceIngestionLeaseMs,
     // The orphan sweep's own line: what it withdrew, or why it could not.
@@ -1805,7 +1812,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     connectorCredentials,
     // A record document to text and a figure to curve points run in the runtime
     // controller's disposable container, like a document export does.
-    intakeController: overrides.vcrIntakeController ?? new RuntimeControllerClient(config),
+    intakeController,
   });
 
   /**

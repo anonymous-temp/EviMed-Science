@@ -77,17 +77,21 @@ const uniqueSorted = (values) => [...new Set(values)].sort((a, b) => a - b)
 /**
  * Locate every structured unit on the PDF's own pages.
  *
- * @param {{ tables: Record<string, any>[], figures?: Record<string, any>[], pages: PdfPageText[] }} input
+ * @param {{ tables: Record<string, any>[], figures?: Record<string, any>[], pages: PdfPageText[], pageCount?: number }} input
+ *   `pageCount` is the document's page count when the text of fewer pages was read: a unit found nowhere then may be on a page nobody read.
  * @returns {{ tables: Record<string, any>[], figures: Record<string, any>[], info: { status: string, pageCount: number, textLayerPages: number, noTextLayerPages: number[], rowChecks: number, budgetSpent: boolean } }}
  */
-export function locateUnitsOnPages({ tables, figures = [], pages }) {
+export function locateUnitsOnPages({ tables, figures = [], pages, pageCount = pages.length }) {
   const indexed = pages.map((entry) => ({ page: entry.page, skeleton: materialSkeleton(entry.text), hasTextLayer: entry.hasTextLayer !== false && materialSkeleton(entry.text).length > 0 }))
   const withText = indexed.filter((entry) => entry.hasTextLayer)
   const noText = indexed.filter((entry) => !entry.hasTextLayer).map((entry) => entry.page)
   /** @param {string} needle @returns {number[]} */
   const pagesContaining = (needle) => withText.filter((entry) => entry.skeleton.includes(needle)).map((entry) => entry.page)
   /** @param {string} reason @returns {MaterialPage} */
-  const unknownFor = (reason) => ({ status: 'unknown', reason: reason === 'no_match' && noText.length ? 'no_text_layer' : reason })
+  const unknownFor = (reason) => ({
+    status: 'unknown',
+    reason: reason !== 'no_match' ? reason : pageCount > pages.length ? 'source_too_large' : noText.length ? 'no_text_layer' : reason,
+  })
   let rowChecks = 0
   let budgetSpent = false
 
@@ -156,7 +160,7 @@ export function locateUnitsOnPages({ tables, figures = [], pages }) {
   })
   return {
     tables: locatedTables, figures: locatedFigures,
-    info: { status: withText.length ? 'mapped' : 'no_text_layer', pageCount: indexed.length, textLayerPages: withText.length, noTextLayerPages: noText.slice(0, 200), rowChecks, budgetSpent },
+    info: { status: withText.length ? 'mapped' : 'no_text_layer', pageCount: Math.max(pageCount, indexed.length), textLayerPages: withText.length, noTextLayerPages: noText.slice(0, 200), rowChecks, budgetSpent },
   }
 }
 
@@ -213,9 +217,11 @@ export function materialTableCounts(table, pagination) {
  * @param {{ tables: Record<string, any>[], figures?: Record<string, any>[], supplements?: Record<string, any>[], pagination: string, format: string,
  *   pages: { status: string, pageCount?: number, textLayerPages?: number, noTextLayerPages?: number[], reason?: string },
  *   extraction: { materials?: string, parser?: string, locator?: string }, sourceSha256?: string | null, textSha256?: string | null,
- *   limits?: string[], failure?: string | null, now?: string }} input
+ *   limits?: string[], failure?: string | null, unavailable?: string | null, now?: string }} input
+ *   `failure` is the code a derivation failed with; `unavailable` is why none was attempted. Neither leaves a count unsaid: both are
+ *   ledgers with their numbers at zero and the reason beside them.
  */
-export function sourceMaterialsCoverage({ tables, figures = [], supplements = [], pagination, format, pages, extraction, sourceSha256 = null, textSha256 = null, limits = [], failure = null, now }) {
+export function sourceMaterialsCoverage({ tables, figures = [], supplements = [], pagination, format, pages, extraction, sourceSha256 = null, textSha256 = null, limits = [], failure = null, unavailable = null, now }) {
   const values = { total: 0, located: 0, ambiguous: 0, unlocated: 0, unextracted: 0, failed: 0 }
   const tableCounts = { total: tables.length, structured: 0, unextracted: 0, failed: 0, continued: 0, continuedAmbiguous: 0 }
   const footnotes = { linked: 0, orphanMarkers: 0, orphanNotes: 0 }
@@ -232,15 +238,16 @@ export function sourceMaterialsCoverage({ tables, figures = [], supplements = []
   }
   /** @type {string[]} */
   const reasons = [...limits]
+  if (unavailable) reasons.push(unavailable)
   if (pages.reason && !reasons.includes(pages.reason)) reasons.push(pages.reason)
   if (pages.status === 'no_text_layer' || pagination === 'image') reasons.push('scanned_or_image_source')
   if (figures.length) reasons.push('figures_not_digitized')
   const origin = pagination === 'image' || pages.status === 'no_text_layer' ? 'ocr' : 'reported'
   const trouble = tableCounts.unextracted + tableCounts.failed + values.unextracted + values.failed
-  const status = failure ? 'failed' : trouble > 0 || limits.length ? 'partial' : 'extracted'
+  const status = failure ? 'failed' : unavailable ? 'unavailable' : trouble > 0 || limits.length ? 'partial' : 'extracted'
   return {
     version: SOURCE_MATERIALS_VERSION,
-    status, ...(failure ? { failure } : {}),
+    status, ...(failure ? { failure } : {}), ...(unavailable ? { unavailable } : {}),
     format, pagination, origin,
     // Where an OCR reading or a graph-estimated value is involved its uncertainty is unknown, and said so.
     ...(origin === 'ocr' ? { uncertainty: 'unknown' } : {}),

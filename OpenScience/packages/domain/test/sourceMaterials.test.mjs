@@ -214,7 +214,7 @@ test("a table too large for one record keeps its first cells and counts the rest
   const rows = Array.from({ length: 2000 }, (_, index) => `| row ${index} | ${index} | ${index + 1} |`).join("\n");
   const found = deriveMarkdownStructure({ text: `| h | a | b |\n| - | - | - |\n${rows}\n` });
   const [big] = found.tables;
-  assert.equal(big.cells.length, 3000);
+  assert.equal(big.cells.length, 1000);
   assert.ok(big.truncated.rows < 2000 && big.truncated.of === 2000);
   assert.ok(big.unextracted > 0, "the cells past the cap with numbers in them are counted");
   assert.ok(found.limits.includes("cell_limit"));

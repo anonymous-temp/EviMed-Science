@@ -2152,6 +2152,13 @@ export function loadConfig(overrides = {}) {
     requireOpenList: overrides.requireOpenList ?? boolEnv("OPEN_SCIENCE_REQUIRE_OPENLIST", false),
     sourceIngestionEnabled:
       overrides.sourceIngestionEnabled ?? boolEnv("OPEN_SCIENCE_SOURCE_INGESTION_ENABLED", production),
+    // Structured materials (2026-10-04): the tables, figures and spreadsheet cells
+    // of a parsed source with their addresses, and the page of each in a PDF
+    // (`sourceMaterials.mjs`). It extends the parse and can fail without costing
+    // the document anything; the switch is for an operator who wants the intake
+    // container's page read gone, not for correctness.
+    sourceMaterialsEnabled:
+      overrides.sourceMaterialsEnabled ?? boolEnv("OPEN_SCIENCE_SOURCE_MATERIALS_ENABLED", true),
     requireDocumentParser:
       overrides.requireDocumentParser ?? boolEnv("OPEN_SCIENCE_REQUIRE_DOCUMENT_PARSER", production),
     sourceIngestionPollMs: Number(

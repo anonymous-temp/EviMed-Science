@@ -52,7 +52,7 @@ export const SOURCE_MATERIALS_EXTRACTOR = 'evimed-materials@1'
  */
 export const SOURCE_MATERIAL_LIMITS = Object.freeze({
   maxTables: 400,
-  maxCellsPerTable: 3000,
+  maxCellsPerTable: 1000,
   maxCellChars: 1000,
   maxFigures: 300,
   maxSupplements: 100,
@@ -496,11 +496,6 @@ function buildMarkdownCells(rows) {
   }
   for (let index = 0; index < bodyRows.length; index += 1) {
     const row = bodyRows[index]
-    if (budget <= 0) {
-      truncated ??= { rows: index, of: bodyRows.length }
-      for (const cell of row) if (looksNumeric(cell.t)) beyondLimit += 1
-      continue
-    }
     const label = row[0]?.t ?? ''
     const labelCore = label ? materialCellMarkers(label).core : ''
     const rowTimepoint = labelCore ? materialTimepoint(labelCore, true) : null
@@ -508,6 +503,12 @@ function buildMarkdownCells(rows) {
     for (let c = 0; c < row.length; c += 1) {
       const cell = row[c]
       if (!cell.t) continue
+      if (budget <= 0) {
+        // Past the cap a cell is not typed, only counted when it starts like a number.
+        truncated ??= { rows: index, of: bodyRows.length }
+        if (looksNumeric(cell.t)) beyondLimit += 1
+        continue
+      }
       const column = c + 1
       // The first column is the row label by convention (stated on the table as
       // `labelColumn`); a label is not a value.
@@ -947,6 +948,7 @@ export function deriveSheetStructure({ sheets }) {
       merges: Array.isArray(sheet?.merges) ? sheet.merges.slice(0, 200).map(String) : [],
       dimensions: sheet?.dimensions && typeof sheet.dimensions === 'object' ? sheet.dimensions : undefined,
       truncated: truncated ? { cells: kept.length, of: Number.isSafeInteger(sheet?.totalCells) ? sheet.totalCells : input.length } : null,
+      beyond: Number.isSafeInteger(sheet?.beyond) ? sheet.beyond : 0,
     })
     table.index = tables.length + 1
     table.start = null

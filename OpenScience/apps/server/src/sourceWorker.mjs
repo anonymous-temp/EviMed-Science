@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
+import path from "node:path";
 import { RUNTIME_YIELDED_CODE } from "./internalProjects.mjs";
-import { readCopyOf } from "./sourceService.mjs";
+import { extractorRevision, readCopyOf } from "./sourceService.mjs";
 
 /** Codes that mean no runtime or budget was available yet, and how long a
  *  document waits before asking again. `runtime_yielded` is the same wait from
@@ -31,8 +32,8 @@ const TERMINAL_ERRORS = new Set([
 /** Leased ingestion worker. ProductJobs owns retries; source generations make
  * an old lease unable to overwrite a newer user correction. */
 export class SourceIngestionWorker {
-  /** @param {{jobs:any,sources:any,parser:any,resolveSource:(job:any,source:any)=>Promise<string|{localPath:string}>,releaseResolved?:(job:any,source:any,file:any)=>Promise<void>,verifyMetadata?:(metadata:any)=>Promise<any>,onPublished?:(job:any)=>void,onReadable?:(job:any)=>void,materialize:(job:any,source:any,result:any)=>Promise<string>,discardMaterialized?:(job:any,source:any,artifactPath:string)=>Promise<void>,cleanupSource?:(job:any,source:any,jobIds:string[],scope:any)=>Promise<void>,prepareCleanup?:(job:any)=>Promise<any>,understandingRuns?:any,cancelUnderstanding?:any,pollMs?:number,leaseMs?:number,reconcileMs?:number,report?:(event:string,detail:Record<string,any>)=>void}} dependencies */
-  constructor({ jobs, sources, parser, resolveSource, releaseResolved = async () => {}, verifyMetadata = async (metadata) => metadata, onPublished = () => {}, onReadable = () => {}, materialize, discardMaterialized = async () => {}, cleanupSource = null, prepareCleanup = async () => null, understandingRuns = null, cancelUnderstanding = null, pollMs = 1000, leaseMs = 900_000, reconcileMs = 60_000, report = () => {} }) {
+  /** @param {{jobs:any,sources:any,parser:any,resolveSource:(job:any,source:any)=>Promise<string|{localPath:string}>,releaseResolved?:(job:any,source:any,file:any)=>Promise<void>,verifyMetadata?:(metadata:any)=>Promise<any>,onPublished?:(job:any)=>void,onReadable?:(job:any)=>void,materialize:(job:any,source:any,result:any)=>Promise<string>,discardMaterialized?:(job:any,source:any,artifactPath:string)=>Promise<void>,cleanupSource?:(job:any,source:any,jobIds:string[],scope:any)=>Promise<void>,prepareCleanup?:(job:any)=>Promise<any>,understandingRuns?:any,cancelUnderstanding?:any,materials?:{extract:Function}|null,pollMs?:number,leaseMs?:number,reconcileMs?:number,report?:(event:string,detail:Record<string,any>)=>void}} dependencies */
+  constructor({ jobs, sources, parser, resolveSource, releaseResolved = async () => {}, verifyMetadata = async (metadata) => metadata, onPublished = () => {}, onReadable = () => {}, materialize, discardMaterialized = async () => {}, cleanupSource = null, prepareCleanup = async () => null, understandingRuns = null, cancelUnderstanding = null, materials = null, pollMs = 1000, leaseMs = 900_000, reconcileMs = 60_000, report = () => {} }) {
     if (![jobs, sources, parser, resolveSource, materialize].every(Boolean)) throw new TypeError("SourceIngestionWorker dependencies are required.");
     if (!Number.isSafeInteger(pollMs) || pollMs < 100 || pollMs > 86_400_000
       || !Number.isSafeInteger(leaseMs) || leaseMs < 1000 || leaseMs > 3_600_000
@@ -53,6 +54,8 @@ export class SourceIngestionWorker {
     this.prepareCleanup = prepareCleanup;
     this.understandingRuns = understandingRuns;
     this.cancelUnderstanding = cancelUnderstanding;
+    /** Structured materials of a parsed source (tables, cells, pages): an extension of the parse that never fails it. */
+    this.materials = materials;
     this.pollMs = pollMs;
     this.leaseMs = leaseMs;
     this.reconcileMs = reconcileMs;
@@ -204,12 +207,29 @@ export class SourceIngestionWorker {
         }, Math.max(100, Math.min(1000, this.pollMs)));
         cancellationCheck.unref();
         let result;
+        let materials = null;
         try {
           result = await this.parser.parse({ path: file,
             mimeType: processing.payload.fingerprint.mimeType,
             sha256: processing.payload.fingerprint.sha256,
             sourceId: processing.id, signal: controller.signal,
           });
+          // The tables, cells and pages of what was just parsed, under the same
+          // cancellation and lease checks as the parse. A failure here is the
+          // ledger's (`coverage.materials`), never the ingestion's: only the
+          // caller's own cancellation propagates.
+          if (this.materials) {
+            try {
+              materials = await this.materials.extract({ text: result.text, file, name: path.basename(file),
+                sha256: processing.payload.fingerprint.sha256, parserRevision: extractorRevision(result.extractor), signal: controller.signal });
+            } catch (error) {
+              // `extract` answers with a ledger instead of throwing; this is the
+              // net under it, so a defect in the extension is a source with no
+              // structure and a report, not a document that could not be read.
+              if (controller.signal.aborted) throw error;
+              try { this.report("source_materials_failed", { code: typeof error?.code === "string" ? error.code : "source_materials_failed" }); } catch { /* a report never fails an ingestion */ }
+            }
+          }
         } catch (error) {
           if (controller.signal.aborted) throw controller.signal.reason;
           throw error;
@@ -222,7 +242,7 @@ export class SourceIngestionWorker {
         // never holds a row lock. It cannot fail the parse: an unreachable
         // Crossref leaves the DOI unconfirmed.
         const metadata = result.metadata ? await this.verifyMetadata(result.metadata).catch(() => null) : null;
-        parsed = await this.sources.freezeCapture(job, { ...result, metadata });
+        parsed = await this.sources.freezeCapture(job, { ...result, metadata, ...(materials ? { materials } : {}) });
       }
       const understands = ["structured", "deep"].includes(processing.payload.depth);
       const result = { ...parsed, text: parsed.input.text, units: parsed.input.units, facts: [], methods: [] };
