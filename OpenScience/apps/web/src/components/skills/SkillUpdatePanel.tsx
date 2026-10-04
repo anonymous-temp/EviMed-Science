@@ -70,7 +70,7 @@ export function SkillUpdatePanel({ skillId, revision, source, onApplied }: { ski
       {error && <p role="alert" className="text-ui text-error">{error}</p>}
       {staged && (
         <section aria-label="更新预览" className="flex flex-col gap-3">
-          {!staged.plan.baseKnown && <p className="text-ui text-text-2">这个技能没有记录它当初的版本，所以每一处不同都按「两边都改了」处理，默认保留你的内容。</p>}
+          {!staged.plan.baseKnown && <p className="text-ui text-text-2">这个技能没有记录它当初的版本，所以每一处不同都按“两边都改了”处理，默认保留你的内容。</p>}
           {shown.length === 0 ? <p className="text-ui text-text-2">新版本和你现在的内容没有区别。</p> : (
             <List label="更新内容" divided>
               {shown.map((entry) => (

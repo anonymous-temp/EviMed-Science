@@ -73,7 +73,7 @@ function ImportReport({ result }: { result: VcrImportResult }) {
       {summary.notices.length > 0 && <ul className="mt-2 flex flex-col gap-0.5 text-caption text-text-3">{summary.notices.map((line) => <li key={line}>{line}</li>)}</ul>}
       <p className="mt-2 text-caption text-text-3">
         {result.fieldMap.columnSourcesDeclared
-          ? "每一列都标明了值的来源：源系统记录的是「观察」，由导入计算出来的（年龄、随访时间）是「计算」。"
+          ? "每一列都标明了值的来源：源系统记录的是“观察”，由导入计算出来的（年龄、随访时间）是“计算”。"
           : "这个数据源整体标为非真实个体数据，各列不单独声明来源。"}
         {result.fieldMap.trimmed > 0 ? ` 映射条目已达上限，${result.fieldMap.trimmed} 个只说明来源的列没有写入。` : ""}
         请在下面的字段映射里核对后确认。

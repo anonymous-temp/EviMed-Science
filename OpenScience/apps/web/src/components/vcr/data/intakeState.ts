@@ -283,7 +283,7 @@ const IMPORT_NOTICES: Record<string, string> = {
   follow_up_before_index: "位受试者的观察期终点早于起点，随访时间留空",
   number_unreadable: "个数值读不出来，已留空",
   special_missing_values: "个取值是 SAS 的特殊缺失（.A 到 .Z），按空白处理",
-  dtype_populated: "份数据集带有 DTYPE：其中有申办方推导或插补出的记录，取值列的来源标为「插补」",
+  dtype_populated: "份数据集带有 DTYPE：其中有申办方推导或插补出的记录，取值列的来源标为“插补”",
   duplicate_subject_rows: "位受试者在 ADSL 里出现了不止一行",
   duplicate_subject_parameter_rows: "位受试者在同一个参数里不止一行",
   cnsr_not_binary: "行的删失标志不是 0 或 1",
