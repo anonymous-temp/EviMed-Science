@@ -599,6 +599,29 @@ TOOL_DEFINITIONS = [
         ),
     },
     {
+        "name": "dailymed_label",
+        "description": (
+            "United States (FDA) drug labels from DailyMed, by version. drug=... searches (paged: data.outcome says how many "
+            "more and which page to ask for). setid=... reads one label at one version (default the current; version=N for an "
+            "older one, compareVersion=M to list section-level changes between two) and preserves the SPL XML, a quotable "
+            "label.md and normalised label.json (ingredients with UNII, products with NDC, forms, routes, strengths, "
+            "marketing category, labeler). Every result says it is the US label; another jurisdiction is refused, never "
+            "substituted. Use drug_label_search for China."
+        ),
+        "inputSchema": object_schema(
+            {
+                "drug": {"type": "string", "minLength": 1, "maxLength": 128, "description": "Brand or generic name; search mode."},
+                "setid": {"type": "string", "pattern": "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$", "description": "A DailyMed set id; read mode."},
+                "version": {"type": "integer", "minimum": 1, "maximum": 100000, "description": "SPL version to read; default the current."},
+                "compareVersion": {"type": "integer", "minimum": 1, "maximum": 100000, "description": "Another version to compare with; default the nearest earlier held one."},
+                "limit": {"type": "integer", "minimum": 1, "maximum": 100, "description": "Search page size; default 10."},
+                "page": {"type": "integer", "minimum": 1, "maximum": 1000, "description": "Search page; default 1."},
+                "jurisdiction": SHORT_STRING,
+                "intake": {"type": "boolean", "description": "Default false. Offer label.md to the knowledge base."},
+            },
+        ),
+    },
+    {
         "name": "guideline_search",
         "description": "Search configured clinical-guideline sources.",
         "inputSchema": object_schema(
@@ -2375,6 +2398,17 @@ def _dispatch(name, arguments, execution_context=None):
                 False,
                 "Stop and read the registry record another way.",
                 ["Read the study page with web_read, or use clinical_trial_search."],
+            )
+        return _public_adapter_call(name, arguments)
+    if name == "dailymed_label":
+        # DailyMed is public and has no private adapter: through the gateway or refused.
+        if not public_sources.enabled():
+            return failure(
+                "public_source_unsupported",
+                "DailyMed labels need the public connectors, which are disabled in this deployment.",
+                False,
+                "Stop and read the label another way.",
+                ["Use drug_label_search, or read the label page with web_read."],
             )
         return _public_adapter_call(name, arguments)
     if name == "reference_list":

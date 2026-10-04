@@ -779,6 +779,10 @@ def _capture_roots(source_id: str) -> list[tuple[str, tuple[str, ...]]]:
     if trial:
         # `clinical_trial_snapshot` files a trial's record under its registry id.
         return [("%s/clinicaltrials/%s" % (SOURCES_DIR, value.upper()), ("record.md",))]
+    label = re.fullmatch(r"[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}", value, re.I)
+    if label:
+        # `dailymed_label` files a label's versions under its DailyMed set id.
+        return [("%s/dailymed/%s" % (SOURCES_DIR, value.lower()), ("label.md",))]
     page = re.fullmatch(r"web-page:([0-9a-f]{16})", value)
     if page:
         return [("%s/web-pages/%s" % (SOURCES_DIR, page.group(1)), ("page.md",))]
