@@ -21,9 +21,10 @@
  *   thing later does not redo what was done.
  * - **A step's completion is read from the data, never from a run's word**
  *   (attachment E §2.2): the definition step is done when a definition version
- *   exists, the comparator step when the design carries a result or a
- *   deterministic 「不可估计」 — which is a finished result, not a failure
- *   (plan §3.6). A failed run that wrote its object still counts (principle
+ *   exists, the evidence step when a parameter cites its evidence (a card
+ *   another step stated by itself is not its product), the comparator step
+ *   when the design carries a result or a deterministic 「不可估计」 — which is
+ *   a finished result, not a failure (plan §3.6). A failed run that wrote its object still counts (principle
  *   19); a run that failed and wrote nothing fails its steps, and one that
  *   ended well and wrote nothing leaves them not started, to be sent again
  *   within the key's attempts or asked for again.
@@ -316,6 +317,30 @@ export function vcrSimpleStepStatus({ complete, jobOpen = false, minimal = false
   if (jobOpen) return { status: "running", note: null };
   if (complete) return { status: minimal ? "minimal" : "done", note: null };
   return null;
+}
+
+/**
+ * Whether an assumption card is the evidence step's own product (plan §4, step
+ * 2: 「试验先例、假设卡」): a parameter that cites the verified values it was
+ * taken from — `external_evidence`, a pooled card or one study taken as it
+ * stands, which the writer refuses unless the cited rows are this study's and
+ * passed their quotation check — or the expert setting widened from such
+ * evidence (`pooling.basedOn`, which only `expertSetCard` writes: a run's own
+ * write has no `pooling` field).
+ *
+ * The step is read from this and from nothing a neighbour can write. The
+ * protocol run states expert settings and scenarios of its own (the live
+ * acceptance of 2026-10-03: scenario cards written under the definition), and
+ * so does the analysis run for the designs it configures; counting any card as
+ * the evidence step's work read the step done before it started, and
+ * `vcr-evidence` was never sent — no pooled value, no prediction interval, no
+ * source anchor behind a single number the simulation drew from.
+ * @param {unknown} card an assumption card as the store reads it
+ */
+export function vcrEvidenceProduct(card) {
+  const entry = object(card);
+  if (entry.sourceKind === "external_evidence") return list(entry.evidenceIds).length > 0;
+  return entry.sourceKind === "expert_set" && Boolean(object(entry.pooling).basedOn);
 }
 
 /**
@@ -1562,12 +1587,24 @@ export class VcrOrchestrator {
       minimal: plan.fidelity(step) === "minimal" && !plan.requested.has(step),
     });
 
+    // Each simple step is done by what only it produces. The evidence step is
+    // done when a parameter cites its evidence (`vcrEvidenceProduct`) — never
+    // when any card exists, because the protocol and analysis runs write cards
+    // of their own — and reads running while its pooling jobs are out. The
+    // four analysis steps are done by an engine result the platform attached,
+    // which no run can write (`attachResult`, the gateway's closed field
+    // lists), so a neighbour's output or a placeholder cannot satisfy them.
+    //
     // Structuring the eligibility criteria is what step 7 is at T0, where
     // nobody's records exist to match (plan §3.2); above T0 it is done when
-    // patients have been judged.
+    // patients have been judged. The criteria are one object two steps may
+    // write — the protocol run structures them from the protocol it reads, the
+    // matching run when it finds none — and the plan's own T0 timeline (§10.3)
+    // has no matching run: reading step 7 done on criteria that exist is the
+    // plan's meaning, not a neighbour's output satisfying it.
     const facts = /** @type {Array<[string, { status: string, note: string | null } | null]>} */ ([
       ["definition", simple("definition", { complete: Boolean(read.definition) })],
-      ["evidence", simple("evidence", { complete: read.assumptions.length > 0 })],
+      ["evidence", simple("evidence", { kinds: ["pool_evidence"], complete: read.assumptions.some(vcrEvidenceProduct) })],
       ["population", aggregate("population")],
       ["patients", aggregate("patients")],
       ["comparator", aggregate("comparator")],

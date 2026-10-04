@@ -195,6 +195,27 @@ test("a runtime write may not write a number, a count or an execution record", a
   assert.equal(calls.filter((call) => call[0] === "population").length, 1);
 });
 
+test("a definition that states nothing is refused in place: the step reads done from the row, so an empty card must not stand for the question", async () => {
+  const { calls, handler } = fixture();
+  /** @param {Record<string, any>} data */
+  const write = async (data) => {
+    const res = response();
+    await handler(request("/internal/vcr/v1/write", { what: "definition", data }), res);
+    return res.json().data;
+  };
+  for (const empty of [{}, { pico: {}, estimand: {} }, { pico: { population: "  ", intervention: "" }, estimand: { intercurrentEvents: [] }, fieldSources: { endpointType: "AI 设定" } }]) {
+    const refused = await write(empty);
+    assert.deepEqual(refused.ids, [], JSON.stringify(empty));
+    assert.deepEqual(refused.issues.map((/** @type {any} */ issue) => [issue.field, issue.code]), [["pico", "vcr_write_value_invalid"]], JSON.stringify(empty));
+    assert.match(refused.issues[0].message, /pico\.population/, "it says what to write, and when to ask instead");
+  }
+  assert.equal(calls.some((call) => call[0] === "definition"), false, "nothing was saved");
+  // Any one stated part is a definition: who is studied, what is given, or an estimand attribute.
+  for (const stated of [{ pico: { population: "二线 NSCLC" } }, { pico: { intervention: "EV 单药" } }, { estimand: { summary: "风险比" } }, { endpointType: "binary", pico: { outcome: "PFS" } }]) {
+    assert.equal((await write(stated)).ids.length, 1, JSON.stringify(stated));
+  }
+});
+
 test("AC-33 everything a run writes is labelled ai_set; nothing it writes is labelled reviewed", async () => {
   const { calls, handler } = fixture();
   await handler(request("/internal/vcr/v1/write", { what: "definition", data: { pico: { population: "二线 NSCLC" }, endpointType: "binary" } }), response());
@@ -515,7 +536,7 @@ test('deferred publication cannot be requested while private forecasts and ordin
     const deferred = response(); await handler(request('/internal/vcr/v1/write', { what, items: [{}] }), deferred);
     assert.equal(deferred.status, 400); assert.equal(deferred.json().code, 'vcr_write_what_invalid');
   }
-  const normal = response(); await handler(request('/internal/vcr/v1/write', { what: 'definition', items: [{ pico: {}, estimand: {} }] }), normal);
+  const normal = response(); await handler(request('/internal/vcr/v1/write', { what: 'definition', items: [{ pico: { population: '二线 NSCLC' }, estimand: {} }] }), normal);
   assert.equal(normal.json().data.ids.length, 1);
 });
 
