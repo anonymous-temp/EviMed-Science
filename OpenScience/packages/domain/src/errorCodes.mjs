@@ -1212,7 +1212,8 @@ export const VCR_PROTOCOL_ISSUE_CODES = Object.freeze([
  */
 export const VCR_ENGINE_ISSUE_CODES = Object.freeze([
   'constraint_unsatisfiable', 'cpu_budget_exhausted', 'grid_cell_failed', 'handler_error',
-  'input_format_unsupported', 'input_hash_mismatch', 'input_out_of_range', 'input_parse_failed', 'input_too_large',
+  'input_format_unsupported', 'input_hash_mismatch', 'input_out_of_range', 'input_parse_failed', 'input_source_not_reconstructed',
+  'input_too_large',
   'job_invalid', 'mechanistic_engine_unknown', 'mechanistic_field_missing', 'missing_covariate',
   'model_card_field_missing', 'model_risk_unknown', 'performance_measure_unsupported', 'replicates_all_failed',
   'required_field_missing', 'twin_label_inconsistent', 'uncertainty_and_variability_conflated',
@@ -1579,6 +1580,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   input_hash_mismatch: '数据文件的内容和冻结快照时的哈希对不上；已拒绝读取。',
   input_out_of_range: '有一个输入值超出了这个方法允许的范围。',
   input_parse_failed: '数据文件无法解析成表格。',
+  input_source_not_reconstructed: '这个输入必须是由已发表生存曲线重建出的伪个体数据（来源标记为「重建」）；真实患者数据不能冒充它。',
   input_too_large: '数据文件超过了引擎允许读取的大小。',
   job_invalid: '这项计算不符合引擎协议，已拒绝，没有运行。',
   mechanistic_engine_unknown: '机制模型声明的计算引擎不在支持列表里。',

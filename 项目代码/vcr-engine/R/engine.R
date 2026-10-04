@@ -46,7 +46,7 @@
 VCR_ENGINE_SOURCE_FILES <- c(
   "protocol", "rules", "inputs", "rng", "simulators", "population", "quality", "weighting", "rmst",
   "reconstruct", "maic", "evidence_pool", "map_prior", "design_analytic",
-  "design_simulate", "assurance", "procova", "accrual", "summaries", "comparison", "weighted_cox"
+  "design_simulate", "assurance", "procova", "accrual", "summaries", "comparison", "weighted_cox", "maic_tte"
 )
 
 #' Source every module in dependency order. Idempotent.
@@ -79,6 +79,7 @@ vcr_engine_handlers <- function() list(
   "comparator.rmst" = vcr_job_rmst,
   "comparator.maic" = vcr_job_maic,
   "comparator.weighted_cox" = vcr_job_weighted_cox,
+  "comparator.maic_time_to_event" = vcr_job_maic_tte,
   "comparator.evalue" = vcr_job_evalue,
   "comparator.map_prior" = vcr_job_map_prior,
   "design.analytic" = vcr_job_design_analytic,
@@ -164,7 +165,7 @@ vcr_default_measure_source <- function(method) {
 #' is misspelt here is a refusal nobody has a message for.
 VCR_ENGINE_OWN_ISSUE_CODES <- c(
   "constraint_unsatisfiable", "cpu_budget_exhausted", "grid_cell_failed", "handler_error",
-  "input_format_unsupported", "input_hash_mismatch", "input_parse_failed", "input_too_large",
+  "input_format_unsupported", "input_hash_mismatch", "input_parse_failed", "input_source_not_reconstructed", "input_too_large",
   "job_invalid", "mechanistic_engine_unknown", "mechanistic_field_missing", "missing_covariate",
   "model_card_field_missing", "model_risk_unknown", "performance_measure_unsupported", "replicates_all_failed",
   "twin_label_inconsistent", "uncertainty_and_variability_conflated")
@@ -1214,7 +1215,7 @@ vcr_job_rmst <- function(job, output_dir = NULL, ...) {
 vcr_job_maic <- function(job, output_dir = NULL, ...) {
   sc <- job$scenario
   if (identical(as.character(sc$endpoint$type %||% ""), "time_to_event")) {
-    vcr_abort("endpoint_not_supported", "scenario.endpoint.type", "MAIC here compares continuous and binary outcomes; a time-to-event MAIC is not implemented.")
+    vcr_abort("endpoint_not_supported", "scenario.endpoint.type", "This MAIC compares continuous and binary outcomes; a time-to-event MAIC is the method comparator.maic_time_to_event.")
   }
   subj <- .vcr_main_table(vcr_job_tables(job))
   vcr_require_individual(subj, "A MAIC", method = "comparator.maic")

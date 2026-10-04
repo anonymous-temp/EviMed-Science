@@ -2104,6 +2104,161 @@
           }
         ]
       }
+    },
+    {
+      "name": "maic_time_to_event_comparator unanchored",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "maic_time_to_event_comparator",
+        "method": "comparator.maic_time_to_event",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariates": [
+            "age",
+            "male"
+          ],
+          "targets": {
+            "age": 60,
+            "male": 0.5
+          },
+          "timeUnit": "months",
+          "parameterCode": "OS",
+          "pseudoIpdInputId": "rec_1:1"
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          },
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:events",
+            "shape": "events",
+            "location": "std_1/snp_1/events.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          },
+          {
+            "kind": "snapshot_file",
+            "id": "rec_1:1",
+            "location": "std_1/rec_1/reconstructed-ipd.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "reconstructed"
+          }
+        ]
+      }
+    },
+    {
+      "name": "maic_time_to_event_comparator anchored on reconstructed rows",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "maic_time_to_event_comparator",
+        "method": "comparator.maic_time_to_event",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariates": [
+            "age",
+            "male"
+          ],
+          "targets": {
+            "age": 60,
+            "male": 0.5
+          },
+          "timeUnit": "months",
+          "parameterCode": "OS",
+          "anchored": true,
+          "treatmentColumn": "arm",
+          "pseudoIpdInputId": "rec_1:1",
+          "pseudoTreatmentColumn": "arm",
+          "ties": "breslow",
+          "unadjustedEffectModifiers": [
+            "ecog"
+          ]
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          },
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:events",
+            "shape": "events",
+            "location": "std_1/snp_1/events.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          },
+          {
+            "kind": "snapshot_file",
+            "id": "rec_1:1",
+            "location": "std_1/rec_1/reconstructed-ipd.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "reconstructed"
+          }
+        ]
+      }
+    },
+    {
+      "name": "maic_time_to_event_comparator anchored on a published contrast",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "maic_time_to_event_comparator",
+        "method": "comparator.maic_time_to_event",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariates": [
+            "age",
+            "male"
+          ],
+          "targets": {
+            "age": 60,
+            "male": 0.5
+          },
+          "timeUnit": "months",
+          "parameterCode": "OS",
+          "anchored": true,
+          "aggregateEstimate": -0.56,
+          "aggregateSe": 0.09
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          },
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:events",
+            "shape": "events",
+            "location": "std_1/snp_1/events.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      }
     }
   ],
   "invalid": [
@@ -13660,6 +13815,536 @@
       },
       "expected": [
         "patient_input_required@inputs"
+      ]
+    },
+    {
+      "name": "an unanchored time-to-event MAIC without the comparator rows",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "maic_time_to_event_comparator",
+        "method": "comparator.maic_time_to_event",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariates": [
+            "age",
+            "male"
+          ],
+          "targets": {
+            "age": 60,
+            "male": 0.5
+          },
+          "timeUnit": "months",
+          "parameterCode": "OS"
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          },
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:events",
+            "shape": "events",
+            "location": "std_1/snp_1/events.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_missing@scenario.pseudoIpdInputId"
+      ]
+    },
+    {
+      "name": "an anchored MAIC that states both the comparator rows and a published contrast",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "maic_time_to_event_comparator",
+        "method": "comparator.maic_time_to_event",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariates": [
+            "age",
+            "male"
+          ],
+          "targets": {
+            "age": 60,
+            "male": 0.5
+          },
+          "timeUnit": "months",
+          "parameterCode": "OS",
+          "anchored": true,
+          "pseudoIpdInputId": "rec_1:1",
+          "aggregateEstimate": -0.5,
+          "aggregateSe": 0.1
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          },
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:events",
+            "shape": "events",
+            "location": "std_1/snp_1/events.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          },
+          {
+            "kind": "snapshot_file",
+            "id": "rec_1:1",
+            "location": "std_1/rec_1/reconstructed-ipd.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "reconstructed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.aggregateEstimate"
+      ]
+    },
+    {
+      "name": "an anchored MAIC that states neither the comparator rows nor a published contrast",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "maic_time_to_event_comparator",
+        "method": "comparator.maic_time_to_event",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariates": [
+            "age",
+            "male"
+          ],
+          "targets": {
+            "age": 60,
+            "male": 0.5
+          },
+          "timeUnit": "months",
+          "parameterCode": "OS",
+          "anchored": true
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          },
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:events",
+            "shape": "events",
+            "location": "std_1/snp_1/events.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_missing@scenario.pseudoIpdInputId"
+      ]
+    },
+    {
+      "name": "a published contrast without its standard error",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "maic_time_to_event_comparator",
+        "method": "comparator.maic_time_to_event",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariates": [
+            "age",
+            "male"
+          ],
+          "targets": {
+            "age": 60,
+            "male": 0.5
+          },
+          "timeUnit": "months",
+          "parameterCode": "OS",
+          "anchored": true,
+          "aggregateEstimate": -0.5
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          },
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:events",
+            "shape": "events",
+            "location": "std_1/snp_1/events.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_missing@scenario.aggregateSe"
+      ]
+    },
+    {
+      "name": "an unanchored MAIC that states a published contrast",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "maic_time_to_event_comparator",
+        "method": "comparator.maic_time_to_event",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariates": [
+            "age",
+            "male"
+          ],
+          "targets": {
+            "age": 60,
+            "male": 0.5
+          },
+          "timeUnit": "months",
+          "parameterCode": "OS",
+          "pseudoIpdInputId": "rec_1:1",
+          "aggregateEstimate": -0.5,
+          "aggregateSe": 0.1
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          },
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:events",
+            "shape": "events",
+            "location": "std_1/snp_1/events.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          },
+          {
+            "kind": "snapshot_file",
+            "id": "rec_1:1",
+            "location": "std_1/rec_1/reconstructed-ipd.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "reconstructed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.aggregateEstimate",
+        "scenario_field_unknown@scenario.aggregateSe"
+      ]
+    },
+    {
+      "name": "comparator rows that the job does not carry",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "maic_time_to_event_comparator",
+        "method": "comparator.maic_time_to_event",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariates": [
+            "age",
+            "male"
+          ],
+          "targets": {
+            "age": 60,
+            "male": 0.5
+          },
+          "timeUnit": "months",
+          "parameterCode": "OS",
+          "pseudoIpdInputId": "rec_9:9"
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          },
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:events",
+            "shape": "events",
+            "location": "std_1/snp_1/events.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          },
+          {
+            "kind": "snapshot_file",
+            "id": "rec_1:1",
+            "location": "std_1/rec_1/reconstructed-ipd.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "reconstructed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.pseudoIpdInputId"
+      ]
+    },
+    {
+      "name": "a pseudo-individual arm column on an unanchored MAIC",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "maic_time_to_event_comparator",
+        "method": "comparator.maic_time_to_event",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariates": [
+            "age",
+            "male"
+          ],
+          "targets": {
+            "age": 60,
+            "male": 0.5
+          },
+          "timeUnit": "months",
+          "parameterCode": "OS",
+          "pseudoIpdInputId": "rec_1:1",
+          "pseudoTreatmentColumn": "arm"
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          },
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:events",
+            "shape": "events",
+            "location": "std_1/snp_1/events.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          },
+          {
+            "kind": "snapshot_file",
+            "id": "rec_1:1",
+            "location": "std_1/rec_1/reconstructed-ipd.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "reconstructed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.pseudoTreatmentColumn"
+      ]
+    },
+    {
+      "name": "a time-to-event MAIC for a binary endpoint",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "maic_time_to_event_comparator",
+        "method": "comparator.maic_time_to_event",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariates": [
+            "age",
+            "male"
+          ],
+          "targets": {
+            "age": 60,
+            "male": 0.5
+          },
+          "timeUnit": "months",
+          "parameterCode": "OS",
+          "pseudoIpdInputId": "rec_1:1",
+          "endpoint": {
+            "type": "binary"
+          }
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          },
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:events",
+            "shape": "events",
+            "location": "std_1/snp_1/events.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          },
+          {
+            "kind": "snapshot_file",
+            "id": "rec_1:1",
+            "location": "std_1/rec_1/reconstructed-ipd.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "reconstructed"
+          }
+        ]
+      },
+      "expected": [
+        "endpoint_not_supported@scenario.endpoint.type"
+      ]
+    },
+    {
+      "name": "a time-to-event MAIC target for a covariate it does not match on",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "maic_time_to_event_comparator",
+        "method": "comparator.maic_time_to_event",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariates": [
+            "age",
+            "male"
+          ],
+          "targets": {
+            "age": 60,
+            "male": 0.5,
+            "bmi": 27
+          },
+          "timeUnit": "months",
+          "parameterCode": "OS",
+          "pseudoIpdInputId": "rec_1:1"
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          },
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:events",
+            "shape": "events",
+            "location": "std_1/snp_1/events.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          },
+          {
+            "kind": "snapshot_file",
+            "id": "rec_1:1",
+            "location": "std_1/rec_1/reconstructed-ipd.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "reconstructed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.targets.bmi"
+      ]
+    },
+    {
+      "name": "a time-to-event MAIC on synthetic study rows",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "maic_time_to_event_comparator",
+        "method": "comparator.maic_time_to_event",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariates": [
+            "age",
+            "male"
+          ],
+          "targets": {
+            "age": 60,
+            "male": 0.5
+          },
+          "timeUnit": "months",
+          "parameterCode": "OS",
+          "pseudoIpdInputId": "rec_1:1"
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "synthetic"
+          },
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:events",
+            "shape": "events",
+            "location": "std_1/snp_1/events.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          },
+          {
+            "kind": "snapshot_file",
+            "id": "rec_1:1",
+            "location": "std_1/rec_1/reconstructed-ipd.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "reconstructed"
+          }
+        ]
+      },
+      "expected": [
+        "input_source_not_individual@inputs[0].valueSource"
       ]
     }
   ],

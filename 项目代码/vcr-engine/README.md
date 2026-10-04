@@ -140,7 +140,7 @@ or a traceback.
 
 ## 5. Methods
 
-25 methods, all at `1.0.0`, one job kind each, keyed exactly as the domain's
+26 methods, all at `1.0.0`, one job kind each, keyed exactly as the domain's
 `VCR_ENGINE_METHODS` (the first release's 24, then the comparator-effect methods
 appended after them; section 11). The engine refuses to start if the lists differ
 (`vcr_engine_self_check`, N00b). `R/domain-snapshot.json` is generated from
@@ -165,6 +165,7 @@ that snapshot and validates every job against them before a handler runs.
 | `comparator.rmst` | weighted KM, RMST(τ), the τ rule | survRM2 |
 | `comparator.maic` | anchored / unanchored MAIC, whole-pipeline bootstrap variance | independent BFGS on TSD 18's objective |
 | `comparator.weighted_cox` | weighted Cox hazard ratio, robust variance and whole-pipeline bootstrap, the proportional-hazards test, the RMST difference beside it | `survival::coxph` on WeightIt weights; `tt()` and hand-written Breslow score tests; a known hazard ratio |
+| `comparator.maic_time_to_event` | unanchored / anchored MAIC for hazard ratios (weighted Cox on the study's patients and the comparator's reconstructed patients; Bucher on the log scale), robust and bootstrap variance | the maicplus 0.1.2 vignettes (to 7 digits); a simulation with an oracle target |
 | `comparator.evalue` | E-values on every scale | EValue |
 | `comparator.map_prior` | MAP by quadrature, robustify, prior ESS (ELIR), conflict against the MAP alone, hybrid operating characteristics | RBesT, an independent joint grid |
 | `design.analytic` | Schoenfeld, Lan-DeMets boundaries (`sided` honoured), n, exact single-arm binomial rejection/power, Simon two-stage over the whole grid | rpact, gsDesign, `stats::binom.test`, published Simon designs |
@@ -242,6 +243,7 @@ R/reconstruct.R      Guyot reconstruction and its quality control
 R/maic.R             MAIC (anchored / unanchored) and STC
 R/comparison.R       what the comparator-effect methods share: the weighted frame, a bootstrap's own Monte-Carlo error
 R/weighted_cox.R     the weighted Cox hazard ratio, its robust variance, the proportional-hazards test
+R/maic_tte.R         the time-to-event MAIC, unanchored and anchored
 R/evidence_pool.R    DL / REML / HKSJ pooling and prediction intervals
 R/map_prior.R        MAP by quadrature, robustify, prior ESS, conflict, hybrid operating characteristics
 R/design_analytic.R  Lan-DeMets boundaries, Schoenfeld, asymptotic log-rank power, Simon
@@ -275,7 +277,7 @@ PASSED n/n
 Case families: `N00a-l` (the protocol mirror), `N01-N22` (design, weighting,
 survival, literature, borrowing, PROCOVA), `N23-N29` (rules, data plane, schema
 agreement, accrual and pooling, populations and patients, matching), `C2-01-C2-18`
-(cohort, models, quality), `N32` (the source of a column), `N33` (the weighted Cox hazard ratio), `E01-E10` (the engine itself: accrual, cancel and
+(cohort, models, quality), `N32` (the source of a column), `N33` (the weighted Cox hazard ratio), `N34` (the time-to-event MAIC), `E01-E10` (the engine itself: accrual, cancel and
 budget, counts, inputs, analytic vs simulated across the families, group
 sequential, the T0 chain, robustness and limits), `Z99` (every method went
 through `vcr_run_job`, and through a case that asserts numbers). Each line carries
@@ -391,3 +393,40 @@ number; fewer than `limits.coxFewEvents` (10) events in an arm is `few_events`, 
 A budget that runs out inside the bootstrap keeps the point estimate, the robust variance
 and the PH test and reports no bootstrap interval (`failed`, `cpu_budget_exhausted`,
 `limited`, the engine's partial-result convention).
+
+### `comparator.maic_time_to_event` (case N34)
+
+Weights are `vcr_maic_weights` (MAIC is entropy balancing), taken at the TSD 18 / maicplus
+scale `exp(X' lambda)` with the covariates centred at the aggregate trial's means
+(`targets`) and **never rescaled to n**: the study's weighted patients and the
+comparator's reconstructed patients (weight 1) share one Cox model, so the weight scale
+moves the hazard ratio (0.2806 rescaled, 0.283478 as published, on the maicplus data).
+The study's patients are the subject table (and its events table); the comparator's
+pseudo-individual rows are a `snapshot_file` input labelled `reconstructed` (a Guyot
+reconstruction's `time`, `status`, and for an anchored comparison `arm`), named in the
+scenario by `pseudoIpdInputId`. Real patients and reconstructed ones are kept apart
+(`counts.realPatients`, `counts.reconstructedPseudoPatients`), the effective sample size
+is the study weights' and never exceeds the real patients, and a comparator table that
+is not a reconstruction, or a study table that is one, is refused by name.
+
+*Unanchored*: `Surv(time, status) ~ arm` on both sets of patients; always `limited`
+(`limitedBy: unanchored_comparison`), whatever the balance. *Anchored*: the study has a
+common comparator (`arm` 1 = active, 0 = common); the study contrast is the weighted
+Cox model on the study's arms, the comparator's contrast is either the reconstructed rows
+of both its arms (unweighted Cox) or a published log hazard ratio with its standard error
+(`aggregateEstimate`, `aggregateSe`), and the indirect contrast is Bucher's difference on
+the log scale; `hazard_ratio_ac_adjusted`, `hazard_ratio_ac_unadjusted` and
+`hazard_ratio_bc` are reported with it. Every route reports the crude indirect estimate
+beside the adjusted one (`hazard_ratio_unadjusted`, TSD 18's reporting rule).
+
+Two variances, both reported: `hazard_ratio_robust` (the Lin-Wei sandwich, the weights
+treated as known, biased low when the effective sample size is small) and `hazard_ratio`
+(the headline: the bootstrap, which resamples the study's patients and the comparator's
+reconstructed rows within arm and re-estimates the weights on the resampled study
+patients every time), each with its standard error (the bootstrap's is a `simulated`
+measure with its `mcse`) and `diagnostics.varianceComparison` for their ratio. The
+aggregate trial's baseline means are treated as fixed (`targetsTreatedAsFixed`). A target
+outside the study's range is `entropy_balance_infeasible`; a weighted effective sample
+size below the domain's floor (10) is `effective_sample_size_below_floor`; an arm without
+an event is `too_few_events`. The vignette data under `tests/fixtures/maicplus-0.1.2` is
+Apache-2.0 (see its `NOTICE`); maicplus is a reference, never a dependency.

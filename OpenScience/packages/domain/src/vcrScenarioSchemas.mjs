@@ -496,6 +496,30 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
     targetTrial: TARGET_TRIAL,
   }),
 
+  // A time-to-event MAIC (NICE DSU TSD 18, Signorovitch 2012). The study's patients are the subject table (and its events table);
+  // the comparator's pseudo-individual rows come from a reconstruction (`evidence.reconstruct_km`) and are named by their input id.
+  // Unanchored: the weighted patients against the comparator's rows in one Cox model. Anchored: the study has a common comparator
+  // C (the arm column: 1 = A, 0 = C) and the contrast of B with C is either the reconstructed rows of both arms (1 = B, 0 = C) or
+  // the published log hazard ratio with its standard error; the indirect contrast is Bucher's on the log scale.
+  'comparator.maic_time_to_event': object({
+    covariates: req(COLUMN_LIST),
+    targets: req({ t: 'map', values: number(), keysFrom: 'covariates', min: 1, max: 100 }),
+    anchored: boolean({ default: false }),
+    treatmentColumn: gated({ ...COLUMN, default: 'arm' }, is('anchored', 'true')),
+    pseudoIpdInputId: { ...INPUT_REF, reqWhen: isNot('anchored', 'true') },
+    pseudoTreatmentColumn: gated({ ...COLUMN, default: 'arm' }, [is('anchored', 'true'), has('pseudoIpdInputId')]),
+    aggregateEstimate: gated(number({ unit: 'log hazard ratio' }), is('anchored', 'true')),
+    aggregateSe: gated(number({ gt: 0 }), is('anchored', 'true')),
+    ties: string({ values: ['efron', 'breslow'], default: 'efron' }),
+    endpoint: ENDPOINT(),
+    timeUnit: string({ maxLength: 20, default: 'months' }),
+    parameterCode: string({ maxLength: 64 }),
+    unadjustedEffectModifiers: array(string({ maxLength: 80 }), { min: 0, max: 50 }),
+  }, {
+    exactlyOne: [{ keys: ['pseudoIpdInputId', 'aggregateEstimate'], when: is('anchored', 'true') }],
+    requires: { aggregateEstimate: ['aggregateSe'], aggregateSe: ['aggregateEstimate'] },
+  }),
+
   'comparator.rmst': object({
     tau: req(number({ gt: 0, unit: 'time units' })),
     treatmentColumn: { ...COLUMN, default: 'arm' },

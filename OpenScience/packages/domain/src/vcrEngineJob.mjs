@@ -101,6 +101,7 @@ export const VCR_ENGINE_METHODS = Object.freeze({
   // The comparator-effect methods (2026-10-04). A new method is a new entry here, a job kind, a schema and a handler; none of the
   // methods above changed.
   'comparator.weighted_cox': { version: '1.0.0', endpoints: frozen(['time_to_event']), crossChecks: frozen(['survival::coxph on WeightIt weights', 'independent score test for non-proportional hazards']), modelTier: 'data' },
+  'comparator.maic_time_to_event': { version: '1.0.0', endpoints: frozen(['time_to_event']), crossChecks: frozen(['maicplus 0.1.2 vignette (Apache-2.0)', 'NICE DSU TSD 18', 'simulated target-population hazard ratio']), modelTier: 'data' },
 })
 
 export const VCR_ENGINE_METHOD_IDS = frozen(Object.keys(VCR_ENGINE_METHODS))
@@ -137,12 +138,14 @@ export const VCR_JOB_METHODS = Object.freeze({
   map_prior: 'comparator.map_prior',
   match_criteria: 'matching.evaluate',
   weighted_cox_comparator: 'comparator.weighted_cox',
+  maic_time_to_event_comparator: 'comparator.maic_time_to_event',
 })
 
 /** Job kinds that read patient-level rows, and so need a snapshot grant (plan §8.1). */
 export const VCR_PATIENT_LEVEL_JOB_KINDS = frozen([
   'profile_snapshot', 'build_cohort', 'synthesize_population', 'population_quality',
   'weight_comparator', 'propensity_weight_comparator', 'rmst', 'match_criteria', 'weighted_cox_comparator',
+  'maic_time_to_event_comparator',
 ])
 
 /**
@@ -162,6 +165,9 @@ export const VCR_INDIVIDUAL_INPUT_SOURCES = Object.freeze({
   'comparator.propensity_weight': VCR_REAL_PATIENT_SOURCES,
   'comparator.maic': VCR_REAL_PATIENT_SOURCES,
   'comparator.weighted_cox': VCR_REAL_PATIENT_SOURCES,
+  // The study's own patients (real) and the comparator's pseudo-individual rows from a Guyot reconstruction (reconstructed)
+  // are both tables of this job; the engine holds each to its role and counts the pseudo-patients apart.
+  'comparator.maic_time_to_event': frozen([...VCR_REAL_PATIENT_SOURCES, 'reconstructed']),
   'comparator.rmst': frozen([...VCR_REAL_PATIENT_SOURCES, 'reconstructed']),
 })
 /** The methods above, by name (kept for callers that only need the list). */

@@ -394,6 +394,7 @@ test("columnSources: only the control plane writes it, only on real people's row
 /** The methods added after the first release's 24, each with the one job kind that runs it. */
 const COMPARATOR_EFFECT_METHODS = /** @type {const} */ ([
   ["comparator.weighted_cox", "weighted_cox_comparator"],
+  ["comparator.maic_time_to_event", "maic_time_to_event_comparator"],
 ]);
 
 test("the comparator-effect methods are appended, read patients, and every rule they can fire has a label", () => {
@@ -431,6 +432,33 @@ test("a weighted Cox job: the weights are the job's own, the PH rule is declared
   for (const source of ["synthetic", "aggregate", "predicted", "reconstructed", "assumed"]) {
     assert.deepEqual(bad((j) => { j.inputs[0].valueSource = source; }), ["input_source_not_individual@inputs[0].valueSource"], source);
   }
+});
+
+test("a time-to-event MAIC job: the comparator's rows, or a published contrast for an anchored one, and never both", () => {
+  const job = (/** @type {string} */ name) => clone(fixture.valid.find((/** @type {any} */ item) => item.name === name).job);
+  const unanchored = () => job("maic_time_to_event_comparator unanchored");
+  const bad = (/** @type {() => any} */ make, /** @type {(j: any) => void} */ change) => { const j = make(); change(j); return keys(validateEngineJob(j)); };
+  assert.deepEqual(validateEngineJob(unanchored()), []);
+  assert.deepEqual(validateEngineJob(job("maic_time_to_event_comparator anchored on reconstructed rows")), []);
+  assert.deepEqual(validateEngineJob(job("maic_time_to_event_comparator anchored on a published contrast")), []);
+  // unanchored: the comparator's rows are required, a published contrast is not a key
+  assert.deepEqual(bad(unanchored, (j) => { delete j.scenario.pseudoIpdInputId; }), ["scenario_field_missing@scenario.pseudoIpdInputId"]);
+  assert.deepEqual(bad(unanchored, (j) => { j.scenario.aggregateEstimate = -0.2; j.scenario.aggregateSe = 0.1; }),
+    ["scenario_field_unknown@scenario.aggregateEstimate", "scenario_field_unknown@scenario.aggregateSe"]);
+  // anchored: exactly one of the two ways to state the comparator trial's contrast
+  const published = () => job("maic_time_to_event_comparator anchored on a published contrast");
+  assert.deepEqual(bad(published, (j) => { j.scenario.pseudoIpdInputId = "rec_1:1"; j.inputs.push({ kind: "snapshot_file", id: "rec_1:1", location: "std_1/rec_1/r.csv", hash: "a".repeat(64), valueSource: "reconstructed" }); }),
+    ["scenario_value_invalid@scenario.aggregateEstimate"]);
+  assert.deepEqual(bad(published, (j) => { delete j.scenario.aggregateEstimate; delete j.scenario.aggregateSe; }), ["scenario_field_missing@scenario.pseudoIpdInputId"]);
+  assert.deepEqual(bad(published, (j) => { delete j.scenario.aggregateSe; }), ["scenario_field_missing@scenario.aggregateSe"]);
+  // the comparator's rows are an input the job carries, and the two roles' tables are told apart by the engine, not by the protocol
+  assert.deepEqual(bad(unanchored, (j) => { j.scenario.pseudoIpdInputId = "rec_9:9"; }), ["scenario_value_invalid@scenario.pseudoIpdInputId"]);
+  assert.deepEqual(bad(unanchored, (j) => { j.inputs[2].valueSource = "reconstructed"; j.inputs[0].valueSource = "reconstructed"; }), [], "a reconstructed study table passes the protocol and is refused by the engine by name");
+  for (const source of ["synthetic", "aggregate", "predicted", "assumed"]) {
+    assert.deepEqual(bad(unanchored, (j) => { j.inputs[0].valueSource = source; }), ["input_source_not_individual@inputs[0].valueSource"], source);
+  }
+  assert.ok(VCR_PROTOCOL_ISSUE_CODES.every((code) => ALL_ERROR_CODES.includes(code)));
+  assert.ok(ALL_ERROR_CODES.includes("input_source_not_reconstructed"), "the engine's own code for a comparator table that is not a reconstruction");
 });
 
 // --- results -----------------------------------------------------------------
