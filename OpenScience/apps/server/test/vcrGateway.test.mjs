@@ -504,6 +504,40 @@ test("the comparator-effect kinds start through the gateway; a time-to-event MAI
   assert.equal(queued.length, before, "a refused request never reaches the queue");
 });
 
+// --- robustness methods ---
+test("the robustness kinds start through the gateway; none of them takes a reconstruction reference, and a stated table is refused by name", async () => {
+  /** @type {any[]} */
+  const queued = [];
+  const jobs = {
+    async enqueue(/** @type {any} */ input) { queued.push(input); return { job: { id: "job_10", state: "queued", progress: {} }, created: true }; },
+    async get() { return null; }, async cancel() { return { job: { id: "job_10", state: "canceled" }, canceled: true }; },
+  };
+  const { handler } = fixture({ jobs });
+  const start = async (/** @type {Record<string, any>} */ body) => { const res = response(); await handler(request("/internal/vcr/v1/simulate", { action: "start", ...body }), res); return res; };
+  // the data is named as the snapshot and nothing else: columns come by grant alone
+  const tipping = { endpoint: { type: "binary" }, design: { kind: "two_arm" }, outcomeColumn: "response", analysis: { method: "fisher_exact" } };
+  for (const [kind, scenario, inputs] of /** @type {Array<[string, Record<string, any>, any[]]>} */ ([
+    ["tipping_point", tipping, [{ kind: "snapshot", id: "snp_1" }]],
+    ["negative_control_comparator", { covariates: ["age"], controls: [{ name: "fracture", column: "nc_fracture" }] }, [{ kind: "snapshot", id: "snp_1" }]],
+    ["prognostic_adjustment_comparator", { endpoint: { type: "binary" }, prognosticScoreColumn: "score", outcomeColumn: "y" }, [{ kind: "snapshot", id: "snp_1" }]],
+  ])) {
+    const res = await start({ kind, scenario, inputs });
+    assert.equal(res.status, 200, `${kind}: ${res.body}`);
+    assert.equal(queued.at(-1).kind, kind);
+    assert.equal(queued.at(-1).derived, undefined, `${kind} takes no reference`);
+    assert.deepEqual(queued.at(-1).inputs, inputs);
+    assert.notEqual(queued.at(-1).internal, true, "a runtime request is not the orchestrator's");
+  }
+  const before = queued.length;
+  for (const kind of ["tipping_point", "negative_control_comparator", "prognostic_adjustment_comparator"]) {
+    const res = await start({ kind, scenario: {}, reconstructionResultId: "res_7" });
+    assert.equal(res.status, 400, `${kind}: ${res.body}`);
+    assert.equal(res.json().code, "vcr_simulate_payload_invalid");
+  }
+  assert.equal(queued.length, before, "a refused request never reaches the queue");
+});
+// --- end robustness methods ---
+
 test("simulate is start / status / cancel, and a job over budget says so plainly", async () => {
   const { calls, handler } = fixture();
   const started = response();
