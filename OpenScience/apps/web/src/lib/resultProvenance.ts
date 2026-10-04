@@ -204,7 +204,12 @@ export async function cancelResultReplay(id: string): Promise<ResultReplay> {
 }
 export async function exportResult(version: ResultVersion): Promise<Blob> {
   const response = await fetchWithWebAuth(resultUrl(`/${encodeURIComponent(version.versionId)}/export`));
-  if (!response.ok) throw new Error("无法导出此版本，请重试");
+  if (!response.ok) {
+    // The code travels with the refusal, so the reader gets the registry's sentence for it (an access change, the size
+    // limit) instead of one line for every cause.
+    const body = await response.json().catch(() => ({}));
+    throw new WebApiError(typeof body?.error === "string" ? body.error : "无法导出此版本，请重试", { status: response.status, code: typeof body?.code === "string" ? body.code : null, requestId: typeof body?.requestId === "string" ? body.requestId : null });
+  }
   return response.blob();
 }
 export function saveResultBlob(blob: Blob, name: string) {
