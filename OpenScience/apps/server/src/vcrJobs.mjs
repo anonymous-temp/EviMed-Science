@@ -1365,8 +1365,7 @@ export class VcrJobs {
   #resultKind(kind) {
     if (["build_cohort", "generate_population", "literature_population", "synthesize_population", "population_quality"].includes(kind)) return "population";
     if (["generate_patients", "generate_patients_continuous", "generate_patients_binary"].includes(kind)) return "patient_set";
-    if (["weight_comparator", "propensity_weight_comparator", "maic_comparator", "rmst", "map_prior", "evalue", "procova",
-      "negative_control_comparator", "tipping_point", "prognostic_adjustment_comparator"].includes(kind)) return "comparator";
+    if (["weight_comparator", "propensity_weight_comparator", "maic_comparator", "rmst", "map_prior", "evalue", "procova"].includes(kind)) return "comparator";
     if (["design_analytic", "design_simulation", "assurance"].includes(kind)) return "trial_scenario";
     if (kind === "design_grid") return "design_grid";
     if (kind === "match_criteria") return "matching";
