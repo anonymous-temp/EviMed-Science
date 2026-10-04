@@ -100,11 +100,11 @@ test("switching web reading off also stops offering the tool to the runtime", as
     };
     // The frontier module is off in this config, so its search tool is not
     // offered either (runtimeManager.mjs, next to the web_read switch).
-    // So are 循证 GEO's three tools and 虚拟临研's five: both modules are off in
+    // So are 循证 GEO's three tools and 虚拟临研's six: both modules are off in
     // this config too, and a tool whose module is off can only answer
     // 「未接入」, which is not an answer worth offering.
     const geo = "geo_read,geo_write,social_posts_search";
-    const vcr = "vcr_read,vcr_write,vcr_simulate,trial_registry_record,evidence_pool";
+    const vcr = "vcr_read,vcr_write,vcr_simulate,trial_registry_record,curve_digitize,evidence_pool";
     assert.equal(disabledTools({ ...base, webReadEnabled: true }), `patent_search,research_calculate,frontier_search,${geo},${vcr}`);
     assert.equal(disabledTools({ ...base, webReadEnabled: false }), `patent_search,research_calculate,web_read,frontier_search,${geo},${vcr}`);
     // Patent search is offered only where a patent adapter is configured

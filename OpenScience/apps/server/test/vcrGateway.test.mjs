@@ -105,7 +105,7 @@ test("the gateway's address is derived from the model gateway's, and is empty wh
   assert.equal(vcrGatewayProviderUrl({ ...config, vcrEnabled: false }), "");
   assert.equal(vcrGatewayProviderUrl({ vcrEnabled: true, modelGatewayInternalUrl: "not a url" }), "");
   assert.equal(VCR_GATEWAY_PATH, "/internal/vcr/v1");
-  assert.deepEqual([...VCR_GATEWAY_OPERATIONS], ["read", "write", "simulate"]);
+  assert.deepEqual([...VCR_GATEWAY_OPERATIONS], ["read", "write", "simulate", "digitize"]);
 });
 
 test("a gateway path's metric label folds anything that is not an operation", () => {
@@ -480,6 +480,62 @@ test("simulate is start / status / cancel, and a job over budget says so plainly
   await overBudget(request("/internal/vcr/v1/simulate", { action: "start", kind: "design_simulation" }), waiting);
   assert.equal(waiting.json().data.awaitingBudget, true);
   assert.match(waiting.json().data.message, /预算/);
+});
+
+test("digitize hands a calibration to the digitizer for the token's own study and answers a receipt, a refusal, or a named error", async () => {
+  /** @type {any[]} */
+  const seen = [];
+  let answer = /** @type {any} */ ({ id: "crv_" + "a".repeat(32), origin: "digitizer", createdAt: "2026-10-04T00:00:00.000Z", digitization: { statedBy: "run", curves: [] } });
+  const curves = { async recordDigitization(/** @type {any} */ input) { seen.push(input); if (answer instanceof Error) throw answer; return answer; } };
+  const { vcr } = fixture();
+  const handler = createVcrGatewayHandler(config, runtimeManager, { vcr: { ...vcr, evidence: { curves } } });
+  const body = { imageArtifactId: "sources/fig.png", calibration: { x: { min: 0, max: 48, unit: "months" }, y: { min: 0, max: 1, scale: "fraction" } },
+    arms: [{ riskTable: [{ time: 0, atRisk: 100 }, { time: 24, atRisk: 50 }] }] };
+
+  const ok = response();
+  await handler(request("/internal/vcr/v1/digitize", body), ok);
+  assert.equal(ok.status, 200);
+  assert.deepEqual(ok.json().data, { state: "digitized", receiptId: "crv_" + "a".repeat(32), origin: "digitizer", createdAt: "2026-10-04T00:00:00.000Z", digitization: { statedBy: "run", curves: [] } });
+  // The token decides the study and the account; the body names neither, and the whole body is the digitizer's to close.
+  assert.deepEqual(seen[0], { studyId: "std_1", principal: "u1", request: body });
+
+  answer = { refused: { reason: "plot_area_ambiguous", message: "two plot areas", candidates: [{ left: 1, top: 2, right: 300, bottom: 400 }] } };
+  const refused = response();
+  await handler(request("/internal/vcr/v1/digitize", body), refused);
+  assert.equal(refused.status, 200);
+  assert.equal(refused.json().data.state, "refused");
+  assert.equal(refused.json().data.reason, "plot_area_ambiguous");
+  assert.deepEqual(refused.json().data.candidates, [{ left: 1, top: 2, right: 300, bottom: 400 }]);
+
+  const named = async (/** @type {number} */ status, /** @type {string} */ code) => {
+    answer = Object.assign(new Error("x"), { status, code, name: "HttpError" });
+    const { HttpError } = await import("../src/security.mjs");
+    answer = new HttpError(status, code, "x");
+    const res = response();
+    await handler(request("/internal/vcr/v1/digitize", body), res);
+    return [res.status, res.json().code];
+  };
+  assert.deepEqual(await named(400, "vcr_curve_calibration_invalid"), [400, "vcr_curve_calibration_invalid"]);
+  assert.deepEqual(await named(503, "vcr_curve_digitizer_unavailable"), [503, "vcr_curve_digitizer_unavailable"]);
+  assert.deepEqual(await named(409, "vcr_curve_source_changed"), [409, "vcr_curve_source_changed"]);
+  assert.deepEqual(await named(504, "vcr_intake_timeout"), [504, "vcr_intake_timeout"]);
+  assert.deepEqual(await named(400, "something_else"), [400, "vcr_request_invalid"]);
+});
+
+test("digitize without a digitizer composed is a named 503, and its rate limit is its own", async () => {
+  const { handler } = fixture();
+  const res = response();
+  await handler(request("/internal/vcr/v1/digitize", { imageArtifactId: "a.png" }), res);
+  assert.equal(res.status, 503);
+  assert.equal(res.json().code, "vcr_curve_digitizer_unavailable");
+  assert.equal(VCR_GATEWAY_WINDOW_LIMITS.digitize, 12);
+  let limited = null;
+  for (let call = 0; call <= VCR_GATEWAY_WINDOW_LIMITS.digitize; call += 1) {
+    const next = response();
+    await handler(request("/internal/vcr/v1/digitize", { imageArtifactId: "a.png" }), next);
+    if (next.status === 429) { limited = next.json().code; break; }
+  }
+  assert.equal(limited, "vcr_gateway_rate_limited");
 });
 
 test("a study whose account the module is not open to answers vcr_disabled", async () => {

@@ -335,6 +335,10 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.curve_extractions (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS vcr_curve_extractions_study_idx ON evimed_vcr.curve_extractions(study_id,created_at);
+-- A digitizer record also keeps what the digitization was: the algorithm and its
+-- version, the calibration the run stated, the parameters used and the quality of
+-- each curve. Null for a human selection, which has none of that to keep.
+ALTER TABLE evimed_vcr.curve_extractions ADD COLUMN IF NOT EXISTS digitization jsonb;
 
 CREATE TABLE IF NOT EXISTS evimed_vcr.assumptions (
   id             text PRIMARY KEY,

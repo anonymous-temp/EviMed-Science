@@ -104,7 +104,7 @@ description: 「虚拟临研」的人群、虚拟患者、对照与试验四步�
 | `model_comparator` 模型预测比较器 | T0 | 当前版本没有实现：引擎里只有按情景参数生成的参考仿真器，给不出"对该人群的预测"。平台如实记为不可估计并写明原因 |
 | `hybrid_control` 混合对照 | T0 | 设计期的 MAP 先验：先验有效样本量与冲突情景下的运行特征 |
 
-Use `mcp__evimed__vcr_read` with `what: "evidence"` to find a `curveReceipts` identifier already recorded by the control plane. For a literature comparator, write that exact identifier as `configuration.provenance.receiptId`; do not invent coordinates, risk-table values, an origin label, or a tool name. The platform resolves the recorded points and verifies the current source-image hash before reconstruction.
+A literature comparator needs a curve record, and there are two ways to hold one. Find one with `mcp__evimed__vcr_read` with `what: "evidence"` (`curveReceipts`: each says whether a person's selection or the digitizer made it, and a digitizer record carries the calibration as it was stated, the algorithm version and the quality of each curve). Or make one with `mcp__evimed__curve_digitize` from a Kaplan–Meier figure already preserved in this study's workspace: you state what you read off the figure — the value at the first and last tick of each axis, the time unit, whether survival is a fraction or a percentage, which curve each arm is (its colour, or its place in the legend) and the risk table the paper prints — and never a coordinate: the points are measured from the pixels, deterministically. For a literature comparator, write the returned identifier as `configuration.provenance.receiptId`; do not invent coordinates, risk-table values, an origin label, or a tool name. The platform resolves the recorded points and verifies the current source-image hash before reconstruction.
 
 The identifier below is a placeholder for the exact receipt returned by that read:
 
@@ -121,7 +121,7 @@ The identifier below is a placeholder for the exact receipt returned by that rea
 }
 ```
 
-This release supports source-bound reconstruction from existing recorded point inputs; it does not implement automatic image digitization. An optional authenticated user selection is data input, not an expert approval requirement. If a receipt, source image or risk table is missing or changed, report reconstruction as unavailable and continue other supported research. Never treat an LLM-written `digitizer` or `human_click` string as proof.
+A person's own selection through the browser stays an optional correction, never a prerequisite and never an approval. If `mcp__evimed__curve_digitize` refuses, it says why and what it needs (two panels with an axis each: name the one with the curve; a colour that is not in the figure; no legend to order by; a curve that rises, which is not survival) — state that and call again. Give the calibration in your report as your reading of the axis labels, with the digitizer's warnings and quality indicators. If a receipt, source image or risk table is missing or changed, or the figure is not a Kaplan–Meier curve, report reconstruction as unavailable and continue other supported research. Never treat an LLM-written `digitizer` or `human_click` string as proof.
 
 A single recorded arm is a benchmark, not a comparison. For a receipt containing both arms, RMST additionally needs an explicitly supported `tau` and `timeUnit`; do not invent these or claim that an unavailable comparison was computed.
 

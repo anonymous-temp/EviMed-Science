@@ -415,17 +415,19 @@ export class VcrEvidenceStore extends VcrStoreBase {
   /** Trusted control-plane entry; no runtime write can manufacture a selection receipt. @param {any} input */
   async saveCurveExtraction(input) {
     return this.transaction(async client => {
-      const row = (await client.query(`INSERT INTO evimed_vcr.curve_extractions(id,study_id,user_id,principal,origin,image,points_hash,scenario)
-        VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8::jsonb) ON CONFLICT(id) DO UPDATE SET id=curve_extractions.id RETURNING *`,
-      [input.id,input.studyId,input.userId,input.principal,input.origin,JSON.stringify(input.image),input.pointsHash,JSON.stringify(input.scenario)])).rows[0];
+      const row = (await client.query(`INSERT INTO evimed_vcr.curve_extractions(id,study_id,user_id,principal,origin,image,points_hash,scenario,digitization)
+        VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8::jsonb,$9::jsonb) ON CONFLICT(id) DO UPDATE SET id=curve_extractions.id RETURNING *`,
+      [input.id,input.studyId,input.userId,input.principal,input.origin,JSON.stringify(input.image),input.pointsHash,JSON.stringify(input.scenario),
+        input.digitization == null ? null : JSON.stringify(input.digitization)])).rows[0];
       await this.audit({ client, studyId: input.studyId, userId: input.userId, actor: input.principal, action: 'vcr.curve.record', object: row.id,
-        detail: { origin: row.origin, imageHash: input.image.sha256, pointsHash: input.pointsHash } });
+        detail: { origin: row.origin, imageHash: input.image.sha256, pointsHash: input.pointsHash,
+          ...(input.digitization ? { algorithm: `${input.digitization.algorithm?.name}@${input.digitization.algorithm?.version}`, anchor: input.digitization.anchor } : {}) } });
       return this.curveFromRow(row);
     });
   }
   /** @param {any} row */
   curveFromRow(row) { return row ? { id: row.id, studyId: row.study_id, userId: row.user_id, principal: row.principal, origin: row.origin,
-    image: row.image, pointsHash: row.points_hash, scenario: row.scenario, createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at } : null; }
+    image: row.image, pointsHash: row.points_hash, scenario: row.scenario, digitization: row.digitization ?? null, createdAt: row.created_at instanceof Date ? row.created_at.toISOString() : row.created_at } : null; }
   /** @param {string} studyId @param {string} id */
   async curveExtraction(studyId, id) { return this.curveFromRow(await this.one('SELECT * FROM evimed_vcr.curve_extractions WHERE study_id=$1 AND id=$2', [studyId,id])); }
   /** @param {string} studyId */

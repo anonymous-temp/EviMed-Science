@@ -1,5 +1,6 @@
 import {assertExtensionAssessmentAuthority} from './extensionAssessmentAuthority.mjs';
 import { createDocumentRenderController } from "./documentRenderController.mjs";
+import { createVcrIntakeController } from "./vcrIntakeController.mjs";
 import { createSkillValidationController } from "./skillValidationController.mjs";
 import { verifyExtensionGeneration, extensionGenerationRoot } from "./extensionGenerationService.mjs";
 import { canonicalJson } from "@evimed/domain";
@@ -333,6 +334,7 @@ async function prepareControllerSocket(socketPath) {
 export function createRuntimeController(overrides = {}, hooks = {}) {
   const config = loadConfig(overrides);
   const documents = createDocumentRenderController(config);
+  const intake = createVcrIntakeController(config);
   const skillValidation = createSkillValidationController(config, hooks.skillValidation ?? {});
   // Protected construction supplies descriptors and signed/current authority resolvers.
   // An absent composition never falls back to a development image or direct execution.
@@ -701,6 +703,33 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
         } finally { res.removeListener("close", disconnected); }
         return;
       }
+      if (req.method === "POST" && ["/v1/vcr/extract", "/v1/vcr/digitize"].includes(url.pathname)) {
+        // 「虚拟临研」 intake (protocol 9): a fixed operation over one staged attempt.
+        // A figure is staged on the data volume the API and this process share and is
+        // named by its attempt and the digest of its request. A record is staged in
+        // the data plane, which this process does not mount: it is named by the one
+        // path inside the plane that the layout allows, with the SHA-256 and size the
+        // script holds the file to. Never a command, a mount or an image
+        // (vcrIntakeController.mjs).
+        if (!String(req.headers["content-type"] ?? "").toLowerCase().startsWith("application/json")) {
+          throw controllerFailure(415, "runtime_controller_content_type_invalid", "Runtime controller requires JSON requests.");
+        }
+        const payload = await readJson(req, 4096);
+        assertExactKeys(payload, url.pathname === "/v1/vcr/extract" ? ["path", "sha256", "bytes"] : ["attemptId", "inputDigest"]);
+        const abort = new AbortController();
+        const disconnected = () => { if (!res.writableEnded) abort.abort(); };
+        req.once("aborted", disconnected);
+        res.once("close", disconnected);
+        if (req.aborted || res.destroyed) abort.abort();
+        try {
+          const result = await intake.run(url.pathname.slice("/v1/vcr/".length), payload, abort.signal);
+          if (!res.destroyed) sendJson(res, 200, { data: result });
+        } finally {
+          req.removeListener("aborted", disconnected);
+          res.removeListener("close", disconnected);
+        }
+        return;
+      }
       if (req.method === "POST" && ["/v1/skills/validate", "/v1/skills/cancel"].includes(url.pathname)) {
         if (!String(req.headers["content-type"] ?? "").toLowerCase().startsWith("application/json")) {
           throw controllerFailure(415, "runtime_controller_content_type_invalid", "Runtime controller requires JSON requests.");
@@ -836,6 +865,7 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
       try { await extensionTools?.close(); } catch (error) { extensionFailure = error; }
       try { await skillValidation.close(); } catch (error) { skillValidationFailure = error; }
       await documents.close();
+      await intake.close();
       await Promise.allSettled(
         [...runtimeChildren.keys()].map(async (containerName) => {
           const child = runtimeChildren.get(containerName);

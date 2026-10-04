@@ -171,8 +171,8 @@ test('output overflow, path leakage and failed cancellation never free uncertain
   await fs.writeFile(mode, 'ok')
 })
 
-test('version 8 exposes only the fixed validation reference and keeps version-7 citation start shape', async t => {
-  assert.equal(RUNTIME_CONTROLLER_PROTOCOL_VERSION, 8)
+test('version 9 keeps version 8\'s fixed validation reference and the version-7 citation start shape', async t => {
+  assert.equal(RUNTIME_CONTROLLER_PROTOCOL_VERSION, 9)
   const { config, reference } = await fixture(t)
   const client = new RuntimeControllerClient(config)
   let received

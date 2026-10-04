@@ -1799,6 +1799,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // A researcher's own EviMed evidence key, where the deployment holds none:
     // the ChiCTR listing is theirs to enable (2026-10-04).
     connectorCredentials,
+    // A record document to text and a figure to curve points run in the runtime
+    // controller's disposable container, like a document export does.
+    intakeController: overrides.vcrIntakeController ?? new RuntimeControllerClient(config),
   });
 
   /**

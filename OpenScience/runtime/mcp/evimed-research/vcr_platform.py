@@ -2,7 +2,7 @@
 """「虚拟临研」's study data, deterministic compute and trial registry, through
 the server's gateway (build contract 2026-09-28 §3.2).
 
-Five tools a 虚拟临研 capability's run uses; none is ever forced into a turn.
+Six tools a 虚拟临研 capability's run uses; none is ever forced into a turn.
 
 - ``vcr_read`` reads the study in the shapes its pages show: the definition,
   the eligibility criteria, the assumption cards, the population, patient sets,
@@ -24,6 +24,12 @@ Five tools a 虚拟临研 capability's run uses; none is ever forced into a turn
 - ``trial_registry_record`` fetches one registry record as structured fields --
   eligibility text, arms, endpoints, planned and actual enrolment. The run
   never reaches a registry itself; the control plane does.
+- ``curve_digitize`` reads a published Kaplan-Meier figure into curve points by
+  a deterministic digitizer the platform runs on a figure the study already
+  holds. The run states a calibration (what the axis labels say), which curve,
+  and the risk table the paper prints; it never states a coordinate. The result
+  is a curve record (``receiptId``) the reconstruction accepts exactly like a
+  person's selection, with the algorithm version and the quality of the trace.
 - ``evidence_pool`` asks the platform to pool this study's *verified*
   extractions of one parameter into an assumption distribution, and returns
   the job to poll. What is pooled is what the study already holds, checked
@@ -78,6 +84,10 @@ POOLING_CALIBRES = ("closest", "overall", "next_closest")
 SIMULATE_ACTIONS = ("start", "status", "cancel")
 READ_MAX_LIMIT = 50
 WRITE_MAX_ITEMS = 200
+# The one operation whose answer waits on a container: the gateway's budget is the
+# deployment's own intake timeout plus a margin, and this ceiling sits above it.
+DIGITIZE_TIMEOUT_SECONDS = 100
+DIGITIZE_FIELDS = ("imageArtifactId", "imageSha256", "calibration", "plotArea", "arms", "reportedLogHazardRatio")
 MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 # Reads, writes and job submissions answer within ten seconds server-side; the
 # client's ceiling leaves room for one retry under the kernel's 180 s limit.
@@ -245,6 +255,114 @@ def tool_definitions():
             },
         },
         {
+            "name": "curve_digitize",
+            "description": (
+                "Read a published Kaplan-Meier figure into curve points, deterministically, so a survival curve can be "
+                "reconstructed. The figure must already be a PNG or JPEG in this study's workspace (imageArtifactId, a "
+                "workspace-relative path; imageSha256 pins it by hash). You state the calibration as the axis labels "
+                "read: x.min and x.max are the values of the FIRST and LAST tick on the time axis (x.unit names the unit), "
+                "y.min and y.max those on the survival axis, y.scale is 'fraction' (0 to 1) or 'percent' (0 to 100); "
+                "if the axes have no tick marks, plotArea (pixels) gives the box whose edges carry those values. Each "
+                "arm names its curve by color ('#rrggbb' as you see it, matched to the nearest curve color in the figure; "
+                "a black curve is '#000000') or by legendOrder (1 = the first legend entry from the top), and states the "
+                "published numbers at risk (riskTable [{time, atRisk}], at least two rows; totalEvents and reportedMedian "
+                "when printed). One arm is the control, two arms are control then treatment. You never state a "
+                "coordinate: points are measured from the pixels and come back recorded with the algorithm version, the "
+                "calibration as you stated it, the parameters used and quality indicators (xCoverage, bridgedColumns = "
+                "stretches hidden under another curve and held, monotonicityRepairs, startSurvival). The answer is a "
+                "receiptId: pass it to vcr_simulate as kind reconstruct_km with scenario {provenance:{receiptId}}, or write "
+                "it as a literature comparator's configuration.provenance.receiptId. Measured against figures drawn from "
+                "known curves: survival within 0.02 (typically 0.002; 0.017 at JPEG quality 60) and time within 0.6% of "
+                "the x range (typically 0.1%), with gridlines, censoring marks, dashes and a legend. Not reliable: curves "
+                "of one colour drawn over each other, shaded bands over a curve, 3D figures, a black curve along the frame, "
+                "text touching the curve. It refuses rather than guesses (plot_area_ambiguous lists candidate boxes, "
+                "colour_required lists the colors found, legend_not_found, curve_rising for a cumulative-incidence plot) and "
+                "records nothing then: read what it asks for and call again. An impossible calibration is refused with the reason."
+            ),
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    "imageArtifactId": {"type": "string", "minLength": 1, "maxLength": 2048},
+                    "imageSha256": {"type": "string", "pattern": r"^[a-f0-9]{64}$"},
+                    "calibration": {
+                        "type": "object",
+                        "properties": {
+                            "x": {
+                                "type": "object",
+                                "properties": {
+                                    "min": {"type": "number", "minimum": 0},
+                                    "max": {"type": "number", "exclusiveMinimum": 0},
+                                    "unit": {"type": "string", "minLength": 1, "maxLength": 20},
+                                },
+                                "required": ["min", "max", "unit"],
+                                "additionalProperties": False,
+                            },
+                            "y": {
+                                "type": "object",
+                                "properties": {
+                                    "min": {"type": "number", "minimum": 0},
+                                    "max": {"type": "number", "exclusiveMinimum": 0, "maximum": 110},
+                                    "scale": {"type": "string", "enum": ["fraction", "percent"]},
+                                },
+                                "required": ["min", "max", "scale"],
+                                "additionalProperties": False,
+                            },
+                        },
+                        "required": ["x", "y"],
+                        "additionalProperties": False,
+                    },
+                    "plotArea": {
+                        "type": "object",
+                        "properties": {
+                            "left": {"type": "number", "minimum": 0},
+                            "top": {"type": "number", "minimum": 0},
+                            "right": {"type": "number", "minimum": 0},
+                            "bottom": {"type": "number", "minimum": 0},
+                        },
+                        "required": ["left", "top", "right", "bottom"],
+                        "additionalProperties": False,
+                    },
+                    "arms": {
+                        "type": "array",
+                        "minItems": 1,
+                        "maxItems": 2,
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "name": {"type": "string", "maxLength": 60},
+                                "curve": {
+                                    "type": "object",
+                                    "properties": {
+                                        "color": {"type": "string", "pattern": r"^#?[0-9a-fA-F]{6}$"},
+                                        "legendOrder": {"type": "integer", "minimum": 1, "maximum": 8},
+                                    },
+                                    "additionalProperties": False,
+                                },
+                                "riskTable": {
+                                    "type": "array",
+                                    "minItems": 2,
+                                    "maxItems": 200,
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {"time": {"type": "number", "minimum": 0}, "atRisk": {"type": "number", "minimum": 0}},
+                                        "required": ["time", "atRisk"],
+                                        "additionalProperties": False,
+                                    },
+                                },
+                                "totalEvents": {"type": "number", "minimum": 0},
+                                "reportedMedian": {"type": "number", "exclusiveMinimum": 0},
+                            },
+                            "required": ["riskTable"],
+                            "additionalProperties": False,
+                        },
+                    },
+                    "reportedLogHazardRatio": {"type": "number"},
+                },
+                "required": ["imageArtifactId", "calibration", "arms"],
+                "additionalProperties": False,
+            },
+        },
+        {
             "name": "evidence_pool",
             "description": (
                 "Pool this study's verified extractions of one parameter into an assumption distribution on the "
@@ -323,7 +441,8 @@ def _post(operation: str, payload: dict, timeout: int = TIMEOUT_SECONDS) -> dict
         raise VcrPlatformError(
             code,
             message,
-            retryable=error.code in (429, 502, 503, 504) and code != "vcr_disabled",
+            # A module that is off, or a deployment with no digitizer, is not an outage that passes.
+            retryable=error.code in (429, 502, 503, 504) and code not in ("vcr_disabled", "vcr_curve_digitizer_unavailable"),
         ) from error
     except (urllib.error.URLError, TimeoutError, OSError) as error:
         raise VcrPlatformError("vcr_gateway_unreachable", "The 虚拟临研 gateway is unreachable.", retryable=True) from error
@@ -572,6 +691,50 @@ def registry_record(arguments: dict) -> dict:
         "data": record,
         "warnings": [],
         "next_actions": ["Keep planned and actual enrolment apart; a planned number is not evidence of accrual speed."],
+    }
+
+
+def digitize(arguments: dict) -> dict:
+    unknown = [key for key in arguments if key not in DIGITIZE_FIELDS]
+    if unknown:
+        raise VcrPlatformError("vcr_request_invalid", "%s is not a field of curve_digitize (a coordinate is never stated: it is measured)." % ", ".join(sorted(unknown)))
+    for key in ("imageArtifactId", "calibration", "arms"):
+        if arguments.get(key) in (None, "", [], {}):
+            raise VcrPlatformError("vcr_request_invalid", "%s is required." % key)
+    payload = {key: arguments[key] for key in DIGITIZE_FIELDS if arguments.get(key) is not None}
+    try:
+        data = _post("digitize", payload, timeout=DIGITIZE_TIMEOUT_SECONDS)
+    except VcrPlatformError as error:
+        if error.code in _absent_codes():
+            return _module_absent(error, "figure", "digitize")
+        raise
+    if data.get("state") == "refused":
+        reason = str(data.get("reason") or "refused")
+        lines = [str(data.get("message") or "The figure could not be traced.")]
+        actions = ["Nothing was recorded. Read what the refusal asks for, state it, and call curve_digitize again."]
+        if isinstance(data.get("candidates"), list) and data["candidates"]:
+            actions.append("Pass plotArea as the one candidate box that holds the curve (pixels: left, top, right, bottom), with the values at its edges.")
+        if isinstance(data.get("palette"), list) and data["palette"]:
+            actions.append("Name the curve by one of these colors: %s." % ", ".join(str(item) for item in data["palette"][:8]))
+        return {
+            "status": "warning",
+            "summary": "Nothing was digitized: %s." % reason,
+            "data": data,
+            "warnings": lines,
+            "next_actions": actions,
+        }
+    digitization = data.get("digitization") if isinstance(data.get("digitization"), dict) else {}
+    curves = digitization.get("curves") if isinstance(digitization.get("curves"), list) else []
+    warnings = [str(item) for item in (digitization.get("warnings") or [])][:12]
+    return {
+        "status": "warning" if warnings else "success",
+        "summary": "Digitized %d curve(s) from the figure; curve record %s." % (len(curves), data.get("receiptId")),
+        "data": data,
+        "warnings": warnings,
+        "next_actions": [
+            "Pass receiptId to vcr_simulate (kind reconstruct_km, scenario {provenance:{receiptId}}), or write it as the literature comparator's configuration.provenance.receiptId.",
+            "In the report, give the calibration as your reading of the axis labels and the quality indicators; a warning names what to check, and the reconstruction's own quality control decides whether the curve may be used.",
+        ],
     }
 
 

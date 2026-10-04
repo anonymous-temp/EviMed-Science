@@ -1723,6 +1723,10 @@ export interface VcrIntakeFile {
   sheetUsed: string | null;
   subjectKey: string | null;
   visibleAt: string | null;
+  /** A record converted from a PDF or Word file: what it was, its pages, and how many of them had no text layer. */
+  sourceFormat: string | null;
+  pages: number | null;
+  blankPages: number | null;
 }
 
 export interface VcrIntakeIssue { code: string; message: string; table: string | null; column: string | null }
@@ -1756,7 +1760,11 @@ export interface VcrIntakeSource {
   allowedUses: string[];
   window: string | null;
   retention: string | null;
-  upload: { formats: string[]; maxBytes: number | null; maxText: string | null };
+  upload: {
+    formats: string[]; maxBytes: number | null; maxText: string | null;
+    /** A patient record: text, and PDF or Word where the deployment converts them (the page offers only what would be taken). */
+    documents: { formats: string[]; maxBytes: number | null; maxText: string | null; converter: boolean };
+  };
   files: VcrIntakeFile[];
   fieldMap: {
     state: "none" | "proposed" | "confirmed";
@@ -1845,6 +1853,7 @@ function readIntakeFile(raw: Loose): VcrIntakeFile {
       name: text(column.name) ?? "", type: text(column.type), filled: finite(column.filled), distinct: finite(column.distinct), identifying: column.identifying === true,
     })),
     entries: finite(raw.entries), sheets: strings(raw.sheets), sheetUsed: text(raw.sheetUsed), subjectKey: text(raw.subjectKey), visibleAt: text(raw.visibleAt),
+    sourceFormat: text(raw.sourceFormat), pages: finite(raw.pages), blankPages: finite(raw.blankPages),
   };
 }
 
@@ -1857,7 +1866,13 @@ function readIntakeSource(raw: Loose): VcrIntakeSource {
     canGrant: raw.canGrant === true, status: text(raw.status) ?? "registered", statusLabel: text(raw.statusLabel) ?? "",
     valueSource: text(raw.valueSource) ?? "observed", valueSourceLabel: text(raw.valueSourceLabel) ?? "",
     allowedUses: strings(raw.allowedUses), window: text(raw.window), retention: text(raw.retention),
-    upload: { formats: strings(upload.formats), maxBytes: finite(upload.maxBytes), maxText: text(upload.maxText) },
+    upload: {
+      formats: strings(upload.formats), maxBytes: finite(upload.maxBytes), maxText: text(upload.maxText),
+      documents: {
+        formats: strings(obj(upload.documents).formats), maxBytes: finite(obj(upload.documents).maxBytes),
+        maxText: text(obj(upload.documents).maxText), converter: obj(upload.documents).converter === true,
+      },
+    },
     files: arr(raw.files).map(readIntakeFile),
     fieldMap: {
       state: state === "proposed" || state === "confirmed" ? state : "none", stateLabel: text(map.stateLabel) ?? "", hash: text(map.hash),

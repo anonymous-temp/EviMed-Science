@@ -16,6 +16,7 @@ import { validateEngineResult, validateEngineJob } from "@evimed/domain";
 import { loadConfig } from "../src/config.mjs";
 import { vcrReadiness } from "../src/vcrService.mjs";
 import { removeVcrArtifacts } from "../src/vcrStoreBase.mjs";
+import { createIntakeCounters } from "../src/vcrRecordExtract.mjs";
 import {
   composeVcr, createVcrEngineJobRemover, matchingContextOf, vcrDataPlaneSeam, vcrDocumentsSeam, vcrEngineStatus,
   vcrMatchingExecutor, vcrMatchingSeam, vcrMetricFamilies, withVcrEngineWarnings,
@@ -474,6 +475,13 @@ test("DL-13 the metric families are the platform's open_science_vcr_*, with the 
   assert.deepEqual(byName.get("open_science_vcr_loop_stalled")?.series.map((series) => [series.labels?.loop, series.value]), [["jobs", 0], ["orchestrator", 1]]);
   assert.deepEqual(byName.get("open_science_vcr_loop_last_ok_timestamp_seconds")?.series.map((series) => series.value), [1_790_640_000, 0]);
   assert.ok(byName.get("open_science_vcr_jobs_total")?.series.some((series) => series.labels?.outcome === "failed" && series.value === 1));
+  // The intake conversions (a PDF or Word record to text, a figure to curve points) count every outcome, refusals included.
+  assert.equal(byName.has("open_science_vcr_intake_total"), false, "a snapshot without the intake reads as no family, not as zeros");
+  const withIntake = new Map(vcrMetricFamilies(true, { ...snapshot, intake: { counters: createIntakeCounters() } }).map((family) => [family.name, family]));
+  assert.deepEqual(withIntake.get("open_science_vcr_intake_total")?.series.map((series) => series.labels?.kind),
+    ["extracted", "needsText", "unreadable", "tooLong", "tooLarge", "timedOut", "failed", "unavailable", "digitized", "digitizeRefused", "digitizeFailed"]);
+  assert.ok(withIntake.get("open_science_vcr_intake_total")?.series.every((series) => series.value === 0));
+  assert.equal(withIntake.get("open_science_vcr_intake_total")?.type, "counter");
   // A schema that did not answer is reported, not read as an empty queue.
   const unreadable = new Map(vcrMetricFamilies(true, { ...snapshot, tables: null }).map((family) => [family.name, family]));
   assert.equal(unreadable.get("open_science_vcr_tables_readable")?.series[0].value, 0);

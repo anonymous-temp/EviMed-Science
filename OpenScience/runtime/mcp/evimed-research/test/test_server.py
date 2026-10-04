@@ -130,6 +130,7 @@ class ToolContractTests(unittest.TestCase):
             "vcr_write",
             "vcr_simulate",
             "trial_registry_record",
+            "curve_digitize",
             "evidence_pool",
         }
         self.assertEqual(set(by_name), expected)

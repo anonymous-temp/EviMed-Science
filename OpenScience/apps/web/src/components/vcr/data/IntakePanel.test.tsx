@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -206,6 +206,61 @@ describe("数据接入 — what the page sends", () => {
     expect(query.get("role")).toBe("document");
     expect(query.get("subject")).toBe("HZ-30001");
     expect(query.get("visibleAt")).toBe("2026-03-01");
+  });
+
+  it("takes a PDF or Word record where the deployment converts them, and says what a scan needs", async () => {
+    // The page offers only what the deployment would take: text alone until a converter is composed.
+    drawTab();
+    const withoutConverter = (await screen.findAllByLabelText("选择要上传的文件"))[0] as HTMLInputElement;
+    await person().selectOptions(screen.getAllByLabelText("文件类型")[0], "document");
+    expect(withoutConverter.accept).toBe(".txt,.md");
+    expect(document.body.textContent).not.toContain("PDF 和 Word 在平台内转成文字");
+    cleanup();
+
+    load("data-sealed.json", (raw) => {
+      raw.intake.sources[0].upload.documents = { formats: ["txt", "md", "pdf", "docx"], maxBytes: 25 * 1024 * 1024, maxText: "25 MB", converter: true };
+    });
+    drawTab();
+    const chooser = (await screen.findAllByLabelText("选择要上传的文件"))[0] as HTMLInputElement;
+    await person().selectOptions(screen.getAllByLabelText("文件类型")[0], "document");
+    expect(chooser.accept).toBe(".txt,.md,.pdf,.docx");
+    expect(document.body.textContent).toContain("PDF 和 Word 在平台内转成文字，不会发给外部服务");
+    await person().type(screen.getAllByLabelText("文档所属受试者编号")[0], "HZ-30001");
+
+    // A picture is refused on the page, with the plane's own sentence, and never sent.
+    await person().upload(chooser, new File(["x"], "chest-xray.png"));
+    expect(await screen.findByText(/请提供文字版：可复制文字的 PDF、Word（.docx）或 .txt/)).toBeInTheDocument();
+    await person().upload(chooser, new File(["x"], "old-record.doc"));
+    expect(await screen.findByText(/请另存为 \.docx/)).toBeInTheDocument();
+    expect(upload.fetchWithWebAuth).not.toHaveBeenCalled();
+
+    // A PDF is sent as a document of its subject.
+    upload.fetchWithWebAuth.mockResolvedValue(new Response(JSON.stringify({ data: { file: { id: "sfl_9", name: "document-ab12cd34.txt" }, created: true } }), { status: 201 }));
+    await person().upload(chooser, new File(["%PDF-1.4"], "discharge.pdf"));
+    await waitFor(() => expect(upload.fetchWithWebAuth).toHaveBeenCalledTimes(1));
+    const query = new URL(String(upload.fetchWithWebAuth.mock.calls[0][0]), "http://x").searchParams;
+    expect(query.get("role")).toBe("document");
+    expect(query.get("name")).toBe("discharge.pdf");
+    expect(query.get("subject")).toBe("HZ-30001");
+
+    // A scan the plane refuses is shown with the reason and what to bring instead.
+    upload.fetchWithWebAuth.mockResolvedValue(new Response(JSON.stringify({ error: "x", code: "vcr_document_needs_text" }), { status: 422 }));
+    await person().upload(chooser, new File(["%PDF-1.4 scan"], "scan.pdf"));
+    expect(await screen.findAllByText(/没有可提取的文字（多半是扫描件或图片）。请提供文字版/)).not.toHaveLength(0);
+    expect(toasts.error).toHaveBeenCalled();
+  });
+
+  it("shows a converted record's origin and how many of its pages had no text", async () => {
+    load("data-sealed.json", (raw) => {
+      raw.intake.sources[0].files.push({
+        id: "sfl_conv", name: "document-9f8e7d6c.txt", role: "document", roleLabel: "患者文档", format: "txt", size: "12.3 KB", rows: null, columnCount: null,
+        at: "刚刚", latest: null, columns: [], entries: null, sheets: [], sheetUsed: null, subjectKey: "P0123456789abcdef", visibleAt: null,
+        sourceFormat: "pdf", pages: 12, blankPages: 1,
+      });
+    });
+    drawTab();
+    const row = await screen.findByText("document-9f8e7d6c.txt");
+    expect(row.closest("li")?.textContent).toContain("来自 PDF，12 页，其中 1 页没有文字");
   });
 
   it("names the plane's refusal of an upload in words a data manager can act on", async () => {

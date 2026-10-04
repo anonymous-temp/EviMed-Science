@@ -510,8 +510,10 @@ export class VcrDataStore extends VcrStoreBase {
       if (inserted.rows[0]) {
         await this.audit({
           client, studyId: entry.studyId, userId: entry.userId, actor: entry.actor ?? entry.userId,
+          // No name: a file's name can be a person's, a document's is discarded, and audit
+          // rows outlive the study. The id, role, format, size and hash identify the file.
           action: "source.file", object: id,
-          detail: { sourceId: entry.sourceId, role, name: entry.name, format: entry.format, bytes: entry.bytes, sha256: entry.sha256,
+          detail: { sourceId: entry.sourceId, role, format: entry.format, bytes: entry.bytes, sha256: entry.sha256,
             rowCount: entry.rowCount ?? null, columnCount: entry.columnCount ?? null },
         });
         return { file: vcrSourceFileFromRow(inserted.rows[0]), created: true };
@@ -560,7 +562,7 @@ export class VcrDataStore extends VcrStoreBase {
       await client.query(`DELETE FROM ${this.schema}.source_files WHERE id = $1`, [entry.fileId]);
       await this.audit({
         client, studyId: entry.studyId, userId: row.user_id, actor: entry.actor ?? "",
-        action: "source.file.remove", object: entry.fileId, detail: { sourceId: row.source_id, name: row.name, sha256: row.sha256 },
+        action: "source.file.remove", object: entry.fileId, detail: { sourceId: row.source_id, role: row.role, sha256: row.sha256 },
       });
       return { removed: vcrSourceFileFromRow(row), frozen: false };
     });

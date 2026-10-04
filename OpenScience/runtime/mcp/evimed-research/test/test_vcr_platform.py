@@ -1,4 +1,4 @@
-"""「虚拟临研」's five runtime tools, against a scripted gateway, and through the
+"""「虚拟临研」's six runtime tools, against a scripted gateway, and through the
 server's own `call_tool` -- the path a run takes (a module test that only calls
 the module proves the module, not the tool)."""
 
@@ -213,9 +213,9 @@ class _GatewayCase(unittest.TestCase):
 
 
 class VcrToolDefinitionTests(unittest.TestCase):
-    def test_five_tools_with_closed_schemas(self):
+    def test_six_tools_with_closed_schemas(self):
         definitions = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}
-        self.assertEqual(set(definitions), {"vcr_read", "vcr_write", "vcr_simulate", "trial_registry_record", "evidence_pool"})
+        self.assertEqual(set(definitions), {"vcr_read", "vcr_write", "vcr_simulate", "trial_registry_record", "curve_digitize", "evidence_pool"})
         for definition in definitions.values():
             schema = definition["inputSchema"]
             self.assertFalse(schema["additionalProperties"])
@@ -435,6 +435,87 @@ class VcrSimulateTests(_GatewayCase):
         cancelled = self.server.call_tool("vcr_simulate", {"action": "cancel", "jobId": "job_4"})
         self.assertEqual(cancelled["status"], "warning")
         self.assertEqual(_Gateway.seen[0]["body"], {"action": "cancel", "jobId": "job_4"})
+
+
+class CurveDigitizeTests(_GatewayCase):
+    ARMS = [{"name": "control", "curve": {"color": "#d62728"}, "riskTable": [{"time": 0, "atRisk": 220}, {"time": 24, "atRisk": 90}], "totalEvents": 120},
+            {"name": "treatment", "curve": {"legendOrder": 2}, "riskTable": [{"time": 0, "atRisk": 220}, {"time": 24, "atRisk": 120}]}]
+    CALIBRATION = {"x": {"min": 0, "max": 48, "unit": "months"}, "y": {"min": 0, "max": 1, "scale": "fraction"}}
+
+    def call(self, **extra):
+        return self.server.call_tool("curve_digitize", {"imageArtifactId": "sources/fig2.png", "calibration": self.CALIBRATION, "arms": self.ARMS, **extra})
+
+    def test_the_schema_has_no_place_for_a_coordinate_and_states_what_is_required_and_in_what_unit(self):
+        definition = {tool["name"]: tool for tool in vcr_platform.tool_definitions()}["curve_digitize"]
+        schema = definition["inputSchema"]
+        self.assertEqual(schema["required"], ["imageArtifactId", "calibration", "arms"])
+        self.assertEqual(set(schema["properties"]), set(vcr_platform.DIGITIZE_FIELDS))
+        for forbidden in ("curve", "points", "provenance", "origin", "surv"):
+            self.assertNotIn(forbidden, schema["properties"])
+        arm = schema["properties"]["arms"]["items"]
+        self.assertEqual(arm["required"], ["riskTable"])
+        self.assertEqual(set(arm["properties"]["curve"]["properties"]), {"color", "legendOrder"})
+        self.assertEqual(schema["properties"]["calibration"]["properties"]["y"]["properties"]["scale"]["enum"], ["fraction", "percent"])
+        text = definition["description"]
+        for stated in ("0.02", "0.6%", "FIRST and LAST tick", "never state a", "receiptId", "plot_area_ambiguous", "one colour"):
+            self.assertIn(stated, text.replace("color", "colour") if stated == "one colour" else text)
+        self.assertLess(len(text), 2400)
+
+    def test_a_digitization_is_requested_with_a_calibration_and_never_a_point(self):
+        _Gateway.answers["digitize"] = (200, {"data": {"state": "digitized", "receiptId": "crv_" + "a" * 32, "origin": "digitizer", "createdAt": "2026-10-04T00:00:00.000Z",
+                                                       "digitization": {"statedBy": "run", "curves": [{"name": "control"}, {"name": "treatment"}], "warnings": []}}})
+        result = self.call(imageSha256="b" * 64, reportedLogHazardRatio=-0.4)
+        self.assertEqual(result["status"], "success")
+        self.assertIn("crv_" + "a" * 32, result["summary"])
+        self.assertIn("2 curve(s)", result["summary"])
+        [seen] = _Gateway.seen
+        self.assertEqual(seen["path"], "/internal/vcr/v1/digitize")
+        self.assertEqual(seen["body"], {"imageArtifactId": "sources/fig2.png", "imageSha256": "b" * 64, "calibration": self.CALIBRATION, "arms": self.ARMS, "reportedLogHazardRatio": -0.4})
+        self.assertTrue(any("receiptId" in action and "reconstruct_km" in action for action in result["next_actions"]))
+        self.assertTrue(any("calibration as your reading of the axis labels" in action for action in result["next_actions"]))
+
+    def test_a_warning_from_the_digitizer_is_carried_to_the_run(self):
+        _Gateway.answers["digitize"] = (200, {"data": {"state": "digitized", "receiptId": "crv_" + "c" * 32, "digitization": {"curves": [{}], "warnings": ["curve_start_not_one: control starts at 0.909."]}}})
+        result = self.call()
+        self.assertEqual(result["status"], "warning")
+        self.assertEqual(result["warnings"], ["curve_start_not_one: control starts at 0.909."])
+
+    def test_a_refusal_to_trace_is_a_warning_that_says_what_to_state_and_records_nothing(self):
+        _Gateway.answers["digitize"] = (200, {"data": {"state": "refused", "reason": "plot_area_ambiguous", "message": "2 plot areas were found.",
+                                                       "candidates": [{"left": 79, "top": 15, "right": 616, "bottom": 373}, {"left": 79, "top": 412, "right": 616, "bottom": 502}]}})
+        result = self.call()
+        self.assertEqual(result["status"], "warning")
+        self.assertIn("plot_area_ambiguous", result["summary"])
+        self.assertIn("2 plot areas were found.", result["warnings"])
+        self.assertTrue(any("plotArea" in action for action in result["next_actions"]))
+        _Gateway.answers["digitize"] = (200, {"data": {"state": "refused", "reason": "colour_required", "message": "several colours", "palette": ["#d62728", "#1f77b4"]}})
+        again = self.call()
+        self.assertTrue(any("#d62728" in action for action in again["next_actions"]))
+
+    def test_a_coordinate_or_an_origin_never_leaves_the_runtime(self):
+        before = len(_Gateway.seen)
+        for field in ("points", "curve", "provenance", "origin", "receiptId"):
+            result = self.call(**{field: [{"time": 0, "surv": 1}]})
+            self.assertEqual(result["error"]["code"], "invalid_input", field)
+        missing = self.server.call_tool("curve_digitize", {"imageArtifactId": "sources/fig2.png", "calibration": self.CALIBRATION})
+        self.assertEqual(missing["error"]["code"], "invalid_input")
+        self.assertEqual(len(_Gateway.seen), before, "nothing was sent")
+
+    def test_an_impossible_calibration_is_the_runs_to_fix_and_an_unavailable_digitizer_is_not(self):
+        _Gateway.answers["digitize"] = (400, {"error": "x.max is greater than x.min.", "code": "vcr_curve_calibration_invalid"})
+        result = self.call()
+        self.assertEqual(result["error"]["code"], "vcr_curve_calibration_invalid")
+        self.assertEqual(result["error"]["stopReason"], "invalid_input")
+        _Gateway.answers["digitize"] = (503, {"error": "no digitizer", "code": "vcr_curve_digitizer_unavailable"})
+        unavailable = self.call()
+        self.assertEqual(unavailable["error"]["code"], "vcr_curve_digitizer_unavailable")
+        self.assertEqual(unavailable["error"]["stopReason"], "unsupported")
+
+    def test_a_deployment_without_the_module_says_so_as_a_warning(self):
+        _Gateway.answers["digitize"] = (503, {"error": "off", "code": "vcr_disabled"})
+        result = self.call()
+        self.assertEqual(result["status"], "warning")
+        self.assertIn("no 虚拟临研 study", result["summary"])
 
 
 class EvidencePoolTests(_GatewayCase):

@@ -184,6 +184,20 @@ pnpm smoke:deployment
    - 任意一个运行时容器的挂载里没有数据平面：`docker inspect <runtime> --format '{{json .Mounts}}'` 不含
      `/data-plane`，也不含它的主机路径。引擎容器只接在 `vcr-engine-internal` 网络上，出不了网。
    - 用一个空的 T0 研究提交一次 `design.analytic` 作业，回执验签通过、作业目录出现在 `/jobs`。
+   - 病历文件转换（PDF / Word 在部署内转成文字，不发给外部解析服务）：上传一份可复制文字的 PDF 和一份 `.docx`，
+     各得到文字；上传一份扫描件，得到「请提供文字版」的拒绝，数据平面里没有留下东西。**转换的暂存在数据平面里，
+     从不写进 `open-science-data`**：暂存目录是 `studies/<研究>/.intake/<尝试>/`（一份只读副本加一个空的输出目录，
+     0700，转换后整个目录被删，引擎的位置语法写不出这个路径）。转换进行中在宿主机上看
+     `<OPEN_SCIENCE_VCR_DATA_PLANE_HOST_DIR>/studies/*/.intake/`，文件 0400、目录 0700、属主是 web 用户，转换后为空；
+     web 与控制器共用的数据卷里（`/data/`）转换前后都没有新增文件。转换跑在运行时控制器起的一次性容器里：
+     `docker ps -a --filter label=open-science.vcr-intake` 转换后为空；转换进行中对它 `docker inspect`，`NetworkMode`
+     为 `none`、挂载只有两个——只读的单个文件 `/input/document.<pdf|docx>` 和 `/output`，来源都在
+     `OPEN_SCIENCE_VCR_DATA_PLANE_HOST_DIR` 之下，不含 `open-science-data` 卷或它的任何子路径；容器用户读得了那份
+     0400 的文件、写得了那个 0700 的目录（即与 web 用户同一个 uid，或 `OPEN_SCIENCE_RUNTIME_CONTAINER_USER` 指向它）。
+     控制器环境里有这个主机路径（`docker exec <控制器> printenv OPEN_SCIENCE_VCR_DATA_PLANE_HOST_DIR`）；没有它，
+     上传 PDF / Word 会得到「本部署暂时不能转换」。镜像里要有 `/opt/evimed/mcp/evimed-research/vcr_record_extract.py`
+     与 `vcr_curve_digitize.py`（随研究 MCP 的 Python 源码一起发，增量发布即可），控制器协议版本为 9。曲线数字化
+     的暂存是已发表的图、不是患者数据，仍在 `/data/vcr-intake/digitize/`，转换后为空。
    - **通过：** 上面每条都成立，且探针文件已删。
 
 4. **五个能力的真实 DSH 运行。** `vcr-protocol`、`vcr-evidence`、`vcr-analysis`、`vcr-matching`、`vcr-package`

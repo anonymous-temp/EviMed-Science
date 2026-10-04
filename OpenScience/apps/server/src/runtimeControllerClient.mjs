@@ -5,9 +5,12 @@ import path from "node:path";
 import { HttpError } from "./security.mjs";
 import { canonicalJson } from "@evimed/domain";
 
-// Version 8 adds isolated native skill validation. The version-7 citation
-// runtime-start shape stays explicitly supported during coordinated rollout.
-export const RUNTIME_CONTROLLER_PROTOCOL_VERSION = 8;
+// Version 9 adds the two 「虚拟临研」 intake conversions (a record document to
+// text, a figure to curve points), each one fixed operation over a staged
+// attempt. Version 8 added isolated native skill validation; the version-7
+// citation runtime-start shape stays explicitly supported during coordinated
+// rollout.
+export const RUNTIME_CONTROLLER_PROTOCOL_VERSION = 9;
 
 function controllerError(code, message, status = 503) {
   return new HttpError(status, code, message);
@@ -75,6 +78,7 @@ export class RuntimeControllerClient {
     this.socketPath = String(config.runtimeControllerSocket ?? "").trim();
     this.timeoutMs = Number(config.runtimeControllerTimeoutMs) || 10_000;
     this.maxJsonBytes = Number(config.maxJsonBytes) || 12 * 1024 * 1024;
+    this.vcrIntakeTimeoutMs = (Number(config.vcrIntakeTimeoutMs) || 60_000) * 2 + 15_000;
   }
 
   async request(method, requestPath, payload = null, options = {}) {
@@ -173,6 +177,22 @@ export class RuntimeControllerClient {
 
   cancelDocumentRender(reference) {
     return this.request("POST", "/v1/document/cancel", reference);
+  }
+
+  /**
+   * Convert one staged record document to text, or digitize one staged figure,
+   * in a disposable container. The caller reads the output directory itself
+   * afterwards. A record is named by the path of its staged file inside the data
+   * plane with the SHA-256 and size the script checks it against; a figure by its
+   * attempt on the shared data volume and the digest of its request. The
+   * deadline here is the controller's own plus a margin for queueing, so the
+   * controller's timeout answers before this one gives up.
+   * @param {'extract'|'digitize'} kind
+   * @param {{path:string,sha256:string,bytes:number}|{attemptId:string,inputDigest:string}} reference
+   * @param {{signal?:AbortSignal, timeoutMs?:number}} [options]
+   */
+  runVcrIntake(kind, reference, { signal, timeoutMs } = {}) {
+    return this.request("POST", `/v1/vcr/${kind}`, reference, { signal, timeoutMs: timeoutMs ?? this.vcrIntakeTimeoutMs });
   }
 
   /** Fixed owned content reference; the controller resolves every filesystem path.

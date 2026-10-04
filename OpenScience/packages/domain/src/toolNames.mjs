@@ -111,6 +111,9 @@ export const MCP_TOOL_BASE_NAMES = Object.freeze([
   'vcr_write',
   'vcr_simulate',
   'trial_registry_record',
+  // a published Kaplan-Meier figure read into curve points by the platform's deterministic
+  // digitizer: the run states a calibration and never a coordinate (vcr_platform.py)
+  'curve_digitize',
   'evidence_pool',
   'research_calculate',
 ])

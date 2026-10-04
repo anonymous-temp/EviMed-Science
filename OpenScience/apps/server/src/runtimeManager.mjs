@@ -1757,7 +1757,8 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
   // every call is the same refusal one step later.
   const vcrEngineComposed = config.vcrEngineConfigured ?? Boolean(String(config.vcrEngineUrl ?? "").trim());
   const vcrDisabled = !environment.EVIMED_VCR_GATEWAY_URL
-    ? ["vcr_read", "vcr_write", "vcr_simulate", "trial_registry_record", "evidence_pool"]
+    ? ["vcr_read", "vcr_write", "vcr_simulate", "trial_registry_record", "curve_digitize", "evidence_pool"]
+    // The digitizer runs in the intake container, not on the engine: it stays offered without one.
     : vcrEngineComposed ? [] : ["vcr_simulate", "evidence_pool"];
   if (vcrDisabled.length) {
     environment.EVIMED_DISABLED_TOOLS = [...new Set([...environment.EVIMED_DISABLED_TOOLS.split(",").filter(Boolean), ...vcrDisabled])].join(",");
