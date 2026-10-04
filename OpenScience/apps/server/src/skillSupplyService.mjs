@@ -98,7 +98,7 @@ export class SkillSupply {
    * @param {string} capabilityId @param {{ id?: string } | null} user @returns {SupplyReason[]}
    */
   softwareReasons(capabilityId, user) {
-    const record = this.packages.get(`capability/${capabilityId}`);
+    const record = this.capabilityRecord(capabilityId);
     if (!record) return [];
     const software = { ...record, dependencies: record.dependencies.filter((dependency) => SOFTWARE_KINDS.includes(dependency.kind)) };
     return this.reasons(/** @type {SkillPackageRecord} */ (software), user).limits;
@@ -151,6 +151,20 @@ export class SkillSupply {
   /** @param {string} id the package id (`origin/name`) @returns {SkillPackageRecord | null} */
   record(id) {
     return this.packages.get(id) ?? null;
+  }
+
+  /**
+   * The record of a capability by its id: a capability package, or the one agent package the image takes whole
+   * (`open-domain-answer`), which the registry lists as a capability too.
+   * @param {string} id @returns {SkillPackageRecord | null}
+   */
+  capabilityRecord(id) {
+    return this.packages.get(`capability/${id}`) ?? this.packages.get(`evimed/${id}`) ?? null;
+  }
+
+  /** The package facts of a capability, or null where none is recorded. @param {string} id @returns {ReturnType<typeof publicSkillPackage>} */
+  capabilityPackage(id) {
+    return publicSkillPackage(this.capabilityRecord(id));
   }
 
   /** The package facts a reader may be given, or null for a subject with no record. @param {string} id @returns {ReturnType<typeof publicSkillPackage>} */

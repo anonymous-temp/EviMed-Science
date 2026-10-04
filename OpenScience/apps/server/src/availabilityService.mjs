@@ -334,7 +334,7 @@ export class AvailabilityService {
     return {
       generatedAt: this.now().toISOString(),
       collector: { state: evidence.state },
-      capabilities: capabilities.map((entry) => ({ ...publicAvailability(entry), package: supply?.publicPackage(`capability/${entry.id}`) ?? null })),
+      capabilities: capabilities.map((entry) => ({ ...publicAvailability(entry), package: supply?.capabilityPackage(entry.id) ?? null })),
       tools: tools.map(publicAvailability),
       extensions: extensions.map((entry) => ({ ...publicAvailability(entry), package: supply?.publicPackage(`extension/${entry.id}`) ?? null })),
       // Skill packages: what each is (source, licence, version, scripts, dependencies, operations) and whether this
