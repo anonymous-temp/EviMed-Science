@@ -130,6 +130,7 @@ import {
   publicSourceCredentialReadiness,
 } from "./publicSourceGateway.mjs";
 import { WEB_SEARCH_GATEWAY_PATH, createWebSearchGatewayHandler } from "./webSearchGateway.mjs";
+import { geneExpressionMetricFamilies } from "./geneExpressionMetrics.mjs";
 import { TOOL_UNIVERSE_GATEWAY_PATH, createToolUniverseGateway } from "./toolUniverseGateway.mjs";
 import { GEO_PROBE_GATEWAY_PATH, createGeoProbeGatewayHandler } from "./geoProbeGateway.mjs";
 import { ResearchMemoryStore, memoryPausedFor } from "./researchMemory.mjs";
@@ -7843,6 +7844,9 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
   // EvimedEvidenceRefused).
   const credentialMissing = publicSourceCredentialMissingMetricFamily();
   addMetric(lines, credentialMissing.name, credentialMissing.help, credentialMissing.type, credentialMissing.series);
+  // The NCBI Gene Expression Omnibus workflow's six resource limits and its named downloads (geneExpressionMetrics.mjs;
+  // two limits counted by the gateway as bytes arrive, four reported by the runtime's tool). Not 循证 GEO's.
+  for (const family of geneExpressionMetricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
   // Model requests booked uncertain, by why (usageLedger.mjs): a burst is a
   // provider or a caller losing calls, and shows here while it happens.
   const uncertain = usageUncertainMetricFamily();

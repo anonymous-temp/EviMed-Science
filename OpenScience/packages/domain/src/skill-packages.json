@@ -465,6 +465,46 @@
     },
     {
       "schemaVersion": 1,
+      "id": "capability/gene-expression-analysis",
+      "name": "gene-expression-analysis",
+      "origin": "capability",
+      "version": "1.0.0",
+      "source": {"kind":"release"},
+      "digest": "sha256:a884e8723d872595b24162a808937c937e01ca3543f26f354acdcea3bba1bb52",
+      "digestAlgorithm": "release-directory-v1",
+      "scripts": [{"path":"scripts/verify_result.py","sha256":"3fb75ee936ad10beb61da36019a7fea735656ac8dc29acbbaa903e41b5c29fcb"}],
+      "references": [{"path":"capability.yaml","sha256":"a865c81398a409710e8476c77af1e5b7719cac04682ed38f61f25cc57d1bd334"}],
+      "dependencies": [
+        {"kind":"platform-tool","name":"gene_expression_differential","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
+        {"kind":"platform-tool","name":"gene_expression_series","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
+        {"kind":"platform-tool","name":"literature_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
+        {"kind":"platform-tool","name":"research_calculate","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
+        {"kind":"python-package","name":"numpy","supply":"image","optional":true,"basis":"observed","evidence":"scripts/verify_result.py"},
+        {"kind":"python-package","name":"scipy","supply":"image","optional":true,"basis":"observed","evidence":"scripts/verify_result.py"},
+        {"kind":"python-package","name":"statsmodels","supply":"image","optional":true,"basis":"observed","evidence":"scripts/verify_result.py"}
+      ],
+      "operations": [
+        {
+          "name": "gene-expression-analysis-package",
+          "kind": "deliverable",
+          "summaryZh": "给出 GEO 数据集编号，比较两组样本的基因表达差异，结果附校验与回执。",
+          "accepts": ["seriesAccession","groupDefinition","platformAccession","outputLanguage"],
+          "produces": [
+            "gene-expression-report.md",
+            "gene-expression-results.json",
+            "gene-expression-top-table.md",
+            "gene-expression-de-table.tsv",
+            "gene-expression-analysed-matrix.tsv.gz",
+            "gene-expression-request.json",
+            "gene_expression.py",
+            "gene-expression-receipt.json"
+          ],
+          "limits": ["只做两组比较的 Welch 检验加 BH 校正，不是 limma；每组至少三个样本，只读已处理矩阵，不处理原始读段。","结果以探针为单位，一个探针可能对应多个基因；超出资源上限的数据集会被拒绝。"]
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
       "id": "capability/geo-content",
       "name": "geo-content",
       "origin": "capability",

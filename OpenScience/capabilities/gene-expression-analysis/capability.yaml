@@ -1,0 +1,69 @@
+# Capability manifest — the only definition of this capability.
+#
+# NCBI Gene Expression Omnibus series to differential expression (plan 2026-10-02 §11.3 N17). This is the public data
+# resource at ncbi.nlm.nih.gov/geo, not 「循证 GEO」 (the pharma GEO module and its `geo-*` capabilities): everything of
+# this one is named `gene-expression` / `gene_expression`.
+id: gene-expression-analysis
+version: 1.0.0
+title: Gene Expression Omnibus Differential Expression
+category: Research Planning
+description: Take a public NCBI GEO series, preserve its matrix and platform annotation with their hashes and stated dates, verify the sample, platform and
+  value-scale identities, and compute a Welch t-test per probe between two declared groups with Benjamini-Hochberg adjustment (not limma), as files with receipts.
+whenToUse: 研究者给出一个 GEO 数据集编号（GSE…），想比较其中两组样本的基因表达差异时，委派给我；原始测序读段、单细胞数据、三组及以上或配对/协变量设计不在我的范围内。
+persona: 你是基因表达数据分析师。你只通过工具取数据和计算，从不自己算统计量，也不手敲报告里的数字；你把方法的局限（不是 limma、分组样本少时方差不稳、探针不等于基因）写进报告。
+safetyClass: clinical
+skills:
+- gene-expression-analysis
+tools:
+- mcp__evimed__gene_expression_series
+- mcp__evimed__gene_expression_differential
+- mcp__evimed__research_calculate
+- mcp__evimed__literature_search
+produces:
+- contractKind: gene-expression-analysis-package
+  outputs:
+  - path: gene-expression-report.md
+    required: false
+  - path: gene-expression-results.json
+    required: false
+  - path: gene-expression-top-table.md
+    required: false
+  - path: gene-expression-de-table.tsv
+    required: false
+  - path: gene-expression-analysed-matrix.tsv.gz
+    required: false
+  - path: gene-expression-request.json
+    required: false
+  - path: gene_expression.py
+    required: false
+  - path: gene-expression-receipt.json
+    required: false
+  checks:
+  - skillsLoaded
+inputs:
+  required:
+  - seriesAccession
+  optional:
+  - groupDefinition
+  - platformAccession
+  - outputLanguage
+estimatedMinutes: [5, 40]
+dataSources:
+- ncbi-gene-expression-omnibus
+starterPrompts:
+- Compare the HDAC1 knock-out and wild-type arrays in GEO series GSE5583 and list the most differentially expressed genes.
+display:
+  title: "基因表达差异分析"
+  category: "研究设计与数据"
+  description: "给出 GEO 数据集编号，比较两组样本的基因表达差异，结果附校验与回执。"
+  starterPrompts:
+  - "比较 GEO 数据集 GSE5583 里 HDAC1 敲除组与野生型组的基因表达差异，列出差异最大的基因。"
+  - "取 GSE 开头编号的芯片数据，先核对平台和数值尺度，再做两组差异分析。"
+  materials: "一个公开的 GEO 系列编号（GSE…）和要比较的两组"
+  estimatedMinutes: {min: 5, max: 40}
+  outputs:
+  - "差异表达报告与前列探针表"
+  - "完整结果表、分析矩阵、代码与回执"
+  knownLimits:
+  - "只做两组比较的 Welch 检验加 BH 校正，不是 limma；每组至少三个样本，只读已处理矩阵，不处理原始读段。"
+  - "结果以探针为单位，一个探针可能对应多个基因；超出资源上限的数据集会被拒绝。"

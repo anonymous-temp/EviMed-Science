@@ -2,6 +2,7 @@ import { RESULT_WORKBENCH_ERROR_MESSAGES } from "./resultErrors.mjs";
 import { DOCUMENT_EXPORT_ERROR_MESSAGES } from "./documentExport.mjs";
 import { CONNECTOR_MISSING_CODES } from "./connectorCredentials.mjs";
 import { DATA_SEMANTICS_ERROR_CODES, DATA_SEMANTICS_ERROR_MESSAGE_ZH } from "./dataSemantics.mjs";
+import { GENE_EXPRESSION_ERROR_MESSAGE_ZH, GENE_EXPRESSION_LIMITATION_ERROR_CODES, GENE_EXPRESSION_LIMIT_MESSAGE_ZH, GENE_EXPRESSION_RUN_FIX_ERROR_CODES } from "./geneExpression.mjs";
 
 /** The tool's own refusals a run repairs by changing what it sent, as opposed to the outages it waits out. */
 const DATA_SEMANTICS_RUN_FIXES = ["semantics_request_invalid", "semantics_request_too_large", "semantics_dataset_invalid", "semantics_revision_conflict"];
@@ -208,6 +209,11 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   // did not have the recorded interpretation. The two codes a malformed call earns are the run's to fix and sit
   // in the terminal set below.
   ...DATA_SEMANTICS_ERROR_CODES.filter((code) => !DATA_SEMANTICS_RUN_FIXES.includes(code)),
+  // NCBI Gene Expression Omnibus (gene_expression_series / gene_expression_differential, 2026-10-04): an input over one of
+  // the six limits, identities that do not agree, a series with no matrix or one that cannot be read, an engine that is
+  // not there. Each refuses that one retrieval or computation, the report says so, and the rest goes on. The codes a
+  // malformed call earns are the run's to fix and sit in the terminal set below.
+  ...GENE_EXPRESSION_LIMITATION_ERROR_CODES,
   // 「前沿动态」 search not answering — the module off or not open to this
   // account, an outage, a slow list. Its results were only ever leads; the
   // answer goes on with the literature, guideline and regulatory tools, which
@@ -567,6 +573,9 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   "kb_search_request_invalid",
   "kb_search_request_too_large",
   ...DATA_SEMANTICS_RUN_FIXES,
+  // The same for a gene-expression call: an accession, group, path or output directory the run built wrongly, a capture it
+  // edited, a result directory that already holds a different analysis (its own results are kept).
+  ...GENE_EXPRESSION_RUN_FIX_ERROR_CODES,
   // And for a frontier search: a filter outside its closed vocabulary.
   "frontier_search_query_invalid",
   "frontier_search_lane_invalid",
@@ -2040,6 +2049,8 @@ export const ERROR_CODE_FAMILIES = Object.freeze([
   [/^source_access_denied$/, '这个数据源不向当前用户提供这份内容；报告会把它记为限制，不会当作读过。'],
   [/^source_timeout$/, '这个数据源这次没有在时限内给出结果；报告会把它记为限制，稍后可以再试。'],
   [/^source_unavailable$/, '这个数据源这次连不上；报告会把它记为限制，不会当作查不到。'],
+  [/^gene_expression_input_over_limit$/, GENE_EXPRESSION_LIMIT_MESSAGE_ZH],
+  [/^(?:gene_expression_|public_source_gene_expression_)/, GENE_EXPRESSION_ERROR_MESSAGE_ZH],
   [/^public_source_[a-z0-9_]+_credential_missing$/, '这个数据源还没有配置凭据，相关部分已跳过；可以在「设置 → 数据源」添加后继续。'],
   [/^public_source_/, '公共数据源这次没能给出结果。'],
   [/^pubtator_/, '关系式检索的概念标识或关系类型不对，用 term_normalize 的 annotate 取一次标识再试。'],

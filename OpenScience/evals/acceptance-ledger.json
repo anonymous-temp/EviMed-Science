@@ -151,6 +151,23 @@
       "note": "Accepted on 2026-09-10 against evimed-20260910-dae363e on a fresh project: brief appraisal-001 (SGLT2 inhibitors in HFpEF) ended succeeded in 15 minutes. Read before this row changed: the root planned and delegated once (the plan-then-delegate instruction under test), the child was injected with all four manifest skills, the appraisal-table deliverable was accepted on its second submission with no gate issue at all (the first carried a required runtime_leakage finding and advisories the child repaired in place), nine studies each rated on the three domains under the domains object the skill now shows, three outcome bodies at high / moderate / moderate with every downgrade named, and the root completed without redoing anything. The independent reviewer left fourteen notices, two of them contradictions (a pooled all-cause-death estimate recorded as incoherent with its inputs but not verified; an interaction P value used as proof of consistent direction while a cited pre-specified analysis points the other way) — delivered, and kept here as the eval cases they are. History of this row: the 2026-09-09 acceptance was withdrawn when its transcript showed the gate counting an errored skill call as a load; the 2026-09-10 02:09 run on a8f9c0f proved the delegation fix but was stopped by hand in its third redo of an already-accepted deliverable, after six false appraisal_domain_missing advisories (the validator read only study.domains while the skill never said the ratings live there) — kept beside this one as ...-interrupted, and fixed in dae363e in the skill, the validator and the orchestration guidance. The attempt on the previous release that wrote the clinical-evidence package's file names is kept as ...-attempt1-failed."
     },
     {
+      "id": "gene-expression-analysis",
+      "visibility": "public",
+      "evalHarness": "evals/gene-expression-analysis",
+      "briefCount": 3,
+      "realDelivery": {
+        "status": "not-run",
+        "evidence": null,
+        "at": null,
+        "surface": null
+      },
+      "relatedEvidence": [
+        "evals/gene-expression-analysis/fixtures/source-manifest.json",
+        "evals/gene-expression-analysis/fixtures/reference_top_table.tsv"
+      ],
+      "note": "2026-10-04（N17）：公开的 NCBI Gene Expression Omnibus 数据集到两组差异表达（Welch + BH，非 limma）。离线已用基础 R 独立复算 GSE5583 的前 50 个探针，相对 1e-8 一致；尚无能力级交付。"
+    },
+    {
       "id": "geo-content",
       "visibility": "public",
       "evalHarness": "evals/geo-content",

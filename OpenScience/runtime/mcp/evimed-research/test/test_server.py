@@ -122,6 +122,11 @@ class ToolContractTests(unittest.TestCase):
             "identifier_resolve",
             "clinical_trial_snapshot",
             "dailymed_label",
+            # The NCBI Gene Expression Omnibus workflow (2026-10-04, N17): a series
+            # preserved and identity-checked, and the differential-expression
+            # computation (`gene_expression_tools.py`). Not 「循证 GEO」.
+            "gene_expression_series",
+            "gene_expression_differential",
             # 「循证 GEO」's platform data and its social channel, through the
             # server's gateway (`geo_platform.py`, 2026-09-25).
             "geo_read",

@@ -400,6 +400,13 @@ test("the generated patch mounts the research MCP and hands it a token, never a 
       // withholds all six, gateway address and engine alike: a tool that can
       // only answer 「未接入」 is not offered.
       EVIMED_DISABLED_TOOLS: "research_calculate,frontier_search,geo_read,geo_write,social_posts_search,vcr_read,vcr_write,vcr_simulate,trial_registry_record,curve_digitize,evidence_pool,patent_search",
+      // The NCBI Gene Expression Omnibus workflow's six resource limits, the defaults here: the tools enforce them in the runtime.
+      EVIMED_GENE_EXPRESSION_MAX_ANNOTATION_BYTES: "134217728",
+      EVIMED_GENE_EXPRESSION_MAX_MATRIX_BYTES: "67108864",
+      EVIMED_GENE_EXPRESSION_MAX_MEMORY_BYTES: "2147483648",
+      EVIMED_GENE_EXPRESSION_MAX_PROBES: "100000",
+      EVIMED_GENE_EXPRESSION_MAX_SAMPLES: "200",
+      EVIMED_GENE_EXPRESSION_MAX_WALL_CLOCK_SECONDS: "120",
       EVIMED_MODEL_GATEWAY_MODEL: "deepseek-v4-pro",
       EVIMED_MODEL_GATEWAY_REASONING_EFFORT: "high",
       EVIMED_MODEL_GATEWAY_TOKEN_FILE: `/runtime/dsh-home/${modelGatewayTokenFileName}`,

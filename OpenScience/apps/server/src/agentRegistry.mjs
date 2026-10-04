@@ -69,6 +69,8 @@ export const EVIMED_AGENT_DATA_SOURCES = new Set([
   "reporting-guidelines",
   "answering-engines",
   "funding-calls",
+  // The public NCBI Gene Expression Omnibus (a series matrix and its platform annotation), not the pharma GEO module.
+  "ncbi-gene-expression-omnibus",
 ]);
 
 export const EVIMED_AGENT_COMPLETION_CHECKS = new Set([

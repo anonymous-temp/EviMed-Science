@@ -386,6 +386,13 @@ def fetch(url, accepted, *, deadline, scope, max_bytes=DEFAULT_MAX_BODY_BYTES, p
 DOWNLOAD_KINDS = {
     "epmc-supplements": {"direct": lambda p: "https://www.ebi.ac.uk/europepmc/webservices/rest/%s/supplementaryFiles" % p["pmcid"], "accept": ("application/zip", "application/xml")},
     "dailymed-spl-zip": {"direct": lambda p: "https://dailymed.nlm.nih.gov/dailymed/getFile.cfm?setid=%s&type=zip&version=%d" % (str(p["setid"]).lower(), int(p["version"])), "accept": ("application/zip",)},
+    # NCBI Gene Expression Omnibus (the public data resource, not the pharma GEO module). A series matrix is one platform's
+    # file; the two records are GEO's SOFT text (`geo/text`, a type of NCBI's own): a series' brief header, and a platform's full
+    # record with its probe table. All three are streamed whole up to the caller's bound (`stream`), never read as a short
+    # answer in words. One entry per line, `"kind": {"direct":`, because a test reads the kind names back out of this file.
+    "ncbi-gene-expression-series-matrix": {"direct": lambda p: "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE%snnn/%s/matrix/%s%s_series_matrix.txt.gz" % (str(p["accession"])[3:-3], p["accession"], p["accession"], ("-" + p["platform"]) if p.get("platform") else ""), "accept": ("application/x-gzip", "application/gzip"), "stream": ("application/x-gzip", "application/gzip")},
+    "ncbi-gene-expression-series-record": {"direct": lambda p: "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=%s&targ=self&form=text&view=brief" % p["accession"], "accept": ("geo/text", "text/plain"), "stream": ("geo/text", "text/plain")},
+    "ncbi-gene-expression-platform-record": {"direct": lambda p: "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=%s&targ=self&form=text&view=full" % p["accession"], "accept": ("geo/text", "text/plain"), "stream": ("geo/text", "text/plain")},
 }
 
 
@@ -487,7 +494,7 @@ def download(kind, params, *, deadline, scope, max_bytes=16 * 1024 * 1024, per_a
         if content_type not in accepted:
             raise _wrong_type(content_type, scope)
         # A small type is an answer in words, not the file: read it whole and bounded.
-        limit = max_bytes if content_type == "application/zip" else 64 * 1024
+        limit = max_bytes if content_type in spec.get("stream", ("application/zip",)) else 64 * 1024
         body, reason, declared = _read_download(response, max_bytes=limit, deadline=deadline, chunk=chunk)
         return Download(body, content_type, reason is None, reason, declared, attempt, deadline.spent() - started)
 
