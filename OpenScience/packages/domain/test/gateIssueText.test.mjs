@@ -163,6 +163,27 @@ test("the codes delegation that does not wait and the claim tools refuse with ar
   }
 });
 
+test("the notices a run raises about its own tools are titled, and read as advice", () => {
+  // 2026-10-04: a research tool that failed and that nothing later got through is
+  // a notice on the run, never its verdict. The two advisory tools that answer
+  // that they cannot be had ride the same notice under their own refusal codes.
+  const raised = {
+    run_tool_failed: "有检索或分析工具没有成功",
+    run_tool_unavailable: "调用了本次运行没有的工具",
+    review_unavailable: "复核服务暂不可用",
+    capsule_unavailable: "方法胶囊暂不可用",
+  };
+  for (const [code, title] of Object.entries(raised)) {
+    assert.ok(Object.hasOwn(GATE_CODE_TITLES_ZH, code), `"${code}" has no title`);
+    const described = describeGateIssue({
+      code, severity: "advice", text: "Research tool web_read failed 1 time(s) and no later call of it succeeded.", detail: "「读网页」有 1 次没有成功，之后也没有成功的同类调用。",
+    });
+    assert.equal(described.title, title, code);
+    assert.equal(described.severity, "advice", `${code} is something to know, never something to fix`);
+    assert.equal(described.detail, "「读网页」有 1 次没有成功，之后也没有成功的同类调用。", "the platform's own Chinese sentence is what is shown");
+  }
+});
+
 test("a pharmacist-authored caution is a safety notice titled by its own rule", () => {
   assert.deepEqual([...GATE_CHECKS_TITLED_BY_RULE], ["clinical-safety-cautions"]);
   // As the domain's validator raises it: advisory to the run, a rule id, an

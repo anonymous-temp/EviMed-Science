@@ -712,6 +712,13 @@ export const RUNTIME_ERROR_CODES = Object.freeze([
   'runtime_session_error',
   'runtime_spend_limit_reached',
   'runtime_session_not_found',
+  // Not written onto a run by the ledger since 2026-10-04: a research tool that
+  // failed and was not corrected is a notice on the run (`run_tool_failed`),
+  // and a turn that ended on its own is judged by what it produced. Kept, with
+  // its sentence, so a run recorded before then is still explained by name;
+  // `TURN_END_ERROR_CODES` still names the kernel's `blocked` turn end with it
+  // on the wire, which the ledger records as `runtime_session_error` with the
+  // sub-code `turn_blocked`.
   'runtime_tool_error',
   'runtime_turn_end_unknown',
   'runtime_history_unavailable',
@@ -802,9 +809,10 @@ export const CREDIT_ERROR_CODES = Object.freeze([
  *
  * It is enumerated separately because the coverage arithmetic over
  * `ALL_ERROR_CODES` answers the wrong question: of the 253 codes there, the
- * overwhelming majority are tool-boundary codes that `terminalFromMessages`
- * collapses into `runtime_tool_error` long before anyone sees them, while
- * fifteen codes that really do end runs — `runtime_monitor_stalled`,
+ * overwhelming majority are tool-boundary codes that never end a run (until
+ * 2026-10-04 `terminalFromMessages` collapsed an uncorrected one into
+ * `runtime_tool_error`; now it reaches a researcher only as a notice on a run
+ * that finished), while fifteen codes that really do end runs — `runtime_monitor_stalled`,
  * `specialist_deliverable_not_accepted`, `superseded_by_dispatch` and the rest
  * of this list — were in no registry at all. The browser filled the gap with a
  * twenty-key table of its own whose default sentence was 「运行未通过核验。」,
@@ -824,6 +832,8 @@ export const RUN_VERDICT_ERROR_CODES = Object.freeze([
   'runtime_canceled',
   'runtime_stopped',
   'runtime_session_error',
+  // No longer written (2026-10-04, see `RUNTIME_ERROR_CODES`); a run recorded
+  // before then still carries it and is explained by its sentence.
   'runtime_tool_error',
   'runtime_turn_end_unknown',
   'runtime_deliverable_never_submitted',
