@@ -5,6 +5,7 @@ import { STOPPING_RULES } from "@evimed/domain";
 import { AutopilotService, parseVerificationResult, recomputationVerdict, splitEpisodeBudget, verificationBudgetCny,
   verificationEpisodeId, verificationIdFor, verificationBrief, verificationPrompt,
   verificationWorkspacePath } from "../src/autopilotService.mjs";
+import { AutopilotPlanner, rotationTaskType } from "../src/autopilotNextAction.mjs";
 import { AutopilotWorker } from "../src/autopilotWorker.mjs";
 import { createAutopilotRoutes } from "../src/autopilotRoutes.mjs";
 import { CapsuleService } from "../src/capsuleService.mjs";
@@ -44,7 +45,7 @@ class MemoryJobs {
   }
 }
 
-function fixture({ notificationCreate = null, now = () => new Date("2026-09-06T01:00:00.000Z") } = {}) {
+function fixture({ notificationCreate = null, now = () => new Date("2026-09-06T01:00:00.000Z"), planner = null } = {}) {
   const documents = new MemoryDocuments();
   const jobs = new MemoryJobs();
   const usage = { assertWithinLimits: async () => ({ allowed: true }) };
@@ -56,7 +57,7 @@ function fixture({ notificationCreate = null, now = () => new Date("2026-09-06T0
   // decision promotes has to survive the actual candidate/approved rules, not a
   // stub that agrees with the caller.
   const capsules = new CapsuleService(documents);
-  const service = new AutopilotService({ documents, jobs, usage, notifications, capsules,
+  const service = new AutopilotService({ documents, jobs, usage, notifications, capsules, planner,
     now, id: (() => { let i = 0; return (prefix) => `${prefix}${++i}`; })() });
   return { documents, jobs, usage, notifications, capsules, service };
 }
@@ -243,27 +244,64 @@ test("starting and scheduling creates one idempotent bounded episode per day", a
   assert.ok(first.episode.payload.prompt.includes(`Episode ID: ${first.episode.id}.`));
 });
 
-test("inactivity, repeated failure and the stop switch prevent further spending", async () => {
+/** Schedule one date's episode and record how it ended, the way a run's completion does. */
+async function episodeEnding(service, agendaId, date, status, gatedClaims = 0) {
+  const { episode } = await service.schedule("user-one", agendaId, { date });
+  const agenda = await service.get("user-one", agendaId);
+  await service.recordOutcome("user-one", agendaId, { expectedRevision: agenda.revision, episodeId: episode.id, status, gatedClaims });
+  return episode.payload.taskType;
+}
+
+test("a task type that keeps failing is paused alone, the agenda stops only when no type is left, and the stop switch prevents further spending", async () => {
   const { service, jobs } = fixture();
   const created = await service.create("user-one", agendaInput);
   let agenda = await service.start("user-one", created.id, { expectedRevision: created.revision });
-  agenda = await service.recordOutcome("user-one", agenda.id, {
-    expectedRevision: agenda.revision, episodeId: "episode-one", status: "failed", gatedClaims: 0,
-  });
-  agenda = await service.recordOutcome("user-one", agenda.id, {
-    expectedRevision: agenda.revision, episodeId: "episode-two", status: "failed", gatedClaims: 0,
-  });
+  // The rotation alternates the two types by the day: 09-06, 09-08, 09-10 are one type, 09-07 and 09-09 the other.
+  const first = await episodeEnding(service, agenda.id, "2026-09-06", "failed");
+  const second = await episodeEnding(service, agenda.id, "2026-09-07", "succeeded", 1);
+  assert.notEqual(first, second);
+  assert.equal(await episodeEnding(service, agenda.id, "2026-09-08", "failed"), first);
+  agenda = await service.get("user-one", agenda.id);
+  // One agenda-wide counter was reset by the other type's success and never paused anything; the first type's own failures are what count.
+  assert.equal(agenda.payload.status, "active", "the other type has done nothing wrong");
+  assert.ok(agenda.payload.taskTypeState[first].pausedAt);
+  assert.equal(agenda.payload.taskTypeState[second].pausedAt, undefined);
+
+  // 09-10 is the paused type's turn by the rotation; it is not offered, so the other one runs.
+  const next = await service.schedule("user-one", agenda.id, { date: "2026-09-10" });
+  assert.equal(next.episode.payload.taskType, second);
+  assert.equal(next.episode.payload.selection.source, "date-rotation");
+  assert.deepEqual(next.episode.payload.selection.eligibleTypes, [second]);
+
+  // The remaining type fails twice too: nothing is left that the agenda may run.
+  await episodeEnding(service, agenda.id, "2026-09-11", "failed");
+  await episodeEnding(service, agenda.id, "2026-09-12", "failed");
+  agenda = await service.get("user-one", agenda.id);
   assert.equal(agenda.payload.status, "paused");
   assert.match(agenda.payload.pauseReason, /连续失败/);
-  await assert.rejects(() => service.schedule("user-one", agenda.id, { date: "2026-09-07" }),
+  await assert.rejects(() => service.schedule("user-one", agenda.id, { date: "2026-09-13" }),
     (error) => error.code === "autopilot_paused");
 
+  // A researcher's start is a fresh authorization: the pauses are lifted with it.
   agenda = await service.start("user-one", agenda.id, { expectedRevision: agenda.revision });
+  assert.deepEqual(agenda.payload.taskTypeState, {});
+  const queued = jobs.items.length;
   agenda = await service.stop("user-one", agenda.id, { expectedRevision: agenda.revision });
   assert.equal(agenda.payload.status, "stopped");
-  await assert.rejects(() => service.schedule("user-one", agenda.id, { date: "2026-09-08" }),
+  await assert.rejects(() => service.schedule("user-one", agenda.id, { date: "2026-09-14" }),
     (error) => error.code === "autopilot_stopped");
-  assert.equal(jobs.items.length, 0, "recording outcomes and stopping must not enqueue replacement work");
+  assert.equal(jobs.items.length, queued, "recording outcomes and stopping must not enqueue replacement work");
+});
+
+test("naming the task types again lifts the pauses failures put on them", async () => {
+  const { service } = fixture();
+  const created = await service.create("user-one", agendaInput);
+  let agenda = await service.start("user-one", created.id, { expectedRevision: created.revision });
+  for (const date of ["2026-09-06", "2026-09-08"]) await episodeEnding(service, agenda.id, date, "failed");
+  agenda = await service.get("user-one", agenda.id);
+  assert.equal(Object.values(agenda.payload.taskTypeState).filter((state) => state.pausedAt).length, 1);
+  agenda = await service.update("user-one", agenda.id, { expectedRevision: agenda.revision, taskTypes: ["literature-sentinel", "evidence-update"] });
+  assert.deepEqual(agenda.payload.taskTypeState, {});
 });
 
 test("a digest separates headlines from leads and records user decisions", async () => {
@@ -1350,4 +1388,245 @@ test('the first versioned timer probes the legacy date identity during a rolling
   assert.equal(timer.job.id, prior.job.id);
   assert.equal(jobs.items.length, 1);
   assert.equal(await service.scheduleDue('user-one', agenda.id), null);
+});
+
+// ── N10: the next action is chosen from the progress ────────────────────────────
+
+/** A planner double that records what it was asked and answers from `handler`. */
+function plannerDouble(handler) {
+  const calls = [];
+  return { calls, decide: async (input) => { calls.push(input); return handler(input, calls.length); } };
+}
+const choose = (taskType, extra = {}) => ({ action: "run", taskType, focus: "核对尚未复核的结论", reason: "上次的结论还没有独立复核", model: "deepseek-flash", ...extra });
+const otherType = (type) => agendaInput.taskTypes.find((candidate) => candidate !== type);
+
+test("the model's choice, focus and reason are kept on the episode and in its brief, and a replay does not ask again", async () => {
+  const planner = plannerDouble((input) => choose(otherType(rotationTaskType(input.eligible, "2026-09-06"))));
+  const { service, jobs } = fixture({ planner });
+  const created = await service.create("user-one", agendaInput);
+  const agenda = await service.start("user-one", created.id, { expectedRevision: created.revision });
+  const rotation = rotationTaskType(agendaInput.taskTypes, "2026-09-06");
+  const first = await service.schedule("user-one", agenda.id, { date: "2026-09-06" });
+  const { selection, taskType, prompt } = first.episode.payload;
+  assert.notEqual(taskType, rotation, "the date no longer decides");
+  assert.equal(taskType, otherType(rotation));
+  assert.equal(selection.source, "model");
+  assert.equal(selection.taskType, taskType);
+  assert.equal(selection.reason, "上次的结论还没有独立复核");
+  assert.equal(selection.focus, "核对尚未复核的结论");
+  assert.equal(selection.model, "deepseek-flash");
+  assert.equal(selection.fallbackReason, undefined);
+  assert.deepEqual(selection.eligibleTypes, agendaInput.taskTypes);
+  assert.ok(prompt.startsWith(`Run the ${taskType} proactive research episode`));
+  assert.match(prompt, /Planned focus for this episode.*核对尚未复核的结论/);
+  assert.match(prompt, /original instruction/, "the researcher's own scope is still the first thing the run reads");
+
+  // What the decision was handed: this episode's id (its cost is the episode's), the agenda's own envelope, no stop yet.
+  const [call] = planner.calls;
+  assert.equal(call.userId, "user-one");
+  assert.equal(call.projectId, "project-one");
+  assert.equal(call.episodeId, first.episode.id);
+  assert.deepEqual(call.limits, { daily: 20, weekly: 80 });
+  assert.equal(call.stopAllowed, false, "an agenda that has finished nothing has given the decision nothing to stop on");
+  assert.equal(call.context.question.title, "心衰证据追踪");
+  assert.equal(call.context.priority, "normal");
+
+  const replay = await service.schedule("user-one", agenda.id, { date: "2026-09-06" });
+  assert.equal(replay.episode.id, first.episode.id);
+  assert.deepEqual(replay.episode.payload.selection, selection);
+  assert.equal(planner.calls.length, 1, "one decision per episode");
+  assert.equal(jobs.items.filter((job) => job.kind === "episode").length, 1);
+});
+
+test("a decision that cannot be had never holds the research back: the date rotation runs and says why", async () => {
+  const failures = [
+    [Object.assign(new Error("402"), { code: "usage_budget_exceeded" }), "usage_budget_exceeded"],
+    [Object.assign(new Error("down"), { code: "autopilot_planner_circuit_open" }), "autopilot_planner_circuit_open"],
+    [Object.assign(new Error("Provider said: key sk-abc rejected"), { code: "Bad Code! sk-abc" }), "autopilot_planner_failed"],
+    [new Error("no code at all"), "autopilot_planner_failed"],
+  ];
+  for (const [error, expected] of failures) {
+    const planner = plannerDouble(() => { throw error; });
+    const { service, jobs } = fixture({ planner });
+    const created = await service.create("user-one", agendaInput);
+    const agenda = await service.start("user-one", created.id, { expectedRevision: created.revision });
+    const { episode } = await service.schedule("user-one", agenda.id, { date: "2026-09-06" });
+    assert.equal(episode.payload.taskType, rotationTaskType(agendaInput.taskTypes, "2026-09-06"));
+    assert.equal(episode.payload.selection.source, "date-rotation");
+    assert.equal(episode.payload.selection.fallbackReason, expected);
+    assert.equal(episode.payload.selection.reason, undefined);
+    assert.doesNotMatch(JSON.stringify(episode.payload.selection), /sk-abc|Provider said/, "a provider's words never reach the record");
+    assert.equal(episode.payload.status, "queued");
+    assert.equal(jobs.items.length, 1);
+  }
+  // No planner at all (the module off, or no provider): the same rotation, the same account of it.
+  const { service } = fixture();
+  const created = await service.create("user-one", agendaInput);
+  const agenda = await service.start("user-one", created.id, { expectedRevision: created.revision });
+  const { episode } = await service.schedule("user-one", agenda.id, { date: "2026-09-06" });
+  assert.equal(episode.payload.selection.source, "date-rotation");
+  assert.equal(episode.payload.selection.fallbackReason, "autopilot_planner_unavailable");
+});
+
+test("the decision is offered only the types that may run, and sees an episode that did not run as exactly that", async () => {
+  const planner = plannerDouble((input) => choose(input.eligible[0]));
+  const { service } = fixture({ planner });
+  const created = await service.create("user-one", agendaInput);
+  let agenda = await service.start("user-one", created.id, { expectedRevision: created.revision });
+  const first = await service.schedule("user-one", agenda.id, { date: "2026-09-06" });
+  await service.markEpisodeFailed("user-one", first.episode.id, { code: "runtime_unavailable" });
+  agenda = await service.get("user-one", agenda.id);
+  await service.recordOutcome("user-one", agenda.id, { expectedRevision: agenda.revision, episodeId: first.episode.id, status: "failed", gatedClaims: 0 });
+  await service.schedule("user-one", agenda.id, { date: "2026-09-07" });
+  const { context, eligible } = planner.calls.at(-1);
+  assert.deepEqual(eligible, agendaInput.taskTypes, "one failure pauses nothing");
+  assert.equal(context.episodes[0].outcome, "did_not_run", "a failure to run is not a finding");
+  assert.equal(context.episodes[0].errorCode, "runtime_unavailable");
+  assert.deepEqual(context.episodes[0].claims, []);
+  // Its second failure pauses that type, and the next decision is not offered it.
+  const second = await service.schedule("user-one", agenda.id, { date: "2026-09-08" });
+  agenda = await service.get("user-one", agenda.id);
+  await service.recordOutcome("user-one", agenda.id, { expectedRevision: agenda.revision, episodeId: second.episode.id, status: "failed", gatedClaims: 0 });
+  assert.equal(second.episode.payload.taskType, first.episode.payload.taskType);
+  await service.schedule("user-one", agenda.id, { date: "2026-09-09" });
+  assert.deepEqual(planner.calls.at(-1).eligible, [otherType(first.episode.payload.taskType)]);
+  assert.equal(planner.calls.at(-1).context.taskTypes.find((item) => item.id === first.episode.payload.taskType).state, "paused_after_repeated_failures");
+});
+
+test("a stop pauses the agenda with the model's reason and tells the researcher, only after something completed since the start, and a start resumes it", async () => {
+  let at = new Date("2026-09-06T01:00:00Z");
+  const planner = plannerDouble((input, n) => n === 1 ? choose(input.eligible[0])
+    : { action: "stop", stopKind: "answered", reason: "问题已经回答，继续运行不会增加新的结论", model: "deepseek-flash" });
+  const { service, jobs, notifications } = fixture({ planner, now: () => at });
+  const created = await service.create("user-one", agendaInput);
+  let agenda = await service.start("user-one", created.id, { expectedRevision: created.revision });
+  const first = await service.schedule("user-one", agenda.id, { date: "2026-09-06" });
+  assert.equal(planner.calls[0].stopAllowed, false);
+  at = new Date("2026-09-06T03:00:00Z");
+  agenda = await service.get("user-one", agenda.id);
+  await service.recordOutcome("user-one", agenda.id, { expectedRevision: agenda.revision, episodeId: first.episode.id, status: "succeeded", gatedClaims: 2 });
+
+  at = new Date("2026-09-07T01:00:00Z");
+  const queued = jobs.items.length;
+  const stopped = await service.schedule("user-one", agenda.id, { date: "2026-09-07" });
+  assert.equal(planner.calls[1].stopAllowed, true, "one episode has completed since the start");
+  assert.equal(stopped.episode, null);
+  assert.equal(stopped.job, null);
+  assert.equal(stopped.stopped.kind, "answered");
+  assert.equal(jobs.items.length, queued, "a stop spends nothing");
+  agenda = await service.get("user-one", agenda.id);
+  assert.equal(agenda.payload.status, "paused");
+  assert.equal(agenda.payload.enabled, false);
+  assert.equal(agenda.payload.pauseReason, "问题已经回答，继续运行不会增加新的结论");
+  assert.equal(agenda.payload.plannerStop.kind, "answered");
+  assert.equal(agenda.payload.plannerStop.at, at.toISOString());
+  assert.deepEqual(agenda.payload.outcomes.map((outcome) => outcome.status), ["succeeded"], "the history is kept as it was");
+  const notice = notifications.created.at(-1).input;
+  assert.equal(notice.noticeType, "notify");
+  assert.match(notice.title, /心衰证据追踪/);
+  assert.equal(notice.body, "问题已经回答，继续运行不会增加新的结论");
+  assert.equal(notice.idempotencyKey, `autopilot-stop:${agenda.id}:${planner.calls[1].episodeId}`);
+  await assert.rejects(() => service.schedule("user-one", agenda.id, { date: "2026-09-08" }), (error) => error.code === "autopilot_paused");
+
+  // The researcher's own start resumes it, clears the stop, and the first episode after it cannot be a stop.
+  at = new Date("2026-09-08T01:00:00Z");
+  agenda = await service.start("user-one", agenda.id, { expectedRevision: agenda.revision });
+  assert.equal(agenda.payload.plannerStop, null);
+  assert.equal(agenda.payload.status, "active");
+  await service.schedule("user-one", agenda.id, { date: "2026-09-08" });
+  assert.equal(planner.calls[2].stopAllowed, false, "a start authorizes work before it can be answered with a stop");
+});
+
+test("a stop that arrives after the researcher already paused the agenda writes nothing", async () => {
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const planner = plannerDouble(async (input, n) => n === 1 ? choose(input.eligible[0])
+    : (await gate, { action: "stop", stopKind: "exhausted", reason: "已无可查证据", model: "deepseek-flash" }));
+  const { service, notifications } = fixture({ planner });
+  const created = await service.create("user-one", agendaInput);
+  let agenda = await service.start("user-one", created.id, { expectedRevision: created.revision });
+  const first = await service.schedule("user-one", agenda.id, { date: "2026-09-06" });
+  agenda = await service.get("user-one", agenda.id);
+  await service.recordOutcome("user-one", agenda.id, { expectedRevision: agenda.revision, episodeId: first.episode.id, status: "succeeded", gatedClaims: 1 });
+  const pending = service.schedule("user-one", agenda.id, { date: "2026-09-07" });
+  await new Promise((resolve) => setImmediate(resolve));
+  agenda = await service.get("user-one", agenda.id);
+  await service.stop("user-one", agenda.id, { expectedRevision: agenda.revision });
+  release();
+  // The researcher's own stop won while the decision was being made: either answer is a refusal to schedule, never a second state.
+  await pending.then((result) => assert.equal(result.stopped ?? null, null), (error) => assert.ok(["autopilot_stopped", "autopilot_paused"].includes(error.code)));
+  const final = await service.get("user-one", agenda.id);
+  assert.equal(final.payload.status, "stopped");
+  assert.equal(final.payload.plannerStop ?? null, null);
+  assert.equal(notifications.created.length, 0);
+});
+
+test("a researcher's own request for work is never answered with a stop and is never halved; a scheduled episode of a direction that found nothing is", async () => {
+  const planner = plannerDouble((input) => choose(input.eligible[0]));
+  const { service } = fixture({ planner });
+  const created = await service.create("user-one", agendaInput);
+  let agenda = await service.start("user-one", created.id, { expectedRevision: created.revision });
+  const full = splitEpisodeBudget(Math.min(agendaInput.maxEpisodeCny, agendaInput.dailyBudgetCny)).episodeCny;
+  const half = splitEpisodeBudget(Math.min(agendaInput.maxEpisodeCny, agendaInput.dailyBudgetCny) / 2).episodeCny;
+  assert.ok(half < full);
+  assert.equal((await service.schedule("user-one", agenda.id, { date: "2026-09-06" })).episode.payload.budgetCny, full);
+
+  // Three episodes that ran and found nothing: the domain's halve.
+  for (let n = 1; n <= STOPPING_RULES.episodesWithoutGatedClaimBeforeHalving; n += 1) {
+    agenda = await service.get("user-one", agenda.id);
+    await service.recordOutcome("user-one", agenda.id, { expectedRevision: agenda.revision, episodeId: `episode-empty-${n}`, status: "succeeded", gatedClaims: 0 });
+  }
+  const scheduled = await service.schedule("user-one", agenda.id, { date: "2026-09-07" });
+  assert.equal(scheduled.episode.payload.budgetCny, half);
+  assert.equal(scheduled.episode.payload.selection.priority, "reduced");
+  assert.equal(planner.calls.at(-1).context.priority, "reduced");
+  assert.equal(planner.calls.at(-1).stopAllowed, true, "a scheduled occurrence after completed work may be stopped");
+
+  const manual = await service.runNow("user-one", agenda.id, { requestId: "ask-now" });
+  assert.equal(manual.episode.payload.budgetCny, full, "asking for work now spends what a run may");
+  assert.equal(manual.episode.payload.selection.priority, "normal");
+  assert.equal(planner.calls.at(-1).stopAllowed, false);
+  const followUp = await service.followUp("user-one", agenda.id, { requestId: "ask-more", note: "Check the denominator of the main outcome" });
+  assert.equal(followUp.episode.payload.budgetCny, full);
+  assert.equal(planner.calls.at(-1).stopAllowed, false);
+  assert.equal(planner.calls.at(-1).context.request.note, "Check the denominator of the main outcome");
+  assert.equal(planner.calls.at(-1).context.request.trigger, "follow-up");
+});
+
+test("with the real planner a stop that is not allowed is dropped and the research runs on the rotation", async () => {
+  const calls = [];
+  const planner = new AutopilotPlanner({ deepseekProviderEnabled: true, deepseekApiKey: "key", deepseekModel: "deepseek-flash" }, {
+    callModel: async (_deps, call) => {
+      calls.push(call);
+      return { choices: [{ finish_reason: "stop", message: { content: JSON.stringify({ action: "stop", stopKind: "answered", reason: "问题已经回答" }) } }] };
+    },
+  });
+  const { service, jobs } = fixture({ planner });
+  const created = await service.create("user-one", agendaInput);
+  const agenda = await service.start("user-one", created.id, { expectedRevision: created.revision });
+  const { episode } = await service.schedule("user-one", agenda.id, { date: "2026-09-06" });
+  assert.equal(episode.payload.selection.source, "date-rotation");
+  assert.equal(episode.payload.selection.fallbackReason, "autopilot_planner_invalid");
+  assert.equal(jobs.items.length, 1, "no completed work, so nothing could be stopped");
+  assert.equal(calls[0].purpose, "autopilot");
+  assert.equal(calls[0].runId, episode.id);
+  assert.equal((await service.get("user-one", agenda.id)).payload.status, "active");
+});
+
+test("with the real planner the model's pick of an offered type runs, and a pick of a type that is not offered is dropped", async () => {
+  let reply = { action: "run", taskType: "evidence-update", focus: "补充最新的随机对照试验", reason: "上次只检索了综述" };
+  const planner = new AutopilotPlanner({ deepseekProviderEnabled: true, deepseekApiKey: "key", deepseekModel: "deepseek-flash" }, {
+    callModel: async () => ({ choices: [{ finish_reason: "stop", message: { content: JSON.stringify(reply) } }] }),
+  });
+  const { service } = fixture({ planner });
+  const created = await service.create("user-one", { ...agendaInput, taskTypes: ["literature-sentinel", "evidence-update"] });
+  const agenda = await service.start("user-one", created.id, { expectedRevision: created.revision });
+  const chosen = await service.schedule("user-one", agenda.id, { date: "2026-09-06" });
+  assert.equal(chosen.episode.payload.taskType, "evidence-update");
+  assert.equal(chosen.episode.payload.selection.source, "model");
+  reply = { ...reply, taskType: "signal-monitoring" };
+  const refused = await service.schedule("user-one", agenda.id, { date: "2026-09-07" });
+  assert.equal(refused.episode.payload.selection.source, "date-rotation");
+  assert.equal(refused.episode.payload.selection.fallbackReason, "autopilot_planner_invalid");
+  assert.ok(agendaInput.taskTypes.includes(refused.episode.payload.taskType));
 });

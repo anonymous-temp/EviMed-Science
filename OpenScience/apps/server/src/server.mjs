@@ -203,6 +203,7 @@ import { runUsageKeys } from "./runUsage.mjs";
 import { inspectAutopilotDispatch, reclaimUnsentAutopilotRuntime } from "./autopilotDispatchRecovery.mjs";
 import { createAutopilotRoutes } from "./autopilotRoutes.mjs";
 import { AutopilotWorker } from "./autopilotWorker.mjs";
+import { AutopilotPlanner } from "./autopilotNextAction.mjs";
 // 「前沿动态」, the frontier feed (plan 2026-09-21 §7): the plugin client, the
 // ingest, package E's editor and pipeline, the reader's service and routes, and
 // the worker that turns them.
@@ -1618,6 +1619,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const autopilotService = productDocuments && productJobs ? new AutopilotService({
     documents: productDocuments, jobs: productJobs, usage: usageLedger, notifications: notificationService,
     capsules: capsuleService,
+    // The model decision before each episode: metered under purpose `autopilot`,
+    // and absent it the date rotation chooses (autopilotNextAction.mjs).
+    planner: new AutopilotPlanner(config, { usageLedger }),
     authorizeContinuation: async (userId, projectId, binding) => {
       if (!resultImpacts) throw new HttpError(409, "result_impact_source_unavailable", "Research continuation is unavailable.");
       await resultImpacts.assertContinuation(userId, projectId, binding);
