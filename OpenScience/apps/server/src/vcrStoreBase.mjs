@@ -202,6 +202,16 @@ async function collectArtifacts(client, studyIds, userId = null) {
 }
 
 /**
+ * An AI draft of a knowledge pack goes with the study it was written for; a draft
+ * somebody reviewed and promoted is the account's own pack and stays (its
+ * `study_id` is only where it came from, and goes null with the study).
+ * @param {any} client @param {readonly string[]} studyIds
+ */
+async function removeDraftPacksOf(client, studyIds) {
+  await client.query(`DELETE FROM ${VCR_SCHEMA}.knowledge_packs WHERE study_id = ANY($1::text[]) AND status = 'ai-draft'`, [[...studyIds]]);
+}
+
+/**
  * Remove every row of a study, in the caller's transaction. Audit rows stay:
  * they outlive the object they describe, like the GEO ledger does. Answers
  * what the study left outside the database (`artifacts`); the caller removes
@@ -214,6 +224,7 @@ export async function deleteVcrStudyRows(client, studyId) {
   if (!exists.rowCount) return { deleted: false, artifacts: noArtifacts() };
   const artifacts = await collectArtifacts(client, [studyId]);
   await client.query(`UPDATE ${VCR_SCHEMA}.audit SET study_id = study_id WHERE study_id = $1`, [studyId]);
+  await removeDraftPacksOf(client, [studyId]);
   await client.query(`DELETE FROM ${VCR_SCHEMA}.studies WHERE id = $1`, [studyId]);
   return { deleted: true, artifacts };
 }
@@ -234,6 +245,7 @@ export async function deleteVcrProjectRows(client, userId, projectId) {
   const studyId = found.rows[0]?.id ?? null;
   if (!studyId) return { deleted: false, studyId: null, artifacts: noArtifacts() };
   const artifacts = await collectArtifacts(client, [studyId]);
+  await removeDraftPacksOf(client, [studyId]);
   await client.query(`DELETE FROM ${VCR_SCHEMA}.studies WHERE id = $1`, [studyId]);
   return { deleted: true, studyId, artifacts };
 }
@@ -259,6 +271,9 @@ export async function deleteVcrUserRows(client, userId) {
   await client.query(`DELETE FROM ${VCR_SCHEMA}.sources WHERE user_id = $1`, [userId]);
   await client.query(`DELETE FROM ${VCR_SCHEMA}.precedents WHERE user_id = $1`, [userId]);
   await client.query(`DELETE FROM ${VCR_SCHEMA}.models WHERE user_id = $1`, [userId]);
+  // The account's library of definitions (its versions and uses with it) and its packs that are rows.
+  await client.query(`DELETE FROM ${VCR_SCHEMA}.definitions WHERE user_id = $1`, [userId]);
+  await client.query(`DELETE FROM ${VCR_SCHEMA}.knowledge_packs WHERE user_id = $1`, [userId]);
   return { deleted: true, artifacts };
 }
 

@@ -334,6 +334,7 @@ export function presentPopulationTab(bundle) {
       : null,
     stale: staleNote(marks),
     partial: partialOf(bundle, ["population"]),
+    knowledge: bundle.knowledge ?? null,
   };
 }
 

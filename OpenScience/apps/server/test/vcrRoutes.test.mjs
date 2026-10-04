@@ -411,6 +411,11 @@ const REQUESTS = {
   "POST /studies/:id/referrals/:referral/contact": ["POST", "/api/vcr/studies/std_1/referrals/ref_1/contact", {}],
   "POST /studies/:id/assessments/:assessment/judgments/:criterion/override": ["POST", "/api/vcr/studies/std_1/assessments/asm_1/judgments/crt_1/override", { state: "not_satisfied" }],
   "POST /studies/:id/assessments/:assessment/review": ["POST", "/api/vcr/studies/std_1/assessments/asm_1/review", {}],
+  "POST /studies/:id/pack": ["POST", "/api/vcr/studies/std_1/pack", { use: "nsclc" }],
+  "POST /studies/:id/pack/promote": ["POST", "/api/vcr/studies/std_1/pack/promote", {}],
+  "POST /studies/:id/definitions": ["POST", "/api/vcr/studies/std_1/definitions", { populationId: "pop_1", name: "成人 ECOG 0-1", text: "年龄不小于 18 岁、ECOG 0 或 1。" }],
+  "POST /studies/:id/definitions/:definition/use": ["POST", "/api/vcr/studies/std_1/definitions/dfn_1/use", { version: 1 }],
+  "POST /studies/:id/definitions/:definition/compare": ["POST", "/api/vcr/studies/std_1/definitions/dfn_1/compare", { versionA: 1, versionB: 2 }],
   "POST /models (with a study)": ["POST", "/api/vcr/models", { studyId: "std_1", name: "m" }],
   "POST /studies/:id/data/sources": ["POST", "/api/vcr/studies/std_1/data/sources", { name: "合作方基线" }],
   "POST /studies/:id/data/sources/:source/files": ["POST", "/api/vcr/studies/std_1/data/sources/src_1/files?name=cohort.csv", undefined],
@@ -432,6 +437,13 @@ function composedHooks() {
     orchestrator: { runStep: ok, recomputeAfterChange: ok },
     jobs: { enqueue: ok, get: async () => ({ id: "job_1" }), listForStudy: async () => [], budgetOf: async () => ({}), cancel: ok, confirmBudget: ok },
     exporter: { requestExport: ok },
+    // The disease packs and the definition library: each answers the shape the real one does.
+    knowledge: {
+      bindPack: ok, promotePack: ok, saveFromStudy: async () => ({ definitionId: "dfn_1", version: 1 }),
+      useInStudy: async () => ({ definitionId: "dfn_1", version: 1, populationId: "pop_1", renamed: [], unmatched: [] }),
+      compareVersions: ok, listPacks: async () => ({ packs: [] }), getPack: async () => ({ id: "nsclc" }),
+      listLibrary: async () => ({ definitions: [] }), getLibraryDefinition: async () => ({ id: "dfn_1" }),
+    },
     members: { add: ok, remove: ok, list: async () => [] },
     matching: { contactReferral: ok, transitionReferral: ok, listReferrals: async () => ({ referrals: [] }) },
     // The data plane behind the intake routes, answering the shapes the real one does (what a route may send back is the route's to filter).
@@ -674,7 +686,8 @@ test("every code these routes emit is one this module declares", async () => {
   // are declared here because this is the list the page reads and the domain's
   // registry takes verbatim. Naming them keeps that true: a declared code that
   // nobody raises is dropped, not left as decoration.
-  const fromElsewhere = ["vcr_study_not_found", "vcr_study_paused", "vcr_tab_not_found", "vcr_referral_not_found", "vcr_model_exists", "vcr_export_not_found"];
+  const fromElsewhere = ["vcr_study_not_found", "vcr_study_paused", "vcr_tab_not_found", "vcr_referral_not_found", "vcr_model_exists", "vcr_export_not_found",
+    "vcr_pack_not_found", "vcr_pack_invalid", "vcr_definition_not_found", "vcr_definition_invalid"];
   for (const code of fromElsewhere) assert.ok(VCR_ROUTE_ERROR_CODES.includes(code), code);
   const neverEmitted = VCR_ROUTE_ERROR_CODES.filter((code) => !literals.has(code) && !fromElsewhere.includes(code));
   assert.deepEqual(neverEmitted, [], `declared but never emitted: ${neverEmitted.join(", ")}`);

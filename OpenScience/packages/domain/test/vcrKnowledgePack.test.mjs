@@ -12,7 +12,10 @@ import {
   vcrPackMatchesName,
   vcrPackRestrictedSource,
   vcrPackSummary,
+  vcrRemapRowRuleColumns,
   vcrRequirementVariables,
+  vcrRowRuleColumns,
+  vcrSuggestColumnRemap,
 } from "@evimed/domain";
 
 /** A small pack that meets the `complete` level; each test breaks one thing. */
@@ -212,4 +215,35 @@ test("a pack answers a search word by its names; the concept columns come from a
   assert.deepEqual(mapped.missing, []);
   assert.deepEqual(mapped.unknown, ["smoking_history"], "a concept the field map names and the pack does not know is listed, not dropped");
   assert.deepEqual(vcrPackConceptColumns(pack, []).missing, ["age", "demo_disease"]);
+});
+
+test("a definition's rules are renamed to another dataset's columns only where the pack's mappings make it unambiguous", () => {
+  const rule = { op: "all", operands: [
+    { op: "compare", column: "AGE", comparator: "gte", value: 18 },
+    { op: "not", operand: { op: "in", column: "ECOG_PS", values: [3, 4] } },
+    { op: "present", column: "ECOG_PS" },
+  ] };
+  assert.deepEqual(vcrRowRuleColumns(rule), ["AGE", "ECOG_PS"]);
+  const pack = {
+    mappings: [
+      { concept: "age", fieldNames: ["AGE", "age_years"] },
+      { concept: "ecog", fieldNames: ["ECOG", "ECOG_PS", "ecogps"] },
+      { concept: "sex", fieldNames: ["SEX", "gender"] },
+    ],
+  };
+  const same = vcrSuggestColumnRemap(pack, ["AGE", "ECOG_PS"], ["AGE", "ECOG_PS"]);
+  assert.deepEqual(same, { suggested: [], unmatched: [] }, "columns the target has need nothing");
+  const mapped = vcrSuggestColumnRemap(pack, ["AGE", "ECOG_PS"], ["age_years", "ecogps", "SEX"]);
+  assert.deepEqual(mapped.suggested, [
+    { from: "AGE", to: "age_years", concept: "age" },
+    { from: "ECOG_PS", to: "ecogps", concept: "ecog" },
+  ]);
+  const renamed = vcrRemapRowRuleColumns(rule, Object.fromEntries(mapped.suggested.map((entry) => [entry.from, entry.to])));
+  assert.deepEqual(vcrRowRuleColumns(renamed), ["age_years", "ecogps"]);
+  assert.deepEqual(vcrRowRuleColumns(rule), ["AGE", "ECOG_PS"], "the input is not changed");
+  // two candidates, or a column no mapping knows, is left for a person
+  const ambiguous = vcrSuggestColumnRemap({ mappings: [{ concept: "age", fieldNames: ["AGE", "age_years", "AGEYR"] }] }, ["AGE"], ["age_years", "AGEYR"]);
+  assert.deepEqual(ambiguous, { suggested: [], unmatched: ["AGE"] });
+  assert.deepEqual(vcrSuggestColumnRemap(pack, ["SMOKING"], ["age"]), { suggested: [], unmatched: ["SMOKING"] });
+  assert.deepEqual(vcrSuggestColumnRemap(null, ["AGE"], ["age"]), { suggested: [], unmatched: ["AGE"] }, "a study with no pack suggests nothing");
 });

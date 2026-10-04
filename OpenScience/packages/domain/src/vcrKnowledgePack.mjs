@@ -644,3 +644,71 @@ export function vcrPackConceptColumns(pack, fieldMap) {
   const unknown = [...new Set(entries.map((entry) => String(entry.concept ?? '').trim()).filter((concept) => concept && !known.has(concept)))]
   return { realised, missing, unknown }
 }
+
+// ---------------------------------------------------------------------------
+// Reusing a population definition on another dataset
+// ---------------------------------------------------------------------------
+
+/**
+ * The column names a row rule reads, in order of first use. A rule is data: this
+ * walks it, nothing is evaluated.
+ * @param {unknown} rule @param {Set<string>} [found]
+ * @returns {string[]}
+ */
+export function vcrRowRuleColumns(rule, found = new Set()) {
+  if (!isObject(rule)) return [...found]
+  if (typeof rule.column === 'string') found.add(rule.column)
+  if (Array.isArray(rule.operands)) for (const child of rule.operands) vcrRowRuleColumns(child, found)
+  if (rule.operand !== undefined) vcrRowRuleColumns(rule.operand, found)
+  return [...found]
+}
+
+/**
+ * A copy of a row rule with columns renamed by `columnMap` (`{ from: to }`); a
+ * column the map does not name stays as it is. Pure: the input is not changed.
+ * @param {any} rule @param {Readonly<Record<string, string>>} columnMap
+ * @returns {any}
+ */
+export function vcrRemapRowRuleColumns(rule, columnMap) {
+  if (!isObject(rule)) return rule
+  /** @type {Record<string, any>} */
+  const copy = { ...rule }
+  if (typeof rule.column === 'string' && Object.hasOwn(columnMap, rule.column)) copy.column = columnMap[rule.column]
+  if (Array.isArray(rule.operands)) copy.operands = rule.operands.map((/** @type {unknown} */ child) => vcrRemapRowRuleColumns(child, columnMap))
+  if (rule.operand !== undefined) copy.operand = vcrRemapRowRuleColumns(rule.operand, columnMap)
+  return copy
+}
+
+/**
+ * For the columns a definition's rules read and a target dataset lacks, the one
+ * column of the target that realises the same concept of the pack's mappings —
+ * only when it is unambiguous. A column realises a concept when its name (or the
+ * concept's own name) is one of the mapping's `fieldNames`, whole-string and
+ * case-insensitive. Several candidates, or none, leave the column in `unmatched`
+ * for a person to name: a guess here would silently change who is in a cohort.
+ *
+ * @param {Record<string, any> | null} pack the study's pack, when it has one
+ * @param {readonly string[]} columns the columns the rules read
+ * @param {readonly string[]} header the columns the target dataset has
+ * @returns {{ suggested: Array<{ from: string, to: string, concept: string }>, unmatched: string[] }}
+ */
+export function vcrSuggestColumnRemap(pack, columns, header) {
+  const norm = (/** @type {unknown} */ value) => String(value ?? '').trim().toLowerCase()
+  const have = new Set(header)
+  const mappings = Array.isArray(pack?.mappings) ? pack.mappings : []
+  /** @type {Array<{ from: string, to: string, concept: string }>} */
+  const suggested = []
+  /** @type {string[]} */
+  const unmatched = []
+  for (const column of columns) {
+    if (have.has(column)) continue
+    const mapping = mappings.find((/** @type {Record<string, any>} */ entry) => norm(entry.concept) === norm(column)
+      || (entry.fieldNames ?? []).some((/** @type {unknown} */ name) => norm(name) === norm(column)))
+    const candidates = mapping
+      ? header.filter((name) => norm(name) === norm(mapping.concept) || (mapping.fieldNames ?? []).some((/** @type {unknown} */ alias) => norm(alias) === norm(name)))
+      : []
+    if (mapping && candidates.length === 1) suggested.push({ from: column, to: candidates[0], concept: String(mapping.concept) })
+    else unmatched.push(column)
+  }
+  return { suggested, unmatched }
+}

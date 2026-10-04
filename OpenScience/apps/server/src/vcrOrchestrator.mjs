@@ -67,7 +67,7 @@ import {
 import { HttpError, randomId } from "./security.mjs";
 import { readVcrReviewExportProof } from "./vcrReview.mjs";
 import { studyReviewDigest } from "./studyReview.mjs";
-import { VCR_SCHEMA } from "./vcrPersistence.mjs";
+import { VCR_COMPARISON_RESULT_KIND, VCR_SCHEMA } from "./vcrPersistence.mjs";
 import { vcrSealRequired } from "./vcrSeal.mjs";
 import { vcrRouteOptions } from "./vcrService.mjs";
 import { vcrObjectNode } from "./vcrStore.mjs";
@@ -2111,6 +2111,9 @@ export class VcrOrchestrator {
    */
   async onJobFinished({ job, result = null }) {
     if (!job) return false;
+    // A comparison of two library versions is a result of its own, kept aside from the study's (`VCR_COMPARISON_RESULT_KIND`):
+    // no object points at it, no step follows it and no review is queued for it.
+    if (result?.kind === VCR_COMPARISON_RESULT_KIND) return true;
     const mark = await this.store.one(`SELECT * FROM ${VCR_SCHEMA}.schedule_marks
       WHERE study_id = $1 AND kind = 'job' AND job_id = $2`, [job.studyId, job.id]);
     const study = await this.store.studyById(String(job.studyId));

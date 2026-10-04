@@ -1256,7 +1256,7 @@ export {
   validateRowRule,
 } from './src/vcrRules.mjs'
 
-// vcrKnowledgePack — 22 exports: 「虚拟临研」's disease knowledge pack: the contract a pack is written to
+// vcrKnowledgePack — 25 exports: 「虚拟临研」's disease knowledge pack: the contract a pack is written to
 // (sections, closed licence and code-system tables, restricted sources), its validator at two levels, and
 // the pure readers a page and a tool use (entry sources, summary, name search, concept-to-column mapping)
 export {
@@ -1281,8 +1281,16 @@ export {
   vcrPackMatchesName,
   vcrPackRestrictedSource,
   vcrPackSummary,
+  vcrRemapRowRuleColumns,
   vcrRequirementVariables,
+  vcrRowRuleColumns,
+  vcrSuggestColumnRemap,
 } from './src/vcrKnowledgePack.mjs'
+
+// vcrKnowledgePackData — 1 export: the curated packs that ship with the platform, validated on import
+export {
+  VCR_SHIPPED_PACKS,
+} from './src/vcrKnowledgePackData.mjs'
 
 // vcrEngineJob — 28 exports: the engine protocol: a frozen scenario, its canonical bytes, the replicate
 // arithmetic behind every Monte-Carlo standard error, the input kinds a caller

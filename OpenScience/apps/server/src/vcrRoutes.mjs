@@ -104,6 +104,10 @@ export const VCR_ROUTE_ERROR_CODES = Object.freeze([
   "vcr_unavailable",
   "vcr_data_plane_not_configured",
   "vcr_data_file_name_invalid",
+  "vcr_pack_not_found",
+  "vcr_pack_invalid",
+  "vcr_definition_not_found",
+  "vcr_definition_invalid",
 ]);
 
 /**
@@ -144,6 +148,11 @@ export const VCR_ROUTE_ABILITIES = Object.freeze({
   "POST /studies/:id/assessments/:assessment/judgments/:criterion/override": ["write_referrals", "review_clinical", "review_any"],
   "POST /studies/:id/assessments/:assessment/review": ["review_clinical", "review_any"],
   "POST /models (with a study)": ["write"],
+  "POST /studies/:id/pack": ["write"],
+  "POST /studies/:id/pack/promote": ["manage_study"],
+  "POST /studies/:id/definitions": ["write"],
+  "POST /studies/:id/definitions/:definition/use": ["write"],
+  "POST /studies/:id/definitions/:definition/compare": ["run"],
   "POST /studies/:id/data/sources": ["manage_data"],
   "POST /studies/:id/data/sources/:source/files": ["manage_data"],
   "DELETE /studies/:id/data/files/:file": ["manage_data"],
@@ -176,10 +185,12 @@ export function vcrRoutePattern(pathname) {
   if (!parts.length) return "/api/vcr";
   if (parts[0] === "models") return "/api/vcr/models";
   if (parts[0] === "precedents") return "/api/vcr/precedents";
+  if (parts[0] === "packs") return parts.length === 1 ? "/api/vcr/packs" : "/api/vcr/packs/:id";
+  if (parts[0] === "definitions") return parts.length === 1 ? "/api/vcr/definitions" : "/api/vcr/definitions/:id";
   if (parts[0] !== "studies") return "/api/vcr/:route";
   if (parts.length === 1) return "/api/vcr/studies";
   if (parts.length === 2) return "/api/vcr/studies/:id";
-  const known = [...VCR_TABS, "run", "jobs", "budget", "assumptions", "reviews", "curve-extractions", "correction-cases", "decisions", "export", "members", "referrals"];
+  const known = [...VCR_TABS, "run", "jobs", "budget", "assumptions", "reviews", "curve-extractions", "correction-cases", "decisions", "export", "members", "referrals", "pack", "definitions"];
   const section = known.includes(parts[2]) ? parts[2] : ":route";
   if (parts[2] === "data" && parts.length > 3) {
     // The intake routes: `data/<kind>[/:item[/<action>[/confirm]]]`, every id folded.
@@ -191,7 +202,7 @@ export function vcrRoutePattern(pathname) {
   }
   if (parts.length === 3) return `/api/vcr/studies/:id/${section}`;
   if (parts.length === 4) return `/api/vcr/studies/:id/${section}/:item`;
-  return `/api/vcr/studies/:id/${section}/:item/${["cancel", "contact", "transition"].includes(parts[4]) ? parts[4] : ":action"}`;
+  return `/api/vcr/studies/:id/${section}/:item/${["cancel", "contact", "transition", "use", "compare"].includes(parts[4]) ? parts[4] : ":action"}`;
 }
 
 /** @param {any} req @param {number} limit @param {readonly string[]} allowed */
@@ -290,6 +301,8 @@ export function createVcrRoutes(dependencies) {
       // The evidence side: what a card that cites the literature is checked against.
       get evidence() { return dependencies.evidence ?? service.packages?.evidence ?? null; },
       get evidenceStore() { return dependencies.evidenceStore ?? service.packages?.evidenceStore ?? null; },
+      // The disease packs and the definition library.
+      get knowledge() { return dependencies.knowledge ?? service.packages?.knowledge ?? null; },
     };
     /** The module's own store: roles, assumptions, reviews, decisions, exports, members. */
     const data = () => {
@@ -421,6 +434,15 @@ export function createVcrRoutes(dependencies) {
       }
       throw new HttpError(404, "not_found", "虚拟临研 route not found.");
     }
+    // The packs the account can use, and its library of population definitions: the account's, so no study is named.
+    if (parts[0] === "packs" || parts[0] === "definitions") {
+      if (method !== "GET" || parts.length > 2) throw new HttpError(404, "not_found", "虚拟临研 route not found.");
+      const knowledge = hooks.knowledge;
+      if (!knowledge) throw UNAVAILABLE();
+      const query = String(url.searchParams.get("q") ?? "").slice(0, 200);
+      if (parts[0] === "packs") return reply(parts.length === 1 ? await knowledge.listPacks(String(user.id), query) : await knowledge.getPack(String(user.id), parts[1]));
+      return reply(parts.length === 1 ? await knowledge.listLibrary(String(user.id), query) : await knowledge.getLibraryDefinition(String(user.id), parts[1]));
+    }
     if (parts[0] !== "studies") throw new HttpError(404, "not_found", "虚拟临研 route not found.");
 
     // --- the study list --------------------------------------------------------
@@ -514,6 +536,68 @@ export function createVcrRoutes(dependencies) {
     if (parts.length === 3 && method === "GET" && VCR_TABS.includes(section)) {
       await authorize(id, "read");
       return reply(await service.tab(user, id, section, url.searchParams));
+    }
+
+    // --- the study's pack and the definitions of the account's library ------------------------
+    if (section === "pack") {
+      if (parts.length === 3 && method === "POST") {
+        const body = await bodyOf(req, maxJsonBytes, ["use"]);
+        if (typeof body.use !== "string" || !ID.test(body.use)) throw new HttpError(400, "vcr_payload_invalid", "use is the id of a pack.");
+        const { study } = await authorize(id, "write");
+        if (!hooks.knowledge) throw UNAVAILABLE();
+        return reply(await audited("vcr.pack.bind", () => ({ code: id, detail: String(body.use) }), { code: id, detail: String(body.use) },
+          () => hooks.knowledge.bindPack(study, body.use, String(user.id))));
+      }
+      if (parts.length === 4 && parts[3] === "promote" && method === "POST") {
+        await bodyOf(req, maxJsonBytes, []);
+        const study = await service.requireStudy(user, id);
+        // The study's lead, or an operator who can see the study.
+        if (!service.isOperator(user)) await requireAbility(study, "manage_study");
+        else await rolesIn(study);
+        if (!hooks.knowledge) throw UNAVAILABLE();
+        return reply(await audited("vcr.pack.promote", () => ({ code: id, detail: "curated" }), { code: id },
+          () => hooks.knowledge.promotePack(study, String(user.id))));
+      }
+      throw new HttpError(404, "not_found", "虚拟临研 route not found.");
+    }
+    if (section === "definitions") {
+      if (parts.length === 3 && method === "POST") {
+        const body = await bodyOf(req, maxJsonBytes, ["populationId", "name", "text", "definitionId", "packEntries"]);
+        if (typeof body.populationId !== "string" || !ID.test(body.populationId)) throw new HttpError(400, "vcr_payload_invalid", "populationId is the id of one of the study's populations.");
+        if (body.definitionId != null && (typeof body.definitionId !== "string" || !ID.test(body.definitionId))) throw new HttpError(400, "vcr_payload_invalid", "definitionId is the id of a library definition.");
+        if (body.packEntries != null && (!Array.isArray(body.packEntries) || body.packEntries.length > 100)) throw new HttpError(400, "vcr_payload_invalid", "packEntries is a list of { section, id }.");
+        const { study } = await authorize(id, "write");
+        if (!hooks.knowledge) throw UNAVAILABLE();
+        const saved = await audited("vcr.definition.save", (result) => ({ code: String(result.definitionId), detail: `v${result.version}` }), { code: id },
+          () => hooks.knowledge.saveFromStudy(study, body, String(user.id)));
+        return reply(saved, 201);
+      }
+      if (parts.length === 5 && parts[4] === "use" && method === "POST") {
+        const body = await bodyOf(req, maxJsonBytes, ["version", "name", "columnMap", "snapshotId"]);
+        if (body.version != null) wholeNumber(body.version, "version", 10_000);
+        if (body.columnMap != null && (typeof body.columnMap !== "object" || Array.isArray(body.columnMap))) throw new HttpError(400, "vcr_payload_invalid", "columnMap is { column: replacement }.");
+        if (body.snapshotId != null && (typeof body.snapshotId !== "string" || !ID.test(body.snapshotId))) throw new HttpError(400, "vcr_payload_invalid", "snapshotId is the id of a snapshot of this study.");
+        const { study } = await authorize(id, "write");
+        if (!hooks.knowledge) throw UNAVAILABLE();
+        const used = await audited("vcr.definition.use", (result) => ({ code: String(result.definitionId), detail: `v${result.version}` }), { code: parts[3] },
+          () => hooks.knowledge.useInStudy(study, { ...body, definitionId: parts[3] }, String(user.id)));
+        return reply(used, 201);
+      }
+      if (parts.length === 5 && parts[4] === "compare" && method === "POST") {
+        const body = await bodyOf(req, maxJsonBytes, ["versionA", "versionB", "snapshotId", "covariates"]);
+        wholeNumber(body.versionA, "versionA", 10_000);
+        wholeNumber(body.versionB, "versionB", 10_000);
+        if (body.snapshotId != null && (typeof body.snapshotId !== "string" || !ID.test(body.snapshotId))) throw new HttpError(400, "vcr_payload_invalid", "snapshotId is the id of a snapshot of this study.");
+        if (body.covariates != null && (!Array.isArray(body.covariates) || body.covariates.length > 100 || body.covariates.some((/** @type {unknown} */ column) => typeof column !== "string"))) {
+          throw new HttpError(400, "vcr_payload_invalid", "covariates is a list of column names.");
+        }
+        const { study } = await authorize(id, "run");
+        if (!hooks.knowledge) throw UNAVAILABLE();
+        const queued = await audited("vcr.definition.compare", (result) => ({ code: String(result.job?.id ?? ""), detail: parts[3] }), { code: parts[3] },
+          () => hooks.knowledge.compareVersions(study, user, { ...body, definitionId: parts[3] }));
+        return reply(queued, queued.created ? 201 : 200);
+      }
+      throw new HttpError(404, "not_found", "虚拟临研 route not found.");
     }
 
     // --- data intake: source → files → field map → snapshot → tables → grants -------------

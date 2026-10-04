@@ -1105,6 +1105,10 @@ export const VCR_ROUTE_ERROR_CODES = Object.freeze([
   'vcr_unavailable',
   'vcr_action_invalid',
   'vcr_criterion_state_invalid',
+  'vcr_pack_not_found',
+  'vcr_pack_invalid',
+  'vcr_definition_not_found',
+  'vcr_definition_invalid',
 ])
 
 export const VCR_GATEWAY_ERROR_CODES = Object.freeze([
@@ -1501,6 +1505,10 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_model_invalid: '模型卡填得不完整：要有名字、版本和层级。',
   vcr_member_role_invalid: '成员角色只能选研究负责人、临床复核、统计复核、数据管理、招募协调员、中心或只读查看者。',
   vcr_referral_not_found: '找不到这条转诊记录。',
+  vcr_pack_not_found: '找不到这份知识包，或它不属于你的账号；刷新知识包列表后重选。',
+  vcr_pack_invalid: '这份知识包不符合规定的结构，没有保存；按提示的字段修改后再写。',
+  vcr_definition_not_found: '人群定义库里没有这条定义或这个版本，或它不属于你的账号；刷新定义库后重选。',
+  vcr_definition_invalid: '这条人群定义不符合要求，没有保存；按提示补全名称、说明或条件后再试。',
   // The runtime channel's write items. The run reads these in `issues` and
   // corrects the item it named.
   // Four the runtime channel already had, which fell through to the family's

@@ -43,12 +43,21 @@ import {
   VCR_EXPORT_KINDS, VCR_FOLLOWUP_KINDS, VCR_INTENDED_USES, VCR_JOB_KINDS, VCR_JOB_STATES, VCR_MEMBER_ROLES,
   VCR_MISSING_REASONS, VCR_MODEL_RISKS, VCR_MODEL_TIERS, VCR_POOLING_METHODS, VCR_POPULATION_KINDS,
   VCR_REFERRAL_STATES, VCR_REVIEW_KINDS, VCR_REVIEW_STATES, VCR_STALE_REASONS, VCR_STEPS, VCR_STUDY_STATUSES,
-  VCR_TRIAL_DESIGNS, VCR_VALUE_SOURCES, VCR_FIELD_ROLES,
+  VCR_TRIAL_DESIGNS, VCR_VALUE_SOURCES, VCR_FIELD_ROLES, VCR_PACK_STATUSES,
 } from "@evimed/domain";
 import { refreshVocabularyChecks } from "./vocabularyChecks.mjs";
 
 /** The schema name, written once. */
 export const VCR_SCHEMA = "evimed_vcr";
+
+/**
+ * The `results.kind` a comparison of two versions of a library definition files
+ * under. It is aside from the study's own results on purpose: no page that lists
+ * "the study's results" (the home list's latest conclusion, the reviews, the
+ * package) reads it — `VcrStore.results` / `allResults` leave it out, and the
+ * library's own reader asks for it by name.
+ */
+export const VCR_COMPARISON_RESULT_KIND = "definition_comparison";
 
 /**
  * What a column of a source is *for* in the study: `VCR_FIELD_ROLES` in `@evimed/domain`
@@ -72,6 +81,7 @@ export const VCR_TABLES = Object.freeze([
   "precedents", "study_precedents", "evidence_items", "curve_extractions", "assumptions",
   "sources", "source_files", "grants", "snapshots", "field_maps", "analysis_tables",
   "populations", "patient_sets", "comparator_designs", "trial_scenarios", "design_grids",
+  "knowledge_packs", "study_packs", "definitions", "definition_versions", "definition_uses",
   "models", "methods",
   "jobs", "executions", "results", "forecasts",
   "matching_assessments", "criterion_judgments", "matching_facts", "language_judgments",
@@ -81,10 +91,14 @@ export const VCR_TABLES = Object.freeze([
 
 const migrations = new WeakMap();
 
-/** `IN (...)` over a closed vocabulary, refusing any member that is not a plain word. @param {readonly string[]} words */
+/**
+ * `IN (...)` over a closed vocabulary, refusing any member that is not a plain
+ * word: letters, digits, `_` and `-` (a knowledge pack's status is `ai-draft`).
+ * @param {readonly string[]} words
+ */
 function inList(words) {
   for (const word of words) {
-    if (!/^[A-Za-z0-9_]+$/.test(word)) throw new TypeError(`A VCR vocabulary word cannot be spliced into SQL: ${JSON.stringify(word)}`);
+    if (!/^[A-Za-z0-9_-]+$/.test(word)) throw new TypeError(`A VCR vocabulary word cannot be spliced into SQL: ${JSON.stringify(word)}`);
   }
   return `(${words.map((word) => `'${word}'`).join(", ")})`;
 }
@@ -632,6 +646,86 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.design_grids (
   created_at       timestamptz NOT NULL DEFAULT now(),
   UNIQUE (study_id, version)
 );
+
+-- ---------------------------------------------------------------------------
+-- Disease knowledge packs and the population definition library (plan §3.3, §5.1)
+-- ---------------------------------------------------------------------------
+
+-- A pack that is not a shipped file. The curated packs ship in \`@evimed/domain\`
+-- and are never rows; a row is a pack the AI drafted for a study (\`ai-draft\`)
+-- or a draft somebody reviewed and promoted (\`curated\`). The account's: a draft
+-- is written from one account's study and is read by that account's studies only.
+-- The origin study is only where it came from (SET NULL, never CASCADE: a promoted
+-- pack outlives the study; an unpromoted draft is removed with it by the deletion
+-- paths, which know the difference).
+CREATE TABLE IF NOT EXISTS evimed_vcr.knowledge_packs (
+  id           text PRIMARY KEY,
+  user_id      text NOT NULL,
+  study_id     text REFERENCES evimed_vcr.studies(id) ON DELETE SET NULL,
+  disease_key  text NOT NULL,
+  version      integer NOT NULL,
+  status       text NOT NULL CHECK (status IN ${inList(VCR_PACK_STATUSES)}),
+  body         jsonb NOT NULL,
+  reviewed_by  text,
+  reviewed_at  timestamptz,
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (user_id, disease_key, version)
+);
+CREATE INDEX IF NOT EXISTS vcr_knowledge_packs_user_idx ON evimed_vcr.knowledge_packs (user_id, created_at DESC);
+
+-- The pack a study works from: one. A shipped pack is named by its id (\`nsclc\`),
+-- a stored one by its row; the version is the one bound.
+CREATE TABLE IF NOT EXISTS evimed_vcr.study_packs (
+  study_id     text PRIMARY KEY REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
+  user_id      text NOT NULL,
+  origin       text NOT NULL CHECK (origin IN ('shipped', 'stored')),
+  pack_id      text NOT NULL,
+  pack_version integer NOT NULL,
+  bound_by     text NOT NULL DEFAULT '',
+  bound_at     timestamptz NOT NULL DEFAULT now()
+);
+
+-- A population definition of an account's library: its name, and the versions it
+-- has been through. The account's, never a study's.
+CREATE TABLE IF NOT EXISTS evimed_vcr.definitions (
+  id         text PRIMARY KEY,
+  user_id    text NOT NULL,
+  name       text NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS vcr_definitions_user_idx ON evimed_vcr.definitions (user_id, updated_at DESC);
+
+-- One version: the rules (the cohort job's own scenario, a rule is data), the
+-- plain-language text, and the pack entries it rests on. Immutable; a change is
+-- the next version.
+CREATE TABLE IF NOT EXISTS evimed_vcr.definition_versions (
+  id              text PRIMARY KEY,
+  definition_id   text NOT NULL REFERENCES evimed_vcr.definitions(id) ON DELETE CASCADE,
+  user_id         text NOT NULL,
+  version         integer NOT NULL,
+  text            text NOT NULL DEFAULT '',
+  body            jsonb NOT NULL,
+  pack_refs       jsonb NOT NULL DEFAULT '[]'::jsonb,
+  source_study_id text REFERENCES evimed_vcr.studies(id) ON DELETE SET NULL,
+  created_by      text NOT NULL DEFAULT '',
+  created_at      timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (definition_id, version)
+);
+
+-- Which studies used which version. A use is the study's, so it goes with the
+-- study; the count a library shows is the studies that used a definition.
+CREATE TABLE IF NOT EXISTS evimed_vcr.definition_uses (
+  definition_id text NOT NULL,
+  version       integer NOT NULL,
+  study_id      text NOT NULL REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
+  user_id       text NOT NULL,
+  population_id text REFERENCES evimed_vcr.populations(id) ON DELETE SET NULL,
+  created_at    timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (definition_id, version, study_id),
+  FOREIGN KEY (definition_id, version) REFERENCES evimed_vcr.definition_versions(definition_id, version) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS vcr_definition_uses_study_idx ON evimed_vcr.definition_uses (study_id);
 
 -- ---------------------------------------------------------------------------
 -- The shared model and method library (plan §8.2). Not owned by one study.
