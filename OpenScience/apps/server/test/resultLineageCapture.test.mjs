@@ -10,7 +10,7 @@ import { captureFinishedRun, captureResultDelivery } from "../src/resultDelivery
 import { createResultProducerCapture } from "../src/resultProducerCapture.mjs";
 import { replayDigest } from "../src/resultReplayClient.mjs";
 import { DataSemanticsService } from "../src/dataSemanticsService.mjs";
-import { readSkillExecution } from "../src/skillExecution.mjs";
+import { askOnce, readSkillExecution } from "../src/skillExecution.mjs";
 import { stableBytes } from "../src/resultDeliveryCapture.mjs";
 import { productDocumentsDouble } from "./helpers/productDocumentsDouble.mjs";
 
@@ -174,6 +174,23 @@ test("an admitted skill script's execution record becomes the results file's pro
   assert.ok(!JSON.stringify(snapshot).includes("must-not-be-kept") && !JSON.stringify(snapshot).includes("/usr/bin"), "no command line or interpreter path is kept");
   assert.equal(read.code.availability, "captured");
   assert.ok(read.machineValues.some(value => value.key === "analyses[0].estimate" && value.value === 1.25));
+  assert.equal(read.snapshot.environment.facts.imageId, undefined, "no image is named when none was looked up");
+});
+
+test("the image the runtime runs is recorded as what a script ran on when it can be looked up, and left out when it cannot", async t => {
+  const f = await skillFixture(t);
+  const image = `sha256:${"7".repeat(64)}`;
+  const named = await readSkillExecution({ results: f.results, project: f.project, userId: OWNER, receiptPath: f.receiptPath, resultsPath: f.files.results.path, readBytes: f.readBytes, runtimeImageId: async () => image });
+  assert.equal(named.snapshot.environment.facts.imageId, image);
+  for (const lookup of [async () => { throw new Error("controller down"); }, async () => "latest", async () => null]) {
+    const unnamed = await readSkillExecution({ results: f.results, project: f.project, userId: OWNER, receiptPath: f.receiptPath, resultsPath: f.files.results.path, readBytes: f.readBytes, runtimeImageId: lookup });
+    assert.equal(unnamed.status, "recorded", "an image that cannot be named never costs the record");
+    assert.equal(unnamed.snapshot.environment.facts.imageId, undefined);
+  }
+  let calls = 0;
+  const once = askOnce(async () => { calls += 1; return image; });
+  assert.deepEqual([await once(), await once()], [image, image]);
+  assert.equal(calls, 1, "one lookup answers every record of a run");
 });
 
 test("a script edited after its execution record, or an input gone missing, is recorded as stated and not as verified", async t => {

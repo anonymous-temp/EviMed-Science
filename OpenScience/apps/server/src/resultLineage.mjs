@@ -60,10 +60,11 @@ function summary(version, calculationId) {
 export class ResultLineageService {
   /**
    * @param {{ results: any, replays?: any, config?: any, mirror?: (project: any, full: string, bytes: Buffer) => Promise<any>,
-   *   transformationsFor?: ((project: any, digests: string[]) => Promise<any[]>) | null }} dependencies
+   *   transformationsFor?: ((project: any, digests: string[]) => Promise<any[]>) | null, runtimeImageId?: (() => Promise<string | null>) | null }} dependencies
    */
-  constructor({ results, replays = null, config = {}, mirror = async () => {}, transformationsFor = null }) {
+  constructor({ results, replays = null, config = {}, mirror = async () => {}, transformationsFor = null, runtimeImageId = null }) {
     this.results = results; this.replays = replays; this.config = config; this.mirror = mirror; this.transformationsFor = transformationsFor;
+    this.runtimeImageId = runtimeImageId;
   }
 
   /**
@@ -159,7 +160,7 @@ export class ResultLineageService {
     const origin = { sessionId: producer.sessionId, runId: producer.runId ?? null, parentSessionId: producer.parentSessionId ?? null, branchId: producer.branchId ?? null };
     if (typeof source.receiptPath === "string") {
       const captured = await captureSkillResults({ results: this.results, project, userId, receiptPath: normalizeResultPath(source.receiptPath), resultsPath, readBytes, producer: origin,
-        transformationsFor: this.transformationsFor ? (digests) => /** @type {any} */ (this.transformationsFor)(project, digests) : null });
+        transformationsFor: this.transformationsFor ? (digests) => /** @type {any} */ (this.transformationsFor)(project, digests) : null, runtimeImageId: this.runtimeImageId });
       if (captured.status === "captured") return captured.version;
     }
     // No execution record accounts for these bytes: they are a results file the run named, and how it was made was not observed.

@@ -6,7 +6,7 @@ import { claimEvidenceSources, claimVerification } from "@evimed/domain/clinical
 import { normalizeResultPath } from "@evimed/domain/result-provenance";
 import { clinicalResultLinks } from "./resultImpact.mjs";
 import { describedQualityNotices } from "./runNotices.mjs";
-import { captureSkillResults, findSkillExecutions, readSkillExecution } from "./skillExecution.mjs";
+import { askOnce, captureSkillResults, findSkillExecutions, readSkillExecution } from "./skillExecution.mjs";
 import { HttpError, openScopedFileNoFollow, readStableFileHandle, resolveScopedPath } from "./security.mjs";
 
 const sha = bytes => createHash("sha256").update(bytes).digest("hex");
@@ -121,9 +121,9 @@ function unreceiptedEntries(files, receipt) {
  * the bytes readable now — and before its siblings, so a report captured beside
  * it can bind its numbers to it. `transformationsFor` joins the script to the
  * dataset transformations N03 recorded for it.
- * @param {{results:any,project:any,run:any,receipt?:any,files?:readonly string[],transformationsFor?:((digests:string[])=>Promise<any[]>)|null}} input
+ * @param {{results:any,project:any,run:any,receipt?:any,files?:readonly string[],transformationsFor?:((digests:string[])=>Promise<any[]>)|null,runtimeImageId?:(()=>Promise<string|null>)|null}} input
  */
-export async function captureResultDelivery({ results, project, run, receipt = null, files = [], transformationsFor = null }) {
+export async function captureResultDelivery({ results, project, run, receipt = null, files = [], transformationsFor = null, runtimeImageId = null }) {
   const items = [];
   const sourceItems = [];
   const failures = [];
@@ -193,7 +193,7 @@ export async function captureResultDelivery({ results, project, run, receipt = n
     try {
       for (const pair of await findSkillExecutions({ paths: recorded.map(file => file.path), readBytes })) {
         if (executions.has(pair.resultsPath)) continue;
-        const read = await readSkillExecution({ results, project, userId: project.userId, ...pair, readBytes, transformationsFor });
+        const read = await readSkillExecution({ results, project, userId: project.userId, ...pair, readBytes, transformationsFor, runtimeImageId });
         if (read.status === "recorded") executions.set(pair.resultsPath, read);
       }
     } catch { /* An execution record that cannot be read leaves the files as they would have been. */ }
@@ -244,12 +244,13 @@ export async function captureResultDelivery({ results, project, run, receipt = n
  * `unreceipted` is off for the platform's own background projects, whose runs
  * are jobs rather than something a researcher was handed: what they got
  * captured before — the files a receipt vouches for — is all they get.
- * @param {{results:any,project:any,run:any,readReceipt:(project:any, run:any)=>Promise<any>,unreceipted?:boolean,transformationsFor?:((digests:string[])=>Promise<any[]>)|null}} input
+ * @param {{results:any,project:any,run:any,readReceipt:(project:any, run:any)=>Promise<any>,unreceipted?:boolean,transformationsFor?:((digests:string[])=>Promise<any[]>)|null,runtimeImageId?:(()=>Promise<string|null>)|null}} input
  */
-export async function captureFinishedRun({ results, project, run, readReceipt, unreceipted = true, transformationsFor = null }) {
+export async function captureFinishedRun({ results, project, run, readReceipt, unreceipted = true, transformationsFor = null, runtimeImageId = null }) {
   const receipt = await readReceipt(project, run);
   const files = unreceipted ? [...(run.artifacts ?? []), ...(run.unverifiedArtifacts ?? [])] : [];
   if (!receipt && files.length === 0) return null;
+  const imageOnce = askOnce(runtimeImageId);
   // Results a script left outside the deliverable layout (a statistical package at the workspace root) are preserved as
   // the run's calculations first; those inside it are captured with their deliverable, below.
   const readBytes = (/** @type {string} */ relativePath, /** @type {number} */ limit) => stableBytes(project, relativePath, limit);
@@ -258,13 +259,13 @@ export async function captureFinishedRun({ results, project, run, readReceipt, u
   try {
     for (const pair of await findSkillExecutions({ paths: files, readBytes })) {
       if (pair.resultsPath.startsWith(prefix)) continue;
-      const captured = await captureSkillResults({ results, project, userId: project.userId, ...pair, readBytes, transformationsFor,
+      const captured = await captureSkillResults({ results, project, userId: project.userId, ...pair, readBytes, transformationsFor, runtimeImageId: imageOnce,
         producer: { sessionId: run.sessionId, runId: run.id, parentSessionId: run.parentSessionId ?? run.forkedFrom ?? null,
           branchId: run.branchId ?? (run.forkedFrom ? run.sessionId : null) } }).catch((/** @type {any} */ error) => ({ status: "unavailable", reason: error?.code ?? "result_capture_failed" }));
       if (captured.status === "unavailable") failures.push({ path: pair.resultsPath, code: "result_skill_execution_unavailable" });
     }
   } catch { /* An execution record that cannot be read leaves the files as they would have been. */ }
-  const delivered = await captureResultDelivery({ results, project, run, receipt, files, transformationsFor });
+  const delivered = await captureResultDelivery({ results, project, run, receipt, files, transformationsFor, runtimeImageId: imageOnce });
   // Reports written while the run was still working were captured before its calculations existed.
   try { await results.rebindRun?.(project.userId, project, run.id); } catch { /* the labels stay as they were captured */ }
   return failures.length ? { ...delivered, failures: [...delivered.failures, ...failures] } : delivered;

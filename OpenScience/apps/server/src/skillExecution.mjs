@@ -46,6 +46,18 @@ const MAX_TOTAL_BYTES = 32 * 1024 * 1024;
 /** JSON files of a delivery looked at for an execution record. */
 const MAX_RECEIPT_CANDIDATES = 64;
 
+/**
+ * One answer for however many records ask in a call: the runtime image is looked up once, and a lookup that failed is not retried.
+ * @param {(() => Promise<string | null>) | null | undefined} lookup
+ * @returns {(() => Promise<string | null>) | null}
+ */
+export function askOnce(lookup) {
+  if (!lookup) return null;
+  /** @type {Promise<string | null> | null} */
+  let answer = null;
+  return () => (answer ??= Promise.resolve().then(lookup).catch(() => null));
+}
+
 /** @param {unknown} value @returns {value is Record<string, any>} */
 const record = (value) => value != null && typeof value === "object" && !Array.isArray(value);
 
@@ -63,11 +75,12 @@ function interpreterOf(path) {
 /**
  * @param {{ results: any, project: any, userId: string, receiptPath: string, resultsPath: string,
  *   readBytes: (relativePath: string, limit: number) => Promise<Buffer>,
- *   transformationsFor?: ((digests: string[]) => Promise<any[]>) | null, inputLimit?: number, now?: () => string }} input
+ *   transformationsFor?: ((digests: string[]) => Promise<any[]>) | null, runtimeImageId?: (() => Promise<string | null>) | null,
+ *   inputLimit?: number }} input `runtimeImageId`: the image the project's runtime runs, which is what ran the script
  * @returns {Promise<{ status: "recorded", snapshot: any, code: any, inputs: any[], machineValues: any[], truncated: boolean, digest: string }
  *   | { status: "unavailable", reason: string }>}
  */
-export async function readSkillExecution({ results, project, userId, receiptPath, resultsPath, readBytes, transformationsFor = null, inputLimit = 8 * 1024 * 1024 }) {
+export async function readSkillExecution({ results, project, userId, receiptPath, resultsPath, readBytes, transformationsFor = null, runtimeImageId = null, inputLimit = 8 * 1024 * 1024 }) {
   /** @param {string} reason @returns {{ status: "unavailable", reason: string }} */
   const unavailable = (reason) => ({ status: "unavailable", reason });
   let receipt;
@@ -119,7 +132,12 @@ export async function readSkillExecution({ results, project, userId, receiptPath
   const versions = record(execution.versions) ? execution.versions : {};
   const libraries = record(versions.libraries) ? versions.libraries : {};
   const interpreterLine = typeof versions.interpreter === "string" ? versions.interpreter.split("\n")[0].slice(0, 200) : null;
-  const reported = interpreterLine !== null || Object.keys(libraries).length > 0;
+  // The image the runtime runs: what the script ran on, as far as the control plane can say. Unavailable stays absent.
+  let imageId = null;
+  if (runtimeImageId) {
+    try { const found = await runtimeImageId(); imageId = typeof found === "string" && /^sha256:[a-f0-9]{64}$/.test(found) ? found : null; } catch { imageId = null; }
+  }
+  const reported = interpreterLine !== null || Object.keys(libraries).length > 0 || imageId !== null;
   let transformations = [];
   if (transformationsFor) {
     try { transformations = await transformationsFor([script.digest, ...checked.map((file) => file.digest)]); } catch { transformations = []; }
@@ -127,7 +145,7 @@ export async function readSkillExecution({ results, project, userId, receiptPath
   const snapshot = skillScriptSnapshot({
     script: { path: script.path, digest: script.digest, verified: script.verified },
     inputs, transformations, interpreter: interpreterOf(script.path),
-    environment: reported ? { digest: replayDigest({ interpreter: interpreterLine, libraries }), facts: { interpreter: interpreterLine, packages: libraries } } : null,
+    environment: reported ? { digest: replayDigest({ interpreter: interpreterLine, libraries }), facts: { interpreter: interpreterLine, packages: libraries, ...(imageId ? { imageId } : {}) } } : null,
     execution: { exitCode: Number.isSafeInteger(execution.exitCode) ? execution.exitCode : null, startedAt: execution.startedAt, endedAt: execution.endedAt,
       sourcesUnchanged: typeof execution.sourcesUnchanged === "boolean" ? execution.sourcesUnchanged : null, observation: execution.output?.observation },
   });
@@ -151,11 +169,11 @@ export async function readSkillExecution({ results, project, userId, receiptPath
  * @param {{ results: any, project: any, userId: string, receiptPath: string, resultsPath: string,
  *   readBytes: (relativePath: string, limit: number) => Promise<Buffer>, producer: { sessionId?: string | null, runId?: string | null,
  *   parentSessionId?: string | null, branchId?: string | null },
- *   transformationsFor?: ((digests: string[]) => Promise<any[]>) | null }} input
+ *   transformationsFor?: ((digests: string[]) => Promise<any[]>) | null, runtimeImageId?: (() => Promise<string | null>) | null }} input
  * @returns {Promise<{ status: "captured", version: any } | { status: "unavailable", reason: string }>}
  */
-export async function captureSkillResults({ results, project, userId, receiptPath, resultsPath, readBytes, producer, transformationsFor = null }) {
-  const read = await readSkillExecution({ results, project, userId, receiptPath, resultsPath, readBytes, transformationsFor });
+export async function captureSkillResults({ results, project, userId, receiptPath, resultsPath, readBytes, producer, transformationsFor = null, runtimeImageId = null }) {
+  const read = await readSkillExecution({ results, project, userId, receiptPath, resultsPath, readBytes, transformationsFor, runtimeImageId });
   if (read.status !== "recorded") return read;
   const existing = (await results.query(userId, project.id, { path: resultsPath, digest: read.digest, hasMachineValues: true, snapshot: { kind: "skill_script" } }, { limit: 1 })).items[0];
   if (existing) return { status: "captured", version: existing };

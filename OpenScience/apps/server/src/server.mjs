@@ -1931,7 +1931,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // The numerical chain: which calculation a printed number came from, and the platform writing a report's numbers itself.
   const resultLineage = resultProvenance ? new ResultLineageService({ results: resultProvenance, replays: resultReplays, config,
     mirror: (project, full, bytes) => runtimeManager.mirrorWorkspaceUpload(project, full, bytes),
-    transformationsFor: dataSemantics ? (project, digests) => dataSemantics.transformationsByCode(project.userId, project.id, digests) : null }) : null;
+    transformationsFor: dataSemantics ? (project, digests) => dataSemantics.transformationsByCode(project.userId, project.id, digests) : null,
+    runtimeImageId: async () => (await runtimeManager.inspectRuntimeImage().catch(() => null))?.imageId ?? null }) : null;
   if (resultRevisions) resultRevisions.lineage = resultLineage;
   const resultRoutes = createResultProvenanceRoutes({ store, service: resultProvenance, lineage: resultLineage });
   const resultReuseRoutes = createResultReuseRoutes({ store, exporter: resultExporter, revisions: resultRevisions });
@@ -2569,7 +2570,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           // captured as observed.
           const captured = await captureFinishedRun({ results: resultProvenance, project, run, readReceipt: readDeliveryReceipt,
             unreceipted: !isInternalProject(project.id),
-            transformationsFor: dataSemantics ? digests => dataSemantics.transformationsByCode(project.userId, project.id, digests) : null });
+            transformationsFor: dataSemantics ? digests => dataSemantics.transformationsByCode(project.userId, project.id, digests) : null,
+            runtimeImageId: async () => (await runtimeManager.inspectRuntimeImage().catch(() => null))?.imageId ?? null });
           for (const failure of captured?.failures ?? []) await securityAudit(config, "result.capture", "failed", {
             userId: project.userId, projectId: project.id, runId: run.id, code: failure.code });
         } catch (error) {

@@ -15,7 +15,7 @@ const base: ResultVersion = { artifactId: "ra_1", versionId: `rv_${"c".repeat(64
 const engine: ProducerSnapshot = { kind: "engine_job", origin: "platform_measured", method: { id: "meta.dl", version: "1", engineVersion: null, executed: { tau_estimator: "DL" }, seed: null, parameters: null },
   script: { path: null, digest: "f".repeat(64), bytes: null, files: null, executed: true, verified: true }, inputs: [{ kind: "data", id: "input.json", digest: "d".repeat(64), versionId: `rv_${"d".repeat(64)}`, path: "input.json", availability: "captured" }],
   transformations: [{ datasetId: "trial-a", name: "derive-outcome", version: 2, codeDigest: null }],
-  environment: { status: "reported", digest: "e".repeat(64), facts: { interpreter: "Python 3.12.3", packages: { numpy: "1.26.4", scipy: "1.13.0" } } }, process: null,
+  environment: { status: "reported", digest: "e".repeat(64), facts: { interpreter: "Python 3.12.3", imageId: `sha256:${"7".repeat(64)}`, packages: { numpy: "1.26.4", scipy: "1.13.0" } } }, process: null,
   reproduction: "observed_execution", unknown: [], recorded: true };
 const unobserved: ProducerSnapshot = { kind: "unobserved", origin: "unknown", method: null, script: null, inputs: [], transformations: [], environment: { status: "unknown", digest: null, facts: null }, process: null,
   reproduction: "not_applicable", unknown: ["script", "inputs", "environment", "undeclared_dependencies"], recorded: true };
@@ -40,7 +40,7 @@ describe("the numerical chain of a version", () => {
     expect(section).toHaveTextContent("摘要 ffffffffffff · 已核对");
     expect(section).toHaveTextContent("输入：input.json · 摘要 dddddddddddd · 已保存此版本");
     expect(section).toHaveTextContent("数据变换：derive-outcome 第 2 版（数据集 trial-a）");
-    expect(section).toHaveTextContent("Python 3.12.3 · 2 个软件包的版本");
+    expect(section).toHaveTextContent("Python 3.12.3 · 2 个软件包的版本 · 运行镜像 777777777777");
     expect(section).toHaveTextContent("运行已记录，所用代码已核对");
     expect(within(section).queryByRole("list", { name: "未被观察的部分" })).toBeNull();
   });

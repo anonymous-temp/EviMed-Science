@@ -28,7 +28,7 @@ export interface ProducerSnapshot {
   script: { path: string | null; digest: string | null; bytes: number | null; files: { path: string; sha256: string; bytes: number | null }[] | null; executed: boolean; verified: boolean } | null;
   inputs: ResultInput[];
   transformations: { datasetId: string; name: string; version: number; codeDigest: string | null }[];
-  environment: { status: "reported" | "unknown"; digest: string | null; facts: { interpreter?: string; implementation?: string; platform?: string; machine?: string; lockDigest?: string; packages?: Record<string, string> } | null; truncated?: boolean };
+  environment: { status: "reported" | "unknown"; digest: string | null; facts: { imageId?: string; interpreter?: string; implementation?: string; platform?: string; machine?: string; lockDigest?: string; packages?: Record<string, string> } | null; truncated?: boolean };
   process: { exitCode: number | null; startedAt: string | null; endedAt: string | null; sourcesUnchanged: boolean | null; observation: string | null } | null;
   reproduction: "observed_execution" | "declared_execution" | "generated_not_executed" | "not_applicable";
   unknown: string[];
