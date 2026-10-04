@@ -377,7 +377,7 @@ name is data and never code (N30), single-arm references (N31)), `C2-01-C2-18`
 robustness methods: negative controls, tipping point, prognostic adjustment), `N40`
 (their protocol parity and breaking battery), `N41` (reference cases for
 `profile.snapshot` and `population.synthpop`), `N42` (two versions of a cohort
-definition compared on one table), `E01-E10` (the engine itself: accrual, cancel and
+definition compared on one table), `N43-N44` (a design is sized for an effect: `design.analytic` refuses a null effect by name in every family, and `design.simulate` on the same null scenarios reports the type I error), `E01-E10` (the engine itself: accrual, cancel and
 budget, counts, inputs, analytic vs simulated across the families, group
 sequential, the T0 chain, robustness and limits), `Z99` (every method went
 through `vcr_run_job`, and through a case that asserts numbers). Each line carries
@@ -413,6 +413,12 @@ failed on the code it replaced; the comment on the case says what it pins.
 7. **The engine's own issue codes** (`VCR_ENGINE_OWN_ISSUE_CODES` in
    `R/engine.R`) are the ones the protocol registry does not carry; E10d fails
    when a code is literal in the sources and in neither list.
+8. **`design.analytic` sizes a design for an effect.** A scenario whose effect
+   is exactly null (hazard ratio 1, effect 0, equal binary rates, risk
+   difference 0, odds ratio 1) has no sample size, and is refused as
+   `design_effect_null` on the field that states the effect; the type I error of
+   a design is `design.simulate`'s measure on the same scenario (N43, N44).
+   The exact single-arm design is given its size and so computes at a null rate.
 ### Binary single-arm contracts (design methods 1.1.0)
 
 `single_arm` requires `design.n`, `truth.nullRate`, `truth.responseRate` and
