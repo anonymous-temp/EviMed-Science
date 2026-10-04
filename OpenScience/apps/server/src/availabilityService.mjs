@@ -98,10 +98,11 @@ export class AvailabilityService {
    *   connectorStatus?: ((userId: string) => Promise<any[]>) | null,
    *   methodValidation?: (() => Promise<{ status: string, reason?: string } | null>) | null,
    *   extensionViews?: ((user: any) => Promise<any[]>) | null,
+   *   skillSupply?: import("./skillSupplyService.mjs").SkillSupply | null,
    *   now?: () => Date,
    * }} dependencies
    */
-  constructor({ config, registry, store = null, engineProbe = null, connectorStatus = null, methodValidation = null, extensionViews = null, now = () => new Date() }) {
+  constructor({ config, registry, store = null, engineProbe = null, connectorStatus = null, methodValidation = null, extensionViews = null, skillSupply = null, now = () => new Date() }) {
     this.config = config;
     this.registry = registry;
     this.store = store;
@@ -109,6 +110,7 @@ export class AvailabilityService {
     this.connectorStatus = connectorStatus;
     this.methodValidation = methodValidation;
     this.extensionViews = extensionViews;
+    this.skillSupply = skillSupply;
     this.now = now;
   }
 
@@ -218,6 +220,10 @@ export class AvailabilityService {
     if (module === "vcr" && facts.validation?.status === "unmeasured") {
       reasons.push({ code: "method-unmeasured", detail: facts.validation.reason ?? "unmeasured", source: "method-validation" });
     }
+    // Software its own scripts import that the runtime image does not install: installed is not runnable (N09).
+    for (const reason of this.skillSupply?.softwareReasons(manifest.id, facts.subject) ?? []) {
+      reasons.push({ code: reason.code, detail: reason.detail, source: reason.source, ...(reason.facts ? { facts: reason.facts } : {}) });
+    }
     return reasons;
   }
 
@@ -246,6 +252,16 @@ export class AvailabilityService {
       entries.push(projectAvailability({ subject: { kind: "capability", id }, reasons: [{ code: "not-in-this-deployment", source: "source-catalogue" }], collector, runtime }));
     }
     return entries.sort((left, right) => left.id.localeCompare(right.id, "en"));
+  }
+
+  /**
+   * Every skill package the deployment ships (not the capabilities and extensions, which are subjects of their own),
+   * each read against the runtime image's recipe and the deployment's tools. Absent where no supply is composed.
+   * @param {{ id?: string } | null} user
+   * @returns {import("@evimed/domain").AvailabilityEntry[]}
+   */
+  skills(user) {
+    return this.skillSupply ? this.skillSupply.skills(user, { mode: String(this.config.runtimeMode ?? "kernel") }) : [];
   }
 
   /**
@@ -314,12 +330,16 @@ export class AvailabilityService {
    */
   async forAccount(user) {
     const [capabilities, tools, extensions, evidence] = await Promise.all([this.capabilities(user), this.tools(user), this.extensions(user), this.evidence()]);
+    const supply = this.skillSupply;
     return {
       generatedAt: this.now().toISOString(),
       collector: { state: evidence.state },
-      capabilities: capabilities.map(publicAvailability),
+      capabilities: capabilities.map((entry) => ({ ...publicAvailability(entry), package: supply?.publicPackage(`capability/${entry.id}`) ?? null })),
       tools: tools.map(publicAvailability),
-      extensions: extensions.map(publicAvailability),
+      extensions: extensions.map((entry) => ({ ...publicAvailability(entry), package: supply?.publicPackage(`extension/${entry.id}`) ?? null })),
+      // Skill packages: what each is (source, licence, version, scripts, dependencies, operations) and whether this
+      // runtime can supply what it needs. A label; the package is still listed and still usable.
+      skills: supply ? [...supply.packages.values()].filter((record) => !["capability", "extension"].includes(record.origin)).map((record) => supply.view(record, user)) : [],
     };
   }
 
@@ -340,6 +360,7 @@ export class AvailabilityService {
     const [capabilities, tools, evidence] = await Promise.all([
       this.capabilities(null, { freshEngines: true }), this.tools(null, { freshEngines: true }), this.evidence(),
     ]);
+    const skills = this.skills(null);
     const engines = this.engineProbe ? Object.fromEntries([...this.engineProbe.snapshot()].map(([tool, health]) => [tool, health])) : {};
     return {
       schemaVersion: AVAILABILITY_EXPORT_VERSION,
@@ -348,9 +369,9 @@ export class AvailabilityService {
       generatedAt: this.now().toISOString(),
       deployment: deploymentIdentity(this.config),
       collector: { state: evidence.state, backlog: evidence.backlog, failedJobs: evidence.failed, sweptOnce: evidence.swept, unreadableRecords: evidence.unreadable, updatedAt: evidence.updatedAt },
-      counts: { capability: countAvailabilityStates(capabilities), tool: countAvailabilityStates(tools) },
+      counts: { capability: countAvailabilityStates(capabilities), tool: countAvailabilityStates(tools), skill: countAvailabilityStates(skills) },
       engines,
-      states: [...capabilities, ...tools].map((entry) => ({ ...publicAvailability(entry), reason: entry.reason, also: entry.also })),
+      states: [...capabilities, ...tools, ...skills].map((entry) => ({ ...publicAvailability(entry), reason: entry.reason, also: entry.also })),
       records: [...evidence.records.values()],
     };
   }
@@ -362,6 +383,7 @@ export class AvailabilityService {
    */
   async metrics() {
     const [capabilities, tools, evidence] = await Promise.all([this.capabilities(null), this.tools(null), this.evidence()]);
+    const skills = this.skills(null);
     /** @type {Record<string, { success: number, failure: number, notMounted: number }>} */
     const operations = {};
     for (const record of evidence.records.values()) {
@@ -372,7 +394,7 @@ export class AvailabilityService {
       operations[record.kind] = row;
     }
     return {
-      states: { capability: countAvailabilityStates(capabilities), tool: countAvailabilityStates(tools) },
+      states: { capability: countAvailabilityStates(capabilities), tool: countAvailabilityStates(tools), ...(skills.length ? { skill: countAvailabilityStates(skills) } : {}) },
       operations,
       collector: { state: evidence.state, backlog: evidence.backlog, failedJobs: evidence.failed, records: evidence.records.size, unreadable: evidence.unreadable },
     };

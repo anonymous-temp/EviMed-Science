@@ -45,18 +45,19 @@ const TERMINAL = new Set(["succeeded", "failed", "canceled"]);
  *   canRun?: () => boolean,
  *   fetchImpl?: typeof fetch,
  *   report?: (code: string) => void,
+ *   skillSupply?: import("./skillSupplyService.mjs").SkillSupply | null,
  * }} dependencies
  */
 export function createAvailability({
   config, authStore, registry, database, jobs, documents, agentRuns, usageLedger, connectorCredentials, methodValidation,
-  extensionService, mutation, canRun = () => true, fetchImpl = globalThis.fetch, report = () => {},
+  extensionService, mutation, canRun = () => true, fetchImpl = globalThis.fetch, report = () => {}, skillSupply = null,
 }) {
   const collecting = Boolean(database && jobs) && config.availabilityEnabled !== false && config.runtimeMode !== "mock";
   const records = database && config.availabilityEnabled !== false ? new AvailabilityStore(database) : null;
   const engineProbe = new EngineHealthProbe({ config, fetchImpl });
 
   const service = new AvailabilityService({
-    config, registry, store: records, engineProbe,
+    config, registry, store: records, engineProbe, skillSupply,
     connectorStatus: connectorCredentials ? (userId) => connectorCredentials.status(userId) : null,
     methodValidation,
     extensionViews: extensionService ? async (user) => {

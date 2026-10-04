@@ -40,6 +40,7 @@ import { EXTENSION_GATEWAY_PATH } from "./extensionGateway.mjs";
 import { SkillLibraryService } from "./skillLibraryService.mjs";
 import { SkillLibraryArtifacts } from "./skillLibraryArtifacts.mjs";
 import { createSkillLibraryRoutes } from "./skillLibraryRoutes.mjs";
+import { SkillSupply } from "./skillSupplyService.mjs";
 import { NativeSkillCatalogue } from "./nativeSkillCatalogue.mjs";
 import { PersonalSkillRepositoryImport } from "./personalSkillRepositoryImport.mjs";
 import { PersonalSkillTransfer } from "./personalSkillTransfer.mjs";
@@ -1031,8 +1032,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       return existingClient ? admit(existingClient) : productDatabase.transaction(admit);
     },
   }) : null;
+  // What each shipped or imported skill needs against what the runtime image installs: a label beside the package.
+  const skillSupply = new SkillSupply({ config });
   const skillLibraryService = productDatabase ? new SkillLibraryService(productDatabase, {
-    artifacts: skillArtifacts,
+    artifacts: skillArtifacts, supply: skillSupply,
     projectAccess: async (user, project) => {
       const current = await store.requireProject(user, project.id);
       if (current.userId !== user.id || current.userId !== project.userId) throw new HttpError(404, "project_not_found", "Project not found.");
@@ -2131,7 +2134,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // recurring-work start and the operators' metrics).
   const availability = createAvailability({
     config, authStore: store, registry: agentRegistry, database: productDatabase, jobs: productJobs, documents: productDocuments,
-    agentRuns: () => agentRuns, usageLedger, connectorCredentials, extensionService,
+    agentRuns: () => agentRuns, usageLedger, connectorCredentials, extensionService, skillSupply,
     methodValidation: () => loadMethodValidation({ file: config.vcrMethodValidationFile, engine: vcr?.engine }),
     mutation: maintenanceMutation,
     canRun: () => !maintenanceService || maintenanceService.claimingAllowed(),

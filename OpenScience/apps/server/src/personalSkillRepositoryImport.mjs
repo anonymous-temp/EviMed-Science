@@ -97,7 +97,10 @@ export class PersonalSkillRepositoryImport {
     currentSignal.throwIfAborted();
     const upload = await this.skills.upload(user, 'zip', archive);
     try {
-      const preview = await this.skills.previewImport(user, { resourceId: upload.resourceId });
+      // The repository and commit are what this adapter itself fetched, so they are the one source an import of these
+      // exact bytes may name (the library records it beside the upload, not on the caller's word).
+      const preview = await this.skills.previewImport(user, { resourceId: upload.resourceId },
+        { source: { kind: 'repository', repository: input.repository, commit: input.commit, path: subdirectory || null } });
       return { resourceId: upload.resourceId, immutableSource: { repository: input.repository, commit: input.commit, subdirectory }, preview, findings: [] };
     } catch (error) {
       await this.skills.removeUpload(user, upload.resourceId).catch(() => {});

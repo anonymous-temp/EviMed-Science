@@ -31,6 +31,9 @@ export const DOMAIN_VERSION = '0.1.0'
 /** @typedef {import('./src/capabilityAvailability.mjs').AvailabilityState} AvailabilityState */
 /** @typedef {import('./src/capabilityAvailability.mjs').OperationObservation} OperationObservation */
 /** @typedef {import('./src/capabilityAvailability.mjs').OperationRecord} OperationRecord */
+/** @typedef {import('./src/skillSupply.mjs').SkillPackageRecord} SkillPackageRecord */
+/** @typedef {import('./src/skillSupply.mjs').SkillOperation} SkillOperation */
+/** @typedef {import('./src/skillSupply.mjs').ImageRecipe} ImageRecipe */
 /** @typedef {import('./src/extensions.mjs').ExtensionCoordinate} ExtensionCoordinate */
 /** @typedef {import('./src/extensions.mjs').ExtensionInstallRequest} ExtensionInstallRequest */
 /** @typedef {import('./src/extensions.mjs').SkillWriteRequest} SkillWriteRequest */

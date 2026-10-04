@@ -171,9 +171,16 @@ export class SkillLibraryArtifacts {
         if (!preview) await this.publish(user, path.join("blobs", hex), entry.bytes);
         resources.push({ id: `resource:${hex}`, path: entry.path, digest: `sha256:${hex}`, size: entry.bytes.length });
       }
+      // What the package was, byte for byte, as it came in: each file's digest, and the text of the ones a reader of its
+      // dependencies needs (scripts and the skill body). The package digest is over (path, digest) pairs, so it names
+      // these exact bytes whatever route they arrived by.
+      const files = normalized.map(entry => ({ path: entry.path, sha256: hash(entry.bytes),
+        ...(entry.bytes.length <= 256 * 1024 && /(?:\.(?:py|r)|(?:^|\/)SKILL\.md)$/i.test(entry.path) ? { text: entry.bytes.toString("utf8") } : {}) }))
+        .sort((left, right) => (left.path < right.path ? -1 : 1));
+      const packageDigest = `sha256:${hash(canonicalJson(files.map(file => ({ path: file.path, sha256: file.sha256 }))))}`;
       // Namespace replacement happens when the service renders the authored revision, never by editing a native provider's result.
       return { nativeName, description: parsed.description ?? "", instructions: parsed.instructions, resources,
-        invocation: parsed.invocation, metadata: parsed.metadata ?? {}, whenToUse: parsed.whenToUse ?? null };
+        invocation: parsed.invocation, metadata: parsed.metadata ?? {}, whenToUse: parsed.whenToUse ?? null, files, packageDigest };
     } finally { await this.removeScratch(user, "imports", hash(skillId)); }
   }
   /** No paths are exposed in resource responses. @param {any} user @param {any} input */

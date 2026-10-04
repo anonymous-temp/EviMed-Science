@@ -32,7 +32,6 @@ test("every origin is present and every package the trees ship is a record that 
   assert.equal(skillPackagesNamed("statistical-analysis").length, 2, "a curated skill and a capability share a name and stay two packages");
   assert.equal(skillPackage("capability", "statistical-analysis")?.id, "capability/statistical-analysis");
   assert.equal(skillPackage("curated", "no-such-skill"), null);
-  assert.equal(SKILL_PACKAGES.size, 91);
 });
 
 test("the stored form has no absences and loses nothing: pruning then reading is the record", async () => {

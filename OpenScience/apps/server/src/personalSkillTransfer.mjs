@@ -269,7 +269,9 @@ export class PersonalSkillTransfer {
         }
         const saved = await this.skills.saveContent(user, mapping.targetId,
           { expectedRevision: mapping.imported, title: revision.title, description: revision.description, instructions: revision.instructions }, resources,
-          { invocation: revision.invocation, metadata: revision.metadata, whenToUse: revision.whenToUse });
+          // The transferred file is the source: the package came from authored data somebody exported, and its baseline is unknown.
+          { invocation: revision.invocation, metadata: revision.metadata, whenToUse: revision.whenToUse,
+            provenance: { source: { kind: 'upload', digest: decoded.sourceDigest }, baseline: null } });
         const mappings = structuredClone(journal.payload.mappings), changed = mappings.find(row => row.sourceId === mapping.sourceId);
         changed.imported++; changed.revisions.push({ sourceRevision: revision.revision, targetRevision: saved.revision });
         const status = mappings.every(row => row.imported === row.total) ? 'complete' : 'in-progress';
