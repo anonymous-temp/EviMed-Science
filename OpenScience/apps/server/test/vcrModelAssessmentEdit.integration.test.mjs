@@ -68,7 +68,7 @@ async function furnish() {
     contextOfUse: "生成对照臂事件时间", influence: "medium", influenceJustification: "与文献对照一起使用", consequence: "high",
     consequenceJustification: "错判会让无效疗法进入关键试验", riskJustification: "后果为高", impact: "low", impactJustification: "做法已有讨论",
     technicalCriteria: ["重建曲线通过质控"], appropriateness: "覆盖终点" } });
-  return /** @type {any} */ (await store.studyById(study.id));
+  return /** @type {any} */ (store.studyById(study.id));
 }
 
 test("an edit is the next version by the person; the risk follows the two ratings; the run's version stays", options, async () => {
@@ -89,7 +89,7 @@ test("an edit is the next version by the person; the risk follows the two rating
   assert.equal((await call("POST", `${S}/model-assessments`, { key: "survival_projection", risk: "low" })).status, 400);
   const lowered = await call("POST", `${S}/model-assessments`, { key: "survival_projection", influence: "low", consequence: "low" });
   assert.deepEqual([lowered.body.data.version, lowered.body.data.risk, lowered.body.data.riskRule], [3, "low", "both_low"]);
-  assert.equal((await call("POST", `${S}/model-assessments`, { key: "not_a_record", influence: "low" })).body.code, "vcr_assessment_not_found");
+  assert.equal((await call("POST", `${S}/model-assessments`, { key: "not_a_record", influence: "low" })).body.code, "vcr_model_assessment_not_found");
 });
 
 test("a frozen model analysis plan is not changed by a later edit, and the next freeze lists it", options, async () => {

@@ -143,3 +143,91 @@ test("on PostgreSQL: a revision's successor is recorded, settled with what the r
   assert.equal(read.items[0].outcome.status, "settled");
   assert.equal((await results.raw(f.user.id, f.project.id, original.versionId)).bytes.toString(), ORIGINAL);
 });
+
+test("on PostgreSQL: a revision whose run ended while nothing listened is settled and its lesson queued exactly once by the sweep, and a second pass does nothing", options, async t => {
+  const f = await fixture(t);
+  const documents = new ProductDocuments(f.store.database); const jobs = new ProductJobs(f.store.database);
+  const feedback = new FeedbackEvents({ database: f.store.database });
+  const originalRun = { id: "original-run", sessionId: "original-session", status: "succeeded", effectiveAgentId: "meta-analysis", transcript: { completeness: "complete" }, artifacts: ["report.md"] };
+  // The revision's run has ended: the restart took the run-finished hook that would have settled it.
+  const run = { id: "revision-run", sessionId: "revision-session", kernelRequestIds: ["submitted-request"], status: "succeeded", effectiveAgentId: "meta-analysis",
+    transcript: { completeness: "complete" }, finishedAt: "2026-10-04T08:00:00.000Z" };
+  const ledger = [originalRun, run];
+  const triggers = new LearningTriggers({ jobs, agentRuns: { list: async () => ledger } });
+  const holder = {};
+  const results = new ResultProvenanceService({ documents, config: f.config,
+    authorizeProject: async (actor, id) => f.store.requireProject(await f.store.userById(actor), id),
+    authorizeReference: async (_actor, _project, reference) => reference,
+    resolveCaptureContext: (owned, input) => holder.revisions.captureContext(owned, input, run),
+    afterCorrection: event => holder.corrections.capture(event) });
+  holder.revisions = new ResultRevisionService({ results, documents, lineage: new ResultLineageService({ results, config: f.config }) });
+  const reported = [];
+  let clock = new Date("2026-10-04T08:30:00.000Z");
+  holder.corrections = new ResultCorrectionService({ results, documents, feedback, runs: { list: async () => ledger }, learning: () => triggers,
+    report: code => reported.push(code), now: () => clock });
+  const write = async (relative, content) => { await mkdir(path.dirname(path.join(f.project.workspaceDir, relative)), { recursive: true }); await writeFile(path.join(f.project.workspaceDir, relative), content); };
+  let call = 0;
+  const capture = async (relative, content, owner) => {
+    await write(relative, content); call += 1;
+    return results.captureFile({ userId: f.user.id, project: f.project, relativePath: relative, expectedDigest: sha(content),
+      producer: { kind: "tool", sessionId: owner.sessionId, runId: owner.id, callId: `call-${call}`, eventId: `call-${call}` } });
+  };
+  const original = await capture("report.md", ORIGINAL, originalRun);
+  const stage = await holder.revisions.stage(f.user.id, original.versionId, { projectId: f.project.id, digest: original.digest, requestId: "selected", sessionId: run.sessionId,
+    anchor: { kind: "text", elementId: "paragraph-1", selectedText: "合并 OR 为 0.71" } });
+  await holder.revisions.bind(f.user.id, f.project, { sessionId: run.sessionId, requestId: "submitted-request", evimedResultRevision: { referenceId: stage.referenceId },
+    content: [{ type: "text", text: `${stage.draft}把 OR 改成核对后的值，并加入新研究` }] });
+  const successor = await capture(`artifacts/result-revisions/${stage.referenceId}/output/report.md`, REVISED, run);
+  const resolveProject = async (userId, projectId) => f.store.requireProject(await f.store.userById(userId), projectId);
+  const distills = async () => (await f.store.database.query("SELECT payload,idempotency_key FROM evimed_product.jobs WHERE user_id=$1 AND kind='distill'", [f.user.id])).rows;
+
+  // The hook never ran: the revision is bound, has no outcome, and no lesson was queued.
+  assert.equal((await documents.get(f.user.id, "result-revision", stage.referenceId)).payload.outcome, undefined);
+  assert.equal((await distills()).length, 0);
+
+  // A run that ended a moment ago is left to the hook that is probably running now.
+  clock = new Date("2026-10-04T08:05:00.000Z");
+  assert.deepEqual(await holder.corrections.sweep({ resolveProject }), { found: 1, settled: 0 });
+  assert.equal((await documents.get(f.user.id, "result-revision", stage.referenceId)).payload.outcome, undefined);
+
+  // Later: settled once, with what the run left, and the lesson queued under the correction's dispatch key.
+  clock = new Date("2026-10-04T08:30:00.000Z");
+  assert.deepEqual(await holder.corrections.sweep({ resolveProject }), { found: 1, settled: 1 });
+  const settled = (await documents.get(f.user.id, "result-revision", stage.referenceId)).payload;
+  assert.equal(settled.outcome.status, "settled");
+  assert.equal(settled.outcome.successorVersionId, successor.versionId);
+  const [lesson, ...rest] = await distills();
+  assert.equal(rest.length, 0, "one lesson");
+  assert.equal(lesson.payload.runId, "original-run");
+  assert.match(lesson.idempotency_key, /^distill:original-run:correction:/);
+
+  // A second tick finds nothing unsettled and changes nothing; the hook arriving late finds the revision settled too.
+  assert.deepEqual(await holder.corrections.sweep({ resolveProject }), { found: 0, settled: 0 });
+  assert.deepEqual(await holder.corrections.settle(f.project, run), { settled: 0 });
+  assert.equal((await distills()).length, 1);
+  assert.deepEqual(reported, [], "nothing failed");
+});
+
+test("on PostgreSQL: the sweep leaves a run still working to its hook, and a revision whose run is gone from the ledger does not hold the others back", options, async t => {
+  const f = await fixture(t);
+  const documents = new ProductDocuments(f.store.database);
+  const bound = (id, sessionId, requestId) => documents.put(f.user.id, "result-revision", id, { recordType: "result-revision", id, projectId: f.project.id,
+    requestedBy: f.user.id, state: "bound", sessionId, promptRequestId: requestId }, { projectId: f.project.id, expectedRevision: 0 });
+  await bound("rr_gone", "session-gone", "request-gone");
+  await bound("rr_working", "session-working", "request-working");
+  await bound("rr_ended", "session-ended", "request-ended");
+  const ledger = [{ id: "run-working", sessionId: "session-working", kernelRequestIds: ["request-working"], status: "running" },
+    { id: "run-ended", sessionId: "session-ended", kernelRequestIds: ["request-ended"], status: "failed", finishedAt: "2026-10-04T01:00:00.000Z" }];
+  const corrections = new ResultCorrectionService({ results: { get: async () => { throw Object.assign(new Error("gone"), { code: "result_version_not_found" }); }, list: async () => ({ items: [] }) },
+    documents, runs: { list: async () => ledger }, now: () => new Date("2026-10-04T12:00:00.000Z") });
+  const resolveProject = async (userId, projectId) => f.store.requireProject(await f.store.userById(userId), projectId);
+  // One row at a time, to see the pass move on: oldest first, then past it, then round to the start.
+  const first = await corrections.sweep({ resolveProject, limit: 1 });
+  const second = await corrections.sweep({ resolveProject, limit: 1 });
+  const third = await corrections.sweep({ resolveProject, limit: 1 });
+  assert.deepEqual([first.found, second.found, third.found], [1, 1, 1], "each pass takes the next one, and none is the same twice in a row");
+  const fourth = await corrections.sweep({ resolveProject, limit: 1 });
+  assert.equal(fourth.found, 1, "past the end it starts over, in the same pass");
+  assert.equal((await documents.get(f.user.id, "result-revision", "rr_working")).payload.outcome, undefined, "a run still working is left to its hook");
+  assert.equal((await documents.get(f.user.id, "result-revision", "rr_gone")).payload.outcome, undefined, "a run the ledger no longer has is left as it was");
+});

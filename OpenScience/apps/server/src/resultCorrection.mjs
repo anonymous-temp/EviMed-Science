@@ -147,6 +147,70 @@ export class ResultCorrectionService {
     return { settled };
   }
 
+  /**
+   * The corrections whose run ended while nothing was listening for it: a restart between the end of the run and the
+   * run-finished hook leaves the revision `bound` with no outcome and its lesson never queued, and `settle` is only ever
+   * called from that hook. This finds those revisions and settles each through the same `settle`, so what it writes is what
+   * the hook would have written: the successor the run ended on is already captured (the tool's own writes capture it as
+   * they happen), the outcome is recorded once, and the lesson is queued under the key of the correction's dispatch
+   * (`distill:<run>:correction:<event>`), so a second pass over the same revision adds nothing.
+   *
+   * Bounded and resumable: at most `limit` unsettled revisions a pass, oldest first, picking up after the last one the
+   * previous pass saw (and starting over past the end), so a revision whose run is gone from the ledger cannot hold the
+   * ones behind it back. A run that has not ended is left to the hook that will come; one that ended less than `quietMs`
+   * ago is left to the hook that is probably running now. Nothing is withheld by the sweep: a revision it cannot reach
+   * stays as it was, and a failure is reported by code and never stops the pass.
+   *
+   * @param {{ resolveProject: (userId: string, projectId: string) => Promise<any>, limit?: number, quietMs?: number }} options
+   * @returns {Promise<{ found: number, settled: number }>}
+   */
+  async sweep({ resolveProject, limit = 25, quietMs = 600_000 }) {
+    const database = this.documents.database;
+    if (!database || typeof resolveProject !== "function") return { found: 0, settled: 0 };
+    const take = Math.max(1, Math.min(100, limit));
+    /** @param {{ at: string, id: string } | null} from */
+    const unsettled = async (from) => (await database.query(`SELECT user_id, project_id, id, updated_at, payload->>'sessionId' AS session_id,
+        payload->>'promptRequestId' AS prompt_request_id
+      FROM evimed_product.documents
+      WHERE kind='result-revision' AND deleted_at IS NULL AND payload->>'state'='bound' AND (payload->'outcome'->>'settledAt') IS NULL
+        AND ($2::timestamptz IS NULL OR (updated_at, id) > ($2::timestamptz, $3::text))
+      ORDER BY updated_at, id LIMIT $1`, [take, from?.at ?? null, from?.id ?? null])).rows;
+    let rows = await unsettled(this.#sweepCursor);
+    // Past the last one it starts over in the same pass, so a wrap costs no empty tick.
+    if (rows.length === 0 && this.#sweepCursor) rows = await unsettled(null);
+    const last = rows.at(-1);
+    this.#sweepCursor = rows.length >= take && last ? { at: new Date(last.updated_at).toISOString(), id: String(last.id) } : null;
+    const ended = this.now().getTime() - quietMs;
+    /** @type {Map<string, any>} */
+    const projects = new Map();
+    /** @type {Map<string, any[]>} */
+    const ledgers = new Map();
+    const done = new Set();
+    let settled = 0;
+    for (const row of rows) {
+      try {
+        const key = `${row.user_id}\u0000${row.project_id}`;
+        if (!projects.has(key)) projects.set(key, await resolveProject(String(row.user_id), String(row.project_id)).catch(() => null));
+        const project = projects.get(key);
+        if (!project) continue;
+        if (!ledgers.has(key)) ledgers.set(key, await this.runs?.list(project).catch(() => []) ?? []);
+        const run = /** @type {any[]} */ (ledgers.get(key)).find((item) => item?.sessionId === row.session_id
+          && (item.kernelRequestIds ?? []).includes(row.prompt_request_id));
+        // No run in the ledger, or one still working: not this pass's to settle.
+        if (!run || run.status === "running") continue;
+        const finishedAt = Date.parse(String(run.finishedAt ?? ""));
+        if (Number.isFinite(finishedAt) && finishedAt > ended) continue;
+        if (done.has(`${key}\u0000${run.id}`)) continue;
+        done.add(`${key}\u0000${run.id}`);
+        settled += (await this.settle(project, run)).settled;
+      } catch (error) { this.report(codeOf(error)); }
+    }
+    return { found: rows.length, settled };
+  }
+
+  /** @type {{ at: string, id: string } | null} where the last pass of `sweep` stopped */
+  #sweepCursor = null;
+
   /** @param {any} project @param {any} run @param {any} row */
   async #settleOne(project, run, row) {
     const staged = row.payload;

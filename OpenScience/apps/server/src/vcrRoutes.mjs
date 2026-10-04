@@ -109,7 +109,7 @@ export const VCR_ROUTE_ERROR_CODES = Object.freeze([
   "vcr_pack_invalid",
   "vcr_definition_not_found",
   "vcr_definition_invalid",
-  "vcr_assessment_not_found",
+  "vcr_model_assessment_not_found",
 ]);
 
 /**
@@ -917,7 +917,7 @@ export function createVcrRoutes(dependencies) {
       const saved = await audited("vcr.model_assessment.edit", (version) => ({ code: version.id, detail: edit.key }), { code: id, detail: edit.key },
         async () => {
           const current = (await data().modelAssessments(study.id)).find((/** @type {any} */ record) => record.key === edit.key);
-          if (!current) throw new HttpError(404, "vcr_assessment_not_found", "No assessment record has this key in this study.");
+          if (!current) throw new HttpError(404, "vcr_model_assessment_not_found", "No assessment record has this key in this study.");
           return data().saveModelAssessment({ studyId: study.id, userId: study.userId, actor: String(user.id), record: { ...current, ...edit } });
         });
       return reply({ id: saved.id, key: saved.key, version: saved.version, risk: saved.risk, riskRule: saved.riskRule }, 201);

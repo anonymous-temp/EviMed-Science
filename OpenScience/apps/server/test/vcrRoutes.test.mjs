@@ -867,7 +867,7 @@ test("the lead edits a model assessment record as themselves; the risk is not a 
 
   // A new record is the run's to write.
   await assert.rejects(routes(request("POST", "/api/vcr/studies/std_1/model-assessments", { key: "no_such_record", influence: "low" }), response()),
-    { status: 404, code: "vcr_assessment_not_found" });
+    { status: 404, code: "vcr_model_assessment_not_found" });
   assert.ok(audits.some((line) => line[0] === "vcr.model_assessment.edit" && line[1] === "refused"));
 });
 

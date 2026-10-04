@@ -55,6 +55,7 @@ function worker(options = {}) {
       resolveRun: options.resolveRun ?? (async () => ({ id: "run_1", sessionId: "s1" })),
       enabled: options.enabled ?? true,
       ...(options.maintain ? { maintain: options.maintain } : {}),
+      ...(options.sweep ? { sweep: options.sweep } : {}),
       window: options.window ?? "",
       now: options.now ?? (() => new Date("2026-09-07T23:00:00")),
       pollMs: 1000,
@@ -298,6 +299,32 @@ test("a maintenance failure is recorded and never escapes the timer", async () =
   failing.maintain = async () => { second += 1; };
   await failing.reconcile();
   assert.equal(second, 1);
+});
+
+test("the sweep for what an interruption left undone rides the reconcile tick: outside the window too, after maintenance, and neither failure stops the other", async () => {
+  /** @type {string[]} */
+  const order = [];
+  const { worker: swept } = worker({
+    enabled: false,
+    maintain: async () => { order.push("maintain"); },
+    sweep: async () => { order.push("sweep"); },
+  });
+  await swept.reconcile();
+  assert.deepEqual(order, ["maintain", "sweep"], "no timer of its own: one tick, maintenance first");
+  assert.equal(swept.claimBlockedReason(), "learning_disabled", "it owes the lesson its settling even when the loop may not spend");
+
+  // A failing maintenance still lets the sweep run, and a failing sweep leaves the maintenance done and is recorded by code.
+  /** @type {string[]} */
+  const seen = [];
+  const { worker: both } = worker({
+    maintain: async () => { seen.push("maintain"); throw Object.assign(new Error("nope"), { code: "prune_failed" }); },
+    sweep: async () => { seen.push("sweep"); throw Object.assign(new Error("nope"), { code: "sweep_failed" }); },
+  });
+  await both.reconcile();
+  assert.deepEqual(seen, ["maintain", "sweep"]);
+  assert.equal(both.status().lastError, "sweep_failed");
+  // Nothing configured is nothing to do: the default sweep is a no-op.
+  await worker().worker.reconcile();
 });
 
 test("overlapping reconciles collapse into one, like the job tick", async () => {

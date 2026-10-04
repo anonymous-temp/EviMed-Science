@@ -3262,6 +3262,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       concurrency: Math.max(1, Math.min(8, Math.trunc(Number(config.learningConcurrency) || 1))),
       pollMs: config.learningPollMs,
       leaseMs: config.learningLeaseMs,
+      // A correction whose run ended while the process was down is settled, and its lesson queued, on the loop's own housekeeping tick.
+      sweep: async () => {
+        await resultCorrections?.sweep({ resolveProject: async (userId, projectId) => {
+          const user = await store.userById(userId);
+          return user ? store.requireProject(user, projectId) : null;
+        } });
+      },
       resolveProject: async (job) => {
         const user = await store.userById(job.userId);
         return user ? store.requireProject(user, job.projectId) : null;
