@@ -505,6 +505,19 @@ test("the verifier's report is stable across a folder and its ZIP, and its exit 
   const notZip = path.join(pkg.root, "..", `${path.basename(pkg.root)}-not.zip`);
   await writeFile(notZip, "not a zip"); t.after(() => rm(notZip, { force: true }));
   assert.equal((await verify(notZip)).status, 2);
+  // A package from before the records existed (format version 1) still has its files and versions checked, and says that is all.
+  const v1 = { ...unzipSync(reply.bytes) };
+  const manifestV1 = JSON.parse(Buffer.from(v1["manifest.json"]).toString());
+  manifestV1.version = 1; manifestV1.omissions = []; delete manifestV1.records; delete manifestV1.coverageGaps; manifestV1.completeness = "partial";
+  v1["manifest.json"] = Buffer.from(JSON.stringify(manifestV1));
+  for (const name of ["execution.json", "verification.json", "reproduction.json"]) { manifestV1.files = manifestV1.files.filter(file => file.archivePath !== name); delete v1[name]; }
+  v1["manifest.json"] = Buffer.from(JSON.stringify(manifestV1));
+  const olderDir = await mkdtemp(path.join(os.tmpdir(), "evimed-handoff-older-"));
+  t.after(() => rm(olderDir, { recursive: true, force: true }));
+  for (const [name, bytes] of Object.entries(v1)) { await mkdir(path.dirname(path.join(olderDir, name)), { recursive: true }); await writeFile(path.join(olderDir, name), bytes); }
+  const older = await verify(olderDir);
+  assert.equal(older.status, 0, JSON.stringify(older.report.problems));
+  assert.deepEqual(older.report.warnings.map(item => item.code), ["older_package_format"]);
   const unrelated = await mkdtemp(path.join(os.tmpdir(), "evimed-handoff-unrelated-"));
   t.after(() => rm(unrelated, { recursive: true, force: true }));
   await writeFile(path.join(unrelated, "manifest.json"), JSON.stringify({ format: "something-else" }));

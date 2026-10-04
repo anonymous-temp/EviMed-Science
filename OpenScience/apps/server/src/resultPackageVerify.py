@@ -254,6 +254,14 @@ def check(source):
     elif selected not in bundled:
         warnings.append({"code": "selected_bytes_not_included", "path": None, "detail": str(selected)[:80]})
 
+    modern = isinstance(report["version"], int) and not isinstance(report["version"], bool) and report["version"] >= 2
+    if not modern:
+        # A version 1 package listed files, versions and omissions without saying which version needed which: its files
+        # and its versions were checked above, and nothing more can honestly be said.
+        warnings.append({"code": "older_package_format", "detail": "only files and versions were checked"})
+        report["files"] = len(listed)
+        return finish(report, problems, warnings, manifest, listed), manifest, listed
+
     accounted = 0
     for version_id, version in versions.items():
         references = [(role, ref) for field, role in ROLE_OF_FIELD for ref in
