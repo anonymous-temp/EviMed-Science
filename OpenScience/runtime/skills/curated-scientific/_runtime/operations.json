@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "$comment": "The one description of what the shared executor (execute_skill.py) accepts. Each curated skill's operation is this template with the skill's own name and artifacts; the skill help is written from it, and test/curatedOperationSchema.test.mjs holds it equal to the executor's argparse flags and size limits, so the help cannot say a flag or a bound the executor does not have.",
+  "entrypoint": "_runtime/execute_skill.py",
+  "operation": {
+    "kind": "script",
+    "summary": "Run the skill's deterministic baseline on a request or a data file and write results, a report and an execution receipt.",
+    "summaryZh": "对一个请求文件或数据文件运行该技能的确定性基线，写出结果、报告和执行回执。",
+    "accepts": ["JSON request object (.json)", "table (.csv, .tsv, .jsonl)"],
+    "limits": [
+      "输入文件必须是普通文件（不是符号链接），非空且不超过 32 MiB",
+      "表格最多 200000 行、2000 列",
+      "文本字段最多 2000000 个字符",
+      "基线是有意收窄的：超出它的方法会在报告里写明，需要改用更完整的流程"
+    ],
+    "params": [
+      { "name": "--input", "type": "path", "description": "请求文件（.json 对象）或数据文件；不给时必须加 --smoke" },
+      { "name": "--output-dir", "type": "path", "required": true, "description": "输出目录，不存在会创建，不能是符号链接" },
+      { "name": "--smoke", "type": "boolean", "description": "不带输入时用该技能的内置小样例运行" }
+    ],
+    "limitsConstants": { "MAX_INPUT_BYTES": 33554432, "MAX_ROWS": 200000, "MAX_COLUMNS": 2000, "MAX_TEXT_CHARS": 2000000 }
+  }
+}

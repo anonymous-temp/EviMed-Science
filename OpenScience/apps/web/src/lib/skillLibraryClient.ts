@@ -1,10 +1,40 @@
 import { fetchWithWebAuth, webApiBase, WebApiError } from "./apiClient";
 import { productRequest, type ProductPage, type ProductRecord } from "./productClient";
+import type { WebAvailabilityState } from "./apiClient";
 
 export interface PersonalSkillPayload {
   title: string; description: string; instructions: string; nativeName: string; digest: string;
   resources: Array<{ id: string; path: string; digest: string; size: number }>; prepared: boolean;
 }
+
+/** What a skill package is, as the server gives it to a reader: unknown stays named, never filled in. */
+export interface SkillPackageView {
+  id: string; name: string; origin: string; version: string | null;
+  source: { kind: string; repository: string | null; commit: string | null; path: string | null; package: string | null; digest: string | null } | null;
+  sourceText: string; licence: { id: string | null } | null; licenceText: string;
+  digest: string | null; digestAlgorithm: string | null; scripts: number; references: number;
+  dependencies: Array<{ kind: string; name: string; constraint: string | null; optional: boolean; supply: string; basis: "declared" | "observed" }>;
+  operations: Array<{ name: string; kind: string }>;
+  unknown: Array<{ field: string; reason: string }>;
+}
+/** Whether this runtime can supply what the package needs: a label beside the package, never a gate. */
+export interface SkillAvailabilityView {
+  state: WebAvailabilityState; label: string; text: string;
+  reason: { code: string; detail?: string; source: string };
+  also?: Array<{ code: string; detail?: string }>; notes: Array<{ code: string; detail?: string }>;
+}
+export interface SkillSupplyResult { revision: number; nativeName: string | null; baseKnown: boolean; package: SkillPackageView | null; availability: SkillAvailabilityView | null }
+/** The one-line label a session catalogue row carries. */
+export interface SkillCatalogueLabel {
+  state: WebAvailabilityState; label: string; text: string; notes: Array<{ code: string; detail?: string }>;
+  version: string | null; sourceText: string | null; licenceText: string | null;
+}
+export type SkillUpdateDecision = "unchanged" | "same" | "keep-local" | "take-upstream" | "add" | "remove" | "conflict";
+export interface SkillUpdatePlan {
+  revision?: number; baseKnown: boolean; changes: number; conflicts: number; counts: Record<SkillUpdateDecision, number>;
+  entries: Array<{ scope: "part" | "resource"; name: string; decision: SkillUpdateDecision; side: "local" | "upstream" | "removed" }>;
+}
+export interface SkillUpdateResult extends SkillUpdatePlan { skill: PersonalSkill; applied: boolean; taken: string[]; kept: string[]; pinnedRevision?: number }
 export type PersonalSkill = ProductRecord<PersonalSkillPayload>;
 export interface SkillSelection { skillId: string; revision: number; digest?: string; nativeName?: string }
 export interface SkillSelectionRecord { revision: number; payload: { skills: SkillSelection[] } }
@@ -22,12 +52,16 @@ export const updatePersonalSkill = (id: string, body: SkillWrite) => productRequ
 export const removePersonalSkill = (id: string, expectedRevision: number) => productRequest<PersonalSkill>(skillPath(id), "DELETE", { expectedRevision });
 export const personalSkillHistory = (id: string) => productRequest<SkillVersion[]>(`${skillPath(id)}/revisions`);
 export const restorePersonalSkill = (id: string, expectedRevision: number, revision: number) => productRequest<PersonalSkill>(`${skillPath(id)}/restore`, "POST", { expectedRevision, revision });
+export const personalSkillSupply = (id: string, revision?: number) => productRequest<SkillSupplyResult>(`${skillPath(id)}/supply${revision ? `?revision=${revision}` : ""}`);
+export const previewSkillUpdate = (id: string, resourceId: string) => productRequest<SkillUpdatePlan & { revision: number }>(`${skillPath(id)}/update-preview`, "POST", { resourceId });
+export const applySkillUpdate = (id: string, input: { resourceId: string; expectedRevision: number; resolutions: Record<string, "local" | "upstream"> }) => productRequest<SkillUpdateResult>(`${skillPath(id)}/update`, "POST", input);
 export const personalSkillDefaults = () => productRequest<SkillSelectionRecord>("/skills/defaults");
 export const savePersonalSkillDefaults = (expectedRevision: number, skills: SkillSelection[]) => productRequest<SkillSelectionRecord>("/skills/defaults", "PUT", { expectedRevision, skills: skills.map(({ skillId, revision }) => ({ skillId, revision })) });
 export const projectSkills = (projectId: string) => productRequest<SkillSelectionRecord>(`/projects/${encodeURIComponent(projectId)}/skills`);
 export const saveProjectSkills = (projectId: string, expectedRevision: number, skills: SkillSelection[]) => productRequest<SkillSelectionRecord>(`/projects/${encodeURIComponent(projectId)}/skills`, "PUT", { expectedRevision, skills: skills.map(({ skillId, revision }) => ({ skillId, revision })) });
 export const importPersonalSkill = (resourceId: string, title: string) => productRequest<PersonalSkill>("/skills/import", "POST", { resourceId, title });
 export interface SkillImportPreview {
+  supply?: (SkillAvailabilityView & { package: SkillPackageView | null }) | null;
   description: string; instructions: string;
   invocation: { userInvocable: boolean; modelInvocable: boolean };
   resources: PersonalSkillPayload["resources"]; scripts: Array<{ path: string; size: number }>;
@@ -52,6 +86,8 @@ export interface EffectiveSkill {
   source: "builtin" | "community" | "personal" | "unknown";
   canDuplicate: boolean;
   personalRef?: { skillId: string; revision: number; title: string };
+  /** Absent from a control plane that predates it; null where no shipped package carries the name. */
+  supply?: SkillCatalogueLabel | null;
 }
 export interface EffectiveSkillCatalogue {
   state: "available" | "unavailable" | "unknown";
@@ -62,7 +98,7 @@ export interface EffectiveSkillCatalogue {
 }
 export interface EffectiveSkillDetail {
   state: "available"; runtimeGeneration: string; sessionId: string;
-  skill: EffectiveSkill & { instructions: string; metadata: Record<string, unknown>; whenToUse: string | null;
+  skill: EffectiveSkill & { operationHelp?: string | null; instructions: string; metadata: Record<string, unknown>; whenToUse: string | null;
     resources: Array<{ path: string; size: number; digest: string }>; scripts: Array<{ path: string; size: number }>; digest: string };
   findings: Array<{ code: string }>;
 }

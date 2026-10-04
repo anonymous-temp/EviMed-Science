@@ -61,6 +61,16 @@ export function createSkillLibraryRoutes({ store, service, maxJsonBytes, savePro
       if (id && !action && req.method === "DELETE") return reply(await service.remove(user, id, await body()));
       if (id && action === "revisions" && req.method === "GET") return reply(await service.history(user, id));
       if (id && action === "restore" && req.method === "POST") return reply(await service.restore(user, id, await body()));
+      // What the skill is (source, licence, version, scripts, dependencies, operations) and whether this runtime can
+      // supply what it needs: a label, read for the current revision or a named one.
+      if (id && action === "supply" && !rawResource && req.method === "GET") {
+        if ([...url.searchParams.keys()].some(key => key !== "revision") || url.searchParams.getAll("revision").length > 1) throw new HttpError(400, "extension_contract_invalid", "Invalid supply query.");
+        const revision = url.searchParams.get("revision");
+        return reply(await service.supplyOf(user, id, revision === null ? null : Number(revision)));
+      }
+      // Updating an edited copy toward a newer upstream: the plan changes nothing; the update makes a new revision.
+      if (id && action === "update-preview" && !rawResource && req.method === "POST") return reply(await service.updatePreview(user, id, await body()));
+      if (id && action === "update" && !rawResource && req.method === "POST") return reply(await service.applyUpdate(user, id, await body()), 201);
       if (id && action === "resources" && rawResource && req.method === "GET") {
         const bytes = await service.resource(user, id, Number(url.searchParams.get("revision")), decode(rawResource));
         res.setHeader("Cache-Control", "no-store");

@@ -712,7 +712,26 @@
         }
       },
       "conditional": {},
-      "instructionOnly": []
+      "instructionOnly": [],
+      "methodDependencies": {
+        "$comment": "Software a skill's full method needs that the runtime image does not carry, as the skill's own text names it. The shared baseline above runs without it; a skill whose own instructions say 'check RDKit' or whose script exits without gseapy is not runnable for that method on this image, and the availability label says so. Each entry quotes the mention that justifies it (checked against the skill's files by test/skillPackages.test.mjs); a name no skill text mentions is not declared here.",
+        "cheminformatics": [
+          { "kind": "python-package", "name": "rdkit", "mention": "RDKit", "evidence": "SKILL.md: Check RDKit or other required dependencies before execution" }
+        ],
+        "biosequence-analysis": [
+          { "kind": "python-package", "name": "biopython", "mention": "Biopython", "evidence": "SKILL.md: Check Biopython or other dependencies before execution" }
+        ],
+        "pathway-enrichment": [
+          { "kind": "python-package", "name": "gseapy", "mention": "gseapy", "evidence": "scripts/run_enrichment.py: Requires: gseapy; exits when it is not installed" }
+        ],
+        "single-cell-analysis": [
+          { "kind": "python-package", "name": "scanpy", "mention": "Scanpy", "evidence": "SKILL.md description: AnnData, Scanpy" },
+          { "kind": "python-package", "name": "anndata", "mention": "AnnData", "evidence": "SKILL.md description: AnnData, Scanpy" }
+        ],
+        "statistical-power": [
+          { "kind": "python-package", "name": "lifelines", "optional": true, "mention": "lifelines", "evidence": "SKILL.md: uv pip install lifelines (survival; optional, add as needed)" }
+        ]
+      }
     }
   },
   "skills": [

@@ -222,7 +222,7 @@ test("an ordinary reader is never handed a run, a dispatch or a project", async 
   const body = await service.forAccount(alice);
   const text = JSON.stringify(body);
   for (const secret of ["run_secret_1", "dispatch", "session-", "project-1"]) assert.equal(text.includes(secret), false, secret);
-  assert.deepEqual(Object.keys(body).sort(), ["capabilities", "collector", "extensions", "generatedAt", "tools"]);
+  assert.deepEqual(Object.keys(body).sort(), ["capabilities", "collector", "extensions", "generatedAt", "skills", "tools"]);
   assert.deepEqual(publicAvailability(stateOf(await service.capabilities(alice), "adr-analysis")).operations.successes, 1);
 });
 

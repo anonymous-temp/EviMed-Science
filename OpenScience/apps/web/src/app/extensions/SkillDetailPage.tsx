@@ -9,7 +9,9 @@ import { FilesSkeleton } from "@/components/cards/Skeletons";
 import { getWebProjectId } from "@/lib/apiClient";
 import { useProjectStore } from "@/lib/projects";
 import { productErrorMessage } from "@/lib/productClient";
-import { getPersonalSkill, personalSkillDefaults, personalSkillHistory, personalSkillResourceUrl, projectSkills, removePersonalSkill, restorePersonalSkill, savePersonalSkillDefaults, saveProjectSkills, updatePersonalSkill, type PersonalSkill, type SkillSelection, type SkillSelectionRecord, type SkillVersion, type SkillWrite } from "@/lib/skillLibraryClient";
+import { getPersonalSkill, personalSkillDefaults, personalSkillHistory, personalSkillResourceUrl, personalSkillSupply, projectSkills, removePersonalSkill, restorePersonalSkill, savePersonalSkillDefaults, saveProjectSkills, updatePersonalSkill, type PersonalSkill, type SkillSelection, type SkillSelectionRecord, type SkillSupplyResult, type SkillVersion, type SkillWrite } from "@/lib/skillLibraryClient";
+import { SkillPackagePanel } from "@/components/skills/SkillPackagePanel";
+import { SkillUpdatePanel } from "@/components/skills/SkillUpdatePanel";
 import { SkillEditor } from "./SkillEditor";
 
 export function SkillDetailPage() {
@@ -21,13 +23,14 @@ export function SkillDetailPage() {
 function SkillDetail({ skillId, projectId }: { skillId: string; projectId: string }) {
   const navigate = useNavigate(), alive = useRef(true), generation = useRef(0), working = useRef(false);
   const [skill, setSkill] = useState<PersonalSkill | null>(null), [history, setHistory] = useState<SkillVersion[]>([]);
-  const [defaults, setDefaults] = useState<SkillSelectionRecord | null>(null), [selection, setSelection] = useState<SkillSelectionRecord | null>(null);
+  const [defaults, setDefaults] = useState<SkillSelectionRecord | null>(null), [selection, setSelection] = useState<SkillSelectionRecord | null>(null), [supply, setSupply] = useState<SkillSupplyResult | null>(null);
   const [error, setError] = useState<string | null>(null), [busy, setBusy] = useState(false), [editing, setEditing] = useState(false), [removing, setRemoving] = useState(false), [compared, setCompared] = useState<SkillVersion | null>(null);
   const load = useCallback(async () => {
     const request = ++generation.current;
     try {
-      const [record, versions, future, project] = await Promise.all([getPersonalSkill(skillId), personalSkillHistory(skillId), personalSkillDefaults(), projectSkills(projectId)]);
-      if (alive.current && request === generation.current) { setSkill(record); setHistory(versions); setDefaults(future); setSelection(project); setError(null); }
+      // The package is a label beside the skill: reading it can fail without the skill failing to open.
+      const [record, versions, future, project, packaged] = await Promise.all([getPersonalSkill(skillId), personalSkillHistory(skillId), personalSkillDefaults(), projectSkills(projectId), personalSkillSupply(skillId).catch(() => null)]);
+      if (alive.current && request === generation.current) { setSkill(record); setHistory(versions); setDefaults(future); setSelection(project); setSupply(packaged); setError(null); }
     } catch (caught) { if (alive.current && request === generation.current) setError(productErrorMessage(caught)); }
   }, [skillId, projectId]);
   useEffect(() => { const requests = generation; alive.current = true; void load(); return () => { alive.current = false; requests.current++; }; }, [load]);
@@ -56,10 +59,12 @@ function SkillDetail({ skillId, projectId }: { skillId: string; projectId: strin
         {defaultSelection && defaultSelection.revision !== skill.revision && <Button variant="text" disabled={busy || !defaults} onClick={() => void act(() => savePersonalSkillDefaults(defaults!.revision, select(defaults!.payload.skills, true)))}>新项目默认更新到版本 {skill.revision}</Button>}
         <Link to="/app/chat" className="text-ui text-accent">前往对话</Link>
       </div>
+      <SkillPackagePanel view={supply?.package ?? null} availability={supply?.availability ?? null} />
       <pre className="whitespace-pre-wrap break-words rounded bg-surface-1 p-4 text-ui text-text">{skill.payload.instructions}</pre>
       {skill.payload.resources.length > 0 && <section aria-label="技能资源"><h2 className="mb-2 text-ui font-medium text-text">资源</h2><List divided>{skill.payload.resources.map(resource => <ListRow key={`${resource.id}:${resource.path}`} title={resource.path} href={personalSkillResourceUrl(skill.id, skill.revision, resource.id)} />)}</List></section>}
       <section aria-label="版本记录"><h2 className="mb-2 text-ui font-medium text-text">版本记录</h2><List divided>{history.filter(version => !version.deletedAt).map(version => <ListRow key={version.revision} title={`版本 ${version.revision}`} meta={version.payload.title} onOpen={() => setCompared(version)} actions={version.revision !== skill.revision ? <Button size="sm" variant="text" disabled={busy} onClick={() => void act(() => restorePersonalSkill(skillId, skill.revision, version.revision))}>恢复此版本</Button> : undefined} />)}</List></section>
       {compared && <section aria-label="版本比较"><h2 className="mb-3 text-ui font-medium text-text">版本 {compared.revision} 与当前版本</h2><div className="grid gap-4 md:grid-cols-2"><div><p className="mb-2 text-caption text-text-3">版本 {compared.revision}</p><pre className="whitespace-pre-wrap break-words rounded bg-surface-1 p-4 text-ui text-text">{compared.payload.instructions}</pre></div><div><p className="mb-2 text-caption text-text-3">当前版本</p><pre className="whitespace-pre-wrap break-words rounded bg-surface-1 p-4 text-ui text-text">{skill.payload.instructions}</pre></div></div><Button variant="text" onClick={() => setCompared(null)}>收起比较</Button></section>}
+      {supply?.package?.source && ["repository", "upload", "builtin-copy"].includes(supply.package.source.kind) && <SkillUpdatePanel skillId={skillId} revision={skill.revision} source={supply.package.source} onApplied={() => void load()} />}
       <div><Button variant="text" destructive disabled={busy} onClick={() => setRemoving(true)}><Trash2 size={16} aria-hidden />移除技能</Button></div>
     </div>}
     {removing && skill && <ConfirmDialog title="移除技能" body="从个人技能库移除，并停止在新对话中选用。现有版本记录和已生成的文件会保留。" confirmLabel="移除" busy={busy} onCancel={() => setRemoving(false)} onConfirm={() => void act(async () => { await removePersonalSkill(skillId, skill.revision); if (alive.current) navigate("/app/extensions/skills"); })} />}
