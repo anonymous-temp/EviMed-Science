@@ -21,6 +21,7 @@ export interface SourceUnderstanding {
   schemaVersion: 1;
   createdAt: string;
   run: { id: string; sessionId: string; dispatchId: string } | null;
+  /** Null when the gateway could not settle the run's cost: not known, never a guess. */
   usage: {
     currency: "CNY";
     modelId: string;
@@ -29,6 +30,9 @@ export interface SourceUnderstanding {
     inputTokens: number | null;
     outputTokens: number | null;
   } | null;
+  /** Present only when the run's delivery receipt did not vouch for the package this was read from.
+   *  A label on a stored understanding, never a reason it is missing; the page does not print it. */
+  verification?: "unverified";
   summary: string;
   slots: Record<string, { state: "known"; value: string; evidence: SourceAnchor[] } | { state: "unknown"; reason: string }>;
   claims: Array<{ id: string; statement: string; evidence: SourceAnchor[] }>;

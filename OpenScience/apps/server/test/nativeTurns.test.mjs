@@ -628,10 +628,15 @@ test("a dispatched run is not credited with a receipt another run of the project
   // snapshotted a previous run's package as this run's accepted work.
   const f = await setup(t, []);
   const binding = { sessionId: fixture.sessionId, mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
-  const { run } = await f.store.reserveRun(f.project, binding, { dispatchId: "someone-elses-receipt", baselineCursor: null });
+  // A previous run's package is older than this run: the freshness rule is what
+  // keeps the files a run did not write out of its delivery (a receipt only
+  // labels it, 2026-10-04).
   const report = "A package a previous run delivered.\n";
   await mkdir(path.join(f.project.workspaceDir, "deliverables", "d1"), { recursive: true });
   await writeFile(path.join(f.project.workspaceDir, "deliverables", "d1", "report.md"), report);
+  const twoDaysAgo = new Date(Date.now() - 2 * 86_400_000);
+  await utimes(path.join(f.project.workspaceDir, "deliverables", "d1", "report.md"), twoDaysAgo, twoDaysAgo);
+  const { run } = await f.store.reserveRun(f.project, binding, { dispatchId: "someone-elses-receipt", baselineCursor: null });
   const receiptFor = (runId) => JSON.stringify({
     formatVersion: 1, runId, bundleVersion: "1", domainVersion: "1", entries: [{
       deliverableId: "d1", contractKind: "clinical-evidence-report", capability: "clinical-evidence-synthesis", acceptedAt: new Date().toISOString(), attempt: 1, notices: [],
@@ -643,6 +648,7 @@ test("a dispatched run is not credited with a receipt another run of the project
   const credited = await f.store.finishFromDurableRecord(f.project, run);
   assert.notEqual(credited.status, "succeeded", "a previous run's accepted package is not this run's delivery");
   assert.deepEqual(credited.artifacts, []);
+  assert.deepEqual(credited.unverifiedArtifacts, [], "nor is it claimed as a file this run wrote");
 });
 
 test("the same receipt, written by this run, is its delivery", async (t) => {

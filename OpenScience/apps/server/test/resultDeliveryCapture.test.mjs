@@ -6,7 +6,7 @@ import test from "node:test";
 import { readDeliveryReceipt } from "../src/agentRuns.mjs";
 import { ResultProvenanceService } from "../src/resultProvenanceService.mjs";
 import { ResultImpactService } from "../src/resultImpact.mjs";
-import { captureResultDelivery } from "../src/resultDeliveryCapture.mjs";
+import { captureFinishedRun, captureResultDelivery } from "../src/resultDeliveryCapture.mjs";
 import { productDocumentsDouble } from "./helpers/productDocumentsDouble.mjs";
 
 const sha = value => createHash("sha256").update(value).digest("hex");
@@ -94,14 +94,83 @@ test("a matrix changed after receipt verification cannot promote metadata into i
   const verified = await readDeliveryReceipt(f.project, f.run);
   await writeFile(path.join(f.project.workspaceDir, f.matrixPath), JSON.stringify({ claims: [{ claimId: "CLM-999", identifier: "10.9999/invented" }] }));
   const reply = await captureResultDelivery({ ...f, receipt: verified });
-  assert.equal(reply.items.length, 1);
-  assert.equal(reply.items[0].path, f.reportPath);
-  assert.equal(reply.items[0].inputs.length, 0);
-  assert.equal(reply.items[0].findings.some(item => item.elementId), false);
-  assert.equal(reply.items[0].review.status, "unknown");
-  assert.equal(reply.items[0].review.matrixText, null);
+  const report = reply.items.find(item => item.path === f.reportPath);
+  assert.equal(report.inputs.length, 0);
+  assert.equal(report.findings.some(item => item.elementId), false);
+  assert.equal(report.review.status, "unknown");
+  assert.equal(report.review.matrixText, null);
   assert.equal(reply.entries[0].metadata, "unavailable");
   assert.ok(reply.failures.some(item => item.code === "result_capture_changed"));
+  // The changed matrix is still the file the run produced: it keeps a version,
+  // as the bytes it is now, bound to nothing and carrying no claim metadata
+  // (2026-10-04: a receipt labels a result, it does not hide one).
+  const matrix = reply.items.find(item => item.path === f.matrixPath);
+  assert.ok(matrix, "the changed matrix is captured as observed");
+  assert.equal(matrix.coverage.producer, "observed");
+  assert.ok(matrix.coverage.gaps.includes("producer_bytes_not_bound"));
+  assert.equal(matrix.inputs.length, 0);
+  assert.equal(matrix.findings.some(item => item.elementId), false);
+  assert.deepEqual(reply.unbound, [f.matrixPath]);
+  assert.equal(report.coverage.producer, "bound", "the report that still matches its receipt stays bound");
+  assert.deepEqual((await f.results.raw("owner", "p", matrix.versionId)).bytes, await readFile(path.join(f.project.workspaceDir, f.matrixPath)));
+});
+
+test("a report changed after its receipt keeps a version as observed bytes, never bound to the receipt", async t => {
+  const f = await fixture(t);
+  const verified = await readDeliveryReceipt(f.project, f.run);
+  await writeFile(path.join(f.project.workspaceDir, f.reportPath), "# Report edited after the gate accepted it\n");
+  const reply = await captureResultDelivery({ ...f, receipt: verified });
+  const report = reply.items.find(item => item.path === f.reportPath);
+  assert.ok(report, "the edited report is captured");
+  assert.equal(report.coverage.producer, "observed");
+  assert.ok(report.coverage.gaps.includes("producer_bytes_not_bound"));
+  assert.equal(report.review.status, "unknown", "the matrix's claim links are not promoted onto bytes the receipt did not vouch for");
+  assert.equal(report.inputs.length, 0);
+  assert.deepEqual(reply.unbound, [f.reportPath]);
+  assert.equal(reply.items.find(item => item.path === f.matrixPath).coverage.producer, "bound", "the matrix that still matches is bound");
+  assert.match((await f.results.raw("owner", "p", report.versionId)).bytes.toString(), /edited after the gate accepted it/);
+});
+
+test("a delivery with no receipt at all still gets a version for each file it left, observed and carrying no claim metadata", async t => {
+  const f = await fixture(t);
+  await rm(path.join(f.project.workspaceDir, "delivery-receipt.json"));
+  assert.equal(await readDeliveryReceipt(f.project, f.run), null);
+  await mkdir(path.join(f.project.workspaceDir, "deliverables/d2"), { recursive: true });
+  await writeFile(path.join(f.project.workspaceDir, "deliverables/d2/notes.md"), "# Notes the run left\n");
+  const files = [f.reportPath, f.matrixPath, "deliverables/d2/notes.md", "analysis/scratch.py", "../escape.md", f.reportPath];
+  const reply = await captureResultDelivery({ ...f, receipt: null, files });
+  assert.deepEqual(reply.failures, []);
+  assert.deepEqual(reply.items.map(item => item.path).sort(), [f.matrixPath, f.reportPath, "deliverables/d2/notes.md"].sort(),
+    "deliverable files only, each once: a scratch script and a path outside the layout are not results");
+  for (const item of reply.items) {
+    assert.equal(item.coverage.producer, "observed", item.path);
+    assert.ok(item.coverage.gaps.includes("producer_bytes_not_bound"), item.path);
+    assert.equal(item.inputs.length, 0, `${item.path}: no claim metadata is promoted from a matrix nothing graded`);
+    assert.equal(item.review.status, "unknown", item.path);
+    assert.equal(item.producer.kind, "deliverable");
+    assert.equal(item.producer.runId, "run");
+  }
+  assert.deepEqual(reply.entries.map(entry => [entry.deliverableId, entry.metadata]).sort(), [["d1", "unavailable"], ["d2", "not_applicable"]]);
+  assert.equal(reply.unbound.length, 3);
+  assert.match((await f.results.raw("owner", "p", reply.items.find(item => item.path === "deliverables/d2/notes.md").versionId)).bytes.toString(), /Notes the run left/);
+  // The same files again are the same versions: a replayed finish adds nothing.
+  const replay = await captureResultDelivery({ ...f, receipt: null, files });
+  assert.deepEqual(replay.items.map(item => item.versionId).sort(), reply.items.map(item => item.versionId).sort());
+});
+
+test("files of a deliverable the receipt does not vouch for are captured beside the ones it does, and a graded deliverable keeps to its receipt", async t => {
+  const f = await fixture(t);
+  const verified = await readDeliveryReceipt(f.project, f.run);
+  await mkdir(path.join(f.project.workspaceDir, "deliverables/d2"), { recursive: true });
+  await writeFile(path.join(f.project.workspaceDir, "deliverables/d2/second.md"), "# A second deliverable no gate accepted\n");
+  await writeFile(path.join(f.project.workspaceDir, "deliverables/d1/scratch.txt"), "left in the graded package's directory\n");
+  const reply = await captureResultDelivery({ ...f, receipt: verified,
+    files: [f.reportPath, f.matrixPath, "deliverables/d1/scratch.txt", "deliverables/d2/second.md"] });
+  assert.deepEqual(reply.failures, []);
+  assert.deepEqual(reply.items.map(item => item.path).sort(), [f.matrixPath, f.reportPath, "deliverables/d2/second.md"].sort());
+  assert.equal(reply.items.find(item => item.path === f.reportPath).coverage.producer, "bound");
+  assert.equal(reply.items.find(item => item.path === "deliverables/d2/second.md").coverage.producer, "observed");
+  assert.deepEqual(reply.unbound, ["deliverables/d2/second.md"]);
 });
 
 test("a source symlink and an unsafe matrix path never acquire capture authority", async t => {
@@ -144,10 +213,13 @@ test("matrix overwrite during source capture leaves its sibling report without u
   };
   const reply = await captureResultDelivery(f);
   assert.equal(reply.sourceItems.length, 1);
-  assert.equal(reply.items.length, 1);
-  assert.equal(reply.items[0].path, f.reportPath);
-  assert.equal(reply.items[0].inputs.length, 0);
-  assert.equal(reply.items[0].findings.some(item => item.elementId), false);
+  // The overwritten matrix keeps a version of its own, as observed bytes; what
+  // it must not do is lend the report any metadata it was not captured with.
+  assert.equal(reply.items.length, 2);
+  const report = reply.items.find(item => item.path === f.reportPath);
+  assert.equal(report.inputs.length, 0);
+  assert.equal(report.findings.some(item => item.elementId), false);
+  assert.equal(reply.items.find(item => item.path === f.matrixPath).coverage.producer, "observed");
   assert.equal(reply.entries[0].metadata, "unavailable");
 });
 
@@ -160,4 +232,34 @@ test("a partial parse keeps bytes and an unsupported quotation finding rather th
   const report = reply.items.find(item => item.path === f.reportPath);
   assert.equal(report.findings.find(item => item.elementId === "CLM-001").status, "quote_not_found");
   assert.equal(report.inputs.find(item => item.id === "10.9999/paper").availability, "captured");
+});
+
+test("a run that finishes with no receipt hands its listed files to capture, and one with nothing to hand over is not an error", async t => {
+  const f = await fixture(t);
+  await rm(path.join(f.project.workspaceDir, "delivery-receipt.json"));
+  // The run as the ledger holds it once finished unverified: its files are its
+  // artifacts, and no receipt came back for them.
+  const finished = { ...f.run, status: "succeeded", verification: "unverified", artifacts: [f.reportPath, f.matrixPath], unverifiedArtifacts: [] };
+  const reply = await captureFinishedRun({ results: f.results, project: f.project, run: finished, readReceipt: readDeliveryReceipt });
+  assert.deepEqual(reply.items.map(item => item.path).sort(), [f.matrixPath, f.reportPath].sort());
+  assert.ok(reply.items.every(item => item.coverage.producer === "observed"));
+  // Files a failed or stopped run only recovered are listed apart, and are files all the same.
+  const stopped = { ...f.run, id: "run-two", status: "failed", artifacts: [], unverifiedArtifacts: [f.reportPath] };
+  const recovered = await captureFinishedRun({ results: f.results, project: f.project, run: stopped, readReceipt: readDeliveryReceipt });
+  assert.deepEqual(recovered.items.map(item => item.path), [f.reportPath]);
+  // Nothing to hand over: no receipt and no file.
+  const empty = { ...f.run, id: "run-three", status: "failed", artifacts: [], unverifiedArtifacts: [] };
+  assert.equal(await captureFinishedRun({ results: f.results, project: f.project, run: empty, readReceipt: readDeliveryReceipt }), null);
+  // The platform's own background projects keep to what a receipt vouches for.
+  const background = { ...f.run, id: "run-background", status: "succeeded", artifacts: [f.reportPath], unverifiedArtifacts: [] };
+  assert.equal(await captureFinishedRun({ results: f.results, project: f.project, run: background, readReceipt: readDeliveryReceipt, unreceipted: false }), null);
+  // A receipt that is there is read as before, and what it names stays bound.
+  // Another run's, since a version's identity is the run, the path and the bytes:
+  // the same run's files were just captured as observed.
+  f.receipt.runId = "run-graded";
+  await f.writeOutputs();
+  const graded = { ...f.run, id: "run-graded", status: "succeeded", artifacts: [f.reportPath, f.matrixPath], unverifiedArtifacts: [] };
+  const verified = await captureFinishedRun({ results: f.results, project: f.project, run: graded, readReceipt: readDeliveryReceipt });
+  assert.ok(verified.items.every(item => item.coverage.producer === "bound"));
+  assert.deepEqual(verified.unbound, []);
 });

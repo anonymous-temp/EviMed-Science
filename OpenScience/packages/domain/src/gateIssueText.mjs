@@ -282,6 +282,7 @@ export const GATE_CODE_TITLES_ZH = Object.freeze({
   // The platform's own notices about a run, named where they are raised.
   run_stall_observed: '一段时间没有可观测的进展',
   run_unverified_delivery: '文件按「未核验」交付',
+  run_stopped_after_answer: '运行时在回答之后停止，回答未经核验',
   run_brief_lost: '未按原始题面核对药品范围',
   run_projection_unreadable: '运行自述文件无法读取',
   run_unattributed: '无法确认交付是否通过验收',

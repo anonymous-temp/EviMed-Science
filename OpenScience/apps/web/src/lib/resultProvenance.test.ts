@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assignResultAnchors, resultTextDifference, resultValueDifference, selectionResultAnchor } from "./resultProvenance";
+import { assignResultAnchors, resultGapLabel, resultTextDifference, resultValueDifference, selectionResultAnchor } from "./resultProvenance";
 
 describe("result anchors and differences", () => {
   it("anchors a selected table cell to its immutable row and column", () => {
@@ -34,5 +34,15 @@ describe("declared numerical comparison", () => {
     expect(resultValueDifference({ ...old, value: Infinity }, { ...old, value: NaN })).toBe("无法比较数值");
     expect(resultValueDifference({ ...old, value: "1" }, { ...old, value: "1" })).toBe("无法比较数值");
     expect(resultValueDifference(old, { ...old, value: 2, absoluteTolerance: Infinity })).toBe("无法比较数值");
+  });
+});
+
+describe("what a result version says about its record", () => {
+  it("reads a file captured with no delivery receipt behind it as not verified, not as a generic gap", () => {
+    // An unverified delivery's files keep their versions as observed bytes
+    // (`producer: observed`, the gap `producer_bytes_not_bound`): the file is
+    // theirs to open, and the page says it has not been verified.
+    expect(resultGapLabel("producer_bytes_not_bound")).toBe("文件内容未经核验");
+    expect(resultGapLabel("code_not_captured")).toBe("部分来源、代码或环境未完整保存");
   });
 });

@@ -4,7 +4,7 @@ import test from "node:test";
 import { HttpError } from "../src/security.mjs";
 import { normalizeSourceText, projectSourceUnderstandingOutput, sourceUnderstandingAuditSample, sourceUnderstandingSchema,
   validateSourceUnderstanding } from "@evimed/domain";
-import { projectSourceManifestRecord, readCopyOf, sourceIndexDocument, sourceOmissionRecord, sourceReadable, SOURCE_DEPTHS, SOURCE_STATES, SOURCE_TYPES,
+import { projectSourceDerivedRecord, projectSourceManifestRecord, readCopyOf, sourceIndexDocument, sourceOmissionRecord, sourceReadable, SOURCE_DEPTHS, SOURCE_STATES, SOURCE_TYPES,
   SourceService } from "../src/sourceService.mjs";
 
 // The lease, replay and account-generation fences need a real database, so they
@@ -1033,4 +1033,27 @@ test("a list filters by what the page says or by the pipeline's status, never bo
   await assert.rejects(service.list("user", { projectId: "project", state: "reading", status: "parsing" }), { code: "source_payload_invalid" });
   // A state is a predicate over two fields; the durable store answers it.
   await assert.rejects(service.list("user", { projectId: "project", state: "reading" }), { code: "source_state_unavailable" });
+});
+
+test("a stored understanding projects the receipt label it was written with, and none when the receipt vouched for it", () => {
+  // `publishUnderstanding` stores what the run's reader returned: an
+  // understanding its delivery receipt did not vouch for is `verification:
+  // "unverified"`, and one whose usage could not be settled has `usage: null`.
+  // Both are labels on a stored record (2026-10-04); neither withholds it.
+  const input = auditCapture();
+  const { output } = auditedDelivery(input, [input.units[0].id]);
+  const row = (extra) => ({ id: "understanding:src_fix:g4", createdAt: "2026-10-04T00:00:00.000Z", payload: {
+    recordType: "source-understanding", sourceId: input.sourceId, generation: input.generation,
+    output: projectSourceUnderstandingOutput(output, input), run: { id: "run_one", sessionId: "ses_one", dispatchId: "disp_one", extra: "dropped" },
+    units: [], ...extra } });
+  const unverified = projectSourceDerivedRecord(row({ usage: null, verification: "unverified" }));
+  assert.equal(unverified.verification, "unverified");
+  assert.equal(unverified.usage, null);
+  assert.equal(unverified.summary, output.summary);
+  assert.deepEqual(unverified.run, { id: "run_one", sessionId: "ses_one", dispatchId: "disp_one" });
+  const graded = projectSourceDerivedRecord(row({ usage: { currency: "CNY", modelId: "m", providerId: "p", actualCost: 0.1, inputTokens: 1, outputTokens: 2, secret: "dropped" } }));
+  assert.equal(Object.hasOwn(graded, "verification"), false, "a vouched-for understanding carries no label");
+  assert.deepEqual(graded.usage, { currency: "CNY", modelId: "m", providerId: "p", actualCost: 0.1, inputTokens: 1, outputTokens: 2 });
+  // Only the one label is ever projected, whatever the row holds.
+  assert.equal(Object.hasOwn(projectSourceDerivedRecord(row({ usage: null, verification: "anything else" })), "verification"), false);
 });

@@ -30,20 +30,27 @@ export class SourceUnderstandingRuns {
     if (result.status !== "succeeded") throw new HttpError(409, "source_understanding_run_failed", "The source understanding run did not succeed.");
     const issues = validateSourceUnderstanding(result.output, input);
     if (issues.length) throw new HttpError(422, "source_understanding_invalid", issues.slice(0, 3).join(" "));
+    // What the gateway settled for this run, or not known. A usage record that
+    // is missing or incomplete is recorded as such: the understanding is the
+    // researcher's, a document does not go without one because a cost could not
+    // be settled, and a cost is never replaced with an invented model or zero
+    // (2026-10-04; this used to refuse the understanding with a 502).
     const usage = result.usage;
-    if (!usage || usage.currency !== "CNY" || typeof usage.modelId !== "string" || !usage.modelId
-      || typeof usage.providerId !== "string" || !usage.providerId || !Number.isFinite(usage.actualCost) || usage.actualCost < 0
-      || !Number.isSafeInteger(usage.inputTokens) || usage.inputTokens < 0 || !Number.isSafeInteger(usage.outputTokens) || usage.outputTokens < 0) {
-      throw new HttpError(502, "source_understanding_usage_invalid", "The source run has no actual gateway usage receipt.");
-    }
+    const known = usage && usage.currency === "CNY" && typeof usage.modelId === "string" && usage.modelId
+      && typeof usage.providerId === "string" && usage.providerId && Number.isFinite(usage.actualCost) && usage.actualCost >= 0
+      && Number.isSafeInteger(usage.inputTokens) && usage.inputTokens >= 0 && Number.isSafeInteger(usage.outputTokens) && usage.outputTokens >= 0;
     // Projected against the immutable input, so the stored audit is the one the
     // control plane derived from the deterministic unit sample and the output's
     // own anchors — not the one the run reported about itself. Dropping the
     // second argument here is what would let a run record a clean audit it
     // never performed, which is the whole reason the contract stopped refusing.
-    return { state: "complete", ...run, output: projectSourceUnderstandingOutput(result.output, input), usage: {
-      currency: "CNY", modelId: usage.modelId, providerId: usage.providerId, actualCost: usage.actualCost,
-      inputTokens: usage.inputTokens, outputTokens: usage.outputTokens,
-    } };
+    return { state: "complete", ...run, output: projectSourceUnderstandingOutput(result.output, input),
+      usage: known ? {
+        currency: "CNY", modelId: usage.modelId, providerId: usage.providerId, actualCost: usage.actualCost,
+        inputTokens: usage.inputTokens, outputTokens: usage.outputTokens,
+      } : null,
+      // Said when the run's delivery receipt did not vouch for the package: a
+      // label on the understanding, never a reason it was not stored.
+      ...(result.verification === "unverified" ? { verification: "unverified" } : {}) };
   }
 }
