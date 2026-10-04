@@ -17,6 +17,8 @@ Persist transformation code, fitted state and the data/split definition for foll
 
 Deliver a substantive `statistical-report.md` with the actual findings and limitations, plus the useful reproducibility artifacts. The optional names are `analysis-results.json`, `analysis-run.json`, `analysis.py` and `analysis.R`; do not create empty placeholders or require both languages. Named scripts, notebooks, figures and tables may accompany them. Prefer structured results with `schemaVersion: 1` and `analyses: [{id, status, method, estimand, n, estimate, interval, pValue, warnings}]`; omit inapplicable fields and use failed/unsupported status with a reason for unavailable calculations. Descriptive summaries do not require a p value or interval. Do not label null or non-finite estimates complete.
 
+A reference-checked helper ships beside the skill: `scripts/analysis_methods.py` (add the skill's `scripts` directory to `sys.path`). It has `compare_groups`, `covariate_balance`, `contingency_test`, `linear_regression`, `logistic_regression`, `kaplan_meier`, `log_rank`, `cox_regression` and `adjust_pvalues`. Each returns one entry shaped for `analysis-results.json` with the diagnostics the data earned (missing values, repeated measurements, censoring, zero cells, separation, covariate imbalance, unadjusted multiplicity), the method record it ran (assumptions, references) and the library versions. A computation the data cannot support comes back `unsupported` with a named reason and no number: keep every other analysis. Use it or your own code with the same care; its diagnostics are labels, never verdicts, and it is not a substitute for choosing the method from the design.
+
 For lightweight provenance, use the helper shipped beside this skill:
 
 ```bash

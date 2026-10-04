@@ -1,0 +1,1194 @@
+{
+ "schemaVersion": 1,
+ "note": "Records of the reference-checked analysis methods in analysis_methods.py, in the shape of packages/domain/src/method-records.json. `version` changes when the method's numbers, inputs, checks or diagnostics change; a result carries it with the record's digest and the digest of the module. Only strings, integers and booleans appear here. `seeded: false` means the method draws no random numbers.",
+ "methods": {
+  "compare_groups": {
+   "id": "compare_groups",
+   "version": "1.0.0",
+   "engine": "analysis_methods",
+   "title": "Comparison of a continuous outcome between two groups: Welch or Student t test, paired t test, Mann-Whitney test",
+   "estimand": "The difference between the two groups' mean outcomes (first minus second, named in the result), with a 95% interval for the t tests; the Mann-Whitney test reports its statistic and p value only.",
+   "assumptions": [
+    {
+     "id": "independent_units",
+     "text": "Each row is one independent subject. A person with several rows, or in both groups, breaks independence.",
+     "checkedBy": "refusal:repeated_measurements, refusal:crossed_subjects"
+    },
+    {
+     "id": "distribution",
+     "text": "The t tests assume the group means are approximately normal (large enough groups or a roughly normal outcome); Welch's test does not assume equal variances.",
+     "checkedBy": "diagnostic:small_group"
+    },
+    {
+     "id": "complete_data_ignorable",
+     "text": "Rows with a missing value are dropped, which is only harmless when the values are missing at random with respect to the outcome.",
+     "checkedBy": "diagnostic:missing_values_dropped, diagnostic:missingness_differs_by_group"
+    },
+    {
+     "id": "no_confounding",
+     "text": "The groups are comparable apart from the exposure; randomization, or adjustment, is not provided here. A covariate that differs between the groups by more than a tenth of a standard deviation is named.",
+     "checkedBy": "diagnostic:covariate_imbalance"
+    },
+    {
+     "id": "direction",
+     "text": "The difference is first minus second; a contrast is named by the caller or the direction is inferred and said so.",
+     "checkedBy": "diagnostic:contrast_direction_inferred"
+    },
+    {
+     "id": "one_test_among_many",
+     "text": "A p value is for one prespecified comparison; several comparisons need an adjustment.",
+     "checkedBy": "diagnostic:multiplicity_unadjusted"
+    }
+   ],
+   "inputs": [
+    {
+     "name": "values",
+     "type": "array of numbers",
+     "unit": "unit of the outcome",
+     "range": "missing values allowed (dropped)"
+    },
+    {
+     "name": "groups",
+     "type": "array of labels",
+     "unit": "none",
+     "range": "exactly two distinct labels after dropping missing"
+    },
+    {
+     "name": "contrast",
+     "type": "pair of labels",
+     "unit": "none",
+     "range": "optional; the two labels, first minus second"
+    },
+    {
+     "name": "test",
+     "type": "string",
+     "unit": "none",
+     "range": "welch (default), student, paired or mann_whitney"
+    },
+    {
+     "name": "subject",
+     "type": "array of labels",
+     "unit": "none",
+     "range": "optional; names the person of each row"
+    },
+    {
+     "name": "aggregate_subjects",
+     "type": "boolean",
+     "unit": "none",
+     "range": "optional; compare each person's mean when persons have several rows"
+    },
+    {
+     "name": "covariates",
+     "type": "table of numbers",
+     "unit": "any",
+     "range": "optional; one row per row of values"
+    },
+    {
+     "name": "family_size",
+     "type": "integer",
+     "unit": "tests",
+     "range": "optional, default 1"
+    }
+   ],
+   "refusals": [
+    {
+     "code": "not_two_groups",
+     "when": "the data do not hold exactly two groups, or the contrast names a group that is not there"
+    },
+    {
+     "code": "crossed_subjects",
+     "when": "a person appears in both groups: the data are paired, and an independent-groups test would count each person twice"
+    },
+    {
+     "code": "repeated_measurements",
+     "when": "a person has several rows in one group: repeated measurements are not independent; use aggregate_subjects or a model for repeated measures"
+    },
+    {
+     "code": "unpaired_subjects",
+     "when": "a paired test was asked for and the rows do not form one pair per person"
+    },
+    {
+     "code": "group_too_small",
+     "when": "a group has fewer than two observations"
+    },
+    {
+     "code": "zero_variance",
+     "when": "the outcome does not vary, so the t statistic is undefined"
+    }
+   ],
+   "diagnostics": [
+    {
+     "code": "missing_values_dropped",
+     "severity": "notice",
+     "when": "rows with a missing outcome, group or predictor were dropped (listwise); the counts say how many"
+    },
+    {
+     "code": "missingness_differs_by_group",
+     "severity": "warning",
+     "when": "the share of rows dropped differs by more than ten percentage points between groups, so the missing values may not be ignorable"
+    },
+    {
+     "code": "contrast_direction_inferred",
+     "severity": "notice",
+     "when": "no contrast was named, so the difference is the first label in sorted order minus the second"
+    },
+    {
+     "code": "subject_means_used",
+     "severity": "notice",
+     "when": "each person's mean replaced their rows (aggregate_subjects)"
+    },
+    {
+     "code": "small_group",
+     "severity": "notice",
+     "when": "a group has fewer than ten observations: normality cannot be examined and the t test leans on it"
+    },
+    {
+     "code": "unequal_group_sizes",
+     "severity": "notice",
+     "when": "one group is more than three times the other"
+    },
+    {
+     "code": "covariate_imbalance",
+     "severity": "warning",
+     "when": "a covariate's standardized difference between the groups exceeds 0.1"
+    },
+    {
+     "code": "mean_difference_is_descriptive",
+     "severity": "notice",
+     "when": "the Mann-Whitney test does not test the difference in means that is reported alongside it"
+    },
+    {
+     "code": "multiplicity_unadjusted",
+     "severity": "notice",
+     "when": "the caller said this is one of several tests (family_size above 1) and no adjustment was applied; adjust_pvalues does it"
+    }
+   ],
+   "seeded": false,
+   "dependencies": [
+    "numpy",
+    "scipy",
+    "pandas",
+    "statsmodels"
+   ],
+   "references": [
+    {
+     "id": "sleep_student1908",
+     "kind": "published",
+     "source": "Student (1908) / Cushny & Peebles (1905) sleep data as printed in R's ?t.test: Welch t -1.8608 on 17.776 df, p 0.07939, interval -3.3655 to 0.2055; paired t -4.0621 on 9 df, p 0.002833, interval -2.4599 to -0.7001; Wilcoxon W 25.5, p 0.06933",
+     "tolerance": "four printed decimals",
+     "test": "OpenScience/evals/statistical-analysis/test_methods_reference.py"
+    }
+   ]
+  },
+  "covariate_balance": {
+   "id": "covariate_balance",
+   "version": "1.0.0",
+   "engine": "analysis_methods",
+   "title": "Standardized mean difference of covariates between two groups",
+   "estimand": "For each covariate, (mean of the first group minus mean of the second) over the root mean of the two variances (Austin 2009). An absolute value above 0.1 is imbalance.",
+   "assumptions": [
+    {
+     "id": "threshold_is_a_convention",
+     "text": "0.1 is a convention for noticing imbalance, not a test; a smaller difference in a covariate that drives the outcome can still confound.",
+     "checkedBy": "none"
+    },
+    {
+     "id": "covariates_measured",
+     "text": "Only the covariates supplied are examined; an unmeasured confounder is not.",
+     "checkedBy": "none"
+    }
+   ],
+   "inputs": [
+    {
+     "name": "groups",
+     "type": "array of labels",
+     "unit": "none",
+     "range": "exactly two distinct labels"
+    },
+    {
+     "name": "covariates",
+     "type": "table of numbers",
+     "unit": "any",
+     "range": "one row per row of groups; binary covariates are coded 0/1"
+    }
+   ],
+   "refusals": [
+    {
+     "code": "not_two_groups",
+     "when": "the data do not hold exactly two groups"
+    }
+   ],
+   "diagnostics": [
+    {
+     "code": "covariate_imbalance",
+     "severity": "warning",
+     "when": "some covariate's absolute standardized difference exceeds 0.1"
+    }
+   ],
+   "seeded": false,
+   "dependencies": [
+    "numpy",
+    "scipy",
+    "pandas",
+    "statsmodels"
+   ],
+   "references": [
+    {
+     "id": "analytic_balance",
+     "kind": "analytic",
+     "source": "hand-computed standardized differences on small tables, and the formula of Austin (2009), Statistics in Medicine 28:3083",
+     "tolerance": "1e-12",
+     "test": "OpenScience/evals/statistical-analysis/test_methods_reference.py"
+    }
+   ]
+  },
+  "contingency_test": {
+   "id": "contingency_test",
+   "version": "1.0.0",
+   "engine": "analysis_methods",
+   "title": "Association in a table of counts: Pearson chi-square, Fisher exact test, odds ratio, risk ratio, risk difference",
+   "estimand": "For a 2 x 2 table (rows groups, first column the event): the odds ratio with Woolf and exact conditional intervals, the risk ratio, the risk difference and the p values of Pearson's, Yates' and Fisher's tests; for a larger table, Pearson's chi-square and Cramer's V.",
+   "assumptions": [
+    {
+     "id": "independent_counts",
+     "text": "Each subject is counted once. Repeated or paired observations in a table (a before-and-after count) need McNemar's test, not this.",
+     "checkedBy": "none"
+    },
+    {
+     "id": "expected_counts",
+     "text": "Pearson's chi-square needs expected counts of about 5 or more; below that the exact test is the primary one for a 2 x 2 table.",
+     "checkedBy": "diagnostic:expected_count_below_5"
+    },
+    {
+     "id": "zero_cells",
+     "text": "A ratio from a table with a zero cell is not estimable; a continuity correction is an explicit choice, and it is named when made.",
+     "checkedBy": "diagnostic:zero_cell_ratio_not_estimable, diagnostic:zero_cell_corrected"
+    },
+    {
+     "id": "no_confounding",
+     "text": "A crude table does not adjust for a third variable; a stratified or regression analysis does.",
+     "checkedBy": "none"
+    },
+    {
+     "id": "one_test_among_many",
+     "text": "A p value is for one prespecified table.",
+     "checkedBy": "diagnostic:multiplicity_unadjusted"
+    }
+   ],
+   "inputs": [
+    {
+     "name": "table",
+     "type": "2-D array of integers",
+     "unit": "counts",
+     "range": "two or more rows and columns, each count 0 or more"
+    },
+    {
+     "name": "correct_zero_cells",
+     "type": "boolean",
+     "unit": "none",
+     "range": "optional, default false"
+    },
+    {
+     "name": "family_size",
+     "type": "integer",
+     "unit": "tests",
+     "range": "optional, default 1"
+    }
+   ],
+   "refusals": [
+    {
+     "code": "invalid_counts",
+     "when": "the table is not a rectangle of non-negative whole numbers"
+    },
+    {
+     "code": "empty_margin",
+     "when": "a row or a column of the table has no counts at all"
+    }
+   ],
+   "diagnostics": [
+    {
+     "code": "expected_count_below_5",
+     "severity": "warning",
+     "when": "an expected cell count is below 5: Pearson's chi-square is unreliable"
+    },
+    {
+     "code": "small_total",
+     "severity": "notice",
+     "when": "the table holds fewer than 20 subjects"
+    },
+    {
+     "code": "zero_cell_ratio_not_estimable",
+     "severity": "warning",
+     "when": "a cell is 0, so the odds and risk ratios are not given; the exact and chi-square tests still are"
+    },
+    {
+     "code": "zero_cell_corrected",
+     "severity": "notice",
+     "when": "0.5 was added to every cell to give the ratios (correct_zero_cells)"
+    },
+    {
+     "code": "multiplicity_unadjusted",
+     "severity": "notice",
+     "when": "the caller said this is one of several tests (family_size above 1) and no adjustment was applied; adjust_pvalues does it"
+    }
+   ],
+   "seeded": false,
+   "dependencies": [
+    "numpy",
+    "scipy",
+    "pandas",
+    "statsmodels"
+   ],
+   "references": [
+    {
+     "id": "tea_tasting_fisher1935",
+     "kind": "published",
+     "source": "Fisher's lady tasting tea (Fisher 1935): table 3, 1, 1, 3; two-sided exact p 34/70 = 0.4857, as printed in R's ?fisher.test; conditional odds ratio 6.4083",
+     "tolerance": "exact fraction; 1e-5 relative for the odds ratio",
+     "test": "OpenScience/evals/statistical-analysis/test_methods_reference.py"
+    },
+    {
+     "id": "physicians_health_study",
+     "kind": "published",
+     "source": "Physicians' Health Study (NEJM 1989) 2 x 2 table: Pearson chi-square 25.01 and odds ratio 1.832 (1.440, 2.331) as printed in Agresti; Yates 24.429 from R chisq.test",
+     "tolerance": "three printed decimals",
+     "test": "OpenScience/evals/statistical-analysis/test_methods_reference.py"
+    },
+    {
+     "id": "party_identification_agresti",
+     "kind": "published",
+     "source": "Agresti, Categorical Data Analysis, party identification by gender (women 762, 327, 468; men 484, 239, 477): Pearson chi-square 30.1 on 2 df",
+     "tolerance": "one printed decimal",
+     "test": "OpenScience/evals/statistical-analysis/test_methods_reference.py"
+    }
+   ]
+  },
+  "linear_regression": {
+   "id": "linear_regression",
+   "version": "1.0.0",
+   "engine": "analysis_methods",
+   "title": "Ordinary least squares with an intercept, with cluster-robust standard errors for repeated measurements",
+   "estimand": "The change in the mean outcome per unit of each predictor, holding the others fixed, with t-based 95% intervals and p values.",
+   "assumptions": [
+    {
+     "id": "linearity",
+     "text": "The mean outcome is linear in the predictors as entered.",
+     "checkedBy": "none"
+    },
+    {
+     "id": "independent_errors",
+     "text": "Rows are independent. A person with several rows is a cluster: the standard errors are cluster-robust (CR1, t with clusters - 1 df) unless the caller insists on independence.",
+     "checkedBy": "diagnostic:cluster_robust_se_used, diagnostic:repeated_measurements_ignored"
+    },
+    {
+     "id": "constant_variance",
+     "text": "The error variance does not change with the predictors; the Breusch-Pagan test notices when it does.",
+     "checkedBy": "diagnostic:heteroscedasticity"
+    },
+    {
+     "id": "identifiable",
+     "text": "The predictors are not collinear and there are more observations than parameters.",
+     "checkedBy": "refusal:collinear_predictors, refusal:too_few_observations, diagnostic:high_collinearity"
+    },
+    {
+     "id": "enough_data",
+     "text": "About ten observations per parameter keep the fit from over-reading noise.",
+     "checkedBy": "diagnostic:few_observations_per_parameter"
+    },
+    {
+     "id": "no_undue_influence",
+     "text": "No handful of rows decides the fit; Cook's distance above 4/n counts the candidates.",
+     "checkedBy": "diagnostic:influential_observations"
+    }
+   ],
+   "inputs": [
+    {
+     "name": "y",
+     "type": "array of numbers",
+     "unit": "unit of the outcome",
+     "range": "missing allowed (dropped)"
+    },
+    {
+     "name": "X",
+     "type": "table of numbers",
+     "unit": "any",
+     "range": "one row per row of y; an intercept is added"
+    },
+    {
+     "name": "subject",
+     "type": "array of labels",
+     "unit": "none",
+     "range": "optional; repeated rows of one person become one cluster"
+    },
+    {
+     "name": "cluster",
+     "type": "array of labels",
+     "unit": "none",
+     "range": "optional; clusters other than persons"
+    },
+    {
+     "name": "treat_rows_as_independent",
+     "type": "boolean",
+     "unit": "none",
+     "range": "optional, default false"
+    },
+    {
+     "name": "family_size",
+     "type": "integer",
+     "unit": "tests",
+     "range": "optional, default 1"
+    }
+   ],
+   "refusals": [
+    {
+     "code": "too_few_observations",
+     "when": "not more observations (or clusters) than parameters"
+    },
+    {
+     "code": "collinear_predictors",
+     "when": "the predictors are linearly dependent, so the coefficients are not identified"
+    }
+   ],
+   "diagnostics": [
+    {
+     "code": "missing_values_dropped",
+     "severity": "notice",
+     "when": "rows with a missing outcome, group or predictor were dropped (listwise); the counts say how many"
+    },
+    {
+     "code": "repeated_measurements_ignored",
+     "severity": "warning",
+     "when": "a person has several rows and the caller asked for independent rows anyway"
+    },
+    {
+     "code": "cluster_robust_se_used",
+     "severity": "notice",
+     "when": "standard errors are cluster-robust because persons have several rows"
+    },
+    {
+     "code": "few_observations_per_parameter",
+     "severity": "warning",
+     "when": "fewer than ten observations per parameter"
+    },
+    {
+     "code": "high_collinearity",
+     "severity": "warning",
+     "when": "a variance inflation factor exceeds 10"
+    },
+    {
+     "code": "heteroscedasticity",
+     "severity": "notice",
+     "when": "the Breusch-Pagan test rejects constant variance at 0.05"
+    },
+    {
+     "code": "influential_observations",
+     "severity": "notice",
+     "when": "some rows have a Cook's distance above 4/n"
+    },
+    {
+     "code": "multiplicity_unadjusted",
+     "severity": "notice",
+     "when": "the caller said this is one of several tests (family_size above 1) and no adjustment was applied; adjust_pvalues does it"
+    }
+   ],
+   "seeded": false,
+   "dependencies": [
+    "numpy",
+    "scipy",
+    "pandas",
+    "statsmodels"
+   ],
+   "references": [
+    {
+     "id": "longley_nist",
+     "kind": "published",
+     "source": "NIST Statistical Reference Datasets, Longley (an ill-conditioned fit with six predictors): certified coefficients, standard errors, residual standard deviation and R-squared to 15 digits",
+     "tolerance": "1e-9 relative",
+     "test": "OpenScience/evals/statistical-analysis/test_methods_reference.py"
+    }
+   ]
+  },
+  "logistic_regression": {
+   "id": "logistic_regression",
+   "version": "1.0.0",
+   "engine": "analysis_methods",
+   "title": "Logistic regression of a binary outcome by maximum likelihood, with Wald intervals and odds ratios",
+   "estimand": "The log odds ratio of the event per unit of each predictor, holding the others fixed, reported with odds ratios and Wald 95% intervals.",
+   "assumptions": [
+    {
+     "id": "linear_logit",
+     "text": "The log odds are linear in the predictors as entered.",
+     "checkedBy": "none"
+    },
+    {
+     "id": "independent_rows",
+     "text": "Rows are independent; repeated measurements get cluster-robust standard errors.",
+     "checkedBy": "diagnostic:cluster_robust_se_used, diagnostic:repeated_measurements_ignored"
+    },
+    {
+     "id": "estimate_exists",
+     "text": "The maximum likelihood estimate exists: no predictor combination separates events from non-events, the predictors are not collinear, and the outcome takes both values.",
+     "checkedBy": "refusal:separation, refusal:collinear_predictors, refusal:outcome_has_one_value"
+    },
+    {
+     "id": "enough_events",
+     "text": "About ten events (and non-events) per predictor keep the fit from over-reading noise.",
+     "checkedBy": "diagnostic:few_events_per_variable"
+    },
+    {
+     "id": "outcome_coding",
+     "text": "The outcome is 0 or 1 with 1 the event.",
+     "checkedBy": "refusal:outcome_not_binary"
+    }
+   ],
+   "inputs": [
+    {
+     "name": "y",
+     "type": "array of 0/1",
+     "unit": "none",
+     "range": "missing allowed (dropped); 1 is the event"
+    },
+    {
+     "name": "X",
+     "type": "table of numbers",
+     "unit": "any",
+     "range": "one row per row of y; an intercept is added"
+    },
+    {
+     "name": "subject",
+     "type": "array of labels",
+     "unit": "none",
+     "range": "optional"
+    },
+    {
+     "name": "cluster",
+     "type": "array of labels",
+     "unit": "none",
+     "range": "optional"
+    },
+    {
+     "name": "treat_rows_as_independent",
+     "type": "boolean",
+     "unit": "none",
+     "range": "optional, default false"
+    },
+    {
+     "name": "family_size",
+     "type": "integer",
+     "unit": "tests",
+     "range": "optional, default 1"
+    }
+   ],
+   "refusals": [
+    {
+     "code": "outcome_not_binary",
+     "when": "the outcome holds values other than 0 and 1"
+    },
+    {
+     "code": "outcome_has_one_value",
+     "when": "every row has the same outcome, so there is nothing to model"
+    },
+    {
+     "code": "collinear_predictors",
+     "when": "the predictors are linearly dependent"
+    },
+    {
+     "code": "separation",
+     "when": "a combination of the predictors perfectly or almost perfectly separates events from non-events: the maximum likelihood estimate does not exist"
+    },
+    {
+     "code": "did_not_converge",
+     "when": "the fit did not converge"
+    }
+   ],
+   "diagnostics": [
+    {
+     "code": "missing_values_dropped",
+     "severity": "notice",
+     "when": "rows with a missing outcome, group or predictor were dropped (listwise); the counts say how many"
+    },
+    {
+     "code": "few_events_per_variable",
+     "severity": "warning",
+     "when": "fewer than ten events or non-events per predictor"
+    },
+    {
+     "code": "repeated_measurements_ignored",
+     "severity": "warning",
+     "when": "a person has several rows and the caller asked for independent rows anyway"
+    },
+    {
+     "code": "cluster_robust_se_used",
+     "severity": "notice",
+     "when": "standard errors are cluster-robust because persons have several rows"
+    },
+    {
+     "code": "multiplicity_unadjusted",
+     "severity": "notice",
+     "when": "the caller said this is one of several tests (family_size above 1) and no adjustment was applied; adjust_pvalues does it"
+    }
+   ],
+   "seeded": false,
+   "dependencies": [
+    "numpy",
+    "scipy",
+    "pandas",
+    "statsmodels"
+   ],
+   "references": [
+    {
+     "id": "snoring_agresti",
+     "kind": "published",
+     "source": "Agresti, Categorical Data Analysis, snoring and heart disease (2,484 subjects, scores 0, 2, 4, 5): logit = -3.866 + 0.397 x, standard errors 0.166 and 0.050; the fit also run in R 4.3.3 glm()",
+     "tolerance": "three printed decimals; 1e-6 relative against R",
+     "test": "OpenScience/evals/statistical-analysis/test_methods_reference.py"
+    },
+    {
+     "id": "lung_logistic_r",
+     "kind": "other-implementation",
+     "source": "R 4.3.3 glm(binomial) of death on age and sex in the survival package's lung data",
+     "tolerance": "1e-6 relative",
+     "test": "OpenScience/evals/statistical-analysis/test_methods_reference.py"
+    }
+   ]
+  },
+  "kaplan_meier": {
+   "id": "kaplan_meier",
+   "version": "1.0.0",
+   "engine": "analysis_methods",
+   "title": "Kaplan-Meier survival curve with Greenwood standard errors and the median survival time",
+   "estimand": "The probability of remaining event-free beyond each event time, per group, with a 95% band (log scale by default, as R's survfit) and the median survival time with its interval.",
+   "assumptions": [
+    {
+     "id": "noninformative_censoring",
+     "text": "Censoring is unrelated to the prognosis: a subject censored at a time has the same outlook as those who stay.",
+     "checkedBy": "diagnostic:heavy_censoring"
+    },
+    {
+     "id": "event_coding",
+     "text": "The event indicator is 1 for the event and 0 for censored; nothing else is guessed.",
+     "checkedBy": "refusal:event_not_binary"
+    },
+    {
+     "id": "one_event_type",
+     "text": "There are no competing events that preclude the event of interest; with competing risks 1 - KM overstates the incidence.",
+     "checkedBy": "none"
+    },
+    {
+     "id": "right_censoring_only",
+     "text": "Every subject enters at time 0 (no delayed entry) and is followed until the event or right censoring.",
+     "checkedBy": "none"
+    },
+    {
+     "id": "tail_is_thin",
+     "text": "The curve's tail rests on the few subjects still at risk.",
+     "checkedBy": "diagnostic:small_final_risk_set, diagnostic:few_events"
+    }
+   ],
+   "inputs": [
+    {
+     "name": "time",
+     "type": "array of numbers",
+     "unit": "unit of follow-up",
+     "range": "0 or more; missing allowed (dropped)"
+    },
+    {
+     "name": "event",
+     "type": "array of 0/1",
+     "unit": "none",
+     "range": "1 event, 0 censored"
+    },
+    {
+     "name": "group",
+     "type": "array of labels",
+     "unit": "none",
+     "range": "optional"
+    },
+    {
+     "name": "conf_type",
+     "type": "string",
+     "unit": "none",
+     "range": "log (default), log-log or plain"
+    }
+   ],
+   "refusals": [
+    {
+     "code": "no_complete_rows",
+     "when": "no row has a time, an event indicator and every covariate"
+    },
+    {
+     "code": "event_not_binary",
+     "when": "the event indicator holds values other than 0 and 1, so which value is the event is not known"
+    },
+    {
+     "code": "negative_time",
+     "when": "a follow-up time is negative"
+    }
+   ],
+   "diagnostics": [
+    {
+     "code": "missing_values_dropped",
+     "severity": "notice",
+     "when": "rows with a missing outcome, group or predictor were dropped (listwise); the counts say how many"
+    },
+    {
+     "code": "missingness_differs_by_group",
+     "severity": "warning",
+     "when": "the share of rows dropped differs by more than ten percentage points between groups, so the missing values may not be ignorable"
+    },
+    {
+     "code": "heavy_censoring",
+     "severity": "notice",
+     "when": "more than half the subjects are censored: the tail of the curve rests on few events"
+    },
+    {
+     "code": "few_events",
+     "severity": "warning",
+     "when": "fewer than ten events: estimates are unstable"
+    },
+    {
+     "code": "tied_event_times",
+     "severity": "notice",
+     "when": "several events share a time; the tie-handling method matters (Efron is used unless Breslow is asked for)"
+    },
+    {
+     "code": "zero_follow_up",
+     "severity": "notice",
+     "when": "some subjects have a follow-up time of exactly 0 and contribute nothing"
+    },
+    {
+     "code": "no_events_in_group",
+     "severity": "warning",
+     "when": "a group has no events, so its curve is flat at 1"
+    },
+    {
+     "code": "small_final_risk_set",
+     "severity": "notice",
+     "when": "fewer than ten subjects remain at risk at the last event time"
+    },
+    {
+     "code": "median_not_reached",
+     "severity": "notice",
+     "when": "the curve never falls to 0.5, so there is no median (the curve itself is complete)"
+    }
+   ],
+   "seeded": false,
+   "dependencies": [
+    "numpy",
+    "scipy",
+    "pandas",
+    "statsmodels"
+   ],
+   "references": [
+    {
+     "id": "aml_miller1981",
+     "kind": "published",
+     "source": "Miller (1981) acute myelogenous leukaemia data (R's survival::aml): median 31 weeks (95% 18 to not reached) maintained and 23 (8 to not reached) not maintained, as printed in the survival package",
+     "tolerance": "exact weeks",
+     "test": "OpenScience/evals/statistical-analysis/test_methods_reference.py"
+    },
+    {
+     "id": "lung_median_310",
+     "kind": "published",
+     "source": "North Central Cancer Treatment Group lung cancer data (survival::lung): median 310 days (95% 285 to 363), as printed in the survival package's documentation and tutorials",
+     "tolerance": "exact days",
+     "test": "OpenScience/evals/statistical-analysis/test_methods_reference.py"
+    }
+   ]
+  },
+  "log_rank": {
+   "id": "log_rank",
+   "version": "1.0.0",
+   "engine": "analysis_methods",
+   "title": "Log-rank test of equal hazards across groups, optionally stratified",
+   "estimand": "Whether the groups' hazard functions are equal over follow-up (chi-square on groups - 1 degrees of freedom). It is a test, not an effect size.",
+   "assumptions": [
+    {
+     "id": "noninformative_censoring",
+     "text": "Censoring is unrelated to the prognosis.",
+     "checkedBy": "diagnostic:heavy_censoring"
+    },
+    {
+     "id": "proportional_hazards_for_power",
+     "text": "The test is valid whatever the hazards do, but most powerful when they are proportional; crossing curves can give a nonsignificant result for a real difference.",
+     "checkedBy": "none"
+    },
+    {
+     "id": "event_coding",
+     "text": "The event indicator is 1 for the event and 0 for censored.",
+     "checkedBy": "refusal:event_not_binary"
+    },
+    {
+     "id": "independent_subjects",
+     "text": "Each row is a different subject.",
+     "checkedBy": "none"
+    }
+   ],
+   "inputs": [
+    {
+     "name": "time",
+     "type": "array of numbers",
+     "unit": "unit of follow-up",
+     "range": "0 or more"
+    },
+    {
+     "name": "event",
+     "type": "array of 0/1",
+     "unit": "none",
+     "range": "1 event, 0 censored"
+    },
+    {
+     "name": "group",
+     "type": "array of labels",
+     "unit": "none",
+     "range": "two or more groups"
+    },
+    {
+     "name": "strata",
+     "type": "array of labels",
+     "unit": "none",
+     "range": "optional"
+    }
+   ],
+   "refusals": [
+    {
+     "code": "no_complete_rows",
+     "when": "no row has a time, an event indicator and every covariate"
+    },
+    {
+     "code": "event_not_binary",
+     "when": "the event indicator holds values other than 0 and 1, so which value is the event is not known"
+    },
+    {
+     "code": "negative_time",
+     "when": "a follow-up time is negative"
+    },
+    {
+     "code": "one_group",
+     "when": "there is only one group, so nothing to compare"
+    },
+    {
+     "code": "no_events",
+     "when": "no subject has the event"
+    },
+    {
+     "code": "singular_variance",
+     "when": "the variance of the statistic is singular (for example every event happens at one time with one subject per group at risk), so the statistic is not defined"
+    }
+   ],
+   "diagnostics": [
+    {
+     "code": "missing_values_dropped",
+     "severity": "notice",
+     "when": "rows with a missing outcome, group or predictor were dropped (listwise); the counts say how many"
+    },
+    {
+     "code": "missingness_differs_by_group",
+     "severity": "warning",
+     "when": "the share of rows dropped differs by more than ten percentage points between groups, so the missing values may not be ignorable"
+    },
+    {
+     "code": "heavy_censoring",
+     "severity": "notice",
+     "when": "more than half the subjects are censored: the tail of the curve rests on few events"
+    },
+    {
+     "code": "few_events",
+     "severity": "warning",
+     "when": "fewer than ten events: estimates are unstable"
+    },
+    {
+     "code": "tied_event_times",
+     "severity": "notice",
+     "when": "several events share a time; the tie-handling method matters (Efron is used unless Breslow is asked for)"
+    },
+    {
+     "code": "zero_follow_up",
+     "severity": "notice",
+     "when": "some subjects have a follow-up time of exactly 0 and contribute nothing"
+    }
+   ],
+   "seeded": false,
+   "dependencies": [
+    "numpy",
+    "scipy",
+    "pandas",
+    "statsmodels"
+   ],
+   "references": [
+    {
+     "id": "aml_logrank",
+     "kind": "published",
+     "source": "survival::aml maintained against not maintained: log-rank chi-square 3.4 on 1 df, p 0.0653, as printed in the survival package's ?survdiff",
+     "tolerance": "two printed decimals",
+     "test": "OpenScience/evals/statistical-analysis/test_methods_reference.py"
+    },
+    {
+     "id": "lung_logrank_sex",
+     "kind": "published",
+     "source": "survival::lung by sex: log-rank chi-square 10.3 on 1 df, p 0.00131, observed 112 and 53 against expected 91.6 and 73.4",
+     "tolerance": "one printed decimal",
+     "test": "OpenScience/evals/statistical-analysis/test_methods_reference.py"
+    }
+   ]
+  },
+  "cox_regression": {
+   "id": "cox_regression",
+   "version": "1.0.0",
+   "engine": "analysis_methods",
+   "title": "Cox proportional hazards regression with Efron or Breslow ties, a likelihood-ratio test and a proportional-hazards test",
+   "estimand": "The log hazard ratio of the event per unit of each covariate, holding the others fixed, reported as hazard ratios with Wald 95% intervals.",
+   "assumptions": [
+    {
+     "id": "proportional_hazards",
+     "text": "A covariate's hazard ratio is constant over follow-up. The score test of a time-varying coefficient (R's cox.zph) questions this; a large p value does not establish it.",
+     "checkedBy": "diagnostic:proportional_hazards_questioned, diagnostic:proportional_hazards_not_tested"
+    },
+    {
+     "id": "noninformative_censoring",
+     "text": "Censoring is unrelated to the prognosis.",
+     "checkedBy": "diagnostic:heavy_censoring"
+    },
+    {
+     "id": "independent_subjects",
+     "text": "Each row is a different subject; clustered rows get cluster-robust standard errors.",
+     "checkedBy": "diagnostic:cluster_robust_se_used"
+    },
+    {
+     "id": "identifiable",
+     "text": "Covariates are not collinear, there are more events than covariates, and a binary covariate has events at both levels.",
+     "checkedBy": "refusal:collinear_covariates, refusal:more_covariates_than_events, refusal:no_events_in_a_level"
+    },
+    {
+     "id": "enough_events",
+     "text": "About ten events per covariate keep the fit from over-reading noise.",
+     "checkedBy": "diagnostic:few_events_per_variable, diagnostic:few_events"
+    },
+    {
+     "id": "linear_covariates",
+     "text": "A continuous covariate acts linearly on the log hazard as entered.",
+     "checkedBy": "none"
+    },
+    {
+     "id": "no_delayed_entry",
+     "text": "Every subject is at risk from time 0; left truncation and time-varying covariates are not supported.",
+     "checkedBy": "none"
+    }
+   ],
+   "inputs": [
+    {
+     "name": "time",
+     "type": "array of numbers",
+     "unit": "unit of follow-up",
+     "range": "0 or more"
+    },
+    {
+     "name": "event",
+     "type": "array of 0/1",
+     "unit": "none",
+     "range": "1 event, 0 censored"
+    },
+    {
+     "name": "X",
+     "type": "table of numbers",
+     "unit": "any",
+     "range": "one row per row of time"
+    },
+    {
+     "name": "ties",
+     "type": "string",
+     "unit": "none",
+     "range": "efron (default) or breslow"
+    },
+    {
+     "name": "cluster",
+     "type": "array of labels",
+     "unit": "none",
+     "range": "optional"
+    },
+    {
+     "name": "strata",
+     "type": "array of labels",
+     "unit": "none",
+     "range": "optional"
+    },
+    {
+     "name": "family_size",
+     "type": "integer",
+     "unit": "tests",
+     "range": "optional, default 1"
+    }
+   ],
+   "refusals": [
+    {
+     "code": "no_complete_rows",
+     "when": "no row has a time, an event indicator and every covariate"
+    },
+    {
+     "code": "event_not_binary",
+     "when": "the event indicator holds values other than 0 and 1, so which value is the event is not known"
+    },
+    {
+     "code": "negative_time",
+     "when": "a follow-up time is negative"
+    },
+    {
+     "code": "no_events",
+     "when": "no subject has the event"
+    },
+    {
+     "code": "more_covariates_than_events",
+     "when": "not more events than covariates"
+    },
+    {
+     "code": "collinear_covariates",
+     "when": "the covariates are linearly dependent"
+    },
+    {
+     "code": "no_events_in_a_level",
+     "when": "a binary covariate has no events at one of its levels, so its hazard ratio is infinite or zero"
+    },
+    {
+     "code": "did_not_converge",
+     "when": "the partial likelihood did not give finite estimates"
+    }
+   ],
+   "diagnostics": [
+    {
+     "code": "missing_values_dropped",
+     "severity": "notice",
+     "when": "rows with a missing outcome, group or predictor were dropped (listwise); the counts say how many"
+    },
+    {
+     "code": "heavy_censoring",
+     "severity": "notice",
+     "when": "more than half the subjects are censored: the tail of the curve rests on few events"
+    },
+    {
+     "code": "few_events",
+     "severity": "warning",
+     "when": "fewer than ten events: estimates are unstable"
+    },
+    {
+     "code": "tied_event_times",
+     "severity": "notice",
+     "when": "several events share a time; the tie-handling method matters (Efron is used unless Breslow is asked for)"
+    },
+    {
+     "code": "zero_follow_up",
+     "severity": "notice",
+     "when": "some subjects have a follow-up time of exactly 0 and contribute nothing"
+    },
+    {
+     "code": "few_events_per_variable",
+     "severity": "warning",
+     "when": "fewer than ten events per covariate"
+    },
+    {
+     "code": "cluster_robust_se_used",
+     "severity": "notice",
+     "when": "standard errors are cluster-robust because subjects have several rows"
+    },
+    {
+     "code": "proportional_hazards_questioned",
+     "severity": "warning",
+     "when": "the score test of a time-varying coefficient rejects proportional hazards for a covariate at 0.05"
+    },
+    {
+     "code": "proportional_hazards_not_tested",
+     "severity": "notice",
+     "when": "the assumption test is not run for a stratified or cluster-robust fit"
+    },
+    {
+     "code": "multiplicity_unadjusted",
+     "severity": "notice",
+     "when": "the caller said this is one of several tests (family_size above 1) and no adjustment was applied; adjust_pvalues does it"
+    }
+   ],
+   "seeded": false,
+   "dependencies": [
+    "numpy",
+    "scipy",
+    "pandas",
+    "statsmodels"
+   ],
+   "references": [
+    {
+     "id": "lung_coxph_documented",
+     "kind": "published",
+     "source": "survival::lung, coxph(Surv(time, status) ~ age + sex): age 0.017045 (se 0.009223, z 1.848, p 0.06459), sex -0.513219 (se 0.167458, z -3.065, p 0.00218), likelihood-ratio 14.12 on 2 df, as printed in the survival package's documentation and tutorials",
+     "tolerance": "five printed decimals",
+     "test": "OpenScience/evals/statistical-analysis/test_methods_reference.py"
+    },
+    {
+     "id": "lung_coxph_breslow_and_zph",
+     "kind": "other-implementation",
+     "source": "R 4.3.3 survival 3.5-8: Breslow coefficients 0.01701289 and -0.51256479, and cox.zph (transform km) chi-square 0.2092 (age), 2.6077 (sex) and 2.7708 (global) for Efron ties, 0.2080, 2.5995 and 2.7610 for Breslow",
+     "tolerance": "1e-6 relative",
+     "test": "OpenScience/evals/statistical-analysis/test_methods_reference.py"
+    }
+   ]
+  },
+  "adjust_pvalues": {
+   "id": "adjust_pvalues",
+   "version": "1.0.0",
+   "engine": "analysis_methods",
+   "title": "Multiplicity adjustment of p values: Bonferroni, Holm, Benjamini-Hochberg",
+   "estimand": "Adjusted p values in the order given: Bonferroni and Holm control the family-wise error rate, Benjamini-Hochberg the false discovery rate.",
+   "assumptions": [
+    {
+     "id": "family_is_declared",
+     "text": "The adjusted family is the set of p values passed in; choosing which tests count is the researcher's, and omitting some inflates the error rate.",
+     "checkedBy": "none"
+    },
+    {
+     "id": "bh_independence",
+     "text": "Benjamini-Hochberg controls the false discovery rate for independent or positively dependent tests.",
+     "checkedBy": "none"
+    }
+   ],
+   "inputs": [
+    {
+     "name": "pvalues",
+     "type": "array of numbers",
+     "unit": "probability",
+     "range": "each between 0 and 1"
+    },
+    {
+     "name": "method",
+     "type": "string",
+     "unit": "none",
+     "range": "holm (default), bonferroni or bh"
+    }
+   ],
+   "refusals": [
+    {
+     "code": "invalid_pvalues",
+     "when": "no p values, a missing one, or one outside 0 to 1"
+    }
+   ],
+   "diagnostics": [],
+   "seeded": false,
+   "dependencies": [
+    "numpy",
+    "pandas"
+   ],
+   "references": [
+    {
+     "id": "benjamini_hochberg_1995",
+     "kind": "published",
+     "source": "Benjamini & Hochberg (1995) JRSS B 57:289, the 15 p values of the worked example: the procedure at q = 0.05 rejects the four smallest",
+     "tolerance": "exact count",
+     "test": "OpenScience/evals/statistical-analysis/test_methods_reference.py"
+    },
+    {
+     "id": "r_p_adjust",
+     "kind": "other-implementation",
+     "source": "R 4.3.3 p.adjust(method = 'holm' / 'BH' / 'bonferroni') on the same 15 p values",
+     "tolerance": "1e-12",
+     "test": "OpenScience/evals/statistical-analysis/test_methods_reference.py"
+    }
+   ]
+  }
+ }
+}
