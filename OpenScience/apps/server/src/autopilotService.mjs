@@ -946,7 +946,11 @@ export class AutopilotService {
         runId: input.runId,
         outcomeStatus,
         digestId: `digest-${hash(`${episode.id}:${input.runId}`).slice(0, 32)}`,
-        date: this.now().toISOString().slice(0, 10),
+        // The episode's own day, which is the agenda's local one. This was the
+        // UTC day, so the briefing of a 07:00 Asia/Shanghai episode was dated
+        // yesterday — in the digest, and in the memory an adopted finding
+        // becomes ("已采纳（<date> 主动科研简报）"). Seen on production 2026-10-05.
+        date: validAgendaDate(episode.payload.date) ? episode.payload.date : this.now().toISOString().slice(0, 10),
         claims: acceptedClaims,
         artifactRefs: safeAutopilotArtifactRefs(input.projectId, { id: input.runId, sessionId: input.sessionId ?? episode.payload.sessionId,
           artifacts: input.artifacts, unverifiedArtifacts: input.unverifiedArtifacts }),

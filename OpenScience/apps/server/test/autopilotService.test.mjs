@@ -456,6 +456,19 @@ test("a completed episode admits only contract-valid claims tied to accepted run
   assert.equal(episode.payload.costCny, 1.25);
 });
 
+test("a briefing carries its episode's day in the agenda's time zone, not the UTC day it finished on", async () => {
+  // 07:00 in Asia/Shanghai is 23:00 UTC of the day before: the episode is the 7th's, and so is its briefing.
+  const { service } = fixture({ now: () => new Date("2026-09-06T23:30:00.000Z") });
+  const created = await service.create("user-one", agendaInput);
+  const active = await service.start("user-one", created.id, { expectedRevision: created.revision });
+  const manual = await service.runNow("user-one", active.id, { requestId: "request-one" });
+  assert.equal(manual.episode.payload.date, "2026-09-07");
+  await service.markEpisodeDispatched("user-one", manual.episode.id, { runId: "run-one", sessionId: "session-one" });
+  const digest = await service.completeRun("user-one", {
+    projectId: "project-one", runId: "run-one", status: "succeeded", deltaSchemaVersion: 1, artifacts: [], costCny: 0.5, claims: [] });
+  assert.equal(digest.payload.date, "2026-09-07");
+});
+
 test("stopping an agenda durably cancels its running sessions without replacing work", async () => {
   const { service, jobs } = fixture();
   const created = await service.create("user-one", agendaInput);
@@ -1080,9 +1093,12 @@ test("a refutation that lands after the researcher adopted the claim takes the c
   const second = await completedEpisode(f, { count: 1, date: "2026-09-07", runId: "run-two" });
   const kept = await f.service.decide("user-one", second.digest.id, { action: "adopt", claimId: "claim-0" });
   const keptId = kept.payload.decisions.at(-1).memory.entryId;
+  // Approved the way a researcher approves — through the capsule, which is what
+  // marks the entry as curated. A status written straight into the store is not
+  // that, and passed here only while both briefings carried one date and so one
+  // retraction sentence, which the replay guard took for a replay.
   const stored = await f.documents.get("user-one", "fact", keptId);
-  await f.documents.put("user-one", "fact", keptId, { ...stored.payload, status: "approved" },
-    { expectedRevision: stored.revision, projectId: "project-one" });
+  await f.capsules.updateEntry("user-one", stored.payload.capsuleId, keptId, { status: "approved", expectedRevision: stored.revision });
   await f.service.recordVerification("user-one", { episodeId: second.episode.id,
     verificationId: verificationIdFor(second.episode.id, 0), verdict: "refuted", checkedSources: [], runId: "verify-run-b" });
   const approved = await f.documents.get("user-one", "fact", keptId);
