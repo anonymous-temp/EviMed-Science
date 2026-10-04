@@ -4826,16 +4826,25 @@ export class AgentRunStore {
           qualityNotices: [runtimeStoppedUnverifiedNotice(), ...labels].slice(0, 20),
         });
       }
-      // No files, but the turn's answer is already in the control plane's hands
-      // and no deliverable was owed: that is an answered turn whose checks did
-      // not run, not a stopped runtime.
-      if (await this.answeredBeforeStop(run, projection)) {
+      // No files. If the turn's own end and answer are already in the control
+      // plane's hands, the runtime stopping is not what happened to it: with no
+      // deliverable owed it is an answered turn whose checks did not run, and
+      // with one owed it is a turn that finished without writing it.
+      if (this.turnFinishedBeforeStop(run)) {
+        if (!(await this.deliverableOwed(run, projection))) {
+          return this.finishInternal(project, run.id, {
+            status: "succeeded",
+            errorCode: null,
+            artifacts: [],
+            verification: "unchecked",
+            qualityNotices: [stoppedAfterAnswerNotice(), ...labels].slice(0, 20),
+          });
+        }
         return this.finishInternal(project, run.id, {
-          status: "succeeded",
-          errorCode: null,
+          status: "failed",
+          errorCode: "specialist_required_output_missing",
           artifacts: [],
-          verification: "unchecked",
-          qualityNotices: [stoppedAfterAnswerNotice(), ...labels].slice(0, 20),
+          qualityNotices: labels.slice(0, 20),
         });
       }
       // Nothing on disk and no finished answer on record: the turn had not
@@ -4919,21 +4928,26 @@ export class AgentRunStore {
    * had already carried the answer past the control plane, though, and what it
    * keeps is the two facts that decide this: the root session's last assistant
    * message had text, and its turn ended `completed`.
-   *
-   * An answer is only the deliverable when none was owed: a turn that planned,
+   * @param {Record<string, any>} run @returns {boolean}
+   */
+  turnFinishedBeforeStop(run) {
+    const turn = this.progressTrackers.get(run.id)?.rootTurn;
+    return Boolean(turn) && turn.endKind === "completed" && turn.replied === true;
+  }
+
+  /**
+   * Whether the run owed files rather than an answer: a turn that planned,
    * delegated or submitted a deliverable, and a run bound to a capability whose
-   * contract is files, owe files, and a reply is not them.
+   * contract is files. A reply is not what either was to deliver.
    * @param {Record<string, any>} run @param {{ state: string, projection?: Record<string, any> }} projection
    * @returns {Promise<boolean>}
    */
-  async answeredBeforeStop(run, projection) {
-    const turn = this.progressTrackers.get(run.id)?.rootTurn;
-    if (!turn || turn.endKind !== "completed" || !turn.replied) return false;
-    if (nativeTurnStartedDelivery(run)) return false;
-    if (projection.state === "read" && Array.isArray(projection.projection?.plan?.items) && projection.projection.plan.items.length > 0) return false;
-    if (!run.effectiveAgentId) return true;
+  async deliverableOwed(run, projection) {
+    if (nativeTurnStartedDelivery(run)) return true;
+    if (projection.state === "read" && Array.isArray(projection.projection?.plan?.items) && projection.projection.plan.items.length > 0) return true;
+    if (!run.effectiveAgentId) return false;
     const agent = (await this.agentRegistry.catch(() => null))?.get?.(run.effectiveAgentId);
-    return Boolean(agent) && !agent.completionChecks?.includes("requiredOutputsExist");
+    return !agent || agent.completionChecks?.includes("requiredOutputsExist") === true;
   }
 
   /**

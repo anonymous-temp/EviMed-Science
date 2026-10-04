@@ -6197,17 +6197,24 @@ test("a runtime that stopped after its turn's answer leaves an answered run, and
     assert.equal((await stopAfter([answer, completed, { ...answer, text: "" }]))?.errorCode, "runtime_stopped", "nor is a later turn that has said nothing");
     const forward = await stopAfter([answer, completed]);
     assert.equal(forward?.status, "succeeded", "without a turn/start the end still counts");
-    // A reply is not what was owed when a deliverable was planned...
+    // A reply is not what was owed when a deliverable was planned, and the run
+    // is not called stopped either: its turn finished, and what is missing is
+    // the files the plan named...
     const planned = await stopAfter([turn, answer, completed], {
       writeState: { formatVersion: 1, plan: { revision: 1, items: [{ id: "d1", status: "planned", attempts: 0 }] }, degraded: [] },
     });
     assert.equal(planned?.status, "failed");
-    assert.equal(planned?.errorCode, "runtime_stopped");
+    assert.equal(planned?.errorCode, "specialist_required_output_missing");
     // ...nor when the run is bound to a capability whose contract is files.
     const bound = await stopAfter([turn, answer, completed], {
       dispatched: { effectiveAgentId: "note-writer", effectiveAgentVersion: "1.0.0", effectiveRuntimeAgent: "evimed-note-writer" },
     });
-    assert.equal(bound?.errorCode, "runtime_stopped");
+    assert.equal(bound?.errorCode, "specialist_required_output_missing");
+    // The same plan with its turn cut off is the stopped runtime it always was.
+    const cutOff = await stopAfter([turn, answer], {
+      writeState: { formatVersion: 1, plan: { revision: 1, items: [{ id: "d1", status: "planned", attempts: 0 }] }, degraded: [] },
+    });
+    assert.equal(cutOff?.errorCode, "runtime_stopped");
   } finally {
     await rm(root, { recursive: true, force: true });
   }
