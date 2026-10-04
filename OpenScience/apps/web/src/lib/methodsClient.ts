@@ -49,6 +49,10 @@ export interface WebMethod {
   scope?: { applicability: string; counterexamples: string[]; current: boolean } | null;
   /** What was left when it was returned to an earlier body or stopped because results produced under it were found wrong. */
   links?: { type: string; at: string; results: number; against: number }[];
+  /** Sources that a result it was learnt from or used for rests on, and that changed. A label beside the method: the
+   *  notice says the source changed, never that the method was wrong. */
+  sourceChanges?: { id: string; source: { id: string; doi?: string }; state: "changed" | "retracted"; reason: string; versionId: string;
+    relation: "learnt_from" | "used_for"; at: string }[];
   createdAt: string;
   updatedAt: string;
 }

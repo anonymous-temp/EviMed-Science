@@ -1558,18 +1558,26 @@ export class ResearchMemoryStore {
    * history and the researcher's own statement stays theirs. A correction notice
    * does not by itself make a conclusion false; it makes it worth checking.
    *
+   * `onlyFrom` names the states a link may be moved out of, so a check that adds
+   * nothing leaves what an earlier one found: a lookup that could not answer
+   * (`unknown`) moves only a link nobody had found a change on, and a correction
+   * never lowers a retraction (`linkStatesLeftFor`). Only the links it moved are
+   * returned, and a link already in the state is not stamped again.
+   *
    * @param {string} userId @param {{ type: string, id: string }} source
-   * @param {{ state: string, reason?: string }} finding
+   * @param {{ state: string, reason?: string, onlyFrom?: readonly string[] | null }} finding
    * @returns {Promise<{ recordIds: string[] }>}
    */
-  async markSourceLinks(userId, source, { state, reason = "" }) {
+  async markSourceLinks(userId, source, { state, reason = "", onlyFrom = null }) {
     const link = sourceLinkOf({ type: source?.type, id: source?.id });
     if (!link) throw invalid("source");
     const next = enumValue(state, MEMORY_SOURCE_STATES, "state");
+    const from = onlyFrom == null ? null : onlyFrom.map((value) => enumValue(value, MEMORY_SOURCE_STATES, "onlyFrom"));
     const result = await this.#query(`UPDATE evimed_memory.record_sources SET state=$4,state_reason=$5,
         state_at=date_trunc('second', clock_timestamp())
-      WHERE user_id=$1 AND source_type=$2 AND source_id=$3 RETURNING record_id`,
-    [assertUserId(userId), link.type, link.id, next, boundedText(reason, MEMORY_REASON_LIMIT)]);
+      WHERE user_id=$1 AND source_type=$2 AND source_id=$3 AND ($6::text[] IS NULL OR (state = ANY($6::text[]) AND state <> $4))
+      RETURNING record_id`,
+    [assertUserId(userId), link.type, link.id, next, boundedText(reason, MEMORY_REASON_LIMIT), from]);
     return { recordIds: result.rows.map((/** @type {any} */ row) => String(row.record_id)).sort() };
   }
 

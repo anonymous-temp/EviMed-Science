@@ -62,6 +62,7 @@ import {
   foldObservation,
   foldRead,
   foldRelation,
+  foldSourceChange,
   mergeMethodResultLinks,
   methodContentDigest,
   libraryEvictions,
@@ -970,6 +971,31 @@ export class LearningService {
       }
     }
     throw new HttpError(409, "product_revision_conflict", "Concurrent method feedback did not settle.");
+  }
+
+  /**
+   * Label a method with a change of a source it rests on (N15): the source, the state it was found in and the result
+   * version the method is linked to. Telemetry like the scientific record — no history row, the revision moves so a
+   * concurrent writer conflicts instead of overwriting — and idempotent by the entry's identity. It is a label read
+   * beside the method: no body, status or counter moves, and the lifecycle never reads it, because a notice that a
+   * source changed is not evidence that the method was wrong.
+   * @param {string} userId @param {string} methodId @param {unknown} entry
+   * @returns {Promise<{ document: any, added: boolean }>}
+   */
+  async recordSourceChange(userId, methodId, entry) {
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const document = await this.getMethod(userId, methodId);
+      const before = Array.isArray(document.payload.sourceChanges) ? document.payload.sourceChanges : [];
+      const sourceChanges = foldSourceChange(before, entry);
+      if (sourceChanges === before) return { document, added: false };
+      try {
+        await this.documents.put(userId, "method", methodId, { ...document.payload, sourceChanges }, { expectedRevision: document.revision, telemetry: true });
+        return { document: await this.getMethod(userId, methodId), added: true };
+      } catch (error) {
+        if (/** @type {any} */ (error)?.code !== "product_revision_conflict" || attempt === 7) throw error;
+      }
+    }
+    throw new HttpError(409, "product_revision_conflict", "Concurrent method labels did not settle.");
   }
 
   /**
