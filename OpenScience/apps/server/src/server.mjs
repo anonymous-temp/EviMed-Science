@@ -4769,15 +4769,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             // the researcher has not worked here yet — or the ledger cannot be
             // read, which is not a reason the shell should fail to render.
             lastSessionId: await agentRuns.lastSessionId(project).catch(() => null),
-            // How many data sources nothing serves for this researcher and
-            // that need a key — the badge on the account page. 0 where the
-            // deployment keeps no personal credentials or cannot say now: the
-            // shell must render either way.
-            missingConnectorCredentials: connectorCredentials
-              ? await connectorCredentials.status(user.id)
-                .then((entries) => entries.filter((entry) => entry.needsAttention).length)
-                .catch(() => 0)
-              : 0,
             csrfToken: session.csrfToken,
             // Whether this account sees the operations page. Presentation
             // only: `config.operatorUsers` decides which menu the shell draws,
@@ -8731,11 +8722,23 @@ export async function readinessBackup(config, database = null) {
     throw readinessFailure("backup_restore_drill_missing");
   }
 
+  // What the last cycle recorded about the data it copied, as counts: files that
+  // changed while they were read and entries that went away (a product is never
+  // quiescent), links a run made, entries an archive cannot carry. Information
+  // for the operator, never a failure and never a name: this answers anyone who
+  // asks `/api/ready`, and a number from a hand-edited or older state file that
+  // is not one reads as unknown.
+  const recorded = (/** @type {unknown} */ value) => (Number.isSafeInteger(value) && Number(value) >= 0 ? Number(value) : null);
   return {
     ...summary,
     retentionDays,
     encrypted: true,
     schedulerHealthy: true,
+    lastBackup: {
+      changedRecorded: recorded(backupState.lastChangedRecorded),
+      omittedRecorded: recorded(backupState.lastOmittedRecorded),
+      linksRecorded: recorded(backupState.lastLinksRecorded),
+    },
     postgres: await postgresBackupReadiness(config, database),
     ...(config.vcrEnabled ? { vcr: await vcrBackupReadiness(config) } : {}),
   };

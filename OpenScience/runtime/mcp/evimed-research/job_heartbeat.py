@@ -20,10 +20,31 @@ from contextlib import contextmanager
 from datetime import datetime, timezone
 
 HEARTBEAT_SECONDS = 30.0
+#: One managed process's wall clock, the key every engine container reads too
+#: (`job_slots.execution_timeout()` in the specialist adapter and MetaAgent).
+EXECUTION_TIMEOUT_ENV = "EVIMED_SPECIALIST_EXECUTION_TIMEOUT_SECONDS"
 #: Where an engine that knows its own stage says so: `{"stage", "percent"}`.
 PROGRESS_ENV = "EVIMED_JOB_PROGRESS_FILE"
 PROGRESS_LIMIT = 4 * 1024
 MANIFEST_LIMIT = 256 * 1024
+
+
+def execution_timeout_seconds():
+    """Wall clock for one specialist process, bounded well inside the server's run monitor.
+
+    The key's value clamped to 60-14400 s; unset or not a number is the default
+    three hours, the MR engine's own limit. A specialist process that hangs had
+    no wall clock of its own: the only bound was the server's four-hour run
+    monitor, which counts polls rather than time, so a hung child could outlive
+    every limit the platform believed it had.
+    """
+    try:
+        configured = float(os.environ.get(EXECUTION_TIMEOUT_ENV, "10800"))
+    except ValueError:
+        configured = 10800.0
+    if configured != configured:  # NaN
+        configured = 10800.0
+    return int(min(max(configured, 60.0), 14400.0))
 
 
 def moment(value):

@@ -15,6 +15,26 @@ logger = logging.getLogger("metaagent.evimed_evidence")
 
 REQUEST_TIMEOUT = 30
 
+# Why the optional background-evidence source was not used, in the three words every
+# engine's result uses: no key (the deployment's or the researcher's), the API
+# answered no, or it could not be reached. A source that answered with nothing
+# relevant is not one of these: it was used.
+SOURCE_NOT_CONFIGURED = "not_configured"
+SOURCE_REFUSED = "refused"
+SOURCE_UNREACHABLE = "unreachable"
+
+
+def source_status(context: dict | None) -> str | None:
+    """The unused-source status of one `search_evimed_evidence` answer; None when the source answered."""
+    if not isinstance(context, dict):
+        return None
+    if context.get("status") == "disabled":
+        return SOURCE_NOT_CONFIGURED
+    if context.get("status") == "error":
+        message = str(context.get("message") or "")
+        return SOURCE_REFUSED if message in {"http_401", "http_403", "http_429"} else SOURCE_UNREACHABLE
+    return None
+
 
 def search_evimed_evidence(
     query: str,

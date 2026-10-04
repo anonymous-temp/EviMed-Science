@@ -84,3 +84,42 @@ def test_runner_reports_what_the_job_spent_on_either_outcome(tmp_path, monkeypat
         assert result["usage"] == {"requests": 1, "cacheHitTokens": 700, "cacheMissTokens": 200,
                                    "outputTokens": 80, "model": "deepseek-flash"}, result
     provider_usage.reset()
+
+
+def test_runner_states_which_citation_source_was_not_used_and_why(tmp_path, monkeypatch):
+    """OpenAlex without a key used to be a log line; the result names it."""
+
+    class Pipeline:
+        def __init__(self, **kwargs):
+            self.articles = [{"pmid": "1"}, {"pmid": "2"}]
+            self.output_dir = kwargs["config"].output_dir
+            self.stats = {"citation_coverage": {
+                "total": 2, "observed": 2, "missing": 0, "by_source": {"icite": 1, "semantic_scholar": 1},
+                "sources_unavailable": {"openalex": "api_key_missing"}, "reference_relations": 0}}
+
+        def run(self):
+            (self.output_dir / "report.md").write_text("# 报告\n" + "内容。" * 60, encoding="utf-8")
+
+    class FakeConfig:
+        def __init__(self, output_dir):
+            self.output_dir = output_dir
+
+    monkeypatch.setattr("bibliometric.config.load_config", lambda output_dir: FakeConfig(tmp_path))
+    monkeypatch.setattr("bibliometric.pipeline.AnalysisPipeline", Pipeline)
+    request = tmp_path / "request.json"
+    request.write_text(json.dumps({"topic": "osimertinib", "maxRecords": 20}), encoding="utf-8")
+
+    assert evimed_runner.run(request, tmp_path) == 0
+    result = json.loads((tmp_path / "result.json").read_text(encoding="utf-8"))
+    assert result["status"] == "succeeded"
+    assert result["sourcesNotUsed"] == [
+        {"source": "openalex", "label": "OpenAlex", "status": "not_configured", "reason": "api_key_missing"}]
+    assert result["modules"]["citationSource"]["status"] == "ok", "every article was covered: not a degraded result"
+
+    # With nothing unavailable the key is absent, as it always was.
+    Pipeline.__init__ = lambda self, **kwargs: (setattr(self, "articles", [{"pmid": "1"}]),
+        setattr(self, "output_dir", kwargs["config"].output_dir),
+        setattr(self, "stats", {"citation_coverage": {"total": 1, "observed": 1, "missing": 0,
+                                                       "by_source": {"icite": 1}, "sources_unavailable": {}}}))[0]
+    assert evimed_runner.run(request, tmp_path) == 0
+    assert "sourcesNotUsed" not in json.loads((tmp_path / "result.json").read_text(encoding="utf-8"))

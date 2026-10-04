@@ -85,7 +85,10 @@ test("backup archives the exact numeric uid, gid, and mode inventoried for every
   });
 });
 
-test("backup fails closed when entry metadata changes after inventory", async (t) => {
+// Strict is the mode for a source nobody writes (a quiesced capture). The default
+// mode is for a live product, where this same change is archived as the entry is
+// now and listed as changed: `backupLiveTree.test.mjs`.
+test("strict backup fails closed when entry metadata changes after inventory", async (t) => {
   const { backups, data, payload, root } = await fixture(t);
   const bin = path.join(root, "bin");
   await mkdir(bin);
@@ -102,6 +105,7 @@ exec "$EVIMED_TEST_REAL_NODE" "$@"
   await assert.rejects(
     capture(data, backups, {
       ...cleanEnvironment,
+      OPEN_SCIENCE_BACKUP_STRICT: "true",
       PATH: `${bin}:${process.env.PATH}`,
       EVIMED_TEST_MUTATE_PATH: payload,
       EVIMED_TEST_REAL_NODE: process.execPath,

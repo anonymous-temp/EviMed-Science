@@ -315,6 +315,15 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   // is what the package checks decide.
   "specialist_execution_failed",
   "meta_agent_execution_failed",
+  // The same, for an engine the deployment's wall clock stopped
+  // (`EVIMED_SPECIALIST_EXECUTION_TIMEOUT_SECONDS`, default three hours): it
+  // hung, or ran past what one job may take. The job ends by this code with what
+  // the engine had written kept in the workspace, and the run reports the
+  // analysis as not finished rather than as wrong. `mr_analysis_timeout` is the
+  // MR engine's own word for it.
+  "specialist_job_timeout",
+  "meta_agent_job_timeout",
+  "mr_analysis_timeout",
   "upstream_failed",
   "public_source_api_path_forbidden",
   "public_source_api_request_forbidden",
@@ -659,10 +668,6 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   "science_connector_value_above_maximum",
   "science_connector_value_below_minimum",
   "pharmacy_reference_invalid",
-  // The worker finished but its output does not match the evidence it claims.
-  // Delivering that is exactly what this gate exists to prevent.
-  "meta_source_evidence_mismatch",
-  "specialist_source_evidence_mismatch",
   // The GEO probe's own 400s: the run asked for an operation, a vendor, a flag,
   // or a screenshot name outside the closed vocabulary. Unlike a refusal, that
   // is the run's own request being wrong, and the caller has to see it rather
@@ -1778,6 +1783,15 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   specialist_receipt_digest_mismatch:
     '写下交付回执之后文件又被改动过，盘上的这一版没有经过质量门判定，因此不能当作已核验的成果发布。'
     + '文件仍在工作区里，可以自行取用；若这是有意的收尾修改，请让运行在最后一次修改之后再提交一次。',
+  specialist_job_timeout:
+    '专科引擎运行超过了部署设定的单次时限，已被停止。已经写出的文件保留在工作区里；'
+    + '重新发起（范围较大的请求可以缩小范围）也许就能完成。',
+  meta_agent_job_timeout:
+    '荟萃分析引擎运行超过了部署设定的单次时限，已被停止。已经完成的步骤和写出的文件都保留着，'
+    + '用同样的请求再发起一次会从上次完成的步骤接着做。',
+  mr_analysis_timeout:
+    '孟德尔随机化分析运行超过了部署设定的单次时限，已被停止。已经写出的文件保留在工作区里；'
+    + '重新发起（例如换成更少的暴露或结局）也许就能完成。',
   specialist_required_output_missing:
     '这项能力约定必须产出的文件里，有一个没有写出来，因此这份成果不完整、没有通过质量门。'
     + '已经写好的部分仍在工作区里。',

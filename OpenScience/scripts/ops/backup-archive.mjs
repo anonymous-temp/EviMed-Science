@@ -7,7 +7,19 @@
 // One inventory for both modes (backup-data.sh used to carry a second one of
 // its own, and every rule had to be written twice): strict opens, hashes and
 // re-checks every entry; not strict records what lstat sees, and the writer
-// re-verifies identity when it opens each entry.
+// opens each entry as it is when it gets to it.
+//
+// Strict is for a source nobody writes (the VCR data plane, a cutover capture
+// with the writers stopped): any entry that differs between the two passes
+// refuses the capture. Not strict is for a live product, which is never
+// quiescent, and is what the scheduler runs. A running specialist job rewrites
+// its state file by rename on every heartbeat, the release receipt creates and
+// removes a project, a run's ledger grows; the writer used to fail the whole
+// archive on the first of them (`Backup source identity changed after
+// inventory.`: three failures in eleven minutes on 2026-10-03, a day without a
+// backup, readiness red). Now an entry that changed or went away is handled
+// where it is and said so in the manifest's `changed` list (see
+// `createArchive`); what could make the archive lie stays a refusal in both.
 import { createHash } from "node:crypto";
 import { constants as fsConstants } from "node:fs";
 import { access, lstat, open, readFile, readdir, readlink, rm, writeFile } from "node:fs/promises";
@@ -35,6 +47,7 @@ const maximumLinkTargetBytes = 4096;
 // backup-scheduler.mjs reads these lines into its state; keep them in step.
 const linkNotePrefix = "backup note: workspace symbolic links recorded, not followed: ";
 const omittedNotePrefix = "backup note: workspace entries left out of the archive: ";
+const changedNotePrefix = "backup note: entries that changed or went away while the backup ran: ";
 let outputCreated = false;
 
 // A run may `ln -s` inside its own workspace, and twice one did (2026-09-26: a
@@ -72,6 +85,20 @@ const omittedKinds = new Set([
 const contentNotArchivedKinds = new Set(["unreadable", "hardlink-dropped", "non-utf8-name"]);
 const unreadableCodes = new Set(["EACCES", "EPERM"]);
 
+// What a live tree did under the backup, anywhere in the data directory (the
+// `omitted` list above is what an archive cannot carry, and only below a
+// workspace). A `changed-during-backup` entry IS an archived file: it was not
+// the file the inventory saw (replaced, rewritten, re-permissioned) or it kept
+// changing while it was read, so the archive holds the bytes the writer read
+// and the manifest's digest is of those bytes, never the inventory's. A
+// `vanished` entry is not in the archive at all: it was gone when the writer
+// got to it, and so is everything below it. The restore verifies exactly what
+// the manifest says was captured, and counts both. The reader's list of the two
+// kinds is `CHANGED_KINDS` in backup_integrity.py.
+
+/** An entry the walk could not find when it looked: not a failure on a live tree. */
+const wentMissing = (error) => error?.code === "ENOENT" || error?.code === "ENOTDIR";
+
 function specialKind(metadata) {
   if (metadata.isFIFO()) return "fifo";
   if (metadata.isSocket()) return "socket";
@@ -97,7 +124,25 @@ function managedRuntimeDecision(parts) {
   return { managed: true, included };
 }
 
-/** Paths the backup never looks at, decided from the path alone. */
+// The platform's own atomic writes, in the shapes this codebase makes them: the
+// specialist adapter's and the MR queue's `.<name>.<16 hex>.tmp`, the control
+// plane's `.<name>.<pid>.<ms>.tmp_<32 hex>` (`writeFileAtomicNoFollow`), and a
+// `.<name>.<anything>.tmpdir` working directory. Each exists for the moments
+// between a write and its rename, and a restored one is nobody's.
+const inFlightTemporary = /^\..+\.(?:[0-9a-f]{16}\.tmp|\d+\.\d+\.tmp_[0-9a-f]{32}|[^/]+\.tmpdir)$/;
+
+/** Paths the backup never looks at, decided from the path alone.
+ *
+ *  Volatile control state is excluded by rule, so it can never fail a backup:
+ *  - runtime control sockets (`.runtime-sockets`, `*.sock`);
+ *  - the specialist slot directory (`.openscience/specialist-slots`): `flock`
+ *    files that exist while a job holds or waits for a slot and are deleted
+ *    with it, created and removed on every job on every engine container;
+ *  - in-flight temporaries of the platform's own atomic writes (above).
+ *  Only outside a workspace: there a name is ours. Inside one it is the
+ *  tenant's to choose, so nothing is excluded by name and the entry's type
+ *  decides; one that is gone by the time the writer gets to it is recorded as
+ *  vanished like any other. */
 function excludedFromBackup(parts) {
   // The platform's own background projects (learning, document
   // understanding, the paired evaluation's cells) are scratch: what they
@@ -107,10 +152,10 @@ function excludedFromBackup(parts) {
   // failed the whole strict backup (2026-09-21, every cycle for hours).
   if (parts.length === 4 && parts[0] === "users" && parts[2] === "projects" && isInternalProject(parts[3])) return true;
   if (!managedRuntimeDecision(parts).included) return true;
-  // Control sockets live outside the workspaces and are skipped by name. Inside
-  // one a name is the tenant's to choose, and the entry's type decides.
+  if (parts[0] === ".openscience" && parts[1] === "specialist-slots") return true;
   const name = parts.at(-1) ?? "";
-  return !isBelowWorkspace(parts) && (name === ".runtime-sockets" || name.endsWith(".sock"));
+  return !isBelowWorkspace(parts)
+    && (name === ".runtime-sockets" || name.endsWith(".sock") || inFlightTemporary.test(name));
 }
 
 function metadataFields(metadata) {
@@ -192,6 +237,8 @@ async function createInventory() {
         try {
           await access(full, fsConstants.R_OK);
         } catch (error) {
+          // Gone since the walk listed it: nothing to carry, and not a failure.
+          if (wentMissing(error)) return false;
           return unreadable(parts, relative, error);
         }
       }
@@ -228,15 +275,28 @@ async function createInventory() {
     const decision = managedRuntimeDecision(parts);
     const below = isBelowWorkspace(parts);
     const full = path.join(root, relative);
+    // Not strict, a name the walk listed and that is gone when it is looked at
+    // is the live tree changing under the walk: it is not part of the inventory,
+    // and strict (a source nobody writes) still says so.
+    const gone = (error) => !strict && wentMissing(error);
     let pathMetadata;
     try {
       pathMetadata = await lstat(full, { bigint: true });
     } catch (error) {
+      if (gone(error)) return false;
       return unreadable(parts, relative, error);
     }
     if (pathMetadata.isSymbolicLink()) {
       if (!below) throw new Error(`Refusing to back up data directory containing symbolic links: ${full}`);
-      entries.push({ path: relative, type: "link", ...metadataFields(pathMetadata), target: await linkTarget(full) });
+      let target;
+      try {
+        target = await linkTarget(full);
+      } catch (error) {
+        // Removed, or replaced by something that is not a link, since the lstat.
+        if (gone(error) || (!strict && error?.code === "EINVAL")) return false;
+        throw error;
+      }
+      entries.push({ path: relative, type: "link", ...metadataFields(pathMetadata), target });
       return true;
     }
     const special = specialKind(pathMetadata);
@@ -257,6 +317,7 @@ async function createInventory() {
           }
           names = await childNames(full, parts, relative);
         } catch (error) {
+          if (gone(error)) return false;
           return unreadable(parts, relative, error);
         }
         let retained = false;
@@ -372,25 +433,80 @@ function recordLabel(record) {
 async function linkUnchanged(entry) {
   const full = path.join(root, entry.path);
   const metadata = await lstat(full, { bigint: true }).catch((error) => {
-    if (error?.code === "ENOENT") return null;
+    if (wentMissing(error)) return null;
     throw error;
   });
   if (!metadata?.isSymbolicLink() || String(metadata.dev) !== entry.dev || String(metadata.ino) !== entry.ino) return false;
-  return (await linkTarget(full)) === entry.target;
+  const target = await linkTarget(full).catch((error) => {
+    if (wentMissing(error) || error?.code === "EINVAL") return null;
+    throw error;
+  });
+  return target === entry.target;
 }
 
+// What a failed open says about the name, as opposed to the file: `ENOENT`, and
+// the refusals of a name that is not what the walk saw (a link or a file where
+// a directory is, `ENOTDIR`/`ELOOP` raw and as security.mjs words them, and a
+// directory or special file where a file is).
+const nameConflictCodes = new Set(["ENOTDIR", "ELOOP", "path_forbidden", "not_a_file"]);
+
+/** What `relative` is right now, by lstat alone and without following anything:
+ *  "gone", "link", "directory", "file" or "special". */
+async function lookNow(relative) {
+  let metadata = await lstat(root, { bigint: true });
+  let current = root;
+  for (const part of relative === "." ? [] : relative.split("/")) {
+    if (metadata.isSymbolicLink()) return "link";
+    if (!metadata.isDirectory()) return "gone"; // nothing is below a file
+    current = path.join(current, part);
+    try {
+      metadata = await lstat(current, { bigint: true });
+    } catch (error) {
+      if (wentMissing(error)) return "gone";
+      throw error;
+    }
+  }
+  if (metadata.isSymbolicLink()) return "link";
+  return metadata.isDirectory() ? "directory" : metadata.isFile() ? "file" : "special";
+}
+
+/** Whether an entry that could not be opened as what the inventory saw is simply
+ *  no longer there: removed, or replaced by a directory where there was a file
+ *  or a file where there was a directory. A link in its place, a special file,
+ *  a second name for a file and a path that escapes are not: they are what the
+ *  no-follow open exists to refuse, and they stay refusals. */
+async function wentAway(entry, error) {
+  if (error?.code === "ENOENT") return true;
+  if (!nameConflictCodes.has(error?.code)) return false;
+  const now = await lookNow(entry.path);
+  return now === "gone" || (entry.type === "directory" ? now === "file" : now === "directory");
+}
+
+/** The entry opened through verified descriptors, or null when it is gone (not
+ *  strict only: a source nobody writes has no entry that goes away). Not strict,
+ *  a file or directory that is not the inode, size, time or permission the
+ *  inventory recorded is opened as it is now: the header and the bytes both
+ *  come from the descriptor, so the archive never describes one file with
+ *  another's bytes. What is still refused, in both modes: another filesystem
+ *  under the same name, a name the inventory did not count on a hard-linked
+ *  file, a type that changed under the open. */
 async function openEntry(entry) {
   const full = path.join(root, entry.path);
-  const opened = entry.type === "directory"
-    ? await openScopedDirectoryNoFollow(root, full)
-    : await openScopedFileNoFollow(root, full, { allowHardLinks: entry.hardLinks !== undefined });
+  let opened;
+  try {
+    opened = entry.type === "directory"
+      ? await openScopedDirectoryNoFollow(root, full)
+      : await openScopedFileNoFollow(root, full, { allowHardLinks: entry.hardLinks !== undefined });
+  } catch (error) {
+    if (!strict && entry.path !== "." && await wentAway(entry, error)) return null;
+    throw error;
+  }
   try {
     const metadata = await opened.handle.stat({ bigint: true });
-    if ((strict ? !completeIdentityMatches(metadata, entry)
-      : String(metadata.dev) !== entry.dev || String(metadata.ino) !== entry.ino
-        || String(metadata.mode) !== entry.mode || String(metadata.uid) !== entry.uid || String(metadata.gid) !== entry.gid)
-      || (entry.hardLinks !== undefined && String(metadata.nlink) !== entry.hardLinks)
-      || (entry.type === "directory" ? !metadata.isDirectory() : !metadata.isFile())) {
+    const identityChanged = strict
+      ? !completeIdentityMatches(metadata, entry) || (entry.hardLinks !== undefined && String(metadata.nlink) !== entry.hardLinks)
+      : String(metadata.dev) !== entry.dev || (entry.hardLinks !== undefined && metadata.nlink > BigInt(entry.hardLinks));
+    if (identityChanged || (entry.type === "directory" ? !metadata.isDirectory() : !metadata.isFile())) {
       throw new Error("Backup source identity changed after inventory.");
     }
     return { handle: opened.handle, metadata };
@@ -398,6 +514,11 @@ async function openEntry(entry) {
     await opened.handle.close();
     throw error;
   }
+}
+
+/** Whether the file in hand is not the one the inventory saw. */
+function differsFromInventory(metadata, entry) {
+  return ["ino", "size", "mtimeNs", "mode", "uid", "gid"].some((key) => String(metadata[key]) !== entry[key]);
 }
 
 function stringField(header, offset, length, value) {
@@ -500,7 +621,37 @@ async function createArchive() {
   // The inventory's records, plus files that became unreadable after it.
   const demoted = [];
   let records = [];
+  let changedRecords = [];
   const directories = entries.filter(entry => entry.type === "directory");
+
+  // What a live tree did while the archive was written (not strict).
+  //  - gone: entries that were not there when the writer reached them.
+  //  - changedFiles: archived files that were not the file the inventory saw,
+  //    or kept changing as they were read.
+  //  - archivedBelow: every directory that has an archived member beneath it.
+  const gone = new Set();
+  const changedFiles = [];
+  const archivedBelow = new Set();
+  const markArchived = (relative) => {
+    for (let at = relative.lastIndexOf("/"); at > 0; at = relative.lastIndexOf("/", at - 1)) {
+      const parent = relative.slice(0, at);
+      if (archivedBelow.has(parent)) break; // its own parents were marked with it
+      archivedBelow.add(parent);
+    }
+  };
+  /** Whether a directory above `relative` (or `relative` itself, with `self`) is gone. */
+  const withinGone = (relative, self = false) => {
+    if (self && gone.has(relative)) return true;
+    for (let at = relative.lastIndexOf("/"); at > 0; at = relative.lastIndexOf("/", at - 1)) {
+      if (gone.has(relative.slice(0, at))) return true;
+    }
+    return false;
+  };
+
+  // Opens every directory the inventory listed. A link in place of one, or any
+  // other substitution that is not just the live tree, fails here, before a
+  // byte is written; a directory that is gone or was replaced by another is
+  // the live tree and is dealt with when its turn comes. Strict: all of it.
   const verifyEntries = async (items) => {
     for (const entry of items) {
       if (entry.type === "link") {
@@ -508,7 +659,7 @@ async function createArchive() {
         continue;
       }
       const opened = await openEntry(entry);
-      await opened.handle.close();
+      await opened?.handle.close();
     }
   };
   let changed = 0;
@@ -535,11 +686,16 @@ async function createArchive() {
         }
         throw error;
       }
+      if (opened === null) {
+        gone.add(entry.path);
+        continue;
+      }
       const { handle, metadata } = opened;
       try {
         yield* headers(entry, metadata, index);
         if (entry.type === "directory") {
           recordArchived({ path: entry.path, type: "directory", size: 0 });
+          markArchived(entry.path);
           continue;
         }
         const size = Number(metadata.size);
@@ -552,15 +708,33 @@ async function createArchive() {
             yield chunk;
           }
         }
-        if (written !== size) throw new Error("Backup source changed during its bounded read.");
+        // A file that shrank under the read: the header has declared `size`
+        // and the first bytes are on the stream, so, as GNU tar does, the
+        // member is padded to the size it declared. The digest covers the
+        // padding, and the manifest lists the file as changed. Strict refuses.
+        let shrank = false;
+        if (written !== size) {
+          if (strict) throw new Error("Backup source changed during its bounded read.");
+          shrank = true;
+          for (let missing = size - written; missing > 0;) {
+            const zeros = Buffer.alloc(Math.min(missing, 1024 * 1024));
+            contentDigest.update(zeros);
+            yield zeros;
+            missing -= zeros.length;
+          }
+        }
         const sha256 = contentDigest.digest("hex");
         const after = await handle.stat({ bigint: true });
         // A name added while it was read may be anywhere on the volume.
         if (after.nlink > BigInt(entry.hardLinks ?? 1)) throw new Error("Backup source became hard-linked while being read.");
-        if (String(metadata.size) !== entry.size || String(metadata.mtimeNs) !== entry.mtimeNs
+        if (shrank || differsFromInventory(metadata, entry)
           || after.size !== metadata.size || after.mtimeNs !== metadata.mtimeNs || after.nlink === 0n
-          || (strict && (sha256 !== entry.sha256 || !completeIdentityMatches(after, entry)))) changed++;
+          || (strict && (sha256 !== entry.sha256 || !completeIdentityMatches(after, entry)))) {
+          changed++;
+          changedFiles.push(entry.path);
+        }
         recordArchived({ path: entry.path, type: "file", size, sha256 });
+        markArchived(entry.path);
         yield padding(size);
       } finally {
         await handle.close();
@@ -570,17 +744,41 @@ async function createArchive() {
     // descriptor safely retained the original bytes while its name moved.
     const demotedPaths = new Set(demoted.map(record => record.path));
     await verifyEntries(strict ? entries.filter(entry => !demotedPaths.has(entry.path)) : directories);
+    // A directory that is gone but has archived members beneath it is still a
+    // member of the archive, as the inventory recorded it: its children cannot
+    // be restored into nothing, and the manifest must name every parent. What
+    // is gone with nothing archived beneath it is not archived at all.
+    for (const [index, entry] of entries.entries()) {
+      if (entry.type !== "directory" || !gone.has(entry.path) || !archivedBelow.has(entry.path)) continue;
+      gone.delete(entry.path);
+      yield* headers(entry, {
+        size: 0n, mtimeNs: BigInt(entry.mtimeNs), uid: BigInt(entry.uid), gid: BigInt(entry.gid), mode: BigInt(entry.mode),
+      }, index);
+      recordArchived({ path: entry.path, type: "directory", size: 0 });
+    }
+    // Everything below a directory that is gone went with it, and is said once,
+    // by the directory: the links and left-out records beneath it, and the
+    // entries that were missing one by one.
+    const kept = (record) => !withinGone(record.kind === "non-utf8-name" ? record.parent : record.path, record.kind === "non-utf8-name");
+    for (const link of recordedLinks.splice(0)) if (!withinGone(link.path)) recordedLinks.push(link);
     // An alias whose first name was not archived after all has no bytes here.
     records = [...omittedRecords.map(record => (record.kind === "hardlink" && !archivedFiles.has(record.of)
-      ? { path: record.path, kind: "hardlink-dropped" } : record)), ...demoted];
+      ? { path: record.path, kind: "hardlink-dropped" } : record)), ...demoted].filter(kept);
     const omitted = records.map(record => JSON.stringify(record));
     manifestBytes += omitted.length ? Buffer.byteLength(`,"omitted":[${omitted.join(",")}]`) : 0;
+    changedRecords = [
+      ...changedFiles.map(file => ({ path: file, kind: "changed-during-backup" })),
+      ...[...gone].filter(file => !withinGone(file)).sort().map(file => ({ path: file, kind: "vanished" })),
+    ];
+    const changedList = changedRecords.map(record => JSON.stringify(record));
+    manifestBytes += changedList.length ? Buffer.byteLength(`,"changed":[${changedList.join(",")}]`) : 0;
     if (manifestBytes > maximumManifestBytes) throw new Error("Backup integrity manifest exceeds its size limit.");
     // Each list only when it has members, so an archive without any is
     // byte-for-byte the format every earlier reader already verifies.
     const links = recordedLinks.length ? `,"links":[${recordedLinks.map(link => link.serialized).join(",")}]` : "";
     const omittedList = omitted.length ? `,"omitted":[${omitted.join(",")}]` : "";
-    const integrityManifest = Buffer.from(`${integrityManifestPrefix}${archivedEntries.join(",")}]${links}${omittedList}}`, "utf8");
+    const changedJson = changedList.length ? `,"changed":[${changedList.join(",")}]` : "";
+    const integrityManifest = Buffer.from(`${integrityManifestPrefix}${archivedEntries.join(",")}]${links}${omittedList}${changedJson}}`, "utf8");
     yield* headers({ path: integrityManifestName, type: "file" }, {
       size: BigInt(integrityManifest.length), mode: 0o600n, mtimeNs: 0n,
       uid: BigInt(rootEntry.uid), gid: BigInt(rootEntry.gid),
@@ -613,6 +811,12 @@ async function createArchive() {
       paths: records.slice(0, 5).map(recordLabel),
     };
     process.stderr.write(`${omittedNotePrefix}${JSON.stringify(note)}\n`);
+  }
+  if (changedRecords.length) {
+    const kinds = {};
+    for (const record of changedRecords) kinds[record.kind] = (kinds[record.kind] ?? 0) + 1;
+    const note = { count: changedRecords.length, kinds, paths: changedRecords.slice(0, 5).map(record => record.path) };
+    process.stderr.write(`${changedNotePrefix}${JSON.stringify(note)}\n`);
   }
   process.exitCode = changed ? 1 : 0;
 }

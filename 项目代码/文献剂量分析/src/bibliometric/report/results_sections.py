@@ -828,7 +828,7 @@ def _results_citation(ctx):
     if not cite_stats:
         return ""
 
-    from bibliometric.analysis.citations import SOURCE_LABELS
+    from bibliometric.analysis.citations import SOURCE_LABELS, sources_not_used
 
     coverage = cite_stats.get("coverage", {})
     observed = int(coverage.get("observed", 0))
@@ -857,6 +857,27 @@ def _results_citation(ctx):
             + ("\n" if complete else
                f" The {total_count - observed} articles without observed citations are "
                "excluded from every metric in this section.\n")
+        )
+
+    # A source that could not be used is said where the sources are listed, and
+    # never left to the log: a reader of "iCite 120" cannot tell a source that
+    # was not needed from one that was not configured, refused or unreachable.
+    unused = sources_not_used(coverage)
+    if unused:
+        words = {
+            "not_configured": ("未配置", "not configured"),
+            "refused": ("被拒绝", "refused"),
+            "unreachable": ("无法连接", "unreachable"),
+        }
+        index = 0 if zh else 1
+        names = ("、" if zh else ", ").join(
+            f"{row['label']}（{words[row['status']][index]}）" if zh
+            else f"{row['label']} ({words[row['status']][index]})"
+            for row in unused
+        )
+        source_note += (
+            f"未能使用的引用数据来源：{names}。\n" if zh
+            else f"Citation sources that could not be used: {names}.\n"
         )
 
     lines = [section_title, source_note]

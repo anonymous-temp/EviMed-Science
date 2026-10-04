@@ -97,6 +97,14 @@ function readRegularFileNoFollow(file, { privateFile = false, knowledgePluginSha
   }
 }
 
+/** A regular file of no bytes: how a deployment says it holds no key. */
+function isEmptyRegularFile(file) {
+  const target = path.resolve(file);
+  assertNoSymlinkPath(target);
+  const stat = fs.lstatSync(target);
+  return stat.isFile() && stat.size === 0;
+}
+
 // Only this shared credential is mounted by the knowledge plugin's pinned
 // UID/GID 10002. All other private files keep the owner-only policy.
 export function readEviMedApiKeyFile(file) {
@@ -628,11 +636,20 @@ export function validateDeploymentConfig(values, envFile) {
       },
     );
   }
-  const evimedApiKey = readEviMedApiKeyFile(
-    resolveDeploymentPath(required(values, "OPEN_SCIENCE_EVIMED_API_KEY_HOST_FILE"), envFile),
-  ).replace(/\r?\n$/, "");
-  if (!evimedApiKey || /[\r\n\0]/.test(evimedApiKey)) {
-    throw failure("preflight_evimed_api_key", "The EviMed API key file must contain one non-empty credential.");
+  // The deployment's EviMed evidence key is optional (owner ruling 2026-10-04: a
+  // source nobody configured is the researcher's to configure where they use
+  // it). Unset, `/dev/null`, or an empty file is a deployment without one, and
+  // starts; a key that is named and there must still be one credential in a
+  // private regular file.
+  const evimedKeyName = values.OPEN_SCIENCE_EVIMED_API_KEY_HOST_FILE?.trim();
+  if (evimedKeyName && evimedKeyName !== "/dev/null") {
+    const evimedKeyFile = resolveDeploymentPath(evimedKeyName, envFile);
+    if (!isEmptyRegularFile(evimedKeyFile)) {
+      const evimedApiKey = readEviMedApiKeyFile(evimedKeyFile).replace(/\r?\n$/, "");
+      if (!evimedApiKey || /[\r\n\0]/.test(evimedApiKey)) {
+        throw failure("preflight_evimed_api_key", "The EviMed API key file must contain one credential, or be empty.");
+      }
+    }
   }
 
   const minFreeBytes = positiveInteger(

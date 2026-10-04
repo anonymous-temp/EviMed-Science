@@ -170,9 +170,13 @@ function log(event, fields = {}, error = false) {
 // backup-archive.mjs writes these lines when it recorded, instead of refusing
 // the backup over them, links a run made inside its own workspace and the
 // other entries there an archive cannot carry (special files, unreadable
-// files, a hard link's other names, names that are not UTF-8).
+// files, a hard link's other names, names that are not UTF-8), and what a live
+// tree did while the archive was being written: files that were not the files
+// the inventory saw or kept changing as they were read, and entries that were
+// gone when the writer reached them.
 const linkNotePrefix = "backup note: workspace symbolic links recorded, not followed: ";
 const omittedNotePrefix = "backup note: workspace entries left out of the archive: ";
+const changedNotePrefix = "backup note: entries that changed or went away while the backup ran: ";
 
 /** The count, first names and (for omissions) counts by kind from one of the
  *  writer's notes; none is `{ count: 0 }`. A note that does not parse is
@@ -202,6 +206,7 @@ async function runCycle(config, previous) {
   const backup = await runProcess("bash", [backupScript, config.dataDir, config.backupDir]);
   const links = backupNote(backup.stderr, linkNotePrefix);
   const omitted = backupNote(backup.stderr, omittedNotePrefix);
+  const changed = backupNote(backup.stderr, changedNotePrefix);
   const archive = path.resolve(backup.stdout.trim().split(/\r?\n/).filter(Boolean).at(-1) ?? "");
   if (path.dirname(archive) !== config.backupDir || !archivePattern.test(path.basename(archive))) {
     throw new Error("Backup command returned an invalid encrypted archive path.");
@@ -268,6 +273,14 @@ async function runCycle(config, previous) {
     lastOmittedRecorded: omitted.count,
     lastOmittedKinds: omitted.kinds,
     lastOmittedSample: omitted.paths,
+    // What a live tree did while the archive was written, by kind
+    // (`changed-during-backup`: archived as the writer read it, `vanished`: not
+    // archived, gone). A product is never quiescent, so this is information
+    // about the data, not a health state: the readiness check reports the count
+    // and never fails on it.
+    lastChangedRecorded: changed.count,
+    lastChangedKinds: changed.kinds,
+    lastChangedSample: changed.paths,
   };
   await writeState(config.stateFile, state);
   log("backup.completed", {
@@ -279,6 +292,8 @@ async function runCycle(config, previous) {
     ...(links.paths.length ? { linksSample: links.paths } : {}),
     omittedRecorded: omitted.count,
     ...(omitted.count ? { omittedKinds: omitted.kinds, omittedSample: omitted.paths } : {}),
+    changedRecorded: changed.count,
+    ...(changed.count ? { changedKinds: changed.kinds, changedSample: changed.paths } : {}),
   });
   return state;
 }

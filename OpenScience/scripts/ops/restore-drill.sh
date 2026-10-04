@@ -58,7 +58,10 @@ fi
 # Workspace links, and the other workspace entries the backup left out
 # (special files, unreadable files, a hard link's other names, non-UTF-8
 # names), are verified as records and restored as
-# nothing: the check above still fails on any link the restore produced.
+# nothing: the check above still fails on any link the restore produced. So are
+# the entries the manifest says changed or went away while the backup ran of a
+# live tree: a changed file is verified against the digest of the bytes the
+# archive holds, a vanished one is verified as absent.
 node - "$receipt" "$ARCHIVE" <<'NODE'
 const fs = require('node:fs');
 const report = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
@@ -69,6 +72,7 @@ if (report.verification !== 'inventory-v1') {
 } else {
   const links = report.links ? `, ${report.links} workspace link(s) recorded, not restored` : '';
   const omitted = report.omitted ? `, ${report.omitted} other workspace entr(ies) recorded, not restored` : '';
-  console.log(`restore drill ok: ${process.argv[3]} (users/ present, ${report.files} files, inventory-v1${links}${omitted})`);
+  const changed = report.changed ? `, ${report.changed} entr(ies) changed while the backup ran, recorded` : '';
+  console.log(`restore drill ok: ${process.argv[3]} (users/ present, ${report.files} files, inventory-v1${links}${omitted}${changed})`);
 }
 NODE

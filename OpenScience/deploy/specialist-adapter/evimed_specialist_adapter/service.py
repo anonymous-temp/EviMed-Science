@@ -63,6 +63,16 @@ _MR_RUNNER_MESSAGE_LIMIT = 2000
 #: trying again later is the whole remedy -- the same fact as an engine that is
 #: not running, which this code already says.
 _SLOT_FAILURE_CODE = "specialist_worker_unavailable"
+#: Why an optional data source was not used, in the three words every engine's
+#: result uses (`sourcesNotUsed`): the deployment and the researcher have no key
+#: for it, it answered no, or it could not be reached.
+_SOURCE_STATUSES = frozenset({"not_configured", "refused", "unreachable"})
+#: What a job the engine's wall clock stopped ends as (`job_slots.execution_timeout()`):
+#: a named code of its own, because "the engine failed" and "the engine did not
+#: finish in the time a job may take" ask for different next steps. `124` is the
+#: exit status `timeout(1)` and the MR engine's own wall clock use for it.
+_TIMEOUT_CODE = "specialist_job_timeout"
+_TIMEOUT_RETURN_CODE = 124
 
 
 SPECS: dict[str, dict[str, Any]] = {
@@ -649,11 +659,25 @@ def _model_ready() -> bool:
         ):
             raise RuntimeError("Managed MR input support is unavailable.")
         _signing_secret()
-        if _kind() == "drug-safety-analysis":
-            _read_secret(os.getenv("EVIMED_EVIDENCE_SEARCH_KEY_FILE", "").strip())
     except (OSError, UnicodeDecodeError, RuntimeError):
         return False
     return os.getenv("LLM_MODEL", "").strip() == "deepseek-flash"
+
+
+def _evidence_source_state() -> dict[str, bool]:
+    """Whether this deployment holds an EviMed evidence key. Reported, never required.
+
+    The drug-safety engine's evidence layer is optional (it says in its result
+    when it was not used), and a source nobody configured is the researcher's to
+    configure where they use it (owner ruling 2026-10-04). This container used to
+    refuse to serve without the deployment's key file, so a deployment without
+    one left the web service waiting on an adapter that would never be healthy.
+    """
+    try:
+        _read_secret(os.getenv("EVIMED_EVIDENCE_SEARCH_KEY_FILE", "").strip())
+    except (OSError, UnicodeDecodeError, RuntimeError):
+        return {"configured": False}
+    return {"configured": True}
 
 
 # The connectors each engine reads directly from its own environment, outside the
@@ -671,7 +695,9 @@ _JOB_CONNECTOR_ENV = {
     "mendelian-randomization": {"opengwas": "OPENGWAS_JWT", "umls": "UMLS_API_KEY"},
     "bibliometric-analysis": {"ncbi": "NCBI_API_KEY"},
     "research-topic-selection": {"ncbi": "NCBI_API_KEY"},
-    "drug-safety-analysis": {"openfda": "OPENFDA_API_KEY"},
+    # The EviMed evidence key is the engine's optional guideline layer: the
+    # deployment's own (a mounted file) wins, and a researcher's fills the gap.
+    "drug-safety-analysis": {"openfda": "OPENFDA_API_KEY", "evimed-evidence": "EVIMED_EVIDENCE_SEARCH_KEY"},
 }
 # The connectors where this container's own value wins: the deployment decided
 # how the source is reached, so a researcher's key is asked for only where the
@@ -679,8 +705,26 @@ _JOB_CONNECTOR_ENV = {
 # person, and the control plane answers with the deployment's one when it holds
 # one.) The control plane's answer for these is the researcher's own key only,
 # never the deployment's.
-_DEPLOYMENT_FIRST_CONNECTORS = frozenset({"umls", "ncbi", "openfda"})
+_DEPLOYMENT_FIRST_CONNECTORS = frozenset({"umls", "ncbi", "openfda", "evimed-evidence"})
 _JOB_ENV_PREFIX = "EVIMED_JOB_CREDENTIAL_"
+
+
+def _deployment_holds(env_name: str) -> bool:
+    """Whether this container already carries a value for the engine variable: set directly, or by a readable file.
+
+    A credential mounted as a file (`<NAME>_FILE`, as the EviMed evidence key is) is
+    the deployment's all the same, and an engine reads a direct value before the
+    file, so a researcher's key must not be handed over where the file holds one.
+    """
+    if os.environ.get(env_name, "").strip():
+        return True
+    location = os.environ.get(f"{env_name}_FILE", "").strip()
+    if not location:
+        return False
+    try:
+        return bool(_read_secret(location))
+    except (OSError, UnicodeDecodeError, RuntimeError):
+        return False
 
 
 def _job_credentials(workload_token: str | None, only: tuple[str, ...] | None = None) -> dict[str, str]:
@@ -698,7 +742,7 @@ def _job_credentials(workload_token: str | None, only: tuple[str, ...] | None = 
         for connector, env_name in _JOB_CONNECTOR_ENV.get(_kind(), {}).items()
         if (only is None or connector in only)
         # Deployment first: this container already holds a value, so nothing is asked.
-        and not (connector in _DEPLOYMENT_FIRST_CONNECTORS and os.environ.get(env_name, "").strip())
+        and not (connector in _DEPLOYMENT_FIRST_CONNECTORS and _deployment_holds(env_name))
     }
     url = os.getenv("EVIMED_CONNECTOR_CREDENTIAL_URL", "").strip()
     if not wanted or not url or not workload_token:
@@ -1095,7 +1139,10 @@ def _status(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
         tail = _log_tail(log_path)
         if tail:
             message = f"{message} Log tail: {tail}"
-        failure = _error("specialist_execution_failed", message, bool(state.get("retryable")))
+        failure = _error(
+            _TIMEOUT_CODE if state.get("errorCode") == _TIMEOUT_CODE else "specialist_execution_failed",
+            message, bool(state.get("retryable")),
+        )
         if state.get("artifacts"):
             failure["artifacts"] = state["artifacts"]
             failure["warnings"] = ["These are partial outputs from a failed job; verify their scope before drawing conclusions."]
@@ -1106,16 +1153,19 @@ def _status(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
         return _error("specialist_job_state_invalid", "The specialist job state is invalid.")
     finished = _moment(state.get("finishedAt"))
     elapsed = _seconds_since(state.get("createdAt"), finished) if finished else None
+    unused = _sources_not_used({"sourcesNotUsed": state.get("sourcesNotUsed")})
+    notes = [*([cleanup["message"]] if cleanup else []), *([_sources_not_used_warning(unused)] if unused else [])]
     return {
         "status": "success",
         "summary": f"{_spec()['label']} job {job_id} completed.",
         "data": {"jobId": job_id, "jobStatus": "succeeded",
                  **({"elapsedSeconds": elapsed} if elapsed is not None else {}),
                  **({"cleanupError": cleanup} if cleanup else {}),
+                 **({"sourcesNotUsed": unused} if unused else {}),
                  **({"auditReceipt": state["auditReceipt"]} if state.get("auditReceipt") else {})},
         "sources": [_source(job_id)],
         "artifacts": state.get("artifacts") or [],
-        **({"warnings": [cleanup["message"]]} if cleanup else {}),
+        **({"warnings": notes} if notes else {}),
     }
 
 
@@ -1331,6 +1381,9 @@ def _run_isolated_mr(
             bindings=state.get("mrInputBindings", {}),
             python=sys.executable,
             runner=root / "evimed_runner.py",
+            # The same wall clock as every other engine (it was a constant 10800
+            # in the engine), so one lever bounds them all.
+            timeout=int(job_slots.execution_timeout()),
         )
         environment = _child_environment()
         credentials = None
@@ -1363,6 +1416,7 @@ def _run_isolated_mr(
             artifacts=outcome["artifacts"] if success or outcome.get("partialScientificReceipt") else [],
             retryable=outcome["returnCode"] in {75, 137, 143},
             **({"usage": usage} if usage else {}),
+            **({"sourcesNotUsed": _sources_not_used(result)} if success and _sources_not_used(result) else {}),
         )
         if success:
             receipt = audit_receipt.produce(state, outcome, data_root)
@@ -1509,6 +1563,52 @@ def _fail_unslotted(state_path: Path, error: job_slots.SlotsUnavailable, log_pat
         pass
 
 
+def _sources_not_used(result: Any) -> list[dict[str, str]]:
+    """The engine's own list of optional sources it did not use, checked before it is shown.
+
+    A source nobody configured is the researcher's to configure where they use it
+    (owner ruling 2026-10-04), and an engine that goes on without one used to say
+    so in its log alone. The engine states it in its result; this keeps the
+    closed, bounded shape of what it said and drops anything else, because the
+    list is read back from disk and reaches the run as text.
+    """
+    rows = result.get("sourcesNotUsed") if isinstance(result, dict) else None
+    if not isinstance(rows, list):
+        return []
+    kept: list[dict[str, str]] = []
+    for row in rows[:8]:
+        if not isinstance(row, dict) or row.get("status") not in _SOURCE_STATUSES:
+            continue
+        source, label = row.get("source"), row.get("label")
+        if not all(isinstance(value, str) and 0 < len(value) <= 80 and value.isprintable() for value in (source, label)):
+            continue
+        entry = {"source": source, "label": label, "status": row["status"]}
+        fallback = row.get("fallback")
+        if isinstance(fallback, str) and 0 < len(fallback) <= 40 and fallback.isprintable():
+            entry["fallback"] = fallback
+        kept.append(entry)
+    return kept
+
+
+def _sources_not_used_warning(rows: Any) -> str | None:
+    """The one sentence a poller reads for `sourcesNotUsed`; None when there is none."""
+    kept = _sources_not_used({"sourcesNotUsed": rows})
+    if not kept:
+        return None
+    named = ", ".join(f"{row['label']} ({row['status'].replace('_', ' ')})" for row in kept)
+    return (f"Optional data sources this job did not use: {named}. The analysis went on without them; "
+            "say so when reporting the result, and tell the researcher they can add the source under 设置 → 数据源.")
+
+
+def _timeout_message() -> str:
+    """What a job the wall clock stopped says, for a reader: the limit, what is kept, what to do."""
+    return (
+        f"{_spec()['label']} was stopped after {int(job_slots.execution_timeout())} seconds without finishing "
+        "(the deployment's execution limit for one job). Files it had already written are kept; "
+        "starting it again, with a narrower request if it is a large one, may finish."
+    )
+
+
 def run_job(state_file: str) -> int:
     state_path = Path(state_file).absolute()
     data_root = Path(os.getenv("EVIMED_DATA_ROOT", "/data")).resolve()
@@ -1563,6 +1663,7 @@ def _run_job(state_path: Path, data_root: Path) -> int:
     request_path = output_root / "request.json"
     request = state["request"]
     _atomic_json(request_path, request)
+    timed_out = False
     log_descriptor = os.open(
         log_path,
         os.O_WRONLY | os.O_CREAT | os.O_APPEND | getattr(os, "O_NOFOLLOW", 0),
@@ -1595,7 +1696,7 @@ def _run_job(state_path: Path, data_root: Path) -> int:
                     ).returncode
             else:
                 try:
-                    return_code, receipt_rows = _run_isolated(
+                    return_code, receipt_rows, timed_out = _run_isolated(
                         state, state_path, root, workspace, output_root, request_path, log, isolation
                     )
                 except (OSError, ValueError, isolated_job.IsolatedJobError) as error:
@@ -1619,7 +1720,7 @@ def _run_job(state_path: Path, data_root: Path) -> int:
     # The engine has ended, either way: what its source evidence did since
     # admission goes in the record, and decides nothing about the outcome.
     _note_evidence(state, root)
-    if return_code != 0 or result.get("status") != "succeeded" or (isolation is not None and receipt_rows is None):
+    if timed_out or return_code != 0 or result.get("status") != "succeeded" or (isolation is not None and receipt_rows is None):
         state.update(
             {
                 "status": "failed",
@@ -1639,6 +1740,11 @@ def _run_job(state_path: Path, data_root: Path) -> int:
                 **({"usage": usage} if usage else {}),
             }
         )
+        if timed_out:
+            # Whatever the engine had written was published above and is named in
+            # `artifacts` (principle 19); the engine's own last word, if it left
+            # one, says nothing about why it was stopped.
+            state.update(errorCode=_TIMEOUT_CODE, retryable=True, error=_timeout_message())
         _write_state(state_path, state)
         _report_usage(state, log_path)
         return return_code or 1
@@ -1656,6 +1762,9 @@ def _run_job(state_path: Path, data_root: Path) -> int:
     # populate `modules` yet leaves both fields absent, which is honestly
     # "not reported" and not "nothing was degraded".
     degradation = {}
+    unused = _sources_not_used(result)
+    if unused:
+        degradation["sourcesNotUsed"] = unused
     modules = result.get("modules")
     if isinstance(modules, dict):
         degradation["modules"] = modules
@@ -1713,12 +1822,14 @@ def _run_isolated(
     request_path: Path,
     log: Any,
     credentials: dict[str, Any],
-) -> tuple[int, dict[str, list[dict[str, Any]]]]:
+) -> tuple[int, dict[str, list[dict[str, Any]]], bool]:
     """Run the engine in a private stage and publish its regular output files.
 
-    Returns its exit code and the owner's receipt rows: the inputs it was
-    handed and every file published into the job's output, the request the
-    owner wrote there included.
+    Returns its exit code, the owner's receipt rows (the inputs it was handed
+    and every file published into the job's output, the request the owner wrote
+    there included) and whether the wall clock stopped it. A stopped engine's
+    files are published all the same: what it had written before is the partial
+    result.
     """
     request = dict(state["request"])
     inputs, handed = [], {}
@@ -1758,11 +1869,18 @@ def _run_isolated(
             "--output-dir",
             str(stage / "output"),
         ]
+        timed_out = False
         with _heartbeat(state_path, state, read=_read_json, write=_atomic_json, progress_path=progress):
-            return_code = isolated_job.run(command, credentials=credentials, cwd=str(root), env=environment, log=log)
+            try:
+                return_code = isolated_job.run(
+                    command, credentials=credentials, cwd=str(root), env=environment, log=log,
+                    timeout=job_slots.execution_timeout(),
+                )
+            except isolated_job.ExecutionTimeout:
+                return_code, timed_out = _TIMEOUT_RETURN_CODE, True
         artifacts = isolated_job.publish(stage / "output", output_root, workspace)
     artifacts.append(isolated_job.file_row(workspace, request_path))
-    return return_code, {"inputs": inputs, "artifacts": sorted(artifacts, key=lambda row: row["path"])}
+    return return_code, {"inputs": inputs, "artifacts": sorted(artifacts, key=lambda row: row["path"])}, timed_out
 
 
 def _create_app() -> FastAPI:
@@ -1808,6 +1926,7 @@ def _create_app() -> FastAPI:
             "modelRoute": "gateway" if engine_model.enabled() else "direct",
             **({"opengwas": opengwas} if opengwas is not None else {}),
             **({"openDataSources": open_sources} if _kind() == "mendelian-randomization" else {}),
+            **({"evidenceSource": _evidence_source_state()} if _kind() == "drug-safety-analysis" else {}),
             "auditReceiptsReady": audit_receipt.ready(fixture=_kind() == "mendelian-randomization"),
             **_evidence_health(),
             # Deployment-wide, from the one directory every engine container

@@ -337,14 +337,15 @@ export const CONNECTOR_CREDENTIAL_GATEWAY_PATH = "/internal/connectors/v1/creden
  * adapters actually ask for (`_JOB_CONNECTOR_ENV` in the specialist adapter's
  * service.py, which `connectorCredentials.test.mjs` holds to this list) —
  * OpenGWAS for the MR engine, and the keys the engines read from their own
- * environment: UMLS (MR), NCBI/PubMed (bibliometrics, topic selection) and
- * openFDA (drug safety). Any other connector's credential is injected by the
+ * environment: UMLS (MR), NCBI/PubMed (bibliometrics, topic selection, MetaAgent),
+ * openFDA (drug safety) and the EviMed evidence API (MetaAgent, drug safety).
+ * Any other connector's credential is injected by the
  * public-source gateway server-side and never leaves the control plane. Found
  * 2026-09-20 in the release's security review: answering every connector let
  * any active runtime token read the deployment's licensed keys (UMLS, OMIM,
  * NCBI, …) — a runtime's token is a file the run can print.
  */
-export const JOB_SCOPED_CONNECTORS = Object.freeze(new Set(["opengwas", "umls", "ncbi", "openfda"]));
+export const JOB_SCOPED_CONNECTORS = Object.freeze(new Set(["opengwas", "umls", "ncbi", "openfda", "evimed-evidence"]));
 
 /**
  * The job-scoped connectors whose answer is the researcher's own credential and
@@ -359,13 +360,14 @@ export const JOB_SCOPED_CONNECTORS = Object.freeze(new Set(["opengwas", "umls", 
  * answer here is only ever the researcher's. OpenGWAS keeps its older shape: its
  * token belongs to a person, and the deployment-held one is the same person's.
  */
-export const JOB_OWN_CREDENTIAL_ONLY = Object.freeze(new Set(["umls", "ncbi", "openfda"]));
+export const JOB_OWN_CREDENTIAL_ONLY = Object.freeze(new Set(["umls", "ncbi", "openfda", "evimed-evidence"]));
 
 /**
  * The credential a specialist adapter should use for one job, resolved for
  * the workload that asked.
  *
- * The engines read some sources themselves (OpenGWAS, UMLS, NCBI, openFDA),
+ * The engines read some sources themselves (OpenGWAS, UMLS, NCBI, openFDA, the
+ * EviMed evidence API),
  * outside the public-source gateway, so the gateway's fallback never reaches
  * them. The adapter asks here instead, with the same workload token the
  * runtime handed it — the token names the user, the control plane holds their

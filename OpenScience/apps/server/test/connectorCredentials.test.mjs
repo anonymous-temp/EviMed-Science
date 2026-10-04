@@ -133,7 +133,7 @@ async function listen(server) {
 
 test("an adapter gets the credential its workload's user should run with, and nothing for anyone else", async (t) => {
   const database = fakeDatabase();
-  const store = new ConnectorCredentialStore({ database, secret: SECRET, config: { publicSourceCredentials: { umls: "deployment-umls" } } });
+  const store = new ConnectorCredentialStore({ database, secret: SECRET, config: { publicSourceCredentials: { umls: "deployment-umls", evimedEvidence: "deployment-evimed" } } });
   await store.set("alice", "opengwas", jwt(future));
   const runtimeManager = {
     async assertActiveEviMedWorkloadToken(token) {
@@ -162,11 +162,18 @@ test("an adapter gets the credential its workload's user should run with, and no
   assert.equal((await ask("opengwas", "bob-workload")).status, 404);
   assert.equal((await ask("opengwas", "nobody")).status, 401);
   assert.equal((await ask("opengwas")).status, 401);
-  // The platform's own evidence API is a connector now; no engine reads it from
-  // its environment, so it is the gateway's, not a job's.
-  const evidence = await ask("evimed-evidence", "alice-workload");
-  assert.equal(evidence.status, 403);
-  assert.equal((await evidence.json()).code, "connector_not_job_scoped");
+  // The platform's own evidence API is a connector, and two engines read it
+  // themselves (MetaAgent's background citations, the drug-safety guideline layer),
+  // so a job is handed the researcher's own key for it, as for UMLS: never the
+  // deployment's, which stays with the gateway and the engine's own mounted file.
+  const noOwnEvidence = await ask("evimed-evidence", "alice-workload");
+  assert.equal(noOwnEvidence.status, 404);
+  assert.equal((await noOwnEvidence.json()).code, "connector_credential_missing");
+  await store.set("alice", "evimed-evidence", "alice-own-evimed-key");
+  const ownEvidence = await ask("evimed-evidence", "alice-workload");
+  assert.equal(ownEvidence.status, 200);
+  assert.deepEqual((await ownEvidence.json()).data, { connector: "evimed-evidence", source: "user", value: "alice-own-evimed-key" });
+  assert.equal((await ask("evimed-evidence", "bob-workload")).status, 404, "another researcher's key is not theirs to read");
   assert.equal((await ask("not-a-connector", "alice-workload")).status, 400);
   const method = await fetch(`${base}${CONNECTOR_CREDENTIAL_GATEWAY_PATH}?connector=opengwas`, { method: "POST", headers: { authorization: "Bearer alice-workload" } });
   assert.equal(method.status, 404);
@@ -313,4 +320,20 @@ test("the adapter's engine-key roster is the control plane's job-scoped list", a
   assert.deepEqual([...asked].sort(), [...JOB_SCOPED_CONNECTORS].sort());
   // Every one of them but OpenGWAS is answered with the researcher's own key only.
   assert.deepEqual([...JOB_SCOPED_CONNECTORS].filter((id) => !JOB_OWN_CREDENTIAL_ONLY.has(id)), ["opengwas"]);
+});
+
+// MetaAgent ships in its own image and keeps its own roster (`new_meta/core/job_credentials.py`).
+// It may only ask for what the control plane answers for, and the variables it names are
+// the ones its engine reads.
+test("MetaAgent's job-credential roster is a subset of the control plane's job-scoped list", async () => {
+  const { readFile } = await import("node:fs/promises");
+  const { JOB_SCOPED_CONNECTORS, JOB_OWN_CREDENTIAL_ONLY } = await import("../src/connectorCredentials.mjs");
+  const source = await readFile(new URL("../../../../项目代码/meta/new_meta/core/job_credentials.py", import.meta.url), "utf8");
+  const block = /^CONNECTORS = \{([\s\S]*?)^\}/m.exec(source)?.[1] ?? "";
+  const asked = [...block.matchAll(/"([a-z][a-z0-9-]*)":\s*"[A-Z][A-Z0-9_]*"/g)].map((match) => match[1]);
+  assert.deepEqual(asked.sort(), ["evimed-evidence", "ncbi"], `MetaAgent's table was read as ${asked.join(",")}`);
+  for (const id of asked) {
+    assert.ok(JOB_SCOPED_CONNECTORS.has(id), `${id} would be a job refused with 403 at start`);
+    assert.ok(JOB_OWN_CREDENTIAL_ONLY.has(id), `${id} must be answered with the researcher's own key only`);
+  }
 });

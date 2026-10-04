@@ -128,11 +128,11 @@
       "credential": "CORE_API_KEY",
       "license": "元数据/摘要/全文版权分别核验",
       "officialUrl": "https://api.core.ac.uk/v3",
-      "blocker": "适配器和服务端密钥注入已实现；提供 CORE_API_KEY 并通过真实联网探针后才可转为 connected_public。",
+      "blocker": "适配器和服务端密钥注入已实现。使用需要 CORE_API_KEY：部署统一配置，或研究者在「设置 → 数据源」保存自己的；两者都没有时，用到该源的那一刻向研究者索取，其余来源照常继续。有可用密钥并通过真实联网探针后才可转为 connected_public。",
       "validation": {
         "contractTests": "pass",
         "credentialInjection": "server_only",
-        "liveProbe": "blocked_missing_operator_credential",
+        "liveProbe": "blocked_missing_credential",
         "verifiedAt": "2026-07-19",
         "productionRoute": "server_allowlisted_gateway",
         "queryMode": "free_text_work_search"
@@ -278,11 +278,11 @@
       "credential": "S2_API_KEY（建议）",
       "license": "元数据/摘要/全文版权分别核验",
       "officialUrl": "https://api.semanticscholar.org/graph/v1",
-      "blocker": "适配器和服务端密钥注入已实现；提供 S2_API_KEY 并通过真实联网探针后才可转为 connected_public。",
+      "blocker": "适配器和服务端密钥注入已实现。S2_API_KEY 不是必需：没有密钥时走匿名额度（较低）；部署统一配置，或研究者在「设置 → 数据源」保存自己的，则用更高额度。有可用密钥并通过真实联网探针后才可转为 connected_public。",
       "validation": {
         "contractTests": "pass",
         "credentialInjection": "server_only",
-        "liveProbe": "blocked_missing_operator_credential",
+        "liveProbe": "blocked_missing_credential",
         "verifiedAt": "2026-07-19",
         "productionRoute": "server_allowlisted_gateway",
         "queryMode": "free_text_paper_search"
@@ -301,11 +301,11 @@
       "credential": "UNPAYWALL_EMAIL",
       "license": "元数据/摘要/全文版权分别核验",
       "officialUrl": "https://api.unpaywall.org/v2",
-      "blocker": "适配器和服务端 email 注入已实现；提供 UNPAYWALL_EMAIL 并通过真实联网探针后才可转为 connected_public。",
+      "blocker": "适配器和服务端 email 注入已实现。使用需要 UNPAYWALL_EMAIL（联系邮箱）：部署统一配置，或研究者在「设置 → 数据源」填写自己的；两者都没有时，用到该源的那一刻向研究者索取，其余来源照常继续。有可用邮箱并通过真实联网探针后才可转为 connected_public。",
       "validation": {
         "contractTests": "pass",
         "credentialInjection": "server_only",
-        "liveProbe": "blocked_missing_operator_credential",
+        "liveProbe": "blocked_missing_credential",
         "verifiedAt": "2026-07-19",
         "productionRoute": "server_allowlisted_gateway",
         "queryMode": "free_text_open_access_search"
@@ -441,11 +441,11 @@
       "credential": "UMLS_API_KEY",
       "license": "需接受 UMLS License",
       "officialUrl": "https://uts-ws.nlm.nih.gov/rest",
-      "blocker": "适配器和服务端密钥注入已实现；接受 UMLS License、提供 UMLS_API_KEY 并通过真实联网探针后才可转为 connected_public。",
+      "blocker": "适配器和服务端密钥注入已实现。使用需要已接受 UMLS License 的 UMLS_API_KEY：部署统一配置，或研究者在「设置 → 数据源」保存自己的；两者都没有时，用到该源的那一刻向研究者索取，其余来源照常继续。有可用密钥并通过真实联网探针后才可转为 connected_public。",
       "validation": {
         "contractTests": "pass",
         "credentialInjection": "server_only",
-        "liveProbe": "blocked_missing_operator_credential",
+        "liveProbe": "blocked_missing_credential",
         "verifiedAt": "2026-07-19",
         "productionRoute": "server_allowlisted_gateway",
         "queryMode": "current_release_concept_search"
@@ -858,11 +858,11 @@
       "credential": "OMIM_API_KEY",
       "license": "需按官方条款核验",
       "officialUrl": "https://api.omim.org/api",
-      "blocker": "适配器和服务端密钥注入已实现；提供 OMIM_API_KEY、确认使用条款并通过真实联网探针后才可转为 connected_public。",
+      "blocker": "适配器和服务端密钥注入已实现。使用需要 OMIM_API_KEY（需确认使用条款）：部署统一配置，或研究者在「设置 → 数据源」保存自己的；两者都没有时，用到该源的那一刻向研究者索取，其余来源照常继续。有可用密钥并通过真实联网探针后才可转为 connected_public。",
       "validation": {
         "contractTests": "pass",
         "credentialInjection": "server_only",
-        "liveProbe": "blocked_missing_operator_credential",
+        "liveProbe": "blocked_missing_credential",
         "verifiedAt": "2026-07-19",
         "productionRoute": "server_allowlisted_gateway",
         "queryMode": "entry_search"
@@ -903,11 +903,11 @@
       "credential": "ADDGENE_API_KEY（Token，需 catalog:retrieve scope）",
       "license": "需按官方条款核验",
       "officialUrl": "https://api.developers.addgene.org",
-      "blocker": "适配器和服务端 Token 注入已实现；提供 catalog:retrieve scope 的 ADDGENE_API_KEY 并通过真实联网探针后才可转为 connected_public。",
+      "blocker": "适配器和服务端 Token 注入已实现。使用需要具有 catalog:retrieve scope 的 ADDGENE_API_KEY：部署统一配置，或研究者在「设置 → 数据源」保存自己的；两者都没有时，用到该源的那一刻向研究者索取，其余来源照常继续。有可用密钥并通过真实联网探针后才可转为 connected_public。",
       "validation": {
         "contractTests": "pass",
         "credentialInjection": "server_only",
-        "liveProbe": "blocked_missing_operator_credential",
+        "liveProbe": "blocked_missing_credential",
         "verifiedAt": "2026-07-19",
         "productionRoute": "server_allowlisted_gateway",
         "queryMode": "plasmid_name_catalog_search"
@@ -948,11 +948,11 @@
       "credential": "BIOGRID_API_KEY",
       "license": "BioGRID 数据许可；REST access key 免费申请",
       "officialUrl": "https://webservice.thebiogrid.org/interactions",
-      "blocker": "适配器和服务端 accesskey 注入已实现；提供免费的 32 字符 BIOGRID_API_KEY 并通过真实联网探针后才可转为 connected_public。",
+      "blocker": "适配器和服务端 accesskey 注入已实现。使用需要免费的 32 字符 BIOGRID_API_KEY：部署统一配置，或研究者在「设置 → 数据源」保存自己的；两者都没有时，用到该源的那一刻向研究者索取，其余来源照常继续。有可用密钥并通过真实联网探针后才可转为 connected_public。",
       "validation": {
         "contractTests": "pass",
         "credentialInjection": "server_only",
-        "liveProbe": "blocked_missing_operator_credential",
+        "liveProbe": "blocked_missing_credential",
         "verifiedAt": "2026-07-19",
         "productionRoute": "server_allowlisted_gateway",
         "queryMode": "human_gene_interaction_search"
@@ -1714,11 +1714,11 @@
       "credential": "OPENGWAS_JWT",
       "license": "账号/服务条款",
       "officialUrl": "https://api.opengwas.io/api/",
-      "blocker": "适配器和服务端 JWT 注入已实现；提供 OPENGWAS_JWT、保留 OpenGWAS attribution 并通过真实联网探针后才可转为 connected_public。",
+      "blocker": "适配器和服务端 JWT 注入已实现。使用需要 OPENGWAS_JWT（令牌属于个人，14 天过期；使用时保留 OpenGWAS attribution）：部署统一配置，或研究者在「设置 → 数据源」保存自己的；两者都没有时，用到该源的那一刻向研究者索取，其余来源照常继续。有可用令牌并通过真实联网探针后才可转为 connected_public。",
       "validation": {
         "contractTests": "pass",
         "credentialInjection": "server_only",
-        "liveProbe": "blocked_missing_operator_credential",
+        "liveProbe": "blocked_missing_credential",
         "verifiedAt": "2026-07-19",
         "productionRoute": "server_allowlisted_gateway",
         "queryMode": "exact_study_id"

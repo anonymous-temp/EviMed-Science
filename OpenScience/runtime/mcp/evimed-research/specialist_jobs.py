@@ -20,7 +20,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from execution_evidence import execution_evidence
+from execution_evidence import evidence_note, execution_evidence, observe_execution_evidence
 import job_heartbeat
 
 
@@ -213,11 +213,7 @@ def _workspace():
 
 def _execution_timeout_seconds():
     """Wall clock for one specialist process, bounded well inside the server's run monitor."""
-    try:
-        configured = float(os.environ.get("EVIMED_SPECIALIST_EXECUTION_TIMEOUT_SECONDS", "10800"))
-    except ValueError:
-        configured = 10800.0
-    return int(min(max(configured, 60.0), 14400.0))
+    return job_heartbeat.execution_timeout_seconds()
 
 
 def _root(spec):
@@ -392,6 +388,26 @@ def _execution_evidence(root):
     return execution_evidence(root, Path(__file__))
 
 
+def _note_evidence(state, root):
+    """Record in the job's state what its source evidence did since it was queued: its record, never its status.
+
+    The engine has ended, either way, and the record says whether its source is
+    the one the job was queued with. A change is a label, not a failure (owner
+    ruling 2026-10-04): a finished job used to end here as
+    `specialist_source_evidence_mismatch`, and one that could not be hashed could
+    not even start. It cannot raise: it runs where an exception would leave a
+    finished job unrecorded.
+    """
+    try:
+        note = evidence_note(state.get("executionEvidence"), state.get("evidenceNote"), observe_execution_evidence(root, Path(__file__)))
+    except Exception:  # noqa: BLE001
+        return
+    if note is None:
+        state.pop("evidenceNote", None)
+    else:
+        state["evidenceNote"] = note
+
+
 def capabilities(tool_name):
     spec = SPECS[tool_name]
     root = _root(spec)
@@ -481,6 +497,7 @@ def start_job(tool_name, arguments, execution_context=None):
     _ensure_directory(workspace, job_root)
     output_root = job_root / "output"
     _ensure_directory(workspace, output_root)
+    observed = observe_execution_evidence(root, Path(__file__))
     state = {
         "schemaVersion": 1,
         "tool": tool_name,
@@ -491,7 +508,10 @@ def start_job(tool_name, arguments, execution_context=None):
         "updatedAt": _now(),
         "root": str(root),
         "python": str(python),
-        "executionEvidence": _execution_evidence(root),
+        # Absent when the evidence could not be taken (`evidenceNote` says why):
+        # the job is queued either way.
+        **({"executionEvidence": observed["evidence"]} if observed["evidence"] is not None
+           else {"evidenceNote": {"unavailable": observed["unavailable"]}}),
         "workspace": str(workspace),
         "outputRoot": str(output_root),
         "artifacts": [],
@@ -690,11 +710,10 @@ def _run_job(state_path):
     workspace = _workspace()
     root = _root(spec)
     python = _python(spec, root)
-    if state.get("executionEvidence") != _execution_evidence(root):
-        raise SpecialistJobError(
-            "specialist_source_evidence_mismatch",
-            "Specialist source or execution adapter changed after this job was queued.",
-        )
+    # The engine's source is not compared here. It is compared once the engine has
+    # ended and written into the record (`_note_evidence`): a source that changed
+    # since the job was queued is a label, and the job runs. What this worker does
+    # still refuse is a state that no longer matches where it lives.
     expected_workspace, expected_state_path, _ = _paths(spec, state.get("jobId"))
     output_root = workspace / spec["directory"] / state["jobId"] / "output"
     if (
@@ -750,6 +769,7 @@ def _run_job(state_path):
                 timeout=_execution_timeout_seconds(),
             )
     except subprocess.TimeoutExpired:
+        _note_evidence(state, root)
         state.update({
             "status": "failed",
             "updatedAt": _now(),
@@ -765,6 +785,9 @@ def _run_job(state_path):
             progress_path.unlink()
         except OSError:
             pass
+    # The engine has ended, either way: what its source evidence did since the job
+    # was queued goes in the record, and decides nothing about the outcome.
+    _note_evidence(state, root)
     result_path = output_root / "result.json"
     if state["tool"] == "mendelian_randomization" and result_path.is_file():
         result = _read_json(result_path)
@@ -798,11 +821,6 @@ def _run_job(state_path):
         state.update({"status": "failed", "updatedAt": _now(), "finishedAt": _now(), "returnCode": completed.returncode, "retryable": False, "error": str(result.get("error") or "%s did not produce a successful result." % spec["label"])})
         _atomic_json(state_path, state)
         return 1
-    if state.get("executionEvidence") != _execution_evidence(root):
-        raise SpecialistJobError(
-            "specialist_source_evidence_mismatch",
-            "Specialist source or execution adapter changed while this job was running.",
-        )
     state.update({"status": "succeeded", "updatedAt": _now(), "finishedAt": _now(), "returnCode": completed.returncode, "artifacts": _collect_artifacts(workspace, output_root)})
     _atomic_json(state_path, state)
     return 0
