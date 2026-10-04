@@ -569,6 +569,8 @@ export class VcrService {
    */
   async #tierOffer(study, roles) {
     if (!roles.some((role) => roleAllows(role, "manage_study"))) return null;
+    // T2 is the most the data can show (T3 is declared, not derived): nothing above it to offer, so nothing to ask.
+    if (VCR_DATA_TIERS.indexOf(study.dataTier) >= VCR_DATA_TIERS.indexOf("T2")) return null;
     const support = await this.#tierSupport(study);
     const offer = vcrTierOffer(study.dataTier, support);
     if (!offer) return null;

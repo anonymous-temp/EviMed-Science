@@ -306,11 +306,12 @@ export const VCR_DATA_TIER_UNLOCKS_ZH = Object.freeze({
  * Synthetic, aggregate, predicted and assumed tables are not people and never
  * count. Pure: the tables are the plane's registered rows (`shape`, `rowCount`,
  * `outcomeBearing`, `valueSource`, `derivedFrom`), not their contents.
- * @param {ReadonlyArray<Record<string, any>> | null | undefined} tables
+ * @param {ReadonlyArray<unknown> | null | undefined} tables
  * @returns {{ tier: 'T0' | 'T1' | 'T2', subjects: number, treatment: boolean, outcomes: boolean }}
  */
 export function vcrTierSupportedBy(tables) {
-  const real = (Array.isArray(tables) ? tables : []).filter((table) => (
+  /** @type {Array<Record<string, any>>} */
+  const real = (Array.isArray(tables) ? tables : []).filter((/** @type {any} */ table) => (
     table && typeof table === 'object' && VCR_REAL_PATIENT_SOURCES.includes(table.valueSource) && Number(table.rowCount) > 0))
   const subjects = real.filter((table) => table.shape === 'subject')
   if (!subjects.length) return { tier: 'T0', subjects: 0, treatment: false, outcomes: false }
@@ -346,12 +347,12 @@ export function vcrTierIsSupported(tier, supported) {
  * is above where the study stands, with what each tier on the way unlocks.
  * Null when the data supports nothing more. It only ever offers a rise: lowering
  * a tier is the lead's explicit act and never the platform's.
- * @param {string} current the study's tier @param {{ tier: string }} support what `vcrTierSupportedBy` answered
+ * @param {string} current the study's tier @param {{ tier?: string } | null | undefined} support what `vcrTierSupportedBy` answered
  * @returns {{ tier: string, unlocks: string[] } | null}
  */
 export function vcrTierOffer(current, support) {
   const from = VCR_DATA_TIERS.indexOf(current)
-  const to = VCR_DATA_TIERS.indexOf(support?.tier)
+  const to = VCR_DATA_TIERS.indexOf(String(support?.tier ?? ''))
   if (from < 0 || to <= from) return null
   const unlocks = VCR_DATA_TIERS.slice(from + 1, to + 1)
     .map((tier) => /** @type {Record<string, string>} */ (VCR_DATA_TIER_UNLOCKS_ZH)[tier]).filter(Boolean)

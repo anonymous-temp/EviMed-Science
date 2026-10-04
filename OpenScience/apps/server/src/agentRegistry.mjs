@@ -327,13 +327,13 @@ function parseSkillName(text, label) {
  * checks of that `produces` entry. The manifest's own `outputs` is the union of
  * every entry (a duplicate path is refused there), which is right for a
  * capability asked for everything and wrong for a run sent for one product.
- * @param {{ produces: readonly { contractKind: string, outputs: readonly { path: string, required: boolean }[], checks: readonly string[] }[] }} source
+ * @param {Record<string, any>} source a validated capability manifest: `produces` is `{ contractKind, outputs: { path, required }[], checks }[]`
  */
 function productsOf(source) {
-  return Object.freeze(source.produces.map((product) => Object.freeze({
+  return Object.freeze(/** @type {Array<Record<string, any>>} */ (source.produces).map((product) => Object.freeze({
     contractKind: product.contractKind,
-    outputs: Object.freeze(product.outputs.map((output) => Object.freeze({ path: output.path, required: output.required }))),
-    completionChecks: Object.freeze([...product.checks]),
+    outputs: Object.freeze(/** @type {Array<Record<string, any>>} */ (product.outputs).map((output) => Object.freeze({ path: String(output.path), required: output.required === true }))),
+    completionChecks: Object.freeze([.../** @type {string[]} */ (product.checks)]),
   })));
 }
 
