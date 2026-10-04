@@ -168,8 +168,10 @@ export function versionsInForce(records, context = {}) {
     >= (widest.get(`${record.kind}\u0000${record.key}`) ?? 0));
 
   // A version that has not begun is a heads-up only while nothing in hand holds
-  // the place it will take: its predecessor is still the answer.
-  const waiting = new Set(held.map((record) => record.supersededBy).filter(Boolean));
+  // the place it will take: its predecessor — held now, or itself still to
+  // begin, when the question is about a time before the whole chain — is the
+  // answer, and only the earliest version of a chain is offered.
+  const waiting = new Set([...held, ...upcoming].map((record) => record.supersededBy).filter(Boolean));
   const ahead = upcoming.filter((record) => !waiting.has(record.id));
 
   const chosen = new Map([...held.map((record) => [record.id, []]), ...ahead.map((record) => [record.id, ["not_yet_valid"]])]);
