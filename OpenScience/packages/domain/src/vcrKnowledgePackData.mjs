@@ -20,9 +20,10 @@
  */
 
 import { validateKnowledgePack } from './vcrKnowledgePack.mjs'
+import nsclc from './vcr-packs/nsclc.json' with { type: 'json' }
 
 /** @type {readonly Record<string, any>[]} */
-const FILES = []
+const FILES = [nsclc]
 
 /** @param {Record<string, any>} value @returns {any} */
 function deepFreeze(value) {
