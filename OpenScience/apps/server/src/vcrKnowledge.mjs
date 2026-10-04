@@ -95,14 +95,39 @@ function sourceUse(pack, id) {
 }
 
 /**
- * A pack in full: its summary and every section, each entry with its sources resolved to the pack's source table (the licence's name and kind of use beside it).
+ * A pack in full: its summary and every section. An entry names its sources by id
+ * and the pack's source table (each with its licence's name and kind of use) is
+ * given once, so a section is its own content and not a copy of the citations.
  * @param {"shipped" | "stored"} origin @param {Record<string, any>} pack @param {Record<string, any> | null} [row]
  */
 export function presentPack(origin, pack, row = null) {
-  const sections = Object.fromEntries(VCR_PACK_SECTIONS.map((section) => [section, list(pack[section]).map((entry) => ({
-    ...entry, sources: vcrPackEntrySources(pack, entry),
-  }))]));
+  const sections = Object.fromEntries(VCR_PACK_SECTIONS.map((section) => [section, list(pack[section])]));
   return { ...presentPackSummary(origin, pack, row), disease: pack.disease, sections };
+}
+
+/**
+ * A pack's sections as an index, the way a run first reads one: each entry's id
+ * and what names it, so the run asks for the section it needs (`filter.kind`)
+ * and reads that whole.
+ * @param {Record<string, any>} pack
+ */
+function packIndex(pack) {
+  /** @param {Record<string, any>} entry */
+  const name = (entry) => entry.labelZh ?? entry.label ?? entry.textZh ?? entry.text ?? entry.concept ?? "";
+  return Object.fromEntries(VCR_PACK_SECTIONS.map((section) => [section, list(pack[section]).map((entry) => ({
+    id: entry.id, name: String(name(entry)).slice(0, 80),
+    ...(entry.kind ? { kind: entry.kind } : {}), ...(entry.type ? { type: entry.type } : {}), ...(entry.criterionType ? { criterionType: entry.criterionType } : {}),
+    ...(section === "mappings" ? { concept: entry.concept } : {}),
+  }))]));
+}
+
+/**
+ * The sources a set of entries cites, from the pack's table.
+ * @param {Record<string, any>} pack @param {readonly Record<string, any>[]} entries
+ */
+function citedSources(pack, entries) {
+  const ids = new Set(entries.flatMap((entry) => list(entry.sources).map(String)));
+  return vcrPackEntrySources(pack, { sources: [...ids] });
 }
 
 /**
@@ -286,14 +311,15 @@ export class VcrKnowledge {
     if (section && !VCR_PACK_SECTIONS.includes(/** @type {any} */ (section))) {
       throw new HttpError(400, "vcr_read_filter_invalid", `filter.kind for a pack is one of: ${VCR_PACK_SECTIONS.join(", ")}.`);
     }
-    const full = presentPack(bound.binding.origin, bound.pack, bound.row);
+    const summary = presentPackSummary(bound.binding.origin, bound.pack, bound.row);
     const mapping = await this.packMapping(study, bound.pack);
-    return {
-      bound: { origin: full.origin, id: full.id, status: full.status, version: full.version, name: full.name, nameZh: full.nameZh, counts: full.counts },
-      disease: full.disease, sources: full.sources,
-      sections: section ? { [section]: full.sections[section] } : full.sections,
-      mapping,
+    const head = {
+      bound: { origin: summary.origin, id: summary.id, status: summary.status, version: summary.version, name: summary.name, nameZh: summary.nameZh, counts: summary.counts },
+      disease: bound.pack.disease, mapping,
     };
+    // No section named: the index. A section named: that section whole, with the sources its entries cite.
+    if (!section) return { ...head, sections: packIndex(bound.pack), note: "按 filter.kind 取一节读全：endpoints、criteria、phenotypes、terms、mappings 或 background。" };
+    return { ...head, sections: { [section]: list(bound.pack[section]) }, sources: citedSources(bound.pack, list(bound.pack[section])) };
   }
 
   /**

@@ -168,7 +168,8 @@ test("a pack is read whole with every entry's sources resolved, by its shipped i
   assert.equal(written.ok, true);
   const shipped = await knowledge.getPack("u1", "demo_cancer");
   assert.equal(shipped.origin, "shipped");
-  assert.equal(shipped.sections.criteria[0].sources[0].licence, "link-only");
+  assert.deepEqual(shipped.sections.criteria[0].sources, ["guide"], "an entry names its sources by id");
+  assert.equal(shipped.sources.find((source) => source.id === "guide")?.licence, "link-only");
   assert.deepEqual(shipped.sections.endpoints[0].standard, { name: "Death from any cause" });
   const stored = await knowledge.getPack("u1", /** @type {any} */ (written).id);
   assert.equal(stored.status, "ai-draft");
@@ -240,15 +241,21 @@ test("the runtime reads the catalogue when nothing is bound, the bound pack whol
   assert.deepEqual(none.packs.map((pack) => pack.id), ["demo_cancer"]);
   assert.ok(none.packs.every((pack) => !("sources" in pack)), "the catalogue is short");
   await knowledge.bindPack(STUDY_A, "demo_cancer", "run");
-  const whole = await knowledge.runtimeReadPack(STUDY_A, {});
-  assert.deepEqual(Object.keys(whole.sections), ["terms", "phenotypes", "endpoints", "criteria", "mappings", "background"]);
-  assert.deepEqual(whole.bound, { origin: "shipped", id: "demo_cancer", status: "curated", version: 3, name: "Demo cancer", nameZh: "示例癌", counts: { terms: 1, phenotypes: 1, endpoints: 1, criteria: 1, mappings: 3, background: 1 } });
-  assert.deepEqual(whole.mapping, {
+  const index = await knowledge.runtimeReadPack(STUDY_A, {});
+  assert.deepEqual(Object.keys(index.sections), ["terms", "phenotypes", "endpoints", "criteria", "mappings", "background"]);
+  assert.deepEqual(index.sections.criteria, [{ id: "c_ecog", name: "ECOG 0 或 1。", kind: "inclusion", criterionType: "performance_status" }], "the index names each entry and carries none of its text");
+  assert.deepEqual(index.sections.mappings.map((entry) => entry.concept), ["age", "ecog", "demo_cancer"]);
+  assert.equal(index.sources, undefined);
+  assert.deepEqual(index.bound, { origin: "shipped", id: "demo_cancer", status: "curated", version: 3, name: "Demo cancer", nameZh: "示例癌", counts: { terms: 1, phenotypes: 1, endpoints: 1, criteria: 1, mappings: 3, background: 1 } });
+  assert.deepEqual(index.mapping, {
     realised: [{ concept: "age", table: "adsl.csv", column: "AGE", by: "name" }, { concept: "demo_cancer", table: "adsl.csv", column: "DX_FLAG", by: "concept" }],
     missing: ["ecog"], unknown: ["smoking"],
   });
   const one = await knowledge.runtimeReadPack(STUDY_A, { kind: "endpoints" });
   assert.deepEqual(Object.keys(one.sections), ["endpoints"]);
+  assert.deepEqual(one.sections.endpoints[0].standard, { name: "Death from any cause" });
+  assert.deepEqual(one.sections.endpoints[0].sources, ["guide"], "an entry cites its sources by id");
+  assert.deepEqual(one.sources.map((source) => [source.id, source.use, source.licence]), [["guide", "link-only", "link-only"]], "and the section carries only the sources it cites, once");
   await assert.rejects(knowledge.runtimeReadPack(STUDY_A, { kind: "prices" }), { status: 400, code: "vcr_read_filter_invalid" });
   const searched = await knowledge.runtimeReadPack(STUDY_A, { query: "示例" });
   assert.equal(searched.bound, null, "a search word asks for the catalogue even when a pack is bound");

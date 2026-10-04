@@ -19,7 +19,7 @@ description: 把一句话或一份方案草稿变成「虚拟临研」的研究�
 
 ## 一（续）、病种知识包
 
-`mcp__evimed__vcr_read` `{ "what": "pack" }`。研究已经绑定了知识包，回来的就是这份包：病种的术语与编码、表型定义、常用终点（各带评估标准）、常见入排条件（已经写成下面「requirement」的文法）、数据字段对应、简短背景，每一条带来源和使用许可；`filter.kind` 取 `terms` `phenotypes` `endpoints` `criteria` `mappings` `background` 之一时只读那一节。没有绑定时回来的是目录：用 `filter.query` 搜病种的名字（`肺癌`、`diabetes`），选中后绑定：`mcp__evimed__vcr_write` `{ "what": "pack", "data": { "use": "<目录里的 id>" } }`。
+`mcp__evimed__vcr_read` `{ "what": "pack" }`。研究已经绑定了知识包，回来的是这份包的目录：病种，各节（`terms` 术语与编码、`phenotypes` 表型定义、`endpoints` 常用终点、`criteria` 常见入排条件、`mappings` 数据字段对应、`background` 简短背景）里每一条的 id 和名称，以及包的状态。要用哪一节，就带 `filter.kind` 把那一节读全：`endpoints`（每个终点有类型、定义和评估标准）和 `criteria`（已经写成下面「requirement」的文法）是这一步要读的，其余按需；每一条都带 `sources`，回来的 `sources` 列出它们的链接和使用许可。没有绑定知识包时回来的是目录：用 `filter.query` 搜病种的名字（`肺癌`、`diabetes`），选中后绑定：`mcp__evimed__vcr_write` `{ "what": "pack", "data": { "use": "<目录里的 id>" } }`。
 
 知识包给的是定义，不是预测。一句话的研究请求靠它写成标准的研究定义：`endpointType` 取包里那个终点的类型，`pico.outcome` 写包里的终点名和它的评估标准，入排条件从包里的常见条件出发、按用户说的人群取舍；写进 `criteria` 的条件，`sourceLocator` 写 `{ "pack": "<包 id>", "entry": "<条目 id>" }`，`sourceText` 用包里这一条的 `text`——用户或方案给了原句时，以原句为准。包里条件的阈值是定义的一部分，可以用；事件率、效应量、脱落率不在包里，要用就去 `vcr_evidence`。包的状态是「AI 草拟」时，用到它的内容照样可以用，写进 `fieldSources` 时注明「AI 草拟的知识包」。
 
