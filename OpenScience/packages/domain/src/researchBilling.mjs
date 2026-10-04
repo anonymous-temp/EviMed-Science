@@ -1,3 +1,5 @@
+import { BALANCE_REFUSAL_CODES } from './errorCodes.mjs'
+
 /** Research allowance pricing is money, never a token denomination. */
 export const RESEARCH_BILLING_VERSION = 'research-allowance-v1-20261003';
 
@@ -57,6 +59,43 @@ export function allowanceRefusalSentence({ simulated = false, balanceCny = null,
   const held = simulated ? `可用${SIMULATED_WALLET_LABEL}额度 ${have}` : `可用 ${have}`
   const amounts = have ? `：${held}${need ? `，这件事预计至少需要 ${need}` : ''}` : ''
   return `${lead}${amounts}。到“设置 → 科研额度”${simulated ? '做一次模拟充值' : '充值'}后即可继续。`
+}
+
+/**
+ * What a programme step of 循证 GEO or 虚拟临研 waits on when the allowance
+ * refused its start (2026-10-04): the step stays queued, its run is asked for
+ * again every tick, and the page says why. A closed pair, because the step
+ * record is read by two stores and two pages: `simulated_allowance` is the
+ * refusal of a simulated wallet, which every surface marks 模拟.
+ */
+export const STEP_WAITING_ALLOWANCE = Object.freeze(['allowance', 'simulated_allowance'])
+
+/**
+ * The step reason a dispatch refusal code means, or null for any other code.
+ * @param {unknown} code
+ * @returns {'allowance' | 'simulated_allowance' | null}
+ */
+export function stepWaitingFor(code) {
+  const text = String(code ?? '')
+  if (!BALANCE_REFUSAL_CODES.includes(text)) return null
+  return text === 'simulated_credits_exhausted' ? 'simulated_allowance' : 'allowance'
+}
+
+/** The short word under a waiting step in a rail. @param {unknown} waiting */
+export function allowanceWaitingNote(waiting) {
+  return waiting === 'simulated_allowance' ? `等${SIMULATED_WALLET_LABEL}额度` : '等科研额度'
+}
+
+/**
+ * Why a step has not started, in one sentence, and what makes it start. Said by
+ * the server where it writes the page's attention lines and by the pages where
+ * they draw a step's state, so the two cannot word it differently.
+ * @param {string} stepName the step as its page names it (「定义」)
+ * @param {unknown} waiting `STEP_WAITING_ALLOWANCE`
+ */
+export function allowanceWaitingSentence(stepName, waiting) {
+  const simulated = waiting === 'simulated_allowance'
+  return `「${stepName}」这一步在等${simulated ? SIMULATED_WALLET_LABEL : '科研'}额度，${simulated ? '模拟充值' : '充值'}后会自动开始。`
 }
 
 export const RESEARCH_MONEY_SCALE = 100_000_000n;

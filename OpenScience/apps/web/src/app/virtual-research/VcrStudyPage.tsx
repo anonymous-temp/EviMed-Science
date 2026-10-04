@@ -45,6 +45,7 @@ import { TrialTab } from "@/components/vcr/tabs/TrialTab";
 import { MatchingTab } from "@/components/vcr/tabs/MatchingTab";
 import { DataTab } from "@/components/vcr/tabs/DataTab";
 import { jobStateLabel, numberText, stepLabel, stepStatusLabel } from "@/components/vcr/vcrText";
+import { stepAllowanceWait } from "@/lib/allowanceWait";
 import { resolveVcrTab, VCR_HOME_PATH, VCR_RAIL_STEPS, VCR_STEP_TABS, VCR_TAB_ITEMS, vcrTabPath } from "@/components/vcr/vcrTabs";
 
 /** `onStudyChanged`: a tab that changes what the header shows (the data tab's intake moves the tier offer) asks the page to read the study again. */
@@ -388,7 +389,8 @@ function railStateOf(status: string | undefined): RailState {
 export function railSteps(study: VcrStudy, studyId: string): RailStep[] {
   return VCR_RAIL_STEPS.map(({ key }) => {
     const step = study.steps[key];
-    const state = railStateOf(step?.status);
+    // A step the allowance would not start needs the reader, like one that did not finish: the accent halo, and its own note.
+    const state = stepAllowanceWait(step) ? "waiting" : railStateOf(step?.status);
     return {
       key,
       name: stepLabel(key),

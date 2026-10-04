@@ -5,6 +5,9 @@ import { cn } from "@/lib/cn";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { PageShell } from "@/components/layout/PageShell";
 import { Button } from "@/components/ui/Button";
+import { allowanceWaitingSentence } from "@evimed/domain";
+import { stepAllowanceWait } from "@/lib/allowanceWait";
+import { AllowanceTopUp } from "@/components/runs/AllowanceTopUp";
 import { useVcrRun } from "./useVcrRun";
 import { staleSentence, stepLabel, VCR_STEP_EMPTY, VCR_STEP_WAITING } from "./vcrText";
 
@@ -106,6 +109,16 @@ export function VcrTabSkeleton({ rows = 4 }: { rows?: number }) {
  */
 export function VcrStepPending({ studyId, study, step }: { studyId: string; study: VcrStudy; step: VcrStepKey }) {
   const state = study.steps[step];
+  // A queued step the allowance would not start is not work under way: it says what it waits on and where that is put right.
+  const allowanceWait = stepAllowanceWait(state);
+  if (allowanceWait) {
+    return (
+      <div data-vcr-step-allowance={step} role="status" className="flex flex-col items-center gap-3 py-12 text-center">
+        <p className="max-w-measure text-ui text-text-2">{allowanceWaitingSentence(stepLabel(step), allowanceWait)}</p>
+        <AllowanceTopUp waiting={allowanceWait} />
+      </div>
+    );
+  }
   if (state?.status === "running" || state?.status === "queued") {
     return (
       <p data-vcr-step-running={step} className="flex items-center justify-center gap-2 py-12 text-ui text-text-3">

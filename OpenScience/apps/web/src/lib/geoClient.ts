@@ -87,6 +87,8 @@ export interface GeoStep {
   roundId?: string | null;
   updatedAt?: string | null;
   note?: string | null;
+  /** What a queued step is waiting on when the allowance refused its start; it starts by itself once that is put right. */
+  waiting?: "allowance" | "simulated_allowance" | null;
 }
 export type GeoSteps = Partial<Record<GeoStepKey, GeoStep>>;
 

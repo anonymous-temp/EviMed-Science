@@ -235,6 +235,24 @@ describe("the rail and the next step", () => {
     expect(next.some((step) => step.key === "budget" || step.state === "waiting")).toBe(false);
   });
 
+  it("marks a step the allowance would not start as waiting on the reader, with the sentence and the wallet that refused", () => {
+    const refused = geoProject({ evidence: "queued", journey: "queued" });
+    refused.steps.evidence = { status: "queued", requested: true, waiting: "simulated_allowance", note: "等模拟额度" };
+    const rail = railSteps(refused, () => "/x");
+    expect(rail.find((step) => step.key === "evidence")).toMatchObject({ state: "waiting", note: "等模拟额度" });
+    expect(rail.find((step) => step.key === "journey")).toMatchObject({ state: "active" });
+    const next = nextSteps(refused);
+    expect(next.find((step) => step.key === "evidence")).toMatchObject({
+      state: "waiting", allowance: "simulated_allowance", text: "「证据」这一步在等模拟额度，模拟充值后会自动开始。",
+    });
+    // The step that merely queued is still under way.
+    expect(next.find((step) => step.key === "journey")).toMatchObject({ state: "active" });
+    // Started, it waits on nothing — whatever the record still carries.
+    refused.steps.evidence = { status: "running", requested: true, waiting: "simulated_allowance" };
+    expect(railSteps(refused, () => "/x").find((step) => step.key === "evidence")).toMatchObject({ state: "active" });
+    expect(nextSteps(refused).find((step) => step.key === "evidence")).toMatchObject({ state: "active" });
+  });
+
   it("stops calling it a wait once the budget is set", () => {
     const funded = geoProject({ distribution: "running" }, { budget: { totalCny: 8000, dailyCny: 800 } });
     expect(railSteps(funded, () => "/x").find((step) => step.key === "distribution")).toMatchObject({ state: "active" });

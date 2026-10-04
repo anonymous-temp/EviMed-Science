@@ -39,7 +39,7 @@ import {
   VCR_REVIEW_KIND_LABELS_ZH, VCR_ROLE_ABILITIES, VCR_STALE_REASON_LABELS_ZH,
   VCR_STEP_LABELS_ZH, VCR_STEPS, VCR_TWIN_LABELS_ZH, VCR_TWIN_EVIDENCE, VCR_VALUE_SOURCE_LABELS_ZH,
   VCR_TRIAL_DESIGN_LABELS_ZH,
-  intendedUseCeiling, lineageNode, parseLineageNode, twinLabel, useWithin,
+  allowanceWaitingSentence, intendedUseCeiling, lineageNode, parseLineageNode, twinLabel, useWithin,
 } from "@evimed/domain";
 
 import { vcrExportHoldsDocument, vcrReportModel, vcrReportReviewRevision } from "./vcrRender.mjs";
@@ -320,6 +320,18 @@ export function attentionOf({ assumptions, scenarios, comparators, results, allR
       lines.push({ kind: "step_failed", tone: "attention", tab: null,
         text: `「${(/** @type {Record<string, string>} */ (VCR_STEP_LABELS_ZH))[step]}」这一步没有做完，已算出的部分保留` });
     }
+  }
+  // A step the allowance would not start is waiting for the reader's top-up, and a queued step that says nothing reads as work
+  // under way. One line for all of them: the page's link to the top-up sits at its end (`allowance_waiting`).
+  const allowanceWaiting = VCR_STEPS.filter((step) => steps?.[step]?.status === "queued" && steps[step].waiting);
+  if (allowanceWaiting.length) {
+    const label = (/** @type {string} */ step) => (/** @type {Record<string, string>} */ (VCR_STEP_LABELS_ZH))[step];
+    const waiting = steps[allowanceWaiting[0]].waiting;
+    lines.push({ kind: "allowance_waiting", tone: "attention", tab: null, waiting,
+      text: allowanceWaiting.length === 1
+        ? allowanceWaitingSentence(label(allowanceWaiting[0]), waiting)
+        : `${allowanceWaiting.length} 个步骤在等${waiting === "simulated_allowance" ? "模拟" : "科研"}额度，${waiting === "simulated_allowance" ? "模拟充值" : "充值"}后会自动开始。`,
+      items: allowanceWaiting.map(label) });
   }
   // An export that ended with no document is said the way a step that did not finish is: its row alone read
   // 「未完成」 in a list nothing pointed at, after a run the study had paid for.

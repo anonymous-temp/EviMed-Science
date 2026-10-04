@@ -203,6 +203,8 @@ export interface VcrStep {
   requested?: boolean;
   /** What it produced, in the reader's words: 「12 张假设卡」「人群 v3」. */
   note?: string | null;
+  /** What a queued step is waiting on when the allowance refused its start; it starts by itself once that is put right. */
+  waiting?: "allowance" | "simulated_allowance" | null;
   runId?: string | null;
   updatedAt?: string | null;
 }
@@ -218,6 +220,8 @@ export interface VcrAttention {
   items?: string[];
   tab?: VcrTabKey | null;
   ref?: VcrRef | null;
+  /** On an `allowance_waiting` line: which wallet refused, so the link at its end is the right top-up. */
+  waiting?: "allowance" | "simulated_allowance" | null;
   /** The link at the line's end: 「去复核」「查看缺口」. */
   action?: { label: string; tab?: VcrTabKey | null; ref?: VcrRef | null } | null;
 }

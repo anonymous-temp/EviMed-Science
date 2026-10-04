@@ -60,8 +60,8 @@ import { createHash } from "node:crypto";
 
 import {
   VCR_DESIGN_SUPPORT, VCR_ENGINE_METHODS, VCR_EXPORT_KINDS, VCR_EXPORT_KIND_LABELS_ZH, VCR_JOB_METHODS, VCR_PATIENT_LEVEL_JOB_KINDS,
-  VCR_SCENARIO_SCHEMAS, VCR_STALE_REASONS, VCR_STEPS, VCR_STEP_CAPABILITIES, VCR_STEP_NEEDS, VCR_STEP_PRODUCTS, lineageNode, parseLineageNode, recomputePlan,
-  whenHolds,
+  VCR_SCENARIO_SCHEMAS, VCR_STALE_REASONS, VCR_STEPS, VCR_STEP_CAPABILITIES, VCR_STEP_NEEDS, VCR_STEP_PRODUCTS, allowanceWaitingNote, lineageNode, parseLineageNode,
+  recomputePlan, stepWaitingFor, whenHolds,
 } from "@evimed/domain";
 
 import { HttpError, randomId } from "./security.mjs";
@@ -115,6 +115,12 @@ export const VCR_ACCRUAL_TOLERANCE = 0.2;
 
 /** @param {unknown} error */
 const codeOf = (error) => (typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : "vcr_orchestrator_failed");
+/**
+ * The fields that take a step off the allowance when it starts or stops for another reason. Only what the allowance
+ * wrote is cleared: a note the step has for any other reason stays.
+ * @param {any} study @param {string} step
+ */
+const unwaiting = (study, step) => (study.steps?.[step]?.waiting ? { waiting: null, note: null } : {});
 /** @param {unknown} value */
 const object = (value) => (value && typeof value === "object" && !Array.isArray(value) ? /** @type {Record<string, any>} */ (value) : {});
 /** @param {unknown} value */
@@ -2369,7 +2375,7 @@ export class VcrOrchestrator {
       const running = await this.#update(study.id, spec.key, {
         state: "running", runId: String(out.runId), sessionId: out.sessionId ?? null, attempts: Number(mark.attempts ?? 0) + 1,
       }, ["claimed"]);
-      for (const step of spec.steps) current = await this.#step(current, step, { status: "running", runId: String(out.runId) });
+      for (const step of spec.steps) current = await this.#step(current, step, { status: "running", runId: String(out.runId), ...unwaiting(current, step) });
       this.counters.dispatched += 1;
       if (running && out.status && TERMINAL_RUN.has(String(out.status))) await this.#finishRun(current, running, String(out.status));
       return { dispatched: { runId: String(out.runId), sessionId: out.sessionId ?? null } };
@@ -2377,7 +2383,7 @@ export class VcrOrchestrator {
       const code = codeOf(error);
       if (TERMINAL_DISPATCH.has(code)) {
         await this.#update(study.id, spec.key, { state: "failed", detail: { lastError: code, allowed: Number(mark.attempts ?? 0) } }, ["claimed"]);
-        for (const step of spec.steps) current = await this.#step(current, step, { status: "failed" });
+        for (const step of spec.steps) current = await this.#step(current, step, { status: "failed", ...unwaiting(current, step) });
         // An export has no step to fail: its row is what says the run will never come, or it reads 「排队中」 for good.
         if (spec.purpose === "export" && object(spec.detail).exportId) {
           await this.store.updateExport(String(object(spec.detail).exportId), { state: "failed" });
@@ -2389,6 +2395,12 @@ export class VcrOrchestrator {
       await this.#update(study.id, spec.key, { state: "pending", detail: { lastError: code } }, ["claimed"]);
       this.counters.deferred += 1;
       this.lastDeferral = code;
+      // A start the allowance refused is not a step that is merely queued: the page says what it waits on, and where
+      // that is put right. The key stays pending, so the next tick asks again and the step starts by itself.
+      const waiting = stepWaitingFor(code);
+      if (waiting) {
+        for (const step of spec.steps) current = await this.#step(current, step, { status: "queued", waiting, note: allowanceWaitingNote(waiting) });
+      }
       return { deferred: code };
     }
   }

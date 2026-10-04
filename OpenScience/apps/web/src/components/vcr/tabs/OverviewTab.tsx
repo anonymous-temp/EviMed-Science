@@ -2,6 +2,7 @@ import { Link } from "react-router";
 import { CircleDashed, Download, History, Sparkles } from "lucide-react";
 import type { VcrAttention, VcrStudy, VcrTabKey } from "@/lib/vcrClient";
 import { cn } from "@/lib/cn";
+import { AllowanceTopUp } from "@/components/runs/AllowanceTopUp";
 import { StatBand } from "@/components/ui/StatTile";
 import { ChartCard } from "@/components/ui/ChartCard";
 import { Tag } from "@/components/ui/Tag";
@@ -210,6 +211,7 @@ function AttentionCard({ items, studyId }: { items: readonly VcrAttention[]; stu
                       className={cn("mt-0.5 shrink-0", item.tone === "attention" ? "text-warn" : "text-text-3")}
                     />
                     <p className="min-w-0 flex-1 text-ui text-text">{item.text}</p>
+                    {item.kind === "allowance_waiting" && item.waiting && <AllowanceTopUp waiting={item.waiting} className="shrink-0 text-caption text-link hover:underline" />}
                     {item.action && target && (
                       <Link to={vcrTabPath(studyId, target)} className="shrink-0 text-caption text-link hover:underline">
                         {item.action.label}
