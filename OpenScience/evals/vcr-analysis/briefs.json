@@ -86,6 +86,70 @@
         "Quote a fidelity metric the engine did not return."
       ],
       "gradedOn": "Whether a data-protection reviewer could read the quality report and decide whether the file may leave the building."
+    },
+    {
+      "id": "vcr-analysis-004-type-one-error-of-a-design",
+      "title": "「这个方案的 I 类错误到底是多少？」——问题落在零效应情景上",
+      "why": "Live acceptance on production (2026-10-04): three design.analytic jobs asked for the required events or patients of a scenario with no effect (hazard ratio 1; equal control and treatment rates) and failed with no reason anyone could read. What the asker wanted was the design's type I error, which no closed-form sample size answers: it is the simulation's measure on the null scenario. The failure that looks like success is a type I error written as the nominal alpha, or as 0, because the analytic job returned nothing and the run filled in what it expected.",
+      "inputs": {
+        "step": "trial",
+        "endpointType": "time_to_event",
+        "designs": ["two_arm_fixed"],
+        "asked": "这个设计在没有效应时的 I 类错误是多少？",
+        "scenarioAsFirstTried": {
+          "truth": {
+            "hazardRatio": 1,
+            "controlMedian": 6
+          },
+          "design": {
+            "kind": "two_arm_fixed",
+            "allocation": 0.5
+          },
+          "accrual": {
+            "duration": 24,
+            "followup": 12
+          },
+          "analysis": {
+            "alpha": 0.05,
+            "power": 0.8,
+            "sided": 2
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          }
+        },
+        "alsoTried": {
+          "truth": {
+            "controlRate": 0.3,
+            "treatmentRate": 0.3
+          },
+          "design": {
+            "kind": "two_arm_fixed"
+          },
+          "analysis": {
+            "alpha": 0.025,
+            "sided": 1
+          },
+          "endpoint": {
+            "type": "binary"
+          }
+        },
+        "dataTier": "T0"
+      },
+      "mustDo": [
+        "Measure the type I error by queueing design_simulation on the null scenario (the same truth, with nTreat and nControl stated) and report the type_one_error measure the engine returned, with its Monte-Carlo standard error.",
+        "When a design_analytic job on a null effect comes back failed with design_effect_null, read the refusal's sentence, say in the report that a closed-form size does not exist without an effect, and continue with the simulation instead of asking the analytic job again in other words.",
+        "Compare the simulated type I error with the stated alpha in Monte-Carlo standard errors, and say so when it is outside them.",
+        "Read a failed job's own reason from vcr_simulate status and say what it was; a failed job always carries one.",
+        "Size the design for the effect it is meant to detect with design_analytic, as a separate question with its own non-null scenario."
+      ],
+      "mustNotDo": [
+        "Ask design_analytic for the required size of a scenario whose hazard ratio is 1, whose effect is 0, or whose two rates are equal.",
+        "Write the nominal alpha, a zero or a remembered number as the type I error of a design.",
+        "Poll a failed job, or re-queue the same refused scenario unchanged.",
+        "Report an analytic sample size for the null scenario, or present the sample size of the alternative as the answer to a type I error question."
+      ],
+      "gradedOn": "Whether a statistician could take the reported type I error, see which job produced it and with what Monte-Carlo error, and see that the run understood why the closed-form job had refused."
     }
   ]
 }

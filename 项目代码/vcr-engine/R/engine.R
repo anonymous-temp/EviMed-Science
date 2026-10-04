@@ -175,7 +175,7 @@ vcr_default_measure_source <- function(method) {
 #' sources and fails when a literal code is in neither list, because a code that
 #' is misspelt here is a refusal nobody has a message for.
 VCR_ENGINE_OWN_ISSUE_CODES <- c(
-  "constraint_unsatisfiable", "cpu_budget_exhausted", "grid_cell_failed", "handler_error",
+  "constraint_unsatisfiable", "cpu_budget_exhausted", "design_effect_null", "grid_cell_failed", "handler_error",
   "input_format_unsupported", "input_hash_mismatch", "input_parse_failed", "input_source_not_reconstructed", "input_too_large",
   "job_invalid", "mechanistic_engine_unknown", "mechanistic_field_missing", "missing_covariate",
   "model_card_field_missing", "model_risk_unknown", "performance_measure_unsupported", "replicates_all_failed",
@@ -1431,12 +1431,14 @@ vcr_job_design_analytic <- function(job, ...) {
   sided <- vcr_check_sided(sc$analysis$sided)
   alloc <- vcr_scalar(d$allocation, 0.5)
   tr <- sc$truth
+  # A closed-form size needs an effect to size for; a null one is refused by name here, never as a non-finite measure below
+  vcr_analytic_effect_guard(kind, e, tr)
   if(identical(kind,"single_arm")) {
     if(!identical(e,"binary"))vcr_abort("design_not_supported","scenario.endpoint.type","Exact single-arm analysis requires a binary endpoint.")
     ex<-vcr_exact_binomial(vcr_scalar(d$n),vcr_scalar(tr$nullRate),vcr_scalar(tr$responseRate),alpha,sc$analysis$alternative)
-    return(list(status="succeeded",counts=vcr_counts(realPatients=0),measures=list(
+    return(list(status="succeeded",counts=vcr_counts(realPatients=0),measures=vcr_analytic_finite_or_refuse(list(
       vcr_measure("type_one_error",ex$typeOneError,source="calculated"),vcr_measure("power",ex$power,source="calculated"),
-      vcr_measure("sample_size",ex$n,source="calculated")),diagnostics=list(exactBinomial=ex)))
+      vcr_measure("sample_size",ex$n,source="calculated"))),diagnostics=list(exactBinomial=ex)))
   }
   measures <- list(); diag <- list()
   add <- function(name, value, ...) measures[[length(measures) + 1L]] <<- vcr_measure(name, value, source = "calculated", ...)
@@ -1495,6 +1497,11 @@ vcr_job_design_analytic <- function(job, ...) {
   if (identical(kind, "simon_two_stage")) {
     p_null <- .vcr_need(tr$nullRate, "scenario.truth.nullRate", "Simon's design states the null response rate."); p_alt <- .vcr_need(tr$alternativeRate, "scenario.truth.alternativeRate", "Simon's design states the alternative response rate.")
     s <- vcr_simon_two_stage(p_null, p_alt, alpha = alpha, beta = 1 - power, n_max = as.integer(vcr_scalar(d$maxN, 100L)))
+    if (is.null(s$optimal) && is.null(s$minimax)) {
+      vcr_abort("scenario_value_invalid", "scenario.design.maxN", sprintf(
+        "No Simon two-stage design of at most %d patients has a type I error at or below alpha and the requested power; raise maxN, relax the power or alpha, or widen the gap between the null and alternative rates.",
+        as.integer(vcr_scalar(d$maxN, 100L))))
+    }
     diag$simon <- s
     if (!is.null(s$optimal)) {
       add("simon_optimal_n", s$optimal$n); add("simon_optimal_n1", s$optimal$n1)
@@ -1526,7 +1533,7 @@ vcr_job_design_analytic <- function(job, ...) {
     }, error = function(err) NULL)
     diag$sensitivity <- tryCatch(vcr_analytic_sensitivity(e, tr, alpha, power, alloc, sided, measures), error = function(err) NULL)
   }
-  list(status = "succeeded", measures = measures, counts = vcr_counts(), diagnostics = diag)
+  list(status = "succeeded", measures = vcr_analytic_finite_or_refuse(measures), counts = vcr_counts(), diagnostics = diag)
 }
 
 #' Required size at the stated effect and at 80% and 120% of it, one parameter at a time.

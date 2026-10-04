@@ -66,7 +66,9 @@ export function abilitiesOf(roles) {
 /**
  * The compute budget in the unit the platform actually meters: CPU seconds.
  * There is no money here — `budgetOf` measures what the engine spent — and a
- * page that said 「元」 would be quoting a price nobody set.
+ * page that said 「元」 would be quoting a price nobody set. `committedSeconds` is
+ * what running work may still spend at most, not what queued jobs might: a
+ * number the page can show beside 「已用」 without it reading as spent.
  * @param {Record<string, any> | null | undefined} budget
  */
 export function budgetView(budget) {

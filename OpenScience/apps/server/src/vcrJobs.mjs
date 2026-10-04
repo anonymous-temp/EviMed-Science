@@ -1,10 +1,29 @@
 import { heavyWorkAdmission } from "./heavyWorkAdmission.mjs";
-// Cancellation is logical immediately; its unspent reservation remains until
-// physical termination and observed CPU accounting have both been recorded.
-const CPU_COMMITTED_SQL = `CASE WHEN state IN ('queued','running') OR
-  (state IN ('failed','canceled') AND checkpoint ? 'engineJobId' AND
-    (COALESCE(checkpoint->>'engineStopped','false')<>'true' OR checkpoint->>'cpuAccountingUncertain'='true'))
+// What a study's compute budget holds a job back for. Three things are counted and a fourth is not:
+//   spent     what finished jobs used (`cpu_seconds_used`), and a stopped job whose use nobody could read, at its whole ceiling;
+//   in flight the unspent ceiling of work that is physically running, or may still be (a cancel the engine has not confirmed);
+//   queued    nothing. A queued job's ceiling is what it may cost at most, not what it costs, and a burst of twelve jobs that
+//             really use two to sixty seconds each must not be added up at six hundred apiece and called a spent budget.
+// Cancellation is logical immediately; its unspent reservation remains until physical termination and observed CPU
+// accounting have both been recorded.
+const CPU_IN_FLIGHT_SQL = `CASE WHEN checkpoint ? 'engineJobId' AND state IN ('queued','running','failed','canceled')
+    AND COALESCE(checkpoint->>'engineStopped','false')<>'true'
   THEN GREATEST(0,cpu_seconds_limit-cpu_seconds_used) ELSE 0 END`;
+const CPU_UNKNOWN_SQL = `CASE WHEN state IN ('failed','canceled') AND checkpoint ? 'engineJobId'
+    AND COALESCE(checkpoint->>'engineStopped','false')='true' AND checkpoint->>'cpuAccountingUncertain'='true'
+  THEN GREATEST(0,cpu_seconds_limit-cpu_seconds_used) ELSE 0 END`;
+/** How long a job that fits the budget only once the work in front of it has finished waits before it is looked at again. */
+const VCR_BUDGET_HOLD_SECONDS = 10;
+/**
+ * A job waiting for a person returns to the queue when it fits: its ceiling is within what the study has not spent, which
+ * is what it was refused for. `$1` is the deployment's default budget, `$2` one study or null for every study.
+ */
+const RELEASE_FITTING_SQL = `UPDATE ${VCR_SCHEMA}.jobs j SET state = 'queued', run_after = now(), updated_at = now()
+  FROM ${VCR_SCHEMA}.studies s
+  WHERE j.state = 'awaiting_budget' AND s.id = j.study_id AND s.deleted_at IS NULL AND ($2::text IS NULL OR j.study_id = $2)
+    AND j.cpu_seconds_limit <= GREATEST(0, $1::numeric) + GREATEST(0, COALESCE((s.budget->>'cpuSecondsConfirmed')::numeric, 0))
+      - (SELECT COALESCE(SUM(cpu_seconds_used), 0) + COALESCE(SUM(${CPU_UNKNOWN_SQL}), 0) FROM ${VCR_SCHEMA}.jobs t WHERE t.study_id = j.study_id)
+  RETURNING j.id, j.study_id, j.user_id, j.cpu_seconds_limit`;
 /**
  * 「虚拟临研」's deterministic work: the job queue in front of `vcr-engine`
  * (build plan 2026-09-28 §11.4, integration contract 2026-09-29 §3).
@@ -41,9 +60,21 @@ const CPU_COMMITTED_SQL = `CASE WHEN state IN ('queued','running') OR
  *   a new one — under the old key the second enqueue would have returned the
  *   first job's stale result.
  * - **Over budget stops, everything else does not** (plan §10.1: 人只在三处停).
- *   A job whose CPU-second ceiling would take the study past its budget is
- *   written `awaiting_budget` and waits for one confirmation; it is not
- *   refused, not silently shrunk, and nothing else in the study waits for it.
+ *   A job needs a person only when it could not run even if nothing else were
+ *   going on: its CPU-second ceiling is more than the study has not yet spent.
+ *   It is then written `awaiting_budget` and waits for one confirmation; it is
+ *   not refused, not silently shrunk, and nothing else in the study waits for
+ *   it. A job that fits that way but not beside the work running now waits in
+ *   the queue, without a notice, for that work to finish; a burst of jobs whose
+ *   ceilings add up to more than the budget while their real use does not is
+ *   not a person's business (the first version added queued ceilings up, and
+ *   on 2026-10-04 a thirteenth job was sent to a researcher with 126 of 7,200
+ *   seconds used). The guarantee is unchanged — a job is handed to the engine
+ *   only when everything spent, plus the unspent ceiling of everything still
+ *   running, plus its own ceiling is within the limit, so actual use cannot pass
+ *   the limit without a confirmation — and a wait does not outlive its reason:
+ *   whatever finishes, fails or is cancelled releases the waiting jobs of its
+ *   study that now fit.
  * - **Cancel is final** (AC-38): the row moves to `canceled` in the same
  *   statement that records the request, the engine is told afterwards on a
  *   best-effort basis, and nothing a still-running worker does afterwards can
@@ -94,7 +125,7 @@ import path from "node:path";
 
 import {
   VCR_ENGINE_METHODS, VCR_ENGINE_PROTOCOL_VERSION, VCR_JOB_KINDS, VCR_JOB_METHODS, VCR_JOB_STATES, VCR_ROBUSTNESS_STAGES,
-  canonicalScenarioJson, knownErrorCodeMessage, validateCallerInputs, validateEngineJob, vcrLocationIsValid, vcrReplicateFloorFor, vcrResultOutputPayload,
+  canonicalScenarioJson, errorCodeMessage, knownErrorCodeMessage, validateCallerInputs, validateEngineJob, vcrLocationIsValid, vcrReplicateFloorFor, vcrResultOutputPayload,
 } from "@evimed/domain";
 
 import { VCR_SCHEMA } from "./vcrPersistence.mjs";
@@ -429,7 +460,7 @@ export class VcrJobs {
     this.report = report;
     this.owner = `vcr-${process.pid}-${Math.random().toString(36).slice(2, 10)}`;
     this.counters = { enqueued: 0, deduplicated: 0, claimed: 0, dispatched: 0, succeeded: 0, failed: 0, canceled: 0,
-      awaitingBudget: 0, partial: 0, resubmitted: 0, exhausted: 0, mismatched: 0, tablesStored: 0 };
+      awaitingBudget: 0, budgetHeld: 0, partial: 0, resubmitted: 0, exhausted: 0, mismatched: 0, tablesStored: 0 };
     /** @type {string | null} */
     this.lastError = null;
     /** @type {Array<(outcome: Record<string, any>) => Promise<unknown> | unknown>} */
@@ -457,27 +488,66 @@ export class VcrJobs {
   // --- budget -----------------------------------------------------------------------
 
   /**
-   * A study's compute budget in CPU-seconds: the deployment's default, plus
-   * whatever a person has confirmed on top of it. Used is what finished jobs
-   * spent; committed is what open jobs may still spend.
+   * A study's compute budget in CPU-seconds, as it stands: the deployment's
+   * default plus whatever a person has confirmed on top of it.
+   *
+   * `usedSeconds` is what finished jobs spent. `committedSeconds` is what work
+   * that is running now, or may still be (a cancel the engine has not confirmed
+   * stopped), can still spend at most, and what a stopped job whose use could
+   * not be read is held at: it is never a queued job's ceiling, because a queued
+   * job has spent nothing and may spend a fraction of its ceiling.
+   * `remainingSeconds` is the limit less both. `awaitingBudget` counts the jobs
+   * that are waiting for a person.
    * @param {string} studyId
    */
   async budgetOf(studyId) {
     const study = await this.store.studyById(studyId);
-    const confirmed = Number(object(study?.budget).cpuSecondsConfirmed ?? 0);
-    const limitSeconds = Math.max(0, Number(this.config.vcrStudyCpuBudget ?? 7_200)) + (Number.isFinite(confirmed) ? confirmed : 0);
-    const row = await this.store.one(`SELECT
-        COALESCE(SUM(cpu_seconds_used), 0)::numeric AS used,
-        COALESCE(SUM(${CPU_COMMITTED_SQL}), 0)::numeric AS committed,
-        COUNT(*) FILTER (WHERE state = 'awaiting_budget')::integer AS awaiting
-      FROM ${VCR_SCHEMA}.jobs WHERE study_id = $1`, [studyId]);
-    const used = Number(row?.used ?? 0);
-    const committed = Number(row?.committed ?? 0);
+    const limitSeconds = this.#budgetLimit(study?.budget);
+    const standing = await this.#cpuStanding(this.store, studyId);
+    const awaiting = await this.store.one(`SELECT COUNT(*)::integer AS n FROM ${VCR_SCHEMA}.jobs WHERE study_id = $1 AND state = 'awaiting_budget'`, [studyId]);
+    const committed = standing.inFlight + standing.unknown;
     return {
-      limitSeconds, usedSeconds: used, committedSeconds: committed,
-      remainingSeconds: Math.max(0, limitSeconds - used - committed),
-      awaitingBudget: Number(row?.awaiting ?? 0),
+      limitSeconds, usedSeconds: standing.used, committedSeconds: committed,
+      remainingSeconds: Math.max(0, limitSeconds - standing.used - committed),
+      awaitingBudget: Number(awaiting?.n ?? 0),
     };
+  }
+
+  /** The study's limit: the deployment's default and what a person has confirmed on top. @param {unknown} budget */
+  #budgetLimit(budget) {
+    const confirmed = Number(object(budget).cpuSecondsConfirmed ?? 0);
+    return Math.max(0, Number(this.config.vcrStudyCpuBudget ?? 7_200)) + (Number.isFinite(confirmed) ? confirmed : 0);
+  }
+
+  /**
+   * What a study has spent and what is still in flight, read in the statement's
+   * own snapshot. @param {{ query?: Function, one?: Function }} runner a transaction client or the store
+   * @param {string} studyId
+   * @returns {Promise<{ used: number, unknown: number, inFlight: number }>}
+   */
+  async #cpuStanding(runner, studyId) {
+    const sql = `SELECT COALESCE(SUM(cpu_seconds_used), 0)::numeric AS used,
+        COALESCE(SUM(${CPU_UNKNOWN_SQL}), 0)::numeric AS unknown, COALESCE(SUM(${CPU_IN_FLIGHT_SQL}), 0)::numeric AS in_flight
+      FROM ${VCR_SCHEMA}.jobs WHERE study_id = $1`;
+    const row = typeof runner.one === "function" ? await runner.one(sql, [studyId]) : (await /** @type {any} */ (runner).query(sql, [studyId])).rows[0];
+    return { used: Number(row?.used ?? 0), unknown: Number(row?.unknown ?? 0), inFlight: Number(row?.in_flight ?? 0) };
+  }
+
+  /**
+   * Return to the queue every job waiting for a person that now fits (its
+   * ceiling is within what the study has not spent), for one study or for all.
+   * A wait that was right when it was written does not outlive its reason; a
+   * job that waits because it is over the study's limit still fits no better
+   * and stays. Each release is audited.
+   * @param {{ query: Function }} client @param {string | null} [studyId]
+   */
+  async #releaseFitting(client, studyId = null) {
+    const released = (await client.query(RELEASE_FITTING_SQL, [Math.max(0, Number(this.config.vcrStudyCpuBudget ?? 7_200)), studyId])).rows;
+    for (const row of released) {
+      await this.store.audit({ client, studyId: String(row.study_id), userId: String(row.user_id), action: "vcr.job.budget_released",
+        object: String(row.id), detail: { cpuSecondsLimit: Number(row.cpu_seconds_limit), reason: "fits_the_budget" } });
+    }
+    return released;
   }
 
   // --- enqueue ----------------------------------------------------------------------
@@ -566,12 +636,10 @@ export class VcrJobs {
       const study = (await client.query(`SELECT budget FROM ${VCR_SCHEMA}.studies
         WHERE id = $1 AND deleted_at IS NULL FOR NO KEY UPDATE`, [studyId])).rows[0];
       if (!study) throw new HttpError(404, "vcr_study_not_found", "Study not found.");
-      const confirmed = Number(object(study.budget).cpuSecondsConfirmed ?? 0);
-      const limit = Math.max(0, Number(this.config.vcrStudyCpuBudget ?? 7_200)) + (Number.isFinite(confirmed) ? confirmed : 0);
-      const reserved = (await client.query(`SELECT COALESCE(SUM(cpu_seconds_used), 0)::numeric AS used,
-        COALESCE(SUM(${CPU_COMMITTED_SQL}), 0)::numeric AS committed
-        FROM ${VCR_SCHEMA}.jobs WHERE study_id = $1`, [studyId])).rows[0];
-      const state = cpuSecondsLimit > Math.max(0, limit - Number(reserved.used) - Number(reserved.committed))
+      // A job needs a person only when it could not run even if nothing else were going on: its ceiling is more than
+      // the study has not yet spent. What other queued jobs might cost is not spent, and is checked when each is handed to the engine.
+      const standing = await this.#cpuStanding(client, studyId);
+      const state = cpuSecondsLimit > Math.max(0, this.#budgetLimit(study.budget) - standing.used - standing.unknown)
         ? "awaiting_budget" : "queued";
       const inserted = (await client.query(`INSERT INTO ${VCR_SCHEMA}.jobs
       (id, study_id, user_id, kind, method, method_version, state, scenario, scenario_hash, inputs, seed, replicates,
@@ -720,6 +788,9 @@ export class VcrJobs {
               'message', '这项计算已经试了最大次数，没有做成。')
         WHERE state = 'running' AND lease_until IS NOT NULL AND lease_until < now() AND attempts >= max_attempts RETURNING *`);
       for (const row of exhausted.rows) this.reaped.push(row);
+      // A wait for a person that its reason has outlived (a job written under the rule that added queued ceilings up,
+      // or a sibling that has finished since) goes back to the queue before anything is taken from it.
+      await this.#releaseFitting(client);
       const running = Number((await client.query(`SELECT count(*)::integer AS n FROM ${VCR_SCHEMA}.jobs
         WHERE state = 'running' AND (lease_until IS NULL OR lease_until > now())`)).rows[0]?.n ?? 0);
       const free = Math.max(0, this.maxConcurrent - running);
@@ -844,6 +915,7 @@ export class VcrJobs {
     this.counters.canceled += 1;
     await this.store.audit({ studyId, userId: String(row.user_id), actor, action: "vcr.job.cancel", object: jobId,
       detail: { keptCheckpoint: Object.keys(object(row.checkpoint)).length > 0 } });
+    await this.store.transaction((client) => this.#releaseFitting(client, studyId));
     const engineJobId = object(row.checkpoint).engineJobId;
     if (engineJobId && this.engine?.cancel) await this.engine.cancel(String(engineJobId)).catch(() => null);
     const job = jobSummaryFromRow(row);
@@ -871,13 +943,13 @@ export class VcrJobs {
       ORDER BY created_at`, input.jobId ? [studyId, String(input.jobId)] : [studyId])).rows;
     const needed = waiting.reduce((total, row) => total + Number(row.cpu_seconds_limit ?? 0), 0);
     const budget = object(study.budget);
-      const consumed = (await client.query(`SELECT COALESCE(SUM(cpu_seconds_used),0)::numeric AS used,
-        COALESCE(SUM(${CPU_COMMITTED_SQL}),0)::numeric AS committed FROM ${VCR_SCHEMA}.jobs WHERE study_id=$1`, [studyId])).rows[0];
+      const consumed = await this.#cpuStanding(client, studyId);
       const prior = Number(budget.cpuSecondsConfirmed ?? 0);
-      const limit = Math.max(0, Number(this.config.vcrStudyCpuBudget ?? 7_200)) + (Number.isFinite(prior) ? prior : 0);
-      const neededWithSettledUse = Math.max(0, Number(consumed.used) + Number(consumed.committed) + needed - limit);
+      const limit = this.#budgetLimit(budget);
+      // The grant covers everything the study has spent, everything still in flight and every waiting ceiling at once.
+      const neededWithSettledUse = Math.max(0, consumed.used + consumed.unknown + consumed.inFlight + needed - limit);
       const grant = Math.max(needed, neededWithSettledUse, Math.max(0, Number(input.cpuSeconds ?? 0)));
-      const confirmed = prior + grant;
+      const confirmed = (Number.isFinite(prior) ? prior : 0) + grant;
       await client.query(`UPDATE ${VCR_SCHEMA}.studies SET budget = $2::jsonb, updated_at = now() WHERE id = $1`,
         [studyId, JSON.stringify({ ...budget, cpuSecondsConfirmed: confirmed, lastConfirmedAt: this.now().toISOString(), lastConfirmedBy: String(input.actor) })]);
       await this.store.audit({ client, studyId, userId: String(study.user_id), actor: String(input.actor), action: "vcr.study.update",
@@ -929,8 +1001,8 @@ export class VcrJobs {
         // a CPU limit, a memory limit. Its fixed code says which; nothing retries
         // a job that killed its own process.
         if (status.error && ["vcr_engine_rejected", "vcr_engine_not_found"].includes(codeOf(error))) {
-          return this.finish(String(row.id), { status: "failed", leaseOwner: owner, leaseAttempt: Number(row.attempts), cpuSeconds: Number(status.cpuSeconds ?? 0), error: {
-            code: "vcr_job_failed", engineError: String(status.error), message: ENGINE_ERROR_MESSAGES[String(status.error)] ?? "引擎没有做成这项计算。" } });
+          return this.finish(String(row.id), { status: "failed", leaseOwner: owner, leaseAttempt: Number(row.attempts), cpuSeconds: Number(status.cpuSeconds ?? 0),
+            error: vcrEngineStoppedError(status.error) });
         }
         throw error;
       }
@@ -944,7 +1016,7 @@ export class VcrJobs {
   /**
    * Hand a result over for recording: the engine's refusal as a failure with its
    * own reason, anything else after it has been held against the frozen job.
-   * @param {any} row @param {{ result: Record<string, any>, signed?: boolean, refused?: boolean }} answer
+   * @param {any} row @param {{ result: Record<string, any>, signed?: boolean, refused?: boolean, issues?: readonly unknown[] }} answer
    * @param {Record<string, any>} status @param {string} owner
    */
   async #settle(row, answer, status, owner) {
@@ -952,7 +1024,7 @@ export class VcrJobs {
     const cpuSeconds = Number(result?.manifest?.cpuSeconds ?? status?.cpuSeconds ?? 0);
     if (answer.refused === true) {
       return this.finish(String(row.id), { status: "failed", leaseOwner: owner, leaseAttempt: Number(row.attempts), cpuSeconds,
-        error: vcrErrorFromIssues(result) ?? { code: "vcr_job_failed", message: "引擎拒绝了这项作业。" } });
+        error: vcrErrorFromIssues(result, answer.issues) ?? { code: "vcr_job_failed", message: "引擎拒绝了这项作业。" } });
     }
     this.#verify(row, result);
     const tables = await this.#storeTables(row, result);
@@ -1014,21 +1086,34 @@ export class VcrJobs {
       const locked = (await client.query(`SELECT * FROM ${VCR_SCHEMA}.jobs WHERE id=$1 FOR UPDATE`, [String(row.id)])).rows[0];
       if (!study || !locked || locked.state !== "running" || locked.lease_owner !== owner || Number(locked.attempts) !== Number(row.attempts)) return { skipped: true };
       if (!object(locked.checkpoint).engineJobId) {
-        const consumed = (await client.query(`SELECT COALESCE(SUM(cpu_seconds_used),0)::numeric AS used,
-          COALESCE(SUM(${CPU_COMMITTED_SQL}),0)::numeric AS committed FROM ${VCR_SCHEMA}.jobs WHERE study_id=$1`, [String(row.study_id)])).rows[0];
-        const confirmed = Number(object(study.budget).cpuSecondsConfirmed ?? 0);
-        const limit = Math.max(0, Number(this.config.vcrStudyCpuBudget ?? 7_200)) + (Number.isFinite(confirmed) ? confirmed : 0);
-        if (Number(consumed.used) + Number(consumed.committed) > limit) {
+        const standing = await this.#cpuStanding(client, String(row.study_id));
+        const ceiling = Number(locked.cpu_seconds_limit ?? 0);
+        const room = this.#budgetLimit(study.budget) - standing.used - standing.unknown;
+        if (ceiling > room) {
+          // Could not run even if nothing else were going on: the study's own budget is what is short, and a person decides.
           const waiting = (await client.query(`UPDATE ${VCR_SCHEMA}.jobs SET state='awaiting_budget',lease_owner=NULL,lease_until=NULL,
             attempts=GREATEST(0,attempts-1),updated_at=now() WHERE id=$1 RETURNING *`, [String(row.id)])).rows[0];
           await this.store.audit({ client, studyId: String(row.study_id), userId: String(row.user_id), action: "vcr.job.budget_wait",
-            object: String(row.id), detail: { reason: "cpu_usage_changed_before_submit" } });
+            object: String(row.id), detail: { reason: "ceiling_exceeds_unspent_budget", cpuSecondsLimit: ceiling, unspentSeconds: Math.max(0, room) } });
           return { waiting };
+        }
+        if (ceiling > room - standing.inFlight) {
+          // It fits once the work in front of it has finished: back to the queue for a moment, with no notice and no attempt used.
+          const held = (await client.query(`UPDATE ${VCR_SCHEMA}.jobs SET state='queued',lease_owner=NULL,lease_until=NULL,
+            attempts=GREATEST(0,attempts-1),run_after=now() + make_interval(secs => $2),updated_at=now() WHERE id=$1 RETURNING *`,
+          [String(row.id), VCR_BUDGET_HOLD_SECONDS])).rows[0];
+          await this.store.audit({ client, studyId: String(row.study_id), userId: String(row.user_id), action: "vcr.job.budget_hold",
+            object: String(row.id), detail: { reason: "work_in_flight", inFlightSeconds: standing.inFlight, cpuSecondsLimit: ceiling } });
+          return { held };
         }
       }
       await client.query(`UPDATE ${VCR_SCHEMA}.jobs SET checkpoint=checkpoint || $2::jsonb,updated_at=now() WHERE id=$1`, [String(row.id), JSON.stringify(intentFields)]);
       return { ready: true };
     });
+    if (admitted.held) {
+      this.counters.budgetHeld += 1;
+      return { action: "waiting", state: "budget_in_flight" };
+    }
     if (admitted.waiting) {
       this.counters.awaitingBudget += 1;
       const study = await this.store.studyById(String(row.study_id));
@@ -1252,6 +1337,8 @@ export class VcrJobs {
     const complete = status === "succeeded" || status === "not_estimable";
     const partial = !complete && measures.length > 0 && result.conclusion === "limited";
     const state = complete ? "succeeded" : (status === "canceled" ? "canceled" : "failed");
+    // A failed job always says why (`vcrFailureReason`): the row is never left with `error` NULL for the page to read as nothing.
+    const reason = state === "failed" ? vcrFailureReason(outcome.error, result) : (outcome.error ?? null);
     const record = complete || partial;
     const { tiers, models } = record ? await this.#usedModels(row) : { tiers: [], models: [] };
     const study = record ? await this.store.studyById(String(row.study_id)) : null;
@@ -1351,10 +1438,12 @@ export class VcrJobs {
             error = $4::jsonb
         WHERE id = $1 AND state = 'running' RETURNING *`,
       [jobId, state, Number(outcome.cpuSeconds ?? 0),
-        outcome.error == null && !partial ? null : JSON.stringify({ ...object(outcome.error), ...(partial ? { partial: true } : {}) })])).rows[0];
+        reason == null && !partial ? null : JSON.stringify({ ...object(reason), ...(partial ? { partial: true } : {}) })])).rows[0];
+      // What this job spent is settled: a job waiting for a person that now fits goes back to the queue in the same commit.
+      await this.#releaseFitting(client, String(row.study_id));
       await this.store.audit({ client, studyId: String(row.study_id), userId: String(row.user_id), action: "vcr.job.finish", object: jobId,
         outcome: state === "succeeded" ? "ok" : state,
-        reason: outcome.error ? String(object(outcome.error).code ?? "") : "",
+        reason: reason ? String(object(reason).code ?? "") : "",
         detail: { kind: String(row.kind), resultId: recorded?.id ?? null, partial, signed: outcome.signed === true } });
       return { finished, execution, recorded };
     });
@@ -1365,7 +1454,7 @@ export class VcrJobs {
     else if (state === "failed") this.counters.failed += 1;
     if (partial) this.counters.partial += 1;
     const done = { action: "finished", state, job: jobSummaryFromRow(finished), result: recorded, execution, partial,
-      engineResult: result, error: outcome.error ?? null };
+      engineResult: result, error: reason };
     for (const hook of this.finishHooks) {
       try { await hook(done); } catch (error) { this.report(codeOf(error)); }
     }
@@ -1485,23 +1574,84 @@ export class VcrJobs {
  * and a queue that read only the status word recorded a failed job with no
  * reason, so the study page and the run's own status answer said 「failed」
  * and nothing more.
+ *
+ * The engine's own refusal is read first, then what the engine found wrong with
+ * its own result (`diagnostics.resultValidationIssues`, written when a handler
+ * returned a number the protocol does not allow: a non-finite measure). A job
+ * the second kind ended was recorded with no reason at all (live acceptance,
+ * 2026-10-04: three `design.analytic` jobs, `error` NULL), because only the
+ * first kind was read; and `validated` is the control plane's own check of the
+ * answer it received, for a refusal whose result carries neither.
  * @param {Record<string, any>} result
+ * @param {readonly unknown[]} [validated] issues the control plane found in the engine's answer
  * @returns {{ code: string, field?: string, message: string, issues: Array<{ code: string, field: string | null, detail: string }> } | null}
  */
-export function vcrErrorFromIssues(result) {
-  const issues = list(object(object(result).diagnostics).issues).map(object).filter((issue) => typeof issue.code === "string" && issue.code);
-  if (!issues.length) return null;
-  const first = issues[0];
-  const detail = String(first.detail ?? first.message ?? "").slice(0, 400);
+export function vcrErrorFromIssues(result, validated = []) {
+  const diagnostics = object(object(result).diagnostics);
+  /** @param {unknown} each @param {boolean} checked @returns {Array<Record<string, any>>} */
+  const named = (each, checked) => list(each).map(object).filter((issue) => typeof issue.code === "string" && issue.code)
+    .map((issue) => /** @type {Record<string, any>} */ ({ ...issue, checked }));
+  const found = [...named(diagnostics.issues, false), ...named(diagnostics.resultValidationIssues, true), ...named(validated, true)]
+    .filter((issue, index, all) => all.findIndex((other) => other.code === issue.code && other.field === issue.field) === index);
+  if (!found.length) return null;
+  const first = found[0];
+  // A validator's verdict is one sentence for every field it is raised on; the field is what tells a reader which number it is about.
+  const said_ = (/** @type {Record<string, any>} */ issue) => {
+    const detail = String(issue.detail ?? issue.message ?? "");
+    return (issue.checked && typeof issue.field === "string" && issue.field ? `${issue.field}: ${detail}` : detail).slice(0, 400);
+  };
+  const detail = said_(first);
   // The domain holds a sentence for every code the engine raises; the engine's own detail names the column or field.
   const said = knownErrorCodeMessage(String(first.code));
   return {
     code: String(first.code),
     ...(typeof first.field === "string" && first.field ? { field: first.field } : {}),
     message: said ? (detail ? `${said}（${detail}）` : said) : (detail || "引擎拒绝了这项作业。"),
-    issues: issues.slice(0, 10).map((issue) => ({ code: String(issue.code), field: typeof issue.field === "string" ? issue.field : null,
-      detail: String(issue.detail ?? issue.message ?? "").slice(0, 400) })),
+    issues: found.slice(0, 10).map((issue) => ({ code: String(issue.code), field: typeof issue.field === "string" ? issue.field : null,
+      detail: said_(issue) })),
   };
+}
+
+/** Said when a failed job has nothing to say for itself: that the reason is unknown is the reason. */
+const FAILED_WITHOUT_REASON = "引擎报告这项计算失败，但没有说明原因；已保留能保留的部分。";
+
+/**
+ * What a job that ended `failed` records as its error: always a code and a
+ * sentence. The error a caller names wins; a failed result's own issues come
+ * next (`vcrErrorFromIssues`); and a failure with neither says that it has no
+ * reason rather than recording none — an error that is NULL reads, on the
+ * page and in the run's own status answer, as a computation nobody can explain
+ * and nobody can repair. This is the one place that holds it for every way a
+ * job fails (the engine's refusal, a result that failed validation, a crash
+ * with no result, a thrown error), so a path added later cannot forget it.
+ * @param {unknown} error what the caller of `finish` named, if anything
+ * @param {Record<string, any>} [result] the engine's result, if there was one
+ * @returns {Record<string, any>}
+ */
+export function vcrFailureReason(error, result = {}) {
+  const given = object(error);
+  const code = typeof given.code === "string" ? given.code.trim() : "";
+  const message = typeof given.message === "string" ? given.message.trim() : "";
+  if (code && message) return given;
+  if (code) return { ...given, message: errorCodeMessage(code) };
+  const derived = vcrErrorFromIssues(result);
+  if (derived) return { ...given, ...derived };
+  return { ...given, code: "vcr_job_failed", message: message || FAILED_WITHOUT_REASON };
+}
+
+/**
+ * The error of a job the engine ended without any result to read: the engine's
+ * own fixed code (`engine_crashed`, `cpu_limit_exceeded`, `memory_limit_exceeded`,
+ * `spawn_failed`, `result_unreadable`) is kept as `engineError` and named in the
+ * sentence, because the sentence is all a page, a schedule mark and a run's
+ * status answer carry. The code is shaped before it is echoed: it is the
+ * engine's word, not ours, and it goes into a sentence a person reads.
+ * @param {unknown} engineError
+ */
+export function vcrEngineStoppedError(engineError) {
+  const named = typeof engineError === "string" && /^[a-z][a-z_]{0,39}$/.test(engineError) ? engineError : "";
+  const said = (named && ENGINE_ERROR_MESSAGES[named]) || "引擎没有做成这项计算。";
+  return { code: "vcr_job_failed", ...(named ? { engineError: named } : {}), message: named ? `${said}（${named}）` : said };
 }
 
 /** What the engine's own fixed job errors mean, for a reader. */

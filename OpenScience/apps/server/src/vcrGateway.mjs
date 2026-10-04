@@ -1728,7 +1728,8 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
           // What a run reads of a result is what a page shows a member, less
           // its small cells (contract §4): the answer passes the boundary once.
           const answer = { action: "status", jobId: job.id, state: job.state, progress: job.progress,
-            cpuSeconds: job.cpuSecondsUsed, error: job.error, result, ...(pooling ? { pooling } : {}) };
+            cpuSeconds: job.cpuSecondsUsed, error: job.error, result, ...(pooling ? { pooling } : {}),
+            ...(job.state === "awaiting_budget" ? { awaitingBudget: true, message: AWAITING_BUDGET_MESSAGE } : {}) };
           return vcr.service.forModel(answer);
         };
       }
@@ -1884,9 +1885,11 @@ async function startJob(vcr, study, request) {
   return { action: "start", jobId: job.id, state: job.state, progress: job.progress, ...(notes ? { notes } : {}),
     // A job stopped for budget is the second human stop: the run is
     // told plainly so it goes on with what it can do (§10.1).
-    ...(job.state === "awaiting_budget"
-      ? { awaitingBudget: true, message: "这项计算超出研究的计算预算，已停在确认处；确认后会自动继续。" } : {}) };
+    ...(job.state === "awaiting_budget" ? { awaitingBudget: true, message: AWAITING_BUDGET_MESSAGE } : {}) };
 }
+
+/** What a run is told of a job only a person can release: it is not coming, so the run does not wait for it or ask again. */
+const AWAITING_BUDGET_MESSAGE = "这项计算超出研究的计算预算，已停在确认处：只有研究者确认后才会继续。运行不必等它，也不必反复查询；先用手头已有的结果往下做，并在报告里说明这一步没有算。";
 
 export const VCR_GATEWAY_PATH = gatewayPath;
 export const VCR_GATEWAY_OPERATIONS = operations;
