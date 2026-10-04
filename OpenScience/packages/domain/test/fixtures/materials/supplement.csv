@@ -1,0 +1,6 @@
+Subject,Arm,Age (years),Week 12 HbA1c (%),Event,"Note"
+S001,Drug,61,7.1,0,"clean"
+S002,Placebo,58,7.9,1,"lost, then found"
+S003,Drug,64,6.8,0,
+S004,Placebo,,8.3,1,"two
+lines"

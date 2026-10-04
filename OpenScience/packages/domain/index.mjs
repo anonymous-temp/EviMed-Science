@@ -819,6 +819,49 @@ export {
   sourceFormatRoute,
   sourcePageForOffset,
 } from './src/sourceDocuments.mjs'
+// sourceMaterials — 25 exports: what a parsed document's tables, figures and spreadsheets say about themselves (cell addresses, closed-format values, captions, footnotes, continuations), derived from the parser's text and never guessed
+export {
+  SOURCE_CONTINUATION_BASES,
+  SOURCE_CONTINUATION_CERTAINTIES,
+  SOURCE_MATERIALS_EXTRACTOR,
+  SOURCE_MATERIALS_VERSION,
+  SOURCE_MATERIAL_LIMITS,
+  SOURCE_PAGINATIONS,
+  SOURCE_TABLE_STATUSES,
+  SOURCE_TABLE_UNEXTRACTED_REASONS,
+  SOURCE_VALUE_KINDS,
+  SOURCE_VALUE_ORIGINS,
+  deriveDelimitedStructure,
+  deriveMarkdownStructure,
+  deriveSheetStructure,
+  materialAddress,
+  materialAddressParts,
+  materialCaptureText,
+  materialCellMarkers,
+  materialColumnLetters,
+  materialHeaderContext,
+  materialLabelKey,
+  materialSkeleton,
+  materialTableValues,
+  materialTimepoint,
+  parseMaterialCell,
+  sourceMaterialsPagination,
+} from './src/sourceMaterials.mjs'
+// sourceMaterialsLocate — 12 exports: the page a structured unit is on, found in the document's own text layer, the ledger of what was located, ambiguous, unlocated, unextracted or failed, and where a quotation sits
+export {
+  SOURCE_LOCATE_LIMITS,
+  SOURCE_MATERIAL_COVERAGE_STATUSES,
+  SOURCE_MATERIAL_LOCATION_STATUSES,
+  SOURCE_MATERIAL_PAGES_STATUSES,
+  SOURCE_MATERIAL_PAGE_UNKNOWN_REASONS,
+  locateQuoteInText,
+  locateUnitsOnPages,
+  materialPageSegments,
+  materialRowPage,
+  materialTableCounts,
+  sourceMaterialsCoverage,
+  sourceMaterialsCoverageIssues,
+} from './src/sourceMaterialsLocate.mjs'
 // memoryVocabulary — 7 exports: the tags the platform writes into a
 // conversation, the identifiers it calls its own machinery by, and the words
 // and shapes a run uses to talk about its own bookkeeping — what a memory
