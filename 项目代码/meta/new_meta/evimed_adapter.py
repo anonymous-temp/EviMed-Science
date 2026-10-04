@@ -560,6 +560,11 @@ def _workspace_input(workspace: Path, value: str | None, *, directory: bool, suf
     return candidate
 
 
+def model_ready() -> bool:
+    """Whether the model route MetaAgent runs on is configured: what `/health` reports as `ready`."""
+    return _model_ready()
+
+
 def _model_ready() -> bool:
     if engine_model.enabled():
         try:
