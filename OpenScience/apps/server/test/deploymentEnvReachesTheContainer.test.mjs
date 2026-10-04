@@ -268,6 +268,11 @@ const operatorLevers = {
   OPEN_SCIENCE_VCR_INTAKE_MEMORY: ["open-science-web", "open-science-runtime-controller"],
   OPEN_SCIENCE_VCR_INTAKE_CONCURRENCY: ["open-science-web", "open-science-runtime-controller"],
   OPEN_SCIENCE_VCR_DIGITIZE_MAX_PIXELS: ["open-science-web", "open-science-runtime-controller"],
+  // The data plane's HOST path reaches the controller alone: it binds a record's
+  // staged file and output directory out of the plane's scratch area by this path
+  // (the Docker socket resolves a bind source on the host). Without it every PDF
+  // or Word record answers that this deployment cannot convert it.
+  OPEN_SCIENCE_VCR_DATA_PLANE_HOST_DIR: ["open-science-runtime-controller"],
 };
 
 async function composeFiles() {
@@ -367,6 +372,11 @@ const notForTheContainer = {
   // encrypted from OPEN_SCIENCE_BACKUP_ENCRYPTION_ACK and never holds the key.
   OPEN_SCIENCE_BACKUP_PASSPHRASE: "backup container",
   OPEN_SCIENCE_BACKUP_PASSPHRASE_FILE: "backup container",
+  // The data plane as the Docker daemon sees it, read by the runtime controller
+  // to bind a record's staged file out of the plane. The web API reaches the
+  // plane at /data-plane (OPEN_SCIENCE_VCR_DATA_PLANE_DIR, which it does receive)
+  // and has no use for the host path.
+  OPEN_SCIENCE_VCR_DATA_PLANE_HOST_DIR: "the controller's",
 };
 
 test("every variable config.mjs reads reaches the web API, or says why it does not", async () => {

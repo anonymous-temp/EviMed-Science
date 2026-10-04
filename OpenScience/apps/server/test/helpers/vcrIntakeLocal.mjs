@@ -3,11 +3,14 @@
  * script the container runs, as a local process.
  *
  * It builds the real launch plan (`vcrIntakePlan`), takes the script and flags
- * from it, and runs `python3` on the repository's copy of that script with
- * `/input` and `/output` mapped to the attempt's directories. So the contract
- * between the plan and the script — the flags, the file names, the result files —
- * is exercised without Docker; what Docker adds (no network, a read-only root,
- * ceilings) is asserted over the plan itself in `vcrIntakeController.test.mjs`.
+ * from it, and runs `python3` on the repository's copy of that script with every
+ * container path (`/input/...`, `/output`) mapped to the host path the plan's own
+ * `--mount` options bind it from. So the contract between the plan and the script
+ * — the mounts, the flags, the file names, the result files — is exercised
+ * without Docker; what Docker adds (no network, a read-only root, ceilings) is
+ * asserted over the plan itself in `vcrIntakeController.test.mjs`. For a record
+ * the plan's bind sources are the plane's own directories, so the config handed
+ * in must set `vcrDataPlaneHostDir` to the plane's root.
  */
 import { spawnSync } from "node:child_process";
 import fs from "node:fs/promises";
@@ -26,6 +29,12 @@ export function pythonCan(...modules) {
   return probe.status === 0;
 }
 
+/** The `src`/`dst` of every `--mount` of a plan. @param {string[]} args */
+export function mountsOf(args) {
+  return args.flatMap((arg, index) => (args[index - 1] === "--mount"
+    ? [{ src: /(?:^|,)src=([^,]+)/.exec(arg)?.[1] ?? "", dst: /(?:^|,)dst=([^,]+)/.exec(arg)?.[1] ?? "", readonly: /,readonly$/.test(arg) }] : []));
+}
+
 /**
  * @param {any} config
  * @param {{ calls?: any[] }} [options]
@@ -33,15 +42,22 @@ export function pythonCan(...modules) {
 export function localIntakeController(config, { calls = [] } = {}) {
   return {
     calls,
-    /** @param {'extract'|'digitize'} kind @param {{ attemptId: string, inputDigest: string }} reference */
+    /** @param {'extract'|'digitize'} kind @param {Record<string, any>} reference */
     async runVcrIntake(kind, reference) {
-      const plan = vcrIntakePlan(config, kind, reference);
+      const plan = vcrIntakePlan(config, kind, /** @type {any} */ (reference));
       const entry = plan.args.indexOf("--entrypoint");
       const [, interpreter, , script, ...flags] = plan.args.slice(entry);
       if (interpreter !== "python3") throw new Error("the plan changed its interpreter");
-      const mapped = flags.map(flag => (flag === "/input/request.json" ? path.join(plan.dir, "input", "request.json")
-        : flag === "/input" ? path.join(plan.dir, "input") : flag === "/output" ? path.join(plan.dir, "output") : flag));
-      calls.push({ kind, reference, files: await fs.readdir(path.join(plan.dir, "input")) });
+      const mounts = mountsOf(plan.args);
+      /** The host path behind a container path, through the plan's own mounts. @param {string} flag */
+      const hostOf = flag => {
+        const mount = mounts.find(({ dst }) => flag === dst || flag.startsWith(`${dst}/`));
+        return mount ? `${mount.src}${flag.slice(mount.dst.length)}` : flag;
+      };
+      const mapped = flags.map(hostOf);
+      const inputs = mounts.filter(({ dst }) => dst.startsWith("/input"));
+      const seen = await fs.stat(inputs[0].src).then(stat => (stat.isDirectory() ? fs.readdir(inputs[0].src) : [path.basename(inputs[0].src)]));
+      calls.push({ kind, reference, files: seen, mounts });
       const done = spawnSync("python3", [path.join(MCP_DIR, path.basename(script)), ...mapped], {
         encoding: "utf8", timeout: 120_000, env: { ...process.env, PYTHONDONTWRITEBYTECODE: "1" },
       });

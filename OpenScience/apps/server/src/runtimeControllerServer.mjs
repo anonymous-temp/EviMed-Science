@@ -678,13 +678,17 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
       }
       if (req.method === "POST" && ["/v1/vcr/extract", "/v1/vcr/digitize"].includes(url.pathname)) {
         // 「虚拟临研」 intake (protocol 9): a fixed operation over one staged attempt.
-        // A caller names the attempt and the digest of its request, never a path,
-        // a command, a mount or an image (vcrIntakeController.mjs).
+        // A figure is staged on the data volume the API and this process share and is
+        // named by its attempt and the digest of its request. A record is staged in
+        // the data plane, which this process does not mount: it is named by the one
+        // path inside the plane that the layout allows, with the SHA-256 and size the
+        // script holds the file to. Never a command, a mount or an image
+        // (vcrIntakeController.mjs).
         if (!String(req.headers["content-type"] ?? "").toLowerCase().startsWith("application/json")) {
           throw controllerFailure(415, "runtime_controller_content_type_invalid", "Runtime controller requires JSON requests.");
         }
         const payload = await readJson(req, 4096);
-        assertExactKeys(payload, ["attemptId", "inputDigest"]);
+        assertExactKeys(payload, url.pathname === "/v1/vcr/extract" ? ["path", "sha256", "bytes"] : ["attemptId", "inputDigest"]);
         const abort = new AbortController();
         const disconnected = () => { if (!res.writableEnded) abort.abort(); };
         req.once("aborted", disconnected);

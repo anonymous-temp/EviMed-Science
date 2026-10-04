@@ -11,7 +11,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { VcrDataPlane, fileView, safeUploadName } from '../src/vcrDataPlane.mjs';
+import { VcrDataPlane, assertDataPlaneLocation, fileView, safeUploadName } from '../src/vcrDataPlane.mjs';
 import { createVcrRecordExtractor } from '../src/vcrRecordExtract.mjs';
 import { streamOf } from './helpers/vcrIntakeData.mjs';
 import { localIntakeController, pythonCan, writeRecordFixtures } from './helpers/vcrIntakeLocal.mjs';
@@ -51,7 +51,7 @@ async function world(t, { extractor = 'real', config = {} } = {}) {
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   const planeDir = path.join(root, 'plane');
   await fs.mkdir(planeDir);
-  const appConfig = { dataDir: path.join(root, 'data'), vcrDataPlaneDir: planeDir, vcrDataMaxBytes: 50 * 1024 * 1024, runtimeContainerImage: 'img',
+  const appConfig = { dataDir: path.join(root, 'data'), vcrDataPlaneDir: planeDir, vcrDataPlaneHostDir: planeDir, vcrDataMaxBytes: 50 * 1024 * 1024, runtimeContainerImage: 'img',
     runtimeContainerUser: '1000:1000', runtimeDataVolume: '', vcrIntakeMemory: '768m', vcrIntakeTimeoutMs: 60_000, vcrIntakeMaxBytes: 25 * 1024 * 1024,
     vcrIntakeMaxPages: 300, vcrIntakeMinCharsPerPage: 100, ...config };
   await fs.mkdir(appConfig.dataDir, { recursive: true });
@@ -203,8 +203,18 @@ test('two different originals with the same text leave one original, and removin
   assert.deepEqual(await inDir(w.planeDir, 'documents'), [], 'the text and its original go together');
 });
 
-test('the data plane never holds the intake scratch and the intake scratch never holds the plane', async t => {
+test('a record is staged for its conversion in the plane and never under the data volume', { skip: !HAVE_PYTHON && 'python3 is needed' }, async t => {
   const w = await world(t);
-  assert.ok(!w.config.dataDir.startsWith(w.planeDir));
-  assert.ok(!w.planeDir.startsWith(w.config.dataDir));
+  assert.ok(!w.config.dataDir.startsWith(w.planeDir) && !w.planeDir.startsWith(w.config.dataDir), 'the plane and the data volume are two different places');
+  const { file } = await w.upload('admission note.docx', await w.read('record.docx'));
+  // What the container was given: one file and one directory, each in this study's scratch area of the plane.
+  const scratch = `${w.planeDir}/studies/${STUDY}/.intake/`;
+  assert.equal(w.calls.length, 1);
+  assert.deepEqual(w.calls[0].mounts.map(({ src, dst }) => [src.startsWith(scratch), dst]), [[true, '/input/document.docx'], [true, '/output']]);
+  // Afterwards the attempt is gone, and the data volume was never written, not even a directory.
+  assert.deepEqual(await inDir(w.planeDir, '.intake'), []);
+  assert.deepEqual(await fs.readdir(w.config.dataDir), []);
+  // The scratch is not a place a snapshot may be located, and no stored file is in it.
+  assert.ok(!file.location.includes('.intake') && !(file.detail.original?.location ?? '').includes('.intake'));
+  assert.throws(() => assertDataPlaneLocation(w.planeDir, `studies/${STUDY}/.intake/${'a1b2c3d4-0000-4000-8000-000000000001'}/in/document.docx`), { code: 'vcr_data_plane_location_outside' });
 });

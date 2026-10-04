@@ -181,10 +181,15 @@ export class RuntimeControllerClient {
 
   /**
    * Convert one staged record document to text, or digitize one staged figure,
-   * in a disposable container. The caller reads `output/` itself afterwards.
-   * The deadline here is the controller's own plus a margin for queueing, so the
+   * in a disposable container. The caller reads the output directory itself
+   * afterwards. A record is named by the path of its staged file inside the data
+   * plane with the SHA-256 and size the script checks it against; a figure by its
+   * attempt on the shared data volume and the digest of its request. The
+   * deadline here is the controller's own plus a margin for queueing, so the
    * controller's timeout answers before this one gives up.
-   * @param {'extract'|'digitize'} kind @param {{attemptId:string,inputDigest:string}} reference @param {{signal?:AbortSignal, timeoutMs?:number}} [options]
+   * @param {'extract'|'digitize'} kind
+   * @param {{path:string,sha256:string,bytes:number}|{attemptId:string,inputDigest:string}} reference
+   * @param {{signal?:AbortSignal, timeoutMs?:number}} [options]
    */
   runVcrIntake(kind, reference, { signal, timeoutMs } = {}) {
     return this.request("POST", `/v1/vcr/${kind}`, reference, { signal, timeoutMs: timeoutMs ?? this.vcrIntakeTimeoutMs });

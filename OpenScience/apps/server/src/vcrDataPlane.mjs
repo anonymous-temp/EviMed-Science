@@ -25,6 +25,14 @@
  *   is recomputed at freeze and again by the engine. Encodings are normalised
  *   at the door (a hospital's Excel "CSV" is GBK) so that the profiler, this
  *   file and R all read the same characters.
+ * - **A record's conversion works in the plane too, and only there.** A PDF or
+ *   Word upload is copied for its conversion into the study's scratch area,
+ *   `studies/<study>/.intake/<attempt>/` (0700, removed after each attempt, swept
+ *   by age after a crash), and bound from there into the converter's container
+ *   by host path; no byte of it passes through the data volume that engines,
+ *   backups and project runtimes reach (`vcrIntakeStage.mjs`). The hidden
+ *   segment is one no engine location can spell (`vcrLocationIsValid`), and
+ *   `assertDataPlaneLocation` refuses it as well.
  * - **The control plane may read the bytes; the model may not.** Deriving and
  *   validating an analysis table means parsing it here, in the tenant
  *   boundary, in memory, discarded when the call returns. Nothing parsed is
@@ -109,6 +117,7 @@ import {
 
 import { HttpError, openScopedFileNoFollow, readStableFileHandle } from "./security.mjs";
 import { VcrAccess } from "./vcrAccess.mjs";
+import { VCR_INTAKE_SCRATCH, isVcrIntakeScratchLocation } from "./vcrIntakeLayout.mjs";
 import { VCR_FIELD_ROLES, VCR_SOURCE_FILE_ROLES } from "./vcrPersistence.mjs";
 import { vcrEffectiveSeal, vcrOutcomeColumns, vcrSealRequired } from "./vcrSeal.mjs";
 
@@ -224,6 +233,12 @@ export function assertDataPlaneLocation(dir, location) {
   if (offending) {
     throw refuse(400, VCR_DATA_PLANE_CODES.locationRuntimeReadable,
       `A snapshot location cannot contain a ${JSON.stringify(offending)} segment.`, { segment: offending });
+  }
+  // The conversion's scratch is inside the plane and is not a file the plane keeps:
+  // no snapshot, table or view may be located in it.
+  if (isVcrIntakeScratchLocation(path.relative(root, resolved))) {
+    throw refuse(400, VCR_DATA_PLANE_CODES.locationOutside,
+      "A snapshot location cannot be in the intake scratch area.", { segment: VCR_INTAKE_SCRATCH });
   }
   return resolved;
 }
@@ -1730,7 +1745,7 @@ export class VcrDataPlane {
   /**
    * @param {{ store: import("./vcrDataStore.mjs").VcrDataStore, config: VcrDataPlaneConfig, profiler?: VcrProfiler | null,
    *   access?: VcrAccess | null, seal?: { recordOutcomeAccess?: (input: any) => Promise<unknown> } | null,
-   *   extractor?: { available: boolean, counters?: Record<string, number>, describe?: () => any, extract: (input: { path: string, format: string, signal?: AbortSignal }) => Promise<{ text: string, extraction: Record<string, any> }> } | null,
+   *   extractor?: { available: boolean, counters?: Record<string, number>, describe?: () => any, extract: (input: { root: string, studyId: string, path: string, format: string, signal?: AbortSignal }) => Promise<{ text: string, extraction: Record<string, any> }> } | null,
    *   now?: () => Date }} options
    *   `access` judges every operation (one is made from the store when none is
    *   given); `seal` records the first outcome read — it is composed after the
@@ -1962,7 +1977,7 @@ export class VcrDataPlane {
           if (!this.extractor?.available) {
             throw refuse(503, VCR_DATA_PLANE_CODES.documentConverterUnavailable, "This deployment cannot convert PDF or Word files; supply a text version.");
           }
-          const got = await this.extractor.extract({ path: raw, format: named.format });
+          const got = await this.extractor.extract({ root, studyId: entry.studyId, path: raw, format: named.format });
           documentText = got.text;
           const originalBytes = await fs.readFile(raw);
           const original = await writeContentAddressed(root, path.posix.join(studyRelative(entry.studyId), "documents"), named.format, originalBytes);

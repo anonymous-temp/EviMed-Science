@@ -8,15 +8,18 @@ needs an embedded font with a ToUnicode map, which a hand-built file cannot
 honestly stand in for); it is tested through Word, which stores text as text.
 """
 
+import contextlib
 import hashlib
 import io
 import json
+import os
 import pathlib
 import shutil
 import sys
 import tempfile
 import unittest
 import zipfile
+from unittest import mock
 from xml.sax.saxutils import escape
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -106,22 +109,36 @@ class Workspace(unittest.TestCase):
     def setUp(self):
         self.root = pathlib.Path(tempfile.mkdtemp(prefix="vcr-extract-"))
         self.addCleanup(shutil.rmtree, self.root, True)
-        self.input = self.root / "input"
-        self.output = self.root / "output"
+        self.input = self.root / "in"
+        self.output = self.root / "out"
         self.input.mkdir()
         self.output.mkdir()
 
-    def stage(self, name, data, form, limits=None):
-        (self.input / name).write_bytes(data)
-        request = {"format": form, "file": {"name": name, "sha256": hashlib.sha256(data).hexdigest(), "bytes": len(data)}, "limits": limits or {}}
-        (self.input / "request.json").write_text(json.dumps(request), encoding="utf-8")
+    def stage(self, name, data, form, limits=None, *, sha256=None, size=None):
+        """The one file, and the flags the controller's launch plan gives the script for it."""
+        self.file = self.input / name
+        self.file.write_bytes(data)
+        self.flags = [
+            "--file", str(self.file), "--format", form,
+            "--expect-sha256", sha256 or hashlib.sha256(data).hexdigest(),
+            "--expect-bytes", str(len(data) if size is None else size),
+        ]
+        for key, flag in (("maxPages", "--max-pages"), ("maxChars", "--max-chars"), ("maxXmlBytes", "--max-xml-bytes")):
+            if key in (limits or {}):
+                self.flags += [flag, str(limits[key])]
 
     def run_script(self):
-        code = extract.main(["--request", str(self.input / "request.json"), "--input-dir", str(self.input), "--output-dir", str(self.output)])
+        code = extract.main([*self.flags, "--output-dir", str(self.output)])
         self.assertEqual(code, 0)
         result = json.loads((self.output / "result.json").read_text(encoding="utf-8"))
         text = (self.output / "text.txt").read_text(encoding="utf-8") if (self.output / "text.txt").exists() else None
         return result, text
+
+    def refused(self, reason="request_invalid"):
+        result, text = self.run_script()
+        self.assertEqual((result["outcome"], result["reason"]), ("refused", reason))
+        self.assertIsNone(text, "a refused file yields no text at all")
+        return result
 
 
 @unittest.skipUnless(HAVE_PYPDF, "pypdf is the runtime image's PDF reader")
@@ -304,30 +321,77 @@ class WordExtraction(Workspace):
 
 
 class Request(Workspace):
+    """The container's first act: hold the bound file to the digest and size it was told."""
+
     def test_a_changed_input_is_not_read(self):
-        self.stage("document.docx", docx_bytes(para("record")), "docx")
-        (self.input / "document.docx").write_bytes(docx_bytes(para("a different record")))
-        result, _ = self.run_script()
-        self.assertEqual((result["outcome"], result["reason"]), ("refused", "request_invalid"))
+        data = docx_bytes(para("record"))
+        self.stage("document.docx", data, "docx")
+        # The same size with one byte changed: the hash says so, and the file is never parsed.
+        self.file.write_bytes(data[:-1] + bytes([data[-1] ^ 0x01]))
+        self.assertEqual(self.refused()["outcome"], "refused")
+        # A different size is caught before the bytes are even read.
+        self.file.write_bytes(docx_bytes(para("a different, longer record")))
+        self.refused()
 
-    def test_a_file_name_cannot_leave_the_input_directory(self):
+    def test_a_file_of_another_size_or_digest_than_the_one_named_is_refused(self):
+        data = docx_bytes(para("record"))
+        self.stage("document.docx", data, "docx", size=len(data) + 1)
+        self.refused()
+        self.stage("document.docx", data, "docx", sha256="0" * 64)
+        self.refused()
+
+    def test_a_link_a_directory_a_pipe_and_a_missing_file_are_not_the_file(self):
+        data = docx_bytes(para("record"))
+        self.stage("document.docx", data, "docx")
+        real = self.input / "real.docx"
+        real.write_bytes(data)
+        (self.input / "link.docx").symlink_to(real)
+        self.flags[1] = str(self.input / "link.docx")
+        self.refused()
+        (self.input / "folder.docx").mkdir()
+        self.flags[1] = str(self.input / "folder.docx")
+        self.refused()
+        os.mkfifo(self.input / "pipe.docx")
+        self.flags[1] = str(self.input / "pipe.docx")
+        self.refused()
+        self.flags[1] = str(self.input / "missing.docx")
+        self.refused()
+
+    def test_an_expectation_that_is_not_a_digest_and_a_size_is_refused_without_reading(self):
+        data = docx_bytes(para("record"))
+        for sha256, size in (("not-a-digest", len(data)), ("A" * 64, len(data)), ("a" * 63, len(data)), (hashlib.sha256(data).hexdigest(), 0)):
+            self.stage("document.docx", data, "docx", sha256=sha256, size=size)
+            self.refused()
+
+    def test_the_document_is_parsed_from_the_verified_bytes_and_not_from_the_path_again(self):
+        data = docx_bytes(para("what was digested"))
+        self.stage("document.docx", data, "docx")
+        original = extract.read_verified
+
+        def swap_after_verifying(source, expectation):
+            verified = original(source, expectation)
+            source.write_bytes(docx_bytes(para("what was swapped in afterwards")))
+            return verified
+
+        with mock.patch.object(extract, "read_verified", swap_after_verifying):
+            result, text = self.run_script()
+        self.assertEqual(result["outcome"], "text")
+        self.assertEqual(text, "what was digested")
+
+    def test_an_unknown_format_is_not_guessed_from_anything(self):
         data = docx_bytes(para("x"))
-        request = {"format": "docx", "file": {"name": "../outside.docx", "sha256": hashlib.sha256(data).hexdigest()}}
-        (self.input / "request.json").write_text(json.dumps(request), encoding="utf-8")
-        result, _ = self.run_script()
-        self.assertEqual((result["outcome"], result["reason"]), ("refused", "request_invalid"))
+        self.stage("document.pdf", data, "rtf")
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as stopped:
+            extract.main([*self.flags, "--output-dir", str(self.output)])
+        self.assertEqual(stopped.exception.code, 2)
+        self.assertFalse((self.output / "result.json").exists())
 
-    def test_an_unknown_format_is_refused_and_never_guessed_from_the_name(self):
-        self.stage("document.pdf", docx_bytes(para("x")), "rtf")
-        result, _ = self.run_script()
-        self.assertEqual((result["outcome"], result["reason"]), ("refused", "request_invalid"))
-
-    def test_an_unreadable_request_still_ends_in_a_result_file(self):
-        (self.input / "request.json").write_text("{not json", encoding="utf-8")
-        result, _ = self.run_script()
-        self.assertEqual(result["outcome"], "refused")
-        self.assertEqual(result["reason"], "failed")
-        self.assertEqual(result["errorClass"], "JSONDecodeError")
+    def test_an_unexpected_failure_still_ends_in_a_result_file_that_names_the_class_and_never_the_message(self):
+        self.stage("document.docx", docx_bytes(para("x")), "docx")
+        with mock.patch.object(extract, "extract_docx", side_effect=ValueError("a line of the record")):
+            result, _ = self.run_script()
+        self.assertEqual((result["outcome"], result["reason"], result["errorClass"]), ("refused", "failed", "ValueError"))
+        self.assertNotIn("a line of the record", json.dumps(result))
 
 
 class Text(unittest.TestCase):

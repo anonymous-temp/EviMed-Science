@@ -567,6 +567,14 @@ function vcrSettings(overrides) {
     // runtime (plan §8.1). Empty = the data plane is not configured and every
     // tier above T0 answers that it is unavailable.
     vcrDataPlaneDir: String(read("vcrDataPlaneDir", "OPEN_SCIENCE_VCR_DATA_PLANE_DIR", "") ?? "").trim(),
+    // The same directory as the Docker daemon sees it, on the host. Only the
+    // runtime controller reads it: the intake conversion of a patient record
+    // binds one file and one empty directory out of the plane's scratch area by
+    // this path, and the controller mounts no plane of its own (the Docker
+    // socket resolves a bind source on the host). The web API reaches the plane
+    // at `vcrDataPlaneDir` and never reads this; unset on the controller, a
+    // record cannot be converted and says so by name (vcrIntakeController.mjs).
+    vcrDataPlaneHostDir: String(read("vcrDataPlaneHostDir", "OPEN_SCIENCE_VCR_DATA_PLANE_HOST_DIR", "") ?? "").trim(),
     // The largest data file an upload may be, in bytes: the request is streamed
     // and cut off at it, and the whole file is read twice (validate, derive), so
     // this bounds memory as well as disk (principle 15). 50 MB by default.

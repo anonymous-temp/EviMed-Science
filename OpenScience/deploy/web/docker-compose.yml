@@ -26,6 +26,8 @@ x-runtime-caps: &runtime-caps
 # characters per page, bytes), so the two read ONE definition and cannot drift:
 # a controller that kills at 60 s while the API waits for 30 is the class this
 # anchor removes. Value-less, so the code's defaults hold until .env says more.
+# (The data plane's host path is not here: only the controller needs it, and it
+# is passed to that service alone, below.)
 x-vcr-intake: &vcr-intake
   OPEN_SCIENCE_VCR_INTAKE_MAX_BYTES:
   OPEN_SCIENCE_VCR_INTAKE_MAX_PAGES:
@@ -1002,6 +1004,11 @@ services:
       # The data plane, read-write: uploads and the tables derived from them are
       # written here, and the engine reads the same directory read-only at the
       # same path. Never a runtime's mount and never inside `open-science-data`.
+      # A PDF or Word record's conversion is staged here too, in the study's
+      # hidden scratch directory (studies/<study>/.intake/, 0700, removed after each
+      # attempt, invisible to the engine's location grammar), and bound from it into
+      # the intake container by the runtime controller, which is told this
+      # directory's host path (OPEN_SCIENCE_VCR_DATA_PLANE_HOST_DIR on that service).
       # Unset binds /dev/null and the module answers 「数据平面未接入」.
       - type: bind
         source: ${OPEN_SCIENCE_VCR_DATA_PLANE_HOST_DIR:-/dev/null}
@@ -1787,6 +1794,14 @@ services:
       OPEN_SCIENCE_WEB_SEARCH_URL: ${OPEN_SCIENCE_WEB_SEARCH_URL:-}
       OPEN_SCIENCE_WEB_SEARCH_GATEWAY_INTERNAL_URL: ${OPEN_SCIENCE_WEB_SEARCH_GATEWAY_INTERNAL_URL:-http://open-science-web:8787/internal/search/v1/query}
       <<: [*runtime-caps, *vcr-intake]
+      # The VCR data plane's HOST directory, for the controller alone. A patient
+      # record's conversion is staged in the plane (never in open-science-data) and
+      # the controller binds one file and one output directory out of it into the
+      # intake container by this path; the Docker socket resolves a bind source on
+      # the host, so the plane is not mounted here and the controller never reads a
+      # byte of it. Unset, a PDF or Word record answers 「本部署暂时不能转换」 by name.
+      # Value-less (the web API sees the plane at /data-plane and never reads it).
+      OPEN_SCIENCE_VCR_DATA_PLANE_HOST_DIR:
     volumes:
       # Writable since 2026-10-03. The controller stages each personal-skill
       # validation input and keeps the render and validation recovery markers

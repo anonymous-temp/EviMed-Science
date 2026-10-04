@@ -4,10 +4,19 @@
 「虚拟临研」 accepts hospital records as PDF and Word. They are converted to text
 INSIDE the deployment: the control plane starts this script in a bounded,
 network-less container (``apps/server/src/vcrIntakeController.mjs``) that sees
-exactly two directories -- ``/input``, read-only, holding the one file and its
-request, and ``/output``, empty -- and nothing else: no model, no workspace, no
-data plane, no credential. It reads the file, writes ``text.txt`` and
-``result.json``, and exits.
+exactly two paths -- ``/input/document.<pdf|docx>``, the one file, read-only, and
+``/output``, an empty directory -- both inside the VCR data plane's scratch area,
+and nothing else: no model, no workspace, no credential, and no view of the rest
+of the plane. It reads the file, writes ``text.txt`` and ``result.json``, and
+exits.
+
+The runtime controller that starts the container never reads the file (it does
+not mount the plane), so the file is not taken on trust: the script's first act is
+to open it without following a link, require a regular file of exactly the size
+it was told, read it ONCE, and require the bytes to hash to the SHA-256 it was
+told. Any mismatch is a refusal (``request_invalid``), and nothing else is read
+from the file afterwards than those very bytes -- the document is parsed from the
+verified copy in memory, so the file cannot change between the check and the use.
 
 The script measures; the control plane decides. It reports how many pages the
 document has and how many non-blank characters each one yielded, and the
@@ -37,9 +46,12 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import io
 import json
+import os
 import re
 import signal
+import stat
 import sys
 import zipfile
 from pathlib import Path
@@ -104,7 +116,7 @@ def significant_chars(text: str) -> int:
 # ---------------------------------------------------------------------------
 
 
-def extract_pdf(path: Path, max_pages: int, max_chars: int) -> dict:
+def extract_pdf(data: bytes, max_pages: int, max_chars: int) -> dict:
     """The text layer of every page, and how much each page had.
 
     Returns ``{pages, pageChars, text, truncated, pageErrors}``. A document with
@@ -114,12 +126,10 @@ def extract_pdf(path: Path, max_pages: int, max_chars: int) -> dict:
         from pypdf import PdfReader  # imported late: the module is also imported where pypdf is absent
     except ImportError as error:  # pragma: no cover - the image ships pypdf
         raise Refusal("converter_missing", "pypdf is not installed") from error
-    with path.open("rb") as handle:
-        head = handle.read(1024)
-    if b"%PDF-" not in head:
+    if b"%PDF-" not in data[:1024]:
         raise Refusal("not_pdf")
     try:
-        reader = PdfReader(str(path), strict=False)
+        reader = PdfReader(io.BytesIO(data), strict=False)
         if reader.is_encrypted:
             # An owner-password-only PDF opens with the empty user password.
             if not reader.decrypt(""):
@@ -314,15 +324,13 @@ def _block_lines(container: ET.Element, depth: int) -> list[str]:
     return lines
 
 
-def extract_docx(path: Path, max_chars: int, max_xml_bytes: int = DEFAULT_MAX_XML_BYTES) -> dict:
+def extract_docx(data: bytes, max_chars: int, max_xml_bytes: int = DEFAULT_MAX_XML_BYTES) -> dict:
     """The main document part of a .docx as text, one paragraph or table row per line."""
-    with path.open("rb") as handle:
-        magic = handle.read(4)
-    if magic != b"PK\x03\x04":
+    if data[:4] != b"PK\x03\x04":
         # An OLE compound file is an old .doc, or an encrypted package: neither is read.
         raise Refusal("not_docx")
     try:
-        archive = zipfile.ZipFile(str(path))
+        archive = zipfile.ZipFile(io.BytesIO(data))
     except zipfile.BadZipFile as error:
         raise Refusal("corrupt", "zip") from error
     with archive:
@@ -379,35 +387,56 @@ def _libraries() -> dict:
     return versions
 
 
-def run(request: dict, input_dir: Path, output_dir: Path) -> dict:
-    """One extraction: the request names the file, its hash and the limits."""
-    spec = request.get("file") or {}
-    name = str(spec.get("name") or "")
-    if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}", name):
-        raise Refusal("request_invalid", "file name")
-    source = input_dir / name
-    if source.is_symlink() or not source.is_file():
-        raise Refusal("request_invalid", "file")
-    digest = hashlib.sha256()
-    with source.open("rb") as handle:
-        for block in iter(lambda: handle.read(1 << 20), b""):
-            digest.update(block)
-    if digest.hexdigest() != str(spec.get("sha256") or ""):
+def read_verified(source: Path, expectation: dict) -> bytes:
+    """The staged file's bytes, read once, and only if they are the file that was digested.
+
+    The controller that started this container cannot look at the file, so this is
+    where "the file I was told about" is made true: opened without following a
+    link, a regular file (never a directory, a device or a FIFO), exactly the
+    expected size, and bytes that hash to the expected SHA-256. One read serves
+    both the check and the parse, so nothing can change in between. Every failure
+    is ``request_invalid``; the detail names which check, never the content.
+    """
+    expected_hash = str(expectation.get("sha256") or "")
+    expected_bytes = expectation.get("bytes")
+    if not re.fullmatch(r"[0-9a-f]{64}", expected_hash) or isinstance(expected_bytes, bool) or not isinstance(expected_bytes, int) or expected_bytes < 1:
+        raise Refusal("request_invalid", "expectation")
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0) | getattr(os, "O_CLOEXEC", 0)
+    try:
+        descriptor = os.open(str(source), flags)
+    except OSError as error:
+        raise Refusal("request_invalid", "file") from error
+    try:
+        info = os.fstat(descriptor)
+        if not stat.S_ISREG(info.st_mode) or info.st_size != expected_bytes:
+            raise Refusal("request_invalid", "file")
+        with os.fdopen(descriptor, "rb", closefd=False) as handle:
+            # One byte past the expectation: a file that grew is caught by length.
+            data = handle.read(expected_bytes + 1)
+    finally:
+        os.close(descriptor)
+    if len(data) != expected_bytes or hashlib.sha256(data).hexdigest() != expected_hash:
         raise Refusal("request_invalid", "hash")
+    return data
+
+
+def run(request: dict, source: Path, output_dir: Path) -> dict:
+    """One extraction: the request carries the format, the file's expected digest and size, and the limits."""
+    data = read_verified(source, request.get("file") or {})
     form = str(request.get("format") or "")
     limits = request.get("limits") or {}
     max_pages = int(limits.get("maxPages", 300))
     max_chars = int(limits.get("maxChars", 1024 * 1024))
     max_xml = min(int(limits.get("maxXmlBytes", DEFAULT_MAX_XML_BYTES)), DEFAULT_MAX_XML_BYTES)
     if form == "pdf":
-        got = extract_pdf(source, max_pages, max_chars)
+        got = extract_pdf(data, max_pages, max_chars)
     elif form == "docx":
-        got = extract_docx(source, max_chars, max_xml)
+        got = extract_docx(data, max_chars, max_xml)
     else:
         raise Refusal("request_invalid", "format")
     text = got["text"]
-    data = text.encode("utf-8")
-    (output_dir / "text.txt").write_bytes(data)
+    out = text.encode("utf-8")
+    (output_dir / "text.txt").write_bytes(out)
     return {
         "protocol": PROTOCOL,
         "outcome": "text",
@@ -417,8 +446,8 @@ def run(request: dict, input_dir: Path, output_dir: Path) -> dict:
         "pageChars": got["pageChars"],
         "pageErrors": got["pageErrors"],
         "chars": significant_chars(text),
-        "textBytes": len(data),
-        "textSha256": hashlib.sha256(data).hexdigest(),
+        "textBytes": len(out),
+        "textSha256": hashlib.sha256(out).hexdigest(),
         "truncated": bool(got["truncated"]),
     }
 
@@ -429,8 +458,13 @@ def _write_result(output_dir: Path, result: dict) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("--request", required=True, help="request.json inside the read-only input directory")
-    parser.add_argument("--input-dir", required=True)
+    parser.add_argument("--file", required=True, help="the one staged file, bound read-only")
+    parser.add_argument("--format", required=True, choices=["pdf", "docx"])
+    parser.add_argument("--expect-sha256", required=True, help="the SHA-256 the file must have")
+    parser.add_argument("--expect-bytes", required=True, type=int, help="the size in bytes the file must have")
+    parser.add_argument("--max-pages", type=int, default=300)
+    parser.add_argument("--max-chars", type=int, default=1024 * 1024)
+    parser.add_argument("--max-xml-bytes", type=int, default=DEFAULT_MAX_XML_BYTES)
     parser.add_argument("--output-dir", required=True)
     parser.add_argument("--deadline", type=int, default=0, help="seconds after which the script ends itself (0 = none)")
     args = parser.parse_args(argv)
@@ -444,8 +478,12 @@ def main(argv: list[str] | None = None) -> int:
         signal.signal(signal.SIGALRM, on_alarm)
         signal.alarm(args.deadline)
     try:
-        request = json.loads(Path(args.request).read_text(encoding="utf-8"))
-        result = run(request, Path(args.input_dir), output_dir)
+        request = {
+            "format": args.format,
+            "file": {"sha256": args.expect_sha256, "bytes": args.expect_bytes},
+            "limits": {"maxPages": args.max_pages, "maxChars": args.max_chars, "maxXmlBytes": args.max_xml_bytes},
+        }
+        result = run(request, Path(args.file), output_dir)
     except Refusal as refusal:
         result = {**base, "outcome": "refused", "reason": refusal.reason, "format": None}
     except MemoryError:

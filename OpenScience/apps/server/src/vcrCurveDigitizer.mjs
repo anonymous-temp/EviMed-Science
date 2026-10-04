@@ -179,6 +179,9 @@ export function createVcrCurveDigitizer({ config, controller = null, counters = 
       if (request.imageSha256 != null && request.imageSha256 !== image.sha256) throw refuse(409, 'vcr_curve_source_changed', 'The figure is not the one the call names by hash.');
       let result;
       try {
+        // The figure is a published image the study already holds, not patient data,
+        // so its scratch copy stays under the data volume (vcrIntakeStage.mjs). A
+        // patient record's never does: it is staged inside the data plane.
         result = await runIntakeAttempt({
           config, controller: /** @type {any} */ (controller), kind: 'digitize', name: image.mime === 'image/png' ? 'figure.png' : 'figure.jpg',
           source: { bytes: image.data }, signal,

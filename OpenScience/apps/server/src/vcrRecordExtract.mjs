@@ -1,21 +1,28 @@
 import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import { HttpError } from './security.mjs';
-import { runIntakeAttempt } from './vcrIntakeStage.mjs';
+import { VCR_INTAKE_LIMITS } from './vcrIntakeLayout.mjs';
+import { runPlaneExtraction } from './vcrIntakeStage.mjs';
 
 /**
  * A patient record as PDF or Word, turned into the text the matching step reads.
  *
  * The conversion runs inside this deployment, in the intake container
- * (`vcrIntakeController.mjs`: no network, no model, no workspace, no data plane,
- * one read-only file and one empty directory). It is NOT sent to the external
- * document-parsing service, by design and by test: a hospital record must not
- * leave the deployment to be read, and nothing here — or in the data plane that
- * calls it — imports `documentParserClient.mjs`
- * (`test/vcrRecordExtract.test.mjs` walks the import graph to prove it).
+ * (`vcrIntakeController.mjs`: no network, no model, no workspace, and of the data
+ * plane nothing but one read-only file and one empty directory of its own
+ * scratch area). It is NOT sent to the external document-parsing service, by
+ * design and by test: a hospital record must not leave the deployment to be read,
+ * and nothing here — or in the data plane that calls it — imports
+ * `documentParserClient.mjs` (`test/vcrRecordExtract.test.mjs` walks the import
+ * graph to prove it).
  *
  * Hidden knowledge:
  *
+ * - **The record is staged in the plane and nowhere else.** `extract` is handed
+ *   the plane's root and the study, copies the raw upload into the study's
+ *   scratch area (`vcrIntakeStage.mjs`), and removes the copy when the answer is
+ *   read; no byte of the record is written under the data volume, which engines,
+ *   backups and project runtimes all reach.
  * - **The container measures; this module decides.** The script reports the
  *   page count and the characters each page yielded; "scanned" is decided here,
  *   by code, as extracted characters per page under `vcrIntakeMinCharsPerPage`.
@@ -33,8 +40,8 @@ import { runIntakeAttempt } from './vcrIntakeStage.mjs';
  *   recounted from the text before any threshold is applied.
  */
 
-/** The ceiling of the extracted text, the same one a `.txt` upload has. */
-export const VCR_DOCUMENT_TEXT_CAP = 1024 * 1024;
+/** The ceiling of the extracted text, the same one a `.txt` upload has (the container is told it too). */
+export const VCR_DOCUMENT_TEXT_CAP = VCR_INTAKE_LIMITS.maxChars;
 /** A Word file carries no page count a reader can rely on; no text at all is what it can fail on. */
 const DOCX_MIN_CHARS = 20;
 /** A page with fewer characters than this is blank for the record of which pages were. */
@@ -66,7 +73,7 @@ const significantChars = text => Array.from(text.replace(/\s+/gu, '')).length;
  * verdict out, so the rule is testable without a container.
  * @param {{ format: string, result: any, text: Buffer | null,
  *   limits: { maxPages: number, minCharsPerPage: number, textCap?: number } }} input
- * @returns {{ ok: true, text: string, extraction: Record<string, any> } | { ok: false, refusal: 'needs_text' | 'unreadable' | 'too_long' | 'too_large' | 'timeout' | 'failed' | 'unavailable' }}
+ * @returns {{ ok: true, text: string, extraction: Record<string, any> } | { ok: false, refusal: 'needs_text' | 'unreadable' | 'too_long' | 'too_large' | 'timeout' | 'failed' | 'unavailable' | 'changed' }}
  */
 export function decideExtraction({ format, result, text, limits }) {
   const cap = limits.textCap ?? VCR_DOCUMENT_TEXT_CAP;
@@ -77,6 +84,8 @@ export function decideExtraction({ format, result, text, limits }) {
       case 'too_large': return { ok: false, refusal: 'too_large' };
       case 'deadline': case 'memory': return { ok: false, refusal: 'timeout' };
       case 'converter_missing': return { ok: false, refusal: 'unavailable' };
+      // The container could not hold the staged file to the digest and size it was given.
+      case 'request_invalid': return { ok: false, refusal: 'changed' };
       case 'encrypted': case 'corrupt': case 'not_pdf': case 'not_docx': return { ok: false, refusal: 'unreadable' };
       default: return { ok: false, refusal: 'failed' };
     }
@@ -134,6 +143,7 @@ const REFUSALS = Object.freeze({
   timeout: [504, 'vcr_intake_timeout', 'The conversion took too long and was stopped.', 'timedOut'],
   failed: [502, 'vcr_intake_failed', 'The conversion did not finish.', 'failed'],
   unavailable: [503, 'vcr_document_converter_unavailable', 'This deployment cannot convert PDF or Word files.', 'unavailable'],
+  changed: [409, 'vcr_intake_input_invalid', 'The staged document is not the file that was uploaded; upload it again.', 'failed'],
 });
 
 /**
@@ -164,11 +174,13 @@ export function createVcrRecordExtractor({ config, controller = null, counters =
     },
     /**
      * Convert one staged upload. `path` is the raw bytes in the data plane's
-     * incoming directory; nothing here moves or deletes it.
-     * @param {{ path: string, format: string, signal?: AbortSignal }} input
+     * incoming directory and `root` is the plane that holds it; the conversion's
+     * own copy lives in the study's scratch area and is gone when this returns.
+     * Nothing here moves or deletes the raw bytes.
+     * @param {{ root: string, studyId: string, path: string, format: string, signal?: AbortSignal }} input
      * @returns {Promise<{ text: string, extraction: Record<string, any> }>}
      */
-    async extract({ path, format, signal }) {
+    async extract({ root, studyId, path, format, signal }) {
       if (!Object.hasOwn(FORMATS, format)) throw new HttpError(415, 'vcr_data_format_unsupported', 'Only PDF and Word records are converted.');
       if (!this.available) throw refuse('unavailable');
       const handle = await fs.open(path, 'r');
@@ -176,13 +188,13 @@ export function createVcrRecordExtractor({ config, controller = null, counters =
       try { head = Buffer.alloc(HEAD_BYTES); const { bytesRead } = await handle.read(head, 0, HEAD_BYTES, 0); head = head.subarray(0, bytesRead); } finally { await handle.close(); }
       const magicOk = format === 'pdf' ? head.includes('%PDF-') : head.subarray(0, 4).equals(Buffer.from([0x50, 0x4b, 0x03, 0x04]));
       if (!magicOk) throw refuse('unreadable');
-      const { maxPages } = limits();
       /** @type {ReturnType<typeof decideExtraction>} */
       let verdict;
       try {
-        verdict = await runIntakeAttempt({
-          config, controller: /** @type {any} */ (controller), kind: 'extract', name: `document.${format}`, source: { path }, signal,
-          request: { format, limits: { maxPages, maxChars: VCR_DOCUMENT_TEXT_CAP, maxXmlBytes: 24 * 1024 * 1024 } },
+        // The container is given its limits by the controller, from the same
+        // configuration this module reads (compose passes both one definition).
+        verdict = await runPlaneExtraction({
+          root, studyId, controller: /** @type {any} */ (controller), source: path, format, signal,
         }, async attempt => {
           const resultFile = await attempt.read('result.json', RESULT_LIMIT);
           let result = null;
@@ -198,6 +210,7 @@ export function createVcrRecordExtractor({ config, controller = null, counters =
         }
         if (error instanceof HttpError && code === 'vcr_intake_timeout') counters.timedOut += 1;
         else if (error instanceof HttpError && code === 'vcr_intake_failed') counters.failed += 1;
+        else if (error instanceof HttpError && code === 'vcr_document_converter_unavailable') counters.unavailable += 1;
         throw error;
       }
       if (verdict.ok === false) throw refuse(verdict.refusal);

@@ -79,7 +79,9 @@ test('refusals the script names map to the reader-facing verdicts', () => {
   for (const reason of ['encrypted', 'corrupt', 'not_pdf', 'not_docx']) assert.deepEqual(refused(reason), { ok: false, refusal: 'unreadable' });
   for (const reason of ['deadline', 'memory']) assert.deepEqual(refused(reason), { ok: false, refusal: 'timeout' });
   assert.deepEqual(refused('converter_missing'), { ok: false, refusal: 'unavailable' });
-  for (const reason of ['failed', 'request_invalid', 'something_new']) assert.deepEqual(refused(reason), { ok: false, refusal: 'failed' });
+  // The container could not hold the staged file to its digest and size: the reader is asked to upload it again.
+  assert.deepEqual(refused('request_invalid'), { ok: false, refusal: 'changed' });
+  for (const reason of ['failed', 'something_new']) assert.deepEqual(refused(reason), { ok: false, refusal: 'failed' });
 });
 
 test('a result that does not describe the text it came with is a failed conversion, never text', () => {
@@ -111,23 +113,46 @@ test('more pages than the limit, and text past the cap, are refused by name', ()
 
 // --- through the real script --------------------------------------------------
 
+const STUDY = 'std_record_test';
+
+/**
+ * A plane (the one directory a record is ever staged in), an empty data volume
+ * that must stay empty, and the real extractor over the real script.
+ */
 async function world(t, extra = {}) {
   const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'vcr-extract-')));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
+  const plane = path.join(root, 'plane');
   const config = { dataDir: path.join(root, 'data'), runtimeContainerImage: 'img', runtimeContainerUser: '1000:1000', runtimeDataVolume: '',
+    vcrDataPlaneDir: plane, vcrDataPlaneHostDir: plane,
     vcrIntakeMemory: '768m', vcrIntakeTimeoutMs: 60_000, vcrIntakeMaxBytes: 25 * 1024 * 1024, vcrIntakeMaxPages: 300, vcrIntakeMinCharsPerPage: 100, ...extra };
   await fs.mkdir(config.dataDir, { recursive: true });
+  await fs.mkdir(path.join(plane, 'studies', STUDY, 'incoming'), { recursive: true });
   const fixtures = await writeRecordFixtures(root);
   const calls = [];
   const counters = createIntakeCounters();
   const extractor = createVcrRecordExtractor({ config, controller: localIntakeController(config, { calls }), counters });
-  return { root, config, fixtures, calls, counters, extractor };
+  /** One upload's conversion, as the plane asks for it. @param {string} file @param {string} format @param {Record<string, any>} [more] */
+  const convert = (file, format, more = {}) => extractor.extract({ root: plane, studyId: STUDY, path: file, format, ...more });
+  return { root, plane, config, fixtures, calls, counters, extractor, convert };
 }
-const attempts = config => fs.readdir(path.join(config.dataDir, 'vcr-intake', 'extract')).catch(() => []);
+/** The attempts left in any study's scratch area of the plane. */
+const attempts = async plane => {
+  const found = [];
+  for (const study of await fs.readdir(path.join(plane, 'studies')).catch(() => [])) {
+    for (const attempt of await fs.readdir(path.join(plane, 'studies', study, '.intake')).catch(() => [])) found.push(`${study}/${attempt}`);
+  }
+  return found;
+};
+/** Everything under a directory, relative. @param {string} dir */
+const listing = async dir => (await fs.readdir(dir, { recursive: true }).catch(() => [])).sort();
 
-test('a Word record becomes text with its provenance, and the scratch copy is gone afterwards', { skip: !HAVE_PYTHON && 'python3 is needed' }, async t => {
+test('a Word record becomes text with its provenance, the scratch copy is in the plane and gone afterwards, and the data volume is never written', { skip: !HAVE_PYTHON && 'python3 is needed' }, async t => {
   const w = await world(t);
-  const done = await w.extractor.extract({ path: w.fixtures['record.docx'], format: 'docx' });
+  // The raw upload, where the plane keeps it until the conversion is done.
+  const raw = path.join(w.plane, 'studies', STUDY, 'incoming', 'raw.upload');
+  await fs.copyFile(w.fixtures['record.docx'], raw);
+  const done = await w.convert(raw, 'docx');
   assert.match(done.text, /^患者男，62岁，主诉胸痛2小时。/);
   assert.match(done.text, /肌钙蛋白I \| 0\.04 ng\/mL/);
   assert.equal(done.extraction.sourceFormat, 'docx');
@@ -135,45 +160,51 @@ test('a Word record becomes text with its provenance, and the scratch copy is go
   assert.equal(done.extraction.extractor.name, 'evimed-record-extract');
   assert.equal(done.extraction.textSha256, sha(done.text));
   assert.equal(w.counters.extracted, 1);
-  // What the container saw: this one file and the request, under the attempt.
-  assert.deepEqual(w.calls[0].files.sort(), ['document.docx', 'request.json']);
-  assert.deepEqual(await attempts(w.config), [], 'the attempt directory is removed');
+  // What the container saw: this one file, read-only, and an output directory, both
+  // inside the study's scratch area of the plane.
+  assert.deepEqual(w.calls[0].files, ['document.docx']);
+  const scratch = `${w.plane}/studies/${STUDY}/.intake/`;
+  assert.deepEqual(w.calls[0].mounts.map(({ src, dst, readonly }) => [src.startsWith(scratch), dst, readonly]), [[true, '/input/document.docx', true], [true, '/output', false]]);
+  assert.deepEqual(await attempts(w.plane), [], 'the attempt directory is removed');
+  assert.deepEqual(await listing(w.config.dataDir), [], 'not one byte of the record, or of anything else, was written under the data volume');
+  assert.deepEqual(await fs.readFile(raw), await fs.readFile(w.fixtures['record.docx']), 'the raw upload is the plane\'s own, and the conversion leaves it as it was');
 });
 
 test('a text PDF becomes text and a scan is refused as needing a text version', { skip: !HAVE_PYPDF && 'pypdf is needed' }, async t => {
   const w = await world(t);
-  const done = await w.extractor.extract({ path: w.fixtures['text.pdf'], format: 'pdf' });
+  const done = await w.convert(w.fixtures['text.pdf'], 'pdf');
   assert.match(done.text, /BP 140\/90 mmHg/);
   assert.equal(done.extraction.pages, 2);
   assert.equal(done.extraction.blankPages, 0);
   assert.equal(done.extraction.extractor.libraries.pypdf.length > 0, true);
 
-  await assert.rejects(w.extractor.extract({ path: w.fixtures['scan.pdf'], format: 'pdf' }), { status: 422, code: 'vcr_document_needs_text' });
-  await assert.rejects(w.extractor.extract({ path: w.fixtures['image-only.docx'], format: 'docx' }), { status: 422, code: 'vcr_document_needs_text' });
+  await assert.rejects(w.convert(w.fixtures['scan.pdf'], 'pdf'), { status: 422, code: 'vcr_document_needs_text' });
+  await assert.rejects(w.convert(w.fixtures['image-only.docx'], 'docx'), { status: 422, code: 'vcr_document_needs_text' });
   assert.equal(w.counters.extracted, 1);
   assert.equal(w.counters.needsText, 2);
-  assert.deepEqual(await attempts(w.config), [], 'a refused attempt is removed too');
+  assert.deepEqual(await attempts(w.plane), [], 'a refused attempt is removed too');
 });
 
 test('a mixed PDF is accepted with its blank page recorded, and a lower page ceiling refuses it by name', { skip: !HAVE_PYPDF && 'pypdf is needed' }, async t => {
   const w = await world(t);
-  const mixed = await w.extractor.extract({ path: w.fixtures['mixed.pdf'], format: 'pdf' });
+  const mixed = await w.convert(w.fixtures['mixed.pdf'], 'pdf');
   assert.equal(mixed.extraction.pages, 4);
   assert.deepEqual(mixed.extraction.blankPageNumbers, [2]);
   const strict = await world(t, { vcrIntakeMaxPages: 3 });
-  await assert.rejects(strict.extractor.extract({ path: strict.fixtures['mixed.pdf'], format: 'pdf' }), { status: 413, code: 'vcr_document_too_long' });
+  await assert.rejects(strict.convert(strict.fixtures['mixed.pdf'], 'pdf'), { status: 413, code: 'vcr_document_too_long' });
   assert.equal(strict.counters.tooLong, 1);
   // The floor is configuration, not a constant: the same scan passes under a floor of zero.
   const lax = await world(t, { vcrIntakeMinCharsPerPage: 1 });
-  const typed = await lax.extractor.extract({ path: lax.fixtures['text.pdf'], format: 'pdf' });
+  const typed = await lax.convert(lax.fixtures['text.pdf'], 'pdf');
   assert.equal(typed.extraction.pages, 2);
 });
 
 test('a file that is not what its name says is unreadable before any container starts', { skip: !HAVE_PYTHON && 'python3 is needed' }, async t => {
   const w = await world(t);
-  await assert.rejects(w.extractor.extract({ path: w.fixtures['not-a.pdf'], format: 'pdf' }), { status: 422, code: 'vcr_document_unreadable' });
-  await assert.rejects(w.extractor.extract({ path: w.fixtures['text.pdf'], format: 'docx' }), { status: 422, code: 'vcr_document_unreadable' });
+  await assert.rejects(w.convert(w.fixtures['not-a.pdf'], 'pdf'), { status: 422, code: 'vcr_document_unreadable' });
+  await assert.rejects(w.convert(w.fixtures['text.pdf'], 'docx'), { status: 422, code: 'vcr_document_unreadable' });
   assert.equal(w.calls.length, 0, 'the magic bytes are checked before a container is asked for');
+  assert.deepEqual(await attempts(w.plane), [], 'and before anything is staged');
   assert.equal(w.counters.unreadable, 2);
 });
 
@@ -181,8 +212,8 @@ test('only PDF and Word are converted, and without a controller the refusal is t
   const config = { dataDir: '/tmp/none', vcrIntakeMaxPages: 300, vcrIntakeMinCharsPerPage: 100 };
   const none = createVcrRecordExtractor({ config });
   assert.equal(none.available, false);
-  await assert.rejects(none.extract({ path: '/dev/null', format: 'pdf' }), { status: 503, code: 'vcr_document_converter_unavailable' });
-  await assert.rejects(none.extract({ path: '/dev/null', format: 'rtf' }), { status: 415, code: 'vcr_data_format_unsupported' });
+  await assert.rejects(none.extract({ root: '/tmp/none', studyId: 'std_x', path: '/dev/null', format: 'pdf' }), { status: 503, code: 'vcr_document_converter_unavailable' });
+  await assert.rejects(none.extract({ root: '/tmp/none', studyId: 'std_x', path: '/dev/null', format: 'rtf' }), { status: 415, code: 'vcr_data_format_unsupported' });
   assert.equal(none.counters.unavailable, 1);
   assert.deepEqual(none.describe(), { available: false, formats: ['pdf', 'docx'], maxBytes: 0, maxPages: 300, minCharsPerPage: 100 });
 });
@@ -192,26 +223,45 @@ test('a controller that cannot be reached is the converter being unavailable; it
   const reported = [];
   const make = error => createVcrRecordExtractor({ config: w.config, counters: w.counters, report: code => reported.push(code),
     controller: { runVcrIntake: async () => { throw error; } } });
-  await assert.rejects(make(new HttpError(503, 'runtime_controller_unavailable', 'x')).extract({ path: w.fixtures['record.docx'], format: 'docx' }),
-    { status: 503, code: 'vcr_document_converter_unavailable' });
+  const asDocx = extractor => extractor.extract({ root: w.plane, studyId: STUDY, path: w.fixtures['record.docx'], format: 'docx' });
+  await assert.rejects(asDocx(make(new HttpError(503, 'runtime_controller_unavailable', 'x'))), { status: 503, code: 'vcr_document_converter_unavailable' });
   assert.deepEqual(reported, ['runtime_controller_unavailable']);
-  await assert.rejects(make(new HttpError(504, 'vcr_intake_timeout', 'x')).extract({ path: w.fixtures['record.docx'], format: 'docx' }), { code: 'vcr_intake_timeout' });
-  await assert.rejects(make(new HttpError(502, 'vcr_intake_failed', 'x')).extract({ path: w.fixtures['record.docx'], format: 'docx' }), { code: 'vcr_intake_failed' });
+  await assert.rejects(asDocx(make(new HttpError(504, 'vcr_intake_timeout', 'x'))), { code: 'vcr_intake_timeout' });
+  await assert.rejects(asDocx(make(new HttpError(502, 'vcr_intake_failed', 'x'))), { code: 'vcr_intake_failed' });
+  // A controller that has no host path for the plane answers by name, and that is the converter being unavailable too.
+  await assert.rejects(asDocx(make(new HttpError(503, 'vcr_document_converter_unavailable', 'x'))), { status: 503, code: 'vcr_document_converter_unavailable' });
   assert.equal(w.counters.timedOut, 1);
   assert.equal(w.counters.failed, 1);
-  assert.equal(w.counters.unavailable, 1);
-  assert.deepEqual(await attempts(w.config), []);
+  assert.equal(w.counters.unavailable, 2);
+  assert.deepEqual(await attempts(w.plane), []);
 });
 
 test('a conversion that wrote no result, or a result that is not JSON, is a failed conversion', async t => {
   const w = await world(t);
   const make = write => createVcrRecordExtractor({ config: w.config, counters: w.counters,
-    controller: { runVcrIntake: async (kind, reference) => { await write(path.join(w.config.dataDir, 'vcr-intake', kind, reference.attemptId, 'output')); return { finished: true }; } } });
-  const asDocx = extractor => extractor.extract({ path: w.fixtures['record.docx'], format: 'docx' });
+    controller: { runVcrIntake: async (kind, reference) => { await write(path.join(w.plane, path.dirname(path.dirname(reference.path)), 'out')); return { finished: true }; } } });
+  const asDocx = extractor => extractor.extract({ root: w.plane, studyId: STUDY, path: w.fixtures['record.docx'], format: 'docx' });
   await assert.rejects(asDocx(make(async () => {})), { status: 502, code: 'vcr_intake_failed' });
   await assert.rejects(asDocx(make(dir => fs.writeFile(path.join(dir, 'result.json'), '{broken'))), { status: 502, code: 'vcr_intake_failed' });
   await assert.rejects(asDocx(make(async dir => { await fs.symlink('/etc/hostname', path.join(dir, 'result.json')); })), { status: 502, code: 'vcr_intake_failed' });
-  assert.deepEqual(await attempts(w.config), []);
+  assert.deepEqual(await attempts(w.plane), []);
+});
+
+test('a staged file that is not the one that was digested is refused as changed, and the attempt is removed', { skip: !HAVE_PYTHON && 'python3 is needed' }, async t => {
+  const w = await world(t);
+  const inner = localIntakeController(w.config);
+  // Someone with write access to the plane swaps the staged file after it was digested.
+  const tampering = { runVcrIntake: async (kind, reference) => {
+    await fs.chmod(path.join(w.plane, reference.path), 0o600);
+    await fs.appendFile(path.join(w.plane, reference.path), 'x');
+    return inner.runVcrIntake(kind, reference);
+  } };
+  const extractor = createVcrRecordExtractor({ config: w.config, controller: tampering, counters: w.counters });
+  await assert.rejects(extractor.extract({ root: w.plane, studyId: STUDY, path: w.fixtures['record.docx'], format: 'docx' }), { status: 409, code: 'vcr_intake_input_invalid' });
+  assert.equal(w.counters.failed, 1);
+  assert.equal(w.counters.extracted, 0);
+  assert.deepEqual(await attempts(w.plane), []);
+  assert.deepEqual(await listing(w.config.dataDir), []);
 });
 
 // --- the external parser is not reachable from this path -----------------------
@@ -250,6 +300,6 @@ test('a record is converted without one outbound request from this process', { s
   const real = globalThis.fetch;
   globalThis.fetch = async (...args) => { requests.push(String(args[0])); throw new Error('no network is part of this path'); };
   t.after(() => { globalThis.fetch = real; });
-  await w.extractor.extract({ path: w.fixtures['record.docx'], format: 'docx' });
+  await w.convert(w.fixtures['record.docx'], 'docx');
   assert.deepEqual(requests, []);
 });

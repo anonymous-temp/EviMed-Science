@@ -7,85 +7,127 @@ import test from 'node:test';
 import { RUNTIME_CONTROLLER_PROTOCOL_VERSION, RuntimeControllerClient } from '../src/runtimeControllerClient.mjs';
 import { createRuntimeController } from '../src/runtimeControllerServer.mjs';
 import {
-  VCR_INTAKE_KINDS, VCR_INTAKE_SCRIPT_DIR, createVcrIntakeController, dockerMemoryBytes, vcrIntakeDirectory, vcrIntakePlan, vcrIntakeRoot,
+  VCR_INTAKE_SCRIPT_DIR, createVcrIntakeController, dockerMemoryBytes, vcrIntakeDirectory, vcrIntakeHostRoot, vcrIntakePlan, vcrIntakeRoot,
 } from '../src/vcrIntakeController.mjs';
+import { VCR_INTAKE_LIMITS } from '../src/vcrIntakeLayout.mjs';
 
 const ATTEMPT = 'a1b2c3d4-0000-4000-8000-000000000001';
 const DIGEST = 'f'.repeat(64);
+const STUDY = 'std_0123abcd';
+const PLANE = '/srv/evimed/vcr-plane';
+const DATA = '/srv/open-science-data';
 
 function planConfig(extra = {}) {
   return {
-    dataDir: '/srv/open-science-data', runtimeContainerBin: 'docker', runtimeContainerImage: 'open-science-runtime:test',
+    dataDir: DATA, runtimeContainerBin: 'docker', runtimeContainerImage: 'open-science-runtime:test',
     runtimeContainerUser: '1000:1000', runtimeDataVolume: '', vcrIntakeMemory: '768m', vcrIntakeTimeoutMs: 60_000,
-    vcrIntakeConcurrency: 2, vcrIntakeMaxBytes: 25 * 1024 * 1024, ...extra,
+    vcrIntakeConcurrency: 2, vcrIntakeMaxBytes: 25 * 1024 * 1024, vcrIntakeMaxPages: 300, vcrDataPlaneHostDir: PLANE, ...extra,
   };
+}
+
+/** A record's reference as the API sends it: the staged file's path inside the plane, its digest and size. */
+function recordReference(attemptId = ATTEMPT, format = 'pdf', extra = {}) {
+  return { path: `studies/${STUDY}/.intake/${attemptId}/in/document.${format}`, sha256: DIGEST, bytes: 4096, ...extra };
 }
 
 /** The `--flag value` pairs of a Docker argument list, in order. @param {string[]} args @param {string} flag */
 const valuesOf = (args, flag) => args.flatMap((arg, index) => (arg === flag ? [args[index + 1]] : []));
 
-test('the intake container sees one read-only input, one empty output and nothing else', () => {
-  for (const kind of VCR_INTAKE_KINDS) {
-    const config = planConfig();
-    const { args, dir, name } = vcrIntakePlan(config, kind, { attemptId: ATTEMPT, inputDigest: DIGEST });
-    assert.equal(dir, path.join('/srv/open-science-data', 'vcr-intake', kind, ATTEMPT));
-    assert.ok(name.startsWith(`evimed-vcr-intake-${kind}-`));
+/** What both operations share: no network, no privileges, a read-only root, bounded, a fixed environment. @param {string[]} args @param {string} kind */
+function assertHardening(args, kind) {
+  assert.ok(args.includes('--network=none'));
+  assert.ok(args.includes('--read-only'));
+  assert.ok(args.includes('--cap-drop=ALL'));
+  assert.ok(args.includes('--security-opt=no-new-privileges'));
+  assert.ok(args.includes('--memory=768m') && args.includes('--memory-swap=768m'));
+  assert.ok(args.includes('--pids-limit=64') && args.includes('--cpus=1'));
+  assert.deepEqual(valuesOf(args, '--user'), ['1000:1000']);
+  for (const forbidden of ['-v', '--volume', '--volumes-from', '--device', '--privileged', '--network', '--net', '--pid', '--ipc', '--add-host', '--dns']) {
+    assert.ok(!args.includes(forbidden), `${forbidden} is not part of the plan`);
+  }
+  // The shared image declares workspace and runtime volumes; both are shadowed
+  // by empty read-only mounts, so there is no workspace to read or write.
+  const tmpfs = valuesOf(args, '--tmpfs');
+  assert.ok(tmpfs.includes('/workspace:ro,noexec,nosuid,nodev,size=1m'));
+  assert.ok(tmpfs.includes('/runtime:ro,noexec,nosuid,nodev,size=1m'));
+  // No model, no gateway, no credential: the environment is a fixed list of
+  // scratch locations and thread counts.
+  const environment = valuesOf(args, '--env');
+  assert.deepEqual(environment.map(item => item.split('=')[0]).sort(), [
+    'HOME', 'OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'PYTHONDONTWRITEBYTECODE', 'XDG_CACHE_HOME', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_STATE_HOME',
+  ]);
+  assert.ok(!environment.some(item => /OPEN_SCIENCE|EVIMED|KEY|TOKEN|SECRET|PASSWORD|GATEWAY|URL/i.test(item)));
+  // A fixed operation: the image's own interpreter and one script.
+  const image = args.indexOf('python3') + 1;
+  assert.equal(args[image], 'open-science-runtime:test');
+  assert.equal(args[image + 1], `${VCR_INTAKE_SCRIPT_DIR}/${kind === 'extract' ? 'vcr_record_extract.py' : 'vcr_curve_digitize.py'}`);
+  return args.slice(image + 2);
+}
 
-    // No network, no privileges, a read-only root, bounded.
-    assert.ok(args.includes('--network=none'));
-    assert.ok(args.includes('--read-only'));
-    assert.ok(args.includes('--cap-drop=ALL'));
-    assert.ok(args.includes('--security-opt=no-new-privileges'));
-    assert.ok(args.includes('--memory=768m') && args.includes('--memory-swap=768m'));
-    assert.ok(args.includes('--pids-limit=64') && args.includes('--cpus=1'));
-    assert.deepEqual(valuesOf(args, '--user'), ['1000:1000']);
+test('a record: the container sees one read-only file and one output directory, both of the plane, and nothing else', () => {
+  const config = planConfig();
+  const plan = vcrIntakePlan(config, 'extract', recordReference());
+  assert.ok(plan.name.startsWith('evimed-vcr-intake-extract-'));
+  assert.equal(plan.dir, null, 'a record has no directory on the data volume');
+  const command = assertHardening(plan.args, 'extract');
 
-    // Exactly two mounts: the input, read-only, and the output. Nothing is bound
-    // from a workspace, a data plane, a socket or a home directory.
+  // Exactly two mounts: the one staged file, read-only, onto a fixed path, and the
+  // attempt's own empty output directory — both by their HOST path in the plane.
+  const attempt = `${PLANE}/studies/${STUDY}/.intake/${ATTEMPT}`;
+  assert.deepEqual(valuesOf(plan.args, '--mount'), [
+    `type=bind,src=${attempt}/in/document.pdf,dst=/input/document.pdf,readonly`,
+    `type=bind,src=${attempt}/out,dst=/output`,
+  ]);
+  // The script is told what to hold the file to; the controller read nothing.
+  assert.deepEqual(command, ['--file', '/input/document.pdf', '--format', 'pdf', '--expect-sha256', DIGEST, '--expect-bytes', '4096',
+    '--max-pages', '300', '--max-chars', String(VCR_INTAKE_LIMITS.maxChars), '--max-xml-bytes', String(VCR_INTAKE_LIMITS.maxXmlBytes),
+    '--output-dir', '/output', '--deadline', '58']);
+  // A Word record is the same operation under its own extension.
+  const word = vcrIntakePlan(config, 'extract', recordReference(ATTEMPT, 'docx'));
+  assert.equal(valuesOf(word.args, '--mount')[0], `type=bind,src=${attempt}/in/document.docx,dst=/input/document.docx,readonly`);
+  assert.deepEqual([valuesOf(word.args, '--file')[0], valuesOf(word.args, '--format')[0]], ['/input/document.docx', 'docx']);
+});
+
+test('a record is bound out of the plane by host path: every source is under the plane, no path of the data volume appears, volume or not', () => {
+  for (const runtimeDataVolume of ['', 'open-science-data']) {
+    const config = planConfig({ runtimeDataVolume, vcrDataPlaneDir: '/data-plane' });
+    const { args } = vcrIntakePlan(config, 'extract', recordReference());
     const mounts = valuesOf(args, '--mount');
     assert.equal(mounts.length, 2);
-    assert.equal(mounts[0], `type=bind,src=${path.join(dir, 'input')},dst=/input,readonly`);
-    assert.equal(mounts[1], `type=bind,src=${path.join(dir, 'output')},dst=/output`);
-    for (const forbidden of ['-v', '--volume', '--volumes-from', '--device', '--privileged', '--network', '--net', '--pid', '--ipc', '--add-host', '--dns']) {
-      assert.ok(!args.includes(forbidden), `${forbidden} is not part of the plan`);
+    for (const mount of mounts) {
+      assert.match(mount, /^type=bind,/, 'a bind of a host path, never a volume');
+      const source = /src=([^,]+)/.exec(mount)?.[1] ?? '';
+      assert.ok(source.startsWith(`${PLANE}/studies/${STUDY}/${'.intake'}/${ATTEMPT}/`), `${source} is in the plane's scratch area`);
+      assert.ok(!source.startsWith(DATA) && !source.includes('vcr-intake'), `${source} is not under the data volume`);
+      assert.ok(!/\/(workspace|projects|users|knowledge-base)\b/.test(source));
+      assert.ok(!source.startsWith('/data-plane'), 'the web container\'s view of the plane is not a host path');
     }
-    // The shared image declares workspace and runtime volumes; both are shadowed
-    // by empty read-only mounts, so there is no workspace to read or write.
-    const tmpfs = valuesOf(args, '--tmpfs');
-    assert.ok(tmpfs.includes('/workspace:ro,noexec,nosuid,nodev,size=1m'));
-    assert.ok(tmpfs.includes('/runtime:ro,noexec,nosuid,nodev,size=1m'));
-
-    // No model, no gateway, no credential: the environment is a fixed list of
-    // scratch locations and thread counts.
-    const environment = valuesOf(args, '--env');
-    assert.deepEqual(environment.map(item => item.split('=')[0]).sort(), [
-      'HOME', 'OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'PYTHONDONTWRITEBYTECODE', 'XDG_CACHE_HOME', 'XDG_CONFIG_HOME', 'XDG_DATA_HOME', 'XDG_STATE_HOME',
-    ]);
-    assert.ok(!environment.some(item => /OPEN_SCIENCE|EVIMED|KEY|TOKEN|SECRET|PASSWORD|GATEWAY|URL/i.test(item)));
-
-    // A fixed operation: the image's own interpreter, one script, fixed flags.
-    const image = args.indexOf('python3') + 1;
-    assert.equal(args[image], 'open-science-runtime:test');
-    assert.equal(args[image + 1], `${VCR_INTAKE_SCRIPT_DIR}/${kind === 'extract' ? 'vcr_record_extract.py' : 'vcr_curve_digitize.py'}`);
-    assert.deepEqual(args.slice(image + 2, image + 8), ['--request', '/input/request.json', '--input-dir', '/input', '--output-dir', '/output']);
-    assert.equal(args[image + 8], '--deadline');
-    assert.equal(Number(args[image + 9]), 58);
-    assert.equal(args.length, image + 10);
+    // Nothing of the data directory or the volume appears anywhere in the plan.
+    for (const arg of args) {
+      assert.ok(!arg.includes(DATA), `${arg} names the data directory`);
+      assert.ok(!/volume-subpath|type=volume|src=open-science-data/.test(arg), `${arg} names the data volume`);
+    }
   }
 });
 
-test('the scratch is never a workspace, a project, a user directory or the data plane', () => {
-  const config = planConfig({ vcrDataPlaneDir: '/data-plane' });
-  const { args } = vcrIntakePlan(config, 'extract', { attemptId: ATTEMPT, inputDigest: DIGEST });
-  for (const mount of valuesOf(args, '--mount')) {
+test('a figure: the container sees one read-only input and one empty output under the data volume, and nothing else', () => {
+  const config = planConfig();
+  const { args, dir, name } = vcrIntakePlan(config, 'digitize', { attemptId: ATTEMPT, inputDigest: DIGEST });
+  assert.equal(dir, path.join(DATA, 'vcr-intake', 'digitize', ATTEMPT));
+  assert.ok(name.startsWith('evimed-vcr-intake-digitize-'));
+  const command = assertHardening(args, 'digitize');
+  const mounts = valuesOf(args, '--mount');
+  assert.deepEqual(mounts, [`type=bind,src=${path.join(dir, 'input')},dst=/input,readonly`, `type=bind,src=${path.join(dir, 'output')},dst=/output`]);
+  for (const mount of mounts) {
     const source = /src=([^,]+)/.exec(mount)?.[1] ?? '';
     assert.ok(source.startsWith(`${vcrIntakeRoot(config)}${path.sep}`));
     assert.ok(!/\/(workspace|projects|users|knowledge-base)\b/.test(source));
-    assert.ok(!source.startsWith('/data-plane'));
+    assert.ok(!source.startsWith(PLANE), 'a published figure never goes through the plane');
   }
+  assert.deepEqual(command, ['--request', '/input/request.json', '--input-dir', '/input', '--output-dir', '/output', '--deadline', '58']);
 });
 
-test('with the shared data volume the two mounts are subpaths of it', () => {
+test('with the shared data volume a figure\'s two mounts are subpaths of it', () => {
   const config = planConfig({ runtimeDataVolume: 'open-science-data' });
   const { args } = vcrIntakePlan(config, 'digitize', { attemptId: ATTEMPT, inputDigest: DIGEST });
   assert.deepEqual(valuesOf(args, '--mount'), [
@@ -94,9 +136,41 @@ test('with the shared data volume the two mounts are subpaths of it', () => {
   ]);
 });
 
-test('a caller names an attempt and a digest and cannot steer a path, a command, a mount or an image', () => {
+test('a record can never be given a directory on the data volume', () => {
+  assert.throws(() => vcrIntakeDirectory(planConfig(), 'extract', ATTEMPT), { code: 'vcr_intake_input_invalid' });
+  assert.throws(() => vcrIntakeDirectory(planConfig(), '../digitize', ATTEMPT), { code: 'vcr_intake_input_invalid' });
+  assert.equal(vcrIntakeDirectory(planConfig(), 'digitize', ATTEMPT), path.join(DATA, 'vcr-intake', 'digitize', ATTEMPT));
+});
+
+test('a caller names a staged file or an attempt and cannot steer a path, a command, a mount or an image', () => {
   const config = planConfig();
-  const bad = [
+  const badRecords = [
+    recordReference(ATTEMPT, 'pdf', { image: 'attacker/image' }),
+    recordReference(ATTEMPT, 'pdf', { command: 'sh' }),
+    recordReference(ATTEMPT, 'pdf', { mounts: ['/:/host'] }),
+    recordReference(ATTEMPT, 'pdf', { sha256: 'not-a-digest' }),
+    recordReference(ATTEMPT, 'pdf', { bytes: 0 }),
+    recordReference(ATTEMPT, 'pdf', { bytes: -1 }),
+    recordReference(ATTEMPT, 'pdf', { bytes: 1.5 }),
+    recordReference(ATTEMPT, 'pdf', { bytes: '4096' }),
+    { path: `studies/${STUDY}/.intake/${ATTEMPT}/in/document.pdf`, sha256: DIGEST },
+    { sha256: DIGEST, bytes: 10 },
+    // The only path accepted is the one the layout spells.
+    ...[
+      `studies/${STUDY}/.intake/${ATTEMPT}/in/document.exe`, `studies/${STUDY}/.intake/${ATTEMPT}/in/other.pdf`,
+      `studies/${STUDY}/.intake/${ATTEMPT}/out/document.pdf`, `studies/${STUDY}/.intake/${ATTEMPT}/in/document.pdf/extra`,
+      `studies/${STUDY}/.intake/${ATTEMPT}/in/../in/document.pdf`, `studies/../.intake/${ATTEMPT}/in/document.pdf`,
+      `studies/${STUDY}/incoming/${ATTEMPT}.upload`, `studies/${STUDY}/.intake/not-an-attempt/in/document.pdf`,
+      `/${PLANE}/studies/${STUDY}/.intake/${ATTEMPT}/in/document.pdf`, `${PLANE}/studies/${STUDY}/.intake/${ATTEMPT}/in/document.pdf`,
+      `studies/a,dst=/etc/.intake/${ATTEMPT}/in/document.pdf`, `studies/${STUDY}/.intake/${ATTEMPT}/in/document.pdf,readonly`,
+      `studies/${STUDY}/.intake/${ATTEMPT}/in/document.pdf\n`, '', 7, null,
+    ].map(bad => recordReference(ATTEMPT, 'pdf', { path: bad })),
+    null, 'text', [],
+  ];
+  for (const reference of badRecords) assert.throws(() => vcrIntakePlan(config, 'extract', reference), { code: 'vcr_intake_input_invalid' }, JSON.stringify(reference));
+  assert.throws(() => vcrIntakePlan(config, 'extract', recordReference(ATTEMPT, 'pdf', { bytes: 26 * 1024 * 1024 })), { status: 413, code: 'vcr_intake_input_invalid' });
+
+  const badFigures = [
     { attemptId: ATTEMPT, inputDigest: DIGEST, image: 'attacker/image' },
     { attemptId: ATTEMPT, inputDigest: DIGEST, command: 'sh' },
     { attemptId: ATTEMPT, inputDigest: DIGEST, mounts: ['/:/host'] },
@@ -104,11 +178,27 @@ test('a caller names an attempt and a digest and cannot steer a path, a command,
     { attemptId: 'a/b', inputDigest: DIGEST },
     { attemptId: ATTEMPT, inputDigest: 'not-a-digest' },
     { attemptId: ATTEMPT },
+    // A figure is not named the way a record is, and the other way round.
+    recordReference(),
     null, 'text', [],
   ];
-  for (const reference of bad) assert.throws(() => vcrIntakePlan(config, 'extract', reference), { code: /^(vcr_intake_input_invalid|invalid_id)$/ });
-  assert.throws(() => vcrIntakePlan(config, 'render', { attemptId: ATTEMPT, inputDigest: DIGEST }), { code: 'vcr_intake_input_invalid' });
-  assert.throws(() => vcrIntakeDirectory(config, '../extract', ATTEMPT), { code: 'vcr_intake_input_invalid' });
+  for (const reference of badFigures) assert.throws(() => vcrIntakePlan(config, 'digitize', reference), { code: /^(vcr_intake_input_invalid|invalid_id)$/ }, JSON.stringify(reference));
+  assert.throws(() => vcrIntakePlan(config, 'extract', { attemptId: ATTEMPT, inputDigest: DIGEST }), { code: 'vcr_intake_input_invalid' });
+  assert.throws(() => vcrIntakePlan(config, 'render', recordReference()), { code: 'vcr_intake_input_invalid' });
+});
+
+test('the plane\'s host directory is a plain absolute path, and a controller without one converts nothing', () => {
+  assert.equal(vcrIntakeHostRoot(planConfig()), PLANE);
+  assert.equal(vcrIntakeHostRoot(planConfig({ vcrDataPlaneHostDir: ' /mnt/disk-2/vcr_plane@a+b.c ' })), '/mnt/disk-2/vcr_plane@a+b.c');
+  for (const unset of ['', undefined, '   ']) {
+    assert.throws(() => vcrIntakePlan(planConfig({ vcrDataPlaneHostDir: unset }), 'extract', recordReference()), { status: 503, code: 'vcr_document_converter_unavailable' });
+  }
+  // A comma would end a `--mount` option; the rest would let a path leave or hide where it points.
+  for (const bad of ['relative/plane', './plane', '/', '/plane/', '/plane//x', '/plane/../x', '/plane/./x', '/plane,dst=/etc', '/plane x', '/plane"x', "/plane'x", '/plane\nx', '/plane:ro', '/pläne', '~/plane']) {
+    assert.throws(() => vcrIntakePlan(planConfig({ vcrDataPlaneHostDir: bad }), 'extract', recordReference()), { status: 503, code: 'vcr_document_converter_unavailable' }, JSON.stringify(bad));
+  }
+  // A figure does not use the plane, so its plan does not need the setting.
+  assert.doesNotThrow(() => vcrIntakePlan(planConfig({ vcrDataPlaneHostDir: '' }), 'digitize', { attemptId: ATTEMPT, inputDigest: DIGEST }));
 });
 
 test('docker sizes are whole megabytes or gigabytes', () => {
@@ -146,12 +236,14 @@ else process.exit(0);
 `, { mode: 0o700 });
   const config = { ...planConfig({ dataDir: path.join(root, 'data'), runtimeContainerBin: bin }), ...extra };
   await fs.mkdir(config.dataDir, { recursive: true });
-  const stage = async (attemptId = ATTEMPT, kind = 'extract', file = { name: 'document.pdf', body: Buffer.from('%PDF-1.4 test') }) => {
-    const dir = vcrIntakeDirectory(config, kind, attemptId);
+  // A figure's attempt on the data volume, as the API stages it. A record has no
+  // such attempt: it is named by a path in the plane, which the controller never reads.
+  const stage = async (attemptId = ATTEMPT, file = { name: 'figure.png', body: Buffer.from('\x89PNG figure') }) => {
+    const dir = vcrIntakeDirectory(config, 'digitize', attemptId);
     await fs.mkdir(path.join(dir, 'input'), { recursive: true });
     await fs.mkdir(path.join(dir, 'output'));
     await fs.writeFile(path.join(dir, 'input', file.name), file.body);
-    const request = Buffer.from(JSON.stringify({ format: 'pdf', file: { name: file.name, sha256: createHash('sha256').update(file.body).digest('hex'), bytes: file.body.length } }));
+    const request = Buffer.from(JSON.stringify({ file: { name: file.name, sha256: createHash('sha256').update(file.body).digest('hex'), bytes: file.body.length } }));
     await fs.writeFile(path.join(dir, 'input', 'request.json'), request);
     return { dir, reference: { attemptId, inputDigest: createHash('sha256').update(request).digest('hex') } };
   };
@@ -168,7 +260,7 @@ async function until(predicate, limit = 4000) {
 
 test('a conversion runs the fixed container from the resolved image id and removes it afterwards', async t => {
   const f = await fixture(t);
-  const { reference } = await f.stage();
+  const reference = recordReference();
   const controller = createVcrIntakeController(f.config, roomy);
   t.after(() => controller.close());
   assert.deepEqual(await controller.run('extract', reference), { finished: true });
@@ -181,11 +273,25 @@ test('a conversion runs the fixed container from the resolved image id and remov
   assert.deepEqual(calls.find(call => call[0] === 'start').slice(0, 2), ['start', '--attach']);
   assert.deepEqual(calls.find(call => call[0] === 'container'), ['container', 'prune', '-f', '--filter', 'label=open-science.vcr-intake', '--filter', 'until=10m']);
   assert.deepEqual(controller.status(), { running: 0, queued: 0 });
+  // A record is bound out of the plane by host path, and the data directory is not in the command.
+  assert.ok(create.some(arg => arg.startsWith(`type=bind,src=${PLANE}/studies/${STUDY}/.intake/${ATTEMPT}/in/document.pdf,`)));
+  assert.ok(!create.some(arg => arg.includes(f.config.dataDir)), 'nothing of the data directory reaches the daemon');
+  // The controller never reads the plane: the same run works with no such directory on this host.
+  await assert.rejects(fs.stat(PLANE), { code: 'ENOENT' });
+});
+
+test('a figure is checked where the controller can see it, a record is held to its digest by the script', async t => {
+  const f = await fixture(t);
+  const controller = createVcrIntakeController(f.config, roomy);
+  t.after(() => controller.close());
+  const { reference } = await f.stage();
+  assert.deepEqual(await controller.run('digitize', reference), { finished: true });
+  assert.ok((await f.calls()).some(call => call[0] === 'create' && call.includes('--request')));
 });
 
 test('a container that fails, a daemon that refuses and a name in use are named, and the container is removed', async t => {
   const f = await fixture(t);
-  const { reference } = await f.stage();
+  const reference = recordReference();
   const controller = createVcrIntakeController(f.config, roomy);
   t.after(() => controller.close());
   await f.setMode('exit-1');
@@ -203,7 +309,7 @@ test('a container that fails, a daemon that refuses and a name in use are named,
 test('the deadline stops the container and answers a timeout', async t => {
   let expire;
   const f = await fixture(t);
-  const { reference } = await f.stage();
+  const reference = recordReference();
   const controller = createVcrIntakeController(f.config, { ...roomy, setTimer: callback => { expire = callback; return 1; }, clearTimer: () => {} });
   t.after(() => controller.close());
   await f.setMode('hang');
@@ -219,8 +325,8 @@ test('the deadline stops the container and answers a timeout', async t => {
 
 test('a caller that goes away stops its container, and a waiting request leaves the queue without starting one', async t => {
   const f = await fixture(t, { vcrIntakeConcurrency: 1 });
-  const first = await f.stage(ATTEMPT);
-  const second = await f.stage('a1b2c3d4-0000-4000-8000-000000000002');
+  const first = { reference: recordReference(ATTEMPT) };
+  const second = { reference: recordReference('a1b2c3d4-0000-4000-8000-000000000002') };
   const controller = createVcrIntakeController(f.config, roomy);
   t.after(() => controller.close());
   await f.setMode('hang');
@@ -240,8 +346,8 @@ test('a caller that goes away stops its container, and a waiting request leaves 
 
 test('one slot runs one conversion at a time and the next starts when it ends', async t => {
   const f = await fixture(t, { vcrIntakeConcurrency: 1 });
-  const first = await f.stage(ATTEMPT);
-  const second = await f.stage('a1b2c3d4-0000-4000-8000-000000000002');
+  const first = { reference: recordReference(ATTEMPT) };
+  const second = { reference: recordReference('a1b2c3d4-0000-4000-8000-000000000002') };
   const controller = createVcrIntakeController(f.config, roomy);
   t.after(() => controller.close());
   await f.setMode('hang');
@@ -258,40 +364,54 @@ test('one slot runs one conversion at a time and the next starts when it ends', 
 
 test('host memory below the container ceiling plus headroom is a busy answer, and nothing is created', async t => {
   const f = await fixture(t);
-  const { reference } = await f.stage();
+  const reference = recordReference();
   const controller = createVcrIntakeController(f.config, { availableMemory: async () => 1024 * 1024 * 1024 });
   t.after(() => controller.close());
   await assert.rejects(controller.run('extract', reference), { status: 429, code: 'vcr_intake_busy' });
   assert.ok(!(await f.calls()).some(call => call[0] === 'create'));
 });
 
-test('an input that is not the one the digest names, a link, a missing file or a dirty output directory never starts a container', async t => {
+test('a figure that is not the one the digest names, a link, a missing file or a dirty output directory never starts a container', async t => {
   const f = await fixture(t);
   const controller = createVcrIntakeController(f.config, roomy);
   t.after(() => controller.close());
   const created = async () => (await f.calls()).some(call => call[0] === 'create');
 
   const changed = await f.stage();
-  await assert.rejects(controller.run('extract', { ...changed.reference, inputDigest: '0'.repeat(64) }), { status: 409, code: 'vcr_intake_input_invalid' });
+  await assert.rejects(controller.run('digitize', { ...changed.reference, inputDigest: '0'.repeat(64) }), { status: 409, code: 'vcr_intake_input_invalid' });
 
   const linked = await f.stage('a1b2c3d4-0000-4000-8000-000000000003');
-  await fs.rm(path.join(linked.dir, 'input', 'document.pdf'));
-  await fs.symlink('/etc/passwd', path.join(linked.dir, 'input', 'document.pdf'));
-  await assert.rejects(controller.run('extract', linked.reference), { code: /^(vcr_intake_input_invalid|path_forbidden)$/ });
+  await fs.rm(path.join(linked.dir, 'input', 'figure.png'));
+  await fs.symlink('/etc/passwd', path.join(linked.dir, 'input', 'figure.png'));
+  await assert.rejects(controller.run('digitize', linked.reference), { code: /^(vcr_intake_input_invalid|path_forbidden)$/ });
 
   const missing = await f.stage('a1b2c3d4-0000-4000-8000-000000000004');
-  await fs.rm(path.join(missing.dir, 'input', 'document.pdf'));
-  await assert.rejects(controller.run('extract', missing.reference), { code: 'vcr_intake_input_invalid' });
+  await fs.rm(path.join(missing.dir, 'input', 'figure.png'));
+  await assert.rejects(controller.run('digitize', missing.reference), { code: 'vcr_intake_input_invalid' });
 
   const dirty = await f.stage('a1b2c3d4-0000-4000-8000-000000000005');
   await fs.writeFile(path.join(dirty.dir, 'output', 'left-over'), 'x');
-  await assert.rejects(controller.run('extract', dirty.reference), { status: 409, code: 'vcr_intake_input_invalid' });
+  await assert.rejects(controller.run('digitize', dirty.reference), { status: 409, code: 'vcr_intake_input_invalid' });
 
   const noRequest = await f.stage('a1b2c3d4-0000-4000-8000-000000000006');
   await fs.rm(path.join(noRequest.dir, 'input', 'request.json'));
-  await assert.rejects(controller.run('extract', noRequest.reference), { code: 'vcr_intake_input_invalid' });
+  await assert.rejects(controller.run('digitize', noRequest.reference), { code: 'vcr_intake_input_invalid' });
 
   assert.equal(await created(), false);
+});
+
+test('a record whose reference is malformed, or a controller with no host path for the plane, never starts a container', async t => {
+  const f = await fixture(t);
+  const controller = createVcrIntakeController(f.config, roomy);
+  t.after(() => controller.close());
+  await assert.rejects(controller.run('extract', recordReference(ATTEMPT, 'pdf', { path: `studies/${STUDY}/incoming/x.upload` })), { code: 'vcr_intake_input_invalid' });
+  await assert.rejects(controller.run('extract', recordReference(ATTEMPT, 'pdf', { sha256: 'xyz' })), { code: 'vcr_intake_input_invalid' });
+  await assert.rejects(controller.run('extract', { attemptId: ATTEMPT, inputDigest: DIGEST }), { code: 'vcr_intake_input_invalid' });
+  const unset = createVcrIntakeController({ ...f.config, vcrDataPlaneHostDir: '' }, roomy);
+  t.after(() => unset.close());
+  await assert.rejects(unset.run('extract', recordReference()), { status: 503, code: 'vcr_document_converter_unavailable' });
+  assert.deepEqual((await f.calls()).filter(call => call[0] === 'create'), []);
+  assert.deepEqual((await f.calls()).filter(call => call[0] === 'image'), [], 'the refusal comes before the daemon is asked anything');
 });
 
 // --- the route, through the controller's own socket ---------------------------
@@ -311,12 +431,20 @@ test('the controller serves the two operations at protocol 9 and refuses anythin
   assert.equal(RUNTIME_CONTROLLER_PROTOCOL_VERSION, 9);
   assert.equal((await client.health()).protocolVersion, 9);
 
+  const record = recordReference();
+  assert.deepEqual(await client.runVcrIntake('extract', record), { finished: true });
+  const created = (await f.calls()).find(call => call[0] === 'create');
+  assert.ok(created.includes('--expect-sha256'), 'the record reached the script by its digest');
   const { reference } = await f.stage();
-  assert.deepEqual(await client.runVcrIntake('extract', reference), { finished: true });
-  assert.ok((await f.calls()).some(call => call[0] === 'create'));
+  assert.deepEqual(await client.runVcrIntake('digitize', reference), { finished: true });
 
-  await assert.rejects(client.request('POST', '/v1/vcr/extract', { ...reference, image: 'x' }), { code: 'runtime_controller_payload_invalid' });
-  await assert.rejects(client.request('POST', '/v1/vcr/extract', { attemptId: '../x', inputDigest: DIGEST }), { status: 400 });
+  // Each operation takes exactly its own reference, and nothing else.
+  await assert.rejects(client.request('POST', '/v1/vcr/extract', { ...record, image: 'x' }), { code: 'runtime_controller_payload_invalid' });
+  await assert.rejects(client.request('POST', '/v1/vcr/extract', { attemptId: ATTEMPT, inputDigest: DIGEST }), { code: 'runtime_controller_payload_invalid' });
+  await assert.rejects(client.request('POST', '/v1/vcr/digitize', { ...reference, image: 'x' }), { code: 'runtime_controller_payload_invalid' });
+  await assert.rejects(client.request('POST', '/v1/vcr/digitize', record), { code: 'runtime_controller_payload_invalid' });
+  await assert.rejects(client.request('POST', '/v1/vcr/extract', { ...record, path: `studies/../../etc/${ATTEMPT}` }), { status: 400, code: 'vcr_intake_input_invalid' });
+  await assert.rejects(client.request('POST', '/v1/vcr/digitize', { attemptId: '../x', inputDigest: DIGEST }), { status: 400 });
   await assert.rejects(client.request('POST', '/v1/vcr/render', reference), { code: 'runtime_controller_route_not_found' });
-  await assert.rejects(client.request('POST', '/v1/vcr/extract', { attemptId: ATTEMPT, inputDigest: DIGEST }), { code: 'vcr_intake_input_invalid' });
+  await assert.rejects(client.request('POST', '/v1/vcr/digitize', { attemptId: ATTEMPT, inputDigest: DIGEST }), { code: 'vcr_intake_input_invalid' });
 });
