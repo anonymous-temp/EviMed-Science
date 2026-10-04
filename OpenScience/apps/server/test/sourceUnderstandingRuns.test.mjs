@@ -38,9 +38,33 @@ test("completed result keeps actual CNY model usage and discards unrecognized ou
   await assert.rejects(adapter.execute(f), { code: "source_understanding_invalid" });
 });
 
-test("a missing gateway receipt cannot be replaced with invented Flash or zero cost", async () => {
+test("a missing gateway receipt is recorded as usage not known, never replaced with invented Flash or zero cost", async () => {
+  // This used to refuse the understanding with a 502, so a document had none
+  // because a cost could not be settled (2026-10-04). The cost is not known and
+  // is stored as not known: the model and the figure are never made up.
+  for (const usage of [undefined, null, { currency: "CNY", modelId: "", providerId: "deepseek", actualCost: 0.1, inputTokens: 1, outputTokens: 1 },
+    { currency: "CNY", modelId: "m", providerId: "deepseek", actualCost: -1, inputTokens: 1, outputTokens: 1 },
+    { currency: "USD", modelId: "m", providerId: "deepseek", actualCost: 1, inputTokens: 1, outputTokens: 1 },
+    { currency: "CNY", modelId: "m", providerId: "deepseek", actualCost: 1, inputTokens: 1.5, outputTokens: 1 }]) {
+    const f = fixture();
+    const adapter = new SourceUnderstandingRuns({ dispatch: async () => ({ runId: "run_one", sessionId: "sess_one" }),
+      readResult: async () => ({ status: "succeeded", output: f.output, ...(usage === undefined ? {} : { usage }) }) });
+    const result = await adapter.execute(f);
+    assert.equal(result.state, "complete", JSON.stringify(usage));
+    assert.equal(result.usage, null, JSON.stringify(usage));
+    assert.equal(result.output.summary, "Notes", "the understanding is stored");
+    assert.equal(result.verification, undefined);
+  }
+});
+
+test("an understanding the run's receipt did not vouch for is stored with that label, and the contract validator still applies", async () => {
   const f = fixture();
   const adapter = new SourceUnderstandingRuns({ dispatch: async () => ({ runId: "run_one", sessionId: "sess_one" }),
-    readResult: async () => ({ status: "succeeded", output: f.output }) });
-  await assert.rejects(adapter.execute(f), { code: "source_understanding_usage_invalid" });
+    readResult: async () => ({ status: "succeeded", output: f.output, verification: "unverified" }) });
+  const result = await adapter.execute(f);
+  assert.equal(result.state, "complete");
+  assert.equal(result.verification, "unverified");
+  // The label is not a pass: what the document is understood to say is still judged against its frozen input.
+  f.output.generation = 3;
+  await assert.rejects(adapter.execute(f), { code: "source_understanding_invalid" });
 });

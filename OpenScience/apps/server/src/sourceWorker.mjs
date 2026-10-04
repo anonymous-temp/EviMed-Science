@@ -12,7 +12,7 @@ const CAPACITY_DEFERRALS = new Map([
 const TERMINAL_ERRORS = new Set([
   "source_job_invalid", "source_path_invalid", "source_digest_invalid", "source_format_unsupported",
   "source_generation_stale", "source_state_conflict", "source_changed", "openlist_source_changed",
-  "source_parser_input_too_large", "source_understanding_invalid", "source_understanding_run_failed", "source_understanding_usage_invalid", "source_understanding_input_too_large",
+  "source_parser_input_too_large", "source_understanding_invalid", "source_understanding_run_failed", "source_understanding_input_too_large",
   // The parser's answers that the same bytes would get again: a format it does
   // not read, a file over its limit, a refused request, and the two that wait
   // on an operator (a key, a quota). Retrying them only spends the backoff; the

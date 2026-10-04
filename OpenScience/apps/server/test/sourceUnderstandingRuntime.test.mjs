@@ -299,29 +299,93 @@ test("result reads the owned accepted bytes and actual usage after active worksp
   assert.equal(result.usage.modelId, "deepseek-v4-pro");
 });
 
-test("changed, linked or unreceipted source outputs never become a completed result", async t => {
+test("a receipt that no longer vouches for the package labels the understanding unverified; it never withholds it", async t => {
+  // 2026-10-04: a receipt is our own record of what was graded. It used to
+  // refuse an understanding for every way it could disagree with the files —
+  // changed bytes, no listing, no receipt — and the uploaded document then had
+  // none. What guards what a document is understood to say is the contract
+  // validator against the frozen input; the receipt only labels.
+  const f = await fixture(t);
+  await f.runtime.dispatch(f.request);
+  const { scoped, outputFile, output } = await acceptedFiles(f);
+  const identity = { ...f.request, runId: "run-one", sessionId: "session-one" };
+  // Vouched for: no label at all.
+  const graded = await f.runtime.readResult(identity);
+  assert.equal(graded.status, "succeeded");
+  assert.equal(graded.verification, undefined);
+
+  // The bytes changed after acceptance: the file as it is now is what is read.
+  await writeFile(outputFile, '{"summary":"changed"}');
+  const changed = await f.runtime.readResult(identity);
+  assert.equal(changed.status, "succeeded");
+  assert.deepEqual(changed.output, { summary: "changed" });
+  assert.equal(changed.verification, "unverified");
+
+  // The run's record lists nothing: the files are on disk all the same.
+  await writeFile(outputFile, JSON.stringify(output));
+  f.state.runs[0].artifacts = [];
+  const unlisted = await f.runtime.readResult(identity);
+  assert.equal(unlisted.status, "succeeded");
+  assert.deepEqual(unlisted.output, output);
+  assert.equal(unlisted.verification, undefined, "the receipt still vouches for the bytes, wherever they are listed");
+
+  // No receipt at all, or one that cannot be read, or one that names another package.
+  const receipt = path.join(scoped.workspaceDir, "delivery-receipt.json");
+  const kept = await readFile(receipt, "utf8");
+  await rm(receipt);
+  assert.equal((await f.runtime.readResult(identity)).verification, "unverified");
+  await writeFile(receipt, "{ not json");
+  assert.equal((await f.runtime.readResult(identity)).verification, "unverified");
+  const other = JSON.parse(kept);
+  other.entries[0].capability = "another-capability";
+  other.entries[0].contractKind = "another-contract";
+  await writeFile(receipt, JSON.stringify(other));
+  const named = await f.runtime.readResult(identity);
+  assert.equal(named.status, "succeeded");
+  assert.equal(named.verification, "unverified");
+  assert.deepEqual(named.output, output);
+});
+
+test("only an understanding that is not there fails, and a link out of the run's workspace never passes the path guard", async t => {
   const f = await fixture(t);
   await f.runtime.dispatch(f.request);
   const { outputFile } = await acceptedFiles(f);
   const identity = { ...f.request, runId: "run-one", sessionId: "session-one" };
-  await writeFile(outputFile, '{"summary":"changed"}');
-  await assert.rejects(f.runtime.readResult(identity), { code: "source_understanding_receipt_changed" });
+  await rm(outputFile);
+  await assert.rejects(f.runtime.readResult(identity), { code: "source_understanding_output_missing" });
+  // The preserved copy of the input is bookkeeping: the control plane judges
+  // the output against its own frozen input, so a package without the copy is
+  // an unverified understanding, not a failure.
+  const scoped = sourceRunProject(f.home, f.state.bound);
+  await writeFile(outputFile, JSON.stringify({ summary: "Actual accepted source result" }));
+  await rm(path.join(scoped.workspaceDir, "deliverables/source-package/source-understanding-input.json"));
+  const withoutInput = await f.runtime.readResult(identity);
+  assert.equal(withoutInput.status, "succeeded");
+  assert.equal(withoutInput.verification, "unverified");
+  // A symlink is not the file: the guard refuses it whatever the receipt says.
   await rm(outputFile);
   const outside = path.join(f.project.rootDir, "outside.json");
   await writeFile(outside, '{}');
   await symlink(outside, outputFile);
   await assert.rejects(f.runtime.readResult(identity));
-  f.state.runs[0].artifacts = [];
-  await assert.rejects(f.runtime.readResult(identity), { code: "source_understanding_receipt_invalid" });
 });
 
-test("a settled receipt with missing token accounting cannot become source usage", async t => {
+test("a settled receipt with missing token accounting is recorded as usage not known, never refused or invented", async t => {
   const f = await fixture(t);
   await f.runtime.dispatch(f.request);
-  await acceptedFiles(f);
+  const { output } = await acceptedFiles(f);
+  const identity = { ...f.request, runId: "run-one", sessionId: "session-one" };
   const summary = f.dependencies.usageLedger.summaryRun;
   f.dependencies.usageLedger.summaryRun = async (...args) => ({ ...await summary(...args), incompleteUsageCalls: 1 });
-  await assert.rejects(f.runtime.readResult({ ...f.request, runId: "run-one", sessionId: "session-one" }), { code: "source_understanding_usage_invalid" });
+  const incomplete = await f.runtime.readResult(identity);
+  assert.equal(incomplete.status, "succeeded");
+  assert.deepEqual(incomplete.output, output);
+  assert.equal(incomplete.usage, null);
+  f.dependencies.usageLedger.summaryRun = async () => ({ settledCalls: 0, reservedCalls: 0 });
+  assert.equal((await f.runtime.readResult(identity)).usage, null, "no settled call at all is not known either");
+  // A request still in flight is waited for, as before.
+  f.dependencies.usageLedger.summaryRun = async () => ({ settledCalls: 1, reservedCalls: 1, modelId: "m" });
+  assert.deepEqual(await f.runtime.readResult(identity), { status: "pending", reason: "source_usage_unsettled" });
 });
 
 test("a replaced source-directory ancestor cannot redirect a receipt read outside its owned tree", async t => {
@@ -456,5 +520,10 @@ test("a preserved input the artifact list names at the root is read there, and b
   assert.equal(result.status, "succeeded");
   assert.deepEqual(result.output, output);
   await writeFile(path.join(scoped.workspaceDir, "source-understanding-input.json"), Buffer.concat([inputBytes, Buffer.from(" ")]));
-  await assert.rejects(f.runtime.readResult(identity), { code: "source_understanding_receipt_changed" });
+  // Bound to the receipt's bytes still means a changed copy is not the accepted
+  // one — and since 2026-10-04 that is said on the understanding, not a refusal.
+  const changed = await f.runtime.readResult(identity);
+  assert.equal(changed.status, "succeeded");
+  assert.deepEqual(changed.output, output);
+  assert.equal(changed.verification, "unverified");
 });

@@ -83,7 +83,10 @@ export function projectSourceDerivedRecord(row) {
   if (p.recordType === "source-understanding") return { ...base, ...projectSourceUnderstandingOutput(p.output), run: projectRun(p.run), usage: p.usage ? {
     currency: p.usage.currency, modelId: p.usage.modelId, providerId: p.usage.providerId, actualCost: p.usage.actualCost,
     inputTokens: p.usage.inputTokens, outputTokens: p.usage.outputTokens,
-  } : null, units: p.units.map(projectUnit) };
+  } : null,
+  // Present only when the run's delivery receipt did not vouch for the package
+  // this was read from: a label, never a reason the understanding is withheld.
+  ...(p.verification === "unverified" ? { verification: "unverified" } : {}), units: p.units.map(projectUnit) };
   if (p.recordType === "source-capture" || row.kind === "source-unit") return { ...base, recordType: p.recordType,
     ...(p.unit ? { unit: projectUnit(p.unit) } : { content: String(p.content ?? ""), status: p.status ?? null }) };
   if (p.recordType === "source-method") return { ...base, recordType: p.recordType, status: "draft", method: projectSourceUnderstandingOutput({
@@ -872,7 +875,8 @@ export class SourceService {
         payload: { recordType: "source-unit", sourceId: source.id, generation, unit, status: "indexed", provenance: [{ type: "source", id: source.id }] } }));
       if (output) {
         records.push({ kind: "knowledge", id, payload: { recordType: "source-understanding", sourceId: source.id, generation,
-          status: "current", output, run, usage: completed.usage, units: publishedUnits.filter(unit => cited.has(unit.id)).map(({ text: _text, ...unit }) => unit) } });
+          status: "current", output, run, usage: completed.usage ?? null, ...(completed.verification === "unverified" ? { verification: "unverified" } : {}),
+          units: publishedUnits.filter(unit => cited.has(unit.id)).map(({ text: _text, ...unit }) => unit) } });
         for (const method of output.methods) records.push({ kind: "method", id: `method:${source.id}:g${generation}:${method.id}`,
           payload: { recordType: "source-method", sourceId: source.id, generation, status: "draft", method, run } });
       }
