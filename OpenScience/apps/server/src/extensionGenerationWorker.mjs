@@ -30,7 +30,7 @@ export class ExtensionGenerationWorker{
         const previous=state.payload.lastGood,installed=await this.runtime.currentGeneration(project);let proof=null;
         if(previous&&canonicalJson(state.payload.effective?.reference??null)===canonicalJson(previous.reference)&&canonicalJson(installed?.reference??null)===canonicalJson(previous.reference)
           &&previous.scope.ownerId===job.userId&&previous.scope.projectId===job.projectId&&previous.scope.ownerAccountCreatedAt===baseline.owner.accountCreatedAt&&previous.scope.projectCreatedAt===baseline.owner.projectCreatedAt
-          &&['baseRuntimeImageDigest','adapterRevision','permissionProfileRevision'].every(key=>baseline.identity[key]===previous.identity[key])
+          &&baseline.identity.baseRuntimeImageDigest===previous.identity.baseRuntimeImageDigest
           &&canonicalJson(baseline.personal)===canonicalJson(previous.projection.personal)
           &&canonicalJson([baseline.legacy])===canonicalJson(previous.projection.plugins.filter(plugin=>plugin.compatibility==='legacy-citation-v1'))){
           try{await this.service.verifyManifest(project,previous.reference);proof=await this.runtime.probeGeneration(project,previous);assertExtensionGenerationRuntimeProof(previous,proof,this.runtime.runtimeGeneration(project));if(canonicalJson((await this.runtime.currentGeneration(project))?.reference??null)!==canonicalJson(previous.reference))proof=null;}catch{proof=null;}

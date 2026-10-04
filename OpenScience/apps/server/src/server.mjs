@@ -970,6 +970,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     access: extensionAccess, catalogue: overrides.extensionCatalogue ?? extensionDeployment.catalogue,
     proofAuthority: overrides.extensionProofAuthority ?? null,
     catalogueGeneratedAt: overrides.extensionCatalogueGeneratedAt ?? extensionDeployment.generatedAt,
+    // Evidence labels, never gates (owner ruling 2026-10-04): the deployment file's own staleness travels to the
+    // catalogue, and a qualification record that cannot be read as a record is logged for the operator while the
+    // researcher sees the extension without a label.
+    policyState: extensionDeployment.policyState,
+    report: ({ catalogueId, code }) => { void securityAudit(config, "extension.qualification.record", "unreadable", { code, detail: catalogueId }).catch(() => {}); },
     connectionList: (user, entry, projectId) => extensionConnections.list(user, entry, projectId),
   }) : null;
   const extensionRoutes = createExtensionRoutes({ store, service: extensionService, maxJsonBytes: config.maxJsonBytes,

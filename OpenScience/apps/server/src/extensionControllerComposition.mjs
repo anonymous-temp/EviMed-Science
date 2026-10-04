@@ -8,8 +8,7 @@ import { ControlPlaneDatabase } from './controlPlaneDatabase.mjs';
 import { ProductJobs } from './productStore.mjs';
 import { ExtensionOperationGrants } from './extensionOperationGrants.mjs';
 import { ExtensionToolController, extensionExecutionIdentity } from './extensionToolController.mjs';
-import { ExtensionQualification } from './extensionQualification.mjs';
-import { deploymentGenerationIdentities, deploymentProofIdentity } from './extensionDeployment.mjs';
+import { deploymentGenerationIdentities } from './extensionDeployment.mjs';
 import { verifyExtensionGeneration, extractExtensionGenerationOperationIdentity } from './extensionGenerationService.mjs';
 import { HttpError } from './security.mjs';
 
@@ -31,8 +30,6 @@ export function createControllerExtensionComposition({ config, deployment, datab
       { timeout: 5000, maxBuffer: 8192 });
     return result.stdout.trim();
   };
-  const qualification = new ExtensionQualification({ root: deployment.qualificationRoot, secret: config.modelGatewaySigningSecret,
-    currentIdentity: async entry => deploymentProofIdentity(deployment, entry, await imageId()), surfaces: entry => deployment.surfaces.get(entry.id) });
   /** Current protected facts, independently of anything in an HTTP body.
    * @param {any} scope @param {any} request */
   const authorize = async (scope, request) => {
@@ -60,8 +57,11 @@ export function createControllerExtensionComposition({ config, deployment, datab
         || !['effective', 'rolled-back'].includes(current.payload.phase) || current.payload.runtimeGeneration !== scope.runtimeGeneration) return false;
       const candidate = current.payload.effective;
       if (!candidate || candidate.scope.ownerAccountCreatedAt !== (scope.ownerAccountCreatedAt ?? scope.accountCreatedAt) || candidate.scope.projectCreatedAt !== scope.projectCreatedAt) return false;
+      // The image the generation was prepared against is what the extension executes in. The adapter and permission
+      // source revisions are labels (owner ruling 2026-10-04) and, with the qualification record, no longer decide
+      // whether an admitted extension may run.
       const actualImage = await imageId(), identities = deploymentGenerationIdentities(deployment, actualImage);
-      if (['baseRuntimeImageDigest', 'adapterRevision', 'permissionProfileRevision'].some(key => candidate.identity[key] !== identities[key])) return false;
+      if (candidate.identity.baseRuntimeImageDigest !== identities.baseRuntimeImageDigest) return false;
       const callerScope={ownerId,actorId:scope.userId,ownerAccountCreatedAt:scope.ownerAccountCreatedAt,actorAccountCreatedAt:scope.accountCreatedAt,
         actorMembershipEpoch:scope.membershipEpoch,projectId:scope.projectId,projectCreatedAt:scope.projectCreatedAt};
       const assessmentContext=assessmentAuthority?{callerScope,operation:request.operation}:null;
@@ -90,8 +90,9 @@ export function createControllerExtensionComposition({ config, deployment, datab
         || prepared.payload.installationRevision !== scope.installationRevision || prepared.result.installationId !== scope.installationId
         || prepared.result.installationRevision !== scope.installationRevision || prepared.result.integrity !== pin.integrity) return false;
       if (pin.assessmentAdmissionDigest) { await assessmentAuthority.verifyManifest(manifest, {id:scope.projectId,userId:ownerId}, assessmentContext); return true; }
-      const proof = await qualification.authority(entry);
-      return proof?.receipt.receiptDigest === pin.receiptDigest;
+      // Everything above proves this is the pinned, admitted package under a live grant. How far it has been measured
+      // is a label: the signed record is not read here, so a missing, rewritten or expired one cannot refuse an operation.
+      return true;
     } catch { return false; }
   };
   const grants = new ExtensionOperationGrants({ dataDir: config.dataDir, secret: config.modelGatewaySigningSecret, authorize,

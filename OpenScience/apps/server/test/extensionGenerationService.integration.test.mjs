@@ -13,7 +13,7 @@ import {VcrDataStore} from '../src/vcrDataStore.mjs';
 import {ExtensionAccess} from '../src/extensionAccess.mjs';
 import {ExtensionService} from '../src/extensionService.mjs';
 import {PluginService} from '../src/pluginService.mjs';
-import {ExtensionGenerationService,verifyExtensionGeneration,extensionGenerationRoot} from '../src/extensionGenerationService.mjs';
+import {ExtensionGenerationService,verifyExtensionGeneration,extensionGenerationRoot,extensionMountIdentity} from '../src/extensionGenerationService.mjs';
 import {ExtensionGenerationWorker} from '../src/extensionGenerationWorker.mjs';
 import {composeExtensionExecution} from '../src/extensionHostedIntegration.mjs';
 import {RuntimeManager} from '../src/runtimeManager.mjs';
@@ -61,8 +61,56 @@ test('two independent plugin configurations publish immutable scope-bound manife
   const projection=path.join(extensionGenerationRoot(service.config,manifest.reference),'selected','projection.json');await fs.chmod(projection,0o400);const retryUmask=process.umask(0o077);try{assert.equal((await service.reconcile(a,'p1',{expectedRevision:saved.revision})).revision,state.revision);}finally{process.umask(retryUmask);}assert.equal((await fs.stat(projection)).mode&0o777,0o444);await assert.rejects(service.reconcile(b,'p1',{expectedRevision:saved.revision}),{status:404});
   const other=await service.reconcile(a,'p2',{expectedRevision:0});assert.equal(other.payload.desired.projection.plugins[0].settings.timeoutMs,9000);await assert.rejects(verifyExtensionGeneration(service.config,{id:'p2',userId:a.id},manifest.reference));
 });
-test('untrusted optional package is omitted with a finding while ordinary research/citation baseline stays selected',options,async()=>{
-  proofEnabled=false;const selected=await extensions.project(a,'p1');const state=await service.reconcile(a,'p1',{expectedRevision:selected.revision});assert.deepEqual(state.payload.desired.projection.plugins.map(row=>row.extensionId),['dsh-cite']);assert.equal(state.payload.desired.findings[0].code,'extension_proof_untrusted');proofEnabled=true;
+test('an unqualified optional package joins the generation, activates, and is labelled beside it, never refused for it',options,async()=>{
+  // Owner ruling 2026-10-04: a qualification record labels, it never admits or refuses. This package has no record at
+  // all. It used to be dropped from the generation with an `extension_proof_untrusted` finding, so it installed and
+  // prepared and stayed 「待启用」 for good; and a changed receipt digest failed its tool calls.
+  proofEnabled=false;
+  try{
+    await db.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'unqualified-project','No record',1048576)",[a.id]);
+    await add('unqualified-project','unqualified-install');
+    const desired=await extensions.project(a,'unqualified-project'),state=await service.reconcile(a,'unqualified-project',{expectedRevision:desired.revision});
+    const manifest=state.payload.desired;
+    assert.deepEqual(manifest.projection.plugins.map(row=>row.extensionId),[entry.id,'dsh-cite'].sort(),'the package is in the generation');
+    assert.deepEqual(manifest.findings,[],'and nothing says it was left out');
+    assert.deepEqual(state.payload.qualification,[{extensionId:entry.id,state:'unqualified'}],'the label is recorded with the generation');
+    for(const row of [...manifest.projection.plugins.filter(plugin=>plugin.extensionId===entry.id),...manifest.bindings.installations])assert.equal(Object.hasOwn(row,'receiptDigest'),false,'no receipt is part of the immutable bytes');
+    assert.deepEqual(await verifyExtensionGeneration(service.config,{id:'unqualified-project',userId:a.id},manifest.reference),manifest);
+    // It activates, and its tool call is admitted, with no record anywhere.
+    const originalGeneration=runtime.runtimeGeneration,originalCurrent=current;let applied=false;
+    runtime.runtimeGeneration=()=>applied?'fixture-runtime':null;
+    const originalReplace=runtime.replaceGeneration;runtime.replaceGeneration=async(_project,candidate)=>{current=candidate;applied=true;return{joined:true};};
+    try{
+      const finished=await worker.runClaimed(await claim(state));assert.equal(finished.result.phase,'effective');
+      const identity=await service.operationIdentity(a,'unqualified-project',entry.id,'fixture-runtime','doc_read');
+      assert.equal(identity.extensionGenerationHash,manifest.reference.generationHash);assert.equal(identity.descriptorId,entry.id);
+    }finally{runtime.runtimeGeneration=originalGeneration;runtime.replaceGeneration=originalReplace;current=originalCurrent;}
+    // A record that arrives later is a label on the next generation; it does not change this one's bytes or its hash.
+    proofEnabled=true;
+    const changed=await extensions.saveProject(a,'unqualified-project',{expectedRevision:desired.revision,selections:[{installationId:desired.selections[0].installationId,enabled:true,settings:{rows:5},connectionRefs:[]}]});
+    const next=await service.reconcile(a,'unqualified-project',{expectedRevision:changed.revision});
+    assert.equal(next.payload.qualification[0].state,'qualified');assert.match(next.payload.qualification[0].receiptDigest,/^sha256:[a-f0-9]{64}$/);
+    assert.equal(Object.hasOwn(next.payload.desired.projection.plugins.find(row=>row.extensionId===entry.id),'receiptDigest'),false);
+    const stray=await db.query("SELECT id FROM evimed_product.jobs WHERE user_id=$1 AND project_id='unqualified-project' AND kind='plugin-apply' AND status='queued'",[a.id]);
+    for(const row of stray.rows)await service.jobs.cancel(a.id,row.id);
+  }finally{proofEnabled=true;}
+});
+test('what is mounted decides whether a generation is current, not the evidence it was assembled under',options,async()=>{
+  // A release moves the adapter and permission source revisions and a re-measurement moves the receipt. Neither says
+  // anything about which code a runtime runs, so neither may unmount an extension that is still what the project selected.
+  const project={id:'p1',userId:a.id},state=await service.current(project),candidate=state.payload.desired;
+  const adapter=identities.adapterRevision,permission=identities.permissionProfileRevision;
+  const snapshot=()=>db.transaction(client=>db.withTransactionClient(client,()=>service.snapshot(a,'p1',client)));
+  try{
+    identities.adapterRevision=d('adapter-after-a-release');identities.permissionProfileRevision=d('permission-after-a-release');
+    const actual=await snapshot();
+    assert.notEqual(actual.manifest.reference.generationHash,candidate.reference.generationHash,'the evidence is in the immutable bytes');
+    assert.equal(extensionMountIdentity(actual.manifest),extensionMountIdentity(candidate),'and not in what is mounted');
+    proofEnabled=false;
+    const unrecorded=await snapshot();
+    assert.equal(extensionMountIdentity(unrecorded.manifest),extensionMountIdentity(candidate),'a record that vanished changes nothing that runs');
+    assert.deepEqual(unrecorded.qualification,[{extensionId:entry.id,state:'unqualified'}]);
+  }finally{identities.adapterRevision=adapter;identities.permissionProfileRevision=permission;proofEnabled=true;}
 });
 test('busy runtime defers application and changed desired revisions supersede queued old generation',options,async()=>{
   const selected=await extensions.project(a,'p1');const state=await service.reconcile(a,'p1',{expectedRevision:selected.revision});kernelBusy=null;const unknown=await claim(state);await worker.runClaimed(unknown);assert.equal((await service.jobs.get(a.id,unknown.id)).status,'queued');kernelBusy=true;const pending=await claim(state);await worker.runClaimed(pending);assert.equal((await service.jobs.get(a.id,pending.id)).status,'queued');assert.equal(current,null);kernelBusy=false;
@@ -104,7 +152,8 @@ test('rolled-back old tools refuse current disable, changed configuration or cha
   await update(lead,[{installationId:installed.installation.id,enabled:true,settings:pin.settings,connectionRefs:[]}]);
   await assert.rejects(service.operationIdentity(a,'p1',entry.id,'fixture-runtime','doc_read'),{code:'extension_access_denied'});
   await update(a,original);assert.equal((await service.operationIdentity(a,'p1',entry.id,'fixture-runtime','doc_read')).extensionGenerationHash,good.reference.generationHash);
-  proofEnabled=false;await manager.assertExtensionPromptGeneration(project,{mode:'queue'});await assert.rejects(service.operationIdentity(a,'p1',entry.id,'fixture-runtime','doc_read'));proofEnabled=true;
+  // With no qualification record at all the pinned extension is still admitted: the record labels, it does not gate.
+  proofEnabled=false;await manager.assertExtensionPromptGeneration(project,{mode:'queue'});assert.equal((await service.operationIdentity(a,'p1',entry.id,'fixture-runtime','doc_read')).extensionGenerationHash,good.reference.generationHash);proofEnabled=true;
   connectionAllowed=false;await assert.rejects(service.operationIdentity(a,'p1',entry.id,'fixture-runtime','doc_read'),{code:'extension_access_denied'});connectionAllowed=true;
   manager.runtimes.clear();
 });
@@ -126,7 +175,11 @@ test('current selection authority remains locked through the supplied operation 
 test('rollback availability refuses stale runtime, source, personal state, account or nonterminal phase without borrowing old authority',options,async()=>{
   const project={id:'p1',userId:a.id},state=await service.current(project),good=state.payload.effective,manager=rollbackManager(project,good);
   manager.runtimes.get(manager.key(project)).modelGatewayTokenJti='another-runtime';await assert.rejects(manager.assertExtensionPromptGeneration(project),{code:'extension_contract_invalid'});manager.runtimes.get(manager.key(project)).modelGatewayTokenJti='fixture-runtime';
-  const adapter=identities.adapterRevision;identities.adapterRevision=d('different-source');await assert.rejects(manager.assertExtensionPromptGeneration(project),{code:'extension_contract_invalid'});identities.adapterRevision=adapter;
+  // A release moves the adapter and permission source revisions: labels, the pinned generation stays mounted and usable.
+  const adapter=identities.adapterRevision,permission=identities.permissionProfileRevision;identities.adapterRevision=d('different-source');identities.permissionProfileRevision=d('different-permission-source');
+  await manager.assertExtensionPromptGeneration(project);assert.equal((await service.operationIdentity(a,'p1',entry.id,'fixture-runtime','doc_read')).extensionGenerationHash,good.reference.generationHash);identities.adapterRevision=adapter;identities.permissionProfileRevision=permission;
+  // The image the generation was prepared against is what the extension runs in: another image still refuses, by name.
+  const image=identities.baseRuntimeImageDigest;identities.baseRuntimeImageDigest=d('different-image');await assert.rejects(manager.assertExtensionPromptGeneration(project),{code:'extension_contract_invalid'});await assert.rejects(service.operationIdentity(a,'p1',entry.id,'fixture-runtime','doc_read'),{code:'extension_contract_invalid'});identities.baseRuntimeImageDigest=image;
   const personalId='personal-skills:project:p1';await service.documents.put(a.id,'extension-generation',personalId,{effective:{reference:null,pins:[{skillId:'changed-private-instructions',revision:1,digest:d('changed-private-instructions')}]},desired:null},{expectedRevision:0,projectId:project.id});await assert.rejects(manager.assertExtensionPromptGeneration(project),{code:'extension_contract_invalid'});await db.query("DELETE FROM evimed_product.revisions WHERE user_id=$1 AND kind='extension-generation' AND id=$2",[a.id,personalId]);await db.query("DELETE FROM evimed_product.documents WHERE user_id=$1 AND kind='extension-generation' AND id=$2",[a.id,personalId]);
   const account=(await db.query('SELECT created_at::text AS epoch FROM evimed_control.users WHERE id=$1',[a.id])).rows[0].epoch;
   await db.query("UPDATE evimed_control.users SET created_at=created_at+interval '1 second' WHERE id=$1",[a.id]);await assert.rejects(manager.assertExtensionPromptGeneration(project),{code:'extension_contract_invalid'});await assert.rejects(service.operationIdentity(a,'p1',entry.id,'fixture-runtime','doc_read'));await db.query('UPDATE evimed_control.users SET created_at=$2::timestamptz WHERE id=$1',[a.id,account]);
