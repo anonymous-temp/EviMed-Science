@@ -61,4 +61,14 @@ if [ -n "$skipped" ]; then
   echo "$skipped" | cut -c1-200 >&2
   exit 1
 fi
+# The method-evidence importer (`scripts/ops/import-vcr-method-validation.mjs`) refuses a report in which any
+# case's detail says skip, skipped or skipping, whatever the word was about: N42 said a text column was
+# "skipped" and the whole release's evidence could not be imported (2026-10-04). Refused here, where the
+# case's author sees it, with the same pattern.
+worded="$(grep -E '^[^ ]+ +PASS ' "$log" | grep -iwE 'skip|skipped|skipping' || true)"
+if [ -n "$worded" ]; then
+  echo "check-numeric-log: a passing case's detail uses the word the evidence importer reads as a skipped case; say it another way:" >&2
+  echo "$worded" | cut -c1-200 >&2
+  exit 1
+fi
 echo "check-numeric-log: $summary, $declared declared, none skipped"
