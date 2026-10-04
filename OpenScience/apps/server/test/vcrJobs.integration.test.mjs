@@ -925,6 +925,137 @@ test("C2-1 an engine refusal is the job's own reason: the first issue's code, fi
   assert.match(cutRow.error.message, /计算时间上限/);
 });
 
+test("a result that failed the engine's own validation says why: the job records resultValidationIssues, and a crash with no result records the engine's code", options, async () => {
+  // The live incident (2026-10-04, design.analytic on a scenario with no effect): the engine's result was `failed` with the reason only
+  // in diagnostics.resultValidationIssues, and the job row was written with error NULL.
+  const study = await makeStudy("validation");
+  const unusable = (/** @type {any} */ job) => engineResult(job, { status: "failed", conclusion: undefined, measures: [], diagnostics: { resultValidationIssues: [
+    { code: "measure_value_invalid", field: "measures[0].value", detail: "A measure carries a finite number; a failed computation is an issue, never a 0 (plan 9.6)." },
+    { code: "measure_value_invalid", field: "measures[1].value", detail: "A measure carries a finite number; a failed computation is an issue, never a 0 (plan 9.6)." }] } });
+  const jobs = new VcrJobs({ store, config, engine: engineDouble({ resultFor: unusable, state: "failed" }) });
+  const { job } = await jobs.enqueue({ studyId: study.id, userId: study.userId, kind: "design_simulation", scenario, idempotencyKey: `vcr:${study.id}:validation` });
+  const [claimed] = await jobs.claim();
+  await jobs.advance(claimed);
+  const ended = await jobs.advance(claimed);
+  assert.equal(ended.state, "failed");
+  const row = await store.job(study.id, job.id);
+  assert.equal(row.error.code, "measure_value_invalid");
+  assert.equal(row.error.field, "measures[0].value");
+  assert.match(row.error.message, /measures\[0\]\.value/, "the sentence says which number the validator refused");
+  assert.deepEqual(row.error.issues.map((/** @type {any} */ issue) => issue.field), ["measures[0].value", "measures[1].value"]);
+  assert.equal(ended.error.code, "measure_value_invalid", "the finish hooks hear the same reason the row holds");
+
+  // The engine's own refusal comes first when a result carries both kinds.
+  const both = await makeStudy("validation-both");
+  const mixed = new VcrJobs({ store, config, engine: engineDouble({ state: "failed", resultFor: (spec) => engineResult(spec, { status: "failed", conclusion: undefined, measures: [],
+    diagnostics: { issues: [{ code: "design_effect_null", field: "scenario.truth.hazardRatio", detail: "The scenario has no effect." }],
+      resultValidationIssues: [{ code: "measure_value_invalid", field: "measures[0].value", detail: "x" }] } }) }) });
+  const { job: mixedJob } = await mixed.enqueue({ studyId: both.id, userId: both.userId, kind: "design_simulation", scenario, idempotencyKey: `vcr:${both.id}:both` });
+  const [again] = await mixed.claim();
+  await mixed.advance(again);
+  await mixed.advance(again);
+  const mixedRow = await store.job(both.id, mixedJob.id);
+  assert.deepEqual(mixedRow.error.issues.map((/** @type {any} */ issue) => issue.code), ["design_effect_null", "measure_value_invalid"]);
+  assert.equal(mixedRow.error.code, "design_effect_null");
+  assert.match(mixedRow.error.message, /这个情景没有效应/, "the Chinese sentence the domain holds for the code");
+
+  // A crash, a CPU limit or a memory limit leaves no result to read: the engine's fixed code is what the job records.
+  for (const [code, sentence] of [["engine_crashed", /异常退出/], ["cpu_limit_exceeded", /CPU 上限/], ["memory_limit_exceeded", /内存/],
+    ["spawn_failed", /没能启动/], ["result_unreadable", /可读的结果/]]) {
+    const dead = await makeStudy(`dead-${code}`);
+    const engine = { ...engineDouble({ state: "failed", statusFor: () => ({ state: "failed", progress: { done: 0, total: 0 }, cpuSeconds: 3, error: code }) }),
+      async result() { throw new VcrEngineError("vcr_engine_rejected", "计算引擎拒绝了这次调用（HTTP 409）。", { status: 409, detail: "result_not_ready" }); } };
+    const crashing = new VcrJobs({ store, config, engine });
+    const { job: deadJob } = await crashing.enqueue({ studyId: dead.id, userId: dead.userId, kind: "design_simulation", scenario, idempotencyKey: `vcr:${dead.id}:${code}` });
+    const [running] = await crashing.claim();
+    await crashing.advance(running);
+    assert.equal((await crashing.advance(running)).state, "failed");
+    const deadRow = await store.job(dead.id, deadJob.id);
+    assert.equal(deadRow.error.engineError, code);
+    assert.equal(deadRow.error.code, "vcr_job_failed");
+    assert.match(deadRow.error.message, sentence);
+    assert.match(deadRow.error.message, new RegExp(code), "the engine's code is in the sentence the page, the mark and the run's status read");
+    assert.equal(deadRow.cpuSecondsUsed, 3, "what it cost is recorded");
+  }
+});
+
+test("no way a job ends failed leaves its error NULL or without a sentence: the outcomes the worker handles, walked", options, async () => {
+  const study = await makeStudy("walk");
+  // this walk is about reasons, not budget: a failed job whose engine work is not known to have stopped still holds its reservation
+  const roomy = { ...config, vcrStudyCpuBudget: 100_000 };
+  /** The ways the engine, the transport or the queue can end a job in `failed`. @type {Array<[string, (spec: any) => any, Record<string, any>]>} */
+  const noResult = { diagnostics: {}, measures: [] };
+  const failedResult = (/** @type {Record<string, any>} */ overrides) => (/** @type {any} */ spec) => engineResult(spec, { status: "failed", conclusion: undefined, ...overrides });
+  /** @type {Array<{ label: string, engine: any, expectCode?: string }>} */
+  const outcomes = [
+    { label: "the engine's refusal in diagnostics.issues", expectCode: "rule_column_unknown",
+      engine: engineDouble({ state: "failed", resultFor: failedResult({ ...noResult, diagnostics: { issues: [{ code: "rule_column_unknown", field: "scenario.rules[0]", detail: "no column" }] } }) }) },
+    { label: "a result that failed validation", expectCode: "measure_value_invalid",
+      engine: engineDouble({ state: "failed", resultFor: failedResult({ ...noResult, diagnostics: { resultValidationIssues: [{ code: "measure_value_invalid", field: "measures[0].value", detail: "not finite" }] } }) }) },
+    { label: "a failed result with no issue of either kind", expectCode: "vcr_job_failed",
+      engine: engineDouble({ state: "failed", resultFor: failedResult(noResult) }) },
+    { label: "a limited failed result whose only word is its measures", expectCode: "vcr_job_failed",
+      engine: engineDouble({ state: "failed", resultFor: failedResult({ conclusion: "limited", replicates: 1000, diagnostics: {},
+        measures: [{ name: "power", value: 0.5, simulated: true, mcse: 0.01, source: "synthetic" }] }) }) },
+    { label: "an unsigned refusal that names nothing", expectCode: "vcr_job_failed",
+      engine: { ...engineDouble({ state: "failed" }), async result(/** @type {string} */ id) { return { result: engineResult({ jobId: id, method: "design.simulate", methodVersion: "1", scenario, seed: 1 }, { status: "failed", conclusion: undefined, measures: [], diagnostics: {} }), signed: false, refused: true, issues: [] }; } } },
+    { label: "an unsigned refusal whose only word is the control plane's validation of it", expectCode: "result_not_object",
+      engine: { ...engineDouble({ state: "failed" }), async result(/** @type {string} */ id) { return { result: engineResult({ jobId: id, method: "design.simulate", methodVersion: "1", scenario, seed: 1 }, { status: "failed", conclusion: undefined, measures: [], diagnostics: {} }), signed: false, refused: true, issues: [{ code: "result_not_object", field: "", detail: "A result is a JSON object." }] }; } } },
+    { label: "an engine word the control plane has never heard", expectCode: "vcr_job_failed",
+      engine: { ...engineDouble({ state: "failed", statusFor: () => ({ state: "failed", progress: {}, cpuSeconds: 0, error: "Not A Code; drop table" }) }), async result() { throw new VcrEngineError("vcr_engine_rejected", "x", { status: 409 }); } } },
+    { label: "a result under this job's id that is another job's", expectCode: "vcr_engine_result_mismatch",
+      engine: engineDouble({ state: "succeeded", resultFor: (spec) => engineResult({ ...spec, seed: Number(spec.seed) + 1 }) }) },
+    { label: "a transport error that carries no message", expectCode: "vcr_job_failed",
+      engine: { ...engineDouble({ state: "succeeded" }), async result() { throw new Error(""); } } },
+    { label: "a transport error that carries a code and no sentence", expectCode: "vcr_engine_rejected",
+      engine: { ...engineDouble({ state: "succeeded" }), async result() { throw Object.assign(new Error(""), { code: "vcr_engine_rejected", retryable: false }); } } },
+  ];
+  // Not composed first: a failed job whose engine work is not known to have stopped holds every later claim, and with no engine nothing can tell it has.
+  const seen = [await jobs_engineless(study)];
+  for (const [index, outcome] of outcomes.entries()) {
+    const jobs = new VcrJobs({ store, config: roomy, engine: outcome.engine });
+    const { job } = await jobs.enqueue({ studyId: study.id, userId: study.userId, kind: "design_simulation", scenario, idempotencyKey: `vcr:${study.id}:walk${index}` });
+    const [claimed] = await jobs.claim();
+    await jobs.advance(claimed);
+    const ended = await jobs.advance(claimed);
+    assert.equal(ended.state, "failed", outcome.label);
+    const row = await store.job(study.id, job.id);
+    assert.ok(row.error && typeof row.error.code === "string" && row.error.code, `${outcome.label}: a code`);
+    assert.ok(typeof row.error.message === "string" && row.error.message.trim(), `${outcome.label}: a sentence`);
+    assert.equal(row.error.code, outcome.expectCode, outcome.label);
+    seen.push(row.id);
+  }
+  // The engine not composed (above), a local executor that throws, and a job that ran out of attempts are the three ways in that do not pass through a result.
+  const local = new VcrJobs({ store, config: roomy, engine: engineDouble(), localExecutors: { "design.simulate": async () => { throw new Error(""); } } });
+  const { job: localJob } = await local.enqueue({ studyId: study.id, userId: study.userId, kind: "design_simulation", scenario, idempotencyKey: `vcr:${study.id}:walk-local` });
+  const [localClaimed] = await local.claim();
+  assert.equal((await local.advance(localClaimed)).state, "failed");
+  seen.push(localJob.id);
+  const stuck = new VcrJobs({ store, config: roomy, engine: engineDouble() });
+  const { job: stuckJob } = await stuck.enqueue({ studyId: study.id, userId: study.userId, kind: "design_simulation", cpuSecondsLimit: 60, scenario, idempotencyKey: `vcr:${study.id}:walk-stuck` });
+  const [held] = await stuck.claim({ workerId: "worker-1" });
+  await store.query("UPDATE evimed_vcr.jobs SET lease_until = now() - interval '1 hour', attempts = max_attempts WHERE id = $1", [held.id]);
+  await stuck.claim({ workerId: "worker-2" });
+  seen.push(stuckJob.id);
+
+  // The walk walked, and across every row of the database no failed job is without its reason.
+  assert.equal(seen.length, outcomes.length + 3);
+  const failed = await store.rows("SELECT id, error FROM evimed_vcr.jobs WHERE state = 'failed'");
+  assert.equal(failed.length, seen.length, "every job the walk ended is failed");
+  const unexplained = failed.filter((/** @type {any} */ row) => !row.error || typeof row.error.code !== "string" || !row.error.code
+    || typeof row.error.message !== "string" || !row.error.message.trim());
+  assert.deepEqual(unexplained.map((/** @type {any} */ row) => row.id), [], "no failed job has an error that is NULL or has no code or no sentence");
+
+  /** @param {any} owner */
+  async function jobs_engineless(owner) {
+    const none = new VcrJobs({ store, config: roomy, engine: null });
+    const { job } = await none.enqueue({ studyId: owner.id, userId: owner.userId, kind: "design_simulation", scenario, idempotencyKey: `vcr:${owner.id}:walk-none` });
+    const [first] = await none.claim();
+    assert.equal((await none.advance(first)).state, "failed");
+    return job.id;
+  }
+});
+
 test("C2-4 a stage carried over from before a change is marked old until its own numbers replace it, and one the recomputation will not run again is dropped and said", options, async () => {
   const study = await makeStudy("carry");
   const node = "trial_scenario:scn_carry@1";

@@ -94,7 +94,7 @@ import path from "node:path";
 
 import {
   VCR_ENGINE_METHODS, VCR_ENGINE_PROTOCOL_VERSION, VCR_JOB_KINDS, VCR_JOB_METHODS, VCR_JOB_STATES, VCR_ROBUSTNESS_STAGES,
-  canonicalScenarioJson, knownErrorCodeMessage, validateCallerInputs, validateEngineJob, vcrLocationIsValid, vcrReplicateFloorFor, vcrResultOutputPayload,
+  canonicalScenarioJson, errorCodeMessage, knownErrorCodeMessage, validateCallerInputs, validateEngineJob, vcrLocationIsValid, vcrReplicateFloorFor, vcrResultOutputPayload,
 } from "@evimed/domain";
 
 import { VCR_SCHEMA } from "./vcrPersistence.mjs";
@@ -929,8 +929,8 @@ export class VcrJobs {
         // a CPU limit, a memory limit. Its fixed code says which; nothing retries
         // a job that killed its own process.
         if (status.error && ["vcr_engine_rejected", "vcr_engine_not_found"].includes(codeOf(error))) {
-          return this.finish(String(row.id), { status: "failed", leaseOwner: owner, leaseAttempt: Number(row.attempts), cpuSeconds: Number(status.cpuSeconds ?? 0), error: {
-            code: "vcr_job_failed", engineError: String(status.error), message: ENGINE_ERROR_MESSAGES[String(status.error)] ?? "引擎没有做成这项计算。" } });
+          return this.finish(String(row.id), { status: "failed", leaseOwner: owner, leaseAttempt: Number(row.attempts), cpuSeconds: Number(status.cpuSeconds ?? 0),
+            error: vcrEngineStoppedError(status.error) });
         }
         throw error;
       }
@@ -952,7 +952,7 @@ export class VcrJobs {
     const cpuSeconds = Number(result?.manifest?.cpuSeconds ?? status?.cpuSeconds ?? 0);
     if (answer.refused === true) {
       return this.finish(String(row.id), { status: "failed", leaseOwner: owner, leaseAttempt: Number(row.attempts), cpuSeconds,
-        error: vcrErrorFromIssues(result) ?? { code: "vcr_job_failed", message: "引擎拒绝了这项作业。" } });
+        error: vcrErrorFromIssues(result, answer.issues) ?? { code: "vcr_job_failed", message: "引擎拒绝了这项作业。" } });
     }
     this.#verify(row, result);
     const tables = await this.#storeTables(row, result);
@@ -1252,6 +1252,8 @@ export class VcrJobs {
     const complete = status === "succeeded" || status === "not_estimable";
     const partial = !complete && measures.length > 0 && result.conclusion === "limited";
     const state = complete ? "succeeded" : (status === "canceled" ? "canceled" : "failed");
+    // A failed job always says why (`vcrFailureReason`): the row is never left with `error` NULL for the page to read as nothing.
+    const reason = state === "failed" ? vcrFailureReason(outcome.error, result) : (outcome.error ?? null);
     const record = complete || partial;
     const { tiers, models } = record ? await this.#usedModels(row) : { tiers: [], models: [] };
     const study = record ? await this.store.studyById(String(row.study_id)) : null;
@@ -1351,10 +1353,10 @@ export class VcrJobs {
             error = $4::jsonb
         WHERE id = $1 AND state = 'running' RETURNING *`,
       [jobId, state, Number(outcome.cpuSeconds ?? 0),
-        outcome.error == null && !partial ? null : JSON.stringify({ ...object(outcome.error), ...(partial ? { partial: true } : {}) })])).rows[0];
+        reason == null && !partial ? null : JSON.stringify({ ...object(reason), ...(partial ? { partial: true } : {}) })])).rows[0];
       await this.store.audit({ client, studyId: String(row.study_id), userId: String(row.user_id), action: "vcr.job.finish", object: jobId,
         outcome: state === "succeeded" ? "ok" : state,
-        reason: outcome.error ? String(object(outcome.error).code ?? "") : "",
+        reason: reason ? String(object(reason).code ?? "") : "",
         detail: { kind: String(row.kind), resultId: recorded?.id ?? null, partial, signed: outcome.signed === true } });
       return { finished, execution, recorded };
     });
@@ -1365,7 +1367,7 @@ export class VcrJobs {
     else if (state === "failed") this.counters.failed += 1;
     if (partial) this.counters.partial += 1;
     const done = { action: "finished", state, job: jobSummaryFromRow(finished), result: recorded, execution, partial,
-      engineResult: result, error: outcome.error ?? null };
+      engineResult: result, error: reason };
     for (const hook of this.finishHooks) {
       try { await hook(done); } catch (error) { this.report(codeOf(error)); }
     }
@@ -1485,23 +1487,84 @@ export class VcrJobs {
  * and a queue that read only the status word recorded a failed job with no
  * reason, so the study page and the run's own status answer said 「failed」
  * and nothing more.
+ *
+ * The engine's own refusal is read first, then what the engine found wrong with
+ * its own result (`diagnostics.resultValidationIssues`, written when a handler
+ * returned a number the protocol does not allow: a non-finite measure). A job
+ * the second kind ended was recorded with no reason at all (live acceptance,
+ * 2026-10-04: three `design.analytic` jobs, `error` NULL), because only the
+ * first kind was read; and `validated` is the control plane's own check of the
+ * answer it received, for a refusal whose result carries neither.
  * @param {Record<string, any>} result
+ * @param {readonly unknown[]} [validated] issues the control plane found in the engine's answer
  * @returns {{ code: string, field?: string, message: string, issues: Array<{ code: string, field: string | null, detail: string }> } | null}
  */
-export function vcrErrorFromIssues(result) {
-  const issues = list(object(object(result).diagnostics).issues).map(object).filter((issue) => typeof issue.code === "string" && issue.code);
-  if (!issues.length) return null;
-  const first = issues[0];
-  const detail = String(first.detail ?? first.message ?? "").slice(0, 400);
+export function vcrErrorFromIssues(result, validated = []) {
+  const diagnostics = object(object(result).diagnostics);
+  /** @param {unknown} each @param {boolean} checked */
+  const named = (each, checked) => list(each).map(object).filter((issue) => typeof issue.code === "string" && issue.code)
+    .map((issue) => ({ ...issue, checked }));
+  const found = [...named(diagnostics.issues, false), ...named(diagnostics.resultValidationIssues, true), ...named(validated, true)]
+    .filter((issue, index, all) => all.findIndex((other) => other.code === issue.code && other.field === issue.field) === index);
+  if (!found.length) return null;
+  const first = found[0];
+  // A validator's verdict is one sentence for every field it is raised on; the field is what tells a reader which number it is about.
+  const said_ = (/** @type {Record<string, any>} */ issue) => {
+    const detail = String(issue.detail ?? issue.message ?? "");
+    return (issue.checked && typeof issue.field === "string" && issue.field ? `${issue.field}: ${detail}` : detail).slice(0, 400);
+  };
+  const detail = said_(first);
   // The domain holds a sentence for every code the engine raises; the engine's own detail names the column or field.
   const said = knownErrorCodeMessage(String(first.code));
   return {
     code: String(first.code),
     ...(typeof first.field === "string" && first.field ? { field: first.field } : {}),
     message: said ? (detail ? `${said}（${detail}）` : said) : (detail || "引擎拒绝了这项作业。"),
-    issues: issues.slice(0, 10).map((issue) => ({ code: String(issue.code), field: typeof issue.field === "string" ? issue.field : null,
-      detail: String(issue.detail ?? issue.message ?? "").slice(0, 400) })),
+    issues: found.slice(0, 10).map((issue) => ({ code: String(issue.code), field: typeof issue.field === "string" ? issue.field : null,
+      detail: said_(issue) })),
   };
+}
+
+/** Said when a failed job has nothing to say for itself: that the reason is unknown is the reason. */
+const FAILED_WITHOUT_REASON = "引擎报告这项计算失败，但没有说明原因；已保留能保留的部分。";
+
+/**
+ * What a job that ended `failed` records as its error: always a code and a
+ * sentence. The error a caller names wins; a failed result's own issues come
+ * next (`vcrErrorFromIssues`); and a failure with neither says that it has no
+ * reason rather than recording none — an error that is NULL reads, on the
+ * page and in the run's own status answer, as a computation nobody can explain
+ * and nobody can repair. This is the one place that holds it for every way a
+ * job fails (the engine's refusal, a result that failed validation, a crash
+ * with no result, a thrown error), so a path added later cannot forget it.
+ * @param {unknown} error what the caller of `finish` named, if anything
+ * @param {Record<string, any>} [result] the engine's result, if there was one
+ * @returns {Record<string, any>}
+ */
+export function vcrFailureReason(error, result = {}) {
+  const given = object(error);
+  const code = typeof given.code === "string" ? given.code.trim() : "";
+  const message = typeof given.message === "string" ? given.message.trim() : "";
+  if (code && message) return given;
+  if (code) return { ...given, message: errorCodeMessage(code) };
+  const derived = vcrErrorFromIssues(result);
+  if (derived) return { ...given, ...derived };
+  return { ...given, code: "vcr_job_failed", message: message || FAILED_WITHOUT_REASON };
+}
+
+/**
+ * The error of a job the engine ended without any result to read: the engine's
+ * own fixed code (`engine_crashed`, `cpu_limit_exceeded`, `memory_limit_exceeded`,
+ * `spawn_failed`, `result_unreadable`) is kept as `engineError` and named in the
+ * sentence, because the sentence is all a page, a schedule mark and a run's
+ * status answer carry. The code is shaped before it is echoed: it is the
+ * engine's word, not ours, and it goes into a sentence a person reads.
+ * @param {unknown} engineError
+ */
+export function vcrEngineStoppedError(engineError) {
+  const named = typeof engineError === "string" && /^[a-z][a-z_]{0,39}$/.test(engineError) ? engineError : "";
+  const said = (named && ENGINE_ERROR_MESSAGES[named]) || "引擎没有做成这项计算。";
+  return { code: "vcr_job_failed", ...(named ? { engineError: named } : {}), message: named ? `${said}（${named}）` : said };
 }
 
 /** What the engine's own fixed job errors mean, for a reader. */
