@@ -1108,6 +1108,11 @@ services:
       # 3 h, the MR engine's own limit; with the wait bound above it is exactly the
       # engine credential's 6 h (clamped to 60-14400 s by the engine).
       EVIMED_SPECIALIST_EXECUTION_TIMEOUT_SECONDS: ${OPEN_SCIENCE_SPECIALIST_EXECUTION_TIMEOUT_SECONDS:-10800}
+      # Where a job asks for the credential its researcher saved under 设置 → 数据源
+      # (the EviMed workload token it was started with is the proof). The deployment's
+      # own key, where it has one, still wins; this fills the gap. Without it the
+      # engine could only ever use what the deployment holds.
+      EVIMED_CONNECTOR_CREDENTIAL_URL: ${OPEN_SCIENCE_CONNECTOR_CREDENTIAL_INTERNAL_URL:-http://open-science-web:8787/internal/connectors/v1/credential}
     volumes:
       # Optional, like the web service's: /dev/null where the deployment holds no
       # EviMed evidence key. MetaAgent's evidence tool then says it was not used.
@@ -1482,6 +1487,11 @@ services:
       EVIMED_SPECIALIST_SLOT_WAIT_SECONDS: ${OPEN_SCIENCE_SPECIALIST_SLOT_WAIT_SECONDS:-10800}
       # One job's wall clock (see evimed-meta-agent).
       EVIMED_SPECIALIST_EXECUTION_TIMEOUT_SECONDS: ${OPEN_SCIENCE_SPECIALIST_EXECUTION_TIMEOUT_SECONDS:-10800}
+      # Where a job asks for the credential its researcher saved under 设置 → 数据源
+      # (the EviMed workload token it was started with is the proof). The deployment's
+      # own key, where it has one, still wins; this fills the gap. Without it the
+      # engine could only ever use what the deployment holds.
+      EVIMED_CONNECTOR_CREDENTIAL_URL: ${OPEN_SCIENCE_CONNECTOR_CREDENTIAL_INTERNAL_URL:-http://open-science-web:8787/internal/connectors/v1/credential}
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
       EVIMED_USAGE_REPORT_URL: ${OPEN_SCIENCE_ENGINE_USAGE_INTERNAL_URL-http://open-science-web:8787/internal/usage/v1/engine}
       LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
@@ -1541,6 +1551,11 @@ services:
       EVIMED_SPECIALIST_SLOT_WAIT_SECONDS: ${OPEN_SCIENCE_SPECIALIST_SLOT_WAIT_SECONDS:-10800}
       # One job's wall clock (see evimed-meta-agent).
       EVIMED_SPECIALIST_EXECUTION_TIMEOUT_SECONDS: ${OPEN_SCIENCE_SPECIALIST_EXECUTION_TIMEOUT_SECONDS:-10800}
+      # Where a job asks for the credential its researcher saved under 设置 → 数据源
+      # (the EviMed workload token it was started with is the proof). The deployment's
+      # own key, where it has one, still wins; this fills the gap. Without it the
+      # engine could only ever use what the deployment holds.
+      EVIMED_CONNECTOR_CREDENTIAL_URL: ${OPEN_SCIENCE_CONNECTOR_CREDENTIAL_INTERNAL_URL:-http://open-science-web:8787/internal/connectors/v1/credential}
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
       EVIMED_USAGE_REPORT_URL: ${OPEN_SCIENCE_ENGINE_USAGE_INTERNAL_URL-http://open-science-web:8787/internal/usage/v1/engine}
       LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
@@ -1649,6 +1664,11 @@ services:
       EVIMED_SPECIALIST_SLOT_WAIT_SECONDS: ${OPEN_SCIENCE_SPECIALIST_SLOT_WAIT_SECONDS:-10800}
       # One job's wall clock (see evimed-meta-agent).
       EVIMED_SPECIALIST_EXECUTION_TIMEOUT_SECONDS: ${OPEN_SCIENCE_SPECIALIST_EXECUTION_TIMEOUT_SECONDS:-10800}
+      # Where a job asks for the credential its researcher saved under 设置 → 数据源
+      # (the EviMed workload token it was started with is the proof). The deployment's
+      # own key, where it has one, still wins; this fills the gap. Without it the
+      # engine could only ever use what the deployment holds.
+      EVIMED_CONNECTOR_CREDENTIAL_URL: ${OPEN_SCIENCE_CONNECTOR_CREDENTIAL_INTERNAL_URL:-http://open-science-web:8787/internal/connectors/v1/credential}
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
       EVIMED_USAGE_REPORT_URL: ${OPEN_SCIENCE_ENGINE_USAGE_INTERNAL_URL-http://open-science-web:8787/internal/usage/v1/engine}
       LLM_API_KEY_FILE: /run/secrets/deepseek-api-key

@@ -127,10 +127,12 @@ def test_a_start_request_spawns_the_worker_with_the_credential_and_the_state_fil
 # --- the engine keys (2026-10-04) ------------------------------------------------
 # A source nobody configured is the researcher's to configure when they use it, so
 # what they saved reaches the engine for their job: UMLS (MR), NCBI/PubMed
-# (bibliometrics, topic selection) and openFDA (drug safety), next to OpenGWAS.
+# (bibliometrics, topic selection), openFDA and the EviMed evidence key (drug
+# safety), next to OpenGWAS.
 
 _CREDENTIAL_URL = "http://control-plane.internal/internal/connectors/v1/credential"
-_ENGINE_KEYS = ("UMLS_API_KEY", "NCBI_API_KEY", "OPENFDA_API_KEY", "OPENGWAS_JWT")
+_ENGINE_KEYS = ("UMLS_API_KEY", "NCBI_API_KEY", "OPENFDA_API_KEY", "OPENGWAS_JWT",
+                "EVIMED_EVIDENCE_SEARCH_KEY", "EVIMED_EVIDENCE_SEARCH_KEY_FILE")
 
 
 def _control_plane(module, monkeypatch, token, asked):
@@ -159,7 +161,10 @@ def test_each_engine_is_asked_for_the_keys_it_reads_and_nothing_else(tmp_path, m
         },
         "bibliometric-analysis": {"EVIMED_JOB_CREDENTIAL_NCBI_API_KEY": "alice-ncbi"},
         "research-topic-selection": {"EVIMED_JOB_CREDENTIAL_NCBI_API_KEY": "alice-ncbi"},
-        "drug-safety-analysis": {"EVIMED_JOB_CREDENTIAL_OPENFDA_API_KEY": "alice-openfda"},
+        "drug-safety-analysis": {
+            "EVIMED_JOB_CREDENTIAL_OPENFDA_API_KEY": "alice-openfda",
+            "EVIMED_JOB_CREDENTIAL_EVIMED_EVIDENCE_SEARCH_KEY": "alice-evimed-evidence",
+        },
         "peer-review": {},
     }
     for kind, wanted in expected.items():
@@ -262,4 +267,4 @@ def test_the_adapter_roster_is_the_control_planes_job_scoped_list() -> None:
     source = (Path(__file__).resolve().parent / "evimed_specialist_adapter" / "service.py").read_text(encoding="utf-8")
     block = re.search(r"_JOB_CONNECTOR_ENV = \{(.*?)\n\}", source, re.S).group(1)
     connectors = set(re.findall(r'"([a-z][a-z0-9-]*)":\s*"[A-Z][A-Z0-9_]*"', block))
-    assert connectors == {"opengwas", "umls", "ncbi", "openfda"}
+    assert connectors == {"opengwas", "umls", "ncbi", "openfda", "evimed-evidence"}

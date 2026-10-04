@@ -11,6 +11,7 @@ import os
 import requests
 
 from mr_agent.llm.client import LLMClient
+from mr_agent.source_notes import STATUS_NOT_CONFIGURED, STATUS_REFUSED, STATUS_UNREACHABLE
 
 logger = logging.getLogger(__name__)
 
@@ -19,33 +20,59 @@ UMLS_SEARCH_URL = "https://uts-ws.nlm.nih.gov/rest/search/current"
 UMLS_CONTENT_URL = "https://uts-ws.nlm.nih.gov/rest/content/current"
 
 
-def get_synonyms_umls(term: str, api_key: str | None = None) -> list[str]:
-    """Get medical synonyms from UMLS API."""
+class _Unavailable(Exception):
+    """UMLS could not be used for this lookup, and which of the three ways it could not."""
+
+    def __init__(self, status: str):
+        super().__init__(status)
+        self.status = status
+
+
+def lookup_synonyms_umls(term: str, api_key: str | None = None) -> tuple[list[str], str | None]:
+    """UMLS synonyms for ``term`` and, when UMLS could not be used, why not.
+
+    The reason is ``not_configured`` (no key), ``refused`` (UMLS answered 401/403)
+    or ``unreachable`` (it did not answer, or answered unusably); ``None`` when it
+    answered, including with no match, which is an answer and not a lost source.
+    """
     api_key = api_key or os.getenv("UMLS_API_KEY", "")
     if not api_key:
         logger.warning("UMLS API key not configured")
-        return []
-    tgt = _get_ticket_granting_ticket(api_key)
-    if not tgt:
-        return []
-    cui = _search_cui(term, tgt, api_key)
-    if not cui:
-        return []
-    return _get_atoms(cui, tgt, api_key)
+        return [], STATUS_NOT_CONFIGURED
+    try:
+        tgt = _get_ticket_granting_ticket(api_key)
+        cui = _search_cui(term, tgt, api_key)
+        return (_get_atoms(cui, tgt, api_key) if cui else []), None
+    except _Unavailable as unavailable:
+        return [], unavailable.status
 
 
-def _get_ticket_granting_ticket(api_key: str) -> str | None:
+def get_synonyms_umls(term: str, api_key: str | None = None) -> list[str]:
+    """Get medical synonyms from UMLS API."""
+    return lookup_synonyms_umls(term, api_key)[0]
+
+
+def _refused(response) -> bool:
+    return getattr(response, "status_code", None) in (401, 403)
+
+
+def _get_ticket_granting_ticket(api_key: str) -> str:
     """Get TGT from UMLS authentication."""
     try:
         resp = requests.post(UMLS_AUTH_URL, data={"apikey": api_key}, timeout=15)
+        if _refused(resp):
+            raise _Unavailable(STATUS_REFUSED)
         resp.raise_for_status()
         from bs4 import BeautifulSoup
         soup = BeautifulSoup(resp.text, "html.parser")
         form = soup.find("form")
-        return form["action"] if form else None
-    except (requests.RequestException, TypeError):
+        tgt = form["action"] if form else None
+    except (requests.RequestException, TypeError, KeyError):
         logger.warning("UMLS TGT retrieval failed")
-        return None
+        raise _Unavailable(STATUS_UNREACHABLE) from None
+    if not tgt:
+        raise _Unavailable(STATUS_UNREACHABLE)  # answered, but not with a ticket
+    return tgt
 
 
 def _get_service_ticket(tgt_url: str) -> str | None:
@@ -59,10 +86,10 @@ def _get_service_ticket(tgt_url: str) -> str | None:
 
 
 def _search_cui(term: str, tgt_url: str, api_key: str) -> str | None:
-    """Search UMLS for CUI of a term."""
+    """Search UMLS for CUI of a term; None when UMLS has no match."""
     ticket = _get_service_ticket(tgt_url)
     if not ticket:
-        return None
+        raise _Unavailable(STATUS_UNREACHABLE)
     params = {
         "string": term,
         "ticket": ticket,
@@ -71,18 +98,20 @@ def _search_cui(term: str, tgt_url: str, api_key: str) -> str | None:
     }
     try:
         resp = requests.get(UMLS_SEARCH_URL, params=params, timeout=15)
+        if _refused(resp):
+            raise _Unavailable(STATUS_REFUSED)
         data = resp.json()
         results = data.get("result", {}).get("results", [])
         return results[0]["ui"] if results else None
-    except (requests.RequestException, IndexError, KeyError):
-        return None
+    except (requests.RequestException, ValueError, IndexError, KeyError, AttributeError):
+        raise _Unavailable(STATUS_UNREACHABLE) from None
 
 
 def _get_atoms(cui: str, tgt_url: str, api_key: str) -> list[str]:
     """Get English synonyms from UMLS atoms."""
     ticket = _get_service_ticket(tgt_url)
     if not ticket:
-        return []
+        raise _Unavailable(STATUS_UNREACHABLE)
     url = f"{UMLS_CONTENT_URL}/CUI/{cui}/atoms"
     params = {
         "ticket": ticket,
@@ -91,6 +120,8 @@ def _get_atoms(cui: str, tgt_url: str, api_key: str) -> list[str]:
     }
     try:
         resp = requests.get(url, params=params, timeout=15)
+        if _refused(resp):
+            raise _Unavailable(STATUS_REFUSED)
         data = resp.json()
         names = set()
         for atom in data.get("result", []):
@@ -98,8 +129,8 @@ def _get_atoms(cui: str, tgt_url: str, api_key: str) -> list[str]:
             if name:
                 names.add(name)
         return list(names)[:10]
-    except (requests.RequestException, KeyError):
-        return []
+    except (requests.RequestException, ValueError, KeyError, AttributeError):
+        raise _Unavailable(STATUS_UNREACHABLE) from None
 
 
 def get_synonyms_llm(term: str, llm: LLMClient) -> list[str]:

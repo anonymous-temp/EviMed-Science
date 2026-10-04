@@ -154,3 +154,56 @@ def test_bibliographic_coupling_counts_shared_references():
 ])
 def test_icite_relation_field_accepts_both_shapes(raw, expected):
     assert citations._pmid_list(raw) == expected
+
+
+# ---------------------------------------------------------------------------
+# A source that could not be used is said, not left to the log.
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("reason, status", [
+    ("api_key_missing", citations.STATUS_NOT_CONFIGURED),
+    ("http_401", citations.STATUS_REFUSED),
+    ("http_403", citations.STATUS_REFUSED),
+    ("http_429", citations.STATUS_REFUSED),
+    ("http_500", citations.STATUS_UNREACHABLE),
+    ("http_404", citations.STATUS_UNREACHABLE),
+    ("bad_json: Expecting value", citations.STATUS_UNREACHABLE),
+    ("request_failed: Connection refused", citations.STATUS_UNREACHABLE),
+])
+def test_an_unavailable_reason_is_one_of_three_status_words(reason, status):
+    assert citations.unavailable_status(reason) == status
+
+
+def test_the_coverage_ledger_lists_which_sources_were_not_used_and_why():
+    session = _Session(icite_rows=[{"pmid": 1, "citation_count": 12}])
+    _, coverage = citations.fetch_citations(_articles(), session=session, openalex_api_key="")
+    assert citations.sources_not_used(coverage) == [
+        {"source": "openalex", "label": "OpenAlex", "status": "not_configured", "reason": "api_key_missing"},
+        {"source": "semantic_scholar", "label": "Semantic Scholar", "status": "unreachable",
+         "reason": "request_failed: semantic scholar unreachable in tests"},
+    ]
+    # Nothing was asked of iCite when there was no PMID to ask about: not a failed source.
+    _, empty = citations.fetch_citations([{"title": "no pmid"}], session=_Session())
+    assert citations.sources_not_used(empty) == []
+    assert citations.sources_not_used(None) == []
+
+
+def test_the_citation_section_names_what_could_not_be_used_beside_what_was():
+    from bibliometric.report import results_sections
+
+    coverage = {"total": 3, "observed": 2, "missing": 1, "by_source": {"icite": 2},
+                "sources_unavailable": {"openalex": "api_key_missing", "semantic_scholar": "http_429"}}
+    stats = {"citation_stats": {"coverage": coverage, "h_index": 1, "total_citations": 10,
+                                "mean_citations": 5, "median_citations": 5}}
+    for lang, expected in (
+        ("en", "Citation sources that could not be used: OpenAlex (not configured), Semantic Scholar (refused)."),
+        ("zh", "未能使用的引用数据来源：OpenAlex（未配置）、Semantic Scholar（被拒绝）。"),
+    ):
+        section = results_sections._results_citation({"stats": stats, "lang": lang, "fig_counter": 0, "table_counter": 0})
+        assert expected in section, section
+        assert section.index("iCite 2") < section.index(expected), "said where the sources are listed"
+    clean = {**coverage, "sources_unavailable": {}}
+    section = results_sections._results_citation(
+        {"stats": {"citation_stats": {**stats["citation_stats"], "coverage": clean}}, "lang": "en",
+         "fig_counter": 0, "table_counter": 0})
+    assert "could not be used" not in section

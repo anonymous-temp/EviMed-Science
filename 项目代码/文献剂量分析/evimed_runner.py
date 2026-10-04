@@ -169,6 +169,14 @@ def run(request_path: Path, output_dir: Path) -> int:
         coverage = (getattr(pipeline, "stats", None) or {}).get("citation_coverage")
         if coverage is not None:
             result["citationCoverage"] = coverage
+            # Which source was not used, and why (not_configured / refused /
+            # unreachable): in the result as well as in the report's own list of
+            # citation sources, never only in the log.
+            from bibliometric.analysis.citations import sources_not_used
+
+            unused = sources_not_used(coverage)
+            if unused:
+                result["sourcesNotUsed"] = unused
         _write_result(output_dir, result)
         return 0
     except Exception as error:

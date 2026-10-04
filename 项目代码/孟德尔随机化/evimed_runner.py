@@ -30,6 +30,7 @@ from evimed_local_inputs import (
     runner_sources,
     verify_published_inputs,
 )
+from mr_agent import source_notes
 from mr_agent.tools.mr_replay import copy_replay_package
 from mr_agent.llm import usage as provider_usage
 from mr_agent.analysis.delivery import MRDeliveryError, diagnostic_artifact_name, diagnostic_plot_checks, interpretation_diagnostics, require_interpretations, require_report_ready
@@ -79,8 +80,18 @@ def _module(status: str, reason: str = "", *, fatal: bool = False) -> dict:
     return entry
 
 
-def _module_ledger(results: list, bidirectional: bool) -> dict:
-    """Per-step ledger for the specialist-job receipt."""
+def _source_notes_of(state) -> list:
+    """The optional sources the analysis did not use; none for a state that predates them."""
+    return list(getattr(state, "source_notes", None) or [])
+
+
+def _module_ledger(results: list, bidirectional: bool, notes: list | None = None) -> dict:
+    """Per-step ledger for the specialist-job receipt.
+
+    `notes` are the optional sources that were not used (`mr_agent.source_notes`):
+    each one degrades the module it stood behind, with its reason, instead of
+    leaving a log line and a result that reads as if it had been used.
+    """
     modules = {
         "instrumentSelection": _module("ok"),
         "primaryEstimate": _module("ok"),
@@ -131,6 +142,8 @@ def _module_ledger(results: list, bidirectional: bool) -> dict:
     else:
         modules["reverseMR"] = _module("skipped", "bidirectional analysis was not requested")
 
+    for note in notes or []:
+        modules[note["module"]] = _module("degraded", source_notes.ledger_reason(note))
     return modules
 
 
@@ -473,7 +486,7 @@ def run(
         except MRDeliveryError as error:
             if provenance:
                 verify_published_inputs(request, output_dir, provenance, output_directory_fd=output_directory_fd)
-            modules = _module_ledger(valid_results, agent.state.slots.bidirectional)
+            modules = _module_ledger(valid_results, agent.state.slots.bidirectional, _source_notes_of(agent.state))
             modules[error.module] = _module("failed", error.code, fatal=True)
             copied = _copy_release_artifacts(output_dir, agent.state, valid_results, include_reports=False)
             analysis_path = output_dir / "mendelian-randomization-run.json"
@@ -488,6 +501,13 @@ def run(
             })
             return 1
         agent._run_paper_generation()
+        # Said where the methods list the data sources: an optional source that
+        # was not used (and what stood in for it) is part of what the paper rests on.
+        unused = _source_notes_of(agent.state)
+        stated = source_notes.sentence(unused, language)
+        if stated:
+            methods = str(agent.state.paper_sections.get("methods") or "").rstrip()
+            agent.state.paper_sections["methods"] = f"{methods}\n\n{stated}".strip()
         paper = _paper_markdown(agent.state.paper_sections, exposure, outcome)
         if len(paper.strip()) < 500:
             raise RuntimeError("MR paper generation produced an incomplete manuscript")
@@ -498,7 +518,7 @@ def run(
             )
         report_path = output_dir / "mendelian-randomization-report.md"
         report_path.write_text(paper, encoding="utf-8")
-        modules = _module_ledger(valid_results, agent.state.slots.bidirectional)
+        modules = _module_ledger(valid_results, agent.state.slots.bidirectional, unused)
         copied_artifacts = _copy_release_artifacts(output_dir, agent.state, valid_results)
         if provenance:
             copied_artifacts.extend(
@@ -536,6 +556,13 @@ def run(
                 "artifacts": [report_path.name, analysis_path.name, *copied_artifacts],
                 "modules": modules,
                 "degraded": _degraded(modules),
+                # Which optional source was not used, and why (not_configured /
+                # refused / unreachable), beside the sentence in the methods.
+                **({"sourcesNotUsed": [
+                    {key: note[key] for key in ("source", "label", "status") if key in note}
+                    | ({"fallback": note["fallback"]} if note.get("fallback") else {})
+                    for note in unused
+                ]} if unused else {}),
             },
         )
         return 0

@@ -914,6 +914,34 @@ still fail a job is not evidence: the researcher's own input files, an unsafe
 published output, the MR workspace and output bindings (`mr_input_changed` means
 exactly those now) and request authentication.
 
+### Specialist engines say which optional source they did not use
+
+A data source nobody configured is the researcher's to configure where they use it
+(owner ruling 2026-10-04), and the job goes on without it. Before 2026-10-04 an
+engine that lost an optional source wrote one log line and delivered a result that
+read as if the source had been used: the MR engine's UMLS synonym expansion and the
+bibliometric engine's OpenAlex citations (MetaAgent's EviMed background evidence
+recorded nothing at all when it had no key). Each engine now states it, in the three
+words every engine uses (`not_configured`: no key, the deployment's or the
+researcher's; `refused`: the source answered 401/403/429; `unreachable`), in its
+`result.json` as `sourcesNotUsed` and where its report lists its sources (MR's
+methods text, the bibliometric report's citation sources, MetaAgent's `modules`
+ledger). The adapters keep only the closed shape and carry it into the job's state
+and the status answer (`data.sourcesNotUsed` plus one sentence in `warnings`), so the
+run tells the researcher which source to add under 设置 → 数据源. It never changes
+the job's status.
+
+The researcher's own keys reach an engine the same way for every engine: the adapter
+asks the control plane at `EVIMED_CONNECTOR_CREDENTIAL_URL` (now passed to the MR,
+bibliometric, research-topic, drug-safety and MetaAgent containers; until 2026-10-04
+only MR received it, so the other engines could only ever use what the deployment
+held) with the workload token the run started the job with, and only where the
+container holds no key of its own (a direct value or a readable `<NAME>_FILE`). The
+answer is the researcher's own key or nothing: UMLS (MR), NCBI (bibliometrics, topic
+selection, MetaAgent), openFDA and the EviMed evidence key (drug safety, MetaAgent).
+It travels in the worker's spawn environment only, never the job's state file or a
+log.
+
 ### Bundle updates and identity
 
 Extract the verified CI Web image's complete `/app` closure into a new release;

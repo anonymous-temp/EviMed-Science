@@ -487,12 +487,20 @@ class SessionState(BaseModel):
     paper_sections: dict[str, str] = Field(default_factory=dict)
     output_dir: Path | None = None
     errors: list[str] = Field(default_factory=list)
+    # Optional data sources that were not used and why (`mr_agent.source_notes`):
+    # said in the result and the methods text, never only in the log.
+    source_notes: list[dict[str, str]] = Field(default_factory=list)
     # Classified code for the last failure ("opengwas_auth_failed", ...), so a
     # refused source does not reach the caller as an unlabelled message.
     error_code: str = ""
     last_completed_step: int = 0
     selected_gwas_ids: dict[str, list[str]] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=datetime.now)
+
+    def note_source_not_used(self, note: dict[str, str]) -> None:
+        """Record an optional source that was not used, once per source and reason."""
+        if not any(item["source"] == note["source"] and item["status"] == note["status"] for item in self.source_notes):
+            self.source_notes.append(note)
 
     def add_message(self, role: str, content: str) -> None:
         self.conversation_history.append({
