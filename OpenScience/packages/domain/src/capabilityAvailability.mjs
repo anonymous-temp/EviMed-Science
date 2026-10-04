@@ -72,6 +72,8 @@ export const AVAILABILITY_RECORD_SOURCES = Object.freeze([
   'runtime-mode',
   'extension-installation',
   'collector',
+  'image-recipe',
+  'package-record',
 ])
 
 /** The product's word for each state; read by the capability page and the export. */
@@ -124,6 +126,9 @@ const versionPhrase = (context) => {
   return version ? `${version} 版` : ''
 }
 
+/** A software or data name as a reader meets it: distributions are written with hyphens, never as an identifier. @param {unknown} name @returns {string} */
+const softwareOf = (name) => String(name ?? '').replace(/_/gu, '-')
+
 /** @param {unknown} kind @returns {string} */
 const nounOf = (kind) => (kind === 'tool' ? '这个工具' : kind === 'extension' ? '这个扩展' : kind === 'skill' ? '这个技能' : '这个能力')
 
@@ -150,6 +155,10 @@ const REASONS = Object.freeze({
   'data-source-not-configured': ['limited', (d) => `数据源「${connectorCredentialSpec(String(d ?? ''))?.title ?? '一个外部数据源'}」这个部署没有配置，使用时可以添加你自己的凭据；其余部分照常。`],
   'method-unmeasured': ['limited', () => '方法的数值验证还没有完成，结果按未验证的方法对待。'],
   'optional-tool-not-offered': ['limited', (d) => `「${verbOf(d)}」在这个部署上没有提供；其余部分照常。`],
+  // A package carried here needs software, data or weights that this deployment's runtime does not have.
+  'dependency-software-missing': ['limited', (d) => `它用到的软件「${softwareOf(d)}」运行环境里没有；需要它的方法会受阻，其余部分照常。`],
+  'dependency-version-differs': ['limited', (d, c) => `它指定「${softwareOf(d)}」${String(c.wanted ?? '')}，运行环境装的是 ${String(c.have ?? '')}；结果以运行环境的版本为准。`],
+  'dependency-data-missing': ['limited', (d) => `它需要的数据或模型权重「${softwareOf(d)}」这个部署没有提供；其余部分照常。`],
   'last-operation-failed': ['limited', (d, c) => {
     const earlier = dayOf(c.lastSuccessAt)
     return `最近一次${c.kind === 'tool' ? '调用' : '运行'}没有成功（${errorCodeMessage(String(d ?? ''))}）${earlier ? `；此前成功过，最近一次是 ${earlier}` : ''}。`
@@ -168,6 +177,8 @@ const REASONS = Object.freeze({
   'mock-runtime': ['unverified', () => '当前是模拟运行环境，不能证明真实可运行。'],
   // Carried and prepared, but this kind of subject's use is not collected, so nothing here proves it runs.
   'use-not-collected': ['unverified', (_d, c) => `${versionPhrase(c)}已准备好，但${nounOf(c.kind)}的实际使用还没有统计，无法确认能否运行。`],
+  // A dependency whose presence could not be read is not called present.
+  'dependency-unchecked': ['unverified', (d) => `它需要的「${softwareOf(d)}」暂时无法核对是否具备，无法确认能否运行。`],
   'collector-off': ['unverified', () => '这个部署没有统计实际运行的情况，无法确认。'],
   'collector-pending': ['unverified', () => '正在整理这个部署上已完成的运行，暂时无法确认。'],
   'records-unreadable': ['unverified', () => '实际运行的情况暂时读不到，无法确认。'],
@@ -526,6 +537,8 @@ export function describeAvailability(entry) {
     version: entry.version ?? null,
     lastSuccessAt: entry.operations?.lastSuccessAt ?? null,
     engineState: typeof facts.engineState === 'string' ? facts.engineState : null,
+    wanted: typeof facts.wanted === 'string' ? facts.wanted : null,
+    have: typeof facts.have === 'string' ? facts.have : null,
   }
   return {
     label: AVAILABILITY_STATE_LABELS_ZH[entry.state] ?? AVAILABILITY_STATE_LABELS_ZH.unverified,

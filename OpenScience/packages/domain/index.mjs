@@ -325,6 +325,56 @@ export {
   totalOutputTokens,
 } from './src/runTranscript.mjs'
 
+// skillSupply — a skill package's source, licence, version, scripts, references, dependencies and operations as one
+// record, and whether the deployment can supply what it needs (read as a label by the availability projection)
+export {
+  PYTHON_DISTRIBUTION_MODULES,
+  R_IMAGE_PACKAGES,
+  SKILL_DEPENDENCY_BASES,
+  SKILL_DEPENDENCY_KINDS,
+  SKILL_DEPENDENCY_SUPPLIES,
+  SKILL_OPERATION_KINDS,
+  SKILL_PACKAGE_ORIGINS,
+  SKILL_PACKAGE_RECORD_VERSION,
+  SKILL_PARAM_TYPES,
+  SKILL_SOURCE_KINDS,
+  buildSkillPackageRecord,
+  declaredDependencies,
+  defaultDependencySupply,
+  describeSkillLicence,
+  describeSkillSource,
+  fencedPython,
+  imageProvides,
+  normalizeSkillOperation,
+  normalizeSkillPackageRecord,
+  observedDependencies,
+  packagePath,
+  pinHolds,
+  publicSkillPackage,
+  pythonImports,
+  rLibraries,
+  skillDependencyReasons,
+  skillPackageRecordDigest,
+  unknownFields,
+} from './src/skillSupply.mjs'
+
+// operationHelp — bounded help derived from an operation's own schema
+export {
+  OPERATION_HELP_BUDGET,
+  PACKAGE_HELP_BUDGET,
+  operationExample,
+  renderOperationHelp,
+  renderPackageHelp,
+} from './src/operationHelp.mjs'
+
+// skillUpdatePlan — what updating an edited copy of a skill toward a newer upstream would change, and what it keeps
+export {
+  SKILL_UPDATE_PARTS,
+  normalizeSkillBaseline,
+  planSkillUpdate,
+  skillContentDigests,
+} from './src/skillUpdatePlan.mjs'
+
 // skillRoots — 3 exports
 export {
   RUNTIME_SKILL_ROOTS,
