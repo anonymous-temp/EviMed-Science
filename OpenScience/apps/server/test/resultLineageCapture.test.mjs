@@ -6,7 +6,8 @@ import test from "node:test";
 import { ResultProvenanceService } from "../src/resultProvenanceService.mjs";
 import { ResultReplayService, verifiedEngineFacts } from "../src/resultReplayService.mjs";
 import { ResultLineageService } from "../src/resultLineage.mjs";
-import { captureResultDelivery } from "../src/resultDeliveryCapture.mjs";
+import { captureFinishedRun, captureResultDelivery } from "../src/resultDeliveryCapture.mjs";
+import { createResultProducerCapture } from "../src/resultProducerCapture.mjs";
 import { replayDigest } from "../src/resultReplayClient.mjs";
 import { DataSemanticsService } from "../src/dataSemanticsService.mjs";
 import { readSkillExecution } from "../src/skillExecution.mjs";
@@ -132,17 +133,17 @@ function receipt({ script, inputs, results, exitCode = 0, libraries = { numpy: "
     output: { before: null, after: snap(results.path, results.bytes), observation: "created", observedWrite: true }, sourcesUnchanged: true, warnings: [], ...extra }] };
 }
 
-async function skillFixture(t, options = {}) {
+async function skillFixture(t, { resultsPath = "deliverables/s1/analysis-results.json", receiptPath = "deliverables/s1/analysis-run.json", ...options } = {}) {
   const f = await fixture(t);
   const script = { path: "analysis.py", bytes: Buffer.from("import pandas\nprint('analysis')\n") };
   const data = { path: "data/trial.csv", bytes: Buffer.from("id,arm,outcome\n1,a,0.5\n2,b,0.7\n") };
   const resultsDoc = { schemaVersion: 1, analyses: [{ id: "primary", status: "complete", method: "ttest", estimate: 1.25, interval: { lower: 0.8, upper: 1.9 }, pValue: 0.034, n: { a: 120, b: 118 } }] };
-  const results = { path: "deliverables/s1/analysis-results.json", bytes: Buffer.from(JSON.stringify(resultsDoc)) };
+  const results = { path: resultsPath, bytes: Buffer.from(JSON.stringify(resultsDoc)) };
   const files = { script, data, results };
   await f.write(script.path, script.bytes); await f.write(data.path, data.bytes); await f.write(results.path, results.bytes);
   const record = receipt({ script, inputs: [data], results, ...options });
-  await f.write("deliverables/s1/analysis-run.json", JSON.stringify(record));
-  return { ...f, files, record, readBytes: (relative, limit) => stableBytes(f.project, relative, limit) };
+  await f.write(receiptPath, JSON.stringify(record));
+  return { ...f, files, record, receiptPath, readBytes: (relative, limit) => stableBytes(f.project, relative, limit) };
 }
 
 test("an admitted skill script's execution record becomes the results file's producer snapshot, each item re-checked against the bytes readable now", async t => {
@@ -218,4 +219,38 @@ test("a delivery with a script's results captures the calculation first, so the 
   assert.deepEqual(doc.bindings.unbound.map(item => item.printed), ["95%", "3.14"]);
   assert.equal(doc.bindings.status, "partly_bound");
   assert.equal(byPath["deliverables/s1/analysis-run.json"].bindings.status, "not_checked", "a JSON record is not a report to be read for numbers");
+});
+
+test("a statistical package at the workspace root: the report written while the run worked is bound to the script's results when the run ends", async t => {
+  const f = await skillFixture(t, { resultsPath: "analysis-results.json", receiptPath: "analysis-run.json" });
+  const reportText = "# 统计报告\n\n估计值 1.25（区间 0.80–1.90），P = 0.034；另有 3.14 未归因。\n";
+  // The report is a native write: captured the moment it completes, before any calculation of the run is preserved.
+  const capture = createResultProducerCapture({ service: f.results });
+  await f.write("statistical-report.md", reportText);
+  await capture.observe(f.project, "run-1", { sessionId: "session-1", event: { type: "tool/call", tool: "write", callId: "w1", seq: 1, input: { file_path: "statistical-report.md", content: reportText } } });
+  const early = await capture.observe(f.project, "run-1", { sessionId: "session-1", event: { type: "tool/result", callId: "w1", status: "completed", seq: 2 } });
+  assert.equal(early.bindings.status, "no_calculation", "true when it was written: nothing of the run had been calculated and preserved");
+  const run = { id: "run-1", sessionId: "session-1", artifacts: ["statistical-report.md", "analysis-results.json", "analysis-run.json", "analysis.py"] };
+  const finished = await captureFinishedRun({ results: f.results, project: f.project, run, readReceipt: async () => null });
+  assert.deepEqual(finished.failures, []);
+  const calc = (await f.results.query(OWNER, "p", { path: "analysis-results.json", hasMachineValues: true })).items[0];
+  assert.ok(calc, "the results the script left outside the deliverable layout were preserved as the run's calculation");
+  assert.equal(calc.snapshot.kind, "skill_script");
+  assert.equal(calc.producer.kind, "workspace");
+  assert.equal(calc.coverage.producer, "bound");
+  const report = await f.results.get(OWNER, "p", early.versionId);
+  assert.equal(report.digest, early.digest, "the report's bytes and identity did not move");
+  assert.equal(report.bindings.status, "partly_bound");
+  assert.deepEqual(report.bindings.items.map(item => [item.printed, item.calculation.key]).sort(),
+    [["0.034", "analyses[0].pValue"], ["0.80", "analyses[0].interval.lower"], ["1.25", "analyses[0].estimate"], ["1.90", "analyses[0].interval.upper"]]);
+  assert.deepEqual(report.bindings.unbound.map(item => item.printed), ["3.14"]);
+  assert.ok(report.coverage.gaps.includes("values_unbound"));
+  assert.equal((await f.lineage.describe(OWNER, "p", calc.versionId)).dependents[0].versionId, report.versionId);
+  // The ledger kept the revision it replaced.
+  const history = await f.documents.history(OWNER, "result-version", early.versionId);
+  assert.equal(history.length, 2);
+  assert.equal(history.at(-1).payload.bindings.status, "no_calculation");
+  // Running the end of the run again changes nothing.
+  await captureFinishedRun({ results: f.results, project: f.project, run, readReceipt: async () => null });
+  assert.equal((await f.documents.history(OWNER, "result-version", early.versionId)).length, 2);
 });

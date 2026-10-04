@@ -6,7 +6,7 @@ import { claimEvidenceSources, claimVerification } from "@evimed/domain/clinical
 import { normalizeResultPath } from "@evimed/domain/result-provenance";
 import { clinicalResultLinks } from "./resultImpact.mjs";
 import { describedQualityNotices } from "./runNotices.mjs";
-import { findSkillExecutions, readSkillExecution } from "./skillExecution.mjs";
+import { captureSkillResults, findSkillExecutions, readSkillExecution } from "./skillExecution.mjs";
 import { HttpError, openScopedFileNoFollow, readStableFileHandle, resolveScopedPath } from "./security.mjs";
 
 const sha = bytes => createHash("sha256").update(bytes).digest("hex");
@@ -250,5 +250,22 @@ export async function captureFinishedRun({ results, project, run, readReceipt, u
   const receipt = await readReceipt(project, run);
   const files = unreceipted ? [...(run.artifacts ?? []), ...(run.unverifiedArtifacts ?? [])] : [];
   if (!receipt && files.length === 0) return null;
-  return captureResultDelivery({ results, project, run, receipt, files, transformationsFor });
+  // Results a script left outside the deliverable layout (a statistical package at the workspace root) are preserved as
+  // the run's calculations first; those inside it are captured with their deliverable, below.
+  const readBytes = (/** @type {string} */ relativePath, /** @type {number} */ limit) => stableBytes(project, relativePath, limit);
+  const prefix = `${workspaceLayout.deliverablesDir}/`;
+  const failures = [];
+  try {
+    for (const pair of await findSkillExecutions({ paths: files, readBytes })) {
+      if (pair.resultsPath.startsWith(prefix)) continue;
+      const captured = await captureSkillResults({ results, project, userId: project.userId, ...pair, readBytes, transformationsFor,
+        producer: { sessionId: run.sessionId, runId: run.id, parentSessionId: run.parentSessionId ?? run.forkedFrom ?? null,
+          branchId: run.branchId ?? (run.forkedFrom ? run.sessionId : null) } }).catch((/** @type {any} */ error) => ({ status: "unavailable", reason: error?.code ?? "result_capture_failed" }));
+      if (captured.status === "unavailable") failures.push({ path: pair.resultsPath, code: "result_skill_execution_unavailable" });
+    }
+  } catch { /* An execution record that cannot be read leaves the files as they would have been. */ }
+  const delivered = await captureResultDelivery({ results, project, run, receipt, files, transformationsFor });
+  // Reports written while the run was still working were captured before its calculations existed.
+  try { await results.rebindRun?.(project.userId, project, run.id); } catch { /* the labels stay as they were captured */ }
+  return failures.length ? { ...delivered, failures: [...delivered.failures, ...failures] } : delivered;
 }

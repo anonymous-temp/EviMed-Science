@@ -60,7 +60,7 @@ function interpreterOf(path) {
  * @param {{ results: any, project: any, userId: string, receiptPath: string, resultsPath: string,
  *   readBytes: (relativePath: string, limit: number) => Promise<Buffer>,
  *   transformationsFor?: ((digests: string[]) => Promise<any[]>) | null, inputLimit?: number, now?: () => string }} input
- * @returns {Promise<{ status: "recorded", snapshot: any, code: any, inputs: any[], machineValues: any[], truncated: boolean }
+ * @returns {Promise<{ status: "recorded", snapshot: any, code: any, inputs: any[], machineValues: any[], truncated: boolean, digest: string }
  *   | { status: "unavailable", reason: string }>}
  */
 export async function readSkillExecution({ results, project, userId, receiptPath, resultsPath, readBytes, transformationsFor = null, inputLimit = 8 * 1024 * 1024 }) {
@@ -130,7 +130,34 @@ export async function readSkillExecution({ results, project, userId, receiptPath
   try { parsed = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(resultsBytes)); } catch { parsed = null; }
   const flat = flattenMachineValues(parsed);
   const code = scriptVersion ? { kind: "code", id: script.path, versionId: scriptVersion.versionId, digest: script.digest, availability: "captured" } : null;
-  return { status: "recorded", snapshot, code, inputs, machineValues: flat.values, truncated: flat.truncated };
+  return { status: "recorded", snapshot, code, inputs, machineValues: flat.values, truncated: flat.truncated, digest: resultsDigest };
+}
+
+/**
+ * Capture the results file an execution record accounts for, as a calculation: its numbers flattened to machine values
+ * and the record as its producer snapshot. The same bytes already preserved as a calculation by this record are that
+ * calculation — a second copy would be a second identity for one result.
+ *
+ * The producer is the workspace (`kind: "workspace"`) of the run: the file was made by a script run through the shell,
+ * which no tool call of this run wrote, so no call is claimed as its producer; the record the script left, and the bytes
+ * the platform re-read against it, are what bind it.
+ *
+ * @param {{ results: any, project: any, userId: string, receiptPath: string, resultsPath: string,
+ *   readBytes: (relativePath: string, limit: number) => Promise<Buffer>, producer: { sessionId?: string | null, runId?: string | null,
+ *   parentSessionId?: string | null, branchId?: string | null },
+ *   transformationsFor?: ((digests: string[]) => Promise<any[]>) | null }} input
+ * @returns {Promise<{ status: "captured", version: any } | { status: "unavailable", reason: string }>}
+ */
+export async function captureSkillResults({ results, project, userId, receiptPath, resultsPath, readBytes, producer, transformationsFor = null }) {
+  const read = await readSkillExecution({ results, project, userId, receiptPath, resultsPath, readBytes, transformationsFor });
+  if (read.status !== "recorded") return read;
+  const existing = (await results.query(userId, project.id, { path: resultsPath, digest: read.digest, hasMachineValues: true, snapshot: { kind: "skill_script" } }, { limit: 1 })).items[0];
+  if (existing) return { status: "captured", version: existing };
+  const version = await results.captureFile({ userId, project, relativePath: resultsPath, expectedDigest: read.digest, machineValues: read.machineValues,
+    snapshot: read.snapshot, code: read.code, inputs: read.inputs,
+    producer: { kind: "workspace", sessionId: producer.sessionId ?? null, runId: producer.runId ?? null, parentSessionId: producer.parentSessionId ?? null,
+      branchId: producer.branchId ?? null, eventId: `skill-results:${read.digest}` } });
+  return { status: "captured", version };
 }
 
 /**

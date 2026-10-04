@@ -202,11 +202,50 @@ export class ResultProvenanceService {
     const notAReport = producer.kind === "workspace" || relativePath.startsWith(".evimed-sources/") || relativePath.startsWith("result-replays/");
     if (hasValues || kind === "values" || notAReport) return projectValueBindings({ status: "not_checked" });
     const calculations = await this.calculationsFor(project, { producer, inputs });
+    return this.bindBytes(calculations, { relativePath, bytes, mimeType });
+  }
+
+  /** @param {any[]} calculations @param {{relativePath:string,bytes:Buffer,mimeType:string}} file */
+  bindBytes(calculations, { relativePath, bytes, mimeType }) {
+    const kind = bindableKind(relativePath, mimeType);
     if (!calculations.length) return projectValueBindings({ status: "no_calculation" });
     if (kind === "binary") return valueBindingRecord({ kind, calculations, items: [], unbound: [], examined: 0 });
     if (bytes.length > RESULT_LINEAGE_LIMITS.textBytes) return valueBindingRecord({ kind: "values", calculations, items: [], unbound: [], examined: 0, truncated: true });
     const body = new TextDecoder("utf-8").decode(bytes);
     return valueBindingRecord({ ...bindPrintedNumbers({ body, path: relativePath, mimeType, calculations }), calculations });
+  }
+
+  /**
+   * At the end of a run, bind the reports, tables and figures it wrote before its calculations existed.
+   *
+   * A native write is captured the moment it completes; a script run through the shell leaves its results file for the
+   * end of the run to capture. A report captured before that holds `no_calculation`, which was true then. Once the
+   * run's calculations are preserved, those versions are bound against them — an annotation on the version, written as
+   * a new revision of its row (the ledger keeps the one it replaces), never a change to its bytes, digest or producer.
+   * Anything that cannot be read or written is skipped: the version stays as it was.
+   * @param {string} userId @param {any} project @param {string} runId
+   */
+  async rebindRun(userId, project, runId) {
+    const scoped = await this.scope(userId, project.id);
+    const calculations = await this.calculationsFor(scoped, { producer: { runId }, inputs: [] });
+    if (!calculations.length) return { rebound: 0 };
+    const page = await this.documents.list(scoped.userId, "result-version", { projectId: scoped.id, limit: 100,
+      filter: { recordType: "result-version", producer: { runId }, bindings: { status: "no_calculation" } } });
+    let rebound = 0;
+    for (const row of page.items) {
+      const payload = row.payload;
+      if (payload.producer?.kind === "workspace" || (payload.machineValues ?? []).length) continue;
+      try {
+        const bytes = await this.readSnapshot(scoped, { ...payload, storagePath: `result-snapshots/${payload.digest}` });
+        const bindings = this.bindBytes(calculations, { relativePath: payload.path, bytes, mimeType: payload.mimeType });
+        if (bindings.status === "no_calculation") continue;
+        const gaps = [...new Set([...(payload.coverage?.gaps ?? []), ...bindingGaps(bindings)])];
+        await this.documents.put(scoped.userId, "result-version", payload.versionId, { ...payload, bindings, bindingSources: bindingSources(bindings),
+          coverage: { ...payload.coverage, gaps } }, { projectId: scoped.id, expectedRevision: row.revision });
+        rebound += 1;
+      } catch { /* The version stays as it was captured. */ }
+    }
+    return { rebound };
   }
 
   /** Partial files survive an unavailable sibling; each failure is explicit.

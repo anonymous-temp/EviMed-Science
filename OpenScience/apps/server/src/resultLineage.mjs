@@ -33,9 +33,9 @@
  */
 import { createHash } from "node:crypto";
 import { lstat } from "node:fs/promises";
-import { NUMBER_BINDING_VERSION, RESULT_LINEAGE_LIMITS, changeImpact, flattenMachineValues, renderSnapshot, renderWithBindings, valueBindingRecord } from "@evimed/domain";
+import { NUMBER_BINDING_VERSION, RESULT_LINEAGE_LIMITS, SNAPSHOT_UNKNOWNS, changeImpact, flattenMachineValues, renderSnapshot, renderWithBindings, valueBindingRecord } from "@evimed/domain";
 import { normalizeResultPath } from "@evimed/domain/result-provenance";
-import { readSkillExecution } from "./skillExecution.mjs";
+import { captureSkillResults } from "./skillExecution.mjs";
 import { stableBytes } from "./resultDeliveryCapture.mjs";
 import { HttpError, assertProjectCapacity, resolveScopedPath, withProjectStorageMutation, writeFileExclusiveNoFollow } from "./security.mjs";
 
@@ -156,16 +156,16 @@ export class ResultLineageService {
     // The same bytes already preserved as a calculation are that calculation: a second copy would be a second identity for one result.
     const existing = (await this.results.query(userId, project.id, { path: resultsPath, digest: sha(bytes), hasMachineValues: true }, { limit: 1 })).items[0];
     if (existing) return existing;
-    /** @type {any} */
-    let lineage = {};
+    const origin = { sessionId: producer.sessionId, runId: producer.runId ?? null, parentSessionId: producer.parentSessionId ?? null, branchId: producer.branchId ?? null };
     if (typeof source.receiptPath === "string") {
-      const read = await readSkillExecution({ results: this.results, project, userId, receiptPath: normalizeResultPath(source.receiptPath), resultsPath, readBytes,
+      const captured = await captureSkillResults({ results: this.results, project, userId, receiptPath: normalizeResultPath(source.receiptPath), resultsPath, readBytes, producer: origin,
         transformationsFor: this.transformationsFor ? (digests) => /** @type {any} */ (this.transformationsFor)(project, digests) : null });
-      if (read.status === "recorded") lineage = { snapshot: read.snapshot, code: read.code, inputs: read.inputs };
+      if (captured.status === "captured") return captured.version;
     }
-    return this.results.captureFile({ userId, project, relativePath: resultsPath, expectedDigest: sha(bytes), machineValues: flat.values, ...lineage,
-      producer: { kind: "tool", sessionId: producer.sessionId, runId: producer.runId ?? null, callId: producer.callId, eventId: `results:${producer.callId}`,
-        parentSessionId: producer.parentSessionId ?? null, branchId: producer.branchId ?? null } });
+    // No execution record accounts for these bytes: they are a results file the run named, and how it was made was not observed.
+    return this.results.captureFile({ userId, project, relativePath: resultsPath, machineValues: flat.values,
+      snapshot: { kind: "unobserved", origin: "unknown", unknown: [...SNAPSHOT_UNKNOWNS] },
+      producer: { kind: "workspace", ...origin, eventId: `results:${sha(bytes)}` } });
   }
 
   /**
@@ -243,8 +243,10 @@ export class ResultLineageService {
     try {
       const existing = await this.results.query(userId, project.id, { path: templatePath, digest }, { limit: 1 });
       if (existing.items[0]) return existing.items[0];
+      // Not a version of the run's own write (a shell command may have made the file): preserved as the bytes the render read.
       return await this.results.captureFile({ userId, project, relativePath: templatePath, expectedDigest: digest,
-        producer: { kind: "tool", sessionId: producer.sessionId, runId: producer.runId ?? null, callId: producer.callId, eventId: `template:${producer.callId}`,
+        snapshot: { kind: "unobserved", origin: "unknown", unknown: [...SNAPSHOT_UNKNOWNS] },
+        producer: { kind: "workspace", sessionId: producer.sessionId, runId: producer.runId ?? null, eventId: `template:${digest}`,
           parentSessionId: producer.parentSessionId ?? null, branchId: producer.branchId ?? null } });
     } catch { return null; }
   }
