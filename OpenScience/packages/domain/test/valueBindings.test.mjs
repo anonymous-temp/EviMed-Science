@@ -211,3 +211,19 @@ test("a report with more numbers than the record holds says so and still labels 
   assert.equal(record.items.length, 300);
   assert.equal(record.status, "bound");
 });
+
+test("the words a file prints are read by the rule binding uses, and a file whose numbers are not words is unchecked rather than empty", () => {
+  const { printedNumberWords } = domain;
+  const text = printedNumberWords({ body: "合并 OR 为 0.71（95% CI 0.52–0.91），共 1,284 人。\n\n```\n9.99\n```\n\n## 参考文献\n[1] 2020;12.5\n", path: "report.md" });
+  assert.deepEqual([text.kind, text.checkable], ["text", true]);
+  assert.deepEqual(text.words, ["0.71", "95%", "0.52", "0.91", "1,284"], "code fences and the reference list print nothing of the analysis");
+  assert.deepEqual(printedNumberWords({ body: "measure,value\nOR,0.71\n", path: "t.csv" }).words, ["0.71"]);
+  assert.deepEqual(printedNumberWords({ body: "<svg><text>OR 0.71</text><text>−4.5%</text></svg>", path: "f.svg" }).words, ["0.71", "-4.5%"]);
+  for (const path of ["results.json", "figure.png", "report.pdf"]) {
+    const unread = printedNumberWords({ body: '{"a":1.5}', path });
+    assert.equal(unread.checkable, false, path);
+    assert.deepEqual(unread.words, [], path);
+  }
+  const huge = printedNumberWords({ body: Array.from({ length: 6000 }, (_, index) => `值 ${index}.5`).join("\n"), path: "big.txt" });
+  assert.equal(huge.checkable, false, "past the bound the list says it is cut, and nothing is compared from it");
+});
