@@ -295,6 +295,7 @@ test("specialty agent catalog requires authentication and exposes only public me
       "dataset-research-scoping",
       "drug-selection",
       "evidence-appraisal",
+      "gene-expression-analysis",
       "geo-content",
       "geo-insight",
       "geo-proposal",

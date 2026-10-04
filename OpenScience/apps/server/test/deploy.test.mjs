@@ -2146,10 +2146,12 @@ test("file-delivery capabilities fix the two pre-delivery steps instead of leavi
     }
     const shipped = await readFile(new URL(`${name}/SKILL.md`, shippedRoot), "utf8").catch(() => null);
     assert.ok(shipped !== null, `${name} has no shipped body under capability-skills/, so a delegated child reads nothing`);
-    // Data-first scoping and native statistics use proportional numerical
-    // checks and optional companions, as covered by their capability suites.
-    // They do not inherit the full report pipeline's mandatory skill sequence.
-    if (["dataset-research-scoping", "statistical-analysis"].includes(name)) continue;
+    // Data-first scoping, native statistics and the gene-expression computation
+    // use proportional numerical checks and optional companions, as covered by
+    // their capability suites: their numbers are rendered from a tool's or a
+    // script's results, not typed from sources. They do not inherit the full
+    // report pipeline's mandatory skill sequence.
+    if (["dataset-research-scoping", "statistical-analysis", "gene-expression-analysis"].includes(name)) continue;
     for (const step of ["traceability-review", "manuscript-humanize"]) {
       assert.ok(skill.includes(step), `${name}/SKILL.md does not name ${step} as a pre-delivery step`);
       assert.ok(shipped.includes(step), `capability-skills/${name}/SKILL.md does not name ${step}; the authored copy is not what the run reads`);

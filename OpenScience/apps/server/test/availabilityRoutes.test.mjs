@@ -2,12 +2,19 @@
 // the deployment on which the product can say the least — and what it says must be that, not more: no label reads
 // "executable", the catalogue is unchanged but for the label, and the operator's export stays behind the operator.
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
 
 import { createWebApiApp } from "../src/server.mjs";
+
+/** The capabilities a researcher can be offered: every manifest under `capabilities/` that is not `visibility: internal`. */
+const capabilitiesRoot = new URL("../../../capabilities/", import.meta.url);
+const publicCapabilityCount = (await Promise.all((await readdir(capabilitiesRoot, { withFileTypes: true }))
+  .filter((entry) => entry.isDirectory())
+  .map((entry) => readFile(new URL(`${entry.name}/capability.yaml`, capabilitiesRoot), "utf8"))))
+  .filter((manifest) => !/^visibility:\s*internal\s*$/m.test(manifest)).length;
 
 const adapters = {
   metaAnalysis: "http://meta:8024/api/v1/evimed/meta-analysis", mendelianRandomization: "http://mr:8026/x", bibliometricAnalysis: "http://bib:8027/x",
@@ -66,7 +73,10 @@ test("GET /api/availability needs a session and answers every capability and too
 test("GET /api/agents carries the label beside each capability and leaves nothing out for what it says", async () => {
   await withApp(async ({ base, headers }) => {
     const { data } = await (await fetch(`${base}/api/agents`, { headers })).json();
-    assert.equal(data.length, 24);
+    // Every public capability under `capabilities/`, counted from the manifests: a capability added next
+    // month is one more row here, not a number to remember.
+    assert.equal(data.length, publicCapabilityCount);
+    assert.ok(data.length >= 24, "the catalogue was read");
     for (const agent of data) {
       assert.equal(typeof agent.availability?.state, "string", agent.id);
       assert.equal(agent.availability.id, agent.id);
