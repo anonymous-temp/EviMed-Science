@@ -1027,6 +1027,20 @@ def failure(code, message, retryable, stop_reason, next_actions):
     }
 
 
+def _public_source_failure(error, stop_reason, next_actions):
+    """A public-source error as a tool failure.
+
+    A source nobody configured for this researcher is told plainly — which
+    source was left out, that the user can add it under 设置 → 数据源, and that the
+    rest of the request goes on with the sources it has — and is never offered
+    as an outage to retry: retrying cannot change it, and the model is told so.
+    Everything else keeps its caller's own stop reason and next actions.
+    """
+    if isinstance(error, public_sources.SourceNotConfigured):
+        return failure(error.code, str(error), False, error.STOP_REASON, error.next_actions())
+    return failure(error.code, str(error), error.retryable, stop_reason, next_actions)
+
+
 def _validate(value, schema, path):
     if "oneOf" in schema:
         matches = 0
@@ -1419,10 +1433,8 @@ def _public_adapter_call(name, arguments):
     except public_sources.PublicSourceError as error:
         if error.retryable:
             _circuit_failure(circuit_name, circuit_url)
-        return failure(
-            error.code,
-            str(error),
-            error.retryable,
+        return _public_source_failure(
+            error,
             "Stop after one retry if the public source remains unavailable.",
             ["Retry once or configure the corresponding private EviMed adapter."],
         )
@@ -1900,10 +1912,8 @@ def _dispatch(name, arguments, execution_context=None):
                 ["Correct the named field and retry with only declared inputs."],
             )
         except public_sources.PublicSourceError as error:
-            return failure(
-                error.code,
-                str(error),
-                error.retryable,
+            return _public_source_failure(
+                error,
                 "Stop after one retry if the public source remains unavailable.",
                 ["Retry once, then report the source as unavailable rather than substituting another."],
             )

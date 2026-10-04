@@ -270,6 +270,54 @@ class OpenAccessFullTextTests(unittest.TestCase):
         self.assertEqual(refused["error"]["code"], "public_source_pdf_not_open_access")
         self.assertIn("Tried: x: HTTP 403", refused["error"]["message"])
 
+    def test_an_unconfigured_unpaywall_is_named_with_what_to_do_and_is_not_retried(self):
+        # 2026-10-04: the deployment holds no Unpaywall address and the
+        # researcher has not added theirs. The gateway's refusal is the closed
+        # code; the result says which source, that the user can add it, and that
+        # retrying cannot help.
+        class Gateway(http.server.BaseHTTPRequestHandler):
+            def do_POST(self):  # noqa: N802 - the stdlib's name
+                self.rfile.read(int(self.headers["content-length"]))
+                body = json.dumps({"error": {
+                    "code": "public_source_unpaywall_credential_missing",
+                    "message": "Unpaywall is not configured for this deployment or this account; the user can add their own credential under 设置 → 数据源.",
+                }}).encode()
+                self.send_response(503)
+                self.send_header("content-type", "application/json")
+                self.send_header("content-length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *_args):
+                return
+
+        server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Gateway)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        token = pathlib.Path(self.temp.name) / "gateway.token"
+        token.write_text("runtime-token\n")
+        os.chmod(token, 0o600)
+        environment = {
+            "EVIMED_PUBLIC_SOURCE_GATEWAY_URL": "http://127.0.0.1:%d/internal/sources/v1/fetch" % server.server_address[1],
+            "EVIMED_MODEL_GATEWAY_TOKEN_FILE": str(token),
+        }
+        with mock.patch.dict(os.environ, environment), \
+                mock.patch.object(self.module, "_resolve", return_value={"doi": "10.1/closed"}), \
+                mock.patch.object(self.module.public_sources, "open_access_pdf_bytes") as raw_mode:
+            os.environ.pop("EVIMED_MODEL_CONFIG_FILE", None)
+            result = self.module.fetch({"identifier": "10.1/closed"})
+        raw_mode.assert_not_called()
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(result["error"]["code"], "public_source_unpaywall_credential_missing")
+        self.assertIs(result["error"]["retryable"], False)
+        self.assertIn("Unpaywall is not configured", result["error"]["message"])
+        self.assertIn("设置 → 数据源", result["error"]["message"])
+        self.assertIn("retrying cannot change", result["error"]["stopReason"])
+        actions = " ".join(result["next_actions"])
+        self.assertIn("Do not retry Unpaywall", actions)
+        self.assertIn("Tell the user that Unpaywall was left out", actions)
+
     def test_the_parse_mode_request_carries_only_the_doi_and_checks_the_pdf_digest(self):
         pdf = b"%PDF-1.7 open access"
         answers = []

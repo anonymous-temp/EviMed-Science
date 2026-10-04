@@ -719,6 +719,52 @@ class AdapterTests(unittest.TestCase):
         self.assertEqual(second["error"]["code"], "public_source_unavailable")
         self.assertEqual(third["error"]["code"], "adapter_circuit_open")
 
+    def test_a_source_nobody_configured_is_told_plainly_and_never_retried_or_tripped(self):
+        # 2026-10-04: a data source the deployment holds no credential for is
+        # the researcher's to configure when they use it. The result says which
+        # source, that the user can add it, that retrying cannot help, and that
+        # the rest of the request goes on — instead of "Public source returned
+        # HTTP 503", which the model read as an outage and retried.
+        os.environ["EVIMED_PUBLIC_CONNECTORS_ENABLED"] = "true"
+        os.environ["EVIMED_ADAPTER_CIRCUIT_FAILURES"] = "1"
+        error = self.server.public_sources.SourceNotConfigured("umls", "UMLS")
+
+        def public_call(_name, arguments):
+            if arguments["source"] == "umls":
+                raise error
+            return {"summary": "No records.", "data": {"items": []}, "sources": []}
+
+        with mock.patch.object(self.server.public_sources, "call", side_effect=public_call) as call:
+            first = self.server.call_tool("biomedical_source_search", {"source": "umls", "query": "aspirin"})
+            second = self.server.call_tool("biomedical_source_search", {"source": "umls", "query": "metformin"})
+            other = self.server.call_tool("biomedical_source_search", {"source": "pubmed", "query": "aspirin"})
+        self.assertEqual(set(first), {"status", "summary", "next_actions", "error"}, "the ToolResult contract's error shape")
+        self.assertEqual(set(first["error"]), {"code", "message", "retryable", "stopReason"})
+        self.assertEqual(first["status"], "error")
+        self.assertEqual(first["error"]["code"], "public_source_umls_credential_missing")
+        self.assertIs(first["error"]["retryable"], False)
+        self.assertIn("UMLS is not configured", first["error"]["message"])
+        self.assertIn("设置 → 数据源", first["error"]["message"])
+        self.assertIn("retrying cannot change", first["error"]["stopReason"])
+        actions = " ".join(first["next_actions"])
+        self.assertIn("Do not retry UMLS", actions)
+        self.assertIn("continue the request with the other sources", actions)
+        self.assertIn("Tell the user that UMLS was left out", actions)
+        self.assertIn("设置 → 数据源", actions)
+        # Not an outage: the circuit stays closed, so the next ask reaches the
+        # source (and is told the same), and an unrelated source is untouched.
+        self.assertEqual(second["error"]["code"], "public_source_umls_credential_missing")
+        self.assertEqual(other["status"], "warning")
+        self.assertEqual(call.call_count, 3)
+
+    def test_the_science_connectors_tell_an_unconfigured_source_the_same_way(self):
+        error = self.server.public_sources.SourceNotConfigured("materials-project", "Materials Project")
+        with mock.patch.object(self.server.science_connectors, "direct_query", side_effect=error):
+            result = self.server.call_tool("search_materials", {"formula": "Fe2O3"})
+        self.assertEqual(result["error"]["code"], "public_source_materials_project_credential_missing")
+        self.assertIs(result["error"]["retryable"], False)
+        self.assertIn("Do not retry Materials Project", " ".join(result["next_actions"]))
+
     def test_biomedical_source_circuits_isolate_unrelated_upstreams(self):
         os.environ["EVIMED_PUBLIC_CONNECTORS_ENABLED"] = "true"
         os.environ["EVIMED_ADAPTER_CIRCUIT_FAILURES"] = "1"
