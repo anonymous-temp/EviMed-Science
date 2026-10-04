@@ -999,6 +999,8 @@ export function vcrGapsForRule(rule) {
     effective_sample_size_below_floor: { title: "加权后有效样本量太低", detail: "加权后外部对照的有效样本量低于下限，估计不稳。", answers: "补充更多可比的外部患者。" },
     standardized_difference_above_floor: { title: "加权后关键协变量仍不平衡", detail: "至少一个关键协变量加权后的标准化差异不低于 0.1。", answers: "换协变量集、补充数据，或承认这两群人不可比。" },
     tau_beyond_followup: { title: "限制平均生存时间的时点超过了随访", detail: "所选时点比某一组最长的随访还长。", answers: "把时点缩到报告里给出的最大可用时点以内，或补充随访更长的数据。" },
+    too_few_events: { title: "某一组没有事件，风险比不存在", detail: "有一组一个事件都没有，或 Cox 模型没有收敛，风险比无法估计。", answers: "延长随访或补充事件更多的数据；也可以改看不依赖事件数的指标，如限制平均生存时间的差。" },
+    nuisance_model_not_estimable: { title: "倾向性模型或结局模型拟合不出来", detail: "协变量之间高度共线，或外部对照的人数不足以拟合结局模型的全部系数。", answers: "删去重复或共线的协变量，减少结局模型里的项，或补充更多外部对照患者。" },
     reconstruction_failed_qc: { title: "重建的曲线没有通过质控", detail: "重建出的风险人数、事件数、中位数或风险比与原文对不上。", answers: "重新数字化曲线并核对风险人数表，或换一篇报告完整的文献。" },
     map_prior_conflict: { title: "历史信息与当前数据冲突", detail: "MAP 先验与当前对照组数据的冲突检验越界。", answers: "检查历史研究与本研究人群是否可比，或降低借用权重。" },
     // The two the control plane derives before any job: they carry the route's

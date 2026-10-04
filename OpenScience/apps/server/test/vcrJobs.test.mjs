@@ -7,9 +7,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   VCR_DERIVED_SOURCES, VCR_JOB_OPEN_STATES, VCR_JOB_TERMINAL_STATES, vcrIdempotencyKey, vcrMergeStageResult, vcrReplicatesForJob,
-  vcrScenarioColumns, vcrScenarioHash, vcrSeedFor,
+  vcrResultKindFor, vcrScenarioColumns, vcrScenarioHash, vcrSeedFor,
 } from "../src/vcrJobs.mjs";
-import { VCR_ENGINE_METHODS, VCR_REPLICATES_ALT_MIN, VCR_REPLICATES_NULL_MIN, canonicalScenarioJson, replicatesForMcse, vcrReplicateFloorFor } from "@evimed/domain";
+import { VCR_RESULT_KINDS } from "../src/vcrStore.mjs";
+import { VCR_JOB_KINDS, VCR_JOB_METHODS, VCR_ENGINE_METHODS, VCR_REPLICATES_ALT_MIN, VCR_REPLICATES_NULL_MIN, canonicalScenarioJson, replicatesForMcse, vcrReplicateFloorFor } from "@evimed/domain";
 
 const scenario = {
   design: { kind: "two_arm_fixed", nTreat: 150, nControl: 150 },
@@ -19,6 +20,18 @@ const scenario = {
   accrual: { kind: "uniform", duration: 12, followup: 12 },
   performance: ["power", "type_one_error"],
 };
+
+test("every job kind files under a result kind the read models know, and every comparator method files under comparator", () => {
+  assert.ok(VCR_JOB_KINDS.length >= 28, "the walk proves it walked");
+  for (const kind of VCR_JOB_KINDS) assert.ok(VCR_RESULT_KINDS.includes(vcrResultKindFor(kind)), `${kind} files under ${vcrResultKindFor(kind)}`);
+  for (const [kind, method] of Object.entries(VCR_JOB_METHODS)) {
+    if (method.startsWith("comparator.")) assert.equal(vcrResultKindFor(kind), "comparator", `${kind} (${method})`);
+  }
+  assert.equal(vcrResultKindFor("procova"), "comparator");
+  assert.equal(vcrResultKindFor("profile_snapshot"), "snapshot_profile");
+  assert.equal(vcrResultKindFor("design_simulation"), "trial_scenario");
+  assert.equal(vcrResultKindFor("reconstruct_km"), "evidence_pool");
+});
 
 test("a scenario's hash is over its canonical bytes, so key order and undefined never change it", () => {
   const base = vcrScenarioHash(scenario);

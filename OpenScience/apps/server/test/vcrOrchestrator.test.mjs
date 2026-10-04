@@ -15,8 +15,8 @@ import {
 } from "../src/vcrOrchestrator.mjs";
 import { VCR_NOTICE_KINDS, createVcrNotifier, vcrNoticeHref, vcrStudyName } from "../src/vcrNotify.mjs";
 import {
-  VCR_EXPORT_KINDS, VCR_EXPORT_KIND_LABELS_ZH, VCR_JOB_KINDS, VCR_JOB_METHODS, VCR_NOTIFICATION_KINDS, VCR_NOT_ESTIMABLE_RULES,
-  VCR_SCENARIO_SCHEMAS, VCR_STEPS, VCR_STEP_CAPABILITIES, VCR_STEP_NEEDS, validateEngineJob, validateScenario,
+  VCR_ENGINE_METHODS, VCR_EXPORT_KINDS, VCR_EXPORT_KIND_LABELS_ZH, VCR_JOB_KINDS, VCR_JOB_METHODS, VCR_NOTIFICATION_KINDS, VCR_NOT_ESTIMABLE_RULES,
+  VCR_NOT_ESTIMABLE_RULE_LABELS_ZH, VCR_SCENARIO_SCHEMAS, VCR_STEPS, VCR_STEP_CAPABILITIES, VCR_STEP_NEEDS, validateEngineJob, validateScenario,
 } from "@evimed/domain";
 
 /** @param {string[]} requested */
@@ -656,17 +656,28 @@ test("two assumptions that cannot both hold are found by closed-form identities 
 });
 
 test("a not-estimable result names what is missing and what would answer it, for every rule the engine can fire", () => {
+  // The list is the domain's, so a rule added there without a sentence here fails this test by name.
+  assert.ok(VCR_NOT_ESTIMABLE_RULES.length >= 11, "the walk proves it walked");
+  const cjk = /[\u4e00-\u9fff]/;
   for (const rule of VCR_NOT_ESTIMABLE_RULES) {
-    const [gap] = vcrGapsForRule(rule);
-    assert.ok(gap?.title && gap.detail && gap.answers, `${rule} has its gap sentence`);
+    const gaps = vcrGapsForRule(rule);
+    assert.equal(gaps.length, 1, `${rule} has exactly one gap sentence`);
+    const [gap] = gaps;
+    for (const part of ["title", "detail", "answers"]) {
+      assert.ok(gap[part] && cjk.test(gap[part]), `${rule}.${part} is a Chinese sentence`);
+      assert.ok(!gap[part].includes(rule), `${rule}.${part} does not show the rule's id to a reader`);
+    }
+    assert.ok(/** @type {Record<string, string>} */ (VCR_NOT_ESTIMABLE_RULE_LABELS_ZH)[rule], `${rule} also has its one-line label`);
   }
+  for (const rule of ["too_few_events", "nuisance_model_not_estimable"]) assert.ok(VCR_NOT_ESTIMABLE_RULES.includes(rule), rule);
   assert.deepEqual(vcrGapsForRule("something_else"), []);
 });
 
 test("a superseded version is found where the graph knows it: an earlier version of the same object is what a change replaces", () => {
   const edges = [{ from: "assumption:dropout_rate@1", to: "trial_scenario:scn_1@1" }];
   assert.deepEqual([...vcrSupersededNodes(edges, ["assumption:dropout_rate@2"])].sort(), ["assumption:dropout_rate@1", "assumption:dropout_rate@2"]);
-  assert.ok(Object.keys(VCR_SCENARIO_SCHEMAS).length === 24);
+  assert.equal(Object.keys(VCR_SCENARIO_SCHEMAS).length, Object.keys(VCR_ENGINE_METHODS).length, "one schema per method the domain declares");
+  assert.ok(Object.keys(VCR_SCENARIO_SCHEMAS).length >= 24);
 });
 
 test("C2-5 the assurance stage binds what its own schema takes from the cards — the outcome's standard deviation, the control rate — and says it used exactly those", () => {

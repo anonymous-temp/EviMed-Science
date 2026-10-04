@@ -309,6 +309,27 @@ export function vcrMergeStageResult(prior, incoming, stage, { staleSince = null,
   };
 }
 
+/**
+ * Which `results.kind` a job kind files under. A comparator is any kind whose
+ * method is a `comparator.*` one, so a method added to the engine files under
+ * `comparator` without this list being edited (a kind missing from it would
+ * silently fall through to `snapshot_profile`); and `procova`, the one
+ * design-family method the comparator step owns.
+ * @param {string} kind
+ */
+export function vcrResultKindFor(kind) {
+  const method = /** @type {Record<string, string>} */ (VCR_JOB_METHODS)[kind] ?? "";
+  if (["build_cohort", "generate_population", "literature_population", "synthesize_population", "population_quality"].includes(kind)) return "population";
+  if (["generate_patients", "generate_patients_continuous", "generate_patients_binary"].includes(kind)) return "patient_set";
+  if (method.startsWith("comparator.") || kind === "procova") return "comparator";
+  if (["design_analytic", "design_simulation", "assurance"].includes(kind)) return "trial_scenario";
+  if (kind === "design_grid") return "design_grid";
+  if (kind === "match_criteria") return "matching";
+  if (kind === "accrual_forecast") return "accrual_forecast";
+  if (["pool_evidence", "reconstruct_km"].includes(kind)) return "evidence_pool";
+  return "snapshot_profile";
+}
+
 export class VcrJobs {
   /**
    * @param {{ store: import("./vcrStore.mjs").VcrStore, config?: Record<string, any>, engine?: any,
@@ -1363,15 +1384,7 @@ export class VcrJobs {
 
   /** Which `results.kind` a job kind files under. @param {string} kind */
   #resultKind(kind) {
-    if (["build_cohort", "generate_population", "literature_population", "synthesize_population", "population_quality"].includes(kind)) return "population";
-    if (["generate_patients", "generate_patients_continuous", "generate_patients_binary"].includes(kind)) return "patient_set";
-    if (["weight_comparator", "propensity_weight_comparator", "maic_comparator", "rmst", "map_prior", "evalue", "procova"].includes(kind)) return "comparator";
-    if (["design_analytic", "design_simulation", "assurance"].includes(kind)) return "trial_scenario";
-    if (kind === "design_grid") return "design_grid";
-    if (kind === "match_criteria") return "matching";
-    if (kind === "accrual_forecast") return "accrual_forecast";
-    if (["pool_evidence", "reconstruct_km"].includes(kind)) return "evidence_pool";
-    return "snapshot_profile";
+    return vcrResultKindFor(kind);
   }
 
   /** What the worker's status line says. */
