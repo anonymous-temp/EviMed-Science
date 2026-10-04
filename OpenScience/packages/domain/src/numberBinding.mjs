@@ -319,6 +319,7 @@ export function typedNumbersOf(template) {
  * @property {string} format the format that was applied (`raw` when none or an unknown one was named)
  * @property {unknown} value what the path resolved to
  * @property {string} rendered the words that stand in the report
+ * @property {number} offset where `rendered` starts in the rendered text
  * @property {boolean} ok
  * @property {string} [unit] the unit the result recorded for the value
  * @property {string} [reason] why it did not render, when it did not
@@ -331,11 +332,18 @@ export function typedNumbersOf(template) {
  * flat machine values — and what the words around a refusal say; this returns
  * what happened, in the order it happened.
  *
+ * A number the words type is counted either way. By default it is replaced with
+ * 「未计算」 (the study package's rule: every number in it is a reference);
+ * `typed: "keep"` leaves it in the text for a caller that labels it instead —
+ * a researcher's statistical report keeps the counts it states, and a number
+ * that cannot be bound is a label on the result, never a deletion of it.
+ *
  * @param {string} template the AI's prose with `{{n:…}}` references in it
  * @param {(path: string) => { value: unknown, unit: string | null }} resolve
+ * @param {{ typed?: "replace" | "keep" }} [options]
  * @returns {{ text: string, bindings: RenderedReference[], unparsed: string[], typed: string[] }}
  */
-export function renderNumberTemplate(template, resolve) {
+export function renderNumberTemplate(template, resolve, { typed: typedPolicy = "replace" } = {}) {
   /** @type {RenderedReference[]} */
   const bindings = [];
   const source = String(template ?? "");
@@ -352,7 +360,7 @@ export function renderNumberTemplate(template, resolve) {
     let out = "";
     let cursor = 0;
     for (const span of typedNumberSpans(words)) {
-      out += words.slice(cursor, span.start) + NUMBER_UNCOMPUTED;
+      out += words.slice(cursor, span.start) + (typedPolicy === "keep" ? span.raw : NUMBER_UNCOMPUTED);
       cursor = span.end;
       typed.push(span.raw);
     }
@@ -389,7 +397,7 @@ export function renderNumberTemplate(template, resolve) {
     const { value, unit } = resolve(path);
     const rendered = formatNumberValue(value, format, unit);
     // The unit is kept beside the binding: it is why a percentage was not scaled.
-    bindings.push({ ref: String(ref), path, format, value, rendered: rendered.text, ok: rendered.ok,
+    bindings.push({ ref: String(ref), path, format, value, rendered: rendered.text, offset: text.length, ok: rendered.ok,
       ...(unit ? { unit } : {}), ...(rendered.reason ? { reason: rendered.reason } : {}),
       ...(rawFormat && !known ? { unknownFormat: String(rawFormat) } : {}) });
     text += rendered.text;

@@ -9,6 +9,7 @@ const document = {
   heterogeneity: { value: 41.234, unit: "percent" },
   studies: [{ id: "s1", yi: 0.12 }, { id: "s2", yi: 0.3 }],
 };
+/** @param {string} path */
 const resolve = (path) => resolveNumberPath(document, path);
 
 test("the mechanism lifted out of the study renderer reads paths, units and formats the same way", () => {
