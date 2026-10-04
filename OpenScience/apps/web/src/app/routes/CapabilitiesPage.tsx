@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { Search } from "lucide-react";
 import { capabilityListed } from "@evimed/domain";
-import { webErrorMessage, listWebResearchAgents, type WebResearchAgent } from "@/lib/apiClient";
+import { webErrorMessage, listWebResearchAgents, type WebAvailabilityState, type WebResearchAgent } from "@/lib/apiClient";
 import { researchAgentUi, type CapabilityUi } from "@/lib/researchAgentUi";
 import { capabilityIcon } from "@/lib/capabilityIcons";
 import { bindConversationCapability } from "@/lib/dispatch";
@@ -12,6 +12,7 @@ import { LoadError } from "@/components/cards/LoadError";
 import { PageShell } from "@/components/layout/PageShell";
 import { FilterChips } from "@/components/ui/FilterChips";
 import { SearchInput } from "@/components/ui/SearchInput";
+import { Tag } from "@/components/ui/Tag";
 
 /**
  * The groups in the product's order — evidence, pharmacy, study design and
@@ -142,16 +143,33 @@ export function CapabilitiesPage() {
   );
 }
 
-/** One tool: its icon and name, one sentence, and how long it usually takes. */
+/**
+ * The states whose sentence a reader can act on, and so is shown. The rest
+ * (installed, executable, unverified) are a label alone: the sentence for them
+ * says how often something ran, which is the system explaining itself
+ * (AGENTS.md, 「The interface never explains the system」). It is still there for
+ * assistive technology.
+ */
+const SENTENCE_SHOWN = new Set<WebAvailabilityState>(["limited", "unavailable", "source-planned"]);
+
+/**
+ * One tool: its icon and name, one sentence, how long it usually takes, and what
+ * this deployment can truthfully say about it. The label is a label: the card
+ * opens the same conversation whatever it says (an unavailable tool reports
+ * "blocked" by its own mechanism when asked).
+ */
 function ToolCard({ agent, busy, onOpen }: { agent: CapabilityUi; busy: boolean; onOpen: () => void }) {
   const Icon = capabilityIcon(agent.id);
   const duration = durationText(agent.estimatedMinutes);
+  const availability = agent.availability ?? null;
+  const sentenceId = `availability-${agent.id}`;
   return (
     <button
       type="button"
       onClick={onOpen}
       disabled={busy}
       aria-label={`用“${agent.title}”开始一次对话`}
+      aria-describedby={availability ? sentenceId : undefined}
       className="flex min-h-32 w-full flex-col gap-1.5 rounded-card bg-surface-1 p-4 text-left transition-colors duration-fast hover:bg-surface-2 disabled:cursor-wait disabled:opacity-40"
     >
       <span className="flex items-center gap-2 text-ui font-semibold text-text">
@@ -159,7 +177,17 @@ function ToolCard({ agent, busy, onOpen }: { agent: CapabilityUi; busy: boolean;
         {agent.title}
       </span>
       <span className="text-ui text-text-2">{agent.description}</span>
-      {duration && <span className="mt-auto pt-1 text-caption text-text-3">{duration}</span>}
+      {availability && (
+        <span id={sentenceId} className={SENTENCE_SHOWN.has(availability.state) ? "text-caption text-text-3" : "sr-only"}>
+          {availability.text}
+        </span>
+      )}
+      {(duration || availability) && (
+        <span className="mt-auto flex items-center gap-2 pt-1 text-caption text-text-3">
+          {availability && <Tag>{availability.label}</Tag>}
+          {duration}
+        </span>
+      )}
     </button>
   );
 }

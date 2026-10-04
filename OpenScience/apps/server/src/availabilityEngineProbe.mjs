@@ -103,6 +103,7 @@ export class EngineHealthProbe {
       /** @type {Record<string, unknown>} */
       let facts = {};
       try {
+        /** @type {any} */
         const body = await response.json();
         if (body && typeof body === "object" && !Array.isArray(body)) {
           facts = Object.fromEntries(SCALAR_FIELDS.filter((field) => scalar(body[field])).map((field) => [field, body[field]]));

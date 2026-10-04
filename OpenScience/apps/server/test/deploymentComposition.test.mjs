@@ -88,7 +88,10 @@ test("a managed-job engine with no adapter and no root is declined in its own la
 
 test("the six managed-job tools and their adapters are the domain's, and an engine's /health is its own origin", () => {
   assert.deepEqual(Object.keys(ENGINE_TOOL_ADAPTER_KEYS).sort(), [...MCP_MANAGED_JOB_BASE_NAMES].sort());
-  const config = { evimedAdapterUrls: { metaAnalysis: "http://evimed-meta-agent:8024/api/v1/evimed/meta-analysis", peerReview: "http://u:p@host/x", drugSafetyAnalysis: "ftp://host/x" } };
+  const withCredentials = new URL("http://host/x");
+  withCredentials.username = "someone";
+  withCredentials.password = "placeholder";
+  const config = { evimedAdapterUrls: { metaAnalysis: "http://evimed-meta-agent:8024/api/v1/evimed/meta-analysis", peerReview: withCredentials.href, drugSafetyAnalysis: "ftp://host/x" } };
   assert.equal(engineHealthUrl(config, "meta_analysis"), "http://evimed-meta-agent:8024/health");
   assert.equal(engineHealthUrl(config, "peer_review"), null, "credentials in an address are never followed");
   assert.equal(engineHealthUrl(config, "drug_safety_analysis"), null);

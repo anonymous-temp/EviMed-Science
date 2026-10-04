@@ -441,6 +441,25 @@ export interface WebResearchAgentOutput {
   required: boolean;
 }
 
+/**
+ * What this deployment can truthfully say about one capability, from
+ * `GET /api/agents` (or `GET /api/availability`): a label, never a gate.
+ * `label` and `text` are the product's own Chinese; the codes are for tests
+ * and operators and are never shown.
+ */
+export type WebAvailabilityState = "source-planned" | "installed" | "executable" | "limited" | "unavailable" | "unverified";
+
+export interface WebCapabilityAvailability {
+  kind: "capability" | "tool" | "skill" | "extension";
+  id: string;
+  /** The exact version the state is about; null for a tool. */
+  version: string | null;
+  state: WebAvailabilityState;
+  label: string;
+  text: string;
+  reason: { code: string; detail?: string; source: string };
+}
+
 export interface WebResearchAgent {
   id: string;
   version: string;
@@ -458,6 +477,8 @@ export interface WebResearchAgent {
   outputs: WebResearchAgentOutput[];
   completionChecks: string[];
   runtimeAgent: string;
+  /** Absent from a control plane that predates it, and null when it could not be computed: the catalogue is the same either way. */
+  availability?: WebCapabilityAvailability | null;
 }
 
 export type WebResearchSessionSelection =

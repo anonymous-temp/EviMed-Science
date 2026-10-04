@@ -166,9 +166,9 @@ const REASONS = Object.freeze({
   'preparation-failed': ['unavailable', (d) => `准备没有成功（${errorCodeMessage(String(d ?? ''))}）。`],
   // Nothing here can be believed either way.
   'mock-runtime': ['unverified', () => '当前是模拟运行环境，不能证明真实可运行。'],
-  'collector-off': ['unverified', () => '运行记录没有开启，无法核实。'],
-  'collector-pending': ['unverified', () => '正在整理这个部署的运行记录，暂时无法核实。'],
-  'records-unreadable': ['unverified', () => '运行记录暂时读不到，无法核实。'],
+  'collector-off': ['unverified', () => '这个部署没有统计实际运行的情况，无法确认。'],
+  'collector-pending': ['unverified', () => '正在整理这个部署上已完成的运行，暂时无法确认。'],
+  'records-unreadable': ['unverified', () => '实际运行的情况暂时读不到，无法确认。'],
 })
 
 /** Every reason code, for the exporters' and the tests' sake. */

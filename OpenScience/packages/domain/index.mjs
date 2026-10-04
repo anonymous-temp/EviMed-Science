@@ -26,6 +26,11 @@
 
 export const DOMAIN_VERSION = '0.1.0'
 
+/** @typedef {import('./src/capabilityAvailability.mjs').AvailabilityEntry} AvailabilityEntry */
+/** @typedef {import('./src/capabilityAvailability.mjs').AvailabilityReason} AvailabilityReason */
+/** @typedef {import('./src/capabilityAvailability.mjs').AvailabilityState} AvailabilityState */
+/** @typedef {import('./src/capabilityAvailability.mjs').OperationObservation} OperationObservation */
+/** @typedef {import('./src/capabilityAvailability.mjs').OperationRecord} OperationRecord */
 /** @typedef {import('./src/extensions.mjs').ExtensionCoordinate} ExtensionCoordinate */
 /** @typedef {import('./src/extensions.mjs').ExtensionInstallRequest} ExtensionInstallRequest */
 /** @typedef {import('./src/extensions.mjs').SkillWriteRequest} SkillWriteRequest */

@@ -6,25 +6,24 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-import {
-  AVAILABILITY_REASON_CODES,
-  AVAILABILITY_SAMPLE_LIMIT,
-  AVAILABILITY_STATE_LABELS_ZH,
-  CAPABILITY_AVAILABILITY_STATES,
-  availabilityReasonState,
-  countAvailabilityStates,
-  describeAvailability,
-  emptyOperationRecord,
-  foldOperation,
-  normalizeOperationRecord,
-  operationOutcomeOfRun,
-  projectAvailability,
-  summarizeOperations,
-  typicalOf,
-} from '../index.mjs'
+import * as domain from '../index.mjs'
 
+// The inputs below are deliberately loose literals (a bad `kind`, a missing time, a weird outcome are the cases
+// under test), so the functions are reached through handles that take them as they are.
+const { AVAILABILITY_REASON_CODES, AVAILABILITY_SAMPLE_LIMIT, AVAILABILITY_STATE_LABELS_ZH, CAPABILITY_AVAILABILITY_STATES, availabilityReasonState, countAvailabilityStates, typicalOf } = domain
+const describeAvailability = /** @type {(entry: any) => { label: string, text: string }} */ (domain.describeAvailability)
+const emptyOperationRecord = /** @type {(subject: any) => any} */ (domain.emptyOperationRecord)
+const foldOperation = /** @type {(record: any, observation: any) => any} */ (domain.foldOperation)
+const normalizeOperationRecord = /** @type {(value: unknown) => any} */ (domain.normalizeOperationRecord)
+const operationOutcomeOfRun = /** @type {(run: any) => string | null} */ (domain.operationOutcomeOfRun)
+const projectAvailability = /** @type {(input: any) => any} */ (domain.projectAvailability)
+const summarizeOperations = /** @type {(record: any) => any} */ (domain.summarizeOperations)
+
+/** @param {string} at @param {Record<string, any>} [extra] */
 const ref = (at, extra = {}) => ({ at, runId: `run_${at.slice(0, 10)}`, dispatchId: 'dispatch-1', sessionId: 'session-1', projectId: 'project-1', ...extra })
+/** @param {string} at @param {Record<string, any>} [extra] */
 const success = (at, extra = {}) => ({ kind: 'capability', id: 'adr-analysis', version: '1.3.1', outcome: 'succeeded', ref: ref(at), ...extra })
+/** @param {string} at @param {string} [code] @param {Record<string, any>} [extra] */
 const failure = (at, code = 'specialist_agent_unavailable', extra = {}) => ({ kind: 'capability', id: 'adr-analysis', version: '1.3.1', outcome: 'failed', ref: ref(at, { code }), ...extra })
 
 /** @param {any[]} observations */
@@ -33,7 +32,7 @@ const subject = { kind: 'capability', id: 'adr-analysis', version: '1.3.1' }
 
 test('six states, each with the product word, and every reason belongs to exactly one of them', () => {
   assert.deepEqual([...CAPABILITY_AVAILABILITY_STATES], ['source-planned', 'installed', 'executable', 'limited', 'unavailable', 'unverified'])
-  for (const state of CAPABILITY_AVAILABILITY_STATES) assert.match(AVAILABILITY_STATE_LABELS_ZH[state], /^[一-鿿]+$/, state)
+  for (const state of CAPABILITY_AVAILABILITY_STATES) assert.match(AVAILABILITY_STATE_LABELS_ZH[/** @type {keyof typeof AVAILABILITY_STATE_LABELS_ZH} */ (state)], /^[一-鿿]+$/, state)
   const used = new Set()
   for (const code of AVAILABILITY_REASON_CODES) {
     const state = availabilityReasonState(code)
@@ -121,7 +120,7 @@ test('a missing engine or data source is a fact about today and outranks a succe
     { code: 'method-unmeasured', source: 'method-validation' },
   ] })
   assert.equal(several.reason.code, 'optional-tool-not-offered')
-  assert.deepEqual(several.also.map((reason) => reason.code), ['method-unmeasured'])
+  assert.deepEqual(several.also.map((/** @type {any} */ reason) => reason.code), ['method-unmeasured'])
 })
 
 test('what the deployment declines is unavailable, and the reader is told which tool', () => {
@@ -226,12 +225,17 @@ test('a finished run is evidence only when it says something about the capabilit
 })
 
 test('install, use, update, remove, rollback and restart of an extension each move the state the way the facts moved', () => {
+  /** @param {string} version */
   const ext = (version) => ({ kind: 'extension', id: 'cowork-docs', version })
+  /** @param {string} version @param {string} at */
   const run = (version, at) => ({ kind: 'extension', id: 'cowork-docs', version, outcome: 'succeeded', ref: ref(at) })
   /** @type {any} */
   let records = new Map()
+  /** @param {string} version */
   const keyOf = (version) => `extension\0cowork-docs\0${version}`
+  /** @param {any} observation */
   const fold = (observation) => { const key = keyOf(observation.version); records.set(key, foldOperation(records.get(key) ?? null, observation)) }
+  /** @param {string} version @param {any[]} [reasons] */
   const read = (version, reasons = []) => projectAvailability({ subject: ext(version), reasons, operations: records.get(keyOf(version)) ?? null })
 
   // install: asked for, being prepared -> named by the catalogue, not carried yet
