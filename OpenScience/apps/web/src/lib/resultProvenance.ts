@@ -258,7 +258,7 @@ export function resultEnvironmentDifference(current: ResultVersion, prior: Resul
   return known ? { status: changed.length ? "differs" : "same", changed } : null;
 }
 export function resultGapLabel(reason: string): string {
-  return ({ no_owned_deterministic_recipe: "未保存受支持的计算配方", engine_unavailable: "这个部署没有用于重算的计算引擎", unknown_inputs: "输入关系未记录", inputs_unknown: "输入关系未记录", code_unknown: "生成代码未记录", environment_unknown: "运行环境未记录", legacy_record: "仅有旧版记录", producer_unknown: "生成来源未确认", no_authoritative_inputs: "缺少已确认的输入", producer_bytes_not_bound: "文件内容未经核验", missing_inputs: "输入文件不可用", unsupported_method: "暂不支持该计算方法", incompatible_environment: "运行环境不兼容", restricted_input: "输入资料不能导出", unavailable_review: "核对意见不可用", unobserved_execution: "执行过程未记录", dependencies_not_observed: "运行中读取的其他文件和网络访问未被记录", code_not_executed: "代码是对话中生成的，没有运行记录", values_unbound: "文中有数值没有对应的计算值", values_unresolved: "渲染时有引用没有找到对应的计算值", values_not_checkable: "此格式的数值无法核对" } as Record<string, string>)[reason] ?? (/^[a-z][a-z0-9_:-]*$/.test(reason) ? "部分来源、代码或环境未完整保存" : reason);
+  return ({ no_owned_deterministic_recipe: "未保存受支持的计算配方", engine_unavailable: "这个部署没有用于重算的计算引擎", unknown_inputs: "输入关系未记录", inputs_unknown: "输入关系未记录", code_unknown: "生成代码未记录", environment_unknown: "运行环境未记录", legacy_record: "仅有旧版记录", producer_unknown: "生成来源未确认", no_authoritative_inputs: "缺少已确认的输入", producer_bytes_not_bound: "文件内容未经核验", missing_inputs: "输入文件不可用", unsupported_method: "暂不支持该计算方法", incompatible_environment: "运行环境不兼容", restricted_input: "输入资料不能导出", unavailable_review: "核对意见不可用", unobserved_execution: "执行过程未记录", dependencies_not_observed: "运行中读取的其他文件和网络访问未被记录", code_not_executed: "代码是对话中生成的，没有它运行过的记录", values_unbound: "文中有数值没有对应的计算值", values_unresolved: "渲染时有引用没有找到对应的计算值", values_not_checkable: "此格式的数值无法核对" } as Record<string, string>)[reason] ?? (/^[a-z][a-z0-9_:-]*$/.test(reason) ? "部分来源、代码或环境未完整保存" : reason);
 }
 
 const SNAPSHOT_KIND_LABELS = { engine_job: "确定性计算引擎", skill_script: "技能脚本（含执行记录）", authored: "对话中直接写入", render: "平台按计算值渲染", unobserved: "生成过程未被观察" } as const;
@@ -266,7 +266,7 @@ const SNAPSHOT_KIND_LABELS = { engine_job: "确定性计算引擎", skill_script
 export function snapshotKindLabel(kind: ProducerSnapshot["kind"]): string { return SNAPSHOT_KIND_LABELS[kind] ?? "生成过程未被观察"; }
 /** Whether code ran: said as a record, never implied. */
 export function reproductionLabel(state: ProducerSnapshot["reproduction"]): string | null {
-  return ({ observed_execution: "运行已记录，所用代码已核对", declared_execution: "运行记录由脚本自述，现存代码与记录不一致，未能核对", generated_not_executed: "这是对话中生成的代码，没有它运行过的记录", not_applicable: null } as const)[state] ?? null;
+  return ({ observed_execution: "运行已记录，所用代码已核对", declared_execution: "这次运行由脚本自述，现存代码与自述不一致，未能核对", generated_not_executed: "这是对话中生成的代码，没有它运行过的记录", not_applicable: null } as const)[state] ?? null;
 }
 /** What the platform did not observe about how a version was made. */
 export function snapshotUnknownLabel(code: string): string {

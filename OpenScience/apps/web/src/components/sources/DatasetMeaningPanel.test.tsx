@@ -69,8 +69,9 @@ describe("DatasetMeaningPanel", () => {
     expect(screen.getByText("模型推断另有判断：mg/dL，没有采用")).toBeInTheDocument();
     expect(screen.getByText("见 dictionary.csv")).toBeInTheDocument();
     expect(screen.getAllByText(/^依据：列名 creatinine；取值 40–400$/).length).toBeGreaterThan(0);
-    // Codes and the join in the researcher's words, never an id.
-    expect(screen.getByText("M（男）、F（女）")).toBeInTheDocument();
+    // Codes and the join in the researcher's words, never an id. A code list is
+    // a set, so the domain keeps it in one order whatever order it was written in.
+    expect(screen.getByText("F（女）、M（男）")).toBeInTheDocument();
     expect(screen.getByText("visits.csv（patient_id）→ patients.csv（patient_id）")).toBeInTheDocument();
     expect(screen.getByText("多对一")).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/model_inferred|researcher_confirmed|visits-|dsem_/);
