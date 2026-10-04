@@ -19,6 +19,7 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import { unzipSync, zipSync } from "fflate";
 import { RESULT_PACKAGE_FILE_ROLES, engineJobSnapshot, RESULT_PACKAGE_FORMAT, RESULT_PACKAGE_OMISSION_REASONS, RESULT_PACKAGE_RECORD_FILES, compareResultNumbers, projectResultCorrection, reproductionRecord } from "@evimed/domain";
+import { loadConfig } from "../src/config.mjs";
 import { ResultExportService } from "../src/resultExport.mjs";
 import { ResultProvenanceService } from "../src/resultProvenanceService.mjs";
 import { ResultReplayService, verifiedEngineFacts } from "../src/resultReplayService.mjs";
@@ -628,4 +629,17 @@ test("a recipient reproduces an engine result from the package alone, and an eng
   const different = await verify(pkg.root, "--compare", path.join(recipient, "drifted.json"));
   assert.equal(different.status, 3);
   assert.equal(different.report.compare.status, "changed");
+});
+
+test("the package's file allowance is a lever whose compose fallback is the code's own default and which .env.example names", async () => {
+  const repoRoot = fileURLToPath(new URL("../../..", import.meta.url));
+  const config = loadConfig({ rootDir: repoRoot });
+  assert.equal(config.resultExportMaxFiles, 96);
+  assert.equal(loadConfig({ rootDir: repoRoot, resultExportMaxFiles: 3 }).resultExportMaxFiles, 8, "a floor: the package's own fixed files have to fit");
+  assert.equal(loadConfig({ rootDir: repoRoot, resultExportMaxFiles: 100000 }).resultExportMaxFiles, 512);
+  assert.equal(loadConfig({ rootDir: repoRoot, resultExportMaxFiles: "not a number" }).resultExportMaxFiles, 96);
+  const compose = await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8");
+  assert.match(compose, new RegExp(`^ +OPEN_SCIENCE_RESULT_EXPORT_MAX_FILES: \\$\\{OPEN_SCIENCE_RESULT_EXPORT_MAX_FILES:-${config.resultExportMaxFiles}\\}$`, "m"),
+    "a compose fallback that differed from the code's default would override it");
+  assert.match(await readFile(path.join(repoRoot, "deploy/web/.env.example"), "utf8"), new RegExp(`^OPEN_SCIENCE_RESULT_EXPORT_MAX_FILES=${config.resultExportMaxFiles}$`, "m"));
 });
