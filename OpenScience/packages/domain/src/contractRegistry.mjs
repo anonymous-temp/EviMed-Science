@@ -17,6 +17,7 @@ import { clinicalSafetyCautionHits, matchedClinicalTriggers, matchedHighRiskEnti
 import { appraisalTableFindings } from './appraisalContract.mjs'
 import { statisticalAnalysisFindings } from './statisticalAnalysisContract.mjs'
 import { datasetScopingFindings } from './datasetScopingContract.mjs'
+import { GENE_EXPRESSION_CHECK_IDS, geneExpressionFindings } from './geneExpression.mjs'
 import { GEO_RECORDS_PREFIX, geoCompanionPaths, geoContentFindings, geoInsightFindings, geoProposalFindings, geoProseNotices, geoStrategyFindings } from './geoContracts.mjs'
 import { VCR_CHECK_IDS, vcrCohortFindings, vcrComparatorFindings, vcrMatchingFindings, vcrSimulationReportFindings, vcrStudyPackageFindings } from './vcrContracts.mjs'
 import { MANUSCRIPT_SCRATCH_FILE, manuscriptSectionFindings } from './manuscriptContract.mjs'
@@ -29,7 +30,7 @@ import { SKILL_AUTHORING_LIMITS } from './constants.mjs'
 import { METHOD_DISPLAY_LIMITS, METHOD_OPERATIONS, cleanMethodDisplay, isMethodDigest, parseSkillFrontmatter, validateMethodSkill } from './methodSkill.mjs'
 import { METHOD_RELATION_TYPES } from './methodGraph.mjs'
 
-const NATIVE_DATA_CONTRACTS = new Set(['statistical-analysis-package', 'dataset-scoping-package'])
+const NATIVE_DATA_CONTRACTS = new Set(['statistical-analysis-package', 'dataset-scoping-package', 'gene-expression-analysis-package'])
 
 /**
  * Every check a gate verdict can attribute a finding to.
@@ -114,6 +115,8 @@ export const GATE_CHECK_IDS = Object.freeze([
   'statistical-results-shape',
   'statistical-finite-results',
   'statistical-execution-provenance',
+  // geneExpression.mjs — four, every one advisory (NCBI Gene Expression Omnibus, not 「循证 GEO」).
+  ...GENE_EXPRESSION_CHECK_IDS,
   'dataset-profile-parse',
   'dataset-number-provenance',
   // manuscriptContract.mjs
@@ -818,6 +821,12 @@ const VALIDATORS = Object.freeze({
   'statistical-analysis-package': (input) => withFindings(
     validateReportShaped(input, proseFilesOf(input)),
     statisticalAnalysisFindings(input),
+  ),
+  // The NCBI Gene Expression Omnibus workflow: the numbers are the analysis tool's files, so the findings read those
+  // files' shape and receipt and nothing of the report's prose. Advisory (principle 4).
+  'gene-expression-analysis-package': (input) => withFindings(
+    validateReportShaped(input, proseFilesOf(input)),
+    geneExpressionFindings(input),
   ),
   'dataset-scoping-package': (input) => withFindings(
     validateReportShaped(input, proseFilesOf(input)),

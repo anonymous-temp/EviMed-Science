@@ -389,15 +389,16 @@ class RealLedgerTests(unittest.TestCase):
         # night, on the releases carrying the engine fixes, mendelian-
         # randomization and meta-analysis were accepted: every row accepted.
         # The platform retains twenty-two accepted deliveries, including statistical analysis.
-        # Five VCR capabilities remain not-run until their own live evidence exists.
+        # Five VCR capabilities remain not-run until their own live evidence exists, and so does gene-expression-analysis
+        # (2026-10-04, N17: three briefs and an offline reference check against base R, no capability-level delivery yet).
         # Delivery acceptance does not imply an unqualified scientific-quality pass.
-        self.assertEqual(statuses.count("not-run"), 5)
+        self.assertEqual(statuses.count("not-run"), 6)
         self.assertEqual(statuses.count("accepted"), 22)
         self.assertEqual(statuses.count("failed"), 0)
         self.assertEqual(
             checker.coverage_notice(),
-            "notice: acceptance ledger records 19 of 24 public capabilities with an accepted delivery "
-            "(0 failed, 5 never run); this is a metric, not a gate",
+            "notice: acceptance ledger records 19 of 25 public capabilities with an accepted delivery "
+            "(0 failed, 6 never run); this is a metric, not a gate",
         )
 
     def test_the_accepted_rows_are_named_here_and_their_evidence_resolves(self):

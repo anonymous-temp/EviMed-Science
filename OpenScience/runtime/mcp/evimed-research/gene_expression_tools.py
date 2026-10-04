@@ -111,7 +111,8 @@ def _engine_failure(error):
     detail = dict(error.detail or {})
     if error.code == "gene_expression_input_over_limit":
         limit = detail.get("limit")
-        report_limit(limit)
+        if not detail.get("countedByGateway"):
+            report_limit(limit)
         return _failure(
             error.code, str(error), False,
             "This input is over a limit for one computation; nothing was computed from it.",
@@ -134,11 +135,18 @@ def _engine_failure(error):
 
 
 def _incomplete_download(download, limit_name, limit_value, what):
-    """A download that stopped early as the failure it is: a limit, a spent deadline, or a lost connection."""
+    """A download that stopped early as the failure it is: a limit, a spent deadline, or a lost connection.
+
+    A body the gateway cut at its byte limit (the same number as ours) ends early with the limit's worth of bytes in
+    hand; the gateway has counted that refusal, so it is marked and not reported again. A body this side stopped
+    reading past the limit is its own observation.
+    """
     reason = download.reason or "incomplete"
     if reason == "size_limit" or download.received >= limit_value:
-        raise engine.over_limit(limit_name, max(download.declared or 0, download.received), limit_value,
-                                "%s is larger than the %d-byte limit for one computation." % (what, limit_value))
+        error = engine.over_limit(limit_name, max(download.declared or 0, download.received), limit_value,
+                                  "%s is larger than the %d-byte limit for one computation." % (what, limit_value))
+        error.detail["countedByGateway"] = reason != "size_limit"
+        raise error
     state = "timeout" if reason in ("deadline", "read_stalled") else "unavailable"
     raise source_outcome.SourceError(
         state, "%s stopped arriving after %d bytes (%s)." % (what, download.received, reason.replace("_", " ")),
@@ -150,8 +158,11 @@ def _download(kind, params, deadline, limit_name, limit_value, what):
     try:
         download = transport.download(kind, params, deadline=deadline, scope=SCOPE, max_bytes=limit_value, attempts=2)
     except source_outcome.Truncated as error:
-        raise engine.over_limit(limit_name, max(error.declared or 0, error.received, limit_value + 1), limit_value,
-                                "%s is larger than the %d-byte limit for one computation." % (what, limit_value)) from error
+        # The gateway refused it by its own size check (a declared length, or the same limit): counted there.
+        refusal = engine.over_limit(limit_name, max(error.declared or 0, error.received, limit_value + 1), limit_value,
+                                    "%s is larger than the %d-byte limit for one computation." % (what, limit_value))
+        refusal.detail["countedByGateway"] = True
+        raise refusal from error
     if not download.complete:
         _incomplete_download(download, limit_name, limit_value, what)
     return download
@@ -178,7 +189,7 @@ def _record_listing(text):
 def _no_matrix(accession, platform, deadline):
     """Why a series matrix was not found: the series is unknown, has several platforms, or has no processed matrix."""
     try:
-        brief = transport.download("ncbi-gene-expression-record", {"accession": accession, "view": "brief"}, deadline=deadline, scope=SCOPE, max_bytes=BRIEF_BYTES, attempts=2)
+        brief = transport.download("ncbi-gene-expression-series-record", {"accession": accession}, deadline=deadline, scope=SCOPE, max_bytes=BRIEF_BYTES, attempts=2)
     except source_outcome.Truncated:
         brief = None
     text = brief.body.decode("utf-8", errors="replace") if brief is not None and brief.complete else ""
@@ -268,7 +279,7 @@ def series(arguments):
             "The series matrix does not name one platform for its samples (%s), so no platform record can be read for it." % (", ".join(samples_platforms) or "none stated"),
             detail={"platforms": samples_platforms},
         )
-    platform_download = _download("ncbi-gene-expression-record", {"accession": wanted, "view": "full"}, deadline, "annotation_bytes", limit_values["annotation_bytes"], "The platform record")
+    platform_download = _download("ncbi-gene-expression-platform-record", {"accession": wanted}, deadline, "annotation_bytes", limit_values["annotation_bytes"], "The platform record")
     platform_record = engine.parse_platform(platform_download.body, limit_values=limit_values)
     identity = engine.identity_checks(matrix, platform_record, requested_platform=platform)
     sample_table = engine._sample_table(matrix)  # noqa: SLF001 - one parser for the capture and the computation

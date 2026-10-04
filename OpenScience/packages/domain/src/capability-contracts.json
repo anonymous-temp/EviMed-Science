@@ -52,6 +52,13 @@
       ]
     },
     {
+      "id": "gene-expression-analysis",
+      "safetyClass": "clinical",
+      "contractKinds": [
+        "gene-expression-analysis-package"
+      ]
+    },
+    {
       "id": "geo-content",
       "safetyClass": "clinical",
       "contractKinds": [

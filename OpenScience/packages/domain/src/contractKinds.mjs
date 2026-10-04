@@ -29,6 +29,8 @@ export const CONTRACT_KINDS = Object.freeze([
   'research-topic-report',
   'dataset-scoping-package',
   'statistical-analysis-package',
+  // NCBI Gene Expression Omnibus series to differential expression (2026-10-04, N17). Not the 「循证 GEO」 packs below.
+  'gene-expression-analysis-package',
   'research-brief',
   // P2 — planned capabilities
   'appraisal-table',
@@ -147,6 +149,7 @@ export const CONTRACT_KIND_LABELS = Object.freeze({
   'research-topic-report': '科研选题分析',
   'dataset-scoping-package': '数据集选题包',
   'statistical-analysis-package': '统计分析',
+  'gene-expression-analysis-package': '基因表达差异分析',
   'research-brief': '研究简报',
   'appraisal-table': '证据质量评价表',
   'manuscript-section': '稿件章节',

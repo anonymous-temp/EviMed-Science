@@ -414,8 +414,11 @@ class DownloadTests(unittest.TestCase):
             except Exception as error:  # noqa: BLE001
                 return door, error
 
-    def test_the_kinds_are_the_two_the_gateway_serves(self):
-        self.assertEqual(set(transport.DOWNLOAD_KINDS), {"epmc-supplements", "dailymed-spl-zip"})
+    def test_the_kinds_are_the_ones_the_gateway_serves(self):
+        self.assertEqual(set(transport.DOWNLOAD_KINDS), {
+            "epmc-supplements", "dailymed-spl-zip",
+            "ncbi-gene-expression-series-matrix", "ncbi-gene-expression-series-record", "ncbi-gene-expression-platform-record",
+        })
 
     def test_a_whole_zip_is_complete_and_asked_for_at_the_upstream_address_when_there_is_no_gateway(self):
         door, result = self.download(FakeResponse(b"PK" + b"x" * 50, content_type="application/zip"))

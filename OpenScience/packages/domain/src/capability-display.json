@@ -196,6 +196,28 @@
         "typicalMinutes": 15
       }
     },
+    "gene-expression-analysis": {
+      "title": "基因表达差异分析",
+      "category": "研究设计与数据",
+      "description": "给出 GEO 数据集编号，比较两组样本的基因表达差异，结果附校验与回执。",
+      "starterPrompts": [
+        "比较 GEO 数据集 GSE5583 里 HDAC1 敲除组与野生型组的基因表达差异，列出差异最大的基因。",
+        "取 GSE 开头编号的芯片数据，先核对平台和数值尺度，再做两组差异分析。"
+      ],
+      "materials": "一个公开的 GEO 系列编号（GSE…）和要比较的两组",
+      "estimatedMinutes": {
+        "min": 5,
+        "max": 40
+      },
+      "outputs": [
+        "差异表达报告与前列探针表",
+        "完整结果表、分析矩阵、代码与回执"
+      ],
+      "knownLimits": [
+        "只做两组比较的 Welch 检验加 BH 校正，不是 limma；每组至少三个样本，只读已处理矩阵，不处理原始读段。",
+        "结果以探针为单位，一个探针可能对应多个基因；超出资源上限的数据集会被拒绝。"
+      ]
+    },
     "geo-content": {
       "title": "循证 GEO · 分层稿件",
       "category": "写作与传播",

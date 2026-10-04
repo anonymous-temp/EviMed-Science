@@ -58,6 +58,11 @@ export const MCP_TOOL_BASE_NAMES = Object.freeze([
   'identifier_resolve',
   'clinical_trial_snapshot',
   'dailymed_label',
+  // The NCBI Gene Expression Omnibus workflow (2026-10-04, N17): a series preserved and identity-checked, and the
+  // differential-expression computation the platform's engine does, never the model (gene_expression_tools.py).
+  // Not 「循证 GEO」: those are geo_read / geo_write below.
+  'gene_expression_series',
+  'gene_expression_differential',
   // full text and pages
   'open_access_full_text',
   'web_read',

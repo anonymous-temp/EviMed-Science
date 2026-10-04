@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { MCP_TOOL_CALL_TIMEOUT_MS, SOCKET_PLUGIN_SWITCHES } from "./dshProfilePatch.mjs";
 import { readReleaseManifestFile, validateReleaseManifest } from "./releaseManifest.mjs";
-import { GEO_DEFAULT_ENGINES, GEO_ENGINES, SIMULATED_START_CREDITS } from "@evimed/domain";
+import { GENE_EXPRESSION_LIMITS, GEO_DEFAULT_ENGINES, GEO_ENGINES, SIMULATED_START_CREDITS } from "@evimed/domain";
 import { MAX_MOUNTED_CAPSULE_METHOD_BYTES } from "./capsuleMethods.mjs";
 import { researchBillingSettings } from "./researchBillingConfig.mjs";
 
@@ -604,6 +604,30 @@ function vcrSettings(overrides) {
     // far more pixels than the container's memory holds arrays for.
     vcrDigitizeMaxPixels: integer("vcrDigitizeMaxPixels", "OPEN_SCIENCE_VCR_DIGITIZE_MAX_PIXELS", 24_000_000, 100_000, 100_000_000),
   };
+}
+
+/**
+ * The six limits of the NCBI Gene Expression Omnibus workflow (`gene_expression_series` / `gene_expression_differential`;
+ * not 「循证 GEO」), each a whole number inside the bounds `@evimed/domain` fixes (principle 15: a reason, a key, a counter).
+ * The two byte limits for a download are enforced here, in the public-source gateway, and every limit reaches the
+ * runtime as `EVIMED_GENE_EXPRESSION_*` (runtimeManager.mjs), where the tools enforce what only the runtime can see:
+ * the samples and probes a matrix holds, the memory one computation may use, and the time it may take. An input over a
+ * limit is refused for that computation with the reason; the operator's counter is
+ * `open_science_gene_expression_limits_total{limit,action}`.
+ * @param {Record<string, unknown>} overrides
+ */
+function geneExpressionSettings(overrides) {
+  /** @param {string} key @param {{ env: string, default: number, min: number, max: number }} spec */
+  const bounded = (key, spec) => {
+    const name = `OPEN_SCIENCE_${spec.env}`;
+    const raw = overrides[key] !== undefined ? overrides[key] : (process.env[name] == null || process.env[name] === "" ? spec.default : process.env[name]);
+    const number = Number(raw);
+    if (!Number.isSafeInteger(number) || number < spec.min || number > spec.max) {
+      throw new Error(`${name} must be a whole number from ${spec.min} to ${spec.max}, got ${JSON.stringify(raw)}.`);
+    }
+    return number;
+  };
+  return Object.fromEntries(Object.values(GENE_EXPRESSION_LIMITS).map((spec) => [spec.configKey, bounded(spec.configKey, spec)]));
 }
 
 function reviewSettings(overrides) {
@@ -2238,6 +2262,8 @@ export function loadConfig(overrides = {}) {
     ...geoSettings(overrides),
     // --- 虚拟临研: the virtual clinical research module (2026-09-28) ---
     ...vcrSettings(overrides),
+    // --- NCBI Gene Expression Omnibus: the six resource limits (2026-10-04; not 循证 GEO) ---
+    ...geneExpressionSettings(overrides),
     ...reviewSettings(overrides),
     ...mediaMarketSettings(overrides),
     // --- 灵豆 settlement: EviMed Science's usage in EviMed's currency (2026-09-26) ---

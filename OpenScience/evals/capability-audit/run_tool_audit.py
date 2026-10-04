@@ -159,6 +159,19 @@ TASK_FIXTURES = {
     "identifier_resolve": {"identifiers": ["30221596", "PMC6143516", "10.1056/NEJMoa1800722"]},
     "clinical_trial_snapshot": {"nctId": "NCT02197234", "compareTo": "none"},
     "dailymed_label": {"setid": "5e81b4a7-b971-45e1-9c31-29cea8c87ce7", "compareVersion": 36},
+    # Added 2026-10-04 with the NCBI Gene Expression Omnibus workflow (N17). The series is a classic three-against-three
+    # microarray (GSE5583, 217 KB; its GPL81 record is 22 MB), so the probe exercises the whole path: both named downloads
+    # through the gateway, the identity checks and the content-addressed capture. The computation probe runs on the capture
+    # the series probe just made (its `captureDir` is a content hash, so it cannot be written here: `run_task_probes` puts the
+    # real one in), compares the two genotypes, and writes its files under a directory of its own.
+    "gene_expression_series": {"accession": "GSE5583"},
+    "gene_expression_differential": {
+        "captureDir": ".evimed-sources/gene-expression/GSE5583-GPL81/replaced-by-the-series-probe",
+        "outputDir": "deliverables/release-audit-gene-expression",
+        "groups": [{"label": "wild type", "samples": ["GSM130365", "GSM130366", "GSM130367"]},
+                   {"label": "HDAC1 knock out", "samples": ["GSM130368", "GSM130369", "GSM130370"]}],
+        "topN": 5,
+    },
     "guideline_search": {"query": "hypertension clinical practice guideline", "limit": 2},
     "clinical_trial_search": {"query": "type 2 diabetes metformin", "limit": 2},
     "patent_search": {"query": "pembrolizumab biomarker", "limit": 2},
@@ -483,6 +496,16 @@ def owned_job_id(arguments):
     return job_id if re.fullmatch(r"replay_[a-f0-9]{64}", job_id) and set(job_id[len("replay_"):]) != {"0"} else None
 
 
+def captured_series_directory(response_root):
+    """The capture directory the gene_expression_series probe wrote, or None when it preserved nothing."""
+    try:
+        data = json.loads((response_root / "gene_expression_series.json").read_text(encoding="utf-8")).get("data")
+    except (OSError, ValueError):
+        return None
+    directory = data.get("captureDir") if isinstance(data, dict) else None
+    return directory if isinstance(directory, str) and directory else None
+
+
 def run_task_probes(server, workspace):
     results = []
     response_root = workspace / ".evimed-audit" / "tool-responses"
@@ -501,6 +524,17 @@ def run_task_probes(server, workspace):
                            "in the probe project and run again.",
             })
             continue
+        if tool == "gene_expression_differential":
+            capture = captured_series_directory(response_root)
+            if capture is None:
+                results.append({
+                    "tool": tool, "probeType": "no_series_capture", "operation": "none", "status": "unverified",
+                    "operational": False, "artifacts": [], "artifactCount": 0,
+                    "summary": "gene_expression_differential is probed on the capture gene_expression_series just made; "
+                               "that probe did not preserve a series, so there is nothing to compute from.",
+                })
+                continue
+            arguments = {**arguments, "captureDir": capture}
         started = time.monotonic()
         result = server.call_tool(tool, arguments)
         elapsed = round((time.monotonic() - started) * 1000)

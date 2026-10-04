@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import { lookup as dnsLookup } from "node:dns/promises";
 import { connectorCredentialSpec, connectorMissingCode } from "@evimed/domain";
 import { headerValue, nodeWebTransport, privateIpv4Address, privateIpv6Address, WebReadError } from "./webReadNetwork.mjs";
+import { recordGeneExpressionDownload, recordGeneExpressionLimit } from "./geneExpressionMetrics.mjs";
+import { GENE_EXPRESSION_LIMIT_ACTIONS, GENE_EXPRESSION_LIMIT_NAMES } from "@evimed/domain";
 
 const gatewayPath = "/internal/sources/v1/fetch";
 
@@ -40,6 +42,7 @@ const allowedHosts = new Set([
   "eutils.ncbi.nlm.nih.gov",
   "export.arxiv.org",
   "fred.stlouisfed.org",
+  "ftp.ncbi.nlm.nih.gov",
   "ghoapi.azureedge.net",
   "gnomad.broadinstitute.org",
   "gtexportal.org",
@@ -97,6 +100,11 @@ const allowedHosts = new Set([
 const apiPathPrefixes = new Map([
   ["www.ncbi.nlm.nih.gov", ["/research/pubtator3-api/"]],
   ["dailymed.nlm.nih.gov", ["/dailymed/services/v2/"]],
+  // NCBI's download tree over HTTPS (the NCBI Gene Expression Omnibus's series matrix files live under /geo/series/): approved
+  // for the named downloads below and for nothing else. No path is approved for a buffered fetch (an empty list), so the
+  // runtime cannot read the rest of the tree, which holds genomes; the only way in is a download kind that names an
+  // accession and builds the one address itself.
+  ["ftp.ncbi.nlm.nih.gov", []],
   // The EU Clinical Trials Information System's public portal API: the trial
   // search (a POST, below) and one trial's record (a GET), and nothing else the
   // portal serves.
@@ -637,6 +645,66 @@ const downloadKinds = new Map([
   }],
 ]);
 
+// The NCBI Gene Expression Omnibus workflow's three downloads (the public data resource, not the pharma module of a similar name). A series matrix is one
+// platform's file: `GSEn_series_matrix.txt.gz`, or `GSEn-GPLm_series_matrix.txt.gz` for a series on several platforms, in the
+// directory named by the accession with its last three digits replaced by `nnn`. The two records are GEO's SOFT text from
+// acc.cgi: a series' brief header (to say why a matrix is missing: unknown series, several platforms, no matrix) and a
+// platform's full record (its probe table, tens of MB). `limit` is the config key that bounds the bytes streamed: the
+// matrix and the annotation each have their own, and a body past it is cut on the wire, which the runtime reads as a
+// body that ended early.
+const geneExpressionSeries = /^GSE[1-9][0-9]{0,8}$/;
+const geneExpressionPlatform = /^GPL[1-9][0-9]{0,8}$/;
+const geneExpressionAcc = (/** @type {string} */ accession, /** @type {string} */ view) => {
+  const url = new URL("https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi");
+  url.searchParams.set("acc", accession);
+  url.searchParams.set("targ", "self");
+  url.searchParams.set("form", "text");
+  url.searchParams.set("view", view);
+  return url;
+};
+downloadKinds.set("ncbi-gene-expression-series-matrix", {
+  params: {
+    accession: (/** @type {unknown} */ value) => typeof value === "string" && geneExpressionSeries.test(value),
+    platform: (/** @type {unknown} */ value) => value === undefined || (typeof value === "string" && geneExpressionPlatform.test(value)),
+  },
+  url: (/** @type {Record<string, any>} */ { accession, platform }) => new URL(
+    `https://ftp.ncbi.nlm.nih.gov/geo/series/GSE${accession.slice(3, -3)}nnn/${accession}/matrix/${accession}${platform ? `-${platform}` : ""}_series_matrix.txt.gz`,
+  ),
+  types: new Map([["application/x-gzip", "stream"], ["application/gzip", "stream"]]),
+  limit: (/** @type {any} */ config) => Number(config.geneExpressionMaxMatrixBytes) || 0,
+});
+downloadKinds.set("ncbi-gene-expression-series-record", {
+  params: { accession: (/** @type {unknown} */ value) => typeof value === "string" && geneExpressionSeries.test(value) },
+  url: (/** @type {Record<string, any>} */ { accession }) => geneExpressionAcc(accession, "brief"),
+  types: new Map([["geo/text", "stream"], ["text/plain", "stream"]]),
+  limit: (/** @type {any} */ config) => Number(config.geneExpressionMaxAnnotationBytes) || 0,
+});
+downloadKinds.set("ncbi-gene-expression-platform-record", {
+  params: { accession: (/** @type {unknown} */ value) => typeof value === "string" && geneExpressionPlatform.test(value) },
+  url: (/** @type {Record<string, any>} */ { accession }) => geneExpressionAcc(accession, "full"),
+  types: new Map([["geo/text", "stream"], ["text/plain", "stream"]]),
+  limit: (/** @type {any} */ config) => Number(config.geneExpressionMaxAnnotationBytes) || 0,
+});
+
+/**
+ * An observation from the runtime: one of the NCBI Gene Expression Omnibus limits that only the runtime can see (samples,
+ * probes, memory, wall clock) refused an input. It crosses as a closed name and nothing else, and it only moves a counter.
+ * @param {Record<string, unknown>} value
+ */
+function validatedGeneExpressionLimitRequest(value) {
+  const observed = /** @type {Record<string, any>} */ (value.geneExpressionLimit);
+  if (
+    Object.keys(value).some((key) => key !== "geneExpressionLimit")
+    || observed == null || typeof observed !== "object" || Array.isArray(observed)
+    || Object.keys(observed).some((key) => key !== "limit" && key !== "action")
+    || !GENE_EXPRESSION_LIMIT_NAMES.includes(observed.limit)
+    || !GENE_EXPRESSION_LIMIT_ACTIONS.includes(observed.action)
+  ) {
+    throw gatewayError(400, "public_source_gateway_field_invalid", "A gene-expression limit observation carries only { geneExpressionLimit: { limit, action } }.");
+  }
+  return { mode: "gene-expression-limit", limit: observed.limit, action: observed.action };
+}
+
 /** @param {Record<string, unknown>} value */
 function validatedDownloadRequest(value) {
   const download = /** @type {Record<string, any>} */ (value.download);
@@ -654,7 +722,7 @@ function validatedDownloadRequest(value) {
   if (!allowedHosts.has(url.hostname.toLowerCase())) {
     throw gatewayError(403, "public_source_gateway_url_forbidden", "The public-source URL is not an approved official endpoint.");
   }
-  return { mode: "download", kind: download.kind, types: kind.types, url };
+  return { mode: "download", kind: download.kind, types: kind.types, url, limit: kind.limit ?? null };
 }
 
 /**
@@ -683,6 +751,7 @@ function validatedRequest(value) {
   if (value.openAccessPdfDoi !== undefined) return validatedOpenAccessPdfRequest(value);
   if (value.webRead !== undefined) return validatedWebReadRequest(value);
   if (value.download !== undefined) return validatedDownloadRequest(value);
+  if (value.geneExpressionLimit !== undefined) return validatedGeneExpressionLimitRequest(value);
   if (Object.keys(value).some((key) => !["url", "accept", "method", "body", "credentialProfile"].includes(key))) {
     throw gatewayError(400, "public_source_gateway_field_invalid", "The public-source request contains an unsupported field.");
   }
@@ -1186,6 +1255,14 @@ async function relayChunk(res, chunk) {
  * @param {{ res: import("node:http").ServerResponse, fetchImpl: typeof fetch, signal: AbortSignal, maxBytes: number }} context
  */
 async function serveDownload(request, { res, fetchImpl, signal, maxBytes }) {
+  /** The gene-expression kinds count what they serve and what they cut at their byte limit (geneExpressionMetrics.mjs). */
+  const counted = (/** @type {"served" | "over_limit"} */ outcome) => recordGeneExpressionDownload(request.kind, outcome);
+  const tooLarge = () => {
+    counted("over_limit");
+    if (request.kind === "ncbi-gene-expression-series-matrix") recordGeneExpressionLimit("matrix_bytes");
+    else if (request.kind.startsWith("ncbi-gene-expression-")) recordGeneExpressionLimit("annotation_bytes");
+    return gatewayError(502, "public_source_gateway_response_too_large", "The official public-source response exceeded the gateway limit.");
+  };
   const timedOut = () => signal.reason?.name === "TimeoutError";
   let upstream;
   try {
@@ -1226,7 +1303,7 @@ async function serveDownload(request, { res, fetchImpl, signal, maxBytes }) {
   }
   if (Number.isFinite(declared) && declared > maxBytes) {
     await upstream.body?.cancel().catch(() => {});
-    throw gatewayError(502, "public_source_gateway_response_too_large", "The official public-source response exceeded the gateway limit.");
+    throw tooLarge();
   }
   if (!upstream.body) throw gatewayError(502, "public_source_gateway_response_invalid", "The official public source returned no readable body.");
   res.writeHead(200, {
@@ -1245,7 +1322,7 @@ async function serveDownload(request, { res, fetchImpl, signal, maxBytes }) {
       if (done) break;
       total += value.byteLength;
       if (total > maxBytes) {
-        throw gatewayError(502, "public_source_gateway_response_too_large", "The official public-source response exceeded the gateway limit.");
+        throw tooLarge();
       }
       if (!(await relayChunk(res, value))) {
         // The caller left; the handler's close listener has aborted the fetch.
@@ -1262,6 +1339,7 @@ async function serveDownload(request, { res, fetchImpl, signal, maxBytes }) {
   } finally {
     reader.releaseLock();
   }
+  counted("served");
   res.end();
 }
 
@@ -1354,10 +1432,21 @@ export function createPublicSourceGatewayHandler(config, runtimeManager, {
         // difference between a slow source answering and a timeout every time.
         clearTimeout(timeout);
         timeout = arm(Math.max(1_000, Number(config.publicSourceDownloadTimeoutMs) || 150_000));
-        await serveDownload(/** @type {{ kind: string, types: Map<string, string>, url: URL }} */ (request), {
+        const downloadRequest = /** @type {{ kind: string, types: Map<string, string>, url: URL, limit: ((config: any) => number) | null }} */ (request);
+        // A kind with a limit of its own (the NCBI Gene Expression Omnibus files) streams up to that, and counts it.
+        const ownLimit = downloadRequest.limit ? downloadRequest.limit(config) : 0;
+        await serveDownload(downloadRequest, {
           res, fetchImpl, signal: controller.signal,
-          maxBytes: Math.max(1024, Number(config.publicSourceGatewayMaxResponseBytes) || 16 * 1024 * 1024),
+          maxBytes: Math.max(1024, ownLimit || Number(config.publicSourceGatewayMaxResponseBytes) || 16 * 1024 * 1024),
         });
+        return;
+      }
+      if (request.mode === "gene-expression-limit") {
+        // The runtime reports a refusal it made; counted, acknowledged, nothing else. Never an error for the caller.
+        recordGeneExpressionLimit(String(request.limit), String(request.action));
+        const body = Buffer.from(JSON.stringify({ ok: true }));
+        res.writeHead(200, { "content-type": "application/json; charset=utf-8", "content-length": String(body.length), "cache-control": "no-store" });
+        res.end(body);
         return;
       }
       if (request.mode === "web-read") {

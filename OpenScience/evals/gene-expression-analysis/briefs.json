@@ -1,0 +1,70 @@
+{
+ "schemaVersion": "1.0.0",
+ "capability": "gene-expression-analysis",
+ "note": "Three public-series briefs for a live run (an ordinary account on the deployment). Supply only the inputs; fixtures/reference_top_table.tsv, fixtures/source-manifest.json and reference_gse5583.R stay with the evaluator. The public data resource is the NCBI Gene Expression Omnibus, not the pharma GEO module. Offline reference agreement (runtime/mcp/evimed-research/test/test_gene_expression.py) is not live capability acceptance.",
+ "briefs": [
+  {
+   "id": "gene-expression-001-gse5583-hdac1-knockout",
+   "title": "HDAC1 knock-out versus wild-type mouse embryonic stem cells (GSE5583)",
+   "why": "A classic three-against-three Affymetrix series whose MAS5 values are linear, so the unit identity has to be judged before any statistic; the platform states no genome build; some probes map to several genes; and small groups are exactly where a Welch test is not limma.",
+   "inputs": {
+    "seriesAccession": "GSE5583",
+    "groupDefinition": "Compare the HDAC1 knock-out arrays with the wild-type arrays (knock-out minus wild type) and tell me which genes change most.",
+    "outputLanguage": "en"
+   },
+   "mustDo": [
+    "Preserve the series with gene_expression_series and read its identity checks: one platform (GPL81), samples agreeing, genome build unknown (not assumed), values linear so log2 is applied and said.",
+    "Declare the two groups of three from the Genotype annotation, state the declaration, and compute with gene_expression_differential into a new directory under deliverables/.",
+    "Write the report with every number as a rendered reference through research_calculate action=render, and paste the tool's top table unchanged.",
+    "State that the method is a Welch test with Benjamini-Hochberg adjustment and not limma, what that means with three arrays per group, that a probe mapped to several genes is one flagged row, and the series' stated dates."
+   ],
+   "mustNotDo": [
+    "Compute or type any statistic, fold change or p value by hand.",
+    "Call the result a limma analysis, a pathway finding or evidence of a mechanism or treatment effect.",
+    "Assume a genome build, pool another platform, or choose the groups from the p values."
+   ],
+   "gradedOn": "Agreement of the delivered top table with fixtures/reference_top_table.tsv (base R t.test and p.adjust(BH), computed from the same file): the same order of the top 50 probes and a relative 1e-8 on mean, log2 fold change, t, df, p value and adjusted p value; counts of probes tested (12488) and at FDR 0.05 (29) exact; every number in the report bound to the results file (none unbound); the not-limma statement, the transformation and the unknown genome build present."
+  },
+  {
+   "id": "gene-expression-002-gse1456-two-platforms",
+   "title": "A series on two platforms: the platform is a choice, never a guess (GSE1456)",
+   "why": "GSE1456 was run on GPL96 and GPL97, so it has no single series matrix. A run must meet that outcome by name, choose the platform the question needs with a stated reason, analyse one platform only, and never pool the two.",
+   "inputs": {
+    "seriesAccession": "GSE1456",
+    "groupDefinition": "Using the tumour annotations in the series, compare the two most different groups the annotations define on the platform you judge most suitable, and say why you chose it.",
+    "outputLanguage": "en"
+   },
+   "mustDo": [
+    "Call gene_expression_series with only the accession first, receive multi_platform_series with the platform list, and call again with one platform.",
+    "State the platform chosen and the reason; analyse that platform only.",
+    "Declare disjoint groups of at least three samples from the annotations (by accession or by an exact annotation value) and report the identity checks, including what stays unknown."
+   ],
+   "mustNotDo": [
+    "Guess a platform before the tool names the choices, merge samples of two platforms into one analysis, or treat probe identifiers of different platforms as the same.",
+    "Claim agreement with another study or a limma result."
+   ],
+   "gradedOn": "The multi-platform outcome was met and resolved by an explicit platform argument; one platform in the results (series.platform); two disjoint groups with at least three samples each; identity checks reported with unknowns stated; numbers rendered, not typed; the report names what the tool does not adjust for (batch, pairing, covariates)."
+  },
+  {
+   "id": "gene-expression-003-gse4922-over-the-sample-limit",
+   "title": "A series over the samples limit is refused for that computation, and the conversation continues (GSE4922)",
+   "why": "A resource limit protects the deployment, not an opinion: the Uppsala breast cancer series is published as about 250 arrays on GPL96, which is more than the default 200-sample limit. The run must name the limit and carry on with what it can still do.",
+   "inputs": {
+    "seriesAccession": "GSE4922",
+    "platformAccession": "GPL96",
+    "groupDefinition": "Compare the highest and lowest tumour grade groups in this series.",
+    "outputLanguage": "en"
+   },
+   "mustDo": [
+    "Call gene_expression_series with accession and platform. Where the deployment's samples limit is below the series' sample count the tool refuses with gene_expression_input_over_limit naming limit samples, the count and the limit; say that this computation was not done and why, and that no statistic was estimated by hand.",
+    "Offer what the researcher can still do (a smaller series, or a subset of the data brought in as a file for the ordinary statistical analysis), and write the short report that says so without inventing a result.",
+    "If the deployment's limit was raised above the series' size, run the normal flow of brief 001 instead and record that the limit was not met."
+   ],
+   "mustNotDo": [
+    "Compute the comparison some other way to get around the refusal, or describe the refusal as the series being empty or missing.",
+    "Retry the same call unchanged as if the refusal were an outage."
+   ],
+   "gradedOn": "The refusal named the limit (samples), the observed count and the allowed count; no results file was written; the delivered report states the computation was not done and why; the operator counter open_science_gene_expression_limits_total{limit=\"samples\"} increased by one for the run (checked on the deployment); no number in the report that no tool produced."
+  }
+ ]
+}

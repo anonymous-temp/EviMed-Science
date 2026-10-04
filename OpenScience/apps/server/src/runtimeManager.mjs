@@ -9,7 +9,7 @@ import fs from "node:fs/promises";
 import http from "node:http";
 import path from "node:path";
 import { gzipSync } from "node:zlib";
-import { workspaceLayout } from "@evimed/domain";
+import { GENE_EXPRESSION_LIMITS, workspaceLayout } from "@evimed/domain";
 import { compactionConfigFromEnv, compactionRuntimeEnv } from "@evimed/harness-port";
 import {
   dockerRuntimeMount,
@@ -1518,6 +1518,10 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
   const gateways = plan.gateways ?? null;
   // Neither a container nor a remote session can see a path on this host.
   const containerized = plan.sandboxMode === "docker" || plan.sandboxMode === "agentbay";
+  // The six resource limits of the NCBI Gene Expression Omnibus workflow (not 循证 GEO): the tools enforce in the runtime what
+  // only the runtime can see (samples and probes a matrix holds, memory, time), from the same config keys the gateway
+  // enforces the two byte limits with.
+  for (const spec of Object.values(GENE_EXPRESSION_LIMITS)) environment[`EVIMED_${spec.env}`] = String(config[spec.configKey] ?? spec.default);
   const publicSourceGatewayUrl = gateways ? String(gateways.publicSource ?? "") : publicSourceGatewayProviderUrl(config);
   if (publicSourceGatewayUrl) {
     environment.EVIMED_PUBLIC_SOURCE_GATEWAY_URL = publicSourceGatewayUrl;

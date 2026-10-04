@@ -646,6 +646,52 @@
           "addedOn": "2026-09-29"
         }
       ]
+    },
+    "gene-expression-analysis-package": {
+      "capability": "gene-expression-analysis",
+      "requiredCount": 0,
+      "outputs": [
+        {
+          "path": "gene-expression-report.md",
+          "required": false,
+          "addedOn": "2026-10-04"
+        },
+        {
+          "path": "gene-expression-results.json",
+          "required": false,
+          "addedOn": "2026-10-04"
+        },
+        {
+          "path": "gene-expression-top-table.md",
+          "required": false,
+          "addedOn": "2026-10-04"
+        },
+        {
+          "path": "gene-expression-de-table.tsv",
+          "required": false,
+          "addedOn": "2026-10-04"
+        },
+        {
+          "path": "gene-expression-analysed-matrix.tsv.gz",
+          "required": false,
+          "addedOn": "2026-10-04"
+        },
+        {
+          "path": "gene-expression-request.json",
+          "required": false,
+          "addedOn": "2026-10-04"
+        },
+        {
+          "path": "gene_expression.py",
+          "required": false,
+          "addedOn": "2026-10-04"
+        },
+        {
+          "path": "gene-expression-receipt.json",
+          "required": false,
+          "addedOn": "2026-10-04"
+        }
+      ]
     }
   }
 }

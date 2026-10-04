@@ -83,6 +83,8 @@ const PHRASES = Object.freeze({
   identifier_resolve: phrase('关联文献编号', ['identifiers']),
   clinical_trial_snapshot: phrase('存档试验登记记录', ['nctId']),
   dailymed_label: phrase('取美国药品说明书', ['drug', 'setid']),
+  gene_expression_series: phrase('取基因表达数据集', ['accession']),
+  gene_expression_differential: phrase('做基因表达差异分析'),
   guideline_search: phrase('检索指南', ['query']),
   clinical_trial_search: phrase('检索临床试验', ['query']),
   patent_search: phrase('检索专利', ['query']),

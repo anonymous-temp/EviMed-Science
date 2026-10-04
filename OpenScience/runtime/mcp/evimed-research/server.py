@@ -42,6 +42,7 @@ import geo_platform
 import vcr_platform
 import research_calculate
 import data_semantics
+import gene_expression_tools
 
 
 SERVER_NAME = "evimed-research"
@@ -983,6 +984,9 @@ TOOL_DEFINITIONS.extend(research_calculate.tool_definitions())
 # offered to the two capabilities that start from a researcher's own data. With the module off it answers a
 # warning and `check` still runs on what the call declares, so it is not an optional tool.
 TOOL_DEFINITIONS.extend(data_semantics.tool_definitions())
+# The NCBI Gene Expression Omnibus workflow (2026-10-04, N17): a series preserved and identity-checked, and the
+# differential-expression computation the platform's engine does (never the model). Not the 循证 GEO module.
+TOOL_DEFINITIONS.extend(gene_expression_tools.tool_definitions())
 
 
 TOOLS = {tool["name"]: tool for tool in TOOL_DEFINITIONS}
@@ -2171,6 +2175,8 @@ def _dispatch(name, arguments, execution_context=None):
             return failure(error.code, str(error), error.retryable, error.stop_reason(), [next_action])
         result["data"] = _data_with_provenance(result["data"], name, arguments, _scope())
         return result
+    if name in gene_expression_tools.TOOL_NAMES:
+        return gene_expression_tools.call(name, arguments)
     if name == "research_calculate":
         try:
             return research_calculate.calculate(arguments, execution_context=execution_context)

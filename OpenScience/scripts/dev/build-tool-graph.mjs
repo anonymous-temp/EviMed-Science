@@ -173,6 +173,9 @@ const TOOL_OUTPUT_FIELDS = Object.freeze({
     { path: "data.markdownPath", type: "file_path" },
     { path: "data.activeIngredients[].name", type: "drug_name" },
   ],
+  // The NCBI Gene Expression Omnibus workflow (N17): each preserves or writes files and names them in `artifacts`.
+  gene_expression_series: [{ path: "artifacts[].path", type: "file_path" }],
+  gene_expression_differential: [{ path: "artifacts[].path", type: "file_path" }],
   clinical_trial_search: [{ path: "items[].nctId", type: "nct_id" }, { path: "items[].pmid", type: "pmid" }],
   biomedical_source_search: [{ path: "items[].doi", type: "doi" }, { path: "items[].pmid", type: "pmid" }],
   patent_search: [],
