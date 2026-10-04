@@ -2,14 +2,17 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { Search } from "lucide-react";
 import { capabilityListed } from "@evimed/domain";
-import { webErrorMessage, listWebResearchAgents, type WebResearchAgent } from "@/lib/apiClient";
+import { fetchWebResearchEstimates, webErrorMessage, listWebResearchAgents, type WebResearchAgent, type WebResearchEstimate } from "@/lib/apiClient";
 import { researchAgentUi, type CapabilityUi } from "@/lib/researchAgentUi";
 import { capabilityIcon } from "@/lib/capabilityIcons";
 import { bindConversationCapability } from "@/lib/dispatch";
+import { formatNumber, formatRange } from "@/lib/format";
 import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
+import { useResearchBilling } from "@/lib/useResearchBilling";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
 import { PageShell } from "@/components/layout/PageShell";
+import { SimulatedAllowanceNotice, SimulatedMark } from "@/components/settings/SimulatedAllowance";
 import { FilterChips } from "@/components/ui/FilterChips";
 import { SearchInput } from "@/components/ui/SearchInput";
 
@@ -37,6 +40,19 @@ function durationText([min, max]: [number, number]): string | null {
 }
 
 /**
+ * What a tool usually takes out of the allowance: 「约 ¥4～8 额度」, in whole
+ * credits (one credit is one CNY). Null when the estimate names no range —
+ * nothing supports one (`basis: "none"`), or the two ends are not a range — so
+ * a price nobody estimated is left out, never shown as zero.
+ */
+function allowanceText(estimate: WebResearchEstimate | undefined): string | null {
+  if (!estimate || estimate.basis === "none") return null;
+  const { low, high } = estimate;
+  if (typeof low !== "number" || typeof high !== "number" || !Number.isFinite(low) || !Number.isFinite(high) || low < 0 || low > high) return null;
+  return `约 ¥${low === high ? formatNumber(high) : formatRange(low, high)} 额度`;
+}
+
+/**
  * 科研工具 — the catalogue of research tools as a grid.
  *
  * A tool is unlike its neighbours (each does a different job), so it is a card
@@ -50,6 +66,12 @@ function durationText([min, max]: [number, number]): string | null {
  * Choosing a tool opens a new conversation with that tool on: the reader types
  * into the composer they were going to use anyway, and the tool rides along as
  * a chip above it.
+ *
+ * Where research is billed from a simulated wallet (`useResearchBilling`), this
+ * is also where the next task's cost is met before it starts: a card adds what
+ * the tool usually takes out of the allowance, marked as simulated, and a low
+ * or used-up allowance is prompted above the grid. Every other deployment gets
+ * the page as it was, and asks for no estimate.
  */
 export function CapabilitiesPage() {
   const navigate = useNavigate();
@@ -59,6 +81,10 @@ export function CapabilitiesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [reloads, setReloads] = useState(0);
+  // `fresh`: the notice draws the balance, which moves. Whether the allowance
+  // can be read never decides whether the catalogue is shown.
+  const billing = useResearchBilling({ fresh: true });
+  const [estimates, setEstimates] = useState<ReadonlyMap<string, WebResearchEstimate>>(() => new Map());
 
   useEffect(() => {
     let active = true;
@@ -75,6 +101,21 @@ export function CapabilitiesPage() {
   // false`) is not a tool to pick here; it stays public so that module can
   // bind a conversation to it.
   const catalogue = useMemo(() => agents.filter((agent) => capabilityListed(agent.id)).map(researchAgentUi), [agents]);
+
+  // What each listed tool usually costs, in one read for all of them — asked
+  // only where the allowance is simulated, and again only when the list of
+  // tools itself changes (a search or a category filters what is already here).
+  // A read that fails costs the page nothing: the cards stay as they are.
+  const listed = useMemo(() => catalogue.map((ui) => ui.id).join(","), [catalogue]);
+  useEffect(() => {
+    if (!billing.simulated || !listed) return;
+    let active = true;
+    void fetchWebResearchEstimates(listed.split(","))
+      .then((answer) => { if (active) setEstimates(new Map(answer.items.map((item) => [item.capabilityId, item]))); })
+      .catch(() => {});
+    return () => { active = false; };
+  }, [billing.simulated, listed]);
+
   const categories = useMemo(
     () => [...new Set(catalogue.map((ui) => ui.category))]
       .sort((left, right) => categoryRank(left) - categoryRank(right) || left.localeCompare(right, "zh")),
@@ -110,6 +151,8 @@ export function CapabilitiesPage() {
       title="科研工具"
       actions={<SearchInput label="搜索工具" value={query} onChange={(event) => setQuery(event.target.value)} className="w-72" />}
     >
+      {/* Only a balance just read: while it is being read again, or could not be, the one held is not drawn. */}
+      {!billing.loading && !billing.error && <SimulatedAllowanceNotice allowance={billing.allowance} className="mb-6" />}
       {categories.length > 1 && (
         <FilterChips
           label="分类"
@@ -131,7 +174,9 @@ export function CapabilitiesPage() {
                     <h2 id={`capability-group-${name}`} className="mb-2 text-ui font-semibold text-text">{name}</h2>
                     <ul className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
                       {items.map((agent) => (
-                        <li key={agent.id} className="flex"><ToolCard agent={agent} busy={opening === agent.id} onOpen={() => open(agent)} /></li>
+                        <li key={agent.id} className="flex">
+                          <ToolCard agent={agent} estimate={billing.simulated ? estimates.get(agent.id) : undefined} busy={opening === agent.id} onOpen={() => open(agent)} />
+                        </li>
                       ))}
                     </ul>
                   </section>
@@ -142,10 +187,15 @@ export function CapabilitiesPage() {
   );
 }
 
-/** One tool: its icon and name, one sentence, and how long it usually takes. */
-function ToolCard({ agent, busy, onOpen }: { agent: CapabilityUi; busy: boolean; onOpen: () => void }) {
+/**
+ * One tool: its icon and name, one sentence, and how long it usually takes —
+ * and, where the allowance is simulated, what it usually takes out of it, with
+ * the mark every simulated amount carries.
+ */
+function ToolCard({ agent, estimate, busy, onOpen }: { agent: CapabilityUi; estimate?: WebResearchEstimate; busy: boolean; onOpen: () => void }) {
   const Icon = capabilityIcon(agent.id);
   const duration = durationText(agent.estimatedMinutes);
+  const allowance = allowanceText(estimate);
   return (
     <button
       type="button"
@@ -159,7 +209,12 @@ function ToolCard({ agent, busy, onOpen }: { agent: CapabilityUi; busy: boolean;
         {agent.title}
       </span>
       <span className="text-ui text-text-2">{agent.description}</span>
-      {duration && <span className="mt-auto pt-1 text-caption text-text-3">{duration}</span>}
+      {(duration || allowance) && (
+        <span className="mt-auto flex flex-wrap items-center gap-x-1.5 gap-y-1 pt-1 text-caption text-text-3">
+          {[duration, allowance].filter(Boolean).join(" · ")}
+          {allowance && <SimulatedMark />}
+        </span>
+      )}
     </button>
   );
 }

@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { matchRoutes, MemoryRouter, Navigate, Outlet, useLocation, useRoutes, type RouteObject } from "react-router";
 import type { ReactElement } from "react";
 import { describe, expect, it, vi } from "vitest";
+import { SIMULATED_WALLET_PAGES } from "@evimed/domain";
 
 // The shell's auth gate and the lazily loaded pages are not what this is
 // about; what is, is where every address people have bookmarked ends up
@@ -89,6 +90,10 @@ describe("every address people already have still arrives", () => {
     ["/app/geo/geo_1", "/app/geo/geo_1"],
     ["/app/geo/geo_1/diagnosis", "/app/geo/geo_1/diagnosis"],
     ["/app/geo/geo_1/answers/snap_1", "/app/geo/geo_1/answers/snap_1"],
+    // 设置, and the simulated wallet's commerce pages under it: where the
+    // control plane's commerce links point on a deployment whose wallet is simulated.
+    ["/app/account?tab=usage", "/app/account?tab=usage"],
+    ...Object.values(SIMULATED_WALLET_PAGES).map((path): [string, string] => [path, path]),
   ])("%s lands on %s", async (from, to) => {
     landOn(from);
     expect(await screen.findByTestId("landed")).toHaveTextContent(new RegExp(`^${to.replace(/[?]/g, "\\?")}$`));
@@ -170,5 +175,31 @@ describe("循证 GEO's addresses", () => {
       return (found?.route.element as ReactElement | undefined)?.type as { $$typeof?: symbol } | undefined;
     });
     for (const type of pages) expect(String(type?.$$typeof)).toBe("Symbol(react.lazy)");
+  });
+});
+
+describe("the simulated wallet's addresses", () => {
+  /** The leaf route an address resolves to, and its parameters. */
+  function leaf(path: string) {
+    const last = (matchRoutes(routes, path) ?? []).at(-1);
+    return { route: last?.route, params: last?.params ?? {} };
+  }
+
+  // The addresses are the domain's (`SIMULATED_WALLET_PAGES`): the control plane
+  // serves them as commerce links, so a page it names must be a page here.
+  it("opens every page the domain names on the one wallet route, by the page's own name", () => {
+    const pages = Object.entries(SIMULATED_WALLET_PAGES);
+    expect(pages.map(([name]) => name).sort()).toEqual(["membership", "orders", "recharge", "refunds"]);
+    for (const [name, path] of pages) {
+      const found = leaf(path);
+      expect(found.route?.path, path).toBe("account/simulated/:page");
+      expect(found.params.page, path).toBe(name);
+    }
+  });
+
+  it("loads the page as its own chunk, and leaves 设置 at its own address", () => {
+    const type = (leaf(SIMULATED_WALLET_PAGES.recharge).route?.element as ReactElement | undefined)?.type as { $$typeof?: symbol } | undefined;
+    expect(String(type?.$$typeof)).toBe("Symbol(react.lazy)");
+    expect(leaf("/app/account").route?.path).toBe("account");
   });
 });

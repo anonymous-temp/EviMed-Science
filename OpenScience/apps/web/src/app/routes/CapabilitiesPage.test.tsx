@@ -1,10 +1,11 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { CAPABILITY_DISPLAY } from "@evimed/domain";
+import { CAPABILITY_DISPLAY, SIMULATED_WALLET_LABEL, SIMULATED_WALLET_PAGES } from "@evimed/domain";
 import { CapabilitiesPage } from "./CapabilitiesPage";
 import { WebApiError } from "@/lib/apiClient";
+import { forgetResearchBilling } from "@/lib/useResearchBilling";
 
 const agents = [
   {
@@ -93,6 +94,8 @@ const mocks = vi.hoisted(() => ({
   listWebResearchAgents: vi.fn(),
   listWebResearchSessions: vi.fn(),
   putWebResearchSession: vi.fn(),
+  allowance: vi.fn(),
+  estimates: vi.fn(),
 }));
 
 // The error dictionary (`webErrorMessage`) lives in this module and the code
@@ -103,8 +106,34 @@ vi.mock("@/lib/apiClient", async (importOriginal) => ({
   listWebResearchAgents: mocks.listWebResearchAgents,
   listWebResearchSessions: mocks.listWebResearchSessions,
   putWebResearchSession: mocks.putWebResearchSession,
+  fetchWebResearchAllowance: mocks.allowance,
+  fetchWebResearchEstimates: mocks.estimates,
   getWebProjectId: () => "default",
 }));
+
+const NO_LINKS = { rechargeUrl: null, membershipUrl: null, ordersUrl: null, refundsUrl: null };
+/** `/api/account/allowance` on a deployment that does not bill research — every deployment but one — as the server writes it. */
+const billingOff = {
+  enabled: false, simulated: false, currency: "CNY", status: "disabled", available: null, held: null, balances: null, membership: null,
+  lowThreshold: null, month: { since: "2026-10-01T00:00:00.000Z", paid: 0, pending: 0 }, commerce: NO_LINKS,
+};
+/** …on one whose wallet is simulated, and on one whose wallet is real. */
+const simulatedWallet = {
+  ...billingOff, enabled: true, simulated: true, status: "ready", available: 200, lowThreshold: 20,
+  commerce: { ...NO_LINKS, rechargeUrl: SIMULATED_WALLET_PAGES.recharge },
+};
+const realWallet = { ...simulatedWallet, simulated: false, lowThreshold: null, commerce: NO_LINKS };
+/** …and from a control plane older than the simulated wallet: billing on, nothing left, and no word of simulation. */
+const olderWallet = { enabled: true, currency: "CNY", status: "ready", available: 0, held: null, month: billingOff.month, commerce: NO_LINKS };
+
+const estimate = (capabilityId: string, low: number | null, high: number | null, basis = "history") => ({
+  capabilityId, basis, low, high, samples: basis === "history" ? 5 : 0, binding: false,
+});
+/** `/api/account/allowance/estimates` for the four tools: a range, a single figure, no basis — and one tool it does not answer for. */
+const estimates = {
+  currency: "CNY", simulated: true,
+  items: [estimate("adr-analysis", 4, 8), estimate("off-label-analysis", 3, 3, "manifest"), estimate("meta-analysis", null, null, "none")],
+};
 
 /** Where a card sent the reader, and with which tool on. */
 function LocationProbe() {
@@ -137,6 +166,12 @@ describe("CapabilitiesPage", () => {
     mocks.listWebResearchSessions.mockResolvedValue([]);
     mocks.putWebResearchSession.mockReset();
     mocks.putWebResearchSession.mockImplementation(async (sessionId: string, selection: object) => ({ sessionId, ...selection }));
+    // Research billing is off unless a test says otherwise: every deployment but one.
+    mocks.allowance.mockReset();
+    mocks.allowance.mockResolvedValue(billingOff);
+    mocks.estimates.mockReset();
+    mocks.estimates.mockResolvedValue(estimates);
+    forgetResearchBilling();
   });
 
   // 循证 GEO has its own row in the sidebar; its capabilities are not tools
@@ -153,9 +188,12 @@ describe("CapabilitiesPage", () => {
     expect(screen.queryByText("GEO 洞察")).not.toBeInTheDocument();
   });
 
-  it("shows the grid's shape while the catalogue loads", () => {
+  it("shows the grid's shape while the catalogue loads", async () => {
     mocks.listWebResearchAgents.mockReturnValue(new Promise(() => {}));
     const { container } = renderPage();
+    expect(container.querySelector(".animate-pulse")).toBeInTheDocument();
+    // The deployment's answer about billing lands meanwhile, and changes nothing here.
+    await act(async () => {});
     expect(container.querySelector(".animate-pulse")).toBeInTheDocument();
   });
 
@@ -272,5 +310,198 @@ describe("CapabilitiesPage", () => {
       expect(text.endsWith("。"), `${id}: ${text}`).toBe(true);
       expect(text, id).not.toMatch(/…|\.\.\./);
     }
+  });
+
+  /** The catalogue has loaded and whatever the page asked for has been answered. */
+  const settled = async () => {
+    await screen.findByRole("button", { name: /药品安全性分析/ });
+    await act(async () => {});
+  };
+  const title = (id: string) => CAPABILITY_DISPLAY[id].title;
+  const LISTED = ["adr-analysis", "off-label-analysis", "meta-analysis", "peer-review"];
+
+  describe("what a tool usually takes out of a simulated allowance", () => {
+    beforeEach(() => { mocks.allowance.mockResolvedValue(simulatedWallet); });
+
+    it("is said beside how long the tool takes, marked, from one read for every listed tool", async () => {
+      // A capability its own module opens is not listed, so it is not asked about either.
+      mocks.listWebResearchAgents.mockResolvedValue([...agents, { ...agents[3], id: "geo-insight", skill: "geo-insight", runtimeAgent: "evimed-geo-insight" }]);
+      renderPage();
+      await waitFor(() => expect(card("药品安全性分析")).toHaveTextContent("约 20～40 分钟 · 约 ¥4～8 额度"));
+      expect(within(card("药品安全性分析")).getByText(SIMULATED_WALLET_LABEL)).toBeInTheDocument();
+      // One figure where the two ends meet, still after the duration.
+      expect(card(title("off-label-analysis"))).toHaveTextContent(/分钟 · 约 ¥3 额度/);
+      expect(within(card(title("off-label-analysis"))).getByText(SIMULATED_WALLET_LABEL)).toBeInTheDocument();
+      expect(mocks.estimates).toHaveBeenCalledTimes(1);
+      expect(mocks.estimates).toHaveBeenCalledWith(LISTED);
+    });
+
+    it("is left out for a tool nothing supports an estimate of, which gets no mark and no zero", async () => {
+      renderPage();
+      await waitFor(() => expect(card("药品安全性分析")).toHaveTextContent("额度"));
+      // `basis: "none"`, and a tool the answer does not carry at all.
+      for (const id of ["meta-analysis", "peer-review"]) {
+        const tool = card(title(id));
+        expect(tool).toHaveTextContent(/约 \d+～\d+ 分钟/);
+        expect(tool).not.toHaveTextContent(/额度|¥/);
+        expect(within(tool).queryByText(SIMULATED_WALLET_LABEL)).not.toBeInTheDocument();
+      }
+    });
+
+    it.each([
+      ["names no range", estimate("adr-analysis", null, null)],
+      ["names half a range", estimate("adr-analysis", 4, null)],
+      ["names a range the wrong way round", estimate("adr-analysis", 8, 4)],
+      ["names a range below nothing", estimate("adr-analysis", -2, 8)],
+      ["says nothing supports it, whatever numbers it carries", estimate("adr-analysis", 4, 8, "none")],
+    ])("is left out when the estimate %s", async (_, item) => {
+      mocks.estimates.mockResolvedValue({ ...estimates, items: [item, estimate("peer-review", 1, 2)] });
+      renderPage();
+      // The read was answered and drawn: the other tool has its price.
+      await waitFor(() => expect(card(title("peer-review"))).toHaveTextContent("约 ¥1～2 额度"));
+      expect(card("药品安全性分析")).toHaveTextContent("约 20～40 分钟");
+      expect(card("药品安全性分析")).not.toHaveTextContent(/额度|¥/);
+      expect(within(card("药品安全性分析")).queryByText(SIMULATED_WALLET_LABEL)).not.toBeInTheDocument();
+    });
+
+    it("is not asked for again by a search or a category, which filter what is already here", async () => {
+      renderPage();
+      await waitFor(() => expect(card("药品安全性分析")).toHaveTextContent("约 ¥4～8 额度"));
+      await userEvent.type(screen.getByRole("searchbox", { name: "搜索工具" }), "氨甲环酸");
+      expect(screen.queryByRole("button", { name: /药品安全性分析/ })).not.toBeInTheDocument();
+      await userEvent.clear(screen.getByRole("searchbox", { name: "搜索工具" }));
+      await userEvent.click(within(screen.getByRole("group", { name: "分类" })).getByRole("button", { name: "药学评价" }));
+      // The card comes back with the price it had.
+      expect(card("药品安全性分析")).toHaveTextContent("约 20～40 分钟 · 约 ¥4～8 额度");
+      await act(async () => {});
+      expect(mocks.estimates).toHaveBeenCalledTimes(1);
+    });
+
+    it("costs the page nothing when it cannot be read: the cards stay as they are, with no error", async () => {
+      mocks.estimates.mockRejectedValue(new WebApiError("later", { status: 503, code: "evimed_credits_unreachable" }));
+      renderPage();
+      await settled();
+      expect(mocks.estimates).toHaveBeenCalledTimes(1);
+      for (const id of LISTED) {
+        expect(card(title(id))).toHaveTextContent(/约 \d+～\d+ 分钟/);
+        expect(card(title(id))).not.toHaveTextContent(/额度|¥/);
+      }
+      expect(card("药品安全性分析")).toHaveTextContent(CAPABILITY_DISPLAY["adr-analysis"].description);
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      expect(screen.queryByText(SIMULATED_WALLET_LABEL)).not.toBeInTheDocument();
+      // Not asked for again and again either.
+      await act(async () => {});
+      expect(mocks.estimates).toHaveBeenCalledTimes(1);
+    });
+
+    it("still opens a conversation with the tool from a card that carries a price", async () => {
+      render(
+        <MemoryRouter initialEntries={["/app/capabilities"]}>
+          <Routes>
+            <Route path="/app/capabilities" element={<CapabilitiesPage />} />
+            <Route path="/app/chat" element={<LocationProbe />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+      await waitFor(() => expect(card("药品安全性分析")).toHaveTextContent("约 ¥4～8 额度"));
+      await userEvent.click(card("药品安全性分析"));
+      await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/chat"));
+      expect(screen.getByTestId("capability")).toHaveTextContent("adr-analysis");
+    });
+  });
+
+  describe("on a deployment whose allowance is not simulated", () => {
+    it.each([
+      ["does not bill research", billingOff],
+      ["bills research from a real wallet", realWallet],
+      ["bills research and says nothing about a simulated wallet", olderWallet],
+    ])("asks for no estimate and draws no price, mark or prompt where it %s", async (_, answer) => {
+      mocks.allowance.mockResolvedValue(answer);
+      renderPage();
+      await settled();
+      // The cards are there, as they always were…
+      expect(card("药品安全性分析")).toHaveTextContent("约 20～40 分钟");
+      for (const id of LISTED) expect(card(title(id))).not.toHaveTextContent(/额度|¥/);
+      // …and nothing of the simulated allowance is.
+      expect(mocks.estimates).not.toHaveBeenCalled();
+      expect(screen.queryAllByText(/模拟/)).toEqual([]);
+      expect(screen.queryByRole("status")).not.toBeInTheDocument();
+      expect(mocks.allowance).toHaveBeenCalledTimes(1);
+    });
+
+    it("shows the catalogue all the same when the allowance cannot be read, and asks for no estimate", async () => {
+      mocks.allowance.mockRejectedValue(new Error("network"));
+      renderPage();
+      await settled();
+      expect(card("药品安全性分析")).toHaveTextContent("约 20～40 分钟");
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      expect(screen.queryByRole("status")).not.toBeInTheDocument();
+      expect(mocks.estimates).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("the low-allowance prompt", () => {
+    it("is at the top of the page when the simulated allowance is running low, with the way to the simulated recharge page", async () => {
+      mocks.allowance.mockResolvedValue({ ...simulatedWallet, available: 5 });
+      renderPage();
+      const prompt = await screen.findByRole("status");
+      expect(prompt).toHaveTextContent("科研额度即将用完，还剩 ¥5.00。");
+      expect(within(prompt).getByText(SIMULATED_WALLET_LABEL)).toBeInTheDocument();
+      expect(within(prompt).getByRole("link", { name: "去模拟充值" })).toHaveAttribute("href", SIMULATED_WALLET_PAGES.recharge);
+      await settled();
+      // Above the categories and the tools.
+      expect(prompt.compareDocumentPosition(screen.getByRole("group", { name: "分类" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(prompt.compareDocumentPosition(card("药品安全性分析")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it("says an empty allowance is used up", async () => {
+      mocks.allowance.mockResolvedValue({ ...simulatedWallet, available: 0 });
+      renderPage();
+      expect(await screen.findByRole("status")).toHaveTextContent("科研额度已用完，模拟充值后可以继续研究。");
+      await settled();
+    });
+
+    it("is not shown while the allowance is above the threshold the server names", async () => {
+      mocks.allowance.mockResolvedValue(simulatedWallet);
+      renderPage();
+      // The allowance was read and is a simulated one: the cards carry prices.
+      await waitFor(() => expect(card("药品安全性分析")).toHaveTextContent("约 ¥4～8 额度"));
+      expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    });
+
+    // The balance moves, so the page reads it again on opening and draws only
+    // the one it just read — never the one another surface left behind.
+    it("is drawn from the balance just read, not from the one held", async () => {
+      mocks.allowance.mockResolvedValue({ ...simulatedWallet, available: 5 });
+      const first = renderPage();
+      expect(await screen.findByRole("status")).toHaveTextContent("还剩 ¥5.00");
+      first.unmount();
+
+      let answer!: (value: object) => void;
+      mocks.allowance.mockReturnValue(new Promise((resolve) => { answer = resolve; }));
+      renderPage();
+      await settled();
+      expect(mocks.allowance).toHaveBeenCalledTimes(2);
+      expect(screen.queryByRole("status")).not.toBeInTheDocument();
+      // A top-up happened in between: nothing is prompted.
+      await act(async () => { answer({ ...simulatedWallet, available: 105 }); });
+      expect(screen.queryByRole("status")).not.toBeInTheDocument();
+      expect(card("药品安全性分析")).toHaveTextContent("约 ¥4～8 额度");
+    });
+
+    it("is not drawn from the balance held when the read that would replace it fails", async () => {
+      mocks.allowance.mockResolvedValueOnce({ ...simulatedWallet, available: 5 });
+      const first = renderPage();
+      expect(await screen.findByRole("status")).toBeInTheDocument();
+      first.unmount();
+      mocks.allowance.mockRejectedValue(new Error("network"));
+      renderPage();
+      await settled();
+      expect(mocks.allowance).toHaveBeenCalledTimes(2);
+      expect(screen.queryByRole("status")).not.toBeInTheDocument();
+      expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+      // The deployment is still the one that said its wallet is simulated: the prices stay.
+      expect(card("药品安全性分析")).toHaveTextContent("约 ¥4～8 额度");
+    });
   });
 });
