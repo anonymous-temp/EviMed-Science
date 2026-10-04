@@ -71,6 +71,8 @@ const MCP_NARRATION = Object.freeze({
   peer_review: (args) => jobPhrase('论文审稿', args),
   drug_safety_analysis: (args) => jobPhrase('药物安全分析', args),
   frontier_search: (args, result) => withCount(`查前沿动态${frontierSubject(args)}`, result?.data ?? result),
+  dataset_semantics: (args) => (args?.action === 'check' ? '检查数据（漂移、重复、关联、分母、时间泄漏）'
+    : args?.action === 'write' ? '记录数据含义' : args?.action === 'transform' ? '记录数据变换' : '读取已记录的数据含义'),
   // 「循证 GEO」's platform tools: what was read or written, in the page's words.
   geo_read: (args) => `读取 GEO 项目：${geoWhat(GEO_READ_WHAT_LABELS_ZH, args?.what)}`,
   geo_write: (args) => `写入 GEO 项目：${geoWhat(GEO_WRITE_WHAT_LABELS_ZH, args?.what)}`,

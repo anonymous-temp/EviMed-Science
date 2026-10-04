@@ -40,6 +40,7 @@ import frontier_search
 import geo_platform
 import vcr_platform
 import research_calculate
+import data_semantics
 
 
 SERVER_NAME = "evimed-research"
@@ -904,6 +905,10 @@ TOOL_DEFINITIONS.extend(geo_platform.tool_definitions())
 # None of them computes in the model: `vcr_simulate` queues a frozen scenario.
 TOOL_DEFINITIONS.extend(vcr_platform.tool_definitions())
 TOOL_DEFINITIONS.extend(research_calculate.tool_definitions())
+# What a project's datasets mean, and the deterministic checks of its files against that (2026-10-04, N03):
+# offered to the two capabilities that start from a researcher's own data. With the module off it answers a
+# warning and `check` still runs on what the call declares, so it is not an optional tool.
+TOOL_DEFINITIONS.extend(data_semantics.tool_definitions())
 
 
 TOOLS = {tool["name"]: tool for tool in TOOL_DEFINITIONS}
@@ -2068,6 +2073,21 @@ def _dispatch(name, arguments, execution_context=None):
                     "Answer without the feed: use the literature, guideline and regulatory tools, or settled knowledge."
                 )
             return failure(error.code, str(error), error.retryable, stop_reason, [next_action])
+        result["data"] = _data_with_provenance(result["data"], name, arguments, _scope())
+        return result
+    if name == "dataset_semantics":
+        try:
+            result = data_semantics.call(arguments)
+        except data_semantics.DataSemanticsError as error:
+            # A malformed call is the run's to fix, an outage may pass, and a module that is off is simply
+            # not there: the analysis goes on from the files either way (principles 12, 19).
+            if error.stop_reason() == "invalid_input":
+                next_action = "Correct the named field and call again, or go on from the files."
+            elif error.retryable:
+                next_action = "Retry once, then go on from the files and say the recorded meaning was not available."
+            else:
+                next_action = "Go on from the files: infer what you need, say what you assumed, and keep the interpretation in the workspace."
+            return failure(error.code, str(error), error.retryable, error.stop_reason(), [next_action])
         result["data"] = _data_with_provenance(result["data"], name, arguments, _scope())
         return result
     if name == "research_calculate":

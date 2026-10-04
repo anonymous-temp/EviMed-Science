@@ -116,6 +116,10 @@ export const MCP_TOOL_BASE_NAMES = Object.freeze([
   'curve_digitize',
   'evidence_pool',
   'research_calculate',
+  // what a project's datasets mean — the recorded interpretation, its exact source versions and the deterministic
+  // data checks — through the control plane's ledger; offered to the two capabilities that start from a
+  // researcher's own data (dataset_semantics, data_semantics.py; plan 2026-10-02 §11.3 N03)
+  'dataset_semantics',
 ])
 
 /** Model-visible MCP tool names. */

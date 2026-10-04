@@ -1,0 +1,1138 @@
+{
+  "schemaVersion": "1.0.0",
+  "capability": "statistical-analysis",
+  "version": "sha256:94a489d9c6aabcd7b4e314bd85fd55031ea20f44d89491d60e3f0912b15066d3",
+  "generatedBy": "scripts/dev/build-tool-graph.mjs",
+  "counts": {
+    "nodes": 17,
+    "edges": 0,
+    "byVia": {
+      "schema": 0,
+      "model": 0,
+      "executed": 0
+    },
+    "sampleable": 0
+  },
+  "suppressed": [
+    {
+      "reason": "kernel-to-kernel type match; every file tool can feed every other, so the pair says nothing about this capability",
+      "count": 22
+    }
+  ],
+  "removed": [],
+  "nodes": [
+    {
+      "name": "ask_user",
+      "source": "kernel",
+      "description": "Ask the operator a question.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "question": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "question"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
+      "stateEffect": "none"
+    },
+    {
+      "name": "bash",
+      "source": "kernel",
+      "description": "Run a shell command in the run workspace.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "command": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
+      "stateEffect": "writes_workspace"
+    },
+    {
+      "name": "edit",
+      "source": "kernel",
+      "description": "Replace an exact string in a workspace file.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "file_path": {
+            "type": "string"
+          },
+          "old_string": {
+            "type": "string"
+          },
+          "new_string": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "file_path",
+          "old_string",
+          "new_string"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": [
+          {
+            "path": "path",
+            "type": "file_path"
+          }
+        ]
+      },
+      "typeTags": [
+        "file_path"
+      ],
+      "requiredTypeTags": [
+        "file_path"
+      ],
+      "outputTypeTags": [
+        "file_path"
+      ],
+      "stateEffect": "writes_workspace"
+    },
+    {
+      "name": "fs_edit",
+      "source": "kernel",
+      "description": "Edit a workspace file through the filesystem plugin.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": [
+          {
+            "path": "path",
+            "type": "file_path"
+          }
+        ]
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [
+        "file_path"
+      ],
+      "stateEffect": "writes_workspace"
+    },
+    {
+      "name": "fs_read",
+      "source": "kernel",
+      "description": "Read a workspace file through the filesystem plugin.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
+      "stateEffect": "none"
+    },
+    {
+      "name": "fs_search",
+      "source": "kernel",
+      "description": "Search the workspace through the filesystem plugin.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "pattern": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "pattern"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": [
+          {
+            "path": "matches[].path",
+            "type": "file_path"
+          }
+        ]
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [
+        "file_path"
+      ],
+      "stateEffect": "none"
+    },
+    {
+      "name": "fs_write",
+      "source": "kernel",
+      "description": "Write a workspace file through the filesystem plugin.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "content"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": [
+          {
+            "path": "path",
+            "type": "file_path"
+          }
+        ]
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [
+        "file_path"
+      ],
+      "stateEffect": "writes_workspace"
+    },
+    {
+      "name": "glob",
+      "source": "kernel",
+      "description": "List workspace paths matching a glob.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "pattern": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "pattern"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": [
+          {
+            "path": "matches[]",
+            "type": "file_path"
+          }
+        ]
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [
+        "file_path"
+      ],
+      "stateEffect": "none"
+    },
+    {
+      "name": "grep",
+      "source": "kernel",
+      "description": "Search workspace file contents.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "pattern": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "pattern"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": [
+          {
+            "path": "matches[].path",
+            "type": "file_path"
+          }
+        ]
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [
+        "file_path"
+      ],
+      "stateEffect": "none"
+    },
+    {
+      "name": "job_run",
+      "source": "kernel",
+      "description": "Start a long-running job.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "command": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "command"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
+      "stateEffect": "writes_workspace"
+    },
+    {
+      "name": "job_status",
+      "source": "kernel",
+      "description": "Poll a started job.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "jobId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "jobId"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
+      "stateEffect": "none"
+    },
+    {
+      "name": "list",
+      "source": "kernel",
+      "description": "List the entries of a workspace directory.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "path": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "path"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": [
+          {
+            "path": "entries[].path",
+            "type": "file_path"
+          }
+        ]
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [
+        "file_path"
+      ],
+      "stateEffect": "none"
+    },
+    {
+      "name": "mcp__evimed__dataset_semantics",
+      "source": "mcp",
+      "description": "Remember and check what the researcher's data MEANS, so a later analysis of the same dataset in this project starts from the same interpretation instead of inferring it again. Rows never leave the workspace; only meaning, counts and row numbers do. action=read: the recorded interpretation (tables, observation unit, patient and observation keys, per-variable definition, type, unit, code system, allowed values, missingness, role, measurement time; population, time window, joins, transformations, last check) with who vouches for each fact -- researcher_confirmed (their words are kept), dictionary_stated (the file is named) or model_inferred (what it was read from) -- and whether the files still are the bytes it was read from. Start here before profiling a dataset the project may already hold. action=write: record what you establish, one basis per call (basis + statement | statedIn | inferredFrom). Write what the researcher says as researcher_confirmed with their own words; it is never overwritten by a later inference (a weaker statement that disagrees comes back kept_stronger and is kept beside it). files=[{path}] binds the exact file versions (the tool hashes them); allowedValues:\"observed\" copies a coded column's values from the file. A refused item comes back in issues and the rest is written. action=check: profile files (default: the recorded paths) against the record and report named outcomes with counts and the rows concerned -- drift (source_changed, column_renamed_candidate, unit_changed, possible_unit_change, type_changed, new_codes, distribution_shift, missingness_shift ...), duplicate_exact / duplicate_conflicting by the declared observationKey, join_cardinality_violation / join_orphans / join_key_invalid, denominator_increase / decrease / changed between steps, temporal_leakage (a predictor measured after leakage.cutoff), transformation_code_changed. A finding is information for the analysis to handle and states nothing is removed or chosen for you; not_checked says why a check could not run -- it is never a clean result. A rename is only a candidate: confirm it with write (variable aliases). action=transform: record a derived variable or filter with its inputs and the code file that makes it; the answer says whether it is new, the same, or what changed since the recorded version.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "read",
+              "write",
+              "check",
+              "transform"
+            ]
+          },
+          "datasetId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64,
+            "pattern": "^[a-z0-9][a-z0-9_-]{0,63}$",
+            "description": "One dataset of the project (lowercase letters, digits, - _). Omitted: read lists them; check and write use the one the files belong to."
+          },
+          "table": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120,
+            "description": "read: only this table."
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 120
+          },
+          "basis": {
+            "type": "string",
+            "enum": [
+              "researcher_confirmed",
+              "dictionary_stated",
+              "model_inferred"
+            ],
+            "description": "write: who vouches for every fact in this call."
+          },
+          "statement": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 400,
+            "description": "basis researcher_confirmed: what the researcher said, in their words."
+          },
+          "statedIn": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 512,
+            "description": "basis dictionary_stated: the data dictionary file (workspace-relative); the tool hashes it."
+          },
+          "inferredFrom": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 5,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 200
+            },
+            "description": "basis model_inferred: what the inference was read from (column names, values in data-profile.json ...)."
+          },
+          "population": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 400
+          },
+          "timeWindow": {
+            "type": "object",
+            "properties": {
+              "start": {
+                "type": "string"
+              },
+              "end": {
+                "type": "string"
+              },
+              "note": {
+                "type": "string",
+                "maxLength": 200
+              }
+            },
+            "additionalProperties": false
+          },
+          "tables": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 120
+                },
+                "observationUnit": {
+                  "type": "string",
+                  "maxLength": 200,
+                  "description": "e.g. one row per patient visit."
+                },
+                "subjectKey": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 6,
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  }
+                },
+                "observationKey": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 6,
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "description": "Columns that together identify ONE observation (patient + visit): duplicates are judged by them."
+                }
+              },
+              "required": [
+                "name"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "variables": {
+            "type": "array",
+            "maxItems": 100,
+            "items": {
+              "type": "object",
+              "properties": {
+                "table": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 120
+                },
+                "name": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                },
+                "definition": {
+                  "type": "string",
+                  "maxLength": 400
+                },
+                "type": {
+                  "type": "string",
+                  "enum": [
+                    "integer",
+                    "number",
+                    "date",
+                    "text"
+                  ]
+                },
+                "unit": {
+                  "description": "A unit string, or null when the variable has none."
+                },
+                "codeSystem": {
+                  "type": "string",
+                  "maxLength": 40
+                },
+                "allowedValues": {
+                  "description": "[{code,label?}] or bare codes, or \"observed\" to copy the column's values."
+                },
+                "range": {
+                  "type": "array",
+                  "minItems": 2,
+                  "maxItems": 2,
+                  "items": {
+                    "type": "number"
+                  }
+                },
+                "missingness": {
+                  "type": "object",
+                  "properties": {
+                    "tokens": {
+                      "type": "array",
+                      "maxItems": 10,
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "reason": {
+                      "type": "string",
+                      "enum": [
+                        "not_measured",
+                        "not_recorded",
+                        "not_shared",
+                        "restricted_in_trial",
+                        "out_of_window",
+                        "pending_result",
+                        "not_applicable"
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                "role": {
+                  "type": "string",
+                  "enum": [
+                    "identifier",
+                    "time",
+                    "exposure",
+                    "outcome",
+                    "covariate",
+                    "other"
+                  ]
+                },
+                "measuredAt": {
+                  "type": "object",
+                  "properties": {
+                    "column": {
+                      "type": "string"
+                    },
+                    "timeKind": {
+                      "type": "string",
+                      "enum": [
+                        "occurred_at",
+                        "recorded_at",
+                        "visible_at"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "column"
+                  ],
+                  "additionalProperties": false
+                },
+                "valueSource": {
+                  "type": "string",
+                  "enum": [
+                    "observed",
+                    "extracted",
+                    "calculated",
+                    "imputed"
+                  ],
+                  "description": "How the column's values came to be (observed / extracted / calculated / imputed)."
+                },
+                "aliases": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 6,
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  },
+                  "description": "Former names of this column: a renamed column keeps what is known about it."
+                }
+              },
+              "required": [
+                "table",
+                "name"
+              ],
+              "additionalProperties": false
+            }
+          },
+          "joins": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {
+              "type": "object",
+              "properties": {
+                "left": {
+                  "type": "object",
+                  "properties": {
+                    "table": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120
+                    },
+                    "columns": {
+                      "type": "array",
+                      "minItems": 1,
+                      "maxItems": 6,
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                      }
+                    }
+                  },
+                  "required": [
+                    "table",
+                    "columns"
+                  ],
+                  "additionalProperties": false
+                },
+                "right": {
+                  "type": "object",
+                  "properties": {
+                    "table": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 120
+                    },
+                    "columns": {
+                      "type": "array",
+                      "minItems": 1,
+                      "maxItems": 6,
+                      "items": {
+                        "type": "string",
+                        "minLength": 1,
+                        "maxLength": 128
+                      }
+                    }
+                  },
+                  "required": [
+                    "table",
+                    "columns"
+                  ],
+                  "additionalProperties": false
+                },
+                "cardinality": {
+                  "type": "string",
+                  "enum": [
+                    "one_to_one",
+                    "one_to_many",
+                    "many_to_one",
+                    "many_to_many"
+                  ],
+                  "description": "Rows of the left table per key, then of the right."
+                }
+              },
+              "required": [
+                "left",
+                "right"
+              ],
+              "additionalProperties": false
+            },
+            "description": "write: declare joins. check: also check these (cardinality optional)."
+          },
+          "files": {
+            "type": "array",
+            "maxItems": 20,
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 512
+                },
+                "table": {
+                  "type": "string",
+                  "maxLength": 120,
+                  "description": "The recorded table this file is the new version of, when its name differs."
+                }
+              },
+              "required": [
+                "path"
+              ],
+              "additionalProperties": false
+            },
+            "description": "write: bind these exact versions. check: the files to check."
+          },
+          "complete": {
+            "type": "boolean",
+            "description": "check: the files are the whole delivery, so a recorded table with no file is reported table_removed."
+          },
+          "observationKeys": {
+            "type": "object",
+            "description": "check: {table: [columns]} observation keys to use in addition to the recorded ones."
+          },
+          "subjectKeys": {
+            "type": "object",
+            "description": "check: {table: [columns]} subject keys likewise."
+          },
+          "leakage": {
+            "type": "object",
+            "properties": {
+              "cutoff": {
+                "type": "object",
+                "properties": {
+                  "table": {
+                    "type": "string"
+                  },
+                  "column": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "table",
+                  "column"
+                ],
+                "additionalProperties": false,
+                "description": "The column holding when the outcome window opens (or the outcome time itself), per subject."
+              },
+              "subjectColumns": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 6,
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 128
+                }
+              },
+              "predictors": {
+                "type": "array",
+                "maxItems": 50,
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "table": {
+                      "type": "string"
+                    },
+                    "column": {
+                      "type": "string"
+                    },
+                    "timeColumn": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "column"
+                  ],
+                  "additionalProperties": false
+                },
+                "description": "Default: recorded covariates and exposures that have a measuredAt column."
+              }
+            },
+            "additionalProperties": false
+          },
+          "steps": {
+            "type": "array",
+            "maxItems": 30,
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 80
+                },
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "filter",
+                    "dedupe",
+                    "recode",
+                    "derive",
+                    "join",
+                    "aggregate",
+                    "other"
+                  ]
+                },
+                "table": {
+                  "type": "string"
+                },
+                "path": {
+                  "type": "string"
+                },
+                "rows": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "subjects": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "subjectColumns": {
+                  "type": "array",
+                  "minItems": 1,
+                  "maxItems": 6,
+                  "items": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 128
+                  }
+                }
+              },
+              "required": [
+                "label"
+              ],
+              "additionalProperties": false
+            },
+            "description": "check: the analysis's steps in order, each measured from a file (table or path) or reported (rows, subjects), to size every exclusion."
+          },
+          "transformation": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 64
+              },
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "derive",
+                  "filter",
+                  "join",
+                  "recode",
+                  "dedupe",
+                  "aggregate",
+                  "other"
+                ]
+              },
+              "description": {
+                "type": "string",
+                "maxLength": 300
+              },
+              "inputs": {
+                "type": "array",
+                "minItems": 1,
+                "maxItems": 10,
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "table": {
+                      "type": "string"
+                    },
+                    "columns": {
+                      "type": "array",
+                      "maxItems": 20,
+                      "items": {
+                        "type": "string"
+                      }
+                    }
+                  },
+                  "required": [
+                    "table"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "output": {
+                "type": "object",
+                "properties": {
+                  "table": {
+                    "type": "string"
+                  },
+                  "column": {
+                    "type": "string"
+                  }
+                },
+                "additionalProperties": false
+              },
+              "codePath": {
+                "type": "string",
+                "maxLength": 512,
+                "description": "The script that does it (workspace-relative); the tool hashes it."
+              },
+              "parameters": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "name",
+              "kind",
+              "inputs"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "action"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
+      "stateEffect": "none"
+    },
+    {
+      "name": "read",
+      "source": "kernel",
+      "description": "Read a workspace file, paginated.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "file_path": {
+            "type": "string"
+          },
+          "offset": {
+            "type": "string"
+          },
+          "limit": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "file_path"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [
+        "file_path"
+      ],
+      "requiredTypeTags": [
+        "file_path"
+      ],
+      "outputTypeTags": [],
+      "stateEffect": "none"
+    },
+    {
+      "name": "skill",
+      "source": "kernel",
+      "description": "Load a skill body into the run.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
+      "stateEffect": "none"
+    },
+    {
+      "name": "task",
+      "source": "kernel",
+      "description": "Run a scoped subtask in a fresh context.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "prompt": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "prompt"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
+      "stateEffect": "none"
+    },
+    {
+      "name": "write",
+      "source": "kernel",
+      "description": "Write a workspace file.",
+      "inputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "properties": {
+          "file_path": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "file_path",
+          "content"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": [
+          {
+            "path": "path",
+            "type": "file_path"
+          }
+        ]
+      },
+      "typeTags": [
+        "file_path"
+      ],
+      "requiredTypeTags": [
+        "file_path"
+      ],
+      "outputTypeTags": [
+        "file_path"
+      ],
+      "stateEffect": "writes_workspace"
+    }
+  ],
+  "edges": []
+}

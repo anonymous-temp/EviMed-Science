@@ -15,7 +15,8 @@ test('statistical capability is clinical, optional-output and uses the existing 
   const source = parse(await read('capabilities/statistical-analysis/capability.yaml'));
   const validated = validateCapabilityManifest(source);
   assert.equal(validated.ok, true, JSON.stringify(validated.issues));
-  assert.deepEqual(source.tools, []);
+  // One MCP tool, the one the two data capabilities share: what the project's datasets mean (N03). No retrieval, no engine.
+  assert.deepEqual(source.tools, ['mcp__evimed__dataset_semantics']);
   assert.deepEqual(source.skills, ['statistical-analysis']);
   assert.ok(source.produces[0].outputs.every((output) => !output.required));
   assert.ok(delegationToolFilter(source, { allowBash: true }).includes('bash'));
