@@ -216,6 +216,16 @@ test("the event vocabulary the manifest lists is the one the frames use", async 
     assert.ok(known.has(type), `${type} fell out of the manifest`);
   }
 
+  // The other direction, which is the one that was open: a record the live
+  // recording carries that the manifest has no name for is one nobody has
+  // classified, and it reached the page as a blank card (2026-10-04). Every
+  // type the pinned kernel wrote into the recording is a name here, and the
+  // plumbing among them is a subset, with nothing listed twice.
+  assert.deepEqual([...exercised].filter((type) => !known.has(type)), [], "a live record type the manifest does not name");
+  assert.equal(known.size, SEAMS.sessionEventTypes.length, "a session event type is listed twice");
+  assert.equal(new Set(SEAMS.sessionEventPlumbing).size, SEAMS.sessionEventPlumbing.length, "a plumbing type is listed twice");
+  assert.deepEqual(SEAMS.sessionEventPlumbing.filter((type) => !known.has(type)), [], "plumbing is named in sessionEventTypes first");
+
   // Declared versus exercised, with the gap named rather than assumed away.
   const gap = SESSION_EVENTS_THE_TRANSCRIPT_IS_BUILT_FROM.filter((type) => !exercised.has(type));
   assert.deepEqual(

@@ -18,14 +18,21 @@ import {
   VCR_ENGINE_METHODS,
   VCR_ENGINE_METHOD_IDS,
   VCR_ENGINE_PROTOCOL_VERSION,
+  VCR_COLUMN_SOURCES,
+  VCR_COLUMN_SOURCE_EXPORT,
+  VCR_COLUMN_SOURCE_LIMITS,
+  VCR_COX_FEW_EVENTS,
   VCR_JOB_KINDS,
   VCR_JOB_METHODS,
   VCR_MAX_REPLICATES,
   VCR_MODEL_TIERS,
+  VCR_NOT_ESTIMABLE_RULES,
+  VCR_NOT_ESTIMABLE_RULE_LABELS_ZH,
   VCR_OBSERVED_ONLY_METHODS,
   VCR_PATIENT_LEVEL_JOB_KINDS,
   VCR_PATTERNS,
   VCR_PROTOCOL_ISSUE_CODES,
+  VCR_REAL_PATIENT_SOURCES,
   VCR_SCENARIO_SCHEMAS,
   VCR_TRIAL_DESIGNS,
   canonicalScenarioJson,
@@ -40,6 +47,7 @@ import {
   vcrLocationIsValid,
   vcrReplicateFloorFor,
   vcrResultOutputPayload,
+  vcrWeakestSource,
 } from "@evimed/domain";
 
 /** JSON-safe deep copy: the fixture is JSON, and a job is never anything else. @template T @param {T} value @returns {T} */
@@ -93,6 +101,9 @@ test("the engine's generated snapshot carries exactly the live schemas, patterns
   assert.deepEqual(snapshot.patterns, plain(VCR_PATTERNS));
   assert.deepEqual(snapshot.jobMethods, plain(VCR_JOB_METHODS));
   assert.deepEqual(snapshot.observedOnlyMethods, [...VCR_OBSERVED_ONLY_METHODS]);
+  assert.deepEqual(snapshot.columnSources, [...VCR_COLUMN_SOURCES]);
+  assert.deepEqual(snapshot.columnSourceLimits, plain(VCR_COLUMN_SOURCE_LIMITS));
+  assert.deepEqual(snapshot.engineTableInputKeys, ["kind", "id", "shape", "location", "hash", "valueSource", "columnSources"]);
   assert.equal(snapshot.maxReplicates, VCR_MAX_REPLICATES);
   for (const [id, spec] of Object.entries(VCR_ENGINE_METHODS)) assert.equal(snapshot.methods[id].modelTier, spec.modelTier, id);
 });
@@ -313,6 +324,182 @@ test("a method that weighs real patients refuses a row that is not one", () => {
   const profile = clone(fixture.valid.find((/** @type {any} */ item) => item.job.method === "profile.snapshot").job);
   profile.inputs[0].valueSource = "synthetic";
   assert.deepEqual(validateEngineJob(profile), []);
+});
+
+// --- the source of a column --------------------------------------------------
+
+test("a column's source is one of the real-patient four, and a result takes the weakest of the columns it used", () => {
+  assert.deepEqual([...VCR_COLUMN_SOURCES], ["observed", "extracted", "calculated", "imputed"], "most direct first: the order is the judgment");
+  assert.deepEqual([...VCR_COLUMN_SOURCES], [...VCR_REAL_PATIENT_SOURCES], "a column of a real source is still a real person's value");
+  assert.equal(vcrWeakestSource(["observed", "observed"], "calculated"), "observed");
+  assert.equal(vcrWeakestSource(["observed", "extracted"], "calculated"), "extracted");
+  assert.equal(vcrWeakestSource(["imputed", "observed", "calculated"], "calculated"), "imputed");
+  assert.equal(vcrWeakestSource(["calculated", "observed"], "observed"), "calculated");
+  assert.equal(vcrWeakestSource([], "observed"), "observed", "no column used: the fallback");
+  assert.equal(vcrWeakestSource(new Set(["observed"]), "x"), "observed", "any iterable");
+  // a source outside the four is returned as it is: it cannot be laundered by listing it beside observed ones
+  assert.equal(vcrWeakestSource(["observed", "synthetic"], "observed"), "synthetic");
+  assert.equal(vcrWeakestSource(["imputed", "reconstructed"], "observed"), "reconstructed");
+  assert.deepEqual(VCR_COLUMN_SOURCE_LIMITS, { maxColumns: 1000, maxNameLength: 200 });
+});
+
+test("an export names a column source in Define-XML and ADaM terms, and only the domain knows how", () => {
+  assert.deepEqual(Object.keys(VCR_COLUMN_SOURCE_EXPORT).sort(), [...VCR_COLUMN_SOURCES].sort(), "one entry per column source, no more");
+  // Define-XML Origin Type (NCI EVS codelist C170449): Collected, Derived, Other; there is no Imputed and no Extracted.
+  const origin = (/** @type {string} */ source) => /** @type {any} */ (VCR_COLUMN_SOURCE_EXPORT)[source].defineXmlOrigin;
+  assert.deepEqual(origin("observed"), { term: "Collected", code: "C170548" });
+  assert.deepEqual(origin("calculated"), { term: "Derived", code: "C170549" });
+  assert.deepEqual(origin("imputed"), { term: "Derived", code: "C170549" }, "imputed is a derived value whose method says how");
+  assert.deepEqual(origin("extracted"), { term: "Other", code: "C17649" }, "no standard term for a value read from text");
+  const entry = (/** @type {string} */ source) => /** @type {any} */ (VCR_COLUMN_SOURCE_EXPORT)[source];
+  // ADaM words an imputed value through the record-level DTYPE (codelist C81224, extensible); only the analysis knows which technique.
+  assert.deepEqual(entry("imputed").adamDerivation, { variable: "DTYPE", codelist: "C81224", extensible: true, value: null });
+  for (const source of ["observed", "extracted", "calculated"]) assert.equal(entry(source).adamDerivation, null, source);
+  assert.deepEqual(["observed", "extracted", "calculated", "imputed"].map((source) => entry(source).describe), [false, true, false, true], "the entries an export must describe in a sentence");
+  assert.ok(Object.isFrozen(VCR_COLUMN_SOURCE_EXPORT) && Object.isFrozen(entry("imputed")) && Object.isFrozen(entry("imputed").adamDerivation));
+});
+
+test("columnSources: only the control plane writes it, only on real people's rows, and each word is one of the four", () => {
+  const profile = () => clone(fixture.valid.find((/** @type {any} */ item) => item.job.method === "profile.snapshot").job);
+  const withSources = (/** @type {any} */ columnSources, /** @type {any} */ over = {}) => { const job = profile(); Object.assign(job.inputs[0], over, { columnSources }); return keys(validateEngineJob(job)); };
+  assert.deepEqual(withSources({ age: "imputed", male: "observed" }), []);
+  assert.deepEqual(withSources({}), [], "an empty map names no column: every column has the table's source");
+  assert.deepEqual(withSources(null), [], "null reads as absent, like a hash or a value source");
+  assert.deepEqual(withSources({ age: "guessed" }), ["input_column_source_invalid@inputs[0].columnSources.age"]);
+  assert.deepEqual(withSources({ age: "aggregate", sex: "synthetic" }), ["input_column_source_invalid@inputs[0].columnSources.age", "input_column_source_invalid@inputs[0].columnSources.sex"], "a column of a real table cannot be called aggregate or synthetic");
+  assert.deepEqual(withSources({ age: 3 }), ["input_column_source_invalid@inputs[0].columnSources.age"]);
+  assert.deepEqual(withSources(["age"]), ["input_column_sources_invalid@inputs[0].columnSources"]);
+  assert.deepEqual(withSources("observed"), ["input_column_sources_invalid@inputs[0].columnSources"]);
+  assert.deepEqual(withSources({ "": "observed" }), ["input_column_sources_invalid@inputs[0].columnSources"]);
+  assert.deepEqual(withSources({ ["c".repeat(201)]: "observed" }), ["input_column_sources_invalid@inputs[0].columnSources"]);
+  assert.deepEqual(withSources({ ["c".repeat(200)]: "observed" }), [], "200 characters is the limit");
+  const many = Object.fromEntries(Array.from({ length: 1001 }, (_, i) => [`c${i}`, "observed"]));
+  assert.deepEqual(withSources(many), ["input_column_sources_invalid@inputs[0].columnSources"]);
+  // a table that is not real people's rows has no sources per column
+  for (const valueSource of ["synthetic", "aggregate", "reconstructed", "predicted", "assumed"]) {
+    assert.deepEqual(withSources({ age: "observed" }, { valueSource }), ["input_column_source_not_individual@inputs[0].columnSources"], valueSource);
+  }
+  // a caller never says it, and a lineage input has no such key
+  const caller = (/** @type {any} */ input) => validateCallerInputs([input]).map((issue) => `${issue.code}@${issue.field}`);
+  assert.deepEqual(caller({ kind: "snapshot", id: "snp_1", columnSources: { age: "observed" } }), ["input_location_forbidden@inputs[0].columnSources"]);
+  const lineage = profile();
+  lineage.inputs.push({ kind: "assumption", id: "asm_1@1", columnSources: { age: "observed" } });
+  assert.deepEqual(keys(validateEngineJob(lineage)), ["input_field_unknown@inputs[1].columnSources"]);
+  for (const code of ["input_column_sources_invalid", "input_column_source_invalid", "input_column_source_not_individual"]) {
+    assert.ok(VCR_PROTOCOL_ISSUE_CODES.includes(code), code);
+    assert.ok(ALL_ERROR_CODES.includes(code), code);
+  }
+});
+
+// --- the comparator-effect methods -----------------------------------------------
+
+/** The methods added after the first release's 24, each with the one job kind that runs it. */
+const COMPARATOR_EFFECT_METHODS = /** @type {const} */ ([
+  ["comparator.weighted_cox", "weighted_cox_comparator"],
+  ["comparator.maic_time_to_event", "maic_time_to_event_comparator"],
+  ["comparator.aipw", "aipw_comparator"],
+  ["comparator.covariate_sets", "covariate_set_comparator"],
+]);
+
+test("the comparator-effect methods are appended, read patients, and every rule they can fire has a label", () => {
+  // The first release's 24 kinds keep their order: a mirror in the runtime's tool holds the list equal, in order.
+  assert.deepEqual([...VCR_JOB_KINDS].slice(0, 24), ["profile_snapshot", "build_cohort", "generate_population", "literature_population", "synthesize_population",
+    "population_quality", "generate_patients", "generate_patients_continuous", "generate_patients_binary", "reconstruct_km", "pool_evidence", "weight_comparator",
+    "propensity_weight_comparator", "maic_comparator", "evalue", "rmst", "design_analytic", "design_simulation", "design_grid", "assurance", "procova",
+    "accrual_forecast", "map_prior", "match_criteria"]);
+  // The kinds appended after the first 24 are this stream's four in the order they were added, then whatever other streams appended
+  // (the robustness methods): derived from the domain, so a stream that appends a kind does not edit this line.
+  assert.deepEqual([...VCR_JOB_KINDS].slice(24, 24 + COMPARATOR_EFFECT_METHODS.length), COMPARATOR_EFFECT_METHODS.map(([, kind]) => kind), "appended in the order they were added");
+  assert.equal(VCR_JOB_KINDS.length, Object.keys(VCR_ENGINE_METHODS).length, "and every kind after them has its method");
+  for (const [method, kind] of COMPARATOR_EFFECT_METHODS) {
+    assert.equal(/** @type {Record<string, string>} */ (VCR_JOB_METHODS)[kind], method, kind);
+    assert.ok(VCR_PATIENT_LEVEL_JOB_KINDS.includes(kind), `${kind} reads patient-level rows`);
+    assert.equal(/** @type {any} */ (VCR_ENGINE_METHODS)[method].version, "1.0.0", method);
+    assert.equal(/** @type {any} */ (VCR_ENGINE_METHODS)[method].modelTier, "data", method);
+    assert.ok(/** @type {any} */ (VCR_ENGINE_METHODS)[method].crossChecks.length > 0, `${method} names what its numeric cases are held against`);
+    assert.ok(VCR_OBSERVED_ONLY_METHODS.includes(method), `${method} refuses synthetic, aggregate and predicted rows`);
+    assert.ok(VCR_SCENARIO_SCHEMAS[/** @type {keyof typeof VCR_SCENARIO_SCHEMAS} */ (method)], method);
+  }
+  for (const rule of VCR_NOT_ESTIMABLE_RULES) assert.ok(/** @type {any} */ (VCR_NOT_ESTIMABLE_RULE_LABELS_ZH)[rule], `${rule} has a sentence`);
+  assert.ok(VCR_NOT_ESTIMABLE_RULES.includes("too_few_events"));
+  assert.equal(VCR_COX_FEW_EVENTS, 10);
+});
+
+test("a weighted Cox job: the weights are the job's own, the PH rule is declared with the scenario, and tau is required", () => {
+  const job = () => clone(fixture.valid.find((/** @type {any} */ item) => item.job.method === "comparator.weighted_cox").job);
+  assert.deepEqual(validateEngineJob(job()), []);
+  const bad = (/** @type {(j: any) => void} */ change) => { const j = job(); change(j); return keys(validateEngineJob(j)); };
+  assert.deepEqual(bad((j) => { delete j.scenario.tau; }), ["scenario_field_missing@scenario.tau"]);
+  assert.deepEqual(bad((j) => { j.scenario.weightColumn = "w"; }), ["scenario_field_unknown@scenario.weightColumn"], "weights are estimated inside the job so the bootstrap can re-estimate them");
+  assert.deepEqual(bad((j) => { j.scenario.endpoint = { type: "continuous" }; }), ["endpoint_not_supported@scenario.endpoint.type"]);
+  assert.deepEqual(bad((j) => { j.scenario.phAlpha = 0; }), ["scenario_value_invalid@scenario.phAlpha"]);
+  // moments belong to entropy balancing only
+  assert.deepEqual(bad((j) => { j.scenario.weighting = "propensity"; j.scenario.moments = 2; }), ["scenario_field_unknown@scenario.moments"]);
+  assert.deepEqual(bad((j) => { j.scenario.weighting = "propensity"; delete j.scenario.moments; }), []);
+  for (const source of ["synthetic", "aggregate", "predicted", "reconstructed", "assumed"]) {
+    assert.deepEqual(bad((j) => { j.inputs[0].valueSource = source; }), ["input_source_not_individual@inputs[0].valueSource"], source);
+  }
+});
+
+test("a time-to-event MAIC job: the comparator's rows, or a published contrast for an anchored one, and never both", () => {
+  const job = (/** @type {string} */ name) => clone(fixture.valid.find((/** @type {any} */ item) => item.name === name).job);
+  const unanchored = () => job("maic_time_to_event_comparator unanchored");
+  const bad = (/** @type {() => any} */ make, /** @type {(j: any) => void} */ change) => { const j = make(); change(j); return keys(validateEngineJob(j)); };
+  assert.deepEqual(validateEngineJob(unanchored()), []);
+  assert.deepEqual(validateEngineJob(job("maic_time_to_event_comparator anchored on reconstructed rows")), []);
+  assert.deepEqual(validateEngineJob(job("maic_time_to_event_comparator anchored on a published contrast")), []);
+  // unanchored: the comparator's rows are required, a published contrast is not a key
+  assert.deepEqual(bad(unanchored, (j) => { delete j.scenario.pseudoIpdInputId; }), ["scenario_field_missing@scenario.pseudoIpdInputId"]);
+  assert.deepEqual(bad(unanchored, (j) => { j.scenario.aggregateEstimate = -0.2; j.scenario.aggregateSe = 0.1; }),
+    ["scenario_field_unknown@scenario.aggregateEstimate", "scenario_field_unknown@scenario.aggregateSe"]);
+  // anchored: exactly one of the two ways to state the comparator trial's contrast
+  const published = () => job("maic_time_to_event_comparator anchored on a published contrast");
+  assert.deepEqual(bad(published, (j) => { j.scenario.pseudoIpdInputId = "rec_1:1"; j.inputs.push({ kind: "snapshot_file", id: "rec_1:1", location: "std_1/rec_1/r.csv", hash: "a".repeat(64), valueSource: "reconstructed" }); }),
+    ["scenario_value_invalid@scenario.aggregateEstimate"]);
+  assert.deepEqual(bad(published, (j) => { delete j.scenario.aggregateEstimate; delete j.scenario.aggregateSe; }), ["scenario_field_missing@scenario.pseudoIpdInputId"]);
+  assert.deepEqual(bad(published, (j) => { delete j.scenario.aggregateSe; }), ["scenario_field_missing@scenario.aggregateSe"]);
+  // the comparator's rows are an input the job carries, and the two roles' tables are told apart by the engine, not by the protocol
+  assert.deepEqual(bad(unanchored, (j) => { j.scenario.pseudoIpdInputId = "rec_9:9"; }), ["scenario_value_invalid@scenario.pseudoIpdInputId"]);
+  assert.deepEqual(bad(unanchored, (j) => { j.inputs[2].valueSource = "reconstructed"; j.inputs[0].valueSource = "reconstructed"; }), [], "a reconstructed study table passes the protocol and is refused by the engine by name");
+  for (const source of ["synthetic", "aggregate", "predicted", "assumed"]) {
+    assert.deepEqual(bad(unanchored, (j) => { j.inputs[0].valueSource = source; }), ["input_source_not_individual@inputs[0].valueSource"], source);
+  }
+  assert.ok(VCR_PROTOCOL_ISSUE_CODES.every((code) => ALL_ERROR_CODES.includes(code)));
+  assert.ok(ALL_ERROR_CODES.includes("input_source_not_reconstructed"), "the engine's own code for a comparator table that is not a reconstruction");
+});
+
+test("an AIPW job: one covariate set for both models or one for each, the weights and the truncation are the job's own", () => {
+  const job = (/** @type {string} */ name) => clone(fixture.valid.find((/** @type {any} */ item) => item.name === name).job);
+  const binary = () => job("aipw_comparator binary");
+  const bad = (/** @type {(j: any) => void} */ change) => { const j = binary(); change(j); return keys(validateEngineJob(j)); };
+  assert.deepEqual(validateEngineJob(binary()), []);
+  assert.deepEqual(validateEngineJob(job("aipw_comparator continuous with a covariate set per model")), []);
+  // each model needs covariates, from the shared list or its own
+  assert.deepEqual(bad((j) => { delete j.scenario.covariates; }), ["scenario_field_missing@scenario.covariates"]);
+  assert.deepEqual(bad((j) => { j.scenario.propensityCovariates = ["age"]; delete j.scenario.covariates; }), ["scenario_field_missing@scenario.covariates"], "the outcome model has none");
+  assert.deepEqual(bad((j) => { j.scenario.propensityCovariates = ["age"]; j.scenario.outcomeCovariates = ["age", "male"]; delete j.scenario.covariates; }), []);
+  assert.deepEqual(bad((j) => { delete j.scenario.endpoint; }), ["scenario_field_missing@scenario.endpoint"]);
+  assert.deepEqual(bad((j) => { j.scenario.endpoint = { type: "time_to_event" }; }), ["endpoint_not_supported@scenario.endpoint.type"]);
+  assert.deepEqual(bad((j) => { j.scenario.estimand = "ATE"; }), ["scenario_value_invalid@scenario.estimand"], "the effect in the trial's own population");
+  assert.deepEqual(bad((j) => { j.scenario.weightColumn = "w"; }), ["scenario_field_unknown@scenario.weightColumn"]);
+  assert.ok(VCR_NOT_ESTIMABLE_RULES.includes("nuisance_model_not_estimable"));
+});
+
+test("a covariate-set job: two to eight named sets, the analysis' own keys once, and a covariate list belongs to a set", () => {
+  const job = (/** @type {string} */ name) => clone(fixture.valid.find((/** @type {any} */ item) => item.name === name).job);
+  const entropy = () => job("covariate_set_comparator entropy balance");
+  const bad = (/** @type {(j: any) => void} */ change) => { const j = entropy(); change(j); return keys(validateEngineJob(j)); };
+  assert.deepEqual(validateEngineJob(entropy()), []);
+  for (const name of ["covariate_set_comparator propensity weights for a time-to-event endpoint", "covariate_set_comparator doubly robust with moments left to entropy balance only", "covariate_set_comparator with second moments"]) {
+    assert.deepEqual(validateEngineJob(job(name)), [], name);
+  }
+  assert.deepEqual(bad((j) => { j.scenario.covariateSets.length = 1; }), ["scenario_value_invalid@scenario.covariateSets"], "a sensitivity analysis compares at least two sets");
+  assert.deepEqual(bad((j) => { j.scenario.covariateSets = Array.from({ length: 9 }, (_, i) => ({ name: `s${i}`, covariates: ["age"] })); }), ["scenario_value_invalid@scenario.covariateSets"], "at most eight: each is a full bootstrap");
+  assert.deepEqual(bad((j) => { j.scenario.covariates = ["age"]; }), ["scenario_field_unknown@scenario.covariates"]);
+  assert.deepEqual(bad((j) => { delete j.scenario.endpoint; }), ["scenario_field_missing@scenario.endpoint"]);
+  assert.deepEqual(bad((j) => { j.scenario.analysis = "propensity"; j.scenario.moments = 2; }), ["scenario_field_unknown@scenario.moments"]);
+  assert.deepEqual(bad((j) => { j.scenario.moments = 2; }), []);
+  assert.deepEqual(bad((j) => { j.scenario.analysis = "aipw"; j.scenario.estimand = "ATE"; }), [], "the protocol allows it; the engine refuses it by name for a doubly robust analysis");
 });
 
 // --- results -----------------------------------------------------------------

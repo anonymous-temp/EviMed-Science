@@ -72,6 +72,18 @@ describe("folding the run's stream", () => {
     // Events it does not read leave the state alone.
     expect(foldRunEvent(state, event("tool/call", { tool: "grep" }, 5))).toBe(state);
   });
+
+  it("shows nothing for a kernel record nobody classified, even from a server that still publishes one", () => {
+    // The stream carries these no more (`dshEventPump.mjs` counts them for
+    // operators), but a page open across a release can still meet one, and a
+    // card drawn for it was a blank card (2026-10-04, 30 in one conversation).
+    const state: FrameRunState = runStateFromRecord(run());
+    for (const raw of ["compaction/prune", "request/header", "request/context", "session/title-llm-request"]) {
+      expect(foldRunEvent(state, event("run/event", { event: { type: "unknown", seq: 9, rawType: raw }, sessionId: "s-1" }, 6))).toBe(state);
+    }
+    // A title the kernel wrote is the conversation's name, not the run's state.
+    expect(foldRunEvent(state, event("run/event", { event: { type: "session/title", seq: 10, title: "二甲双胍的肾功能界限", source: "provider" }, sessionId: "s-1" }, 7))).toBe(state);
+  });
 });
 
 describe("sending the state", () => {

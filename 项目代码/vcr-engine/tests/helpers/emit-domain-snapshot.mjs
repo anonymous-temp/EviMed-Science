@@ -66,6 +66,10 @@ const snapshot = {
   optionalCountKeys: [...vocab.VCR_OPTIONAL_COUNT_KEYS],
   valueSources: [...vocab.VCR_VALUE_SOURCES],
   realPatientSources: [...vocab.VCR_REAL_PATIENT_SOURCES],
+  // A column's source, most direct first; the engine labels a result with the
+  // weakest of the columns it used (`vcr_weakest_source`, R/inputs.R).
+  columnSources: [...vocab.VCR_COLUMN_SOURCES],
+  columnSourceLimits: { ...job.VCR_COLUMN_SOURCE_LIMITS },
   nonIndividualSources: [...vocab.VCR_NON_INDIVIDUAL_SOURCES],
   // robustness methods: what the negative-control bias screen may say of a control
   negativeControlVerdicts: [...vocab.VCR_NEGATIVE_CONTROL_VERDICTS],
@@ -97,6 +101,7 @@ const snapshot = {
     // Deployment presets for the deterministic 「不可估计」 rules. A scenario
     // cannot loosen them: the engine reads them here, never from a job.
     essFloor: vocab.VCR_ESS_FLOOR,
+    coxFewEvents: vocab.VCR_COX_FEW_EVENTS,
     // robustness methods: the fewest negative controls an empirical null is fitted on
     negativeControlCalibrationMin: vocab.VCR_NEGATIVE_CONTROL_CALIBRATION_MIN,
     supportCeiling: vocab.VCR_SUPPORT_CEILING,

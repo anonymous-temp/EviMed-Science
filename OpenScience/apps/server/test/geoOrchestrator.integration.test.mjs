@@ -426,6 +426,37 @@ test("the runtime cap defers the dispatch to the next tick, with the same dispat
   assert.equal(world.dispatched.filter((entry) => entry.geoProjectId === other.project.id).length, 0);
 });
 
+test("a step the allowance refuses stays queued and says what it waits on; once the allowance allows it, the step runs and says nothing", options, async () => {
+  const world = harness();
+  const { project, user } = await newProject();
+  const stepOf = async (/** @type {string} */ key) => (await q(`SELECT steps -> $2::text AS step FROM evimed_geo.projects WHERE id = $1`, [project.id, key]))[0].step;
+  world.failures.push(new HttpError(402, "simulated_credits_exhausted", "The simulated allowance is too low."));
+  await world.orchestrator.runStep(user, project, "evidence");
+  const waiting = await stepOf("evidence");
+  assert.equal(waiting.status, "queued", "not failed, and not started");
+  assert.equal(waiting.waiting, "simulated_allowance");
+  assert.equal(waiting.note, "等模拟额度");
+  // The key stays pending, so the next tick asks again and the step starts by itself.
+  await world.orchestrator.tick();
+  assert.equal(world.dispatched.filter((entry) => entry.geoProjectId === project.id).length, 1);
+  const started = await stepOf("evidence");
+  assert.equal(started.status, "running");
+  assert.equal(started.waiting, null);
+  assert.equal(started.note, null);
+  // The real wallet's refusal is the same wait, unmarked; any other deferral invents no wait.
+  const other = await newProject();
+  world.failures.push(new HttpError(402, "credits_exhausted", "This account holds 0 credits."));
+  await world.orchestrator.runStep(other.user, other.project, "evidence");
+  const real = (await q(`SELECT steps -> 'evidence' AS step FROM evimed_geo.projects WHERE id = $1`, [other.project.id]))[0].step;
+  assert.deepEqual([real.status, real.waiting, real.note], ["queued", "allowance", "等科研额度"]);
+  const third = await newProject();
+  world.failures.push(new HttpError(429, "runtime_limit_exceeded", "Too many running runtimes for this user."));
+  await world.orchestrator.runStep(third.user, third.project, "evidence");
+  const busy = (await q(`SELECT steps -> 'evidence' AS step FROM evimed_geo.projects WHERE id = $1`, [third.project.id]))[0].step;
+  assert.equal(busy.status, "queued");
+  assert.equal(busy.waiting ?? null, null);
+});
+
 test("a baseline that measured no answer fails the diagnosis: no 「诊断完成」, no noise, no strategy; 「让 AI 做」 measures again", options, async () => {
   const { world, project, user } = await lockedProgram();
   const first = world.enqueued[0].id;

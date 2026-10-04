@@ -624,3 +624,27 @@ test("host preflight refuses a configured replay image with the wrong architectu
   assert.ok(calls.some(call => call.at(-1) === values.OPEN_SCIENCE_RESULT_REPLAY_IMAGE));
   assert.equal(calls.some(call => call.includes("config")), false);
 });
+
+test("host preflight starts a deployment without an EviMed evidence key, and still refuses a malformed one", async (t) => {
+  // The key is optional (owner ruling 2026-10-04): a deployment without one starts,
+  // and each researcher saves their own where they use it. Named and present, it
+  // is still one credential in a private regular file.
+  const fixture = await deploymentFixture();
+  t.after(() => rm(fixture.dir, { recursive: true, force: true }));
+  const withKey = (value) => ({ ...fixture.values, OPEN_SCIENCE_EVIMED_API_KEY_HOST_FILE: value });
+  assert.doesNotThrow(() => validateDeploymentConfig(fixture.values, fixture.envFile), "a real key");
+  for (const absent of ["", "/dev/null"]) {
+    assert.doesNotThrow(() => validateDeploymentConfig(withKey(absent), fixture.envFile), `named ${JSON.stringify(absent)}`);
+  }
+  const unset = { ...fixture.values };
+  delete unset.OPEN_SCIENCE_EVIMED_API_KEY_HOST_FILE;
+  assert.doesNotThrow(() => validateDeploymentConfig(unset, fixture.envFile), "unset");
+  await writeFile(fixture.evimedApiKeyFile, "", { mode: 0o600 });
+  assert.doesNotThrow(() => validateDeploymentConfig(fixture.values, fixture.envFile), "an empty file");
+
+  await writeFile(fixture.evimedApiKeyFile, "first-credential\nsecond-credential\n", { mode: 0o600 });
+  assert.throws(() => validateDeploymentConfig(fixture.values, fixture.envFile), { code: "preflight_evimed_api_key" });
+  await writeFile(fixture.evimedApiKeyFile, "a-credential\n", { mode: 0o600 });
+  await chmod(fixture.evimedApiKeyFile, 0o644);
+  assert.throws(() => validateDeploymentConfig(fixture.values, fixture.envFile), { code: "preflight_file_permissions" });
+});

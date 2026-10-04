@@ -225,7 +225,16 @@
             "xlsx"
           ],
           "maxBytes": 52428800,
-          "maxText": "50 MB"
+          "maxText": "50 MB",
+          "documents": {
+            "formats": [
+              "txt",
+              "md"
+            ],
+            "maxBytes": null,
+            "maxText": null,
+            "converter": false
+          }
         },
         "files": [
           {
@@ -301,7 +310,10 @@
             "sheets": [],
             "sheetUsed": null,
             "subjectKey": null,
-            "visibleAt": null
+            "visibleAt": null,
+            "sourceFormat": null,
+            "pages": null,
+            "blankPages": null
           },
           {
             "id": "sfl_2",
@@ -341,7 +353,10 @@
             "sheets": [],
             "sheetUsed": null,
             "subjectKey": null,
-            "visibleAt": null
+            "visibleAt": null,
+            "sourceFormat": null,
+            "pages": null,
+            "blankPages": null
           },
           {
             "id": "sfl_3",
@@ -359,7 +374,10 @@
             "sheets": [],
             "sheetUsed": null,
             "subjectKey": null,
-            "visibleAt": null
+            "visibleAt": null,
+            "sourceFormat": null,
+            "pages": null,
+            "blankPages": null
           }
         ],
         "fieldMap": {
@@ -646,7 +664,16 @@
             "xlsx"
           ],
           "maxBytes": 52428800,
-          "maxText": "50 MB"
+          "maxText": "50 MB",
+          "documents": {
+            "formats": [
+              "txt",
+              "md"
+            ],
+            "maxBytes": null,
+            "maxText": null,
+            "converter": false
+          }
         },
         "files": [
           {
@@ -687,7 +714,10 @@
             "sheets": [],
             "sheetUsed": null,
             "subjectKey": null,
-            "visibleAt": null
+            "visibleAt": null,
+            "sourceFormat": null,
+            "pages": null,
+            "blankPages": null
           }
         ],
         "fieldMap": {

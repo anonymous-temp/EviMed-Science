@@ -28,7 +28,7 @@
  */
 
 import { AsyncLocalStorage } from "node:async_hooks";
-import { DshRuntimeAdapter, decodeHostInteraction, delegatedChildrenOf, sessionListItems, subagentAddress } from "./dshRuntimeAdapter.mjs";
+import { DshRuntimeAdapter, KERNEL_PLUMBING_EVENT_TYPES, decodeHostInteraction, delegatedChildrenOf, sessionListItems, subagentAddress } from "./dshRuntimeAdapter.mjs";
 import { Buffer } from "node:buffer";
 import { randomBytes } from "node:crypto";
 import { phaseOfToolCall } from "@evimed/domain";
@@ -47,6 +47,12 @@ export const RUNTIME_DOWNLINK_RECONNECT_MS = 2_000;
 // person who starts a conversation in the browser application sees it in the
 // ledger while they are still in it; slow enough to be one small call.
 export const ADOPTION_SWEEP_MS = 15_000;
+/**
+ * How many distinct unclassified record types are counted under their own
+ * name. The kernel's register is about sixty types and a plugin may write more,
+ * so the series is bounded rather than trusted: past this, the rest are `other`.
+ */
+export const UNCLASSIFIED_TYPE_LIMIT = 64;
 
 /**
  * @param {number} ms
@@ -207,6 +213,26 @@ export class RuntimeEventPump {
     this.projects = new Map();
     /** Adoptions still writing, so `closeAll` can wait for them. @type {Set<Promise<void>>} */
     this.inFlightAdoptions = new Set();
+    /** Kernel session records nobody has classified, by raw type, since this process started. @type {Map<string, number>} */
+    this.unclassified = new Map();
+  }
+
+  /**
+   * The session records this pump met that are neither decoded nor classified as
+   * the kernel's own bookkeeping (`sessionEventPlumbing`), by raw type. The page
+   * is shown none of them; this is where an operator sees which to classify
+   * next (`open_science_runtime_session_records_unclassified_total`).
+   * @returns {[string, number][]}
+   */
+  unclassifiedCounts() {
+    return [...this.unclassified].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1));
+  }
+
+  /** @param {string} rawType */
+  #countUnclassified(rawType) {
+    const key = /^[A-Za-z0-9][A-Za-z0-9/_.:-]{0,79}$/.test(rawType) ? rawType : "other";
+    const name = this.unclassified.has(key) || this.unclassified.size < UNCLASSIFIED_TYPE_LIMIT ? key : "other";
+    this.unclassified.set(name, (this.unclassified.get(name) ?? 0) + 1);
   }
 
   /** @param {{ userId: string, id: string }} project @returns {string} */
@@ -734,11 +760,13 @@ export class RuntimeEventPump {
    * this run. Opening snapshots and reconnect replays stop at the stored high
    * water mark and therefore cannot keep a stalled child alive.
    * @param {PumpProjectState} state @param {string} sessionId @param {string} runId @param {number} seq
+   * @returns {boolean} whether the sequence was new
    */
   #noteRunActivity(state, sessionId, runId, seq) {
-    if (!Number.isSafeInteger(seq) || seq < 0 || seq <= (state.sessionHeads.get(sessionId) ?? -1)) return;
+    if (!Number.isSafeInteger(seq) || seq < 0 || seq <= (state.sessionHeads.get(sessionId) ?? -1)) return false;
     state.sessionHeads.set(sessionId, seq);
     this.onRunActivity(state.project, runId, { sessionId, seq });
+    return true;
   }
 
   /**
@@ -984,12 +1012,13 @@ export class RuntimeEventPump {
       }
     }
     if (!runId) return; // isolated: evimed_runtime_event_pump_unrouted_total
+    let fresh = false;
     if (!options.replay) {
       if (event.type === "assistant/delta" && event.stream) {
         // A stream index is not a durable log sequence. Keep the anchor and
         // attempt identity separate; reconnect baselines never reach this path.
         this.onRunActivity(state.project, runId, { sessionId, seq: event.seq, stream: event.stream });
-      } else this.#noteRunActivity(state, sessionId, runId, event.seq);
+      } else fresh = this.#noteRunActivity(state, sessionId, runId, event.seq);
     }
     // What kind of research work a tool call is, labelled here once so the
     // browser, the frame and the ledger's progress count the same calls the
@@ -1006,10 +1035,22 @@ export class RuntimeEventPump {
       // isolated: evimed_runtime_event_pump_progress_feed_failures_total — the
       // progress aggregate is a reader of this stream, never a reason to stop it.
     }
-    // Which session said it. A delegated child's tool calls now reach the
-    // run's channel too, and a reader that could not tell them from the
-    // orchestrator's would draw one conversation out of two.
-    this.runEvents.publish(runId, "run/event", { event: labelled, sessionId, ...(fromChild ? { child: true } : {}) });
+    // What reaches a run's stream, and what is only counted. A record with no
+    // variant (`unknown`) says nothing a reader can use — the kernel's own
+    // bookkeeping, or a type nobody has classified yet — and a page that drew a
+    // card for one drew a blank one (2026-10-04: 30 of them in one conversation,
+    // `compaction/prune` ×18, `request/header` ×6, …). So none is published.
+    // The log's sequence above has already counted it as the kernel being
+    // alive; what is left is telling the two kinds apart, and only the
+    // unclassified kind is for an operator to look at.
+    if (event.type === "unknown") {
+      if (fresh && !KERNEL_PLUMBING_EVENT_TYPES.has(event.rawType)) this.#countUnclassified(event.rawType);
+    } else {
+      // Which session said it. A delegated child's tool calls now reach the
+      // run's channel too, and a reader that could not tell them from the
+      // orchestrator's would draw one conversation out of two.
+      this.runEvents.publish(runId, "run/event", { event: labelled, sessionId, ...(fromChild ? { child: true } : {}) });
+    }
     if (event.type === "compaction" && !options.replay) {
       try {
         this.onCompaction(state.project, runId, { seq: event.seq, replaced: event.replaced, tokens: event.estimatedTokens });

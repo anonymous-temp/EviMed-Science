@@ -112,7 +112,7 @@ vcr_case("E04", c("AC-08", "AC-09"), function() {
 })
 
 vcr_case("E05", c("AC-04", "AC-28"), function() {
-  # Health, and: every one of the 24 handlers answers a real job through
+  # Health, and: every one of the handlers answers a real job through
   # `vcr_run_job` with a protocol-valid result -- the echo of what was asked, a
   # named conclusion, a value source on every measure, an output hash the
   # control plane can recompute and no absolute path in a table row.

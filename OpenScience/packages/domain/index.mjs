@@ -26,6 +26,11 @@
 
 export const DOMAIN_VERSION = '0.1.0'
 
+/** @typedef {import('./src/capabilityAvailability.mjs').AvailabilityEntry} AvailabilityEntry */
+/** @typedef {import('./src/capabilityAvailability.mjs').AvailabilityReason} AvailabilityReason */
+/** @typedef {import('./src/capabilityAvailability.mjs').AvailabilityState} AvailabilityState */
+/** @typedef {import('./src/capabilityAvailability.mjs').OperationObservation} OperationObservation */
+/** @typedef {import('./src/capabilityAvailability.mjs').OperationRecord} OperationRecord */
 /** @typedef {import('./src/extensions.mjs').ExtensionCoordinate} ExtensionCoordinate */
 /** @typedef {import('./src/extensions.mjs').ExtensionInstallRequest} ExtensionInstallRequest */
 /** @typedef {import('./src/extensions.mjs').SkillWriteRequest} SkillWriteRequest */
@@ -257,6 +262,28 @@ export {
   capabilityListed,
   capabilityTitle,
 } from './src/capabilityDisplay.mjs'
+
+// capabilityAvailability — 17 exports: whether a capability, tool, skill or extension has really run on this
+// deployment, as a label (source-planned / installed / executable / limited / unavailable / unverified)
+export {
+  AVAILABILITY_RECORD_SOURCES,
+  AVAILABILITY_RECORD_VERSION,
+  AVAILABILITY_REASON_CODES,
+  AVAILABILITY_SAMPLE_LIMIT,
+  AVAILABILITY_STATE_LABELS_ZH,
+  AVAILABILITY_SUBJECT_KINDS,
+  CAPABILITY_AVAILABILITY_STATES,
+  availabilityReasonState,
+  countAvailabilityStates,
+  describeAvailability,
+  emptyOperationRecord,
+  foldOperation,
+  normalizeOperationRecord,
+  operationOutcomeOfRun,
+  projectAvailability,
+  summarizeOperations,
+  typicalOf,
+} from './src/capabilityAvailability.mjs'
 
 // contractRegistry — 7 exports
 export {
@@ -1020,6 +1047,8 @@ export {
   VCR_ASSUMPTION_SOURCE_KIND_LABELS_ZH,
   VCR_BOOTSTRAP_MIN,
   VCR_CAPABILITIES,
+  VCR_COLUMN_SOURCES,
+  VCR_COLUMN_SOURCE_EXPORT,
   VCR_COMPARABILITY_DIMENSIONS,
   VCR_COMPARABILITY_DIMENSION_LABELS_ZH,
   VCR_COMPARATOR_ROUTES,
@@ -1029,6 +1058,7 @@ export {
   VCR_CONTACT_STATES,
   VCR_COUNT_KEYS,
   VCR_COUNT_LABELS_ZH,
+  VCR_COX_FEW_EVENTS,
   VCR_CRITERION_STATES,
   VCR_CRITERION_STATE_LABELS_ZH,
   VCR_CRITERION_TYPES,
@@ -1152,6 +1182,7 @@ export {
   vcrTierSupportedBy,
   useWithin,
   vcrKnown,
+  vcrWeakestSource,
 } from './src/vcrVocabulary.mjs'
 
 // vcrSuppression — 2 exports: small-cell suppression for everything a model may read: every people-count
@@ -1190,6 +1221,7 @@ export {
 // `vcr-engine` both run
 export {
   VCR_CALLER_SNAPSHOT_KIND,
+  VCR_COLUMN_SOURCE_LIMITS,
   VCR_DESIGN_SUPPORT,
   VCR_ENGINE_METHODS,
   VCR_ENGINE_METHOD_IDS,
@@ -1264,4 +1296,4 @@ export { DOCUMENT_EXPORT_VERSION, DOCUMENT_RENDERER_VERSION, DOCUMENT_EXPORT_FOR
 
 export { RESULT_PRODUCER_KINDS, RESULT_INPUT_KINDS, RESULT_AVAILABILITY, isResultDigest, normalizeResultPath, projectResultInput, projectResultVersion, validateResultAnchor, resultVersionDifference } from "./src/resultProvenance.mjs";
 export { RESULT_REPLAY_METHODS, compareResultNumbers } from "./src/resultReplay.mjs";
-export { RESEARCH_BILLING_VERSION, RESEARCH_MONEY_SCALE, RESEARCH_BILLABLE_PURPOSES, researchMoneyUnits, researchMoneyDecimal, researchTaskCharge, SIMULATED_WALLET_LABEL, SIMULATED_START_CREDITS, SIMULATED_LOW_CREDITS, SIMULATED_WALLET_PAGES, SIMULATED_TOPUP_PACKAGES } from './src/researchBilling.mjs';
+export { RESEARCH_BILLING_VERSION, RESEARCH_MONEY_SCALE, RESEARCH_BILLABLE_PURPOSES, STEP_WAITING_ALLOWANCE, allowanceRefusalSentence, allowanceWaitingNote, allowanceWaitingSentence, stepWaitingFor, researchMoneyUnits, researchMoneyDecimal, researchTaskCharge, SIMULATED_WALLET_LABEL, SIMULATED_START_CREDITS, SIMULATED_LOW_CREDITS, SIMULATED_WALLET_PAGES, SIMULATED_TOPUP_PACKAGES } from './src/researchBilling.mjs';

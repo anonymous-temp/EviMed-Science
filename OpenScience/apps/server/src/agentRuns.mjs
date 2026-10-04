@@ -261,6 +261,34 @@ function normalizeEffectiveProducts(value, { strict = false } = {}) {
   return unique.length > 0 ? Object.freeze(unique) : null;
 }
 
+/**
+ * The products a run's delivery is held to: the ones its dispatch named
+ * (`effectiveProducts`), and for a turn typed into the conversation — which no
+ * orchestrator dispatched and so named none — the ones its own plan declared it
+ * would deliver for the capability the conversation is bound to.
+ *
+ * A native turn bound to a capability that produces several (a 虚拟临研
+ * conversation) was held to every one of its products, whatever it had planned:
+ * a turn that planned the patients alone was marked for the comparability table
+ * and the simulation report it never took on. Each planned item names its
+ * capability and its contract kind, so the plan is the turn's own account of what
+ * it owes. A plan that declares nothing for the bound capability — no plan, or
+ * items of other capabilities only — narrows nothing, and the turn is held to all
+ * of it, as it was; so is a kind the capability does not produce
+ * (`AgentRegistry.get` ignores it).
+ * @param {Record<string, any>} run
+ * @returns {readonly string[] | null}
+ */
+function deliveryProducts(run) {
+  if (run.effectiveProducts) return run.effectiveProducts;
+  if (!run.nativeTurn || !run.effectiveAgentId) return null;
+  const items = Array.isArray(run.nativeWorkflow?.plan?.items) ? run.nativeWorkflow.plan.items : [];
+  const declared = items
+    .filter((/** @type {any} */ item) => String(item?.capability ?? "").trim() === run.effectiveAgentId && typeof item?.contractKind === "string")
+    .map((/** @type {any} */ item) => item.contractKind);
+  return normalizeEffectiveProducts(declared);
+}
+
 function normalizeDispatchInput(input) {
   assertObject(input, "Agent run dispatch payload must be an object.");
   assertOnlyFields(input, dispatchFields);
@@ -1420,6 +1448,9 @@ async function readDelegatedAssistantMessages(project, parentMessages, readSessi
 const evidenceSourceToolSuffixes = Object.freeze([
   "web_read",
   "open_access_full_text",
+  "identifier_resolve",
+  "clinical_trial_snapshot",
+  "dailymed_label",
   "literature_search",
   "guideline_search",
   "biomedical_source_search",
@@ -2524,8 +2555,10 @@ async function specialistCompletionOutcome(
   const registry = await agentRegistry;
   // Held to the products it was dispatched for: a run sent for one product of a
   // capability that produces several owes that product's files and checks, not
-  // everything the capability can produce. A run that named none is held to all.
-  const agent = registry?.get?.(run.effectiveAgentId, { products: run.effectiveProducts });
+  // everything the capability can produce. A run that named none is held to all —
+  // unless it is a turn in the conversation whose plan declared the products it
+  // would deliver (`deliveryProducts`).
+  const agent = registry?.get?.(run.effectiveAgentId, { products: deliveryProducts(run) });
   if (!agent || agent.version !== run.effectiveAgentVersion || agent.runtimeAgent !== run.effectiveRuntimeAgent) {
     return { artifacts: [], errorCode: "specialist_contract_unavailable" };
   }
@@ -5684,7 +5717,7 @@ export class AgentRunStore {
         // order a run to patch files it was never asked to write. That line
         // already has the right behaviour for a citation it cannot vouch for:
         // deliver the answer and mark it unverified.
-        const repairAgent = (await this.agentRegistry)?.get?.(run.effectiveAgentId, { products: run.effectiveProducts });
+        const repairAgent = (await this.agentRegistry)?.get?.(run.effectiveAgentId, { products: deliveryProducts(run) });
         const fileDeliverable = repairAgent?.completionChecks?.includes("requiredOutputsExist") === true;
         const canRepair = fileDeliverable
           && repairableEvidencePackageErrorCodes.has(completion.errorCode)

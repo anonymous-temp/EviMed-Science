@@ -1,0 +1,35 @@
+{
+  "capability": "adr-analysis",
+  "brief": "adr-001-osimertinib-cardiac",
+  "base": "https://82.156.128.153",
+  "project": "acceptance-adr-analysis",
+  "session": "acc-adr-analysis-mutgzwi0",
+  "runId": "run_2683ad846a71acdcb348f9280e033985",
+  "agentVersion": "1.3.1",
+  "dispatchedAt": "2026-10-04T06:59:13.172Z",
+  "observedAt": "2026-10-04T07:10:02Z",
+  "observation": {
+    "status": "terminal",
+    "reason": "terminal"
+  },
+  "prompt": "drug: 奥希替尼（osimertinib）\nadverseEvent: 心力衰竭、左室射血分数下降、QT 间期延长\ndrugAliases: [\"Osimertinib\",\"AZD9291\",\"泰瑞沙\",\"TAGRISSO\"]\nsuspectRoles: [\"PS\"]\nadministrationRoutes: [\"ORAL\"]\nstudyDateFrom: 2023-01-01\nstudyDateTo: 2025-12-31\nbackgroundDateFrom: 2016-01-01\nbackgroundDateTo: 2025-12-31",
+  "promptSource": "rendered brief",
+  "outcome": {
+    "status": "failed",
+    "startedAt": "2026-10-04T06:59:13.172Z",
+    "finishedAt": "2026-10-04T07:09:58.695Z",
+    "errorCode": "runtime_tool_error",
+    "verification": null,
+    "artifacts": [
+      "deliverables/osimertinib-cardiac-adr/revision-notes.md",
+      "deliverables/osimertinib-cardiac-adr/safety-report.md"
+    ],
+    "unverifiedArtifacts": [],
+    "qualityNotices": [],
+    "effectiveAgentId": "adr-analysis",
+    "effectiveRouteReason": "session-binding",
+    "durationMs": 645523,
+    "repairRounds": null,
+    "model": "deepseek/deepseek-flash"
+  }
+}

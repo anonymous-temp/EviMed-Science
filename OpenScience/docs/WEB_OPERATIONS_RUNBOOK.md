@@ -571,6 +571,33 @@ not sufficient containment for those events.
   (after `OPEN_SCIENCE_BACKUP_MAX_FAILURES` failures it otherwise waits a full
   interval). The site keeps serving meanwhile: web does not wait on the
   backup's health.
+- A live product is never quiescent, and the scheduler's backup does not need it
+  to be (2026-10-04; until then one entry that differed between the inventory
+  and the archive failed the whole cycle with `Backup source identity changed
+  after inventory.`, as on 2026-10-03 and again right after a release). A file
+  that was replaced (a running specialist job rewrites its state file by rename
+  on every heartbeat), rewritten, re-permissioned or shrunk is archived as the
+  writer finds it (a file that shrank as it was read is padded to its declared
+  size, as tar does), under the digest of the bytes the archive holds; one that
+  is gone is not archived, and a directory that is gone is one record, not one
+  per file. Both are listed in the manifest's `changed` list
+  (`changed-during-backup`, `vanished`), verified by the restore and counted by
+  the drill (`N entr(ies) changed while the backup ran`), and reach
+  `backup.completed` as `changedRecorded` (with `changedKinds` and a bounded
+  `changedSample`), the state as `lastChangedRecorded` / `lastChangedKinds` /
+  `lastChangedSample`, and `/api/ready`'s `backup.lastBackup` as three counts
+  (`changedRecorded`, `omittedRecorded`, `linksRecorded`) — information, never a
+  failure, and never a name. Volatile control state is not inventoried at all
+  (the rule sits next to `excludedFromBackup`): runtime sockets, the specialist
+  slot directory `.openscience/specialist-slots`, and the platform's own
+  in-flight temporaries (`.<name>.<hex>.tmp`, `.tmpdir`) outside a workspace.
+  Still a refusal, because each could make the archive lie: a symbolic link, a
+  special file or a second name for a file where a file was, a directory
+  replaced by a link, a path that escapes, another filesystem under the same
+  name, an I/O error. `OPEN_SCIENCE_BACKUP_STRICT=true` keeps its meaning —
+  capture a source nobody writes, and refuse any change, which is what the VCR
+  data plane and a cutover capture with the writers stopped want — and is not
+  the mode to run against a live deployment.
 - The production host also has the single `evimed-postgres-backup.timer` unit.
   Its versioned implementation is `scripts/ops/postgres-backup.py`, installed
   as `/usr/local/sbin/evimed-postgres-backup`; the existing unit names and daily
@@ -820,10 +847,10 @@ header.
 
 ### Specialist job slots on a small host
 
-The five adapter engines (MR, bibliometric, research-topic, peer-review,
-drug-safety) are each limited to 2 GiB while a job runs, and MetaAgent's container
-carries no memory limit at all, so on a host shared with other products the six
-have to take turns.
+The six engines (MR, bibliometric, research-topic, peer-review, drug-safety
+and MetaAgent) are each limited to 2 GiB, 1.5 CPUs and 256 processes while a job
+runs (MetaAgent's container had no limit at all until 2026-10-04), so on a host
+shared with other products they have to take turns.
 `OPEN_SCIENCE_SPECIALIST_MAX_CONCURRENT_JOBS` caps the specialist jobs running at
 once across all six (`1` on a small host; `0` or unset is no cap, which is how it
 behaved before 2026-10-04). Each engine receives it as
@@ -863,7 +890,22 @@ container itself stays healthy, so web still starts. `invalidSetting` echoes a
 limit that is not a whole number; the engine then runs uncapped. A slot belongs to
 its worker process: an engine whose worker alone was killed, and not its container,
 would run on without one until it ends, bounded by the container's own limits
-(`mem_limit: 2g` and `pids_limit` on the five adapter engines; MetaAgent has none).
+(`mem_limit: 2g`, `cpus: 1.5` and `pids_limit: 256` on all six engines).
+
+A held slot is also bounded in time. Every engine job has a wall clock,
+`OPEN_SCIENCE_SPECIALIST_EXECUTION_TIMEOUT_SECONDS` (default 10800, clamped to
+60-14400; each engine reads it as `EVIMED_SPECIALIST_EXECUTION_TIMEOUT_SECONDS`, the
+name the managed-local executor already used). Past it the worker stops the engine's
+whole process group, publishes what the engine had written (named in the job's
+`artifacts`, as for any failed job), ends the job retryable as `specialist_job_timeout`
+(`meta_agent_job_timeout` for MetaAgent, which resumes from its last completed step;
+`mr_analysis_timeout` for MR, whose engine enforces the same bound) and releases the
+slot with the worker. Before 2026-10-04 only MR had one: with
+`OPEN_SCIENCE_SPECIALIST_MAX_CONCURRENT_JOBS=1` a hung engine of any other kind held
+the slot until it died and every waiting job ended at the wait bound. The default is
+the MR engine's own three hours, equal to the slot wait bound, so wait plus run is
+exactly the engine credential's six hours; raising either needs the credential's
+`OPEN_SCIENCE_ENGINE_MODEL_TOKEN_TTL_SECONDS` raised with it.
 
 ### Specialist engine evidence is a label
 
@@ -882,6 +924,72 @@ release audit does not certify a record that carries an `evidenceNote`, so a
 still fail a job is not evidence: the researcher's own input files, an unsafe
 published output, the MR workspace and output bindings (`mr_input_changed` means
 exactly those now) and request authentication.
+
+### What the deployment really did: capability availability
+
+Each capability in the catalogue (`GET /api/agents`, field `availability`; the whole
+list at `GET /api/availability`) and each research tool carries one of six labels:
+`source-planned`, `installed`, `executable`, `limited`, `unavailable`, `unverified`,
+with the reason and the record it came from. It is a label and never a gate: nothing
+consults it before a dispatch, no button is disabled by it, and an engine that is down
+still accepts the job and reports it blocked by its own mechanism. `executable` needs a
+finished operation of that exact capability version on this deployment, so a package
+count, a mock runtime (`OPEN_SCIENCE_RUNTIME_MODE=mock`) or the release audit's outside
+probe never yields it. `limited` names what is missing: an engine whose own `/health`
+says it is not ready or does not answer, a data source nobody configured, a method not
+yet measured. `unavailable` is a tool the deployment withholds from runtimes (the same
+rules as `EVIMED_DISABLED_TOOLS`, restated in `deploymentComposition.mjs` and held equal
+to the launch by a parity test), a module that is off or closed to the account, or a
+runtime that answered "unknown tool". `unverified` is the default whenever nothing can be
+believed either way, including the minutes after a first start while the collector is
+still reading the runs that finished before it existed.
+
+The evidence is collected, not written by runs: one leased `availability-collect` job per
+finished run joins the run ledger, the persisted transcript, the result versions the run
+produced and its settled spend, and folds them into
+`evimed_product.availability_operations` in the transaction that completes the job, so a
+replay never counts a run twice. An hourly per-account sweep
+(`OPEN_SCIENCE_AVAILABILITY_SWEEP_INTERVAL_MS`) queues any run that has no job and gives
+jobs that gave up another try; `OPEN_SCIENCE_AVAILABILITY_ENABLED=false` stops collection
+and leaves every label that needs a record at `unverified`.
+
+For the release audit: `GET /api/ops/availability` with the operator token returns every
+record in full — counts, last success and last failure code, typical duration and cost,
+and for the last success and failure the run, dispatch, session, project, result-version
+and skill-version references — beside the deployment's own view of every capability and
+tool and each engine's fresh `/health`. An ordinary account is never handed those
+references. `/api/ops/metrics` carries `open_science_availability_subjects{kind,state}`,
+`open_science_availability_operations_total{kind,outcome}` and the collector's backlog,
+failed-job and state gauges; a backlog that does not drain, or failed jobs above zero,
+mean runs the collector cannot read.
+
+### Specialist engines say which optional source they did not use
+
+A data source nobody configured is the researcher's to configure where they use it
+(owner ruling 2026-10-04), and the job goes on without it. Before 2026-10-04 an
+engine that lost an optional source wrote one log line and delivered a result that
+read as if the source had been used: the MR engine's UMLS synonym expansion and the
+bibliometric engine's OpenAlex citations (MetaAgent's EviMed background evidence
+recorded nothing at all when it had no key). Each engine now states it, in the three
+words every engine uses (`not_configured`: no key, the deployment's or the
+researcher's; `refused`: the source answered 401/403/429; `unreachable`), in its
+`result.json` as `sourcesNotUsed` and where its report lists its sources (MR's
+methods text, the bibliometric report's citation sources, MetaAgent's `modules`
+ledger). The adapters keep only the closed shape and carry it into the job's state
+and the status answer (`data.sourcesNotUsed` plus one sentence in `warnings`), so the
+run tells the researcher which source to add under 设置 → 数据源. It never changes
+the job's status.
+
+The researcher's own keys reach an engine the same way for every engine: the adapter
+asks the control plane at `EVIMED_CONNECTOR_CREDENTIAL_URL` (now passed to the MR,
+bibliometric, research-topic, drug-safety and MetaAgent containers; until 2026-10-04
+only MR received it, so the other engines could only ever use what the deployment
+held) with the workload token the run started the job with, and only where the
+container holds no key of its own (a direct value or a readable `<NAME>_FILE`). The
+answer is the researcher's own key or nothing: UMLS (MR), NCBI (bibliometrics, topic
+selection, MetaAgent), openFDA and the EviMed evidence key (drug safety, MetaAgent).
+It travels in the worker's spawn environment only, never the job's state file or a
+log.
 
 ### Bundle updates and identity
 

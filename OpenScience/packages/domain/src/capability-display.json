@@ -26,7 +26,7 @@
       "evaluation": {
         "lastStatus": "accepted",
         "lastRunAt": "2026-09-27",
-        "runs": 1,
+        "runs": 2,
         "delivered": 1,
         "typicalMinutes": 23
       }
@@ -53,9 +53,9 @@
       "evaluation": {
         "lastStatus": "accepted",
         "lastRunAt": "2026-09-09",
-        "runs": 2,
-        "delivered": 2,
-        "typicalMinutes": 23
+        "runs": 3,
+        "delivered": 3,
+        "typicalMinutes": 21
       }
     },
     "clinical-evidence-synthesis": {
@@ -366,9 +366,9 @@
       "evaluation": {
         "lastStatus": "accepted",
         "lastRunAt": "2026-09-28",
-        "runs": 4,
-        "delivered": 2,
-        "typicalMinutes": 61
+        "runs": 5,
+        "delivered": 3,
+        "typicalMinutes": 60
       }
     },
     "meta-analysis": {
@@ -394,9 +394,9 @@
       "evaluation": {
         "lastStatus": "accepted",
         "lastRunAt": "2026-09-28",
-        "runs": 4,
-        "delivered": 3,
-        "typicalMinutes": 61
+        "runs": 5,
+        "delivered": 4,
+        "typicalMinutes": 60
       }
     },
     "off-label-analysis": {
@@ -448,7 +448,10 @@
       ],
       "evaluation": {
         "lastStatus": "accepted",
-        "lastRunAt": "2026-09-27"
+        "lastRunAt": "2026-09-27",
+        "runs": 1,
+        "delivered": 1,
+        "typicalMinutes": 19
       }
     },
     "research-grant-development": {
@@ -501,9 +504,9 @@
       "evaluation": {
         "lastStatus": "accepted",
         "lastRunAt": "2026-09-28",
-        "runs": 2,
-        "delivered": 2,
-        "typicalMinutes": 24
+        "runs": 3,
+        "delivered": 3,
+        "typicalMinutes": 28
       }
     },
     "statistical-analysis": {

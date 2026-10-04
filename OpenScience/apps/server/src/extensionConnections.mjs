@@ -17,6 +17,15 @@ function requirements(entry) {
 }
 /** Reference revisions contain metadata only; credential values stay in the existing store/gateway. @param {unknown} value */
 const revision = value => `sha256:${createHash("sha256").update(canonicalJson(value)).digest("hex")}`;
+/**
+ * What of a researcher's own credential row a revision binds: when it was
+ * written and until when it holds. Advice recorded beside the row (the upstream
+ * check on save) is not part of it — a revision computed from the status and
+ * one recomputed from the row must agree, and they disagreed the day `check`
+ * was added to the status.
+ * @param {any} own
+ */
+const ownIdentity = own => own ? { updatedAt: own.updatedAt, expiresAt: own.expiresAt ?? null, expired: Boolean(own.expired) } : null;
 
 /** Reuse existing credential and channel adapters. No new token table, plaintext export or raw runtime credential endpoint. */
 export class ExtensionConnections {
@@ -49,7 +58,7 @@ export class ExtensionConnections {
         const status = statuses.find(item => item.id === requirement.kind);
         if (!status || !["user", "deployment"].includes(status.source)) continue;
         items.push({ id: `connector:${status.id}`, title: status.title, kind: status.id, operations: requirement.operations,
-          revision: revision({ actorId: user.id, connector: status.id, source: status.source, own: status.own ?? null }) });
+          revision: revision({ actorId: user.id, connector: status.id, source: status.source, own: ownIdentity(status.own) }) });
       }
     }
     if (items.length > 64 || new Set(items.map(item => item.id)).size !== items.length) throw new HttpError(502, "extension_contract_invalid", "Invalid managed connection inventory.");
@@ -71,7 +80,7 @@ export class ExtensionConnections {
         if (this.credentials.deploymentConfigured(requirement.kind)) {
           const status = (await this.credentials.status(user.id)).find(item => item.id === requirement.kind);
           if (!status || status.source !== "deployment") return false;
-          return !expectedRevision || expectedRevision === revision({ actorId: user.id, connector: status.id, source: status.source, own: status.own ?? null });
+          return !expectedRevision || expectedRevision === revision({ actorId: user.id, connector: status.id, source: status.source, own: ownIdentity(status.own) });
         }
         const database = client ?? this.credentials.database;
         const result = await database.query(`SELECT connector,expires_at,updated_at FROM evimed_control.user_connector_credentials

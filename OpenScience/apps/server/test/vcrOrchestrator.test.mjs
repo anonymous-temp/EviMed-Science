@@ -15,8 +15,8 @@ import {
 } from "../src/vcrOrchestrator.mjs";
 import { VCR_NOTICE_KINDS, createVcrNotifier, vcrNoticeHref, vcrStudyName } from "../src/vcrNotify.mjs";
 import {
-  VCR_EXPORT_KINDS, VCR_EXPORT_KIND_LABELS_ZH, VCR_JOB_KINDS, VCR_JOB_METHODS, VCR_NOTIFICATION_KINDS, VCR_NOT_ESTIMABLE_RULES,
-  VCR_SCENARIO_SCHEMAS, VCR_STEPS, VCR_STEP_CAPABILITIES, VCR_STEP_NEEDS, validateEngineJob, validateScenario,
+  VCR_ENGINE_METHODS, VCR_EXPORT_KINDS, VCR_EXPORT_KIND_LABELS_ZH, VCR_JOB_KINDS, VCR_JOB_METHODS, VCR_NOTIFICATION_KINDS, VCR_NOT_ESTIMABLE_RULES,
+  VCR_NOT_ESTIMABLE_RULE_LABELS_ZH, VCR_SCENARIO_SCHEMAS, VCR_STEPS, VCR_STEP_CAPABILITIES, VCR_STEP_NEEDS, validateEngineJob, validateScenario,
 } from "@evimed/domain";
 
 /** @param {string[]} requested */
@@ -591,6 +591,134 @@ test("populations, patient sets and grids are built as their own schemas, and a 
   assert.deepEqual(validateScenario("design.grid", grid.stages[0].scenario), []);
 });
 
+// --- the comparator-effect methods are reachable from the comparator step ------------------------------
+
+const CMP_T2 = { ...context, study: { ...seedStudy, dataTier: "T2" } };
+/** @param {Record<string, any>} configuration @param {Record<string, any>} [row] @param {Record<string, any>} [ctx] */
+const planComparator = (configuration, row = {}, ctx = CMP_T2) => /** @type {any} */ (vcrBuildStages({ kind: "comparator",
+  row: { id: "cmp_x", version: 1, route: "external_control", estimand: "ATT", configuration, ...row } }, ctx));
+/** The engine's own verdict on a stage's scenario, once the platform has written the comparator's input id. @param {any} stage */
+const stageIssues = (stage) => validateScenario(VCR_JOB_METHODS[stage.jobKind],
+  stage.derived.some((/** @type {any} */ entry) => entry.bindTo) ? { ...stage.scenario, pseudoIpdInputId: "res_x:reconstructed-ipd" } : stage.scenario);
+
+test("a study's declared design reaches the comparator-effect methods: weighted Cox, doubly robust, covariate sets", () => {
+  const base = { covariates: ["age", "ecog"], tau: 12, parameterCode: "OS", snapshotId: "snp_1" };
+  // the declared method and endpoint decide; nothing is read from a word of prose
+  assert.equal(vcrJobKindFor("comparator", { route: "external_control", configuration: { method: "weighted_cox" } }), "weighted_cox_comparator");
+  assert.equal(vcrJobKindFor("comparator", { route: "external_control", configuration: { method: "aipw" } }), "aipw_comparator");
+  assert.equal(vcrJobKindFor("comparator", { route: "external_control", configuration: { covariateSets: [{ name: "a", covariates: ["x"] }] } }), "covariate_set_comparator");
+  assert.equal(vcrJobKindFor("comparator", { route: "external_control", configuration: { covariateSets: [], method: "aipw" } }), "aipw_comparator", "an empty list declares no sets");
+  assert.equal(vcrJobKindFor("comparator", { route: "external_control", configuration: { method: "weighted_cox", covariateSets: [{ name: "a", covariates: ["x"] }] } }),
+    "covariate_set_comparator", "declared sets make the sensitivity analysis of the declared method");
+  assert.equal(vcrJobKindFor("comparator", { route: "external_control" }), "weight_comparator", "the old default is untouched");
+
+  const cox = planComparator({ ...base, method: "weighted_cox" });
+  assert.equal(cox.ok, true, JSON.stringify(cox));
+  assert.equal(cox.stages[0].jobKind, "weighted_cox_comparator");
+  assert.equal(cox.stages[0].snapshot, true);
+  assert.deepEqual(cox.stages[0].scenario.endpoint, { type: "time_to_event" });
+  assert.deepEqual(stageIssues(cox.stages[0]), []);
+  const coxAte = planComparator({ ...base, method: "weighted_cox" }, { estimand: "ATE" });
+  assert.equal(coxAte.ok, true);
+  assert.equal(coxAte.stages[0].scenario.weighting, "propensity", "entropy balancing estimates the ATT only, as in the weighting jobs");
+  assert.deepEqual(stageIssues(coxAte.stages[0]), []);
+
+  const binary = { ...CMP_T2, definition: { ...definition, endpointType: "binary" } };
+  const aipw = planComparator({ covariates: ["age", "ecog"], outcomeColumn: "response", method: "aipw", snapshotId: "snp_1" }, {}, binary);
+  assert.equal(aipw.ok, true, JSON.stringify(aipw));
+  assert.equal(aipw.stages[0].jobKind, "aipw_comparator");
+  assert.deepEqual(aipw.stages[0].scenario.endpoint, { type: "binary" });
+  assert.deepEqual(stageIssues(aipw.stages[0]), []);
+
+  const sets = [{ name: "primary", covariates: ["age", "ecog"] }, { name: "without ecog", covariates: ["age"] }];
+  const entropy = planComparator({ covariateSets: sets, tau: 12, parameterCode: "OS", snapshotId: "snp_1" });
+  assert.equal(entropy.ok, true, JSON.stringify(entropy));
+  assert.equal(entropy.stages[0].jobKind, "covariate_set_comparator");
+  assert.equal(entropy.stages[0].scenario.analysis, "entropy_balance");
+  assert.deepEqual(stageIssues(entropy.stages[0]), []);
+  const propensity = planComparator({ covariateSets: sets, tau: 12, method: "propensity" });
+  assert.equal(propensity.stages[0].scenario.analysis, "propensity");
+  assert.equal(planComparator({ covariateSets: sets, tau: 12 }, { estimand: "ATE" }).stages[0].scenario.analysis, "propensity", "a non-ATT estimand is not entropy balancing");
+  const doubly = planComparator({ covariateSets: sets, method: "aipw", outcomeColumn: "response" }, {}, binary);
+  assert.equal(doubly.stages[0].scenario.analysis, "aipw");
+  assert.deepEqual(stageIssues(doubly.stages[0]), []);
+  // an analysis the run typed in does not choose: the design's method does
+  assert.equal(planComparator({ covariateSets: sets, tau: 12, analysis: "aipw" }).stages[0].scenario.analysis, "entropy_balance");
+  // the alternatives are the design's, so a covariate list beside them is refused by name rather than ignored
+  const both = planComparator({ covariateSets: sets, covariates: ["age"], tau: 12 });
+  assert.equal(both.ok, false);
+  assert.equal(both.refused.code, "vcr_scenario_unknown_fields");
+  assert.ok(both.refused.paths.includes("covariates"));
+});
+
+test("a design the study's endpoint cannot support is refused in a sentence, not run as something else", () => {
+  const refused = (/** @type {any} */ plan, /** @type {string} */ code, /** @type {RegExp} */ words) => {
+    assert.equal(plan.ok, false, JSON.stringify(plan));
+    assert.equal(plan.refused.code, code);
+    assert.match(plan.refused.message, words);
+  };
+  const binary = { ...CMP_T2, definition: { ...definition, endpointType: "binary" } };
+  refused(planComparator({ covariates: ["age"], method: "weighted_cox", tau: 12 }, {}, binary), "vcr_job_scenario_invalid", /事件时间终点/);
+  refused(planComparator({ covariates: ["age"], method: "aipw", tau: 12 }), "vcr_job_scenario_invalid", /连续或二分类/);
+  refused(planComparator({ covariates: ["age"], method: "aipw" }, { estimand: "ATE" }, binary), "vcr_job_scenario_invalid", /ATT/);
+  refused(planComparator({ covariateSets: [{ name: "a", covariates: ["x"] }, { name: "b", covariates: ["y"] }], method: "aipw", tau: 12 }), "vcr_job_scenario_invalid", /连续或二分类/);
+  const noEndpoint = { ...CMP_T2, definition: null };
+  refused(planComparator({ covariates: ["age"], method: "weighted_cox", tau: 12 }, {}, noEndpoint), "vcr_scenario_endpoint_missing", /终点类型/);
+  // a design with no declared choice keeps the weighting job it always had, whatever the endpoint
+  assert.equal(planComparator({ covariates: ["age"] }, {}, binary).stages[0].jobKind, "weight_comparator");
+});
+
+test("a time-to-event MAIC takes its comparator from the reconstruction result, by reference, and plans only what its design declares", () => {
+  const T0 = { ...context, study: { ...seedStudy, dataTier: "T0" } };
+  const curve = { curve: [{ time: 0, surv: 1 }, { time: 12, surv: 0.5 }, { time: 24, surv: 0.3 }], riskTable: [{ time: 0, atRisk: 100 }, { time: 12, atRisk: 50 }],
+    provenance: { kind: "digitizer", tool: "platform" } };
+  const maic = { method: "maic", covariates: ["age"], targets: { age: 60 }, snapshotId: "snp_1" };
+  const plan = (/** @type {Record<string, any>} */ configuration) => planComparator(configuration, { route: "literature_control", estimand: "ATT" }, T0);
+  assert.equal(vcrJobKindFor("comparator", { route: "literature_control", configuration: { method: "maic" } }, { definition }), "maic_time_to_event_comparator");
+  assert.equal(vcrJobKindFor("comparator", { route: "literature_control", configuration: { method: "maic", endpoint: { type: "binary" } } }, { definition }), "maic_comparator",
+    "a binary or continuous MAIC is the old method");
+
+  // unanchored: one comparator curve -> reconstruct, then the MAIC reads the reconstruction's table by the stage that wrote it
+  const un = plan({ ...maic, ...curve });
+  assert.equal(un.ok, true, JSON.stringify(un));
+  assert.deepEqual(un.stages.map((/** @type {any} */ entry) => entry.jobKind), ["reconstruct_km", "maic_time_to_event_comparator"]);
+  assert.equal(un.stages[0].stage, "reconstruct");
+  assert.deepEqual(un.stages[0].keepTables, ["reconstructed-ipd"]);
+  assert.equal(un.stages[1].after, "reconstruct");
+  assert.deepEqual(un.stages[1].derived, [{ from: "stage", stage: "reconstruct", table: "reconstructed-ipd", bindTo: "pseudoIpdInputId" }]);
+  assert.equal(un.stages[1].snapshot, true, "the study's own patients come by snapshot");
+  assert.equal(un.stages[1].scenario.pseudoIpdInputId, undefined, "the input's name is written by the queue from the result, never by the plan");
+  assert.equal(un.stages[1].scenario.curve, undefined, "the maic stage does not carry the curve it did not read");
+  for (const entry of un.stages) assert.deepEqual(stageIssues(entry), [], entry.jobKind);
+
+  // anchored on two reconstructed arms
+  const anchored = plan({ ...maic, anchored: true, treatmentColumn: "arm", ...curve, treatmentArm: { curve: curve.curve, riskTable: curve.riskTable } });
+  assert.equal(anchored.ok, true, JSON.stringify(anchored));
+  assert.deepEqual(anchored.stages.map((/** @type {any} */ entry) => entry.jobKind), ["reconstruct_km", "maic_time_to_event_comparator"]);
+  for (const entry of anchored.stages) assert.deepEqual(stageIssues(entry), [], entry.jobKind);
+  // anchored on the published contrast: no reconstruction, one stage, no hand-off
+  const published = plan({ ...maic, anchored: true, aggregateEstimate: -0.56, aggregateSe: 0.09 });
+  assert.equal(published.ok, true, JSON.stringify(published));
+  assert.deepEqual(published.stages.map((/** @type {any} */ entry) => entry.jobKind), ["maic_time_to_event_comparator"]);
+  assert.deepEqual(published.stages[0].derived, []);
+  assert.equal(published.stages[0].scenario.aggregateEstimate, -0.56);
+  assert.deepEqual(stageIssues(published.stages[0]), []);
+
+  // what the design does not declare is refused in a sentence, never filled in
+  const no = (/** @type {Record<string, any>} */ configuration, /** @type {RegExp} */ words) => {
+    const refused = /** @type {any} */ (plan(configuration));
+    assert.equal(refused.ok, false, JSON.stringify(refused));
+    assert.equal(refused.refused.code, "vcr_job_scenario_invalid");
+    assert.match(refused.refused.message, words);
+  };
+  no(maic, /发表曲线/);
+  no({ ...maic, ...curve, treatmentArm: { curve: curve.curve, riskTable: curve.riskTable } }, /一条曲线/);
+  no({ ...maic, ...curve, aggregateEstimate: -0.5, aggregateSe: 0.1 }, /锚定比较/);
+  no({ ...maic, anchored: true }, /已发表的风险比/);
+  no({ ...maic, anchored: true, ...curve }, /两个臂/);
+  no({ ...maic, anchored: true, ...curve, treatmentArm: { curve: curve.curve, riskTable: curve.riskTable }, aggregateEstimate: -0.5, aggregateSe: 0.1 }, /不能两个都写/);
+});
+
 test("every example in the skill is a shape the platform accepts: the objects build, and the direct scenarios validate", () => {
   const skill = fs.readFileSync(path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../capabilities/vcr-analysis/SKILL.md"), "utf8");
   const blocks = [...skill.matchAll(/```json vcr:(\S+)\n([\s\S]*?)```/g)].map((match) => ({ kind: match[1], body: JSON.parse(match[2]) }));
@@ -656,18 +784,28 @@ test("two assumptions that cannot both hold are found by closed-form identities 
 });
 
 test("a not-estimable result names what is missing and what would answer it, for every rule the engine can fire", () => {
+  // The list is the domain's, so a rule added there without a sentence here fails this test by name.
+  assert.ok(VCR_NOT_ESTIMABLE_RULES.length >= 11, "the walk proves it walked");
+  const cjk = /[\u4e00-\u9fff]/;
   for (const rule of VCR_NOT_ESTIMABLE_RULES) {
-    const [gap] = vcrGapsForRule(rule);
-    assert.ok(gap?.title && gap.detail && gap.answers, `${rule} has its gap sentence`);
+    const gaps = vcrGapsForRule(rule);
+    assert.equal(gaps.length, 1, `${rule} has exactly one gap sentence`);
+    const [gap] = gaps;
+    for (const part of ["title", "detail", "answers"]) {
+      assert.ok(gap[part] && cjk.test(gap[part]), `${rule}.${part} is a Chinese sentence`);
+      assert.ok(!gap[part].includes(rule), `${rule}.${part} does not show the rule's id to a reader`);
+    }
+    assert.ok(/** @type {Record<string, string>} */ (VCR_NOT_ESTIMABLE_RULE_LABELS_ZH)[rule], `${rule} also has its one-line label`);
   }
+  for (const rule of ["too_few_events", "nuisance_model_not_estimable"]) assert.ok(VCR_NOT_ESTIMABLE_RULES.includes(rule), rule);
   assert.deepEqual(vcrGapsForRule("something_else"), []);
 });
 
 test("a superseded version is found where the graph knows it: an earlier version of the same object is what a change replaces", () => {
   const edges = [{ from: "assumption:dropout_rate@1", to: "trial_scenario:scn_1@1" }];
   assert.deepEqual([...vcrSupersededNodes(edges, ["assumption:dropout_rate@2"])].sort(), ["assumption:dropout_rate@1", "assumption:dropout_rate@2"]);
-  assert.ok(Object.keys(VCR_SCENARIO_SCHEMAS).length >= 24, "the first release's 24 schemas, and one per method added after them");
-  assert.equal(Object.keys(VCR_SCENARIO_SCHEMAS).length, VCR_JOB_KINDS.length, "one schema per job kind");
+  assert.equal(Object.keys(VCR_SCENARIO_SCHEMAS).length, Object.keys(VCR_ENGINE_METHODS).length, "one schema per method the domain declares");
+  assert.ok(Object.keys(VCR_SCENARIO_SCHEMAS).length >= 24);
 });
 
 test("C2-5 the assurance stage binds what its own schema takes from the cards — the outcome's standard deviation, the control rate — and says it used exactly those", () => {
@@ -755,12 +893,13 @@ test("an assumption card is the evidence step's product only when it cites its e
  * store, so the orchestrator's own pass runs without a database: the live shape
  * of a study whose definition is done and whose cards are whatever the caller
  * says. Nothing is dispatched but through the orchestrator's own `#dispatch`.
- * @param {{ assumptions?: any[], openJobs?: any[], steps?: Record<string, any> }} [options]
+ * @param {{ assumptions?: any[], openJobs?: any[], steps?: Record<string, any>, dispatch?: ((input: any) => Promise<any>) | null,
+ *   tier?: string, protocol?: { id: string } | null, criteria?: number, assessments?: Array<{ protocolVersionId: string | null }> }} [options]
  */
-function studyInMemory({ assumptions = [], openJobs = [], steps = {} } = {}) {
+function studyInMemory({ assumptions = [], openJobs = [], steps = {}, dispatch = null, tier = "T0", protocol = null, criteria = 0, assessments = [] } = {}) {
   const state = {
     study: /** @type {Record<string, any>} */ ({
-      id: "std_live", userId: "u_live", projectId: "prj_live", name: "EV-201", question: "单臂 II 期能不能用外部对照？", dataTier: "T0",
+      id: "std_live", userId: "u_live", projectId: "prj_live", name: "EV-201", question: "单臂 II 期能不能用外部对照？", dataTier: tier,
       intendedUse: "exploratory", status: "active",
       steps: Object.fromEntries(VCR_STEPS.map((step) => [step, { status: step === "definition" ? "done" : "none", requested: true, note: null, ...(steps[step] ?? {}) }])),
     }),
@@ -787,7 +926,7 @@ function studyInMemory({ assumptions = [], openJobs = [], steps = {} } = {}) {
     async comparatorDesigns() { return []; },
     async trialScenarios() { return []; },
     async latestDesignGrid() { return null; },
-    async latestProtocolVersion() { return null; },
+    async latestProtocolVersion() { return protocol; },
     async staleMarks() { return []; },
     async setStep(/** @type {string} */ _id, /** @type {string} */ step, /** @type {Record<string, any>} */ fields) {
       state.study = { ...state.study, steps: { ...state.study.steps, [step]: { ...state.study.steps[step], ...fields } } };
@@ -797,8 +936,10 @@ function studyInMemory({ assumptions = [], openJobs = [], steps = {} } = {}) {
       if (/FROM [\w.]*jobs\s+WHERE study_id = \$1 AND state IN \('queued', 'running', 'awaiting_budget'\)/.test(sql)) return state.openJobs;
       return [];
     },
-    async one(/** @type {string} */ sql) {
-      if (/matching_assessments/.test(sql)) return { n: 0 };
+    async one(/** @type {string} */ sql, /** @type {any[]} */ params = []) {
+      // The two counts the matching step is read from: the criteria of the protocol version, and the assessments made against it.
+      if (/FROM [\w.]*matching_assessments/.test(sql)) return { n: assessments.filter((row) => !/AND protocol_version_id = \$2/.test(sql) || row.protocolVersionId === params[1]).length };
+      if (/FROM [\w.]*criteria\b/.test(sql)) return { n: criteria };
       if (/UPDATE [\w.]*schedule_marks/.test(sql)) return { key: "run", state: "running" };
       return null;
     },
@@ -808,7 +949,7 @@ function studyInMemory({ assumptions = [], openJobs = [], steps = {} } = {}) {
   const dispatched = [];
   const orchestrator = new VcrOrchestrator({
     store: /** @type {any} */ (store), jobs: /** @type {any} */ ({}),
-    dispatchRun: async (input) => { dispatched.push(input); return { runId: `run_${dispatched.length}`, sessionId: null }; },
+    dispatchRun: dispatch ?? (async (input) => { dispatched.push(input); return { runId: `run_${dispatched.length}`, sessionId: null }; }),
   });
   return { state, dispatched, orchestrator, steps: () => /** @type {Record<string, any>} */ (state.study.steps) };
 }
@@ -879,4 +1020,78 @@ test("a retry scoped to the patients is dispatched for the cohort snapshot alone
   await evidence.orchestrator.advance("std_live");
   assert.equal(evidence.dispatched[0].capabilityId, "vcr-evidence");
   assert.equal(Object.hasOwn(evidence.dispatched[0], "products"), false);
+});
+
+// --- a step the allowance would not start says so, and starts by itself once it can ----------------
+
+test("a step the allowance refuses stays queued and says what it waits on; once the allowance allows it, it runs and says nothing", async () => {
+  /** @type {any[]} */ const asked = [];
+  let refusal = "simulated_credits_exhausted";
+  const live = studyInMemory({ dispatch: async (input) => {
+    asked.push(input);
+    if (refusal) throw Object.assign(new Error("The simulated allowance is too low."), { code: refusal });
+    return { runId: "run_funded", sessionId: null };
+  } });
+  await live.orchestrator.advance("std_live");
+  assert.equal(asked.length, 1, "the dispatch was attempted");
+  const waiting = live.steps().evidence;
+  assert.equal(waiting.status, "queued", "not failed, and not started");
+  assert.equal(waiting.waiting, "simulated_allowance");
+  assert.equal(waiting.note, "等模拟额度", "the rail says it in two words, marked 模拟");
+  assert.equal(live.orchestrator.status().lastDeferral, "simulated_credits_exhausted");
+
+  // The real wallet's refusal is the same wait, unmarked.
+  const real = studyInMemory({ dispatch: async () => { throw Object.assign(new Error("credits"), { code: "credits_exhausted" }); } });
+  await real.orchestrator.advance("std_live");
+  assert.deepEqual([real.steps().evidence.waiting, real.steps().evidence.note], ["allowance", "等科研额度"]);
+
+  // Anything else that defers is a queued step and nothing more: no wait on the allowance is invented for it.
+  const busy = studyInMemory({ dispatch: async () => { throw Object.assign(new Error("cap"), { code: "runtime_limit_exceeded" }); } });
+  await busy.orchestrator.advance("std_live");
+  assert.equal(busy.steps().evidence.status, "queued");
+  assert.equal(busy.steps().evidence.waiting ?? null, null);
+  assert.equal(busy.steps().evidence.note, null);
+
+  // Topped up: the next tick asks again, the step runs, and the wait is gone with its note.
+  refusal = "";
+  await live.orchestrator.advance("std_live");
+  assert.equal(live.steps().evidence.status, "running");
+  assert.equal(live.steps().evidence.runId, "run_funded");
+  assert.equal(live.steps().evidence.waiting, null);
+  assert.equal(live.steps().evidence.note, null);
+});
+
+test("a note the step has for another reason is not taken off with the allowance's wait", async () => {
+  const live = studyInMemory({ steps: { evidence: { status: "queued", note: "三篇证据待补", waiting: null } } });
+  await live.orchestrator.advance("std_live");
+  assert.equal(live.steps().evidence.status, "running");
+  assert.equal(live.steps().evidence.note, "三篇证据待补");
+});
+
+// --- matching is done by judgments against the criteria as they stand --------------------------------
+
+test("above T0 the matching step is done by patients judged against the latest protocol version; an assessment of an earlier version does not count", async () => {
+  const matching = (/** @type {Array<{ protocolVersionId: string | null }>} */ assessments) => studyInMemory({
+    tier: "T1", protocol: { id: "pv2" }, criteria: 3, assessments,
+    steps: { evidence: { status: "done" }, population: { status: "done" }, patients: { status: "done" }, comparator: { status: "done" }, trial: { status: "done" }, matching: { status: "none" } },
+  });
+  // Judged against the criteria now in force: the step is done.
+  const current = matching([{ protocolVersionId: "pv1" }, { protocolVersionId: "pv2" }]);
+  await current.orchestrator.advance("std_live");
+  assert.equal(current.steps().matching.status, "done");
+  assert.equal(current.dispatched.some((run) => run.capabilityId === "vcr-matching"), false, "nothing is sent for a step that is done");
+  // Judged only against the version the protocol has since moved on from: the history is kept, the step is not done,
+  // and the matching run goes out to judge the patients against the criteria as they stand.
+  const superseded = matching([{ protocolVersionId: "pv1" }, { protocolVersionId: "pv1" }]);
+  await superseded.orchestrator.advance("std_live");
+  assert.notEqual(superseded.steps().matching.status, "done");
+  assert.equal(superseded.dispatched.some((run) => run.capabilityId === "vcr-matching"), true);
+  // An assessment that names no version is not one against these criteria either.
+  const unversioned = matching([{ protocolVersionId: null }]);
+  await unversioned.orchestrator.advance("std_live");
+  assert.notEqual(unversioned.steps().matching.status, "done");
+  // T0 has nobody's records to judge: the structured criteria are what the step is, whatever was assessed before.
+  const t0 = studyInMemory({ tier: "T0", protocol: { id: "pv2" }, criteria: 3, assessments: [{ protocolVersionId: "pv1" }], steps: { matching: { status: "none" } } });
+  await t0.orchestrator.advance("std_live");
+  assert.equal(t0.steps().matching.status, "done");
 });

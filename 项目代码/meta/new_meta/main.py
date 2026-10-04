@@ -98,7 +98,9 @@ from new_meta.schemas.study import ExtractedStudy
 from new_meta.schemas.risk_of_bias import StudyRoB
 from new_meta.schemas.grade import GRADEProfile
 from new_meta.tools.reference_manager import ReferenceManager
-from new_meta.tools.evimed_evidence import search_evimed_evidence
+from new_meta.tools.evimed_evidence import (
+    SOURCE_NOT_CONFIGURED, SOURCE_REFUSED, SOURCE_UNREACHABLE, search_evimed_evidence, source_status,
+)
 from new_meta.tools import pubmed
 from new_meta.tools.utils import paper_identity, safe_identifier
 from new_meta.tools.utils import study_label as _study_label
@@ -1362,6 +1364,16 @@ def _intervention_search_terms(value: str) -> str:
     return " ".join(selected) or _compact_search_field(text, max_words=3)
 
 
+#: The run-warning code for each reason the optional Evimed evidence source was not
+#: used. `unreachable` keeps the code it always had; the other two are new, so the
+#: job's result (`evimed_adapter._sources_not_used`) reads a closed vocabulary.
+EVIMED_EVIDENCE_WARNING_CODES = {
+    SOURCE_NOT_CONFIGURED: "evimed_evidence_not_configured",
+    SOURCE_REFUSED: "evimed_evidence_refused",
+    SOURCE_UNREACHABLE: "evimed_evidence_search_failed",
+}
+
+
 def _add_evidence_context_references(
     project: Project,
     protocol: ResearchProtocol,
@@ -1381,17 +1393,25 @@ def _add_evidence_context_references(
         context = cached
     else:
         context = _search_evidence_context_with_fallbacks(protocol, query)
-        if context.get("status") == "error":
+        # An optional source that was not used is recorded in the run's warnings
+        # whatever the reason -- `disabled` (no key) used to record nothing, so the
+        # result read as if the source had been searched. The code carries the
+        # reason (not_configured / refused / unreachable) for the job's result.
+        unused = source_status(context)
+        if unused is not None:
+            reason = context.get("message") or "missing_evimed_api_key"
             project.add_warning(
                 "search",
-                f"Evimed evidence search failed and background citation enrichment was skipped: {context.get('message', 'unknown error')}",
-                code="evimed_evidence_search_failed",
+                f"Evimed evidence search was not used ({unused.replace('_', ' ')}: {reason}); "
+                "background citation enrichment was skipped.",
+                code=EVIMED_EVIDENCE_WARNING_CODES[unused],
                 severity="warning",
-                context={"query": query},
+                context={"query": query, "sourceStatus": unused},
             )
 
     if context.get("status") == "ok":
-        project.clear_warnings(stage="search", code="evimed_evidence_search_failed")
+        for code in EVIMED_EVIDENCE_WARNING_CODES.values():
+            project.clear_warnings(stage="search", code=code)
 
     added = 0
     raw_references = context.get("references") or []

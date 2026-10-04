@@ -106,3 +106,26 @@ test("a run that ends is on /api/ops/metrics, counted by the control plane", asy
     await rm(dataDir, { recursive: true, force: true });
   }
 });
+
+test("kernel records nobody classified are on /api/ops/metrics by raw type, so an operator sees what to classify next", async () => {
+  const dataDir = await mkdtemp(path.join(tmpdir(), "os-session-records-"));
+  const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: true, operatorMetricsToken: "session-records-token" });
+  try {
+    const address = await app.listen(0, "127.0.0.1");
+    const scrape = async () => (await (await fetch(`http://127.0.0.1:${address.port}/api/ops/metrics`, {
+      headers: { Authorization: "Bearer session-records-token" },
+    })).text()).split("\n");
+    // The series is declared before the first record, so the first one shows as an increase.
+    let lines = await scrape();
+    assert.ok(lines.includes("# TYPE open_science_runtime_session_records_unclassified_total counter"));
+    assert.equal(lines.some((line) => line.startsWith("open_science_runtime_session_records_unclassified_total{")), false);
+    app.runtimeEventPump.unclassified.set("goal/change", 3);
+    app.runtimeEventPump.unclassified.set("other", 1);
+    lines = await scrape();
+    assert.ok(lines.includes('open_science_runtime_session_records_unclassified_total{raw_type="goal/change"} 3'));
+    assert.ok(lines.includes('open_science_runtime_session_records_unclassified_total{raw_type="other"} 1'));
+  } finally {
+    await app.close();
+    await rm(dataDir, { recursive: true, force: true });
+  }
+});

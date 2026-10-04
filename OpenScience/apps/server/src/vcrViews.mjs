@@ -39,7 +39,7 @@ import {
   VCR_REVIEW_KIND_LABELS_ZH, VCR_ROLE_ABILITIES, VCR_STALE_REASON_LABELS_ZH,
   VCR_STEP_LABELS_ZH, VCR_STEPS, VCR_TWIN_LABELS_ZH, VCR_TWIN_EVIDENCE, VCR_VALUE_SOURCE_LABELS_ZH,
   VCR_TRIAL_DESIGN_LABELS_ZH,
-  intendedUseCeiling, lineageNode, parseLineageNode, twinLabel, useWithin,
+  allowanceWaitingSentence, intendedUseCeiling, lineageNode, parseLineageNode, twinLabel, useWithin,
 } from "@evimed/domain";
 
 import { vcrExportHoldsDocument, vcrReportModel, vcrReportReviewRevision } from "./vcrRender.mjs";
@@ -79,12 +79,14 @@ export function budgetView(budget) {
 }
 
 /** The words a job kind is shown as. */
-const JOB_KIND_LABELS = Object.freeze(/** @type {Record<string, string>} */ ({
+export const JOB_KIND_LABELS = Object.freeze(/** @type {Record<string, string>} */ ({
   profile_snapshot: "数据快照画像", build_cohort: "构建队列", generate_population: "生成情景人群",
   literature_population: "文献人群", synthesize_population: "合成人群", population_quality: "人群质量报告",
   generate_patients: "生成虚拟患者", generate_patients_continuous: "生成虚拟患者（连续终点）",
   generate_patients_binary: "生成虚拟患者（二分类终点）", reconstruct_km: "重建生存曲线", pool_evidence: "合并证据",
   weight_comparator: "熵平衡加权", propensity_weight_comparator: "倾向评分加权", maic_comparator: "匹配调整间接比较",
+  weighted_cox_comparator: "加权 Cox 风险比", maic_time_to_event_comparator: "事件时间终点的匹配调整间接比较",
+  aipw_comparator: "双重稳健估计（AIPW）", covariate_set_comparator: "协变量集敏感性分析",
   evalue: "E 值", rmst: "RMST 比较", design_analytic: "方案的解析计算", design_simulation: "方案的模拟运行",
   design_grid: "设计网格", assurance: "成功把握", procova: "预后协变量调整", accrual_forecast: "入组预测",
   map_prior: "MAP 先验", match_criteria: "逐条匹配",
@@ -321,6 +323,18 @@ export function attentionOf({ assumptions, scenarios, comparators, results, allR
       lines.push({ kind: "step_failed", tone: "attention", tab: null,
         text: `「${(/** @type {Record<string, string>} */ (VCR_STEP_LABELS_ZH))[step]}」这一步没有做完，已算出的部分保留` });
     }
+  }
+  // A step the allowance would not start is waiting for the reader's top-up, and a queued step that says nothing reads as work
+  // under way. One line for all of them: the page's link to the top-up sits at its end (`allowance_waiting`).
+  const allowanceWaiting = VCR_STEPS.filter((step) => steps?.[step]?.status === "queued" && steps[step].waiting);
+  if (allowanceWaiting.length) {
+    const label = (/** @type {string} */ step) => (/** @type {Record<string, string>} */ (VCR_STEP_LABELS_ZH))[step];
+    const wallet = steps[allowanceWaiting[0]].waiting;
+    lines.push({ kind: "allowance_waiting", tone: "attention", tab: null, waiting: wallet,
+      text: allowanceWaiting.length === 1
+        ? allowanceWaitingSentence(label(allowanceWaiting[0]), wallet)
+        : `${allowanceWaiting.length} 个步骤在等${wallet === "simulated_allowance" ? "模拟" : "科研"}额度，${wallet === "simulated_allowance" ? "模拟充值" : "充值"}后会自动开始。`,
+      items: allowanceWaiting.map(label) });
   }
   // An export that ended with no document is said the way a step that did not finish is: its row alone read
   // 「未完成」 in a list nothing pointed at, after a run the study had paid for.

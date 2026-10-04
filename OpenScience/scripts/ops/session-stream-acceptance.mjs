@@ -12,11 +12,13 @@
  * the wire. Everything it checks is a property the page depends on and cannot
  * check for itself:
  *
- *   - both unions are closed and exhausted. `unknown` is not a failure by
- *     construction — it exists so an undecoded variant is counted and shown
- *     rather than dropped — but on a real run every `unknown` is an event the
- *     DSH pump could not decode, so they are reported BY rawType and count.
- *     A page that renders "unknown x214" is a page that renders nothing.
+ *   - both unions are closed and exhausted. `unknown` is how an undecoded
+ *     kernel record stays countable, and the pump publishes none of them: the
+ *     kernel's own bookkeeping and the records nobody has classified both stay
+ *     off the stream, because a page that drew a card for one drew a blank
+ *     one. So an `unknown` ARRIVING is a publisher regression, and fails here.
+ *     What an operator reads instead is the count by raw type on
+ *     `/api/ops/metrics` (`open_science_runtime_session_records_unclassified_total`).
  *   - sequence numbers are strictly increasing, because resumption is by our
  *     own counter and a repeated seq silently truncates a reconnecting tab.
  *   - resumption works: the stream is cut mid-run and resumed with `?since=`,
@@ -267,6 +269,12 @@ function analyse(frames, { cutAt, terminal, recording, resumeExercised = null })
   for (const [type, count] of offUnion) {
     problems.push(`run/event carried type "${type}" ${count}x, absent from RUN_EVENT_TYPES`);
   }
+  // An `unknown` on the stream is a card nobody can read. The pump counts them
+  // for operators and publishes none, so one arriving names a regression in the
+  // publisher (or a recording from before it): reported by raw type.
+  for (const [raw, count] of undecoded) {
+    problems.push(`run/event carried ${count}x unknown (${raw}); the pump publishes no record without a variant`);
+  }
 
   // seq must be strictly increasing per connection; a repeat truncates a
   // resuming tab at the wrong place.
@@ -310,10 +318,6 @@ function analyse(frames, { cutAt, terminal, recording, resumeExercised = null })
   for (const [type, count] of [...envelopeTypes].sort((a, b) => b[1] - a[1])) console.log(`  ${String(count).padStart(4)}  ${type}`);
   console.log("\nrun/event types:");
   for (const [type, count] of [...innerTypes].sort((a, b) => b[1] - a[1])) console.log(`  ${String(count).padStart(4)}  ${type}`);
-  if (undecoded.size) {
-    console.log("\nundecoded by the DSH pump (each renders as a blank card):");
-    for (const [raw, count] of [...undecoded].sort((a, b) => b[1] - a[1])) console.log(`  ${String(count).padStart(4)}  ${raw}`);
-  }
   const unseen = RUN_EVENT_TYPES.filter((type) => type !== "unknown" && !innerTypes.has(type));
   if (unseen.length) console.log(`\nnot exercised by this run (not a failure, a coverage fact): ${unseen.join(", ")}`);
 

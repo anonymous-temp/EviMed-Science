@@ -32,8 +32,11 @@
  *    `context` and `unknown` at priority 0, and the lowest priority renders,
  *    so a takeover goes below it.
  *  - A node that renders nothing leaves an empty flow item, and the chat's own
- *    stylesheet hides empty flow items (`.flowItem:empty{display:none}`) and
- *    skips them in the flow gap — `null` is a supported render, not a hole.
+ *    stylesheet hid empty flow items (`.flowItem:empty{display:none}`) and
+ *    skipped them in the flow gap — `null` is a supported render, not a hole.
+ *    At 0.1.7-rc.2 the flow item holds the chat-node outlet anchor, so it is no
+ *    longer `:empty` and kept its gap: `runtimeUiShell.mjs` hides these three
+ *    kinds by their empty outlet instead.
  *  - The language pack is the wrong tool: the row's title is copy, but the
  *    label beside it (`@deepseek-ai/dsh-system-prompt`, the plugin that
  *    injected the context) is data. Emptying the copy left a dot and a bare

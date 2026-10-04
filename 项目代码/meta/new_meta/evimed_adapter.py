@@ -6,7 +6,7 @@ It never accepts a shell command or a caller-supplied absolute output path.
 """
 from __future__ import annotations
 
-from new_meta.core import engine_model, job_slots
+from new_meta.core import engine_model, job_credentials, job_slots
 
 import base64
 import hashlib
@@ -64,6 +64,12 @@ _DEFAULT_MAX_ACTIVE_JOBS = 1
 #: failing at the same step stops being retried and says so.
 _DEFAULT_MAX_ATTEMPTS = 3
 _MAX_SCANNED_JOBS = 200
+#: What a run the wall clock stopped ends as (`job_slots.execution_timeout()`, the
+#: deployment's EVIMED_SPECIALIST_EXECUTION_TIMEOUT_SECONDS, shared by every
+#: engine): an engine that hangs would hold its slot, and the deployment's one job
+#: at a time, forever. `124` is the status `timeout(1)` and the MR engine use.
+_TIMEOUT_CODE = "meta_agent_job_timeout"
+_TIMEOUT_RETURN_CODE = 124
 
 #: The engine's terminal release vocabulary (new_meta/core/release_contract.py).
 #: The adapter reports these values verbatim; anything else is named as unknown
@@ -686,7 +692,8 @@ def _start_locked(arguments: dict[str, Any], workspace: Path, owner: dict[str, s
                     model_credentials = _job_model_credentials(state["jobId"], workload_token, execution_context)
                 except (engine_model.EngineModelUnavailable, OSError, RuntimeError, UnicodeDecodeError):
                     return _error("meta_model_gateway_unavailable", "The model gateway did not admit this Meta retry.", True)
-            return _resume_job(path, state, model_credentials=model_credentials)
+            return _resume_job(path, state, model_credentials=model_credentials,
+                               job_keys=job_credentials.resolve(workload_token))
     # The candidate may have been at another intensity, or have no resumable
     # checkpoint. Its unused token must never be handed to a different job.
     if candidate is not None:
@@ -728,7 +735,8 @@ def _start_locked(arguments: dict[str, Any], workspace: Path, owner: dict[str, s
         **job_observation.admission(arguments, workspace, owner),
     }
     _atomic_json(state_path, state)
-    failure = _launch_worker(state_path, state, model_credentials=model_credentials)
+    failure = _launch_worker(state_path, state, model_credentials=model_credentials,
+                             job_keys=job_credentials.resolve(workload_token))
     if failure is not None:
         return failure
     starts = _record_start_request(state_path, "started")
@@ -742,13 +750,16 @@ def _start_locked(arguments: dict[str, Any], workspace: Path, owner: dict[str, s
     }
 
 
-def _launch_worker(state_path: Path, state: dict[str, Any], *, model_credentials: dict[str, str] | None = None) -> dict[str, Any] | None:
+def _launch_worker(state_path: Path, state: dict[str, Any], *, model_credentials: dict[str, str] | None = None,
+                   job_keys: dict[str, str] | None = None) -> dict[str, Any] | None:
     job_id = str(state["jobId"])
     try:
         worker = subprocess.Popen(
             [sys.executable, "-m", "new_meta.evimed_adapter", "--run-job", str(state_path)],
             cwd=str(Path(__file__).resolve().parents[1]),
-            env={**os.environ, **(model_credentials or {})},
+            # A researcher's own connector keys ride the spawn environment only, like the
+            # model credential: never the state file, never a log (`core/job_credentials.py`).
+            env={**os.environ, **(model_credentials or {}), **(job_keys or {})},
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -818,7 +829,8 @@ def _same_execution(state: dict[str, Any], digest: str, context: dict | None,
 
 
 def _resume_job(state_path: Path, state: dict[str, Any], *,
-                model_credentials: dict[str, str] | None = None) -> dict[str, Any]:
+                model_credentials: dict[str, str] | None = None,
+                job_keys: dict[str, str] | None = None) -> dict[str, Any]:
     """Run a failed job again from its own checkpoint, within the attempt limit."""
     job_id = str(state.get("jobId"))
     limit = _positive_int_env("EVIMED_META_MAX_ATTEMPTS", _DEFAULT_MAX_ATTEMPTS)
@@ -852,7 +864,7 @@ def _resume_job(state_path: Path, state: dict[str, Any], *,
         "previousError": previous_error,
     })
     _atomic_json(state_path, state)
-    failure = _launch_worker(state_path, state, model_credentials=model_credentials)
+    failure = _launch_worker(state_path, state, model_credentials=model_credentials, job_keys=job_keys)
     if failure is not None:
         return failure
     starts = _record_start_request(state_path, "resumed")
@@ -1000,7 +1012,7 @@ def _status(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
             ["Report the failure and the partial files it left; do not present them as a finished review."]
         )
         return _error(
-            "meta_agent_execution_failed",
+            _TIMEOUT_CODE if state.get("errorCode") == _TIMEOUT_CODE else "meta_agent_execution_failed",
             message,
             bool(state.get("retryable")) or resumable,
             next_actions=next_actions,
@@ -1037,6 +1049,7 @@ def _status(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
             "blockingReasons": state.get("blockingReasons") or [],
             "warningReasons": state.get("warningReasons") or [],
             "modules": state.get("modules") or {},
+            **({"sourcesNotUsed": state["sourcesNotUsed"]} if state.get("sourcesNotUsed") else {}),
             "degraded": any(
                 entry.get("status") in {"degraded", "failed"}
                 for entry in (state.get("modules") or {}).values()
@@ -1047,10 +1060,13 @@ def _status(arguments: dict[str, Any], workspace: Path) -> dict[str, Any]:
         "sources": [_source(job_id)],
         "artifacts": state.get("artifacts") or [],
     }
+    if state.get("sourcesNotUsed"):
+        result["warnings"] = [*result.get("warnings", []), _sources_not_used_warning(state["sourcesNotUsed"])]
     if result["status"] == "warning":
         result["warnings"] = [
+            *result.get("warnings", []),
             "This terminal result is the answer to the request: deliver it and state each release finding "
-            "in plain words; do not start the job again to clear a finding."
+            "in plain words; do not start the job again to clear a finding.",
         ]
         result["next_actions"] = state.get("nextActions") or [
             "Read package/release_decision.json and state its findings in plain words when delivering."
@@ -1106,6 +1122,41 @@ def _module_ledger(project: Path) -> dict[str, dict[str, Any]]:
             existing["status"] = "failed"
             existing["fatal"] = True
     return modules
+
+
+#: The run-warning code `main.py` writes for each reason the optional Evimed evidence
+#: source was not used (`main.EVIMED_EVIDENCE_WARNING_CODES`), and the status word for it.
+_UNUSED_SOURCE_CODES = {
+    "evimed_evidence_not_configured": "not_configured",
+    "evimed_evidence_refused": "refused",
+    "evimed_evidence_search_failed": "unreachable",
+}
+
+
+def _sources_not_used(project: Path) -> list[dict[str, str]]:
+    """Which optional source this run did not use and why, read from its own warnings by closed code.
+
+    A source nobody configured is the researcher's to configure where they use it
+    (owner ruling 2026-10-04); the run goes on without it. This job's result says so
+    -- `not_configured`, `refused` or `unreachable`, the words every engine uses --
+    instead of leaving it to a log line, so the run can tell the researcher.
+    """
+    path = project / "pipeline_warnings.json"
+    try:
+        warnings = json.loads(path.read_text(encoding="utf-8")) if path.is_file() and not path.is_symlink() else []
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return []
+    codes = {str(item.get("code")) for item in warnings if isinstance(item, dict)} if isinstance(warnings, list) else set()
+    for code, status in _UNUSED_SOURCE_CODES.items():
+        if code in codes:
+            return [{"source": "evimed-evidence", "label": "EviMed evidence", "status": status}]
+    return []
+
+
+def _sources_not_used_warning(rows: list[dict[str, str]]) -> str:
+    named = ", ".join(f"{row['label']} ({row['status'].replace('_', ' ')})" for row in rows)
+    return (f"Optional data sources this review did not use: {named}. It went on without them; say so when "
+            "reporting the result, and tell the researcher they can add the source under 设置 → 数据源.")
 
 
 def _evidence_accounting(project: Path) -> dict[str, Any]:
@@ -1260,6 +1311,15 @@ def _log_line(log_path: Path | None, text: str) -> None:
         pass
 
 
+def _timeout_message() -> str:
+    """What a run the wall clock stopped says, for a reader: the limit, what is kept, what to do."""
+    return (
+        f"MetaAgent was stopped after {int(job_slots.execution_timeout())} seconds without finishing "
+        "(the deployment's execution limit for one job). The steps it had completed and the files it had "
+        "written are kept; starting the same request again resumes from the last completed step."
+    )
+
+
 def _wait_for_slot(state_path: Path, state: dict[str, Any]) -> job_slots.Slot:
     """Hold one of the deployment's specialist slots before the job starts, or end the job by name.
 
@@ -1346,6 +1406,9 @@ def _run_job(state_path: Path, state: dict[str, Any]) -> int:
             json.loads(policy_raw) if policy_raw else state.get("modelPolicy")))
     else:
         _load_api_key_file()
+    # The researcher's own connector keys, if the start resolved any: onto the
+    # variables the engine reads, before it starts, in this worker's environment only.
+    job_credentials.apply(os.environ)
     workspace = Path(state["workspace"]).resolve()
     output_root = Path(state["outputRoot"]).resolve()
     if output_root != workspace and workspace not in output_root.parents:
@@ -1382,17 +1445,27 @@ def _run_job(state_path: Path, state: dict[str, Any]) -> int:
         os.O_WRONLY | os.O_CREAT | os.O_APPEND | getattr(os, "O_NOFOLLOW", 0),
         0o600,
     )
+    timed_out = False
     with os.fdopen(log_descriptor, "ab", buffering=0) as log:
         with _heartbeat(state_path, state, output_root, log_path):
-            completed = subprocess.run(
-                command,
-                cwd=str(Path(__file__).resolve().parents[1]),
-                env=dict(os.environ),
-                stdin=subprocess.DEVNULL,
-                stdout=log,
-                stderr=subprocess.STDOUT,
-                check=False,
-            )
+            try:
+                completed = subprocess.run(
+                    command,
+                    cwd=str(Path(__file__).resolve().parents[1]),
+                    env=dict(os.environ),
+                    stdin=subprocess.DEVNULL,
+                    stdout=log,
+                    stderr=subprocess.STDOUT,
+                    check=False,
+                    timeout=job_slots.execution_timeout(),
+                )
+            except subprocess.TimeoutExpired:
+                # `run` has stopped the engine and waited for it. What it had
+                # written stays in the output directory and is looked at below
+                # like the output of any other process that ended early.
+                completed = subprocess.CompletedProcess(command, _TIMEOUT_RETURN_CODE)
+                timed_out = True
+                _log_line(log_path, f"execution limit: stopped after {int(job_slots.execution_timeout())} seconds")
     projects = sorted(
         (entry for entry in output_root.iterdir() if entry.is_dir()),
         key=lambda entry: entry.stat().st_mtime_ns,
@@ -1415,10 +1488,11 @@ def _run_job(state_path: Path, state: dict[str, Any]) -> int:
             "updatedAt": _now(),
             "finishedAt": _now(),
             "returnCode": completed.returncode,
-            "retryable": completed.returncode in {75, 137, 143},
+            "retryable": completed.returncode in {75, 137, 143} or timed_out,
             "error": f"MetaAgent exited with code {completed.returncode}.",
             # Principle 19: what it finished before failing stays named.
             **(_partial_record(workspace, inside) if inside is not None else {}),
+            **({"errorCode": _TIMEOUT_CODE, "error": _timeout_message()} if timed_out else {}),
         })
         _atomic_json(state_path, state)
         # A failed attempt's tokens were paid for too. Only a project inside
@@ -1436,8 +1510,11 @@ def _run_job(state_path: Path, state: dict[str, Any]) -> int:
         pass
     if partial_completion:
         release = {**release, "status": "ready_with_warnings", "deliverable": True,
-                   "summary": "The process ended after writing a readable manuscript; completed evidence is retained and later work remains incomplete.",
-                   "warning_codes": [*(release.get("warning_codes") or []), "partial_process_completion"],
+                   "summary": ("The process was stopped at the deployment's execution limit after writing a readable manuscript; "
+                               if timed_out else "The process ended after writing a readable manuscript; ")
+                              + "completed evidence is retained and later work remains incomplete.",
+                   "warning_codes": [*(release.get("warning_codes") or []), "partial_process_completion",
+                                     *([_TIMEOUT_CODE] if timed_out else [])],
                    "next_actions": []}
         state.update(completion="partial", verification="unverified")
         draft = project / "manuscript" / "draft.md"
@@ -1461,6 +1538,7 @@ def _run_job(state_path: Path, state: dict[str, Any]) -> int:
         ][:20],
         "warningReasons": [str(item) for item in release.get("warning_codes") or [] if str(item).strip()][:40],
         "modules": _module_ledger(project),
+        **({"sourcesNotUsed": _sources_not_used(project)} if _sources_not_used(project) else {}),
         "evidenceAccounting": _evidence_accounting(project),
         "nextActions": [str(item) for item in release.get("next_actions", []) if str(item).strip()][:20],
         "artifacts": _artifact_list(workspace, project),

@@ -54,6 +54,73 @@ export const VCR_REAL_PATIENT_SOURCES = frozen(['observed', 'extracted', 'calcul
 export const VCR_NON_INDIVIDUAL_SOURCES = frozen(['aggregate', 'synthetic', 'predicted'])
 
 /**
+ * The source of ONE COLUMN of a real person's table, most direct first. A column
+ * of a real source is still a real person's value, so these are exactly the
+ * real-patient sources, and their order is a judgment made once: a recorded value
+ * beats a transcription of one, a transcription beats a deterministic computation
+ * from others, and a computed value beats one filled in by a declared method. A
+ * table is labelled with the weakest of its columns; a RESULT is labelled with
+ * the weakest of the columns its method actually used (`vcrWeakestSource`), so
+ * one imputed column that nothing read does not mark the result imputed.
+ */
+export const VCR_COLUMN_SOURCES = VCR_REAL_PATIENT_SOURCES
+
+/**
+ * The least direct of `sources` (the last in `VCR_COLUMN_SOURCES`), or `fallback`
+ * for none. A source outside the real-patient four (a synthetic or aggregate
+ * table has no per-column sources) is returned as it is, so a caller cannot
+ * launder it by listing it beside observed ones. `R/inputs.R` mirrors this.
+ * @param {Iterable<string>} sources @param {string} fallback
+ */
+export function vcrWeakestSource(sources, fallback) {
+  const list = [...sources]
+  if (!list.length) return fallback
+  const outside = list.find((source) => !VCR_COLUMN_SOURCES.includes(source))
+  if (outside) return outside
+  return list.reduce((weakest, source) => (VCR_COLUMN_SOURCES.indexOf(source) > VCR_COLUMN_SOURCES.indexOf(weakest) ? source : weakest))
+}
+
+/**
+ * How a column source is spelled in the standards an export has to meet, kept
+ * here and never in the engine (the engine states a source; a deliverable states
+ * how a regulator reads it). Verified against the NCI EVS terminology files
+ * (2026-10-04, last modified 2026-09-25):
+ *
+ * - **Define-XML** carries one provenance word per variable, the Origin Type
+ *   (codelist C170449, ORIGINT): `Collected` (C170548, "a value that is actually
+ *   observed and recorded by a person or obtained by an instrument"), `Derived`
+ *   (C170549, "a value that is calculated by an algorithm or reproducible rule,
+ *   and which is dependent upon other data values") and `Other` (C17649). It has
+ *   NO "imputed" and NO "extracted" term.
+ * - **ADaM** words an imputed value as a derived one: the record-level
+ *   Derivation Type (DTYPE, codelist C81224, extensible) names the imputation
+ *   technique (LOCF, WOCF, MI ...), and the algorithm goes into the variable's
+ *   method. So `imputed` exports as `Derived` plus a DTYPE whose value is the
+ *   imputation method's own term (`adamDerivation.value: null` here: only the
+ *   analysis knows the method).
+ * - **Extracted** (read from unstructured text by a person or a model) has no
+ *   CDISC term; it exports as `Other` and the variable's description says how it
+ *   was extracted (`describe: true`).
+ *
+ * `describe` marks the entries whose export must also carry a sentence.
+ */
+export const VCR_COLUMN_SOURCE_EXPORT = Object.freeze({
+  observed: Object.freeze({
+    defineXmlOrigin: Object.freeze({ term: 'Collected', code: 'C170548' }), adamDerivation: null, describe: false,
+  }),
+  extracted: Object.freeze({
+    defineXmlOrigin: Object.freeze({ term: 'Other', code: 'C17649' }), adamDerivation: null, describe: true,
+  }),
+  calculated: Object.freeze({
+    defineXmlOrigin: Object.freeze({ term: 'Derived', code: 'C170549' }), adamDerivation: null, describe: false,
+  }),
+  imputed: Object.freeze({
+    defineXmlOrigin: Object.freeze({ term: 'Derived', code: 'C170549' }),
+    adamDerivation: Object.freeze({ variable: 'DTYPE', codelist: 'C81224', extensible: true, value: null }), describe: true,
+  }),
+})
+
+/**
  * The four counts that must be shown apart wherever a sample size appears
  * (§3.5), plus the two that appear only when their route is used.
  */
@@ -462,6 +529,13 @@ export const VCR_DEFAULT_ESTIMAND = 'ATT'
 export const VCR_NOT_ESTIMABLE_RULES = frozen([
   'entropy_balance_infeasible', 'outside_common_support', 'effective_sample_size_below_floor',
   'standardized_difference_above_floor', 'tau_beyond_followup', 'reconstruction_failed_qc', 'map_prior_conflict',
+  // A Cox model has no estimate when an arm has no event (the hazard ratio is infinite or zero) or the fit
+  // does not converge; fewer events than `VCR_COX_FEW_EVENTS` is a notice, never a refusal.
+  'too_few_events',
+  // A doubly robust estimate needs both of its working models: the propensity model of who is in the trial and the outcome
+  // model fitted on the external controls. When either cannot be fitted (collinear covariates, fewer controls than the
+  // model has coefficients) there is no estimate.
+  'nuisance_model_not_estimable',
   // --- robustness methods (2026-10-04): negative controls, tipping point, prognostic adjustment ---
   // No negative control produced an estimate (every one has an arm with no event, or none was supplied in a usable form).
   'negative_controls_not_estimable',
@@ -482,6 +556,8 @@ export const VCR_NOT_ESTIMABLE_RULE_LABELS_ZH = Object.freeze({
   tau_beyond_followup: 'RMST 的 τ 超过任一组的最长随访',
   reconstruction_failed_qc: '重建 KM 未过质控',
   map_prior_conflict: 'MAP 先验与当前数据冲突检验越界',
+  too_few_events: '某一组没有事件，或 Cox 模型没有收敛（事件太少，风险比不存在）',
+  nuisance_model_not_estimable: '倾向性模型或结局模型拟合不出来（协变量共线，或外部对照的人数不足以拟合结局模型）',
   negative_controls_not_estimable: '没有一个阴性对照结局能得出估计（每个都有一组没有事件，或没有提供可用的数据）',
   primary_analysis_not_estimable: '这项分析本身的主要估计不存在（某一组没有事件或没有人、模型没有收敛、预后评分没有变异）',
   data_tier_insufficient: '现有数据档位不足以走这条对照路线',
@@ -602,6 +678,8 @@ export const VCR_JOB_KINDS = frozen([
   'reconstruct_km', 'pool_evidence', 'weight_comparator', 'propensity_weight_comparator', 'maic_comparator',
   'evalue', 'rmst', 'design_analytic', 'design_simulation', 'design_grid', 'assurance', 'procova',
   'accrual_forecast', 'map_prior', 'match_criteria',
+  // appended (2026-10-04): the comparator-effect methods
+  'weighted_cox_comparator', 'maic_time_to_event_comparator', 'aipw_comparator', 'covariate_set_comparator',
   // --- appended (2026-10-04): the robustness methods ---
   'negative_control_comparator', 'tipping_point', 'prognostic_adjustment_comparator',
   // --- end robustness methods ---
@@ -711,6 +789,14 @@ export const VCR_SMD_FLOOR = 0.1
  *   log ratio).
  */
 export const VCR_ESS_FLOOR = 10
+/**
+ * A Cox comparison with fewer events than this in an arm is reported but labelled
+ * `limited` and says why (a notice, not a refusal): the hazard ratio of an arm
+ * with a handful of events is estimable and very imprecise, and the robust
+ * variance is biased low there. An arm with NO event is the one case that is not
+ * estimable at all (`too_few_events`).
+ */
+export const VCR_COX_FEW_EVENTS = 10
 export const VCR_SUPPORT_CEILING = 0.1
 // --- robustness methods (2026-10-04) ---
 /**

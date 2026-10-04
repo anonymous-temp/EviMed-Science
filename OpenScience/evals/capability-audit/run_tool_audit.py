@@ -143,6 +143,18 @@ TASK_FIXTURES = {
     # a paper with a long reference list, read through Europe PMC's citation
     # network -- the same record the tool's own unit test is written around.
     "reference_list": {"identifier": "30153985", "limit": 5},
+    # Added 2026-10-04 with the three N04 operations, so the registry never again
+    # gains a tool this audit refuses to start over. Each asks the question that
+    # exercises the whole path the tool exists for: three identifier types resolved
+    # to one another (one request per type, plus PubMed's confirmation); a trial
+    # with posted results read, preserved and aligned (`compareTo: none`, because a
+    # first read has nothing held to compare with); and a US label read at its
+    # current version and compared with an older one, which is the zip download
+    # the buffered gateway fetch cannot do. The Tagrisso set id is a major
+    # label that has had 37 versions; version 36 is not going away.
+    "identifier_resolve": {"identifiers": ["30221596", "PMC6143516", "10.1056/NEJMoa1800722"]},
+    "clinical_trial_snapshot": {"nctId": "NCT02197234", "compareTo": "none"},
+    "dailymed_label": {"setid": "5e81b4a7-b971-45e1-9c31-29cea8c87ce7", "compareVersion": 36},
     "guideline_search": {"query": "hypertension clinical practice guideline", "limit": 2},
     "clinical_trial_search": {"query": "type 2 diabetes metformin", "limit": 2},
     "patent_search": {"query": "pembrolizumab biomarker", "limit": 2},

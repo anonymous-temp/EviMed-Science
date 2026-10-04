@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-evidence",
-  "version": "sha256:e561d511810ef98a7ba236003785c2484b9721e27739ee6a80c1e43916563278",
+  "version": "sha256:0e61027151e6af6bccdda22b9f1da245006e6c25077bfcae72f648515c4f1560",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 31,
@@ -453,6 +453,12 @@
             "type": "integer",
             "minimum": 0,
             "maximum": 2
+          },
+          "pageToken": {
+            "type": "string",
+            "maxLength": 200,
+            "pattern": "^[A-Za-z0-9_-]+$",
+            "description": "ClinicalTrials.gov continuation from data.outcome.next; same query."
           },
           "startYear": {
             "type": "integer",
@@ -1073,6 +1079,12 @@
             "minimum": 1,
             "maximum": 100
           },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9999,
+            "description": "PubMed route: results to skip. data.outcome says when more exist and what to pass."
+          },
           "dateFrom": {
             "type": "string",
             "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
@@ -1228,7 +1240,7 @@
     {
       "name": "mcp__evimed__open_access_full_text",
       "source": "mcp",
-      "description": "Resolve a PMCID, PMID, or DOI through Europe PMC, retrieve the complete open-access JATS XML, and write bounded Markdown and XML artifacts into the current workspace for direct, paginated reading.",
+      "description": "Resolve a PMCID, PMID or DOI through Europe PMC and preserve the open-access full text (publisher JATS XML, else the open-access PDF) with its tables as cells, its PMC version and its license. data.contentLevel says what the text is; an abstract is never full text. supplements=true also fetches the article's supplementary files, checks each against the md5 the article declares and preserves them (up to ~150 s; a cut-short archive keeps the files that arrived whole). intake=true hands the text and supplements to the project's knowledge base. Refusals, timeouts and no-supplement answers are named in data.outcome and data.supplementaryFiles.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1236,6 +1248,14 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 512
+          },
+          "supplements": {
+            "type": "boolean",
+            "description": "Default false. Fetch and preserve the supplementary files."
+          },
+          "intake": {
+            "type": "boolean",
+            "description": "Default false. Offer the preserved text and supplements to the knowledge base."
           }
         },
         "additionalProperties": false,
@@ -1486,7 +1506,7 @@
     {
       "name": "mcp__evimed__vcr_simulate",
       "source": "mcp",
-      "description": "Queue a deterministic computation on the 虚拟临研 engine and read where it got to. start returns a jobId; status reports state, progress and the saved result; cancel stops it and keeps the completed batches. Every number in the answer is the engine's -- never compute one yourself. The scenario is the frozen setting of one method and is refused by name (the field's path) when it carries a key the engine does not read, lacks a required one, or asks for a design or endpoint the method does not implement. Shapes (key? is optional; key[e] is read only when endpoint.type is e and refused for any other): design_analytic {design{kind,informationRates?,spending?,allocation?}, endpoint{type}, truth{...}, analysis{alpha,power,sided}, accrual?[time_to_event]}; design_simulation {design{kind,nTreat,nControl?,informationRates?}, endpoint{type}, truth{null?,...}, analysis{method,alpha,sided,tau?}, accrual?[time_to_event], performance?, targetMcse?}; design_grid the same plus designs[] and truths[]; assurance {design, endpoint, designPrior{mean,sd,kind,basis}, truth[continuous|binary], analysis}; generate_population {n, population{variables[{name,family,...}],correlation?,constraints?,missing?}}; literature_population {n, baselineTable[{variable,mean,sd|proportion|proportions}]}; generate_patients {design{nTreat,nControl?}, endpoint, truth, accrual?}; generate_patients_binary and generate_patients_continuous {design{nTreat,nControl?}, endpoint, truth}; reconstruct_km {curve[{time,surv}], riskTable[{time,atRisk}], provenance{kind,tool}, totalEvents?, treatmentArm?}; rmst {tau, ...}; weight_comparator {covariates[], estimand, endpoint, tau[time_to_event], ...}; map_prior {historical{...}, ...}; procova {endpoint, truth{effect,sd}, prognostic{rho}, analysis}. Truth spells the null case truth.null (boolean); accrual (enrolment, follow-up, dropout as accrual.dropoutAnnual) exists only for a time_to_event endpoint; alpha is the total, sided is 1 or 2. Patient-level kinds (profile_snapshot, build_cohort, synthesize_population, weight_comparator, ...) name their data as inputs [{kind:'snapshot', id}] and nothing else. pool_evidence and match_criteria are built by the platform (evidence_pool; the protocol's criteria). The vcr-analysis skill has the full shapes with examples.",
+      "description": "Queue a deterministic computation on the 虚拟临研 engine and read where it got to. start returns a jobId; status reports state, progress and the saved result; cancel stops it and keeps the completed batches. Every number in the answer is the engine's -- never compute one yourself. The scenario is the frozen setting of one method and is refused by name (the field's path) when it carries a key the engine does not read, lacks a required one, or asks for a design or endpoint the method does not implement. Shapes (key? is optional; key[e] is read only when endpoint.type is e and refused for any other): design_analytic {design{kind,informationRates?,spending?,allocation?}, endpoint{type}, truth{...}, analysis{alpha,power,sided}, accrual?[time_to_event]}; design_simulation {design{kind,nTreat,nControl?,informationRates?}, endpoint{type}, truth{null?,...}, analysis{method,alpha,sided,tau?}, accrual?[time_to_event], performance?, targetMcse?}; design_grid the same plus designs[] and truths[]; assurance {design, endpoint, designPrior{mean,sd,kind,basis}, truth[continuous|binary], analysis}; generate_population {n, population{variables[{name,family,...}],correlation?,constraints?,missing?}}; literature_population {n, baselineTable[{variable,mean,sd|proportion|proportions}]}; generate_patients {design{nTreat,nControl?}, endpoint, truth, accrual?}; generate_patients_binary and generate_patients_continuous {design{nTreat,nControl?}, endpoint, truth}; reconstruct_km {curve[{time,surv}], riskTable[{time,atRisk}], provenance{kind,tool}, totalEvents?, treatmentArm?}; rmst {tau, ...}; weight_comparator {covariates[], estimand, endpoint, tau[time_to_event], ...}; map_prior {historical{...}, ...}; procova {endpoint, truth{effect,sd}, prognostic{rho}, analysis}. Truth spells the null case truth.null (boolean); accrual (enrolment, follow-up, dropout as accrual.dropoutAnnual) exists only for a time_to_event endpoint; alpha is the total, sided is 1 or 2. Patient-level kinds (profile_snapshot, build_cohort, weight_comparator, ...) name their data as inputs [{kind:'snapshot', id}] and nothing else. pool_evidence and match_criteria are built by the platform. The other comparators (weighted_cox, aipw, covariate_set, maic_time_to_event _comparator) and all shapes are in the vcr-analysis skill; maic_time_to_event_comparator takes reconstructionResultId, never rows.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1526,6 +1546,10 @@
               "accrual_forecast",
               "map_prior",
               "match_criteria",
+              "weighted_cox_comparator",
+              "maic_time_to_event_comparator",
+              "aipw_comparator",
+              "covariate_set_comparator",
               "negative_control_comparator",
               "tipping_point",
               "prognostic_adjustment_comparator"
@@ -1560,6 +1584,12 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 120
+          },
+          "reconstructionResultId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160,
+            "pattern": "^[A-Za-z0-9_.:@-]+$"
           },
           "jobId": {
             "type": "string",

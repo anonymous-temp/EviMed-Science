@@ -65,6 +65,7 @@ import {
   GEO_PROBE_JOB_STATUSES, GEO_PROJECT_STATUSES, GEO_QUESTION_KINDS, GEO_RECONCILIATION_STATUSES, GEO_ROUND_KINDS,
   GEO_ROUND_STATUSES, GEO_SEVERITIES, GEO_SNAPSHOT_STATUSES, GEO_SOURCE_LAYERS, GEO_TIERS, GEO_TOPUP_STATUSES,
 } from "@evimed/domain";
+import { refreshVocabularyChecks } from "./vocabularyChecks.mjs";
 
 /** The schema name, written once. */
 export const GEO_SCHEMA = "evimed_geo";
@@ -633,7 +634,11 @@ export async function migrateGeo(database) {
   if (cached) return cached;
   const attempt = database.transaction(async (/** @type {any} */ client) => {
     await client.query("SELECT pg_advisory_xact_lock(hashtext('evimed-geo-v1'))");
-    await client.query(sql());
+    const ddl = sql();
+    await client.query(ddl);
+    // A vocabulary word the domain added after this table was created is
+    // otherwise refused on every existing database (vocabularyChecks.mjs).
+    await refreshVocabularyChecks(client, ddl, GEO_SCHEMA);
     return { schema: GEO_SCHEMA, tables: GEO_TABLES };
   });
   migrations.set(database, attempt);

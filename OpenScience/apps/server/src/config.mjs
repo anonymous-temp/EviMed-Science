@@ -1138,9 +1138,8 @@ export function loadConfig(overrides = {}) {
     openFda: ["openFdaApiKey", "OPEN_SCIENCE_OPENFDA_API_KEY", "openfda.api-key"],
   };
   const publicSourceCredentialSecrets = Object.fromEntries(
-    Object.entries(publicSourceCredentialSpecs).map(([profile, [overrideValue, valueEnv, localFile]]) => [
-      profile,
-      preferredFileSecret(overrides, {
+    Object.entries(publicSourceCredentialSpecs).map(([profile, [overrideValue, valueEnv, localFile]]) => {
+      const loaded = preferredFileSecret(overrides, {
         overrideValue,
         overrideFile: `${overrideValue}File`,
         valueEnv,
@@ -1151,8 +1150,14 @@ export function loadConfig(overrides = {}) {
         // 2026-09-22 (its evimed-api exit); refusing its group bit silently
         // turned every EviMed evidence call into `credential_missing`.
         allowGroupRead: profile === "evimedEvidence",
-      }),
-    ]),
+      });
+      // The deployment's EviMed evidence key is optional (owner ruling
+      // 2026-10-04: a researcher configures a source nobody configured where they
+      // use it). Compose binds /dev/null where a deployment has none, which reads
+      // as none rather than as a broken secret, like the edge proxy's below.
+      const none = profile === "evimedEvidence" && loaded.error === "public_source_evimed_evidence_file_not_regular";
+      return [profile, none ? { value: "", source: "none", error: null } : loaded];
+    }),
   );
   // The reranker's credential. It is the same host file the recall index's own
   // configuration is rendered from: the control plane already holds every
@@ -1881,6 +1886,15 @@ export function loadConfig(overrides = {}) {
       process.env.OPEN_SCIENCE_PUBLIC_SOURCE_GATEWAY_MAX_RESPONSE_BYTES ??
       16 * 1024 * 1024,
     ),
+    // A named download (a paper's supplementary-file zip, an older label
+    // version): Europe PMC builds that zip as it sends it, 33 s to the first
+    // byte and 136 s for 3.5 MB on 2026-10-04, so it gets one whole tool
+    // call's budget less the margin instead of the buffered fetch's minute.
+    // Derived from the ceiling, not an environment lever: a longer deadline
+    // would only mean the gateway's own answer never arrives.
+    publicSourceDownloadTimeoutMs: Number(
+      overrides.publicSourceDownloadTimeoutMs ?? (MCP_TOOL_CALL_TIMEOUT_MS - GATEWAY_RESPONSE_MARGIN_MS),
+    ),
     // The self-hosted metasearch origin. Empty means the deployment has no
     // open-web channel; the tool then refuses with a stated reason instead of
     // the runtime silently getting nothing back.
@@ -2599,6 +2613,15 @@ export function loadConfig(overrides = {}) {
     // (principle 13); off, the source cards simply carry none.
     sourceUpdatesEnabled: overrides.sourceUpdatesEnabled ?? boolEnv("OPEN_SCIENCE_SOURCE_UPDATES_ENABLED", true),
     resultsEnabled: overrides.resultsEnabled ?? boolEnv("OPEN_SCIENCE_RESULTS_ENABLED", true),
+    // Truthful capability availability (availabilityModule.mjs): the collector that joins finished runs to what they
+    // used and produced. A label and never a gate, so the switch only decides whether operations are collected; with
+    // it off the projection is still served from the deployment's composition and every label that needs a record
+    // reads 「未验证」. The sweep is how often runs the finish hook missed (and those from before this existed) are
+    // looked for.
+    availabilityEnabled: overrides.availabilityEnabled ?? boolEnv("OPEN_SCIENCE_AVAILABILITY_ENABLED", true),
+    availabilitySweepIntervalMs: Math.max(60_000, Math.min(86_400_000, Number(
+      overrides.availabilitySweepIntervalMs ?? process.env.OPEN_SCIENCE_AVAILABILITY_SWEEP_INTERVAL_MS ?? 3_600_000,
+    ) || 3_600_000)),
     resultEngineUrl: String(overrides.resultEngineUrl ?? process.env.OPEN_SCIENCE_RESULT_ENGINE_URL ?? "").trim(),
     resultEngineRequestTimeoutMs: Math.max(1000, Math.min(60000, Number(
       overrides.resultEngineRequestTimeoutMs ?? process.env.OPEN_SCIENCE_RESULT_ENGINE_REQUEST_TIMEOUT_MS ?? 15000,

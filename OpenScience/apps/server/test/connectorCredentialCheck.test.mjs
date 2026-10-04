@@ -95,7 +95,12 @@ test("a source that is down, slow or refusing connections is unreachable, never 
     options.signal.addEventListener("abort", () => reject(options.signal.reason));
   });
   const started = Date.now();
-  assert.equal(await checkConnectorCredential("core", KEY, { fetchImpl: hang, timeoutMs: 600 }), "unreachable");
+  // AbortSignal.timeout's timer is unref'd; with nothing else pending, Node 22
+  // ends the test's event loop before it fires (CI pins 22). A ref'd stand-in
+  // keeps the loop alive for exactly as long as the bound is being measured.
+  const keepAlive = setInterval(() => {}, 100);
+  const answer = await checkConnectorCredential("core", KEY, { fetchImpl: hang, timeoutMs: 600 }).finally(() => clearInterval(keepAlive));
+  assert.equal(answer, "unreachable");
   assert.ok(Date.now() - started < 3_000, "the bound held");
   assert.ok(CREDENTIAL_CHECK_TIMEOUT_MS <= 5_000, "a save is never held for long");
   assert.equal(calls[0].redirect, "error", "a redirect is not followed with a credential on the request");

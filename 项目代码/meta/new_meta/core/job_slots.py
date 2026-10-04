@@ -42,6 +42,17 @@ touches nothing. A job waits at most ``EVIMED_SPECIALIST_SLOT_WAIT_SECONDS``
 wait plus run fits inside the six-hour lifetime of the engine's model credential
 that was issued when the job was admitted.
 
+A slot is held for as long as the engine runs, so an engine that hangs would hold
+it forever, and with one slot every other job would end at the wait bound. Every
+engine job therefore has a wall clock, ``execution_timeout()``
+(``EVIMED_SPECIALIST_EXECUTION_TIMEOUT_SECONDS``, the deployment's
+``OPEN_SCIENCE_SPECIALIST_EXECUTION_TIMEOUT_SECONDS``): the worker stops the
+engine when it runs out, keeps what it had written, ends the job by a named code,
+and the slot is released with the worker. The default is the three hours MR's own
+analysis already runs under (``evimed_mr_job.Job.timeout``) and the managed-local
+executor's default for the same key, which is also exactly what the wait bound
+leaves of the six-hour credential: 10800 + 10800.
+
 This file is held byte-identical with ``项目代码/meta/new_meta/core/job_slots.py``
 (the Meta engine ships in its own image and cannot import the adapter), the
 way ``engine_model.py`` is; keep it to the standard library.
@@ -62,6 +73,13 @@ LIMIT_ENV = "EVIMED_SPECIALIST_MAX_CONCURRENT_JOBS"
 WAIT_ENV = "EVIMED_SPECIALIST_SLOT_WAIT_SECONDS"
 DEFAULT_WAIT_SECONDS = 10800.0
 MAX_WAIT_SECONDS = 86400.0
+TIMEOUT_ENV = "EVIMED_SPECIALIST_EXECUTION_TIMEOUT_SECONDS"
+DEFAULT_TIMEOUT_SECONDS = 10800.0
+#: The same bounds the managed-local executor applies to the same key: a minute
+#: is the least a job can mean, and four hours is the control plane's own run
+#: monitor, which a job must end inside.
+MIN_TIMEOUT_SECONDS = 60.0
+MAX_TIMEOUT_SECONDS = 14400.0
 #: How often a waiting job looks again, and how often it tells its record it is
 #: still waiting (the same cadence a running job's heartbeat uses, so a poller
 #: reads a waiting job as alive for the same reason it reads a running one so).
@@ -116,6 +134,22 @@ def wait_bound() -> float:
     except ValueError:
         return DEFAULT_WAIT_SECONDS
     return value if 1 <= value <= MAX_WAIT_SECONDS else DEFAULT_WAIT_SECONDS
+
+
+def execution_timeout() -> float:
+    """Seconds one engine job may run before its worker stops it.
+
+    The key's value clamped to the bounds above; unset or not a number is the
+    default. Read when the job starts, so a change applies to the next job.
+    """
+    raw = os.getenv(TIMEOUT_ENV, "").strip()
+    try:
+        value = float(raw) if raw else DEFAULT_TIMEOUT_SECONDS
+    except ValueError:
+        return DEFAULT_TIMEOUT_SECONDS
+    if value != value:  # NaN
+        return DEFAULT_TIMEOUT_SECONDS
+    return min(max(value, MIN_TIMEOUT_SECONDS), MAX_TIMEOUT_SECONDS)
 
 
 def directory() -> Path:

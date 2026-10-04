@@ -40,7 +40,7 @@ import { createHash } from "node:crypto";
 
 import {
   VCR_DATA_TIERS, VCR_EXPORT_KINDS, VCR_INTENDED_USES, VCR_MEMBER_ROLES, VCR_REVIEW_KINDS, VCR_STALE_REASONS, VCR_STEPS,
-  VCR_STEP_STATUSES, VCR_STUDY_STATUSES, intendedUseCeiling, intendedUseCeilingDetail, lineageNode, missingModelEvidence, roleAllows,
+  STEP_WAITING_ALLOWANCE, VCR_STEP_STATUSES, VCR_STUDY_STATUSES, intendedUseCeiling, intendedUseCeilingDetail, lineageNode, missingModelEvidence, roleAllows,
   useWithin,
 } from "@evimed/domain";
 
@@ -90,7 +90,7 @@ export const VCR_READING_ROLES = Object.freeze(VCR_MEMBER_ROLES.filter((role) =>
 /** A study's step record, all seven present. @param {unknown} value */
 export function normalizedVcrSteps(value) {
   const raw = object(value);
-  /** @type {Record<string, { status: string, requested: boolean, runId: string | null, jobId: string | null, updatedAt: string | null, note: string | null }>} */
+  /** @type {Record<string, { status: string, requested: boolean, runId: string | null, jobId: string | null, updatedAt: string | null, note: string | null, waiting: string | null }>} */
   const steps = {};
   for (const step of VCR_STEPS) {
     const entry = object(raw[step]);
@@ -102,6 +102,8 @@ export function normalizedVcrSteps(value) {
       jobId: text(entry.jobId),
       updatedAt: text(entry.updatedAt),
       note: text(entry.note),
+      // What a queued step is waiting on when its start was refused: the allowance (`STEP_WAITING_ALLOWANCE`).
+      waiting: STEP_WAITING_ALLOWANCE.includes(entry.waiting) ? String(entry.waiting) : null,
     };
   }
   return steps;
@@ -411,7 +413,7 @@ export class VcrStore extends VcrStoreBase {
     }
     /** @type {Record<string, any>} */
     const entry = { updatedAt: new Date().toISOString() };
-    for (const key of ["status", "requested", "runId", "jobId", "note"]) {
+    for (const key of ["status", "requested", "runId", "jobId", "note", "waiting"]) {
       if (fields[/** @type {keyof typeof fields} */ (key)] !== undefined) entry[key] = fields[/** @type {keyof typeof fields} */ (key)];
     }
     const row = await this.one(`UPDATE ${VCR_SCHEMA}.studies

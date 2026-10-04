@@ -6,7 +6,8 @@ import path from "node:path";
 import test from "node:test";
 
 import { DshMux } from "../src/dshMux.mjs";
-import { openRuntimeMux, RUNTIME_DOWNLINK_RECONNECT_MS, RuntimeEventPump } from "../src/dshEventPump.mjs";
+import { openRuntimeMux, RUNTIME_DOWNLINK_RECONNECT_MS, RuntimeEventPump, UNCLASSIFIED_TYPE_LIMIT } from "../src/dshEventPump.mjs";
+import { KERNEL_PLUMBING_EVENT_TYPES } from "../src/dshRuntimeAdapter.mjs";
 import { startMockDshRuntime } from "../src/mockDshRuntime.mjs";
 import { RunEventHub } from "../src/runEventStream.mjs";
 
@@ -870,4 +871,120 @@ test("an unknown legacy cursor cannot claim an unowned opening snapshot", async 
   muxes[0].follow("same").push({ type: "snapshot", records: fixture.events.map(sessionEvent) });
   await new Promise((resolve) => setTimeout(resolve, 30));
   assert.deepEqual(eventsOf(runEvents, "legacy-unknown"), []);
+});
+
+/* ------------------------------------------------- what reaches the page */
+
+test("the kernel's own bookkeeping reaches no run's stream, and still counts as the kernel being alive", async (t) => {
+  /** @type {{ runId: string, seq: number }[]} */
+  const activity = [];
+  const { runEvents, pump, muxes } = pumpOnFakeMux({ onRunActivity: (_project, runId, note) => activity.push({ runId, seq: note.seq }) });
+  t.after(() => pump.closeAll());
+  const project = { userId: "alice", id: "bookkeeping" };
+  pump.attach(project, { url: "http://127.0.0.1:1" });
+  pump.noteRun(project, { id: "run-1", sessionId: "s-1", status: "running" });
+  await waitFor(() => muxes[0]?.follow("s-1"), "a follow stream");
+  const stream = muxes[0].follow("s-1");
+  stream.push(sessionEvent({ type: "turn/start", seq: 1, time: 1, data: { turn: 1 } }));
+  // The names the live conversation of 2026-10-04 carried, each as the log writes it.
+  ["compaction/start", "compaction/summary", "compaction/prune", "request/header", "request/context", "session/title-llm-request"]
+    .forEach((type, index) => stream.push(sessionEvent({ type, seq: 2 + index, time: 1, data: {} })));
+  stream.push(sessionEvent({ type: "turn/end", seq: 8, time: 1, data: { turn: 1, reason: { kind: "completed" } } }));
+  await waitFor(() => eventsOf(runEvents, "run-1").length >= 2, "the two events a reader is given");
+
+  assert.deepEqual(eventsOf(runEvents, "run-1").map((event) => event.type), ["turn/start", "turn/end"]);
+  assert.deepEqual(activity.map((note) => note.seq), [1, 2, 3, 4, 5, 6, 7, 8], "every record moved the log, so every one is a heartbeat");
+  assert.deepEqual(pump.unclassifiedCounts(), [], "bookkeeping is classified, so there is nothing for an operator to chase");
+});
+
+test("a record nobody has classified is counted by type for operators and shown to no one", async (t) => {
+  const { runEvents, pump, muxes } = pumpOnFakeMux();
+  t.after(() => pump.closeAll());
+  const project = { userId: "alice", id: "unclassified" };
+  pump.attach(project, { url: "http://127.0.0.1:1" });
+  pump.noteRun(project, { id: "run-1", sessionId: "s-1", status: "running" });
+  await waitFor(() => muxes[0]?.follow("s-1"), "a follow stream");
+  const stream = muxes[0].follow("s-1");
+  // The opening snapshot is history: it is not counted, and not a record this process met.
+  stream.push({ type: "snapshot", records: [sessionEvent({ type: "goal/change", seq: 0, time: 1, data: {} })] });
+  stream.push(sessionEvent({ type: "turn/start", seq: 1, time: 1, data: { turn: 1 } }));
+  stream.push(sessionEvent({ type: "hook/invoked", seq: 2, time: 1, data: {} }));
+  stream.push(sessionEvent({ type: "hook/invoked", seq: 3, time: 1, data: {} }));
+  stream.push(sessionEvent({ type: "goal/change", seq: 4, time: 1, data: {} }));
+  // The same record delivered twice is one record.
+  stream.push(sessionEvent({ type: "goal/change", seq: 4, time: 1, data: {} }));
+  // A record that is plumbing is not counted, wherever it sits among them.
+  stream.push(sessionEvent({ type: "request/header", seq: 5, time: 1, data: {} }));
+  stream.push(sessionEvent({ type: "turn/end", seq: 6, time: 1, data: { turn: 1, reason: { kind: "completed" } } }));
+  await waitFor(() => eventsOf(runEvents, "run-1").length >= 2, "the two events a reader is given");
+
+  assert.deepEqual(eventsOf(runEvents, "run-1").map((event) => event.type), ["turn/start", "turn/end"]);
+  assert.deepEqual(pump.unclassifiedCounts(), [["hook/invoked", 2], ["goal/change", 1]]);
+});
+
+test("the unclassified count is bounded: past the limit the rest are one series, and a malformed name is never a label", async (t) => {
+  const { pump, muxes } = pumpOnFakeMux();
+  t.after(() => pump.closeAll());
+  const project = { userId: "alice", id: "bounded" };
+  pump.attach(project, { url: "http://127.0.0.1:1" });
+  pump.noteRun(project, { id: "run-1", sessionId: "s-1", status: "running" });
+  await waitFor(() => muxes[0]?.follow("s-1"), "a follow stream");
+  const stream = muxes[0].follow("s-1");
+  stream.push(sessionEvent({ type: "turn/start", seq: 1, time: 1, data: { turn: 1 } }));
+  const total = UNCLASSIFIED_TYPE_LIMIT + 5;
+  for (let index = 0; index < total; index += 1) stream.push(sessionEvent({ type: `plugin/kind-${index}`, seq: 2 + index, time: 1, data: {} }));
+  stream.push(sessionEvent({ type: 'has "quotes"\nand a newline', seq: 2 + total, time: 1, data: {} }));
+  await waitFor(() => pump.unclassifiedCounts().reduce((sum, [, count]) => sum + count, 0) === total + 1, "every record counted once");
+  const counts = new Map(pump.unclassifiedCounts());
+  assert.equal(counts.size, UNCLASSIFIED_TYPE_LIMIT + 1, "the limit's worth of names, and `other`");
+  assert.equal(counts.get("other"), 6);
+});
+
+test("a title the kernel wrote is a title event on the run's stream, with who wrote it", async (t) => {
+  const { runEvents, pump, muxes } = pumpOnFakeMux();
+  t.after(() => pump.closeAll());
+  const project = { userId: "alice", id: "titles" };
+  pump.attach(project, { url: "http://127.0.0.1:1" });
+  pump.noteRun(project, { id: "run-1", sessionId: "s-1", status: "running" });
+  await waitFor(() => muxes[0]?.follow("s-1"), "a follow stream");
+  const stream = muxes[0].follow("s-1");
+  stream.push(sessionEvent({ type: "turn/start", seq: 1, time: 1, data: { turn: 1 } }));
+  stream.push(sessionEvent({ type: "session/title", seq: 2, time: 1, data: { title: "二甲双胍与肾功能", messageSeqs: [1], source: { kind: "fallback" } } }));
+  stream.push(sessionEvent({ type: "session/title", seq: 3, time: 1, data: { title: "二甲双胍的肾功能界限", messageSeqs: [1], source: { kind: "provider", provider: "session-title-first-prompt-llm" } } }));
+  await waitFor(() => eventsOf(runEvents, "run-1").filter((event) => event.type === "session/title").length === 2, "both titles");
+  assert.deepEqual(eventsOf(runEvents, "run-1").filter((event) => event.type === "session/title"), [
+    { type: "session/title", seq: 2, title: "二甲双胍与肾功能", source: "fallback" },
+    { type: "session/title", seq: 3, title: "二甲双胍的肾功能界限", source: "provider" },
+  ]);
+});
+
+test("a conversation recorded from the pinned kernel puts bookkeeping nowhere on the stream and leaves nothing unclassified", async (t) => {
+  // Frames recorded from a live 0.1.7-rc.2 kernel, not written here: the first
+  // turn of the golden recording, as its session/follow stream delivered it.
+  const golden = JSON.parse(await readFile(new URL("./fixtures/dsh/golden-frames.json", import.meta.url), "utf8"));
+  const sessionId = golden.unary.find((entry) => entry.method === "session/create").response.result.value.sessionId;
+  /** @type {number[]} */
+  const activity = [];
+  const { runEvents, pump, muxes } = pumpOnFakeMux({ onRunActivity: (_project, _runId, note) => activity.push(note.seq) });
+  t.after(() => pump.closeAll());
+  const project = { userId: "alice", id: "recorded" };
+  pump.attach(project, { url: "http://127.0.0.1:1" });
+  pump.noteRun(project, { id: "run-1", sessionId, status: "running" });
+  await waitFor(() => muxes[0]?.follow(sessionId), "the recorded session's follow stream");
+  const stream = muxes[0].follow(sessionId);
+  for (const frame of golden.session) stream.push(frame);
+  const firstTurnEnd = golden.session.find((frame) => frame?.event?.type === "turn/end").event.seq;
+  await waitFor(() => eventsOf(runEvents, "run-1").some((event) => event.type === "turn/end" && event.seq === firstTurnEnd), "the first turn's end");
+
+  const published = eventsOf(runEvents, "run-1");
+  assert.ok(published.length > 10, "the recording must publish something, or this proves nothing");
+  assert.equal(published.filter((event) => event.type === "unknown").length, 0, "no record without a variant is a card");
+  assert.deepEqual(published.filter((event) => event.type === "session/title").map((event) => event.source), ["fallback", "provider"]);
+  assert.deepEqual(pump.unclassifiedCounts(), [], "the pinned kernel writes nothing the manifest has not classified");
+  // Every bookkeeping record of that turn still moved the log, and so was a heartbeat.
+  const bookkeeping = golden.session
+    .filter((frame) => frame?.type === "event" && frame.event.seq <= firstTurnEnd && KERNEL_PLUMBING_EVENT_TYPES.has(frame.event.type))
+    .map((frame) => frame.event.seq);
+  assert.ok(bookkeeping.length >= 10, "the first turn of the recording carries bookkeeping");
+  for (const seq of bookkeeping) assert.ok(activity.includes(seq), `record ${seq} was a heartbeat`);
 });

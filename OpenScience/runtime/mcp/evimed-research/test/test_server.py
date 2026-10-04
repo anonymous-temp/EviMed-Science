@@ -116,6 +116,12 @@ class ToolContractTests(unittest.TestCase):
             # A paper's reference list or its citing papers, from Europe PMC's
             # citation network (2026-09-23): landmark-trial tracing.
             "reference_list",
+            # Linked identifiers, a trial's record kept as snapshots and a US label
+            # by version (2026-10-04): each preserves what it read and names how
+            # the retrieval ended.
+            "identifier_resolve",
+            "clinical_trial_snapshot",
+            "dailymed_label",
             # 「循证 GEO」's platform data and its social channel, through the
             # server's gateway (`geo_platform.py`, 2026-09-25).
             "geo_read",
@@ -218,6 +224,25 @@ class ToolContractTests(unittest.TestCase):
         self.assertTrue(all(item["status"] == "blocked_license" for item in blocked["data"]["items"]))
         self.assertTrue(all(item.get("blocker") for item in blocked["data"]["items"]))
         self.assertNotIn("sources", blocked)
+
+    def test_the_catalog_says_who_supplies_a_key_as_it_is_now(self):
+        # Until 2026-10-04 every credentialed source read "provide X_API_KEY and
+        # pass a live probe" with the probe state `blocked_missing_operator_credential`:
+        # a key was the operator's to supply. It is the deployment's, or the
+        # researcher's own, saved under 设置 → 数据源 and asked for at the moment of use.
+        ready = self.server.call_tool("data_source_catalog", {"status": "ready_credentials", "limit": 123})
+        self.assert_contract(ready)
+        rows = ready["data"]["items"]
+        self.assertEqual({row["id"] for row in rows}, {
+            "core", "semantic-scholar", "unpaywall", "umls", "omim-online-mendelian-inheritance-in-man",
+            "addgene-plasmid-repository", "biogrid", "opengwas-ieu-gwas",
+        })
+        for row in rows:
+            self.assertIn("设置 → 数据源", row["blocker"], row["id"])
+            self.assertIn("研究者", row["blocker"], row["id"])
+            self.assertEqual(row["validation"]["liveProbe"], "blocked_missing_credential", row["id"])
+        everything = self.server.call_tool("data_source_catalog", {"limit": 123})
+        self.assertNotIn("operator credential", json.dumps(everything["data"], ensure_ascii=False).lower().replace("_", " "))
 
     def test_an_empty_us_label_search_says_what_the_source_matches_and_where_labels_are(self):
         # 2026-09-27: a drug evaluation asked DailyMed for "FARXIGA dapagliflozin

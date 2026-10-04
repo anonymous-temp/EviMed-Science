@@ -13,7 +13,8 @@
       "runId": null,
       "jobId": null,
       "updatedAt": "2026-09-28T02:00:00.000Z",
-      "note": "研究定义 v1"
+      "note": "研究定义 v1",
+      "waiting": null
     },
     "evidence": {
       "status": "done",
@@ -21,7 +22,8 @@
       "runId": null,
       "jobId": null,
       "updatedAt": "2026-09-28T02:00:00.000Z",
-      "note": "4 张假设卡"
+      "note": "4 张假设卡",
+      "waiting": null
     },
     "population": {
       "status": "done",
@@ -29,7 +31,8 @@
       "runId": null,
       "jobId": null,
       "updatedAt": "2026-09-28T02:00:00.000Z",
-      "note": "人群 v2"
+      "note": "人群 v2",
+      "waiting": null
     },
     "patients": {
       "status": "failed",
@@ -37,7 +40,8 @@
       "runId": null,
       "jobId": null,
       "updatedAt": "2026-09-28T02:00:00.000Z",
-      "note": "这一次运行只完成了一部分"
+      "note": "这一次运行只完成了一部分",
+      "waiting": null
     },
     "comparator": {
       "status": "done",
@@ -45,7 +49,8 @@
       "runId": null,
       "jobId": null,
       "updatedAt": "2026-09-28T02:00:00.000Z",
-      "note": "文献对照"
+      "note": "文献对照",
+      "waiting": null
     },
     "trial": {
       "status": "done",
@@ -53,7 +58,8 @@
       "runId": null,
       "jobId": null,
       "updatedAt": "2026-09-28T02:00:00.000Z",
-      "note": "4 个方案"
+      "note": "4 个方案",
+      "waiting": null
     },
     "matching": {
       "status": "done",
@@ -61,7 +67,8 @@
       "runId": null,
       "jobId": null,
       "updatedAt": "2026-09-28T02:00:00.000Z",
-      "note": "6 人已评估"
+      "note": "6 人已评估",
+      "waiting": null
     }
   },
   "sessionId": null,

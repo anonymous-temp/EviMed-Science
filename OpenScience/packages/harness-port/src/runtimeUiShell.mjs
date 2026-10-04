@@ -130,6 +130,15 @@ export function shellStylesheet(pin, operator = false) {
     // (`div[data-slot]`), which is why the path names two of them; all of it is
     // data attributes the chat and the tool tree document.
     '[data-chat-flow-kind="tool-call"]:has(> [data-slot="conversation.chat.node"] > [data-chat-call-id] > [data-slot="tool.call.toolview"]:only-child:empty){display:none !important}',
+    // The same for the rows a researcher's transcript draws nothing for (the
+    // system prompt, the context the platform injected, a record no renderer
+    // knows: `runtimeUiTranscript.mjs`). Their flow item holds the chat-node
+    // outlet anchor even when the occupant returns null, so the chat's own
+    // `:empty` rule no longer finds it empty and it kept its place in the flow
+    // gap — a blank band for every record of the kernel's own bookkeeping,
+    // thirty in one conversation (2026-10-04). An operator's rows are drawn, so
+    // their anchor is not empty and nothing here touches them.
+    ':is([data-chat-flow-kind="unknown"],[data-chat-flow-kind="system-prompt"],[data-chat-flow-kind="context"]):has(> [data-slot="conversation.chat.node"]:empty){display:none !important}',
 
     // The left column, which `sidebar` occupies with nothing.
     //

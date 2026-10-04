@@ -48,6 +48,47 @@ SOURCE_LABELS = {
     SOURCE_S2: "Semantic Scholar",
 }
 
+# Why a source was not used, in the three words every engine's result uses
+# (`sourcesNotUsed`): the deployment has no key for it, it answered no, or it
+# could not be reached. The coverage ledger keeps the raw reason beside them.
+STATUS_NOT_CONFIGURED = "not_configured"
+STATUS_REFUSED = "refused"
+STATUS_UNREACHABLE = "unreachable"
+_REFUSED_HTTP = frozenset({"401", "403", "429"})
+#: Not a source that failed: there was nothing to ask it.
+_NOTHING_TO_ASK = frozenset({"no_pmids_in_record_set"})
+
+
+def unavailable_status(reason: str) -> str:
+    """The status word for a ``sources_unavailable`` reason."""
+    text = str(reason or "")
+    if text == "api_key_missing":
+        return STATUS_NOT_CONFIGURED
+    if text.startswith("http_") and text[5:] in _REFUSED_HTTP:
+        return STATUS_REFUSED
+    return STATUS_UNREACHABLE
+
+
+def sources_not_used(coverage: dict | None) -> list[dict]:
+    """Which citation sources could not be used, and why: ``[{source, label, status, reason}]``.
+
+    Read from the coverage ledger, so it is true whether or not every article was
+    eventually covered by another source: an optional source that was not used is
+    not a degraded result, but the reader is told.
+    """
+    rows = []
+    for name, reason in sorted(((coverage or {}).get("sources_unavailable") or {}).items()):
+        if reason in _NOTHING_TO_ASK:
+            continue
+        rows.append({
+            "source": name,
+            "label": SOURCE_LABELS.get(name, name),
+            "status": unavailable_status(reason),
+            # A reason can carry an exception's text; bounded, one line.
+            "reason": " ".join(str(reason).split())[:200],
+        })
+    return rows
+
 _USER_AGENT = "evimed-bibliometric-agent/1.0"
 
 

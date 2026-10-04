@@ -4,7 +4,10 @@ import {
   researchMoneyUnits, researchMoneyDecimal, researchTaskCharge,
   SIMULATED_LOW_CREDITS, SIMULATED_START_CREDITS, SIMULATED_TOPUP_PACKAGES, SIMULATED_WALLET_LABEL, SIMULATED_WALLET_PAGES,
 } from '../src/researchBilling.mjs';
-import { ALL_ERROR_CODES, CREDIT_ERROR_CODES, errorCodeMessage, errorCodeOutcome } from '../index.mjs';
+import {
+  ALL_ERROR_CODES, BALANCE_REFUSAL_CODES, CREDIT_ERROR_CODES, STEP_WAITING_ALLOWANCE, allowanceRefusalSentence, allowanceWaitingNote, allowanceWaitingSentence,
+  errorCodeMessage, errorCodeOutcome, stepWaitingFor,
+} from '../index.mjs';
 test('money retains fractional precision without binary rounding', () => {
   assert.equal(researchMoneyDecimal(researchMoneyUnits('0.00000001')), '0.00000001');
   assert.throws(() => researchMoneyUnits('0.000000001'));
@@ -63,4 +66,33 @@ test('a refusal on a simulated allowance says 模拟 and is a ceiling', () => {
     assert.match(errorCodeMessage(code), /模拟/, code);
     assert.equal(errorCodeOutcome(code), 'upstream', code);
   }
+});
+
+test('the refusal a window prints says the allowance is low, by how much when known, and where it is topped up', () => {
+  assert.equal(allowanceRefusalSentence({ simulated: true, balanceCny: 3.5, estimateCny: 6 }),
+    '模拟额度不足，这次没有开始：可用模拟额度 ¥3.50，这件事预计至少需要 ¥6.00。到“设置 → 科研额度”做一次模拟充值后即可继续。');
+  assert.equal(allowanceRefusalSentence({ balanceCny: 0, estimateCny: 12.345 }),
+    '科研额度不足，这次没有开始：可用 ¥0.00，这件事预计至少需要 ¥12.35。到“设置 → 科研额度”充值后即可继续。');
+  // No estimate (a free conversation against an empty allowance): the balance alone.
+  assert.equal(allowanceRefusalSentence({ balanceCny: 0 }), '科研额度不足，这次没有开始：可用 ¥0.00。到“设置 → 科研额度”充值后即可继续。');
+  // Nothing known: the sentence still says what happened and where to go, and invents no amount.
+  assert.equal(allowanceRefusalSentence(), '科研额度不足，这次没有开始。到“设置 → 科研额度”充值后即可继续。');
+  assert.equal(allowanceRefusalSentence({ simulated: true, balanceCny: Number.NaN, estimateCny: -1 }),
+    '模拟额度不足，这次没有开始。到“设置 → 科研额度”做一次模拟充值后即可继续。');
+  // The dictionary's sentence for the same codes sends the reader to the same place.
+  for (const code of ['credits_exhausted', 'simulated_credits_exhausted']) assert.match(errorCodeMessage(code), /设置 → 科研额度|充值/);
+});
+
+test('a step the allowance would not start waits for one of two reasons, named by the refusal that stopped it', () => {
+  assert.deepEqual([...STEP_WAITING_ALLOWANCE], ['allowance', 'simulated_allowance']);
+  assert.equal(stepWaitingFor('credits_exhausted'), 'allowance');
+  assert.equal(stepWaitingFor('simulated_credits_exhausted'), 'simulated_allowance');
+  // Every refusal that waits on the balance names a wait, and nothing else does.
+  for (const code of BALANCE_REFUSAL_CODES) assert.ok(STEP_WAITING_ALLOWANCE.includes(String(stepWaitingFor(code))), code);
+  for (const code of ['runtime_limit_exceeded', 'credits_daily_limit_reached', 'usage_budget_exceeded', '', null, undefined]) assert.equal(stepWaitingFor(code), null, String(code));
+  assert.equal(allowanceWaitingNote('allowance'), '等科研额度');
+  assert.equal(allowanceWaitingNote('simulated_allowance'), '等模拟额度');
+  assert.ok([...allowanceWaitingNote('simulated_allowance')].length <= 12, 'short enough for a rail');
+  assert.equal(allowanceWaitingSentence('定义', 'allowance'), '「定义」这一步在等科研额度，充值后会自动开始。');
+  assert.equal(allowanceWaitingSentence('定义', 'simulated_allowance'), '「定义」这一步在等模拟额度，模拟充值后会自动开始。');
 });

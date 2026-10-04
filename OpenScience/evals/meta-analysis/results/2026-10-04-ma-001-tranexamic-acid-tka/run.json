@@ -1,0 +1,36 @@
+{
+  "capability": "meta-analysis",
+  "brief": "ma-001-tranexamic-acid-tka",
+  "base": "https://82.156.128.153",
+  "project": "acceptance-meta-analysis",
+  "session": "acc-meta-analysis-mutgzwg9",
+  "runId": "run_22b53aa6b90c9eeb96faf0f89a8d798c",
+  "agentVersion": "1.1.4",
+  "dispatchedAt": "2026-10-04T06:59:18.048Z",
+  "observedAt": "2026-10-04T07:58:56Z",
+  "observation": {
+    "status": "terminal",
+    "reason": "terminal"
+  },
+  "prompt": "topic: 氨甲环酸用于全膝关节置换术围手术期减少失血的系统评价与 Meta 分析\npopulation: 接受初次单侧全膝关节置换术的成年患者\nintervention: 氨甲环酸（静脉、局部或联合给药）\ncomparator: 安慰剂或不使用氨甲环酸\noutcomes: [\"总失血量\",\"输血率\",\"症状性静脉血栓栓塞事件\"]\nstudyDesign: 随机对照试验\nanalysisType: pairwise",
+  "promptSource": "rendered brief",
+  "outcome": {
+    "status": "succeeded",
+    "startedAt": "2026-10-04T06:59:18.048Z",
+    "finishedAt": "2026-10-04T07:58:48.805Z",
+    "errorCode": null,
+    "verification": null,
+    "artifacts": [
+      "deliverables/ma-tka-txa/meta-analysis-report.md",
+      "deliverables/ma-tka-txa/meta-analysis-run.json",
+      "deliverables/ma-tka-txa/revision-notes.md"
+    ],
+    "unverifiedArtifacts": [],
+    "qualityNotices": [],
+    "effectiveAgentId": "meta-analysis",
+    "effectiveRouteReason": "session-binding",
+    "durationMs": 3570757,
+    "repairRounds": null,
+    "model": "deepseek/deepseek-flash"
+  }
+}

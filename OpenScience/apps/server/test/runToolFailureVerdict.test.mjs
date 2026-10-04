@@ -442,8 +442,8 @@ test("a turn that was stopped, refused by the spending limit or failed in its se
     [{ kind: "error", code: "runtime_spend_limit_reached" }, { status: "failed", errorCode: "runtime_spend_limit_reached" }],
     [{ kind: "error", code: "runtime_session_error" }, { status: "failed", errorCode: "runtime_session_error" }],
     [{ kind: "max-tokens", code: "runtime_session_error", subCode: "model_max_tokens" }, { status: "failed", errorCode: "runtime_session_error", errorSubCode: "model_max_tokens" }],
-    // The kernel's `blocked` end carries `runtime_tool_error` on the wire; the ledger has always recorded it as a session error.
-    [{ kind: "blocked", code: "runtime_tool_error", subCode: "turn_blocked" }, { status: "failed", errorCode: "runtime_session_error", errorSubCode: "turn_blocked" }],
+    // The kernel's `blocked` end (a pre-step rejection) is a session error with its own sub-code on the wire and in the ledger.
+    [{ kind: "blocked", code: "runtime_session_error", subCode: "turn_blocked" }, { status: "failed", errorCode: "runtime_session_error", errorSubCode: "turn_blocked" }],
   ];
   for (const [end, expected] of cases) {
     await withRun(null, async ({ dispatch, turn, reconcile }) => {

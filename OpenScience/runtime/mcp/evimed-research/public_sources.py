@@ -43,6 +43,8 @@ PUBMED_EFETCH_BATCH = 200
 MAX_PUBMED_ABSTRACT_PMIDS = 200
 _PMID_PATTERN = re.compile(r"^\s*(?:PMID\s*:?\s*)?(\d{1,9})\s*$", re.I)
 _RXNORM_RESOLVE_LIMIT = 10
+# The most identifiers one `identifier_resolve` call links (the NCBI ID converter's own bound).
+MAX_IDENTIFIER_BATCH = 200
 
 
 class PublicSourceError(Exception):
@@ -152,6 +154,9 @@ def supports(name):
         "comprehensive_drug_evaluation",
         "drug_selection_evaluation",
         "biomedical_source_search",
+        "identifier_resolve",
+        "clinical_trial_snapshot",
+        "dailymed_label",
     }
 
 
@@ -568,15 +573,22 @@ def _ncbi_params(params):
     return output
 
 
-def _ncbi_rate_limited(fetch):
+def _ncbi_pace():
+    """Space NCBI requests the way E-utilities asks (3/s anonymous, 10/s with a
+    key). One lock for every caller, so an identifier resolution and an abstract
+    fetch running side by side still keep to it."""
     global _NCBI_LAST_REQUEST
     minimum_interval = 0.11 if os.environ.get("NCBI_API_KEY", "").strip() else 0.34
+    with _NCBI_RATE_LOCK:
+        wait = minimum_interval - (time.monotonic() - _NCBI_LAST_REQUEST)
+        if wait > 0:
+            time.sleep(wait)
+        _NCBI_LAST_REQUEST = time.monotonic()
+
+
+def _ncbi_rate_limited(fetch):
     for attempt in range(3):
-        with _NCBI_RATE_LOCK:
-            wait = minimum_interval - (time.monotonic() - _NCBI_LAST_REQUEST)
-            if wait > 0:
-                time.sleep(wait)
-            _NCBI_LAST_REQUEST = time.monotonic()
+        _ncbi_pace()
         try:
             return fetch()
         except PublicSourceError as error:
@@ -634,20 +646,56 @@ def _text_list_truncated(value, limit=1, max_chars=1500):
     return len(text) > limit or any(len(item) > max_chars for item in text[:limit])
 
 
-def _pubmed(query, limit, date_from=None, date_to=None, source_name="pubmed"):
+# E-utilities serves the first 9,999 results of a query by `retstart`; beyond that the query has to be narrowed.
+PUBMED_REACHABLE_RESULTS = 9999
+
+
+def _pubmed_outcome(returned, offset, total, limit):
+    """How a PubMed search page ended: complete, a page of a larger answer, or cut by what E-utilities will serve."""
+    from source_outcome import complete, more_available, no_results, truncated  # lazy: it imports this module
+    if returned == 0:
+        return no_results(
+            reason="no_match" if offset == 0 else "past_the_end",
+            how="PubMed matched nothing for this query%s. That is not evidence that no study exists: broaden the terms or use the MeSH entry terms (term_normalize mesh=true)."
+            % ("" if offset == 0 else " beyond offset %d" % offset),
+        )
+    seen = offset + returned
+    if total is None:
+        return complete(returned=seen)
+    if seen >= total:
+        return complete(returned=seen, total=total)
+    if seen >= PUBMED_REACHABLE_RESULTS:
+        return truncated(
+            kept=seen, limit=PUBMED_REACHABLE_RESULTS, unit="results reachable", total=total,
+            how="PubMed serves at most the first %d results of a query; narrow it (dateFrom/dateTo, more specific terms) to reach the other %d." % (PUBMED_REACHABLE_RESULTS, total - seen),
+        )
+    return more_available(
+        returned=seen, total=total, next_arguments={"offset": seen},
+        how="%d of %d matching records returned; call again with offset=%d for the next %d. PubMed's relevance order is not stable between pages, so a record can appear on two of them: drop repeats by PMID (evidence_deduplicate)." % (seen, total, seen, limit),
+    )
+
+
+def _pubmed(query, limit, date_from=None, date_to=None, source_name="pubmed", offset=0):
     base = _base("EVIMED_PUBMED_BASE_URL", "https://eutils.ncbi.nlm.nih.gov/entrez/eutils")
     term = query.strip()
     if date_from or date_to:
         start = date_from or "1900-01-01"
         end = date_to or datetime.now(timezone.utc).date().isoformat()
         term = '(%s) AND ("%s"[Date - Publication] : "%s"[Date - Publication])' % (term, start, end)
-    search_url = _url(base, "esearch.fcgi", _ncbi_params({
-        "db": "pubmed", "term": term, "retmax": limit, "retmode": "json", "sort": "relevance"
-    }))
+    params = {"db": "pubmed", "term": term, "retmax": limit, "retmode": "json", "sort": "relevance"}
+    if offset:
+        params["retstart"] = offset
+    search_url = _url(base, "esearch.fcgi", _ncbi_params(params))
     found = _ncbi_get_json(search_url)
+    count = _dict(found.get("esearchresult")).get("count")
+    total = int(count) if isinstance(count, (str, int)) and str(count).isdigit() else None
     ids = found.get("esearchresult", {}).get("idlist", [])
     if not isinstance(ids, list) or not ids:
-        return {"summary": "PubMed returned no matching records.", "data": {"items": []}, "sources": []}
+        return {
+            "summary": "PubMed returned no matching records.",
+            "data": {"items": [], "outcome": _pubmed_outcome(0, offset, total, limit), **({"total": total} if total is not None else {})},
+            "sources": [],
+        }
     ids = [str(item) for item in ids[:limit] if str(item).strip()]
     summary_url = _url(base, "esummary.fcgi", _ncbi_params({"db": "pubmed", "id": ",".join(ids), "retmode": "json"}))
     details = _ncbi_get_json(summary_url).get("result", {})
@@ -678,8 +726,8 @@ def _pubmed(query, limit, date_from=None, date_to=None, source_name="pubmed"):
         })
         sources.append(_source("PMID:%s" % pmid, title, record_url, source_name))
     return {
-        "summary": "Retrieved %d traceable PubMed records." % len(items),
-        "data": {"items": items},
+        "summary": "Retrieved %d traceable PubMed records%s." % (len(items), (" of %d matching" % total) if total is not None else ""),
+        "data": {"items": items, "outcome": _pubmed_outcome(len(items), offset, total, limit), **({"total": total} if total is not None else {})},
         "sources": sources,
     }
 
@@ -1561,6 +1609,14 @@ def _literature(arguments, left_out):
         )
         return result
     databases = arguments.get("databases") or ["internal", "pubmed"]
+    offset = int(arguments.get("offset") or 0)
+    if offset and "internal" in databases:
+        # A continuation pages PubMed's own list: the EviMed index has no offset, and
+        # answering page two from another ranking would repeat or skip records.
+        databases = [name for name in databases if name != "internal"] or ["pubmed"]
+        paging_note = "offset pages PubMed's own result list; the EviMed index was not asked."
+    else:
+        paging_note = None
     if "internal" in databases:
         try:
             result = _evimed_literature_records(arguments)
@@ -1596,10 +1652,13 @@ def _literature(arguments, left_out):
         fallback["warnings"].insert(0, evimed_warning)
         return _filter_bibliographic_title_result(fallback, arguments.get("requiredTitleConcepts"))
     if "pubmed" in databases:
-        result = _pubmed(query, limit, arguments.get("dateFrom"), arguments.get("dateTo"))
+        result = _pubmed(query, limit, arguments.get("dateFrom"), arguments.get("dateTo"), offset=offset)
     else:
         result = _crossref(query, limit)
-    return _bibliographic_metadata_only(result)
+    result = _bibliographic_metadata_only(result)
+    if paging_note:
+        result["warnings"].append(paging_note)
+    return result
 
 
 def guideline(arguments):
@@ -1636,6 +1695,9 @@ def trials(arguments):
 
 
 def _trials(arguments, left_out):
+    if arguments.get("pageToken"):
+        # A page token belongs to ClinicalTrials.gov's own list; the EviMed index cannot continue it.
+        return _trials_registry(arguments, "pageToken continues ClinicalTrials.gov's own result list; the EviMed index was not asked.")
     try:
         result = _evimed_trial_records(arguments)
         if result.get("data", {}).get("items"):
@@ -1647,16 +1709,25 @@ def _trials(arguments, left_out):
             evimed_warning = "%s ClinicalTrials.gov records are returned instead; ChiCTR and Cochrane CENTRAL are not searched." % error
         else:
             evimed_warning = "EviMed clinical-trial search was unavailable: %s" % error
+    return _trials_registry(arguments, evimed_warning)
+
+
+def _trials_registry(arguments, evimed_warning):
     base = _base("EVIMED_CLINICAL_TRIALS_BASE_URL", "https://clinicaltrials.gov/api/v2")
     limit = min(arguments.get("limit", 10), 100)
     candidate_limit = _evimed_candidate_limit(arguments, limit)
-    params = {"query.term": arguments["query"], "pageSize": candidate_limit, "format": "json"}
+    params = {"query.term": arguments["query"], "pageSize": candidate_limit, "format": "json", "countTotal": "true"}
     if arguments.get("recruitmentStatus"):
         params["filter.overallStatus"] = arguments["recruitmentStatus"]
+    if arguments.get("pageToken"):
+        params["pageToken"] = arguments["pageToken"]
     url = _url(base, "studies", params)
-    records = _get_json(url).get("studies", [])
+    body = _get_json(url)
+    records = body.get("studies", [])
     if not isinstance(records, list):
         records = []
+    registry_total = body.get("totalCount") if isinstance(body.get("totalCount"), int) else None
+    next_token = body.get("nextPageToken") if isinstance(body.get("nextPageToken"), str) and body.get("nextPageToken") else None
     items = []
     for record in records[:candidate_limit]:
         protocol = record.get("protocolSection", {}) if isinstance(record, dict) else {}
@@ -1683,10 +1754,23 @@ def _trials(arguments, left_out):
         _source(item["id"], item.get("title"), item.get("url"), "clinicaltrials.gov")
         for item in items
     ]
+    from source_outcome import complete, more_available, no_results  # lazy: it imports this module
+    if next_token:
+        # The registry's total counts every match of the query; this page's `returned`
+        # counts what survived the required-concept filter, so they are named apart.
+        outcome = more_available(
+            returned=len(items), total=None, next_arguments={"pageToken": next_token},
+            how="This page held %d of %s registry matches for the query (before any required-concept filter); call again with pageToken to continue with the same query." % (len(records), registry_total if registry_total is not None else "an unknown number of"),
+            pageSize=candidate_limit, **({"registryTotal": registry_total} if registry_total is not None else {}),
+        )
+    elif not records and not arguments.get("pageToken"):
+        outcome = no_results(reason="no_match", how="ClinicalTrials.gov matched nothing for this query; that is not evidence that no trial exists. Broaden the terms or search the other registries.")
+    else:
+        outcome = complete(returned=len(items), **({"registryTotal": registry_total} if registry_total is not None else {}))
     return {
         "status": "warning",
         "summary": "Retrieved %d registered clinical trials." % len(items),
-        "data": {"items": items},
+        "data": {"items": items, "outcome": outcome},
         "sources": sources,
         "warnings": [
             evimed_warning,
@@ -4217,4 +4301,13 @@ def call(name, arguments):
         return drug_selection(arguments)
     if name == "reference_list":
         return reference_list(arguments)
+    if name == "identifier_resolve":
+        import identifier_links  # lazy: it imports this module
+        return identifier_links.resolve(arguments)
+    if name == "clinical_trial_snapshot":
+        import trial_snapshots  # lazy: it imports this module
+        return trial_snapshots.snapshot(arguments)
+    if name == "dailymed_label":
+        import label_snapshots  # lazy: it imports this module
+        return label_snapshots.snapshot(arguments)
     raise PublicSourceError("public_source_unsupported", "No public connector is available for %s." % name)

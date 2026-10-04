@@ -1,0 +1,402 @@
+{
+ "schemaVersion": "1.0.0",
+ "researchDirection": "Identify actionable questions about missed dialysis sessions and adherence.",
+ "researchContext": {
+  "availableData": "Existing attendance and transport records from one hospital; no biospecimens.",
+  "population": "Adults receiving maintenance hemodialysis",
+  "studySetting": "Community hospital",
+  "resourceConstraints": [
+   "Six months",
+   "No new recruitment",
+   "One part-time analyst"
+  ]
+ },
+ "provenanceNote": "Two sets of candidates are carried here. The three entries with candidate ids R1-R3 are the managed specialist job's own portfolio, transcribed with their opportunity links, evidence links and support level unchanged; their titles and rationale are kept in the language the job returned them in, with an English rendering beside each. The six entries with candidate ids Q1-Q6 are the questions that survived the evidence expansion run alongside the job, and they are the ones the accompanying report ranks. The reconciliation of the two sets is recorded at the end of this file. Every evidence link below names a record carried in the evidence record file, and every record that supports an entry here was checked for its publication status.",
+ "candidates": [
+  {
+   "candidateId": "R1",
+   "title": "交通距离工具变量估计漏透析对急诊就诊的因果效应：基于社区医院常规记录的可行性研究",
+   "titleEnglish": "Instrumental-variable estimation, using travel distance, of the causal effect of missed dialysis sessions on emergency department visits: a feasibility study on routine community-hospital records",
+   "sourceOpportunityId": "BOM1",
+   "sourceEvidenceIds": [
+    "pubmed_38022334",
+    "pubmed_42719390",
+    "pubmed_40051030"
+   ],
+   "sourceEvidencePmids": [
+    "38022334",
+    "42719390",
+    "40051030"
+   ],
+   "supportLevel": "indirect",
+   "supportRationale": "引用文献为相邻方法或部分构件提供支持，尚不构成完整方案的直接验证。",
+   "hypothesis": "待验证：在维持性血透成人中，由居住地到透析中心的交通距离所驱动的漏透析频率变化，与急诊就诊风险存在因果关联；该关联估计需满足工具变量相关性、排除性、独立性和单调性。",
+   "studyDesign": {
+    "type": "回顾性工具变量队列研究（两阶段最小二乘或有限信息最大似然）",
+    "rationale": "利用交通距离作为外生工具，试图控制常规观察性研究中的未测混杂；但排除性限制不可直接检验，需预设敏感性分析。"
+   },
+   "estimand": "目标估计量：交通距离工具下漏透析频率对急诊就诊的局部平均处理效应（LATE），限于依从者；当前急诊结局与工具有效性未确认，估计量仅为设计目标。",
+   "dataRequirements": "需现有出勤记录、交通或居住地可地理编码距离、急诊就诊记录、链接键、基线协变量（年龄、性别、透析龄、合并症、社会经济代理、就医可及性）、伦理审批与数据使用许可。现有信息仅确认出勤与交通记录，未确认急诊记录、地址精度、链接成功率和样本量。",
+   "falsification": "预设弱工具诊断（如第一阶段F统计量、偏R2）和排除性限制敏感性分析（如安慰剂结局、替代工具、阴性对照）。若第一阶段不足、排除性限制明显违背后估计仍不稳定，或急诊结局无法链接，则假说不可检验或不被支持。",
+   "feasibility": "6个月、单中心、兼职分析员下，仅当急诊记录和可地理编码地址已存在且链接质量高时可行；否则需先做数据审计，无法完成因果主分析。无新招募与无生物样本不阻碍，但工具变量假设无法用现有数据完全验证。",
+   "noveltyBasis": "最近证据为BOM1所列间接支持PMID 38022334、42719390、40051030；需查原文确认其已回答的问题与残余问题。剩余问题：在单一社区医院维持性血透成人中，交通距离是否满足工具变量排除性限制，并能否估计漏透析对急诊就诊的因果效应。所给小检索不能证明新颖性。",
+   "gaps": [],
+   "reportQuestionId": "Q3",
+   "reconciliation": "Reframed rather than carried as proposed. The exposure and the setting survive; the causal estimand does not. Two things were removed after the evidence expansion. First, the exclusion restriction cannot be tested in a single unit with these records, and the analytic capacity here (one part-time analyst, six months) does not extend to the instrument diagnostics and sensitivity analyses the entry itself requires. Second, the outcome the entry is built on — emergency department attendance — is not among the records the hospital is known to hold, so the estimand would be unverifiable before anything was estimated. The transport exposure survives as a pre-specified association against missed sessions and, separately, shortened sessions, which is what the report ranks.",
+   "reconciliationStatus": "reframed"
+  },
+  {
+   "candidateId": "R2",
+   "title": "维持性血透漏透析机器学习预测模型及可干预特征识别：单中心可行性研究",
+   "titleEnglish": "A machine-learning prediction model for missed haemodialysis sessions with identification of modifiable features: a single-centre feasibility study",
+   "sourceOpportunityId": "BOM2",
+   "sourceEvidenceIds": [
+    "pubmed_42598448",
+    "pubmed_42410327",
+    "pubmed_35275346"
+   ],
+   "sourceEvidencePmids": [
+    "42598448",
+    "42410327",
+    "35275346"
+   ],
+   "supportLevel": "indirect",
+   "supportRationale": "引用文献为相邻方法或部分构件提供支持，尚不构成完整方案的直接验证。",
+   "hypothesis": "待验证：在社区医院维持性血透队列中，基于现有出勤和交通记录构建的预测模型，能识别下一个月漏透析风险较高的患者，并给出可干预的交通与排班特征。",
+   "studyDesign": {
+    "type": "回顾性预测模型开发与时间外验证（梯度提升模型，SHAP 特征贡献）",
+    "rationale": "迁移已在其他预约场景验证的高维树模型与可解释性方法；单中心样本量下需以正则化和时间外验证控制过拟合。"
+   },
+   "estimand": "目标估计量：模型在时间外验证集上对下一月是否至少漏一次透析的区分度（如 AUROC）与校准，以及相对单变量规则的区分度增量。",
+   "dataRequirements": "现有出勤记录（每次预约是否出席）、既往出席行为派生特征、交通模式与距离或时间、预约时段与班次、透析龄、年龄、血管通路类型、合并症计数，以及足够的事件数用于预设数量的候选预测因子。事件数与特征可得性均未确认。",
+   "falsification": "预设：若模型在时间外验证集上相对单变量规则（本月是否曾漏透析）的区分度增量置信区间包含 0，或校准曲线不可估计，则模型的附加价值不被支持。",
+   "feasibility": "6个月、单中心、兼职分析员下，高维模型加SHAP解释不可行：事件数不足会使交叉验证与校准都不可靠。可行版本是预测因子预先固定的简约模型与时间外验证。",
+   "noveltyBasis": "最近证据为BOM2所列间接支持PMID 42598448、42410327、35275346；迁移来源为其他预约场景的缺席预测，不含透析人群的时间外验证。所给小检索不能证明新颖性。",
+   "gaps": [],
+   "reportQuestionId": "Q4",
+   "reconciliation": "Reframed and reduced in scope. The prediction question survives and is kept as a secondary aim, but the proposed model class does not. The support for it was a transferred framework from another appointment setting; the events a single community hospital accumulates in a limited record window will not support a boosted model with an explanation layer, and the reporting standard for prediction models requires a pre-specified predictor set, a calibration assessment and a stated updating path. The reduced-scope version fixes at most five predictors in advance, validates on a later period, and reports descriptive associations only if the event count is below a threshold set before analysis.",
+   "reconciliationStatus": "reframed"
+  },
+  {
+   "candidateId": "R3",
+   "title": "现有记录链接评估漏透析与长期硬终点的关联：社区医院回顾性队列",
+   "titleEnglish": "Linking existing records to assess the association between missed dialysis sessions and long-term hard endpoints: a community-hospital retrospective cohort",
+   "sourceOpportunityId": "BOM3",
+   "sourceEvidenceIds": [
+    "pubmed_40051030",
+    "pubmed_42719390",
+    "pubmed_42010919"
+   ],
+   "sourceEvidencePmids": [
+    "40051030",
+    "42719390",
+    "42010919"
+   ],
+   "supportLevel": "indirect",
+   "supportRationale": "引用文献为相邻方法或部分构件提供支持，尚不构成完整方案的直接验证。",
+   "hypothesis": "待验证：在社区医院维持性血透成人中，漏透析频率与全因死亡及心血管住院风险独立相关。",
+   "studyDesign": {
+    "type": "回顾性队列（现有出勤记录与院内死亡、住院登记链接，Cox 比例风险模型）",
+    "rationale": "利用现有记录构建长期队列，无需新招募；结局登记的完整性与外院就诊捕获率决定偏倚方向。"
+   },
+   "estimand": "目标估计量：漏透析频率每增加一个单位对应的全因死亡与心血管住院风险比，控制基线混杂。",
+   "dataRequirements": "出勤记录、患者标识、随访起点与终点、死亡日期与来源、住院日期与诊断、外院就诊是否可得、基线协变量。院内存活与住院数据是否可及未确认。",
+   "falsification": "预设：若在校正预设混杂后，漏透析频率与全因死亡的关联置信区间包含 1，或在随访窗口内事件数不足以估计风险比，则假说不被支持或不可检验。",
+   "feasibility": "作为主目标不可行：单中心有限记录窗口内死亡事件过少，且若外院就诊未捕获则结局系统性低报。作为次要描述性分析可行，但需报告实际事件数与区间宽度，不宣称复现已发表的效应量。",
+   "noveltyBasis": "最近证据为BOM3所列间接支持PMID 40051030、42719390、42010919；但这些工作已回答漏透析与死亡/住院的关联问题。所给小检索不能证明新颖性。",
+   "gaps": [],
+   "reportQuestionId": "Q6",
+   "reconciliation": "Kept only so that it is not mistaken for a gap, and demoted out of the recommended study. The evidence expansion found the association this entry proposes to estimate already established at scale — in 4,493 patients internationally and in 9,543 transplant recipients for shortened treatment — so re-deriving it in one hospital produces an imprecise estimate of a known quantity. The job's own framing treated long-term hard endpoints as an uncovered gap; the wider literature does not support that reading, and the report follows the wider evidence. The defensible version is a secondary descriptive analysis reporting the observed event count and the interval width actually achieved.",
+   "reconciliationStatus": "demoted"
+  },
+  {
+   "candidateId": "Q1",
+   "title": "How much does the measured burden of missed and shortened sessions move when published definitions are applied to the same attendance records?",
+   "sourceOpportunityId": "ISE1",
+   "sourceEvidenceIds": [
+    "PMID8305644",
+    "PMID7985669",
+    "PMID25874087",
+    "PMID42719390",
+    "PMID41003269"
+   ],
+   "sourceEvidencePmids": [
+    "8305644",
+    "7985669",
+    "25874087",
+    "42719390",
+    "41003269"
+   ],
+   "supportLevel": "direct",
+   "supportRationale": "Each linked record reports non-attendance prevalence under a different operational definition and denominator, which is the input the comparison is run on; none of them applies more than one definition to the same records.",
+   "hypothesis": "Applying the competing published definitions of a missed and of a shortened session to one unit's attendance records moves the estimated burden by a material margin, and the denominator choice (sessions prescribed versus sessions attended plus missed) is the largest single source of that movement.",
+   "studyDesign": {
+    "type": "Retrospective measurement study on held attendance records; no new recruitment, no biospecimens",
+    "rationale": "The comparison is arithmetic and definitional rather than causal, so it is bounded by the record window and by nothing else."
+   },
+   "estimand": "Prevalence of non-attendance, and separately of shortened treatment, per applicable definition, with exact binomial confidence intervals, on one fixed denominator stated in advance.",
+   "dataRequirements": "Session level: scheduled date, scheduled shift and weekday, attended or not, delivered minutes, prescribed duration, prescribed sessions per week, patient identifier. Patient level: dialysis initiation date, age, sex, primary renal diagnosis, vascular access type, censoring date or reason, documented reason for non-attendance. Missing and required: prescribed session duration and delivered minutes.",
+   "falsification": "The claim that definition choice materially changes the estimate is falsified if every applicable definition lands within 2 percentage points of the others in this unit.",
+   "feasibility": "Feasible. A re-derivation on records already held; the only computational requirement is correct handling of the prescribed-sessions denominator.",
+   "noveltyBasis": "No direct answer found in this search. The heterogeneity of definitions is documented by the integrative review, but no located study reports the spread of estimates produced by applying competing definitions to one dataset.",
+   "gaps": [
+    "MISSING — required: prescribed session duration and delivered minutes. Without both, the shortened-session definitions cannot be applied and the comparison reduces to missed sessions only.",
+    "MISSING — required: the record window over which the prescribed-session denominator is defined."
+   ],
+   "reportQuestionId": "Q1",
+   "reconciliationStatus": "new"
+  },
+  {
+   "candidateId": "Q2",
+   "title": "Is non-attendance in this unit organised by weekday, shift, season or dialysis frequency rather than by patient characteristics?",
+   "sourceOpportunityId": "ISE2",
+   "sourceEvidenceIds": [
+    "PMID41003269",
+    "PMID42719390",
+    "PMID30146421"
+   ],
+   "sourceEvidencePmids": [
+    "41003269",
+    "42719390",
+    "30146421"
+   ],
+   "supportLevel": "direct",
+   "supportRationale": "The linked records carry the weekday, shift and session-frequency contrasts that would be reproduced, and one of them names seasonality as untested while reporting seasonal variation in a downstream outcome — which is the open half of the question.",
+   "hypothesis": "Missed and shortened sessions in this unit are concentrated in identifiable schedule positions — particular weekdays, the night shift, particular seasons, or higher prescribed session frequency — and the seasonality component is not explained by patient composition.",
+   "studyDesign": {
+    "type": "Retrospective cohort of all scheduled sessions in the record window, session as the unit of analysis, patient-level random effect",
+    "rationale": "Repeated sessions per patient require the random effect; the rest is stratification."
+   },
+   "estimand": "Rate of missed sessions and rate of shortened sessions per scheduled session, by weekday, shift, pre-specified season and prescribed frequency stratum, with interval estimates.",
+   "dataRequirements": "All fields of Q1, plus a calendar date for seasonal assignment and a season or month window fixed before extraction. Missing and required: the pre-specified seasonal windows themselves.",
+   "falsification": "The seasonality hypothesis is falsified if the seasonal rate-ratio confidence intervals for missed sessions all contain 1 with adequate power, or if fewer than three seasons carry usable data.",
+   "feasibility": "Feasible, but the seasonal element requires a record window covering at least two full years; otherwise seasonality is dropped rather than reported.",
+   "noveltyBasis": "Occupied, but not in this setting. The weekday and shift associations are already established in large international samples, so a single-unit replication is confirmatory. The open part is seasonality: no located study reports missed or shortened sessions by season, and the most recent single-centre cohort in this set states explicitly that it did not examine whether missed treatments varied by season.",
+   "gaps": [
+    "MISSING — required: the length of the available attendance record window, which decides whether the seasonal element can be analysed at all.",
+    "MISSING — required: a pre-specified season or month window. If the unit has no documented definition, one must be fixed in advance and recorded."
+   ],
+   "reportQuestionId": "Q2",
+   "reconciliationStatus": "new"
+  },
+  {
+   "candidateId": "Q3",
+   "title": "Do the hospital's own transport records explain missed and shortened sessions, and do they explain shortening rather than absence?",
+   "sourceOpportunityId": "ISE3",
+   "sourceEvidenceIds": [
+    "PMID8305644",
+    "PMID24088208",
+    "PMID29239556",
+    "PMID38737772",
+    "PMID37071662"
+   ],
+   "sourceEvidencePmids": [
+    "8305644",
+    "24088208",
+    "29239556",
+    "38737772",
+    "37071662"
+   ],
+   "supportLevel": "direct",
+   "supportRationale": "The linked records supply the three incompatible published positions the question tests against — transport as a recorded reason for stopping early rather than for not arriving, travel distance as a population-level predictor, and self-reported access time from a spatial model — while none of them uses an institution's own transport records against its own session-level attendance.",
+   "hypothesis": "Recorded transport exposure is associated with missed sessions and, separately, with shortened sessions, and the association with shortening is at least as strong as the association with absence.",
+   "studyDesign": {
+    "type": "Retrospective cohort, session as the unit, patient-level random effects, transport exposures and confounder set pre-specified before extraction",
+    "rationale": "Pre-specification is what separates this from the reason-code and self-report literature; the within-person contrast is what carries the causal reading, if any."
+   },
+   "estimand": "Adjusted association between recorded transport exposure and missed sessions, and separately between transport exposure and shortened sessions, over the pre-specified confounder set.",
+   "dataRequirements": "All fields of Q1, plus per-session or per-period transport mode, provider identifier, one-way distance or travel time, voucher or reimbursement flag and date, and scheduled pickup time relative to session end. Missing and required: the linkage key between transport and attendance records and its resolution.",
+   "falsification": "Falsified if the adjusted transport coefficients for missed sessions and for shortened sessions both have confidence intervals containing 1, or if within-patient transport variation over the record window is too small to estimate a within-person effect.",
+   "feasibility": "Reduced scope. Feasible only if the linkage key resolves to the session or at least to the period and if transport varies within patients over time; otherwise the study is a cross-sectional comparison of patient groups that differ by transport eligibility, and the honest output is a description of the transport-usage distribution plus a stated inability to separate transport from those characteristics.",
+   "noveltyBasis": "No direct answer found in this search, with bounded scope. The located works put transport in three different roles (reason code for stopping early, population-level travel distance, self-reported access time); a search of an institution's own transport records against its own session-level attendance was not located. The negative result rests on a bounded retrieval and a study may exist in administrative or quality-improvement literature that is not indexed in the sources searched.",
+   "gaps": [
+    "MISSING — required: the transport-to-attendance linkage key. Whether the two record sets share a patient identifier and a date or period key decides whether session-level transport attribution is possible at all.",
+    "MISSING — required: within-patient variation in transport exposure. Without it the design has no within-person contrast."
+   ],
+   "reportQuestionId": "Q3",
+   "reconciliationStatus": "new",
+   "derivedFromOpportunityId": "BOM1"
+  },
+  {
+   "candidateId": "Q4",
+   "title": "Can next-month missed and shortened sessions be predicted from attendance and transport history, and does the model beat a one-variable rule?",
+   "sourceOpportunityId": "ISE4",
+   "sourceEvidenceIds": [
+    "PMID28646169",
+    "PMID38626948",
+    "PMID26440803"
+   ],
+   "sourceEvidencePmids": [
+    "28646169",
+    "38626948",
+    "26440803"
+   ],
+   "supportLevel": "direct",
+   "supportRationale": "One linked record supplies the comparator instrument — a trial whose poor-attendance definition (missing 2-6 sessions in 12 weeks) is used as a one-variable entry rule rather than as a validated predictor — and the other two are the reporting standards the reduced-scope model has to meet.",
+   "hypothesis": "A pre-specified model using prior attendance, transport exposure and a small fixed set of clinical covariates discriminates next-month non-attendance better than the single rule 'missed any session this month', on a later validation period.",
+   "studyDesign": {
+    "type": "Retrospective prediction-model development with a temporal split: earlier period for development, later period for validation, at most five pre-specified predictors, no automated selection",
+    "rationale": "A single unit's event count fixes both the model class and the number of predictors; the temporal split is what makes the discrimination estimate mean anything."
+   },
+   "estimand": "Discrimination and calibration for non-attendance in the following 30 days, on the temporal validation set, and the discrimination difference against the one-variable rule.",
+   "dataRequirements": "All fields of Q1 and Q3. Missing and required: an event count adequate for the number of candidate predictors.",
+   "falsification": "Falsified if the discrimination difference between the model and the prior-month-non-attendance rule has a confidence interval containing zero on the temporal validation set.",
+   "feasibility": "Reduced scope. The full model agenda is not deliverable by one part-time analyst in six months on one unit's records; the reduced-scope version is a pre-specified logistic model with confidence intervals, an explicit statement that the calibration estimate is imprecise, and a fallback to descriptive associations if the development-period event count is below a threshold set before analysis.",
+   "noveltyBasis": "No direct answer found in this search. No located study builds or temporally validates a predictor of next-month missed or shortened sessions in a single unit from transport records; the closest works are a study-level association analysis in a multinational cohort and a trial entry criterion, neither of which is a validated unit-level prediction model.",
+   "gaps": [
+    "MISSING — required: the number of non-attendance events in the development period, which decides whether a model is fitted at all.",
+    "MISSING — required: a record window long enough to split into development and validation periods."
+   ],
+   "reportQuestionId": "Q4",
+   "reconciliationStatus": "new",
+   "derivedFromOpportunityId": "BOM2"
+  },
+  {
+   "candidateId": "Q5",
+   "title": "Did the unit's transport or reimbursement arrangement change attendance when it changed?",
+   "sourceOpportunityId": "ISE5",
+   "sourceEvidenceIds": [
+    "PMID28646169",
+    "PMID20796047",
+    "PMID32884245"
+   ],
+   "sourceEvidencePmids": [
+    "28646169",
+    "20796047",
+    "32884245"
+   ],
+   "supportLevel": "direct",
+   "supportRationale": "The linked records establish what randomised and synthesised evidence on attendance-changing interventions looks like and how thin it is, which is what makes a local natural-experiment estimate worth reporting; they do not supply the local exposure.",
+   "hypothesis": "A documented change in transport provision, voucher policy or scheduling in this unit is followed by a change in the missed and shortened session rates.",
+   "studyDesign": {
+    "type": "Interrupted time series or before-and-after analysis on attendance records, with the intervention date taken from administrative documentation rather than inferred from the data",
+    "rationale": "No new recruitment and no prospective intervention leave the unit's own administrative change as the only available exposure."
+   },
+   "estimand": "Change in the rate of missed sessions, and separately of shortened sessions, per scheduled session, before versus after the documented change.",
+   "dataRequirements": "All fields of Q1 and Q3, plus the administrative record of the change and its date. Missing and required: documentation of an actual change with a date.",
+   "falsification": "A before-after difference is uninterpretable as a causal statement if the pre-change and post-change periods differ in patient composition beyond what the record captures, for example if a shift change or a population shift coincides with the transport change.",
+   "feasibility": "Not feasible unless a change is documented. With a documented change, six months for one part-time analyst covers a simple pre-post comparison of a pre-specified primary rate difference; a full interrupted time series with seasonality terms needs more time points than one unit usually provides.",
+   "noveltyBasis": "Not applicable as a novelty question: the answer is local and the design is established. It is carried because the value lies in the local estimate, and it is dropped outright if no change is documented.",
+   "gaps": [
+    "MISSING — required: documentation of an actual change in transport provision, voucher policy or scheduling, with its date. Without it the candidate is dropped.",
+    "MISSING — required: usable time points before and after the change; a single unit usually yields too few for a full interrupted time series."
+   ],
+   "reportQuestionId": "Q5",
+   "reconciliationStatus": "new"
+  },
+  {
+   "candidateId": "Q6",
+   "title": "Does local non-attendance reproduce the published mortality and hospitalisation association?",
+   "sourceOpportunityId": "ISE6",
+   "sourceEvidenceIds": [
+    "PMID30146421",
+    "PMID1899455",
+    "PMID34673160"
+   ],
+   "sourceEvidencePmids": [
+    "30146421",
+    "1899455",
+    "34673160"
+   ],
+   "supportLevel": "direct",
+   "supportRationale": "The linked records are the works that already answer the question — an international cohort association between missed treatments and mortality, a treatment-duration mortality comparison, and shortened treatment against transplant outcomes — which is why the entry is recorded as answered rather than as a gap.",
+   "hypothesis": "None proposed. The hypothesis that missed or shortened sessions are associated with death and hospitalisation is already supported; the question is closed.",
+   "studyDesign": {
+    "type": "Not proposed as a primary aim. At most a retrospective cohort with a descriptive secondary analysis on the session-derived exposure",
+    "rationale": "A single community hospital over a limited record window accumulates too few deaths for a hazard estimate with useful precision, and outcome under-ascertainment biases the association toward the null."
+   },
+   "estimand": "Observed event count and the width of the interval actually achieved, with an explicit decline to test the published hazard ratio.",
+   "dataRequirements": "All fields of Q1, plus hospital admissions with dates and death dates with a source. Missing and required: whether the hospital holds outcome data at all, whether admissions at other hospitals are captured, and whether death ascertainment is complete.",
+   "falsification": "Not applicable; the question is closed by existing evidence, and a local descriptive analysis is not framed as a test of it.",
+   "feasibility": "Not feasible as a primary aim; as a secondary descriptive analysis it is feasible but should report the event count it actually achieved rather than an underpowered replication.",
+   "noveltyBasis": "Answered. Missed-treatment and mortality associations are established in an international cohort of 4,493 patients and in 600 patients for treatment duration, and shortened treatment has been related to transplant outcomes in 9,543 recipients. Re-deriving the association in one hospital adds no new knowledge.",
+   "gaps": [],
+   "reportQuestionId": "Q6",
+   "reconciliationStatus": "closed",
+   "derivedFromOpportunityId": "BOM3"
+  }
+ ],
+ "inSessionOpportunities": [
+  {
+   "opportunityId": "ISE1",
+   "title": "Definitional divergence in the measured burden of non-attendance",
+   "origin": "Evidence expansion run alongside the worker. The prevalence figures located under competing definitions and denominators, taken together, imply a comparison that no located work performs on one dataset.",
+   "supportLevel": "direct",
+   "evidenceIds": [
+    "PMID8305644",
+    "PMID7985669",
+    "PMID25874087",
+    "PMID42719390",
+    "PMID41003269"
+   ]
+  },
+  {
+   "opportunityId": "ISE2",
+   "title": "Session-level patterning of non-attendance by schedule position",
+   "origin": "Evidence expansion. Weekday, shift and frequency contrasts are reported in large samples; seasonality is named as untested by the most recent single-centre cohort and no located study reports missed or shortened sessions by season.",
+   "supportLevel": "direct",
+   "evidenceIds": [
+    "PMID41003269",
+    "PMID42719390",
+    "PMID30146421"
+   ]
+  },
+  {
+   "opportunityId": "ISE3",
+   "title": "Transport recorded by the institution itself as the exposure",
+   "origin": "Evidence expansion. The located works place transport in three different roles and none measures an institution’s own transport records against its own session-level attendance. Descends from the worker opportunity that proposed a transport-based causal design.",
+   "supportLevel": "direct",
+   "evidenceIds": [
+    "PMID8305644",
+    "PMID24088208",
+    "PMID29239556",
+    "PMID38737772",
+    "PMID37071662"
+   ]
+  },
+  {
+   "opportunityId": "ISE4",
+   "title": "Prediction of next-month non-attendance from attendance and transport history",
+   "origin": "Evidence expansion. No located study builds or temporally validates such a predictor in one unit; the closest works are a study-level association analysis and a trial entry criterion. Descends from the worker opportunity that proposed a transferred prediction framework.",
+   "supportLevel": "direct",
+   "evidenceIds": [
+    "PMID28646169",
+    "PMID38626948",
+    "PMID26440803"
+   ]
+  },
+  {
+   "opportunityId": "ISE5",
+   "title": "A documented local change in transport or reimbursement provision as a natural experiment",
+   "origin": "Evidence expansion. Randomised evidence specific to attendance is limited to one automated-messaging trial, which leaves a documented local administrative change as the only exposure available under the stated constraints.",
+   "supportLevel": "direct",
+   "evidenceIds": [
+    "PMID28646169",
+    "PMID20796047",
+    "PMID32884245"
+   ]
+  },
+  {
+   "opportunityId": "ISE6",
+   "title": "Local reproduction of the published mortality and hospitalisation association",
+   "origin": "Evidence expansion, recorded so that it is not mistaken for an open gap. Descends from the worker opportunity that proposed linking existing records to long-term hard endpoints.",
+   "supportLevel": "direct",
+   "evidenceIds": [
+    "PMID30146421",
+    "PMID1899455",
+    "PMID34673160"
+   ]
+  }
+ ],
+ "removedCandidates": [],
+ "crossSourceReconciliation": {
+  "scopeDifference": "The managed job worked from a retrieved evidence set of 226 records dated 2021 to 2026, drawn largely from a Chinese-language retrieval, and reported 88% of them as clinical. The evidence expansion run alongside it worked from a predominantly English-language set spanning 1991 to 2026, in which the foundational work on missed and shortened treatments predates the job's window. The two sets overlap on one work. The job's own coverage statistics are carried in the run receipt, unchanged.",
+  "whereTheyDisagree": [
+   "The job treats long-term hard endpoints (death, cardiovascular hospitalisation) as an uncovered gap and builds its third candidate on linking existing records to them. The wider evidence base already carries that association at scale, so the report records the question as closed rather than open.",
+   "The job treats the transport question as estimable by instrumental variables and rates it the highest priority. The evidence expansion supports the transport question as the intellectually strongest candidate but not that design: the exclusion restriction is untestable here and the outcome the instrument would be used against is not a record the hospital is known to hold.",
+   "The job's machine-learning opportunity rests on a framework transferred from another appointment setting. The evidence expansion found no dialysis-specific validated predictor, so the question stays open, but under these resources it survives only as a pre-specified low-dimensional model with a temporal split."
+  ],
+  "verificationStatus": "The evidence identifiers the job attached to its candidates were not independently retrieved and read in this run, and nothing in the accompanying report rests on them. They are preserved here so the lineage of the job's candidates stays intact and so a later run can check them.",
+  "governingDocument": "The accompanying report's ranking governs. Two of the job's three candidates survive in reframed form inside it, and the third is carried only as a closed question."
+ }
+}

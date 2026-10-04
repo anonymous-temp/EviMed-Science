@@ -1,0 +1,138 @@
+{
+ "receiptVersion": "1.0.0",
+ "deliverableId": "dialysis-adherence-agenda",
+ "capability": "research-topic-selection",
+ "generatedAt": "2026-10-04T08:56:00Z",
+ "jobId": "topic-20261004083851-a943128f5eb2",
+ "status": "succeeded",
+ "terminalState": "succeeded",
+
+ "researchContext": {
+  "availableData": "Existing attendance and transport records from one hospital; no biospecimens.",
+  "population": "Adults receiving maintenance hemodialysis",
+  "studySetting": "Community hospital",
+  "resourceConstraints": ["Six months", "No new recruitment", "One part-time analyst"]
+ },
+
+ "artifacts": [
+  {"name": "result.json", "path": "research-topic-runs/topic-20261004083851-a943128f5eb2/output/result.json", "bytes": 943, "sha256": "aa85a2a4a1a81dd088077fbabd84d76b2f227d3c4d520ce71af2c85cf782c838"},
+  {"name": "request.json", "path": "research-topic-runs/topic-20261004083851-a943128f5eb2/output/request.json", "bytes": 435, "sha256": "33917c4d5e77567d05d0371b10d79548bd39fbc0efcb3fe0ae83caa421bb91d5"},
+  {"name": "research-topic-report.md", "path": "research-topic-runs/topic-20261004083851-a943128f5eb2/output/research-topic-report.md", "bytes": 53844, "sha256": "06095b7cdafa03f2a3ccde3c8140957440df07be17ba5e8cd662673b65473b55"},
+  {"name": "research-portfolio.json", "path": "research-topic-runs/topic-20261004083851-a943128f5eb2/output/research-portfolio.json", "bytes": 7742, "sha256": "a89f760a3daf55c852e2a03968d9cf0872748241ce4a07b28a157b47e98cdf3c"},
+  {"name": "evidence-records.json", "path": "research-topic-runs/topic-20261004083851-a943128f5eb2/output/evidence-records.json", "bytes": 704441, "sha256": "26907ba779a2548a4e8ebb003540ef1a82ecce848daec7a2d9a3044f719c4b91"},
+  {"name": "evidence-stats.json", "path": "research-topic-runs/topic-20261004083851-a943128f5eb2/output/evidence-stats.json", "bytes": 1995, "sha256": "7d919061b989a360694905b0e7b1f6983f9ce815a449969b74ef6771bad25e27"},
+  {"name": "module-outputs.json", "path": "research-topic-runs/topic-20261004083851-a943128f5eb2/output/module-outputs.json", "bytes": 535920, "sha256": "c37c08af2025fc35787d97dd44c3106dfc6741a88fff68c624c5f30beafc072b"},
+  {"name": "research-topic-run.json", "path": "research-topic-runs/topic-20261004083851-a943128f5eb2/output/research-topic-run.json", "bytes": 630251, "sha256": "53f8e2e78c0bad39020a22841e6e0105bfc7195322a8825c58e74b0430018169"}
+ ],
+
+ "researchRequest": {
+  "researchDirection": "Identify actionable questions about missed dialysis sessions and adherence.",
+  "requestedOutputLanguage": "en",
+  "availableData": "Existing attendance and transport records from one hospital; no biospecimens.",
+  "population": "Adults receiving maintenance hemodialysis",
+  "studySetting": "Community hospital",
+  "resourceConstraints": ["Six months", "No new recruitment", "One part-time analyst"]
+ },
+
+ "managedWorker": {
+  "workerId": "topic-20261004083851-a943128f5eb2",
+  "taskId": "TASK_20261004_083856_23e08f00",
+  "reportId": "REPORT_20261004_084823",
+  "terminalState": "succeeded",
+  "startedAt": "2026-10-04T08:38:56Z",
+  "completedAt": "2026-10-04T08:52:00.667918Z",
+  "elapsedSeconds": 789,
+  "degraded": false,
+  "moduleStatuses": {
+   "M1_PROBLEM_LANDSCAPE": "ok",
+   "M2_RESEARCH_ECOSYSTEM": "ok",
+   "M3_EVIDENCE_SYSTEM": "ok",
+   "M4_SCIENTIFIC_CONTRADICTION": "ok",
+   "M5_BREAKTHROUGH_OPPORTUNITY": "ok",
+   "M6_RESEARCH_AGENDA": "ok",
+   "evidenceRetrieval": "ok"
+  },
+  "usage": {
+   "requests": 18,
+   "cacheHitTokens": 11392,
+   "cacheMissTokens": 43490,
+   "outputTokens": 120200,
+   "model": "deepseek-flash"
+  },
+  "artifactDirectory": "research-topic-runs/topic-20261004083851-a943128f5eb2/output",
+  "returnedArtifacts": [
+   {"name": "result.json", "bytes": 943, "sha256": "aa85a2a4a1a81dd088077fbabd84d76b2f227d3c4d520ce71af2c85cf782c838"},
+   {"name": "request.json", "bytes": 435, "sha256": "33917c4d5e77567d05d0371b10d79548bd39fbc0efcb3fe0ae83caa421bb91d5"},
+   {"name": "research-topic-report.md", "bytes": 53844, "sha256": "06095b7cdafa03f2a3ccde3c8140957440df07be17ba5e8cd662673b65473b55"},
+   {"name": "research-portfolio.json", "bytes": 7742, "sha256": "a89f760a3daf55c852e2a03968d9cf0872748241ce4a07b28a157b47e98cdf3c"},
+   {"name": "evidence-records.json", "bytes": 704441, "sha256": "26907ba779a2548a4e8ebb003540ef1a82ecce848daec7a2d9a3044f719c4b91"},
+   {"name": "evidence-stats.json", "bytes": 1995, "sha256": "7d919061b989a360694905b0e7b1f6983f9ce815a449969b74ef6771bad25e27"},
+   {"name": "module-outputs.json", "bytes": 535920, "sha256": "c37c08af2025fc35787d97dd44c3106dfc6741a88fff68c624c5f30beafc072b"},
+   {"name": "research-topic-run.json", "bytes": 630251, "sha256": "53f8e2e78c0bad39020a22841e6e0105bfc7195322a8825c58e74b0430018169"}
+  ]
+ },
+
+ "carriedIntoTheDeliverable": {
+  "research-portfolio.json": "The worker's three candidates are preserved in it with their opportunity links, evidence links and support level unchanged, each with the reconciliation that was applied after the evidence expansion. Six further candidates from the evidence expansion run alongside the worker are carried beside them, and the relation between the two sets is stated inside the file.",
+  "evidence-records.json": "The worker's 226 evidence records are carried unchanged, including their identifiers and publication-status fields. 57 records retrieved and read during the evidence expansion are appended under their own identifiers; none of the worker's identifiers were reused, renamed or removed. Total 283 records, no duplicated identifier.",
+  "research-topic-report.md": "Written in this run. It is the reconciled report, not the worker's report; where the two diverge the divergence is recorded in the portfolio's reconciliation block and in the notes below."
+ },
+
+ "workerStatisticsAsReturned": {
+  "evidenceCountDisplay": "226",
+  "clinicalRatioDisplay": "88%",
+  "yearSpanDisplay": "5",
+  "keywordDiversityDisplay": "0.541",
+  "raw": {
+   "evidence_count": 226,
+   "clinical_ratio": 0.8805309734513275,
+   "year_span": 5,
+   "keyword_diversity": 0.5411622276029056,
+   "earliest_year": 2021,
+   "latest_year": 2026
+  },
+  "howComputed": "These are the strings the worker's own statistics file carries in its display block, copied unchanged; the raw values behind them are copied beside them. The definitions of clinical ratio, year span and keyword diversity are not stated in the worker's output, so they are reported as the worker's values and are not reconstructed here."
+ },
+
+ "deliverableCoverage": {
+  "definition": "Counted by this capability's own preflight over the delivered files: distinct citation identifiers anywhere in the report and the evidence map; channels matched in the evidence map; source directories under the preserved-sources tree that hold a retrieved full text.",
+  "worksCited": 52,
+  "worksMapped": 52,
+  "worksOpenable": 52,
+  "channels": ["crossref", "europe-pmc", "guideline", "open-web", "openalex", "pubmed", "trial-registry"],
+  "preservedFullTexts": 7,
+  "preservedSourceDirectories": 9,
+  "candidateQuestions": 6,
+  "noveltyStatements": 6,
+  "preflightIssues": [],
+  "preflightWarnings": [
+   "Coverage diagnostic: 52 works, 7 channels, 7 preserved full texts. Judge adequacy against the question, closest prior work, search scope and source availability; counts do not establish novelty."
+  ]
+ },
+
+ "channelsSearched": [
+  {"channel": "pubmed", "usage": "Record and abstract retrieval by identifier, plus phrase queries."},
+  {"channel": "europe-pmc", "usage": "Full-text-spanning queries and open-access full-text retrieval; this is the channel that returned the retrievable full texts."},
+  {"channel": "openalex", "usage": "Two records not carried by the identifier-level searches."},
+  {"channel": "crossref", "usage": "Metadata for works whose publisher pages were not retrievable, including two works cited at record level only."},
+  {"channel": "guideline", "usage": "Six guideline documents, of which six were preserved with their text."},
+  {"channel": "trial-registry", "usage": "Eleven registry records screened for overlap with the proposed designs."},
+  {"channel": "open-web", "usage": "Leads only, followed to primary records before any use."}
+ ],
+
+ "searchesThatFailedOrReturnedNothingUsable": [
+  "Two queries on attendance patterning by season and day of week returned no usable records.",
+  "One query on transport voucher or rideshare interventions returned no usable records.",
+  "One query for trajectory modelling of adherence over time returned an off-target paediatric transplant rehabilitation record.",
+  "Two open-access full-text retrievals failed: one source was temporarily unavailable and one article is not open access. Both affected works are cited at abstract level only and no design or effect claim rests on them.",
+  "The preprint source requires an exact identifier rather than a text query, so preprints were not systematically searched; a preprint relevant to these questions may exist.",
+  "The data-source catalogue returned no matches for dialysis registry, attendance or transport queries; an empty match does not establish absence."
+ ],
+
+ "notes": [
+  "The worker was requested in English and returned its candidate titles, hypotheses and rationale in Chinese. They are preserved verbatim, with an English rendering beside each.",
+  "The worker's evidence set and the evidence expansion's evidence set are largely disjoint: the worker's 226 records fall in 2021 to 2026, while the foundational work on missed and shortened treatments dates from 1991 to 2018. The two sets overlap on one work.",
+  "The worker's candidate evidence identifiers were not independently retrieved and read in this run. Nothing in the delivered report rests on them; they are preserved so the lineage stays intact.",
+  "One article retrieved during the expansion turned out to be a different paper than the one sought and is preserved as an artifact of that failed retrieval; it is not cited anywhere and carries no record in the evidence record file."
+ ]
+}

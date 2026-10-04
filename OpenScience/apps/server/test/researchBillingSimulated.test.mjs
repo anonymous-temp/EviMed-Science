@@ -83,6 +83,9 @@ test("the balance gate: told before a task starts, never mid-run, and the refusa
     assert.equal(errorCodeOutcome(error.code), "capped", "a ceiling, like the real one");
     assert.match(errorCodeMessage(error.code), /模拟/);
     assert.match(errorCodeMessage(error.code), /模拟充值/, "it offers the simulated top-up");
+    // What the kernel's own window prints: the amounts, in the allowance page's yuan, marked 模拟.
+    assert.match(error.readerMessage, /^模拟额度不足，这次没有开始：可用模拟额度 ¥\d+\.\d{2}，这件事预计至少需要 ¥\d+\.\d{2}。到“设置 → 科研额度”做一次模拟充值后即可继续。$/);
+    assert.ok(!/credits|allowance/.test(error.readerMessage), "no English reaches the reader");
     return true;
   });
   // The same balance still admits a free conversation (no estimate to be short of) …
@@ -97,7 +100,13 @@ test("the balance gate: told before a task starts, never mid-run, and the refusa
   // The real wallet's refusal keeps its own code and sentence.
   const real = new EvimedCreditsService({ config: { evimedCreditsEnabled: true, evimedCreditsPerCny: 100 }, database: {},
     client: { configured: true, async balance() { return { balance: 0, frozen: 0 }; } }, evimedUserIdOf: async () => "98211" });
-  await assert.rejects(real.assertBalanceForStart("u_1", "adr-analysis"), { status: 402, code: "credits_exhausted" });
+  await assert.rejects(real.assertBalanceForStart("u_1", "adr-analysis"), (/** @type {any} */ error) => {
+    assert.equal(error.status, 402);
+    assert.equal(error.code, "credits_exhausted");
+    assert.match(error.readerMessage, /^科研额度不足，这次没有开始：可用 ¥0\.00，/, "a real wallet's is not marked 模拟");
+    assert.ok(!error.readerMessage.includes("模拟"));
+    return true;
+  });
 });
 
 test("a simulated top-up goes through the service once per request, as a closed package, for a simulated deployment only", async () => {

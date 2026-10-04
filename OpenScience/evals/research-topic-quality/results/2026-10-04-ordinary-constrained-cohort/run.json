@@ -1,0 +1,86 @@
+{
+  "capability": "research-topic-selection",
+  "brief": "ordinary-constrained-cohort",
+  "base": "https://82.156.128.153",
+  "project": "acceptance-research-topic-selection",
+  "session": "acc-research-topic-selec-mutkjj6t",
+  "runId": "run_dce7a3743e251f26770e7cd446e4f19d",
+  "agentVersion": "1.4.0",
+  "dispatchedAt": "2026-10-04T08:38:27.667Z",
+  "observedAt": "2026-10-04T09:49:54Z",
+  "observation": {
+    "status": "terminal",
+    "reason": "terminal"
+  },
+  "prompt": "researchDirection: Identify actionable questions about missed dialysis sessions and adherence.\navailableData: Existing attendance and transport records from one hospital; no biospecimens.\npopulation: Adults receiving maintenance hemodialysis\nstudySetting: Community hospital\nresourceConstraints: [\"Six months\",\"No new recruitment\",\"One part-time analyst\"]",
+  "promptSource": "rendered brief",
+  "outcome": {
+    "status": "succeeded",
+    "startedAt": "2026-10-04T08:38:27.667Z",
+    "finishedAt": "2026-10-04T09:49:50.429Z",
+    "errorCode": null,
+    "verification": null,
+    "artifacts": [
+      ".tmp-work/fix2.py",
+      "deliverables/dialysis-adherence-agenda/evidence-map.md",
+      "deliverables/dialysis-adherence-agenda/evidence-records.json",
+      "deliverables/dialysis-adherence-agenda/research-portfolio.json",
+      "deliverables/dialysis-adherence-agenda/research-topic-report.md",
+      "deliverables/dialysis-adherence-agenda/research-topic-run.json",
+      "deliverables/dialysis-adherence-agenda/revision-notes.md"
+    ],
+    "unverifiedArtifacts": [],
+    "qualityNotices": [
+      {
+        "code": "topic_portfolio_notice",
+        "check": "topic-study-plan",
+        "severity": "advice",
+        "title": "研究设计要素尚未确定",
+        "detail": "文件 research-portfolio.json",
+        "file": "research-portfolio.json",
+        "text": "candidates[3].gaps must exactly expose absent design fields; unresolved: none."
+      },
+      {
+        "code": "topic_portfolio_notice",
+        "check": "topic-study-plan",
+        "severity": "advice",
+        "title": "研究设计要素尚未确定",
+        "detail": "文件 research-portfolio.json",
+        "file": "research-portfolio.json",
+        "text": "candidates[4].gaps must exactly expose absent design fields; unresolved: none."
+      },
+      {
+        "code": "topic_portfolio_notice",
+        "check": "topic-study-plan",
+        "severity": "advice",
+        "title": "研究设计要素尚未确定",
+        "detail": "文件 research-portfolio.json",
+        "file": "research-portfolio.json",
+        "text": "candidates[5].gaps must exactly expose absent design fields; unresolved: none."
+      },
+      {
+        "code": "topic_portfolio_notice",
+        "check": "topic-study-plan",
+        "severity": "advice",
+        "title": "研究设计要素尚未确定",
+        "detail": "文件 research-portfolio.json",
+        "file": "research-portfolio.json",
+        "text": "candidates[6].gaps must exactly expose absent design fields; unresolved: none."
+      },
+      {
+        "code": "topic_portfolio_notice",
+        "check": "topic-study-plan",
+        "severity": "advice",
+        "title": "研究设计要素尚未确定",
+        "detail": "文件 research-portfolio.json",
+        "file": "research-portfolio.json",
+        "text": "candidates[7].gaps must exactly expose absent design fields; unresolved: none."
+      }
+    ],
+    "effectiveAgentId": "research-topic-selection",
+    "effectiveRouteReason": "session-binding",
+    "durationMs": 4282762,
+    "repairRounds": null,
+    "model": "deepseek/deepseek-flash"
+  }
+}

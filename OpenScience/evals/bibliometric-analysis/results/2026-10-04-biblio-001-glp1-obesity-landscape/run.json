@@ -1,0 +1,49 @@
+{
+  "capability": "bibliometric-analysis",
+  "brief": "biblio-001-glp1-obesity-landscape",
+  "base": "https://82.156.128.153",
+  "project": "acceptance-bibliometric-analysis",
+  "session": "acc-bibliometric-analysi-muthhvf7",
+  "runId": "run_3d0f239d64fd7db4354072dd3ed4c1f8",
+  "agentVersion": "1.1.1",
+  "dispatchedAt": "2026-10-04T07:13:12.295Z",
+  "observedAt": "2026-10-04T07:24:58Z",
+  "observation": {
+    "status": "terminal",
+    "reason": "terminal"
+  },
+  "prompt": "topic: GLP-1 受体激动剂用于肥胖与体重管理\ndateFrom: 2015\ndateTo: 2025\nmaxRecords: 5000\noutputLanguage: zh-CN",
+  "promptSource": "rendered brief",
+  "outcome": {
+    "status": "succeeded",
+    "startedAt": "2026-10-04T07:13:12.295Z",
+    "finishedAt": "2026-10-04T07:24:54.078Z",
+    "errorCode": null,
+    "verification": null,
+    "artifacts": [
+      "deliverables/glp1-obesity-bibliometric/bibliometric-analysis-report.md",
+      "deliverables/glp1-obesity-bibliometric/bibliometric-analysis-run.json",
+      "deliverables/glp1-obesity-bibliometric/build_run_json.py",
+      "deliverables/glp1-obesity-bibliometric/derive_values.py",
+      "deliverables/glp1-obesity-bibliometric/recount_checks.py",
+      "deliverables/glp1-obesity-bibliometric/revision-notes.md"
+    ],
+    "unverifiedArtifacts": [],
+    "qualityNotices": [
+      {
+        "code": "clinical_high_risk_entity_notice",
+        "check": "clinical-high-risk-entity",
+        "severity": "advice",
+        "title": "提及高警示药品，请核对",
+        "detail": "文件 bibliometric-analysis-report.md",
+        "file": "bibliometric-analysis-report.md",
+        "text": "bibliometric-analysis-report.md names Semaglutide、Liraglutide、Insulin, a high-alert medicine, under a non-clinical contract. No action is required; if the file carries advice about taking it, deliver it as a clinical contract kind so the safety rules apply."
+      }
+    ],
+    "effectiveAgentId": "bibliometric-analysis",
+    "effectiveRouteReason": "session-binding",
+    "durationMs": 701783,
+    "repairRounds": null,
+    "model": "deepseek/deepseek-flash"
+  }
+}

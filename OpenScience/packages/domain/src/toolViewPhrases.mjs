@@ -80,6 +80,9 @@ const PHRASES = Object.freeze({
   // retrieval
   literature_search: phrase('检索文献', ['query']),
   reference_list: phrase('查参考文献', ['identifier', 'doi', 'pmid', 'query']),
+  identifier_resolve: phrase('关联文献编号', ['identifiers']),
+  clinical_trial_snapshot: phrase('存档试验登记记录', ['nctId']),
+  dailymed_label: phrase('取美国药品说明书', ['drug', 'setid']),
   guideline_search: phrase('检索指南', ['query']),
   clinical_trial_search: phrase('检索临床试验', ['query']),
   patent_search: phrase('检索专利', ['query']),

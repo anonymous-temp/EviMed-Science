@@ -1,0 +1,65 @@
+{
+  "capability": "mendelian-randomization",
+  "brief": "mr-001-bmi-coronary-artery-disease",
+  "base": "https://82.156.128.153",
+  "project": "acceptance-mendelian-randomization",
+  "session": "acc-mendelian-randomizat-mutj4u73",
+  "runId": "run_51a37ee980347515bce805c4fad3fa1e",
+  "agentVersion": "1.2.0",
+  "dispatchedAt": "2026-10-04T07:59:02.497Z",
+  "observedAt": "2026-10-04T08:38:20Z",
+  "observation": {
+    "status": "terminal",
+    "reason": "terminal"
+  },
+  "prompt": "exposure: 体重指数（BMI）\noutcome: 冠状动脉疾病（coronary artery disease）\nanalysisDirection: forward\nexposureSource: GIANT 联盟的欧洲人群 BMI GWAS（运行时解析并记录确切的来源标识）\noutcomeSource: CARDIoGRAMplusC4D 的欧洲人群冠心病 GWAS（运行时解析并记录确切的来源标识）\noutputLanguage: zh-CN",
+  "promptSource": "rendered brief",
+  "outcome": {
+    "status": "succeeded",
+    "startedAt": "2026-10-04T07:59:02.497Z",
+    "finishedAt": "2026-10-04T08:38:18.962Z",
+    "errorCode": null,
+    "verification": null,
+    "artifacts": [
+      "deliverables/mr-bmi-cad/mendelian-randomization-inputs.json",
+      "deliverables/mr-bmi-cad/mendelian-randomization-report.md",
+      "deliverables/mr-bmi-cad/mendelian-randomization-run.json",
+      "deliverables/mr-bmi-cad/revision-notes.md"
+    ],
+    "unverifiedArtifacts": [],
+    "qualityNotices": [
+      {
+        "code": "deliverable_run_artifact_missing",
+        "check": "structured-output",
+        "severity": "advice",
+        "title": "结构化产物格式有误",
+        "detail": "文件 mendelian-randomization-run.json",
+        "file": "mendelian-randomization-run.json",
+        "text": "mendelian-randomization-run.json names the artifact mendelian-randomization-pair-results.json, which is not in the delivered package."
+      },
+      {
+        "code": "deliverable_run_artifact_missing",
+        "check": "structured-output",
+        "severity": "advice",
+        "title": "结构化产物格式有误",
+        "detail": "文件 mendelian-randomization-run.json",
+        "file": "mendelian-randomization-run.json",
+        "text": "mendelian-randomization-run.json names the artifact mendelian-randomization-open-sources.json, which is not in the delivered package."
+      },
+      {
+        "code": "deliverable_run_artifact_missing",
+        "check": "structured-output",
+        "severity": "advice",
+        "title": "结构化产物格式有误",
+        "detail": "文件 mendelian-randomization-run.json",
+        "file": "mendelian-randomization-run.json",
+        "text": "mendelian-randomization-run.json names the artifact revision-notes.md, which is not in the delivered package."
+      }
+    ],
+    "effectiveAgentId": "mendelian-randomization",
+    "effectiveRouteReason": "session-binding",
+    "durationMs": 2356465,
+    "repairRounds": null,
+    "model": "deepseek/deepseek-flash"
+  }
+}

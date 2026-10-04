@@ -351,6 +351,10 @@ services:
       # holds.
       # 「转为深度研究」 (researchHandoff.mjs, fusion plan §9.5); off by default.
       OPEN_SCIENCE_RESULTS_ENABLED:
+      # Truthful capability availability (availabilityModule.mjs): the collector's off switch and how often it
+      # looks for runs the finish hook missed. A label, never a gate; value-less, so the code's default holds.
+      OPEN_SCIENCE_AVAILABILITY_ENABLED:
+      OPEN_SCIENCE_AVAILABILITY_SWEEP_INTERVAL_MS:
       OPEN_SCIENCE_RESULT_ENGINE_URL:
       OPEN_SCIENCE_RESULT_ENGINE_REQUEST_TIMEOUT_MS:
       OPEN_SCIENCE_RESULT_REPLAY_TIMEOUT_MS:
@@ -950,8 +954,12 @@ services:
         source: ${OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET_HOST_FILE:?set OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET_HOST_FILE}
         target: /run/secrets/evimed-workload-signing-key
         read_only: true
+      # The deployment's EviMed evidence key is optional (owner ruling
+      # 2026-10-04): a deployment without one binds /dev/null, which config.mjs
+      # reads as none, and each researcher saves their own under 设置 → 数据源
+      # where they use it. The engines below mount the same file the same way.
       - type: bind
-        source: ${OPEN_SCIENCE_EVIMED_API_KEY_HOST_FILE:?set OPEN_SCIENCE_EVIMED_API_KEY_HOST_FILE}
+        source: ${OPEN_SCIENCE_EVIMED_API_KEY_HOST_FILE:-/dev/null}
         target: /run/secrets/evimed-api-key
         read_only: true
       - type: bind
@@ -1126,9 +1134,22 @@ services:
       # /data/.openscience/specialist-slots, which no runtime mounts.
       EVIMED_SPECIALIST_MAX_CONCURRENT_JOBS: ${OPEN_SCIENCE_SPECIALIST_MAX_CONCURRENT_JOBS:-0}
       EVIMED_SPECIALIST_SLOT_WAIT_SECONDS: ${OPEN_SCIENCE_SPECIALIST_SLOT_WAIT_SECONDS:-10800}
+      # One job's wall clock, on every engine: past it the worker stops the engine,
+      # keeps what it wrote and ends the job `specialist_job_timeout`, and its slot
+      # is released. Without it a hung engine held the only slot until it died.
+      # 3 h, the MR engine's own limit; with the wait bound above it is exactly the
+      # engine credential's 6 h (clamped to 60-14400 s by the engine).
+      EVIMED_SPECIALIST_EXECUTION_TIMEOUT_SECONDS: ${OPEN_SCIENCE_SPECIALIST_EXECUTION_TIMEOUT_SECONDS:-10800}
+      # Where a job asks for the credential its researcher saved under 设置 → 数据源
+      # (the EviMed workload token it was started with is the proof). The deployment's
+      # own key, where it has one, still wins; this fills the gap. Without it the
+      # engine could only ever use what the deployment holds.
+      EVIMED_CONNECTOR_CREDENTIAL_URL: ${OPEN_SCIENCE_CONNECTOR_CREDENTIAL_INTERNAL_URL:-http://open-science-web:8787/internal/connectors/v1/credential}
     volumes:
+      # Optional, like the web service's: /dev/null where the deployment holds no
+      # EviMed evidence key. MetaAgent's evidence tool then says it was not used.
       - type: bind
-        source: ${OPEN_SCIENCE_EVIMED_API_KEY_HOST_FILE:?set OPEN_SCIENCE_EVIMED_API_KEY_HOST_FILE}
+        source: ${OPEN_SCIENCE_EVIMED_API_KEY_HOST_FILE:-/dev/null}
         target: /run/secrets/evimed-api-key
         read_only: true
       - open-science-data:/data
@@ -1159,6 +1180,14 @@ services:
     read_only: true
     tmpfs:
       - /tmp:rw,nosuid,nodev,size=256m
+    # The same bound as the five adapter engines below, set the same way: a
+    # MetaAgent job is as large as any of theirs, and without these the container
+    # was limited by nothing but the host (on the production host `docker stats`
+    # showed a memory limit equal to the whole machine), so one runaway review
+    # could take down every product that shares it.
+    cpus: 1.5
+    mem_limit: 2g
+    pids_limit: 256
     networks:
       - default
       - runtime-internal
@@ -1320,6 +1349,8 @@ services:
       # The deployment-wide cap on specialist jobs (see evimed-meta-agent).
       EVIMED_SPECIALIST_MAX_CONCURRENT_JOBS: ${OPEN_SCIENCE_SPECIALIST_MAX_CONCURRENT_JOBS:-0}
       EVIMED_SPECIALIST_SLOT_WAIT_SECONDS: ${OPEN_SCIENCE_SPECIALIST_SLOT_WAIT_SECONDS:-10800}
+      # One job's wall clock (see evimed-meta-agent).
+      EVIMED_SPECIALIST_EXECUTION_TIMEOUT_SECONDS: ${OPEN_SCIENCE_SPECIALIST_EXECUTION_TIMEOUT_SECONDS:-10800}
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
       EVIMED_USAGE_REPORT_URL: ${OPEN_SCIENCE_ENGINE_USAGE_INTERNAL_URL-http://open-science-web:8787/internal/usage/v1/engine}
       LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
@@ -1486,6 +1517,13 @@ services:
       # The deployment-wide cap on specialist jobs (see evimed-meta-agent).
       EVIMED_SPECIALIST_MAX_CONCURRENT_JOBS: ${OPEN_SCIENCE_SPECIALIST_MAX_CONCURRENT_JOBS:-0}
       EVIMED_SPECIALIST_SLOT_WAIT_SECONDS: ${OPEN_SCIENCE_SPECIALIST_SLOT_WAIT_SECONDS:-10800}
+      # One job's wall clock (see evimed-meta-agent).
+      EVIMED_SPECIALIST_EXECUTION_TIMEOUT_SECONDS: ${OPEN_SCIENCE_SPECIALIST_EXECUTION_TIMEOUT_SECONDS:-10800}
+      # Where a job asks for the credential its researcher saved under 设置 → 数据源
+      # (the EviMed workload token it was started with is the proof). The deployment's
+      # own key, where it has one, still wins; this fills the gap. Without it the
+      # engine could only ever use what the deployment holds.
+      EVIMED_CONNECTOR_CREDENTIAL_URL: ${OPEN_SCIENCE_CONNECTOR_CREDENTIAL_INTERNAL_URL:-http://open-science-web:8787/internal/connectors/v1/credential}
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
       EVIMED_USAGE_REPORT_URL: ${OPEN_SCIENCE_ENGINE_USAGE_INTERNAL_URL-http://open-science-web:8787/internal/usage/v1/engine}
       LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
@@ -1543,6 +1581,13 @@ services:
       # The deployment-wide cap on specialist jobs (see evimed-meta-agent).
       EVIMED_SPECIALIST_MAX_CONCURRENT_JOBS: ${OPEN_SCIENCE_SPECIALIST_MAX_CONCURRENT_JOBS:-0}
       EVIMED_SPECIALIST_SLOT_WAIT_SECONDS: ${OPEN_SCIENCE_SPECIALIST_SLOT_WAIT_SECONDS:-10800}
+      # One job's wall clock (see evimed-meta-agent).
+      EVIMED_SPECIALIST_EXECUTION_TIMEOUT_SECONDS: ${OPEN_SCIENCE_SPECIALIST_EXECUTION_TIMEOUT_SECONDS:-10800}
+      # Where a job asks for the credential its researcher saved under 设置 → 数据源
+      # (the EviMed workload token it was started with is the proof). The deployment's
+      # own key, where it has one, still wins; this fills the gap. Without it the
+      # engine could only ever use what the deployment holds.
+      EVIMED_CONNECTOR_CREDENTIAL_URL: ${OPEN_SCIENCE_CONNECTOR_CREDENTIAL_INTERNAL_URL:-http://open-science-web:8787/internal/connectors/v1/credential}
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
       EVIMED_USAGE_REPORT_URL: ${OPEN_SCIENCE_ENGINE_USAGE_INTERNAL_URL-http://open-science-web:8787/internal/usage/v1/engine}
       LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
@@ -1595,6 +1640,8 @@ services:
       # The deployment-wide cap on specialist jobs (see evimed-meta-agent).
       EVIMED_SPECIALIST_MAX_CONCURRENT_JOBS: ${OPEN_SCIENCE_SPECIALIST_MAX_CONCURRENT_JOBS:-0}
       EVIMED_SPECIALIST_SLOT_WAIT_SECONDS: ${OPEN_SCIENCE_SPECIALIST_SLOT_WAIT_SECONDS:-10800}
+      # One job's wall clock (see evimed-meta-agent).
+      EVIMED_SPECIALIST_EXECUTION_TIMEOUT_SECONDS: ${OPEN_SCIENCE_SPECIALIST_EXECUTION_TIMEOUT_SECONDS:-10800}
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
       EVIMED_USAGE_REPORT_URL: ${OPEN_SCIENCE_ENGINE_USAGE_INTERNAL_URL-http://open-science-web:8787/internal/usage/v1/engine}
       LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
@@ -1647,6 +1694,13 @@ services:
       # The deployment-wide cap on specialist jobs (see evimed-meta-agent).
       EVIMED_SPECIALIST_MAX_CONCURRENT_JOBS: ${OPEN_SCIENCE_SPECIALIST_MAX_CONCURRENT_JOBS:-0}
       EVIMED_SPECIALIST_SLOT_WAIT_SECONDS: ${OPEN_SCIENCE_SPECIALIST_SLOT_WAIT_SECONDS:-10800}
+      # One job's wall clock (see evimed-meta-agent).
+      EVIMED_SPECIALIST_EXECUTION_TIMEOUT_SECONDS: ${OPEN_SCIENCE_SPECIALIST_EXECUTION_TIMEOUT_SECONDS:-10800}
+      # Where a job asks for the credential its researcher saved under 设置 → 数据源
+      # (the EviMed workload token it was started with is the proof). The deployment's
+      # own key, where it has one, still wins; this fills the gap. Without it the
+      # engine could only ever use what the deployment holds.
+      EVIMED_CONNECTOR_CREDENTIAL_URL: ${OPEN_SCIENCE_CONNECTOR_CREDENTIAL_INTERNAL_URL:-http://open-science-web:8787/internal/connectors/v1/credential}
       EVIMED_WORKLOAD_SIGNING_SECRET_FILE: /run/secrets/evimed-workload-signing-key
       EVIMED_USAGE_REPORT_URL: ${OPEN_SCIENCE_ENGINE_USAGE_INTERNAL_URL-http://open-science-web:8787/internal/usage/v1/engine}
       LLM_API_KEY_FILE: /run/secrets/deepseek-api-key
@@ -1675,8 +1729,10 @@ services:
         source: ${OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET_HOST_FILE:?set OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET_HOST_FILE}
         target: /run/secrets/evimed-workload-signing-key
         read_only: true
+      # Optional, like the web service's: /dev/null where the deployment holds no
+      # EviMed evidence key. The engine's evidence layer then says it was not used.
       - type: bind
-        source: ${OPEN_SCIENCE_EVIMED_API_KEY_HOST_FILE:?set OPEN_SCIENCE_EVIMED_API_KEY_HOST_FILE}
+        source: ${OPEN_SCIENCE_EVIMED_API_KEY_HOST_FILE:-/dev/null}
         target: /run/secrets/evimed-api-key
         read_only: true
     healthcheck:
@@ -1720,8 +1776,11 @@ services:
         source: ${OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET_HOST_FILE:?set OPEN_SCIENCE_EVIMED_WORKLOAD_SIGNING_SECRET_HOST_FILE}
         target: /run/secrets/evimed-workload-signing-key
         read_only: true
+      # Optional, like the web service's: /dev/null where the deployment holds no
+      # EviMed evidence key. Its EviMed calls then answer that the credential is
+      # missing, which the run reads as the researcher's to configure.
       - type: bind
-        source: ${OPEN_SCIENCE_EVIMED_API_KEY_HOST_FILE:?set OPEN_SCIENCE_EVIMED_API_KEY_HOST_FILE}
+        source: ${OPEN_SCIENCE_EVIMED_API_KEY_HOST_FILE:-/dev/null}
         target: /run/secrets/evimed-api-key
         read_only: true
     healthcheck:

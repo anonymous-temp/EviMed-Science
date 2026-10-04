@@ -45,6 +45,7 @@ import {
   VCR_REFERRAL_STATES, VCR_REVIEW_KINDS, VCR_REVIEW_STATES, VCR_STALE_REASONS, VCR_STEPS, VCR_STUDY_STATUSES,
   VCR_TRIAL_DESIGNS, VCR_VALUE_SOURCES,
 } from "@evimed/domain";
+import { refreshVocabularyChecks } from "./vocabularyChecks.mjs";
 
 /** The schema name, written once. */
 export const VCR_SCHEMA = "evimed_vcr";
@@ -1084,7 +1085,11 @@ export async function migrateVcr(database) {
   if (cached) return cached;
   const attempt = database.transaction(async (/** @type {any} */ client) => {
     await client.query("SELECT pg_advisory_xact_lock(hashtext('evimed-vcr-v1'))");
-    await client.query(sql());
+    const ddl = sql();
+    await client.query(ddl);
+    // A vocabulary word the domain added after this table was created is
+    // otherwise refused on every existing database (vocabularyChecks.mjs).
+    await refreshVocabularyChecks(client, ddl, VCR_SCHEMA);
     return { schema: VCR_SCHEMA, tables: VCR_TABLES };
   });
   migrations.set(database, attempt);

@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import { Radar } from "lucide-react";
 import { getGeoDiagnosis, getGeoMonitoring, type GeoDiagnosis, type GeoMonitoring, type GeoProject } from "@/lib/geoClient";
+import { AllowanceTopUp } from "@/components/runs/AllowanceTopUp";
 import { ChartCard } from "@/components/ui/ChartCard";
 import { DataTable, InlineBar } from "@/components/ui/DataTable";
 import { Delta } from "@/components/ui/Delta";
@@ -316,6 +317,7 @@ function NextRow({ step }: { step: NextStep }) {
               : "h-2.5 w-2.5 shrink-0 rounded-full border-2 border-accent"}
       />
       <span className="min-w-0 flex-1 truncate">{step.text}</span>
+      {step.allowance && <AllowanceTopUp waiting={step.allowance} className="shrink-0 text-caption text-link hover:underline" />}
       <span className={step.state === "waiting" ? "shrink-0 text-caption text-accent-strong" : "shrink-0 text-caption text-text-3"}>
         {step.when ?? NEXT_WORDS[step.state]}
       </span>

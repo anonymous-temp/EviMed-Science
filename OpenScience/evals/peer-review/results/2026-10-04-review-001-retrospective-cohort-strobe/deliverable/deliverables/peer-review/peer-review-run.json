@@ -1,0 +1,286 @@
+{
+  "deliverableId": "peer-review",
+  "contractKind": "peer-review-report",
+  "title": "同行评议报告：Muc2 敲除小鼠慢性结肠炎模型中行为共病证据可得性的系统评价（含送审材料不一致的确认）",
+  "status": "succeeded",
+  "recommendation": "major_revision",
+  "recommendationConditional": "本建议仅对实际收到的文件成立，并以澄清送审材料不一致为前提（报告第 5.1 条）。若送审对象本应为题面所述的单中心回顾性前后对照研究，则本报告的全部条目都不适用于它。",
+  "declaredArticleType": "observational-cohort",
+  "actualManuscriptType": "systematic review of evidence availability (animal model)",
+  "rubrics": [
+    {
+      "id": "prisma_2020",
+      "role": "primary",
+      "applicability": "applicable",
+      "note": "文件实际为系统评价，故采用 PRISMA 2020 清单 27 条（分项展开 42 条）逐条核对。"
+    },
+    {
+      "id": "animal_systematic_review_tools",
+      "role": "supplementary",
+      "applicability": "applicable",
+      "note": "用于判断无纳入研究时偏倚风险评估的施加对象，以及拟用工具未报告属于哪类缺口；用于注册与方案条目的判断。"
+    },
+    {
+      "id": "publication_type_scope_notes",
+      "role": "methodological_reference",
+      "applicability": "applicable",
+      "note": "用于判断以临床试验出版类型作设计过滤在动物模型问题上的适用性。"
+    },
+    {
+      "id": "observational_cohort_rubric",
+      "role": "declared_by_submission_note",
+      "applicability": "inapplicable",
+      "note": "题面声明的观察性队列设计在实际文件中不存在，故未套用该设计的条目。"
+    }
+  ],
+  "confidence": {
+    "reporting_completeness_findings": "high",
+    "search_strategy_outcome_block_absence": "high",
+    "conclusion_determined_by_search_conditions": "medium",
+    "deduplication_arithmetic_anomaly": "medium-high",
+    "basis": "可读正文的判断依据是全文文本；设计过滤相关判断的依据是检索式文本、主题词索引规则与一次公开文献复核，而非重跑作者的原始检索；因稿件未报告检索执行日期，无法确定所引用记录是否本应被检出。"
+  },
+  "parsingCoverage": {
+    "pages": 3,
+    "pagesParsed": 3,
+    "characters": 7597,
+    "tables": 0,
+    "figures": 0,
+    "imageObjects": 0,
+    "supplements": 0,
+    "referenceList": "none present",
+    "resolvableCitationIdentifiers": {
+      "dois": 0,
+      "pmids": 0,
+      "arxiv": 0
+    },
+    "unparsedContent": "无整段内容缺失；排版层面存在个别文字损失，已在报告第 7 节按「未报告 / 未能核验」分别表述。"
+  },
+  "issues": {
+    "fatal": 3,
+    "major": 8,
+    "minor": 7,
+    "fatalItems": [
+      "送审材料与送审说明不一致（送审层面问题，非稿件写作缺陷）",
+      "唯一实质结论不可核验（无流程图、无 5 条记录清单、无逐条排除理由、去重与筛选混为一步）",
+      "设计限定与研究物种错配，使「无合格证据」的结论主要由检索条件决定"
+    ],
+    "notCountedAsDefects": [
+      {
+        "item": "未做偏倚风险评估",
+        "reason": "纳入研究数为 0 时偏倚风险工具无处施加，此处理逻辑自洽；仅将「未报告拟用工具」计为报告缺口。"
+      }
+    ]
+  },
+  "statisticalRecomputation": {
+    "status": "performed",
+    "scope": "无纳入研究，故无效应量、异质性、预测区间、发表偏倚或证据确定性可复核；仅对流程计数核算。",
+    "computed": {
+      "identified": 479,
+      "retainedAfterDeduplication": 5,
+      "screened": 5,
+      "included": 0,
+      "differenceAttributedToDeduplication": 474,
+      "differenceSharePercent": 98.96,
+      "retentionSharePercent": 1.04,
+      "recordsAttributedToDeduplicationPerRetained": 94.8,
+      "identifiedPerScreened": 95.8,
+      "definition": "被归因于去重的记录数 = 识别数 − 去重后保留数，按作者在结果部分的表述命名；去重规则本身未报告。"
+    }
+  },
+  "verificationPerformed": {
+    "quotes": "报告与证据位置索引中的每一段英文引文均逐字比对送审文件正文，比对前仅将换行归一为空格；未发现不符。",
+    "searchStrategyComposition": "对检索式文本逐词计数：结局与行为学词 0 次，微生物组词仅见于粪菌移植词块内，另含来源不明的商品名自由词与 7 处不扩展下位词的主题词。",
+    "designFilterCheck": {
+      "query": "(\"Mucin-2\"[tiab] OR \"Muc2\"[tiab]) AND (\"randomized controlled trial\"[pt] OR \"controlled clinical trial\"[pt])",
+      "retrievalLimitRecords": 25,
+      "classifiedBy": "题名中的物种与主题词，逐条人工判读",
+      "countsNotRetained": "本页记录未逐条留档，报告不据该页给出比例或占比，只给具名示例",
+      "namedExamples": [
+        {
+          "pmid": "25253808",
+          "speciesClass": "farm-animal",
+          "title": "Effect of dietary zinc oxide on jejunal morphological and immunological characteristics in weaned piglets."
+        },
+        {
+          "pmid": "24706960",
+          "speciesClass": "farm-animal",
+          "title": "Effects of dietary clays on performance and intestinal mucus barrier of broiler chicks challenged with Salmonella enterica serovar Typhimurium and on goblet cell function in vitro."
+        },
+        {
+          "pmid": "26523563",
+          "speciesClass": "farm-animal",
+          "title": "Dietary organic zinc attenuates heat stress-induced changes in pig intestinal integrity and metabolism."
+        },
+        {
+          "pmid": "21592537",
+          "speciesClass": "farm-animal",
+          "title": "Expression of secreted mucins (MUC2, MUC5AC, MUC5B, and MUC6) and membrane-bound mucin (MUC4) in the lungs of pigs experimentally infected with Actinobacillus pleuropneumoniae."
+        },
+        {
+          "pmid": "29659876",
+          "speciesClass": "farm-animal",
+          "title": "Effects of Lactobacillus reuteri LR1 on the growth performance, intestinal morphology, and intestinal barrier function in weaned pigs."
+        },
+        {
+          "pmid": "33782049",
+          "speciesClass": "human",
+          "title": "Randomized Controlled Trial of the Gastrin/CCK(2) Receptor Antagonist Netazepide in Patients with Barrett's Esophagus."
+        },
+        {
+          "pmid": "19661836",
+          "speciesClass": "human",
+          "title": "Conjunctival mucin mRNA expression in contact lens wear."
+        },
+        {
+          "pmid": "40286792",
+          "speciesClass": "human-and-mouse",
+          "title": "Efficacy of a postbiotic and its components in promoting colonic transit and alleviating chronic constipation in humans and mice."
+        }
+      ],
+      "targetSpeciesRecordsWithBehaviouralOutcomes": 0,
+      "note": "复核由评审方执行，用于说明该过滤条件既不能限定物种也不能检索到目标文献；不是对作者原检索的重跑。"
+    },
+    "citedPrimaryRecordChecked": {
+      "pmid": "42343156",
+      "doi": "10.1080/19490976.2026.2689121",
+      "journal": "Gut Microbes",
+      "year": 2026,
+      "publicationTypes": [
+        "Journal Article"
+      ],
+      "fieldsVerified": [
+        "题录",
+        "出版类型",
+        "主题词",
+        "摘要"
+      ],
+      "abstractFindings": [
+        "以无特定病原体与无菌两种状态的 Muc2 敲除小鼠与 Muc2 表达小鼠相比较",
+        "评估焦虑样行为、抑郁样行为与记忆障碍",
+        "测量结肠、血清与脑内色氨酸及其代谢物"
+      ],
+      "causalToFilter": "该记录的出版类型仅\"期刊论文\"一种，不含临床试验类，故以 \"[pt]\" 作设计过滤时不会被检出。",
+      "notVerified": "随机化与分配方法：摘要未报告，报告未据此断言该研究满足送审稿件的纳入标准。"
+    }
+  },
+  "managedRunsObserved": [
+    {
+      "jobId": "review-20261004073236-e23b1d76d789",
+      "requestedArticleType": "other",
+      "terminalStatus": "succeeded",
+      "recommendation": "major_revision",
+      "rubrics": [
+        "universal_rubric",
+        "prisma_2020"
+      ],
+      "degraded": true,
+      "degradedReason": "inapplicable_RoB_tool_requirement：无纳入研究时偏倚风险评估工具无处施加，故不将「未做偏倚风险评估」计为缺陷。",
+      "statisticalRecomputation": "skipped",
+      "issuesReported": {
+        "fatal": 0,
+        "major": 5,
+        "minor": 15
+      },
+      "quoteVerification": {
+        "manuscript_chars": 7490,
+        "issues_checked": 20,
+        "quotes_checked": 10,
+        "quotes_located": 10,
+        "quotes_dropped": 0
+      },
+      "artifacts": [
+        {
+          "name": "peer-review-report.md",
+          "bytes": 22711,
+          "sha256": "86abc5d31a74368f221a72e490d14d78eb20a0382a97de0ce1801fbca3c77e31"
+        },
+        {
+          "name": "peer-review-run.json",
+          "bytes": 326977,
+          "sha256": "78c136575f392790"
+        },
+        {
+          "name": "request.json",
+          "bytes": 181,
+          "sha256": "974ad9998ade8a46"
+        },
+        {
+          "name": "result.json",
+          "bytes": 1442,
+          "sha256": "0bf7a585a9e17e48b72ffca5f5294678d2f5ac7fe5718dcb2b04e3011c580356"
+        }
+      ],
+      "disposition": "该次运行的报告正文内部不自洽：其正文列出 16 条编号问题并称无次要问题，而运行结果记录的却是 0 致命 / 5 重大 / 15 次要；本报告未沿用其结果计数。其部分具体断言经逐字比对后不成立，已在 revision-notes.md 中逐条记录并排除。"
+    },
+    {
+      "jobId": "review-20261004073421-194335b6a78e",
+      "requestedArticleType": "systematic-review",
+      "terminalStatus": "succeeded",
+      "recommendation": "major_revision",
+      "rubrics": [
+        "universal_rubric",
+        "prisma_2020"
+      ],
+      "degraded": true,
+      "degradedReason": "prisma_scr 不适用（研究类型为系统评价而非范围综述）；叙述性综述豁免条款不适用，PRISMA 2020 与注册、双人筛选、完整检索式等要求对本文具有约束力。",
+      "statisticalRecomputation": "skipped",
+      "issuesReported": {
+        "fatal": 4,
+        "major": 3,
+        "minor": 17
+      },
+      "quoteVerification": {
+        "manuscript_chars": 7490,
+        "issues_checked": 24,
+        "quotes_checked": 6,
+        "quotes_located": 6,
+        "quotes_dropped": 0
+      },
+      "artifacts": [
+        {
+          "name": "peer-review-report.md",
+          "bytes": 26017,
+          "sha256": "541264d7ba43b416d91ad4dcbe59425d0d2d14731c61de3da0fe4ccf4590a513"
+        },
+        {
+          "name": "peer-review-run.json",
+          "bytes": 352340,
+          "sha256": "6f98f1f28a29fb81"
+        },
+        {
+          "name": "request.json",
+          "bytes": 193,
+          "sha256": "7daa5f462a58d07c"
+        },
+        {
+          "name": "result.json",
+          "bytes": 1454,
+          "sha256": "8ec9ed23c19f85c5fb4e88fc376b380a17480e099b7eafb88f22cea7e110290f"
+        }
+      ],
+      "disposition": "其结论（建议大修、采用 PRISMA 2020）与本报告一致，其结果计数作为参照保留；其若干具体断言经逐字比对后不成立（例如称检索式缺少若干词块、称检索式与题名被截断、称方法段落重复出现），本报告未沿用，处理记录见 revision-notes.md。"
+    }
+  ],
+  "artifacts": [
+    {
+      "name": "peer-review-report.md",
+      "role": "评议报告正文",
+      "bytes": 37739,
+      "sha256": "e9d0ba8cec0b5e0c1613d09ba33db68d29363553e06d7e3e67820f5baad996e5"
+    },
+    {
+      "name": "peer-review-run.json",
+      "role": "本轮运行记录",
+      "bytes": null
+    },
+    {
+      "name": "revision-notes.md",
+      "role": "台账与过程记录",
+      "bytes": 9525,
+      "sha256": "a3746cbb125193ba9d02a9cd0d653371a53a6084921277dd729963170d5823a7"
+    }
+  ],
+  "notes": "本轮报告为评审方独立撰写：采用实际收到的文件为唯一评述对象，报告正文中的每一段英文引文均逐字取自该文件，未使用任何未能核验的来源。",
+  "jobIdProvenance": "本报告正文由本轮评审方独立撰写，不由任何单次受管评议任务生成；本轮调用的两次受管评议任务见 managedRunsObserved，其结论方向作为参照被读取，其中若干具体断言经逐字比对后未采用（见 revision-notes.md 第五节）。"
+}

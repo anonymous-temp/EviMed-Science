@@ -8,6 +8,7 @@ import {
   ALLOWED_WIRE_METHODS,
   DENIED_WIRE_METHODS,
   DshRuntimeAdapter,
+  KERNEL_PLUMBING_EVENT_TYPES,
   decodeSessionFrame,
   isAllowedWireMethod,
   mapWireError,
@@ -482,7 +483,7 @@ test("each turn-end kind lands on its own code, and an unknown kind is counted",
   const cases = [
     ["completed", null, undefined],
     ["aborted", "runtime_canceled", undefined],
-    ["blocked", "runtime_tool_error", "turn_blocked"],
+    ["blocked", "runtime_session_error", "turn_blocked"],
     ["error", "runtime_session_error", undefined],
     ["max-tokens", "runtime_session_error", "model_max_tokens"],
     ["interrupted", "runtime_stopped", undefined],
@@ -537,6 +538,7 @@ test("every live session/follow frame decodes, and an unrecognized event is visi
     "assistant/delta",
     "message/assistant",
     "message/user",
+    "session/title",
     "step/end",
     "step/start",
     // The parent's own `subagent/catalog` fact. It was on this recording all
@@ -547,13 +549,34 @@ test("every live session/follow frame decodes, and an unrecognized event is visi
     "tool/result",
     "turn/end",
     "turn/start",
-    // Frames this build has no variant for — `agent/inbox/spliced`,
-    // `session/title`, `request/header`, `request/context`,
-    // `session/title-llm-request`. Surfaced under a named `unknown` rather than
-    // dropped, which is what makes a kernel that adds a frame show up in the
-    // trajectory inspector instead of disappearing.
+    // Frames this build has no variant for — the kernel's own bookkeeping,
+    // checked just below. Surfaced under a named `unknown` rather than dropped,
+    // which is what makes a kernel that adds a frame countable instead of
+    // disappearing.
     "unknown",
   ], "a shape this build stops producing, or starts producing, must be read here");
+
+  // Every record of the live recording that has no variant is one the manifest
+  // classifies as the kernel's bookkeeping, so none of it is unclassified: not a
+  // blank card, not a count for an operator to chase. A re-recording at a new
+  // pin that writes a record nobody has classified fails here, by name.
+  const unclassified = decoded.map((item) => item.event)
+    .filter((event) => event.type === "unknown" && !KERNEL_PLUMBING_EVENT_TYPES.has(event.rawType))
+    .map((event) => event.rawType);
+  assert.deepEqual([...new Set(unclassified)], [], "a record type this recording carries is neither decoded nor classified");
+  // And the classification is not vacuous: the bookkeeping the brief names is
+  // on this wire and is recognised as such, each by the type it was written under.
+  const plumbingSeen = new Set(decoded.map((item) => item.event).filter((event) => event.type === "unknown").map((event) => event.rawType));
+  for (const rawType of ["request/header", "request/context", "session/title-llm-request", "agent/inbox/spliced", "system/message"]) {
+    assert.ok(plumbingSeen.has(rawType), `${rawType} should be on the recording, as bookkeeping`);
+  }
+  // The titles the kernel wrote, as the wire carries them: its stand-in first,
+  // the model's name for the conversation second.
+  const titles = decoded.filter((item) => item.event.type === "session/title").map((item) => item.event);
+  assert.deepEqual(titles.map((event) => event.source), ["fallback", "provider"]);
+  const recordedTitles = golden.session.filter((frame) => frame?.event?.type === "session/title").map((frame) => frame.event);
+  assert.deepEqual(titles.map((event) => event.title), recordedTitles.map((event) => event.data.title));
+  assert.deepEqual(titles.map((event) => event.seq), recordedTitles.map((event) => event.seq));
 
   // And the accounting, which is the half a set check cannot give: nothing the
   // kernel sent may decode to nothing except for reasons named here. A decoder
@@ -639,6 +662,30 @@ test("every live session/follow frame decodes, and an unrecognized event is visi
   assert.equal(decodeSessionFrame(RECORDED_SESSION, { type: "chunks", event: { type: "chunkrow/tool-call-chunks", seq: 1, data: {} } }), null);
   assert.equal(decodeSessionFrame(RECORDED_SESSION, null), null);
   assert.equal(decodeSessionFrame(RECORDED_SESSION, { type: "event" }), null);
+});
+
+test("a session title with no title in it is a counted unknown, not a title change", () => {
+  const frame = (data) => ({ type: "event", event: { type: "session/title", seq: 7, data } });
+  assert.deepEqual(decodeSessionFrame("s-1", frame({ title: "  ", source: { kind: "provider" } })).event, { type: "unknown", seq: 7, rawType: "session/title" });
+  assert.deepEqual(decodeSessionFrame("s-1", frame({ source: { kind: "provider" } })).event, { type: "unknown", seq: 7, rawType: "session/title" });
+  // A title is one line of the kernel's choosing; the stream carries a bounded one.
+  const long = decodeSessionFrame("s-1", frame({ title: "题".repeat(500), source: { kind: "fallback" } })).event;
+  assert.equal(long.type, "session/title");
+  assert.equal(long.title.length, 200);
+  assert.equal(decodeSessionFrame("s-1", frame({ title: "A title" })).event.source, "", "a source the kernel did not name stays unnamed");
+});
+
+test("the plumbing the manifest names is a subset of the vocabulary it records, with nothing twice", () => {
+  assert.ok(KERNEL_PLUMBING_EVENT_TYPES.size >= 12);
+  const known = new Set(SEAMS.sessionEventTypes);
+  assert.equal(known.size, SEAMS.sessionEventTypes.length, "a session event type is listed once");
+  assert.equal(KERNEL_PLUMBING_EVENT_TYPES.size, SEAMS.sessionEventPlumbing.length, "a plumbing type is listed once");
+  for (const rawType of KERNEL_PLUMBING_EVENT_TYPES) assert.ok(known.has(rawType), `${rawType} is plumbing but not a recorded session event type`);
+  // What a reader is given is never also plumbing: a decoded type is not on the list.
+  for (const rawType of ["turn/start", "turn/end", "step/start", "step/end", "user/message", "assistant/message", "tool/call", "tool/result",
+    "subagent/catalog", "subagent/descriptor", "compaction/end", "session/title"]) {
+    assert.ok(!KERNEL_PLUMBING_EVENT_TYPES.has(rawType), `${rawType} has a variant and must not be listed as plumbing`);
+  }
 });
 
 test("the event kinds a single short run cannot produce still decode", () => {

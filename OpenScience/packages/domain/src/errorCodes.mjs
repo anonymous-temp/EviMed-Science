@@ -90,6 +90,17 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   "public_source_gateway_unavailable",
   "public_source_gateway_timeout",
   "public_source_gateway_rate_limited",
+  // A source that said no to this caller (HTTP 401 or 403): the item exists and
+  // the source will not serve it, so it is a limitation to report and retrying
+  // cannot change it. The gateway names it apart from `..._upstream_error` so
+  // a run is told "refused" and not "down" (plan section 5.7).
+  "public_source_gateway_upstream_denied",
+  // The three whole-result failures of the record and file operations
+  // (`source_outcome.py`): refused, out of time, unreachable. Each is a fact
+  // about a source, never a defect in the run; the tool says what to do next.
+  "source_access_denied",
+  "source_timeout",
+  "source_unavailable",
   "public_source_gateway_response_invalid",
   "public_source_gateway_response_too_large",
   // `reference_list` asked Europe PMC about a DOI it holds no record of. The
@@ -315,6 +326,15 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   // is what the package checks decide.
   "specialist_execution_failed",
   "meta_agent_execution_failed",
+  // The same, for an engine the deployment's wall clock stopped
+  // (`EVIMED_SPECIALIST_EXECUTION_TIMEOUT_SECONDS`, default three hours): it
+  // hung, or ran past what one job may take. The job ends by this code with what
+  // the engine had written kept in the workspace, and the run reports the
+  // analysis as not finished rather than as wrong. `mr_analysis_timeout` is the
+  // MR engine's own word for it.
+  "specialist_job_timeout",
+  "meta_agent_job_timeout",
+  "mr_analysis_timeout",
   "upstream_failed",
   "public_source_api_path_forbidden",
   "public_source_api_request_forbidden",
@@ -432,6 +452,16 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   // tool never got far enough to have an opinion about the source.
   "public_source_query_invalid",
   "public_source_pmid_invalid",
+  // The N04 operations (2026-10-04): an identifier list with no identifier in it,
+  // an NCT id or compareTo that is not one, and a label request that names both or
+  // neither of drug and setid. The run built the request wrongly; nothing was asked.
+  "public_source_identifier_invalid",
+  "public_source_trial_id_invalid",
+  "public_source_label_invalid",
+  // A record or label that was read and could not be written into the workspace, so
+  // nothing downstream can quote it (as full_text_output_invalid).
+  "public_source_trial_snapshot_failed",
+  "public_source_label_snapshot_failed",
   // `locate_quote` asked with no quote, or with a path outside the preserved
   // sources, or ran where no managed workspace exists: the run's own request
   // or the runtime's own set-up, never a fact about a source.
@@ -659,10 +689,6 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   "science_connector_value_above_maximum",
   "science_connector_value_below_minimum",
   "pharmacy_reference_invalid",
-  // The worker finished but its output does not match the evidence it claims.
-  // Delivering that is exactly what this gate exists to prevent.
-  "meta_source_evidence_mismatch",
-  "specialist_source_evidence_mismatch",
   // The GEO probe's own 400s: the run asked for an operation, a vendor, a flag,
   // or a screenshot name outside the closed vocabulary. Unlike a refusal, that
   // is the run's own request being wrong, and the caller has to see it rather
@@ -680,11 +706,17 @@ export const terminalEvidenceSourceErrorCodes = new Set([
  * Kernel-boundary codes the adapter lands a DSH turn on (§6.4). `interrupted`
  * is written by the persistence backend on cold load, not by the loop, so it
  * reaches us as a stopped run rather than a failed one.
+ *
+ * `blocked` is a pre-step rejection: a plugin refused the turn before its first
+ * model call, which no tool had a part in. It mapped to `runtime_tool_error`
+ * while a tool failure could end a run; the ledger has recorded it as a session
+ * error with the sub-code `turn_blocked` since, and the wire now says the same
+ * (2026-10-04).
  */
 export const TURN_END_ERROR_CODES = Object.freeze({
   completed: null,
   aborted: 'runtime_canceled',
-  blocked: 'runtime_tool_error',
+  blocked: 'runtime_session_error',
   error: 'runtime_session_error',
   'max-tokens': 'runtime_session_error',
   interrupted: 'runtime_stopped',
@@ -725,10 +757,9 @@ export const RUNTIME_ERROR_CODES = Object.freeze([
   // Not written onto a run by the ledger since 2026-10-04: a research tool that
   // failed and was not corrected is a notice on the run (`run_tool_failed`),
   // and a turn that ended on its own is judged by what it produced. Kept, with
-  // its sentence, so a run recorded before then is still explained by name;
-  // `TURN_END_ERROR_CODES` still names the kernel's `blocked` turn end with it
-  // on the wire, which the ledger records as `runtime_session_error` with the
-  // sub-code `turn_blocked`.
+  // its sentence, so a run recorded before then is still explained by name.
+  // Nothing maps onto it any more: the kernel's `blocked` turn end is
+  // `runtime_session_error` with the sub-code `turn_blocked`.
   'runtime_tool_error',
   'runtime_turn_end_unknown',
   'runtime_history_unavailable',
@@ -1232,6 +1263,7 @@ export const VCR_PROTOCOL_ISSUE_CODES = Object.freeze([
   'input_id_invalid', 'input_version_missing', 'input_hash_invalid', 'input_hash_missing', 'input_value_source_invalid',
   'input_value_source_missing', 'input_location_invalid', 'input_location_missing', 'input_location_forbidden',
   'input_field_unknown', 'input_shape_invalid', 'input_source_not_individual', 'patient_input_required', 'snapshot_required',
+  'input_column_sources_invalid', 'input_column_source_invalid', 'input_column_source_not_individual',
   // its scenario
   'scenario_missing', 'scenario_value_invalid', 'scenario_field_unknown', 'scenario_field_missing',
   'endpoint_unknown', 'endpoint_not_supported', 'design_unknown', 'design_not_supported',
@@ -1256,7 +1288,8 @@ export const VCR_PROTOCOL_ISSUE_CODES = Object.freeze([
  */
 export const VCR_ENGINE_ISSUE_CODES = Object.freeze([
   'constraint_unsatisfiable', 'cpu_budget_exhausted', 'grid_cell_failed', 'handler_error',
-  'input_format_unsupported', 'input_hash_mismatch', 'input_out_of_range', 'input_parse_failed', 'input_too_large',
+  'input_format_unsupported', 'input_hash_mismatch', 'input_out_of_range', 'input_parse_failed', 'input_source_not_reconstructed',
+  'input_too_large',
   'job_invalid', 'mechanistic_engine_unknown', 'mechanistic_field_missing', 'missing_covariate',
   'model_card_field_missing', 'model_risk_unknown', 'performance_measure_unsupported', 'replicates_all_failed',
   'required_field_missing', 'twin_label_inconsistent', 'uncertainty_and_variability_conflated',
@@ -1641,6 +1674,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   input_hash_mismatch: '数据文件的内容和冻结快照时的哈希对不上；已拒绝读取。',
   input_out_of_range: '有一个输入值超出了这个方法允许的范围。',
   input_parse_failed: '数据文件无法解析成表格。',
+  input_source_not_reconstructed: '这个输入必须是由已发表生存曲线重建出的伪个体数据（来源标记为「重建」）；真实患者数据不能冒充它。',
   input_too_large: '数据文件超过了引擎允许读取的大小。',
   job_invalid: '这项计算不符合引擎协议，已拒绝，没有运行。',
   mechanistic_engine_unknown: '机制模型声明的计算引擎不在支持列表里。',
@@ -1773,6 +1807,15 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   specialist_receipt_digest_mismatch:
     '写下交付回执之后文件又被改动过，盘上的这一版没有经过质量门判定，因此不能当作已核验的成果发布。'
     + '文件仍在工作区里，可以自行取用；若这是有意的收尾修改，请让运行在最后一次修改之后再提交一次。',
+  specialist_job_timeout:
+    '专科引擎运行超过了部署设定的单次时限，已被停止。已经写出的文件保留在工作区里；'
+    + '重新发起（范围较大的请求可以缩小范围）也许就能完成。',
+  meta_agent_job_timeout:
+    '荟萃分析引擎运行超过了部署设定的单次时限，已被停止。已经完成的步骤和写出的文件都保留着，'
+    + '用同样的请求再发起一次会从上次完成的步骤接着做。',
+  mr_analysis_timeout:
+    '孟德尔随机化分析运行超过了部署设定的单次时限，已被停止。已经写出的文件保留在工作区里；'
+    + '重新发起（例如换成更少的暴露或结局）也许就能完成。',
   specialist_required_output_missing:
     '这项能力约定必须产出的文件里，有一个没有写出来，因此这份成果不完整、没有通过质量门。'
     + '已经写好的部分仍在工作区里。',
@@ -1925,6 +1968,13 @@ export const ERROR_CODE_FAMILIES = Object.freeze([
   [/^web_render_/, '这个网页需要浏览器打开，云端浏览器这次没能打开它；运行会改用其他来源。'],
   [/^source_parser_/, '文档解析服务这次没能把这份文件转成文字。'],
   [/^source_format_/, '这种文件格式无法转成文字。'],
+  // The three ways a record or file retrieval can fail as a whole (`source_outcome.py`):
+  // the source refused this reader, the call's one time budget ran out, or the source
+  // could not be reached. Each is a limitation the report states and never a finding
+  // that the thing does not exist.
+  [/^source_access_denied$/, '这个数据源不向当前用户提供这份内容；报告会把它记为限制，不会当作读过。'],
+  [/^source_timeout$/, '这个数据源这次没有在时限内给出结果；报告会把它记为限制，稍后可以再试。'],
+  [/^source_unavailable$/, '这个数据源这次连不上；报告会把它记为限制，不会当作查不到。'],
   [/^public_source_[a-z0-9_]+_credential_missing$/, '这个数据源还没有配置凭据，相关部分已跳过；可以在「设置 → 数据源」添加后继续。'],
   [/^public_source_/, '公共数据源这次没能给出结果。'],
   [/^pubtator_/, '关系式检索的概念标识或关系类型不对，用 term_normalize 的 annotate 取一次标识再试。'],

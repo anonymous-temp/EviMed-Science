@@ -60,8 +60,8 @@ import { createHash } from "node:crypto";
 
 import {
   VCR_DESIGN_SUPPORT, VCR_ENGINE_METHODS, VCR_EXPORT_KINDS, VCR_EXPORT_KIND_LABELS_ZH, VCR_JOB_METHODS, VCR_PATIENT_LEVEL_JOB_KINDS,
-  VCR_SCENARIO_SCHEMAS, VCR_STALE_REASONS, VCR_STEPS, VCR_STEP_CAPABILITIES, VCR_STEP_NEEDS, VCR_STEP_PRODUCTS, lineageNode, parseLineageNode, recomputePlan,
-  whenHolds,
+  VCR_SCENARIO_SCHEMAS, VCR_STALE_REASONS, VCR_STEPS, VCR_STEP_CAPABILITIES, VCR_STEP_NEEDS, VCR_STEP_PRODUCTS, allowanceWaitingNote, lineageNode, parseLineageNode,
+  recomputePlan, stepWaitingFor, whenHolds,
 } from "@evimed/domain";
 
 import { HttpError, randomId } from "./security.mjs";
@@ -115,6 +115,12 @@ export const VCR_ACCRUAL_TOLERANCE = 0.2;
 
 /** @param {unknown} error */
 const codeOf = (error) => (typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : "vcr_orchestrator_failed");
+/**
+ * The fields that take a step off the allowance when it starts or stops for another reason. Only what the allowance
+ * wrote is cleared: a note the step has for any other reason stays.
+ * @param {any} study @param {string} step
+ */
+const unwaiting = (study, step) => (study.steps?.[step]?.waiting ? { waiting: null, note: null } : {});
 /** @param {unknown} value */
 const object = (value) => (value && typeof value === "object" && !Array.isArray(value) ? /** @type {Record<string, any>} */ (value) : {});
 /** @param {unknown} value */
@@ -651,10 +657,22 @@ export function vcrJobKindFor(kind, row, context = {}) {
   }
   if (kind === "comparator") {
     const route = String(object(row).route);
-    if (route === "literature_control") return configuration.method === "maic" ? "maic_comparator" : "reconstruct_km";
+    // The endpoint the comparison is about: the design's own, else the study's definition. A time-to-event
+    // MAIC is another method from the continuous/binary one (hazard ratios on a log scale, a comparator
+    // that is a reconstruction), so the endpoint decides which of the two a `maic` design runs.
+    const endpoint = String(object(configuration.endpoint).type ?? object(context.definition).endpointType ?? "");
+    if (route === "literature_control") {
+      if (configuration.method !== "maic") return "reconstruct_km";
+      return endpoint === "time_to_event" ? "maic_time_to_event_comparator" : "maic_comparator";
+    }
     if (route === "hybrid_control") return "map_prior";
     if (route === "prognostic_adjustment") return "procova";
     if (route === "external_control") {
+      // What the design declares, in this order: alternative covariate sets make the sensitivity analysis; a named
+      // method (`weighted_cox`, `aipw`) makes that analysis; otherwise the weighting job of the estimand.
+      if (list(configuration.covariateSets).length) return "covariate_set_comparator";
+      if (configuration.method === "weighted_cox") return "weighted_cox_comparator";
+      if (configuration.method === "aipw") return "aipw_comparator";
       return configuration.method === "propensity" || String(object(row).estimand ?? "ATT") !== "ATT" ? "propensity_weight_comparator" : "weight_comparator";
     }
     return null;
@@ -670,7 +688,7 @@ export function vcrJobKindFor(kind, row, context = {}) {
 /**
  * One job of an object's plan.
  * @typedef {{ stage: string | null, jobKind: string, scenario: Record<string, any>, keepTables: string[],
- *   derived: Array<{ from: "object" | "stage", stage?: string, table: string }>, snapshot: boolean, after: string | null,
+ *   derived: Array<{ from: "object" | "stage", stage?: string, table: string, bindTo?: string }>, snapshot: boolean, after: string | null,
  *   bound: Array<{ key: string, version: number, path: string }>, detail: Record<string, any> }} VcrStage
  * @typedef {{ ok: true, stages: VcrStage[] }} VcrPlanOk
  * @typedef {{ ok: false, unavailable: { rule: string, reason: string, gaps: any[] } }} VcrPlanUnavailable
@@ -736,6 +754,71 @@ export function vcrModelApplicabilityIssues(model, { endpointType, variables }) 
     }
   }
   return issues;
+}
+
+/**
+ * The analysis a covariate-set comparison re-runs, from the design's declared method and estimand:
+ * the doubly robust one when it says `aipw`, the propensity weights when it says `propensity` or the
+ * estimand is not the ATT (entropy balancing estimates the ATT and nothing else), else entropy balancing.
+ * @param {Record<string, any>} configuration @param {string} estimand
+ */
+function covariateSetAnalysis(configuration, estimand) {
+  if (configuration.method === "aipw") return "aipw";
+  return configuration.method === "propensity" || estimand !== "ATT" ? "propensity" : "entropy_balance";
+}
+
+/**
+ * Whether the study's declared design supports the comparator job the design chose, as a refusal that
+ * says what to change, or null. The checks are the ones the engine would refuse by name later, made
+ * here so the study reads one plain sentence at planning time: a Cox model needs an event time, the
+ * doubly robust estimate a continuous or binary outcome and the trial's own population (ATT).
+ * @param {string} jobKind @param {Record<string, any>} configuration @param {string} endpoint @param {string} estimand
+ * @returns {{ code: string, message: string } | null}
+ */
+function externalControlRefusal(jobKind, configuration, endpoint, estimand) {
+  const sets = jobKind === "covariate_set_comparator";
+  const analysis = sets ? covariateSetAnalysis(configuration, estimand) : null;
+  const wantsAipw = jobKind === "aipw_comparator" || analysis === "aipw";
+  if (!(["weighted_cox_comparator", "aipw_comparator", "covariate_set_comparator"].includes(jobKind))) return null;
+  if (!endpoint) return { code: "vcr_scenario_endpoint_missing", message: "这项比较要知道终点类型：先写研究定义，或在对照设计里写 endpoint.type。" };
+  if (jobKind === "weighted_cox_comparator" && endpoint !== "time_to_event") {
+    return { code: "vcr_job_scenario_invalid", message: `加权 Cox 只用于事件时间终点，这个研究的终点是 ${endpoint}：连续或二分类终点请用加权估计，或把方法改为 aipw。` };
+  }
+  if (wantsAipw && endpoint === "time_to_event") {
+    return { code: "vcr_job_scenario_invalid", message: "双重稳健估计只用于连续或二分类终点；事件时间终点请用 weighted_cox。" };
+  }
+  if (wantsAipw && estimand !== "ATT") {
+    return { code: "vcr_job_scenario_invalid", message: "双重稳健估计只估计试验人群自己的效应（ATT）；要别的估计对象请换成倾向评分加权。" };
+  }
+  return null;
+}
+
+/**
+ * How a time-to-event MAIC gets its comparator, from what the design declares: the comparator's published curve
+ * (`curve` with `riskTable`) is reconstructed into pseudo-patients by the platform; an anchored design may state
+ * the comparator trial's log hazard ratio and standard error instead. The two are never mixed, a single curve
+ * is the unanchored comparator, and two curves (`treatmentArm`) are the anchored one's.
+ * @param {Record<string, any>} configuration
+ * @returns {{ reconstruct: boolean, refused?: undefined } | { refused: string, reconstruct?: undefined }}
+ */
+function maicTimeToEventPlan(configuration) {
+  const anchored = configuration.anchored === true;
+  const curve = Array.isArray(configuration.curve) && configuration.curve.length > 0;
+  const twoArms = isObject(configuration.treatmentArm);
+  const published = configuration.aggregateEstimate != null || configuration.aggregateSe != null;
+  if (!anchored) {
+    if (!curve) return { refused: "非锚定的事件时间比较需要比较臂的发表曲线（curve 与 riskTable）：平台用它重建伪个体数据，不接受自己写的数据行。" };
+    if (twoArms) return { refused: "非锚定比较只重建比较臂的一条曲线；treatmentArm 属于锚定比较（anchored: true）。" };
+    if (published) return { refused: "非锚定比较没有已发表的对比可写：aggregateEstimate 与 aggregateSe 属于锚定比较。" };
+    return { reconstruct: true };
+  }
+  if (curve && published) return { refused: "锚定比较的对比臂要么由曲线重建（curve、riskTable、treatmentArm），要么写已发表的风险比对数与标准误（aggregateEstimate、aggregateSe），不能两个都写。" };
+  if (curve) {
+    return twoArms ? { reconstruct: true }
+      : { refused: "锚定比较要重建两个臂：curve 是共同对照臂，treatmentArm 是比较试验的试验臂；或改写已发表的风险比对数与标准误。" };
+  }
+  if (published) return { reconstruct: false };
+  return { refused: "锚定比较要知道对比较试验的对比：写重建用的曲线（curve、riskTable、treatmentArm），或已发表的风险比对数与标准误（aggregateEstimate、aggregateSe）。" };
 }
 
 /**
@@ -848,6 +931,18 @@ export function vcrBuildStages(item, context) {
     const type = object(configuration.endpoint).type ?? endpointDefault;
     const estimand = String(row.estimand ?? "ATT");
     if (route === "literature_control") {
+      if (configuration.method === "maic" && type === "time_to_event") {
+        const plan = maicTimeToEventPlan(configuration);
+        if (plan.refused) return { ok: false, refused: { code: "vcr_job_scenario_invalid", message: plan.refused } };
+        const study = { ...configuration, endpoint: { ...object(configuration.endpoint), type } };
+        // The comparator's patients are the reconstruction's pseudo-patients, handed to the MAIC by the result that wrote them.
+        if (!plan.reconstruct) return finish([stage("maic_time_to_event_comparator", study, { endpoint: type, snapshot: true, bindAll: false })]);
+        return finish([
+          stage("reconstruct_km", configuration, { stage: "reconstruct", bindAll: false, snapshot: false, keepTables: ["reconstructed-ipd"] }),
+          stage("maic_time_to_event_comparator", study, { stage: "maic", endpoint: type, snapshot: true, bindAll: false, after: "reconstruct",
+            derived: [{ from: "stage", stage: "reconstruct", table: "reconstructed-ipd", bindTo: "pseudoIpdInputId" }] }),
+        ]);
+      }
       if (configuration.method === "maic") {
         return finish([stage("maic_comparator", { ...configuration, endpoint: { ...object(configuration.endpoint), type } }, { endpoint: type, snapshot: true, bindAll: false })]);
       }
@@ -867,8 +962,16 @@ export function vcrBuildStages(item, context) {
       return finish([stage("procova", { ...configuration, endpoint: { ...object(configuration.endpoint), type: type ?? "continuous" } }, { endpoint: "continuous", snapshot: false })]);
     }
     if (route === "external_control") {
-      const jobKind = vcrJobKindFor("comparator", row);
-      return finish([stage(/** @type {string} */ (jobKind), { ...configuration, estimand, endpoint: { ...object(configuration.endpoint), type } }, { endpoint: type, bindAll: false })]);
+      const jobKind = /** @type {string} */ (vcrJobKindFor("comparator", row, { definition }));
+      const refused = externalControlRefusal(jobKind, configuration, String(type ?? ""), estimand);
+      if (refused) return { ok: false, refused };
+      /** @type {Record<string, any>} */
+      const candidate = { ...configuration, estimand, endpoint: { ...object(configuration.endpoint), type } };
+      // The analysis a covariate-set comparison re-runs is the design's own method, written by code from it and never typed in.
+      if (jobKind === "covariate_set_comparator") candidate.analysis = covariateSetAnalysis(configuration, estimand);
+      // A Cox model under another estimand than the ATT is weighted by the propensity score, as the weighting jobs are.
+      if (jobKind === "weighted_cox_comparator" && estimand !== "ATT" && candidate.weighting === undefined) candidate.weighting = "propensity";
+      return finish([stage(jobKind, candidate, { endpoint: type, bindAll: false })]);
     }
     return { ok: false, unavailable: { rule: "route_unavailable_in_version", reason: "route_unavailable", gaps: [ROUTE_GAPS.model_comparator] } };
   }
@@ -1039,6 +1142,8 @@ export function vcrGapsForRule(rule) {
     effective_sample_size_below_floor: { title: "加权后有效样本量太低", detail: "加权后外部对照的有效样本量低于下限，估计不稳。", answers: "补充更多可比的外部患者。" },
     standardized_difference_above_floor: { title: "加权后关键协变量仍不平衡", detail: "至少一个关键协变量加权后的标准化差异不低于 0.1。", answers: "换协变量集、补充数据，或承认这两群人不可比。" },
     tau_beyond_followup: { title: "限制平均生存时间的时点超过了随访", detail: "所选时点比某一组最长的随访还长。", answers: "把时点缩到报告里给出的最大可用时点以内，或补充随访更长的数据。" },
+    too_few_events: { title: "某一组没有事件，风险比不存在", detail: "有一组一个事件都没有，或 Cox 模型没有收敛，风险比无法估计。", answers: "延长随访或补充事件更多的数据；也可以改看不依赖事件数的指标，如限制平均生存时间的差。" },
+    nuisance_model_not_estimable: { title: "倾向性模型或结局模型拟合不出来", detail: "协变量之间高度共线，或外部对照的人数不足以拟合结局模型的全部系数。", answers: "删去重复或共线的协变量，减少结局模型里的项，或补充更多外部对照患者。" },
     reconstruction_failed_qc: { title: "重建的曲线没有通过质控", detail: "重建出的风险人数、事件数、中位数或风险比与原文对不上。", answers: "重新数字化曲线并核对风险人数表，或换一篇报告完整的文献。" },
     map_prior_conflict: { title: "历史信息与当前数据冲突", detail: "MAP 先验与当前对照组数据的冲突检验越界。", answers: "检查历史研究与本研究人群是否可比，或降低借用权重。" },
     // The two the control plane derives before any job: they carry the route's
@@ -1579,8 +1684,11 @@ export class VcrOrchestrator {
     const read = await this.#read(study);
     const criteria = read.protocol ? Number((await this.store.one(`SELECT count(*)::integer AS n FROM ${VCR_SCHEMA}.criteria
       WHERE study_id = $1 AND protocol_version_id = $2`, [study.id, read.protocol.id]))?.n ?? 0) : 0;
-    const assessments = Number((await this.store.one(`SELECT count(*)::integer AS n FROM ${VCR_SCHEMA}.matching_assessments
-      WHERE study_id = $1`, [study.id]))?.n ?? 0);
+    // Only what was judged against the criteria as they stand now. An assessment made against an earlier version of the
+    // protocol stays in the history and answers a question that is no longer asked; counting it called the step done while
+    // nobody had been judged against the criteria the study holds (`protocol_version_id` is that version).
+    const assessments = read.protocol ? Number((await this.store.one(`SELECT count(*)::integer AS n FROM ${VCR_SCHEMA}.matching_assessments
+      WHERE study_id = $1 AND protocol_version_id = $2`, [study.id, read.protocol.id]))?.n ?? 0) : 0;
 
     const objects = this.#objectStates(read);
     /** @param {string} step */
@@ -1813,7 +1921,7 @@ export class VcrOrchestrator {
     if (stage.detail.awaitingAnalytic === true) return { stop: true };
     const key = stage.stage ? `job:${node}#${stage.stage}` : `job:${node}`;
     if (await this.#mark(study.id, key)) return {};
-    /** @type {Array<{ resultId: string, table: string }>} */
+    /** @type {Array<{ resultId: string, table: string, bindTo?: string }>} */
     const derived = [];
     if (stage.after) {
       const previous = await this.#mark(study.id, `job:${node}#${stage.after}`);
@@ -1829,7 +1937,7 @@ export class VcrOrchestrator {
         ? String(object((await this.#mark(study.id, `job:${node}#${entry.stage}`))?.detail).resultId ?? "")
         : String(read.populations.find((population) => population.id === item.row.populationId)?.resultId ?? "");
       if (!resultId) return { stop: true };
-      derived.push({ resultId, table: entry.table });
+      derived.push({ resultId, table: entry.table, ...(entry.bindTo ? { bindTo: entry.bindTo } : {}) });
     }
     const inputs = await this.#freeze(item, stage, read);
     if (stage.snapshot && !inputs.some((input) => input.kind === "snapshot")) {
@@ -2373,7 +2481,7 @@ export class VcrOrchestrator {
       const running = await this.#update(study.id, spec.key, {
         state: "running", runId: String(out.runId), sessionId: out.sessionId ?? null, attempts: Number(mark.attempts ?? 0) + 1,
       }, ["claimed"]);
-      for (const step of spec.steps) current = await this.#step(current, step, { status: "running", runId: String(out.runId) });
+      for (const step of spec.steps) current = await this.#step(current, step, { status: "running", runId: String(out.runId), ...unwaiting(current, step) });
       this.counters.dispatched += 1;
       if (running && out.status && TERMINAL_RUN.has(String(out.status))) await this.#finishRun(current, running, String(out.status));
       return { dispatched: { runId: String(out.runId), sessionId: out.sessionId ?? null } };
@@ -2381,7 +2489,7 @@ export class VcrOrchestrator {
       const code = codeOf(error);
       if (TERMINAL_DISPATCH.has(code)) {
         await this.#update(study.id, spec.key, { state: "failed", detail: { lastError: code, allowed: Number(mark.attempts ?? 0) } }, ["claimed"]);
-        for (const step of spec.steps) current = await this.#step(current, step, { status: "failed" });
+        for (const step of spec.steps) current = await this.#step(current, step, { status: "failed", ...unwaiting(current, step) });
         // An export has no step to fail: its row is what says the run will never come, or it reads 「排队中」 for good.
         if (spec.purpose === "export" && object(spec.detail).exportId) {
           await this.store.updateExport(String(object(spec.detail).exportId), { state: "failed" });
@@ -2393,6 +2501,12 @@ export class VcrOrchestrator {
       await this.#update(study.id, spec.key, { state: "pending", detail: { lastError: code } }, ["claimed"]);
       this.counters.deferred += 1;
       this.lastDeferral = code;
+      // A start the allowance refused is not a step that is merely queued: the page says what it waits on, and where
+      // that is put right. The key stays pending, so the next tick asks again and the step starts by itself.
+      const waiting = stepWaitingFor(code);
+      if (waiting) {
+        for (const step of spec.steps) current = await this.#step(current, step, { status: "queued", waiting, note: allowanceWaitingNote(waiting) });
+      }
       return { deferred: code };
     }
   }

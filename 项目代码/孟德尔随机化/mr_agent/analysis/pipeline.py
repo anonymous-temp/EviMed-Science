@@ -38,6 +38,7 @@ from mr_agent.models import (
     MRMethod,
     SessionState,
 )
+from mr_agent import source_notes
 from mr_agent.tools import gwas, pubmed, umls
 from mr_agent.tools.gwas import sanitize_gwas_id
 from mr_agent.tools.mr_executor import (
@@ -354,7 +355,11 @@ class MRPipeline:
         for term in all_terms:
             if not term or not term.strip():
                 continue
-            syns = umls.get_synonyms_umls(term)
+            syns, unused = umls.lookup_synonyms_umls(term)
+            if unused:
+                # Said in the result and the methods text, not only in the log:
+                # the search terms came from the language model, not from UMLS.
+                self.state.note_source_not_used(source_notes.row("umls", "UMLS", unused, "umlsSynonyms", "llm"))
             if not syns:
                 syns = umls.get_synonyms_llm(term, self.llm)
             # 只取前3个同义词，避免产生过多 GWAS 搜索请求

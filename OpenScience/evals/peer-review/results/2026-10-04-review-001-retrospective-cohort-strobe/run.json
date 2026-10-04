@@ -1,0 +1,47 @@
+{
+  "capability": "peer-review",
+  "brief": "review-001-retrospective-cohort-strobe",
+  "base": "https://82.156.128.153",
+  "project": "acceptance-peer-review",
+  "session": "acc-peer-review-muti6n0z",
+  "runId": "run_0370f95c62e10836294c0253a59f6195",
+  "agentVersion": "1.0.2",
+  "dispatchedAt": "2026-10-04T07:32:27.977Z",
+  "observedAt": "2026-10-04T07:51:40Z",
+  "observation": {
+    "status": "terminal",
+    "reason": "terminal"
+  },
+  "prompt": "manuscript: manuscripts/cds-reminder-deescalation.pdf（单中心回顾性前后对照研究：ICU 抗菌药物降阶梯的决策支持提醒，部署前后各 40 例入院）\narticleType: observational-cohort\noutputLanguage: zh-CN",
+  "promptSource": "file peer-prompt.txt",
+  "outcome": {
+    "status": "succeeded",
+    "startedAt": "2026-10-04T07:32:27.977Z",
+    "finishedAt": "2026-10-04T07:51:37.722Z",
+    "errorCode": null,
+    "verification": null,
+    "artifacts": [
+      "deliverables/peer-review/peer-review-report.md",
+      "deliverables/peer-review/peer-review-run.json",
+      "deliverables/peer-review/revision-notes.md",
+      "work/extract_pdf.py"
+    ],
+    "unverifiedArtifacts": [],
+    "qualityNotices": [
+      {
+        "code": "deliverable_run_receipt_unbound",
+        "check": "structured-output",
+        "severity": "advice",
+        "title": "结构化产物格式有误",
+        "detail": "文件 peer-review-run.json",
+        "file": "peer-review-run.json",
+        "text": "peer-review-run.json names no jobId, so the package cannot be tied to the engine run that produced it."
+      }
+    ],
+    "effectiveAgentId": "peer-review",
+    "effectiveRouteReason": "session-binding",
+    "durationMs": 1149745,
+    "repairRounds": null,
+    "model": "deepseek/deepseek-flash"
+  }
+}

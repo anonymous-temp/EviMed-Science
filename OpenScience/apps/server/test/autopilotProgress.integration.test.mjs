@@ -51,9 +51,12 @@ test("Postgres scheduling freezes only owned prior records and reuses the real i
 test("Postgres credit refusal leaves a bounded queued job and resource reason without a scientific outcome; pause prevents its retry", options, async t => {
   const f = await fixture(t); const scheduled = await f.service.schedule(f.owner,f.agenda.id,{date:f.today});
   let reservations = 0;
-  const credits = { enabled:true,balanceFor:async()=>({balance:0}),estimate:async()=>({low:1,high:2}),counters:{refusedStarts:0} };
+  // A real service (its wiring is its own private state), with only the two
+  // reads that would reach the wallet answered here.
+  const credits = Object.assign(new EvimedCreditsService({ config:{evimedCreditsEnabled:true,evimedCreditsPerCny:1}, database:f.database, client:{configured:true} }),
+    { balanceFor:async()=>({balance:0}), estimate:async()=>({low:1,high:2}) });
   const worker = new AutopilotWorker({jobs:f.jobs,service:f.service,dispatchEpisode:async input=>{
-    await EvimedCreditsService.prototype.assertBalanceForStart.call(credits,f.owner,"clinical-evidence-synthesis");
+    await credits.assertBalanceForStart(f.owner,"clinical-evidence-synthesis");
     await input.assertDispatchAllowed(); reservations++; return {runId:"run",sessionId:"session"};
   }});
   await worker.tick();
@@ -74,8 +77,9 @@ test("Postgres credit refusal leaves a bounded queued job and resource reason wi
 test("the existing credit service admits unknown and disabled balances without inventing a positive balance", options, async t => {
   const f = await fixture(t); const {episode} = await f.service.schedule(f.owner,f.agenda.id,{date:f.today});
   for (const result of [
-    await EvimedCreditsService.prototype.assertBalanceForStart.call({enabled:false},f.owner,"meta-analysis"),
-    await EvimedCreditsService.prototype.assertBalanceForStart.call({enabled:true,balanceFor:async()=>({balance:null,status:"unavailable"})},f.owner,"meta-analysis"),
+    await new EvimedCreditsService({ config:{evimedCreditsEnabled:false,evimedCreditsPerCny:1}, database:f.database, client:{configured:true} }).assertBalanceForStart(f.owner,"meta-analysis"),
+    await Object.assign(new EvimedCreditsService({ config:{evimedCreditsEnabled:true,evimedCreditsPerCny:1}, database:f.database, client:{configured:true} }),
+      { balanceFor:async()=>({balance:null,status:"unavailable"}) }).assertBalanceForStart(f.owner,"meta-analysis"),
   ]) {
     const saved = await f.service.recordBalanceCheck(f.owner,episode.id,{...result,capabilityId:"meta-analysis",checkedAt:new Date().toISOString()});
     assert.equal(saved.allowed,true); assert.equal(saved.balance,null); assert.equal(saved.reason,result.reason);

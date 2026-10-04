@@ -79,6 +79,7 @@ JOB_KINDS = (
     "reconstruct_km", "pool_evidence", "weight_comparator", "propensity_weight_comparator", "maic_comparator",
     "evalue", "rmst", "design_analytic", "design_simulation", "design_grid", "assurance", "procova",
     "accrual_forecast", "map_prior", "match_criteria",
+    "weighted_cox_comparator", "maic_time_to_event_comparator", "aipw_comparator", "covariate_set_comparator",
     # robustness methods (2026-10-04)
     "negative_control_comparator", "tipping_point", "prognostic_adjustment_comparator",
 )
@@ -217,10 +218,11 @@ def tool_definitions():
                 "{historical{...}, ...}; procova {endpoint, truth{effect,sd}, prognostic{rho}, analysis}. Truth spells "
                 "the null case truth.null (boolean); accrual (enrolment, follow-up, dropout as accrual.dropoutAnnual) "
                 "exists only for a time_to_event endpoint; alpha is the total, "
-                "sided is 1 or 2. Patient-level kinds (profile_snapshot, build_cohort, synthesize_population, "
-                "weight_comparator, ...) name their data as inputs [{kind:'snapshot', id}] and nothing else. "
-                "pool_evidence and match_criteria are built by the platform (evidence_pool; the protocol's criteria). "
-                "The vcr-analysis skill has the full shapes with examples."
+                "sided is 1 or 2. Patient-level kinds (profile_snapshot, build_cohort, weight_comparator, ...) name "
+                "their data as inputs [{kind:'snapshot', id}] and nothing else. pool_evidence and match_criteria are "
+                "built by the platform. The other comparators (weighted_cox, aipw, covariate_set, maic_time_to_event "
+                "_comparator) and all shapes are in the vcr-analysis skill; maic_time_to_event_comparator takes "
+                "reconstructionResultId, never rows."
             ),
             "inputSchema": {
                 "type": "object",
@@ -233,6 +235,7 @@ def tool_definitions():
                     "replicates": {"type": "integer", "minimum": 1, "maximum": 10000000},
                     "cpuSecondsLimit": {"type": "integer", "minimum": 1, "maximum": 86400},
                     "subjectId": {"type": "string", "minLength": 1, "maxLength": 120},
+                    "reconstructionResultId": ID,
                     "jobId": ID,
                 },
                 "required": ["action"],
@@ -565,7 +568,7 @@ def simulate(arguments: dict) -> dict:
         if kind not in JOB_KINDS:
             raise VcrPlatformError("vcr_simulate_payload_invalid", "kind must be one of: %s." % ", ".join(JOB_KINDS))
         payload["kind"] = kind
-        for key in ("scenario", "inputs", "seed", "replicates", "cpuSecondsLimit", "subjectId"):
+        for key in ("scenario", "inputs", "seed", "replicates", "cpuSecondsLimit", "subjectId", "reconstructionResultId"):
             if arguments.get(key) is not None:
                 payload[key] = arguments[key]
     else:

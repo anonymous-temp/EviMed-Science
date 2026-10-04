@@ -45,7 +45,7 @@
  */
 
 import { rm } from "node:fs/promises";
-import { canonicalGeoUrl, geoArticlePublishable, GEO_STEPS } from "@evimed/domain";
+import { canonicalGeoUrl, geoArticlePublishable, GEO_STEPS, STEP_WAITING_ALLOWANCE } from "@evimed/domain";
 import { GEO_SCHEMA, migrateGeo } from "./geoPersistence.mjs";
 import { geoScreenshotFile } from "./geoScreenshots.mjs";
 import { randomId } from "./security.mjs";
@@ -80,6 +80,8 @@ export function normalizedSteps(value) {
       ...(entry.roundId ? { roundId: String(entry.roundId) } : {}),
       updatedAt: typeof entry.updatedAt === "string" ? entry.updatedAt : null,
       ...(typeof entry.note === "string" && entry.note ? { note: entry.note } : {}),
+      // What a queued step is waiting on when its start was refused: the allowance (`STEP_WAITING_ALLOWANCE`).
+      ...(STEP_WAITING_ALLOWANCE.includes(entry.waiting) ? { waiting: String(entry.waiting) } : {}),
     };
   }
   return steps;

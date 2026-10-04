@@ -410,7 +410,11 @@ def verify_sources():
     require({item.get("id") for item in conditional_items} == conditional, "credential-ready catalog entries do not match implemented adapters")
     require(all(item.get("connector") == item.get("id") for item in conditional_items), "credential-ready connector ids drifted")
     require(all((item.get("validation") or {}).get("contractTests") == "pass" for item in conditional_items), "a credential-ready adapter lacks contract evidence")
-    require(all((item.get("validation") or {}).get("liveProbe") == "blocked_missing_operator_credential" for item in conditional_items), "a credential-ready source was falsely marked live")
+    # The probe ran with no credential to hand (the audit holds none of the
+    # deployment's, and a researcher's own are not its to use): not "an operator's
+    # credential is missing". Since 2026-10-04 a key is the deployment's or the
+    # researcher's own, so the state names the credential, not who supplies it.
+    require(all((item.get("validation") or {}).get("liveProbe") == "blocked_missing_credential" for item in conditional_items), "a credential-ready source was falsely marked live")
     require(summary.get("productionConnectorRoute") == "controlled_connector_routes", "public connectors do not use controlled production routes")
     require(summary.get("productionConnectorRoutes") == ["bundled_verified_dataset", "server_allowlisted_gateway"], "public connector routes drifted")
     require(summary.get("runtimeArbitraryEgress") is False, "public connectors incorrectly require arbitrary runtime egress")
