@@ -147,8 +147,10 @@ export function uploadProblem(file: { name: string; size: number }, role: "data"
   const dot = file.name.lastIndexOf(".");
   const extension = dot > 0 ? file.name.slice(dot + 1).toLowerCase() : "";
   if (!extension) return "文件名需要带扩展名，例如 cohort.csv。";
-  if (extension === "parquet") return "Parquet 文件暂时不能接入：请在导出时改为 CSV 后上传。";
+  // The plane's own sentences for what it refuses by name (`VCR_UNSUPPORTED_FORMAT_HINTS`), word for word: a test holds them equal.
+  if (extension === "parquet") return "Parquet 文件目前不能直接接入：请在导出时改为 CSV，或用 Excel、Python 转成 CSV 后上传。";
   if (extension === "xls") return "旧版 .xls 不能接入：请另存为 .xlsx 或 CSV 后上传。";
+  if (extension === "zip") return "请先解压，再逐个上传数据文件。";
   if (!EXTENSIONS[role].includes(extension)) return `这一类文件支持：${EXTENSIONS[role].join("、")}。`;
   if (file.size === 0) return "文件是空的。";
   const cap = role === "data" ? maxBytes : Math.min(maxBytes ?? Number.POSITIVE_INFINITY, ROLE_CAPS[role]);

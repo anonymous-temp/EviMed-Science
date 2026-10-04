@@ -1558,7 +1558,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   cpu_budget_exhausted: '这项计算用完了它的计算时间上限；已完成的部分作为有限结果保留。',
   grid_cell_failed: '方案网格里有一个格子没有算出来；其余格子照常给出。',
   handler_error: '统计引擎在这项计算里遇到了意外错误，没有给出任何数字。',
-  input_format_unsupported: '数据文件的格式不受支持（支持 CSV、TSV、JSON、Parquet）。',
+  input_format_unsupported: '数据文件的格式不受支持：请用 CSV、TSV、JSON 或 Excel（.xlsx）；Parquet 请先转成 CSV。',
   input_hash_mismatch: '数据文件的内容和冻结快照时的哈希对不上；已拒绝读取。',
   input_out_of_range: '有一个输入值超出了这个方法允许的范围。',
   input_parse_failed: '数据文件无法解析成表格。',

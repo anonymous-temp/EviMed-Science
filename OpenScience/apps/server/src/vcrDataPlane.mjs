@@ -1006,8 +1006,12 @@ export const VCR_UPLOAD_FORMATS = Object.freeze({
   dictionary: Object.freeze({ csv: "csv", tsv: "tsv", json: "json", xlsx: "xlsx" }),
   document: Object.freeze({ txt: "txt", md: "txt" }),
 });
-/** Extensions refused with a reason a person can act on. */
-const UNSUPPORTED_FORMAT_HINTS = Object.freeze({
+/**
+ * Extensions refused with a reason a person can act on. The browser says the
+ * same sentence before an upload is sent (`intakeState.ts`), and a test holds the
+ * two equal: the form's refusal and the plane's are one answer.
+ */
+export const VCR_UNSUPPORTED_FORMAT_HINTS = Object.freeze({
   parquet: "Parquet 文件目前不能直接接入：请在导出时改为 CSV，或用 Excel、Python 转成 CSV 后上传。",
   xls: "旧版 .xls 不能接入：请另存为 .xlsx 或 CSV 后上传。",
   zip: "请先解压，再逐个上传数据文件。",
@@ -1037,7 +1041,7 @@ export function safeUploadName(raw, role) {
   }
   const formats = /** @type {Record<string, string>} */ (/** @type {any} */ (VCR_UPLOAD_FORMATS)[role] ?? {});
   if (!Object.hasOwn(formats, ext)) {
-    const hint = /** @type {Record<string, string>} */ (UNSUPPORTED_FORMAT_HINTS)[ext];
+    const hint = /** @type {Record<string, string>} */ (VCR_UNSUPPORTED_FORMAT_HINTS)[ext];
     throw refuse(415, VCR_DATA_PLANE_CODES.formatUnsupported,
       hint ?? `A ${role} file is one of: ${Object.keys(formats).join(", ")}.`, { ext });
   }

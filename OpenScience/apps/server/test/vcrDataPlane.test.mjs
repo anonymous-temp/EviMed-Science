@@ -13,9 +13,9 @@ import os from "node:os";
 import path from "node:path";
 import { after, before, test } from "node:test";
 
-import { VCR_MIN_CELL_SIZE, VCR_QUALITY_CATEGORIES, VCR_REAL_PATIENT_SOURCES, suppressForModel } from "@evimed/domain";
+import { VCR_MIN_CELL_SIZE, VCR_QUALITY_CATEGORIES, VCR_REAL_PATIENT_SOURCES, VCR_SOURCE_FORMATS, suppressForModel } from "@evimed/domain";
 import {
-  VCR_ANALYSIS_TABLE_BLOCKING_ISSUES, VCR_COLUMN_SOURCE_ORDER, VCR_DATA_PLANE_CODES, VCR_PROFILER_SCRIPT,
+  VCR_ANALYSIS_TABLE_BLOCKING_ISSUES, VCR_COLUMN_SOURCE_ORDER, VCR_DATA_PLANE_CODES, VCR_PROFILER_SCRIPT, VCR_UNSUPPORTED_FORMAT_HINTS, VCR_UPLOAD_FORMATS,
   analysisTableIssues, asOfIssues, assertDataPlaneLocation, assertDataPlaneRoot, checkedTable, columnSourceIssues, decodeUploadText, deriveAnalysisShapes,
   dictionaryEntries, fieldMapHash, isOutcomeEntry, jsonTable, latestDataFiles, normalizeFieldMap, parseDelimited, parseTable, profilerFieldMap, projectTable, pseudonymOf,
   qualitySummary, rowsVisibleAsOf, safeUploadName, sha256OfFile, snapshotClocks, suppressSmallCells, tablesNeededBy, tableVisibleAsOf, toCsv, treatmentEvidence,
@@ -764,6 +764,23 @@ test("PA-10 an upload's name is display text: no path, no comma, an extension th
     assert.throws(() => safeUploadName(name, role), (error) => /** @type {any} */ (error).code === code, `${name} as ${role}`);
   }
   assert.ok(safeUploadName(`${"长".repeat(300)}.csv`, "data").name.length <= 100);
+});
+
+test("PA-10 the source-format vocabulary, what an upload accepts, what is refused by name and what the form says are one answer", async () => {
+  // The vocabulary a source is registered with is the data formats the door takes: no format a source can be registered as that no file can be uploaded as.
+  assert.deepEqual([...VCR_SOURCE_FORMATS].sort(), Object.keys(VCR_UPLOAD_FORMATS.data).sort());
+  assert.equal(VCR_SOURCE_FORMATS.includes(/** @type {any} */ ("parquet")), false, "Parquet is refused at the door by ruling, so it is not a format a source has");
+  for (const refused of Object.keys(VCR_UNSUPPORTED_FORMAT_HINTS)) {
+    assert.equal(VCR_SOURCE_FORMATS.includes(/** @type {any} */ (refused)), false, `${refused} is refused by name and is not in the vocabulary`);
+    assert.throws(() => safeUploadName(`a.${refused}`, "data"), (error) => /** @type {any} */ (error).code === "vcr_data_format_unsupported" && String(/** @type {any} */ (error).message).includes(
+      /** @type {Record<string, string>} */ (VCR_UNSUPPORTED_FORMAT_HINTS)[refused]), `${refused}: the refusal says the hint`);
+  }
+  // The form refuses the same files in the same words before the upload is sent.
+  const form = await fs.readFile(new URL("../../web/src/components/vcr/data/intakeState.ts", import.meta.url), "utf8");
+  for (const [extension, hint] of Object.entries(VCR_UNSUPPORTED_FORMAT_HINTS)) {
+    assert.ok(form.includes(`extension === "${extension}") return "${hint}"`), `the page says ${extension}'s hint word for word`);
+  }
+  assert.ok(form.includes('data: ["csv", "tsv", "json", "xlsx"]'), "the page's list of data extensions is the door's");
 });
 
 test("PA-10 bytes become text whatever a hospital's Excel wrote, or are refused", () => {

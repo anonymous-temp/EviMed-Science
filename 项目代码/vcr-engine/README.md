@@ -82,11 +82,20 @@ path, `..`, a symlink at any level, a directory, a missing or wrong `hash`
 json or parquet (`input_format_unsupported`), a file over the cap
 (`input_too_large`) and a table that will not parse (`input_parse_failed`).
 The bytes are hashed and then parsed *from memory*, so the file that was
-checked is the file that was read.
+checked is the file that was read. Parquet is the engine's own reach, not the
+product's: the control plane's intake takes csv, tsv, json and xlsx and refuses a
+Parquet upload by name, so a job it builds never names one.
 
-`valueSource` is honoured, not assumed: weighting, propensity, RMST, MAIC and
-synthetic-data generation need `observed` rows (`input_source_not_individual`
-otherwise), and `counts.realPatients` counts only observed rows.
+`valueSource` is honoured, not assumed. The control plane sets it from the
+snapshot or population the file came from, and the domain says per method which
+sources are a record of real people (`individualInputSources`):
+`population.synthpop` and the entropy-balance, propensity-weight and MAIC
+comparators read `observed`, `extracted`, `calculated` or `imputed` rows and refuse
+any other (`input_source_not_individual`); `comparator.rmst` also reads the
+`reconstructed` pseudo-patients of a literature control. `counts.realPatients`
+counts the rows of those four real-patient sources; reconstructed rows are counted
+apart as `reconstructedPseudoPatients` and synthetic ones as `generatedRecords`,
+never as real patients.
 
 Analysis tables come in three shapes: `subject` (ADSL, one row per person),
 `longitudinal` (BDS, one row per person and visit) and `events` (ADTTE: `AVAL`
@@ -249,8 +258,9 @@ PASSED n/n
 ```
 
 Case families: `N00a-l` (the protocol mirror), `N01-N22` (design, weighting,
-survival, literature, borrowing, PROCOVA), `N23-N29` (rules, data plane, schema
-agreement, accrual and pooling, populations and patients, matching), `C2-01-C2-18`
+survival, literature, borrowing, PROCOVA), `N23-N31` (rules, data plane, schema
+agreement, accrual and pooling, populations and patients, matching, a column
+name is data and never code (N30), single-arm references (N31)), `C2-01-C2-18`
 (cohort, models, quality), `E01-E10` (the engine itself: accrual, cancel and
 budget, counts, inputs, analytic vs simulated across the families, group
 sequential, the T0 chain, robustness and limits), `Z99` (every method went
