@@ -913,9 +913,12 @@ test("interleaved frame assets, unary calls and reconnects retain independent pr
   const secondCookie = `${f.loginCookie}; ${secondFrame.cookie.split(";")[0]}`;
   const routed = [];
   f.manager.proxy = async (_req, res, project, suffix) => { routed.push([project.id, suffix]); res.end("ok"); };
+  // One socket at a time: `f.started` below is read in order, and two upgrades sent together reach the server in
+  // whichever order the loop takes them (in CI the second arrived first, 2026-10-04). What interleaves is the
+  // traffic after both are open, which is what the bindings are tested against.
   const first = f.connect();
-  const other = f.connect({ Cookie: secondCookie }, `${secondFrame.prefix}api/remote.mux`);
   assert.equal(await first.opened, 101);
+  const other = f.connect({ Cookie: secondCookie }, `${secondFrame.prefix}api/remote.mux`);
   assert.equal(await other.opened, 101);
   for (const [base, cookie, suffix] of [
     [f.base, f.cookie, "/assets/a.js"],
