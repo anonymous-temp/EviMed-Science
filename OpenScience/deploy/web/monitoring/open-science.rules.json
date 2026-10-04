@@ -532,7 +532,7 @@
           },
           "annotations": {
             "summary": "EviMed 自有证据接口在过去一小时被网关拒绝 {{ $value }} 次（没有可用的密钥）",
-            "description": "文献、指南、试验、专利、说明书检索都会先问 EviMed 接口，被拒后静默退回 PubMed 等公共源，报告质量下降而运行照常成功。检查部署的 OPEN_SCIENCE_EVIMED_API_KEY_FILE（0440、属组与知识源插件共用）与 /api/ready 的 publicSourceCredentials；本部署若有意不接 EviMed 接口，静默此告警。"
+            "description": "文献、指南、试验、专利、说明书检索都会先问 EviMed 接口，被拒后退回 PubMed 等公共源，并向模型说明该源未配置，报告质量可能下降而运行照常成功；部署没有密钥时，研究者可在「设置 → 数据源」自己添加。检查部署的 OPEN_SCIENCE_EVIMED_API_KEY_FILE（0440、属组与知识源插件共用）与 /api/ready 的 publicSourceCredentials；本部署若有意不接 EviMed 接口、由研究者自带密钥，静默此告警。"
           }
         }
       ]

@@ -671,9 +671,10 @@ _OPENGWAS_NEXT_ACTIONS = [
     'exposureSource and outcomeSource as {"type": "gwas_catalog", "accession": "GCST..."} '
     '(or {"type": "gwas_catalog", "pubmedId": "..."} for a paper with one such study), '
     "forward direction; or two uploaded GWAS files with declared preclumped instruments.",
-    "Tell the researcher OpenGWAS itself is blocked: a token is saved under 账户→连接器 "
-    "(issued at api.opengwas.io, valid 14 days) or set by the operator as "
-    "OPEN_SCIENCE_OPENGWAS_JWT; do not retry an OpenGWAS request without one.",
+    "Tell the researcher OpenGWAS itself is not configured: they can save their own token under "
+    "设置 → 数据源 (issued at api.opengwas.io, valid 14 days) or the operator can set "
+    "OPEN_SCIENCE_OPENGWAS_JWT; do not retry an OpenGWAS request without one, and offer to redo this "
+    "analysis once it is added.",
 ]
 
 
@@ -1617,7 +1618,7 @@ def _create_app() -> FastAPI:
             if state is not None:
                 opengwas = {
                     **state,
-                    # A researcher's own token (账户→连接器) still unlocks their jobs.
+                    # A researcher's own token (设置 → 数据源) still unlocks their jobs.
                     "perAccountCredentials": bool(
                         os.getenv("EVIMED_CONNECTOR_CREDENTIAL_URL", "").strip()
                     ),
