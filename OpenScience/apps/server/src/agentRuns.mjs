@@ -2883,21 +2883,32 @@ export async function readDeliveryReceipt(project, run = null) {
 
 /**
  * The receipt's files, confirmed present and unchanged since they were graded.
+ *
+ * `mismatched` is every file that is not the graded one, and says nothing about
+ * why. `changed` is the part of it that is still there under another digest —
+ * the run kept editing after its package was accepted — with the path it is
+ * there under, which is the part a reader can open. The two were one list, and
+ * every caller that wanted the files had to treat a file the run changed and a
+ * file that is gone the same.
  * @param {Record<string, any>} project
  * @param {import('@evimed/domain').DeliveryReceipt} receipt
- * @returns {Promise<{ artifacts: string[], mismatched: string[], receipt: import('@evimed/domain').DeliveryReceipt }>}
+ * @returns {Promise<{ artifacts: string[], mismatched: string[], changed: { name: string, path: string }[], receipt: import('@evimed/domain').DeliveryReceipt }>}
  */
 async function verifiedReceiptArtifacts(project, receipt) {
   /** @type {string[]} */
   const artifacts = [];
   /** @type {string[]} */
   const mismatched = [];
+  /** @type {{ name: string, path: string }[]} */
+  const changed = [];
   const entries = [];
   for (const entry of receipt.entries ?? []) {
     const files = [];
     for (const file of entry.files ?? []) {
       let resolved = String(file.path ?? "");
       let matched = false;
+      /** @type {string | null} */
+      let present = null;
       try {
         const relative = normalizeWorkspaceRelativePath(resolved, "receipt artifact path");
         const id = String(entry.deliverableId ?? "");
@@ -2922,16 +2933,25 @@ async function verifiedReceiptArtifacts(project, receipt) {
               artifacts.push(candidate);
               break;
             }
+            present ??= candidate;
           } catch { /* only these two explicitly scoped locations are candidates */ }
           finally { await opened?.handle.close().catch(() => {}); }
         }
       } catch { /* malformed and cross-deliverable paths never resolve */ }
-      if (!matched) mismatched.push(resolved);
+      if (!matched) {
+        mismatched.push(resolved);
+        if (present) changed.push({ name: resolved, path: present });
+      }
       files.push({ ...file, path: resolved });
     }
     entries.push({ ...entry, files });
   }
-  return { artifacts: [...new Set(artifacts)].slice(0, maxArtifacts).sort(), mismatched: [...new Set(mismatched)], receipt: { ...receipt, entries } };
+  return {
+    artifacts: [...new Set(artifacts)].slice(0, maxArtifacts).sort(),
+    mismatched: [...new Set(mismatched)],
+    changed: changed.filter((item, index) => changed.findIndex((other) => other.name === item.name) === index).slice(0, maxArtifacts),
+    receipt: { ...receipt, entries },
+  };
 }
 
 /** The file name a repair grant for one accepted receipt entry is kept under.
@@ -3005,6 +3025,59 @@ function unattributedNotice() {
 }
 
 /**
+ * What a receipt says of the files it names that are no longer the graded ones.
+ *
+ * A receipt is our own record of what was graded. Where the bytes on disk are
+ * not those bytes it has nothing to say about them, and that is a fact to put
+ * on the delivery (2026-10-04) — never a reason to withhold the files or to
+ * report that nothing was produced. A file the run changed ships as it is now;
+ * a file that is gone is only said to be gone.
+ *
+ * @param {{ mismatched: string[], changed: { name: string }[] }} verified
+ * @param {{ text: string, detail: string }} outcome what became of the changed
+ *   files, in the notice's own words (English for `text`, Chinese for `detail`)
+ * @returns {StoredNotice[]}
+ */
+function receiptMismatchNotices(verified, outcome) {
+  const there = new Set(verified.changed.map((item) => item.name));
+  return verified.mismatched.slice(0, 10).map((entry) => (there.has(entry)
+    ? runNotice("run_receipt_mismatch", `delivery-receipt.json names ${entry} with a digest the file no longer matches, ${outcome.text}`,
+      { file: entry, detail: `回执记下的文件在通过之后被改动，${outcome.detail}` })
+    : runNotice("run_receipt_mismatch", `delivery-receipt.json names ${entry}, which is no longer in the workspace`,
+      { file: entry, detail: "回执记下的文件已经不在工作区里。" })));
+}
+
+/**
+ * The files a receipt names as they are on disk now — the graded ones and the
+ * ones changed since — for a delivery that ships what exists.
+ * @param {{ artifacts: string[], changed: { path: string }[] }} verified
+ * @returns {string[]}
+ */
+function receiptFilesNow(verified) {
+  return [...new Set([...verified.artifacts, ...verified.changed.map((item) => item.path)])].slice(0, maxArtifacts).sort();
+}
+
+/**
+ * Files delivered because the runtime stopped before the run could grade them:
+ * the platform's own reason for the unverified mark.
+ * @returns {StoredNotice}
+ */
+function runtimeStoppedUnverifiedNotice() {
+  const sentence = `运行时在核验之前已经停止，这些文件没能核验。${UNVERIFIED_DELIVERY_NOTICE}`;
+  return runNotice("run_unverified_delivery", sentence, { detail: sentence });
+}
+
+/**
+ * An answer the control plane holds whose checks could not run, because the
+ * runtime stopped after the turn finished.
+ * @returns {StoredNotice}
+ */
+function stoppedAfterAnswerNotice() {
+  const sentence = "运行时在这一轮结束之后停止了，回答已完整保留；回答之后本应进行的检查没有运行，内容仍需自行核对。";
+  return runNotice("run_stopped_after_answer", sentence, { detail: sentence });
+}
+
+/**
  * The run-side gate's advisory findings on an accepted package, with their
  * identity back.
  *
@@ -3051,6 +3124,14 @@ function receiptNotices(entries, projection) {
  * repair") ended a v8 ablation cell after one round as
  * `specialist_receipt_digest_mismatch` with no files (2026-09-16). Drift in a
  * deliverable nobody authorized is still refused.
+ *
+ * That refusal is of the grant, never of the delivery. A grant lets the run
+ * reopen frozen bytes, and bytes that moved without one cannot be vouched for,
+ * so none is minted; the caller then says why no repair was sent
+ * (`run_repair_not_dispatched`) and goes on to the same delivery decision as a
+ * package that was never sent back, which ships what is on disk. It is only
+ * reached when server repair rounds are on (`OPEN_SCIENCE_GATE_REPAIR_ROUNDS`,
+ * default 0): with none, `canRepair` is false before this is called.
  */
 async function snapshotAcceptedPackageForRepair(project, run, runtimeGeneration = null) {
   const receipt = await readDeliveryReceipt(project, run);
@@ -3217,8 +3298,10 @@ async function consumeRepairAuthorization(project, input, {
  * @param {any} project
  * @param {number | null} [since] epoch ms the run started; a file last written
  *   before it is an earlier run's, in the same workspace
+ * @param {number | null} [until] epoch ms the run's turn ended, when it is
+ *   known; a file written after it is a later turn's of the same conversation
  */
-async function writtenDeliverableFiles(project, since = null) {
+async function writtenDeliverableFiles(project, since = null, until = null) {
   /** @type {string[]} */
   const found = [];
   /** @type {import('node:fs').Dirent[]} */
@@ -3242,10 +3325,11 @@ async function writtenDeliverableFiles(project, since = null) {
     for (const file of files) {
       if (found.length >= maxArtifacts) break;
       if (!file.isFile()) continue;
-      if (since != null) {
+      if (since != null || until != null) {
         // The same second of slack the required-output freshness rule allows.
         const written = await stat(path.join(project.workspaceDir, workspaceLayout.deliverablesDir, id, file.name)).catch(() => null);
-        if (!written || written.mtimeMs + 1_000 < since) continue;
+        if (!written || (since != null && written.mtimeMs + 1_000 < since)
+          || (until != null && written.mtimeMs > until + 1)) continue;
       }
       found.push(`${workspaceLayout.deliverablesDir}/${id}/${file.name}`);
     }
@@ -4661,19 +4745,25 @@ export class AgentRunStore {
   async finishFromDurableRecord(project, run) {
     if (run.nativeTurn) run = (await this.list(project)).find((item) => item.id === run.id) ?? run;
     const receipt = await readDeliveryReceipt(project, run);
-    if (run.nativeWorkflow?.completion?.ok === false) {
-      const verified = receipt ? await verifiedReceiptArtifacts(project, receipt) : null;
-      return this.finishInternal(project, run.id, {
-        status: "failed", errorCode: "specialist_deliverable_not_accepted",
-        artifacts: verified && !verified.mismatched.length ? verified.artifacts : [],
-        qualityNotices: nativeWorkflowNotices(run.nativeWorkflow),
-      });
-    }
+    // What exists decides, and what exists is read from the host copy of the
+    // workspace — the one thing that outlives the container.
+    //
+    // The receipt is our own record of what was graded: it labels a delivery
+    // and never decides whether there is one (the owner's ruling of 2026-10-04,
+    // which restates 2026-09-17: a verdict never withholds a delivery). This
+    // path used to end every run it reached without a matching receipt as
+    // `failed` with `artifacts: []`, and an answer-line turn never has one, so
+    // a conversation whose container stopped right after its answer was
+    // recorded as a stopped runtime. It also used to fail a run for a
+    // completion tool that answered `ok:false`; the live path stopped doing
+    // that on 2026-09-20 and nothing writes that field any more.
+    const started = Date.parse(String(run.startedAt ?? ""));
+    const since = Number.isFinite(started) ? started : null;
     if (!receipt) {
-      // Nothing durable: the runtime really did stop before it delivered.
-      // Whatever the projection saw of it travels with the verdict, because a
-      // run that died mid-flight is exactly when its last recorded state is
-      // worth having.
+      // Nothing graded: either the runtime really did stop before it delivered,
+      // or it delivered and was never asked for a verdict. Whatever the
+      // projection saw of the run travels with the outcome, because a run that
+      // died mid-flight is exactly when its last recorded state is worth having.
       const projection = await readRunStateProjection(project, project.workspaceDir, run);
       // Deduplicated against what the run already admitted while it was alive.
       // `publishRunProjection` puts these same lines on the ledger as they
@@ -4684,28 +4774,25 @@ export class AgentRunStore {
       const notices = projection.state === "read"
         ? runSideNotices(projection.projection ?? {}).filter((notice) => !admitted.has(notice.text))
         : [];
-      // Two failures end here and they are not the same failure. A run cut off
+      // Two situations end here and they are not the same one. A run cut off
       // mid-flight lost its work; a run that wrote every file its contract asks
       // for and never submitted any of them for grading produced a complete
       // package and stopped short of asking for a verdict. Both leave a gone
-      // container and no receipt, so reported under one code the second reads
+      // container and no receipt, and reported under one code the second reads
       // as infrastructure trouble and its actual cause is invisible — which is
       // what run 7 looked like: seven deliverable files on disk, the plan item
       // still `planned`, `attempts: 0`, and a ledger entry saying the runtime
-      // stopped.
+      // stopped. Both are said as labels now; neither decides the outcome.
       //
       // Decided from the record, never from a guess: the projection has to say
       // a deliverable was planned and never attempted, and the files it names
       // have to actually be there.
       const unsubmitted = await unsubmittedDeliverables(project, projection);
-      // A third cause ends here, and it is neither of the two above: a run that
-      // submitted its package again and again and was rejected every time. Its
-      // items are `submitted` with a positive attempt count, so
-      // `unsubmittedDeliverables` does not see them, and it was reported
-      // `runtime_stopped` — which reads as infrastructure trouble for a run that
-      // worked for an hour and did not meet the contract. The live path already
-      // says this; the durable path has to say the same thing about the same
-      // fact.
+      // A third is a run that submitted its package again and again and was
+      // rejected every time. Its items are `submitted` with a positive attempt
+      // count, so `unsubmittedDeliverables` does not see them. The live path
+      // says this already; the durable path has to say the same thing about the
+      // same fact.
       const rejected = projection.state === "read" && Array.isArray(projection.projection?.plan?.items)
         ? projection.projection.plan.items.filter((item) => item?.status !== "accepted" && Number(item?.attempts ?? 0) > 0)
         : [];
@@ -4713,56 +4800,95 @@ export class AgentRunStore {
       // stream (`runIsSettled` in the browser's `useRunStream`), so a frame
       // published after `finishInternal` reaches nobody who was watching.
       if (projection.state === "read") this.publishDeliverables(project, run, projection.projection ?? {}, null);
+      const labels = [
+        ...(projection.state === "unattributed" ? [unattributedNotice()] : []),
+        ...unsubmitted.map((entry) => {
+          const sentence = `交付物「${entry.id}」的文件已经写好（${entry.files} 个），但从未提交校验，因此没有通过质量门。`;
+          return runNotice("run_deliverable_never_submitted", sentence, { detail: sentence });
+        }),
+        ...(unsubmitted.length ? [] : rejected.map((entry) => {
+          const sentence = `交付物「${entry.id}」提交了 ${Number(entry.attempts ?? 0)} 次，每次都被契约校验拒绝，因此产物未经质量门。`;
+          return runNotice("run_deliverable_rejected_every_time", sentence, { detail: sentence });
+        })),
+        ...notices,
+      ];
+      // Files on disk are a delivery, marked: the runtime stopping is why they
+      // were not graded, not a reason to say the run produced nothing.
+      const written = await writtenDeliverableFiles(project, since).catch(() => []);
+      if (written.length > 0) {
+        return this.finishInternal(project, run.id, {
+          status: "succeeded",
+          errorCode: null,
+          artifacts: written,
+          verification: "unverified",
+          qualityNotices: [runtimeStoppedUnverifiedNotice(), ...labels].slice(0, 20),
+        });
+      }
+      // No files, but the turn's answer is already in the control plane's hands
+      // and no deliverable was owed: that is an answered turn whose checks did
+      // not run, not a stopped runtime.
+      if (await this.answeredBeforeStop(run, projection)) {
+        return this.finishInternal(project, run.id, {
+          status: "succeeded",
+          errorCode: null,
+          artifacts: [],
+          verification: "unchecked",
+          qualityNotices: [stoppedAfterAnswerNotice(), ...labels].slice(0, 20),
+        });
+      }
+      // Nothing on disk and no finished answer on record: the turn had not
+      // finished, and the runtime stopping is the truthful reason.
       return this.finishInternal(project, run.id, {
         status: "failed",
-        errorCode: projection.state === "unattributed" ? "specialist_deliverable_not_accepted" : unsubmitted.length
-          ? "runtime_deliverable_never_submitted"
-          : rejected.length ? "specialist_deliverable_not_accepted" : "runtime_stopped",
+        errorCode: "runtime_stopped",
         artifacts: [],
-        qualityNotices: [
-          ...(projection.state === "unattributed" ? [unattributedNotice()] : []),
-          ...unsubmitted.map((entry) => {
-            const sentence = `交付物「${entry.id}」的文件已经写好（${entry.files} 个），但从未提交校验，因此没有通过质量门。`;
-            return runNotice("run_deliverable_never_submitted", sentence, { detail: sentence });
-          }),
-          ...(unsubmitted.length ? [] : rejected.map((entry) => {
-            const sentence = `交付物「${entry.id}」提交了 ${Number(entry.attempts ?? 0)} 次，每次都被契约校验拒绝，因此产物未经质量门。`;
-            return runNotice("run_deliverable_rejected_every_time", sentence, { detail: sentence });
-          })),
-          ...notices,
-        ].slice(0, 20),
+        qualityNotices: labels.slice(0, 20),
       });
     }
     const verifiedReceipt = await verifiedReceiptArtifacts(project, receipt);
     const { artifacts, mismatched } = verifiedReceipt;
     if (mismatched.length) {
       // A file that does not match the digest it was graded under is not the
-      // file that was graded. Refusing is the only honest answer: the
-      // alternative is delivering something no gate has seen.
+      // file that was graded — and it is still the file the run produced.
+      // Changed bytes and a broken delivery are not the same thing; refusing
+      // was this path's answer, `artifacts: []` on a package the gate had
+      // accepted, and the receipt's whole value is the label it puts on what
+      // ships. So the files as they are on disk now are what ships, marked
+      // unverified, with the receipt's account of which ones moved.
       //
       // No amendment on this path, unlike the live one. This runs when the
       // container is gone, so the gate cannot be re-run over the bytes on disk
-      // and nothing has judged them — which is precisely the case the receipt
-      // exists to catch.
+      // and nothing has judged them — which is precisely the case the label
+      // exists for.
       //
-      // Unless the files moved under a revision the server authorized: then
-      // the run ended with its revision not accepted, which is what it says.
+      // Files that moved under a revision the server authorized say so: the
+      // run ended with its revision not accepted, and the accepted version
+      // stays preserved in the control plane.
       const drift = await revisionDrift(project, verifiedReceipt);
-      if (drift.explained) {
+      const labels = drift.explained
+        ? [revisionNotAcceptedNotice(verifiedReceipt, drift.revising)]
+        : receiptMismatchNotices(verifiedReceipt, {
+          text: "and the runtime is gone so no gate can judge the current bytes; the file is delivered as it is now",
+          detail: "运行已经结束，改动后的内容无法再核验，交付的是改动后的版本。",
+        });
+      const current = receiptFilesNow(verifiedReceipt);
+      const unfinished = await readRunStateProjection(project, project.workspaceDir, run);
+      if (unfinished.state === "read") this.publishDeliverables(project, run, unfinished.projection ?? {}, null);
+      if (current.length > 0) {
         return this.finishInternal(project, run.id, {
-          status: "failed",
-          errorCode: "specialist_deliverable_not_accepted",
-          artifacts: [],
-          qualityNotices: [revisionNotAcceptedNotice(verifiedReceipt, drift.revising)],
+          status: "succeeded",
+          errorCode: null,
+          artifacts: current,
+          verification: "unverified",
+          qualityNotices: [...labels, runtimeStoppedUnverifiedNotice()].slice(0, 20),
         });
       }
+      // Every file the receipt names is gone: nothing on disk.
       return this.finishInternal(project, run.id, {
         status: "failed",
-        errorCode: "specialist_receipt_digest_mismatch",
+        errorCode: "specialist_required_output_missing",
         artifacts: [],
-        qualityNotices: mismatched.slice(0, 10).map((entry) => runNotice("run_receipt_mismatch",
-          `delivery-receipt.json names ${entry} with a digest the file no longer matches, and the runtime is gone so no gate can judge the current bytes`,
-          { file: entry, detail: "回执记下的文件在通过之后被改动，运行已经结束，改动后的内容无法再核验。" })),
+        qualityNotices: labels,
       });
     }
     const delivered = await readRunStateProjection(project, project.workspaceDir, run);
@@ -4779,6 +4905,33 @@ export class AgentRunStore {
         ...droppedDeliverableNotices(delivered, receipt),
       ].slice(0, 20),
     });
+  }
+
+  /**
+   * Whether a run's own turn is known to have ended with its answer, from what
+   * the control plane held when the runtime went away.
+   *
+   * The conversation lives only inside the container, so a run whose container
+   * stopped after its turn finished could not be read and was called stopped —
+   * for an answer-line turn, which never has a receipt, always. The event pump
+   * had already carried the answer past the control plane, though, and what it
+   * keeps is the two facts that decide this: the root session's last assistant
+   * message had text, and its turn ended `completed`.
+   *
+   * An answer is only the deliverable when none was owed: a turn that planned,
+   * delegated or submitted a deliverable, and a run bound to a capability whose
+   * contract is files, owe files, and a reply is not them.
+   * @param {Record<string, any>} run @param {{ state: string, projection?: Record<string, any> }} projection
+   * @returns {Promise<boolean>}
+   */
+  async answeredBeforeStop(run, projection) {
+    const turn = this.progressTrackers.get(run.id)?.rootTurn;
+    if (!turn || turn.endKind !== "completed" || !turn.replied) return false;
+    if (nativeTurnStartedDelivery(run)) return false;
+    if (projection.state === "read" && Array.isArray(projection.projection?.plan?.items) && projection.projection.plan.items.length > 0) return false;
+    if (!run.effectiveAgentId) return true;
+    const agent = (await this.agentRegistry.catch(() => null))?.get?.(run.effectiveAgentId);
+    return Boolean(agent) && !agent.completionChecks?.includes("requiredOutputsExist");
   }
 
   /**
@@ -5388,9 +5541,14 @@ export class AgentRunStore {
           const repair = await sendRepair(repairSender, clinicalEvidenceResubmitPrompt(unaccepted.map((item) => String(item.id))), this.repairRetryDelaysMs);
           if (repair.accepted) return run;
           const refusal = repairDispatchFailure(repair.failures);
-          terminal.status = "failed";
-          terminal.errorCode = "specialist_evidence_repair_failed";
+          // Said, and nothing more. The server has accepted these bytes; what
+          // could not be sent is a request to write down our own record of it,
+          // and a missing receipt labels a delivery — it does not end one
+          // (2026-10-04). This used to fail a package the gate had just
+          // accepted; the delivery decision below marks it unverified when no
+          // receipt follows.
           terminal.qualityNotices = [
+            ...(terminal.qualityNotices ?? []),
             runNotice("run_resubmit_not_dispatched", "The server accepted the current package, but the run-side receipt resubmission could not be dispatched."),
             runNotice("run_resubmit_not_dispatched", refusal),
           ];
@@ -5426,10 +5584,11 @@ export class AgentRunStore {
         ];
       }
     }
-    // What we ship has to be what was graded, on this path too.
+    // What we ship has to be what was graded, on this path too — or say that it
+    // was not.
     //
     // The receipt names each accepted file by sha256, and `finishFromDurableRecord`
-    // refuses a mismatch — but that function is only reached when the container
+    // compares them — but that function is only reached when the container
     // is already gone. With the container still alive this path finished from
     // the transcript and never opened the receipt, so a run that kept editing
     // after acceptance shipped as `succeeded`: six of eight files differing from
@@ -5457,11 +5616,27 @@ export class AgentRunStore {
     // unaffected.
     if (terminal.status === "succeeded") {
       const projection = await readRunStateProjection(project, project.workspaceDir, run);
+      /**
+       * The transcript is one witness of what the run wrote, not the only one:
+       * files a child wrote by shell, or that its tool results never named, are
+       * on disk all the same. The host copy of the workspace is what decides
+       * (2026-10-04) — a receipt that is missing says nothing about files that
+       * exist.
+       */
+      const filesOnDisk = async () => {
+        if (artifacts.length > 0) return;
+        const startedAt = Date.parse(String(run.startedAt ?? ""));
+        artifacts = await writtenDeliverableFiles(project, Number.isFinite(startedAt) ? startedAt : null,
+          typeof ownEnd?.time === "number" ? ownEnd.time : null).catch(() => []);
+      };
       /** @param {(string | StoredNotice)[]} notices */
-      const unaccepted = (notices) => {
+      const unaccepted = async (notices) => {
+        await filesOnDisk();
         if (artifacts.length === 0) {
+          // The plan named files and none was written: that is what failed, and
+          // the code says so rather than blaming a receipt.
           terminal.status = "failed";
-          terminal.errorCode = "specialist_deliverable_not_accepted";
+          terminal.errorCode = "specialist_required_output_missing";
         } else if (!serverGateClean) {
           terminal.verification = "unverified";
         }
@@ -5479,7 +5654,7 @@ export class AgentRunStore {
         // what its receipt names.
         const incomplete = Boolean(requiresAcceptance && !currentReceipt);
         if (incomplete || (projection.state === "unattributed" && artifacts.length > 0 && !currentReceipt)) {
-          unaccepted([...nativeWorkflowNotices(proof),
+          await unaccepted([...nativeWorkflowNotices(proof),
             ...(projection.state === "unattributed" ? [unattributedNotice()] : []),
           ]);
         }
@@ -5489,12 +5664,14 @@ export class AgentRunStore {
         : [];
       const accepted = planned.filter((item) => item?.status === "accepted");
       if (terminal.status === "succeeded" && planned.length > 0 && accepted.length === 0 && !(await readDeliveryReceipt(project, run))) {
+        // Before the sentence, which says whether any file was left.
+        await filesOnDisk();
         const sentence = artifacts.length === 0
           ? `本次运行计划了 ${planned.length} 件交付物，没有一件通过契约校验，也没有留下文件。`
           : serverGateClean
             ? `本次运行计划的 ${planned.length} 件交付物没有拿到运行内的回执；服务端已用同一套规则核验了盘上的文件并通过。`
             : `本次运行计划的 ${planned.length} 件交付物没有通过运行内的契约校验，文件按「未核验」交付，未通过的项列在下面。`;
-        unaccepted([runNotice("run_planned_none_accepted", sentence, { detail: sentence })]);
+        await unaccepted([runNotice("run_planned_none_accepted", sentence, { detail: sentence })]);
       }
     }
     const finalReceipt = await readDeliveryReceipt(project, run);
@@ -5582,19 +5759,34 @@ export class AgentRunStore {
             ...(run.nativeTurn && ownEnd?.time ? { finishedAt: new Date(ownEnd.time).toISOString() } : {}),
           });
         } else if (!amendable) {
-          return this.finishInternal(project, run.id, {
-            status: "failed",
-            errorCode: "specialist_receipt_digest_mismatch",
-            artifacts: [],
-            // First: behind twenty gate issues they were cut off, and the
-            // ledger never said which files had moved.
-            qualityNotices: [
-              ...verified.mismatched.slice(0, 10).map((entry) => runNotice("run_receipt_mismatch",
-                `delivery-receipt.json names ${entry} with a digest the file no longer matches, and the package did not pass on the bytes now on disk`,
-                { file: entry, detail: `回执记下的文件在通过之后被改动，改动后的内容没有通过核验。` })),
-              ...(terminal.qualityNotices ?? []),
-            ].slice(0, 20),
-          });
+          // The receipt labels what ships; it does not decide whether anything
+          // does (2026-10-04). Here no gate has judged the bytes now on disk —
+          // the run either failed for a reason of its own, which stands, or it
+          // finished with no file its transcript names — so the files the
+          // receipt names are delivered as they are now, marked unverified. This
+          // branch answered `failed / specialist_receipt_digest_mismatch` with
+          // `artifacts: []`, over the reason the run really had when it had one.
+          // Only a package that is gone altogether is a failure, and it is
+          // called that.
+          if (terminal.status === "succeeded") {
+            const current = receiptFilesNow(verified);
+            if (current.length > 0) {
+              artifacts = current;
+              terminal.verification = "unverified";
+            } else {
+              terminal.status = "failed";
+              terminal.errorCode = "specialist_required_output_missing";
+            }
+          }
+          // First: behind twenty gate issues they were cut off, and the
+          // ledger never said which files had moved.
+          terminal.qualityNotices = [
+            ...receiptMismatchNotices(verified, {
+              text: "so no gate has judged the bytes now on disk; the file is delivered as it is now",
+              detail: "改动后的内容没有经过核验，交付的是改动后的版本。",
+            }),
+            ...(terminal.qualityNotices ?? []),
+          ].slice(0, 20);
         } else {
           const changed = `交付物在写下回执之后被改动了 ${verified.mismatched.length} 个文件：${verified.mismatched.slice(0, 6).join("、")}。`
             + (terminal.verification
@@ -5780,6 +5972,8 @@ export class AgentRunStore {
         activity: new Map(),
         /** The kernel's last word on this run's direct children. @type {{ sessionId: string, running: boolean }[]} */
         kernelChildren: [],
+        /** How the run's own (root) turn stood the last time the stream spoke of it. @type {{ endKind: string | null, replied: boolean } | null} */
+        rootTurn: null,
         discoveredAt: 0,
         /** @type {{ key: string, at: number, total: number, verified: number, unverified: number } | null} */
         matrix: null,
@@ -5843,6 +6037,21 @@ export class AgentRunStore {
     if (observed.child && observed.event.type === "turn/end") {
       tracker.childEnds.set(observed.sessionId, String(observed.event.endKind ?? ""));
       changed = true;
+    }
+    // What the control plane holds of the run's own answer once its runtime is
+    // gone: the last assistant message the root session spoke and how its turn
+    // ended. A run whose container stops right after a finished turn can no
+    // longer be read, and without this it could only be called stopped. Only
+    // the two facts are kept — never the reply — and a replay of an earlier
+    // snapshot says nothing about how this turn ended.
+    if (!observed.child && !observed.replay) {
+      const event = observed.event;
+      if (event.type === "turn/start") tracker.rootTurn = { endKind: null, replied: false };
+      else if (event.type === "message/assistant" && !event.interrupted) {
+        tracker.rootTurn = { endKind: tracker.rootTurn?.endKind ?? null, replied: String(event.text ?? "").trim().length > 0 };
+      } else if (event.type === "turn/end") {
+        tracker.rootTurn = { endKind: String(event.endKind ?? ""), replied: tracker.rootTurn?.replied ?? false };
+      }
     }
     // A child that starts a new turn is running again, whatever its last one did.
     if (observed.child && observed.event.type === "turn/start" && tracker.childEnds.delete(observed.sessionId)) changed = true;

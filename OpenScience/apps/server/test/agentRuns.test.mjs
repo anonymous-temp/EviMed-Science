@@ -902,7 +902,10 @@ test("every fact the durable finish path reads, the live one reads too", async (
     // Read through `receiptNotices` on both paths, which is where
     // `entry.notices` is opened now: the call is the marker.
     ["acceptance notices", "receiptNotices("],
-    ["nothing accepted", "specialist_deliverable_not_accepted"],
+    // Nothing on disk is the one thing left that fails a delivery for want of a
+    // receipt, and both paths name it by the same code (2026-10-04): the files
+    // are what is missing, not an acceptance.
+    ["nothing on disk", "specialist_required_output_missing"],
     ["the run-state projection", "readRunStateProjection"],
   ]) {
     assert.ok(durable.includes(marker), `the durable path stopped reading ${fact} (${marker})`);
@@ -982,7 +985,10 @@ test("a deliverable no gate accepted is never a clean success: failed with nothi
     appendHistory([skillLoadedPart, { type: "text", text: "二甲双胍主要通过抑制肝糖输出发挥作用。" }]);
     const run = await store.reconcileSession(project, binding.sessionId);
     assert.equal(run.status, "failed", "seven rejections and nothing on disk is not a success");
-    assert.equal(run.errorCode, "specialist_deliverable_not_accepted");
+    // The files are what is missing, and the code says so: it is not a verdict
+    // about a receipt, and it does not claim the package was written.
+    assert.equal(run.errorCode, "specialist_required_output_missing");
+    assert.notEqual(run.errorCode, "specialist_deliverable_not_accepted");
     assert.ok(
       noticeTexts(run).some((line) => /没有一件通过契约校验/.test(String(line))),
       "the verdict must say why",
@@ -1007,6 +1013,78 @@ test("a deliverable no gate accepted is never a clean success: failed with nothi
     assert.equal(delivered.verification, "unverified", "and never a clean success");
     assert.deepEqual(delivered.artifacts, [relative]);
     assert.ok(noticeTexts(delivered).some((line) => /没有通过运行内的契约校验，文件按「未核验」交付/.test(String(line))));
+  });
+});
+
+test("files on disk that the transcript never names are delivered unverified when no receipt came back", async () => {
+  // The transcript is one witness of what a run wrote, not the only one: a
+  // child's shell, or a tool result that named nothing, leaves files the
+  // transcript never lists. Reading only it made `artifacts` empty and failed
+  // a run over files that were on disk — a missing receipt says nothing about
+  // files that exist (2026-10-04), so the host copy of the workspace decides.
+  await withAnswerModeRun(async ({ project, binding, dispatch, appendHistory, skillLoadedPart, store }) => {
+    await mkdir(path.join(project.workspaceDir, ".evimed-run"), { recursive: true });
+    await writeFile(path.join(project.workspaceDir, ".evimed-run", "state.json"), JSON.stringify({
+      formatVersion: 1,
+      plan: { revision: 1, items: [{ id: "d1", status: "submitted", attempts: 7 }] },
+      budget: { steps: 57, tokens: 1, children: 1, limits: {} },
+      evidence: { total: 0, byStatus: {} },
+      gateRuns: [],
+      subagents: [],
+      qualityNotices: [],
+      degraded: [],
+    }, null, 2), "utf8");
+
+    await dispatch("turn_files_the_transcript_never_names");
+    const relative = "deliverables/d1/clinical-evidence-report.md";
+    await mkdir(path.join(project.workspaceDir, "deliverables", "d1"), { recursive: true });
+    await writeFile(path.join(project.workspaceDir, relative), "# 二甲双胍的证据综述\n", "utf8");
+    appendHistory([skillLoadedPart, { type: "text", text: "二甲双胍主要通过抑制肝糖输出发挥作用。" }]);
+    const run = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(run.status, "succeeded", noticeTexts(run).join(" | "));
+    assert.equal(run.errorCode, null);
+    assert.equal(run.verification, "unverified");
+    assert.deepEqual(run.artifacts, [relative]);
+    assert.ok(noticeTexts(run).some((line) => /没有通过运行内的契约校验，文件按「未核验」交付/.test(String(line))));
+  });
+});
+
+test("a run that failed for a reason of its own keeps it when its receipt also drifted", async () => {
+  // The digest-mismatch branch answered `failed / specialist_receipt_digest_mismatch`
+  // for every run that was not `succeeded with artifacts`, which replaced the
+  // reason the run really had — a session error here — with a verdict about
+  // our own record. The receipt adds a label; the run's own verdict stands.
+  await withAnswerModeRun(async ({ project, binding, dispatch, store }) => {
+    const deliverableDir = path.join(project.workspaceDir, "deliverables", "d1");
+    await mkdir(deliverableDir, { recursive: true });
+    await writeFile(path.join(deliverableDir, "clinical-evidence-report.md"), "# edited after grading\n", "utf8");
+    await writeFile(path.join(project.workspaceDir, "delivery-receipt.json"), JSON.stringify({
+      formatVersion: 1,
+      runId: "run_own_failure",
+      bundleVersion: "0.1.0",
+      domainVersion: "0.1.0",
+      entries: [{
+        deliverableId: "d1",
+        contractKind: "clinical-evidence-report",
+        capability: "clinical-evidence-synthesis",
+        files: [{ path: "deliverables/d1/clinical-evidence-report.md", sha256: "0".repeat(64), bytes: 1 }],
+        acceptedAt: "2026-01-01T00:00:00.000Z",
+        attempt: 2,
+        notices: [],
+      }],
+    }, null, 2), "utf8");
+    const dispatched = await dispatch("turn_own_failure");
+    await relabelReceipt(project, dispatched.id);
+    store.readSessionHistory = async () => [{
+      info: { id: "msg_session_error", role: "assistant", time: { completed: Date.now() + 10 }, error: { name: "UnknownError", code: "provider_unavailable" } },
+      parts: [{ type: "text", text: "请求没有完成。" }],
+    }];
+    const run = await store.reconcileSession(project, binding.sessionId);
+    assert.equal(run.status, "failed");
+    assert.equal(run.errorCode, "runtime_session_error", "the run's own reason stands");
+    assert.notEqual(run.errorCode, "specialist_receipt_digest_mismatch");
+    assert.ok(noticeTexts(run).some((line) => /digest the file no longer matches/.test(String(line))), "and the drift is said");
+    assert.deepEqual(run.unverifiedArtifacts, ["deliverables/d1/clinical-evidence-report.md"], "the file is still listed");
   });
 });
 
@@ -1041,13 +1119,19 @@ test("an accepted deliverable and an answer-line turn are both still successes",
   });
 });
 
-test("a run whose files drifted from its receipt does not ship, container alive or not", async () => {
+test("a run whose files drifted from its receipt ships the files as they are, marked unverified, container alive or not", async () => {
   // The digest check was written for the container-gone path and only reached
   // there. With the container alive, reconciliation finished from the transcript
   // and never opened the receipt — so a run that kept editing after its package
   // was accepted was recorded `succeeded` with 16 artifacts while six of its
   // eight files differed from the digests they were accepted under. Nothing had
   // graded the bytes that shipped.
+  //
+  // The first answer to that was to refuse the package (`failed /
+  // specialist_receipt_digest_mismatch`, `artifacts: []`). A receipt is our own
+  // record of what was graded, and it labels a delivery; it does not decide
+  // whether there is one (the owner's ruling of 2026-10-04). So the files that
+  // are on disk now ship, said to be unverified, with which of them moved.
   await withAnswerModeRun(async ({ project, binding, dispatch, appendHistory, skillLoadedPart, store }) => {
     const deliverableDir = path.join(project.workspaceDir, "deliverables", "d1");
     await mkdir(deliverableDir, { recursive: true });
@@ -1072,21 +1156,18 @@ test("a run whose files drifted from its receipt does not ship, container alive 
     await relabelReceipt(project, dispatched.id);
     appendHistory([skillLoadedPart, { type: "text", text: "二甲双胍主要通过抑制肝糖输出发挥作用。" }]);
     const run = await store.reconcileSession(project, binding.sessionId);
-    assert.equal(run.status, "failed", "a package no gate has seen must not ship");
-    assert.equal(run.errorCode, "specialist_receipt_digest_mismatch");
-    // Not shipped is not deleted. The verdict above is the whole of "does not
-    // ship" — the run is `failed`, the package is not published as graded, and
-    // nothing downstream treats it as accepted. The files are still listed,
-    // marked unverified, because the alternative is telling a researcher whose
-    // report is sitting in the workspace that there is 「暂无交付物」.
-    assert.deepEqual(run.artifacts, [], "a package no gate has seen is not graded output");
-    assert.deepEqual(run.unverifiedArtifacts, ["deliverables/d1/clinical-evidence-report.md"]);
+    assert.equal(run.status, "succeeded", noticeTexts(run).join(" | "));
+    assert.equal(run.errorCode, null);
+    assert.equal(run.verification, "unverified", "bytes no gate has seen are never a clean success");
+    assert.deepEqual(run.artifacts, ["deliverables/d1/clinical-evidence-report.md"],
+      "the file as it is on disk now is what ships, never an empty list");
+    assert.deepEqual(run.unverifiedArtifacts, []);
     assert.ok(
       noticeTexts(run).some((line) => /digest the file no longer matches/.test(String(line))),
-      "the verdict must say which file drifted",
+      "the delivery must say which file drifted",
     );
-    assert.ok(noticeTexts(run).some((line) => String(line).includes("未经核验")),
-      "and must label the files it lists as ungraded");
+    assert.ok(noticeTexts(run).some((line) => /as it is now/.test(String(line))),
+      "and that what ships is the file as it is now, not the graded one");
   });
 });
 
@@ -3215,7 +3296,13 @@ test("a finding about the evidence itself still stamps the package unverified", 
   assert.match(result.blockingIssues.join("\n"), /not found in its preserved source artifact/);
 });
 
-test("server-valid clinical bytes without a local receipt get one resubmit-only repair", async () => {
+/**
+ * A clinical package the server's own gate accepts, a local ceiling that kept it
+ * from getting a receipt, and one resubmit-only repair that is sent — and either
+ * taken by the runtime or refused.
+ * @param {{ refuse?: boolean }} [options]
+ */
+async function clinicalRunWithoutReceipt({ refuse = false } = {}) {
   const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-resubmit-valid-"));
   try {
     const project = {
@@ -3263,7 +3350,7 @@ test("server-valid clinical bytes without a local receipt get one resubmit-only 
       effectiveRuntimeAgent: "evimed-clinical-evidence-synthesis",
     }, async (_session, _record, repairText = null) => {
       if (repairText) repairPrompts.push(repairText);
-      return { accepted: true };
+      return { accepted: !(refuse && repairText) };
     });
 
     const deliverables = new Map([
@@ -3308,13 +3395,31 @@ test("server-valid clinical bytes without a local receipt get one resubmit-only 
     }];
 
     const current = await store.reconcileSession(project, binding.sessionId);
-    assert.equal(current.status, "running", "the server-valid current bytes need a receipt, not a terminal failure");
-    assert.equal(repairPrompts.length, 1, "one resubmit-only repair must be sent");
-    assert.match(repairPrompts[0], /evimed_submit_deliverable/);
-    assert.match(repairPrompts[0], /do not edit|不要修改/i);
+    return { current, repairPrompts };
   } finally {
     await rm(root, { recursive: true, force: true });
   }
+}
+
+test("server-valid clinical bytes without a local receipt get one resubmit-only repair", async () => {
+  const { current, repairPrompts } = await clinicalRunWithoutReceipt();
+  assert.equal(current.status, "running", "the server-valid current bytes need a receipt, not a terminal failure");
+  assert.equal(repairPrompts.length, 1, "one resubmit-only repair must be sent");
+  assert.match(repairPrompts[0], /evimed_submit_deliverable/);
+  assert.match(repairPrompts[0], /do not edit|不要修改/i);
+});
+
+test("a receipt resubmission that cannot be dispatched does not fail a package the server accepted", async () => {
+  // The request to write down our own record of the acceptance could not be
+  // delivered. That used to end the run `failed / specialist_evidence_repair_failed`
+  // — a package the gate had just accepted, failed for want of the receipt. The
+  // failure is said, and the delivery stands (2026-10-04).
+  const { current, repairPrompts } = await clinicalRunWithoutReceipt({ refuse: true });
+  assert.equal(repairPrompts.length, 1);
+  assert.equal(current.status, "succeeded", noticeTexts(current).join(" | "));
+  assert.equal(current.errorCode, null);
+  assert.ok(current.artifacts.includes("clinical-evidence-report.md"), JSON.stringify(current.artifacts));
+  assert.ok(noticeTexts(current).some((line) => /receipt resubmission could not be dispatched/.test(line)), noticeTexts(current).join(" | "));
 });
 
 /** Break only a bookkeeping check in the shared package: CLM-013 keeps its
@@ -6024,6 +6129,83 @@ test("a container that exits with nothing durable still says what the run last k
   }
 });
 
+test("a runtime that stopped after its turn's answer leaves an answered run, and only then", async () => {
+  // An answer-line turn never has a receipt, so with the container gone it
+  // always landed on `runtime_stopped` — however finished its answer was. The
+  // event pump had carried that answer past the control plane already; what it
+  // keeps is whether the root session's last message had text and how its turn
+  // ended, and those two facts are what an answered turn is made of. Everything
+  // else stays what it was: a turn that did not finish is a stopped runtime.
+  const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-answered-"));
+  try {
+    const project = {
+      id: "project-1",
+      userId: "user-1",
+      rootDir: root,
+      workspaceDir: path.join(root, "workspace"),
+      metaDir: path.join(root, ".openscience"),
+    };
+    await mkdir(path.join(project.workspaceDir, workspaceLayout.runStateDir), { recursive: true });
+    await mkdir(project.metaDir, { recursive: true });
+    const binding = { sessionId: "ses_answered", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
+    const makeStore = () => new AgentRunStore({ get: async () => binding }, {
+      model: "deepseek/deepseek-v4-pro",
+      readSessionHistory: async () => [],
+      monitorIntervalMs: 60_000,
+      agentRegistry: { get: (id) => (id === "note-writer"
+        ? { id, version: "1.0.0", runtimeAgent: "evimed-note-writer", skill: "note-writer", companionSkills: [],
+          outputs: [{ path: "note.md", required: true }], completionChecks: ["requiredOutputsExist"] }
+        : undefined) },
+    });
+    /** One run, the events the pump carried for it, and the container's exit. */
+    const stopAfter = async (events, { writeState = null, dispatched = null } = {}) => {
+      const store = makeStore();
+      const started = dispatched
+        ? await store.dispatch(project, { sessionId: binding.sessionId, dispatchId: `d_${Math.random().toString(16).slice(2, 10)}`, ...dispatched }, async () => ({ accepted: true }))
+        : await store.start(project, { sessionId: binding.sessionId });
+      await relabelReceipt(project, started.id);
+      if (writeState) await writeFile(path.join(project.workspaceDir, workspaceLayout.runStateFile), JSON.stringify(writeState), "utf8");
+      store.scheduleMonitor = () => {};
+      let seq = 1;
+      for (const event of events) store.noteRunEvent(project, started.id, { sessionId: binding.sessionId, child: false, replay: false, event: { seq: (seq += 1), ...event } });
+      await store.closeProject(project, "failed");
+      const finished = (await store.list(project)).find((item) => item.id === started.id);
+      await store.closeAll();
+      return finished;
+    };
+    const turn = { type: "turn/start", turn: 1 };
+    const answer = { type: "message/assistant", text: "二甲双胍主要通过抑制肝糖输出发挥作用。", reasoning: "", usage: null, interrupted: false };
+    const completed = { type: "turn/end", turn: 1, endKind: "completed" };
+
+    const answered = await stopAfter([turn, answer, completed]);
+    assert.equal(answered?.status, "succeeded", JSON.stringify(answered?.qualityNotices));
+    assert.equal(answered?.errorCode, null);
+    assert.equal(answered?.verification, "unchecked", "the checks that follow an answer did not run, and that is said");
+    assert.deepEqual(answered?.artifacts, []);
+    assert.ok(answered?.qualityNotices?.some((notice) => notice.code === "run_stopped_after_answer"), JSON.stringify(answered?.qualityNotices));
+
+    // Controls: each fact the verdict rests on, withdrawn on its own.
+    assert.equal((await stopAfter([]))?.errorCode, "runtime_stopped", "no turn on record: the turn had not finished");
+    assert.equal((await stopAfter([turn, answer]))?.errorCode, "runtime_stopped", "an answer with no end is a turn cut off");
+    assert.equal((await stopAfter([turn, { ...answer, text: "  " }, completed]))?.errorCode, "runtime_stopped", "an empty last message is no answer");
+    assert.equal((await stopAfter([turn, answer, { ...completed, endKind: "aborted" }]))?.errorCode, "runtime_stopped", "a turn that was aborted did not finish");
+    assert.equal((await stopAfter([turn, answer, completed, turn]))?.errorCode, "runtime_stopped", "a later turn that began and never ended is not finished");
+    // A reply is not what was owed when a deliverable was planned...
+    const planned = await stopAfter([turn, answer, completed], {
+      writeState: { formatVersion: 1, plan: { revision: 1, items: [{ id: "d1", status: "planned", attempts: 0 }] }, degraded: [] },
+    });
+    assert.equal(planned?.status, "failed");
+    assert.equal(planned?.errorCode, "runtime_stopped");
+    // ...nor when the run is bound to a capability whose contract is files.
+    const bound = await stopAfter([turn, answer, completed], {
+      dispatched: { effectiveAgentId: "note-writer", effectiveAgentVersion: "1.0.0", effectiveRuntimeAgent: "evimed-note-writer" },
+    });
+    assert.equal(bound?.errorCode, "runtime_stopped");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("the run's own projection is read from the host, not from the container's view of it", () => {
   // `runtimeWorkspaceRoot()` answers "what are the model's absolute paths
   // relative to". Under docker that is `/workspace` — inside the container —
@@ -6477,13 +6659,15 @@ test("an artifact is recognised from the spelling the model actually sends", () 
   }, "/w"), [], "reading a file does not produce one");
 });
 
-test("a package written and never submitted is not reported as a stopped runtime", async () => {
+test("a package written and never submitted is delivered unverified, not reported as a stopped runtime", async () => {
   // Run 7, exactly: seven deliverable files on disk, the plan item still
   // `planned` with `attempts: 0`, no gate run, no receipt — and a ledger entry
   // reading `runtime_stopped`. A run cut off mid-flight and a run that wrote
   // its whole contract and never asked for a verdict both end with a gone
-  // container and no receipt, so one code for both makes the second read as
-  // infrastructure trouble and hides what actually happened.
+  // container and no receipt. The first fix told them apart by code
+  // (`runtime_deliverable_never_submitted`) and still ended both `failed`; the
+  // second said what the files are — delivered, unverified — because a receipt
+  // that is missing says nothing about files that are there (2026-10-04).
   const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-unsubmitted-"));
   try {
     const project = {
@@ -6496,13 +6680,14 @@ test("a package written and never submitted is not reported as a stopped runtime
     await mkdir(project.metaDir, { recursive: true });
     await mkdir(path.join(project.workspaceDir, workspaceLayout.runStateDir), { recursive: true });
     await mkdir(path.join(project.workspaceDir, workspaceLayout.deliverablesDir, "d1"), { recursive: true });
-    await writeFile(path.join(project.workspaceDir, workspaceLayout.deliverablesDir, "d1", "clinical-evidence-report.md"), "# report\n", "utf8");
+    const report = path.join(project.workspaceDir, workspaceLayout.deliverablesDir, "d1", "clinical-evidence-report.md");
     const writeState = (items) => writeFile(
       path.join(project.workspaceDir, workspaceLayout.runStateFile),
       JSON.stringify({ formatVersion: 1, plan: { revision: 1, items }, degraded: [] }),
       "utf8",
     );
-    const finish = async () => {
+    /** The run's own report is written while it runs, so it is always newer than the run: nothing here depends on how long the machine took. */
+    const finish = async ({ writes = true } = {}) => {
       const binding = { sessionId: "ses_u", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
       const store = new AgentRunStore({ get: async () => binding }, {
         model: "deepseek/deepseek-v4-pro",
@@ -6510,48 +6695,53 @@ test("a package written and never submitted is not reported as a stopped runtime
         monitorIntervalMs: 60_000,
       });
       const started = await store.start(project, { sessionId: binding.sessionId });
-    await relabelReceipt(project, started.id);
+      await relabelReceipt(project, started.id);
+      if (writes) await writeFile(report, "# report\n", "utf8");
+      else await rm(report, { force: true });
       await store.closeProject(project, "failed");
       return (await store.list(project)).find((item) => item.id === started.id);
     };
 
     await writeState([{ id: "d1", status: "planned", attempts: 0 }]);
     const abandoned = await finish();
-    assert.equal(abandoned?.errorCode, "runtime_deliverable_never_submitted");
-    assert.ok(
-      noticeTexts(abandoned).some((line) => line.includes("d1") && line.includes("1")),
-      `the verdict must name the deliverable and what was written: ${JSON.stringify(abandoned?.qualityNotices)}`,
-    );
     // Ungraded is a label on the files, not a reason to hide them.
     //
     // This asserted `artifacts: []` — "ungraded files are still not
     // deliverables" — and that was the whole defect, stated as an invariant. In
     // production 28 of 179 finished runs ended here, at p90 58 minutes, with a
-    // complete package on disk and 「暂无交付物。」 on the screen. The verdict is
-    // unchanged and still `runtime_deliverable_never_submitted`; what changed is
-    // that the run no longer reports having produced nothing when it produced
-    // something.
-    assert.deepEqual(abandoned?.artifacts, [], "ungraded files are not graded output");
-    assert.deepEqual(abandoned?.unverifiedArtifacts, ["deliverables/d1/clinical-evidence-report.md"],
-      "but the run must still say what it wrote");
+    // complete package on disk and 「暂无交付物。」 on the screen. Then it
+    // asserted `failed / runtime_deliverable_never_submitted` with the files
+    // listed apart; they are the run's artifacts, marked, and the run delivered.
+    assert.equal(abandoned?.status, "succeeded", JSON.stringify(abandoned?.qualityNotices));
+    assert.equal(abandoned?.errorCode, null);
+    assert.equal(abandoned?.verification, "unverified");
+    assert.deepEqual(abandoned?.artifacts, ["deliverables/d1/clinical-evidence-report.md"]);
+    assert.deepEqual(abandoned?.unverifiedArtifacts, []);
+    assert.ok(
+      noticeTexts(abandoned).some((line) => line.includes("d1") && line.includes("从未提交")),
+      `the outcome must name the deliverable and that it was never submitted: ${JSON.stringify(abandoned?.qualityNotices)}`,
+    );
     assert.ok(noticeTexts(abandoned).some((line) => line.includes("未经核验")),
       `the files must be labelled unverified rather than passed off as graded: ${JSON.stringify(abandoned?.qualityNotices)}`);
+    assert.ok(noticeTexts(abandoned).some((line) => line.includes("运行时在核验之前已经停止")),
+      "and the delivery says why nothing could grade them: the runtime had stopped");
 
     // Negative controls — the three ways this could lie.
-    // 1. An item that was submitted and rejected wrote files too; that is a
-    //    graded failure, not an abandoned one, and not infrastructure trouble
-    //    either. This asserted `runtime_stopped` when those were the only two
-    //    codes; a run that worked for an hour and did not meet the contract now
-    //    says so. What the control is for — it must never read as abandoned —
-    //    is unchanged.
+    // 1. An item that was submitted and rejected wrote files too. It is a
+    //    delivery as well, and its label says what happened: rejected every
+    //    time, which is neither abandoned nor infrastructure trouble.
     await writeState([{ id: "d1", status: "rejected", attempts: 2 }]);
     const graded = await finish();
-    assert.equal(graded?.errorCode, "specialist_deliverable_not_accepted");
-    assert.notEqual(graded?.errorCode, "runtime_deliverable_never_submitted");
+    assert.equal(graded?.status, "succeeded");
+    assert.equal(graded?.verification, "unverified");
     assert.ok(
-      noticeTexts(graded).some((line) => line.includes("d1") && line.includes("2")),
-      `the verdict must name the deliverable and how many times it was rejected: ${JSON.stringify(graded?.qualityNotices)}`,
+      noticeTexts(graded).some((line) => line.includes("d1") && line.includes("2 次") && line.includes("拒绝")),
+      `the outcome must name the deliverable and how many times it was rejected: ${JSON.stringify(graded?.qualityNotices)}`,
     );
+    assert.equal(noticeTexts(graded).some((line) => line.includes("从未提交")), false, "a rejected item must never read as abandoned");
+    // With the files gone nothing is delivered, and what remains is a run that
+    // stopped. The two controls below need exactly that: a package left on disk
+    // would deliver, which is the rule above and proves nothing about them.
     // 2. An item never started is a run that stopped, not a package left
     //    ungraded. The directory must EXIST and be EMPTY: a missing directory
     //    is rejected one line earlier, so using one proves nothing about the
@@ -6559,7 +6749,10 @@ test("a package written and never submitted is not reported as a stopped runtime
     //    stayed green with the count deleted.
     await mkdir(path.join(project.workspaceDir, workspaceLayout.deliverablesDir, "d-empty"), { recursive: true });
     await writeState([{ id: "d-empty", status: "planned", attempts: 0 }]);
-    assert.equal((await finish())?.errorCode, "runtime_stopped");
+    const stopped = await finish({ writes: false });
+    assert.equal(stopped?.status, "failed");
+    assert.equal(stopped?.errorCode, "runtime_stopped");
+    assert.deepEqual(stopped?.artifacts, []);
     // 3. An id from the projection is input, not a name we chose. The traversal
     //    has to lead somewhere real for the guard to be under test: pointed at
     //    a path that does not exist, the read throws and the case passes with
@@ -6567,16 +6760,20 @@ test("a package written and never submitted is not reported as a stopped runtime
     await mkdir(path.join(root, "outside"), { recursive: true });
     await writeFile(path.join(root, "outside", "secret.txt"), "not a deliverable\n", "utf8");
     await writeState([{ id: "../../outside", status: "planned", attempts: 0 }]);
-    assert.equal((await finish())?.errorCode, "runtime_stopped", "a traversing id must not be read at all");
+    assert.equal((await finish({ writes: false }))?.errorCode, "runtime_stopped", "a traversing id must not be read at all");
   } finally {
     await rm(root, { recursive: true, force: true });
   }
 });
 
-test("a receipt naming a file that no longer matches its digest is refused, not delivered", async () => {
-  // The receipt's whole value is that it proves the fetched artifacts are the
-  // graded artifacts. A file edited after grading is not the graded file, and
-  // delivering it would put something no gate has seen in front of a reader.
+test("a receipt naming a file that no longer matches its digest still ships the file, marked unverified", async () => {
+  // The receipt's value is the label it puts on what ships: it proves the
+  // fetched artifacts are the graded artifacts, and says so when they are not.
+  // A file edited after grading is not the graded file — it is still the file
+  // the run produced, and with the runtime gone nothing can grade it now. It
+  // used to be refused (`failed / specialist_receipt_digest_mismatch`,
+  // `artifacts: []`), which put 「暂无交付物」 over a report on disk
+  // (2026-10-04). It ships as it is, and the run says which file moved.
   const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-digest-"));
   try {
     const project = {
@@ -6599,7 +6796,10 @@ test("a receipt naming a file that no longer matches its digest is refused, not 
         deliverableId: "d1",
         contractKind: "clinical-evidence-report",
         capability: "clinical-evidence-synthesis",
-        files: [{ path: "deliverables/d1/clinical-evidence-report.md", sha256: "0".repeat(64), bytes: 1 }],
+        files: [
+          { path: "deliverables/d1/clinical-evidence-report.md", sha256: "0".repeat(64), bytes: 1 },
+          { path: "deliverables/d1/revision-notes.md", sha256: "1".repeat(64), bytes: 1 },
+        ],
         acceptedAt: "2026-01-01T00:00:00.000Z",
         attempt: 1,
         notices: [],
@@ -6607,33 +6807,54 @@ test("a receipt naming a file that no longer matches its digest is refused, not 
     }, null, 2), "utf8");
 
     const binding = { sessionId: "ses_digest", mode: "open-domain", agentId: null, agentVersion: null, runtimeAgent: null };
-    let alive = true;
-    const store = new AgentRunStore({ get: async () => binding }, {
-      model: "deepseek/deepseek-v4-pro",
-      readSessionHistory: async () => {
-        if (alive) { alive = false; return []; }
-        const error = new Error("gone");
-        error.code = "runtime_not_running";
-        throw error;
-      },
-      monitorIntervalMs: 60_000,
-    });
+    /** A store whose container is alive for the run's first read and gone after it. */
+    const goneAfterStart = () => {
+      let alive = true;
+      return new AgentRunStore({ get: async () => binding }, {
+        model: "deepseek/deepseek-v4-pro",
+        readSessionHistory: async () => {
+          if (alive) { alive = false; return []; }
+          const error = new Error("gone");
+          error.code = "runtime_not_running";
+          throw error;
+        },
+        monitorIntervalMs: 60_000,
+      });
+    };
+    const store = goneAfterStart();
     const started = await store.start(project, { sessionId: binding.sessionId });
     await relabelReceipt(project, started.id);
     await store.reconcileSession(project, binding.sessionId).catch(() => {});
     const finished = (await store.list(project)).find((item) => item.id === started.id);
-    assert.equal(finished?.status, "failed");
-    assert.equal(finished?.errorCode, "specialist_receipt_digest_mismatch");
-    // Same rule on the container-gone path: refused, and still on disk.
-    assert.deepEqual(finished?.artifacts, []);
-    assert.deepEqual(finished?.unverifiedArtifacts, ["deliverables/d1/clinical-evidence-report.md"]);
-    assert.ok(noticeTexts(finished).some((line) => String(line).includes("未经核验")));
+    assert.equal(finished?.status, "succeeded", noticeTexts(finished).join(" | "));
+    assert.equal(finished?.errorCode, null);
+    assert.equal(finished?.verification, "unverified");
+    // The file that is there ships; the one the receipt names that is gone is
+    // only said to be gone.
+    assert.deepEqual(finished?.artifacts, ["deliverables/d1/clinical-evidence-report.md"]);
+    assert.deepEqual(finished?.unverifiedArtifacts, []);
+    const notices = noticeTexts(finished);
+    assert.ok(notices.some((line) => /clinical-evidence-report\.md with a digest the file no longer matches/.test(line)), notices.join(" | "));
+    assert.ok(notices.some((line) => /revision-notes\.md, which is no longer in the workspace/.test(line)), notices.join(" | "));
+    assert.ok(notices.some((line) => line.includes("未经核验")));
+
+    // Negative control: when every file the receipt names is gone there is
+    // nothing to deliver, and it is called that rather than a digest mismatch.
+    await rm(path.join(deliverableDir, "clinical-evidence-report.md"));
+    const later = goneAfterStart();
+    const second = await later.start(project, { sessionId: binding.sessionId });
+    await relabelReceipt(project, second.id);
+    await later.closeProject(project, "failed");
+    const gone = (await later.list(project)).find((item) => item.id === second.id);
+    assert.equal(gone?.status, "failed");
+    assert.equal(gone?.errorCode, "specialist_required_output_missing");
+    assert.deepEqual(gone?.artifacts, []);
   } finally {
     await rm(root, { recursive: true, force: true });
   }
 });
 
-test("with the runtime gone, files moved by an authorized revision end as a revision not accepted, not as tampering", async () => {
+test("with the runtime gone, files moved by an authorized revision ship as they are, said to be a revision not accepted, not as tampering", async () => {
   const root = await mkdtemp(path.join(tmpdir(), "os-agent-run-revision-gone-"));
   try {
     const project = {
@@ -6687,10 +6908,15 @@ test("with the runtime gone, files moved by an authorized revision end as a revi
 
     await store.reconcileSession(project, binding.sessionId).catch(() => {});
     const finished = (await store.list(project)).find((item) => item.id === started.id);
-    assert.equal(finished?.status, "failed");
-    assert.equal(finished?.errorCode, "specialist_deliverable_not_accepted");
-    assert.deepEqual(finished?.artifacts, []);
+    // The revision did not pass, and that is the label on what ships: the
+    // revised file, as it is on disk now. The accepted version stays preserved
+    // in the control plane (`snapshotAcceptedPackageForRepair`).
+    assert.equal(finished?.status, "succeeded", noticeTexts(finished).join(" | "));
+    assert.equal(finished?.verification, "unverified");
+    assert.deepEqual(finished?.artifacts, [relative]);
     assert.match(String(noticeTexts(finished)[0]), /交付物「d1」按服务端门禁的要求开启了修订/);
+    assert.equal(noticeTexts(finished).some((line) => /digest the file no longer matches/.test(line)), false,
+      "an authorized revision is not described as tampering");
   } finally {
     await rm(root, { recursive: true, force: true });
   }
@@ -6918,6 +7144,10 @@ test("a package edited after its receipt into something that fails is still refu
     const run = await store.reconcileSession(project, binding.sessionId);
     assert.equal(run.status, "failed");
     assert.deepEqual(run.artifacts, []);
+    // Nothing is on disk, and the code says what is missing rather than
+    // blaming the receipt: the required file is not there.
+    assert.equal(run.errorCode, "specialist_required_output_missing");
+    assert.notEqual(run.errorCode, "specialist_receipt_digest_mismatch");
   });
 });
 
@@ -7974,8 +8204,13 @@ test("a run that ends without a verdict recovers only the files it wrote, not an
     await writeFile(path.join(mine, "clinical-evidence-report.md"), "# this run's report\n", "utf8");
     await store.closeProject(project, "failed");
     const finished = (await store.list(project)).find((item) => item.id === started.id);
-    assert.deepEqual(finished?.unverifiedArtifacts, ["deliverables/d1/clinical-evidence-report.md"],
+    // What this run wrote ships, marked; what an earlier run wrote is not
+    // claimed — by either list.
+    assert.equal(finished?.status, "succeeded", noticeTexts(finished).join(" | "));
+    assert.equal(finished?.verification, "unverified");
+    assert.deepEqual(finished?.artifacts, ["deliverables/d1/clinical-evidence-report.md"],
       "what this run wrote is said; what an earlier run wrote is not claimed");
+    assert.deepEqual(finished?.unverifiedArtifacts, []);
   } finally {
     await rm(root, { recursive: true, force: true });
   }

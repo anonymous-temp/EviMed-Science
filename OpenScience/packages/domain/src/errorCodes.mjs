@@ -725,6 +725,11 @@ export const RUNTIME_ERROR_CODES = Object.freeze([
   // a verdict on it. Reported as the same code, the second reads as
   // infrastructure trouble and the actual cause — the run stopped short of its
   // own contract — is invisible.
+  //
+  // Not written by the ledger since 2026-10-04: a package that is on disk is
+  // delivered, marked unverified, with the same fact as a notice
+  // (`run_deliverable_never_submitted`). Kept, with its sentence, so a run
+  // recorded before then is still explained by name.
   'runtime_deliverable_never_submitted',
 ])
 
@@ -831,6 +836,14 @@ export const RUN_VERDICT_ERROR_CODES = Object.freeze([
   // Refused by the delivery gate. The package is on disk and the issues are
   // actionable inside it — every sentence for these says so, because "your
   // files are gone" is what 28 of 179 production runs looked like.
+  //
+  // The first two are no longer written by the ledger (2026-10-04): the
+  // delivery receipt is our own record and labels a delivery, it does not
+  // refuse one. A run whose files are on disk is delivered, marked unverified,
+  // with the receipt's account of what moved as a notice; one with nothing on
+  // disk ends `specialist_required_output_missing`, which says what is missing.
+  // They stay, with their sentences, so a run recorded before then is still
+  // explained by name.
   'specialist_deliverable_not_accepted',
   'specialist_receipt_digest_mismatch',
   'specialist_required_output_missing',
