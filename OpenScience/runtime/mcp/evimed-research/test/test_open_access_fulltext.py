@@ -1,6 +1,7 @@
 import base64
 import hashlib
 import http.server
+import io
 import importlib.util
 import json
 import threading
@@ -10,6 +11,7 @@ import sys
 import tempfile
 import unittest
 from datetime import datetime, timezone
+from email.message import Message
 from concurrent.futures import ThreadPoolExecutor
 from types import SimpleNamespace
 from unittest import mock
@@ -129,23 +131,34 @@ class OpenAccessFullTextTests(unittest.TestCase):
         self.assertFalse((self.workspace / ".evimed-sources").exists())
 
     def test_request_uses_the_managed_public_source_gateway_transport(self):
-        response = mock.MagicMock()
-        response.__enter__.return_value = response
-        response.__exit__.return_value = False
-        response.headers.get.return_value = "12"
-        response.headers.get_content_type.return_value = "application/xml"
-        response.read.return_value = b"<article/>"
+        # A response that ends: the body is read in chunks inside the call's one
+        # deadline, so a double whose read() never returns b"" would be (rightly)
+        # read until the size bound.
+        class Body(io.BytesIO):
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_exc):
+                return False
+
+        response = Body(b"<article/>")
+        response.headers = Message()
+        response.headers["Content-Type"] = "application/xml"
+        response.headers["Content-Length"] = "10"
         with mock.patch.object(self.module.public_sources, "_open_remote", return_value=response) as opened:
             payload = self.module._request_bytes(
                 "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC1/fullTextXML",
                 "application/xml",
             )
         self.assertEqual(payload, b"<article/>")
-        opened.assert_called_once_with(
-            "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC1/fullTextXML",
-            ("application/xml",),
-            timeout_seconds=60,
+        self.assertEqual(opened.call_count, 1)
+        self.assertEqual(
+            opened.call_args.args,
+            ("https://www.ebi.ac.uk/europepmc/webservices/rest/PMC1/fullTextXML", ("application/xml",)),
         )
+        # One deadline: the socket is given what the budget allows, never more than the per-attempt cap.
+        self.assertLessEqual(opened.call_args.kwargs["timeout_seconds"], 60)
+        self.assertEqual(opened.call_args.kwargs["method"], "GET")
 
     def test_workspace_symlink_is_rejected(self):
         target = pathlib.Path(self.temp.name) / "target"
