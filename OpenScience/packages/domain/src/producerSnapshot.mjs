@@ -161,12 +161,12 @@ function projectEnvironment(raw) {
 }
 
 /** @param {unknown} raw */
-function projectExecution(raw) {
+function projectProcess(raw) {
   if (!isObject(raw)) return null;
   const exitCode = Number.isSafeInteger(raw.exitCode) ? raw.exitCode : null;
-  const execution = { exitCode, startedAt: isoTime(raw.startedAt), endedAt: isoTime(raw.endedAt),
+  const process = { exitCode, startedAt: isoTime(raw.startedAt), endedAt: isoTime(raw.endedAt),
     sourcesUnchanged: typeof raw.sourcesUnchanged === "boolean" ? raw.sourcesUnchanged : null, observation: text(raw.observation, 40) };
-  return Object.values(execution).some((value) => value !== null) ? execution : null;
+  return Object.values(process).some((value) => value !== null) ? process : null;
 }
 
 /** @param {unknown} raw */
@@ -208,7 +208,9 @@ function snapshotFrom(raw) {
   const reproduction = entitled ? claimed : script ? "generated_not_executed" : "not_applicable";
   const unknown = [...new Set(Array.isArray(raw.unknown) ? raw.unknown.filter((item) => SNAPSHOT_UNKNOWNS.includes(item)) : [])];
   return { schemaVersion: 1, kind, origin, method: projectMethod(raw.method), script, inputs, transformations: projectTransformations(raw.transformations),
-    environment: projectEnvironment(raw.environment), execution: projectExecution(raw.execution), reproduction, unknown,
+    environment: projectEnvironment(raw.environment),
+    // The process that ran, under a name no replay record uses: exit status, times and whether the sources stayed unchanged.
+    process: projectProcess(raw.process), reproduction, unknown,
     recorded: raw.recorded !== false };
 }
 
@@ -271,7 +273,7 @@ export function skillScriptSnapshot({ script, inputs, transformations = [], envi
     kind: "skill_script", origin: "receipt_declared",
     method: interpreter ? { id: interpreter } : null,
     script: { path: script?.path, digest: script?.digest, executed: confirmed, verified: Boolean(script?.verified) },
-    inputs, transformations, environment, execution,
+    inputs, transformations, environment, process: execution,
     reproduction: confirmed ? "observed_execution" : succeeded ? "declared_execution" : "generated_not_executed",
     // The script ran as a process: anything it read that its receipt does not list is unknown.
     unknown: ["undeclared_dependencies", ...(everyChecked ? [] : ["inputs"])],

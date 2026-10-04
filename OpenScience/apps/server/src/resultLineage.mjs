@@ -54,7 +54,7 @@ const record = (value) => value != null && typeof value === "object" && !Array.i
 function summary(version, calculationId) {
   const mine = calculationId ? version.bindings.items.filter((/** @type {any} */ item) => item.calculation.versionId === calculationId) : version.bindings.items;
   return { versionId: version.versionId, path: version.path, capturedAt: version.capturedAt, digest: version.digest,
-    boundValues: mine.length, keys: [...new Set(mine.map((/** @type {any} */ item) => item.calculation.key))].slice(0, 20) };
+    runId: version.producer.runId ?? version.producer.sessionId ?? null, boundValues: mine.length, keys: [...new Set(mine.map((/** @type {any} */ item) => item.calculation.key))].slice(0, 20) };
 }
 
 export class ResultLineageService {
@@ -96,14 +96,15 @@ export class ResultLineageService {
         // A successor that is a revised report or table is not a recalculation: nothing it holds is a machine value.
         if (!successor.machineValues.length) continue;
         const impact = changeImpact({ before: calculation, after: successor, dependents: calculation.versionId === versionId ? dependents : [version] });
-        changes.push({ calculationVersionId: calculation.versionId, successorVersionId: successor.versionId, successorCapturedAt: successor.capturedAt, ...impact });
+        changes.push({ calculationVersionId: calculation.versionId, successorVersionId: successor.versionId, successorCapturedAt: successor.capturedAt,
+          successorPath: successor.path, successorRunId: successor.producer.runId ?? successor.producer.sessionId ?? null, ...impact });
       }
     }
     return {
       versionId,
       role: isCalculation ? (version.bindings.items.length ? "both" : "calculation") : version.bindings.items.length || version.bindings.counts.unbound ? "report" : "none",
       calculations: calculations.map((calculation) => ({ versionId: calculation.versionId, path: calculation.path, digest: calculation.digest, capturedAt: calculation.capturedAt,
-        method: calculation.snapshot?.method?.id ?? null, producer: calculation.snapshot?.kind ?? null })),
+        runId: calculation.producer.runId ?? calculation.producer.sessionId ?? null, method: calculation.snapshot?.method?.id ?? null, producer: calculation.snapshot?.kind ?? null })),
       dependents: dependents.map((/** @type {any} */ item) => summary(item, versionId)),
       changes,
     };

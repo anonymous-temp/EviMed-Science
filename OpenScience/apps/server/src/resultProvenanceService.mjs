@@ -126,8 +126,10 @@ export class ResultProvenanceService {
       // Neither refuses anything: a gap is a label (owner ruling 2026-10-04).
       const producerSnapshot = projectProducerSnapshot(input.snapshot) ?? this.defaultSnapshot(producer, relativePath);
       const machineValues = input.machineValues ?? [];
+      // A scan that cannot run leaves the version captured and its numbers "not checked": the label never costs the bytes.
       const bindings = input.bindings ? projectValueBindings(input.bindings)
-        : await this.bindNumbers(project, { relativePath, bytes, mimeType: mimeFor(full), producer, inputs, hasValues: machineValues.length > 0 });
+        : await this.bindNumbers(project, { relativePath, bytes, mimeType: mimeFor(full), producer, inputs, hasValues: machineValues.length > 0 })
+          .catch(() => projectValueBindings({ status: "not_checked" }));
       for (const gap of [...snapshotGaps(producerSnapshot), ...bindingGaps(bindings)]) if (!coverage.gaps.includes(gap)) coverage.gaps.push(gap);
       const payload = { recordType: "result-version", artifactId, versionId, projectId: project.id,
         path: relativePath, digest, size: bytes.length, mimeType: mimeFor(full), capturedAt: this.now().toISOString(),

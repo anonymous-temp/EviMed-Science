@@ -74,13 +74,13 @@ test("no credential, command line or environment variable has a field to ride in
     script: { path: "analysis.py", digest: HASH("a"), executed: true, verified: true, command: "curl -H 'Authorization: Bearer t'" },
     environment: { digest: HASH("b"), facts: { interpreter: "Python 3.12", token: "t", HOME: "/home/x", packages: { numpy: "1.26", "bad name": "1", pandas: "x".repeat(200) } } },
     method: { id: "native-python", parameters: { alpha: 0.05, note: "x".repeat(500), nested: { a: 1 }, flag: true } },
-    execution: { exitCode: 0, startedAt: "2026-10-04T10:00:00Z", endedAt: "2026-10-04T10:00:03Z", sourcesUnchanged: true, stdout: "secret" },
+    process: { exitCode: 0, startedAt: "2026-10-04T10:00:00Z", endedAt: "2026-10-04T10:00:03Z", sourcesUnchanged: true, stdout: "secret" },
   });
   const serialized = JSON.stringify(snapshot);
   for (const leaked of ["sk-live-secret", "OPENAI_API_KEY", "--token", "Bearer", "/home/x", "secret", "x".repeat(100)]) assert.ok(!serialized.includes(leaked), leaked);
   assert.deepEqual(snapshot.environment.facts, { interpreter: "Python 3.12", packages: { numpy: "1.26" } });
   assert.deepEqual(snapshot.method.parameters, { alpha: 0.05, flag: true });
-  assert.equal(snapshot.execution.exitCode, 0);
+  assert.equal(snapshot.process.exitCode, 0);
 });
 
 test("generated reproduction code is never promoted to an observed execution", () => {

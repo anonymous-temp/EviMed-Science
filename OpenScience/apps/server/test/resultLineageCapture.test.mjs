@@ -169,7 +169,7 @@ test("an admitted skill script's execution record becomes the results file's pro
   assert.deepEqual(snapshot.environment.facts.packages, { numpy: "1.26.4", pandas: "2.2.2" });
   assert.deepEqual(snapshot.transformations, [{ datasetId: "trial-a", name: "derive-outcome", version: 2, codeDigest: sha(f.files.script.bytes) }]);
   assert.deepEqual(snapshot.unknown, ["undeclared_dependencies"], "what the script read beyond its declared input is not known");
-  assert.equal(snapshot.execution.exitCode, 0);
+  assert.equal(snapshot.process.exitCode, 0);
   assert.ok(!JSON.stringify(snapshot).includes("must-not-be-kept") && !JSON.stringify(snapshot).includes("/usr/bin"), "no command line or interpreter path is kept");
   assert.equal(read.code.availability, "captured");
   assert.ok(read.machineValues.some(value => value.key === "analyses[0].estimate" && value.value === 1.25));
