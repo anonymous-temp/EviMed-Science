@@ -45,7 +45,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { CAPABILITY_DISPLAY, capabilityTitle, estimateCost, spendingPermission, researchTaskCharge, researchMoneyUnits, isResearcherOwnedWork, RESEARCH_BILLING_VERSION, SIMULATED_LOW_CREDITS } from "@evimed/domain";
+import { CAPABILITY_DISPLAY, allowanceRefusalSentence, capabilityTitle, estimateCost, spendingPermission, researchTaskCharge, researchMoneyUnits, isResearcherOwnedWork, RESEARCH_BILLING_VERSION, SIMULATED_LOW_CREDITS } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 import { productId } from "./productPersistence.mjs";
 import { EvimedCreditsError } from "./evimedCreditsClient.mjs";
@@ -816,13 +816,22 @@ export class EvimedCreditsService {
     if (!permission.interactive || short) {
       this.counters.refusedStarts += 1;
       const said = `This account holds ${balance.balance} credits and this work is estimated at ${estimate.low}.`;
+      // What a researcher reads where the code cannot be mapped to a sentence —
+      // the kernel's own window, the one surface this refusal reaches as text —
+      // in the allowance page's own amounts (a credit is `this.rate` per CNY).
+      const readerMessage = allowanceRefusalSentence({
+        simulated: this.simulated,
+        balanceCny: this.rate > 0 ? balance.balance / this.rate : null,
+        estimateCny: this.rate > 0 && estimate.low > 0 ? estimate.low / this.rate : null,
+      });
       // Its own code where the allowance is simulated, so the sentence says so
       // and the top-up it offers is the simulated one.
-      if (this.simulated) {
-        throw new HttpError(402, "simulated_credits_exhausted",
-          `The simulated allowance is too low. ${said} Top up under Settings → Research allowance (simulated).`);
-      }
-      throw new HttpError(402, permission.code ?? "credits_exhausted", said);
+      const refusal = this.simulated
+        ? new HttpError(402, "simulated_credits_exhausted",
+          `The simulated allowance is too low. ${said} Top up under Settings → Research allowance (simulated).`)
+        : new HttpError(402, permission.code ?? "credits_exhausted", said);
+      refusal.readerMessage = readerMessage;
+      throw refusal;
     }
     return { allowed: true, balance: balance.balance, estimate };
   }

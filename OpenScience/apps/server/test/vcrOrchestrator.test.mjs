@@ -754,12 +754,13 @@ test("an assumption card is the evidence step's product only when it cites its e
  * store, so the orchestrator's own pass runs without a database: the live shape
  * of a study whose definition is done and whose cards are whatever the caller
  * says. Nothing is dispatched but through the orchestrator's own `#dispatch`.
- * @param {{ assumptions?: any[], openJobs?: any[], steps?: Record<string, any> }} [options]
+ * @param {{ assumptions?: any[], openJobs?: any[], steps?: Record<string, any>, dispatch?: ((input: any) => Promise<any>) | null,
+ *   tier?: string, protocol?: { id: string } | null, criteria?: number, assessments?: Array<{ protocolVersionId: string | null }> }} [options]
  */
-function studyInMemory({ assumptions = [], openJobs = [], steps = {} } = {}) {
+function studyInMemory({ assumptions = [], openJobs = [], steps = {}, dispatch = null, tier = "T0", protocol = null, criteria = 0, assessments = [] } = {}) {
   const state = {
     study: /** @type {Record<string, any>} */ ({
-      id: "std_live", userId: "u_live", projectId: "prj_live", name: "EV-201", question: "单臂 II 期能不能用外部对照？", dataTier: "T0",
+      id: "std_live", userId: "u_live", projectId: "prj_live", name: "EV-201", question: "单臂 II 期能不能用外部对照？", dataTier: tier,
       intendedUse: "exploratory", status: "active",
       steps: Object.fromEntries(VCR_STEPS.map((step) => [step, { status: step === "definition" ? "done" : "none", requested: true, note: null, ...(steps[step] ?? {}) }])),
     }),
@@ -786,7 +787,7 @@ function studyInMemory({ assumptions = [], openJobs = [], steps = {} } = {}) {
     async comparatorDesigns() { return []; },
     async trialScenarios() { return []; },
     async latestDesignGrid() { return null; },
-    async latestProtocolVersion() { return null; },
+    async latestProtocolVersion() { return protocol; },
     async staleMarks() { return []; },
     async setStep(/** @type {string} */ _id, /** @type {string} */ step, /** @type {Record<string, any>} */ fields) {
       state.study = { ...state.study, steps: { ...state.study.steps, [step]: { ...state.study.steps[step], ...fields } } };
@@ -796,8 +797,10 @@ function studyInMemory({ assumptions = [], openJobs = [], steps = {} } = {}) {
       if (/FROM [\w.]*jobs\s+WHERE study_id = \$1 AND state IN \('queued', 'running', 'awaiting_budget'\)/.test(sql)) return state.openJobs;
       return [];
     },
-    async one(/** @type {string} */ sql) {
-      if (/matching_assessments/.test(sql)) return { n: 0 };
+    async one(/** @type {string} */ sql, /** @type {any[]} */ params = []) {
+      // The two counts the matching step is read from: the criteria of the protocol version, and the assessments made against it.
+      if (/FROM [\w.]*matching_assessments/.test(sql)) return { n: assessments.filter((row) => !/AND protocol_version_id = \$2/.test(sql) || row.protocolVersionId === params[1]).length };
+      if (/FROM [\w.]*criteria\b/.test(sql)) return { n: criteria };
       if (/UPDATE [\w.]*schedule_marks/.test(sql)) return { key: "run", state: "running" };
       return null;
     },
@@ -807,7 +810,7 @@ function studyInMemory({ assumptions = [], openJobs = [], steps = {} } = {}) {
   const dispatched = [];
   const orchestrator = new VcrOrchestrator({
     store: /** @type {any} */ (store), jobs: /** @type {any} */ ({}),
-    dispatchRun: async (input) => { dispatched.push(input); return { runId: `run_${dispatched.length}`, sessionId: null }; },
+    dispatchRun: dispatch ?? (async (input) => { dispatched.push(input); return { runId: `run_${dispatched.length}`, sessionId: null }; }),
   });
   return { state, dispatched, orchestrator, steps: () => /** @type {Record<string, any>} */ (state.study.steps) };
 }
@@ -878,4 +881,78 @@ test("a retry scoped to the patients is dispatched for the cohort snapshot alone
   await evidence.orchestrator.advance("std_live");
   assert.equal(evidence.dispatched[0].capabilityId, "vcr-evidence");
   assert.equal(Object.hasOwn(evidence.dispatched[0], "products"), false);
+});
+
+// --- a step the allowance would not start says so, and starts by itself once it can ----------------
+
+test("a step the allowance refuses stays queued and says what it waits on; once the allowance allows it, it runs and says nothing", async () => {
+  /** @type {any[]} */ const asked = [];
+  let refusal = "simulated_credits_exhausted";
+  const live = studyInMemory({ dispatch: async (input) => {
+    asked.push(input);
+    if (refusal) throw Object.assign(new Error("The simulated allowance is too low."), { code: refusal });
+    return { runId: "run_funded", sessionId: null };
+  } });
+  await live.orchestrator.advance("std_live");
+  assert.equal(asked.length, 1, "the dispatch was attempted");
+  const waiting = live.steps().evidence;
+  assert.equal(waiting.status, "queued", "not failed, and not started");
+  assert.equal(waiting.waiting, "simulated_allowance");
+  assert.equal(waiting.note, "等模拟额度", "the rail says it in two words, marked 模拟");
+  assert.equal(live.orchestrator.status().lastDeferral, "simulated_credits_exhausted");
+
+  // The real wallet's refusal is the same wait, unmarked.
+  const real = studyInMemory({ dispatch: async () => { throw Object.assign(new Error("credits"), { code: "credits_exhausted" }); } });
+  await real.orchestrator.advance("std_live");
+  assert.deepEqual([real.steps().evidence.waiting, real.steps().evidence.note], ["allowance", "等科研额度"]);
+
+  // Anything else that defers is a queued step and nothing more: no wait on the allowance is invented for it.
+  const busy = studyInMemory({ dispatch: async () => { throw Object.assign(new Error("cap"), { code: "runtime_limit_exceeded" }); } });
+  await busy.orchestrator.advance("std_live");
+  assert.equal(busy.steps().evidence.status, "queued");
+  assert.equal(busy.steps().evidence.waiting ?? null, null);
+  assert.equal(busy.steps().evidence.note, null);
+
+  // Topped up: the next tick asks again, the step runs, and the wait is gone with its note.
+  refusal = "";
+  await live.orchestrator.advance("std_live");
+  assert.equal(live.steps().evidence.status, "running");
+  assert.equal(live.steps().evidence.runId, "run_funded");
+  assert.equal(live.steps().evidence.waiting, null);
+  assert.equal(live.steps().evidence.note, null);
+});
+
+test("a note the step has for another reason is not taken off with the allowance's wait", async () => {
+  const live = studyInMemory({ steps: { evidence: { status: "queued", note: "三篇证据待补", waiting: null } } });
+  await live.orchestrator.advance("std_live");
+  assert.equal(live.steps().evidence.status, "running");
+  assert.equal(live.steps().evidence.note, "三篇证据待补");
+});
+
+// --- matching is done by judgments against the criteria as they stand --------------------------------
+
+test("above T0 the matching step is done by patients judged against the latest protocol version; an assessment of an earlier version does not count", async () => {
+  const matching = (/** @type {Array<{ protocolVersionId: string | null }>} */ assessments) => studyInMemory({
+    tier: "T1", protocol: { id: "pv2" }, criteria: 3, assessments,
+    steps: { evidence: { status: "done" }, population: { status: "done" }, patients: { status: "done" }, comparator: { status: "done" }, trial: { status: "done" }, matching: { status: "none" } },
+  });
+  // Judged against the criteria now in force: the step is done.
+  const current = matching([{ protocolVersionId: "pv1" }, { protocolVersionId: "pv2" }]);
+  await current.orchestrator.advance("std_live");
+  assert.equal(current.steps().matching.status, "done");
+  assert.equal(current.dispatched.some((run) => run.capabilityId === "vcr-matching"), false, "nothing is sent for a step that is done");
+  // Judged only against the version the protocol has since moved on from: the history is kept, the step is not done,
+  // and the matching run goes out to judge the patients against the criteria as they stand.
+  const superseded = matching([{ protocolVersionId: "pv1" }, { protocolVersionId: "pv1" }]);
+  await superseded.orchestrator.advance("std_live");
+  assert.notEqual(superseded.steps().matching.status, "done");
+  assert.equal(superseded.dispatched.some((run) => run.capabilityId === "vcr-matching"), true);
+  // An assessment that names no version is not one against these criteria either.
+  const unversioned = matching([{ protocolVersionId: null }]);
+  await unversioned.orchestrator.advance("std_live");
+  assert.notEqual(unversioned.steps().matching.status, "done");
+  // T0 has nobody's records to judge: the structured criteria are what the step is, whatever was assessed before.
+  const t0 = studyInMemory({ tier: "T0", protocol: { id: "pv2" }, criteria: 3, assessments: [{ protocolVersionId: "pv1" }], steps: { matching: { status: "none" } } });
+  await t0.orchestrator.advance("std_live");
+  assert.equal(t0.steps().matching.status, "done");
 });

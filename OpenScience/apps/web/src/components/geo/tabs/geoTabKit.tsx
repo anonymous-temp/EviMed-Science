@@ -1,13 +1,16 @@
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link } from "react-router";
+import { allowanceWaitingSentence } from "@evimed/domain";
 import { webErrorMessage, WebApiError } from "@/lib/apiClient";
+import { stepAllowanceWait } from "@/lib/allowanceWait";
 import { isGeoOff, runGeoStep, type GeoCell, type GeoProject, type GeoStepKey } from "@/lib/geoClient";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/cn";
 import { LoadError } from "@/components/cards/LoadError";
+import { AllowanceTopUp } from "@/components/runs/AllowanceTopUp";
 import { Button } from "@/components/ui/Button";
 import { GeoCellText } from "../GeoCellText";
-import { GEO_STEP_EMPTY, GEO_STEP_WAITING, type GeoUnit } from "../geoText";
+import { GEO_STEP_EMPTY, GEO_STEP_NAMES, GEO_STEP_WAITING, type GeoUnit } from "../geoText";
 import { useOpenGeoConversation } from "../useOpenGeoConversation";
 import { answerPath } from "./geoTabText";
 
@@ -121,6 +124,16 @@ export function stepWaiting(project: GeoProject, step: GeoStepKey): boolean {
 export function StepPending({ geoId, project, step }: { geoId: string; project: GeoProject; step: GeoStepKey }) {
   const open = useOpenGeoConversation();
   const [busy, setBusy] = useState(false);
+  // A queued step the allowance would not start is not work under way: it says what it waits on and where that is put right.
+  const allowanceWait = stepAllowanceWait(project.steps[step]);
+  if (allowanceWait) {
+    return (
+      <div data-geo-step-allowance={step} role="status" className="flex flex-col items-center gap-3 py-12 text-center">
+        <p className="max-w-measure text-ui text-text-2">{allowanceWaitingSentence(GEO_STEP_NAMES[step], allowanceWait)}</p>
+        <AllowanceTopUp waiting={allowanceWait} />
+      </div>
+    );
+  }
   if (stepInProgress(project, step)) {
     return (
       <p data-geo-step-running={step} className="flex items-center justify-center gap-2 py-12 text-ui text-text-3">

@@ -10,8 +10,10 @@
  * `@evimed/domain`'s `RunEvent`, and forwards its own stream. Three properties
  * follow, and each of them is why this module exists rather than a proxy:
  *
- * - the browser's event union is ours, so it can be exhaustively switched and
- *   an unknown variant is counted and shown rather than silently dropped;
+ * - the browser's event union is ours, so it can be exhaustively switched; a
+ *   kernel record with no variant is counted for operators (the pump's
+ *   `unclassifiedCounts`) rather than silently dropped, and is never put on
+ *   this stream, where a page could only draw a blank card for it;
  * - resumption is by our sequence number, so a reconnecting tab replays from
  *   where it was rather than from the beginning;
  * - the run's own facts — deliverable verdicts, evidence states, budget — ride

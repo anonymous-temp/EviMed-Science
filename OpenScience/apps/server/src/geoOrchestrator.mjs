@@ -1,4 +1,4 @@
-import { GEO_ENGINE_LABELS_ZH, GEO_POOL_LABELS_ZH, GEO_STEP_LABELS_ZH, GEO_STEPS, canonicalGeoUrl } from "@evimed/domain";
+import { GEO_ENGINE_LABELS_ZH, GEO_POOL_LABELS_ZH, GEO_STEP_LABELS_ZH, GEO_STEPS, allowanceWaitingNote, canonicalGeoUrl, stepWaitingFor } from "@evimed/domain";
 import { geoProjectFromRow } from "./geoStore.mjs";
 import { HttpError, randomId } from "./security.mjs";
 
@@ -107,6 +107,12 @@ const DAY_MS = 86_400_000;
 
 /** @param {unknown} error */
 const codeOf = (error) => (typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : "geo_orchestrator_failed");
+/**
+ * The fields that take a step off the allowance when it starts or stops for another reason. Only what the allowance
+ * wrote is cleared: a note the step has for any other reason stays.
+ * @param {any} project @param {string} step
+ */
+const unwaiting = (project, step) => (project.steps?.[step]?.waiting ? { waiting: null, note: null } : {});
 /** @param {string} engine */
 const engineLabel = (engine) => /** @type {Record<string, string>} */ (GEO_ENGINE_LABELS_ZH)[engine] ?? engine;
 /** An engine's name before Chinese text: a Latin name takes a space (「Kimi 讲错」, 「豆包讲错」). @param {string} engine */
@@ -1341,7 +1347,7 @@ export class GeoOrchestrator {
       });
       const running = await this.#update(project.id, spec.key, { state: "running", runId: String(out.runId), sessionId: out.sessionId ?? null,
         attempts: Number(mark.attempts ?? 0) + 1 }, ["claimed"]);
-      for (const step of spec.steps) current = await this.#step(current, step, { status: "running", runId: String(out.runId) });
+      for (const step of spec.steps) current = await this.#step(current, step, { status: "running", runId: String(out.runId), ...unwaiting(current, step) });
       this.counters.dispatched += 1;
       // The ledger answered with a run that had already ended (a replayed dispatch id).
       if (running && out.status && TERMINAL_RUN.has(String(out.status))) await this.#finishRun(current, running, String(out.status));
@@ -1351,7 +1357,7 @@ export class GeoOrchestrator {
       if (TERMINAL_DISPATCH.has(code)) {
         // No try is left: it waits for a person to ask again (`runStep`).
         await this.#update(project.id, spec.key, { state: "failed", detail: { lastError: code, allowed: Number(mark.attempts ?? 0) } }, ["claimed"]);
-        for (const step of spec.steps) current = await this.#step(current, step, { status: "failed" });
+        for (const step of spec.steps) current = await this.#step(current, step, { status: "failed", ...unwaiting(current, step) });
         this.counters.dispatchFailed += 1;
         this.lastError = code;
         return { failed: code };
@@ -1359,6 +1365,12 @@ export class GeoOrchestrator {
       await this.#update(project.id, spec.key, { state: "pending", detail: { lastError: code } }, ["claimed"]);
       this.counters.deferred += 1;
       this.lastDeferral = code;
+      // A start the allowance refused is not a step that is merely queued: the page says what it waits on, and where
+      // that is put right. The key stays pending, so the next tick asks again and the step starts by itself.
+      const waiting = stepWaitingFor(code);
+      if (waiting) {
+        for (const step of spec.steps) current = await this.#step(current, step, { status: "queued", waiting, note: allowanceWaitingNote(waiting) });
+      }
       return { deferred: code };
     }
   }

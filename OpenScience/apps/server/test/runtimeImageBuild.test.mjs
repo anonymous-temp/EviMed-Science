@@ -116,6 +116,40 @@ test("the image and the nightly seam check install the kernel under one cutoff",
   assert.doesNotMatch(seams, /"pnpm", \["add"/, "the seam check must not install the kernel a second way");
 });
 
+test("the seam check exempts the wire methods the platform registers itself, all of them and only them", async () => {
+  // `pnpm verify:seams` reported three phantom methods: the manifest lists the
+  // platform's own `evimedSkills/*` methods, which the kernel never ships, and
+  // the check exempted one namespace by a literal prefix. The namespaces are
+  // read from the services that register them now.
+  const { ownWireNamespaces, wireSurfaceFindings } = await import("../../../scripts/ops/wire-surface.mjs");
+  const manifest = JSON.parse(await read("packages/harness-port/seam-manifest.json"));
+  const own = ownWireNamespaces(path.join(repoRoot, "packages/harness-port/src"));
+  assert.deepEqual([...own].sort(), ["evimedPlugins", "evimedSkills"]);
+
+  const declared = [...manifest.wire.unary, ...manifest.wire.denied];
+  const ours = declared.filter((name) => own.has(name.split("/")[0]));
+  assert.equal(ours.filter((name) => name.startsWith("evimedSkills/")).length, 3);
+  // The kernel ships everything the manifest names except what the platform registers.
+  const shipped = declared.filter((name) => !ours.includes(name));
+  const streams = Object.values(manifest.wire.streamEndpoints);
+  assert.deepEqual(wireSurfaceFindings({ declared, shipped, streams, own }), { unclassified: [], phantom: [] });
+
+  // The old rule, for the record: one namespace exempted by prefix left these three.
+  assert.deepEqual(
+    wireSurfaceFindings({ declared, shipped, streams, own: new Set(["evimedPlugins"]) }).phantom,
+    ["evimedSkills/list", "evimedSkills/read", "evimedSkills/snapshotBuiltin"],
+  );
+  // Both directions still find a finding: a retired upstream method is a phantom,
+  // an `evimed…/` name nothing registers is a phantom, and a method the kernel
+  // ships that the manifest does not classify is reported.
+  const findings = wireSurfaceFindings({
+    declared: [...declared, "session/retiredUpstream", "evimedNothing/registersThis"],
+    shipped: [...shipped, "session/newUpstream"], streams, own,
+  });
+  assert.deepEqual(findings.phantom, ["evimedNothing/registersThis", "session/retiredUpstream"]);
+  assert.deepEqual(findings.unclassified, ["session/newUpstream"]);
+});
+
 test("each community bundle is installed at the version its record says was booted, with its peers pinned", async () => {
   const { docker, agentbay, pins, support, baseline } = await sources();
   const cite = support.communityToolBundles.find((row) => row.name === "dsh-cite");

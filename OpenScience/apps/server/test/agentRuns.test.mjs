@@ -210,6 +210,55 @@ test("the delivery gate holds a run to the products it was dispatched for: a ret
   }
 });
 
+test("a turn typed into a conversation bound to a multi-product capability is held to the products its plan declared, and to all of it when the plan declares none", async () => {
+  const root = await mkdtemp(path.join(tmpdir(), "os-run-native-products-"));
+  const project = { id: "vcr-native-products", userId: "researcher", rootDir: root, workspaceDir: path.join(root, "workspace"), metaDir: path.join(root, ".openscience") };
+  await mkdir(project.workspaceDir, { recursive: true });
+  await mkdir(project.metaDir, { recursive: true });
+  const registry = await loadAgentRegistry({ packageDirs: [new URL("../../../runtime/skills/evimed", import.meta.url).pathname], capabilityDirs: [new URL("../../../capabilities", import.meta.url).pathname] });
+  const analysis = registry.get("vcr-analysis");
+  const startedAt = new Date(Date.now() - 60_000).toISOString();
+  /** The turn as the ledger holds it: no dispatch named products, and the plan it wrote is the native workflow's evidence. @param {any[] | undefined} items @param {Record<string, any>} [extra] */
+  const turn = (items, extra = {}) => ({ id: "run_native", sessionId: "ses_native", effectiveAgentId: analysis.id, effectiveAgentVersion: analysis.version,
+    effectiveRuntimeAgent: analysis.runtimeAgent, startedAt, mountedSkills: [analysis.skill, ...analysis.companionSkills],
+    nativeTurn: { startSeq: 1 }, nativeWorkflow: items ? { turnStartSeq: 1, plan: { revision: 1, written: true, items }, submissions: [], delegates: [] } : null, ...extra });
+  const item = (/** @type {string} */ id, /** @type {string} */ contractKind, capability = analysis.id) => ({ id, contractKind, capability });
+  /** @param {string[]} files */
+  const write = async (files) => { for (const file of files) await writeFile(path.join(project.workspaceDir, file), `# ${file}\n内容。\n`); };
+  try {
+    // The turn planned the cohort alone and wrote its two files: that is all it owes.
+    await write(["analysis-report.md", "results.json"]);
+    const patients = await requiredSpecialistArtifactsForTest(project, turn([item("cohort", "vcr-cohort-snapshot")]), registry);
+    assert.equal(patients.errorCode, null, "held to the product it declared");
+    assert.deepEqual([...patients.artifacts].sort(), ["analysis-report.md", "results.json"]);
+    // The same files with no plan, or an empty one, are held to every product, as before. (A plan of another capability's
+    // deliverables only is a different rule: the turn is judged by those, not by this binding.)
+    for (const items of [undefined, []]) {
+      const held = await requiredSpecialistArtifactsForTest(project, turn(items), registry);
+      assert.notEqual(held.errorCode, null, `${JSON.stringify(items)}: nothing declared, nothing narrowed`);
+      assert.match(held.qualityIssues.join("\n"), /comparability\.md|simulation\.json/);
+    }
+    // A product it declared and did not write is still owed; one it did not declare is not.
+    await rm(path.join(project.workspaceDir, "analysis-report.md"));
+    const missing = await requiredSpecialistArtifactsForTest(project, turn([item("cohort", "vcr-cohort-snapshot")]), registry);
+    assert.equal(missing.errorCode, "specialist_required_output_missing");
+    assert.match(missing.qualityIssues.join("\n"), /analysis-report\.md/);
+    // Two declared products are two products' files, and a kind this capability does not produce narrows nothing.
+    await write(["analysis-report.md", "simulation.json"]);
+    const two = await requiredSpecialistArtifactsForTest(project, turn([item("cohort", "vcr-cohort-snapshot"), item("trial", "vcr-simulation-report")]), registry);
+    assert.equal(two.errorCode, null);
+    assert.deepEqual([...two.artifacts].sort(), ["analysis-report.md", "results.json", "simulation.json"]);
+    const alien = await requiredSpecialistArtifactsForTest(project, turn([item("x", "vcr-study-package")]), registry);
+    assert.notEqual(alien.errorCode, null);
+    // A dispatched run's own products are never replaced by a plan.
+    const dispatched = await requiredSpecialistArtifactsForTest(project, turn([item("trial", "vcr-simulation-report")], { effectiveProducts: ["vcr-cohort-snapshot"] }), registry);
+    assert.equal(dispatched.errorCode, null);
+    assert.deepEqual([...dispatched.artifacts].sort(), ["analysis-report.md", "results.json"]);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 /**
  * The version a capability ships at, read from its generated manifest: a
  * capability's version bump is a release fact, not a test edit.

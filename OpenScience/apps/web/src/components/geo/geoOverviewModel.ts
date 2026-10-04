@@ -26,6 +26,8 @@ import {
   type GeoStepKey,
   type GeoWeekItem,
 } from "@/lib/geoClient";
+import { allowanceWaitingSentence } from "@evimed/domain";
+import { stepAllowanceWait, type AllowanceWaiting } from "@/lib/allowanceWait";
 import type { RailState, RailStep } from "@/components/ui/ProgressRail";
 import type { DeltaPolarity } from "@/components/ui/Delta";
 import { formatGeoValue, geoCellPhrase, geoCellWord, GEO_LINKLESS_WORD } from "./GeoCellText";
@@ -310,7 +312,9 @@ export function railSteps(project: GeoProject, geoTabPathOf: (step: GeoStepKey) 
     const asked = key === "distribution" && !done && (step?.requested === true || working);
     const held = asked && !market;
     const waiting = asked && market && needsBudget;
-    const state: RailState = waiting ? "waiting" : done ? "done" : held ? "todo" : working ? "active" : "todo";
+    // A step the allowance would not start needs the reader as much as the budget does.
+    const allowanceWait = stepAllowanceWait(step);
+    const state: RailState = waiting || allowanceWait ? "waiting" : done ? "done" : held ? "todo" : working ? "active" : "todo";
     return {
       key,
       name: GEO_STEP_NAMES[key],
@@ -329,6 +333,8 @@ export interface NextStep {
   /** `held`: it cannot start until something outside the project is in place (the media market). */
   state: "waiting" | "active" | "done" | "held";
   when: string | null;
+  /** Set on the row of a step the allowance would not start: which wallet refused, so the row can offer the right top-up. */
+  allowance?: AllowanceWaiting;
 }
 
 /** “下一步”: what is waiting on the reader first, then what is under way, then what is finished. */
@@ -350,7 +356,11 @@ export function nextSteps(project: GeoProject): NextStep[] {
     if (key === "distribution" && !market) continue;
     const note = railNote(step.note);
     const name = GEO_STEP_NAMES[key];
-    if (step.status === "running" || step.status === "queued") {
+    const allowance = stepAllowanceWait(step);
+    if (allowance) {
+      // Queued, but not under way: the allowance would not start it, and the reader is who puts that right.
+      rows.push({ key, text: allowanceWaitingSentence(name, allowance), state: "waiting", when: null, allowance });
+    } else if (step.status === "running" || step.status === "queued") {
       rows.push({ key, text: note ? `${name} ${note}` : `${name}进行中`, state: "active", when: null });
     }
   }
