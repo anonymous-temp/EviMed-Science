@@ -536,6 +536,11 @@ services:
       OPEN_SCIENCE_EVIMED_CREDITS_TIMEOUT_MS:
       OPEN_SCIENCE_EVIMED_CREDITS_PER_CNY:
       OPEN_SCIENCE_EVIMED_CREDITS_POLL_MS:
+      # A simulated wallet in the control plane instead of EviMed's: it moves no
+      # money, is refused beside a real wallet's address, and grants each account
+      # a starting allowance on its first read (2026-10-04).
+      OPEN_SCIENCE_EVIMED_CREDITS_SIMULATED:
+      OPEN_SCIENCE_EVIMED_CREDITS_SIMULATED_START_CREDITS:
       # Versioned task charges opt in independently of the allowance page.
       OPEN_SCIENCE_RESEARCH_BILLING_ENABLED:
       OPEN_SCIENCE_RESEARCH_COMMERCE_ENABLED:

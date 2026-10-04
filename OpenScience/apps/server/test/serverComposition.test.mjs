@@ -444,9 +444,12 @@ async function waitFor(predicate, timeoutMs = 2_000) {
  * The real app, its real startup sequence run, over a fake pool.
  * @param {import("node:test").TestContext} t
  */
-async function composedApp(t, overrides = {}) {
+async function composedApp(t, overrides = {}, { beforeListen = null } = {}) {
   const dataDir = await realpath(await mkdtemp(path.join(process.platform === "darwin" ? "/private/tmp" : tmpdir(), "evimed-composition-")));
   const pool = new FakePool(capsuleFixtureRows());
+  // A test about a database that misbehaves at boot shapes the pool here,
+  // before the app's own startup sequence asks it anything.
+  beforeListen?.(pool);
   if (overrides.geoEnabled) pool.geoProjects.set("geo_x", { id: "geo_x", user_id: USER_ID, project_id: PROJECT_ID, status: "active", steps: {}, created_at: new Date("2026-01-01T00:00:00Z"), updated_at: new Date("2026-01-01T00:00:00Z"), deleted_at: null });
 
   // Capsule cleanup issues no statement of its own; this is the one call the
@@ -2062,4 +2065,106 @@ for (const lossStage of [2, 3]) test(`verifier takeover at stage ${lossStage} ke
   assert.deepEqual(closed, ["verify-generation-1", "verify-generation-2"]);
   await assert.rejects(stat(scratch), { code: "ENOENT" });
   assert.ok((await stat(other)).isDirectory());
+});
+
+// Research-allowance billing (2026-10-04). Billing is a module of the platform,
+// not a condition of it: whatever stops it from coming up leaves the platform
+// serving research, the allowance reading as unavailable (unknown, never zero),
+// nothing charged, and readiness naming the cause.
+test("billing that cannot come up never stops the platform: it boots, the allowance reads unavailable, readiness names the code", async (t) => {
+  /** @type {string[]} */
+  const stderr = [];
+  const write = process.stderr.write.bind(process.stderr);
+  process.stderr.write = /** @type {any} */ ((/** @type {any} */ chunk, /** @type {any[]} */ ...rest) => { stderr.push(String(chunk)); return write(chunk, ...rest); });
+  t.after(() => { process.stderr.write = write; });
+  const fixture = await composedApp(t, {
+    evimedCreditsEnabled: true, evimedCreditsSimulated: true, researchBillingEnabled: true, evimedCreditsPerCny: 1,
+    evimedCreditsUrl: "", evimedCreditsBalanceUrl: "",
+  }, {
+    // The credits schema cannot be migrated: the statement that creates it is refused.
+    beforeListen: (pool) => {
+      const answer = pool.answer.bind(pool);
+      pool.answer = (/** @type {string} */ text, /** @type {any[]} */ values) => {
+        if (/evimed_credits/.test(text)) throw Object.assign(new Error("permission denied for schema evimed_credits"), { code: "42501" });
+        return answer(text, values);
+      };
+    },
+  });
+  // `composedApp` returned, so `listen()` resolved: the platform is up.
+  const base = `http://127.0.0.1:${fixture.app.server.address().port}`;
+  const headers = { Cookie: "os_session=composition-session", "x-open-science-project": PROJECT_ID };
+  const allowance = await fetch(`${base}/api/account/allowance`, { headers });
+  assert.equal(allowance.status, 200, "the page opens");
+  const data = (await allowance.json()).data;
+  assert.deepEqual([data.enabled, data.simulated, data.status, data.available, data.month], [true, true, "unavailable", null, null]);
+  assert.deepEqual(data.commerce, { rechargeUrl: null, membershipUrl: null, ordersUrl: null, refundsUrl: null });
+  const ready = (await (await fetch(`${base}/api/ready`)).json()).data;
+  assert.deepEqual([ready.checks.credits.ok, ready.checks.credits.code, ready.checks.credits.simulated], [false, "42501", true]);
+  assert.ok(stderr.some((line) => /research billing is unavailable \(42501\)/.test(line)), "the boot says why on stderr");
+  // And the platform's other lines are not the module's to turn red.
+  assert.equal(ready.checks.dataDir.ok, true);
+  // The simulated wallet's own page says unavailable instead of answering from a ledger it cannot read.
+  const topup = await fetch(`${base}/api/simulated-wallet/topups`, { method: "POST", headers: { ...headers, "content-type": "application/json", "x-open-science-csrf": "composition-csrf" },
+    body: JSON.stringify({ packageId: "topup-50", requestId: "request-0001" }) });
+  assert.equal(topup.status, 503);
+});
+
+test("a simulated wallet beside a real wallet's address refuses the billing module, not the platform, and nothing is asked of anyone", async (t) => {
+  let walletCalls = 0;
+  const fixture = await composedApp(t, {
+    evimedCreditsEnabled: true, evimedCreditsSimulated: true, researchBillingEnabled: true, evimedCreditsPerCny: 1,
+    evimedCreditsUrl: "https://wallet.evimed.com/deduct", evimedCreditsBalanceUrl: "https://wallet.evimed.com/balance",
+    evimedCreditsFetch: async () => { walletCalls += 1; throw new Error("no wallet may be asked"); },
+  });
+  const base = `http://127.0.0.1:${fixture.app.server.address().port}`;
+  const headers = { Cookie: "os_session=composition-session", "x-open-science-project": PROJECT_ID };
+  const data = (await (await fetch(`${base}/api/account/allowance`, { headers })).json()).data;
+  assert.deepEqual([data.enabled, data.status, data.available], [true, "unavailable", null]);
+  const ready = (await (await fetch(`${base}/api/ready`)).json()).data;
+  assert.deepEqual([ready.checks.credits.ok, ready.checks.credits.code], [false, "evimed_credits_simulated_conflict"]);
+  assert.equal((await fetch(`${base}/api/health`)).status, 200, "the platform itself is up");
+  assert.equal(fixture.pool.count(/evimed_credits/), 0, "a refused module does not even migrate its schema");
+  assert.equal(walletCalls, 0);
+});
+
+test("a programme step and a channel question are asked of the allowance before any run exists", async (t) => {
+  const { EvimedCreditsService } = await import("../src/evimedCreditsService.mjs");
+  const original = EvimedCreditsService.prototype.assertBalanceForStart;
+  t.after(() => { EvimedCreditsService.prototype.assertBalanceForStart = original; });
+  const fixture = await composedApp(t, { geoEnabled: true, geoAudience: "all", operatorUsers: [USER_ID], evimedCreditsEnabled: true,
+    evimedCreditsUrl: "", evimedCreditsBalanceUrl: "", llmRoutingEnabled: false, modelGatewaySigningSecret: randomBytes(32).toString("hex") });
+  const { app } = fixture;
+  await app.geo.worker.close();
+  const user = await app.store.userById(USER_ID);
+  const project = await app.store.requireProject(user, PROJECT_ID);
+  /** @type {any} */ let balance = Object.assign(new Error("No balance"), { code: "simulated_credits_exhausted", status: 402 });
+  /** @type {(string | null)[]} */ const checked = [];
+  EvimedCreditsService.prototype.assertBalanceForStart = async function (/** @type {string} */ userId, /** @type {string | null} */ capabilityId) {
+    checked.push(`${userId}:${capabilityId}`);
+    if (balance instanceof Error) throw balance;
+    return balance;
+  };
+  let reserved = 0, runs = 0;
+  app.memorySubstrate.recall = async () => [];
+  app.researchSessions.put = async (/** @type {any} */ _project, /** @type {string} */ _sessionId, /** @type {any} */ binding) => binding;
+  app.runtimeManager.reserveBoundedRuntimeSession = async () => { reserved += 1; return { id: `session-gate-${reserved}`, kernel: "dsh" }; };
+  app.runtimeManager.dispatchPrompt = async () => ({ accepted: true });
+  app.agentRuns.dispatch = async (/** @type {any} */ _scoped, /** @type {any} */ input, /** @type {any} */ sendPrompt) => {
+    runs += 1;
+    await sendPrompt({ sessionId: input.sessionId }, { id: `run-gate-${runs}`, kernelRequestIds: [] });
+    return { id: `run-gate-${runs}`, status: "running" };
+  };
+  const step = { userId: USER_ID, projectId: PROJECT_ID, geoProjectId: "geo_x", capabilityId: "geo-insight", reason: "geo:evidence",
+    brief: "「循证 GEO」自动运行 · 第 1 步（证据）" };
+  // GEO: refused before a runtime is reserved — the orchestrator leaves the step pending and asks again, so a top-up releases it.
+  await assert.rejects(app.geo.orchestrator.dispatchRun({ ...step, dispatchId: "geo-gate-1" }), { status: 402, code: "simulated_credits_exhausted" });
+  assert.deepEqual([reserved, runs], [0, 0]);
+  // A channel question: routed first (so the estimate is the capability's own), then asked, and no run exists after a refusal.
+  await assert.rejects(app.im.service.dispatchRun({ user, project, sessionId: "im-gate-1", dispatchId: "im-gate-d1", text: "你好" }), { status: 402, code: "simulated_credits_exhausted" });
+  assert.equal(runs, 0);
+  assert.deepEqual(checked, [`${USER_ID}:geo-insight`, `${USER_ID}:open-domain-answer`]);
+  // With an allowance the same step goes ahead.
+  balance = { allowed: true };
+  assert.deepEqual(await app.geo.orchestrator.dispatchRun({ ...step, dispatchId: "geo-gate-2" }), { runId: "run-gate-1", sessionId: "session-gate-1", status: "running" });
+  assert.deepEqual([reserved, runs], [1, 1]);
 });

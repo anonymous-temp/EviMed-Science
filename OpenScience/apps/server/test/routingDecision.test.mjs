@@ -258,6 +258,18 @@ test("credits come from the injected estimator, and its absence costs the caller
   });
   assert.deepEqual(service.credits, { min: 46, max: 118 });
   assert.equal(service.summary, "会做深度研究 · 文献计量分析 · 约 20–120 分钟 · 约 46–118 灵豆");
+  assert.equal("simulated" in service, false, "a real wallet's price carries no simulated field");
+
+  // A simulated wallet's price says so, in the structure and in the line beside the duration.
+  const simulated = await decideRouting({
+    question: "对 GLP-1 肥胖研究做 CiteSpace 文献计量分析",
+    agents: catalogue,
+    classifier: null,
+    estimateCredits: async ({ capabilityId }) => ({ capabilityId, unit: "灵豆", low: 46, high: 118, basis: "manifest", simulated: true }),
+  });
+  assert.deepEqual(simulated.credits, { min: 46, max: 118 });
+  assert.equal(simulated.simulated, true);
+  assert.equal(simulated.summary, "会做深度研究 · 文献计量分析 · 约 20–120 分钟 · 约 46–118 灵豆（模拟）");
 
   // A settlement service that is down costs the reader the price, never the
   // prediction.

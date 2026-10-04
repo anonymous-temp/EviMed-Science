@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { MCP_TOOL_CALL_TIMEOUT_MS, SOCKET_PLUGIN_SWITCHES } from "./dshProfilePatch.mjs";
 import { readReleaseManifestFile, validateReleaseManifest } from "./releaseManifest.mjs";
-import { GEO_DEFAULT_ENGINES, GEO_ENGINES } from "@evimed/domain";
+import { GEO_DEFAULT_ENGINES, GEO_ENGINES, SIMULATED_START_CREDITS } from "@evimed/domain";
 import { MAX_MOUNTED_CAPSULE_METHOD_BYTES } from "./capsuleMethods.mjs";
 import { researchBillingSettings } from "./researchBillingConfig.mjs";
 
@@ -706,6 +706,13 @@ function mediaMarketSettings(overrides) {
  * - The owner approved one credit per CNY on 2026-09-29. An explicit 0 still
  *   means not configured. Settlement also requires the separate enabled
  *   switch and actual billing endpoints; the conversion alone spends nothing.
+ * - `OPEN_SCIENCE_EVIMED_CREDITS_SIMULATED` replaces the wallet with a simulated
+ *   one that lives in the control plane and moves no money (2026-10-04,
+ *   `evimedCreditsSimulator.mjs`). It is mutually exclusive with a real wallet's
+ *   addresses, and neither that nor a bad starting allowance is judged here: a
+ *   typo in a billing knob must not stop the platform, so the billing module
+ *   checks both when it is composed and refuses by a named code
+ *   (`evimedCreditsRefusal`), the platform booting regardless.
  *
  * @param {Record<string, any>} overrides
  */
@@ -764,6 +771,10 @@ function evimedCreditsSettings(overrides) {
     // `evimedEvidence` profile resolves. Read per call, never held here.
     evimedCreditsApiKeyFile: keyFile,
     evimedCreditsPerCny: rate,
+    evimedCreditsSimulated: overrides.evimedCreditsSimulated ?? boolEnv("OPEN_SCIENCE_EVIMED_CREDITS_SIMULATED", false),
+    // Whole credits a first read of an account's simulated wallet grants. Left
+    // as the number it parses to, NaN included: the module judges it.
+    evimedCreditsSimulatedStartCredits: Number(read("evimedCreditsSimulatedStartCredits", "OPEN_SCIENCE_EVIMED_CREDITS_SIMULATED_START_CREDITS", SIMULATED_START_CREDITS)),
     // How often the retry sweep looks for a settlement whose backoff elapsed.
     evimedCreditsPollMs: integer("evimedCreditsPollMs", "OPEN_SCIENCE_EVIMED_CREDITS_POLL_MS", 60_000, 5_000, 3_600_000),
   };

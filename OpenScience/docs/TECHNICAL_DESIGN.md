@@ -269,6 +269,15 @@ its switch is on; the rest are changes inside existing layers.
     never represented as confirmed spending. Financial evidence and its retry outbox survive
     account deletion, while account-generation checks prevent a reused username reading an
     earlier owner's statement. Token counts remain resource measurements, not currency;
+  - *simulated wallet* (`evimedCreditsSimulator.mjs`, `OPEN_SCIENCE_EVIMED_CREDITS_SIMULATED`,
+    2026-10-04): replaces the wallet and only the wallet, behind the same credits client — a
+    `fetch` that speaks the wire envelope against tables of its own in `evimed_credits` — so
+    charges still come from what a task really cost and only the credits are simulated.
+    Settlement rows are marked `wallet = 'simulated'`; statements, totals and the retry
+    sweep read one wallet kind; the real client refuses a `sim:` payer and the simulator a
+    real user id. Billing failing never stops research (`ensureReady`: the module goes
+    quiet and readiness's `credits` check names why); the balance gate asks before a run
+    exists on every way work begins (`test/balanceGateCoverage.test.mjs`);
   - *hosted commerce* (`researchCommerce.mjs`): optional recharge, membership, order and
     refund links come from explicit trusted HTTPS deployment configuration. A configured
     link is not a checkout API, a payment receipt, a membership entitlement or a reservation.

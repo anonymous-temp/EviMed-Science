@@ -1,4 +1,5 @@
 import { Link } from "react-router";
+import { BALANCE_REFUSAL_CODES } from "@evimed/domain";
 import type { AgendaRecord, EpisodeRecord } from "@/lib/autopilotClient";
 import { safeWorkspacePath } from "@/lib/claimCitations";
 import { artifactDisplayName } from "@/lib/artifactNames";
@@ -8,6 +9,8 @@ import { Disclosure } from "@/components/ui/Disclosure";
 import { instant, scheduleOf } from "./taskPresentation";
 
 const STATES: Record<string, string> = { queued: "排队中", verifying: "结果核验中", running: "研究进行中", failed: "未完成", canceled: "已取消", merged: "研究结果" };
+/** A run held back because the allowance cannot pay for it. A simulated wallet refuses under its own code, and its run waits, and reads, the same way. */
+const waitsForBalance = (code: string) => BALANCE_REFUSAL_CODES.includes(code);
 export function TaskTimeline({ agenda, episodes, onOpen }: { agenda: AgendaRecord; episodes: EpisodeRecord[]; onOpen: (digest?: string | null) => void }) {
   const zone = scheduleOf(agenda).timeZone;
   // Episodes preserve complete follow-ups even after the agenda's latest-20 message window rotates.
@@ -24,8 +27,8 @@ export function TaskTimeline({ agenda, episodes, onOpen }: { agenda: AgendaRecor
       const deferrals = Object.values(payload?.resourceDeferrals ?? {}).filter(Boolean);
       const waiting = deferrals.find(value => value?.status === "waiting");
       const exhausted = deferrals.find(value => value?.status === "exhausted");
-      const state = waiting ? (waiting.code === "credits_exhausted" ? "等待余额" : "等待运行资源")
-        : exhausted ? (exhausted.code === "credits_exhausted" ? "余额不足" : "运行资源暂不可用") : STATES[payload?.status ?? ""] ?? "正在安排";
+      const state = waiting ? (waitsForBalance(waiting.code) ? "等待余额" : "等待运行资源")
+        : exhausted ? (waitsForBalance(exhausted.code) ? "余额不足" : "运行资源暂不可用") : STATES[payload?.status ?? ""] ?? "正在安排";
       const artifacts = (payload?.artifactRefs ?? []).filter(ref => ref.projectId === agenda.projectId && ref.runId === payload?.runId
         && ref.sessionId === payload?.sessionId && /^[A-Za-z0-9_-]{1,160}$/.test(ref.runId) && safeWorkspacePath(ref.path));
       return <li key={item.key} className="space-y-3">

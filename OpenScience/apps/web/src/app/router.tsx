@@ -27,6 +27,7 @@ const CapabilitiesPage = lazy(() => import("./routes/CapabilitiesPage").then((m)
 const InboxPage = lazy(() => import("./routes/InboxPage").then((m) => ({ default: m.InboxPage })));
 const MemoryHubPage = lazy(() => import("./routes/MemoryHubPage").then((m) => ({ default: m.MemoryHubPage })));
 const AccountPage = lazy(() => import("./routes/AccountPage").then((m) => ({ default: m.AccountPage })));
+const SimulatedWalletPage = lazy(() => import("./routes/SimulatedWalletPage").then((m) => ({ default: m.SimulatedWalletPage })));
 const RunFilePage = lazy(() => import("./routes/RunFilePage").then((m) => ({ default: m.RunFilePage })));
 const FrontierPage = lazy(() => import("./routes/FrontierPage").then((m) => ({ default: m.FrontierPage })));
 const FrontierEventPage = lazy(() => import("./routes/FrontierEventPage").then((m) => ({ default: m.FrontierEventPage })));
@@ -113,6 +114,12 @@ export const routes: RouteObject[] = [
         { path: "inbox", element: <InboxPage /> },
         { path: "capabilities", element: <CapabilitiesPage /> },
         { path: "account", element: <AccountPage /> },
+        // The simulated wallet's four commerce pages — 模拟充值, 模拟会员, 模拟订单,
+        // 模拟退款 — at the addresses the domain names (`SIMULATED_WALLET_PAGES`),
+        // which is where the control plane's commerce links point on a
+        // deployment whose wallet is simulated. The page answers for itself
+        // where the wallet is not: one sentence, not a 404.
+        { path: "account/simulated/:page", element: <SimulatedWalletPage /> },
         { path: "extensions", element: <Navigate to="/app/extensions/plugins" replace /> },
         { path: "extensions/plugins", element: <PluginsPage /> },
         { path: "extensions/plugins/:extensionId", element: <PluginDetailPage /> },

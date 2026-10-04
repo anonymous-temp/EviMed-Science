@@ -43,6 +43,8 @@ modes can still contain:
   the previous account's statements. Account deletion removes research titles
   from retained statement descriptions. The deployment's privacy notice and
   financial-record retention schedule must describe this distinct retention.
+  Rows charged to the simulated wallet are marked `simulated` and are not money;
+  the simulated wallet itself (balance and top-ups) is removed with the account.
 
 Operators must treat this directory as sensitive research data. The MVP includes
 project-level and current-account self-service export and deletion, but does

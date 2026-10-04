@@ -67,7 +67,7 @@ beforeEach(() => {
 
 /** Everything the allowance page says: a deployment without billing must show none of it, and no placeholder row for what does not exist. */
 function expectNoResearchBilling() {
-  for (const gone of [/科研额度/, /充值/, /会员/, /订单/, /退款/, /尚未开放/, /尚未启用/, /尚未关联/, /研究消费/, /平台运行成本/]) {
+  for (const gone of [/科研额度/, /充值/, /会员/, /订单/, /退款/, /尚未开放/, /尚未启用/, /尚未关联/, /研究消费/, /平台运行成本/, /模拟/]) {
     expect(screen.queryAllByText(gone)).toEqual([]);
   }
 }
@@ -205,10 +205,14 @@ describe("科研额度 on a deployment that bills research", () => {
     expect(mocks.runs).not.toHaveBeenCalled(); expect(mocks.usage).not.toHaveBeenCalled();
   });
 
-  it("does not invent commerce or membership", async () => {
-    open(); expect(await screen.findAllByText("尚未开放")).toHaveLength(4);
-    expect(screen.queryByRole("link", { name: "查看充值" })).not.toBeInTheDocument();
-    expect(screen.queryByText("会员额度")).not.toBeInTheDocument();
+  // Four rows reading 「尚未开放」 under 「充值与会员」 were the page presenting a
+  // checkout this deployment does not have: what is not there is not drawn.
+  it("does not invent commerce or membership: no row, and no group, for what the deployment does not have", async () => {
+    open(); expect(await screen.findByText("¥20.00")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "科研额度" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "充值与会员" })).not.toBeInTheDocument();
+    for (const gone of [/尚未开放/, /充值/, /会员/, /订单/, /退款/]) expect(screen.queryAllByText(gone)).toEqual([]);
+    expect(screen.queryByRole("link", { name: /^查看/ })).not.toBeInTheDocument();
   });
 
   it("keeps confirmed monthly charges readable when the wallet is unavailable", async () => {
@@ -218,11 +222,51 @@ describe("科研额度 on a deployment that bills research", () => {
     expect(screen.queryByText("¥20.00")).not.toBeInTheDocument();
   });
 
-  it("uses configured HTTPS destinations only", async () => {
+  // The server answers `month: null` when it could not read the ledger. Unknown
+  // is not zero: no spend row is drawn, and no statement list either.
+  it("draws no month and no statements when the ledger could not be read", async () => {
+    mocks.allowance.mockResolvedValue({ ...allowance, status: "unavailable", available: null, month: null });
+    open(); expect(await screen.findByText("科研额度暂不可用")).toBeInTheDocument();
+    for (const gone of [/本月研究消费/, /本月待结算/, /研究消费明细/, /还没有研究消费记录/]) expect(screen.queryAllByText(gone)).toEqual([]);
+    expect(screen.queryByRole("list", { name: "研究消费记录" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/¥/)).not.toBeInTheDocument();
+    await act(async () => {});
+    expect(mocks.statements).not.toHaveBeenCalled();
+  });
+
+  it("uses configured HTTPS destinations only, and draws a row for those alone", async () => {
     mocks.allowance.mockResolvedValue({ ...allowance, commerce: { ...allowance.commerce, rechargeUrl: "https://account.example/recharge", ordersUrl: "javascript:alert(1)" } });
     open(); expect(await screen.findByRole("link", { name: "查看充值" })).toHaveAttribute("href", "https://account.example/recharge");
     expect(screen.getByRole("link", { name: "查看充值" })).toHaveAttribute("rel", "noreferrer");
-    expect(screen.queryByRole("link", { name: "查看订单" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "充值与会员" })).toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: /^查看/ })).toHaveLength(1);
+    expect(screen.getByText("充值")).toBeInTheDocument();
+    // The destination that is not a page, and the two the deployment did not name, have no row at all.
+    for (const gone of ["订单", "会员", "退款", "尚未开放"]) expect(screen.queryAllByText(gone)).toEqual([]);
+  });
+
+  it("keeps the group for a membership the wallet reports, with no commerce row beside it", async () => {
+    mocks.allowance.mockResolvedValue({ ...allowance, membership: { name: "科研会员", status: "active", expiresAt: null } });
+    open(); expect(await screen.findByText("科研会员")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "充值与会员" })).toBeInTheDocument();
+    expect(screen.getByText("有效")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /^查看/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/尚未开放/)).not.toBeInTheDocument();
+  });
+
+  // The marks, the line and the prompt belong to a simulated wallet. This one is
+  // not, with a balance of nothing and a threshold named: none of it may appear.
+  it.each([
+    ["says nothing about a simulated wallet", {}],
+    ["says its wallet is not simulated", { simulated: false, lowThreshold: null }],
+    ["is not simulated, whatever threshold its answer carries", { simulated: false, lowThreshold: 20 }],
+  ])("shows no simulated mark, line or prompt on a deployment that %s", async (_, fields) => {
+    mocks.allowance.mockResolvedValue({ ...allowance, available: 0, ...fields });
+    mocks.statements.mockResolvedValue({ items: [settled], nextCursor: null });
+    open(); expect(await screen.findByText("¥0.00")).toBeInTheDocument();
+    expect(await screen.findByText("文献研究")).toBeInTheDocument();
+    expect(screen.queryAllByText(/模拟/)).toEqual([]);
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
 
   it("appends statements from the next cursor", async () => {

@@ -1,7 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { WEB_SESSION_ENDED_EVENT, WEB_SESSION_STARTED_EVENT, WebApiError, webErrorMessage } from "@/lib/apiClient";
-import { forgetResearchBilling, useResearchBilling } from "./useResearchBilling";
+import { allowanceSimulated, forgetResearchBilling, useResearchBilling } from "./useResearchBilling";
 
 const mocks = vi.hoisted(() => ({ allowance: vi.fn() }));
 // The error dictionary is the real one: a failed read is worded by it.
@@ -202,5 +202,64 @@ describe("useResearchBilling", () => {
     await act(async () => { read.resolve(on); });
     expect(surface.result.current.allowance).toBeNull();
     expect(surface.result.current.enabled).toBe(false);
+  });
+});
+
+/** …and on a deployment whose wallet is simulated, as the server writes it since 2026-10-04. */
+const simulated = { ...on, simulated: true, available: 200, lowThreshold: 20 };
+
+describe("a simulated wallet", () => {
+  it("reads as not simulated until the deployment says its wallet is", async () => {
+    const read = pending();
+    mocks.allowance.mockReturnValue(read.promise);
+    const { result } = renderHook(() => useResearchBilling());
+    expect(result.current.simulated).toBe(false);
+    await act(async () => { read.resolve(simulated); });
+    expect(result.current.simulated).toBe(true);
+    expect(result.current.enabled).toBe(true);
+    expect(result.current.allowance).toEqual(simulated);
+  });
+
+  // A control plane older than the simulated wallet answers without the field,
+  // and so does every fixture written before it: that answer is a real wallet's.
+  it("reads an answer that says nothing about it as not simulated", async () => {
+    expect(on).not.toHaveProperty("simulated");
+    mocks.allowance.mockResolvedValue(on);
+    const { result } = renderHook(() => useResearchBilling());
+    await settle();
+    expect(result.current.enabled).toBe(true);
+    expect(result.current.simulated).toBe(false);
+  });
+
+  it("reads a wallet the deployment calls real as not simulated", async () => {
+    mocks.allowance.mockResolvedValue({ ...on, simulated: false, lowThreshold: null });
+    const { result } = renderHook(() => useResearchBilling());
+    await settle();
+    expect(result.current.enabled).toBe(true);
+    expect(result.current.simulated).toBe(false);
+  });
+
+  it("never calls a deployment without billing simulated, whatever else its answer says", async () => {
+    mocks.allowance.mockResolvedValue({ ...off, simulated: true });
+    const { result } = renderHook(() => useResearchBilling());
+    await settle();
+    expect(result.current.enabled).toBe(false);
+    expect(result.current.simulated).toBe(false);
+  });
+
+  it("is forgotten with the answer when the account changes", async () => {
+    mocks.allowance.mockResolvedValueOnce(simulated);
+    const surface = renderHook(() => useResearchBilling());
+    await settle();
+    expect(surface.result.current.simulated).toBe(true);
+    await act(async () => { window.dispatchEvent(new Event(WEB_SESSION_ENDED_EVENT)); });
+    expect(surface.result.current.simulated).toBe(false);
+  });
+
+  it("is one rule, whoever asks it", () => {
+    expect(allowanceSimulated(simulated as never)).toBe(true);
+    expect(allowanceSimulated(on as never)).toBe(false);
+    expect(allowanceSimulated({ ...off, simulated: true } as never)).toBe(false);
+    expect(allowanceSimulated(null)).toBe(false);
   });
 });

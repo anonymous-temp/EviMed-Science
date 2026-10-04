@@ -1743,16 +1743,28 @@ export async function exportWebProject(projectId: string): Promise<Blob> {
   return res.blob();
 }
 
-/** Customer-facing allowance; supplier costs are never customer charges. */
+/**
+ * Customer-facing allowance; supplier costs are never customer charges.
+ *
+ * The fields the simulated wallet added (2026-10-04) are optional because a
+ * control plane older than it answers without them, and an answer without them
+ * means what it always did: a wallet that is not simulated, with no threshold.
+ */
 export interface WebResearchAllowance {
   enabled: boolean;
+  /** The wallet behind this allowance is simulated: no amount it carries is money. Absent reads as false. */
+  simulated?: boolean;
   status: "ready" | "unavailable" | "unlinked" | "disabled";
   currency: "CNY";
   available: number | null;
   held: number | null;
   balances?: { paid: number | null; member: number | null; promotional: number | null } | null;
-  month: { since: string; paid: number; pending: number };
+  /** At or below this the allowance reads as low. A simulated wallet's only; null, or absent, where there is none. */
+  lowThreshold?: number | null;
+  /** The month's confirmed and pending charges, or null when the ledger could not be read — unknown, never zero. */
+  month: { since: string; paid: number; pending: number } | null;
   membership?: { name: string; status: string; expiresAt: string | null } | null;
+  /** An app path (the simulated wallet's own pages) or a configured HTTPS page; null where there is none. */
   commerce: { rechargeUrl: string | null; membershipUrl: string | null; ordersUrl: string | null; refundsUrl: string | null };
 }
 
@@ -1763,14 +1775,72 @@ export interface WebResearchStatement {
   at: string | null;
   status: "pending" | "settled" | "failed" | "waived";
   amount: number | null;
+  /**
+   * What the row is: a research task charged against the allowance, or credits
+   * going in (a simulated top-up, the simulated starting grant). Absent on a row
+   * from a control plane older than the simulated wallet, where every row is a
+   * charge.
+   */
+  kind?: "charge" | "topup" | "grant";
+  /** The row belongs to a simulated wallet. Absent reads as the list's own answer. */
+  simulated?: boolean;
   waivedCny?: string;
   pricingVersion?: string;
   settlementPrecision?: "legacy-integer-floor" | "legacy-integer";
 }
 
 export interface WebResearchStatements {
+  /** The wallet these rows belong to is simulated. Absent reads as false. */
+  simulated?: boolean;
   items: WebResearchStatement[];
   nextCursor: string | null;
+}
+
+/**
+ * What one research tool usually costs before it starts: a range in whole
+ * credits (one credit is one CNY), or no range at all where nothing supports
+ * one (`basis: "none"`). A statistical estimate, never a reservation or a cap
+ * (`binding: false`).
+ */
+export interface WebResearchEstimate {
+  capabilityId: string;
+  basis: "history" | "manifest" | "none";
+  low: number | null;
+  high: number | null;
+  samples: number;
+  binding: false;
+}
+
+export interface WebResearchEstimates {
+  currency: "CNY";
+  simulated: boolean;
+  items: WebResearchEstimate[];
+}
+
+/** One top-up of the simulated wallet. Its amount is whole credits and was never money. */
+export interface WebSimulatedOrder {
+  id: string;
+  packageId: string;
+  title: string;
+  amount: number;
+  at: string;
+  status: "paid";
+}
+
+export interface WebSimulatedOrders {
+  simulated: true;
+  currency: "CNY";
+  items: WebSimulatedOrder[];
+  nextCursor: string | null;
+}
+
+export interface WebSimulatedTopUp {
+  simulated: true;
+  order: WebSimulatedOrder;
+  /** The allowance after this top-up. */
+  available: number;
+  /** The same request had already been applied: nothing was added a second time. */
+  duplicate: boolean;
 }
 
 export async function fetchWebResearchAllowance(): Promise<WebResearchAllowance> {
@@ -1783,6 +1853,50 @@ export async function fetchWebResearchStatements(cursor?: string): Promise<WebRe
   const query = new URLSearchParams({ limit: "20" });
   if (cursor) query.set("cursor", cursor);
   return parseApiResponse<WebResearchStatements>(await fetchWithWebAuth(apiUrl(`/account/allowance/statements?${query}`)));
+}
+
+/** How many tools one estimates read may ask about: the route refuses a longer list whole. */
+const RESEARCH_ESTIMATES_LIMIT = 40;
+
+/**
+ * The estimate of every tool named, in one read (`capabilities=<id>,<id>,…`).
+ *
+ * The route answers the list as a whole and refuses it as a whole — a repeated
+ * id, or more than its limit — so the list is made unique and cut to the limit
+ * here: a tool past the limit goes without an estimate, rather than every tool
+ * going without one.
+ */
+export async function fetchWebResearchEstimates(ids: string[]): Promise<WebResearchEstimates> {
+  if (!hasWebApi) throw new BackendUnavailableError("account.allowance.estimates");
+  const query = new URLSearchParams({ capabilities: [...new Set(ids)].slice(0, RESEARCH_ESTIMATES_LIMIT).join(",") });
+  return parseApiResponse<WebResearchEstimates>(await fetchWithWebAuth(apiUrl(`/account/allowance/estimates?${query}`)));
+}
+
+/** The simulated wallet's top-ups, newest first. A deployment whose wallet is not simulated answers 404 `simulated_wallet_not_enabled`. */
+export async function fetchWebSimulatedOrders(cursor?: string): Promise<WebSimulatedOrders> {
+  if (!hasWebApi) throw new BackendUnavailableError("simulatedWallet.orders");
+  const query = new URLSearchParams({ limit: "20" });
+  if (cursor) query.set("cursor", cursor);
+  return parseApiResponse<WebSimulatedOrders>(await fetchWithWebAuth(apiUrl(`/simulated-wallet/orders?${query}`)));
+}
+
+/**
+ * Add one package of simulated credits to the allowance.
+ *
+ * `requestId` is the top-up's identity: the control plane applies a request id
+ * once, and answers a repeat of it with `duplicate: true` and the same order.
+ * So the caller makes one id per top-up the reader asked for and sends that
+ * same id again on a retry — a second click, or an answer that was lost on the
+ * way back, can then never add the credits twice.
+ */
+export async function topUpWebSimulatedWallet(packageId: string, requestId: string): Promise<WebSimulatedTopUp> {
+  if (!hasWebApi) throw new BackendUnavailableError("simulatedWallet.topUp");
+  const res = await fetchWithWebAuth(apiUrl("/simulated-wallet/topups"), {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ packageId, requestId }),
+  });
+  return parseApiResponse<WebSimulatedTopUp>(res);
 }
 
 export interface WebUsageSummary {

@@ -146,6 +146,16 @@ describe("scheduled tasks", () => {
     mocks.listEpisodes.mockResolvedValue({ items: [episode, { ...episode, id: "wait", payload: { ...episode.payload, runId: null, sessionId: null, status: "queued", resourceDeferrals: { episode: { code: "credits_exhausted", status: "waiting" } } } }] });
     render(); expect(await screen.findByText("等待余额")).toBeInTheDocument(); expect(screen.getAllByText(/已有研究结果/).length).toBeGreaterThan(0);
   });
+  // A simulated wallet refuses under its own code, and a run it holds back waits, and reads, exactly as one a real wallet holds back.
+  it.each([
+    ["credits_exhausted", "waiting", "等待余额"], ["simulated_credits_exhausted", "waiting", "等待余额"],
+    ["credits_exhausted", "exhausted", "余额不足"], ["simulated_credits_exhausted", "exhausted", "余额不足"],
+    ["runtime_busy", "waiting", "等待运行资源"], ["runtime_busy", "exhausted", "运行资源暂不可用"],
+  ])("says a run held back by %s (%s) is 「%s」", async (code, status, label) => {
+    mocks.listEpisodes.mockResolvedValue({ items: [{ ...episode, id: "held", payload: { ...episode.payload, runId: null, sessionId: null, status: "queued", resourceDeferrals: { episode: { code, status } } } }] });
+    render(); expect(await screen.findByText(label)).toBeInTheDocument();
+    for (const other of ["等待余额", "余额不足", "等待运行资源", "运行资源暂不可用"].filter(each => each !== label)) expect(screen.queryByText(other)).not.toBeInTheDocument();
+  });
   it("fills a research recommendation with a prompt and weekly schedule", async () => {
     render("/app/autopilot"); await userEvent.click(await screen.findByRole("button", { name: "指南更新周报" }));
     expect((await screen.findByLabelText("任务指令") as HTMLTextAreaElement).value).toContain("指南"); expect(screen.getByLabelText("重复")).toHaveValue("weekly");

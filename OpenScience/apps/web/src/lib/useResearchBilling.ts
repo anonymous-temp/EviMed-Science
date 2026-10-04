@@ -7,6 +7,8 @@ import {
 export interface ResearchBilling {
   /** True only once the deployment has said research billing is on. */
   enabled: boolean;
+  /** True only once the deployment has said the allowance it bills is a simulated wallet's (`allowanceSimulated`). */
+  simulated: boolean;
   /** The newest answer, or null until one has come. */
   allowance: WebResearchAllowance | null;
   /** A read this surface asked for is on its way. The answer held, if any, may be out of date. */
@@ -68,23 +70,40 @@ const current = () => shared;
 const mustAsk = (fresh: boolean) => shared === null || (fresh && shared.enabled);
 
 /**
+ * Whether an allowance is a simulated wallet's: billing is on, and the
+ * deployment said the wallet behind it is simulated, so no amount it carries is
+ * money and every surface that draws one marks it.
+ *
+ * Unknown reads as not simulated, the same way unknown reads as off: an answer
+ * from a control plane older than the simulated wallet says nothing about it,
+ * and an allowance nobody called simulated is never drawn as one. A deployment
+ * without billing has no allowance to simulate, whatever else the answer says.
+ */
+export function allowanceSimulated(allowance: WebResearchAllowance | null): boolean {
+  return allowance?.enabled === true && allowance.simulated === true;
+}
+
+/**
  * Whether this deployment bills research, from the one allowance read every
  * surface that words itself by it shares.
  *
  * Research billing is a deployment switch and it is off by default. A page for
- * a subsystem that is switched off must not present it, so three surfaces
- * follow the answer: 设置's tab (用量, or 科研额度 where billing is on), the
- * section behind it (the month's usage, or the allowance), and the chat
- * frame's button when a spend ceiling refused a conversation. They ask the same
- * question of `/api/account/allowance`, so they share one read the way
- * `fetchWebMe` shares `/api/me`: a read already on its way is joined and never
- * doubled, the answer is kept for the life of the page, and a login or logout
- * forgets it — it was about the account that left.
+ * a subsystem that is switched off must not present it, so the surfaces that
+ * name billing follow the answer: 设置's tab (用量, or 科研额度 where billing is
+ * on), the section behind it (the month's usage, or the allowance), the chat
+ * frame's button when a spend ceiling refused a conversation, 科研工具 (the
+ * low-allowance notice and each tool's estimate) and the simulated wallet's own
+ * pages. They ask the same question of `/api/account/allowance`, so they share
+ * one read the way `fetchWebMe` shares `/api/me`: a read already on its way is
+ * joined and never doubled, the answer is kept for the life of the page, and a
+ * login or logout forgets it — it was about the account that left.
  *
  * Unknown reads as off. While the first read is on its way, and when it could
  * not be read, `enabled` is false: the wording that is true on every
  * deployment is the one that does not name billing, so a deployment without it
  * never sees 科研额度 flash, and one with it shows 用量 for a moment.
+ * `simulated` follows the same rule (`allowanceSimulated`): nothing is drawn as
+ * a simulated wallet's until the deployment has said it is one.
  *
  * Which answers are asked again. `enabled: false` is the deployment's own
  * setting — nothing a session does changes it — so it is final for the page's
@@ -92,9 +111,9 @@ const mustAsk = (fresh: boolean) => shared === null || (fresh && shared.enabled)
  * `enabled: true` carries numbers that move (the balance, the month's spend),
  * so a surface that shows them passes `fresh` and reads again when it opens;
  * until the new answer lands it is `loading`, and the answer it holds is only
- * good for the wording (`enabled`), not for drawing the numbers. A failure is
- * never kept: it is reported to the surface that was waiting, and the next
- * surface to open asks again.
+ * good for the wording (`enabled`, `simulated`), not for drawing the numbers. A
+ * failure is never kept: it is reported to the surface that was waiting, and
+ * the next surface to open asks again.
  *
  * Presentation only, like `useOperator`: the allowance routes authorize
  * themselves and charging happens server-side, so a browser that flips this
@@ -116,5 +135,5 @@ export function useResearchBilling({ fresh = false }: { fresh?: boolean } = {}):
   useEffect(() => {
     if (mustAsk(fresh)) reload();
   }, [fresh, reload]);
-  return { enabled: allowance?.enabled === true, allowance, loading, error, reload };
+  return { enabled: allowance?.enabled === true, simulated: allowanceSimulated(allowance), allowance, loading, error, reload };
 }

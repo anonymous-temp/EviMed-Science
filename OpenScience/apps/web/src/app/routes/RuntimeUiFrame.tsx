@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router";
-import { errorCodeMessage, errorCodeOutcome } from "@evimed/domain";
+import { errorCodeMessage, errorCodeOutcome, SIMULATED_WALLET_PAGES } from "@evimed/domain";
 import { createWebRuntimeUiFrame, fetchWebRuntimeStatus, listWebResearchAgents, renewWebRuntimeUiFrame, releaseWebRuntimeUiFrame, startWebRuntime, webErrorMessage, WebApiError, type WebAgentRun, type WebRuntimeStartStatus, type WebRuntimeUiFrame } from "@/lib/apiClient";
 import { newRuntimeUiIntent, runtimeUiIntentFromState, type RuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { bindConversationCapability, conversationCapability } from "@/lib/dispatch";
@@ -34,7 +34,19 @@ interface FrameFailure {
   /** A specific conversation could not be opened: offer a new one beside the
    *  retry, which would only ask for the same conversation again. */
   newTask?: boolean;
+  /** The code the control plane refused with, when it named one. The sentence
+   *  comes from the dictionary; the code is kept because one refusal has an
+   *  action of its own (`SIMULATED_CREDITS_EXHAUSTED`). */
+  code?: string | null;
 }
+
+/**
+ * The refusal of a deployment whose wallet is simulated: the allowance is below
+ * what the task needs, or empty. What lifts it is a simulated top-up, so the
+ * action offered is the simulated recharge page — not the allowance page, which
+ * only states the position.
+ */
+const SIMULATED_CREDITS_EXHAUSTED = "simulated_credits_exhausted";
 
 /** A failure this surface observed itself — a timer, a native error frame —
  *  where no control-plane refusal exists to explain. */
@@ -69,7 +81,7 @@ function refusedFrame(error: unknown): FrameFailure {
   // A 401 is already being handled elsewhere — `fetchWithWebAuth` announces the
   // ended session and the shell moves to the login route — so a retry here
   // would race that, not fix it.
-  return { text, retryable: !capped && error.status !== 401, capped };
+  return { text, retryable: !capped && error.status !== 401, capped, code: error.code };
 }
 
 /**
@@ -109,7 +121,10 @@ function noticedFrame(code: string, detail: string, title: string): FrameFailure
   // A notice whose title says it all sends no detail (「项目正忙，请稍后再试」).
   const text = detail || title || (code === "runtime_limit_exceeded" ? RUNTIME_SLOT_CAP_TEXT : errorCodeMessage(code));
   const capped = errorCodeOutcome(code) === "capped";
-  return { text, retryable: true, capped, concurrency: capped };
+  // The one ceiling here that is about spend: neither a wait nor ending another
+  // conversation lifts it, so it gets no retry and keeps its own action.
+  if (code === SIMULATED_CREDITS_EXHAUSTED) return { text, retryable: false, capped: true, code };
+  return { text, retryable: true, capped, concurrency: capped, code };
 }
 
 /**
@@ -124,7 +139,7 @@ function refusedStart(error: unknown): FrameFailure | null {
   // notice page retries the opening if it does not end in time).
   if (error instanceof WebApiError && error.code === PREPARING_CODE) return null;
   if (!(error instanceof WebApiError) || errorCodeOutcome(error.code ?? "") !== "capped") return null;
-  if (error.code === "runtime_limit_exceeded") return { text: RUNTIME_SLOT_CAP_TEXT, retryable: true, capped: true, concurrency: true };
+  if (error.code === "runtime_limit_exceeded") return { text: RUNTIME_SLOT_CAP_TEXT, retryable: true, capped: true, concurrency: true, code: error.code };
   return refusedFrame(error);
 }
 
@@ -214,6 +229,16 @@ function UsageButton() {
   const navigate = useNavigate();
   const { enabled } = useResearchBilling();
   return <Button variant="ghost" onClick={() => navigate("/app/account?tab=usage")}>{enabled ? "查看科研额度" : "查看用量"}</Button>;
+}
+
+/**
+ * The way from a conversation the simulated allowance refused to the page that
+ * lifts the refusal. The refusal's own code says the wallet is simulated, so
+ * this needs no allowance read to know what to call itself.
+ */
+function SimulatedRechargeButton() {
+  const navigate = useNavigate();
+  return <Button variant="ghost" onClick={() => navigate(SIMULATED_WALLET_PAGES.recharge)}>去模拟充值</Button>;
 }
 
 /**
@@ -890,8 +915,9 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
             <p>{error.text}</p>
             {error.retryable && <Button ref={retryButton} variant="ghost" onClick={() => setAttempt(value => value + 1)}>重试</Button>}
             {error.newTask && <Button variant="ghost" onClick={() => navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent() } })}>新建对话</Button>}
-            {/* The usage section of settings, where a spend ceiling is stated. */}
-            {error.capped && !error.concurrency && <UsageButton />}
+            {/* The usage section of settings, where a spend ceiling is stated — or,
+                for a simulated allowance that ran out, the page that tops it up. */}
+            {error.capped && !error.concurrency && (error.code === SIMULATED_CREDITS_EXHAUSTED ? <SimulatedRechargeButton /> : <UsageButton />)}
           </div>
         ) : (
           <>

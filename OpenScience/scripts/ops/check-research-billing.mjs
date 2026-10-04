@@ -2,6 +2,7 @@
 // Configuration evidence only: never contact a wallet or read a secret file.
 import { pathToFileURL } from "node:url";
 import { createResearchCommerce, checkResearchCommerceConformance, RESEARCH_COMMERCE_ACTIONS } from "../../apps/server/src/researchCommerce.mjs";
+import { evimedCreditsRefusal } from "../../apps/server/src/evimedCreditsSimulator.mjs";
 
 /** @param {unknown} value */
 function safeWalletEndpoint(value) {
@@ -16,40 +17,60 @@ function safeWalletEndpoint(value) {
 /**
  * A passing configuration check is not authorization to release payments and
  * never proves provider connectivity, user mapping, or exactly-once charging.
+ *
+ * A simulated wallet (`OPEN_SCIENCE_EVIMED_CREDITS_SIMULATED`) is reported as
+ * what it is — `simulated: true`, assessment `simulated` — and can never satisfy
+ * a requirement for real billing: `--require-billing` and `--require-handoffs`
+ * fail in that mode, and `endToEndVerified` is false always. `--require-simulated`
+ * is the check for the simulation itself.
  * @param {Record<string, unknown>} [config]
  * @param {{requireBilling?:boolean, requiredHandoffs?:Array<"recharge"|"membership"|"orders"|"refunds">,
- * requirePrecision?:boolean, requireAutomaticCommerce?:boolean}} [options]
+ * requirePrecision?:boolean, requireAutomaticCommerce?:boolean, requireSimulated?:boolean}} [options]
  */
 export function checkResearchBillingReadiness(config = {}, options = {}) {
-  const { requireBilling = false, requiredHandoffs = [], requirePrecision = false, requireAutomaticCommerce = false } = options;
+  const { requireBilling = false, requiredHandoffs = [], requirePrecision = false, requireAutomaticCommerce = false, requireSimulated = false } = options;
   const policyEnabled = config.researchBillingEnabled === true;
   const walletEnabled = config.evimedCreditsEnabled === true;
   const conversionConfigured = config.evimedCreditsPerCny === 1;
+  const simulated = config.evimedCreditsSimulated === true;
   const deductConfigured = safeWalletEndpoint(config.evimedCreditsUrl);
   const balanceConfigured = safeWalletEndpoint(config.evimedCreditsBalanceUrl);
+  // The platform's own judgement of a simulated configuration, so this check and
+  // the module that refuses to boot cannot disagree about what is refused.
+  const refusal = simulated ? evimedCreditsRefusal(config) : null;
   const issues = [];
-  if (requireBilling || policyEnabled) {
+  if (requireSimulated && !simulated) issues.push({ code: "research_billing_simulated_disabled" });
+  if (requireBilling && simulated) issues.push({ code: "research_billing_wallet_simulated" });
+  if (refusal === "evimed_credits_simulated_conflict") issues.push({ code: "research_billing_simulated_with_real_wallet" });
+  if (refusal === "evimed_credits_simulated_start_invalid") issues.push({ code: "research_billing_simulated_start_invalid" });
+  if (requireBilling || policyEnabled || requireSimulated) {
     if (!walletEnabled) issues.push({ code: "research_billing_wallet_disabled" });
     if (!policyEnabled) issues.push({ code: "research_billing_policy_disabled" });
     if (!conversionConfigured) issues.push({ code: "research_billing_conversion_invalid" });
-    if (!deductConfigured) issues.push({ code: "research_billing_deduct_endpoint_invalid" });
-    if (!balanceConfigured) issues.push({ code: "research_billing_balance_endpoint_invalid" });
+    // A simulated wallet has no address; a real one must.
+    if (!simulated && !deductConfigured) issues.push({ code: "research_billing_deduct_endpoint_invalid" });
+    if (!simulated && !balanceConfigured) issues.push({ code: "research_billing_balance_endpoint_invalid" });
   }
   if (requirePrecision) issues.push({ code: "research_billing_precision_contract_unverified" });
   const commerce = createResearchCommerce(config).status();
   issues.push(...checkResearchCommerceConformance(config, { requiredHandoffs, requireAutomaticCommerce }).issues);
+  const status = simulated
+    ? (walletEnabled && conversionConfigured && !refusal ? "simulated" : "invalid_configuration")
+    : !policyEnabled ? "disabled"
+      : walletEnabled && conversionConfigured && deductConfigured && balanceConfigured ? "configured_compatibility" : "invalid_configuration";
   return {
     ok: issues.length === 0,
-    assessment: "configuration_only",
+    assessment: simulated ? "simulated" : "configuration_only",
     endToEndVerified: false,
-    billing: { status: !policyEnabled ? "disabled" : walletEnabled && conversionConfigured && deductConfigured && balanceConfigured
-      ? "configured_compatibility" : "invalid_configuration",
-      policyEnabled, walletEnabled, conversionConfigured, deductConfigured, balanceConfigured,
-      currency: "CNY", creditsPerCny: 1, walletAuthority: "evimed",
+    simulated,
+    billing: { status,
+      simulated, policyEnabled, walletEnabled, conversionConfigured, deductConfigured, balanceConfigured,
+      currency: "CNY", creditsPerCny: 1, walletAuthority: simulated ? "simulated" : "evimed",
       walletContract: "legacy-integer-floor", credentialReadiness: "not_checked" },
     commerce,
     waivers: ["platform_overhead", "unconfirmed_provider_usage", "failed_platform_task", "canceled_task", "fractional_cny_remainder"],
-    limitations: ["integer_wallet_amounts_only", "precision_contract_unverified", "credentials_not_checked",
+    limitations: [...(simulated ? ["simulated_wallet_not_real_money"] : []),
+      "integer_wallet_amounts_only", "precision_contract_unverified", "credentials_not_checked",
       "connectivity_not_checked", "user_identity_mapping_not_checked", "exactly_once_settlement_not_checked",
       "holds_not_supported", "membership_entitlements_not_supported", "checkout_not_supported", "refunds_not_supported"],
     issues,
@@ -71,6 +92,8 @@ export function researchBillingReadinessConfig(env) {
     evimedCreditsEnabled: bool("OPEN_SCIENCE_EVIMED_CREDITS_ENABLED"),
     researchBillingEnabled: bool("OPEN_SCIENCE_RESEARCH_BILLING_ENABLED"),
     evimedCreditsPerCny: rate == null || rate === "" ? 1 : Number(rate),
+    evimedCreditsSimulated: bool("OPEN_SCIENCE_EVIMED_CREDITS_SIMULATED"),
+    evimedCreditsSimulatedStartCredits: Number(env.OPEN_SCIENCE_EVIMED_CREDITS_SIMULATED_START_CREDITS || 200),
     evimedCreditsUrl: env.OPEN_SCIENCE_EVIMED_CREDITS_URL ?? "",
     evimedCreditsBalanceUrl: env.OPEN_SCIENCE_EVIMED_CREDITS_BALANCE_URL ?? "",
     researchCommerceEnabled: bool("OPEN_SCIENCE_RESEARCH_COMMERCE_ENABLED"),
@@ -84,7 +107,7 @@ export function researchBillingReadinessConfig(env) {
 
 /** @param {string[]} args */
 export function parseResearchBillingReadinessArgs(args) {
-  const options = { requireBilling: false, requirePrecision: false, requireAutomaticCommerce: false,
+  const options = { requireBilling: false, requirePrecision: false, requireAutomaticCommerce: false, requireSimulated: false,
     requiredHandoffs: /** @type {Array<"recharge"|"membership"|"orders"|"refunds">} */ ([]), help: false };
   const seen = new Set();
   for (const argument of args) {
@@ -94,6 +117,7 @@ export function parseResearchBillingReadinessArgs(args) {
     if (argument === "--require-billing") options.requireBilling = true;
     else if (argument === "--require-precision") options.requirePrecision = true;
     else if (argument === "--require-automatic-commerce") options.requireAutomaticCommerce = true;
+    else if (argument === "--require-simulated") options.requireSimulated = true;
     else if (argument === "--help") options.help = true;
     else if (argument.startsWith("--require-handoffs=")) {
       const actions = argument.slice("--require-handoffs=".length).split(",");
@@ -111,7 +135,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   try {
     const options = parseResearchBillingReadinessArgs(process.argv.slice(2));
     if (options.help) {
-      console.log("Usage: node scripts/ops/check-research-billing.mjs [--require-billing] [--require-handoffs=recharge,membership,orders,refunds] [--require-precision] [--require-automatic-commerce]\nChecks public configuration only; never proves end-to-end payment readiness.");
+      console.log("Usage: node scripts/ops/check-research-billing.mjs [--require-billing] [--require-simulated] [--require-handoffs=recharge,membership,orders,refunds] [--require-precision] [--require-automatic-commerce]\nChecks public configuration only; never proves end-to-end payment readiness. A simulated wallet is reported as simulated and never satisfies --require-billing.");
     } else {
       const report = checkResearchBillingReadiness(researchBillingReadinessConfig(process.env), options);
       console.log(JSON.stringify(report, null, 2));

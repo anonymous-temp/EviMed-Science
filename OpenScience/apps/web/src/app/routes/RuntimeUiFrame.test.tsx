@@ -15,6 +15,7 @@ import { forgetResearchBilling } from "@/lib/useResearchBilling";
 import { useRuntimeSessionSearch } from "@/lib/runtimeUiBridge";
 import { renderHook } from "@testing-library/react";
 import { kernelThemeTokens } from "@evimed/design-tokens/kernel";
+import { errorCodeMessage, SIMULATED_WALLET_PAGES } from "@evimed/domain";
 
 const mocks = vi.hoisted(() => ({ create: vi.fn(), renew: vi.fn(), release: vi.fn(), listRuns: vi.fn(), subscribe: vi.fn(), listSources: vi.fn(), me: vi.fn(), warm: vi.fn(), start: vi.fn(), status: vi.fn(), listAgents: vi.fn(), listSessions: vi.fn(), putSession: vi.fn(), allowance: vi.fn(), connectors: vi.fn(), saveConnector: vi.fn(), dispatch: vi.fn(), projectId: "default", profile: { uiOrigin: "https://host.example:8443" } }));
 vi.mock("@/lib/sourceClient", async importOriginal => ({ ...(await importOriginal<typeof import("@/lib/sourceClient")>()), listSources: mocks.listSources }));
@@ -73,6 +74,7 @@ function mount(state: unknown = null, path = "/app/chat") {
   return render(<MemoryRouter initialEntries={[{ pathname: path, state }]}><PathProbe /><SessionFrameHost /><Routes>
     <Route path="/app/chat/:sessionId?" element={<SessionRoute />} />
     <Route path="/app/account" element={<div>account and usage</div>} />
+    <Route path="/app/account/simulated/:page" element={<div>simulated wallet</div>} />
     <Route path="/app/files" element={<div>knowledge base</div>} />
     <Route path="/app/runs/:runId/files/*" element={<div>run file reader</div>} />
   </Routes></MemoryRouter>);
@@ -461,6 +463,76 @@ describe("native frame identity and readiness", () => {
     expect(mocks.allowance).not.toHaveBeenCalled();
   });
 
+  // A deployment whose wallet is simulated refuses under its own code. What
+  // lifts that refusal is a simulated top-up, so the action offered is the
+  // simulated recharge page rather than the allowance page — and the code says
+  // which wallet it is, so nothing has to be read to name the button.
+  const simulatedExhausted = () => new WebApiError("The simulated allowance is too low.", {
+    status: 402, code: "simulated_credits_exhausted", requestId: "req_402_sim",
+  });
+
+  it("offers the simulated recharge page, not the allowance page or a retry, when the simulated allowance refused the conversation", async () => {
+    mocks.allowance.mockResolvedValue(billing(true));
+    mocks.create.mockRejectedValueOnce(simulatedExhausted());
+    mount();
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(errorCodeMessage("simulated_credits_exhausted"));
+    expect(alert).toHaveTextContent("模拟额度不足");
+    expect(screen.queryByRole("button", { name: "重试" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "查看科研额度" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "查看用量" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "去模拟充值" }));
+    expect(screen.getByTestId("path")).toHaveTextContent(SIMULATED_WALLET_PAGES.recharge);
+    expect(screen.getByText("simulated wallet")).toBeInTheDocument();
+    await act(async () => {});
+    expect(mocks.allowance).not.toHaveBeenCalled();
+    expect(mocks.create).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers the same way when it is the runtime's start that the simulated allowance refused", async () => {
+    mocks.start.mockRejectedValueOnce(simulatedExhausted());
+    mount();
+    expect(await screen.findByRole("alert")).toHaveTextContent("模拟额度不足");
+    expect(screen.getByRole("button", { name: "去模拟充值" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "重试" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "查看用量" })).toBeNull();
+  });
+
+  it("offers the same way when the frame's own notice page names the simulated allowance", async () => {
+    const { container } = mount(null, "/app/chat/session-a");
+    await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull());
+    const frame = container.querySelector("iframe")!;
+    const detail = errorCodeMessage("simulated_credits_exhausted");
+    emit(frame, { type: "evimed.runtime-ui.notice", code: "simulated_credits_exhausted", title: "对话暂时打不开", detail });
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent(detail);
+    // Neither a wait nor ending another conversation lifts it: no retry, and the recharge page.
+    expect(screen.queryByRole("button", { name: "重试" })).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: "去模拟充值" }));
+    expect(screen.getByTestId("path")).toHaveTextContent(SIMULATED_WALLET_PAGES.recharge);
+    expect(screen.getByText("simulated wallet")).toBeInTheDocument();
+  });
+
+  // The other ceilings are untouched: a concurrency notice still offers a
+  // retry and no page, and a real wallet's refusal still leads to the allowance.
+  it("keeps a concurrency notice and a real wallet's refusal as they were", async () => {
+    const { container, unmount } = mount(null, "/app/chat/session-a");
+    await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull());
+    emit(container.querySelector("iframe")!, { type: "evimed.runtime-ui.notice", code: "runtime_limit_exceeded", title: "对话暂时打不开", detail: "" });
+    expect(await screen.findByRole("alert")).toHaveTextContent("对话暂时打不开");
+    expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "去模拟充值" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "查看用量" })).toBeNull();
+    unmount();
+
+    mocks.allowance.mockResolvedValue(billing(true));
+    mocks.create.mockRejectedValueOnce(new WebApiError("Out of credits.", { status: 402, code: "credits_exhausted" }));
+    mount();
+    expect(await screen.findByRole("alert")).toHaveTextContent(errorCodeMessage("credits_exhausted"));
+    expect(await screen.findByRole("button", { name: "查看科研额度" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "去模拟充值" })).toBeNull();
+  });
+
   // A refusal that is not a ceiling keeps its retry, but stops claiming the
   // cause was the connection.
   it("renders a disabled surface as the reason it gave rather than as a connection fault", async () => {
@@ -824,7 +896,9 @@ describe("the run behind the task, in the frame", () => {
       expect(bar.compareDocumentPosition(frame) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       expect(container.querySelectorAll("iframe")).toHaveLength(1);
 
-      await user.click(screen.getByRole("button", { name: "去配置" }));
+      // The strip is there before the connector list is: until it is read 去配置
+      // is a link to the settings page, and the button in place comes with it.
+      await user.click(await screen.findByRole("button", { name: "去配置" }));
       await user.type(screen.getByLabelText("UMLS 凭据"), "umls-secret-key-123");
       mocks.connectors.mockResolvedValue([connector("user")]);
       await user.click(screen.getByRole("button", { name: "保存 UMLS 凭据" }));

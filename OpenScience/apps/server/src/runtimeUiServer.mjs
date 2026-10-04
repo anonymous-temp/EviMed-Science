@@ -51,8 +51,13 @@ function assertBrowserOrigin(req, config) {
   }
 }
 
-/** @param {Record<string, any>} config @param {any} project @param {string} method */
-async function authorizeMethod(config, project, method, boundWorkspace = false, usageLedger = null, runtimeManager = null) {
+/**
+ * @param {Record<string, any>} config @param {any} project @param {string} method
+ * @param {boolean} [boundWorkspace] @param {any} [usageLedger] @param {any} [runtimeManager]
+ * @param {((project: any, payload: any) => Promise<void>) | null} [balanceGate] the research allowance's question
+ * @param {any} [payload] the native RPC's payload, for a method that carries one
+ */
+async function authorizeMethod(config, project, method, boundWorkspace = false, usageLedger = null, runtimeManager = null, balanceGate = null, payload = null) {
   if (isDeniedRuntimeUiMethod(method) && !(method === "workspace/create" && boundWorkspace)) {
     throw new HttpError(403, "runtime_ui_method_denied", `${method} is not available in the hosted surface.`);
   }
@@ -63,6 +68,10 @@ async function authorizeMethod(config, project, method, boundWorkspace = false, 
       weeklyLimit: Number(config.userWeeklySpendLimit) || 0,
     });
     else await assertSpendWithinLimits(config, project.userId);
+    // A message steered into a turn that is already running is that work's own:
+    // refusing it would cut in-flight work off for a balance, which no verdict
+    // here may do. Every other prompt begins a turn, and is asked.
+    if (balanceGate && payload?.args?.request?.mode !== "steer") await balanceGate(project, payload);
   }
 }
 
@@ -258,13 +267,13 @@ function assertNativeModelSelection(config, payload) {
 /**
  * `agentRuns` is the run ledger a message steered into a running turn is
  * counted on (`recordSteer`); `audit` reports a count that could not be written.
- * @param {{ config: Record<string, any>, store: any, runtimeManager: any, agentRegistry?: any, usageLedger?: any, authorizePrompt?:(project:any,sessionId:string)=>Promise<void>, preparePrompt?:((project:any,request:any)=>Promise<any>)|null, recordPromptActor?:((user:any,project:any,request:any)=>Promise<any>)|null, bindResultRevision?:((user:any,project:any,request:any)=>Promise<any>)|null, authorizeMutation?:((operation:()=>Promise<any>)=>Promise<any>)|null,
+ * @param {{ config: Record<string, any>, store: any, runtimeManager: any, agentRegistry?: any, usageLedger?: any, balanceGate?:((project:any,payload:any)=>Promise<void>)|null, authorizePrompt?:(project:any,sessionId:string)=>Promise<void>, preparePrompt?:((project:any,request:any)=>Promise<any>)|null, recordPromptActor?:((user:any,project:any,request:any)=>Promise<any>)|null, bindResultRevision?:((user:any,project:any,request:any)=>Promise<any>)|null, authorizeMutation?:((operation:()=>Promise<any>)=>Promise<any>)|null,
  *   managedBrowser?: any, authorizeOpenSession?:((user:any,project:any,sessionId:string)=>Promise<void>)|null,
  *   agentRuns?: { recordSteeredInput: (project: any, sessionId: string, requestId: string) => Promise<any> } | null,
  *   audit?: (event: string, detail: Record<string, any>) => Promise<void> }} deps
  * @returns {{ server: import('node:http').Server, releaseFrame: (frameId: string, userId: string) => Promise<number>, refreshFrameBinding: (renewed: any) => number, listen: (port?: number, host?: string) => Promise<any>, address: () => any, close: () => Promise<void> }}
  */
-export function createRuntimeUiServer({ config, store, runtimeManager, agentRegistry = null, usageLedger = null, authorizePrompt = null, preparePrompt = null, recordPromptActor = null, bindResultRevision = null, authorizeMutation = null,
+export function createRuntimeUiServer({ config, store, runtimeManager, agentRegistry = null, usageLedger = null, balanceGate = null, authorizePrompt = null, preparePrompt = null, recordPromptActor = null, bindResultRevision = null, authorizeMutation = null,
   agentRuns = null, managedBrowser = null, authorizeOpenSession = null, audit = async () => {} }) {
   /**
    * A message the researcher sends into a turn that is running is counted on
@@ -674,7 +683,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
     // around. It is this method and not the runtime's start, because starting
     // a runtime is what reading a transcript also does, and reading your own
     // finished work is not spending.
-    await authorizeMethod(config, project, method, boundWorkspace, usageLedger, runtimeManager);
+    await authorizeMethod(config, project, method, boundWorkspace, usageLedger, runtimeManager, balanceGate, promptBody?.payload);
     const forward = () => runtimeManager.proxy(req, res, project, frame.suffix, {
       surface: "ui",
       uiBasePath: frame.prefix,
@@ -761,7 +770,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
           if (typeof endpoint !== "string" || (endpoint !== "$events" && runtimeUiMethodFromPath(`/api/${endpoint}`) !== endpoint)) {
             throw new HttpError(400, "runtime_ui_endpoint_invalid", "A valid mux endpoint is required.");
           }
-          await authorizeMethod(config, project, endpoint, false, usageLedger, runtimeManager);
+          await authorizeMethod(config, project, endpoint, false, usageLedger, runtimeManager, balanceGate, payload);
           await assertWorkspacePath(endpoint, payload, runtimeManager.runtimeWorkspaceRoot(project), project);
           if (endpoint === "session/selectModel") {
             assertNativeModelSelection(config, payload);

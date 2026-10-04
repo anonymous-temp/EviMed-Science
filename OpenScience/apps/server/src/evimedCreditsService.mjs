@@ -45,10 +45,11 @@
  */
 
 import { createHash } from "node:crypto";
-import { CAPABILITY_DISPLAY, capabilityTitle, estimateCost, spendingPermission, researchTaskCharge, researchMoneyUnits, isResearcherOwnedWork, RESEARCH_BILLING_VERSION } from "@evimed/domain";
+import { CAPABILITY_DISPLAY, capabilityTitle, estimateCost, spendingPermission, researchTaskCharge, researchMoneyUnits, isResearcherOwnedWork, RESEARCH_BILLING_VERSION, SIMULATED_LOW_CREDITS } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 import { productId } from "./productPersistence.mjs";
 import { EvimedCreditsError } from "./evimedCreditsClient.mjs";
+import { SIMULATED_INCARNATION_SQL, SimulatedWalletRefusal, simulatedPayerId } from "./evimedCreditsSimulator.mjs";
 import { runUsageKeys, autopilotUsageScope } from "./runUsage.mjs";
 import { migrateEvimedCredits, researchBillingPolicy } from "./evimedCreditsPersistence.mjs";
 
@@ -128,6 +129,7 @@ function settlement(row) {
     receiptId: row.receipt_id ?? null,
     upstreamUserId: row.upstream_user_id ?? null,
     errorCode: row.error_code ?? null,
+    wallet: row.wallet ?? null,
     createdAt: new Date(row.created_at).toISOString(),
     settledAt: row.settled_at == null ? null : new Date(row.settled_at).toISOString(),
   } : null;
@@ -137,15 +139,32 @@ export class EvimedCreditsService {
   /**
    * @param {{ config: Record<string, any>, database: any, client: any, usageLedger?: any,
    *   evimedUserIdOf?: ((userId: string) => Promise<string | null>) | null,
+   *   simulator?: any, refusal?: string | null,
    *   now?: () => Date, report?: (code: string) => void }} dependencies
    */
-  constructor({ config, database, client, usageLedger = null, evimedUserIdOf = null, now = () => new Date(), report = () => {} }) {
+  constructor({ config, database, client, usageLedger = null, evimedUserIdOf = null, simulator = null, refusal = null, now = () => new Date(), report = () => {} }) {
     this.config = config;
     this.database = database;
     this.client = client;
     this.usageLedger = usageLedger;
     /** Who an account is to EviMed (decision 5). Absent means nobody is. */
     this.evimedUserIdOf = evimedUserIdOf;
+    /** The simulated wallet's own surface (top-up, orders); null where the wallet is real. */
+    this.simulator = simulator;
+    /** Whether the wallet is simulated: its rows are marked, and it reads and writes only rows of its own kind. */
+    this.simulated = config?.evimedCreditsSimulated === true;
+    /** @type {"live" | "simulated"} */
+    this.walletKind = this.simulated ? "simulated" : "live";
+    /** A named code for a configuration this module will not run under; permanent for the process. */
+    this.refusal = refusal;
+    /**
+     * Why the module cannot do its job right now — the refusal, or what boot or
+     * the last readiness probe found. While it is set nothing is charged, no
+     * start is refused and no balance is claimed: billing failing never stops
+     * research (principles 14 and 19), and a probe that succeeds clears it.
+     * @type {string | null}
+     */
+    this.failure = refusal;
     this.now = now;
     this.report = report;
     this.rate = evimedCreditsRate(config);
@@ -159,6 +178,11 @@ export class EvimedCreditsService {
    *  rate are all there. Anything missing is named by `status()` and settles
    *  nothing — it never half-charges. */
   get enabled() {
+    return this.#wired() && !this.failure;
+  }
+
+  /** Everything the module needs is there; whether it is working is `failure`'s. */
+  #wired() {
     return Boolean(this.config?.evimedCreditsEnabled) && Boolean(this.database) && Boolean(this.client?.configured) && this.rate > 0;
   }
 
@@ -166,6 +190,8 @@ export class EvimedCreditsService {
     return {
       enabled: Boolean(this.config?.evimedCreditsEnabled),
       operating: this.enabled,
+      simulated: this.simulated,
+      failure: this.failure,
       creditsPerCny: this.rate,
       counters: { ...this.counters },
       upstream: this.client?.status?.() ?? null,
@@ -184,9 +210,34 @@ export class EvimedCreditsService {
     return typeof value === "string" && value.trim() ? value : null;
   }
 
+  /**
+   * Whom the wallet charges for one account. A real wallet knows the EviMed user
+   * id (above); the simulated one knows every account, as `sim:` plus the
+   * account's id and incarnation, so a replaced account never inherits a wallet.
+   * @param {string} userId @returns {Promise<string | null>}
+   */
+  async #payer(userId) {
+    if (!this.simulated) return this.#evimedUserId(userId);
+    const result = await this.database.query(
+      `SELECT ${SIMULATED_INCARNATION_SQL} AS incarnation FROM evimed_control.users u WHERE u.id=$1`, [userId]);
+    const incarnation = result.rows[0]?.incarnation;
+    return incarnation ? simulatedPayerId(userId, incarnation) : null;
+  }
+
+  /**
+   * The same, for an account row already in hand (`#currentAccount`).
+   * @param {string} userId @param {any} account @returns {string | null}
+   */
+  #payerFor(userId, account) {
+    if (this.simulated) return account?.incarnation ? simulatedPayerId(userId, account.incarnation) : null;
+    return account?.auth_type === "evimed" ? account.evimed_user_id : null;
+  }
+
   /** Readiness: the schema exists and can be written. @returns {Promise<{ok: true}>} */
   async ready() {
+    if (this.refusal) throw new HttpError(503, this.refusal, "The research billing module refused this configuration.");
     await migrateEvimedCredits(this.database);
+    if (this.simulated) await this.simulator?.ready();
     if (this.config?.evimedCreditsEnabled) {
       const policy = await researchBillingPolicy(this.database, { activate: this.config?.researchBillingEnabled === true, now: this.now() });
       if (policy && (this.rate !== 1 || policy.pricing_version !== RESEARCH_BILLING_VERSION)) {
@@ -194,6 +245,32 @@ export class EvimedCreditsService {
       }
     }
     return { ok: true };
+  }
+
+  /**
+   * Bring the module up, or say why it cannot — never throwing. The policy's
+   * activation is persisted here before research is accepted, and a module that
+   * cannot do that is not allowed to take the platform down with it: it goes
+   * quiet (`failure`), the platform boots, readiness reports the code, and the
+   * next probe (readiness, the retry sweep, a start) tries again.
+   * @returns {Promise<string | null>} the named code of what is wrong, or null
+   */
+  async ensureReady() {
+    if (this.refusal) return this.#fail(this.refusal);
+    try {
+      await this.ready();
+      this.failure = null;
+      return null;
+    } catch (error) {
+      return this.#fail(typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : "evimed_credits_unavailable");
+    }
+  }
+
+  /** @param {string} code */
+  #fail(code) {
+    if (this.failure !== code) this.report(code);
+    this.failure = code;
+    return code;
   }
 
   /** @param {string} userId @param {string} runId */
@@ -247,7 +324,8 @@ export class EvimedCreditsService {
     }
     if (!this.enabled) {
       this.counters.skipped += 1;
-      const reason = !this.config?.evimedCreditsEnabled ? "not_enabled" : this.rate <= 0 ? "rate_unset" : "not_configured";
+      const reason = !this.config?.evimedCreditsEnabled ? "not_enabled" : this.failure ? "billing_unavailable"
+        : this.rate <= 0 ? "rate_unset" : "not_configured";
       return { status: "skipped", reason };
     }
     try {
@@ -257,7 +335,7 @@ export class EvimedCreditsService {
       const costCny = await this.#costOf(userId, ids);
       const credits = creditsForCost(costCny, this.rate);
       const memo = settlementMemo({ capabilityId: run.capabilityId ?? null, subject: run.subject ?? null });
-      const upstreamUserId = await this.#evimedUserId(userId);
+      const upstreamUserId = await this.#payer(userId);
       const opened = await this.#open({
         userId, runId, projectId: run.projectId ?? null, capabilityId: run.capabilityId ?? "",
         memo, costCny, credits, upstreamUserId, startedAt: run.startedAt ?? null, accountCreatedAt: run.accountCreatedAt ?? null,
@@ -308,7 +386,7 @@ export class EvimedCreditsService {
         await client.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`research-billing-user:${userId}`]);
         const account = await this.#currentAccount(client,userId,run.startedAt ?? null,run.accountCreatedAt ?? null);
         if (!account) return { inserted: false, row: null, stale: true };
-        const upstreamUserId = account.auth_type === 'evimed' ? account.evimed_user_id : null;
+        const upstreamUserId = this.#payerFor(userId, account);
         const prior = await client.query('SELECT * FROM evimed_credits.settlements WHERE run_id=$1', [runId]);
         if (prior.rows[0]?.user_id !== undefined && prior.rows[0].user_id !== userId) throw new HttpError(409, 'usage_settlement_conflict', 'Settlement owner differs.');
         if (prior.rows[0]) return { inserted: false, row: settlement(prior.rows[0]) };
@@ -328,13 +406,13 @@ export class EvimedCreditsService {
         const free = credits === 0;
         const result = await client.query(
           `INSERT INTO evimed_credits.settlements
-           (run_id,user_id,project_id,capability_id,memo,cost_cny,credits,credits_per_cny,status,attempts,next_attempt_at,settled_at,upstream_user_id,owner_created_at)
-           VALUES($1,$2,$3,$4,$5,$6,$7,1,$8,$9,$10,$11,$12,(SELECT created_at FROM evimed_control.users WHERE id=$2)) ON CONFLICT(run_id) DO NOTHING RETURNING *`,
+           (run_id,user_id,project_id,capability_id,memo,cost_cny,credits,credits_per_cny,status,attempts,next_attempt_at,settled_at,upstream_user_id,owner_created_at,wallet)
+           VALUES($1,$2,$3,$4,$5,$6,$7,1,$8,$9,$10,$11,$12,(SELECT created_at FROM evimed_control.users WHERE id=$2),$13) ON CONFLICT(run_id) DO NOTHING RETURNING *`,
           [runId,userId,run.projectId ?? null,run.capabilityId ?? '',title,evidence.actualCny,credits,
-            free ? 'settled' : 'pending',free ? 0 : 1,free ? null : new Date(at.getTime()+EVIMED_CREDITS_BACKOFF_MS[0]).toISOString(),free ? at.toISOString() : null,upstreamUserId]);
+            free ? 'settled' : 'pending',free ? 0 : 1,free ? null : new Date(at.getTime()+EVIMED_CREDITS_BACKOFF_MS[0]).toISOString(),free ? at.toISOString() : null,upstreamUserId,this.walletKind]);
         if (!result.rows[0]) return { inserted: false, row: null };
-        await client.query(`INSERT INTO evimed_credits.research_tasks(run_id,user_id,title,evidence,created_at,status,settled_at,owner_created_at)
-          VALUES($1,$2,$3,$4::jsonb,$5,$6,$7,(SELECT created_at FROM evimed_control.users WHERE id=$2))`, [runId,userId,title,JSON.stringify(evidence),at.toISOString(),free ? 'settled' : 'pending',free ? at.toISOString() : null]);
+        await client.query(`INSERT INTO evimed_credits.research_tasks(run_id,user_id,title,evidence,created_at,status,settled_at,owner_created_at,wallet)
+          VALUES($1,$2,$3,$4::jsonb,$5,$6,$7,(SELECT created_at FROM evimed_control.users WHERE id=$2),$8)`, [runId,userId,title,JSON.stringify(evidence),at.toISOString(),free ? 'settled' : 'pending',free ? at.toISOString() : null,this.walletKind]);
         for (const request of pricedRows.filter((/** @type {any} */ row) => row.status === 'settled' && row.billing_eligible === true)) await client.query(
           'INSERT INTO evimed_credits.research_task_requests(request_id,run_id) VALUES($1,$2)', [request.id,runId]);
         return { inserted: true, row: settlement(result.rows[0]) };
@@ -369,28 +447,44 @@ export class EvimedCreditsService {
       } catch { throw new HttpError(400, 'evimed_credits_request_invalid', 'Invalid statement cursor.'); }
     }
     const bound = Math.min(100, Math.max(1, Math.floor(Number(limit) || 20)));
+    // Credits going in belong to the simulated wallet alone: a real wallet's
+    // top-ups happen elsewhere, so its statements hold charges and nothing else.
+    const credits = this.simulated ? `
+        UNION ALL
+        SELECT e.request_id,w.user_id,CASE e.kind WHEN 'grant' THEN '模拟初始额度' ELSE '模拟充值' END,
+          jsonb_build_object('kind',e.kind,'credits',e.credits),e.created_at,'settled'::text
+        FROM evimed_credits.simulated_entries e
+          JOIN evimed_credits.simulated_wallets w ON w.payer=e.payer
+          JOIN evimed_control.users u ON u.id=w.user_id AND u.created_at=w.owner_created_at
+        WHERE w.user_id=$1 AND e.kind IN ('grant','topup')` : "";
     const result = await this.database.query(`SELECT t.*
       FROM (
         SELECT t.run_id,t.user_id,t.title,t.evidence,t.created_at,t.status FROM evimed_credits.research_tasks t
-          JOIN evimed_control.users u ON u.id=t.user_id AND u.created_at=t.owner_created_at WHERE t.user_id=$1
+          JOIN evimed_control.users u ON u.id=t.user_id AND u.created_at=t.owner_created_at WHERE t.user_id=$1 AND t.wallet=$5
         UNION ALL
         SELECT s.run_id,s.user_id,s.memo,jsonb_build_object(
           'actualCny',s.cost_cny::text,'billableCny',(s.credits/s.credits_per_cny)::text,
           'chargedCny',(s.credits/s.credits_per_cny)::text,'waivedCny','0.00000000',
           'pricingVersion','legacy','walletContract','legacy-integer'),s.created_at,s.status
-        FROM evimed_credits.settlements s JOIN evimed_control.users u ON u.id=s.user_id AND u.created_at=s.owner_created_at WHERE s.user_id=$1
-          AND NOT EXISTS(SELECT 1 FROM evimed_credits.research_tasks t WHERE t.run_id=s.run_id)
+        FROM evimed_credits.settlements s JOIN evimed_control.users u ON u.id=s.user_id AND u.created_at=s.owner_created_at WHERE s.user_id=$1 AND s.wallet=$5
+          AND NOT EXISTS(SELECT 1 FROM evimed_credits.research_tasks t WHERE t.run_id=s.run_id)${credits}
       ) t
       WHERE t.user_id=$1 AND ($2::timestamptz IS NULL OR (t.created_at,t.run_id)<($2::timestamptz,$3::text))
-      ORDER BY t.created_at DESC,t.run_id DESC LIMIT $4`, [productId(userId,'user'),position?.[0] ?? null,position?.[1] ?? null,bound+1]);
+      ORDER BY t.created_at DESC,t.run_id DESC LIMIT $4`, [productId(userId,'user'),position?.[0] ?? null,position?.[1] ?? null,bound+1,this.walletKind]);
     const rows = result.rows.slice(0,bound);
     const items = rows.map((/** @type {any} */ row) => {
       const evidence = row.evidence;
+      if (evidence.kind === 'topup' || evidence.kind === 'grant') {
+        const added = Number(evidence.credits);
+        return { id: row.run_id, runId: null, title: row.title, at: new Date(row.created_at).toISOString(), status: 'settled',
+          amount: added, requestedAmount: added, waivedCny: '0.00000000', kind: evidence.kind, simulated: true };
+      }
       const status = Number(evidence.chargedCny) === 0 ? 'waived'
         : row.status === 'pending' ? 'pending' : row.status === 'settled' ? 'settled' : 'failed';
       return { id: row.run_id, runId: evidence.physicalRunId ?? row.run_id, title: row.title, at: new Date(row.created_at).toISOString(), status,
         amount: ['failed','pending'].includes(status) ? null : Number(evidence.chargedCny), requestedAmount: Number(evidence.chargedCny), actualCny: evidence.actualCny, billableCny: evidence.billableCny,
-        waivedCny: evidence.waivedCny, platformCostCny: evidence.platformCostCny ?? null, pricingVersion: evidence.pricingVersion, settlementPrecision: evidence.walletContract };
+        waivedCny: evidence.waivedCny, platformCostCny: evidence.platformCostCny ?? null, pricingVersion: evidence.pricingVersion, settlementPrecision: evidence.walletContract,
+        kind: 'charge', simulated: this.simulated };
     });
     const last = rows.at(-1);
     const nextCursor = result.rows.length > bound && last ? Buffer.from(JSON.stringify([new Date(last.created_at).toISOString(),last.run_id])).toString('base64url') : null;
@@ -400,6 +494,25 @@ export class EvimedCreditsService {
   /** The allowance is hydrated from the upstream wallet; this ledger never owns it.
    * @param {string} userId @param {{since?:Date}} [options] */
   async allowanceSummary(userId, { since = new Date(0) } = {}) {
+    // Where the allowance is simulated, it says so and says where low begins.
+    const kind = { simulated: this.simulated, lowThreshold: this.simulated ? SIMULATED_LOW_CREDITS : null };
+    // A module that is down reads as unavailable — unknown, never zero — and so
+    // does one whose ledger cannot be read right now: the page still opens.
+    const unreadable = (/** @type {string} */ status) => ({ balanceCny: null, status, currency: 'CNY', creditsPerCny: this.rate,
+      spentCny: 0, pendingCny: 0, waivedCny: 0, settlementPrecision: 'legacy-integer-floor', ledgerReadable: false, ...kind });
+    if (this.failure) return unreadable('billing_unavailable');
+    try {
+      return { ...(await this.#allowance(userId, since)), ledgerReadable: true, ...kind };
+    } catch (error) {
+      if (error instanceof HttpError && error.status < 500) throw error;
+      const code = typeof /** @type {any} */ (error)?.code === 'string' ? /** @type {any} */ (error).code : 'evimed_credits_unreachable';
+      this.report(code);
+      return unreadable(code);
+    }
+  }
+
+  /** @param {string} userId @param {Date} since */
+  async #allowance(userId, since) {
     await migrateEvimedCredits(this.database);
     const balance = await this.balanceFor(userId);
     const result = await this.database.query(`SELECT
@@ -409,12 +522,12 @@ export class EvimedCreditsService {
       FROM (
         SELECT t.status,t.created_at,t.settled_at,(t.evidence->>'chargedCny')::numeric AS charged,
           (t.evidence->>'waivedCny')::numeric AS waived FROM evimed_credits.research_tasks t
-          JOIN evimed_control.users u ON u.id=t.user_id AND u.created_at=t.owner_created_at WHERE t.user_id=$1
+          JOIN evimed_control.users u ON u.id=t.user_id AND u.created_at=t.owner_created_at WHERE t.user_id=$1 AND t.wallet=$3
         UNION ALL
         SELECT s.status,s.created_at,s.settled_at,s.credits/s.credits_per_cny AS charged,0::numeric AS waived
-        FROM evimed_credits.settlements s JOIN evimed_control.users u ON u.id=s.user_id AND u.created_at=s.owner_created_at WHERE s.user_id=$1
+        FROM evimed_credits.settlements s JOIN evimed_control.users u ON u.id=s.user_id AND u.created_at=s.owner_created_at WHERE s.user_id=$1 AND s.wallet=$3
           AND NOT EXISTS(SELECT 1 FROM evimed_credits.research_tasks t WHERE t.run_id=s.run_id)
-      ) history`, [productId(userId,'user'),since.toISOString()]);
+      ) history`, [productId(userId,'user'),since.toISOString(),this.walletKind]);
     return { balanceCny: balance.balance == null || this.rate <= 0 ? null : balance.balance / this.rate, status: balance.status, currency: 'CNY', creditsPerCny: this.rate,
       spentCny: Number(result.rows[0]?.spent ?? 0), pendingCny: Number(result.rows[0]?.pending ?? 0),
       waivedCny: Number(result.rows[0]?.waived ?? 0), settlementPrecision: 'legacy-integer-floor' };
@@ -425,7 +538,7 @@ export class EvimedCreditsService {
    * @param {any} client @param {string} userId @param {string|null} startedAt @param {string|null} accountCreatedAt @param {boolean} [allowMissing] */
   async #currentAccount(client,userId,startedAt,accountCreatedAt,allowMissing = false) {
     if (!startedAt && !accountCreatedAt && !allowMissing) return null;
-    const result = await client.query(`SELECT u.auth_type,u.evimed_user_id,u.created_at::text AS owner_created_at
+    const result = await client.query(`SELECT u.auth_type,u.evimed_user_id,u.created_at::text AS owner_created_at,${SIMULATED_INCARNATION_SQL} AS incarnation
       FROM evimed_control.users u WHERE u.id=$1
       AND ($3::timestamptz IS NULL OR u.created_at=$3::timestamptz)
       AND ($3::timestamptz IS NOT NULL OR $2::timestamptz IS NULL OR date_trunc('milliseconds',u.created_at) <= $2::timestamptz)`, [userId,startedAt,accountCreatedAt]);
@@ -449,14 +562,14 @@ export class EvimedCreditsService {
       const free = input.credits <= 0;
       const result = await client.query(
         `INSERT INTO evimed_credits.settlements
-           (run_id,user_id,project_id,capability_id,memo,cost_cny,credits,credits_per_cny,status,attempts,next_attempt_at,settled_at,upstream_user_id,owner_created_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,(SELECT created_at FROM evimed_control.users WHERE id=$2))
+           (run_id,user_id,project_id,capability_id,memo,cost_cny,credits,credits_per_cny,status,attempts,next_attempt_at,settled_at,upstream_user_id,owner_created_at,wallet)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,(SELECT created_at FROM evimed_control.users WHERE id=$2),$14)
          ON CONFLICT (run_id) DO NOTHING RETURNING *`,
         [input.runId, input.userId, input.projectId, String(input.capabilityId ?? ""), input.memo,
           input.costCny, input.credits, this.rate,
           free ? "settled" : "pending", free ? 0 : 1,
           free ? null : new Date(at.getTime() + EVIMED_CREDITS_BACKOFF_MS[0]).toISOString(),
-          free ? at.toISOString() : null,account.auth_type === 'evimed' ? account.evimed_user_id : null],
+          free ? at.toISOString() : null, this.#payerFor(input.userId, account), this.walletKind],
       );
       if (result.rows[0]) return { inserted: true, row: settlement(result.rows[0]) };
       const existing = await client.query("SELECT * FROM evimed_credits.settlements WHERE run_id=$1", [input.runId]);
@@ -466,7 +579,7 @@ export class EvimedCreditsService {
 
   /**
    * Send one claimed settlement and write down what happened.
-   * @param {{ runId: string, userId: string, credits: number, memo: string, attempts: number, createdAt: string, upstreamUserId?:string|null }} row
+   * @param {{ runId: string, userId: string, credits: number, memo: string, attempts: number, createdAt: string, upstreamUserId?:string|null, wallet?:string|null }} row
    */
   async #charge(row) {
     if (row.attempts > EVIMED_CREDITS_MAX_ATTEMPTS) {
@@ -474,13 +587,25 @@ export class EvimedCreditsService {
       this.counters.abandoned += 1;
       return { status: "abandoned", credits: row.credits, errorCode: "evimed_credits_attempts_exhausted" };
     }
+    // A row made against the other kind of wallet is not this wallet's to send:
+    // a simulated row must never reach a real wallet, nor a real one a simulated
+    // answer. The sweep already claims only its own kind; this is the second lock.
+    if (row.wallet && row.wallet !== this.walletKind) {
+      return { status: "pending", credits: row.credits, errorCode: "evimed_credits_wallet_mismatch" };
+    }
     try {
       let evimedUserId = row.upstreamUserId ?? null;
       if (!evimedUserId) {
-        const payer = await this.database.query(`SELECT u.evimed_user_id FROM evimed_control.users u
-          JOIN evimed_credits.settlements s ON s.user_id=u.id AND s.owner_created_at=u.created_at
-          WHERE s.run_id=$1 AND u.auth_type='evimed'`, [row.runId]);
-        evimedUserId = payer.rows[0]?.evimed_user_id ?? null;
+        const payer = this.simulated
+          ? await this.database.query(`SELECT ${SIMULATED_INCARNATION_SQL} AS incarnation, u.id AS user_id FROM evimed_control.users u
+              JOIN evimed_credits.settlements s ON s.user_id=u.id AND s.owner_created_at=u.created_at
+              WHERE s.run_id=$1`, [row.runId])
+          : await this.database.query(`SELECT u.evimed_user_id FROM evimed_control.users u
+              JOIN evimed_credits.settlements s ON s.user_id=u.id AND s.owner_created_at=u.created_at
+              WHERE s.run_id=$1 AND u.auth_type='evimed'`, [row.runId]);
+        evimedUserId = this.simulated
+          ? (payer.rows[0]?.incarnation ? simulatedPayerId(payer.rows[0].user_id, payer.rows[0].incarnation) : null)
+          : payer.rows[0]?.evimed_user_id ?? null;
       }
       if (!evimedUserId) {
         // Final: no retry gives an account an EviMed id it does not have, and
@@ -551,8 +676,8 @@ export class EvimedCreditsService {
     return this.database.transaction(async (/** @type {any} */ client) => {
       const due = await client.query(
         `SELECT run_id, attempts FROM evimed_credits.settlements
-           WHERE status='pending' AND next_attempt_at <= $1::timestamptz
-           ORDER BY next_attempt_at LIMIT 1 FOR UPDATE SKIP LOCKED`, [at]);
+           WHERE status='pending' AND wallet=$2 AND next_attempt_at <= $1::timestamptz
+           ORDER BY next_attempt_at LIMIT 1 FOR UPDATE SKIP LOCKED`, [at, this.walletKind]);
       const row = due.rows[0];
       if (!row) return null;
       const attempt = Number(row.attempts) + 1;
@@ -571,8 +696,9 @@ export class EvimedCreditsService {
    * @param {number} [limit]
    */
   async retryDue(limit = 20) {
-    if (!this.enabled) return 0;
-    await this.ready();
+    // A module that came up broken tries again here, once a minute: the sweep is
+    // also its recovery probe. Whatever it finds, the sweep itself never throws.
+    if (!this.#wired() || await this.ensureReady()) return 0;
     const bound = Math.max(1, Math.min(200, Math.floor(Number(limit) || 20)));
     let attempted = 0;
     for (; attempted < bound;) {
@@ -626,6 +752,7 @@ export class EvimedCreditsService {
       basis: estimated.basis,
       samples: samples.length,
       creditsPerCny: this.rate,
+      ...(this.simulated ? { simulated: true } : {}),
     };
   }
 
@@ -637,24 +764,26 @@ export class EvimedCreditsService {
    * @returns {Promise<{ balance: number | null, frozen: number | null, unit: string, status: string }>}
    */
   async balanceFor(userId) {
+    const kind = this.simulated ? { simulated: true } : {};
     if (!this.enabled) {
-      return { balance: null, frozen: null, unit: "灵豆", status: this.config?.evimedCreditsEnabled ? "unconfigured" : "disabled" };
+      return { balance: null, frozen: null, unit: "灵豆", ...kind,
+        status: this.failure ? "billing_unavailable" : this.config?.evimedCreditsEnabled ? "unconfigured" : "disabled" };
     }
     try {
-      const evimedUserId = await this.#evimedUserId(productId(userId, "user"));
+      const evimedUserId = await this.#payer(productId(userId, "user"));
       if (!evimedUserId) {
         // Not a failure of anything: this account has no EviMed balance to
         // read, so it has no number, and the start is admitted (decision 3).
         this.counters.unlinked += 1;
-        return { balance: null, frozen: null, unit: "灵豆", status: "evimed_credits_account_unlinked" };
+        return { balance: null, frozen: null, unit: "灵豆", status: "evimed_credits_account_unlinked", ...kind };
       }
       const answer = await this.client.balance(evimedUserId);
-      return { balance: answer.balance, frozen: answer.frozen, unit: "灵豆", status: "ok" };
+      return { balance: answer.balance, frozen: answer.frozen, unit: "灵豆", status: "ok", ...kind };
     } catch (error) {
       this.counters.balanceUnavailable += 1;
       const code = typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : "evimed_credits_unreachable";
       this.report(code);
-      return { balance: null, frozen: null, unit: "灵豆", status: code };
+      return { balance: null, frozen: null, unit: "灵豆", status: code, ...kind };
     }
   }
 
@@ -672,8 +801,13 @@ export class EvimedCreditsService {
    * @returns {Promise<{ allowed: true, reason?: string, balance?: number, estimate?: any }>}
    */
   async assertBalanceForStart(userId, capabilityId) {
-    if (!this.enabled) return { allowed: true, reason: "not_enabled" };
-    if (this.config?.researchBillingEnabled) await this.ready();
+    if (!this.#wired()) return { allowed: true, reason: this.failure ? "billing_unavailable" : "not_enabled" };
+    // The policy's activation is persisted before research is accepted. A module
+    // that cannot do that is not a reason to refuse the research: the start is
+    // admitted, nothing will be charged, and readiness carries the code.
+    if ((this.config?.researchBillingEnabled || this.failure) && await this.ensureReady()) {
+      return { allowed: true, reason: "billing_unavailable" };
+    }
     const balance = await this.balanceFor(userId);
     if (balance.balance == null) return { allowed: true, reason: balance.status };
     const estimate = await this.estimate(capabilityId);
@@ -681,9 +815,80 @@ export class EvimedCreditsService {
     const short = estimate.low > 0 && balance.balance < estimate.low;
     if (!permission.interactive || short) {
       this.counters.refusedStarts += 1;
-      throw new HttpError(402, permission.code ?? "credits_exhausted",
-        `This account holds ${balance.balance} credits and this work is estimated at ${estimate.low}.`);
+      const said = `This account holds ${balance.balance} credits and this work is estimated at ${estimate.low}.`;
+      // Its own code where the allowance is simulated, so the sentence says so
+      // and the top-up it offers is the simulated one.
+      if (this.simulated) {
+        throw new HttpError(402, "simulated_credits_exhausted",
+          `The simulated allowance is too low. ${said} Top up under Settings → Research allowance (simulated).`);
+      }
+      throw new HttpError(402, permission.code ?? "credits_exhausted", said);
     }
     return { allowed: true, balance: balance.balance, estimate };
   }
+
+  /** The simulated wallet's own surface answers only a deployment whose wallet is simulated and working. */
+  #requireSimulated() {
+    if (!this.simulated || !this.simulator) throw new HttpError(404, "simulated_wallet_not_enabled", "This deployment has no simulated wallet.");
+    if (!this.enabled) throw new HttpError(503, "evimed_credits_unreachable", "The simulated wallet is unavailable.");
+  }
+
+  /**
+   * Add one package of simulated credits to this account, once per request id.
+   * @param {string} userId @param {{ packageId?: unknown, requestId?: unknown }} request
+   */
+  async simulatedTopUp(userId, { packageId, requestId }) {
+    this.#requireSimulated();
+    const payer = await this.#payer(productId(userId, "user"));
+    if (!payer) throw new HttpError(400, "simulated_wallet_request_invalid", "This account has no simulated wallet.");
+    try {
+      return await this.simulator.topUp({ payer, packageId, requestId });
+    } catch (error) {
+      if (error instanceof SimulatedWalletRefusal) throw new HttpError(400, "simulated_wallet_request_invalid", "The simulated top-up was refused.");
+      throw error;
+    }
+  }
+
+  /** This account's simulated top-ups, newest first. @param {string} userId @param {{ limit?: number, cursor?: string | null }} [options] */
+  async simulatedOrders(userId, options = {}) {
+    this.#requireSimulated();
+    const payer = await this.#payer(productId(userId, "user"));
+    if (!payer) return { items: [], nextCursor: null };
+    try {
+      return await this.simulator.orders(payer, options);
+    } catch (error) {
+      if (error instanceof SimulatedWalletRefusal) throw new HttpError(400, "simulated_wallet_request_invalid", "The order list request was refused.");
+      throw error;
+    }
+  }
+}
+
+/** @param {string} code @param {Record<string, unknown> | null} [details] */
+function readinessFailure(code, details = null) {
+  /** @type {Error & Record<string, any>} */
+  const error = new Error(code);
+  error.code = code;
+  if (details) error.details = details;
+  return error;
+}
+
+/**
+ * The module's line of `/api/ready`: red only for its own invariants — the
+ * schema and the policy's activation (`ensureReady`), and a configuration it
+ * refused — and each says what it is by a named code. A wallet that cannot be
+ * reached, or is not wired yet, is a warning on a green check: it is outside
+ * the platform, and nothing is charged until it answers. Asking is also what
+ * lets a module that came up broken recover.
+ * @param {{ config: Record<string, any>, credits: { service: EvimedCreditsService } | null, database: any }} dependencies
+ */
+export async function creditsReadiness({ config, credits, database }) {
+  if (!config.evimedCreditsEnabled) return { required: false, enabled: false };
+  if (!credits || !database) throw readinessFailure("evimed_credits_unavailable", { reason: database ? "not_composed" : "no_product_database" });
+  const failure = await credits.service.ensureReady();
+  if (failure) throw readinessFailure(failure, { simulated: credits.service.simulated });
+  const status = credits.service.status();
+  return {
+    required: true, enabled: true, simulated: status.simulated, policy: config.researchBillingEnabled === true,
+    ...(status.operating ? {} : { warning: "evimed_credits_wallet_not_wired" }),
+  };
 }

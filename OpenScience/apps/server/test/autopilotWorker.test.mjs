@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { BALANCE_REFUSAL_CODES } from "@evimed/domain";
 import { verificationEpisodeId, verificationIdFor } from "../src/autopilotService.mjs";
 import { AutopilotWorker } from "../src/autopilotWorker.mjs";
 
@@ -266,6 +267,21 @@ test("known exhausted credits defer an undispatched episode without a scientific
   assert.ok(failure.args[4].delayMs >= 60_000 && failure.args[4].delayMs <= 86_400_000);
   assert.equal(failure.args[4].refundAttempt, undefined, "the finite resource-check retry budget is not reset");
   assert.equal(f.calls.find(call => call.method === "resourceDeferred").args[1], "episode-one");
+});
+
+test("a simulated allowance's refusal defers an episode exactly as a real balance's does, and every balance refusal is one list", async () => {
+  // The simulated wallet refuses with a code of its own so its sentence says 模拟;
+  // work that waits for credits must wait on it too, or a top-up would find the
+  // episode already failed.
+  assert.deepEqual([...BALANCE_REFUSAL_CODES], ["credits_exhausted", "simulated_credits_exhausted"]);
+  const f = fixture({ dispatchError: Object.assign(new Error("The simulated allowance is too low."), { code: "simulated_credits_exhausted", status: 402 }) });
+  f.service.recordResourceDeferral = async (...args) => f.calls.push({ method: "resourceDeferred", args });
+  await f.worker.tick();
+  assert.equal(f.calls.some(call => ["failed", "canceled", "cancelDispatched", "queueCancellation"].includes(call.method)), false);
+  const failure = f.calls.find(call => call.method === "jobFail");
+  assert.equal(failure.args[4].retry, true);
+  assert.equal(failure.args[3].message, "Proactive research is waiting for account credits.");
+  assert.equal(f.calls.find(call => call.method === "resourceDeferred").args[2].code, "simulated_credits_exhausted");
 });
 
 test("exhausted verification credits keep the claim's prior evidence and stop retrying at the bound", async () => {

@@ -52,6 +52,8 @@ test("allowance reads only the session owner and never invents a balance source 
   assert.equal(res.data.balances, null);
   assert.equal(res.data.membership, null);
   assert.deepEqual(res.data.month, { since: "2026-10-01T00:00:00.000Z", paid: 4, pending: 2 });
+  assert.equal(res.data.simulated, false, "a deployment whose wallet is real says so");
+  assert.equal(res.data.lowThreshold, null);
 });
 
 test("unavailable wallets remain unknown while confirmed task charges stay readable", async () => {
@@ -100,7 +102,7 @@ test("estimates convert a legacy rate to CNY without promising a reservation", a
   const f = fixture();
   const res = response();
   await f.routes({ url: "/api/account/allowance/estimate?capability=meta-analysis" }, res);
-  assert.deepEqual(res.data, { currency: "CNY", capabilityId: "meta-analysis", basis: "history", low: 0.3, high: 0.7, samples: 8, binding: false });
+  assert.deepEqual(res.data, { currency: "CNY", capabilityId: "meta-analysis", basis: "history", low: 0.3, high: 0.7, samples: 8, binding: false, simulated: false });
   await assert.rejects(f.routes({ url: "/api/account/allowance/estimate?capability=../secret" }, response()), { status: 400 });
 });
 
