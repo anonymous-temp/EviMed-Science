@@ -79,7 +79,7 @@ export function TaskForm({ projectId, agenda, recommendation, onSaved, onRecorde
         <Input label="时区" value={schedule.timeZone} error={validZone ? undefined : "请输入有效时区，例如 Asia/Shanghai"} required onChange={event => setSchedule({ ...schedule, timeZone: event.target.value })} />
         <fieldset className="flex flex-wrap gap-3"><legend className="mb-2 text-ui font-medium text-text">任务类型</legend>{TASK_TYPES.map(([value, label]) => <label key={value} className="flex items-center gap-1 text-ui text-text"><input type="checkbox" checked={taskTypes.includes(value)} onChange={event => setTaskTypes(event.target.checked ? [...taskTypes, value] : taskTypes.filter(item => item !== value))} />{label}</label>)}</fieldset>
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">{([['maxEpisodeCny', '单次上限 ¥'], ['dailyBudgetCny', '每日上限 ¥'], ['weeklyBudgetCny', '每周上限 ¥']] as const).map(([key, label]) => <Input key={key} label={label} type="number" min="0.01" step="0.01" value={budgets[key]} onChange={event => setBudgets({ ...budgets, [key]: Number(event.target.value) })} />)}</div>
-        <p className="text-caption text-text-3">单次 ≤ 每日 ≤ 每周</p>
+        <p className="text-caption text-text-3">单次 ≤ 每日 ≤ 每周。每日、每周按近 24 小时、近 7 天滚动计算，只计这个任务自己的花费，不含账户里的其他研究。</p>
       </div></Disclosure>
     </fieldset>
     {error && <p role="alert" className="text-ui text-error">{error}</p>}

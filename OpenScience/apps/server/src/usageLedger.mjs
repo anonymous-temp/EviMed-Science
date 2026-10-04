@@ -182,6 +182,20 @@ export function openCostPredicate(window, instantPlaceholder) {
     + ` OR (status='uncertain' AND created_at >= ${at} - interval '${window}'))`;
 }
 
+/**
+ * The four sums every spend-window question asks of a set of rows, with `$2`
+ * bound to the decision instant: what settled in the last day and in the last
+ * week, and what is still open (reserved, or lost and counted at its bound) in
+ * each. Written once, because the account's admission check, a reservation and
+ * a task's own spend (`spendOfRuns`) must answer to the same clock and the same
+ * arithmetic, and a divergence between them is invisible until it costs money.
+ * Spliced into SQL; a constant, never built from input.
+ */
+const SPEND_WINDOW_SUMS = `coalesce(sum(CASE WHEN status='settled' AND created_at >= $2::timestamptz - interval '${openCostWindows.day}' THEN actual_cost ELSE 0 END),0) AS day_settled,
+        coalesce(sum(CASE WHEN status='settled' AND created_at >= $2::timestamptz - interval '${openCostWindows.week}' THEN actual_cost ELSE 0 END),0) AS week_settled,
+        coalesce(sum(CASE WHEN ${openCostPredicate(openCostWindows.day, "$2")} THEN ${OPEN_COST_VALUE} ELSE 0 END),0) AS day_open,
+        coalesce(sum(CASE WHEN ${openCostPredicate(openCostWindows.week, "$2")} THEN ${OPEN_COST_VALUE} ELSE 0 END),0) AS week_open`;
+
 /** @param {unknown} value @param {string} name @param {number} max */
 function text(value, name, max = 200) {
   if (typeof value !== "string" || !value.trim() || value.length > max || /[\0\r\n]/.test(value)) {
@@ -311,10 +325,7 @@ export class UsageLedger {
         return record(existing.rows[0]);
       }
       const totals = await client.query(`SELECT
-        coalesce(sum(CASE WHEN status='settled' AND created_at >= $2::timestamptz - interval '${openCostWindows.day}' THEN actual_cost ELSE 0 END),0) AS day_settled,
-        coalesce(sum(CASE WHEN status='settled' AND created_at >= $2::timestamptz - interval '${openCostWindows.week}' THEN actual_cost ELSE 0 END),0) AS week_settled,
-        coalesce(sum(CASE WHEN ${openCostPredicate(openCostWindows.day, "$2")} THEN ${OPEN_COST_VALUE} ELSE 0 END),0) AS day_open,
-        coalesce(sum(CASE WHEN ${openCostPredicate(openCostWindows.week, "$2")} THEN ${OPEN_COST_VALUE} ELSE 0 END),0) AS week_open,
+        ${SPEND_WINDOW_SUMS},
         coalesce(sum(CASE WHEN run_id=$3 AND status='settled' THEN actual_cost
           WHEN run_id=$3 AND ${openCostPredicate(openCostWindows.week, "$2")} THEN ${OPEN_COST_VALUE} ELSE 0 END),0) AS run_committed
         FROM evimed_usage.model_requests WHERE user_id=$1 AND purpose <> ALL($4::text[])`,
@@ -771,10 +782,7 @@ export class UsageLedger {
     return this.database.transaction(async (client) => {
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`evimed-usage:${user}`]);
       const result = await client.query(`SELECT
-        coalesce(sum(CASE WHEN status='settled' AND created_at >= $2::timestamptz - interval '${openCostWindows.day}' THEN actual_cost ELSE 0 END),0) AS day_settled,
-        coalesce(sum(CASE WHEN status='settled' AND created_at >= $2::timestamptz - interval '${openCostWindows.week}' THEN actual_cost ELSE 0 END),0) AS week_settled,
-        coalesce(sum(CASE WHEN ${openCostPredicate(openCostWindows.day, "$2")} THEN ${OPEN_COST_VALUE} ELSE 0 END),0) AS day_open,
-        coalesce(sum(CASE WHEN ${openCostPredicate(openCostWindows.week, "$2")} THEN ${OPEN_COST_VALUE} ELSE 0 END),0) AS week_open
+        ${SPEND_WINDOW_SUMS}
         FROM evimed_usage.model_requests WHERE user_id=$1 AND purpose <> ALL($3::text[])
           AND ($4::text[] IS NULL OR purpose = ANY($4::text[]))`,
       [user, at, [...UNCAPPED_USAGE_PURPOSES], only]);
@@ -785,6 +793,59 @@ export class UsageLedger {
       if (exceeded) throw new HttpError(402, "usage_budget_exceeded", "This account reached its spending limit.", { ...exceeded, currency: "CNY" });
       return { allowed: true };
     });
+  }
+
+  /**
+   * What a set of runs has spent in the rolling day and week, counted exactly as
+   * the account's own windows count (`SPEND_WINDOW_SUMS`: settled calls at what
+   * they cost, open ones at `OPEN_COST_VALUE`, and the purposes the caps leave
+   * out left out here too). The question a task's own caps ask: a scheduled
+   * agenda's ¥3 a day is compared with what its own episodes spent — their
+   * planner decisions, their runs and their verifications are all booked under
+   * the episode's id or its verifications' — never with everything the account
+   * spent, which is what an account cap is for (`assertWithinLimits`).
+   *
+   * A read, not an admission: no lock, nothing reserved. Zero runs spent zero.
+   * @param {string} userId @param {{ runIds: readonly string[], now?: Date }} options
+   * @returns {Promise<{ day: number, week: number }>}
+   */
+  async spendOfRuns(userId, { runIds, now = new Date() }) {
+    const user = productId(userId, "user");
+    const ids = [...new Set(runIds)].map((id) => productId(id, "run"));
+    if (ids.length === 0) return { day: 0, week: 0 };
+    const at = instant(now, "spend window time");
+    await migrateUsageLedger(this.database);
+    const result = await this.database.query(`SELECT
+      ${SPEND_WINDOW_SUMS}
+      FROM evimed_usage.model_requests WHERE user_id=$1 AND purpose <> ALL($3::text[]) AND run_id = ANY($4::text[])`,
+    [user, at, [...UNCAPPED_USAGE_PURPOSES], ids]);
+    const row = result.rows[0];
+    return { day: Number(row.day_settled) + Number(row.day_open), week: Number(row.week_settled) + Number(row.week_open) };
+  }
+
+  /**
+   * When the spend `spendOfRuns` counts was made, one entry per minute, oldest
+   * first, over the last week: what a refusal needs to say when its window frees.
+   * Minute buckets keep the answer small for a run that made hundreds of calls;
+   * `at` is the start of the minute, so a caller adding the window to it errs
+   * early by under a minute, which is the direction it must add a minute for.
+   * Only read when something was refused.
+   * @param {string} userId @param {{ runIds: readonly string[], now?: Date }} options
+   * @returns {Promise<Array<{ at: string, cost: number }>>}
+   */
+  async spendTimelineOfRuns(userId, { runIds, now = new Date() }) {
+    const user = productId(userId, "user");
+    const ids = [...new Set(runIds)].map((id) => productId(id, "run"));
+    if (ids.length === 0) return [];
+    const at = instant(now, "spend window time");
+    await migrateUsageLedger(this.database);
+    const result = await this.database.query(`SELECT date_trunc('minute',created_at) AS minute,
+      sum(CASE WHEN status='settled' THEN actual_cost ELSE ${OPEN_COST_VALUE} END) AS cost
+      FROM evimed_usage.model_requests WHERE user_id=$1 AND purpose <> ALL($3::text[]) AND run_id = ANY($4::text[])
+        AND created_at >= $2::timestamptz - interval '${openCostWindows.week}'
+        AND (status='settled' OR ${openCostPredicate(openCostWindows.week, "$2")})
+      GROUP BY 1 ORDER BY 1`, [user, at, [...UNCAPPED_USAGE_PURPOSES], ids]);
+    return result.rows.map((row) => ({ at: new Date(row.minute).toISOString(), cost: Number(row.cost) }));
   }
 
   /** @param {any} client @param {string} userId @param {string} id */

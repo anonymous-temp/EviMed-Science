@@ -451,11 +451,6 @@ async function readVerificationVerdict(project, run) {
   }
 }
 
-function minimumPositive(...values) {
-  const positive = values.map(Number).filter((value) => Number.isFinite(value) && value > 0);
-  return positive.length ? Math.min(...positive) : 0;
-}
-
 function isLocalDevelopmentOrigin(origin) {
   try {
     const url = new URL(origin);
@@ -1631,6 +1626,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const autopilotPlanner = new AutopilotPlanner(config, { usageLedger });
   const autopilotService = productDocuments && productJobs ? new AutopilotService({
     documents: productDocuments, jobs: productJobs, usage: usageLedger, notifications: notificationService,
+    // The account's own spending caps, which cover everything the researcher spends;
+    // an agenda's daily and weekly caps count only the agenda's own (agendaBudget.mjs).
+    accountCaps: () => ({ userDailySpendLimit: config.userDailySpendLimit, userWeeklySpendLimit: config.userWeeklySpendLimit }),
     capsules: capsuleService,
     // The model decision before each episode: metered under purpose `autopilot`,
     // and absent it the date rotation chooses (autopilotNextAction.mjs).
@@ -3426,18 +3424,19 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       const agenda = await autopilotService.get(user.id, verification.agendaId);
       const brief = verificationBrief(verification);
       const prompt = verificationPrompt(brief);
-      const dailyLimit = minimumPositive(agenda.payload.dailyBudgetCny, config.userDailySpendLimit);
-      const weeklyLimit = minimumPositive(agenda.payload.weeklyBudgetCny, config.userWeeklySpendLimit);
-      const runLimit = Number(verification.budgetCny);
-      if (!Number.isFinite(runLimit) || runLimit <= 0) {
+      if (!Number.isFinite(Number(verification.budgetCny)) || Number(verification.budgetCny) <= 0) {
         throw new HttpError(400, "autopilot_payload_invalid", "A verification needs a positive share of the episode budget.");
       }
-      // Verification spends money, so it asks the same question the episode
-      // asked before it spent any: an account already at its ceiling leaves the
-      // claim at "gated" instead of promoting it unchecked. The share it spends
-      // was held back from the episode's own budget at schedule time, so a night
-      // that used everything it was given has not eaten its own second opinion.
-      if (usageLedger) await usageLedger.assertWithinLimits(user.id, { dailyLimit, weeklyLimit });
+      // Verification spends money, so it asks the same two questions the episode
+      // asked before it spent any: the task's own caps against what the task spent,
+      // and the account's against the account's. A task or an account already at
+      // its ceiling leaves the claim at "gated" instead of promoting it unchecked.
+      // The share it spends was held back from the episode's own budget at
+      // schedule time, so a night that used everything it was given has not eaten
+      // its own second opinion; it is bounded by what the task has left, if less.
+      const allowance = await autopilotService.assertAffordable(user.id, agenda);
+      const runLimit = Math.min(Number(verification.budgetCny), allowance.remainingCny);
+      const { dailyLimit, weeklyLimit } = autopilotService.runScope(agenda, runLimit);
       const registry = await agentRegistry;
       const selected = registry.get(OPEN_DOMAIN_ANSWER_AGENT_ID);
       if (!selected) throw new HttpError(503, "autopilot_capability_unavailable", "Autopilot capability is unavailable.");
@@ -3546,10 +3545,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         if (previous.replay) return { runId: previous.replay.id, sessionId: previous.replay.sessionId };
         const dispatchId = episode.dispatchId ?? episode.episodeId;
         const agenda = await autopilotService.get(user.id, episode.agendaId);
-        if (usageLedger) await usageLedger.assertWithinLimits(user.id, {
-          dailyLimit: Number(agenda.payload.dailyBudgetCny) || 0,
-          weeklyLimit: Number(agenda.payload.weeklyBudgetCny) || 0,
-        });
+        // The same two questions as at scheduling, asked again because the budget
+        // may have been spent between the two: the task's own caps against the
+        // task's own spend, then the account's. What is left of the task's caps
+        // bounds this run below.
+        const allowance = await autopilotService.assertAffordable(user.id, agenda);
         const registry = await agentRegistry;
         // One table in the domain, held against every capability's declared
         // task types by a test: GEO monitoring used to ride `signal-monitoring`
@@ -3558,13 +3558,17 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         if (!selected) throw new HttpError(503, "autopilot_capability_unavailable", "Autopilot capability is unavailable.");
         await checkAutopilotBalance(episode, user, selected);
         await reclaimUnsentAutopilotRuntime({ service: autopilotService, runtimeManager }, project, episode, previous.unsent);
-        const dailyLimit = minimumPositive(agenda.payload.dailyBudgetCny, config.userDailySpendLimit);
-        const weeklyLimit = minimumPositive(agenda.payload.weeklyBudgetCny, config.userWeeklySpendLimit);
+        // Signed into the bounded runtime and every model request it makes: the
+        // account's day and week (the gateway sums everything the account spent,
+        // so these are never the task's) and this run's own limit, which is what
+        // the task's caps become — the episode's budget, or what the task has left
+        // if less.
+        const { dailyLimit, weeklyLimit, runLimit } = autopilotService.runScope(agenda, Math.min(Number(episode.budgetCny), allowance.remainingCny));
         const session = await runtimeManager.reserveBoundedRuntimeSession(project, {
           runId: episode.episodeId,
           dailyLimit,
           weeklyLimit,
-          runLimit: Number(episode.budgetCny),
+          runLimit,
         });
         const cleanupTarget = runtimeManager.boundedRuntimeCleanupTarget(project);
         const releaseOwnRuntime = async () => cleanupTarget?.runId === episode.episodeId
@@ -3628,7 +3632,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             const budgetMarker = issueModelGatewayBudgetMarker({
               secret: config.modelGatewaySigningSecret, userId: user.id, projectId: project.id,
               runId: episode.episodeId, dailyLimit,
-              weeklyLimit, runLimit: Number(episode.budgetCny),
+              weeklyLimit, runLimit,
             });
             if (!repairText) await assertAutopilotDispatchAllowed(episode, user);
             else await autopilotService.assertEpisodeContinuation(user.id, episode.episodeId);

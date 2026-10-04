@@ -20,6 +20,11 @@ import { HttpError } from "./security.mjs";
  *    researcher's own spend limits, which cover everything, bounded runs
  *    included, exactly as they cover an interactive run.
  *
+ * A scheduled agenda is a further bounded kind (`agendaBudget.mjs`): its own
+ * caps cannot be selected by one purpose (its episodes' runs are booked as
+ * `kernel`), so they count the spend booked under its episodes' run ids, and it
+ * takes only this shape's `account` and `scope`.
+ *
  * Zero (or unset) means no cap, which is the default for all of them since the
  * owner's ruling of 2026-09-21: nothing is to stop the product from being
  * exercised while it is being tested. The gateway and the bounded runtime need
@@ -43,7 +48,7 @@ function cap(value, code) {
 
 /**
  * @param {{ runLimitCny?: number, dailyLimitCny?: number, weeklyLimitCny?: number,
- *   purpose: "learning" | "source-understanding" | "geo" | "vcr", invalidCode: string }} own
+ *   purpose: "learning" | "source-understanding" | "geo" | "vcr" | "autopilot", invalidCode: string }} own
  * @param {Record<string, any>} config the account caps: `userDailySpendLimit`, `userWeeklySpendLimit`
  */
 export function boundedRunBudget(own, config) {

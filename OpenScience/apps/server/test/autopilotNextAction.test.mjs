@@ -139,7 +139,7 @@ const input = (extra = {}) => ({ userId: "user-1", projectId: "project-1", episo
 
 test("one metered, bounded call under its own purpose, charged to the episode it chooses for", async () => {
   const { instance, calls } = planner(async () => answer(run), { userDailySpendLimit: 30 });
-  const decision = await instance.decide(input({ limits: { daily: 20, weekly: 80 } }));
+  const decision = await instance.decide(input({ envelopeCny: 8 }));
   assert.deepEqual(decision, { ...run, model: "deepseek-flash" });
   assert.equal(calls.length, 1);
   const { call } = calls[0];
@@ -147,8 +147,10 @@ test("one metered, bounded call under its own purpose, charged to the episode it
   assert.equal(call.userId, "user-1");
   assert.equal(call.projectId, "project-1");
   assert.equal(call.runId, "episode-abc");
-  // The agenda's own envelope and the account's: whichever is tighter, per window.
-  assert.deepEqual(call.limits, { daily: 20, weekly: 80 });
+  // Two different questions, two different sums (2026-10-04: the agenda's ¥3 a day was passed as `daily` and
+  // compared with everything the account had spent): the account's caps over what the account spent, and the
+  // episode's own envelope over what this one episode has spent, which is the decision itself.
+  assert.deepEqual(call.limits, { daily: 30, weekly: 0, run: 8 });
   assert.equal(call.body.model, "deepseek-flash");
   assert.equal(call.body.max_tokens, 800, "an explicit ceiling, or the gateway reserves for 65,536 tokens");
   assert.deepEqual(call.body.thinking, { type: "disabled" });
@@ -158,9 +160,11 @@ test("one metered, bounded call under its own purpose, charged to the episode it
   assert.deepEqual(JSON.parse(call.body.messages[1].content), { today: "2026-10-04" });
   assert.ok(call.signal instanceof AbortSignal);
   assert.deepEqual(instance.counters, { decisions: 1, runs: 1, stops: 0, invalid: 0, failures: 0, circuitOpen: 0, budgetSpent: 0 });
-  const tighter = planner(async () => answer(run), { userDailySpendLimit: 5, userWeeklySpendLimit: 0 });
-  await tighter.instance.decide(input({ limits: { daily: 20, weekly: 80 } }));
-  assert.deepEqual(tighter.calls[0].call.limits, { daily: 5, weekly: 80 });
+  // An agenda's own daily and weekly caps are not a parameter of the decision at all: passed as `limits` they are ignored
+  // rather than compared with the account's whole spend, and the account's caps stand as the deployment set them.
+  const tighter = planner(async () => answer(run), { userDailySpendLimit: 5, userWeeklySpendLimit: 40 });
+  await tighter.instance.decide(input({ limits: { daily: 3, weekly: 6 } }));
+  assert.deepEqual(tighter.calls[0].call.limits, { daily: 5, weekly: 40, run: 0 }, "no envelope is no per-run cap, and the agenda's caps never become the account's");
 });
 
 test("a stop is returned as a stop with its kind, only where one is allowed", async () => {
