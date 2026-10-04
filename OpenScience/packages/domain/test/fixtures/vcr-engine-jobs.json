@@ -1961,6 +1961,149 @@
           }
         ]
       }
+    },
+    {
+      "name": "weighted_cox_comparator #1",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "weighted_cox_comparator",
+        "method": "comparator.weighted_cox",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariates": [
+            "age",
+            "male"
+          ],
+          "treatmentColumn": "arm",
+          "tau": 24,
+          "timeUnit": "months",
+          "parameterCode": "OS",
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "cohortRules": [
+            {
+              "name": "adult",
+              "rule": {
+                "op": "compare",
+                "column": "age",
+                "comparator": "gte",
+                "value": 18
+              }
+            }
+          ]
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          },
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:events",
+            "shape": "events",
+            "location": "std_1/snp_1/events.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      }
+    },
+    {
+      "name": "weighted_cox_comparator with propensity weights, Breslow ties and a declared PH rule",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "weighted_cox_comparator",
+        "method": "comparator.weighted_cox",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariates": [
+            "age",
+            "male"
+          ],
+          "treatmentColumn": "arm",
+          "tau": 24,
+          "timeUnit": "months",
+          "parameterCode": "OS",
+          "weighting": "propensity",
+          "estimand": "ATE",
+          "ties": "breslow",
+          "phAlpha": 0.1,
+          "phTransform": "rank"
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          },
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:events",
+            "shape": "events",
+            "location": "std_1/snp_1/events.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      }
+    },
+    {
+      "name": "weighted_cox_comparator with moments",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "weighted_cox_comparator",
+        "method": "comparator.weighted_cox",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariates": [
+            "age",
+            "male"
+          ],
+          "treatmentColumn": "arm",
+          "tau": 24,
+          "timeUnit": "months",
+          "parameterCode": "OS",
+          "moments": 2
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          },
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:events",
+            "shape": "events",
+            "location": "std_1/snp_1/events.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      }
     }
   ],
   "invalid": [
@@ -13047,6 +13190,476 @@
       },
       "expected": [
         "input_field_unknown@inputs[1].columnSources"
+      ]
+    },
+    {
+      "name": "a weighted Cox without tau",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "weighted_cox_comparator",
+        "method": "comparator.weighted_cox",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariates": [
+            "age"
+          ]
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          },
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:events",
+            "shape": "events",
+            "location": "std_1/snp_1/events.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_missing@scenario.tau"
+      ]
+    },
+    {
+      "name": "a weighted Cox without covariates",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "weighted_cox_comparator",
+        "method": "comparator.weighted_cox",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "tau": 24
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          },
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:events",
+            "shape": "events",
+            "location": "std_1/snp_1/events.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_missing@scenario.covariates"
+      ]
+    },
+    {
+      "name": "a weighted Cox for a binary endpoint",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "weighted_cox_comparator",
+        "method": "comparator.weighted_cox",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariates": [
+            "age",
+            "male"
+          ],
+          "treatmentColumn": "arm",
+          "tau": 24,
+          "timeUnit": "months",
+          "parameterCode": "OS",
+          "endpoint": {
+            "type": "binary"
+          }
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          },
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:events",
+            "shape": "events",
+            "location": "std_1/snp_1/events.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "endpoint_not_supported@scenario.endpoint.type"
+      ]
+    },
+    {
+      "name": "a weighted Cox with ties that do not exist",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "weighted_cox_comparator",
+        "method": "comparator.weighted_cox",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariates": [
+            "age",
+            "male"
+          ],
+          "treatmentColumn": "arm",
+          "tau": 24,
+          "timeUnit": "months",
+          "parameterCode": "OS",
+          "ties": "exact"
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          },
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:events",
+            "shape": "events",
+            "location": "std_1/snp_1/events.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.ties"
+      ]
+    },
+    {
+      "name": "a weighted Cox with a PH level of 1",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "weighted_cox_comparator",
+        "method": "comparator.weighted_cox",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariates": [
+            "age",
+            "male"
+          ],
+          "treatmentColumn": "arm",
+          "tau": 24,
+          "timeUnit": "months",
+          "parameterCode": "OS",
+          "phAlpha": 1
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          },
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:events",
+            "shape": "events",
+            "location": "std_1/snp_1/events.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.phAlpha"
+      ]
+    },
+    {
+      "name": "a weighted Cox with a PH transform that does not exist",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "weighted_cox_comparator",
+        "method": "comparator.weighted_cox",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariates": [
+            "age",
+            "male"
+          ],
+          "treatmentColumn": "arm",
+          "tau": 24,
+          "timeUnit": "months",
+          "parameterCode": "OS",
+          "phTransform": "log"
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          },
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:events",
+            "shape": "events",
+            "location": "std_1/snp_1/events.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.phTransform"
+      ]
+    },
+    {
+      "name": "moments for propensity weights",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "weighted_cox_comparator",
+        "method": "comparator.weighted_cox",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariates": [
+            "age",
+            "male"
+          ],
+          "treatmentColumn": "arm",
+          "tau": 24,
+          "timeUnit": "months",
+          "parameterCode": "OS",
+          "weighting": "propensity",
+          "moments": 2
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          },
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:events",
+            "shape": "events",
+            "location": "std_1/snp_1/events.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.moments"
+      ]
+    },
+    {
+      "name": "weights that do not exist",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "weighted_cox_comparator",
+        "method": "comparator.weighted_cox",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariates": [
+            "age",
+            "male"
+          ],
+          "treatmentColumn": "arm",
+          "tau": 24,
+          "timeUnit": "months",
+          "parameterCode": "OS",
+          "weighting": "overlap"
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          },
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:events",
+            "shape": "events",
+            "location": "std_1/snp_1/events.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.weighting"
+      ]
+    },
+    {
+      "name": "a weight column the job estimates itself",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "weighted_cox_comparator",
+        "method": "comparator.weighted_cox",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariates": [
+            "age",
+            "male"
+          ],
+          "treatmentColumn": "arm",
+          "tau": 24,
+          "timeUnit": "months",
+          "parameterCode": "OS",
+          "weightColumn": "w"
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          },
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:events",
+            "shape": "events",
+            "location": "std_1/snp_1/events.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.weightColumn"
+      ]
+    },
+    {
+      "name": "a weighted Cox on synthetic rows",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "weighted_cox_comparator",
+        "method": "comparator.weighted_cox",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariates": [
+            "age",
+            "male"
+          ],
+          "treatmentColumn": "arm",
+          "tau": 24,
+          "timeUnit": "months",
+          "parameterCode": "OS"
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "synthetic"
+          },
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:events",
+            "shape": "events",
+            "location": "std_1/snp_1/events.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "input_source_not_individual@inputs[0].valueSource"
+      ]
+    },
+    {
+      "name": "a weighted Cox with no table",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "weighted_cox_comparator",
+        "method": "comparator.weighted_cox",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariates": [
+            "age",
+            "male"
+          ],
+          "treatmentColumn": "arm",
+          "tau": 24,
+          "timeUnit": "months",
+          "parameterCode": "OS"
+        },
+        "inputs": [
+          {
+            "kind": "assumption",
+            "id": "asm_1@1"
+          }
+        ]
+      },
+      "expected": [
+        "patient_input_required@inputs"
       ]
     }
   ],

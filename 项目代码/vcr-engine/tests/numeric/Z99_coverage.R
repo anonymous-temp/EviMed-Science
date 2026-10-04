@@ -19,7 +19,8 @@ vcr_case("Z99", c("AC-04", "AC-30"), function() {
   by_case <- vcr_test_methods_by_case()
   numeric_run <- unique(unlist(by_case[setdiff(names(by_case), structural)]))
   only_structural <- setdiff(declared, numeric_run)
-  list(pass = length(ran) >= 24L && length(missing) == 0L && length(only_structural) == 0L && length(declared) == 24L,
+  # the walk proves it walked: the 24 methods of the first release are still declared, and every declared method ran
+  list(pass = length(ran) >= length(declared) && length(missing) == 0L && length(only_structural) == 0L && length(declared) >= 24L,
        detail = sprintf("%d/%d declared methods went through vcr_run_job in this run, %d/%d in a case that asserts numbers%s%s",
                         length(intersect(declared, ran)), length(declared), length(intersect(declared, numeric_run)), length(declared),
                         if (length(missing)) paste0("; never run: ", paste(missing, collapse = ", ")) else "",

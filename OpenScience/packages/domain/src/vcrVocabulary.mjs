@@ -452,6 +452,9 @@ export const VCR_DEFAULT_ESTIMAND = 'ATT'
 export const VCR_NOT_ESTIMABLE_RULES = frozen([
   'entropy_balance_infeasible', 'outside_common_support', 'effective_sample_size_below_floor',
   'standardized_difference_above_floor', 'tau_beyond_followup', 'reconstruction_failed_qc', 'map_prior_conflict',
+  // A Cox model has no estimate when an arm has no event (the hazard ratio is infinite or zero) or the fit
+  // does not converge; fewer events than `VCR_COX_FEW_EVENTS` is a notice, never a refusal.
+  'too_few_events',
   // Two the control plane derives before any job runs: the study's data tier
   // cannot reach the route (§3.2 table), or the route has no method in this
   // version (the model-predicted comparator) — a verdict in code, never a job.
@@ -465,6 +468,7 @@ export const VCR_NOT_ESTIMABLE_RULE_LABELS_ZH = Object.freeze({
   tau_beyond_followup: 'RMST 的 τ 超过任一组的最长随访',
   reconstruction_failed_qc: '重建 KM 未过质控',
   map_prior_conflict: 'MAP 先验与当前数据冲突检验越界',
+  too_few_events: '某一组没有事件，或 Cox 模型没有收敛（事件太少，风险比不存在）',
   data_tier_insufficient: '现有数据档位不足以走这条对照路线',
   route_unavailable_in_version: '这条对照路线在当前版本还没有可用的方法',
 })
@@ -583,6 +587,8 @@ export const VCR_JOB_KINDS = frozen([
   'reconstruct_km', 'pool_evidence', 'weight_comparator', 'propensity_weight_comparator', 'maic_comparator',
   'evalue', 'rmst', 'design_analytic', 'design_simulation', 'design_grid', 'assurance', 'procova',
   'accrual_forecast', 'map_prior', 'match_criteria',
+  // appended (2026-10-04): the comparator-effect methods
+  'weighted_cox_comparator',
 ])
 export const VCR_JOB_STATES = frozen(['queued', 'running', 'succeeded', 'failed', 'canceled', 'awaiting_budget'])
 export const VCR_JOB_STATE_LABELS_ZH = Object.freeze({
@@ -673,6 +679,14 @@ export const VCR_SMD_FLOOR = 0.1
  *   log ratio).
  */
 export const VCR_ESS_FLOOR = 10
+/**
+ * A Cox comparison with fewer events than this in an arm is reported but labelled
+ * `limited` and says why (a notice, not a refusal): the hazard ratio of an arm
+ * with a handful of events is estimable and very imprecise, and the robust
+ * variance is biased low there. An arm with NO event is the one case that is not
+ * estimable at all (`too_few_events`).
+ */
+export const VCR_COX_FEW_EVENTS = 10
 export const VCR_SUPPORT_CEILING = 0.1
 export const VCR_MAP_CONFLICT_BOUND = 0.01
 export const VCR_RECONSTRUCTION_TOLERANCE = Object.freeze({

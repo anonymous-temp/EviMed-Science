@@ -21,10 +21,13 @@ import {
   VCR_COLUMN_SOURCES,
   VCR_COLUMN_SOURCE_EXPORT,
   VCR_COLUMN_SOURCE_LIMITS,
+  VCR_COX_FEW_EVENTS,
   VCR_JOB_KINDS,
   VCR_JOB_METHODS,
   VCR_MAX_REPLICATES,
   VCR_MODEL_TIERS,
+  VCR_NOT_ESTIMABLE_RULES,
+  VCR_NOT_ESTIMABLE_RULE_LABELS_ZH,
   VCR_OBSERVED_ONLY_METHODS,
   VCR_PATIENT_LEVEL_JOB_KINDS,
   VCR_PATTERNS,
@@ -107,7 +110,8 @@ test("the engine's generated snapshot carries exactly the live schemas, patterns
 
 test("every method has one scenario schema, every kind one method, and both tables are total", () => {
   assert.deepEqual(Object.keys(VCR_SCENARIO_SCHEMAS).sort(), [...VCR_ENGINE_METHOD_IDS].sort());
-  assert.equal(VCR_ENGINE_METHOD_IDS.length, 24);
+  assert.ok(VCR_ENGINE_METHOD_IDS.length >= 25, "the 24 methods of the first release and the comparator-effect methods after them");
+  assert.equal(VCR_ENGINE_METHOD_IDS.length, VCR_JOB_KINDS.length, "one kind per method");
   assert.deepEqual(Object.keys(VCR_JOB_METHODS).sort(), [...VCR_JOB_KINDS].sort());
   assert.equal(new Set(Object.values(VCR_JOB_METHODS)).size, VCR_JOB_KINDS.length, "no two kinds run one method");
   for (const kind of VCR_PATIENT_LEVEL_JOB_KINDS) assert.ok(VCR_JOB_KINDS.includes(kind), kind);
@@ -382,6 +386,50 @@ test("columnSources: only the control plane writes it, only on real people's row
   for (const code of ["input_column_sources_invalid", "input_column_source_invalid", "input_column_source_not_individual"]) {
     assert.ok(VCR_PROTOCOL_ISSUE_CODES.includes(code), code);
     assert.ok(ALL_ERROR_CODES.includes(code), code);
+  }
+});
+
+// --- the comparator-effect methods -----------------------------------------------
+
+/** The methods added after the first release's 24, each with the one job kind that runs it. */
+const COMPARATOR_EFFECT_METHODS = /** @type {const} */ ([
+  ["comparator.weighted_cox", "weighted_cox_comparator"],
+]);
+
+test("the comparator-effect methods are appended, read patients, and every rule they can fire has a label", () => {
+  // The first release's 24 kinds keep their order: a mirror in the runtime's tool holds the list equal, in order.
+  assert.deepEqual([...VCR_JOB_KINDS].slice(0, 24), ["profile_snapshot", "build_cohort", "generate_population", "literature_population", "synthesize_population",
+    "population_quality", "generate_patients", "generate_patients_continuous", "generate_patients_binary", "reconstruct_km", "pool_evidence", "weight_comparator",
+    "propensity_weight_comparator", "maic_comparator", "evalue", "rmst", "design_analytic", "design_simulation", "design_grid", "assurance", "procova",
+    "accrual_forecast", "map_prior", "match_criteria"]);
+  assert.deepEqual([...VCR_JOB_KINDS].slice(24), COMPARATOR_EFFECT_METHODS.map(([, kind]) => kind), "appended in the order they were added");
+  for (const [method, kind] of COMPARATOR_EFFECT_METHODS) {
+    assert.equal(/** @type {Record<string, string>} */ (VCR_JOB_METHODS)[kind], method, kind);
+    assert.ok(VCR_PATIENT_LEVEL_JOB_KINDS.includes(kind), `${kind} reads patient-level rows`);
+    assert.equal(/** @type {any} */ (VCR_ENGINE_METHODS)[method].version, "1.0.0", method);
+    assert.equal(/** @type {any} */ (VCR_ENGINE_METHODS)[method].modelTier, "data", method);
+    assert.ok(/** @type {any} */ (VCR_ENGINE_METHODS)[method].crossChecks.length > 0, `${method} names what its numeric cases are held against`);
+    assert.ok(VCR_OBSERVED_ONLY_METHODS.includes(method), `${method} refuses synthetic, aggregate and predicted rows`);
+    assert.ok(VCR_SCENARIO_SCHEMAS[/** @type {keyof typeof VCR_SCENARIO_SCHEMAS} */ (method)], method);
+  }
+  for (const rule of VCR_NOT_ESTIMABLE_RULES) assert.ok(/** @type {any} */ (VCR_NOT_ESTIMABLE_RULE_LABELS_ZH)[rule], `${rule} has a sentence`);
+  assert.ok(VCR_NOT_ESTIMABLE_RULES.includes("too_few_events"));
+  assert.equal(VCR_COX_FEW_EVENTS, 10);
+});
+
+test("a weighted Cox job: the weights are the job's own, the PH rule is declared with the scenario, and tau is required", () => {
+  const job = () => clone(fixture.valid.find((/** @type {any} */ item) => item.job.method === "comparator.weighted_cox").job);
+  assert.deepEqual(validateEngineJob(job()), []);
+  const bad = (/** @type {(j: any) => void} */ change) => { const j = job(); change(j); return keys(validateEngineJob(j)); };
+  assert.deepEqual(bad((j) => { delete j.scenario.tau; }), ["scenario_field_missing@scenario.tau"]);
+  assert.deepEqual(bad((j) => { j.scenario.weightColumn = "w"; }), ["scenario_field_unknown@scenario.weightColumn"], "weights are estimated inside the job so the bootstrap can re-estimate them");
+  assert.deepEqual(bad((j) => { j.scenario.endpoint = { type: "continuous" }; }), ["endpoint_not_supported@scenario.endpoint.type"]);
+  assert.deepEqual(bad((j) => { j.scenario.phAlpha = 0; }), ["scenario_value_invalid@scenario.phAlpha"]);
+  // moments belong to entropy balancing only
+  assert.deepEqual(bad((j) => { j.scenario.weighting = "propensity"; j.scenario.moments = 2; }), ["scenario_field_unknown@scenario.moments"]);
+  assert.deepEqual(bad((j) => { j.scenario.weighting = "propensity"; delete j.scenario.moments; }), []);
+  for (const source of ["synthetic", "aggregate", "predicted", "reconstructed", "assumed"]) {
+    assert.deepEqual(bad((j) => { j.inputs[0].valueSource = source; }), ["input_source_not_individual@inputs[0].valueSource"], source);
   }
 });
 

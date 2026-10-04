@@ -63,15 +63,17 @@ WRITE_WHATS = (
     "comparator", "trial_scenario", "design_grid", "decision", "report", "model", "forecast", "step", "plan",
     "fact", "language_judgment", "site", "followup", "field_map",
 )
-# The engine's 24 job kinds, in the domain's order (`VCR_JOB_KINDS` in
-# `packages/domain/src/vcrVocabulary.mjs`); `test/test_vcr_platform.py` reads the
-# domain and holds this list equal to it.
+# The engine's job kinds, in the domain's order (`VCR_JOB_KINDS` in
+# `packages/domain/src/vcrVocabulary.mjs`): the 24 of the first release, then the
+# comparator-effect kinds appended after them; `test/test_vcr_platform.py` reads
+# the domain and holds this list equal to it.
 JOB_KINDS = (
     "profile_snapshot", "build_cohort", "generate_population", "literature_population", "synthesize_population",
     "population_quality", "generate_patients", "generate_patients_continuous", "generate_patients_binary",
     "reconstruct_km", "pool_evidence", "weight_comparator", "propensity_weight_comparator", "maic_comparator",
     "evalue", "rmst", "design_analytic", "design_simulation", "design_grid", "assurance", "procova",
     "accrual_forecast", "map_prior", "match_criteria",
+    "weighted_cox_comparator",
 )
 POOLING_METHODS = ("single_study", "random_effects_dl", "random_effects_reml", "random_effects_hksj", "fixed_effect")
 POOLING_CALIBRES = ("closest", "overall", "next_closest")

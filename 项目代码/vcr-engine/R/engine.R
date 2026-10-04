@@ -46,7 +46,7 @@
 VCR_ENGINE_SOURCE_FILES <- c(
   "protocol", "rules", "inputs", "rng", "simulators", "population", "quality", "weighting", "rmst",
   "reconstruct", "maic", "evidence_pool", "map_prior", "design_analytic",
-  "design_simulate", "assurance", "procova", "accrual", "summaries"
+  "design_simulate", "assurance", "procova", "accrual", "summaries", "comparison", "weighted_cox"
 )
 
 #' Source every module in dependency order. Idempotent.
@@ -78,6 +78,7 @@ vcr_engine_handlers <- function() list(
   "comparator.propensity_weight" = vcr_job_weight_comparator,
   "comparator.rmst" = vcr_job_rmst,
   "comparator.maic" = vcr_job_maic,
+  "comparator.weighted_cox" = vcr_job_weighted_cox,
   "comparator.evalue" = vcr_job_evalue,
   "comparator.map_prior" = vcr_job_map_prior,
   "design.analytic" = vcr_job_design_analytic,

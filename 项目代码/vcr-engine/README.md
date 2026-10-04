@@ -29,7 +29,7 @@ language model never enters this path.
 | Every simulated number carries its Monte-Carlo standard error | `vcr_measure(simulated = TRUE)` refuses to construct without one | N03, N04, AC-28 |
 | Replicate counts follow from the target precision | `vcr_replicates_for_mcse` + the domain's floors (20,000 null / 5,000 alternative); a run held below its floor by `VCR_ENGINE_MAX_REPLICATES` is `limited` | N05, E10b |
 | Analytic first, simulation as the check | every simulated design carries `diagnostics.analyticCheck` with the difference in MCSE units | E07, N02, N04c |
-| "Not estimable" is a deterministic verdict, never a fabricated 0 | seven named rules in `notEstimableRules`; `measures` stays empty | N09, N11, N17 |
+| "Not estimable" is a deterministic verdict, never a fabricated 0 | the named rules in `notEstimableRules` (seven at the first release, then `too_few_events` for a Cox model); `measures` stays empty | N09, N11, N17, N33 |
 | The four counts stay apart | `vcr_counts()` + `vcr_validate_counts()`; `NULL` is the only stand-in for unknown; only `observed` rows are real patients | E04, C2-05, N17, E09 |
 | Reconstructed pseudo-patients are never real patients | `counts.reconstructedPseudoPatients`, source `reconstructed` | N16, N17 |
 | A rule is data, never code | no `eval`/`parse` anywhere in `R/` or `service/`; an `expression` key anywhere in a scenario is refused by name | N23 |
@@ -140,8 +140,9 @@ or a traceback.
 
 ## 5. Methods
 
-24 methods, all at `1.0.0`, one job kind each, keyed exactly as the domain's
-`VCR_ENGINE_METHODS`. The engine refuses to start if the lists differ
+25 methods, all at `1.0.0`, one job kind each, keyed exactly as the domain's
+`VCR_ENGINE_METHODS` (the first release's 24, then the comparator-effect methods
+appended after them; section 11). The engine refuses to start if the lists differ
 (`vcr_engine_self_check`, N00b). `R/domain-snapshot.json` is generated from
 the live domain by `tests/helpers/emit-domain-snapshot.mjs` (never edit by
 hand); N00a regenerates it and fails on drift. The engine reads the domain's
@@ -163,6 +164,7 @@ that snapshot and validates every job against them before a handler runs.
 | `comparator.propensity_weight` | logistic PS weights (overlap diagnostics) | WeightIt |
 | `comparator.rmst` | weighted KM, RMST(τ), the τ rule | survRM2 |
 | `comparator.maic` | anchored / unanchored MAIC, whole-pipeline bootstrap variance | independent BFGS on TSD 18's objective |
+| `comparator.weighted_cox` | weighted Cox hazard ratio, robust variance and whole-pipeline bootstrap, the proportional-hazards test, the RMST difference beside it | `survival::coxph` on WeightIt weights; `tt()` and hand-written Breslow score tests; a known hazard ratio |
 | `comparator.evalue` | E-values on every scale | EValue |
 | `comparator.map_prior` | MAP by quadrature, robustify, prior ESS (ELIR), conflict against the MAP alone, hybrid operating characteristics | RBesT, an independent joint grid |
 | `design.analytic` | Schoenfeld, Lan-DeMets boundaries (`sided` honoured), n, exact single-arm binomial rejection/power, Simon two-stage over the whole grid | rpact, gsDesign, `stats::binom.test`, published Simon designs |
@@ -238,6 +240,8 @@ R/weighting.R        entropy balancing, propensity weights, SMD, ESS, whole-pipe
 R/rmst.R             weighted KM, RMST, the τ rule
 R/reconstruct.R      Guyot reconstruction and its quality control
 R/maic.R             MAIC (anchored / unanchored) and STC
+R/comparison.R       what the comparator-effect methods share: the weighted frame, a bootstrap's own Monte-Carlo error
+R/weighted_cox.R     the weighted Cox hazard ratio, its robust variance, the proportional-hazards test
 R/evidence_pool.R    DL / REML / HKSJ pooling and prediction intervals
 R/map_prior.R        MAP by quadrature, robustify, prior ESS, conflict, hybrid operating characteristics
 R/design_analytic.R  Lan-DeMets boundaries, Schoenfeld, asymptotic log-rank power, Simon
@@ -245,7 +249,7 @@ R/design_simulate.R  the ADEMP runner: batches, checkpoints, cancel, budget, MCS
 R/assurance.R        power averaged over a design prior
 R/procova.R          prognostic-adjustment sample size
 R/accrual.R          Poisson-Gamma accrual, event target, online update, back-test
-R/engine.R           job dispatch, the 24 handlers, the manifest, the self-check, the engine's own issue codes
+R/engine.R           job dispatch, the handlers of the first 24 methods, the manifest, the self-check, the engine's own issue codes
 R/domain-snapshot.json   generated from @evimed/domain (never edit by hand)
 R/package-lock.json      the runtime library the Dockerfile verifies (62 packages)
 service/app.py           FastAPI: queue of one, process group, rlimits, cancel, receipt signature
@@ -271,7 +275,7 @@ PASSED n/n
 Case families: `N00a-l` (the protocol mirror), `N01-N22` (design, weighting,
 survival, literature, borrowing, PROCOVA), `N23-N29` (rules, data plane, schema
 agreement, accrual and pooling, populations and patients, matching), `C2-01-C2-18`
-(cohort, models, quality), `N32` (the source of a column), `E01-E10` (the engine itself: accrual, cancel and
+(cohort, models, quality), `N32` (the source of a column), `N33` (the weighted Cox hazard ratio), `E01-E10` (the engine itself: accrual, cancel and
 budget, counts, inputs, analytic vs simulated across the families, group
 sequential, the T0 chain, robustness and limits), `Z99` (every method went
 through `vcr_run_job`, and through a case that asserts numbers). Each line carries
@@ -349,3 +353,41 @@ and survival single-arm variants are explicitly unsupported. Prior supported
 two-arm/group-sequential (and analytical Simon) jobs may replay version 1.0.0;
 new variants require 1.1.0. N31 records numerical evidence; local unpinned R runs
 are exploratory, and release validation runs the locked R 4.3.3 library in CI.
+
+## 11. Comparator-effect methods
+
+Added after the first release's 24; each is a method of its own with its own job kind
+(appended to the domain's list), schema, numeric cases and refusals. The weights are
+always estimated **inside** the job: a weighted number whose weights somebody else
+estimated has an interval that treats them as known, so none of these methods takes a
+weight column, and every bootstrapped quantity is reported with its own Monte-Carlo
+standard error (`diagnostics.bootstrap.seMcse`, and the order-statistic standard error
+of each interval endpoint in `intervalMcse`; the bootstrap standard error is also a
+`simulated` measure carrying `mcse`).
+
+### `comparator.weighted_cox` (case N33)
+
+`Surv(time, status) ~ arm`, with case weights from entropy balancing or the logistic
+propensity score (`weighting`, the weighting jobs' own rules and thresholds, the same
+refusals of a malformed table), `ties` Efron (default) or Breslow. Reported:
+`hazard_ratio` (the trial's against the control's) with the **bootstrap** percentile
+interval (rows resampled within arm, the weights re-estimated and the Cox model refitted
+in every resample), `hazard_ratio_robust` with the Lin-Wei sandwich interval (the weights
+treated as known), their standard errors, and the ratio of the two in
+`diagnostics.varianceComparison` (a metric, never a gate: the robust variance is biased
+low when the effective sample size is small). `ph_test_chisq` and `ph_test_p` are
+`survival::cox.zph` (a weighted score test with the weights treated as fixed, so
+descriptive when they were estimated), the per-term and global rows are in
+`diagnostics.proportionalHazards`, the scaled Schoenfeld residuals in the table
+`ph-schoenfeld`. The level (`phAlpha`) and the time transform (`phTransform`) are in the
+scenario, declared before the data is read, and **the estimator is not switched by the
+result**: when it rejects, the hazard ratio is still reported, the conclusion is
+`limited` (`limitedBy: proportional_hazards_rejected`) and `rmst_difference`,
+`rmst_treatment`, `rmst_control` and `survival_difference_at_tau` at the scenario's `tau`
+stand beside it (`tau` is required so the companion is always computable; a `tau` beyond
+follow-up keeps the hazard ratio and says `rmst_companion_unavailable`). An arm with no
+event, or a fit that does not converge, is `not_estimable` / `too_few_events` with no
+number; fewer than `limits.coxFewEvents` (10) events in an arm is `few_events`, a notice.
+A budget that runs out inside the bootstrap keeps the point estimate, the robust variance
+and the PH test and reports no bootstrap interval (`failed`, `cpu_budget_exhausted`,
+`limited`, the engine's partial-result convention).

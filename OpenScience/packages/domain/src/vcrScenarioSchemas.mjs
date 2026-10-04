@@ -475,6 +475,27 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
     ...WEIGHTING_CONTEXT,
   }),
 
+  // A weighted Cox comparison: the weights are estimated INSIDE the job (so the bootstrap re-estimates them in every
+  // resample), the hazard ratio carries a robust variance and a bootstrap, and the proportional-hazards test is reported
+  // with the RMST difference beside it. `tau` is required so that companion is always computable; the PH level and the
+  // time transform are declared before the data is read, never chosen after (the estimator is not switched by the test).
+  'comparator.weighted_cox': object({
+    covariates: req(COLUMN_LIST),
+    treatmentColumn: { ...COLUMN, default: 'arm' },
+    weighting: string({ values: ['entropy_balance', 'propensity'], default: 'entropy_balance' }),
+    moments: gated(integer({ min: 1, max: 3, default: 1 }), isNot('weighting', 'propensity')),
+    estimand: string({ values: ['ATT', 'ATE', 'ATO'], default: 'ATT' }),
+    tau: req(number({ gt: 0, unit: 'time units' })),
+    ties: string({ values: ['efron', 'breslow'], default: 'efron' }),
+    phAlpha: number({ gt: 0, lt: 1, default: 0.05 }),
+    phTransform: string({ values: ['km', 'rank', 'identity'], default: 'km' }),
+    endpoint: ENDPOINT(),
+    timeUnit: string({ maxLength: 20, default: 'months' }),
+    parameterCode: string({ maxLength: 64 }),
+    cohortRules: COHORT_STEPS,
+    targetTrial: TARGET_TRIAL,
+  }),
+
   'comparator.rmst': object({
     tau: req(number({ gt: 0, unit: 'time units' })),
     treatmentColumn: { ...COLUMN, default: 'arm' },

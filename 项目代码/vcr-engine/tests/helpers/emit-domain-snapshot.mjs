@@ -97,6 +97,7 @@ const snapshot = {
     // Deployment presets for the deterministic 「不可估计」 rules. A scenario
     // cannot loosen them: the engine reads them here, never from a job.
     essFloor: vocab.VCR_ESS_FLOOR,
+    coxFewEvents: vocab.VCR_COX_FEW_EVENTS,
     supportCeiling: vocab.VCR_SUPPORT_CEILING,
     conflictBound: vocab.VCR_MAP_CONFLICT_BOUND,
     tolerance: { ...vocab.VCR_RECONSTRUCTION_TOLERANCE },
