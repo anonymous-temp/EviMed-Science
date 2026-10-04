@@ -84,9 +84,11 @@ test("only the GEO modules query the GEO schema, and only the composition, the r
   assert.ok(querying.length >= 5, "the walk found the GEO modules");
   assert.deepEqual(querying.filter((name) => !name.startsWith("geo")), [], "no module outside GEO reads its tables");
   // server.mjs composes the module; runtimeManager and runtimeGatewayEntry hand
-  // a GEO project's runtime its gateway address; imService links a GEO notice.
-  // None of them is on the path of an answer's retrieval or ranking.
-  assert.deepEqual(importing.sort(), ["imService.mjs", "runtimeGatewayEntry.mjs", "runtimeManager.mjs", "server.mjs"]);
+  // a GEO project's runtime its gateway address; imService links a GEO notice;
+  // deploymentComposition restates which GEO tools a launch withholds (the
+  // availability label) from the same gateway address and audience. None of
+  // them is on the path of an answer's retrieval or ranking.
+  assert.deepEqual(importing.sort(), ["deploymentComposition.mjs", "imService.mjs", "runtimeGatewayEntry.mjs", "runtimeManager.mjs", "server.mjs"]);
   for (const name of ["researchContext.mjs", "specialistRouting.mjs", "publicSourceGateway.mjs", "webSearchGateway.mjs", "kbSearchGateway.mjs",
     "clinicalEvidenceQuality.mjs", "agentRuns.mjs"]) {
     const text = await readFile(path.join(serverSource, name), "utf8");

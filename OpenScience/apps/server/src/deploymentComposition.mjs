@@ -33,7 +33,7 @@ import { frontierGatewayProviderUrl } from "./frontierGateway.mjs";
 import { frontierAudienceAllows } from "./frontierService.mjs";
 import { geoGatewayProviderUrl } from "./geoGateway.mjs";
 import { geoAudienceAllows } from "./geoService.mjs";
-import { publicSourceGatewayProviderUrl } from "./runtimeManager.mjs";
+import { GEO_RUNTIME_TOOLS, VCR_ENGINE_TOOLS, VCR_RUNTIME_TOOLS, publicSourceGatewayProviderUrl } from "./runtimeManager.mjs";
 import { vcrGatewayProviderUrl } from "./vcrGateway.mjs";
 import { vcrAudienceAllows } from "./vcrService.mjs";
 
@@ -145,7 +145,7 @@ export function declinedTools(config, user) {
 
   const geoUrl = providerUrl(() => geoGatewayProviderUrl(config));
   if (!addressed("geo", geoUrl)) {
-    for (const tool of ["geo_read", "geo_write", "social_posts_search"]) decline(tool, whyNot("geo", geoUrl), "runtime", "geo");
+    for (const tool of GEO_RUNTIME_TOOLS) decline(tool, whyNot("geo", geoUrl), "runtime", "geo");
   } else if (!String(config.geoSocialUrl ?? "").trim()) {
     decline("social_posts_search", "no-social-channel", "runtime", "geo");
   }
@@ -153,9 +153,9 @@ export function declinedTools(config, user) {
   const vcrUrl = providerUrl(() => vcrGatewayProviderUrl(config));
   const vcrEngineComposed = config.vcrEngineConfigured ?? Boolean(String(config.vcrEngineUrl ?? "").trim());
   if (!addressed("vcr", vcrUrl)) {
-    for (const tool of ["vcr_read", "vcr_write", "vcr_simulate", "trial_registry_record", "evidence_pool"]) decline(tool, whyNot("vcr", vcrUrl), "runtime", "vcr");
+    for (const tool of VCR_RUNTIME_TOOLS) decline(tool, whyNot("vcr", vcrUrl), "runtime", "vcr");
   } else if (!vcrEngineComposed) {
-    for (const tool of ["vcr_simulate", "evidence_pool"]) decline(tool, "engine-not-composed", "runtime", "vcr");
+    for (const tool of VCR_ENGINE_TOOLS) decline(tool, "engine-not-composed", "runtime", "vcr");
   }
 
   if (!String(config.evimedAdapterUrls?.patentSearch ?? "").trim()) decline("patent_search", "adapter-unconfigured");

@@ -1741,7 +1741,7 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
   // social channel — a tool that can only answer 「无信号」 is not offered.
   // `OPTIONAL_TOOLS` in the MCP server lets the release audit count them.
   const geoDisabled = !environment.EVIMED_GEO_GATEWAY_URL
-    ? ["geo_read", "geo_write", "social_posts_search"]
+    ? [...GEO_RUNTIME_TOOLS]
     : String(config.geoSocialUrl ?? "").trim() ? [] : ["social_posts_search"];
   if (geoDisabled.length) {
     environment.EVIMED_DISABLED_TOOLS = [...new Set([...environment.EVIMED_DISABLED_TOOLS.split(",").filter(Boolean), ...geoDisabled])].join(",");
@@ -1757,9 +1757,9 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
   // every call is the same refusal one step later.
   const vcrEngineComposed = config.vcrEngineConfigured ?? Boolean(String(config.vcrEngineUrl ?? "").trim());
   const vcrDisabled = !environment.EVIMED_VCR_GATEWAY_URL
-    ? ["vcr_read", "vcr_write", "vcr_simulate", "trial_registry_record", "curve_digitize", "evidence_pool"]
+    ? [...VCR_RUNTIME_TOOLS]
     // The digitizer runs in the intake container, not on the engine: it stays offered without one.
-    : vcrEngineComposed ? [] : ["vcr_simulate", "evidence_pool"];
+    : vcrEngineComposed ? [] : [...VCR_ENGINE_TOOLS];
   if (vcrDisabled.length) {
     environment.EVIMED_DISABLED_TOOLS = [...new Set([...environment.EVIMED_DISABLED_TOOLS.split(",").filter(Boolean), ...vcrDisabled])].join(",");
   }
@@ -1874,6 +1874,17 @@ export function webSearchGatewayProviderUrl(config) {
   }
   return url.href;
 }
+
+/**
+ * The runtime tools each module's gateway serves, written once. The launch
+ * withholds them by these lists and the availability projection
+ * (`deploymentComposition.mjs`) restates the launch from the same lists; two
+ * hand-written copies drifted the day `curve_digitize` was added to one.
+ */
+export const GEO_RUNTIME_TOOLS = Object.freeze(["geo_read", "geo_write", "social_posts_search"]);
+export const VCR_RUNTIME_TOOLS = Object.freeze(["vcr_read", "vcr_write", "vcr_simulate", "trial_registry_record", "curve_digitize", "evidence_pool"]);
+/** The 虚拟临研 tools that need the deterministic engine itself, not only the gateway. */
+export const VCR_ENGINE_TOOLS = Object.freeze(["vcr_simulate", "evidence_pool"]);
 
 export function publicSourceGatewayProviderUrl(config) {
   const value = String(config.publicSourceGatewayInternalUrl ?? "").trim();
