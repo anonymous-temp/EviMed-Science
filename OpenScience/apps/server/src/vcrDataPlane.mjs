@@ -1735,7 +1735,8 @@ export function tablesNeededBy(method, endpointType, derived) {
   const wanted = ["subject"];
   // Methods whose outcome is always an event time, and the weighting methods that read one when the endpoint says so.
   const timeToEvent = ["comparator.rmst", "comparator.weighted_cox", "comparator.maic_time_to_event"].includes(method)
-    || (["comparator.entropy_balance", "comparator.propensity_weight", "comparator.covariate_sets"].includes(method) && endpointType === "time_to_event");
+    || (["comparator.entropy_balance", "comparator.propensity_weight", "comparator.covariate_sets", "comparator.prognostic_adjustment", "comparator.tipping_point"].includes(method)
+      && endpointType === "time_to_event");
   if (timeToEvent) wanted.push("events");
   return wanted.every((shape) => derived.includes(shape)) ? wanted : ["files"];
 }

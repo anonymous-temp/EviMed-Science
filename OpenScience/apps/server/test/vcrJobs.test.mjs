@@ -180,3 +180,58 @@ test("null and alternative stages retain their own operating characteristics, Mo
   assert.equal(phases.simulation.diagnostics.analyticCheck.law, "alternative");
   assert.notEqual(phases.simulation_null.tables[0].sha256, phases.simulation.tables[0].sha256);
 });
+
+// --- robustness methods ---
+
+test("a robustness stage that cannot be computed does not turn the comparison into one that could not be estimated", () => {
+  const stage = (/** @type {string} */ name, /** @type {string} */ jobId) => ({ stage: name, jobId, method: `m.${name}`, methodVersion: "1.0.0" });
+  const primary = { conclusion: "estimable", notEstimableRule: null, counts: { realPatients: 120 }, measures: [{ name: "hazard_ratio", value: 0.7 }], diagnostics: { balance: [] }, tables: [] };
+  const screenless = { conclusion: "not_estimable", notEstimableRule: "negative_controls_not_estimable", counts: {}, measures: [], diagnostics: { detail: "no control had an estimate" }, tables: [] };
+  const asFiled = (/** @type {any} */ merged) => ({ id: "res_1", conclusion: merged.conclusion, notEstimableRule: merged.notEstimableRule, counts: merged.counts, measures: merged.measures,
+    diagnostics: merged.diagnostics, tables: merged.tables });
+
+  // the comparison lands first, then the screen
+  const first = vcrMergeStageResult(null, primary, stage("primary", "job_1"));
+  const merged = vcrMergeStageResult(/** @type {any} */ (asFiled(first)), screenless, stage("negative_control", "job_2"));
+  assert.equal(merged.conclusion, "limited", "the comparison's own numbers stand; one analysis beside it is missing");
+  assert.equal(merged.notEstimableRule, null, "and the object does not carry the screen's rule as its own");
+  assert.deepEqual(merged.measures.map((measure) => measure.name), ["hazard_ratio"]);
+  assert.equal(merged.diagnostics.stageResults.negative_control.conclusion, "not_estimable", "the stage's own verdict stays whole");
+  assert.equal(merged.diagnostics.stageResults.negative_control.notEstimableRule, "negative_controls_not_estimable");
+
+  // the screen lands first (the queue may run them in either order): until the comparison lands the object is what the screen says, then it is the same as above
+  const screenFirst = vcrMergeStageResult(null, screenless, stage("negative_control", "job_2"));
+  assert.equal(screenFirst.conclusion, "not_estimable");
+  const settled = vcrMergeStageResult(/** @type {any} */ (asFiled(screenFirst)), primary, stage("primary", "job_1"));
+  assert.equal(settled.conclusion, "limited");
+  assert.equal(settled.notEstimableRule, null);
+
+  // a comparison that is itself not estimable stays so, with its own rule, whatever the screen found
+  const refusedPrimary = { conclusion: "not_estimable", notEstimableRule: "overlap_below_floor", counts: {}, measures: [], diagnostics: {}, tables: [] };
+  const screen = { conclusion: "estimable", notEstimableRule: null, counts: {}, measures: [{ name: "negative_controls_analysed", value: 12 }], diagnostics: {}, tables: [] };
+  const both = vcrMergeStageResult(/** @type {any} */ (asFiled(vcrMergeStageResult(null, refusedPrimary, stage("primary", "job_1")))), screen, stage("negative_control", "job_2"));
+  assert.equal(both.conclusion, "not_estimable");
+  assert.equal(both.notEstimableRule, "overlap_below_floor");
+  // and one that is limited stays limited when the screen is estimable
+  const limited = vcrMergeStageResult(/** @type {any} */ (asFiled(vcrMergeStageResult(null, { ...primary, conclusion: "limited" }, stage("primary", "job_1")))), screen, stage("tipping_point", "job_3"));
+  assert.equal(limited.conclusion, "limited");
+
+  // stages that are not robustness stages merge exactly as before: the weaker conclusion, and the rule of the stage that landed
+  const analytic = vcrMergeStageResult(null, primary, stage("analytic", "job_1"));
+  const simulated = vcrMergeStageResult(/** @type {any} */ (asFiled(analytic)), screenless, stage("simulation", "job_2"));
+  assert.equal(simulated.conclusion, "not_estimable");
+  assert.equal(simulated.notEstimableRule, "negative_controls_not_estimable");
+});
+
+test("the columns the robustness methods read are named for the access judgment: the score, each control column, the primary and the tipping outcome", () => {
+  assert.deepEqual(vcrScenarioColumns({ prognosticScoreColumn: "prog", covariates: ["age"], treatmentColumn: "arm", outcomeColumn: "y" }).sort(), ["age", "arm", "prog", "y"]);
+  assert.deepEqual(vcrScenarioColumns({ covariates: ["age"], controls: [{ name: "a", column: "nc_a" }, { name: "b", estimate: 0.1, se: 0.2 }], primary: { column: "y" } }).sort(),
+    ["age", "nc_a", "y"]);
+  assert.deepEqual(vcrScenarioColumns({ outcomeColumn: "response", treatmentColumn: "arm", design: { kind: "two_arm" } }).sort(), ["arm", "response"]);
+});
+
+test("the robustness job kinds are filed under the comparator", () => {
+  for (const kind of ["negative_control_comparator", "tipping_point", "prognostic_adjustment_comparator"]) assert.equal(vcrResultKindFor(kind), "comparator", kind);
+});
+
+// --- end robustness methods ---

@@ -826,7 +826,14 @@ export const VCR_NEGATIVE_CONTROL_VERDICT_LABELS_ZH = Object.freeze({
  * reads it from its snapshot, and a test holds the two equal.
  */
 export const VCR_PROGNOSTIC_QUALIFICATION = 'none_beyond_continuous'
-export const VCR_PROGNOSTIC_QUALIFICATION_LABEL_ZH = '目前没有监管机构认可将预后协变量调整用于二分类或事件时间终点：EMA 2022 年 9 月的资格认定意见只覆盖连续终点，二分类与事件时间终点留待以后；FDA 2023 年指南称非线性模型调整“可能可以接受”，并要求与审评部门讨论。'
+export const VCR_PROGNOSTIC_QUALIFICATION_LABEL_ZH = '二分类和事件时间终点的预后协变量调整，目前没有监管机构认可：EMA 2022 年的资格认定意见只覆盖连续终点。'
+/**
+ * The stages of a comparison that stress it rather than make it: a bias screen with negative controls and a tipping-point analysis of
+ * the missing outcomes. A stress test that cannot be computed (no control has an estimate) leaves the comparison as estimable as it was
+ * but limited, and says which analysis is missing; the stage's own result stays whole under `diagnostics.stageResults`.
+ */
+export const VCR_ROBUSTNESS_STAGES = frozen(['negative_control', 'tipping_point'])
+export const VCR_ROBUSTNESS_STAGE_LABELS_ZH = Object.freeze({ negative_control: '阴性对照结局', tipping_point: '缺失结局的临界点分析' })
 // --- end robustness methods ---
 export const VCR_MAP_CONFLICT_BOUND = 0.01
 export const VCR_RECONSTRUCTION_TOLERANCE = Object.freeze({

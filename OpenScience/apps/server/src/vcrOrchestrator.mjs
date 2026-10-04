@@ -666,7 +666,11 @@ export function vcrJobKindFor(kind, row, context = {}) {
       return endpoint === "time_to_event" ? "maic_time_to_event_comparator" : "maic_comparator";
     }
     if (route === "hybrid_control") return "map_prior";
-    if (route === "prognostic_adjustment") return "procova";
+    if (route === "prognostic_adjustment") {
+      // A binary or time-to-event endpoint with a declared prognostic score is the marginal-effect analysis; a continuous endpoint stays
+      // with PROCOVA's own design-stage calculation. The declared endpoint and the declared score column decide, never a word.
+      return endpoint && endpoint !== "continuous" && configuration.prognosticScoreColumn !== undefined ? "prognostic_adjustment_comparator" : "procova";
+    }
     if (route === "external_control") {
       // What the design declares, in this order: alternative covariate sets make the sensitivity analysis; a named
       // method (`weighted_cox`, `aipw`) makes that analysis; otherwise the weighting job of the estimand.
@@ -793,6 +797,87 @@ function externalControlRefusal(jobKind, configuration, endpoint, estimand) {
   return null;
 }
 
+// --- robustness methods ---
+
+/** The refusal for keys a plan's stages do not read. @param {string[]} paths @returns {{ code: string, message: string, paths: string[] }} */
+function unknownFieldsRefusal(paths) {
+  return { code: "vcr_scenario_unknown_fields", paths,
+    message: `配置里有引擎不读的字段：${paths.slice(0, 8).join("、")}。只写引擎认识的字段（见 vcr_simulate 的场景说明），其余字段会被拒绝而不是忽略。` };
+}
+
+/**
+ * The keys of a comparator design that declare a robustness analysis beside its primary comparison, and what the primary then does not
+ * read: `negativeControls` (a list of outcomes the treatment cannot affect), `tippingPoint` (an object with the tipping-point job's own
+ * keys: how the missing outcomes are stressed), and the two keys only the negative-control job reads (`primary`, `effectScale`).
+ */
+const ROBUSTNESS_DECLARATIONS = Object.freeze(["negativeControls", "tippingPoint"]);
+const NEGATIVE_CONTROL_ONLY_KEYS = Object.freeze(["primary", "effectScale"]);
+
+/** The design with the keys only a robustness stage reads taken out, so that the primary is held to what it reads. @param {Record<string, any>} configuration */
+function withoutRobustnessKeys(configuration) {
+  const own = { ...configuration };
+  const negative = list(configuration.negativeControls).length > 0;
+  for (const key of ROBUSTNESS_DECLARATIONS) delete own[key];
+  if (negative) for (const key of NEGATIVE_CONTROL_ONLY_KEYS) delete own[key];
+  return own;
+}
+
+/**
+ * Whether the declared robustness analyses can be planned for this endpoint, as a refusal that says what to change, or null.
+ * @param {Record<string, any>} configuration @param {string} endpoint
+ * @returns {{ code: string, message: string } | null}
+ */
+function robustnessRefusal(configuration, endpoint) {
+  if (configuration.tippingPoint === undefined && !list(configuration.negativeControls).length) return null;
+  if (!endpoint) return { code: "vcr_scenario_endpoint_missing", message: "这项比较要知道终点类型：先写研究定义，或在对照设计里写 endpoint.type。" };
+  if (configuration.tippingPoint !== undefined && !isObject(configuration.tippingPoint)) {
+    return { code: "vcr_job_scenario_invalid", message: "tippingPoint 要写成一个对象：写明缺失结局怎样压力测试（方向、计数或结局列、事件时间终点的视野与偏移）。" };
+  }
+  if (configuration.tippingPoint !== undefined && endpoint !== "binary" && endpoint !== "time_to_event") {
+    return { code: "vcr_job_scenario_invalid", message: `缺失结局的临界点分析只用于二分类和事件时间终点，这个研究的终点是 ${endpoint}。` };
+  }
+  return null;
+}
+
+/**
+ * The negative-control job's candidate scenario, from the design: the design's own adjustment (the weighting its method and estimand
+ * name, its covariates and cohort rules) so that "the same adjustment" is the same words, and the outcomes it declared.
+ * @param {Record<string, any>} configuration @param {string} endpoint @param {string} estimand
+ */
+function negativeControlScenario(configuration, endpoint, estimand) {
+  const weighting = configuration.weighting ?? (configuration.method === "propensity" || estimand !== "ATT" ? "propensity" : "entropy_balance");
+  /** @type {Record<string, any>} */
+  const scenario = { endpoint: { ...object(configuration.endpoint), type: endpoint }, estimand, weighting, controls: configuration.negativeControls };
+  for (const key of ["covariates", "treatmentColumn", "moments", "cohortRules", "effectScale", "primary"]) {
+    if (configuration[key] !== undefined) scenario[key] = configuration[key];
+  }
+  return scenario;
+}
+
+/**
+ * The tipping-point job's candidate scenario: the keys the design declared for it, over the design's own treatment column and cohort
+ * rules. The design's endpoint type governs, so a declaration cannot change what kind of endpoint it stresses.
+ * @param {Record<string, any>} configuration @param {string} endpoint
+ */
+function tippingPointScenario(configuration, endpoint) {
+  /** @type {Record<string, any>} */
+  const shared = {};
+  for (const key of ["treatmentColumn", "cohortRules"]) if (configuration[key] !== undefined) shared[key] = configuration[key];
+  return { ...shared, ...object(configuration.tippingPoint), endpoint: { ...object(configuration.endpoint), type: endpoint } };
+}
+
+/**
+ * Whether a negative-control or a tipping-point stage reads the subject table: a control (or the primary effect) given as a column, a
+ * tipping point of a binary outcome given as a column, and every time-to-event tipping point. The rest are numbers the design states.
+ * @param {"negative_control" | "tipping_point"} kind @param {Record<string, any>} scenario
+ */
+function robustnessReadsPatients(kind, scenario) {
+  if (kind === "negative_control") return [...list(scenario.controls), scenario.primary].some((source) => isObject(source) && source.column !== undefined);
+  return object(scenario.endpoint).type === "time_to_event" || scenario.outcomeColumn !== undefined;
+}
+
+// --- end robustness methods ---
+
 /**
  * How a time-to-event MAIC gets its comparator, from what the design declares: the comparator's published curve
  * (`curve` with `riskTable`) is reconstructed into pseudo-patients by the platform; an anchored design may state
@@ -873,12 +958,49 @@ export function vcrBuildStages(item, context) {
     // the superset (`analysis.power` for the analytic stage, `targetMcse` for the
     // simulation), and each stage keeps what its own schema takes.
     const unknown = built.length ? built[0].unknown.filter((path) => built.every((entry) => entry.unknown.includes(path))) : [];
-    if (unknown.length) {
-      return { ok: false, refused: { code: "vcr_scenario_unknown_fields", paths: unknown,
-        message: `配置里有引擎不读的字段：${unknown.slice(0, 8).join("、")}。只写引擎认识的字段（见 vcr_simulate 的场景说明），其余字段会被拒绝而不是忽略。` } };
-    }
+    if (unknown.length) return { ok: false, refused: unknownFieldsRefusal(unknown) };
     return { ok: true, stages: built.map((entry) => entry.built) };
   };
+
+  // --- robustness methods ---
+  /**
+   * The robustness analyses the design declares beside its primary comparison, as stages, or the refusal that says what to change.
+   * What one of them does not read is the declaration's own (the design-level keys it takes are ones its schema reads), so it is
+   * refused by name rather than ignored.
+   * @param {Record<string, any>} configuration @param {string} endpoint @param {string} estimand
+   * @returns {{ refused: { code: string, message: string, paths?: string[] }, extras?: undefined } | { extras: Array<{ built: VcrStage, unknown: string[] }>, refused?: undefined }}
+   */
+  const robustnessStages = (configuration, endpoint, estimand) => {
+    const refused = robustnessRefusal(configuration, endpoint);
+    if (refused) return { refused };
+    /** @type {Array<{ built: VcrStage, unknown: string[] }>} */
+    const extras = [];
+    if (list(configuration.negativeControls).length) {
+      const scenario = negativeControlScenario(configuration, endpoint, estimand);
+      extras.push(stage("negative_control_comparator", scenario, { stage: "negative_control", endpoint, bindAll: false,
+        snapshot: robustnessReadsPatients("negative_control", scenario) }));
+    }
+    if (isObject(configuration.tippingPoint)) {
+      const scenario = tippingPointScenario(configuration, endpoint);
+      extras.push(stage("tipping_point", scenario, { stage: "tipping_point", endpoint, bindAll: false,
+        snapshot: robustnessReadsPatients("tipping_point", scenario) }));
+    }
+    const unknown = extras.flatMap((entry) => entry.unknown);
+    return unknown.length ? { refused: unknownFieldsRefusal(unknown) } : { extras };
+  };
+  /**
+   * The primary comparison held to the keys it reads (finish), with the robustness stages after it. A plan with robustness stages names
+   * its primary stage, so that each stage's result is told apart when they are filed as one.
+   * @param {string} jobKind @param {Record<string, any>} candidate @param {string | null} endpoint
+   * @param {Array<{ built: VcrStage, unknown: string[] }>} extras
+   * @returns {VcrPlan}
+   */
+  const finishWithRobustness = (jobKind, candidate, endpoint, extras) => {
+    const checked = finish([stage(jobKind, candidate, { endpoint, bindAll: false, ...(extras.length ? { stage: "primary" } : {}) })]);
+    if (!checked.ok || !extras.length) return checked;
+    return { ok: true, stages: [...checked.stages, ...extras.map((entry) => entry.built)] };
+  };
+  // --- end robustness methods ---
 
   if (item.kind === "population") {
     const jobKind = vcrJobKindFor("population", row);
@@ -959,19 +1081,35 @@ export function vcrBuildStages(item, context) {
     }
     if (route === "hybrid_control") return finish([stage("map_prior", configuration, { bindAll: false })]);
     if (route === "prognostic_adjustment") {
+      // --- robustness methods ---
+      if (vcrJobKindFor("comparator", row, { definition }) === "prognostic_adjustment_comparator") {
+        const robust = robustnessStages(configuration, String(type ?? ""), estimand);
+        if (robust.refused) return { ok: false, refused: robust.refused };
+        return finishWithRobustness("prognostic_adjustment_comparator", { ...withoutRobustnessKeys(configuration), endpoint: { ...object(configuration.endpoint), type } },
+          String(type ?? ""), robust.extras);
+      }
+      if (type && type !== "continuous") {
+        return { ok: false, refused: { code: "vcr_job_scenario_invalid",
+          message: `终点是 ${type}：二分类和事件时间终点的预后协变量调整要先写预后评分所在的列（prognosticScoreColumn）；设计期功效的 PROCOVA 只用于连续终点。` } };
+      }
+      // --- end robustness methods ---
       return finish([stage("procova", { ...configuration, endpoint: { ...object(configuration.endpoint), type: type ?? "continuous" } }, { endpoint: "continuous", snapshot: false })]);
     }
     if (route === "external_control") {
       const jobKind = /** @type {string} */ (vcrJobKindFor("comparator", row, { definition }));
       const refused = externalControlRefusal(jobKind, configuration, String(type ?? ""), estimand);
       if (refused) return { ok: false, refused };
+      // --- robustness methods ---
+      const robust = robustnessStages(configuration, String(type ?? ""), estimand);
+      if (robust.refused) return { ok: false, refused: robust.refused };
+      // --- end robustness methods ---
       /** @type {Record<string, any>} */
-      const candidate = { ...configuration, estimand, endpoint: { ...object(configuration.endpoint), type } };
+      const candidate = { ...withoutRobustnessKeys(configuration), estimand, endpoint: { ...object(configuration.endpoint), type } };
       // The analysis a covariate-set comparison re-runs is the design's own method, written by code from it and never typed in.
       if (jobKind === "covariate_set_comparator") candidate.analysis = covariateSetAnalysis(configuration, estimand);
       // A Cox model under another estimand than the ATT is weighted by the propensity score, as the weighting jobs are.
       if (jobKind === "weighted_cox_comparator" && estimand !== "ATT" && candidate.weighting === undefined) candidate.weighting = "propensity";
-      return finish([stage(jobKind, candidate, { endpoint: type, bindAll: false })]);
+      return finishWithRobustness(jobKind, candidate, type ?? null, robust.extras);
     }
     return { ok: false, unavailable: { rule: "route_unavailable_in_version", reason: "route_unavailable", gaps: [ROUTE_GAPS.model_comparator] } };
   }
@@ -1855,7 +1993,7 @@ export class VcrOrchestrator {
     // and this plan no longer has is one no job will run again (`vcrMergeStageResult`).
     const planned = plan.stages.map((stage) => stage.stage).filter((name) => typeof name === "string" && name);
     for (const stage of plan.stages) {
-      const outcome = await this.#enqueueStage(study, item, node, stage, read, generation, planned);
+      const outcome = await this.#enqueueStage(study, item, node, stage, read, generation, planned, plan.stages);
       if (outcome.jobId) queued.push(outcome.jobId);
       // A stage waits for the one it needs; nothing after it goes ahead of it.
       if (outcome.stop) break;
@@ -1915,9 +2053,10 @@ export class VcrOrchestrator {
    * One job of an object's plan.
    * @param {any} study @param {{ step: string, kind: string, row: any }} item @param {string} node @param {import("./vcrOrchestrator.mjs").VcrStage} stage
    * @param {VcrRead} read @param {number} generation @param {string[]} planned the stage names of the plan this job belongs to
+   * @param {readonly import("./vcrOrchestrator.mjs").VcrStage[]} [stages] every stage of the plan this job belongs to
    * @returns {Promise<{ jobId?: string, stop?: boolean }>}
    */
-  async #enqueueStage(study, item, node, stage, read, generation, planned) {
+  async #enqueueStage(study, item, node, stage, read, generation, planned, stages = [stage]) {
     if (stage.detail.awaitingAnalytic === true) return { stop: true };
     const key = stage.stage ? `job:${node}#${stage.stage}` : `job:${node}`;
     if (await this.#mark(study.id, key)) return {};
@@ -1951,7 +2090,7 @@ export class VcrOrchestrator {
     const claimed = await this.#claim(study, key, "job", "claimed", { step: item.step, detail: { jobKind: stage.jobKind, node, stage: stage.stage } });
     if (!claimed) return {};
     try {
-      await this.#freezePlanIfSealed(study, item, stage);
+      await this.#freezePlanIfSealed(study, item, stage, stages);
       const line = await this.#lineOf(study.id, item.kind, item.row);
       const { job } = await this.jobs.enqueue({
         studyId: study.id, userId: study.userId, kind: stage.jobKind, scenario: stage.scenario, inputs, derived, internal: true,
@@ -2096,13 +2235,21 @@ export class VcrOrchestrator {
    * An analysis run under a sealed use freezes its plan before the first job
    * that reads an outcome (plan §6.5): the plan is the comparator's route,
    * estimand and configuration, and what the assumptions said then.
+   * A plan with more than one stage that reads patients (a comparison and the robustness analyses declared beside it) freezes them
+   * together, the same way from whichever stage is queued first: the analyses planned up front are part of the plan, and a second
+   * stage freezing a different plan would be a new plan version, not the same plan read twice.
    * @param {any} study @param {{ kind: string, row: any }} item @param {import("./vcrOrchestrator.mjs").VcrStage} stage
+   * @param {readonly import("./vcrOrchestrator.mjs").VcrStage[]} [stages] every stage of the plan the job belongs to
    */
-  async #freezePlanIfSealed(study, item, stage) {
+  async #freezePlanIfSealed(study, item, stage, stages = [stage]) {
     if (!this.seal?.freezePlan || !vcrSealRequired(study.intendedUse) || !stage.snapshot || item.kind !== "comparator") return;
+    const reading = stages.filter((entry) => entry.snapshot);
+    const lead = reading[0] ?? stage;
+    const alsoRead = reading.slice(1).map((entry) => ({ stage: entry.stage, jobKind: entry.jobKind, scenario: entry.scenario }));
     await this.seal.freezePlan({ studyId: study.id, actor: "orchestrator", plan: {
-      intendedUse: study.intendedUse, comparator: { route: item.row.route, estimand: item.row.estimand, scenario: stage.scenario },
-      endpoint: object(stage.scenario.endpoint), assumptions: stage.bound,
+      intendedUse: study.intendedUse,
+      comparator: { route: item.row.route, estimand: item.row.estimand, scenario: lead.scenario, ...(alsoRead.length ? { alsoRead } : {}) },
+      endpoint: object(lead.scenario.endpoint), assumptions: lead.bound,
     } });
   }
 
