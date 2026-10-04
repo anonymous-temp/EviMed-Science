@@ -139,3 +139,16 @@ it("account import accepts the exported tar-gzip without expanding it in the bro
   await user.selectOptions(screen.getByLabelText("数据格式"), "account"); expect(screen.getByLabelText("迁移文件")).toHaveAttribute("accept", ".json,.tar.gz,.tgz");
   const file = new File(['bounded fixture bytes'], "account.tar.gz", { type: "application/gzip" }); await user.upload(screen.getByLabelText("迁移文件"), file); await user.click(screen.getByRole("button", { name: "上传迁移文件" })); await waitFor(() => expect(api.uploadPersonalSkillTransfer).toHaveBeenCalledWith(file, "account")); expect(api.confirmPersonalSkillTransfer).not.toHaveBeenCalled();
 });
+
+it("labels a skill whose software this runtime lacks, and still lists it and still lets it be previewed", async () => {
+  const supply = { state: "limited", label: "受限", text: "它用到的软件「rdkit」运行环境里没有；需要它的方法会受阻，其余部分照常。", notes: [], version: null, sourceText: "派生自 scientific-agent-skills，提交未记录", licenceText: "MIT" };
+  api.effectiveSkills.mockResolvedValue({ ...catalogue, items: [{ ...item, supply }, { ...item, key: "k2", name: "plain-skill", supply: { ...supply, state: "installed", label: "已安装" } }] });
+  const user = userEvent.setup(); open();
+  expect(await screen.findByText("evidence-check")).toBeInTheDocument();
+  expect(screen.getByText("受限")).toBeInTheDocument();
+  expect(screen.queryByText("已安装")).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "预览 evidence-check" }));
+  expect(await screen.findByText(/rdkit.*其余部分照常/)).toBeInTheDocument();
+  expect(screen.getByText(/派生自 scientific-agent-skills，提交未记录 · MIT/)).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "预览 plain-skill" })).toBeEnabled();
+});

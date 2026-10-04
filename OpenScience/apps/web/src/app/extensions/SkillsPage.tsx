@@ -13,6 +13,8 @@ import { listWebResearchSessions, listWebAgentRuns } from "@/lib/apiClient";
 import { useProjectStore } from "@/lib/projects";
 import { effectiveSkills, effectiveSkill, duplicateEffectiveSkill, type EffectiveSkill, type EffectiveSkillCatalogue, type EffectiveSkillDetail } from "@/lib/skillLibraryClient";
 import { pendingPersonalSkillTransfers, type PendingSkillTransfer, uploadPersonalSkillTransfer, previewPersonalSkillTransfer, confirmPersonalSkillTransfer, personalSkillPortableUrl, type SkillTransferFormat, type SkillTransferUpload, type SkillTransferPreview, type SkillTransferResult, type SkillTransferIntent } from "@/lib/skillLibraryClient";
+import { Tag } from "@/components/ui/Tag";
+import { SkillPackagePanel } from "@/components/skills/SkillPackagePanel";
 import { ExtensionsNavigation } from "./ExtensionsNavigation";
 import { SkillEditor } from "./SkillEditor";
 
@@ -101,6 +103,7 @@ export function SkillsPage() {
             <p className="text-ui text-text-2">{preview.content.description}</p>
             <pre className="whitespace-pre-wrap break-words rounded bg-surface-1 p-4 text-ui text-text">{preview.content.instructions}</pre>
             <p className="text-caption text-text-2">{preview.content.invocation.userInvocable ? "可主动调用" : "不支持主动调用"} · {preview.content.invocation.modelInvocable ? "可在科研中选用" : "不会自动选用"}</p>
+            {preview.content.supply && <SkillPackagePanel view={preview.content.supply.package} availability={preview.content.supply} />}
             {preview.content.resources.length > 0 && <List label="导入资源" divided>{preview.content.resources.map(resource => <ListRow key={resource.path} title={resource.path} meta={/^scripts\//.test(resource.path) ? "脚本" : "资源"} />)}</List>}
           </section>}
           <div className="flex gap-2"><Button type="submit" variant={preview ? "secondary" : "primary"} loading={busy}>预览</Button>{preview && <Button type="button" disabled={busy} onClick={() => void confirmImport()}>确认导入</Button>}<Button type="button" variant="text" disabled={busy} onClick={() => { setImporting(false); setPreview(null); }}>取消</Button></div>
@@ -178,7 +181,7 @@ function CurrentSessionSkills() {
       : catalogue?.state === "unavailable" ? <p role="status" className="text-ui text-text-2">当前会话技能暂不可用</p>
       : catalogue?.state === "unknown" ? <p role="status" className="text-ui text-text-2">当前会话技能状态尚未确认</p>
       : catalogue?.state === "available" && <>
-        {catalogue.items.length ? <List label="会话可见技能" divided>{catalogue.items.map(entry => <ListRow key={entry.key} title={entry.personalRef?.title || entry.name} meta={entry.description} trailing={<span className="text-caption text-text-3">{sourceName(entry.source)}</span>} onOpen={() => void showPreview(entry)} actions={<Button variant="text" size="sm" aria-label={`预览 ${entry.personalRef?.title || entry.name}`} disabled={previewing || copying} onClick={() => void showPreview(entry)}>预览</Button>} />)}</List> : <p className="text-ui text-text-2">当前会话没有可见技能。</p>}
+        {catalogue.items.length ? <List label="会话可见技能" divided>{catalogue.items.map(entry => <ListRow key={entry.key} title={entry.personalRef?.title || entry.name} meta={entry.description} trailing={<span className="flex items-center gap-2 text-caption text-text-3">{entry.supply && entry.supply.state !== "installed" && <Tag>{entry.supply.label}</Tag>}{sourceName(entry.source)}</span>} onOpen={() => void showPreview(entry)} actions={<Button variant="text" size="sm" aria-label={`预览 ${entry.personalRef?.title || entry.name}`} disabled={previewing || copying} onClick={() => void showPreview(entry)}>预览</Button>} />)}</List> : <p className="text-ui text-text-2">当前会话没有可见技能。</p>}
         {catalogue.learnedMethods.length > 0 && <section aria-label="当前项目已学方法" className="mt-6"><h3 className="mb-2 text-ui font-medium text-text">已学方法</h3><List divided>{catalogue.learnedMethods.map(method => <ListRow key={method.id} title={method.title} to={method.href} />)}</List></section>}
       </>}
     {previewing && <p role="status" className="mt-4 text-ui text-text-2">正在读取技能内容</p>}
@@ -187,6 +190,7 @@ function CurrentSessionSkills() {
       <h3 className="text-ui font-medium text-text">{preview.entry.personalRef?.title || preview.entry.name}</h3>
       <p className="text-ui text-text-2">{preview.content.skill.description}</p>
       {preview.content.skill.whenToUse && <p className="text-ui text-text-2">{preview.content.skill.whenToUse}</p>}
+      {preview.entry.supply && <p className="flex flex-wrap items-center gap-2 text-ui text-text-2"><Tag>{preview.entry.supply.label}</Tag><span>{preview.entry.supply.text}</span>{preview.entry.supply.sourceText && <span className="text-caption text-text-3">{preview.entry.supply.sourceText}{preview.entry.supply.licenceText ? ` · ${preview.entry.supply.licenceText}` : ""}</span>}</p>}
       <p className="text-caption text-text-2">{preview.content.skill.invocation.userInvocable ? "可主动调用" : "不支持主动调用"} · {preview.content.skill.invocation.modelInvocable ? "可在科研中选用" : "不会自动选用"}</p>
       <pre className="whitespace-pre-wrap break-words rounded bg-surface-1 p-4 text-ui text-text">{preview.content.skill.instructions}</pre>
       {Object.keys(preview.content.skill.metadata).length > 0 && <details className="text-ui text-text-2"><summary>技能说明</summary><pre className="mt-2 whitespace-pre-wrap break-words">{JSON.stringify(preview.content.skill.metadata, null, 2)}</pre></details>}
