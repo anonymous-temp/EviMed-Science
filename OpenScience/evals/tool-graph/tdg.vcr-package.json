@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-package",
-  "version": "sha256:f3929109dd9ecd888dbacd53015e1335c61dbf34d16aa7c127423a66332c7a90",
+  "version": "sha256:95a5285e66f94bd7c15e77216e97325eebd75e8732e0b4e0d3684575e64fa704",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 22,
@@ -742,7 +742,7 @@
     {
       "name": "mcp__evimed__vcr_read",
       "source": "mcp",
-      "description": "Read this 虚拟临研 study: its definition and estimand, structured eligibility criteria, assumption cards with their sources, verified evidence, population and patient sets, comparator designs, trial scenarios, saved results, the report model, the model and method library, and queued jobs. Aggregates and structure only -- never a patient-level row, and never a cell speaking for fewer than ten people (a published trial's own figures -- registry records, extracted values, precedents -- are not this study's people and come back whole). what: study also returns intendedUseCeiling, the highest use the study's results can be labelled with and why. what: matching answers criterion by criterion (how many subjects stand where, and the gaps) and lists the study's own subject pseudonyms; with filter.subjectKey it returns that one subject's judgments with their evidence quotes and the facts written for them, and the language criteria still waiting for the run's answer.",
+      "description": "Read this 虚拟临研 study: its definition and estimand, structured eligibility criteria, assumption cards with their sources, verified evidence, population and patient sets, comparator designs, trial scenarios, saved results, the report model, the model and method library, and queued jobs. Aggregates and structure only -- never a patient-level row, and never a cell speaking for fewer than ten people (a published trial's own figures -- registry records, extracted values, precedents -- are not this study's people and come back whole). what: study also returns intendedUseCeiling, the highest use the study's results can be labelled with and why. what: pack reads the study's disease knowledge pack (an index of its sections; filter.kind reads one section whole) or, with none bound, the catalogue (filter.query searches it); what: library lists the account's reusable population definitions. what: matching answers criterion by criterion (how many subjects stand where, and the gaps) and lists the study's own subject pseudonyms; with filter.subjectKey it returns that one subject's judgments with their evidence quotes and the facts written for them, and the language criteria still waiting for the run's answer.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -766,7 +766,9 @@
               "snapshot_profile",
               "models",
               "jobs",
-              "trial_registry_record"
+              "trial_registry_record",
+              "pack",
+              "library"
             ]
           },
           "filter": {
@@ -855,7 +857,7 @@
     {
       "name": "mcp__evimed__vcr_write",
       "source": "mcp",
-      "description": "Write this 虚拟临研 study's definitions and designs: the research definition, a protocol version and its structured eligibility criteria, assumption cards and their evidence items, precedents, population, patient-set, comparator and trial designs, a design grid, a decision record, a fitted literature model, patient facts, sites and follow-up, or the report text. Numbers are not writable: results, counts, measures and execution records come from the engine, and an object's configuration carries only the keys the engine reads (see vcr_simulate). Items are checked one by one; refused items come back in issues and the rest are written.",
+      "description": "Write this 虚拟临研 study's definitions and designs: the research definition, a protocol version and its structured eligibility criteria, assumption cards and their evidence items, precedents, population, patient-set, comparator and trial designs, a design grid, a decision record, a fitted literature model, patient facts, sites and follow-up, or the report text. A disease pack: data {use: <catalogue id>} binds one, data {disease, sources, terms, endpoints, criteria…} drafts one for a disease with none (marked AI draft); a population item may carry fromLibrary {definitionId, version?} instead of a definition. Numbers are not writable: results, counts, measures and execution records come from the engine, and an object's configuration carries only the keys the engine reads (see vcr_simulate). Items are checked one by one; refused items come back in issues and the rest are written.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -883,7 +885,8 @@
               "language_judgment",
               "site",
               "followup",
-              "field_map"
+              "field_map",
+              "pack"
             ]
           },
           "items": {

@@ -239,3 +239,47 @@ export function judgmentBody(input: VcrJudgmentBody) {
 export function assessmentReviewBody() {
   return {};
 }
+
+/** Save one of the study's population definitions into the account's library: a new entry, or the next version of `definitionId`. */
+export interface VcrDefinitionSaveBody {
+  populationId: string;
+  /** A new entry's name; a new version keeps the entry's own unless one is given. */
+  name?: string;
+  /** Who is in, in plain language. */
+  text: string;
+  definitionId?: string;
+}
+
+/** Use a library definition in the study. `columnMap` renames the dataset's columns the rules read, `{ library column: this dataset's column }`. */
+export interface VcrDefinitionUseBody {
+  version?: number;
+  name?: string;
+  columnMap?: Record<string, string>;
+  snapshotId?: string;
+}
+
+/** Two versions of one library definition applied to the same registered dataset; the engine compares them. */
+export interface VcrDefinitionCompareBody {
+  versionA: number;
+  versionB: number;
+  snapshotId?: string;
+  covariates?: string[];
+}
+
+export function definitionSaveBody(input: VcrDefinitionSaveBody) {
+  return said({ populationId: input.populationId, name: input.name?.trim() || undefined, text: input.text.trim(), definitionId: input.definitionId });
+}
+
+export function definitionUseBody(input: VcrDefinitionUseBody = {}) {
+  const map = input.columnMap && Object.keys(input.columnMap).length > 0 ? input.columnMap : undefined;
+  return said({ version: input.version, name: input.name?.trim() || undefined, columnMap: map, snapshotId: input.snapshotId });
+}
+
+export function definitionCompareBody(input: VcrDefinitionCompareBody) {
+  return said({ versionA: input.versionA, versionB: input.versionB, snapshotId: input.snapshotId, covariates: input.covariates });
+}
+
+/** Bind the study to a pack of the catalogue. */
+export function packBindBody(use: string) {
+  return { use };
+}

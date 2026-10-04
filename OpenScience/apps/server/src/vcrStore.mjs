@@ -45,7 +45,7 @@ import {
 } from "@evimed/domain";
 
 import { HttpError } from "./security.mjs";
-import { VCR_SCHEMA } from "./vcrPersistence.mjs";
+import { VCR_COMPARISON_RESULT_KIND, VCR_SCHEMA } from "./vcrPersistence.mjs";
 import { VcrStoreBase, vcrId } from "./vcrStoreBase.mjs";
 import { withReviewState } from "./vcrViewsKit.mjs";
 
@@ -924,15 +924,15 @@ export class VcrStore extends VcrStoreBase {
   /** Current results (nothing superseded), newest first. @param {string} studyId @param {string | null} [kind] */
   async results(studyId, kind = null) {
     const rows = await this.rows(`SELECT * FROM ${VCR_SCHEMA}.results
-      WHERE study_id = $1 AND superseded_by IS NULL AND ($2::text IS NULL OR kind = $2)
-      ORDER BY created_at DESC LIMIT 200`, [studyId, kind]);
+      WHERE study_id = $1 AND superseded_by IS NULL AND ($2::text IS NULL OR kind = $2) AND kind <> $3
+      ORDER BY created_at DESC LIMIT 200`, [studyId, kind, VCR_COMPARISON_RESULT_KIND]);
     return rows.map(resultFromRow);
   }
 
   /** Every result of a study including superseded ones (the package's history). @param {string} studyId */
   async allResults(studyId) {
-    return (await this.rows(`SELECT * FROM ${VCR_SCHEMA}.results WHERE study_id = $1 ORDER BY created_at DESC LIMIT 500`, [studyId]))
-      .map(resultFromRow);
+    return (await this.rows(`SELECT * FROM ${VCR_SCHEMA}.results WHERE study_id = $1 AND kind <> $2 ORDER BY created_at DESC LIMIT 500`,
+      [studyId, VCR_COMPARISON_RESULT_KIND])).map(resultFromRow);
   }
 
   // --- forecasts (AC-23) ---------------------------------------------------------------

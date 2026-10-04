@@ -62,12 +62,12 @@ import public_sources
 READ_WHATS = (
     "study", "definition", "criteria", "assumptions", "evidence", "population", "patients", "comparator", "trial",
     "precedents", "matching", "subject_document", "results", "report_model", "snapshot_profile", "models", "jobs",
-    "trial_registry_record",
+    "trial_registry_record", "pack", "library",
 )
 WRITE_WHATS = (
     "definition", "protocol", "criteria", "assumption", "evidence_item", "precedent", "population", "patient_set",
     "comparator", "trial_scenario", "design_grid", "decision", "report", "model", "forecast", "step", "plan",
-    "fact", "language_judgment", "site", "followup", "field_map",
+    "fact", "language_judgment", "site", "followup", "field_map", "pack",
 )
 # The engine's job kinds, in the domain's order (`VCR_JOB_KINDS` in
 # `packages/domain/src/vcrVocabulary.mjs`): the 24 of the first release, then the
@@ -136,7 +136,10 @@ def tool_definitions():
                 "Aggregates and structure only -- never a patient-level row, and never a cell speaking for fewer than "
                 "ten people (a published trial's own figures -- registry records, extracted values, precedents -- are "
                 "not this study's people and come back whole). what: study also returns intendedUseCeiling, the "
-                "highest use the study's results can be labelled with and why. what: matching answers criterion by criterion (how many subjects stand where, and the gaps) "
+                "highest use the study's results can be labelled with and why. what: pack reads the study's disease knowledge pack "
+                "(an index of its sections; filter.kind reads one section whole) or, with none bound, the catalogue "
+                "(filter.query searches it); what: library lists the account's reusable population definitions. "
+                "what: matching answers criterion by criterion (how many subjects stand where, and the gaps) "
                 "and lists the study's own subject pseudonyms; with filter.subjectKey it returns that one subject's "
                 "judgments with their evidence quotes and the facts written for them, and the language criteria still "
                 "waiting for the run's answer."
@@ -172,7 +175,9 @@ def tool_definitions():
                 "Write this 虚拟临研 study's definitions and designs: the research definition, a protocol version and "
                 "its structured eligibility criteria, assumption cards and their evidence items, precedents, population, "
                 "patient-set, comparator and trial designs, a design grid, a decision record, a fitted literature model, "
-                "patient facts, sites and follow-up, or the report text. Numbers are not writable: results, counts, "
+                "patient facts, sites and follow-up, or the report text. A disease pack: data {use: <catalogue id>} binds one, "
+                "data {disease, sources, terms, endpoints, criteria…} drafts one for a disease with none (marked AI draft); a population "
+                "item may carry fromLibrary {definitionId, version?} instead of a definition. Numbers are not writable: results, counts, "
                 "measures and execution records come from the engine, and an object's configuration carries only the "
                 "keys the engine reads (see vcr_simulate). Items are checked one by one; refused items come back in "
                 "issues and the rest are written."

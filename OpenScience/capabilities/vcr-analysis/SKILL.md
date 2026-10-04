@@ -61,6 +61,8 @@ description: 「虚拟临研」的人群、虚拟患者、对照与试验四步�
 
 文献人群写 `baselineTable`（每行一个变量，连续变量给 `mean` 和 `sd`，二分类给 `proportion`）；真实队列写 `rules`（每条 `{ name, rule }`）加 `timeZero` 和 `exit` 两个列名，并带 `snapshotId`。**规则是数据，不是代码**：`compare`、`between`、`in`、`missing`、`present`，用 `all`、`any`、`not` 组合，列名必须是这张表里真有的列；写成表达式字符串会被拒绝。
 
+真实队列先看定义库里有没有现成的：`mcp__evimed__vcr_read` `what: "library"` 列出账号里可复用的人群定义（名称、版本、说明、规则）。要用哪一条，人群这一项写 `fromLibrary`，不再写 `definition`：`{ "what": "population", "items": [ { "fromLibrary": { "definitionId": "<库里的 id>", "version": 2 } } ] }`（`version` 不写取最新）。规则、时间零点和退出沿用库里的；列名和研究的数据对不上时，平台只在知识包的字段映射能唯一对上的地方替你改名，改了哪些、哪些没对上都在返回值里，没对上的列要换成数据里真有的列再写一次。
+
 合成人群的 `allowedUses` 只能是 `design` / `feasibility` / `testing` / `training` / `shared_preview`——**合成人群永远不进真实外部对照**。
 
 筛选流程每一步都要单列三个数：保留、排除、**无法判断**。把「无法判断」并进「排除」，是这一步最常见也最贵的错误。

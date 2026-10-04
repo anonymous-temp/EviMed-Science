@@ -65,7 +65,7 @@ export const VCR_READ_MAX_ITEMS = 50;
 export const VCR_READ_WHATS = Object.freeze([
   "study", "definition", "criteria", "assumptions", "evidence", "population", "patients", "comparator", "trial",
   "precedents", "matching", "subject_document", "results", "report_model", "snapshot_profile", "models", "jobs",
-  "trial_registry_record",
+  "trial_registry_record", "pack", "library",
 ]);
 
 /**
@@ -121,7 +121,7 @@ export const VCR_PUBLISHED_FIGURE_READS = Object.freeze(["evidence", "precedents
 export const VCR_WRITE_WHATS = Object.freeze([
   "definition", "protocol", "criteria", "assumption", "evidence_item", "precedent", "population", "patient_set",
   "comparator", "trial_scenario", "design_grid", "decision", "report", "model", "forecast", "step", "plan",
-  "fact", "language_judgment", "site", "followup", "field_map",
+  "fact", "language_judgment", "site", "followup", "field_map", "pack",
 ]);
 
 /** @param {unknown} value */
@@ -395,11 +395,11 @@ export class VcrService {
    * @param {{ store: import("./vcrStore.mjs").VcrStore, config: Record<string, any>, engine?: any, now?: () => Date,
    *   metricName?: ((id: string) => string | null) | null,
    *   access?: any, dataPlane?: any, evidence?: any, matching?: any, jobs?: any, seal?: any,
-   *   matchStore?: any, evidenceStore?: any, documents?: any }} options
+   *   matchStore?: any, evidenceStore?: any, documents?: any, knowledge?: any }} options
    */
   constructor({ store, config, engine = null, now = () => new Date(), metricName = null,
     access = null, dataPlane = null, evidence = null, matching = null, jobs = null, seal = null,
-    matchStore = null, evidenceStore = null, documents = null }) {
+    matchStore = null, evidenceStore = null, documents = null, knowledge = null }) {
     if (!store || !config) throw new TypeError("The VCR service needs its store and the config.");
     this.store = store;
     this.config = config;
@@ -413,7 +413,7 @@ export class VcrService {
      * (`matching.tab`, `evidence.tab`) answer for the runtime and the deliverable,
      * not for a page.
      */
-    this.packages = { access, dataPlane, evidence, matching, jobs, seal, matchStore, evidenceStore, documents };
+    this.packages = { access, dataPlane, evidence, matching, jobs, seal, matchStore, evidenceStore, documents, knowledge };
     this.counters = { studiesCreated: 0, reads: 0, writes: 0, writeIssues: 0, notFound: 0, tabs: 0 };
     /** @type {readonly string[] | null} set by `seedVcrCatalogue` at composition */
     this.engineMismatch = null;
@@ -835,7 +835,42 @@ export class VcrService {
     if (tab === "matching") bundle.people = await this.#people(matchingPeopleOf(bundle.match));
     // The header's one offer, read for the page that has a header (the overview is the study's own payload).
     if (tab === "overview") bundle.tierOffer = await this.#tierOffer(study, roles);
+    // The pack the study works from and the library definitions it used: the overview shows them, the population tab acts on them.
+    if (tab === "overview" || tab === "population") bundle.knowledge = await this.#knowledge(study, user, roles, populations);
     return bundle;
+  }
+
+  /**
+   * The study's knowledge block (`null` when the package is not composed or cannot answer — the page then shows nothing of it).
+   * @param {any} study @param {{ id: string }} user @param {string[]} roles @param {any[]} populations
+   */
+  async #knowledge(study, user, roles, populations) {
+    const knowledge = this.packages.knowledge;
+    if (!knowledge?.studyKnowledge) return null;
+    const canPromote = this.isOperator(user) || roles.some((role) => roleAllows(role, "manage_study"));
+    const view = await knowledge.studyKnowledge(study, { canPromote }).catch(() => null);
+    if (!view) return null;
+    // The populations a definition could be saved from: defined by rules on real data.
+    const savable = populations.filter((population) => population.kind === "real" && list(object(population.definition).rules).length)
+      .map((population) => ({ populationId: population.id, label: `人群 v${population.version}`, name: String(population.name ?? "") }));
+    return { ...view, savable };
+  }
+
+  /**
+   * What the matching run reads beside its funnel: the pack's concept names for the variables the protocol's criteria
+   * name, and the dataset columns that realise them.
+   * @param {any} study
+   */
+  async #matchingGuide(study) {
+    const knowledge = this.packages.knowledge;
+    if (!knowledge?.studyPack || !knowledge.matchingGuide) return null;
+    const bound = await knowledge.studyPack(study).catch(() => null);
+    if (!bound) return null;
+    const protocol = await this.store.latestProtocolVersion(study.id);
+    const criteria = protocol
+      ? (this.packages.matchStore ? await this.packages.matchStore.listCriteria({ studyId: study.id, protocolVersionId: protocol.id }) : await this.store.criteria(protocol.id))
+      : [];
+    return knowledge.matchingGuide(study, bound, criteria);
   }
 
   /**
@@ -1209,7 +1244,25 @@ export class VcrService {
         if (!matching?.runtimeRead) {
           return { available: false, code: "vcr_matching_unavailable", message: "匹配与招募未接入：这一步暂不可用，其余步骤照常。" };
         }
-        return matching.runtimeRead(study, filter);
+        const answer = await matching.runtimeRead(study, filter);
+        // The study-level read also says which concept names the pack uses for the variables the criteria
+        // name and which dataset columns realise them — the names a fact is written under.
+        const guide = filter.subjectKey ? null : await this.#matchingGuide(study);
+        return guide ? { ...answer, packMapping: guide } : answer;
+      }
+      case "pack": {
+        const knowledge = this.packages.knowledge;
+        if (!knowledge?.runtimeReadPack) {
+          return { available: false, code: "vcr_unavailable", message: "知识包未接入本部署：这一步暂不可用，其余步骤照常。" };
+        }
+        return knowledge.runtimeReadPack(study, filter);
+      }
+      case "library": {
+        const knowledge = this.packages.knowledge;
+        if (!knowledge?.runtimeReadLibrary) {
+          return { available: false, code: "vcr_unavailable", message: "人群定义库未接入本部署：这一步暂不可用，其余步骤照常。" };
+        }
+        return knowledge.runtimeReadLibrary(study, filter);
       }
       case "precedents": {
         const evidence = this.packages.evidence;

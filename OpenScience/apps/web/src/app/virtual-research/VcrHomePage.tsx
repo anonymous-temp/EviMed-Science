@@ -25,17 +25,19 @@ import { ConclusionChip, ReviewChip } from "@/components/vcr/VcrMarks";
 import { VcrListSkeleton, VcrOffPage } from "@/components/vcr/VcrStates";
 import { useOpenVcrConversation } from "@/components/vcr/useOpenVcrConversation";
 import { VCR_ACTION_CARDS, type VcrActionCard } from "@/components/vcr/vcrActions";
+import { VcrDefinitionsPanel } from "@/components/vcr/VcrKnowledge";
 import { VcrModelsPanel } from "@/components/vcr/VcrModelsPanel";
 import { VcrPrecedentsPanel } from "@/components/vcr/VcrPrecedentsPanel";
 import { stepLabel, tierLabel } from "@/components/vcr/vcrText";
 import { vcrTabPath } from "@/components/vcr/vcrTabs";
 
-type HomeTab = "studies" | "models" | "precedents";
+type HomeTab = "studies" | "models" | "precedents" | "definitions";
 
 const TABS: ReadonlyArray<{ value: HomeTab; label: string }> = Object.freeze([
   { value: "studies", label: "研究" },
   { value: "models", label: "模型与方法" },
   { value: "precedents", label: "试验先例" },
+  { value: "definitions", label: "人群定义库" },
 ]);
 
 const ACTION_ICONS = {
@@ -140,7 +142,8 @@ export function VcrHomePage() {
       <div id="vcr-home-panel" role="tabpanel" aria-labelledby={`vcr-home-panel-tab-${tab}`} className="pt-6">
         {tab === "models" ? <VcrModelsPanel />
           : tab === "precedents" ? <VcrPrecedentsPanel />
-            : feature === "loading" || listing.kind === "loading" ? <VcrListSkeleton />
+            : tab === "definitions" ? <VcrDefinitionsPanel />
+              : feature === "loading" || listing.kind === "loading" ? <VcrListSkeleton />
               : listing.kind === "error" ? <LoadError message={listing.message} onRetry={() => setReloads((value) => value + 1)} />
                 : listing.home.studies.length === 0
                   ? <EmptyState icon={UsersRound} title="还没有研究" />

@@ -37,14 +37,17 @@ import { useEffect, useState } from "react";
 import { fetchWebMe, WebApiError, type WebMe } from "./apiClient";
 import { productRequest } from "./productClient";
 import {
-  assessmentReviewBody, assumptionBody, budgetBody, cancelBody, contactBody, decisionBody, exportBody, jobBody, judgmentBody, memberBody,
-  modelBody, reviewBody, runBody, studyCreateBody, studyPatchBody, transitionBody,
-  type VcrAssumptionBody, type VcrBudgetBody, type VcrContactBody, type VcrCreateBody, type VcrDecisionBody, type VcrJobBody,
+  assessmentReviewBody, assumptionBody, budgetBody, cancelBody, contactBody, decisionBody, definitionCompareBody, definitionSaveBody,
+  definitionUseBody, exportBody, jobBody, judgmentBody, memberBody, modelBody, packBindBody, reviewBody, runBody, studyCreateBody,
+  studyPatchBody, transitionBody,
+  type VcrAssumptionBody, type VcrBudgetBody, type VcrContactBody, type VcrCreateBody, type VcrDecisionBody, type VcrDefinitionCompareBody,
+  type VcrDefinitionSaveBody, type VcrDefinitionUseBody, type VcrJobBody,
   type VcrJudgmentBody, type VcrMemberBody, type VcrModelBody, type VcrPatchBody, type VcrReviewBody, type VcrTransitionBody,
 } from "./vcrBodies";
 
 export type {
-  VcrAssumptionBody, VcrBudgetBody, VcrContactBody, VcrCreateBody, VcrDecisionBody, VcrJobBody, VcrJudgmentBody, VcrMemberBody, VcrModelBody,
+  VcrAssumptionBody, VcrBudgetBody, VcrContactBody, VcrCreateBody, VcrDecisionBody, VcrDefinitionCompareBody, VcrDefinitionSaveBody,
+  VcrDefinitionUseBody, VcrJobBody, VcrJudgmentBody, VcrMemberBody, VcrModelBody,
   VcrPatchBody, VcrReviewBody, VcrTransitionBody,
 } from "./vcrBodies";
 
@@ -443,6 +446,8 @@ export interface VcrStudy {
   jobs: VcrJob[];
   ceiling: VcrCeiling | null;
   overview: VcrOverview;
+  /** The disease pack the study works from and the library definitions it used; null where the module cannot say. */
+  knowledge?: VcrKnowledge | null;
   updatedAt?: string | null;
   createdAt?: string | null;
 }
@@ -536,6 +541,8 @@ export interface VcrPopulationTab {
   headline?: string | null;
   stale: VcrStaleNote | null;
   partial: VcrPartial | null;
+  /** The library definitions the study used, and the populations that could be saved to it. */
+  knowledge?: VcrKnowledge | null;
 }
 
 /** A model's card (plan §8.2). */
@@ -981,6 +988,110 @@ export interface VcrPrecedents {
   sources?: string | null;
 }
 
+/* ------------------------------------------- knowledge: packs and the definition library */
+
+/** What a pack entry rests on: the source's link and the licence under which it is used. */
+export interface VcrPackSource {
+  id: string;
+  title: string;
+  url: string;
+  licence: string;
+  licenceName?: string | null;
+  /** 引用方式: attribution (reused with attribution), link-only (linked, restated in own words), own. */
+  use?: "attribution" | "link-only" | "own" | null;
+  accessed?: string | null;
+}
+
+/** A disease knowledge pack, without its sections (`VCR_PACK_STATUSES`: curated 已整理, ai-draft AI 草拟). */
+export interface VcrPackSummary {
+  origin: "shipped" | "stored";
+  id: string;
+  diseaseKey: string;
+  name: string | null;
+  nameZh: string | null;
+  version: number;
+  status: "curated" | "ai-draft";
+  counts: Record<string, number>;
+  sources: VcrPackSource[];
+  reviewedBy?: string | null;
+  reviewedAt?: string | null;
+  boundAt?: string | null;
+  /** A draft the reader may promote (the lead, or an operator). */
+  canPromote?: boolean;
+}
+
+/** A library definition a study used, with the pack entries it rests on. */
+export interface VcrUsedDefinition {
+  definitionId: string;
+  version: number;
+  populationId: string | null;
+  name: string;
+  text: string;
+  /** How many versions the library entry has, and how many studies used it. */
+  versions: number;
+  uses: number;
+  usedAt: string | null;
+  packRefs: Array<{ section: string; id: string; concept?: string }>;
+}
+
+/** The engine's comparison of two versions on one dataset: sizes, overlap and one standardized difference per covariate. */
+export interface VcrComparison {
+  id: string;
+  definitionId: string;
+  versionA: number;
+  versionB: number;
+  snapshotId: string | null;
+  cohortSizeA: number | null;
+  cohortSizeB: number | null;
+  overlap: { both?: number | null; onlyA?: number | null; onlyB?: number | null };
+  covariates: Array<{
+    covariate: string;
+    kind?: "binary" | "continuous";
+    meanA?: number | null;
+    meanB?: number | null;
+    standardizedDifference?: number | null;
+    skipped?: string | null;
+  }>;
+  /** The |difference| above which a covariate is flagged. */
+  floor: number | null;
+  createdAt: string | null;
+}
+
+export interface VcrKnowledge {
+  pack: VcrPackSummary | null;
+  definitions: VcrUsedDefinition[];
+  comparisons: VcrComparison[];
+  /** The study's populations a definition could be saved from. */
+  savable: Array<{ populationId: string; label: string; name: string }>;
+}
+
+/** One version of a library definition. */
+export interface VcrLibraryVersion {
+  version: number;
+  text: string;
+  rules: Array<{ name?: string; rule?: unknown; unknownAs?: string }>;
+  packRefs: Array<{ section: string; id: string; concept?: string }>;
+  createdAt: string | null;
+}
+
+/** An account's library entry (`GET /api/vcr/definitions`). */
+export interface VcrLibraryEntry {
+  id: string;
+  name: string;
+  versions: number;
+  uses: number;
+  updatedAt: string | null;
+  latest: VcrLibraryVersion | null;
+}
+
+export interface VcrLibraryDetail {
+  id: string;
+  name: string;
+  uses: number;
+  versions: VcrLibraryVersion[];
+  studies: Array<{ version: number; studyId: string; studyName: string; at: string | null }>;
+}
+
 /* ------------------------------------------------------------------- readers */
 
 const VALUE_SOURCES: ReadonlySet<string> = new Set([
@@ -1146,6 +1257,7 @@ export function readVcrStudy(raw: unknown): VcrStudy {
       ? { ...(value.ceiling as VcrCeiling), reasons: arr(obj(value.ceiling).reasons) as unknown as VcrCeiling["reasons"] } : null,
     sessionId: text(value.sessionId),
     overview: readOverview(value.overview),
+    knowledge: readVcrKnowledge(value.knowledge),
   };
 }
 
@@ -1235,6 +1347,7 @@ export function readVcrPopulation(raw: unknown): VcrPopulationTab {
     counts: readVcrCounts(value.counts),
     stale: readStale(value.stale),
     partial: readPartial(value.partial),
+    knowledge: readVcrKnowledge(value.knowledge),
   };
 }
 
@@ -1402,6 +1515,81 @@ export function readVcrPrecedents(raw: unknown): VcrPrecedents {
   };
 }
 
+function readPackSource(raw: Loose): VcrPackSource {
+  return {
+    id: text(raw.id) ?? "", title: text(raw.title) ?? "", url: text(raw.url) ?? "", licence: text(raw.licence) ?? "",
+    licenceName: text(raw.licenceName), use: raw.use === "attribution" || raw.use === "link-only" || raw.use === "own" ? raw.use : null,
+    accessed: text(raw.accessed),
+  };
+}
+
+export function readVcrPackSummary(raw: unknown): VcrPackSummary {
+  const value = obj(raw);
+  return {
+    origin: value.origin === "stored" ? "stored" : "shipped",
+    id: text(value.id) ?? "", diseaseKey: text(value.diseaseKey) ?? "", name: text(value.name), nameZh: text(value.nameZh),
+    version: finite(value.version) ?? 1,
+    status: value.status === "curated" ? "curated" : "ai-draft",
+    counts: Object.fromEntries(Object.entries(obj(value.counts)).filter((entry): entry is [string, number] => typeof entry[1] === "number")),
+    sources: arr(value.sources).map(readPackSource),
+    reviewedBy: text(value.reviewedBy), reviewedAt: text(value.reviewedAt), boundAt: text(value.boundAt), canPromote: value.canPromote === true,
+  };
+}
+
+function readPackRefs(raw: unknown): Array<{ section: string; id: string; concept?: string }> {
+  return arr(raw).map((ref) => ({ section: text(ref.section) ?? "", id: text(ref.id) ?? "", ...(text(ref.concept) ? { concept: text(ref.concept) as string } : {}) }))
+    .filter((ref) => ref.section && ref.id);
+}
+
+export function readVcrKnowledge(raw: unknown): VcrKnowledge | null {
+  const value = obj(raw);
+  if (!Object.keys(value).length) return null;
+  return {
+    pack: value.pack && typeof value.pack === "object" ? readVcrPackSummary(value.pack) : null,
+    definitions: arr(value.definitions).map((item) => ({
+      definitionId: text(item.definitionId) ?? "", version: finite(item.version) ?? 1, populationId: text(item.populationId), name: text(item.name) ?? "",
+      text: text(item.text) ?? "", versions: finite(item.versions) ?? 1, uses: finite(item.uses) ?? 1, usedAt: text(item.usedAt), packRefs: readPackRefs(item.packRefs),
+    })),
+    comparisons: arr(value.comparisons).map((item) => ({
+      id: text(item.id) ?? "", definitionId: text(item.definitionId) ?? "", versionA: finite(item.versionA) ?? 0, versionB: finite(item.versionB) ?? 0,
+      snapshotId: text(item.snapshotId), cohortSizeA: finite(item.cohortSizeA), cohortSizeB: finite(item.cohortSizeB),
+      overlap: { both: finite(obj(item.overlap).both), onlyA: finite(obj(item.overlap).onlyA), onlyB: finite(obj(item.overlap).onlyB) },
+      covariates: arr(item.covariates).map((entry) => {
+        const kind: "binary" | "continuous" | null = entry.kind === "binary" ? "binary" : entry.kind === "continuous" ? "continuous" : null;
+        return {
+          covariate: text(entry.covariate) ?? "", ...(kind ? { kind } : {}),
+          meanA: finite(entry.meanA), meanB: finite(entry.meanB), standardizedDifference: finite(entry.standardizedDifference), skipped: text(entry.skipped),
+        };
+      }).filter((entry) => entry.covariate),
+      floor: finite(item.floor), createdAt: text(item.createdAt),
+    })).filter((item) => item.id && item.definitionId),
+    savable: arr(value.savable).map((item) => ({ populationId: text(item.populationId) ?? "", label: text(item.label) ?? "", name: text(item.name) ?? "" }))
+      .filter((item) => item.populationId),
+  };
+}
+
+function readLibraryVersion(raw: Loose): VcrLibraryVersion {
+  return {
+    version: finite(raw.version) ?? 1, text: text(raw.text) ?? "", rules: arr(raw.rules) as VcrLibraryVersion["rules"],
+    packRefs: readPackRefs(raw.packRefs), createdAt: text(raw.createdAt),
+  };
+}
+
+export function readVcrLibrary(raw: unknown): VcrLibraryEntry[] {
+  return arr(obj(raw).definitions).map((item) => ({
+    id: text(item.id) ?? "", name: text(item.name) ?? "", versions: finite(item.versions) ?? 1, uses: finite(item.uses) ?? 0, updatedAt: text(item.updatedAt),
+    latest: item.latest && typeof item.latest === "object" ? readLibraryVersion(item.latest as Loose) : null,
+  })).filter((item) => item.id);
+}
+
+export function readVcrLibraryDetail(raw: unknown): VcrLibraryDetail {
+  const value = obj(raw);
+  return {
+    id: text(value.id) ?? "", name: text(value.name) ?? "", uses: finite(value.uses) ?? 0, versions: arr(value.versions).map(readLibraryVersion),
+    studies: arr(value.studies).map((item) => ({ version: finite(item.version) ?? 1, studyId: text(item.studyId) ?? "", studyName: text(item.studyName) ?? "", at: text(item.at) })),
+  };
+}
+
 export function readVcrDeliverable(raw: unknown): VcrDeliverable {
   const value = obj(raw);
   const document = obj(value.document);
@@ -1528,6 +1716,48 @@ export async function getVcrModels(): Promise<VcrModels> {
 /** Take a literature model into the account's library; its tier is set by the server, never by the page. */
 export function adoptVcrModel(input: VcrModelBody) {
   return productRequest<{ id: string; name?: string }>("/vcr/models", "POST", modelBody(input));
+}
+
+/** The packs the account can use (shipped ones, and its own curated or bound drafts); `q` is the server's own search word. */
+export async function getVcrPacks(query: { q?: string } = {}): Promise<VcrPackSummary[]> {
+  const suffix = query.q ? `?${new URLSearchParams({ q: query.q }).toString()}` : "";
+  return arr(obj(await productRequest<unknown>(`/vcr/packs${suffix}`)).packs).map(readVcrPackSummary);
+}
+
+/** Work from this pack of the catalogue. */
+export function bindVcrPack(studyId: string, packId: string) {
+  return productRequest<unknown>(`${study(studyId)}/pack`, "POST", packBindBody(packId));
+}
+
+/** A reviewed draft becomes curated (the lead, or an operator). */
+export function promoteVcrPack(studyId: string) {
+  return productRequest<unknown>(`${study(studyId)}/pack/promote`, "POST", {});
+}
+
+/** The account's library of population definitions. */
+export async function getVcrLibrary(): Promise<VcrLibraryEntry[]> {
+  return readVcrLibrary(await productRequest<unknown>("/vcr/definitions"));
+}
+
+export async function getVcrLibraryDetail(definitionId: string): Promise<VcrLibraryDetail> {
+  return readVcrLibraryDetail(await productRequest<unknown>(`/vcr/definitions/${id(definitionId)}`));
+}
+
+/** Save one of the study's populations into the library (a new entry, or the next version of `definitionId`). */
+export function saveVcrDefinition(studyId: string, input: VcrDefinitionSaveBody) {
+  return productRequest<{ definitionId: string; name: string; version: number }>(`${study(studyId)}/definitions`, "POST", definitionSaveBody(input));
+}
+
+/** Use a library definition in the study; the answer lists the columns renamed and the ones left unmatched. */
+export function reuseVcrDefinition(studyId: string, definitionId: string, input: VcrDefinitionUseBody = {}) {
+  return productRequest<{ populationId: string; version: number; renamed: Array<{ from: string; to: string }>; unmatched: string[] }>(
+    `${study(studyId)}/definitions/${id(definitionId)}/use`, "POST", definitionUseBody(input));
+}
+
+/** Queue the engine's comparison of two versions of a definition on the study's registered dataset. */
+export function compareVcrDefinition(studyId: string, definitionId: string, input: VcrDefinitionCompareBody) {
+  return productRequest<{ job: { id: string }; created: boolean }>(
+    `${study(studyId)}/definitions/${id(definitionId)}/compare`, "POST", definitionCompareBody(input));
 }
 
 /** The precedent library: `q` is the server's own query word. */

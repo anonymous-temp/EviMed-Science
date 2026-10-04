@@ -207,6 +207,12 @@ function requests(target, ids) {
     // answers 404 for an assessment this study does not have.
     "POST /studies/:id/assessments/:assessment/judgments/:criterion/override": async () => ["POST", `${S}/assessments/asm_none/judgments/crt_none/override`, { state: "not_satisfied", note: "病历写明曾用过该药" }],
     "POST /studies/:id/assessments/:assessment/review": async () => ["POST", `${S}/assessments/asm_none/review`, {}],
+    // The study's pack and the library's definitions: allowed roles reach the package, which answers 404 for what the account does not have.
+    "POST /studies/:id/pack": async () => ["POST", `${S}/pack`, { use: "no_such_pack" }],
+    "POST /studies/:id/pack/promote": async () => ["POST", `${S}/pack/promote`, {}],
+    "POST /studies/:id/definitions": async () => ["POST", `${S}/definitions`, { populationId: "pop_none", name: "无此人群", text: "没有这个人群" }],
+    "POST /studies/:id/definitions/:definition/use": async () => ["POST", `${S}/definitions/dfn_none/use`, {}],
+    "POST /studies/:id/definitions/:definition/compare": async () => ["POST", `${S}/definitions/dfn_none/compare`, { versionA: 1, versionB: 2 }],
     "POST /models (with a study)": async () => { counter += 1; return ["POST", "/api/vcr/models", { studyId: target.id, name: `model-${suffix}-${counter}` }]; },
     // Data intake: a lead and a data manager may; nobody else may, whatever else they hold.
     "POST /studies/:id/data/sources": async () => { counter += 1; return ["POST", `${S}/data/sources`, { name: `数据源-${counter}`, ownerParty: "合作方" }]; },

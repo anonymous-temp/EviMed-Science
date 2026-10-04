@@ -76,6 +76,8 @@ import { createIntakeCounters, createVcrRecordExtractor } from "./vcrRecordExtra
 import { createVcrCurveDigitizer } from "./vcrCurveDigitizer.mjs";
 import { VcrEvidenceStore } from "./vcrEvidenceStore.mjs";
 import { VcrJobs } from "./vcrJobs.mjs";
+import { VcrKnowledge } from "./vcrKnowledge.mjs";
+import { VcrKnowledgeStore } from "./vcrKnowledgeStore.mjs";
 import { createVcrContact } from "./vcrContact.mjs";
 import { VcrMatchStore } from "./vcrMatchStore.mjs";
 import { VcrMembers } from "./vcrMembers.mjs";
@@ -923,9 +925,13 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   });
 
   const corrections = createVcrCorrectionCases({ store, matchStore, dataPlane, access });
-  service.attach({ corrections });
+  // The disease packs and the account's library of population definitions: read and written by the study's pages,
+  // by the runtime's `pack` and `library` and by the population writer; the job queue is the comparison's.
+  const knowledgeStore = new VcrKnowledgeStore({ database: productDatabase });
+  const knowledge = new VcrKnowledge({ store: knowledgeStore, studyStore: store, dataStore, jobs });
+  service.attach({ corrections, knowledge });
   composed = {
-    store, dataStore, matchStore, evidenceStore, corrections,
+    store, dataStore, matchStore, evidenceStore, corrections, knowledge, knowledgeStore,
     access, members, contact, dataPlane, dataPlaneSeam, documents, engine, engineStatus, removeEngineJob, jobs, seal, evidence, matching, registry, service,
     intake: { counters: intakeCounters, extractor, digitizer },
     // Composed later, beside the other modules' workers (server.mjs).

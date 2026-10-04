@@ -558,7 +558,7 @@ function distributionOf(item, field, value) {
  * runtime is reserved for, when it is a bounded one (`runtimeRunId`).
  * @typedef {{ store: any, service: any, orchestrator: any, study: any, evidence?: any, evidenceStore?: any, matchStore?: any,
  *   matching?: any, seal?: any, dataPlane?: any, documents?: any, report?: (code: string) => void,
- *   caller?: { runtimeRunId?: string | null } | null }} WriteDeps
+ *   caller?: { runtimeRunId?: string | null } | null, knowledge?: any }} WriteDeps
  */
 
 /** The criterion fields a protocol write takes. */
@@ -864,8 +864,40 @@ const WRITERS = {
     return written.id;
   },
 
-  async population(item, { store, study }) {
-    if (!item.only(["kind", "name", "definition", "snapshotId", "allowedUses"])) return null;
+  async pack(item, { knowledge, study, caller }) {
+    // One object: { use: <pack id> } binds a catalogue pack; { disease, sources, terms, … } drafts one, marked AI draft.
+    if (!item.only(["use", "schema", "id", "version", "status", "updated", "disease", "sources", "terms", "phenotypes", "endpoints", "criteria", "mappings", "background"])) return null;
+    if (!knowledge?.writePack) return void item.bad("", "知识包未接入本部署。", "vcr_write_refused");
+    const done = await knowledge.writePack(study, item.row, caller?.runtimeRunId ? `run:${caller.runtimeRunId}` : "runtime");
+    if (!done.ok) {
+      for (const problem of done.issues.slice(0, 20)) item.bad(problem.field || "", `${problem.detail}（${problem.code}）`);
+      return null;
+    }
+    return done.id;
+  },
+
+  async population(item, { store, study, knowledge, caller }, extra) {
+    if (!item.only(["kind", "name", "definition", "snapshotId", "allowedUses", "fromLibrary"])) return null;
+    // A definition from the account's library: the rules, time zero and exit are the library's, the study's dataset names
+    // the columns (renamed only where the pack makes it unambiguous), and the study is recorded as a use of that version.
+    if (item.row.fromLibrary != null) {
+      const from = item.obj("fromLibrary", { required: true, bytes: 1024 });
+      if (item.row.definition !== undefined || (item.row.kind !== undefined && item.row.kind !== "real")) {
+        item.bad("fromLibrary", "fromLibrary 提供人群定义：不要同时写 definition，kind 只能是 real。");
+      }
+      const definitionId = from ? String(from.definitionId ?? "") : "";
+      if (from && !ID.test(definitionId)) item.bad("fromLibrary.definitionId", "definitionId 是人群定义库里一条定义的 id（先用 vcr_read what=library 读）。");
+      if (from && from.version != null && !(Number.isInteger(from.version) && from.version >= 1)) item.bad("fromLibrary.version", "version 是正整数。");
+      const named = item.row.snapshotId == null ? null : String(item.row.snapshotId);
+      if (named) await item.owned("snapshotId", "snapshot", named);
+      if (!knowledge?.useInStudy) item.bad("fromLibrary", "人群定义库未接入本部署。", "vcr_write_refused");
+      if (!item.ok || !from) return null;
+      const used = await knowledge.useInStudy(study, { definitionId, version: from.version ?? null, name: item.str("name", { max: 120 }), snapshotId: named },
+        caller?.runtimeRunId ? `run:${caller.runtimeRunId}` : "runtime");
+      extra.results.push({ index: item.index, populationId: used.populationId, definitionId: used.definitionId, version: used.version,
+        ...(used.renamed.length ? { renamed: used.renamed } : {}), ...(used.unmatched.length ? { unmatched: used.unmatched } : {}) });
+      return used.populationId;
+    }
     const kind = item.choice("kind", VCR_POPULATION_KINDS, { required: true });
     const name = item.str("name", { max: 120 }) ?? "";
     const definition = item.obj("definition") ?? {};
@@ -1299,7 +1331,7 @@ const WRITERS = {
  * @param {WriteDeps & { what: string, items: any[] | null, data: any | null }} input
  */
 export async function vcrRuntimeWrite({ store, service, orchestrator, study, what, items, data, evidence = null, evidenceStore = null,
-  matchStore = null, matching = null, seal = null, dataPlane = null, documents = null, report = () => {}, caller = null }) {
+  matchStore = null, matching = null, seal = null, dataPlane = null, documents = null, report = () => {}, caller = null, knowledge = null }) {
   /** @type {string[]} */
   const ids = [];
   /** @type {Array<Record<string, any>>} */
@@ -1313,7 +1345,7 @@ export async function vcrRuntimeWrite({ store, service, orchestrator, study, wha
     return { ok: false, ids, issues: [issue(null, "", "vcr_write_empty", "这次写入没有任何内容。")] };
   }
   /** @type {WriteDeps} */
-  const deps = { store, service, orchestrator, study, evidence, evidenceStore, matchStore, matching, seal, dataPlane, documents, report, caller };
+  const deps = { store, service, orchestrator, study, evidence, evidenceStore, matchStore, matching, seal, dataPlane, documents, report, caller, knowledge };
 
   if (what === "protocol" || what === "criteria") {
     try {
@@ -1504,7 +1536,7 @@ function poolingSummary(result, about) {
 /**
  * @param {any} config @param {any} runtimeManager
  * @param {{ vcr: { service: any, store: any, jobs?: any, orchestrator?: any, evidence?: any, evidenceStore?: any, matchStore?: any,
- *   matching?: any, seal?: any, dataPlaneSeam?: any, documents?: any } | null,
+ *   matching?: any, seal?: any, dataPlaneSeam?: any, documents?: any, knowledge?: any } | null,
  *   report?: (code: string) => void, budgetMs?: number }} dependencies
  */
 export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = () => {}, budgetMs = answerBudgetMs }) {
@@ -1565,6 +1597,7 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
             what: request.what, items: request.items, data: request.data,
             evidence: vcr.evidence ?? null, evidenceStore: vcr.evidenceStore ?? null, matchStore: vcr.matchStore ?? null,
             matching: vcr.matching ?? null, seal: vcr.seal ?? null, dataPlane: vcr.dataPlaneSeam ?? null, documents: vcr.documents ?? null, report,
+            knowledge: vcr.knowledge ?? vcr.service?.packages?.knowledge ?? null,
             caller: { runtimeRunId: runtimeRunId == null ? null : String(runtimeRunId) },
           });
           vcr.service.counters.writes += 1;

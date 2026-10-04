@@ -1,0 +1,4259 @@
+{
+  "schema": "evimed.vcr.knowledge-pack/1",
+  "id": "nsclc",
+  "disease": {
+    "key": "nsclc",
+    "name": "Non-small cell lung cancer",
+    "nameZh": "非小细胞肺癌",
+    "aliases": [
+      "NSCLC",
+      "lung cancer (non-small cell)",
+      "non-small-cell lung carcinoma"
+    ],
+    "aliasesZh": [
+      "肺癌（非小细胞）",
+      "非小细胞肺癌"
+    ]
+  },
+  "version": 1,
+  "status": "curated",
+  "updated": "2026-10-04",
+  "sources": [
+    {
+      "id": "ncit",
+      "title": "NCI Thesaurus (NCIt), flat file",
+      "url": "https://evs.nci.nih.gov/ftp1/NCI_Thesaurus/Thesaurus.FLAT.zip",
+      "accessed": "2026-10-04",
+      "licence": "CC-BY-4.0",
+      "publisher": "National Cancer Institute, Enterprise Vocabulary Services",
+      "version": "26.09d",
+      "note": "Version 26.09d (EVS metadata, dated 2026-09-28; the flat file read is dated 2026-09-29). Terms of use read at https://evs.nci.nih.gov/ftp1/NCI_Thesaurus/ThesaurusTermsofUse.htm (CC BY 4.0). Preferred names and definitions are NCIt text reused with attribution."
+    },
+    {
+      "id": "ohdsi_1279",
+      "title": "OHDSI PhenotypeLibrary v3.37.0, cohort 1279 \"Non Small Cell Lung Cancer\"",
+      "url": "https://raw.githubusercontent.com/OHDSI/PhenotypeLibrary/v3.37.0/inst/cohorts/1279.json",
+      "accessed": "2026-10-04",
+      "licence": "Apache-2.0",
+      "publisher": "OHDSI (Observational Health Data Sciences and Informatics)",
+      "version": "3.37.0",
+      "note": "Apache-2.0 per the PhenotypeLibrary README and DESCRIPTION; the repository holds no LICENSE file. Cohort 1279 has the library status \"Pending peer review\" (not accepted, not validated here). Cohorts 1266, 1267, 1278, 1281 and 1286 were also opened (all \"Pending peer review\") and not used. OMOP concept ids are copied from the cohort JSON; logic is restated in this pack's own grammar."
+    },
+    {
+      "id": "fda_nsclc_endpoints",
+      "title": "FDA guidance for industry: Clinical Trial Endpoints for the Approval of Non-Small Cell Lung Cancer Drugs and Biologics (April 2015)",
+      "url": "https://www.fda.gov/regulatory-information/search-fda-guidance-documents/clinical-trial-endpoints-approval-non-small-cell-lung-cancer-drugs-and-biologics",
+      "accessed": "2026-10-04",
+      "licence": "link-only",
+      "publisher": "U.S. Food and Drug Administration"
+    },
+    {
+      "id": "fda_cancer_endpoints",
+      "title": "FDA guidance for industry: Clinical Trial Endpoints for the Approval of Cancer Drugs and Biologics (December 2018)",
+      "url": "https://www.fda.gov/regulatory-information/search-fda-guidance-documents/clinical-trial-endpoints-approval-cancer-drugs-and-biologics",
+      "accessed": "2026-10-04",
+      "licence": "link-only",
+      "publisher": "U.S. Food and Drug Administration"
+    },
+    {
+      "id": "ema_anticancer",
+      "title": "EMA guideline on the clinical evaluation of anticancer medicinal products, EMA/CHMP/205/95 Rev.6 (adopted 18 November 2023)",
+      "url": "https://www.ema.europa.eu/en/documents/scientific-guideline/guideline-clinical-evaluation-anticancer-medicinal-products-revision-6_en.pdf",
+      "accessed": "2026-10-04",
+      "licence": "link-only",
+      "publisher": "European Medicines Agency"
+    },
+    {
+      "id": "recist11",
+      "title": "RECIST 1.1 (Response Evaluation Criteria in Solid Tumors), RECIST Working Group page",
+      "url": "https://recist.eortc.org/recist-1-1/",
+      "accessed": "2026-10-04",
+      "licence": "link-only",
+      "publisher": "EORTC RECIST Working Group"
+    },
+    {
+      "id": "evimed_hints",
+      "title": "EviMed authored dataset field-name hints",
+      "url": "https://www.evimed.com/",
+      "accessed": "2026-10-04",
+      "licence": "evimed-own",
+      "publisher": "EviMed"
+    },
+    {
+      "id": "nct02075840",
+      "title": "NCT02075840: A Study Comparing Alectinib With Crizotinib in Treatment-Naive Anaplastic Lymphoma Kinase-Positive Advanced Non-Small Cell Lung Cancer Participants",
+      "url": "https://clinicaltrials.gov/study/NCT02075840",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct02125461",
+      "title": "NCT02125461: A Global Study to Assess the Effects of MEDI4736 Following Concurrent Chemoradiation in Patients With Stage III Unresectable Non-Small Cell Lung Cancer",
+      "url": "https://clinicaltrials.gov/study/NCT02125461",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct02220894",
+      "title": "NCT02220894: Study of Pembrolizumab (MK-3475) Versus Platinum-Based Chemotherapy for Participants With Programmed Cell Death-Ligand 1 (PD-L1)-Positive Advanced or Metastatic Non-Small Cell Lung ...",
+      "url": "https://clinicaltrials.gov/study/NCT02220894",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct02273375",
+      "title": "NCT02273375: Double Blind Placebo Controlled Controlled Study of Adjuvant MEDI4736 In Completely Resected NSCLC",
+      "url": "https://clinicaltrials.gov/study/NCT02273375",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct02296125",
+      "title": "NCT02296125: AZD9291 Versus Gefitinib or Erlotinib in Patients With Locally Advanced or Metastatic Non-small Cell Lung Cancer",
+      "url": "https://clinicaltrials.gov/study/NCT02296125",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct02366143",
+      "title": "NCT02366143: A Study of Atezolizumab in Combination With Carboplatin Plus (+) Paclitaxel With or Without Bevacizumab Compared With Carboplatin+Paclitaxel+Bevacizumab in Participants With Stage IV ...",
+      "url": "https://clinicaltrials.gov/study/NCT02366143",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct02367781",
+      "title": "NCT02367781: A Study of Atezolizumab in Combination With Carboplatin Plus (+) Nab-Paclitaxel Compared With Carboplatin+Nab-Paclitaxel in Participants With Stage IV Non-Squamous Non-Small Cell ...",
+      "url": "https://clinicaltrials.gov/study/NCT02367781",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct02395172",
+      "title": "NCT02395172: Avelumab in Non-Small Cell Lung Cancer (JAVELIN Lung 200)",
+      "url": "https://clinicaltrials.gov/study/NCT02395172",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct02409342",
+      "title": "NCT02409342: A Study of Atezolizumab (MPDL3280A) Compared With a Platinum Agent (Cisplatin or Carboplatin) + (Pemetrexed or Gemcitabine) in Participants With Stage IV Non-Squamous or Squamous ...",
+      "url": "https://clinicaltrials.gov/study/NCT02409342",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct02414139",
+      "title": "NCT02414139: Study of Oral cMET Inhibitor INC280 in Patients With EGFR Wild-type (wt), Advanced Non-small Cell Lung Cancer (NSCLC) (Geometry Mono-1)",
+      "url": "https://clinicaltrials.gov/study/NCT02414139",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct02448797",
+      "title": "NCT02448797: Icotinib as Adjuvant Therapy Compared With Standard Chemotherapy in Stage II-IIIA NSCLC With EGFR-mutation",
+      "url": "https://clinicaltrials.gov/study/NCT02448797",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct02477826",
+      "title": "NCT02477826: An Investigational Immuno-therapy Trial of Nivolumab, or Nivolumab Plus Ipilimumab, or Nivolumab Plus Platinum-doublet Chemotherapy, Compared to Platinum Doublet Chemotherapy in ...",
+      "url": "https://clinicaltrials.gov/study/NCT02477826",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct02486718",
+      "title": "NCT02486718: Study to Assess Safety and Efficacy of Atezolizumab (MPDL3280A) Compared to Best Supportive Care Following Chemotherapy in Patients With Lung Cancer [IMpower010]",
+      "url": "https://clinicaltrials.gov/study/NCT02486718",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct02511106",
+      "title": "NCT02511106: AZD9291 Versus Placebo in Patients With Stage IB-IIIA Non-small Cell Lung Carcinoma, Following Complete Tumour Resection With or Without Adjuvant Chemotherapy.",
+      "url": "https://clinicaltrials.gov/study/NCT02511106",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct02576574",
+      "title": "NCT02576574: Avelumab in First-line NSCLC (JAVELIN Lung 100)",
+      "url": "https://clinicaltrials.gov/study/NCT02576574",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct02578680",
+      "title": "NCT02578680: Study of Pemetrexed+Platinum Chemotherapy With or Without Pembrolizumab (MK-3475) in Participants With First Line Metastatic Nonsquamous Non-small Cell Lung Cancer ...",
+      "url": "https://clinicaltrials.gov/study/NCT02578680",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct02595944",
+      "title": "NCT02595944: Nivolumab After Surgery and Chemotherapy in Treating Patients With Stage IB-IIIA Non-small Cell Lung Cancer (An ALCHEMIST Treatment Trial)",
+      "url": "https://clinicaltrials.gov/study/NCT02595944",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct02737501",
+      "title": "NCT02737501: ALTA-1L Study: A Study of Brigatinib Versus Crizotinib in Anaplastic Lymphoma Kinase Positive (ALK+) Advanced Non-small Cell Lung Cancer (NSCLC) Participants",
+      "url": "https://clinicaltrials.gov/study/NCT02737501",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct02775435",
+      "title": "NCT02775435: A Study of Carboplatin-Paclitaxel/Nab-Paclitaxel Chemotherapy With or Without Pembrolizumab (MK-3475) in Adults With First Line Metastatic Squamous Non-small Cell Lung Cancer ...",
+      "url": "https://clinicaltrials.gov/study/NCT02775435",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct02838420",
+      "title": "NCT02838420: A Study to Evaluate and Compare the Efficacy and Safety of Alectinib Versus Crizotinib and to Evaluate the Pharmacokinetics of Alectinib in Asian Participants With Treatment-Naive ...",
+      "url": "https://clinicaltrials.gov/study/NCT02838420",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct02864251",
+      "title": "NCT02864251: A Study of Nivolumab + Chemotherapy or Nivolumab + Ipilimumab Versus Chemotherapy in Non-Small Cell Lung Cancer (NSCLC) Participants With Epidermal Growth Factor Receptor (EGFR) ...",
+      "url": "https://clinicaltrials.gov/study/NCT02864251",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct02864992",
+      "title": "NCT02864992: Tepotinib Phase II in NSCLC Harboring MET Alterations (VISION)",
+      "url": "https://clinicaltrials.gov/study/NCT02864992",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct02998528",
+      "title": "NCT02998528: A Neoadjuvant Study of Nivolumab Plus Ipilimumab or Nivolumab Plus Chemotherapy Versus Chemotherapy Alone in Early Stage Non-Small Cell Lung Cancer (NSCLC)",
+      "url": "https://clinicaltrials.gov/study/NCT02998528",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct03052608",
+      "title": "NCT03052608: A Study Of Lorlatinib Versus Crizotinib In First Line Treatment Of Patients With ALK-Positive NSCLC",
+      "url": "https://clinicaltrials.gov/study/NCT03052608",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct03088540",
+      "title": "NCT03088540: Study of REGN 2810 Compared to Platinum-Based Chemotherapies in Participants With Metastatic Non-Small Cell Lung Cancer (NSCLC)",
+      "url": "https://clinicaltrials.gov/study/NCT03088540",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct03093116",
+      "title": "NCT03093116: A Study of Repotrectinib (TPX-0005) in Patients With Advanced Solid Tumors Harboring ALK, ROS1, or NTRK1-3 Rearrangements",
+      "url": "https://clinicaltrials.gov/study/NCT03093116",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct03215706",
+      "title": "NCT03215706: A Study of Nivolumab and Ipilimumab Combined With Chemotherapy Compared to Chemotherapy Alone in First Line NSCLC",
+      "url": "https://clinicaltrials.gov/study/NCT03215706",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct03425643",
+      "title": "NCT03425643: Efficacy and Safety of Pembrolizumab (MK-3475) With Platinum Doublet Chemotherapy as Neoadjuvant/Adjuvant Therapy for Participants With Resectable Stage II, IIIA, and Resectable IIIB ...",
+      "url": "https://clinicaltrials.gov/study/NCT03425643",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct03600883",
+      "title": "NCT03600883: A Phase 1/2, Study Evaluating the Safety, Tolerability, PK, and Efficacy of Sotorasib (AMG 510) in Subjects With Solid Tumors With a Specific KRAS Mutation (CodeBreaK 100)",
+      "url": "https://clinicaltrials.gov/study/NCT03600883",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct03849768",
+      "title": "NCT03849768: A Study to Evaluate Safety and Efficacy of HS-10296 as First-Line Treatment in Patients",
+      "url": "https://clinicaltrials.gov/study/NCT03849768",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct03915951",
+      "title": "NCT03915951: An Open-label Study of Encorafenib + Binimetinib in Patients With BRAFV600-mutant Non-small Cell Lung Cancer",
+      "url": "https://clinicaltrials.gov/study/NCT03915951",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct04194944",
+      "title": "NCT04194944: A Study of Selpercatinib (LY3527723) in Participants With Advanced or Metastatic RET Fusion-Positive Non-Small Cell Lung Cancer",
+      "url": "https://clinicaltrials.gov/study/NCT04194944",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct04222972",
+      "title": "NCT04222972: A Study of Pralsetinib Versus Standard of Care for First-Line Treatment of Advanced Non-Small Cell Lung Cancer (NSCLC)",
+      "url": "https://clinicaltrials.gov/study/NCT04222972",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct04303780",
+      "title": "NCT04303780: Study to Compare AMG 510 \"Proposed INN Sotorasib\" With Docetaxel in Non Small Cell Lung Cancer (NSCLC) (CodeBreak 200).",
+      "url": "https://clinicaltrials.gov/study/NCT04303780",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct04487080",
+      "title": "NCT04487080: A Study of Amivantamab and Lazertinib Combination Therapy Versus Osimertinib in Locally Advanced or Metastatic Non-Small Cell Lung Cancer",
+      "url": "https://clinicaltrials.gov/study/NCT04487080",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    },
+    {
+      "id": "nct04685135",
+      "title": "NCT04685135: Phase 3 Study of MRTX849 (Adagrasib) vs Docetaxel in Patients With Advanced Non-Small Cell Lung Cancer With KRAS G12C Mutation",
+      "url": "https://clinicaltrials.gov/study/NCT04685135",
+      "accessed": "2026-10-04",
+      "licence": "ctgov-terms",
+      "publisher": "ClinicalTrials.gov (U.S. National Library of Medicine)",
+      "processed": "2026-10-02",
+      "modified": true
+    }
+  ],
+  "terms": [
+    {
+      "id": "t_nsclc",
+      "label": "Non-small cell lung cancer (NSCLC)",
+      "labelZh": "非小细胞肺癌",
+      "kind": "disease",
+      "concept": "nsclc_diagnosis",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C2926",
+          "display": "Lung Non-Small Cell Carcinoma"
+        },
+        {
+          "system": "OMOP",
+          "code": "4115276",
+          "display": "Non-small cell lung cancer"
+        }
+      ],
+      "synonyms": [
+        "NSCLC",
+        "Non-small cell lung carcinoma",
+        "Non-small cell lung cancer",
+        "非小细胞肺癌"
+      ],
+      "sources": [
+        "ncit",
+        "ohdsi_1279"
+      ]
+    },
+    {
+      "id": "t_sclc",
+      "label": "Small cell lung cancer (SCLC)",
+      "labelZh": "小细胞肺癌",
+      "kind": "disease",
+      "concept": "small_cell_lung_cancer",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C4917",
+          "display": "Lung Small Cell Carcinoma"
+        },
+        {
+          "system": "OMOP",
+          "code": "4110591",
+          "display": "Small cell carcinoma of lung"
+        }
+      ],
+      "synonyms": [
+        "SCLC",
+        "Small cell lung carcinoma",
+        "小细胞肺癌"
+      ],
+      "sources": [
+        "ncit",
+        "ohdsi_1279"
+      ]
+    },
+    {
+      "id": "t_primary_lung_cancer",
+      "label": "Primary lung cancer (record-based)",
+      "labelZh": "原发性肺癌（病历记录）",
+      "kind": "disease",
+      "concept": "primary_lung_cancer_diagnosis",
+      "codes": [
+        {
+          "system": "OMOP",
+          "code": "443388",
+          "display": "Malignant tumor of lung"
+        }
+      ],
+      "sources": [
+        "ohdsi_1279"
+      ]
+    },
+    {
+      "id": "t_adenocarcinoma",
+      "label": "Lung adenocarcinoma",
+      "labelZh": "肺腺癌",
+      "kind": "histology",
+      "concept": "histology",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C3512",
+          "display": "Lung Adenocarcinoma"
+        }
+      ],
+      "synonyms": [
+        "Adenocarcinoma of the lung",
+        "LUAD",
+        "肺腺癌"
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_squamous",
+      "label": "Lung squamous cell carcinoma",
+      "labelZh": "肺鳞状细胞癌（肺鳞癌）",
+      "kind": "histology",
+      "definition": "A carcinoma arising from squamous bronchial epithelial cells. It may be keratinizing or non-keratinizing. Keratinizing squamous cell carcinoma is characterized by the presence of keratinization, pearl formation, and/or intercellular bridges. Non-keratinizing squamous cell carcinoma is characterized by the absence of keratinization, pearl formation, and intercellular bridges. Cigarette smoking and arsenic exposure are strongly associated with squamous cell lung carcinoma.",
+      "concept": "histology",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C3493",
+          "display": "Lung Squamous Cell Carcinoma"
+        }
+      ],
+      "synonyms": [
+        "Squamous cell carcinoma of the lung",
+        "LUSC",
+        "肺鳞癌"
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_nonsquamous",
+      "label": "Non-squamous non-small cell lung carcinoma",
+      "labelZh": "非鳞状非小细胞肺癌",
+      "kind": "histology",
+      "definition": "A non-small cell lung carcinoma without evidence of squamous differentiation.",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C135017",
+          "display": "Lung Non-Squamous Non-Small Cell Carcinoma"
+        }
+      ],
+      "synonyms": [
+        "Non-squamous NSCLC",
+        "非鳞癌"
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_stage_iii",
+      "label": "Stage III (locally advanced)",
+      "labelZh": "III期（局部晚期）",
+      "kind": "stage",
+      "definition": "Locally advanced cancer that has spread to nearby organs but not to distant anatomic sites.",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C27970",
+          "display": "Stage III"
+        }
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_stage_iv",
+      "label": "Stage IV",
+      "labelZh": "IV期",
+      "kind": "stage",
+      "definition": "Advanced cancer that has spread to adjacent and/or distant anatomic sites.",
+      "concept": "stage_iv_disease",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C27971",
+          "display": "Stage IV"
+        }
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_metastatic_nsclc",
+      "label": "Metastatic non-small cell lung cancer",
+      "labelZh": "转移性非小细胞肺癌",
+      "kind": "stage",
+      "definition": "A non-small cell carcinoma that arises from the lung and has metastasized to another anatomic site.",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C156094",
+          "display": "Metastatic Lung Non-Small Cell Carcinoma"
+        }
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_unresectable",
+      "label": "Unresectable",
+      "labelZh": "不可切除",
+      "kind": "stage",
+      "definition": "Not capable of being removed by surgery.",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C14151",
+          "display": "Unresectable"
+        }
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_resectable",
+      "label": "Resectable carcinoma",
+      "labelZh": "可切除的癌",
+      "kind": "stage",
+      "definition": "A carcinoma that is amenable to surgical resection.",
+      "concept": "resectable_disease",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C150604",
+          "display": "Resectable Carcinoma"
+        }
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_adjuvant",
+      "label": "Adjuvant therapy",
+      "labelZh": "辅助治疗",
+      "kind": "treatment",
+      "definition": "Any therapy that is administered to augment or stimulate other treatment modalities or to minimize or prevent disease recurrence subsequent to the main treatment plan.",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C15675",
+          "display": "Adjuvant Therapy"
+        }
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_neoadjuvant",
+      "label": "Neoadjuvant therapy",
+      "labelZh": "新辅助治疗",
+      "kind": "treatment",
+      "definition": "Therapy administered prior to the primary treatment for the purpose of making the primary treatment more effective.",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C15665",
+          "display": "Neoadjuvant Therapy"
+        }
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_consolidation",
+      "label": "Consolidation therapy",
+      "labelZh": "巩固治疗",
+      "kind": "treatment",
+      "definition": "Treatment that is given after initial therapy to kill any remaining cancer cells.",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C15679",
+          "display": "Consolidation Therapy"
+        }
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_egfr_tki",
+      "label": "EGFR tyrosine kinase inhibitor therapy",
+      "labelZh": "EGFR酪氨酸激酶抑制剂（EGFR-TKI）治疗",
+      "kind": "treatment",
+      "definition": "The use of EGFR tyrosine kinase inhibitors to disrupt the activation of EGFR, effectively halting the signaling cascade for cell growth, thereby decreasing tumor proliferation and migration.",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C116534",
+          "display": "EGFR Tyrosine Kinase Inhibitor Therapy"
+        }
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_checkpoint_inhibitor",
+      "label": "Immune checkpoint inhibitor",
+      "labelZh": "免疫检查点抑制剂",
+      "kind": "treatment",
+      "definition": "An agent that inhibits any of the immune checkpoint inhibitory proteins.",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C143250",
+          "display": "Immune Checkpoint Inhibitor"
+        }
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_egfr_sensitizing",
+      "label": "EGFR-sensitizing mutation",
+      "labelZh": "EGFR敏感突变",
+      "kind": "biomarker",
+      "definition": "A change in the sequence of the EGFR gene that results in increased sensitivity to EGFR targeted agents.",
+      "concept": "egfr_sensitizing_mutation",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C153232",
+          "display": "Sensitizing EGFR Gene Mutation"
+        }
+      ],
+      "synonyms": [
+        "EGFR sensitizing mutation",
+        "EGFR-TKI sensitizing mutation"
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_egfr_ex19del",
+      "label": "EGFR exon 19 deletion",
+      "labelZh": "EGFR 19号外显子缺失突变",
+      "kind": "biomarker",
+      "definition": "In-frame deletions occurring within the exon 19-encoded part of the epidermal growth factor receptor (EGFR) kinase domain. These mutations are commonly seen in non-small cell lung cancer and are associated with increased sensitivity to EGFR tyrosine kinase inhibitors.",
+      "concept": "egfr_exon19_deletion",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C126892",
+          "display": "EGFR Exon 19 Deletion Mutation"
+        }
+      ],
+      "synonyms": [
+        "EGFR Ex19del",
+        "EGFR del19"
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_egfr_l858r",
+      "label": "EGFR L858R substitution (exon 21)",
+      "labelZh": "EGFR L858R点突变（21号外显子）",
+      "kind": "biomarker",
+      "definition": "A change in the amino acid residue at position 858 in the epidermal growth factor receptor protein where leucine has been replaced by arginine.",
+      "concept": "egfr_l858r_mutation",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C98515",
+          "display": "EGFR NP_005219.2:p.L858R"
+        }
+      ],
+      "synonyms": [
+        "EGFR L858R"
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_alk",
+      "label": "ALK gene rearrangement",
+      "labelZh": "ALK基因重排（融合）",
+      "kind": "biomarker",
+      "definition": "A molecular abnormality indicating rearrangement of the ALK gene.",
+      "concept": "alk_rearrangement",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C129574",
+          "display": "ALK Gene Rearrangement"
+        }
+      ],
+      "synonyms": [
+        "ALK rearrangement",
+        "ALK-positive"
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_ros1",
+      "label": "ROS1 gene rearrangement",
+      "labelZh": "ROS1基因重排（融合）",
+      "kind": "biomarker",
+      "definition": "A molecular abnormality indicating rearrangement of the ROS1 gene.",
+      "concept": "ros1_rearrangement",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C130236",
+          "display": "ROS1 Gene Rearrangement"
+        }
+      ],
+      "synonyms": [
+        "ROS1 rearrangement",
+        "ROS1 fusion"
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_kras_g12c",
+      "label": "KRAS G12C mutation",
+      "labelZh": "KRAS G12C突变",
+      "kind": "biomarker",
+      "definition": "A change in the amino acid residue at position 12 in the GTPase KRas protein where glycine has been replaced by cysteine.",
+      "concept": "kras_g12c_mutation",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C98365",
+          "display": "KRAS NP_004976.2:p.G12C"
+        }
+      ],
+      "synonyms": [
+        "KRAS G12C",
+        "KRAS p.G12C"
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_met_ex14",
+      "label": "MET exon 14 skipping mutation",
+      "labelZh": "MET 14号外显子跳跃突变",
+      "kind": "biomarker",
+      "definition": "A molecular genetic abnormality indicating the presence of a splice site mutation that results in a loss of transcription of exon 14 of the MET gene.",
+      "concept": "met_exon14_skipping",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C131179",
+          "display": "MET Exon 14 Skipping Mutation"
+        }
+      ],
+      "synonyms": [
+        "METex14 skipping"
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_ret_fusion",
+      "label": "RET fusion positive",
+      "labelZh": "RET融合阳性",
+      "kind": "biomarker",
+      "definition": "Indicates that the expression of a RET fusion has been detected in a sample.",
+      "concept": "ret_fusion",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C131069",
+          "display": "RET Fusion Positive"
+        }
+      ],
+      "synonyms": [
+        "RET fusion",
+        "RET rearrangement"
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_braf_v600e",
+      "label": "BRAF V600E mutation",
+      "labelZh": "BRAF V600E突变",
+      "kind": "biomarker",
+      "definition": "A change in the amino acid residue at position 600 in the serine/threonine protein kinase B-raf protein where valine has been replaced by glutamic acid.",
+      "concept": "braf_v600e_mutation",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C98342",
+          "display": "BRAF NP_004324.2:p.V600E"
+        }
+      ],
+      "synonyms": [
+        "BRAF V600E"
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_pdl1_tps",
+      "label": "PD-L1 tumor proportion score (TPS)",
+      "labelZh": "PD-L1肿瘤细胞阳性比例分数（TPS）",
+      "kind": "biomarker",
+      "definition": "A score for tumor PD-L1 expression based on the percentage of viable tumor cells that are positive for PD-L1 staining.",
+      "concept": "pdl1_tps",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C184941",
+          "display": "PD-L1 Tumor Proportion Score"
+        }
+      ],
+      "synonyms": [
+        "PD-L1 TPS"
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_pdl1_tps_ge_1",
+      "label": "PD-L1 TPS of 1% or more",
+      "labelZh": "PD-L1 TPS ≥1%",
+      "kind": "biomarker",
+      "definition": "A semi-quantitative finding indicating that at least 1 percent of the viable tumor cells in a sample are positive for PD-L1 expression by immunostaining.",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C200204",
+          "display": "PD-L1 Tumor Proportion Score Greater than or Equal to 1"
+        }
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_pdl1_tps_ge_50",
+      "label": "PD-L1 TPS of 50% or more",
+      "labelZh": "PD-L1 TPS ≥50%",
+      "kind": "biomarker",
+      "definition": "A semi-quantitative finding indicating that at least 50 percent of the viable tumor cells in a sample are positive for PD-L1 expression by immunostaining.",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C205128",
+          "display": "PD-L1 Tumor Proportion Score Greater than or Equal to 50"
+        }
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_driver_gene_testing",
+      "label": "Driver-gene variant testing (EGFR, ALK, ROS1, MET, RET, BRAF, KRAS)",
+      "labelZh": "驱动基因变异检测（EGFR、ALK、ROS1、MET、RET、BRAF、KRAS）",
+      "kind": "assessment",
+      "concept": "nsclc_biomarker_test",
+      "codes": [
+        {
+          "system": "OMOP",
+          "code": "35962802",
+          "display": "EGFR gene variant measurement"
+        },
+        {
+          "system": "OMOP",
+          "code": "35963763",
+          "display": "ALK gene variant measurement"
+        },
+        {
+          "system": "OMOP",
+          "code": "35957723",
+          "display": "ROS1 gene variant measurement"
+        },
+        {
+          "system": "OMOP",
+          "code": "35961878",
+          "display": "MET gene variant measurement"
+        },
+        {
+          "system": "OMOP",
+          "code": "35952943",
+          "display": "RET gene variant measurement"
+        },
+        {
+          "system": "OMOP",
+          "code": "35948173",
+          "display": "BRAF gene variant measurement"
+        },
+        {
+          "system": "OMOP",
+          "code": "35948791",
+          "display": "KRAS gene variant measurement"
+        }
+      ],
+      "sources": [
+        "ohdsi_1279"
+      ]
+    },
+    {
+      "id": "t_ecog",
+      "label": "ECOG performance status",
+      "labelZh": "ECOG体能状态评分",
+      "kind": "assessment",
+      "definition": "A performance status scale designed to assess disease progression and its affect on the daily living abilities of the patient.",
+      "concept": "ecog",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C105721",
+          "display": "ECOG Performance Status"
+        }
+      ],
+      "synonyms": [
+        "ECOG PS",
+        "Eastern Cooperative Oncology Group performance status"
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_recist",
+      "label": "RECIST 1.1",
+      "labelZh": "RECIST 1.1实体瘤疗效评价标准",
+      "kind": "assessment",
+      "definition": "A standardized guideline developed by the Response Evaluation Criteria in Solid Tumors (RECIST) Working Group in 2000 and revised in 2009, which is an objective response criteria used to assess solid tumor response and to measure change in tumor size for use in adult and pediatric cancer clinical trials. Major revisions in RECIST version 1.1 includes lymph node (LN) measurement, the maximum number of target lesions, the definition of disease progression, as well as the inclusion of and guidance on the use of MRI and FDG PET in the detection of new lesions.",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C124415",
+          "display": "Response Evaluation Criteria in Solid Tumors Version 1.1"
+        }
+      ],
+      "synonyms": [
+        "Response Evaluation Criteria in Solid Tumors version 1.1",
+        "RECIST v1.1"
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_measurable_disease",
+      "label": "Measurable disease",
+      "labelZh": "可测量病灶",
+      "kind": "assessment",
+      "definition": "A finding indicating that a subject has one or more measurable pathological lesions.",
+      "concept": "measurable_disease",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C8507",
+          "display": "Measurable Disease"
+        }
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_os",
+      "label": "Overall survival (OS)",
+      "labelZh": "总生存期（OS）",
+      "kind": "measure",
+      "definition": "A measure of the time until death from any cause.",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C125201",
+          "display": "Overall Survival"
+        }
+      ],
+      "synonyms": [
+        "OS"
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_pfs",
+      "label": "Progression-free survival (PFS)",
+      "labelZh": "无进展生存期（PFS）",
+      "kind": "measure",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C28234",
+          "display": "Progression-free Survival"
+        }
+      ],
+      "synonyms": [
+        "PFS"
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_orr",
+      "label": "Objective response rate (ORR)",
+      "labelZh": "客观缓解率（ORR）",
+      "kind": "measure",
+      "definition": "A clinical metric measuring the percentage of patients whose tumors shrink or completely disappear after a specific treatment.",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C227552",
+          "display": "Objective Response Rate"
+        }
+      ],
+      "synonyms": [
+        "ORR"
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_dfs",
+      "label": "Disease-free survival (DFS)",
+      "labelZh": "无病生存期（DFS）",
+      "kind": "measure",
+      "definition": "The length of time after treatment for a specific disease during which a patient survives with no sign of recurrence of the disease.",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C17751",
+          "display": "Disease-Free Survival"
+        }
+      ],
+      "synonyms": [
+        "DFS"
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_efs",
+      "label": "Event-free survival (EFS)",
+      "labelZh": "无事件生存期（EFS）",
+      "kind": "measure",
+      "definition": "The length of time after treatment during which a patient survives with no sign of a particular complication of disease.",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C96340",
+          "display": "Event-Free Survival"
+        }
+      ],
+      "synonyms": [
+        "EFS"
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_pcr",
+      "label": "Pathologic complete response (pCR)",
+      "labelZh": "病理学完全缓解（pCR）",
+      "kind": "measure",
+      "definition": "The disappearance of all signs of cancer, supported by pathological examination.",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C123603",
+          "display": "Pathologic Complete Response"
+        }
+      ],
+      "synonyms": [
+        "pCR"
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_mpr",
+      "label": "Major pathologic response (MPR)",
+      "labelZh": "主要病理学缓解（MPR）",
+      "kind": "measure",
+      "definition": "A major decrease in signs of cancer, supported by pathological examination and based on pre-defined thresholds.",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C123590",
+          "display": "Major Pathologic Response"
+        }
+      ],
+      "synonyms": [
+        "MPR"
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_ild",
+      "label": "Interstitial lung disease",
+      "labelZh": "间质性肺疾病",
+      "kind": "comorbidity",
+      "definition": "A category of lung diseases characterized by varying degrees of inflammation and fibrosis of the interstitial lung tissue. Causes include occupational lung exposures and drugs. In a minority of cases there is no clear cause and such cases are termed idiopathic interstitial pneumonia.",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C164315",
+          "display": "Interstitial Lung Disease"
+        }
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_brain_metastasis",
+      "label": "Brain metastasis",
+      "labelZh": "脑转移",
+      "kind": "comorbidity",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C3813",
+          "display": "Metastatic Malignant Neoplasm in the Brain"
+        }
+      ],
+      "synonyms": [
+        "Metastatic malignant neoplasm in the brain"
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "t_autoimmune",
+      "label": "Autoimmune disease",
+      "labelZh": "自身免疫性疾病",
+      "kind": "comorbidity",
+      "definition": "A disorder resulting from loss of function or tissue destruction of an organ or multiple organs, arising from humoral or cellular immune responses of the individual to his own tissue constituents. It may be systemic (e.g., systemic lupus erythematosus), or organ specific, (e.g., thyroiditis).",
+      "codes": [
+        {
+          "system": "NCIt",
+          "code": "C2889",
+          "display": "Autoimmune Disease"
+        }
+      ],
+      "sources": [
+        "ncit"
+      ]
+    }
+  ],
+  "phenotypes": [
+    {
+      "id": "p_nsclc",
+      "label": "Non-small cell lung cancer",
+      "labelZh": "非小细胞肺癌",
+      "type": "diagnosis",
+      "rule": {
+        "op": "present",
+        "variable": "nsclc_diagnosis"
+      },
+      "text": "A diagnosis of non-small cell lung cancer, a group of lung carcinomas that includes adenocarcinoma, squamous cell carcinoma and large cell carcinoma.",
+      "textZh": "诊断为非小细胞肺癌，即包括腺癌、鳞状细胞癌和大细胞癌在内的一组肺癌。",
+      "terms": [
+        "t_nsclc",
+        "t_adenocarcinoma",
+        "t_squamous"
+      ],
+      "sources": [
+        "ncit"
+      ]
+    },
+    {
+      "id": "p_nsclc_adenocarcinoma",
+      "label": "NSCLC, adenocarcinoma histology",
+      "labelZh": "非小细胞肺癌，腺癌组织学类型",
+      "type": "diagnosis",
+      "rule": {
+        "op": "all",
+        "operands": [
+          {
+            "op": "present",
+            "variable": "nsclc_diagnosis"
+          },
+          {
+            "op": "compare",
+            "variable": "histology",
+            "comparator": "eq",
+            "value": "adenocarcinoma"
+          }
+        ]
+      },
+      "text": "Non-small cell lung cancer whose recorded histology is adenocarcinoma; some trials require adenocarcinoma specifically.",
+      "textZh": "组织学类型记录为腺癌的非小细胞肺癌；部分试验专门要求腺癌。",
+      "terms": [
+        "t_nsclc",
+        "t_adenocarcinoma"
+      ],
+      "sources": [
+        "ncit",
+        "nct02296125"
+      ]
+    },
+    {
+      "id": "p_nsclc_squamous",
+      "label": "NSCLC, squamous cell histology",
+      "labelZh": "非小细胞肺癌，鳞状细胞癌组织学类型",
+      "type": "diagnosis",
+      "rule": {
+        "op": "all",
+        "operands": [
+          {
+            "op": "present",
+            "variable": "nsclc_diagnosis"
+          },
+          {
+            "op": "compare",
+            "variable": "histology",
+            "comparator": "eq",
+            "value": "squamous_cell_carcinoma"
+          }
+        ]
+      },
+      "text": "Non-small cell lung cancer whose recorded histology is squamous cell carcinoma; first-line trials often enroll squamous and non-squamous disease separately.",
+      "textZh": "组织学类型记录为鳞状细胞癌的非小细胞肺癌；一线试验常将鳞癌与非鳞癌分开入组。",
+      "terms": [
+        "t_nsclc",
+        "t_squamous"
+      ],
+      "sources": [
+        "ncit",
+        "nct02775435"
+      ]
+    },
+    {
+      "id": "p_nsclc_nonsquamous",
+      "label": "NSCLC, non-squamous histology",
+      "labelZh": "非小细胞肺癌，非鳞癌组织学类型",
+      "type": "diagnosis",
+      "rule": {
+        "op": "all",
+        "operands": [
+          {
+            "op": "present",
+            "variable": "nsclc_diagnosis"
+          },
+          {
+            "op": "compare",
+            "variable": "histology",
+            "comparator": "ne",
+            "value": "squamous_cell_carcinoma"
+          }
+        ]
+      },
+      "text": "Non-small cell lung cancer without squamous differentiation (adenocarcinoma and the other non-squamous types); the group some chemotherapy-immunotherapy trials enroll.",
+      "textZh": "无鳞状分化的非小细胞肺癌（腺癌及其他非鳞癌类型）；部分化疗联合免疫治疗试验入组该人群。",
+      "terms": [
+        "t_nsclc",
+        "t_nonsquamous"
+      ],
+      "sources": [
+        "ncit",
+        "nct02578680"
+      ]
+    },
+    {
+      "id": "p_advanced_nsclc",
+      "label": "Advanced NSCLC (locally advanced unresectable or metastatic)",
+      "labelZh": "晚期非小细胞肺癌（局部晚期不可切除或转移性）",
+      "type": "diagnosis",
+      "rule": {
+        "op": "all",
+        "operands": [
+          {
+            "op": "present",
+            "variable": "nsclc_diagnosis"
+          },
+          {
+            "op": "any",
+            "operands": [
+              {
+                "op": "present",
+                "variable": "stage_iv_disease"
+              },
+              {
+                "op": "present",
+                "variable": "locally_advanced_unresectable_disease"
+              }
+            ]
+          }
+        ]
+      },
+      "text": "Non-small cell lung cancer that is metastatic (stage IV), or locally advanced and not amenable to curative surgery or radiotherapy; the entry setting of advanced-disease drug trials.",
+      "textZh": "转移性（IV期）非小细胞肺癌，或局部晚期且不适合根治性手术或放疗者；晚期药物试验的入组场景。",
+      "terms": [
+        "t_nsclc",
+        "t_metastatic_nsclc",
+        "t_stage_iii",
+        "t_stage_iv",
+        "t_unresectable"
+      ],
+      "sources": [
+        "ncit",
+        "nct02296125",
+        "nct04487080",
+        "nct03052608"
+      ]
+    },
+    {
+      "id": "p_stage_iv_nsclc",
+      "label": "Stage IV (metastatic) NSCLC",
+      "labelZh": "IV期（转移性）非小细胞肺癌",
+      "type": "diagnosis",
+      "rule": {
+        "op": "all",
+        "operands": [
+          {
+            "op": "present",
+            "variable": "nsclc_diagnosis"
+          },
+          {
+            "op": "present",
+            "variable": "stage_iv_disease"
+          }
+        ]
+      },
+      "text": "Non-small cell lung cancer at stage IV; several first-line trials limit entry to this stage, and some also admit recurrent disease.",
+      "textZh": "IV期非小细胞肺癌；若干一线试验仅限此分期入组，部分试验也接受复发性疾病。",
+      "terms": [
+        "t_nsclc",
+        "t_stage_iv",
+        "t_metastatic_nsclc"
+      ],
+      "sources": [
+        "ncit",
+        "nct02578680",
+        "nct02409342",
+        "nct02477826"
+      ]
+    },
+    {
+      "id": "p_resectable_early_stage_nsclc",
+      "label": "Resectable early-stage NSCLC (before surgery)",
+      "labelZh": "可切除的早期非小细胞肺癌（术前）",
+      "type": "diagnosis",
+      "rule": {
+        "op": "all",
+        "operands": [
+          {
+            "op": "present",
+            "variable": "nsclc_diagnosis"
+          },
+          {
+            "op": "present",
+            "variable": "resectable_disease"
+          },
+          {
+            "op": "absent",
+            "variable": "stage_iv_disease"
+          }
+        ]
+      },
+      "text": "Non-small cell lung cancer without distant metastasis that is judged resectable with curative intent; the population of neoadjuvant and perioperative trials.",
+      "textZh": "无远处转移、经评估可行根治性切除的非小细胞肺癌；新辅助及围手术期试验的人群。",
+      "terms": [
+        "t_nsclc",
+        "t_resectable",
+        "t_neoadjuvant"
+      ],
+      "sources": [
+        "ncit",
+        "nct02998528",
+        "nct03425643"
+      ]
+    },
+    {
+      "id": "p_completely_resected_nsclc",
+      "label": "Completely resected NSCLC (adjuvant setting)",
+      "labelZh": "已完整切除的非小细胞肺癌（辅助治疗场景）",
+      "type": "diagnosis",
+      "rule": {
+        "op": "all",
+        "operands": [
+          {
+            "op": "present",
+            "variable": "nsclc_diagnosis"
+          },
+          {
+            "op": "present",
+            "variable": "complete_resection"
+          }
+        ]
+      },
+      "text": "Non-small cell lung cancer after complete surgical resection of the primary tumor; the population of adjuvant trials, which follow patients for recurrence.",
+      "textZh": "原发肿瘤已行完整手术切除的非小细胞肺癌；辅助治疗试验的人群，随访复发情况。",
+      "terms": [
+        "t_nsclc",
+        "t_adjuvant"
+      ],
+      "sources": [
+        "ncit",
+        "nct02511106",
+        "nct02486718",
+        "nct02595944",
+        "nct02273375"
+      ]
+    },
+    {
+      "id": "p_egfr_sensitizing_nsclc",
+      "label": "NSCLC with a common EGFR-sensitizing mutation",
+      "labelZh": "携带常见EGFR敏感突变的非小细胞肺癌",
+      "type": "biomarker",
+      "rule": {
+        "op": "all",
+        "operands": [
+          {
+            "op": "present",
+            "variable": "nsclc_diagnosis"
+          },
+          {
+            "op": "any",
+            "operands": [
+              {
+                "op": "present",
+                "variable": "egfr_exon19_deletion"
+              },
+              {
+                "op": "present",
+                "variable": "egfr_l858r_mutation"
+              }
+            ]
+          }
+        ]
+      },
+      "text": "Non-small cell lung cancer with an EGFR exon 19 deletion or an exon 21 L858R substitution, the two common mutations that EGFR-targeted trials select on.",
+      "textZh": "携带EGFR 19号外显子缺失或21号外显子L858R点突变的非小细胞肺癌；EGFR靶向治疗试验据此入组。",
+      "terms": [
+        "t_nsclc",
+        "t_egfr_sensitizing",
+        "t_egfr_ex19del",
+        "t_egfr_l858r"
+      ],
+      "sources": [
+        "ncit",
+        "nct02296125",
+        "nct04487080"
+      ]
+    },
+    {
+      "id": "p_alk_positive_nsclc",
+      "label": "ALK-positive NSCLC",
+      "labelZh": "ALK阳性非小细胞肺癌",
+      "type": "biomarker",
+      "rule": {
+        "op": "all",
+        "operands": [
+          {
+            "op": "present",
+            "variable": "nsclc_diagnosis"
+          },
+          {
+            "op": "present",
+            "variable": "alk_rearrangement"
+          }
+        ]
+      },
+      "text": "Non-small cell lung cancer with a documented ALK rearrangement, the population of ALK-inhibitor trials.",
+      "textZh": "有ALK重排证据的非小细胞肺癌；ALK抑制剂试验的人群。",
+      "terms": [
+        "t_nsclc",
+        "t_alk"
+      ],
+      "sources": [
+        "ncit",
+        "nct03052608",
+        "nct02838420",
+        "nct02075840"
+      ]
+    },
+    {
+      "id": "p_ros1_positive_nsclc",
+      "label": "ROS1-rearranged NSCLC",
+      "labelZh": "ROS1重排非小细胞肺癌",
+      "type": "biomarker",
+      "rule": {
+        "op": "all",
+        "operands": [
+          {
+            "op": "present",
+            "variable": "nsclc_diagnosis"
+          },
+          {
+            "op": "present",
+            "variable": "ros1_rearrangement"
+          }
+        ]
+      },
+      "text": "Non-small cell lung cancer with a ROS1 rearrangement (fusion); one registered trial enrolls ROS1-positive NSCLC in dedicated cohorts.",
+      "textZh": "有ROS1重排（融合）的非小细胞肺癌；有注册试验设立专门队列入组ROS1阳性非小细胞肺癌。",
+      "terms": [
+        "t_nsclc",
+        "t_ros1"
+      ],
+      "sources": [
+        "ncit",
+        "nct03093116"
+      ]
+    },
+    {
+      "id": "p_kras_g12c_nsclc",
+      "label": "KRAS G12C-mutated NSCLC",
+      "labelZh": "KRAS G12C突变非小细胞肺癌",
+      "type": "biomarker",
+      "rule": {
+        "op": "all",
+        "operands": [
+          {
+            "op": "present",
+            "variable": "nsclc_diagnosis"
+          },
+          {
+            "op": "present",
+            "variable": "kras_g12c_mutation"
+          }
+        ]
+      },
+      "text": "Non-small cell lung cancer with a KRAS G12C mutation, the population of KRAS G12C inhibitor trials, two of which compared the inhibitor with docetaxel.",
+      "textZh": "携带KRAS G12C突变的非小细胞肺癌；KRAS G12C抑制剂试验的人群，其中两项试验以多西他赛为对照。",
+      "terms": [
+        "t_nsclc",
+        "t_kras_g12c"
+      ],
+      "sources": [
+        "ncit",
+        "nct04303780",
+        "nct04685135"
+      ]
+    },
+    {
+      "id": "p_met_exon14_nsclc",
+      "label": "NSCLC with MET exon 14 skipping",
+      "labelZh": "伴MET 14号外显子跳跃的非小细胞肺癌",
+      "type": "biomarker",
+      "rule": {
+        "op": "all",
+        "operands": [
+          {
+            "op": "present",
+            "variable": "nsclc_diagnosis"
+          },
+          {
+            "op": "present",
+            "variable": "met_exon14_skipping"
+          }
+        ]
+      },
+      "text": "Non-small cell lung cancer with a MET alteration that causes exon 14 skipping; registered MET-inhibitor trials select on it.",
+      "textZh": "携带导致14号外显子跳跃的MET变异的非小细胞肺癌；MET抑制剂注册试验据此入组。",
+      "terms": [
+        "t_nsclc",
+        "t_met_ex14"
+      ],
+      "sources": [
+        "ncit",
+        "nct02864992",
+        "nct02414139"
+      ]
+    },
+    {
+      "id": "p_ret_fusion_nsclc",
+      "label": "RET fusion-positive NSCLC",
+      "labelZh": "RET融合阳性非小细胞肺癌",
+      "type": "biomarker",
+      "rule": {
+        "op": "all",
+        "operands": [
+          {
+            "op": "present",
+            "variable": "nsclc_diagnosis"
+          },
+          {
+            "op": "present",
+            "variable": "ret_fusion"
+          }
+        ]
+      },
+      "text": "Non-small cell lung cancer with a RET gene fusion, the population of selective RET-inhibitor trials.",
+      "textZh": "携带RET基因融合的非小细胞肺癌；选择性RET抑制剂试验的人群。",
+      "terms": [
+        "t_nsclc",
+        "t_ret_fusion"
+      ],
+      "sources": [
+        "ncit",
+        "nct04194944",
+        "nct04222972"
+      ]
+    },
+    {
+      "id": "p_braf_v600e_nsclc",
+      "label": "BRAF V600E-mutated NSCLC",
+      "labelZh": "BRAF V600E突变非小细胞肺癌",
+      "type": "biomarker",
+      "rule": {
+        "op": "all",
+        "operands": [
+          {
+            "op": "present",
+            "variable": "nsclc_diagnosis"
+          },
+          {
+            "op": "present",
+            "variable": "braf_v600e_mutation"
+          }
+        ]
+      },
+      "text": "Non-small cell lung cancer with a BRAF V600E mutation; a registered BRAF/MEK-inhibitor combination trial selects on it.",
+      "textZh": "携带BRAF V600E突变的非小细胞肺癌；有BRAF/MEK抑制剂联合治疗注册试验据此入组。",
+      "terms": [
+        "t_nsclc",
+        "t_braf_v600e"
+      ],
+      "sources": [
+        "ncit",
+        "nct03915951"
+      ]
+    },
+    {
+      "id": "p_driver_positive_nsclc",
+      "label": "NSCLC with an actionable driver alteration",
+      "labelZh": "伴可干预驱动基因变异的非小细胞肺癌",
+      "type": "biomarker",
+      "rule": {
+        "op": "all",
+        "operands": [
+          {
+            "op": "present",
+            "variable": "nsclc_diagnosis"
+          },
+          {
+            "op": "any",
+            "operands": [
+              {
+                "op": "present",
+                "variable": "egfr_sensitizing_mutation"
+              },
+              {
+                "op": "present",
+                "variable": "alk_rearrangement"
+              },
+              {
+                "op": "present",
+                "variable": "ros1_rearrangement"
+              },
+              {
+                "op": "present",
+                "variable": "kras_g12c_mutation"
+              },
+              {
+                "op": "present",
+                "variable": "met_exon14_skipping"
+              },
+              {
+                "op": "present",
+                "variable": "ret_fusion"
+              },
+              {
+                "op": "present",
+                "variable": "braf_v600e_mutation"
+              }
+            ]
+          }
+        ]
+      },
+      "text": "Non-small cell lung cancer with at least one of the driver alterations that registered trials select on: EGFR-sensitizing mutation, ALK or ROS1 rearrangement, KRAS G12C, MET exon 14 skipping, RET fusion or BRAF V600E.",
+      "textZh": "至少携带一种注册试验据以入组的驱动基因变异的非小细胞肺癌：EGFR敏感突变、ALK或ROS1重排、KRAS G12C、MET 14号外显子跳跃、RET融合或BRAF V600E。",
+      "terms": [
+        "t_nsclc",
+        "t_egfr_sensitizing",
+        "t_alk",
+        "t_ros1",
+        "t_kras_g12c",
+        "t_met_ex14",
+        "t_ret_fusion",
+        "t_braf_v600e"
+      ],
+      "sources": [
+        "ncit",
+        "nct02296125",
+        "nct03052608",
+        "nct03093116",
+        "nct04303780",
+        "nct02864992",
+        "nct04194944",
+        "nct03915951"
+      ]
+    },
+    {
+      "id": "p_pdl1_tps_ge_1",
+      "label": "PD-L1 TPS of 1% or more",
+      "labelZh": "PD-L1 TPS ≥1%",
+      "type": "biomarker",
+      "rule": {
+        "op": "compare",
+        "variable": "pdl1_tps",
+        "comparator": "gte",
+        "value": 1,
+        "unit": "percent"
+      },
+      "text": "A PD-L1 tumor proportion score of at least 1 percent; one of the PD-L1 cut-offs that one immunotherapy trial used for its primary survival analyses.",
+      "textZh": "肿瘤PD-L1阳性比例分数（TPS）≥1%；某免疫治疗试验用于主要生存分析的PD-L1界值之一。",
+      "terms": [
+        "t_pdl1_tps",
+        "t_pdl1_tps_ge_1"
+      ],
+      "sources": [
+        "ncit",
+        "nct02220894"
+      ]
+    },
+    {
+      "id": "p_pdl1_tps_ge_50",
+      "label": "PD-L1 TPS of 50% or more",
+      "labelZh": "PD-L1 TPS ≥50%",
+      "type": "biomarker",
+      "rule": {
+        "op": "compare",
+        "variable": "pdl1_tps",
+        "comparator": "gte",
+        "value": 50,
+        "unit": "percent"
+      },
+      "text": "A PD-L1 tumor proportion score of at least 50 percent, the highest of the PD-L1 cut-offs that one immunotherapy trial used for its primary survival analyses.",
+      "textZh": "肿瘤PD-L1阳性比例分数（TPS）≥50%；某免疫治疗试验主要生存分析所用PD-L1界值中最高的一档。",
+      "terms": [
+        "t_pdl1_tps",
+        "t_pdl1_tps_ge_50"
+      ],
+      "sources": [
+        "ncit",
+        "nct02220894"
+      ]
+    },
+    {
+      "id": "p_measurable_disease",
+      "label": "Measurable disease by RECIST 1.1",
+      "labelZh": "按RECIST 1.1存在可测量病灶",
+      "type": "other",
+      "rule": {
+        "op": "present",
+        "variable": "measurable_disease"
+      },
+      "text": "At least one lesion that can be measured with imaging under RECIST 1.1, the baseline requirement for response and progression endpoints.",
+      "textZh": "按RECIST 1.1至少有一个可经影像学测量的病灶；是评价缓解与进展类终点的基线要求。",
+      "terms": [
+        "t_measurable_disease",
+        "t_recist"
+      ],
+      "sources": [
+        "ncit",
+        "recist11",
+        "nct02409342",
+        "nct04487080"
+      ]
+    },
+    {
+      "id": "p_nsclc_record_based_ohdsi",
+      "label": "NSCLC identified from health records (OHDSI cohort 1279, pending peer review)",
+      "labelZh": "由病历记录识别的非小细胞肺癌（OHDSI队列1279，待同行评审）",
+      "type": "diagnosis",
+      "rule": {
+        "op": "all",
+        "operands": [
+          {
+            "op": "present",
+            "variable": "primary_lung_cancer_diagnosis"
+          },
+          {
+            "op": "absent",
+            "variable": "small_cell_lung_cancer"
+          },
+          {
+            "op": "absent",
+            "variable": "upper_respiratory_tract_malignancy"
+          },
+          {
+            "op": "any",
+            "operands": [
+              {
+                "op": "present",
+                "variable": "nsclc_diagnosis"
+              },
+              {
+                "op": "present",
+                "variable": "nsclc_drug_exposure"
+              },
+              {
+                "op": "present",
+                "variable": "nsclc_biomarker_test"
+              }
+            ]
+          }
+        ]
+      },
+      "text": "Restates OHDSI cohort 1279 (status pending peer review, not validated). Entry is a record of primary lung cancer or an abnormal lung finding; the person then needs a primary lung cancer diagnosis within 180 days after entry, no small cell lung cancer record and no upper respiratory tract malignancy, and NSCLC-specific evidence (an NSCLC diagnosis, an NSCLC drug or a driver-gene test) within 365 days. This grammar has no forward windows, so those timings and the cohort's US reporting-code branch are not expressed.",
+      "textZh": "复述OHDSI队列1279的逻辑（状态：待同行评审，未经验证）。入组事件为原发性肺癌记录或肺部异常发现；其后须在180天内有原发性肺癌诊断，无小细胞肺癌记录及上呼吸道恶性肿瘤，并在365天内有非小细胞肺癌特异性证据（非小细胞肺癌诊断、相关药物或驱动基因检测）。本文法没有向前的时间窗，因此上述时间限定及该队列中美国报销编码分支均未表达。",
+      "terms": [
+        "t_nsclc",
+        "t_sclc",
+        "t_primary_lung_cancer",
+        "t_driver_gene_testing"
+      ],
+      "sources": [
+        "ohdsi_1279"
+      ]
+    }
+  ],
+  "endpoints": [
+    {
+      "id": "e_os",
+      "label": "Overall survival",
+      "labelZh": "总生存期",
+      "type": "time_to_event",
+      "definition": "How long patients survive after randomization, counted to death from any cause; the whole randomized (intent-to-treat) population is analyzed.",
+      "definitionZh": "自随机分组至任何原因死亡的时间，在意向性治疗人群中分析。",
+      "assessment": "Date of death, with patients alive at the analysis cut-off censored at the last date known alive. A randomized comparison is expected, because later therapy can confound survival.",
+      "standard": {
+        "name": "FDA guidance: Clinical Trial Endpoints for the Approval of Cancer Drugs and Biologics",
+        "version": "December 2018",
+        "url": "https://www.fda.gov/regulatory-information/search-fda-guidance-documents/clinical-trial-endpoints-approval-cancer-drugs-and-biologics"
+      },
+      "setting": "Locally advanced or metastatic disease; also reported in adjuvant and perioperative trials",
+      "terms": [
+        "t_os"
+      ],
+      "sources": [
+        "fda_nsclc_endpoints",
+        "fda_cancer_endpoints",
+        "ema_anticancer",
+        "nct02578680",
+        "nct02125461"
+      ]
+    },
+    {
+      "id": "e_pfs",
+      "label": "Progression-free survival",
+      "labelZh": "无进展生存期",
+      "type": "time_to_event",
+      "definition": "How long patients live after randomization without objective tumor progression; the event is whichever comes first of progression or death from any cause.",
+      "definitionZh": "自随机分组至出现客观肿瘤进展或任何原因死亡（以先发生者为准）的时间。",
+      "assessment": "Imaging assessed by RECIST 1.1, in the registered NSCLC trials read here by blinded independent central review or by the investigator. Progression under RECIST 1.1 is a rise of at least 20% (and at least 5 mm) in the sum of target-lesion diameters, or new lesions. The progression date, censoring rules and handling of missed assessments should be pre-specified.",
+      "standard": {
+        "name": "RECIST 1.1",
+        "version": "1.1",
+        "url": "https://recist.eortc.org/recist-1-1/"
+      },
+      "setting": "Locally advanced or metastatic disease",
+      "terms": [
+        "t_pfs",
+        "t_recist"
+      ],
+      "sources": [
+        "fda_nsclc_endpoints",
+        "fda_cancer_endpoints",
+        "ema_anticancer",
+        "recist11",
+        "nct02296125",
+        "nct02125461",
+        "nct03052608"
+      ]
+    },
+    {
+      "id": "e_orr",
+      "label": "Objective response rate",
+      "labelZh": "客观缓解率",
+      "type": "binary",
+      "definition": "Proportion of patients whose best response is a complete or partial response; stable disease is not counted.",
+      "definitionZh": "最佳疗效为完全缓解或部分缓解的患者比例；疾病稳定不计入。",
+      "assessment": "Tumor measurements on imaging by RECIST 1.1 (partial response is a fall of at least 30% in the sum of target-lesion diameters, complete response is disappearance of all target lesions); the response criteria should be fixed in the protocol.",
+      "standard": {
+        "name": "RECIST 1.1",
+        "version": "1.1",
+        "url": "https://recist.eortc.org/recist-1-1/"
+      },
+      "setting": "Locally advanced or metastatic disease",
+      "terms": [
+        "t_orr",
+        "t_recist"
+      ],
+      "sources": [
+        "fda_nsclc_endpoints",
+        "fda_cancer_endpoints",
+        "ema_anticancer",
+        "recist11",
+        "nct02296125"
+      ]
+    },
+    {
+      "id": "e_dor",
+      "label": "Duration of response",
+      "labelZh": "缓解持续时间",
+      "type": "time_to_event",
+      "definition": "In patients who responded, how long the response lasts: from the first documented complete or partial response to documented tumor progression.",
+      "definitionZh": "在获得缓解的患者中，自首次记录到缓解（完全或部分）至记录到肿瘤进展的时间。",
+      "assessment": "Measured on the same RECIST 1.1 imaging assessments as response; in one registered trial death without progression also ends the response. EMA expects it to be reported whenever the response rate is.",
+      "standard": {
+        "name": "RECIST 1.1",
+        "version": "1.1",
+        "url": "https://recist.eortc.org/recist-1-1/"
+      },
+      "setting": "Locally advanced or metastatic disease",
+      "terms": [
+        "t_orr",
+        "t_recist"
+      ],
+      "sources": [
+        "fda_cancer_endpoints",
+        "ema_anticancer",
+        "recist11",
+        "nct02296125"
+      ]
+    },
+    {
+      "id": "e_dfs",
+      "label": "Disease-free survival",
+      "labelZh": "无病生存期",
+      "type": "time_to_event",
+      "definition": "In patients after complete resection, how long from randomization until the cancer returns (in some trials, or a new primary NSCLC appears) or the patient dies from any cause.",
+      "definitionZh": "在已完整切除的患者中，自随机分组至疾病复发（部分试验还包括新发原发非小细胞肺癌）或任何原因死亡的时间。",
+      "assessment": "Recurrence is found on follow-up imaging and clinical assessment. The protocol should fix the definition and the follow-up schedule, because differences in unscheduled assessments between arms can bias the estimate (FDA).",
+      "standard": {
+        "name": "FDA guidance: Clinical Trial Endpoints for the Approval of Cancer Drugs and Biologics",
+        "version": "December 2018",
+        "url": "https://www.fda.gov/regulatory-information/search-fda-guidance-documents/clinical-trial-endpoints-approval-cancer-drugs-and-biologics"
+      },
+      "setting": "Adjuvant, after complete resection",
+      "terms": [
+        "t_dfs"
+      ],
+      "sources": [
+        "fda_cancer_endpoints",
+        "fda_nsclc_endpoints",
+        "ema_anticancer",
+        "nct02511106",
+        "nct02486718"
+      ]
+    },
+    {
+      "id": "e_efs",
+      "label": "Event-free survival",
+      "labelZh": "无事件生存期",
+      "type": "time_to_event",
+      "definition": "Counted from a randomization made before surgery, the first of: progression that makes surgery impossible, recurrence at a local or distant site, or death from any cause.",
+      "definitionZh": "自随机分组（术前）至出现使手术无法进行的进展、局部或远处复发或任何原因死亡的时间。",
+      "assessment": "Progression and recurrence by RECIST 1.1 imaging (blinded independent central review in one registered trial) or by biopsy. In one registered trial, patients who do not undergo surgery for a reason other than progression are not counted as having an event until progression or death.",
+      "standard": {
+        "name": "FDA guidance: Clinical Trial Endpoints for the Approval of Cancer Drugs and Biologics",
+        "version": "December 2018",
+        "url": "https://www.fda.gov/regulatory-information/search-fda-guidance-documents/clinical-trial-endpoints-approval-cancer-drugs-and-biologics"
+      },
+      "setting": "Neoadjuvant and perioperative",
+      "terms": [
+        "t_efs"
+      ],
+      "sources": [
+        "fda_cancer_endpoints",
+        "nct02998528",
+        "nct03425643"
+      ]
+    },
+    {
+      "id": "e_pcr",
+      "label": "Pathologic complete response",
+      "labelZh": "病理学完全缓解",
+      "type": "binary",
+      "definition": "Proportion of patients with no residual tumor (residual invasive cancer, in one trial) in the resected lung and lymph nodes after neoadjuvant therapy.",
+      "definitionZh": "新辅助治疗后，切除的肺及淋巴结标本中无残留肿瘤（其中一项试验表述为无残留浸润癌）的患者比例。",
+      "assessment": "Pathology review of the surgical specimen, by blinded independent pathologists in the registered trials read here. EMA asks that patients withdrawn be counted as non-responders when it is a secondary endpoint. No NSCLC-specific regulatory standard is cited; the protocol defines it.",
+      "standard": {
+        "name": "Protocol-defined pathological assessment (no NSCLC-specific regulatory standard cited)"
+      },
+      "setting": "Neoadjuvant and perioperative",
+      "terms": [
+        "t_pcr"
+      ],
+      "sources": [
+        "nct02998528",
+        "nct03425643",
+        "ema_anticancer"
+      ]
+    },
+    {
+      "id": "e_mpr",
+      "label": "Major pathologic response",
+      "labelZh": "主要病理学缓解",
+      "type": "binary",
+      "definition": "Proportion of patients with only a small amount of viable tumor left in the resected lung and lymph nodes after neoadjuvant therapy; both registered trials read here set the limit at 10% viable tumor.",
+      "definitionZh": "新辅助治疗后，切除的肺及淋巴结标本中仅残留少量存活肿瘤的患者比例；本包所读的两项注册试验均以残留存活肿瘤不超过10%为界。",
+      "assessment": "Pathology review of the surgical specimen by blinded independent pathologists. The limit on residual viable tumor is set in each protocol; no NSCLC-specific regulatory standard is cited.",
+      "standard": {
+        "name": "Protocol-defined pathological assessment (no NSCLC-specific regulatory standard cited)"
+      },
+      "setting": "Neoadjuvant and perioperative",
+      "terms": [
+        "t_mpr"
+      ],
+      "sources": [
+        "nct02998528",
+        "nct03425643"
+      ]
+    },
+    {
+      "id": "e_symptoms",
+      "label": "Patient-reported tumor-related symptoms and quality of life",
+      "labelZh": "患者报告的肿瘤相关症状与生活质量",
+      "type": "continuous",
+      "definition": "Change in, or time to deterioration of, a patient-reported symptom or quality-of-life score, for symptoms due to the cancer rather than to drug toxicity.",
+      "definitionZh": "患者报告的症状或生活质量评分的变化，或评分恶化的时间；评价的应是肿瘤所致症状，而非药物毒性。",
+      "assessment": "Needs a well-defined, reliable instrument, a pre-specified assessment schedule and a plan for missing data, ideally in blinded randomized trials. One registered trial lists the change in the EORTC QLQ-C30 global health status score as a secondary endpoint.",
+      "standard": {
+        "name": "Principles for patient-reported outcomes in the FDA NSCLC endpoints guidance",
+        "version": "April 2015",
+        "url": "https://www.fda.gov/regulatory-information/search-fda-guidance-documents/clinical-trial-endpoints-approval-non-small-cell-lung-cancer-drugs-and-biologics"
+      },
+      "setting": "Advanced disease",
+      "sources": [
+        "fda_nsclc_endpoints",
+        "fda_cancer_endpoints",
+        "nct03425643"
+      ]
+    }
+  ],
+  "criteria": [
+    {
+      "id": "c_age_adult",
+      "kind": "inclusion",
+      "criterionType": "demographic",
+      "requirement": {
+        "op": "compare",
+        "variable": "age",
+        "comparator": "gte",
+        "value": 18,
+        "unit": "years"
+      },
+      "text": "Adults aged 18 years or older.",
+      "textZh": "年龄≥18岁的成人。",
+      "sources": [
+        "nct02296125",
+        "nct02125461",
+        "nct02511106",
+        "nct03052608",
+        "nct04303780",
+        "nct03849768",
+        "nct02395172",
+        "nct02576574"
+      ]
+    },
+    {
+      "id": "c_nsclc_confirmed",
+      "kind": "inclusion",
+      "criterionType": "diagnosis",
+      "requirement": {
+        "op": "present",
+        "variable": "nsclc_diagnosis"
+      },
+      "text": "Non-small cell lung cancer confirmed by histology or cytology (some trials word it as pathologically or tissue confirmed).",
+      "textZh": "经组织学或细胞学确诊的非小细胞肺癌（部分试验表述为病理学或组织学确诊）。",
+      "terms": [
+        "t_nsclc"
+      ],
+      "sources": [
+        "nct02578680",
+        "nct02477826",
+        "nct03052608",
+        "nct02409342",
+        "nct02367781",
+        "nct02998528",
+        "nct02486718",
+        "nct02775435"
+      ]
+    },
+    {
+      "id": "c_advanced_setting",
+      "kind": "inclusion",
+      "criterionType": "diagnosis",
+      "requirement": {
+        "op": "any",
+        "operands": [
+          {
+            "op": "present",
+            "variable": "stage_iv_disease"
+          },
+          {
+            "op": "present",
+            "variable": "locally_advanced_unresectable_disease"
+          }
+        ]
+      },
+      "text": "Locally advanced disease that cannot be cured by surgery or radiotherapy, or metastatic disease; the entry setting of advanced-disease trials. Some trials name stage IIIB or recurrent disease explicitly.",
+      "textZh": "局部晚期且无法通过手术或放疗根治，或已转移的疾病；晚期疾病试验的入组场景。部分试验明确写明IIIB期或复发性疾病。",
+      "terms": [
+        "t_stage_iii",
+        "t_stage_iv",
+        "t_unresectable"
+      ],
+      "sources": [
+        "nct02296125",
+        "nct03052608",
+        "nct04487080",
+        "nct03849768",
+        "nct02220894",
+        "nct02838420",
+        "nct04303780"
+      ]
+    },
+    {
+      "id": "c_stage_iv",
+      "kind": "inclusion",
+      "criterionType": "diagnosis",
+      "requirement": {
+        "op": "present",
+        "variable": "stage_iv_disease"
+      },
+      "text": "Stage IV (metastatic) disease. Several first-line trials restrict entry to stage IV; some also admit recurrent disease.",
+      "textZh": "IV期（转移性）疾病。若干一线试验仅限IV期入组，部分试验也接受复发性疾病。",
+      "terms": [
+        "t_stage_iv",
+        "t_metastatic_nsclc"
+      ],
+      "sources": [
+        "nct02578680",
+        "nct02409342",
+        "nct02367781",
+        "nct02366143",
+        "nct02775435",
+        "nct02477826"
+      ]
+    },
+    {
+      "id": "c_ecog_0_1",
+      "kind": "inclusion",
+      "criterionType": "performance_status",
+      "requirement": {
+        "op": "compare",
+        "variable": "ecog",
+        "comparator": "between",
+        "value": 0,
+        "highValue": 1
+      },
+      "text": "ECOG performance status 0 or 1 (written as 0 to 1 or as 1 or less).",
+      "textZh": "ECOG体能状态评分0或1分（写作0–1分或≤1分）。",
+      "terms": [
+        "t_ecog"
+      ],
+      "sources": [
+        "nct02578680",
+        "nct02477826",
+        "nct02409342",
+        "nct02367781",
+        "nct02998528",
+        "nct02486718",
+        "nct02775435",
+        "nct02220894"
+      ]
+    },
+    {
+      "id": "c_measurable_disease",
+      "kind": "inclusion",
+      "criterionType": "other",
+      "requirement": {
+        "op": "present",
+        "variable": "measurable_disease"
+      },
+      "text": "At least one measurable lesion according to RECIST 1.1; one trial also requires that it was not irradiated before and not biopsied during screening.",
+      "textZh": "按RECIST 1.1至少有一个可测量病灶；有试验还要求该病灶此前未接受放疗、且筛选期未被活检。",
+      "terms": [
+        "t_measurable_disease",
+        "t_recist"
+      ],
+      "sources": [
+        "nct02477826",
+        "nct04487080",
+        "nct02409342",
+        "nct02367781",
+        "nct02775435",
+        "nct02838420",
+        "nct02220894",
+        "nct02366143"
+      ]
+    },
+    {
+      "id": "c_no_prior_systemic_advanced",
+      "kind": "inclusion",
+      "criterionType": "prior_treatment",
+      "requirement": {
+        "op": "absent",
+        "variable": "prior_systemic_therapy_advanced"
+      },
+      "text": "No earlier systemic anticancer treatment for locally advanced or metastatic disease (the first-line setting); some trials still allow earlier adjuvant or neoadjuvant treatment.",
+      "textZh": "未曾因局部晚期或转移性疾病接受系统性抗肿瘤治疗（一线治疗场景）；部分试验仍允许既往辅助或新辅助治疗。",
+      "sources": [
+        "nct02296125",
+        "nct02578680",
+        "nct02409342",
+        "nct02367781",
+        "nct02775435",
+        "nct02838420",
+        "nct02366143"
+      ]
+    },
+    {
+      "id": "c_no_active_brain_mets",
+      "kind": "exclusion",
+      "criterionType": "comorbidity",
+      "requirement": {
+        "op": "absent",
+        "variable": "brain_metastases_active"
+      },
+      "text": "No active brain or central nervous system metastases (untreated or symptomatic); several trials admit patients whose metastases are treated and stable.",
+      "textZh": "无活动性脑或中枢神经系统转移（未经治疗或有症状）；若干试验允许转移灶已治疗且稳定的患者入组。",
+      "terms": [
+        "t_brain_metastasis"
+      ],
+      "sources": [
+        "nct02296125",
+        "nct02578680",
+        "nct02477826",
+        "nct04487080",
+        "nct04303780",
+        "nct02409342",
+        "nct02775435",
+        "nct02367781"
+      ]
+    },
+    {
+      "id": "c_no_active_autoimmune",
+      "kind": "exclusion",
+      "criterionType": "comorbidity",
+      "requirement": {
+        "op": "absent",
+        "variable": "active_autoimmune_disease"
+      },
+      "text": "No active autoimmune disease, an exclusion in immune checkpoint inhibitor trials; some word it as disease needing systemic treatment in the past 2 years, and some exclude any history of autoimmune disease.",
+      "textZh": "无活动性自身免疫性疾病，常见于免疫检查点抑制剂试验的排除标准；部分试验表述为过去2年内需要系统治疗者，部分试验排除任何自身免疫病史。",
+      "terms": [
+        "t_autoimmune",
+        "t_checkpoint_inhibitor"
+      ],
+      "sources": [
+        "nct02578680",
+        "nct02477826",
+        "nct02125461",
+        "nct02775435",
+        "nct02220894",
+        "nct03425643",
+        "nct03088540",
+        "nct02409342"
+      ]
+    },
+    {
+      "id": "c_no_hiv",
+      "kind": "exclusion",
+      "criterionType": "comorbidity",
+      "requirement": {
+        "op": "absent",
+        "variable": "hiv_infection"
+      },
+      "text": "No known HIV infection.",
+      "textZh": "无已知HIV感染。",
+      "sources": [
+        "nct02578680",
+        "nct02477826",
+        "nct02409342",
+        "nct02367781",
+        "nct02486718",
+        "nct02775435",
+        "nct02220894",
+        "nct02366143"
+      ]
+    },
+    {
+      "id": "c_no_active_hepatitis",
+      "kind": "exclusion",
+      "criterionType": "comorbidity",
+      "requirement": {
+        "op": "all",
+        "operands": [
+          {
+            "op": "absent",
+            "variable": "hepatitis_b"
+          },
+          {
+            "op": "absent",
+            "variable": "hepatitis_c"
+          }
+        ]
+      },
+      "text": "No active hepatitis B or hepatitis C infection.",
+      "textZh": "无活动性乙型或丙型肝炎病毒感染。",
+      "sources": [
+        "nct02578680",
+        "nct02477826",
+        "nct02409342",
+        "nct02367781",
+        "nct02775435",
+        "nct02220894",
+        "nct02486718",
+        "nct02366143"
+      ]
+    },
+    {
+      "id": "c_no_ild",
+      "kind": "exclusion",
+      "criterionType": "comorbidity",
+      "requirement": {
+        "op": "absent",
+        "variable": "interstitial_lung_disease"
+      },
+      "text": "No interstitial lung disease, and no history of pneumonitis that needed steroid treatment; the trials differ on how they treat radiation pneumonitis.",
+      "textZh": "无间质性肺疾病，且无需要激素治疗的非感染性肺炎（pneumonitis）病史；各试验对放射性肺炎的处理不尽相同。",
+      "terms": [
+        "t_ild"
+      ],
+      "sources": [
+        "nct02296125",
+        "nct02511106",
+        "nct04487080",
+        "nct03849768",
+        "nct02578680",
+        "nct02775435",
+        "nct02220894",
+        "nct03425643"
+      ]
+    },
+    {
+      "id": "c_no_other_malignancy_5y",
+      "kind": "exclusion",
+      "criterionType": "comorbidity",
+      "requirement": {
+        "op": "absent",
+        "variable": "other_malignancy",
+        "window": {
+          "years": 5
+        }
+      },
+      "text": "No other malignancy within the past 5 years, except those treated with curative intent and with negligible risk of recurrence or spread (for example non-melanoma skin cancer or carcinoma in situ). The 5-year window is the one these trials share; other trials use shorter windows.",
+      "textZh": "过去5年内无其他恶性肿瘤，但已行根治性治疗且复发或转移风险可忽略者（如非黑色素瘤皮肤癌、原位癌）除外。5年是这些试验共有的时间窗；其他试验使用更短的时间窗。",
+      "sources": [
+        "nct02578680",
+        "nct02409342",
+        "nct02367781",
+        "nct02366143",
+        "nct02486718",
+        "nct02775435",
+        "nct02220894",
+        "nct02448797"
+      ]
+    },
+    {
+      "id": "c_no_pregnancy_lactation",
+      "kind": "exclusion",
+      "criterionType": "pregnancy",
+      "requirement": {
+        "op": "all",
+        "operands": [
+          {
+            "op": "absent",
+            "variable": "pregnancy"
+          },
+          {
+            "op": "absent",
+            "variable": "breastfeeding"
+          }
+        ]
+      },
+      "applicability": {
+        "op": "compare",
+        "variable": "sex",
+        "comparator": "in",
+        "value": [
+          "female"
+        ]
+      },
+      "text": "Not pregnant and not breastfeeding (applies to women).",
+      "textZh": "未妊娠且未哺乳（适用于女性）。",
+      "sources": [
+        "nct02578680",
+        "nct02409342",
+        "nct02367781",
+        "nct02366143",
+        "nct02486718",
+        "nct02838420",
+        "nct02220894",
+        "nct03088540"
+      ]
+    },
+    {
+      "id": "c_life_expectancy_3m",
+      "kind": "inclusion",
+      "criterionType": "other",
+      "requirement": {
+        "op": "compare",
+        "variable": "life_expectancy",
+        "comparator": "gte",
+        "value": 3,
+        "unit": "months"
+      },
+      "text": "Expected survival of at least 3 months (some trials write it as 12 weeks).",
+      "textZh": "预期生存期至少3个月（部分试验写作12周）。",
+      "sources": [
+        "nct02578680",
+        "nct02775435",
+        "nct02220894",
+        "nct02864251",
+        "nct03088540"
+      ]
+    },
+    {
+      "id": "c_lab_bone_marrow",
+      "kind": "inclusion",
+      "criterionType": "lab",
+      "requirement": {
+        "op": "all",
+        "operands": [
+          {
+            "op": "compare",
+            "variable": "anc",
+            "comparator": "gte",
+            "value": 1.5,
+            "unit": "10^9/L"
+          },
+          {
+            "op": "compare",
+            "variable": "platelet_count",
+            "comparator": "gte",
+            "value": 100,
+            "unit": "10^9/L"
+          },
+          {
+            "op": "compare",
+            "variable": "hemoglobin",
+            "comparator": "gte",
+            "value": 9,
+            "unit": "g/dL"
+          }
+        ]
+      },
+      "text": "Adequate bone marrow function: absolute neutrophil count at least 1.5 x 10^9/L, platelet count at least 100 x 10^9/L and hemoglobin at least 9 g/dL (rules on transfusion vary by trial).",
+      "textZh": "骨髓功能充足：中性粒细胞绝对计数≥1.5×10^9/L，血小板计数≥100×10^9/L，血红蛋白≥9 g/dL（各试验对输血的规定不同）。",
+      "sources": [
+        "nct03849768",
+        "nct02838420",
+        "nct02395172"
+      ]
+    },
+    {
+      "id": "c_qtc_470",
+      "kind": "exclusion",
+      "criterionType": "lab",
+      "requirement": {
+        "op": "compare",
+        "variable": "qtc_interval",
+        "comparator": "lte",
+        "value": 470,
+        "unit": "ms"
+      },
+      "text": "Resting corrected QT interval of 470 ms or less; trials of oral targeted therapy exclude a longer interval (QTcF in several, the mean of three ECGs in some).",
+      "textZh": "静息校正QT间期≤470 ms；口服靶向药物试验排除更长者（多项试验采用QTcF，部分取3次心电图均值）。",
+      "sources": [
+        "nct02296125",
+        "nct02511106",
+        "nct03849768",
+        "nct02838420",
+        "nct02075840",
+        "nct04194944"
+      ]
+    },
+    {
+      "id": "c_no_major_surgery_4w",
+      "kind": "exclusion",
+      "criterionType": "time_window",
+      "requirement": {
+        "op": "absent",
+        "variable": "major_surgery",
+        "window": {
+          "days": 28
+        }
+      },
+      "text": "No major surgery in the 4 weeks before the first dose or randomization (written as 28 days in some trials).",
+      "textZh": "首次给药或随机分组前4周内未接受大手术（部分试验写作28天）。",
+      "sources": [
+        "nct02296125",
+        "nct02511106",
+        "nct03052608",
+        "nct03849768",
+        "nct02395172",
+        "nct02486718",
+        "nct03088540"
+      ]
+    },
+    {
+      "id": "c_no_investigational_4w",
+      "kind": "exclusion",
+      "criterionType": "time_window",
+      "requirement": {
+        "op": "absent",
+        "variable": "investigational_drug",
+        "window": {
+          "days": 28
+        }
+      },
+      "text": "No other investigational agent in the 4 weeks before the first dose (written as 28 days in some trials).",
+      "textZh": "首次给药前4周内未使用其他研究性药物（部分试验写作28天）。",
+      "sources": [
+        "nct02578680",
+        "nct02775435",
+        "nct03425643",
+        "nct02486718",
+        "nct02220894"
+      ]
+    },
+    {
+      "id": "c_no_prior_checkpoint_inhibitor",
+      "kind": "exclusion",
+      "criterionType": "prior_treatment",
+      "requirement": {
+        "op": "absent",
+        "variable": "prior_checkpoint_inhibitor_therapy"
+      },
+      "text": "No earlier treatment with an anti-PD-1 or anti-PD-L1 antibody; several trials also exclude other immune checkpoint or co-stimulation agents.",
+      "textZh": "既往未接受抗PD-1或抗PD-L1抗体治疗；若干试验还排除其他免疫检查点或共刺激通路药物。",
+      "terms": [
+        "t_checkpoint_inhibitor"
+      ],
+      "sources": [
+        "nct02578680",
+        "nct02125461",
+        "nct02409342",
+        "nct02367781",
+        "nct02775435",
+        "nct03425643",
+        "nct02220894",
+        "nct02395172"
+      ]
+    },
+    {
+      "id": "c_driver_negative",
+      "kind": "exclusion",
+      "criterionType": "biomarker",
+      "requirement": {
+        "op": "all",
+        "operands": [
+          {
+            "op": "absent",
+            "variable": "egfr_sensitizing_mutation"
+          },
+          {
+            "op": "absent",
+            "variable": "alk_rearrangement"
+          }
+        ]
+      },
+      "text": "No EGFR-sensitizing mutation and no ALK rearrangement (EGFR- or ALK-directed therapy not indicated), a requirement of several first-line immunotherapy trials; one of them applies it to non-squamous disease.",
+      "textZh": "无EGFR敏感突变且无ALK重排（无EGFR或ALK靶向治疗指征），是若干一线免疫治疗试验的要求；其中一项仅对非鳞癌如此要求。",
+      "terms": [
+        "t_egfr_sensitizing",
+        "t_alk"
+      ],
+      "sources": [
+        "nct02409342",
+        "nct02220894",
+        "nct03215706",
+        "nct02395172",
+        "nct02578680"
+      ]
+    },
+    {
+      "id": "c_egfr_sensitizing_required",
+      "kind": "inclusion",
+      "criterionType": "biomarker",
+      "requirement": {
+        "op": "any",
+        "operands": [
+          {
+            "op": "present",
+            "variable": "egfr_exon19_deletion"
+          },
+          {
+            "op": "present",
+            "variable": "egfr_l858r_mutation"
+          }
+        ]
+      },
+      "text": "A tumor with an EGFR exon 19 deletion or an exon 21 L858R substitution, usually confirmed on tumor tissue or by a central test; the entry criterion of EGFR-targeted therapy trials.",
+      "textZh": "肿瘤携带EGFR 19号外显子缺失或21号外显子L858R点突变，通常经肿瘤组织或中心实验室检测确认；EGFR靶向治疗试验的入组标准。",
+      "terms": [
+        "t_egfr_ex19del",
+        "t_egfr_l858r",
+        "t_egfr_sensitizing"
+      ],
+      "sources": [
+        "nct02296125",
+        "nct02511106",
+        "nct04487080",
+        "nct03849768"
+      ]
+    },
+    {
+      "id": "c_no_prior_egfr_tki",
+      "kind": "exclusion",
+      "criterionType": "prior_treatment",
+      "requirement": {
+        "op": "absent",
+        "variable": "prior_egfr_tki"
+      },
+      "text": "No earlier EGFR tyrosine kinase inhibitor treatment (in the adjuvant trial, none at any time, including as neoadjuvant or adjuvant therapy).",
+      "textZh": "既往未接受EGFR酪氨酸激酶抑制剂治疗（辅助治疗试验中，包括新辅助或辅助阶段在内均不得使用过）。",
+      "terms": [
+        "t_egfr_tki"
+      ],
+      "sources": [
+        "nct02296125",
+        "nct02511106",
+        "nct03849768"
+      ]
+    },
+    {
+      "id": "c_alk_positive_required",
+      "kind": "inclusion",
+      "criterionType": "biomarker",
+      "requirement": {
+        "op": "present",
+        "variable": "alk_rearrangement"
+      },
+      "text": "A documented ALK-positive (ALK-rearranged) tumor, the entry criterion of ALK-inhibitor trials; two of these trials name the Ventana ALK immunohistochemistry assay.",
+      "textZh": "有ALK阳性（ALK重排）证据的肿瘤，是ALK抑制剂试验的入组标准；其中两项试验指明采用Ventana ALK免疫组化检测。",
+      "terms": [
+        "t_alk"
+      ],
+      "sources": [
+        "nct03052608",
+        "nct02838420",
+        "nct02075840",
+        "nct02737501"
+      ]
+    },
+    {
+      "id": "c_kras_g12c_required",
+      "kind": "inclusion",
+      "criterionType": "biomarker",
+      "requirement": {
+        "op": "present",
+        "variable": "kras_g12c_mutation"
+      },
+      "text": "A KRAS G12C mutation identified by molecular testing (by central testing in one of the trials); the entry criterion of KRAS G12C inhibitor trials.",
+      "textZh": "经分子检测确认存在KRAS G12C突变（其中一项试验采用中心检测）；KRAS G12C抑制剂试验的入组标准。",
+      "terms": [
+        "t_kras_g12c"
+      ],
+      "sources": [
+        "nct04303780",
+        "nct03600883",
+        "nct04685135"
+      ]
+    },
+    {
+      "id": "c_ret_fusion_required",
+      "kind": "inclusion",
+      "criterionType": "biomarker",
+      "requirement": {
+        "op": "present",
+        "variable": "ret_fusion"
+      },
+      "text": "A documented RET gene fusion (in tumor and/or blood in one trial); the entry criterion of selective RET-inhibitor trials.",
+      "textZh": "有RET基因融合的证据（其中一项试验接受肿瘤和/或血液检测）；选择性RET抑制剂试验的入组标准。",
+      "terms": [
+        "t_ret_fusion"
+      ],
+      "sources": [
+        "nct04194944",
+        "nct04222972"
+      ]
+    },
+    {
+      "id": "c_complete_resection",
+      "kind": "inclusion",
+      "criterionType": "prior_treatment",
+      "requirement": {
+        "op": "present",
+        "variable": "complete_resection"
+      },
+      "text": "Complete surgical resection of the primary tumor (negative margins, in the trials that say so); the entry criterion of adjuvant trials.",
+      "textZh": "原发肿瘤已行完整手术切除（凡有说明的试验均要求切缘阴性）；辅助治疗试验的入组标准。",
+      "terms": [
+        "t_adjuvant"
+      ],
+      "sources": [
+        "nct02511106",
+        "nct02486718",
+        "nct02595944",
+        "nct02273375"
+      ]
+    },
+    {
+      "id": "c_pathologic_stage_ib_iiia",
+      "kind": "inclusion",
+      "criterionType": "diagnosis",
+      "requirement": {
+        "op": "compare",
+        "variable": "pathologic_stage_group",
+        "comparator": "in",
+        "value": [
+          "IB",
+          "II",
+          "IIA",
+          "IIB",
+          "IIIA"
+        ]
+      },
+      "text": "Pathological stage IB to IIIA after resection; several trials built on the 7th edition of the staging system limit stage IB to tumors of at least 4 cm.",
+      "textZh": "切除术后病理分期为IB至IIIA期；若干沿用第7版分期系统的试验将IB期限定为肿瘤直径≥4 cm。",
+      "terms": [
+        "t_adjuvant"
+      ],
+      "sources": [
+        "nct02511106",
+        "nct02486718",
+        "nct02595944",
+        "nct02273375"
+      ]
+    }
+  ],
+  "mappings": [
+    {
+      "id": "m_subject_id",
+      "concept": "subject_id",
+      "label": "Subject identifier",
+      "labelZh": "受试者编号",
+      "type": "text",
+      "role": "subject_key",
+      "fieldNames": [
+        "USUBJID",
+        "SUBJID",
+        "subject_id",
+        "SubjectID",
+        "patient_id",
+        "PatientID",
+        "study_id",
+        "ID",
+        "患者编号",
+        "受试者编号",
+        "病历号",
+        "住院号"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_treatment_arm",
+      "concept": "treatment_arm",
+      "label": "Treatment arm",
+      "labelZh": "治疗组",
+      "type": "text",
+      "role": "arm",
+      "fieldNames": [
+        "ARM",
+        "ARMCD",
+        "TRT01P",
+        "TRT01A",
+        "TRTA",
+        "treatment",
+        "treatment_arm",
+        "group",
+        "分组",
+        "治疗组",
+        "治疗方案"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_time_zero_date",
+      "concept": "time_zero_date",
+      "label": "Time zero (randomization, treatment start or index date)",
+      "labelZh": "时间零点（随机、开始治疗或索引日期）",
+      "type": "date",
+      "role": "time_zero",
+      "fieldNames": [
+        "RANDDT",
+        "RFSTDTC",
+        "TRTSDT",
+        "randomization_date",
+        "randomization_date",
+        "index_date",
+        "treatment_start_date",
+        "随机日期",
+        "入组日期",
+        "治疗开始日期",
+        "索引日期"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_age",
+      "concept": "age",
+      "label": "Age",
+      "labelZh": "年龄",
+      "type": "number",
+      "role": "covariate",
+      "unit": "years",
+      "fieldNames": [
+        "AGE",
+        "age",
+        "age_years",
+        "AGEYR",
+        "Age",
+        "patient_age",
+        "年龄",
+        "年龄(岁)",
+        "入组年龄"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_sex",
+      "concept": "sex",
+      "label": "Sex",
+      "labelZh": "性别",
+      "type": "code",
+      "role": "covariate",
+      "fieldNames": [
+        "SEX",
+        "sex",
+        "gender",
+        "Gender",
+        "性别"
+      ],
+      "codes": [
+        {
+          "means": "female",
+          "accepts": [
+            "F",
+            "female",
+            "Female",
+            "FEMALE",
+            "2",
+            "女"
+          ]
+        },
+        {
+          "means": "male",
+          "accepts": [
+            "M",
+            "male",
+            "Male",
+            "MALE",
+            "1",
+            "男"
+          ]
+        }
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_ecog",
+      "concept": "ecog",
+      "label": "ECOG performance status (0-5)",
+      "labelZh": "ECOG体能状态评分（0–5分）",
+      "type": "number",
+      "role": "covariate",
+      "unit": "score",
+      "fieldNames": [
+        "ECOG",
+        "ECOGPS",
+        "ECOG_PS",
+        "ecog",
+        "ecog_ps",
+        "ecog_score",
+        "ECOG评分",
+        "ECOG PS",
+        "体能状态",
+        "体力状态",
+        "PS评分"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_life_expectancy",
+      "concept": "life_expectancy",
+      "label": "Estimated life expectancy",
+      "labelZh": "预期生存期",
+      "type": "number",
+      "role": "covariate",
+      "unit": "months",
+      "fieldNames": [
+        "LIFEEXP",
+        "life_expectancy",
+        "expected_survival",
+        "预期生存期",
+        "预计生存期"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_pregnancy",
+      "concept": "pregnancy",
+      "label": "Pregnancy",
+      "labelZh": "妊娠",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "PREGNANCY",
+        "PREGFL",
+        "pregnant",
+        "pregnancy_status",
+        "妊娠",
+        "怀孕",
+        "是否妊娠"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_breastfeeding",
+      "concept": "breastfeeding",
+      "label": "Breastfeeding",
+      "labelZh": "哺乳",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "LACTATION",
+        "BRSTFEED",
+        "breastfeeding",
+        "lactating",
+        "nursing",
+        "哺乳",
+        "哺乳期"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_anc",
+      "concept": "anc",
+      "label": "Absolute neutrophil count",
+      "labelZh": "中性粒细胞绝对计数",
+      "type": "number",
+      "role": "measurement",
+      "unit": "10^9/L",
+      "fieldNames": [
+        "ANC",
+        "NEUT",
+        "absolute_neutrophil_count",
+        "neutrophil_count",
+        "neutrophils",
+        "中性粒细胞绝对值",
+        "中性粒细胞计数"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_platelet_count",
+      "concept": "platelet_count",
+      "label": "Platelet count",
+      "labelZh": "血小板计数",
+      "type": "number",
+      "role": "measurement",
+      "unit": "10^9/L",
+      "fieldNames": [
+        "PLT",
+        "PLAT",
+        "platelets",
+        "platelet_count",
+        "PLT_COUNT",
+        "血小板",
+        "血小板计数"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_hemoglobin",
+      "concept": "hemoglobin",
+      "label": "Hemoglobin",
+      "labelZh": "血红蛋白",
+      "type": "number",
+      "role": "measurement",
+      "unit": "g/dL",
+      "fieldNames": [
+        "HGB",
+        "HB",
+        "Hgb",
+        "hemoglobin",
+        "hemoglobin",
+        "血红蛋白",
+        "血红蛋白(g/dL)"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_qtc_interval",
+      "concept": "qtc_interval",
+      "label": "Corrected QT interval (QTc or QTcF)",
+      "labelZh": "校正QT间期（QTc或QTcF）",
+      "type": "number",
+      "role": "measurement",
+      "unit": "ms",
+      "fieldNames": [
+        "QTC",
+        "QTCF",
+        "QTcF",
+        "QTc",
+        "qtc_interval",
+        "QT间期",
+        "校正QT间期"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_nsclc_diagnosis",
+      "concept": "nsclc_diagnosis",
+      "label": "NSCLC diagnosis (histologically or cytologically confirmed)",
+      "labelZh": "非小细胞肺癌诊断（组织学或细胞学确诊）",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "DIAGNOSIS",
+        "DIAG",
+        "DX",
+        "diagnosis",
+        "primary_diagnosis",
+        "nsclc",
+        "NSCLC",
+        "诊断",
+        "主要诊断",
+        "病理诊断",
+        "肿瘤诊断"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_primary_lung_cancer_diagnosis",
+      "concept": "primary_lung_cancer_diagnosis",
+      "label": "Primary lung cancer diagnosis",
+      "labelZh": "原发性肺癌诊断",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "LUNG_CANCER",
+        "primary_lung_cancer",
+        "lung_cancer_dx",
+        "lung_cancer",
+        "原发性肺癌",
+        "肺癌诊断"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_small_cell_lung_cancer",
+      "concept": "small_cell_lung_cancer",
+      "label": "Small cell lung cancer diagnosis",
+      "labelZh": "小细胞肺癌诊断",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "SCLC",
+        "small_cell_lung_cancer",
+        "sclc_dx",
+        "小细胞肺癌"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_upper_respiratory_tract_malignancy",
+      "concept": "upper_respiratory_tract_malignancy",
+      "label": "Malignancy of the upper respiratory tract",
+      "labelZh": "上呼吸道恶性肿瘤",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "URT_MALIGNANCY",
+        "head_neck_cancer",
+        "upper_respiratory_malignancy",
+        "上呼吸道恶性肿瘤",
+        "头颈部肿瘤"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_histology",
+      "concept": "histology",
+      "label": "Histology (lung cancer histologic type)",
+      "labelZh": "组织学类型（肺癌病理类型）",
+      "type": "code",
+      "role": "covariate",
+      "fieldNames": [
+        "HISTOLOGY",
+        "HISTTYPE",
+        "histology",
+        "histologic_type",
+        "pathology_type",
+        "tumor_type",
+        "病理类型",
+        "组织学类型",
+        "病理分型"
+      ],
+      "codes": [
+        {
+          "means": "adenocarcinoma",
+          "accepts": [
+            "Adenocarcinoma",
+            "ADC",
+            "LUAD",
+            "adeno",
+            "腺癌",
+            "肺腺癌"
+          ]
+        },
+        {
+          "means": "squamous_cell_carcinoma",
+          "accepts": [
+            "Squamous",
+            "Squamous cell carcinoma",
+            "SCC",
+            "LUSC",
+            "鳞癌",
+            "鳞状细胞癌",
+            "肺鳞癌"
+          ]
+        },
+        {
+          "means": "large_cell_carcinoma",
+          "accepts": [
+            "Large cell",
+            "Large cell carcinoma",
+            "LCC",
+            "大细胞癌"
+          ]
+        },
+        {
+          "means": "other_nsclc",
+          "accepts": [
+            "NSCLC NOS",
+            "NSCLC-NOS",
+            "Other",
+            "adenosquamous",
+            "腺鳞癌",
+            "非小细胞肺癌NOS",
+            "其他"
+          ]
+        }
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_stage_iv_disease",
+      "concept": "stage_iv_disease",
+      "label": "Stage IV (metastatic) disease",
+      "labelZh": "IV期（转移性）疾病",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "STAGE_IV",
+        "stage_iv",
+        "metastatic",
+        "M1",
+        "metastatic_disease",
+        "IV期",
+        "转移性",
+        "远处转移"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_locally_advanced_unresectable_disease",
+      "concept": "locally_advanced_unresectable_disease",
+      "label": "Locally advanced disease not amenable to curative surgery or radiotherapy",
+      "labelZh": "局部晚期且不适合根治性手术或放疗",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "LOCALLY_ADVANCED",
+        "locally_advanced",
+        "unresectable",
+        "stage_iii_unresectable",
+        "局部晚期",
+        "不可切除",
+        "III期不可切除"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_resectable_disease",
+      "concept": "resectable_disease",
+      "label": "Resectable disease (candidate for curative-intent surgery)",
+      "labelZh": "可切除疾病（适合根治性手术）",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "RESECTABLE",
+        "resectable",
+        "operable",
+        "surgical_candidate",
+        "可切除",
+        "可手术"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_complete_resection",
+      "concept": "complete_resection",
+      "label": "Complete surgical resection of the primary tumor",
+      "labelZh": "原发肿瘤完整手术切除",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "COMPLETE_RESECTION",
+        "R0",
+        "R0_resection",
+        "complete_resection",
+        "resection_margin_negative",
+        "完整切除",
+        "R0切除",
+        "切缘阴性"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_pathologic_stage_group",
+      "concept": "pathologic_stage_group",
+      "label": "Pathological stage group (UICC/AJCC edition set by the protocol)",
+      "labelZh": "病理分期（UICC/AJCC版本以方案为准）",
+      "type": "code",
+      "role": "covariate",
+      "fieldNames": [
+        "PATHSTAGE",
+        "PSTAGE",
+        "pathologic_stage",
+        "pathological_stage",
+        "stage_group",
+        "TNM_stage",
+        "病理分期",
+        "术后分期",
+        "TNM分期"
+      ],
+      "codes": [
+        {
+          "means": "IB",
+          "accepts": [
+            "IB",
+            "Stage IB",
+            "1B",
+            "IB期"
+          ]
+        },
+        {
+          "means": "II",
+          "accepts": [
+            "II",
+            "Stage II",
+            "2",
+            "II期"
+          ]
+        },
+        {
+          "means": "IIA",
+          "accepts": [
+            "IIA",
+            "Stage IIA",
+            "2A",
+            "IIA期"
+          ]
+        },
+        {
+          "means": "IIB",
+          "accepts": [
+            "IIB",
+            "Stage IIB",
+            "2B",
+            "IIB期"
+          ]
+        },
+        {
+          "means": "IIIA",
+          "accepts": [
+            "IIIA",
+            "Stage IIIA",
+            "3A",
+            "IIIA期"
+          ]
+        }
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_measurable_disease",
+      "concept": "measurable_disease",
+      "label": "Measurable disease by RECIST 1.1",
+      "labelZh": "按RECIST 1.1存在可测量病灶",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "MEASURABLE",
+        "MEASDIS",
+        "measurable_disease",
+        "recist_measurable",
+        "target_lesion",
+        "可测量病灶",
+        "靶病灶"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_egfr_sensitizing_mutation",
+      "concept": "egfr_sensitizing_mutation",
+      "label": "EGFR-sensitizing mutation",
+      "labelZh": "EGFR敏感突变",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "EGFR_SENS",
+        "EGFR_MUT",
+        "EGFR_STATUS",
+        "EGFR_MUTATION",
+        "egfr_mutation",
+        "EGFR突变",
+        "EGFR基因突变",
+        "EGFR突变状态"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_egfr_exon19_deletion",
+      "concept": "egfr_exon19_deletion",
+      "label": "EGFR exon 19 deletion",
+      "labelZh": "EGFR 19号外显子缺失",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "EGFR_EX19DEL",
+        "EGFR_19DEL",
+        "EX19DEL",
+        "egfr_exon19_deletion",
+        "19del",
+        "EGFR 19del",
+        "19号外显子缺失"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_egfr_l858r_mutation",
+      "concept": "egfr_l858r_mutation",
+      "label": "EGFR L858R substitution",
+      "labelZh": "EGFR L858R点突变",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "EGFR_L858R",
+        "L858R",
+        "egfr_l858r",
+        "EGFR 21L858R",
+        "L858R突变",
+        "21号外显子L858R"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_alk_rearrangement",
+      "concept": "alk_rearrangement",
+      "label": "ALK rearrangement",
+      "labelZh": "ALK重排",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "ALK",
+        "ALK_REARR",
+        "ALK_STATUS",
+        "alk_rearrangement",
+        "ALK_FUSION",
+        "ALK融合",
+        "ALK重排",
+        "ALK阳性"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_ros1_rearrangement",
+      "concept": "ros1_rearrangement",
+      "label": "ROS1 rearrangement",
+      "labelZh": "ROS1重排",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "ROS1",
+        "ROS1_REARR",
+        "ROS1_STATUS",
+        "ros1_rearrangement",
+        "ROS1_FUSION",
+        "ROS1融合",
+        "ROS1重排",
+        "ROS1阳性"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_kras_g12c_mutation",
+      "concept": "kras_g12c_mutation",
+      "label": "KRAS G12C mutation",
+      "labelZh": "KRAS G12C突变",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "KRAS_G12C",
+        "KRASG12C",
+        "kras_g12c",
+        "KRAS",
+        "KRAS_STATUS",
+        "KRAS G12C突变",
+        "KRAS突变"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_met_exon14_skipping",
+      "concept": "met_exon14_skipping",
+      "label": "MET exon 14 skipping alteration",
+      "labelZh": "MET 14号外显子跳跃变异",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "MET_EX14",
+        "METEX14",
+        "MET14",
+        "met_exon14_skipping",
+        "MET_STATUS",
+        "MET 14号外显子跳跃",
+        "MET14跳突"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_ret_fusion",
+      "concept": "ret_fusion",
+      "label": "RET fusion",
+      "labelZh": "RET融合",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "RET",
+        "RET_FUSION",
+        "RET_REARR",
+        "ret_fusion",
+        "RET融合",
+        "RET重排",
+        "RET阳性"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_braf_v600e_mutation",
+      "concept": "braf_v600e_mutation",
+      "label": "BRAF V600E mutation",
+      "labelZh": "BRAF V600E突变",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "BRAF_V600E",
+        "BRAFV600E",
+        "braf_v600e",
+        "BRAF",
+        "BRAF_STATUS",
+        "BRAF V600E突变",
+        "BRAF突变"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_pdl1_tps",
+      "concept": "pdl1_tps",
+      "label": "PD-L1 tumor proportion score",
+      "labelZh": "PD-L1肿瘤细胞阳性比例分数（TPS）",
+      "type": "number",
+      "role": "measurement",
+      "unit": "percent",
+      "fieldNames": [
+        "PDL1",
+        "PDL1_TPS",
+        "PD-L1",
+        "PD_L1",
+        "pdl1_tps",
+        "TPS",
+        "PD-L1 TPS",
+        "PD-L1表达",
+        "PD-L1 TPS(%)"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_nsclc_biomarker_test",
+      "concept": "nsclc_biomarker_test",
+      "label": "Driver-gene variant test performed",
+      "labelZh": "已行驱动基因变异检测",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "GENE_TEST",
+        "MOLECULAR_TEST",
+        "NGS",
+        "biomarker_test",
+        "driver_gene_test",
+        "基因检测",
+        "分子检测",
+        "驱动基因检测"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_nsclc_drug_exposure",
+      "concept": "nsclc_drug_exposure",
+      "label": "Exposure to an NSCLC-directed drug",
+      "labelZh": "使用过非小细胞肺癌相关药物",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "NSCLC_DRUG",
+        "CMTRT",
+        "drug_name",
+        "medication",
+        "antineoplastic_drug",
+        "用药",
+        "抗肿瘤药物",
+        "药物名称"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_prior_systemic_therapy_advanced",
+      "concept": "prior_systemic_therapy_advanced",
+      "label": "Prior systemic therapy for locally advanced or metastatic disease",
+      "labelZh": "既往因局部晚期或转移性疾病接受的系统治疗",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "PRIOR_SYSTEMIC",
+        "PRIOR_THERAPY_ADV",
+        "prior_chemo",
+        "prior_systemic_therapy",
+        "LINE_OF_THERAPY",
+        "既往系统治疗",
+        "晚期既往治疗",
+        "治疗线数"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_prior_checkpoint_inhibitor_therapy",
+      "concept": "prior_checkpoint_inhibitor_therapy",
+      "label": "Prior anti-PD-1 or anti-PD-L1 (immune checkpoint) therapy",
+      "labelZh": "既往抗PD-1或抗PD-L1（免疫检查点）治疗",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "PRIOR_IO",
+        "PRIOR_PD1",
+        "PRIOR_IMMUNOTHERAPY",
+        "prior_checkpoint_inhibitor",
+        "既往免疫治疗",
+        "既往PD-1治疗"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_prior_egfr_tki",
+      "concept": "prior_egfr_tki",
+      "label": "Prior EGFR tyrosine kinase inhibitor therapy",
+      "labelZh": "既往EGFR-TKI治疗",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "PRIOR_EGFR_TKI",
+        "PRIOR_TKI",
+        "prior_egfr_tki",
+        "EGFR_TKI_PRIOR",
+        "既往EGFR-TKI",
+        "既往靶向治疗"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_brain_metastases_active",
+      "concept": "brain_metastases_active",
+      "label": "Active brain or CNS metastases (untreated or symptomatic)",
+      "labelZh": "活动性脑或中枢神经系统转移（未治疗或有症状）",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "BRAIN_MET",
+        "BRAINMET",
+        "CNS_MET",
+        "brain_metastases",
+        "active_brain_mets",
+        "脑转移",
+        "颅内转移",
+        "中枢神经系统转移"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_active_autoimmune_disease",
+      "concept": "active_autoimmune_disease",
+      "label": "Active autoimmune disease",
+      "labelZh": "活动性自身免疫性疾病",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "AUTOIMMUNE",
+        "AUTOIMMUNE_DISEASE",
+        "autoimmune",
+        "自身免疫病",
+        "自身免疫性疾病"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_hiv_infection",
+      "concept": "hiv_infection",
+      "label": "HIV infection",
+      "labelZh": "HIV感染",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "HIV",
+        "HIVFL",
+        "hiv_status",
+        "hiv_infection",
+        "HIV感染",
+        "HIV抗体",
+        "艾滋病"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_hepatitis_b",
+      "concept": "hepatitis_b",
+      "label": "Active hepatitis B infection",
+      "labelZh": "活动性乙型肝炎病毒感染",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "HBV",
+        "HBSAG",
+        "HBV_INFECTION",
+        "hepatitis_b",
+        "hep_b",
+        "乙肝",
+        "乙型肝炎",
+        "HBsAg"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_hepatitis_c",
+      "concept": "hepatitis_c",
+      "label": "Active hepatitis C infection",
+      "labelZh": "活动性丙型肝炎病毒感染",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "HCV",
+        "HCV_AB",
+        "HCV_INFECTION",
+        "hepatitis_c",
+        "hep_c",
+        "丙肝",
+        "丙型肝炎",
+        "HCV抗体"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_interstitial_lung_disease",
+      "concept": "interstitial_lung_disease",
+      "label": "Interstitial lung disease or steroid-requiring pneumonitis (history or active)",
+      "labelZh": "间质性肺疾病或需激素治疗的肺炎（既往或现症）",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "ILD",
+        "PNEUMONITIS",
+        "interstitial_lung_disease",
+        "ild_history",
+        "间质性肺病",
+        "间质性肺炎",
+        "放射性肺炎"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_other_malignancy",
+      "concept": "other_malignancy",
+      "label": "Other malignancy (second primary cancer)",
+      "labelZh": "其他恶性肿瘤（第二原发癌）",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "SECOND_PRIMARY",
+        "OTHER_MALIGNANCY",
+        "PRIOR_MALIGNANCY",
+        "previous_cancer",
+        "既往恶性肿瘤",
+        "其他恶性肿瘤",
+        "第二原发肿瘤"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_major_surgery",
+      "concept": "major_surgery",
+      "label": "Major surgery",
+      "labelZh": "大手术",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "MAJOR_SURGERY",
+        "SURGERY",
+        "SURGERY_DATE",
+        "PROCEDURE_DATE",
+        "大手术",
+        "手术日期"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_investigational_drug",
+      "concept": "investigational_drug",
+      "label": "Investigational drug exposure",
+      "labelZh": "研究性药物使用",
+      "type": "flag",
+      "role": "covariate",
+      "fieldNames": [
+        "INVESTIGATIONAL",
+        "INVEST_DRUG",
+        "trial_drug",
+        "other_trial_participation",
+        "研究药物",
+        "参加其他临床试验"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_overall_survival_time",
+      "concept": "overall_survival_time",
+      "label": "Time from time zero to death or last follow-up (overall survival)",
+      "labelZh": "总生存时间（至死亡或末次随访）",
+      "type": "number",
+      "role": "outcome_time",
+      "fieldNames": [
+        "OS_TIME",
+        "OS_MONTHS",
+        "OS_DAYS",
+        "OSTIME",
+        "os_time",
+        "OS",
+        "生存时间",
+        "总生存时间",
+        "OS(月)"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_death_event",
+      "concept": "death_event",
+      "label": "Death (event indicator for overall survival)",
+      "labelZh": "死亡（总生存的事件标志）",
+      "type": "flag",
+      "role": "outcome_event",
+      "fieldNames": [
+        "OS_EVENT",
+        "OS_STATUS",
+        "DTHFL",
+        "DEATH_FLAG",
+        "DEAD",
+        "vital_status",
+        "死亡",
+        "死亡标志",
+        "生存状态"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_progression_free_survival_time",
+      "concept": "progression_free_survival_time",
+      "label": "Time from time zero to progression, death or last assessment (progression-free survival)",
+      "labelZh": "无进展生存时间",
+      "type": "number",
+      "role": "outcome_time",
+      "fieldNames": [
+        "PFS_TIME",
+        "PFS_MONTHS",
+        "PFS_DAYS",
+        "pfs_time",
+        "PFS",
+        "无进展生存时间",
+        "无进展生存期",
+        "PFS(月)"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_progression_or_death_event",
+      "concept": "progression_or_death_event",
+      "label": "Progression or death (event indicator for progression-free survival)",
+      "labelZh": "进展或死亡（无进展生存的事件标志）",
+      "type": "flag",
+      "role": "outcome_event",
+      "fieldNames": [
+        "PFS_EVENT",
+        "PFS_STATUS",
+        "PD_OR_DEATH",
+        "progression_event",
+        "进展或死亡",
+        "进展标志",
+        "疾病进展"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_disease_free_survival_time",
+      "concept": "disease_free_survival_time",
+      "label": "Time from time zero to recurrence, death or last assessment (disease-free survival)",
+      "labelZh": "无病生存时间",
+      "type": "number",
+      "role": "outcome_time",
+      "fieldNames": [
+        "DFS_TIME",
+        "DFS_MONTHS",
+        "DFS_DAYS",
+        "dfs_time",
+        "DFS",
+        "无病生存时间",
+        "无病生存期"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_recurrence_or_death_event",
+      "concept": "recurrence_or_death_event",
+      "label": "Recurrence or death (event indicator for disease-free survival)",
+      "labelZh": "复发或死亡（无病生存的事件标志）",
+      "type": "flag",
+      "role": "outcome_event",
+      "fieldNames": [
+        "DFS_EVENT",
+        "DFS_STATUS",
+        "RECURRENCE_OR_DEATH",
+        "recurrence",
+        "复发或死亡",
+        "复发标志"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_best_overall_response",
+      "concept": "best_overall_response",
+      "label": "Best overall response (RECIST 1.1)",
+      "labelZh": "最佳总体疗效（RECIST 1.1）",
+      "type": "code",
+      "role": "other",
+      "fieldNames": [
+        "BOR",
+        "BESTRESP",
+        "best_overall_response",
+        "best_response",
+        "RECIST_RESPONSE",
+        "最佳总体疗效",
+        "最佳疗效"
+      ],
+      "codes": [
+        {
+          "means": "complete response",
+          "accepts": [
+            "CR",
+            "Complete Response",
+            "完全缓解"
+          ]
+        },
+        {
+          "means": "partial response",
+          "accepts": [
+            "PR",
+            "Partial Response",
+            "部分缓解"
+          ]
+        },
+        {
+          "means": "stable disease",
+          "accepts": [
+            "SD",
+            "Stable Disease",
+            "疾病稳定"
+          ]
+        },
+        {
+          "means": "progressive disease",
+          "accepts": [
+            "PD",
+            "Progressive Disease",
+            "疾病进展"
+          ]
+        }
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    },
+    {
+      "id": "m_pathologic_complete_response",
+      "concept": "pathologic_complete_response",
+      "label": "Pathologic complete response at surgery",
+      "labelZh": "手术标本病理学完全缓解",
+      "type": "flag",
+      "role": "other",
+      "fieldNames": [
+        "PCR",
+        "pCR",
+        "PATH_CR",
+        "pathologic_complete_response",
+        "病理完全缓解",
+        "pCR标志"
+      ],
+      "sources": [
+        "evimed_hints"
+      ]
+    }
+  ],
+  "background": [
+    {
+      "id": "b_os_standard",
+      "text": "For locally advanced or metastatic NSCLC the FDA treats overall survival as the standard clinical benefit endpoint. Progression-free survival may be a primary endpoint if the trial is designed to show a large effect with an acceptable risk-benefit profile, and an objective response rate alone has been used only for accelerated approval, when the effect is large and responses are durable.",
+      "textZh": "对于局部晚期或转移性非小细胞肺癌，FDA将总生存期视为标准的临床获益终点；若试验旨在显示较大的效应且风险获益可接受，无进展生存期可作为主要终点；单凭客观缓解率仅曾用于加速批准，且要求效应大、缓解持久。",
+      "sources": [
+        "fda_nsclc_endpoints"
+      ]
+    },
+    {
+      "id": "b_subgroups",
+      "text": "NSCLC is a heterogeneous disease that responds differently across molecular and histopathologic subgroups, so the FDA recommends designing trials prospectively to evaluate treatment effects by subgroup.",
+      "textZh": "非小细胞肺癌异质性强，不同分子与组织病理亚组对治疗的反应各异，因此FDA建议试验在设计时即前瞻性地评价各亚组的治疗效应。",
+      "sources": [
+        "fda_nsclc_endpoints"
+      ]
+    },
+    {
+      "id": "b_drivers",
+      "text": "Registered NSCLC trials select patients on molecular alterations: EGFR-sensitizing mutations, ALK and ROS1 rearrangements, KRAS G12C, MET exon 14 skipping, RET fusions and BRAF V600E, and one immunotherapy trial selects on PD-L1 expression.",
+      "textZh": "非小细胞肺癌注册试验常按分子变异入组：EGFR敏感突变、ALK与ROS1重排、KRAS G12C、MET 14号外显子跳跃、RET融合和BRAF V600E；另有免疫治疗试验按PD-L1表达入组。",
+      "sources": [
+        "nct02296125",
+        "nct03052608",
+        "nct03093116",
+        "nct04303780",
+        "nct02864992",
+        "nct04194944",
+        "nct03915951",
+        "nct02220894"
+      ]
+    },
+    {
+      "id": "b_setting_endpoints",
+      "text": "The usual endpoints follow the setting. Advanced-disease trials use progression-free and overall survival with response rate, adjuvant trials use disease-free survival after complete resection, and neoadjuvant or perioperative trials use event-free survival with pathological response.",
+      "textZh": "常用终点随治疗场景而异：晚期疾病试验采用无进展生存期和总生存期，并报告缓解率；辅助治疗试验在完整切除后采用无病生存期；新辅助或围手术期试验采用无事件生存期并结合病理学缓解。",
+      "sources": [
+        "nct02296125",
+        "nct02511106",
+        "nct02998528",
+        "nct03425643",
+        "fda_cancer_endpoints"
+      ]
+    },
+    {
+      "id": "b_tumor_assessment",
+      "text": "When progression-free survival or response is the primary endpoint, the FDA expects tumor assessments to be verified by blinded central review or by a prespecified audit, and asks that the progression date, censoring rules and missed assessments be defined in advance. The registered NSCLC trials read here assess tumors by RECIST 1.1.",
+      "textZh": "当无进展生存期或缓解率为主要终点时，FDA期望肿瘤评估由盲态中心阅片或预先设定的抽查复核；并要求预先界定进展日期、截尾规则和漏访的处理。本包所读的非小细胞肺癌注册试验均按RECIST 1.1评估肿瘤。",
+      "sources": [
+        "fda_cancer_endpoints",
+        "fda_nsclc_endpoints",
+        "recist11",
+        "nct02125461",
+        "nct03052608"
+      ]
+    },
+    {
+      "id": "b_ema_reporting",
+      "text": "The EMA guideline asks that overall survival be reported as a secondary endpoint when progression-free or disease-free survival is primary, and that response rate and response duration be reported in advanced or metastatic disease whatever the primary endpoint.",
+      "textZh": "欧洲药品管理局（EMA）指南要求：当无进展生存期或无病生存期为主要终点时，总生存期应作为次要终点报告；在晚期或转移性疾病中，无论主要终点是什么，均应报告缓解率和缓解持续时间。",
+      "sources": [
+        "ema_anticancer"
+      ]
+    }
+  ]
+}

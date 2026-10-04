@@ -750,6 +750,21 @@ export const VCR_STEP_PRODUCTS = Object.freeze({
   trial: 'vcr-simulation-report',
 })
 
+/**
+ * What a column of a source is *for* in the study — the one thing the analysis
+ * tables are derived from (plan §8.1 step 2). `subject_key` is the person's key
+ * in the source (it becomes a per-study pseudonym and never leaves the data
+ * plane); `arm` and `covariate` are baseline attributes (the subject table);
+ * `outcome_time` / `outcome_event` are one time-to-event outcome, paired by
+ * their `parameter` (the events table); `measurement` is one longitudinal
+ * parameter (the longitudinal table); `time_zero` is the index date; `visit_date`
+ * dates a measurement row; `other` is kept in the snapshot and never derived.
+ * Spliced into the control plane's CHECK on `field_maps.role`.
+ */
+export const VCR_FIELD_ROLES = frozen([
+  'subject_key', 'arm', 'covariate', 'outcome_time', 'outcome_event', 'time_zero', 'measurement', 'visit_date', 'other',
+])
+
 /** Data-source formats the data plane accepts in the first version (§8.1). */
 export const VCR_SOURCE_FORMATS = frozen(['csv', 'tsv', 'xlsx', 'json'])
 /** The three analysis tables every snapshot derives (ADaM shapes, §8.1). */
