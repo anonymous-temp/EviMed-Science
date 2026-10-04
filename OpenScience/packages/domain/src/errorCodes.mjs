@@ -1,6 +1,10 @@
 import { RESULT_WORKBENCH_ERROR_MESSAGES } from "./resultErrors.mjs";
 import { DOCUMENT_EXPORT_ERROR_MESSAGES } from "./documentExport.mjs";
 import { CONNECTOR_MISSING_CODES } from "./connectorCredentials.mjs";
+import { DATA_SEMANTICS_ERROR_CODES, DATA_SEMANTICS_ERROR_MESSAGE_ZH } from "./dataSemantics.mjs";
+
+/** The tool's own refusals a run repairs by changing what it sent, as opposed to the outages it waits out. */
+const DATA_SEMANTICS_RUN_FIXES = ["semantics_request_invalid", "semantics_request_too_large", "semantics_dataset_invalid", "semantics_revision_conflict"];
 
 /**
  * The cross-boundary error-code registry.
@@ -183,6 +187,11 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   "kb_search_response_too_large",
   "kb_search_gateway_token_missing",
   "kb_search_gateway_token_invalid",
+  // The stored meaning of a dataset (dataset_semantics → dataSemanticsGateway.mjs) not answering — the module off,
+  // an outage, a slow ledger. The analysis goes on from the files, as it did before the tool existed, and says it
+  // did not have the recorded interpretation. The two codes a malformed call earns are the run's to fix and sit
+  // in the terminal set below.
+  ...DATA_SEMANTICS_ERROR_CODES.filter((code) => !DATA_SEMANTICS_RUN_FIXES.includes(code)),
   // 「前沿动态」 search not answering — the module off or not open to this
   // account, an outage, a slow list. Its results were only ever leads; the
   // answer goes on with the literature, guideline and regulatory tools, which
@@ -531,6 +540,7 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   "kb_search_source_ids_invalid",
   "kb_search_request_invalid",
   "kb_search_request_too_large",
+  ...DATA_SEMANTICS_RUN_FIXES,
   // And for a frontier search: a filter outside its closed vocabulary.
   "frontier_search_query_invalid",
   "frontier_search_lane_invalid",
@@ -1994,6 +2004,7 @@ export const ERROR_CODE_FAMILIES = Object.freeze([
   // and what the card's own button does about it.
   [/^source_parser_/, '文档解析这次没有完成，稍后再重新分析。'],
   [/^kb_search_/, '资料库检索这次没能完成；运行会直接读取知识库里的文件继续。'],
+  [/^semantics_/, DATA_SEMANTICS_ERROR_MESSAGE_ZH],
   [/^frontier_(?:disabled$|search_)/, '前沿动态检索这次没能完成；回答会改用文献、指南和监管来源继续。'],
   // The engine protocol's per-field issues (`VCR_PROTOCOL_ISSUE_CODES`), last so
   // no earlier family can take one of them. Three families, because each is
