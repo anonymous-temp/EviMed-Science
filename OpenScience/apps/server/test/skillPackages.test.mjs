@@ -87,7 +87,7 @@ test("a community skill is bound to the exact repository and commit its source r
   }
 });
 
-test("the platform's own packages say they came with the release and name a licence only where their own frontmatter declares one", () => {
+test("the platform's own packages say they came with the release and name a licence only where their own frontmatter declares one", async () => {
   for (const entry of SKILL_PACKAGES.values()) {
     if (!["core", "capability", "capability-skill", "evimed"].includes(entry.origin)) continue;
     assert.equal(entry.source.kind, "release", entry.id);
@@ -95,7 +95,10 @@ test("the platform's own packages say they came with the release and name a lice
     if (entry.licence?.id) assert.equal(entry.licence.basis, "declared", `${entry.id}: a licence name is declared only where a source declares one`);
     else if (entry.licence) assert.equal(entry.licence.basis, "file-present", entry.id);
   }
-  assert.equal(record("capability/statistical-analysis").version, "1.1.0", "a capability's version is its manifest's");
+  // Read from the manifest, never pinned here: a capability's version moves with every edit of its skill.
+  const declared = /^version:\s*(\S+)\s*$/m.exec(await read("capabilities/statistical-analysis/capability.yaml"))?.[1];
+  assert.match(declared ?? "", /^\d+\.\d+\.\d+$/);
+  assert.equal(record("capability/statistical-analysis").version, declared, "a capability's version is its manifest's");
   assert.equal(record("office/xlsx").licence.id, "MIT");
   assert.equal(record("extension/cowork-portable").licence.id, "MIT");
   assert.equal(record("extension/cowork-portable").source.commit, "2ae5cf755c4294a1e988eebf3b12dd062425d84c");
