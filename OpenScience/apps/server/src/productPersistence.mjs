@@ -10,6 +10,8 @@ export const PRODUCT_KINDS = Object.freeze([
   // property of the project's next run and not of any one method: a method can
   // be on trial in one project and absent from another at the same instant.
   "method-trial", "document-export", "result-version", "result-impact", "result-revision", "result-replay", ...EXTENSION_PRODUCT_KINDS,
+  // What a project's datasets mean: one document per dataset, the recorded interpretation a repeat analysis starts from.
+  "dataset-semantics",
 ]);
 // Frontier issues, reader notifications and operator rebuilds use the shared
 // durable ledger. Its per-entry queue — thousands of rows a day — lives in
@@ -281,6 +283,18 @@ BEGIN
   END IF;
 END $result_workbench_kinds$;
 INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-10-02-result-workbench-v1') ON CONFLICT DO NOTHING;
+DO $dataset_semantics_kind$
+BEGIN
+  -- Its own block, for the reason the method-trial block gives: the blocks before this one rebuild the
+  -- constraint only when it lacks *their* kind.
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint c WHERE c.conrelid='evimed_product.documents'::regclass
+      AND c.conname='product_documents_kind_check' AND position('''dataset-semantics''' in pg_get_constraintdef(c.oid)) > 0) THEN
+    ALTER TABLE evimed_product.documents DROP CONSTRAINT IF EXISTS product_documents_kind_check;
+    ALTER TABLE evimed_product.documents ADD CONSTRAINT product_documents_kind_check
+      CHECK (kind IN (${PRODUCT_KINDS.map(kind => `'${kind}'`).join(",")}));
+  END IF;
+END $dataset_semantics_kind$;
+INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-10-04-dataset-semantics-kind-v1') ON CONFLICT DO NOTHING;
 DO $availability_kind$
 BEGIN
   -- Its own block, for the reason the method-trial block gives: the blocks before

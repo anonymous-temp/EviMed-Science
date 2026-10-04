@@ -1,5 +1,5 @@
 id: statistical-analysis
-version: 1.0.0
+version: 1.1.0
 title: Statistical Analysis
 category: Research Planning
 description: Analyze supplied research data with executed Python or R, preserving reproducible code, numerical results, uncertainty and partial findings.
@@ -8,7 +8,8 @@ persona: You are a statistical analyst. Infer the estimand and independent units
 safetyClass: clinical
 skills:
 - statistical-analysis
-tools: []
+tools:
+- mcp__evimed__dataset_semantics
 produces:
 - contractKind: statistical-analysis-package
   outputs:

@@ -34,6 +34,7 @@ import { LoadError } from "@/components/cards/LoadError";
 import { FilesSkeleton } from "@/components/cards/Skeletons";
 import { FilePreviewInspector } from "@/components/inspector/FilePreviewInspector";
 import { PageShell } from "@/components/layout/PageShell";
+import { DatasetMeaningPanel } from "@/components/sources/DatasetMeaningPanel";
 import { SourceUnderstandingPanel } from "@/components/sources/SourceUnderstandingPanel";
 import { KNOWLEDGE_BASE_ACCEPT, KNOWLEDGE_BASE_UPLOAD_HINT, partitionKnowledgeBaseFiles } from "./FilesPage";
 
@@ -587,6 +588,8 @@ function SourceDetails({ source, projectId, onRaiseDepth }: { source: SourceReco
   return (
     <div className="space-y-6">
       <SourceFacts metadata={source.payload.metadata} pageCount={source.payload.analysis?.pageCount} fileName={name} />
+      {/* A table the project has analysed shows what it was understood to mean, beside the file itself. */}
+      {kindOf(source) === "sheet" && <DatasetMeaningPanel projectId={projectId} path={source.payload.paths[0] ?? ""} sha256={source.payload.fingerprint?.sha256 ?? null} />}
       <OmissionNotice notice={source.payload.omissionNotice} onRaiseDepth={onRaiseDepth} />
       <SourceUnderstandingPanel key={source.id} projectId={projectId} sourceId={source.id}
         generation={source.payload.generation} error={source.payload.error} />

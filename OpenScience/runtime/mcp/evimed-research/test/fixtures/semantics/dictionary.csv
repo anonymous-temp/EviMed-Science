@@ -1,0 +1,7 @@
+variable,label,unit,type
+patient_id,Patient identifier,,text
+visit_no,Visit number,,integer
+visit_date,Date of visit,,date
+sbp,Systolic blood pressure,mmHg,integer
+creatinine,Serum creatinine,umol/L,number
+heart_rate,Heart rate,beats/min,integer

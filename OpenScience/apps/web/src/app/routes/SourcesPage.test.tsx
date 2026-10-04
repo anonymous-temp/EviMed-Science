@@ -43,6 +43,12 @@ vi.mock("@/components/inspector/FilePreviewInspector", () => ({
   ),
 }));
 
+// What a dataset was understood to mean has its own panel and its own tests; the page only has to put it
+// beside a table's file, name the file's bytes to it, and leave every other document alone.
+vi.mock("@/components/sources/DatasetMeaningPanel", () => ({
+  DatasetMeaningPanel: ({ path, sha256 }: { path: string; sha256?: string | null }) => <p>数据含义面板：{path}·{sha256}</p>,
+}));
+
 /** A day this year, so the row dates it without a year. */
 const arrived = `${new Date().getFullYear()}-03-05T08:00:00`;
 
@@ -562,6 +568,21 @@ describe("SourcesPage", () => {
     const drawer = await openDetails();
     expect(within(drawer).getByText("《房颤抗凝治疗指南》 · 张三、李四、王五 等 · 中华心血管病杂志，2024-03 · 共 12 页")).toBeInTheDocument();
     expect(document.body.textContent).not.toMatch(/Crossref|DOI 10\./);
+  });
+
+  it("puts what a table was understood to mean beside the table's file, and beside no other document", async () => {
+    const sha256 = "a".repeat(64);
+    const table = { ...complete, payload: { ...complete.payload, paths: ["knowledge-base/随访.csv"], fingerprint: { size: 2048, sha256 } } };
+    mocks.listSources.mockResolvedValue({ items: [table], nextCursor: null });
+    const view = render(<SourcesPage />);
+    const csv = await openDetails("随访.csv");
+    expect(within(csv).getByText(`数据含义面板：knowledge-base/随访.csv·${sha256}`)).toBeInTheDocument();
+    view.unmount();
+
+    mocks.listSources.mockResolvedValue({ items: [complete], nextCursor: null });
+    render(<SourcesPage />);
+    const protocol = await openDetails("研究方案.docx");
+    expect(within(protocol).queryByText(/数据含义面板/)).not.toBeInTheDocument();
   });
 
   it("marks a parsed document available to every project, and takes it back", async () => {

@@ -1,6 +1,6 @@
 {
   "id": "statistical-analysis",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "title": "Statistical Analysis",
   "description": "Analyze supplied research data with executed Python or R, preserving reproducible code, numerical results, uncertainty and partial findings.",
   "whenToUse": "Use for a requested statistical analysis of supplied data, including descriptive comparisons, regression, survival analysis and follow-up calculations. For choosing possible studies from a dataset, use dataset-research-scoping.",
@@ -8,7 +8,9 @@
   "skills": [
     "statistical-analysis"
   ],
-  "tools": [],
+  "tools": [
+    "mcp__evimed__dataset_semantics"
+  ],
   "produces": [
     {
       "contractKind": "statistical-analysis-package",

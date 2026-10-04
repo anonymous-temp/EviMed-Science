@@ -11,6 +11,9 @@ import { ResultReplayService } from "./resultReplayService.mjs";
 import { ResultReplayWorker } from "./resultReplayWorker.mjs";
 import { createResultReplayRoutes } from "./resultReplayRoutes.mjs";
 import { createResultGateway, RESULT_GATEWAY_PATH } from "./resultGateway.mjs";
+import { DataSemanticsService } from "./dataSemanticsService.mjs";
+import { createDataSemanticsGateway, DATA_SEMANTICS_GATEWAY_PATH } from "./dataSemanticsGateway.mjs";
+import { createDataSemanticsRoutes } from "./dataSemanticsRoutes.mjs";
 import { ResultExportService } from "./resultExport.mjs";
 import { ResultRevisionService } from "./resultRevision.mjs";
 import { createResultReuseRoutes } from "./resultReuseRoutes.mjs";
@@ -1877,6 +1880,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     controller: documentController, admission: client => heavyWorkAdmission(client, "render"),
     report: code => process.stderr.write(`document export: ${code}\n`) }) : null;
   const documentExportRoutes = createDocumentExportRoutes({ store, service: documentExportService });
+  // What a project's datasets mean: one ledger document per dataset, read and written by the two data capabilities
+  // through their tool's gateway and shown beside the dataset on the files page. No patient row is ever in it.
+  const dataSemantics = productDocuments && config.dataSemanticsEnabled ? new DataSemanticsService({ documents: productDocuments }) : null;
+  const dataSemanticsRoutes = createDataSemanticsRoutes({ store, service: dataSemantics, maxJsonBytes: config.maxJsonBytes });
   const resultProvenance = productDocuments && config.resultsEnabled ? new ResultProvenanceService({
     documents: productDocuments, config, maxSnapshotBytes: config.resultSnapshotMaxBytes,
     resolveCaptureContext: async (project, input) => {
@@ -3629,6 +3636,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const revisionGatewayHandler = createRevisionGatewayHandler({ runtimeManager, store, agentRuns });
   const resultGatewayHandler = createResultGateway({ runtimeManager, store, service: resultReplays, agentRuns,
     resolveSession: (project, sessionId) => runtimeEventPump.sessionOwner(project, sessionId) });
+  const dataSemanticsGatewayHandler = createDataSemanticsGateway({ config, runtimeManager, store, service: dataSemantics });
   const toolUniverseGatewayHandler = createToolUniverseGateway({ config, runtimeManager, store });
   const modelGatewayHandler = createModelGatewayHandler(config, runtimeManager, {
     fetchImpl: overrides.modelGatewayFetch ?? globalThis.fetch,
@@ -4390,6 +4398,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     };
     const gateway = pathname.startsWith(`${RESULT_GATEWAY_PATH}/`)
       ? resultGatewayHandler
+      : pathname.startsWith(`${DATA_SEMANTICS_GATEWAY_PATH}/`)
+      ? dataSemanticsGatewayHandler
       : pathname === TOOL_UNIVERSE_GATEWAY_PATH
       ? toolUniverseGatewayHandler
       : pathname.startsWith(`${CAPSULE_GATEWAY_PATH}/`)
@@ -4526,6 +4536,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (await resultRoutes(req, res)) return;
       if (await resultReuseRoutes(req, res)) return;
       if (await resultImpactRoutes(req, res)) return;
+      if (await dataSemanticsRoutes(req, res)) return;
       if (await resultSourceUpdatesRoutes(req, res)) return;
       if (await resultReplayRoutes(req, res)) return;
       if (await availability.routes(req, res)) return;

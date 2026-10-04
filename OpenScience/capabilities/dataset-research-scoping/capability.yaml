@@ -7,7 +7,7 @@
 # child is) and `produces` (which contract validates the result) are
 # required. `tools` uses the model-visible names.
 id: dataset-research-scoping
-version: 1.8.0
+version: 1.9.0
 title: Dataset Research Scoping
 category: Research Planning
 description: Start from a dataset the researcher already holds, profile it mechanically, map it against
@@ -37,6 +37,7 @@ tools:
 - mcp__evimed__term_normalize
 - mcp__evimed__evidence_deduplicate
 - mcp__evimed__pharmacy_reference_search
+- mcp__evimed__dataset_semantics
 produces:
 - contractKind: dataset-scoping-package
   outputs:

@@ -1,6 +1,6 @@
 {
   "id": "dataset-research-scoping",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "title": "Dataset Research Scoping",
   "description": "Start from a dataset the researcher already holds, profile it mechanically, map it against the published literature, and decide which research questions it can and cannot support — naming the missing field for every question it cannot.",
   "whenToUse": "研究者手上已经有数据、要从数据出发找选题时，委派给我——这与从文献出发的证据综述是两条不同的入口。",
@@ -26,7 +26,8 @@
     "mcp__evimed__clinical_trial_search",
     "mcp__evimed__term_normalize",
     "mcp__evimed__evidence_deduplicate",
-    "mcp__evimed__pharmacy_reference_search"
+    "mcp__evimed__pharmacy_reference_search",
+    "mcp__evimed__dataset_semantics"
   ],
   "produces": [
     {

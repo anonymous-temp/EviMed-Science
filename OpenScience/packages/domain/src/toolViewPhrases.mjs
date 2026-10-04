@@ -140,6 +140,7 @@ const PHRASES = Object.freeze({
   curve_digitize: phrase('数字化生存曲线图'),
   evidence_pool: phrase('合并证据参数', ['parameter']),
   research_calculate: phrase('计算研究数据', ['method']),
+  dataset_semantics: phrase('读写数据含义'),
   // the kernel's own
   bash: phrase('运行脚本'),
 })

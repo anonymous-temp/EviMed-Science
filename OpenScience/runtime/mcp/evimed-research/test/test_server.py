@@ -138,6 +138,9 @@ class ToolContractTests(unittest.TestCase):
             "trial_registry_record",
             "curve_digitize",
             "evidence_pool",
+            # What a project's datasets mean, and the deterministic checks of
+            # its files against that (`data_semantics.py`, 2026-10-04).
+            "dataset_semantics",
         }
         self.assertEqual(set(by_name), expected)
         for tool in tools:

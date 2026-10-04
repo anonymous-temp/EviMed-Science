@@ -1578,6 +1578,10 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
       resultGatewayUrl.pathname = "/internal/results/v1";
       environment.EVIMED_RESULT_GATEWAY_URL = gateways ? String(gateways.results ?? "") : resultGatewayUrl.href;
     }
+    // What a project's datasets mean rides the same token: given an address where the module is on and the product
+    // ledger exists, so a run's `dataset_semantics` tool answers `semantics_disabled` without a request elsewhere.
+    const semanticsGatewayUrl = gateways ? String(gateways.semantics ?? "") : dataSemanticsGatewayProviderUrl(config);
+    if (semanticsGatewayUrl) environment.EVIMED_SEMANTICS_GATEWAY_URL = semanticsGatewayUrl;
     // So does 「前沿动态」 search, and it is absent for the same reason — and
     // also for an account the module is not open to yet (the operators-only
     // dry run): that runtime's tool answers `frontier_disabled` without asking
@@ -1903,6 +1907,18 @@ export function publicSourceGatewayProviderUrl(config) {
 export function capsuleGatewayEndpointUrl(config) {
   const url = new URL(modelGatewayProviderUrl(config));
   url.pathname = "/internal/capsules/v1";
+  return url.toString().replace(/\/$/, "");
+}
+
+/**
+ * The recorded-data-meaning gateway, as the runtime may know it: empty when the module is off or there is no
+ * product ledger to keep it in.
+ * @param {any} config @returns {string}
+ */
+export function dataSemanticsGatewayProviderUrl(config) {
+  if (!config.dataSemanticsEnabled || config.stateStore !== "postgres") return "";
+  const url = new URL(modelGatewayProviderUrl(config));
+  url.pathname = "/internal/semantics/v1";
   return url.toString().replace(/\/$/, "");
 }
 
