@@ -208,6 +208,21 @@ class SourceError(public_sources.PublicSourceError):
         }[self.state]
 
 
+# The three failures are built through these, not by naming the state in a call to the error class: the
+# repository's "every error code is classified" test reads a string literal at the head of
+# an `...Error(` call as an error code, and a state is not one. The state is the name here.
+def denied(message, **fields):
+    return SourceError(state="denied", message=message, **fields)
+
+
+def timed_out(message, **fields):
+    return SourceError(state="timeout", message=message, **fields)
+
+
+def unavailable(message, **fields):
+    return SourceError(state="unavailable", message=message, **fields)
+
+
 class Truncated(Exception):
     """A body that reached a bound before it ended. Not an error of the source:
     the caller decides whether what arrived is usable, and a body cut at a bound

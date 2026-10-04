@@ -68,7 +68,7 @@ def hand_off(group, files, *, deadline=None):
 
     def handle(response, _attempt, _waited):
         if response is None or transport._content_type(response) != "application/json":  # noqa: SLF001
-            raise source_outcome.SourceError("unavailable", "Source intake answered with something that is not a result list.", scope="Source intake", reason="invalid_response", retryable=False)
+            raise source_outcome.unavailable("Source intake answered with something that is not a result list.", scope="Source intake", reason="invalid_response", retryable=False)
         return json.loads(transport.read_body(response, max_bytes=512 * 1024, deadline=deadline, scope="Source intake").decode("utf-8"))
 
     try:

@@ -11,7 +11,7 @@
 # on what it says about it, so its outputs are a table and a certainty
 # judgement rather than a report and a search log.
 id: evidence-appraisal
-version: 1.0.0
+version: 1.1.0
 title: Evidence Appraisal
 category: Clinical Evidence
 description: Critically appraise a body of studies the researcher already holds — design, risk of bias,
@@ -39,6 +39,8 @@ tools:
 # trial reported twice. It has no source-selection step, so it carries no
 # guideline or catalogue tools.
 - mcp__evimed__open_access_full_text
+- mcp__evimed__identifier_resolve
+- mcp__evimed__clinical_trial_snapshot
 - mcp__evimed__web_read
 - mcp__evimed__literature_search
 - mcp__evimed__kb_search

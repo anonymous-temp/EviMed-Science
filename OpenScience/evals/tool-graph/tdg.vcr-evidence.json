@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-evidence",
-  "version": "sha256:adb61c38f5da92d41406d88a1f30e14923d128050e885078263c367c93425198",
+  "version": "sha256:c76d3ad80b08d20483b81a1bb6009a69db1bc97eb832f79cd378f455c1e1c807",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 30,
@@ -1037,7 +1037,7 @@
     {
       "name": "mcp__evimed__open_access_full_text",
       "source": "mcp",
-      "description": "Resolve a PMCID, PMID, or DOI through Europe PMC, retrieve the complete open-access JATS XML, and write bounded Markdown and XML artifacts into the current workspace for direct, paginated reading.",
+      "description": "Resolve a PMCID, PMID or DOI through Europe PMC and preserve the open-access full text (publisher JATS XML, else the open-access PDF) with its tables as cells, its PMC version and its license. data.contentLevel says what the text is; an abstract is never full text. supplements=true also fetches the article's supplementary files, checks each against the md5 the article declares and preserves them (up to ~150 s; a cut-short archive keeps the files that arrived whole). intake=true hands the text and supplements to the project's knowledge base. Refusals, timeouts and no-supplement answers are named in data.outcome and data.supplementaryFiles.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1045,6 +1045,14 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 512
+          },
+          "supplements": {
+            "type": "boolean",
+            "description": "Default false. Fetch and preserve the supplementary files."
+          },
+          "intake": {
+            "type": "boolean",
+            "description": "Default false. Offer the preserved text and supplements to the knowledge base."
           }
         },
         "additionalProperties": false,

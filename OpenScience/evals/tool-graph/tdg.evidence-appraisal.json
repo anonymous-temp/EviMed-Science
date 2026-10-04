@@ -1,13 +1,13 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "evidence-appraisal",
-  "version": "sha256:ace846ca18ecca5f7f2f5177b5942aca3c22ac5b5e1968cf9a4010cf50dddfa0",
+  "version": "sha256:5d046dfef6ef469790a31885c12f30498ea1251dfc1fcdab39f5b93eaa6f1239",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
-    "nodes": 25,
-    "edges": 13,
+    "nodes": 27,
+    "edges": 19,
     "byVia": {
-      "schema": 13,
+      "schema": 19,
       "model": 0,
       "executed": 0
     },
@@ -22,7 +22,42 @@
   "removed": [
     {
       "from": "mcp__evimed__evidence_deduplicate",
+      "to": "mcp__evimed__identifier_resolve",
+      "type": "parameter",
+      "via": "schema",
+      "reason": "lowest-priority edge in a dependency cycle"
+    },
+    {
+      "from": "mcp__evimed__evidence_deduplicate",
       "to": "mcp__evimed__open_access_full_text",
+      "type": "parameter",
+      "via": "schema",
+      "reason": "lowest-priority edge in a dependency cycle"
+    },
+    {
+      "from": "mcp__evimed__open_access_full_text",
+      "to": "edit",
+      "type": "parameter",
+      "via": "schema",
+      "reason": "lowest-priority edge in a dependency cycle"
+    },
+    {
+      "from": "mcp__evimed__open_access_full_text",
+      "to": "mcp__evimed__identifier_resolve",
+      "type": "parameter",
+      "via": "schema",
+      "reason": "lowest-priority edge in a dependency cycle"
+    },
+    {
+      "from": "mcp__evimed__open_access_full_text",
+      "to": "read",
+      "type": "parameter",
+      "via": "schema",
+      "reason": "lowest-priority edge in a dependency cycle"
+    },
+    {
+      "from": "mcp__evimed__open_access_full_text",
+      "to": "write",
       "type": "parameter",
       "via": "schema",
       "reason": "lowest-priority edge in a dependency cycle"
@@ -680,6 +715,60 @@
       "stateEffect": "none"
     },
     {
+      "name": "mcp__evimed__clinical_trial_snapshot",
+      "source": "mcp",
+      "description": "Read one ClinicalTrials.gov record whole, with posted results, and preserve it as a snapshot: record.json, a quotable record.md and alignment.json (populations, registered and reported endpoints, timepoints). Each read is compared with the snapshot held before it and the changes are listed by kind (endpoint_timeframe_changed, enrollment_changed, result_values_changed ...). The registry's API serves only the current record, so versions older than your first snapshot are not available and the result says so.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "nctId": {
+            "type": "string",
+            "pattern": "^[Nn][Cc][Tt]\\d{8}$",
+            "description": "NCT and eight digits."
+          },
+          "compareTo": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "previous (default), none, or the leading hex of a held snapshot directory."
+          },
+          "intake": {
+            "type": "boolean",
+            "description": "Default false. Offer record.md to the knowledge base."
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "nctId"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": [
+          {
+            "path": "data.nctId",
+            "type": "nct_id"
+          },
+          {
+            "path": "data.markdownPath",
+            "type": "file_path"
+          }
+        ]
+      },
+      "typeTags": [
+        "nct_id"
+      ],
+      "requiredTypeTags": [
+        "nct_id"
+      ],
+      "outputTypeTags": [
+        "file_path",
+        "nct_id"
+      ],
+      "stateEffect": "none"
+    },
+    {
       "name": "mcp__evimed__drug_label_search",
       "source": "mcp",
       "description": "Search drug labels by drug (name, brand or approval number), optionally product and manufacturer: Chinese labels from the EviMed label index, US labels with jurisdiction US. Read one label by labelId (optionally sections): it is preserved, each section citable as label:<approval>#<section>. Indexed copies are snapshots; verify against the current official label.",
@@ -812,6 +901,63 @@
           {
             "path": "items[].pmid",
             "type": "pmid"
+          }
+        ]
+      },
+      "typeTags": [
+        "doi",
+        "pmid"
+      ],
+      "requiredTypeTags": [
+        "doi",
+        "pmid"
+      ],
+      "outputTypeTags": [
+        "doi",
+        "pmid"
+      ],
+      "stateEffect": "none"
+    },
+    {
+      "name": "mcp__evimed__identifier_resolve",
+      "source": "mcp",
+      "description": "Link PMIDs, PMCIDs and DOIs to one another (up to 200) and preserve the answer: NCBI's ID converter, then Europe PMC, PubMed and Crossref for what it cannot place. Each identifier ends resolved, conflict, not_found, invalid or unchecked. A PMID that is not in PMC has no PMCID, which is not the same as not existing. Returns the linked ids, title, PMC versions, which source said what, and the preserved links.json.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "identifiers": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 200,
+            "items": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300
+            },
+            "description": "PMIDs (\"30221596\", \"PMID: 30221596\"), PMCIDs (\"PMC6426126\") and DOIs, in any mix."
+          }
+        },
+        "additionalProperties": false,
+        "required": [
+          "identifiers"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": [
+          {
+            "path": "items[].pmid",
+            "type": "pmid"
+          },
+          {
+            "path": "items[].pmcid",
+            "type": "pmid"
+          },
+          {
+            "path": "items[].doi",
+            "type": "doi"
           }
         ]
       },
@@ -1041,7 +1187,7 @@
     {
       "name": "mcp__evimed__open_access_full_text",
       "source": "mcp",
-      "description": "Resolve a PMCID, PMID, or DOI through Europe PMC, retrieve the complete open-access JATS XML, and write bounded Markdown and XML artifacts into the current workspace for direct, paginated reading.",
+      "description": "Resolve a PMCID, PMID or DOI through Europe PMC and preserve the open-access full text (publisher JATS XML, else the open-access PDF) with its tables as cells, its PMC version and its license. data.contentLevel says what the text is; an abstract is never full text. supplements=true also fetches the article's supplementary files, checks each against the md5 the article declares and preserves them (up to ~150 s; a cut-short archive keeps the files that arrived whole). intake=true hands the text and supplements to the project's knowledge base. Refusals, timeouts and no-supplement answers are named in data.outcome and data.supplementaryFiles.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1049,6 +1195,14 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 512
+          },
+          "supplements": {
+            "type": "boolean",
+            "description": "Default false. Fetch and preserve the supplementary files."
+          },
+          "intake": {
+            "type": "boolean",
+            "description": "Default false. Offer the preserved text and supplements to the knowledge base."
           }
         },
         "additionalProperties": false,
@@ -1340,6 +1494,19 @@
     },
     {
       "from": "mcp__evimed__biomedical_source_search",
+      "to": "mcp__evimed__identifier_resolve",
+      "type": "parameter",
+      "via": "schema",
+      "confidence": 0.9,
+      "validatedBy": null,
+      "stateEffect": "none",
+      "matchedTypes": [
+        "doi",
+        "pmid"
+      ]
+    },
+    {
+      "from": "mcp__evimed__biomedical_source_search",
       "to": "mcp__evimed__open_access_full_text",
       "type": "parameter",
       "via": "schema",
@@ -1353,7 +1520,31 @@
     },
     {
       "from": "mcp__evimed__clinical_trial_search",
+      "to": "mcp__evimed__clinical_trial_snapshot",
+      "type": "parameter",
+      "via": "schema",
+      "confidence": 0.9,
+      "validatedBy": null,
+      "stateEffect": "none",
+      "matchedTypes": [
+        "nct_id"
+      ]
+    },
+    {
+      "from": "mcp__evimed__clinical_trial_search",
       "to": "mcp__evimed__evidence_deduplicate",
+      "type": "parameter",
+      "via": "schema",
+      "confidence": 0.9,
+      "validatedBy": null,
+      "stateEffect": "none",
+      "matchedTypes": [
+        "pmid"
+      ]
+    },
+    {
+      "from": "mcp__evimed__clinical_trial_search",
+      "to": "mcp__evimed__identifier_resolve",
       "type": "parameter",
       "via": "schema",
       "confidence": 0.9,
@@ -1376,33 +1567,7 @@
       ]
     },
     {
-      "from": "mcp__evimed__literature_search",
-      "to": "mcp__evimed__evidence_deduplicate",
-      "type": "parameter",
-      "via": "schema",
-      "confidence": 0.9,
-      "validatedBy": null,
-      "stateEffect": "none",
-      "matchedTypes": [
-        "doi",
-        "pmid"
-      ]
-    },
-    {
-      "from": "mcp__evimed__literature_search",
-      "to": "mcp__evimed__open_access_full_text",
-      "type": "parameter",
-      "via": "schema",
-      "confidence": 0.9,
-      "validatedBy": null,
-      "stateEffect": "writes_workspace",
-      "matchedTypes": [
-        "doi",
-        "pmid"
-      ]
-    },
-    {
-      "from": "mcp__evimed__open_access_full_text",
+      "from": "mcp__evimed__clinical_trial_snapshot",
       "to": "edit",
       "type": "parameter",
       "via": "schema",
@@ -1414,8 +1579,84 @@
       ]
     },
     {
-      "from": "mcp__evimed__open_access_full_text",
+      "from": "mcp__evimed__clinical_trial_snapshot",
+      "to": "read",
+      "type": "parameter",
+      "via": "schema",
+      "confidence": 0.9,
+      "validatedBy": null,
+      "stateEffect": "none",
+      "matchedTypes": [
+        "file_path"
+      ]
+    },
+    {
+      "from": "mcp__evimed__clinical_trial_snapshot",
+      "to": "write",
+      "type": "parameter",
+      "via": "schema",
+      "confidence": 0.9,
+      "validatedBy": null,
+      "stateEffect": "writes_workspace",
+      "matchedTypes": [
+        "file_path"
+      ]
+    },
+    {
+      "from": "mcp__evimed__identifier_resolve",
       "to": "mcp__evimed__evidence_deduplicate",
+      "type": "parameter",
+      "via": "schema",
+      "confidence": 0.9,
+      "validatedBy": null,
+      "stateEffect": "none",
+      "matchedTypes": [
+        "doi",
+        "pmid"
+      ]
+    },
+    {
+      "from": "mcp__evimed__identifier_resolve",
+      "to": "mcp__evimed__open_access_full_text",
+      "type": "parameter",
+      "via": "schema",
+      "confidence": 0.9,
+      "validatedBy": null,
+      "stateEffect": "writes_workspace",
+      "matchedTypes": [
+        "doi",
+        "pmid"
+      ]
+    },
+    {
+      "from": "mcp__evimed__literature_search",
+      "to": "mcp__evimed__evidence_deduplicate",
+      "type": "parameter",
+      "via": "schema",
+      "confidence": 0.9,
+      "validatedBy": null,
+      "stateEffect": "none",
+      "matchedTypes": [
+        "doi",
+        "pmid"
+      ]
+    },
+    {
+      "from": "mcp__evimed__literature_search",
+      "to": "mcp__evimed__identifier_resolve",
+      "type": "parameter",
+      "via": "schema",
+      "confidence": 0.9,
+      "validatedBy": null,
+      "stateEffect": "none",
+      "matchedTypes": [
+        "doi",
+        "pmid"
+      ]
+    },
+    {
+      "from": "mcp__evimed__literature_search",
+      "to": "mcp__evimed__open_access_full_text",
       "type": "parameter",
       "via": "schema",
       "confidence": 0.9,
@@ -1428,26 +1669,15 @@
     },
     {
       "from": "mcp__evimed__open_access_full_text",
-      "to": "read",
+      "to": "mcp__evimed__evidence_deduplicate",
       "type": "parameter",
       "via": "schema",
       "confidence": 0.9,
       "validatedBy": null,
       "stateEffect": "writes_workspace",
       "matchedTypes": [
-        "file_path"
-      ]
-    },
-    {
-      "from": "mcp__evimed__open_access_full_text",
-      "to": "write",
-      "type": "parameter",
-      "via": "schema",
-      "confidence": 0.9,
-      "validatedBy": null,
-      "stateEffect": "writes_workspace",
-      "matchedTypes": [
-        "file_path"
+        "doi",
+        "pmid"
       ]
     },
     {

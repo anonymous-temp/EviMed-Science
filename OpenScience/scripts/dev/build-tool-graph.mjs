@@ -159,6 +159,20 @@ const DESCRIPTION_TYPE_TOKENS = Object.freeze([
 const TOOL_OUTPUT_FIELDS = Object.freeze({
   literature_search: [{ path: "items[].pmid", type: "pmid" }, { path: "items[].doi", type: "doi" }],
   guideline_search: [{ path: "items[].doi", type: "doi" }],
+  identifier_resolve: [
+    { path: "items[].pmid", type: "pmid" },
+    { path: "items[].pmcid", type: "pmid" },
+    { path: "items[].doi", type: "doi" },
+  ],
+  clinical_trial_snapshot: [
+    { path: "data.nctId", type: "nct_id" },
+    { path: "data.markdownPath", type: "file_path" },
+  ],
+  dailymed_label: [
+    { path: "items[].setId", type: "source_id" },
+    { path: "data.markdownPath", type: "file_path" },
+    { path: "data.activeIngredients[].name", type: "drug_name" },
+  ],
   clinical_trial_search: [{ path: "items[].nctId", type: "nct_id" }, { path: "items[].pmid", type: "pmid" }],
   biomedical_source_search: [{ path: "items[].doi", type: "doi" }, { path: "items[].pmid", type: "pmid" }],
   patent_search: [],

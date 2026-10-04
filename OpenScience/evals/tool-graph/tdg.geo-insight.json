@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "geo-insight",
-  "version": "sha256:63897508b0a8a598466b06eed94f9e97a53859ac040103163a1e73bad0c0e76b",
+  "version": "sha256:cb10fea2ad1f97d750ae638d54aa57000e0b04f30f4df09f55751e812140165f",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 32,
@@ -1206,7 +1206,7 @@
     {
       "name": "mcp__evimed__open_access_full_text",
       "source": "mcp",
-      "description": "Resolve a PMCID, PMID, or DOI through Europe PMC, retrieve the complete open-access JATS XML, and write bounded Markdown and XML artifacts into the current workspace for direct, paginated reading.",
+      "description": "Resolve a PMCID, PMID or DOI through Europe PMC and preserve the open-access full text (publisher JATS XML, else the open-access PDF) with its tables as cells, its PMC version and its license. data.contentLevel says what the text is; an abstract is never full text. supplements=true also fetches the article's supplementary files, checks each against the md5 the article declares and preserves them (up to ~150 s; a cut-short archive keeps the files that arrived whole). intake=true hands the text and supplements to the project's knowledge base. Refusals, timeouts and no-supplement answers are named in data.outcome and data.supplementaryFiles.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1214,6 +1214,14 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 512
+          },
+          "supplements": {
+            "type": "boolean",
+            "description": "Default false. Fetch and preserve the supplementary files."
+          },
+          "intake": {
+            "type": "boolean",
+            "description": "Default false. Offer the preserved text and supplements to the knowledge base."
           }
         },
         "additionalProperties": false,

@@ -52,6 +52,12 @@ export const MCP_TOOL_BASE_NAMES = Object.freeze([
   'clinical_trial_search',
   'patent_search',
   'biomedical_source_search',
+  // linked identifiers, a trial's record with its history, and a US label by
+  // version (2026-10-04, N04): each preserves what it read and names how the
+  // retrieval ended (source_outcome.py)
+  'identifier_resolve',
+  'clinical_trial_snapshot',
+  'dailymed_label',
   // full text and pages
   'open_access_full_text',
   'web_read',

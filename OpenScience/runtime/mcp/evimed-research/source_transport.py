@@ -196,8 +196,7 @@ def read_body(response, *, max_bytes, deadline, scope=None, chunk=CHUNK_BYTES):
     received = 0
     while True:
         if deadline.expired():
-            raise SourceError(
-                "timeout", "The time budget ran out while %s was still sending its answer (%d bytes had arrived)." % (scope or "the source", received),
+            raise source_outcome.timed_out("The time budget ran out while %s was still sending its answer (%d bytes had arrived)." % (scope or "the source", received),
                 scope=scope, reason="deadline_during_body", retryable=True, partial={"bytesReceived": received},
             )
         _tighten(response, deadline)
@@ -206,8 +205,7 @@ def read_body(response, *, max_bytes, deadline, scope=None, chunk=CHUNK_BYTES):
         except http.client.IncompleteRead as error:
             raise Truncated(received + len(error.partial or b""), max_bytes, reason="connection_closed_early", declared=declared) from error
         except (TimeoutError, socket.timeout) as error:
-            raise SourceError(
-                "timeout", "%s stopped sending its answer (%d bytes had arrived)." % (scope or "The source", received),
+            raise source_outcome.timed_out("%s stopped sending its answer (%d bytes had arrived)." % (scope or "The source", received),
                 scope=scope, reason="read_stalled", retryable=True, partial={"bytesReceived": received},
             ) from error
         if not piece:
@@ -257,15 +255,14 @@ def classify_http_error(error, *, scope):
     mapped = source_outcome.state_of(code)
     if status in (401, 403) or mapped == "denied":
         reason = "policy" if mapped == "denied" and code != "public_source_gateway_upstream_denied" else "refused_by_source"
-        return SourceError("denied", "%s refused this request (HTTP %s)." % (scope or "The source", status), scope=scope, reason=reason, retryable=False)
+        return source_outcome.denied("%s refused this request (HTTP %s)." % (scope or "The source", status), scope=scope, reason=reason, retryable=False)
     if status in (408, 504) or mapped == "timeout":
-        return SourceError("timeout", "%s did not answer in time." % (scope or "The source"), scope=scope, reason="source_did_not_answer", retryable=True)
+        return source_outcome.timed_out("%s did not answer in time." % (scope or "The source"), scope=scope, reason="source_did_not_answer", retryable=True)
     if status == 429 or code == "public_source_gateway_rate_limited":
-        return SourceError("unavailable", "%s is rate limiting this caller." % (scope or "The source"), scope=scope, reason="rate_limited", retryable=True, retry_after=retry_after)
+        return source_outcome.unavailable("%s is rate limiting this caller." % (scope or "The source"), scope=scope, reason="rate_limited", retryable=True, retry_after=retry_after)
     if status == 400:
-        return SourceError("unavailable", "%s rejected the request as invalid (HTTP 400)." % (scope or "The source"), scope=scope, reason="request_rejected", retryable=False)
-    return SourceError(
-        "unavailable", "%s answered with an error (HTTP %s)." % (scope or "The source", status), scope=scope,
+        return source_outcome.unavailable("%s rejected the request as invalid (HTTP 400)." % (scope or "The source"), scope=scope, reason="request_rejected", retryable=False)
+    return source_outcome.unavailable("%s answered with an error (HTTP %s)." % (scope or "The source", status), scope=scope,
         reason="upstream_error", retryable=True, retry_after=retry_after,
     )
 
@@ -289,8 +286,7 @@ def _run(open_response, handle, *, deadline, scope, per_attempt, attempts, idemp
     while True:
         attempt += 1
         if deadline.expired():
-            raise SourceError(
-                "timeout", "The time budget ran out before %s could be asked%s." % (scope, " again" if attempt > 1 else ""),
+            raise source_outcome.timed_out("The time budget ran out before %s could be asked%s." % (scope, " again" if attempt > 1 else ""),
                 scope=scope, reason="deadline_before_attempt", retryable=True,
             )
         if pace_url:
@@ -304,7 +300,7 @@ def _run(open_response, handle, *, deadline, scope, per_attempt, attempts, idemp
             if isinstance(classified, NotFound):
                 if 404 in accept_statuses:
                     return handle(None, attempt, waited)
-                raise SourceError("unavailable", "%s holds no record at this address (HTTP 404)." % scope, scope=scope, reason="not_found", retryable=False) from error
+                raise source_outcome.unavailable("%s holds no record at this address (HTTP 404)." % scope, scope=scope, reason="not_found", retryable=False) from error
             if isinstance(classified, (Truncated, public_sources.SourceNotConfigured)):
                 raise classified from error
             if error.code in accept_statuses:
@@ -316,12 +312,10 @@ def _run(open_response, handle, *, deadline, scope, per_attempt, attempts, idemp
             raise
         except (urllib.error.URLError, TimeoutError, socket.timeout, OSError, http.client.HTTPException) as error:
             if _is_timeout(error):
-                raise SourceError(
-                    "timeout", "%s did not answer within %d s." % (scope, int(deadline.socket_timeout(per_attempt))),
+                raise source_outcome.timed_out("%s did not answer within %d s." % (scope, int(deadline.socket_timeout(per_attempt))),
                     scope=scope, reason="no_answer_in_time", retryable=True,
                 ) from error
-            failure = SourceError(
-                "unavailable", "%s could not be reached (%s)." % (scope, getattr(error, "reason", None) or type(error).__name__),
+            failure = source_outcome.unavailable("%s could not be reached (%s)." % (scope, getattr(error, "reason", None) or type(error).__name__),
                 scope=scope, reason="connection_failed", retryable=True,
             )
         # `failure` is a retryable-or-final SourceError for this attempt.
@@ -345,12 +339,10 @@ def _wrong_type(content_type, scope):
     """The failure a response of an unasked-for type is: a web page where data
     was asked for is a verification or login wall, anything else is unreadable."""
     if content_type == "text/html":
-        return SourceError(
-            "denied", "%s answered with a web page instead of the data (a verification or login page)." % scope,
+        return source_outcome.denied("%s answered with a web page instead of the data (a verification or login page)." % scope,
             scope=scope, reason="verification_page", retryable=False,
         )
-    return SourceError(
-        "unavailable", "%s answered with content type %s, which is not what was asked for." % (scope, content_type or "none"),
+    return source_outcome.unavailable("%s answered with content type %s, which is not what was asked for." % (scope, content_type or "none"),
         scope=scope, reason="unexpected_content_type", retryable=False,
     )
 
@@ -490,7 +482,7 @@ def download(kind, params, *, deadline, scope, max_bytes=16 * 1024 * 1024, per_a
 
     def handle(response, attempt, waited):
         if response is None:
-            raise SourceError("unavailable", "%s holds no such file." % scope, scope=scope, reason="not_found", retryable=False)
+            raise source_outcome.unavailable("%s holds no such file." % scope, scope=scope, reason="not_found", retryable=False)
         content_type = _content_type(response)
         if content_type not in accepted:
             raise _wrong_type(content_type, scope)
@@ -513,4 +505,4 @@ def fetch_json(url, *, deadline, scope, strict=True, **options):
     try:
         return response.json(strict=strict), response
     except (UnicodeDecodeError, ValueError) as error:
-        raise SourceError("unavailable", "%s answered with text that is not JSON." % scope, scope=scope, reason="invalid_response", retryable=False) from error
+        raise source_outcome.unavailable("%s answered with text that is not JSON." % scope, scope=scope, reason="invalid_response", retryable=False) from error

@@ -394,7 +394,7 @@ def _search(arguments, deadline):
     rows = body.get("data") if isinstance(body, dict) else None
     meta = body.get("metadata") if isinstance(body, dict) else None
     if not isinstance(rows, list) or not isinstance(meta, dict):
-        raise source_outcome.SourceError("unavailable", "DailyMed answered with something that is not a label list.", scope=SCOPE, reason="invalid_response", retryable=False)
+        raise source_outcome.unavailable("DailyMed answered with something that is not a label list.", scope=SCOPE, reason="invalid_response", retryable=False)
     jurisdiction = jurisdiction_of(set())
     items = [{
         "setId": row.get("setid"), "version": row.get("spl_version"), "title": _text_value(row.get("title")), "publishedDate": _published(row.get("published_date")),
@@ -438,7 +438,7 @@ def _history(set_id, deadline):
     data = body.get("data") if isinstance(body, dict) else None
     history = data.get("history") if isinstance(data, dict) else None
     if not isinstance(history, list):
-        raise source_outcome.SourceError("unavailable", "DailyMed answered with something that is not a version history.", scope=SCOPE, reason="invalid_response", retryable=False)
+        raise source_outcome.unavailable("DailyMed answered with something that is not a version history.", scope=SCOPE, reason="invalid_response", retryable=False)
     versions = sorted(({"version": row["spl_version"], "publishedDate": _published(row.get("published_date"))} for row in history if isinstance(row, dict) and isinstance(row.get("spl_version"), int)), key=lambda row: -row["version"])
     return versions or None
 
@@ -460,9 +460,9 @@ def _version_xml(set_id, version, deadline):
     entries, _skipped, ended = zips.read_zip(download.body)
     documents = [entry for entry in entries if entry["name"].casefold().endswith(".xml")]
     if not documents or ended != "end_of_archive":
-        raise source_outcome.SourceError("unavailable", "DailyMed's archive of version %d holds no SPL document." % version, scope=SCOPE, reason="no_document_in_archive", retryable=False)
+        raise source_outcome.unavailable("DailyMed's archive of version %d holds no SPL document." % version, scope=SCOPE, reason="no_document_in_archive", retryable=False)
     if any(entry["crcOk"] is False for entry in documents):
-        raise source_outcome.SourceError("unavailable", "The SPL document in DailyMed's archive of version %d is corrupt." % version, scope=SCOPE, reason="corrupt_entry", retryable=True)
+        raise source_outcome.unavailable("The SPL document in DailyMed's archive of version %d is corrupt." % version, scope=SCOPE, reason="corrupt_entry", retryable=True)
     imageless = len(entries) - len(documents)
     return documents[0]["payload"], imageless
 
@@ -506,17 +506,16 @@ def _read(arguments, deadline):
     if target == current_version:
         xml_payload = _current_xml(set_id, deadline)
         if xml_payload is None:
-            raise source_outcome.SourceError("unavailable", "DailyMed lists this label but did not serve its document.", scope=SCOPE, reason="document_missing", retryable=True)
+            raise source_outcome.unavailable("DailyMed lists this label but did not serve its document.", scope=SCOPE, reason="document_missing", retryable=True)
         images = 0
     else:
         xml_payload, images = _version_xml(set_id, target, deadline)
     try:
         label, sections = parse_spl(xml_payload)
     except ValueError as error:
-        raise source_outcome.SourceError("unavailable", "DailyMed's document is not an SPL label (%s)." % error, scope=SCOPE, reason="invalid_response", retryable=False) from error
+        raise source_outcome.unavailable("DailyMed's document is not an SPL label (%s)." % error, scope=SCOPE, reason="invalid_response", retryable=False) from error
     if label.get("setId") != set_id or label.get("version") != target:
-        raise source_outcome.SourceError(
-            "unavailable", "DailyMed served set id %s version %s where %s version %s was asked for." % (label.get("setId"), label.get("version"), set_id, target),
+        raise source_outcome.unavailable("DailyMed served set id %s version %s where %s version %s was asked for." % (label.get("setId"), label.get("version"), set_id, target),
             scope=SCOPE, reason="identity_mismatch", retryable=False,
         )
     label = {**label, "publishedDate": published.get(target)}

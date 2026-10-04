@@ -22,6 +22,12 @@ export const EVIDENCE_TOOL_BASE_NAMES = Object.freeze([
   // A reference list names works a run may then fetch; recorded as retrieval
   // leads like any search result (2026-09-23).
   'reference_list',
+  // Linked identifiers, a trial's preserved record and a US label by version
+  // (2026-10-04): each result names the sources it read, and the last two
+  // preserve a quotable record.md / label.md.
+  'identifier_resolve',
+  'clinical_trial_snapshot',
+  'dailymed_label',
   'guideline_search',
   'clinical_trial_search',
   'patent_search',
@@ -35,7 +41,7 @@ export const EVIDENCE_TOOL_BASE_NAMES = Object.freeze([
 ])
 
 /** Tools whose success means the full text or official page is on disk. */
-const PRESERVING_TOOL_BASE_NAMES = new Set(['open_access_full_text', 'web_read'])
+const PRESERVING_TOOL_BASE_NAMES = new Set(['open_access_full_text', 'web_read', 'clinical_trial_snapshot', 'dailymed_label'])
 
 /**
  * The three assessment tools. Their `retrieve` action (the default) asks the

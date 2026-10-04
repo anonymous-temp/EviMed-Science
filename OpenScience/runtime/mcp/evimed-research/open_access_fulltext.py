@@ -820,8 +820,7 @@ def _explain_xml_failure(error: FullTextError, metadata: dict, pmcid: str, deadl
             return FullTextError("full_text_not_available", "Europe PMC holds no record of %s." % pmcid)
         flag = str((records[0] or {}).get("isOpenAccess") or "").upper() if isinstance(records[0], dict) else ""
     if flag == "N":
-        denied = source_outcome.SourceError(
-            "denied", "Europe PMC serves the full-text XML only for open-access articles; %s is in PMC without an open license." % pmcid,
+        denied = source_outcome.denied("Europe PMC serves the full-text XML only for open-access articles; %s is in PMC without an open license." % pmcid,
             scope="Europe PMC", reason="not_open_access", retryable=False,
         )
         return FullTextError(denied.code, str(denied), False, source_error=denied)
@@ -858,7 +857,7 @@ def _supplements_section(arguments: dict, workspace: Path, pmcid: str, version: 
     try:
         download, empty = supplements.retrieve(pmcid, deadline=deadline, max_bytes=SUPPLEMENT_MAX_BYTES)
     except public_sources.SourceNotConfigured as error:
-        failure = source_outcome.SourceError("denied", str(error), scope=scope, reason="not_configured", retryable=False)
+        failure = source_outcome.denied(str(error), scope=scope, reason="not_configured", retryable=False)
         section["retrieval"] = "failed"
         result["failures"].append(failure.entry())
         result["warnings"].append(str(failure))

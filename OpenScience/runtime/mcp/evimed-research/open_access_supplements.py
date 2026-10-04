@@ -327,8 +327,9 @@ def retrieve(pmcid, *, deadline, max_bytes):
     result = transport.download("epmc-supplements", {"pmcid": pmcid}, deadline=deadline, scope=scope, max_bytes=max_bytes)
     if result.content_type == "application/zip":
         if result.received == 0:
+            state = "timeout" if result.reason in ("deadline", "read_stalled") else "unavailable"
             raise source_outcome.SourceError(
-                "timeout" if result.reason in ("deadline", "read_stalled") else "unavailable",
+                state,
                 "Europe PMC sent no part of the supplementary-file archive (%s)." % (result.reason or "empty answer"),
                 scope=scope, reason=result.reason or "empty_answer", retryable=True,
             )
@@ -339,12 +340,10 @@ def retrieve(pmcid, *, deadline, max_bytes):
     if "errorBean" in text or message:
         reason = (message.group(1).strip() if message else "")[:200]
         if "not open access" in reason.casefold():
-            raise source_outcome.SourceError(
-                "denied", "Europe PMC does not serve the supplementary files of %s: it is not an open-access article." % pmcid,
+            raise source_outcome.denied("Europe PMC does not serve the supplementary files of %s: it is not an open-access article." % pmcid,
                 scope=scope, reason="not_open_access", retryable=False,
             )
-        raise source_outcome.SourceError(
-            "unavailable", "Europe PMC answered with an error instead of the supplementary files (%s)." % (reason or "no message"),
+        raise source_outcome.unavailable("Europe PMC answered with an error instead of the supplementary files (%s)." % (reason or "no message"),
             scope=scope, reason="error_bean", retryable=False,
         )
     if "fullTextXMLBean" in text:
@@ -352,8 +351,7 @@ def retrieve(pmcid, *, deadline, max_bytes):
             reason="no_supplementary_files",
             how="Europe PMC holds no supplementary files for %s; if the article lists some on the publisher's site, they are not in PMC." % pmcid,
         )
-    raise source_outcome.SourceError(
-        "unavailable", "Europe PMC answered with XML that is neither a file archive nor a refusal.",
+    raise source_outcome.unavailable("Europe PMC answered with XML that is neither a file archive nor a refusal.",
         scope=scope, reason="unexpected_answer", retryable=False,
     )
 

@@ -198,8 +198,7 @@ def _idconv(items, kind, deadline):
     }))
     body, _ = transport.fetch_json(url, deadline=deadline, scope=SOURCE_TITLES["ncbi-idconv"], strict=False)
     if not isinstance(body, dict) or body.get("status") != "ok" or not isinstance(body.get("records"), list):
-        raise source_outcome.SourceError(
-            "unavailable", "The NCBI ID converter answered with something that is not a list of records.",
+        raise source_outcome.unavailable("The NCBI ID converter answered with something that is not a list of records.",
             scope=SOURCE_TITLES["ncbi-idconv"], reason="invalid_response", retryable=False,
         )
     by_requested = {}
@@ -238,8 +237,7 @@ def _esummary(items, deadline):
     body, _ = transport.fetch_json(url, deadline=deadline, scope=SOURCE_TITLES["pubmed"], strict=False)
     result = body.get("result") if isinstance(body, dict) else None
     if not isinstance(result, dict):
-        raise source_outcome.SourceError(
-            "unavailable", "PubMed answered with something that is not a summary list.",
+        raise source_outcome.unavailable("PubMed answered with something that is not a summary list.",
             scope=SOURCE_TITLES["pubmed"], reason="invalid_response", retryable=False,
         )
     for pmid, holders in wanted.items():
@@ -280,8 +278,7 @@ def _europe_pmc(items, field, deadline):
         body, _ = transport.fetch_json(url, deadline=deadline, scope=SOURCE_TITLES["europe-pmc"])
         records = ((body or {}).get("resultList") or {}).get("result") if isinstance(body, dict) else None
         if not isinstance(records, list):
-            raise source_outcome.SourceError(
-                "unavailable", "Europe PMC answered with something that is not a result list.",
+            raise source_outcome.unavailable("Europe PMC answered with something that is not a result list.",
                 scope=SOURCE_TITLES["europe-pmc"], reason="invalid_response", retryable=False,
             )
         index = {}
@@ -487,7 +484,7 @@ def resolve(arguments):
             for item in subjects:
                 item.failed.append(error)
         except public_sources.SourceNotConfigured as error:
-            wrapped = source_outcome.SourceError("denied", str(error), scope=SOURCE_TITLES[source], reason="not_configured", retryable=False)
+            wrapped = source_outcome.denied(str(error), scope=SOURCE_TITLES[source], reason="not_configured", retryable=False)
             failures.append(wrapped)
             for item in subjects:
                 item.failed.append(wrapped)

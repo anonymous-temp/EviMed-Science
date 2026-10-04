@@ -531,13 +531,11 @@ def _fetch(nct_id, deadline):
     if response.status == 404:
         return None
     if not isinstance(value, dict) or not isinstance(value.get("protocolSection"), dict):
-        raise source_outcome.SourceError(
-            "unavailable", "ClinicalTrials.gov answered with something that is not a study record.",
+        raise source_outcome.unavailable("ClinicalTrials.gov answered with something that is not a study record.",
             scope=scope, reason="invalid_response", retryable=False,
         )
     if (value["protocolSection"].get("identificationModule") or {}).get("nctId") not in (nct_id, None):
-        raise source_outcome.SourceError(
-            "unavailable", "ClinicalTrials.gov answered with the record of another trial.", scope=scope, reason="identity_mismatch", retryable=False,
+        raise source_outcome.unavailable("ClinicalTrials.gov answered with the record of another trial.", scope=scope, reason="identity_mismatch", retryable=False,
         )
     return value
 

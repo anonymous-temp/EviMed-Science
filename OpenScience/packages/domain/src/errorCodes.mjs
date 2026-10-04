@@ -436,6 +436,16 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   // tool never got far enough to have an opinion about the source.
   "public_source_query_invalid",
   "public_source_pmid_invalid",
+  // The N04 operations (2026-10-04): an identifier list with no identifier in it,
+  // an NCT id or compareTo that is not one, and a label request that names both or
+  // neither of drug and setid. The run built the request wrongly; nothing was asked.
+  "public_source_identifier_invalid",
+  "public_source_trial_id_invalid",
+  "public_source_label_invalid",
+  // A record or label that was read and could not be written into the workspace, so
+  // nothing downstream can quote it (as full_text_output_invalid).
+  "public_source_trial_snapshot_failed",
+  "public_source_label_snapshot_failed",
   // `locate_quote` asked with no quote, or with a path outside the preserved
   // sources, or ran where no managed workspace exists: the run's own request
   // or the runtime's own set-up, never a fact about a source.
@@ -1877,6 +1887,13 @@ export const ERROR_CODE_FAMILIES = Object.freeze([
   [/^web_render_/, '这个网页需要浏览器打开，云端浏览器这次没能打开它；运行会改用其他来源。'],
   [/^source_parser_/, '文档解析服务这次没能把这份文件转成文字。'],
   [/^source_format_/, '这种文件格式无法转成文字。'],
+  // The three ways a record or file retrieval can fail as a whole (`source_outcome.py`):
+  // the source refused this reader, the call's one time budget ran out, or the source
+  // could not be reached. Each is a limitation the report states and never a finding
+  // that the thing does not exist.
+  [/^source_access_denied$/, '这个数据源不向当前用户提供这份内容；报告会把它记为限制，不会当作读过。'],
+  [/^source_timeout$/, '这个数据源这次没有在时限内给出结果；报告会把它记为限制，稍后可以再试。'],
+  [/^source_unavailable$/, '这个数据源这次连不上；报告会把它记为限制，不会当作查不到。'],
   [/^public_source_[a-z0-9_]+_credential_missing$/, '这个数据源还没有配置凭据，相关部分已跳过；可以在「设置 → 数据源」添加后继续。'],
   [/^public_source_/, '公共数据源这次没能给出结果。'],
   [/^pubtator_/, '关系式检索的概念标识或关系类型不对，用 term_normalize 的 annotate 取一次标识再试。'],
