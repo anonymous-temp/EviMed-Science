@@ -896,3 +896,4 @@ DONE S507 2026-09-04T18:55:00+00:00 **计量在生产里真的记到数了**,不
 2026-10-04T13:53Z DONE REL-1004-merge-n11-n14-n16 head=dd9be7962 local=web-2244,server-unit-5642(2 env),product-state-1102(2 env),packages,ops,mcp,audits,checks-5,lint,typecheck rc7=failed-frontend-copy-rule
 2026-10-04T14:00Z DONE REL-1004-rc9-pushed head=d60e3053a2a8 rc8=failed-skill-package-table-digest-of-local-bytecode-caches fix=digest-skips-pycache clean-checkout=8-generated-checks-pass
 2026-10-04T14:31Z DONE REL-1004-merge-n15-n17 head=2ef6095d0 checks=7 lint,typecheck rc9-web=success
+2026-10-04T14:32Z DONE REL-1004-merge-followups head=388fc71f6 checks=7 lint,typecheck
