@@ -713,6 +713,47 @@ test("runtime controller cannot replace an active controller socket", async () =
   }
 });
 
+test("a controller whose release manifest is missing or unreadable still answers health and reports it", async () => {
+  // Owner ruling 2026-10-04. The control plane asks `/v1/health` before every
+  // launch, so a 503 here stopped every runtime start over a record that is only
+  // evidence about the release. It is reported in the body instead, and the
+  // control plane's readiness check is what fails on it.
+  const tmp = await shortTempDir("osrm-");
+  const dataDir = path.join(tmp, "data");
+  const dockerBin = await fakeDocker(tmp);
+  process.env.FAKE_DOCKER_STATE = path.join(tmp, "docker-state");
+  process.env.FAKE_VOLUME_ROOT = dataDir;
+  await mkdir(dataDir, { recursive: true });
+  const brokenManifest = path.join(tmp, "release-manifest.json");
+  await writeFile(brokenManifest, "{ not json");
+  const cases = [
+    { name: "missing", expected: { ok: false, code: "release_manifest_missing" }, patch: { releaseManifest: null } },
+    { name: "unreadable", expected: { ok: false, code: "release_manifest_json_invalid" }, patch: { releaseManifest: undefined, releaseManifestFile: brokenManifest } },
+    { name: "present", expected: { ok: true }, patch: {} },
+  ];
+  try {
+    for (const item of cases) {
+      const socketPath = path.join(tmp, `control-${item.name}`, "controller.sock");
+      const config = { ...controllerConfig({ dataDir, socketPath, dockerBin }), ...item.patch };
+      if (config.releaseManifest === undefined) delete config.releaseManifest;
+      const controller = createRuntimeController(config);
+      try {
+        await controller.listen();
+        const client = new RuntimeControllerClient({ runtimeControllerSocket: socketPath, runtimeControllerTimeoutMs: 2_000 });
+        const health = await client.health();
+        assert.equal(health.protocolVersion, RUNTIME_CONTROLLER_PROTOCOL_VERSION, item.name);
+        assert.deepEqual(health.releaseManifest, item.expected, item.name);
+      } finally {
+        await controller.close().catch(() => {});
+      }
+    }
+  } finally {
+    delete process.env.FAKE_DOCKER_STATE;
+    delete process.env.FAKE_VOLUME_ROOT;
+    await removeTree(tmp);
+  }
+});
+
 test("runtime controller cleans a runtime when the start client disconnects", async (t) => {
   const tmp = await shortTempDir("osrd-");
   const dataDir = path.join(tmp, "data");
@@ -1115,6 +1156,171 @@ test("production readiness verifies the isolated controller and runtime image pr
     assert.equal(readiness.checks.runtime.imageVerified, true);
   } finally {
     await app?.close().catch(() => {});
+    await controller.close().catch(() => {});
+    delete process.env.FAKE_DOCKER_STATE;
+    delete process.env.FAKE_VOLUME_ROOT;
+    await removeTree(tmp);
+  }
+});
+
+test("a production launch that disagrees with its release manifest goes through the controller, and readiness is what reports it", async (t) => {
+  // Owner ruling 2026-10-04, measured end to end: the manager asks the
+  // controller for health and then for a start, and neither may answer 503 over
+  // a manifest. The same deployment fails readiness with the manifest's own code.
+  const tmp = await shortTempDir("osrmm-");
+  const dataDir = path.join(tmp, "data");
+  const socketPath = path.join(tmp, "control", "controller.sock");
+  const dockerBin = await fakeDocker(tmp);
+  const project = await projectTree(dataDir);
+  if (await skipUnsupportedRuntimeSocket(t, project)) {
+    await removeTree(tmp);
+    return;
+  }
+  process.env.FAKE_DOCKER_STATE = path.join(tmp, "docker-state");
+  process.env.FAKE_VOLUME_ROOT = dataDir;
+  // The operator configured one image, the manifest names another: the shape of
+  // a release switch that did not finish, which used to answer 503 on every start.
+  const mismatched = { ...controllerConfig({ dataDir, socketPath, dockerBin }), runtimeContainerImage: "evimed-runtime-dsh:not-the-manifest" };
+  const controller = createRuntimeController(mismatched);
+  /** @type {any} */
+  let manager = null;
+  /** @type {any} */
+  let app = null;
+  try {
+    await controller.listen();
+    manager = new RuntimeManager(loadConfig({
+      ...mismatched,
+      runtimeControllerMode: "socket",
+      runtimeControllerTimeoutMs: 2_000,
+      runtimeControllerPollMs: 100,
+      allowDirectDockerControl: false,
+      runtimeProxyConnectTimeoutMs: 3_000,
+      runtimeSkillDirs: [],
+      maxProjectBytes: 1024 * 1024,
+      maxProjectUsageScanEntries: 1_000,
+      runtimeIdleTimeoutMs: 0,
+      runtimeQuotaCheckIntervalMs: 0,
+      maxLogFileBytes: 1024 * 1024,
+    }));
+    const runtime = await manager.start(project);
+    assert.equal(runtime.sandboxMode, "docker", "the launch was not refused");
+    assert.deepEqual(manager.statsAll().unverifiedReleaseLaunches, [{ code: "release_manifest_mismatch", launches: 1 }]);
+    const ledger = (await readFile(path.join(project.metaDir, "runtime.jsonl"), "utf8")).trim().split("\n").map((line) => JSON.parse(line));
+    const finding = ledger.filter((entry) => entry.event === "release_provenance_unverified");
+    assert.equal(finding.length, 1, "one structured event for the launch");
+    assert.deepEqual([finding[0].code, finding[0].field], ["release_manifest_mismatch", "runtimeContainerImage"]);
+    await manager.stop(project);
+
+    app = createWebApiApp({
+      ...mismatched,
+      port: 0,
+      runtimeControllerMode: "socket",
+      runtimeControllerTimeoutMs: 2_000,
+      allowDirectDockerControl: false,
+      devAuth: false,
+      authMode: "local",
+      bootstrapUser: "alice",
+      bootstrapPassword: "correct horse battery staple",
+      publicUrl: "https://science.example.com",
+      operatorMetricsToken: "controller-readiness-metrics-token-1234567890",
+      backupMode: "external",
+      backupExternalAck: true,
+      restoreDrillAck: true,
+      trustProxy: true,
+      requireDurableUsageLedger: false,
+      requireInbox: false,
+      requireDocumentParser: false,
+    });
+    const address = await app.listen(0, "127.0.0.1");
+    const response = await fetch(`http://127.0.0.1:${address.port}/api/ready`);
+    assert.equal(response.status, 503);
+    const readiness = (await response.json()).data;
+    assert.equal(readiness.checks.release.ok, false);
+    assert.equal(readiness.checks.release.code, "release_manifest_mismatch");
+    assert.equal(readiness.checks.release.field, "runtimeContainerImage");
+    assert.equal(readiness.checks.runtime.ok, true, "the runtime check itself is not what the manifest turns red");
+    const metrics = await fetch(`http://127.0.0.1:${address.port}/api/ops/metrics`, {
+      headers: { authorization: "Bearer controller-readiness-metrics-token-1234567890" },
+    });
+    assert.equal(metrics.status, 200);
+    const text = await metrics.text();
+    assert.match(text, /open_science_readiness_check\{check="release",code="release_manifest_mismatch"\} 0/);
+    assert.match(text, /^# TYPE open_science_runtime_release_unverified_launches_total counter$/m);
+  } finally {
+    await app?.close().catch(() => {});
+    await manager?.closeAll().catch(() => {});
+    await controller.close().catch(() => {});
+    delete process.env.FAKE_DOCKER_STATE;
+    delete process.env.FAKE_VOLUME_ROOT;
+    await removeTree(tmp);
+  }
+});
+
+test("a controller with no release manifest fails the control plane's runtime readiness and refuses nothing", async (t) => {
+  const tmp = await shortTempDir("osrmc-");
+  const dataDir = path.join(tmp, "data");
+  const socketPath = path.join(tmp, "control", "controller.sock");
+  const dockerBin = await fakeDocker(tmp);
+  const project = await projectTree(dataDir);
+  if (await skipUnsupportedRuntimeSocket(t, project)) {
+    await removeTree(tmp);
+    return;
+  }
+  process.env.FAKE_DOCKER_STATE = path.join(tmp, "docker-state");
+  process.env.FAKE_VOLUME_ROOT = dataDir;
+  // The controller was started without the release manifest; the web process
+  // has it. Before the ruling the controller answered 503 on health and every
+  // start with it.
+  const controller = createRuntimeController({ ...controllerConfig({ dataDir, socketPath, dockerBin }), releaseManifest: null });
+  /** @type {any} */
+  let app = null;
+  /** @type {any} */
+  let manager = null;
+  try {
+    await controller.listen();
+    const web = {
+      ...controllerConfig({ dataDir, socketPath, dockerBin }),
+      port: 0,
+      runtimeControllerMode: "socket",
+      runtimeControllerTimeoutMs: 2_000,
+      runtimeControllerPollMs: 100,
+      allowDirectDockerControl: false,
+    };
+    manager = new RuntimeManager(loadConfig({
+      ...web, runtimeProxyConnectTimeoutMs: 3_000, runtimeSkillDirs: [], maxProjectBytes: 1024 * 1024,
+      maxProjectUsageScanEntries: 1_000, runtimeIdleTimeoutMs: 0, runtimeQuotaCheckIntervalMs: 0, maxLogFileBytes: 1024 * 1024,
+    }));
+    const runtime = await manager.start(project);
+    assert.equal(runtime.sandboxMode, "docker", "a controller without a manifest still starts runtimes");
+    assert.deepEqual(manager.controllerReleaseManifest, { ok: false, code: "release_manifest_missing" });
+    await manager.stop(project);
+
+    app = createWebApiApp({
+      ...web,
+      devAuth: false,
+      authMode: "local",
+      bootstrapUser: "alice",
+      bootstrapPassword: "correct horse battery staple",
+      publicUrl: "https://science.example.com",
+      operatorMetricsToken: "controller-readiness-metrics-token-1234567890",
+      backupMode: "external",
+      backupExternalAck: true,
+      restoreDrillAck: true,
+      trustProxy: true,
+      requireDurableUsageLedger: false,
+      requireInbox: false,
+      requireDocumentParser: false,
+    });
+    const address = await app.listen(0, "127.0.0.1");
+    const response = await fetch(`http://127.0.0.1:${address.port}/api/ready`);
+    assert.equal(response.status, 503);
+    const readiness = (await response.json()).data;
+    assert.equal(readiness.checks.runtime.ok, false);
+    assert.equal(readiness.checks.runtime.code, "release_manifest_missing");
+    assert.equal(readiness.checks.release.ok, true, "the web process's own manifest is fine");
+  } finally {
+    await app?.close().catch(() => {});
+    await manager?.closeAll().catch(() => {});
     await controller.close().catch(() => {});
     delete process.env.FAKE_DOCKER_STATE;
     delete process.env.FAKE_VOLUME_ROOT;

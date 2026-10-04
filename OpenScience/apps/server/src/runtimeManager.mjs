@@ -2407,10 +2407,16 @@ export function buildRuntimeLaunchPlan(config, project, port, {
         "Runtime container network egress requires OPEN_SCIENCE_RUNTIME_NETWORK_EGRESS_POLICY_ACK=true in production.",
       );
     }
-    const releasePolicy = runtimeReleasePolicyError(config);
-    if (releasePolicy) {
-      throw new HttpError(503, releasePolicy.code, "Runtime release provenance is missing or does not match deployment configuration.");
-    }
+    // The release manifest is our own evidence about the deployment, not a
+    // condition of anyone's work (owner ruling 2026-10-04: a receipt may label,
+    // log or fail a readiness check; it may not refuse a user's operation). A
+    // production launch whose image, kernel, socket bundle or skill roots
+    // disagree with the manifest used to answer 503 here and in the controller,
+    // so one stale record stopped every researcher from starting a runtime. It
+    // now goes ahead and the plan carries the finding: the caller logs one
+    // event per launch and counts it, and `readinessRelease` fails the
+    // readiness check, which is what stops `host-release-switch.sh`.
+    const releaseProvenance = runtimeReleasePolicyError(config);
     const runtimeRoot = containerRuntimeRoot(project);
     const xdgConfigDir = path.join(runtimeRoot, "xdg-config");
     // Written by the control plane before either side builds a plan; read here
@@ -2443,6 +2449,9 @@ export function buildRuntimeLaunchPlan(config, project, port, {
     return {
       sandboxMode,
       containerName,
+      // `{ code, field? }` when the deployment disagrees with its release
+      // manifest, otherwise null. A finding, never a refusal (see above).
+      releaseProvenance,
       command: config.runtimeContainerBin,
       args: [
         "run",
@@ -3052,6 +3061,7 @@ export class DockerRuntimeProvider {
     plan.personalSkillGeneration = personalSkillGeneration;
     plan.extensionGeneration = extensionGeneration;
     plan.pluginConfig = pluginConfig;
+    if (plan.releaseProvenance) await manager.recordUnverifiedRelease(project, plan.releaseProvenance);
     await Promise.all(plan.runtimeDirs.map((dir) => fs.mkdir(dir, { recursive: true, mode: 0o700 })));
     let socketStat = null;
     if (plan.socketPath) {
@@ -3266,6 +3276,15 @@ export class RuntimeManager {
      *  (`open_science_mounted_method_*`): launches, bytes it spent on what the
      *  methods put in front of the model, and methods it left out. */
     this.methodMounts = { launches: 0, promptBytes: 0, leftOut: 0 };
+    /** Launches that went ahead although the deployment disagrees with its
+     *  release manifest (`open_science_runtime_release_unverified_launches_total`),
+     *  by the finding's code. The launch is never refused for it; readiness is
+     *  what fails (`buildRuntimeLaunchPlan`). */
+    this.unverifiedReleaseLaunches = new Map();
+    /** The runtime controller's own report on its release manifest from the
+     *  last health call (`{ ok, code? }`), or null before one / without a
+     *  controller. Read by `readinessRuntime`; it decides nothing else. */
+    this.controllerReleaseManifest = null;
     /** Frozen methods for private evaluation projects only; never a user-controlled override. */
     this.evaluationMethodSnapshots = new Map();
     this.pluginOverrides = new Map();
@@ -3525,6 +3544,10 @@ export class RuntimeManager {
   async controllerHealth() {
     if (!this.runtimeController) return null;
     const health = await this.runtimeController.health();
+    // What the controller says about its own release manifest is evidence: it
+    // is kept for the readiness check (`controllerReleaseManifest`) and never
+    // refuses the call that asked.
+    this.controllerReleaseManifest = health.releaseManifest ?? null;
     if (this.config.production && health.releaseId !== this.config.releaseId) {
       throw new HttpError(
         503,
@@ -5090,7 +5113,25 @@ export class RuntimeManager {
         maxPerUser: positiveLimit(this.config.maxRunningRuntimesPerUser),
       },
       methodMounts: { ...this.methodMounts, maxPromptBytes: positiveLimit(this.config.mountedMethodPromptBytes) },
+      unverifiedReleaseLaunches: [...this.unverifiedReleaseLaunches].map(([code, launches]) => ({ code, launches })),
     };
+  }
+
+  /**
+   * One structured event on the project's runtime ledger, and one count, for a
+   * launch that proceeded although the deployment disagrees with its release
+   * manifest. The finding is the manifest check's own code and, when there is
+   * one, the field that differs (never a value). Nothing here can fail a launch.
+   *
+   * @param {Record<string, any>} project @param {{ code: string, field?: string }} finding
+   */
+  async recordUnverifiedRelease(project, finding) {
+    this.unverifiedReleaseLaunches.set(finding.code, (this.unverifiedReleaseLaunches.get(finding.code) ?? 0) + 1);
+    await appendRuntimeEvent(project, "release_provenance_unverified", {
+      code: finding.code,
+      ...(finding.field ? { field: finding.field } : {}),
+      releaseId: String(this.config.releaseId ?? ""),
+    }, this.config);
   }
 
   /**
