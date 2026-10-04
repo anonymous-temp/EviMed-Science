@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import {
   DURABLE_RECALL_KINDS, recallContent, searchTokens, selectWithinBudget,
 } from "./memoryRecallPolicy.mjs";
-import { annotateVersions, versionFields, versionsInForce } from "./memoryValidity.mjs";
+import { annotateVersions, recordLabels, versionFields, versionsInForce } from "./memoryValidity.mjs";
 import { HttpError } from "./security.mjs";
 import {
   MEMORY_CONFLICT_STATES,
@@ -1422,6 +1422,13 @@ export class ResearchMemoryStore {
    * acting on their word; the old statement stays as history and is never
    * deleted.
    *
+   * When the researcher is the one who settles it (`by: "user"`), the statement
+   * they chose is theirs from then on: it is stamped confirmed, and an
+   * inference they chose becomes their own word (`explicit`, as confirming a
+   * pending memory on the page does), with a revision saying who decided. The
+   * decision is the researcher's and is recorded as theirs — the statement was
+   * not made true by a model's say-so (principle 18).
+   *
    * @param {string} userId @param {string} keepId @param {string} otherId
    * @param {{ reason?: string, by?: string, runId?: string | null }} [options]
    * @returns {Promise<{ kept: any, superseded: any }>}
@@ -1453,8 +1460,68 @@ export class ResearchMemoryStore {
       const superseded = await this.#retire(client, owner, replaced, kept, {
         auditReason: auditReason || "the researcher settled a disagreement in favour of it", actor,
       });
-      return { kept, superseded };
+      return { kept: by === "user" ? await this.#confirmChosen(client, owner, kept, replaced, auditReason) : kept, superseded };
     });
+  }
+
+  /**
+   * The statement a researcher chose when settling a disagreement, as theirs: a
+   * confirmation time, a revision that says so (`recordProvenance` reads a
+   * reason that begins "user confirmed" as the `confirmed` basis), and — for an
+   * inference — the origin and weight of their own word.
+   * @param {any} client @param {string} owner @param {any} kept @param {any} replaced @param {string} auditReason
+   */
+  async #confirmChosen(client, owner, kept, replaced, auditReason) {
+    const now = await transactionInstant(client);
+    const own = kept.origin === "inferred";
+    const updated = await client.query(`UPDATE evimed_memory.records SET origin=$3,confidence=$4,last_confirmed_at=$5,
+      revisions=$6::jsonb,version=version+1,updated_at=$5 WHERE user_id=$1 AND id=$2 RETURNING *`,
+    [owner, kept.id, own ? "explicit" : kept.origin, own ? 1 : kept.confidence, now,
+      JSON.stringify(appendRevision(kept.revisions, {
+        version: kept.version, value: kept.value, summary: kept.summary, status: kept.status,
+        changedAt: now,
+        reason: boundedText(`user confirmed it over ${replaced.key}${auditReason ? `: ${auditReason}` : ""}`, MEMORY_REASON_LIMIT),
+        ...revisionActor("user", null),
+        ...revisionPointers(kept),
+      }))]);
+    const confirmed = publicRecord(updated.rows[0]);
+    await this.#enqueueRecordIndex(client, owner, confirmed);
+    return confirmed;
+  }
+
+  /**
+   * What the memory page labels records with, in as few reads as the relations
+   * need: for each live record, the interval it holds over, the open
+   * disagreements it is a side of and the sources it rests on that are no
+   * longer as they were (`recordLabels`). A record with nothing to say is not
+   * in the map, and a store that cannot read the relations throws rather than
+   * answering as if there were none.
+   *
+   * @param {string} userId @param {readonly { id: string, status: string }[]} records
+   * @returns {Promise<Map<string, ReturnType<typeof recordLabels>>>}
+   */
+  async labelRecords(userId, records) {
+    const owner = assertUserId(userId);
+    const isLive = (/** @type {{ status: string }} */ record) => record.status === "active" || record.status === "pending";
+    /** @type {Map<string, ReturnType<typeof recordLabels>>} */
+    const labels = new Map();
+    const now = Date.now();
+    /** @param {any} record @param {any} [links] */
+    const label = (record, links = {}) => {
+      const found = recordLabels(record, links, { now });
+      if (found.caveats.length || found.validity.from || found.validity.until) labels.set(record.id, found);
+    };
+    // A replaced or forgotten record keeps only its interval, which is what
+    // the page says about it (「3月2日～9月1日」); no relation is read for it.
+    for (const record of records) if (!isLive(record)) label(record);
+    const live = records.filter(isLive);
+    // `recallLinks` reads at most 500 ids at once.
+    for (let from = 0; from < live.length; from += 500) {
+      const chunk = live.slice(from, from + 500);
+      const links = await this.recallLinks(owner, chunk.map((record) => record.id));
+      for (const record of chunk) label(record, links);
+    }
+    return labels;
   }
 
   /**

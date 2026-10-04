@@ -562,6 +562,9 @@ export interface WebStructuredMemory {
    *  the timeline's 「曾经如此」. */
   supersededBy?: string | null;
   invalidSince?: string | null;
+  /** What the page labels this memory by; absent when there is nothing to say
+   *  (and from a control plane older than it). */
+  relations?: WebMemoryRelations;
   evidence: Array<{
     sourceType: string;
     sourceRef: string;
@@ -581,6 +584,29 @@ export interface WebStructuredMemory {
     by?: "extraction" | "user" | "system";
     runId?: string;
   }>;
+}
+
+/** Why a memory in force is uncertain, as the control plane names it (`MEMORY_CAVEATS`). */
+export type WebMemoryCaveat = "conflict" | "source_retracted" | "source_expired" | "source_changed" | "not_yet_valid";
+
+/** One statement a memory disagrees with. A sensitive one is named and has no text. */
+export interface WebMemoryConflictSide {
+  id: string;
+  status: "active" | "pending";
+  scope: string;
+  scopeId: string;
+  origin: string;
+  sensitive: boolean;
+  text: string;
+  createdAt: string | null;
+}
+
+/** The interval a memory holds over, its open disagreements, and the sources it rests on that have changed. */
+export interface WebMemoryRelations {
+  validity: { from: string | null; until: string | null };
+  caveats: WebMemoryCaveat[];
+  conflicts: WebMemoryConflictSide[];
+  sources: Array<{ type: string; id: string; state: "retracted" | "expired" | "changed" }>;
 }
 
 /** The provenance label a memory keeps for good, and its counted strength. */

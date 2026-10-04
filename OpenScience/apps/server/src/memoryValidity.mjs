@@ -272,6 +272,65 @@ export function versionFields(version) {
   };
 }
 
+/** How much of the other statement of a disagreement the memory page is handed. */
+const PAGE_EXCERPT = 300;
+
+/**
+ * What the memory page says about one stored record: the interval it holds
+ * over, the open disagreements it is a side of, and the sources it rests on that
+ * are no longer as they were. The same labels recall serves, read for the page
+ * instead of for a question — the page asks no time but now, so `not_yet_valid`
+ * is a record in force whose stated start has not come, and a start nobody
+ * stated is not one.
+ *
+ * Only a record that is live (`active` or `pending`) carries conflict, source
+ * and not-yet-valid labels: a replaced or forgotten memory is history, and a
+ * disagreement it was a side of was settled or is no longer anyone's. The
+ * other statement of a disagreement is handed over as text for the researcher
+ * to choose between, except a sensitive one, which is named and not shown (the
+ * page shows a sensitive memory under 关于你 and nowhere else). A label never
+ * withholds anything.
+ *
+ * @param {Record<string, any>} record @param {RecordLinks} [links] @param {{ now?: number }} [context]
+ * @returns {{ validity: { from: string | null, until: string | null }, caveats: string[],
+ *   conflicts: { id: string, status: string, scope: string, scopeId: string, origin: string, sensitive: boolean,
+ *     text: string, createdAt: string | null }[],
+ *   sources: { type: string, id: string, state: string }[] }}
+ */
+export function recordLabels(record, links = {}, context = {}) {
+  const now = Number.isFinite(context.now) ? /** @type {number} */ (context.now) : Date.now();
+  const live = record.status === "active" || record.status === "pending";
+  const conflicts = [];
+  const sources = [];
+  if (live) {
+    for (const link of links.conflicts?.get(record.id) ?? []) {
+      if (link.state !== "open" || !["active", "pending"].includes(String(link.other.status))) continue;
+      const sensitive = Boolean(link.other.sensitive);
+      conflicts.push({
+        id: String(link.other.id), status: String(link.other.status), scope: String(link.other.scope ?? ""),
+        scopeId: String(link.other.scopeId ?? ""), origin: String(link.other.origin ?? ""), sensitive,
+        text: sensitive ? "" : String(link.other.summary || link.other.value || "").replace(/\s+/gu, " ").trim().slice(0, PAGE_EXCERPT),
+        createdAt: link.createdAt ?? null,
+      });
+    }
+    for (const link of links.sources?.get(record.id) ?? []) {
+      if (SOURCE_STATE_CAVEAT[/** @type {keyof typeof SOURCE_STATE_CAVEAT} */ (link.state)]) {
+        sources.push({ type: link.type, id: link.id, state: link.state });
+      }
+    }
+  }
+  const found = new Set();
+  if (conflicts.length) found.add("conflict");
+  for (const source of sources) found.add(SOURCE_STATE_CAVEAT[/** @type {keyof typeof SOURCE_STATE_CAVEAT} */ (source.state)]);
+  if (record.status === "active" && validityOf(record, { recorded: false }).start > now) found.add("not_yet_valid");
+  return {
+    validity: { from: record.validFrom ?? null, until: record.invalidSince ?? null },
+    caveats: MEMORY_CAVEATS.filter((caveat) => found.has(caveat)),
+    conflicts,
+    sources,
+  };
+}
+
 /**
  * A question's own time, as the model gives it: an ISO date or instant, or
  * nothing. A date with no time of day is read at its end, so "as of 2025-06-30"

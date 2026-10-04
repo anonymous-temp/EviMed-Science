@@ -57,6 +57,26 @@ export function createMemoryRoutes({
   config, researchMemory, memorySubstrate = null, feedbackEvents, store, context, audit, recordFeedback, decodeRouteComponent,
 }) {
   const enabled = config.memoryEnabled !== false;
+
+  /**
+   * Each record with what the page labels it by — the interval it holds over,
+   * the open disagreements it is a side of, the sources it rests on that have
+   * changed — when it has any (`relations`; absent means nothing to say). The
+   * labels are an addition to the list: a store without them, or one that
+   * cannot read the relations right now, serves the records as it always did
+   * (principle 19).
+   * @param {string} userId @param {any[]} records
+   */
+  async function withRelations(userId, records) {
+    if (typeof researchMemory.labelRecords !== "function" || records.length === 0) return records;
+    try {
+      const labels = await researchMemory.labelRecords(userId, records);
+      return records.map((record) => (labels.has(record.id) ? { ...record, relations: labels.get(record.id) } : record));
+    } catch {
+      return records;
+    }
+  }
+
   return async function memoryRoutes(req, res) {
     const pathname = new URL(req.url ?? "/", "http://evimed.local").pathname;
     if (pathname !== "/api/memory" && !pathname.startsWith("/api/memory/")) return false;
@@ -146,7 +166,7 @@ export function createMemoryRoutes({
         query: url.searchParams.get("query") ?? "",
         pageSize: Number(url.searchParams.get("pageSize") ?? 100),
       });
-      sendJson(res, 200, { data: records });
+      sendJson(res, 200, { data: await withRelations(ctx.user.id, records) });
       return true;
     }
 
@@ -168,7 +188,15 @@ export function createMemoryRoutes({
       const ctx = await context(req, res);
       // Every project's memory, not only the one the page was opened from:
       // each row names its project and the page filters by it.
-      const profile = await researchMemory.profile(ctx.user.id);
+      const stored = await researchMemory.profile(ctx.user.id);
+      const records = await withRelations(ctx.user.id, stored.records);
+      const labelled = new Map(records.map((/** @type {any} */ record) => [record.id, record]));
+      const profile = {
+        ...stored,
+        records,
+        groups: Object.fromEntries(Object.entries(stored.groups).map(([kind, group]) => [
+          kind, /** @type {any[]} */ (group).map((record) => labelled.get(record.id) ?? record)])),
+      };
       const ids = profile.records.map((/** @type {any} */ record) => record.id);
       sendJson(res, 200, { data: {
         ...profile,
@@ -226,7 +254,7 @@ export function createMemoryRoutes({
         }
       }
       sendJson(res, 200, { data: {
-        items,
+        items: await withRelations(ctx.user.id, items),
         query,
         semantic,
         conversations: { ...found.titles, ...conversationTitlesIn(items) },
@@ -234,6 +262,28 @@ export function createMemoryRoutes({
           ? await researchMemory.recordUsage(ctx.user.id, items.map((/** @type {any} */ record) => record.id)).catch(() => ({}))
           : {},
       } });
+      return true;
+    }
+
+    // Two memories disagree and the researcher says which one holds. The other
+    // is replaced by it, never deleted: it stays as 「曾经如此」 and its undo
+    // (the route below) puts the disagreement back. Only the account's own
+    // session reaches this — an agent key's surface has no such verb — and a
+    // record of another account is a 404, as everywhere in this module. The
+    // decision is the researcher's and is recorded as theirs
+    // (`resolveConflict`, `by: "user"`); nothing else settles a disagreement.
+    if (pathname === "/api/memory/conflicts/resolve" && req.method === "POST") {
+      const ctx = await context(req, res);
+      const body = assertObject(await readJson(req, config.maxJsonBytes), "memory conflict resolution");
+      const unknown = Object.keys(body).filter((field) => field !== "keepId" && field !== "otherId");
+      if (unknown.length > 0) {
+        throw new HttpError(400, "memory_payload_invalid", `Unknown field(s): ${unknown.sort().join(", ")}.`);
+      }
+      const keepId = assertString(body.keepId, "keepId", { max: 128 });
+      const otherId = assertString(body.otherId, "otherId", { max: 128 });
+      const settled = await researchMemory.resolveConflict(ctx.user.id, keepId, otherId, { by: "user" });
+      await audit(ctx, "memory.conflict.resolve", "completed", { target: settled.kept.id, superseded: settled.superseded.id });
+      sendJson(res, 200, { data: settled });
       return true;
     }
 
