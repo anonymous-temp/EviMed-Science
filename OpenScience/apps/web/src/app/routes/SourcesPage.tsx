@@ -7,6 +7,7 @@ import { addToLibrary, browseOpenList, cancelSource, decideDuplicateGroup, getSo
   setSourceFolderStatus, sourceFailureMessage, syncSourceFolder, type DuplicateGroup, type OpenListEntry, type SourceFamily,
   type SourceFolderRecord, type SourceListState, type SourceMetadata, type SourceOmissionNotice, type SourceRecord } from "@/lib/sourceClient";
 import { productErrorMessage } from "@/lib/productClient";
+import { sourceMaterialsText, type SourceMaterialsLedger } from "@/lib/sourceMaterials";
 import { baseName, formatClock, formatDay, humanSize } from "@/lib/format";
 import { extOf, extToKind, previewKindForName } from "@/lib/artifacts";
 import { pickFiles, uploadFilesToWorkspace } from "@/lib/backend";
@@ -587,6 +588,7 @@ function SourceDetails({ source, projectId, onRaiseDepth }: { source: SourceReco
   return (
     <div className="space-y-6">
       <SourceFacts metadata={source.payload.metadata} pageCount={source.payload.analysis?.pageCount} fileName={name} />
+      <MaterialsNotice ledger={source.payload.coverage?.materials} />
       <OmissionNotice notice={source.payload.omissionNotice} onRaiseDepth={onRaiseDepth} />
       <SourceUnderstandingPanel key={source.id} projectId={projectId} sourceId={source.id}
         generation={source.payload.generation} error={source.payload.error} />
@@ -609,6 +611,15 @@ export function SourceFacts({ metadata, pageCount, fileName }: { metadata?: Sour
   ].filter((part): part is string => Boolean(part));
   if (!parts.length) return null;
   return <p className="max-w-measure text-caption text-text-3">{parts.join(" · ")}</p>;
+}
+
+/** How many of a document's tables and numbers were found, and where each
+ *  stands: located, page to be settled, page unknown, or not extracted. One
+ *  sentence under the document's facts; nothing when there is nothing to say. */
+export function MaterialsNotice({ ledger }: { ledger?: SourceMaterialsLedger | null }) {
+  const text = sourceMaterialsText(ledger);
+  if (!text) return null;
+  return <p className="max-w-measure text-caption text-text-3" data-source-materials>{text}</p>;
 }
 
 /** A rate as a percentage the notice can state without inventing precision the

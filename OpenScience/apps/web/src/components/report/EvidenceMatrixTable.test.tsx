@@ -56,6 +56,24 @@ describe("EvidenceMatrixTable", () => {
     expect(within(row).getByText("标注为“高”，按各分项计算为“中”")).toBeInTheDocument();
   });
 
+  it("shows each quotation's place in its source beside it: the table and cell, the page, or that it is not known", () => {
+    const placed = new Map([
+      ["CLM-001", { claimId: "CLM-001", claimType: "direct", status: "verified", sources: [{ artifactPath: ".evimed-sources/aspree/fulltext.md", status: "verified", location: {
+        status: "located", table: { id: "tbl-1", index: 1, label: "Table 2" }, row: 3, cell: { row: 3, column: 2 }, page: { status: "located", pages: [7] } } }] }],
+      ["CLM-003", { claimId: "CLM-003", claimType: "synthesized", status: "quote_not_found", sources: [
+        { artifactPath: null, status: "verified", location: { status: "unknown", page: { status: "unknown", reason: "no_page_markers" }, reason: "not_in_a_table" } },
+        { artifactPath: null, status: "quote_not_found" },
+      ] }],
+    ]);
+    render(<MemoryRouter><EvidenceMatrixTable claims={claims} verified={placed} /></MemoryRouter>);
+    const first = screen.getByRole("rowheader", { name: "CLM-001" }).closest("tr")!;
+    expect(within(first).getByText("位置：Table 2 第 3 行第 2 列 · 第 7 页")).toBeInTheDocument();
+    const second = screen.getByRole("rowheader", { name: "CLM-003" }).closest("tr")!;
+    expect(within(second).getByText("位置：位置未知")).toBeInTheDocument();
+    // The source that carries no location says nothing about one.
+    expect(within(second).getAllByText(/^位置：/)).toHaveLength(1);
+  });
+
   it("says what each check found, per source for a synthesized claim, with kinds of source", () => {
     render(<MemoryRouter><EvidenceMatrixTable claims={claims} verified={verified} /></MemoryRouter>);
     const row = screen.getByRole("rowheader", { name: "CLM-003" }).closest("tr")!;

@@ -1,4 +1,5 @@
 import { knownErrorCodeMessage } from "@evimed/domain";
+import type { SourceMaterialsLedger } from "@/lib/sourceMaterials";
 import type { WebMe } from "./apiClient";
 import { productRequest, type ProductPage, type ProductRecord } from "./productClient";
 
@@ -119,6 +120,8 @@ export interface SourcePayload {
   coverage: null | {
     total: number; accounted: number; accountedPercent?: number; extracted: number; indexedOnly: number; noContent: number;
     failed: number; percent: number; omissionRate: number | null; parserFailureRate?: number;
+    /** What was located, ambiguous, unlocated, unextracted or failed among the tables and values (absent: not extracted). */
+    materials?: SourceMaterialsLedger;
   };
   outputs: { summary?: string; facts?: number; methods?: number; artifactPath?: string };
   /** Set once the document's understanding is in; `outputs.summary` is then its summary. */

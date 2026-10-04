@@ -85,6 +85,29 @@ describe("a report sentence opens what it rests on", () => {
     expect(screen.queryByText(/确定性/)).toBeNull();
   });
 
+  it("shows where the quotation sits in its source, the page as unknown where only the table is, and the place as unknown where it is", async () => {
+    const located = new Map([["CLM-001", { claimId: "CLM-001", claimType: "direct", status: "verified", sources: [{ artifactPath: null, status: "verified", location: {
+      status: "located", table: { id: "tbl-1", index: 1, label: "Table 2" }, row: 3, cell: { row: 3, column: 2, header: "Placebo (n=120)" }, page: { status: "unknown", reason: "no_page_markers" },
+    } }] }]]);
+    const { unmount } = render(<MarkdownViewer variant="document" claims={claims} reading={{ verified: located }}>{"x [1]<!-- claim:CLM-001 -->"}</MarkdownViewer>);
+    await userEvent.click(screen.getByRole("button", { name: /查看这句话的依据/ }));
+    expect(await screen.findByText("位置：Table 2 第 3 行第 2 列 · 页码未知")).toBeInTheDocument();
+    unmount();
+    const unknown = new Map([["CLM-001", { claimId: "CLM-001", claimType: "direct", status: "verified", sources: [{ artifactPath: null, status: "verified", location: {
+      status: "unknown", page: { status: "unknown", reason: "no_page_markers" }, reason: "not_in_a_table" } }] }]]);
+    render(<MarkdownViewer variant="document" claims={claims} reading={{ verified: unknown }}>{"x [1]<!-- claim:CLM-001 -->"}</MarkdownViewer>);
+    await userEvent.click(screen.getByRole("button", { name: /查看这句话的依据/ }));
+    expect(await screen.findByText("位置：位置未知")).toBeInTheDocument();
+  });
+
+  it("a verification that carries no location shows no location line", async () => {
+    const old = new Map([["CLM-001", { claimId: "CLM-001", claimType: "direct", status: "verified", sources: [{ artifactPath: null, status: "verified" }] }]]);
+    render(<MarkdownViewer variant="document" claims={claims} reading={{ verified: old }}>{"x [1]<!-- claim:CLM-001 -->"}</MarkdownViewer>);
+    await userEvent.click(screen.getByRole("button", { name: /查看这句话的依据/ }));
+    expect(await screen.findByText("MIMIC-IV 是单一机构常规诊疗数据的公开衍生数据库。")).toBeInTheDocument();
+    expect(document.querySelector("[data-source-location]")).toBeNull();
+  });
+
   it("without a matrix the markers are removed, never printed as text", () => {
     const { container } = render(<MarkdownViewer variant="document">{report}</MarkdownViewer>);
     expect(screen.queryByRole("button", { name: /依据/ })).toBeNull();

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { claimEvidenceSources, claimVerification } from "@evimed/domain/clinical-evidence";
 import {
   CLAIM_STATUS_TEXT, claimGuidance, claimIdsFromHref, claimMatrixPathFor, claimSources, claimStatuses, claimVerificationSummary, isClaimMatrixPath,
-  linkClaimMarkers, parseClaimMatrix, parseClaimMatrixDocument, reportPathForMatrix, safeWorkspacePath,
+  linkClaimMarkers, parseClaimMatrix, parseClaimMatrixDocument, reportPathForMatrix, safeWorkspacePath, sourceLocationText,
 } from "./claimCitations";
 
 // Marker and matrix shapes copied from a production report (2026-09-16,
@@ -171,5 +171,31 @@ describe("claim citations", () => {
     const noPath = { ...raw, artifactPath: undefined };
     const [parsedNoPath] = parseClaimMatrix(JSON.stringify({ claims: [noPath] })).values();
     expect(claimSources(parsedNoPath)).toHaveLength(2);
+  });
+});
+
+describe("where a quotation sits in its source", () => {
+  it("says table, row and column, and the page when the text has one", () => {
+    expect(sourceLocationText({ status: "located", table: { id: "tbl-1", index: 1, label: "Table 2" }, row: 3, cell: { row: 3, column: 2 }, page: { status: "located", pages: [7] } }))
+      .toBe("Table 2 第 3 行第 2 列 · 第 7 页");
+    expect(sourceLocationText({ status: "located", table: { id: "tbl-1", index: 1, label: "Table 2" }, row: 3, page: { status: "located", pages: [7, 8] } }))
+      .toBe("Table 2 第 3 行 · 第 7、8 页");
+    expect(sourceLocationText({ status: "located", table: { id: "sheet-1", index: 1, name: "Table S2" }, cell: { row: 2, column: 3, address: "C2" }, page: { status: "unknown", reason: "no_page_markers" } }))
+      .toBe("工作表 Table S2 第 2 行第 3 列 · 页码未知");
+  });
+
+  it("says a page is undecided, a table is one of several, and a place is unknown, each as what it is", () => {
+    expect(sourceLocationText({ status: "located", table: { id: "tbl-2", index: 2 }, page: { status: "ambiguous", candidates: [3, 9] } })).toBe("第 2 张表 · 页码待定（第 3、9 页之一）");
+    expect(sourceLocationText({ status: "ambiguous", candidates: [{ id: "tbl-1", index: 1, label: "Table 2" }, { id: "tbl-4", index: 4 }], page: { status: "unknown" } }))
+      .toBe("可能在 Table 2、第 4 张表 · 页码未知");
+    // A quotation in prose with a page marker has a page and no table.
+    expect(sourceLocationText({ status: "located", page: { status: "located", pages: [3] }, reason: "not_in_a_table" })).toBe("第 3 页");
+    expect(sourceLocationText({ status: "unknown", page: { status: "unknown", reason: "no_page_markers" }, reason: "not_in_a_table" })).toBe("位置未知");
+    expect(sourceLocationText({ status: "unknown", page: { status: "unknown", reason: "quote_not_verified" }, reason: "quote_not_found" })).toBe("位置未知");
+  });
+
+  it("says nothing when no location was computed: an older verification asked nothing, and an unknown it never looked for is not claimed", () => {
+    expect(sourceLocationText(undefined)).toBeNull();
+    expect(sourceLocationText(null)).toBeNull();
   });
 });

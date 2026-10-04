@@ -325,7 +325,7 @@ export function materialPageSegments(text) {
  *
  * @param {{ text: string, quote: string, matches: (haystack: string, needle: string) => boolean,
  *   structure?: { tables: Record<string, any>[] } | null }} input
- * @returns {{ status: 'located' | 'ambiguous' | 'unknown', table?: Record<string, any>, row?: number, cell?: Record<string, any>, candidates?: Record<string, any>[], page: MaterialPage, reason?: string }}
+ * @returns {{ status: 'located' | 'ambiguous' | 'unknown', table?: Record<string, any>, row?: number, cell?: Record<string, any>, candidates?: Record<string, any>[], rowCandidates?: number[], cellCandidates?: Record<string, any>[], page: MaterialPage, reason?: string }}
  */
 export function locateQuoteInText({ text, quote, matches, structure = null }) {
   const capture = materialCaptureText(text)

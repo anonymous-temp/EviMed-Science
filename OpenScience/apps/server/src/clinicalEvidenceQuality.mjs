@@ -20,4 +20,5 @@ export {
   validateClinicalEvidencePackage,
   clinicalCheckTier,
   claimVerification,
+  attachClaimSourceLocations,
 } from "@evimed/domain/clinical-evidence";

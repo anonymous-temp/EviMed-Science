@@ -2,7 +2,7 @@ import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { knownErrorCodeMessage } from "@evimed/domain";
-import { SourcesPage } from "./SourcesPage";
+import { MaterialsNotice, SourcesPage } from "./SourcesPage";
 
 const mocks = vi.hoisted(() => ({
   listSources: vi.fn(), overrideSource: vi.fn(), retrySource: vi.fn(), cancelSource: vi.fn(), removeSource: vi.fn(),
@@ -624,4 +624,24 @@ describe("SourcesPage", () => {
     expect(within(rail).getByText("项目")).toBeInTheDocument();
   });
 
+});
+
+describe("MaterialsNotice", () => {
+  const ledger = {
+    version: 1, status: "partial", format: "pdf", pagination: "paginated", origin: "reported",
+    extraction: { materials: "evimed-materials@1", parser: "evimed-extract@0.5.0" }, sourceSha256: "a".repeat(64), textSha256: "b".repeat(64),
+    pages: { status: "mapped", pageCount: 9 }, tables: { total: 2, structured: 2, unextracted: 0, failed: 0, continued: 0, continuedAmbiguous: 0 },
+    values: { total: 12, located: 9, ambiguous: 1, unlocated: 1, unextracted: 1, failed: 0 },
+    figures: { total: 0, captioned: 0, valuesKnown: 0 }, footnotes: { linked: 0, orphanMarkers: 0, orphanNotes: 0 }, supplements: { referenced: 0, linked: 0 }, reasons: [],
+  } as const;
+
+  it("states how many of a document's numbers were found and where each stands", () => {
+    render(<MaterialsNotice ledger={ledger} />);
+    expect(screen.getByText("表格与数值：2 张表、12 个数值，已定位 9，页码待定 1，页码未知 1，未能提取 1。")).toBeInTheDocument();
+  });
+
+  it("says nothing for a document read before the extraction existed", () => {
+    const { container } = render(<MaterialsNotice ledger={undefined} />);
+    expect(container).toBeEmptyDOMElement();
+  });
 });
