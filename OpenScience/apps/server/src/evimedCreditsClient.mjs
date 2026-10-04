@@ -158,11 +158,20 @@ export function upstreamAmount(value) {
 }
 
 /**
+ * A payer the simulated wallet minted (`evimedCreditsSimulator.mjs`). It names
+ * nobody at EviMed, so it must never be sent where a real person is charged.
+ * @param {unknown} userId
+ */
+const isSimulatedPayer = (userId) => String(userId ?? "").startsWith("sim:");
+
+/**
  * @param {{ deductUrl?: string, balanceUrl?: string, apiKey?: string, apiKeyFile?: string,
- *   timeoutMs?: number, fetchImpl?: typeof fetch, maxResponseBytes?: number }} [options]
+ *   timeoutMs?: number, fetchImpl?: typeof fetch, maxResponseBytes?: number, simulated?: boolean }} [options]
+ *   `simulated` says the other end is the in-process simulated wallet: the same
+ *   wire and the same classification, and the one place a `sim:` payer is welcome.
  */
 export function createEvimedCreditsClient({ deductUrl = "", balanceUrl = "", apiKey = "", apiKeyFile = "",
-  timeoutMs = 10_000, fetchImpl = globalThis.fetch, maxResponseBytes = MAX_RESPONSE_BYTES } = {}) {
+  timeoutMs = 10_000, fetchImpl = globalThis.fetch, maxResponseBytes = MAX_RESPONSE_BYTES, simulated = false } = {}) {
   const deduct = String(deductUrl ?? "").trim();
   const balance = String(balanceUrl ?? "").trim();
   const key = String(apiKey ?? "");
@@ -244,6 +253,7 @@ export function createEvimedCreditsClient({ deductUrl = "", balanceUrl = "", api
         balanceConfigured: Boolean(balance),
         keyPresent: Boolean(key) || evimedKeyFileUsable(keyFile),
         lastError,
+        simulated,
         counters: { ...counters },
       };
     },
@@ -258,6 +268,10 @@ export function createEvimedCreditsClient({ deductUrl = "", balanceUrl = "", api
     async deduct({ requestId, userId, credits, memo, occurredAt }) {
       if (!requestId || !userId || !Number.isSafeInteger(credits) || credits <= 0 || credits > MAX_CREDITS) {
         throw new EvimedCreditsError("evimed_credits_request_invalid", "This deduction's own fields are invalid.", { final: true });
+      }
+      // A simulated row must never reach a real wallet, whatever put it in the outbox.
+      if (!simulated && isSimulatedPayer(userId)) {
+        throw new EvimedCreditsError("evimed_credits_request_invalid", "A simulated payer is not charged on a real wallet.", { final: true });
       }
       counters.deductions += 1;
       try {
@@ -287,6 +301,9 @@ export function createEvimedCreditsClient({ deductUrl = "", balanceUrl = "", api
      */
     async balance(userId) {
       if (!userId) throw new EvimedCreditsError("evimed_credits_request_invalid", "A balance read needs an account.", { final: true });
+      if (!simulated && isSimulatedPayer(userId)) {
+        throw new EvimedCreditsError("evimed_credits_request_invalid", "A simulated payer is not read on a real wallet.", { final: true });
+      }
       counters.balanceReads += 1;
       try {
         const data = await call(balance, { userId });

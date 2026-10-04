@@ -26,6 +26,7 @@
  */
 
 import { RESEARCH_BILLING_VERSION } from "@evimed/domain";
+import { eraseSimulatedWallets } from "./evimedCreditsSimulator.mjs";
 
 const migrations = new WeakMap();
 
@@ -85,6 +86,12 @@ CREATE TABLE IF NOT EXISTS evimed_credits.research_tasks (
 );
 ALTER TABLE evimed_credits.settlements ADD COLUMN IF NOT EXISTS owner_created_at timestamptz NOT NULL DEFAULT '-infinity';
 ALTER TABLE evimed_credits.research_tasks ADD COLUMN IF NOT EXISTS owner_created_at timestamptz NOT NULL DEFAULT '-infinity';
+-- Which wallet a row was charged to, for ever. A settlement made against the
+-- simulated wallet (evimedCreditsSimulator.mjs) is never money, and a retry
+-- sweep, a statement or a month's total reads only the wallet this deployment
+-- runs on, so simulated and real rows can share a table without sharing a total.
+ALTER TABLE evimed_credits.settlements ADD COLUMN IF NOT EXISTS wallet text NOT NULL DEFAULT 'live' CHECK (wallet IN ('live','simulated'));
+ALTER TABLE evimed_credits.research_tasks ADD COLUMN IF NOT EXISTS wallet text NOT NULL DEFAULT 'live' CHECK (wallet IN ('live','simulated'));
 CREATE TABLE IF NOT EXISTS evimed_credits.schema_migrations (
   version text PRIMARY KEY
 );
@@ -154,6 +161,8 @@ export async function researchBillingPolicy(database, { activate = false, now = 
  * The caller holds the account identity lock and runs this before account deletion.
  * @param {any} client @param {string} userId */
 export async function prepareResearchBillingAccountDeletion(client, userId) {
+  // A simulated wallet holds no money and no subject, so it goes with the account.
+  await eraseSimulatedWallets(client, userId);
   const exists = await client.query(`SELECT to_regclass('evimed_credits.settlements') AS table_name,
     EXISTS(SELECT 1 FROM pg_attribute WHERE attrelid=to_regclass('evimed_credits.settlements')
       AND attname='owner_created_at' AND NOT attisdropped) AS incarnation_ready`);

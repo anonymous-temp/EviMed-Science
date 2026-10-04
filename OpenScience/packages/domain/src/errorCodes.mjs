@@ -1268,6 +1268,8 @@ export const GEO_ROUTE_ERROR_CODES = Object.freeze([
 export const EVIMED_CREDITS_ROUTE_ERROR_CODES = Object.freeze([
   'evimed_credits_not_enabled',
   'evimed_credits_request_invalid',
+  // The allowance's records could not be read just now: said as a status, never as an empty ledger.
+  'evimed_credits_unreachable',
   // The simulated wallet's own pages (`/api/simulated-wallet/*`): off, and a
   // top-up the page built wrong.
   'simulated_wallet_not_enabled',
@@ -1671,6 +1673,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   // read by a client that asked anyway rather than by a person.
   evimed_credits_not_enabled: '这个部署还没有接入灵豆计费，因此没有余额和预计消耗可看。',
   evimed_credits_request_invalid: '这次查询的参数不对，没有得到预计消耗。换一个科研工具再看即可。',
+  evimed_credits_unreachable: '科研额度的记录暂时读不出来，稍后再试。',
   simulated_wallet_not_enabled: '这个部署没有开启模拟额度，没有可以充值的内容。',
   simulated_wallet_request_invalid: '这次模拟充值的内容不对，没有入账。换一个充值额度再试。',
   usage_metering_unavailable: '计量暂时不可用，本次用量稍后补记。',
@@ -2065,6 +2068,7 @@ const ERROR_CODE_OUTCOMES = Object.freeze({
   // malformed. Neither is a ceiling — the ceiling is `credits_exhausted`.
   evimed_credits_not_enabled: 'upstream',
   evimed_credits_request_invalid: 'upstream',
+  evimed_credits_unreachable: 'upstream',
   simulated_wallet_not_enabled: 'upstream',
   simulated_wallet_request_invalid: 'upstream',
 })
