@@ -1,0 +1,70 @@
+{
+ "schemaVersion": 1,
+ "note": "Provenance of the real data and the independent reference behind the gene-expression-analysis numerical check. The series matrix is committed as GEO served it; the platform record is committed reduced (what was removed is stated); the reference numbers are computed by base R, not by the platform's module.",
+ "downloadedOn": "2026-10-04",
+ "series": {
+  "accession": "GSE5583",
+  "title": "Expression data from wild type versus HDAC knock out mouse embryonic stem cells",
+  "design": "3 wild-type and 3 HDAC1 knock-out mouse embryonic stem cell arrays, Affymetrix MG-U74Av2 (GPL81), MAS 5.0 processed linear intensities",
+  "publication": {
+   "pubmedId": "16940178"
+  },
+  "statedDates": {
+   "status": "Public on Sep 19 2006",
+   "submission": "Aug 23 2006",
+   "lastUpdate": "Feb 18 2018"
+  },
+  "file": "runtime/mcp/evimed-research/test/fixtures/gene_expression/GSE5583_series_matrix.txt.gz",
+  "url": "https://ftp.ncbi.nlm.nih.gov/geo/series/GSE5nnn/GSE5583/matrix/GSE5583_series_matrix.txt.gz",
+  "sha256": "bca34f9908a6f5ad4ef5b1b3fa5e0f017704dcfbd2bffea80d76abf42001e220",
+  "bytes": 216671,
+  "contentType": "application/x-gzip",
+  "committedAs": "byte-identical to the download"
+ },
+ "platform": {
+  "accession": "GPL81",
+  "title": "[MG_U74Av2] Affymetrix Murine Genome U74A Version 2 Array",
+  "url": "https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?acc=GPL81&targ=self&form=text&view=full",
+  "fullRecord": {
+   "sha256": "be1521a21990ada3dac89e2c855d493e9831612913cb3228f35f9d571a7b22d0",
+   "bytes": 22564953,
+   "contentType": "geo/text",
+   "committed": false,
+   "why": "22.5 MB of text, mostly Gene Ontology strings and 6,909 sample ids of other series; the test needs only the probe-to-gene table"
+  },
+  "reducedFile": "runtime/mcp/evimed-research/test/fixtures/gene_expression/GPL81_reduced.txt.gz",
+  "reducedSha256": "b3b32ee6c65a14060e600891ab527100e7c8bc47e38e76a7478012d11e5a8135",
+  "reducedBytes": 335779,
+  "reduction": "gzip (mtime 0, level 9) of the record with the `!Platform_sample_id` and `!Platform_series_id` lines and the `#` column-description lines removed, and the table cut to six columns (ID, GB_ACC, Species Scientific Name, Gene Title, Gene Symbol, ENTREZ_GENE_ID); all 12,488 probe rows and every other `!Platform_` line kept as served"
+ },
+ "terms": {
+  "read": "https://www.ncbi.nlm.nih.gov/home/about/policies/ on 2026-10-04",
+  "statement": "NCBI itself places no restrictions on the use or distribution of the data contained therein; original submitters may claim patent, copyright or other intellectual property rights in their contributions, and NCBI is not in a position to assess such claims.",
+  "recordOwnTerms": "Neither the series matrix nor the platform record states a licence of its own. GEO's own disclaimer page (https://www.ncbi.nlm.nih.gov/geo/info/disclaimer.html) answered a programmatic read with a reCAPTCHA page and could not be read; the policy above is what was read.",
+  "decision": "The 217 KB series matrix is committed byte-identical and the reduced platform table beside it, cited by accession; nothing of either is presented as the platform's own work."
+ },
+ "reference": {
+  "script": "evals/gene-expression-analysis/reference_gse5583.R",
+  "interpreter": "R version 4.3.3 (2024-02-29)",
+  "method": "readLines/read.delim of the matrix; GEO2R's log2 rule; base t.test (Welch, var.equal = FALSE) per probe; base p.adjust(method = \"BH\"); ordered by p value, then absolute t, then probe id",
+  "independence": "no code of the platform's module is used; R's t distribution functions are not scipy's",
+  "groups": {
+   "reference": [
+    "GSM130365",
+    "GSM130366",
+    "GSM130367"
+   ],
+   "comparison": [
+    "GSM130368",
+    "GSM130369",
+    "GSM130370"
+   ]
+  },
+  "file": "evals/gene-expression-analysis/fixtures/reference_top_table.tsv",
+  "sha256": "891f4dbb4bb7682a4f46f571fcb533942a2e3c06d8b78923c4a8da15fc16426b",
+  "summaryFile": "evals/gene-expression-analysis/fixtures/reference_top_table.tsv.summary",
+  "summarySha256": "252a58a8b9ce8faee7aaf2f219c26404d2aa460a77f20d142243b334c69bc0fa",
+  "topRows": 50,
+  "tolerance": "relative 1e-8 on mean, log2 fold change, t, df, p value, adjusted p value and interval lower bound; the order of the top 50 probes identical; counts exact (checked by runtime/mcp/evimed-research/test/test_gene_expression.py)"
+ }
+}
