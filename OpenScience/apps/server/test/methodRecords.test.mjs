@@ -8,7 +8,7 @@
 // reads what a module answers, so a digest is compared by computing it on both sides.
 import assert from "node:assert/strict";
 import { execFile as execFileCallback } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { access, readFile } from "node:fs/promises";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -52,6 +52,19 @@ test("every admitted method has a record, and the records name no method that is
     assert.ok(scalars(record).every((value) => ["string", "boolean"].includes(typeof value) || Number.isInteger(value)), method);
   }
   assert.equal(methodRecord("imported.script"), null);
+});
+
+test("every reference a record cites names a test file that exists, and each states its tolerance", async () => {
+  const repository = `${root}../`;
+  for (const method of RESULT_REPLAY_METHODS) {
+    for (const reference of methodRecord(method).references) {
+      assert.ok(["published", "other-implementation", "analytic"].includes(reference.kind), `${method}/${reference.id}`);
+      assert.ok(reference.source.length > 30 && reference.tolerance.length > 0, `${method}/${reference.id} says what it was checked against and how closely`);
+      // A reference may name two files ("a and b"), or a file and the case in it ("a (case N12)"): the first is the test.
+      const file = reference.test.split(" (")[0].split(" and ")[0];
+      await access(`${repository}${file}`).catch(() => assert.fail(`${method}/${reference.id} cites ${file}, which is not in the repository`));
+    }
+  }
 });
 
 test("the two R-run methods are recorded at the version the R engine publishes", () => {

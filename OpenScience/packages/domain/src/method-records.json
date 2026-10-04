@@ -544,9 +544,23 @@
     {
      "id": "n01_rpact_gsdesign",
      "kind": "other-implementation",
-     "source": "vcr-engine numeric case N01: boundaries and power against rpact and gsDesign; Schoenfeld 331 events for HR 0.7, one-sided alpha 0.025, power 0.9; exact binomial against stats::binom.test; Simon (1989) designs",
-     "tolerance": "1e-4 to 1e-12 as each case states",
+     "source": "vcr-engine numeric cases N01-N06: group-sequential boundaries, spending and inflation against rpact and gsDesign",
+     "tolerance": "1e-4 as the cases state",
      "test": "项目代码/vcr-engine/tests/numeric/N01_N06_design.R"
+    },
+    {
+     "id": "n31_binom_test",
+     "kind": "other-implementation",
+     "source": "vcr-engine numeric case N31: exact single-arm rejection rules against stats::binom.test on twelve designs",
+     "tolerance": "1e-12",
+     "test": "项目代码/vcr-engine/tests/numeric/N31_single_arm.R"
+    },
+    {
+     "id": "schoenfeld_331",
+     "kind": "published",
+     "source": "Schoenfeld's event formula for HR 0.7, one-sided alpha 0.025, power 0.9: 330.378 events, 331 rounded up, the number the plan quotes, asserted through a genuine R run of this method",
+     "tolerance": "exact after rounding up",
+     "test": "OpenScience/apps/server/test/resultVcrReplayNumeric.test.mjs"
     }
    ]
   },
