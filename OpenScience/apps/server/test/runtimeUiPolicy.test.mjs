@@ -8,6 +8,7 @@ import path from "node:path";
 import test from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import WebSocket, { WebSocketServer } from "ws";
+import { allowanceRefusalSentence } from "@evimed/domain";
 import { HttpError } from "../src/security.mjs";
 import { AgentRunStore } from "../src/agentRuns.mjs";
 import { loadConfig } from "../src/config.mjs";
@@ -394,7 +395,11 @@ test("a turn typed into the kernel's own window asks the research allowance befo
   const balanceGate = async (/** @type {any} */ project, /** @type {any} */ payload) => {
     asked.push({ sessionId: payload?.args?.request?.sessionId, mode: payload?.args?.request?.mode });
     assert.equal(project.id, "default", "the gate is told whose project the turn is in");
-    if (!allowance) throw new HttpError(402, "simulated_credits_exhausted", "The simulated allowance is too low.");
+    if (!allowance) {
+      const refusal = new HttpError(402, "simulated_credits_exhausted", "The simulated allowance is too low.");
+      refusal.readerMessage = allowanceRefusalSentence({ simulated: true, balanceCny: 3.5, estimateCny: 6 });
+      throw refusal;
+    }
   };
   const f = await fixture(t, {}, {}, { balanceGate });
   const prompt = (streamId, mode) => open(streamId, "session/prompt",
@@ -404,7 +409,10 @@ test("a turn typed into the kernel's own window asks the research allowance befo
   // A turn that begins — plain, or queued as a turn of its own — is asked, and refused with the code that says 模拟.
   for (const [streamId, mode] of [["begin", undefined], ["queued", "queue"]]) {
     c.send(prompt(streamId, mode));
-    assertNativeError(await c.next(), streamId, "simulated_credits_exhausted");
+    const refused = await c.next();
+    assertNativeError(refused, streamId, "simulated_credits_exhausted");
+    // What the kernel's window prints: Chinese, says the allowance is simulated and too low, by how much, and where to top up.
+    assert.equal(refused.error.message, "模拟额度不足，这次没有开始：可用模拟额度 ¥3.50，这件事预计至少需要 ¥6.00。到“设置 → 科研额度”做一次模拟充值后即可继续。");
     assert.deepEqual(await c.next(), { type: "end", streamId });
   }
   assert.deepEqual(f.received, [], "nothing reached the kernel");
@@ -429,7 +437,9 @@ test("a turn typed into the kernel's own window asks the research allowance befo
     headers: { cookie: f.cookie, origin: UI_ORIGIN, "content-type": "application/json" },
     body: JSON.stringify({ type: "client-request", rpcId: requestId, method: "session/prompt",
       payload: { args: { request: { requestId, sessionId: "s-allowance", ...(mode ? { mode } : {}), content: [{ type: "text", text: "再做一个" }] } } } }) });
-  assert.equal((await http("http-begin")).status, 402);
+  const httpRefusal = await http("http-begin");
+  assert.equal(httpRefusal.status, 402);
+  assert.match(await httpRefusal.text(), /可用模拟额度 ¥3\.50/, "the page-served refusal says the same words");
   assert.equal((await http("http-steer", "steer")).status, 200);
   assert.deepEqual(asked.map((entry) => entry.mode), [undefined, "queue", undefined], "only the turn that begins was asked, on HTTP too");
   // With an allowance the same turn begins.

@@ -1,5 +1,5 @@
 /** Policy-aware bridge for DSH's native open/cancel/item/error/end mux wire. */
-import { RUNTIME_UI_MUX_RESPONSE_MAX_BYTES } from "@evimed/domain";
+import { RUNTIME_UI_MUX_RESPONSE_MAX_BYTES, knownErrorCodeMessage } from "@evimed/domain";
 import WebSocket, { WebSocketServer } from "ws";
 import { connect } from "node:net";
 import { HttpError } from "./security.mjs";
@@ -143,11 +143,25 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
   let queue = Promise.resolve();
   let validating = false;
 
+  /**
+   * What the kernel's own window prints for a refused stream: its `message` is
+   * the text a researcher reads, and the window cannot map a code to a sentence
+   * the way the shell does. So the refusal is said in Chinese here — the
+   * specifics its raiser wrote for a reader (`readerMessage`: how far short the
+   * allowance is), else the dictionary's sentence for the code — and the English
+   * `message` stays for the codes no sentence exists for (the policy refusals
+   * nobody reads), where it is at least the truth.
+   * @param {unknown} error
+   */
+  const readerText = (error) => {
+    if (!(error instanceof HttpError)) return "The runtime UI policy could not be verified.";
+    return error.readerMessage || knownErrorCodeMessage(error.code) || error.message;
+  };
   const rejectStream = async (streamId, error) => {
     const known = error instanceof HttpError;
     await send(client, JSON.stringify({ type: "error", streamId, error: {
       code: known ? error.code : "runtime_ui_policy_failed",
-      message: known ? error.message : "The runtime UI policy could not be verified.",
+      message: readerText(error),
       details: {},
     } }));
     await send(client, JSON.stringify({ type: "end", streamId }));

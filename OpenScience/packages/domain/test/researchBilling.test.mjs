@@ -4,7 +4,7 @@ import {
   researchMoneyUnits, researchMoneyDecimal, researchTaskCharge,
   SIMULATED_LOW_CREDITS, SIMULATED_START_CREDITS, SIMULATED_TOPUP_PACKAGES, SIMULATED_WALLET_LABEL, SIMULATED_WALLET_PAGES,
 } from '../src/researchBilling.mjs';
-import { ALL_ERROR_CODES, CREDIT_ERROR_CODES, errorCodeMessage, errorCodeOutcome } from '../index.mjs';
+import { ALL_ERROR_CODES, CREDIT_ERROR_CODES, allowanceRefusalSentence, errorCodeMessage, errorCodeOutcome } from '../index.mjs';
 test('money retains fractional precision without binary rounding', () => {
   assert.equal(researchMoneyDecimal(researchMoneyUnits('0.00000001')), '0.00000001');
   assert.throws(() => researchMoneyUnits('0.000000001'));
@@ -63,4 +63,19 @@ test('a refusal on a simulated allowance says 模拟 and is a ceiling', () => {
     assert.match(errorCodeMessage(code), /模拟/, code);
     assert.equal(errorCodeOutcome(code), 'upstream', code);
   }
+});
+
+test('the refusal a window prints says the allowance is low, by how much when known, and where it is topped up', () => {
+  assert.equal(allowanceRefusalSentence({ simulated: true, balanceCny: 3.5, estimateCny: 6 }),
+    '模拟额度不足，这次没有开始：可用模拟额度 ¥3.50，这件事预计至少需要 ¥6.00。到“设置 → 科研额度”做一次模拟充值后即可继续。');
+  assert.equal(allowanceRefusalSentence({ balanceCny: 0, estimateCny: 12.345 }),
+    '科研额度不足，这次没有开始：可用 ¥0.00，这件事预计至少需要 ¥12.35。到“设置 → 科研额度”充值后即可继续。');
+  // No estimate (a free conversation against an empty allowance): the balance alone.
+  assert.equal(allowanceRefusalSentence({ balanceCny: 0 }), '科研额度不足，这次没有开始：可用 ¥0.00。到“设置 → 科研额度”充值后即可继续。');
+  // Nothing known: the sentence still says what happened and where to go, and invents no amount.
+  assert.equal(allowanceRefusalSentence(), '科研额度不足，这次没有开始。到“设置 → 科研额度”充值后即可继续。');
+  assert.equal(allowanceRefusalSentence({ simulated: true, balanceCny: Number.NaN, estimateCny: -1 }),
+    '模拟额度不足，这次没有开始。到“设置 → 科研额度”做一次模拟充值后即可继续。');
+  // The dictionary's sentence for the same codes sends the reader to the same place.
+  for (const code of ['credits_exhausted', 'simulated_credits_exhausted']) assert.match(errorCodeMessage(code), /设置 → 科研额度|充值/);
 });

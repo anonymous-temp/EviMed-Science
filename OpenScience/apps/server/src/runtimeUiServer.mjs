@@ -747,7 +747,9 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
         sendNotice(res, status, "请在知识库中处理这份资料", "", { code, shellOrigin });
         return;
       }
-      sendNotice(res, status, "对话暂时打不开", noticeDetail(String(code)), { code: String(code), shellOrigin });
+      // A refusal that knows its amounts (the allowance's) says them; the rest say the dictionary's sentence.
+      const detail = error instanceof HttpError && error.readerMessage ? error.readerMessage : noticeDetail(String(code));
+      sendNotice(res, status, "对话暂时打不开", detail, { code: String(code), shellOrigin });
     });
   });
 

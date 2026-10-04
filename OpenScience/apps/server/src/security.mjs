@@ -124,6 +124,14 @@ export class HttpError extends Error {
     /** @type {number | undefined} */
     this.retryAfterSeconds = undefined;
     if (Number.isFinite(options.retryAfterSeconds)) this.retryAfterSeconds = options.retryAfterSeconds;
+    /** The sentence, in the reader's language, for a surface that shows this
+     *  error's text as it is — the kernel's own conversation window, which
+     *  cannot map a code to the dictionary the way the shell does. `message` is
+     *  for logs and API clients and stays English. Set by whoever knows the
+     *  specifics (the amounts a refused start was short by); never sent in the
+     *  JSON body `sendError` writes.
+     *  @type {string | undefined} */
+    this.readerMessage = undefined;
   }
 }
 
