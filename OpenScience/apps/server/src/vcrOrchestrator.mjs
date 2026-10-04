@@ -1576,6 +1576,15 @@ export class VcrOrchestrator {
   }
 
   /**
+   * The digest of the study's version nodes as they stand now: what a document
+   * written at this moment is written from (the `inputDigest` a cover records).
+   * @param {any} study @returns {Promise<string>}
+   */
+  async inputDigest(study) {
+    return (await this.#cover(study)).inputDigest;
+  }
+
+  /**
    * The export a run of this study is out for right now, or null: the mark the
    * study's one run slot holds (claimed and not stale, or running), when the run
    * was dispatched to write an export — an export the researcher asked for

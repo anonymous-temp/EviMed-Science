@@ -796,7 +796,9 @@ test("shared exports serve all VCR kinds to current members without a new resear
     // The two model documents take their words by named section: the first and the last of the sections a run writes.
     const model = VCR_MODEL_DOCUMENT_KINDS.includes(kind);
     const [first, last] = model ? [VCR_MODEL_DOCUMENT_SECTIONS[kind].prose[0], VCR_MODEL_DOCUMENT_SECTIONS[kind].prose.at(-1)] : ["Methods", "Limitations"];
-    const written = await vcrRuntimeWrite({ store: context.app.vcr.store, service: context.app.vcr.service, study: current,
+    // As the gateway calls it: with the orchestrator, so the document records the study versions it was written from
+    // and the request below is answered with this document instead of a run to write another.
+    const written = await vcrRuntimeWrite({ store: context.app.vcr.store, service: context.app.vcr.service, orchestrator: context.app.vcr.orchestrator, study: current,
       what: "report", items: [ { kind, section: first, template: "方法。" }, { kind, section: last, template: "尚无结果，保留限制。" } ], data: null });
     assert.equal(written.ok, true, JSON.stringify(written.issues));
     const queued = await call("lead", "POST", `/api/vcr/studies/${study.id}/export`, { kind });

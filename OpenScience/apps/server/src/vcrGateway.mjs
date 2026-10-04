@@ -1355,6 +1355,11 @@ const WRITERS = {
     // sections bind to that model under the export row lock, including two
     // report writes arriving while a calculation changes the live study.
     const candidate = object(target.cover).results ?? (service.reportModel ? await service.reportModel(study, { kind: target.kind }) : {});
+    // What the document is written from, recorded with the snapshot: an export the researcher asked for carries it from the
+    // request; a row this write opened (their own conversation) has none yet, and without one the next 导出 could not tell
+    // that the study still holds the versions this document stands on, and would start a run to write it again.
+    const writtenFrom = object(target.cover).inputDigest
+      ?? (typeof orchestrator?.inputDigest === "function" ? await orchestrator.inputDigest(study) : null);
     let rendered = renderVcrNumbers(template, candidate);
     const update = (cover) => {
       const model = cover.results ?? candidate;
@@ -1364,7 +1369,8 @@ const WRITERS = {
       const index = reports.findIndex(entry => entry.section === section);
       if (index < 0) reports.push(report); else reports[index] = report;
       return { ...cover, reports, report, results: model, intendedUse: model.intendedUse ?? study.intendedUse,
-        reviews: model.review?.records ?? [], staleResults: model.stale?.length ?? 0, seal: model.seal ?? null };
+        reviews: model.review?.records ?? [], staleResults: model.stale?.length ?? 0, seal: model.seal ?? null,
+        ...(cover.inputDigest ?? writtenFrom ? { inputDigest: cover.inputDigest ?? writtenFrom } : {}) };
     };
     if (store.updateExportCover) {
       if (!await store.updateExportCover(target.id, update)) throw new HttpError(404, "vcr_export_not_found", "Export not found.");
