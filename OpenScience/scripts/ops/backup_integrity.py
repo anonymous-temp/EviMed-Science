@@ -46,6 +46,13 @@ OMITTED_KINDS = frozenset((
     "fifo", "socket", "character-device", "block-device", "unreadable", "hardlink", "hardlink-dropped",
     "non-utf8-name",
 ))
+# What a live tree did under the backup, anywhere in the data directory. A
+# `changed-during-backup` record names an archived FILE that was not the file the
+# inventory saw, or kept changing as it was read: its bytes are in the archive and
+# the manifest's digest is of those bytes. A `vanished` record names an entry that
+# was gone when it was archived (and everything below it): not a member, not
+# restored. Both are verified as records and counted.
+CHANGED_KINDS = frozenset(("changed-during-backup", "vanished"))
 
 
 def identity(metadata):
@@ -202,7 +209,7 @@ def read_manifest(root_fd):
     try:
         descriptor = os.open(MANIFEST_NAME, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=root_fd)
     except FileNotFoundError:
-        return None, 0, 0
+        return None, 0, 0, 0
     try:
         before = os.fstat(descriptor)
         if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or before.st_size > MAX_MANIFEST_BYTES:
@@ -310,12 +317,31 @@ def read_manifest(root_fd):
         if key in keys:
             raise IntegrityError("backup_inventory_invalid")
         keys.add(key)
-    return expected, len(recorded), len(keys)
+    # What changed or went away while the backup ran. The same record cannot also
+    # be a link, a left-out entry or (for `vanished`) an archived member, and a
+    # vanished name needs an archived directory to be a child of.
+    changed = manifest.get("changed", [])
+    if not isinstance(changed, list) or len(entries) + len(links) + len(omitted) + len(changed) > MAX_MANIFEST_ENTRIES:
+        raise IntegrityError("backup_inventory_invalid")
+    seen = set()
+    for record in changed:
+        if not isinstance(record, dict) or set(record) != {"path", "kind"} or record.get("kind") not in CHANGED_KINDS:
+            raise IntegrityError("backup_inventory_invalid")
+        name = record["path"]
+        if not valid_member_name(name) or name in seen or name in recorded or name in keys:
+            raise IntegrityError("backup_inventory_invalid")
+        if record["kind"] == "changed-during-backup":
+            if expected.get(name, {}).get("type") != "file":
+                raise IntegrityError("backup_inventory_invalid")
+        elif name in expected or expected.get(posixpath.dirname(name) or ".", {}).get("type") != "directory":
+            raise IntegrityError("backup_inventory_invalid")
+        seen.add(name)
+    return expected, len(recorded), len(keys), len(seen)
 
 
 def verify_tree(root_fd, *, remove_manifest=True):
     """Walk pinned directories without following links, then compare exact bytes."""
-    expected, links, omitted = read_manifest(root_fd)
+    expected, links, omitted, changed = read_manifest(root_fd)
     seen = set()
     files = 0
     directories = 0
@@ -399,6 +425,8 @@ def verify_tree(root_fd, *, remove_manifest=True):
         receipt["links"] = links
     if omitted:
         receipt["omitted"] = omitted
+    if changed:
+        receipt["changed"] = changed
     return receipt
 
 
@@ -466,6 +494,8 @@ def main(arguments):
     links = f"; {receipt['links']} workspace link(s) recorded in the archive manifest, not restored" if receipt.get("links") else ""
     if receipt.get("omitted"):
         links += f"; {receipt['omitted']} other workspace entr(ies) recorded in the archive manifest, not restored"
+    if receipt.get("changed"):
+        links += f"; {receipt['changed']} entr(ies) changed or went away while the backup ran, recorded in the archive manifest"
     print(f"restore verification: {receipt['verification']} ({receipt['files']} files{links})", file=sys.stderr)
 
 

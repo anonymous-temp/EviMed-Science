@@ -8556,11 +8556,23 @@ export async function readinessBackup(config, database = null) {
     throw readinessFailure("backup_restore_drill_missing");
   }
 
+  // What the last cycle recorded about the data it copied, as counts: files that
+  // changed while they were read and entries that went away (a product is never
+  // quiescent), links a run made, entries an archive cannot carry. Information
+  // for the operator, never a failure and never a name: this answers anyone who
+  // asks `/api/ready`, and a number from a hand-edited or older state file that
+  // is not one reads as unknown.
+  const recorded = (/** @type {unknown} */ value) => (Number.isSafeInteger(value) && Number(value) >= 0 ? Number(value) : null);
   return {
     ...summary,
     retentionDays,
     encrypted: true,
     schedulerHealthy: true,
+    lastBackup: {
+      changedRecorded: recorded(backupState.lastChangedRecorded),
+      omittedRecorded: recorded(backupState.lastOmittedRecorded),
+      linksRecorded: recorded(backupState.lastLinksRecorded),
+    },
     postgres: await postgresBackupReadiness(config, database),
     ...(config.vcrEnabled ? { vcr: await vcrBackupReadiness(config) } : {}),
   };

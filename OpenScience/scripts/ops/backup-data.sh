@@ -52,8 +52,15 @@ if [ -e "$archive" ] || [ -e "$archive.enc" ] || [ -e "$archive.sha256" ] || [ -
   exit 1
 fi
 
-# Only same-inode content updates may produce a file-changed warning. A replaced
-# ancestor, symlink, unexpected inode, short read, or I/O error is always fatal.
+# Not strict, the backup of a live product: an entry that changed, was replaced
+# or went away between the inventory and the writer is handled where it is and
+# listed in the manifest's `changed` list, a file that shrank as it was read is
+# padded to the size its header declared (as tar does), and either makes the
+# writer exit 1 with the file-changed warning below. Fatal in both modes, because
+# each could make the archive lie: a symlink (or a special file, or a second name
+# for a file) where a file or directory was, a path that escapes the data
+# directory, another filesystem under the same name, a short read in strict mode,
+# an I/O error. Strict is for a source nobody writes and refuses any change.
 # The writer streams pinned descriptors into gzip; there is no full-data staging
 # copy and no second path-based tar read that could follow a replacement link.
 set +e

@@ -571,6 +571,33 @@ not sufficient containment for those events.
   (after `OPEN_SCIENCE_BACKUP_MAX_FAILURES` failures it otherwise waits a full
   interval). The site keeps serving meanwhile: web does not wait on the
   backup's health.
+- A live product is never quiescent, and the scheduler's backup does not need it
+  to be (2026-10-04; until then one entry that differed between the inventory
+  and the archive failed the whole cycle with `Backup source identity changed
+  after inventory.`, as on 2026-10-03 and again right after a release). A file
+  that was replaced (a running specialist job rewrites its state file by rename
+  on every heartbeat), rewritten, re-permissioned or shrunk is archived as the
+  writer finds it (a file that shrank as it was read is padded to its declared
+  size, as tar does), under the digest of the bytes the archive holds; one that
+  is gone is not archived, and a directory that is gone is one record, not one
+  per file. Both are listed in the manifest's `changed` list
+  (`changed-during-backup`, `vanished`), verified by the restore and counted by
+  the drill (`N entr(ies) changed while the backup ran`), and reach
+  `backup.completed` as `changedRecorded` (with `changedKinds` and a bounded
+  `changedSample`), the state as `lastChangedRecorded` / `lastChangedKinds` /
+  `lastChangedSample`, and `/api/ready`'s `backup.lastBackup` as three counts
+  (`changedRecorded`, `omittedRecorded`, `linksRecorded`) — information, never a
+  failure, and never a name. Volatile control state is not inventoried at all
+  (the rule sits next to `excludedFromBackup`): runtime sockets, the specialist
+  slot directory `.openscience/specialist-slots`, and the platform's own
+  in-flight temporaries (`.<name>.<hex>.tmp`, `.tmpdir`) outside a workspace.
+  Still a refusal, because each could make the archive lie: a symbolic link, a
+  special file or a second name for a file where a file was, a directory
+  replaced by a link, a path that escapes, another filesystem under the same
+  name, an I/O error. `OPEN_SCIENCE_BACKUP_STRICT=true` keeps its meaning —
+  capture a source nobody writes, and refuse any change, which is what the VCR
+  data plane and a cutover capture with the writers stopped want — and is not
+  the mode to run against a live deployment.
 - The production host also has the single `evimed-postgres-backup.timer` unit.
   Its versioned implementation is `scripts/ops/postgres-backup.py`, installed
   as `/usr/local/sbin/evimed-postgres-backup`; the existing unit names and daily
