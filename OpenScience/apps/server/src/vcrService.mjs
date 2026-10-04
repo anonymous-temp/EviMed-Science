@@ -1198,9 +1198,9 @@ function readinessFailure(code, details = null) {
 
 /**
  * The `vcr` readiness check. Red only for this module's own invariants: it is
- * on, and the schema is there. The engine not being composed is a warning, not
- * a failure — the study's AI steps and its conversation work without it (plan
- * §10.5).
+ * on, the schema is there, and a receipt key the operator configured is one the
+ * process can use. The engine not being composed is a warning, not a failure —
+ * the study's AI steps and its conversation work without it (plan §10.5).
  * @param {{ config: Record<string, any>, vcr: any, database: any }} input
  */
 export async function vcrReadiness({ config, vcr, database }) {
@@ -1212,6 +1212,13 @@ export async function vcrReadiness({ config, vcr, database }) {
     throw readinessFailure("vcr_migration_failed", {
       reason: typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : "migration_error",
     });
+  }
+  // A receipt key the operator configured and the process cannot use. The engine
+  // stays composed and every step runs — a receipt labels a result and never
+  // decides whether a person has one — but the deployment is not what its
+  // configuration says, and that is what a readiness check is for.
+  if (config.vcrEngineReceiptKeyError) {
+    throw readinessFailure("vcr_engine_receipt_key_unusable", { reason: String(config.vcrEngineReceiptKeyError) });
   }
   const warnings = [
     ...(vcr.engine?.configured?.() ? [] : ["vcr_engine_not_composed"]),

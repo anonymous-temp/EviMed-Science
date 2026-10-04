@@ -1144,6 +1144,7 @@ export const VCR_MODULE_ERROR_CODES = Object.freeze([
   'vcr_model_exists',
   // the module's own health
   'vcr_migration_failed',
+  'vcr_engine_receipt_key_unusable',
   'vcr_loop_failed',
   'vcr_orchestrator_failed',
   'vcr_worker_loop_missing',
@@ -1432,9 +1433,9 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_engine_not_composed: '本部署没有接入计算引擎，需要计算的步骤暂不可用；其余步骤照常。',
   vcr_engine_unreachable: '连不上计算引擎；这一步暂不可用，研究的其余部分照常，引擎恢复后可以重新计算。',
   vcr_engine_timeout: '计算引擎这次没有及时应答；作业会自动重试。',
-  vcr_engine_secret_missing: '计算引擎的口令或回执密钥没有配置，引擎按未配置处理；请联系管理员。',
+  vcr_engine_secret_missing: '计算引擎的口令没有配置，引擎按未配置处理；请联系管理员。',
   vcr_engine_token_file_short: '计算引擎的口令文件太短（至少 32 字节），引擎按未配置处理；请联系管理员。',
-  vcr_engine_receipt_key_file_unavailable: '回执密钥文件读不到，引擎按未配置处理；请联系管理员。',
+  vcr_engine_receipt_key_file_unavailable: '回执密钥文件读不到；计算照常进行，结果仍按输出哈希核对，只是没有用密钥验回执。请联系管理员。',
   vcr_engine_catalogue_mismatch: '计算引擎和平台的方法目录对不上，已停用这个引擎；请联系管理员升级。',
   vcr_engine_not_found: '引擎里找不到这项作业，可能已被清理；重新排一次即可。',
   vcr_engine_response_invalid: '计算引擎的应答格式不对，这次没有采用；可以重新计算。',
@@ -1497,6 +1498,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_model_exists: '这个名字和版本的模型已经存在；换一个名字或版本。',
   // The module's own health (an operator reads these).
   vcr_migration_failed: '虚拟临研的数据表升级失败，模块已停用；请联系管理员。',
+  vcr_engine_receipt_key_unusable: '配置了计算引擎的回执密钥，但读不到或太短（至少 32 字节）；计算照常进行，结果仍按输出哈希核对，只是没有用密钥验回执。请联系管理员修正。',
   vcr_loop_failed: '虚拟临研的后台循环出错，已记录并会重试。',
   vcr_orchestrator_failed: '虚拟临研的自动编排出错，已记录并会重试。',
   vcr_worker_loop_missing: '虚拟临研的后台循环没有启动；请联系管理员。',
