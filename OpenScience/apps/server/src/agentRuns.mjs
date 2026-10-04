@@ -48,7 +48,9 @@ import {
 // source, terminal source — moved into the domain when the run side started
 // needing them too. They are re-exported here because the ledger's callers and
 // its tests have always imported them from this module, and because a second
-// definition is exactly the drift the move was made to stop.
+// definition is exactly the drift the move was made to stop. The ledger itself
+// reads only the first: the run side retries on the second (`run-policy`), and
+// no tool failure decides a run's verdict any more (`terminalFromMessages`).
 import {
   CONNECTOR_CREDENTIAL_IDS,
   PLAN_ITEM_STATES,
@@ -59,10 +61,14 @@ import {
   gateIssueSeverity,
   isContractKind,
   isMcpToolName,
+  isSocketToolName,
+  mcpToolBaseName,
+  mcpToolName,
   recoverableEvidenceSourceErrorCodes,
   repairableEvidencePackageErrorCodes,
   runPhase,
   terminalEvidenceSourceErrorCodes,
+  toolViewPhrase,
   transition as domainTransition,
   transitionEvents,
   validateDeliveryReceipt,
@@ -1360,17 +1366,23 @@ function delegatedChildSessionIds(messages) {
  * A child that still cannot be read is returned by name rather than skipped in
  * silence, so the gate can say its verdict rests on an incomplete run.
  *
+ * `sessions` is the same messages grouped by the session that wrote them, for
+ * the one reader that must not let one session's success correct another's
+ * failure (`uncorrectedToolFailures`).
+ *
  * @param {Record<string, any>} project
  * @param {any[]} parentMessages
  * @param {(project: Record<string, any>, sessionId: string, options: {wake: boolean, parentSessionId: string | null}) => Promise<any>} readSessionHistory
  * @param {string | null} [rootSessionId] the session `parentMessages` belong to
- * @returns {Promise<{ assistants: any[], unreadable: string[] }>}
+ * @returns {Promise<{ assistants: any[], sessions: any[][], unreadable: string[] }>}
  */
 async function readDelegatedAssistantMessages(project, parentMessages, readSessionHistory, rootSessionId = null) {
   /** @type {{ sessionId: string, parentSessionId: string | null }[]} */
   const queue = delegatedChildSessionIds(parentMessages).map((sessionId) => ({ sessionId, parentSessionId: rootSessionId }));
   const seen = new Set();
   const assistants = [];
+  /** @type {any[][]} */
+  const sessions = [];
   /** @type {string[]} */
   const unreadable = [];
   while (queue.length && seen.size < 32) {
@@ -1390,13 +1402,14 @@ async function readDelegatedAssistantMessages(project, parentMessages, readSessi
     }
     const completed = history.filter((message) => messageId(message) && messageRole(message) === "assistant" && assistantFinished(message));
     assistants.push(...completed);
+    sessions.push(completed);
     for (const child of delegatedChildSessionIds(completed)) {
       if (!seen.has(child) && !queue.some((item) => item.sessionId === child) && seen.size + queue.length < 32) {
         queue.push({ sessionId: child, parentSessionId: next.sessionId });
       }
     }
   }
-  return { assistants, unreadable };
+  return { assistants, sessions, unreadable };
 }
 
 // Tools whose job is to go and fetch from outside. Whether one succeeds depends
@@ -1420,21 +1433,6 @@ const evidenceSourceToolSuffixes = Object.freeze([
 // server's own in-memory copy instead, so this file is a convenience for the
 // run and never evidence about it.
 export const workspaceBriefPath = ".evimed-brief/research-brief.md";
-
-
-// Transport died before either side could say anything. The MCP client reports
-// this as a bare string ("MCP error -32001: Request timed out") with no JSON
-// envelope, so no code parses out of it and the failure fell through to
-// terminal — the most recoverable class of failure there is, treated as the
-// least. It only ever reached a verdict by luck: whether some later call to the
-// same tool happened to succeed.
-const transportFailureSignature = /\b(timed out|timeout|econnreset|econnrefused|etimedout|socket hang up|network error|connection (?:closed|reset|refused)|stream closed)\b/i;
-
-function transportLevelToolFailure(part) {
-  const raw = part?.state?.error;
-  if (typeof raw !== "string" || !raw.trim() || raw.trim().startsWith("{")) return false;
-  return transportFailureSignature.test(raw);
-}
 
 function evidenceSourceTool(tool) {
   if (typeof tool !== "string") return false;
@@ -1630,16 +1628,55 @@ function parsedToolErrorCode(part) {
   return null;
 }
 
-function failedToolPart(part) {
-  return part?.type === "tool"
-    && (part?.state?.status === "error" || parsedToolResultStatus(part) === "error");
+/**
+ * How one tool call ended: it `failed`, it `succeeded`, or it is still `open`.
+ *
+ * A call can have "completed" for the kernel and still have failed. An MCP tool
+ * answers bare JSON `{status: "error"}`; a socket tool answers rendered text,
+ * `failed: <code>` (`socketToolResult`). `socket` says which of the two the
+ * tool speaks.
+ * @param {any} part @param {boolean} socket
+ * @returns {"failed" | "succeeded" | "open"}
+ */
+function toolPartOutcome(part, socket) {
+  const status = part?.state?.status;
+  if (status === "error") return "failed";
+  if (status !== "completed") return "open";
+  if (socket) return socketToolResult(part?.state?.output)?.ok === false ? "failed" : "succeeded";
+  return parsedToolResultStatus(part) === "error" ? "failed" : "succeeded";
 }
 
-function successfulToolPart(part) {
-  return part?.type === "tool"
-    && part?.state?.status === "completed"
-    && parsedToolResultStatus(part) !== "error";
+/**
+ * The kernel's code for a call to a tool the session does not mount — its
+ * `ToolNotFoundError`, which the ledger's tool parts carry in `state.error`.
+ * The kernel words the same failure `unknown tool "<name>"`.
+ */
+const UNKNOWN_TOOL_CODE = "UNKNOWN_TOOL";
+
+/**
+ * Whether a failed call named a tool this session does not mount.
+ *
+ * By the kernel's code, or by its own template with the call's own name in it —
+ * a format the kernel writes, read as a format and never as prose, so that a
+ * history that kept only the message still tells the two apart.
+ * @param {any} part
+ */
+function unknownToolCall(part) {
+  if (part?.state?.error === UNKNOWN_TOOL_CODE) return true;
+  const said = `unknown tool "${part?.tool}"`;
+  return [part?.state?.error, part?.state?.output].some((text) => typeof text === "string" && text.includes(said));
 }
+
+/**
+ * The socket's two advisory tools — the independent review and the method
+ * capsule — by the code each answers with when it cannot be had, and what the
+ * reader is told. They are consulted and never relied on: that one was
+ * unavailable is a fact about the run, not a fault of it.
+ */
+const advisoryToolUnavailable = Object.freeze({
+  review_unavailable: "独立复核这次没有做成；它只给建议，交付结果不受影响。",
+  capsule_unavailable: "方法胶囊这次没有取到；运行按常规方法继续，交付结果不受影响。",
+});
 
 /**
  * The data sources a run's research calls went without: the connectors whose
@@ -1671,8 +1708,20 @@ function connectorNeedsFromMessages(messages) {
 }
 
 /**
- * The terminal outcome a turn's messages decide. Callers go on to add the
- * delivery verdict to it (`verification`, `qualityNotices`, …), hence open.
+ * The terminal outcome a turn's own end decides: it was stopped, the spending
+ * limit refused a model call, the session failed, or it ended on its own —
+ * `succeeded` here, and what it delivered is for the callers' delivery decision,
+ * which adds to this (`verification`, `qualityNotices`, …), hence open.
+ *
+ * No tool failure is read. A turn that ended on its own is decided by what it
+ * produced, never by a tool call it got past — a source that would not answer,
+ * a page that would not load, a call to a tool this session does not mount.
+ * Three specimens of that were each fixed by widening a list: a `read` past the
+ * end of a file failed a complete peer review, an openFDA HTTP 400 failed a run
+ * with every deliverable, and a call to `web_read`, which the session did not
+ * mount, failed a complete, accepted adverse-event package (2026-10-04). A list
+ * of failures always lags the failures. `uncorrectedToolFailures` says what went
+ * wrong, as notices; whether files exist is `specialist_required_output_missing`.
  * @param {any[]} messages
  * @returns {{ status: string, errorCode: string | null, errorSubCode: string | null } & Record<string, any>}
  */
@@ -1698,39 +1747,152 @@ function terminalFromMessages(messages) {
       return { status: "failed", errorCode: "runtime_session_error", errorSubCode: subCode };
     }
   }
-  const toolParts = messages.flatMap((message) => message?.parts ?? []).filter((part) => part?.type === "tool");
-  for (const [index, part] of toolParts.entries()) {
-    if (!failedToolPart(part)) continue;
-    // A run's verdict is about the EviMed research work. Editor and shell tools
-    // fail routinely while an agent explores — one `read` past end of file
-    // failed an otherwise complete peer review — and whether the deliverables
-    // exist is checked separately against the declared outputs.
-    // Asked of the vocabulary, not by substring. A research tool has three
-    // spellings — bare, `mcp__evimed__`-prefixed and the historic `evimed_` —
-    // and a substring test both misses the bare one the rollback kernel shows
-    // and matches the socket's own `evimed_plan`, which is not research work.
-    if (typeof part.tool !== "string" || !isMcpToolName(part.tool)) continue;
-    const errorCode = parsedToolErrorCode(part);
-    // Keyed on the code, not on which tool asked. Every code in that set means
-    // an external source was unreachable or had nothing to give, and that is
-    // equally true whichever tool made the request. Pairing it with a
-    // hand-listed set of "evidence source" tools meant the list decided the
-    // verdict: an openFDA adverse-event query answering HTTP 400 failed a run
-    // that had produced every deliverable, only because adr_case_query was not
-    // on a list written before it mattered. A list of tools always lags the
-    // tools; the code is the fact.
-    if (recoverableEvidenceSourceErrorCodes.has(errorCode)) continue;
-    if (errorCode === null && transportLevelToolFailure(part)) continue;
-    const correctedByLaterSuccess = toolParts.slice(index + 1).some((candidate) => (
-      candidate.tool === part.tool && successfulToolPart(candidate)
-    ));
-    if (!correctedByLaterSuccess) {
-      // A data source nobody configured never lands here: its code is
-      // recoverable above, and the ledger records it as a need instead.
-      return { status: "failed", errorCode: "runtime_tool_error", errorSubCode: null };
+  return { status: "succeeded", errorCode: null, errorSubCode: null };
+}
+
+/**
+ * @typedef {object} ToolFailure
+ * @property {string} tool the research tool's base name, or the advisory socket tool's own name
+ * @property {"failed" | "unavailable" | "advisory"} kind
+ *   `failed`: it answered with an error; `unavailable`: the session does not
+ *   mount it (the kernel's `unknown tool`); `advisory`: an advisory tool said it cannot be had
+ * @property {string | null} code the last error code it gave, when it gave one
+ * @property {number} count how many calls ended this way
+ */
+
+/**
+ * Which tool a call belongs to, for the one rule below: a research tool by its
+ * base name — it has four spellings, and they are one tool — or a socket tool by
+ * its own name. Null for anything else. Editor and shell tools fail routinely
+ * while an agent explores, and a socket tool's refusals are the submit loop at
+ * its work, which the delivery decision reads as what it settled on.
+ * @param {unknown} tool
+ * @returns {{ id: string, socket: boolean } | null}
+ */
+function reportedTool(tool) {
+  if (typeof tool !== "string") return null;
+  const research = mcpToolBaseName(tool);
+  if (research) return { id: research, socket: false };
+  return isSocketToolName(tool) ? { id: tool, socket: true } : null;
+}
+
+/**
+ * What a failed call says went wrong, when it is something to report.
+ * @param {any} part @param {boolean} socket
+ * @returns {{ kind: ToolFailure["kind"], code: string | null } | null}
+ */
+function reportableToolFailure(part, socket) {
+  if (socket) {
+    // The rendered answer names its code; a history that kept only the kernel's
+    // own error code for the call names it in `state.error`.
+    const answer = socketToolResult(part?.state?.output);
+    const code = answer?.ok === false ? String(answer.code ?? "") : String(part?.state?.error ?? "");
+    return Object.hasOwn(advisoryToolUnavailable, code) ? { kind: "advisory", code } : null;
+  }
+  if (unknownToolCall(part)) return { kind: "unavailable", code: null };
+  const code = parsedToolErrorCode(part);
+  // A data source nobody configured is a named state of its own, not a failure:
+  // the conversation offers the researcher a form for it (`connectorNeeds`).
+  if (connectorForMissingCode(code)) return null;
+  return { kind: "failed", code };
+}
+
+/**
+ * What the run's tools could not give it, and nothing later did — one row per
+ * tool, with how many calls ended that way and the last error code it gave.
+ *
+ * One rule decides: a failure is corrected by a later success of the same tool in
+ * the same session. The model asked again, or differently, and got through; a
+ * tool that never succeeded after failing is what the run went without. Two
+ * lists of exceptions stood in front of it while a failure could fail the run —
+ * the codes of a source with nothing to give, and the transport timeouts that
+ * carry no code — and neither is needed now that none does. A source nobody
+ * configured is not a failure at all but a named state (`connectorNeeds`).
+ *
+ * A research tool is read by its vocabulary, not by substring, so the bare
+ * spelling a model may call is the same tool as the prefixed one it may succeed
+ * with next. A call to a tool the session does not mount can never succeed, so
+ * it is reported as what it is, `unavailable`, and a later call of the mounted
+ * spelling corrects it like any other.
+ *
+ * @param {readonly (readonly any[])[]} sessions the messages of each session, in order — a
+ *   failure in one session is not corrected by a success in another
+ * @returns {ToolFailure[]}
+ */
+function uncorrectedToolFailures(sessions) {
+  /** @type {Map<string, ToolFailure>} */
+  const found = new Map();
+  for (const messages of sessions) {
+    const parts = messages.flatMap((message) => message?.parts ?? []);
+    /** @type {Set<string>} */
+    const succeeded = new Set();
+    // Backwards, so "a later call of the same tool succeeded" is a set lookup.
+    for (let index = parts.length - 1; index >= 0; index -= 1) {
+      const part = parts[index];
+      if (part?.type !== "tool") continue;
+      const tool = reportedTool(part.tool);
+      if (!tool) continue;
+      const outcome = toolPartOutcome(part, tool.socket);
+      if (outcome === "succeeded") {
+        succeeded.add(tool.id);
+        continue;
+      }
+      if (outcome !== "failed" || succeeded.has(tool.id)) continue;
+      const failure = reportableToolFailure(part, tool.socket);
+      if (!failure) continue;
+      const row = found.get(tool.id);
+      if (!row) {
+        found.set(tool.id, { tool: tool.id, kind: failure.kind, code: failure.code, count: 1 });
+        continue;
+      }
+      row.count += 1;
+      // The latest code is the first one met going backwards; an earlier call
+      // fills it only when the latest gave none.
+      row.code ??= failure.code;
+      if (failure.kind === "failed") row.kind = "failed";
     }
   }
-  return { status: "succeeded", errorCode: null, errorSubCode: null };
+  return [...found.values()].sort((left, right) => right.count - left.count || left.tool.localeCompare(right.tool));
+}
+
+/** How many tools one run's notices name; a run that went without more has more to say than this. */
+const maxToolFailureNotices = 8;
+
+/**
+ * The notices for what the run's tools could not give it: one per tool, with its
+ * name, its error code when it gave one, how many times, and the reader's
+ * sentence. Said once the delivery decision is known, because what the reader
+ * needs from it is different in the three situations `outcome` names:
+ *
+ *   `delivered`        the files shipped; this says what the run went without
+ *   `nothing-written`  the run planned files and wrote none; the tool is the
+ *                      likely cause, and the notice says so as one
+ *   `other`            the run failed for a reason of its own; this is a fact beside it
+ *
+ * @param {readonly ToolFailure[]} failures
+ * @param {"delivered" | "nothing-written" | "other"} outcome
+ * @returns {StoredNotice[]}
+ */
+function toolFailureNotices(failures, outcome) {
+  const tail = outcome === "delivered" ? "；成果照常交付，涉及它的部分请留意是否完整。"
+    : outcome === "nothing-written" ? "；这可能是这次没有写出交付文件的原因。" : "。";
+  return failures.slice(0, maxToolFailureNotices).map(({ tool, kind, code, count }) => {
+    if (kind === "advisory") {
+      return runNotice(String(code), `The advisory tool ${tool} answered ${code} ${count} time(s) and no later call of it succeeded.`, {
+        detail: advisoryToolUnavailable[/** @type {keyof typeof advisoryToolUnavailable} */ (String(code))],
+      });
+    }
+    // The verb a conversation row is drawn with (「读网页」), never the tool's name.
+    const label = toolViewPhrase(mcpToolName(tool))?.verb ?? "一项检索或分析工具";
+    if (kind === "unavailable") {
+      return runNotice("run_tool_unavailable", `Research tool ${tool} is not mounted in this session: ${count} call(s) answered unknown tool.`, {
+        detail: `这次运行没有提供「${label}」，它被调用了 ${count} 次，这一步没有执行${tail}`,
+      });
+    }
+    return runNotice("run_tool_failed", `Research tool ${tool} failed ${count} time(s)${code ? ` (${code})` : ""} and no later call of it succeeded.`, {
+      detail: `「${label}」有 ${count} 次没有成功，之后也没有成功的同类调用${tail}`,
+    });
+  });
 }
 
 /** @param {any} issues @param {any} shrinkage @param {boolean} revisionRequired */
@@ -4814,6 +4976,11 @@ export class AgentRunStore {
 
   async finishFromDurableRecord(project, run) {
     if (run.nativeTurn) run = (await this.list(project)).find((item) => item.id === run.id) ?? run;
+    // Reads no tool result, and that is the rule rather than a gap: no tool
+    // failure decides a run (`terminalFromMessages`), so what the transcript
+    // would add here is the notices `uncorrectedToolFailures` writes, which a
+    // runtime that is gone cannot be asked for. The verdict is the same one the
+    // live path reaches from the same files, receipt and answer.
     const receipt = await readDeliveryReceipt(project, run);
     // What exists decides, and what exists is read from the host copy of the
     // workspace — the one thing that outlives the container.
@@ -5378,7 +5545,7 @@ export class AgentRunStore {
       .filter((message) => messageId(message) && messageRole(message) === "assistant" && assistantFinished(message));
     if (assistants.length === 0) {
       if (ownEnd?.code) return this.finishInternal(project, run.id, {
-        ...terminalFromMessages([{ info: { error: { name: ownEnd.kind, code: ownEnd.code, subCode: ownEnd.subCode } } }, ...history]),
+        ...terminalFromMessages([{ info: { error: { name: ownEnd.kind, code: ownEnd.code, subCode: ownEnd.subCode } } }]),
         artifacts: [],
         ...(run.nativeTurn && ownEnd.time ? { finishedAt: new Date(ownEnd.time).toISOString() } : {}),
       });
@@ -5395,10 +5562,23 @@ export class AgentRunStore {
       ? [{ info: { error: { name: ownEnd.kind, code: ownEnd.code, subCode: ownEnd.subCode } } }, ...assistants]
       : assistants);
     // The sources this run went without — including those a delegated child
-    // met, which the verdict above does not read — kept on the record so the
-    // conversation can offer the researcher a form for them.
+    // met — kept on the record so the conversation can offer the researcher a
+    // form for them.
     const connectorNeeds = connectorNeedsFromMessages(allRunAssistants);
     if (connectorNeeds.length > 0) terminal.connectorNeeds = connectorNeeds;
+    // A turn that ended on its own is decided by what it produced, never by a
+    // tool failure it got past. What its tools could not give it is said, once
+    // the delivery decision below is known (`toolFailureNotices`): a delivered
+    // run names what it went without, and a run that wrote none of the files
+    // it planned names the tools as the likely cause. A turn that was stopped
+    // or failed on its own is not asked about them.
+    /** @type {ToolFailure[]} */
+    let toolFailures = [];
+    if (terminal.status === "succeeded") {
+      try {
+        toolFailures = uncorrectedToolFailures([allAssistants, ...delegated.sessions]);
+      } catch { /* isolated: evimed_run_tool_failure_read_failures_total — a notice about the tools must never keep a run from finishing */ }
+    }
     let runtimeWorkspaceRoot;
     try {
       runtimeWorkspaceRoot = await this.runtimeWorkspaceRoot(project);
@@ -5910,6 +6090,14 @@ export class AgentRunStore {
           ].slice(0, 20);
         }
       }
+    }
+    if (toolFailures.length > 0) {
+      const outcome = terminal.status === "succeeded" ? "delivered"
+        : terminal.errorCode === "specialist_required_output_missing" ? "nothing-written" : "other";
+      const said = toolFailureNotices(toolFailures, outcome);
+      terminal.qualityNotices = outcome === "nothing-written"
+        ? [...said, ...(terminal.qualityNotices ?? [])]
+        : [...(terminal.qualityNotices ?? []), ...said];
     }
     return this.finishInternal(project, run.id, { ...terminal, artifacts,
       ...(run.nativeTurn && ownEnd?.time ? { finishedAt: new Date(ownEnd.time).toISOString() } : {}),

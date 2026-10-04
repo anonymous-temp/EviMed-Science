@@ -81,6 +81,9 @@ test("a run whose research call met an unconfigured data source is answered, and
     const one = await finishedWith([failedCall(connectorMissingCode(spec.id))]);
     assert.equal(one.result.status, "succeeded", spec.id);
     assert.deepEqual(one.result.connectorNeeds, [spec.id], spec.id);
+    // A source nobody configured is a named state with a form of its own, not a
+    // failure to say twice.
+    assert.deepEqual(one.listed.qualityNotices.filter((item) => item.code === "run_tool_failed"), [], spec.id);
   }
 
   // The MR engine's own refusal names the same need.
@@ -105,19 +108,30 @@ test("a run whose research call met an unconfigured data source is answered, and
   assert.equal(plain.listed.connectorNeeds, undefined);
 });
 
-test("every other tool failure still fails the run, and a code that only looks like a connector's names none", async () => {
+test("every other tool failure is said as a notice and fails nothing, and a code that only looks like a connector's names none", async () => {
   for (const code of ["invalid_input", "public_source_nonexistent_credential_missing", null]) {
     const other = await finishedWith([failedCall(code)]);
-    assert.equal(other.result.status, "failed", String(code));
-    assert.equal(other.result.errorCode, "runtime_tool_error", String(code));
+    assert.equal(other.result.status, "succeeded", `${code}: a tool the run got no answer from is not the run's verdict`);
+    assert.equal(other.result.errorCode, null, String(code));
     assert.equal(other.result.connectorNeeds, undefined, String(code));
+    // Said, though: the failure is the run's own record of what it went without.
+    const notice = other.listed.qualityNotices.find((item) => item.code === "run_tool_failed");
+    assert.ok(notice, `${code}: no notice for the failed call`);
+    assert.ok(
+      notice.text.includes(code === null ? "biomedical_source_search failed 1 time(s) and no later" : `biomedical_source_search failed 1 time(s) (${code}) and no later`),
+      `the code is named when the call gave one: ${notice.text}`,
+    );
   }
-  // Left out one source and failed on another: the failure is still the verdict,
-  // and the source it left out is still recorded — a capability whose only path
-  // needed it ends with nothing to hand over, and that is the thing to fix.
+  // Left out one source and failed on another: the failure is a notice, the
+  // source it left out is still recorded as a need — a capability whose only
+  // path needed it ends with nothing to hand over, and that is the thing to fix
+  // — and the notice is about the failure, never about the credential.
   const both = await finishedWith([failedCall("public_source_umls_credential_missing"), failedCall("invalid_input")]);
-  assert.equal(both.result.status, "failed");
+  assert.equal(both.result.status, "succeeded");
   assert.deepEqual(both.listed.connectorNeeds, ["umls"]);
+  const failed = both.listed.qualityNotices.filter((item) => item.code === "run_tool_failed");
+  assert.equal(failed.length, 1);
+  assert.match(failed[0].text, /failed 1 time\(s\) \(invalid_input\)/);
 });
 
 test("the inbox says a finished run left a source out and where to add it, and says nothing when it did not", () => {

@@ -2591,20 +2591,32 @@ test("a completed tool step cannot finish a busy multi-step run and artifacts ar
     sessionStatus = "idle";
     const finished = await store.reconcileSession(project, binding.sessionId);
     assert.equal(finished.id, started.id);
-    assert.equal(finished.status, "failed");
-    assert.equal(finished.errorCode, "runtime_tool_error");
+    // The research call that never answered is said, and decides nothing: the
+    // turn ended on its own with a file written and an answer given.
+    assert.equal(finished.status, "succeeded");
+    assert.equal(finished.errorCode, null);
     assert.deepEqual(finished.artifacts, ["reports/final.md"]);
+    assert.ok(
+      noticeTexts(finished).some((line) => line.startsWith("Research tool literature_search failed 1 time(s)")),
+      `the failed search is a notice: ${JSON.stringify(finished.qualityNotices)}`,
+    );
   } finally {
     await rm(root, { recursive: true, force: true });
   }
 });
 
-test("deep research tolerates documented source misses but requires invalid EviMed calls to be corrected", async (t) => {
+// A research tool that failed and that nothing later got through never ends a
+// run that ended on its own (2026-10-04). Until then this table pinned the
+// opposite for the calls it called "invalid": two of its rows ended `failed /
+// runtime_tool_error` over a package the run had delivered. What it asserts now
+// is the one rule — every uncorrected failure is a notice naming its tool and
+// its code, a corrected one and a source nobody configured are not — whatever
+// the code says, because a list of codes always lags the codes.
+test("no research tool failure fails a run that ended on its own, and each one the run never got past is said once per tool", async (t) => {
   const scenarios = [
     {
       name: "unavailable open-access source",
-      expectedStatus: "succeeded",
-      expectedErrorCode: null,
+      notice: { tool: "open_access_full_text", code: "full_text_not_available" },
       parts: [
         {
           type: "tool",
@@ -2624,8 +2636,7 @@ test("deep research tolerates documented source misses but requires invalid EviM
       // sources. That is a host gap the agent is told to record and work
       // around, and it was failing otherwise complete runs.
       name: "unpaywall credential missing on the host",
-      expectedStatus: "succeeded",
-      expectedErrorCode: null,
+      notice: null,
       parts: [
         {
           type: "tool",
@@ -2642,8 +2653,7 @@ test("deep research tolerates documented source misses but requires invalid EviM
     },
     {
       name: "source that is simply not open access",
-      expectedStatus: "succeeded",
-      expectedErrorCode: null,
+      notice: { tool: "open_access_full_text", code: "public_source_pdf_not_open_access" },
       parts: [
         {
           type: "tool",
@@ -2665,8 +2675,7 @@ test("deep research tolerates documented source misses but requires invalid EviM
       // library — an outage in a helper container and an upstream rate limit,
       // neither a defect in the analysis it was helping with.
       name: "downstream specialist service that could not complete",
-      expectedStatus: "succeeded",
-      expectedErrorCode: null,
+      notice: { tool: "research_topic_selection", code: "specialist_execution_failed" },
       parts: [
         {
           type: "tool",
@@ -2690,8 +2699,7 @@ test("deep research tolerates documented source misses but requires invalid EviM
       // Since `web_read` reads any public page, the refusals left are the
       // site's own: its robots.txt, or a page no browser could open.
       name: "a web page the gateway refused to read",
-      expectedStatus: "succeeded",
-      expectedErrorCode: null,
+      notice: { tool: "web_read", code: "web_read_robots_disallowed" },
       parts: [
         {
           type: "tool",
@@ -2714,8 +2722,7 @@ test("deep research tolerates documented source misses but requires invalid EviM
       // failure treated as the least. In production it survived only because a
       // later call to the same tool happened to succeed.
       name: "MCP transport timeout with no structured error code",
-      expectedStatus: "succeeded",
-      expectedErrorCode: null,
+      notice: { tool: "open_access_full_text", code: null },
       parts: [
         {
           type: "tool",
@@ -2725,12 +2732,12 @@ test("deep research tolerates documented source misses but requires invalid EviM
       ],
     },
     {
-      // Still terminal: the gateway could not parse what the run sent it,
-      // which is the run's own defect rather than a source declining to be
-      // read. The gateway itself draws this line — 403 refuses, 400 rejects.
+      // The gateway could not parse what the run sent it — the run's own
+      // defect rather than a source declining to be read, and the gateway draws
+      // that line itself: 403 refuses, 400 rejects. It was the one row besides
+      // the dedup input that failed a run; it is a notice like the rest.
       name: "malformed request the gateway could not parse",
-      expectedStatus: "failed",
-      expectedErrorCode: "runtime_tool_error",
+      notice: { tool: "biomedical_source_search", code: "public_source_gateway_url_invalid" },
       parts: [
         {
           type: "tool",
@@ -2751,8 +2758,7 @@ test("deep research tolerates documented source misses but requires invalid EviM
       // source whether literature search or an adverse-event query asked it,
       // and a run that produced every deliverable failed over the difference.
       name: "adverse-event query whose public source was unreachable",
-      expectedStatus: "succeeded",
-      expectedErrorCode: null,
+      notice: { tool: "adr_case_query", code: "public_source_http_error" },
       parts: [
         {
           type: "tool",
@@ -2769,8 +2775,7 @@ test("deep research tolerates documented source misses but requires invalid EviM
     },
     {
       name: "uncorrected invalid deduplication input",
-      expectedStatus: "failed",
-      expectedErrorCode: "runtime_tool_error",
+      notice: { tool: "evidence_deduplicate", code: "invalid_input" },
       parts: [
         {
           type: "tool",
@@ -2787,8 +2792,7 @@ test("deep research tolerates documented source misses but requires invalid EviM
     },
     {
       name: "corrected invalid deduplication input",
-      expectedStatus: "succeeded",
-      expectedErrorCode: null,
+      notice: null,
       parts: [
         {
           type: "tool",
@@ -2846,8 +2850,18 @@ test("deep research tolerates documented source misses but requires invalid EviM
           parts: [...scenario.parts, { type: "text", text: "Research completed." }],
         }];
         const result = await store.reconcileSession(project, binding.sessionId);
-        assert.equal(result.status, scenario.expectedStatus);
-        assert.equal(result.errorCode, scenario.expectedErrorCode);
+        assert.equal(result.status, "succeeded");
+        assert.equal(result.errorCode, null);
+        const said = result.qualityNotices.filter((notice) => notice.code === "run_tool_failed");
+        if (scenario.notice === null) {
+          assert.deepEqual(said, [], "nothing to say about a call that was corrected or that named a source nobody configured");
+        } else {
+          assert.equal(said.length, 1, "one notice for the tool");
+          const { tool, code } = scenario.notice;
+          assert.equal(said[0].text, `Research tool ${tool} failed 1 time(s)${code ? ` (${code})` : ""} and no later call of it succeeded.`);
+          assert.match(said[0].detail, /有 1 次没有成功，之后也没有成功的同类调用；成果照常交付/);
+          assert.doesNotMatch(said[0].detail, new RegExp(tool), "the reader is told what was attempted, never a tool's name");
+        }
       } finally {
         await rm(root, { recursive: true, force: true });
       }
@@ -5938,7 +5952,7 @@ test("a run degraded by unverified content projects the degraded phase, and canc
     await store.finishInternal(project, canceled.id, { status: "canceled", artifacts: [] });
 
     const failed = await store.dispatch(project, { sessionId: "ses_failed", dispatchId: "turn_failed" }, async () => ({ accepted: true }));
-    await store.finishInternal(project, failed.id, { status: "failed", artifacts: [], errorCode: "runtime_tool_error" });
+    await store.finishInternal(project, failed.id, { status: "failed", artifacts: [], errorCode: "runtime_session_error" });
 
     const byId = new Map((await store.list(project)).map((item) => [item.id, item]));
     assert.equal(byId.get(degraded.id).phase, "degraded");

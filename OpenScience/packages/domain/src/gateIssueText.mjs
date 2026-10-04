@@ -321,6 +321,13 @@ export const GATE_CODE_TITLES_ZH = Object.freeze({
   run_capability_catalogue_incomplete: '能力目录不完整',
   run_evidence_ingest_failed: '有检索结果未能记入证据',
   run_turn_end_unknown: '一轮以未知方式结束',
+  // A research tool that did not give the run what it asked for, and no later
+  // call of it did (2026-10-04). Said per tool, never a verdict on the run: the
+  // turn is judged by what it produced. The two advisory tools that answer
+  // that they cannot be had (`review_unavailable`, `capsule_unavailable`) are
+  // titled above with the run-side refusals and ride the same notice.
+  run_tool_failed: '有检索或分析工具没有成功',
+  run_tool_unavailable: '调用了本次运行没有的工具',
   memory_extraction_empty: '本次对话没有抽取到记忆',
   memory_pending: '新记忆暂缓生效',
   memory_conflicts: '对话改写了你确认过的记忆',
