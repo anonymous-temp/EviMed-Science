@@ -1,10 +1,10 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "statistical-analysis",
-  "version": "sha256:ad5989e8ec89ded2b5eed4896da297ef0574ea54c9f85ac7a8c968b612ba72b4",
+  "version": "sha256:3fa1b4aae1ce4f353c03e657ef219a678ec3193afbab70da85d312db92926343",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
-    "nodes": 17,
+    "nodes": 18,
     "edges": 0,
     "byVia": {
       "schema": 0,
@@ -991,6 +991,102 @@
           "action"
         ],
         "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
+      "stateEffect": "none"
+    },
+    {
+      "name": "mcp__evimed__research_calculate",
+      "source": "mcp",
+      "description": "Compute frozen aggregate JSON with an admitted deterministic engine. inputPath is a JSON file in its method's shape, written here with ? after an optional key and | between a key's alternatives; a missing key, or one the engine does not read, fails the calculation. meta.dl {studies[{id,label,yi,vi}],effectMeasure:MD|SMD|RD|OR|RR|HR|IRR,outcome} -- two or more studies with distinct ids; yi is a study's effect on the analysis scale (the natural log for OR, RR, HR, IRR) and vi its variance, above 0. faers.signals {tables[{id,a,b,c,d}]} -- 2x2 counts, integers of 0 or more, one table per id: a the drug with the event, b the drug with other events, c other drugs with the event, d other drugs with other events; optional parameters yates, correctZeroCells. bibliometric.network {edges[{source,target,weight,source_freq,target_freq}]} -- each pair once; weight is the pair's co-occurrence count, source_freq and target_freq each node's own frequency, all above 0; parameters.maxNodes is required. design.analytic {scenario:{design{kind:two_arm_fixed},endpoint{type:continuous},truth{effect,sd?},analysis?{alpha?,power?,sided?}}|{design{kind:two_arm_fixed},endpoint{type:binary},truth{controlRate,treatmentRate}}|{design{kind:two_arm_fixed},endpoint{type:time_to_event},truth{hazardRatio,controlMedian}}|{design{kind:group_sequential,informationRates[]},endpoint{type:time_to_event},truth{hazardRatio,controlMedian}}|{design{kind:simon_two_stage},endpoint{type:binary},truth{nullRate,alternativeRate}}|{design{kind:single_arm,n},endpoint{type:binary},truth{nullRate,responseRate},analysis{method:exact_binomial,alternative:greater|less}}} -- the optional analysis fits every two_arm_fixed and group_sequential scenario and defaults to alpha 0.025 in total, power 0.9, sided 1; sd defaults to 1; informationRates rise to 1. comparator.evalue {scenario{riskRatio,confidenceLimit?,scale?:risk_ratio|odds_ratio|hazard_ratio,rare?}} -- riskRatio is the estimate on that scale and confidenceLimit the interval limit nearer 1; rare reads an odds or hazard ratio of a rare outcome as a risk ratio. action=start/status/cancel; completed results preserve input/code/environment identities and original bytes. No scripts, retrieval, fitted EBGM prior or patient rows. action=render fills a report template's {{n:alias.key|f2}} references from machine values into a NEW file.",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "action"
+        ],
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "start",
+              "status",
+              "cancel",
+              "render"
+            ]
+          },
+          "method": {
+            "type": "string",
+            "enum": [
+              "meta.dl",
+              "faers.signals",
+              "bibliometric.network",
+              "design.analytic",
+              "comparator.evalue"
+            ]
+          },
+          "inputPath": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048,
+            "description": "Workspace-relative frozen aggregate JSON in its method's shape (at most 8 MiB); never a patient-level file."
+          },
+          "parameters": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "maxNodes": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 500,
+                "description": "bibliometric.network, required: the graph keeps this many of the most frequent nodes."
+              },
+              "yates": {
+                "type": "boolean",
+                "description": "faers.signals: Yates-correct the chi-square (default false)."
+              },
+              "correctZeroCells": {
+                "type": "boolean",
+                "description": "faers.signals: add 0.5 to every cell of a table that has a zero (default true); false fails the calculation on such a table."
+              }
+            }
+          },
+          "requestId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "jobId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 160
+          },
+          "templatePath": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048,
+            "description": "render: workspace-relative text template with {{n:alias.key|format}} references; key is a machine value's key (values.pooled_effect); formats raw int f1 f2 f3 pct0 pct1 pct2 thousands months text."
+          },
+          "outputPath": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 2048,
+            "description": "render: workspace-relative NEW file for the report; an existing file is never overwritten."
+          },
+          "calculations": {
+            "type": "object",
+            "maxProperties": 8,
+            "description": "render: alias -> {jobId} of a finished calculation | {versionId} of a result | {resultsPath, receiptPath?} of a results JSON and its run_analysis.py receipt. An unresolved reference reads 未计算; typed numbers stay and are checked."
+          }
+        }
       },
       "outputSchema": {
         "type": "object",

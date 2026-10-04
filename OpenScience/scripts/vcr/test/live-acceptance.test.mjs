@@ -220,21 +220,21 @@ test('a VCR export kind that fails is recorded under its own name; the kinds aft
     json(res, { projectId: 'prj_1' });
   }, async c => {
     const result = await runAcceptance({ ...c, command: 'vcr-exports', studyId: 'std_1', allowResearch: 'yes' });
-    assert.equal(exports, VCR_EXPORT_KINDS.length, 'every kind was asked for, the two after the failure included');
+    assert.equal(exports, VCR_EXPORT_KINDS.length, 'every kind was asked for, the ones after the failure included');
     assert.deepEqual(Object.keys(result.reviewAcceptance), [...VCR_EXPORT_KINDS]);
     const failed = VCR_EXPORT_KINDS[1];
     assert.deepEqual(result.reviewAcceptance[failed], { verified: false, state: 'export_failed', conversion: 'failed', vcrExportId: 'vex_2', error: 'conversion_failed' });
-    assert.equal(result.outputs.length, 6, 'Word and PDF of the three kinds that were delivered');
+    assert.equal(result.outputs.length, 2 * (VCR_EXPORT_KINDS.length - 1), 'Word and PDF of every kind that was delivered');
     for (const kind of VCR_EXPORT_KINDS.filter(kind => kind !== failed)) {
       assert.equal(result.reviewAcceptance[kind].verified, true, `${kind} was inspected after the failure`);
       assert.equal(result.reviewAcceptance[kind].exportState, 'ready');
     }
-    assert.deepEqual([...new Set(inspected)].sort(), ['vex_1', 'vex_3', 'vex_4']);
+    assert.deepEqual([...new Set(inspected)].sort(), VCR_EXPORT_KINDS.map((_, index) => `vex_${index + 1}`).filter(id => id !== 'vex_2'));
     assert.equal(result.status, 'incomplete', 'one failed kind keeps the receipt incomplete');
     assert.equal(result.error, undefined, 'and the failure is that kind\'s, not the whole run\'s');
   });
 });
-test('all four VCR Word/PDF conversions survive unavailable or stale AI review without false acceptance', async () => {
+test('every VCR Word/PDF conversion survives unavailable or stale AI review without false acceptance', async () => {
   let exports = 0;
   await fixture((req, res) => {
     req.resume();
@@ -247,7 +247,7 @@ test('all four VCR Word/PDF conversions survive unavailable or stale AI review w
     json(res, { projectId: 'prj_1' });
   }, async c => {
     const result = await runAcceptance({ ...c, command: 'vcr-exports', studyId: 'std_1', allowResearch: 'yes' });
-    assert.equal(result.outputs.length, 8); assert.equal(exports, 4);
+    assert.equal(result.outputs.length, 2 * VCR_EXPORT_KINDS.length); assert.equal(exports, VCR_EXPORT_KINDS.length);
     assert.equal(result.status, 'incomplete');
     assert.equal(Object.values(result.reviewAcceptance).every(row => row.conversion === 'completed' && !row.verified), true);
   });

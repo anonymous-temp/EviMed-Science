@@ -1,5 +1,5 @@
 id: statistical-analysis
-version: 1.1.0
+version: 1.2.0
 title: Statistical Analysis
 category: Research Planning
 description: Analyze supplied research data with executed Python or R, preserving reproducible code, numerical results, uncertainty and partial findings.
@@ -10,6 +10,7 @@ skills:
 - statistical-analysis
 tools:
 - mcp__evimed__dataset_semantics
+- mcp__evimed__research_calculate
 produces:
 - contractKind: statistical-analysis-package
   outputs:

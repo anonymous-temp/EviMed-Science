@@ -672,7 +672,8 @@ jobs:
         run: |
           node --test --test-concurrency=1 \
             apps/server/test/vcrEngineContract.integration.test.mjs \
-            apps/server/test/vcrIntake.integration.test.mjs
+            apps/server/test/vcrIntake.integration.test.mjs \
+            apps/server/test/vcrKnowledgeEngine.integration.test.mjs
           NO_COLOR=1 node --test --test-reporter=spec --test-concurrency=1 \
             apps/server/test/resultReplayLifecycle.integration.test.mjs \
             2>&1 | tee "$RUNNER_TEMP/result-replay-five-paths.log"

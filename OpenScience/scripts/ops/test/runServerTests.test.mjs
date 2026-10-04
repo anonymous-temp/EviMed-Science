@@ -11,7 +11,7 @@ import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { partitionServerTests, runServerTests } from "../../test/runServerTests.mjs";
+import { DEFAULT_TEST_TIMEOUT_MS, hangGuardFlags, partitionServerTests, runServerTests } from "../../test/runServerTests.mjs";
 
 const files = ["agentRuns.test.mjs", "pluginService.integration.test.mjs", "server.test.mjs", "sourceApp.integration.test.mjs", "helpers", "notATest.mjs"];
 
@@ -53,6 +53,22 @@ test("the serial run is one `--test-concurrency=1` invocation after the parallel
   runs.length = 0;
   runServerTests([], { execute: /** @type {any} */ (execute), env: {} });
   assert.equal(runs.length, 1);
+});
+
+test("both runs cancel a test that never ends and let its file exit, with a bound an operator can change", () => {
+  /** @type {string[][]} */
+  const runs = [];
+  const execute = (/** @type {string} */ _bin, /** @type {string[]} */ args) => { runs.push(args); return { status: 0 }; };
+  runServerTests([], { execute: /** @type {any} */ (execute), env: { OPEN_SCIENCE_TEST_POSTGRES_URL: "postgresql://postgres@127.0.0.1/evimed_test_product" } });
+  assert.equal(runs.length, 2);
+  for (const args of runs) {
+    assert.ok(args.includes(`--test-timeout=${DEFAULT_TEST_TIMEOUT_MS}`), "a default bound per test");
+    assert.ok(args.includes("--test-force-exit"), "a file whose event loop stays busy still ends");
+  }
+  assert.deepEqual(hangGuardFlags({ OPEN_SCIENCE_TEST_TIMEOUT_MS: "45000" }), ["--test-timeout=45000", "--test-force-exit"]);
+  for (const unusable of ["0", "-5", "soon", "1.5", ""]) {
+    assert.deepEqual(hangGuardFlags({ OPEN_SCIENCE_TEST_TIMEOUT_MS: unusable }), [`--test-timeout=${DEFAULT_TEST_TIMEOUT_MS}`, "--test-force-exit"], `"${unusable}" is not a bound`);
+  }
 });
 
 test("a failing run is the exit status, whichever of the two it was", () => {

@@ -54,6 +54,11 @@ export const repairableEvidencePackageErrorCodes = new Set([
 // skill already instructs the agent to record in failedSources and work around.
 export const recoverableEvidenceSourceErrorCodes = new Set([
   ...Object.keys(RESULT_WORKBENCH_ERROR_MESSAGES),
+  // The data-semantics checks name why a table could not be checked; the check is
+  // reported as not run and every other check, and the analysis, go on.
+  "file_unreadable",
+  "file_too_large",
+  "format_unsupported",
   "tooluniverse_upstream_unavailable",
   "tooluniverse_unavailable",
   "tooluniverse_busy",
@@ -1458,6 +1463,12 @@ export function turnEndErrorCode(kind, wireCode) {
  * code is visibly untranslated rather than invisibly generic.
  */
 export const ERROR_CODE_MESSAGES = Object.freeze({
+  // Why a data-semantics check could not read a table. The check is reported as
+  // not run; the other checks and the analysis go on.
+  file_unreadable: '这个数据文件没能读取，对应的数据检查未执行；其他检查和分析不受影响。',
+  file_too_large: '这个数据文件超过了可检查的大小或行数，对应的数据检查未执行；可以先导出一个较小的表再检查。',
+  format_unsupported: '这种文件格式暂时无法做数据检查；可以另存为 CSV 或 Excel 后再检查。',
+
   managed_browser_invalid: '网址或操作无效，请检查后重试。',
   managed_browser_not_found: '浏览会话已结束，请重新打开。',
   managed_browser_sequence_conflict: '页面状态已更新，请刷新后再操作。',

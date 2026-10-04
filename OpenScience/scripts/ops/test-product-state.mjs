@@ -32,6 +32,7 @@ const testRoot = new URL("../../apps/server/test/", import.meta.url);
 export const ENGINE_BACKED_INTEGRATION_TESTS = Object.freeze([
   "vcrEngineContract.integration.test.mjs",
   "vcrIntake.integration.test.mjs",
+  "vcrKnowledgeEngine.integration.test.mjs",
   "resultReplayLifecycle.integration.test.mjs",
 ]);
 

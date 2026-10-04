@@ -17,6 +17,15 @@
  * `--test-concurrency=1`, one file at a time against the database. Everything
  * after `pnpm test:server --` (a name pattern, a reporter) reaches both runs.
  *
+ * A test that never ends must fail by name, in minutes. On 2026-10-04 a release
+ * candidate's job ran out its whole 75 minutes on one test: it froze `Date.now`
+ * and reached a wait loop that only the clock ends. `node --test` has no
+ * default timeout, and a file whose event loop stays busy never exits even
+ * after its test is cancelled. So both runs carry `--test-timeout` (per test,
+ * `OPEN_SCIENCE_TEST_TIMEOUT_MS`, five minutes unless set; a test's own
+ * `timeout` option still wins, so the engine-backed ones keep theirs) and
+ * `--test-force-exit` (a file ends when its tests have, whatever is left open).
+ *
  * @module runServerTests
  */
 import { readdirSync } from "node:fs";
@@ -24,6 +33,20 @@ import { spawnSync } from "node:child_process";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 const testDirectory = new URL("../../apps/server/test/", import.meta.url);
+
+/** How long one test may run before it is cancelled and reported by name. */
+export const DEFAULT_TEST_TIMEOUT_MS = 300_000;
+
+/**
+ * The flags that keep a hung test from holding the run.
+ * @param {Record<string, string | undefined>} env
+ * @returns {string[]}
+ */
+export function hangGuardFlags(env) {
+  const configured = Number(env.OPEN_SCIENCE_TEST_TIMEOUT_MS);
+  const timeoutMs = Number.isInteger(configured) && configured > 0 ? configured : DEFAULT_TEST_TIMEOUT_MS;
+  return [`--test-timeout=${timeoutMs}`, "--test-force-exit"];
+}
 
 /**
  * Split the server's test files into the parallel run and the serial one.
@@ -44,7 +67,7 @@ export function runServerTests(args = [], { execute = spawnSync, env = process.e
   const guard = fileURLToPath(new URL("./localhostProbeGuard.mjs", import.meta.url));
   const cwd = fileURLToPath(new URL("../../apps/server/", import.meta.url));
   /** @param {readonly string[]} flags @param {readonly string[]} names */
-  const run = (flags, names) => execute(process.execPath, ["--import", guard, "--test", ...flags, ...args, ...names.map((name) => `test/${name}`)], { stdio: "inherit", cwd, env }).status ?? 1;
+  const run = (flags, names) => execute(process.execPath, ["--import", guard, "--test", ...hangGuardFlags(env), ...flags, ...args, ...names.map((name) => `test/${name}`)], { stdio: "inherit", cwd, env }).status ?? 1;
   const statuses = [run([], parallel)];
   if (serial.length) statuses.push(run(["--test-concurrency=1"], serial));
   return statuses.find((status) => status !== 0) ?? 0;
