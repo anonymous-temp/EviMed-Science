@@ -6,8 +6,13 @@ import { useProjectStore } from "@/lib/projects";
 import { AutopilotPage } from "./AutopilotPage";
 
 const identity = vi.hoisted(() => ({ projectId: "project-one" }));
-const mocks = vi.hoisted(() => ({ listAgendas: vi.fn(), getAgenda: vi.fn(), createAgenda: vi.fn(), updateAgenda: vi.fn(), archiveAgenda: vi.fn(), startAgenda: vi.fn(), stopAgenda: vi.fn(), runAgendaNow: vi.fn(), followUpAgenda: vi.fn(), listEpisodes: vi.fn(), getDigest: vi.fn(), markDigestOpened: vi.fn() }));
+const mocks = vi.hoisted(() => ({ listAgendas: vi.fn(), getAgenda: vi.fn(), createAgenda: vi.fn(), updateAgenda: vi.fn(), archiveAgenda: vi.fn(), startAgenda: vi.fn(), stopAgenda: vi.fn(), runAgendaNow: vi.fn(), followUpAgenda: vi.fn(), listEpisodes: vi.fn(), getDigest: vi.fn(), markDigestOpened: vi.fn(),
+  getResearchState: vi.fn(), addAgendaMaterials: vi.fn(), removeAgendaMaterial: vi.fn() }));
+const files = vi.hoisted(() => ({ pickFiles: vi.fn(), uploadFilesToWorkspace: vi.fn(), sha256Hex: vi.fn(), listSources: vi.fn() }));
 vi.mock("@/lib/autopilotClient", () => mocks);
+vi.mock("@/lib/backend", async (original) => ({ ...(await original<object>()), pickFiles: files.pickFiles, uploadFilesToWorkspace: files.uploadFilesToWorkspace }));
+vi.mock("@/lib/fileDigest", () => ({ sha256Hex: files.sha256Hex }));
+vi.mock("@/lib/sourceClient", async (original) => ({ ...(await original<object>()), listSources: files.listSources }));
 vi.mock("@/lib/apiClient", async (original) => ({ ...(await original<object>()), getWebProjectId: () => identity.projectId }));
 const agenda = { id: "agenda-one", projectId: "project-one", revision: 2, createdAt: "2026-09-28T00:00:00Z", payload: {
   title: "心衰证据追踪", prompt: "完整跟进心衰与肾病\n保留原始指令", topics: ["heart failure"], taskTypes: ["evidence-update"],
@@ -17,6 +22,10 @@ const agenda = { id: "agenda-one", projectId: "project-one", revision: 2, create
 } };
 const episode = { id: "ep-one", projectId: "project-one", revision: 1, payload: { agendaId: agenda.id, taskType: "evidence-update", date: "2026-09-29", status: "merged", runId: "run-one", sessionId: "ses-one", digestId: "digest-one", createdAt: "2026-09-29T00:00:00Z", updatedAt: "2026-09-29T01:00:00Z", trigger: "scheduled", instruction: "Previous frozen instruction", claims: [{ id: "c1", statement: "已有研究结果" }] } };
 const digest = { id: "digest-one", projectId: "project-one", payload: { episodeIds: ["ep-one"] } };
+/** The researcher's reading of the question, as the server projects it. */
+const state = (extra: Record<string, unknown>) => ({ agendaId: "agenda-one", asOf: "2026-10-04T00:00:00Z", truncated: false, found: [], unresolved: [], materials: [], ...extra });
+const planned = (kind: "answered" | "needs_input" | "paused_by_researcher", reason: string) => ({ ...agenda, payload: { ...agenda.payload, enabled: false, status: "paused", scheduleState: "paused", nextRunAt: null,
+  pauseReason: reason, plannerStop: { kind, reason, at: "2026-10-01T00:00:00Z" } } });
 function Location() { const loc = useLocation(); return <p data-testid="location">{loc.pathname}{loc.search}</p>; }
 function render(path = "/app/autopilot?task=agenda-one") { return renderView(<MemoryRouter initialEntries={[path]}><Routes>
   <Route path="/app/autopilot" element={<><AutopilotPage /><Location /></>} />
@@ -33,6 +42,9 @@ describe("scheduled tasks", () => {
     mocks.archiveAgenda.mockResolvedValue(agenda); mocks.runAgendaNow.mockResolvedValue({ episode: { ...episode, id: "manual-one", payload: { ...episode.payload, status: "queued" } } });
     mocks.followUpAgenda.mockResolvedValue({ episode: { ...episode, id: "follow-one", payload: { ...episode.payload, status: "queued", trigger: "follow-up", followUpNote: "补充肾病亚组" } } });
     mocks.getDigest.mockResolvedValue(digest); mocks.markDigestOpened.mockResolvedValue(digest);
+    Object.values(files).forEach(fn => fn.mockReset());
+    mocks.getResearchState.mockResolvedValue(state({})); mocks.addAgendaMaterials.mockResolvedValue(agenda); mocks.removeAgendaMaterial.mockResolvedValue(agenda);
+    files.listSources.mockResolvedValue({ items: [], nextCursor: null });
   });
   it("shows the server schedule and full instruction in a selectable split view", async () => {
     render(); const panel = await detail();
@@ -279,4 +291,118 @@ describe("scheduled tasks", () => {
     expect(historyReads).toBeGreaterThan(1); expect(screen.queryByText("排队中")).not.toBeInTheDocument(); expect(screen.getByText("研究结果")).toBeInTheDocument();
   });
 
+
+  // ——— Question and material to observable research to supplement (plan §11.3 N11) ———
+  it("shows what was found, what is unresolved and the material added, from the server's reading of the question", async () => {
+    mocks.getResearchState.mockResolvedValue(state({
+      found: [{ statement: "获益在亚组中一致", check: "stands", sources: 2, date: "2026-09-28" }, { statement: "死亡率下降 30%", check: "refuted", sources: 2, date: "2026-09-27" }, { statement: "已重算的结论", check: "reproduced", sources: 1, date: "2026-09-27" }],
+      unresolved: [{ kind: "question", text: "亚组 B 的结果呢？" }, { kind: "not_run", date: "2026-09-29" }, { kind: "unchecked", text: "无酮症酸中毒增加" }, { kind: "check_unavailable", text: "住院减少" }, { kind: "weakened", text: "HFpEF 获益更大" }],
+      materials: [{ sourceId: "src_a", name: "年龄分布.xlsx", addedAt: "2026-10-04T01:00:00Z", state: "ready" }, { sourceId: "src_b", name: "scan.pdf", addedAt: "2026-10-04T01:01:00Z", state: "reading" }] }));
+    render(); const panel = await detail();
+    const found = await within(panel).findByRole("region", { name: "已发现" });
+    expect(found).toHaveTextContent("独立复核后仍成立：获益在亚组中一致"); expect(found).toHaveTextContent("已被推翻：死亡率下降 30%"); expect(found).toHaveTextContent("已复现：已重算的结论");
+    const open = within(panel).getByRole("region", { name: "尚未解决" });
+    expect(open).toHaveTextContent("你的问题：亚组 B 的结果呢？"); expect(open).toHaveTextContent("最近一次研究没有完成，结果未知。");
+    expect(open).toHaveTextContent("尚未独立复核：无酮症酸中毒增加"); expect(open).toHaveTextContent("复核未能进行：住院减少"); expect(open).toHaveTextContent("被复核削弱：HFpEF 获益更大");
+    const material = within(panel).getByRole("region", { name: "补充材料" });
+    expect(material).toHaveTextContent("年龄分布.xlsx"); expect(material).toHaveTextContent("scan.pdf"); expect(material).toHaveTextContent("正在读取");
+    expect(mocks.getResearchState).toHaveBeenCalledWith(agenda.id);
+    expect(panel).not.toHaveTextContent("运行记录");
+  });
+  it("shows no findings section for a question that has found nothing, and still offers to add material", async () => {
+    render(); const panel = await detail();
+    await within(panel).findByRole("region", { name: "补充材料" });
+    expect(within(panel).queryByRole("region", { name: "已发现" })).not.toBeInTheDocument(); expect(within(panel).queryByRole("region", { name: "尚未解决" })).not.toBeInTheDocument();
+    expect(within(panel).getByRole("button", { name: "添加材料" })).toBeEnabled();
+  });
+  it("offers a retry when the question's progress cannot be read, and the rest of the task still shows", async () => {
+    mocks.getResearchState.mockRejectedValueOnce(new Error("offline")); render(); const panel = await detail();
+    expect(await within(panel).findByText(/研究进展暂不可用/)).toBeInTheDocument(); expect(panel).toHaveTextContent("已有研究结果");
+    await userEvent.click(within(panel).getByRole("button", { name: /重试/ }));
+    expect(await within(panel).findByRole("region", { name: "补充材料" })).toBeInTheDocument();
+  });
+  it("adds an upload as material by the digest of what was uploaded: through the knowledge base, never a plan to approve", async () => {
+    const file = new File(["age,n"], "年龄分布.csv", { type: "text/csv" });
+    files.pickFiles.mockResolvedValue([file]); files.uploadFilesToWorkspace.mockResolvedValue(["knowledge-base/年龄分布.csv"]); files.sha256Hex.mockResolvedValue("a".repeat(64));
+    mocks.addAgendaMaterials.mockResolvedValue({ ...agenda, revision: 3, payload: { ...agenda.payload, materials: [{ sourceId: "src_a", addedAt: "2026-10-04T01:00:00Z" }] } });
+    render(); const panel = await detail();
+    await userEvent.click(await within(panel).findByRole("button", { name: "添加材料" }));
+    await waitFor(() => expect(mocks.addAgendaMaterials).toHaveBeenCalledWith(agenda.id, { sha256: ["a".repeat(64)] }));
+    expect(files.uploadFilesToWorkspace).toHaveBeenCalledWith([file], "knowledge-base", "base");
+    expect(mocks.startAgenda).not.toHaveBeenCalled(); expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    await waitFor(() => expect(mocks.getResearchState.mock.calls.length).toBeGreaterThan(1));
+  });
+  it("says a format the knowledge base cannot read is not added, and adds nothing", async () => {
+    files.pickFiles.mockResolvedValue([new File(["x"], "talk.mp4", { type: "video/mp4" })]);
+    render(); const panel = await detail(); await userEvent.click(await within(panel).findByRole("button", { name: "添加材料" }));
+    expect(await within(panel).findByRole("alert")).toHaveTextContent("没有添加：talk.mp4");
+    expect(files.uploadFilesToWorkspace).not.toHaveBeenCalled(); expect(mocks.addAgendaMaterials).not.toHaveBeenCalled();
+  });
+  it("continues a task that stopped for material when the material is added, without choosing anything again", async () => {
+    const waiting = planned("needs_input", "请补充受试者年龄分布");
+    mocks.listAgendas.mockResolvedValue({ items: [waiting] }); mocks.getAgenda.mockResolvedValue(waiting);
+    files.pickFiles.mockResolvedValue([new File(["age,n"], "年龄分布.csv", { type: "text/csv" })]); files.uploadFilesToWorkspace.mockResolvedValue(["knowledge-base/年龄分布.csv"]); files.sha256Hex.mockResolvedValue("b".repeat(64));
+    mocks.addAgendaMaterials.mockResolvedValue({ ...waiting, revision: 3 }); mocks.startAgenda.mockResolvedValue({ ...agenda, revision: 4 });
+    render(); const panel = await detail(); expect(panel).toHaveTextContent("需要你补充：请补充受试者年龄分布");
+    await userEvent.click(await within(panel).findByRole("button", { name: "补充材料并继续" }));
+    await waitFor(() => expect(mocks.startAgenda).toHaveBeenCalledWith(agenda.id, 3));
+    expect(mocks.addAgendaMaterials.mock.invocationCallOrder[0]).toBeLessThan(mocks.startAgenda.mock.invocationCallOrder[0]);
+  });
+  it("adds documents already in the knowledge base, and offers only those not yet added", async () => {
+    files.listSources.mockResolvedValue({ items: [
+      { id: "src_a", projectId: "project-one", revision: 1, payload: { paths: ["knowledge-base/已添加.pdf"], status: "complete" } },
+      { id: "src_b", projectId: "project-one", revision: 1, payload: { paths: ["knowledge-base/新的.pdf"], status: "complete" } }], nextCursor: null });
+    const withMaterial = { ...agenda, payload: { ...agenda.payload, materials: [{ sourceId: "src_a", addedAt: "2026-10-04T01:00:00Z" }] } };
+    mocks.listAgendas.mockResolvedValue({ items: [withMaterial] });
+    render(); const panel = await detail(); await userEvent.click(await within(panel).findByRole("button", { name: "从知识库选择" }));
+    const dialog = await screen.findByRole("dialog", { name: "从知识库添加资料" });
+    expect(files.listSources).toHaveBeenCalledWith("project-one", { state: "ready" });
+    expect(await within(dialog).findByText("新的.pdf")).toBeInTheDocument(); expect(within(dialog).queryByText("已添加.pdf")).not.toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "添加到这个任务" })).toBeDisabled();
+    await userEvent.click(within(dialog).getByRole("checkbox")); await userEvent.click(within(dialog).getByRole("button", { name: "添加到这个任务" }));
+    await waitFor(() => expect(mocks.addAgendaMaterials).toHaveBeenCalledWith(agenda.id, { sourceIds: ["src_b"] }));
+    expect(screen.queryByRole("dialog", { name: "从知识库添加资料" })).not.toBeInTheDocument();
+  });
+  it("takes a document out of the question's material without touching the knowledge base", async () => {
+    mocks.getResearchState.mockResolvedValue(state({ materials: [{ sourceId: "src_a", name: "年龄分布.xlsx", addedAt: "2026-10-04T01:00:00Z", state: "ready" }] }));
+    render(); const panel = await detail(); await userEvent.click(await within(panel).findByRole("button", { name: "移除 年龄分布.xlsx" }));
+    await waitFor(() => expect(mocks.removeAgendaMaterial).toHaveBeenCalledWith(agenda.id, "src_a"));
+    expect(mocks.startAgenda).not.toHaveBeenCalled();
+  });
+  it("lets the researcher reply to a task the planner paused, and the reply continues it", async () => {
+    const answered = planned("answered", "问题已经回答");
+    mocks.listAgendas.mockResolvedValue({ items: [answered] }); mocks.startAgenda.mockResolvedValue({ ...agenda, revision: 3 });
+    render(); const panel = await detail(); const box = within(panel).getByLabelText("针对任务追问");
+    expect(box).toBeEnabled(); expect(panel).toHaveTextContent("发送后任务将继续");
+    await userEvent.type(box, "还想看看肾功能不全的亚组"); await userEvent.click(within(panel).getByRole("button", { name: "发送追问" }));
+    await waitFor(() => expect(mocks.followUpAgenda).toHaveBeenCalledWith(agenda.id, expect.objectContaining({ note: "还想看看肾功能不全的亚组" })));
+    expect(mocks.startAgenda).toHaveBeenCalledWith(agenda.id, 2);
+    expect(mocks.startAgenda.mock.invocationCallOrder[0]).toBeLessThan(mocks.followUpAgenda.mock.invocationCallOrder[0]);
+  });
+  it("retries a reply from the restarted task, not from the stale one", async () => {
+    mocks.listAgendas.mockResolvedValue({ items: [planned("answered", "问题已经回答")] }); mocks.startAgenda.mockResolvedValue({ ...agenda, revision: 3 });
+    mocks.followUpAgenda.mockRejectedValueOnce(new Error("offline"));
+    render(); const panel = await detail(); await userEvent.type(within(panel).getByLabelText("针对任务追问"), "继续");
+    await userEvent.click(within(panel).getByRole("button", { name: "发送追问" })); await userEvent.click(await screen.findByRole("button", { name: "重试操作" }));
+    await waitFor(() => expect(mocks.followUpAgenda).toHaveBeenCalledTimes(2));
+    expect(mocks.startAgenda).toHaveBeenCalledTimes(1);
+    expect(mocks.followUpAgenda.mock.calls[0]).toEqual(mocks.followUpAgenda.mock.calls[1]);
+  });
+  it("does not offer a reply to a task the researcher stopped or one that nothing paused for a reason of its own", async () => {
+    mocks.listAgendas.mockResolvedValue({ items: [{ ...agenda, payload: { ...agenda.payload, enabled: false, status: "stopped", scheduleState: "paused", plannerStop: null } }] });
+    render(); const panel = await detail(); expect(within(panel).getByLabelText("针对任务追问")).toBeDisabled(); expect(panel).toHaveTextContent("请先启用任务");
+  });
+  it("answers a message that asked to hold the research by showing the pause, not an episode", async () => {
+    const paused = planned("paused_by_researcher", "你要求先暂停，等你说继续再往下做");
+    mocks.followUpAgenda.mockResolvedValue({ episode: null, job: null, stopped: { kind: "paused_by_researcher" } });
+    mocks.listAgendas.mockResolvedValueOnce({ items: [agenda] }).mockResolvedValue({ items: [{ ...paused, payload: { ...paused.payload, messages: [{ requestId: "r1", note: "先停一下，我要核对数据来源", runEpisodeId: null, outcome: "paused", at: "2026-10-04T01:00:00Z" }] } }] });
+    render(); const panel = await detail(); await userEvent.type(within(panel).getByLabelText("针对任务追问"), "先停一下，我要核对数据来源");
+    await userEvent.click(within(panel).getByRole("button", { name: "发送追问" }));
+    expect(await within(panel).findByText("已按你的要求暂停")).toBeInTheDocument();
+    expect(panel).toHaveTextContent("已暂停：你要求先暂停，等你说继续再往下做"); expect(within(panel).getByText("先停一下，我要核对数据来源")).toBeInTheDocument();
+    expect(within(panel).getByLabelText("针对任务追问")).toHaveValue(""); expect(within(panel).queryByRole("alert")).not.toBeInTheDocument();
+  });
+  it("tells the researcher in the box what it takes: a question, a correction or a pause", async () => {
+    render(); const panel = await detail(); expect(within(panel).getByLabelText("针对任务追问")).toHaveAttribute("placeholder", "提问、更正上面的结论，或说明需要暂停…");
+  });
 });
