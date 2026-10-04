@@ -637,6 +637,11 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   "vcr_number_unbound",
   "vcr_number_unparsed",
   "vcr_interval_unnamed",
+  // A model card or an assessment record the run wrote is stored as it stands and says what it has not said; a section the
+  // platform writes itself is refused by name: the run fills what it was told is its own.
+  "vcr_model_card_incomplete",
+  "vcr_model_assessment_incomplete",
+  "vcr_report_section_invalid",
   // Malformed calls into the specialist workers and the science connectors:
   // a bad action, an id that is not one, a path outside the workspace, an
   // argument the schema rejects. The run rewrites the call.
@@ -1165,6 +1170,9 @@ export const VCR_WRITE_ISSUE_CODES = Object.freeze([
   'vcr_number_unbound',
   'vcr_number_unparsed',
   'vcr_interval_unnamed',
+  'vcr_model_card_incomplete',
+  'vcr_model_assessment_incomplete',
+  'vcr_report_section_invalid',
 ])
 
 /**
@@ -1199,7 +1207,7 @@ export const VCR_MODULE_ERROR_CODES = Object.freeze([
   // jobs, derived tables and the orchestrator's step notes
   'vcr_derived_table_missing', 'vcr_derived_table_unsupported', 'vcr_engine_table_invalid', 'vcr_job_attempts_exhausted',
   'vcr_object_unknown', 'vcr_scenario_endpoint_missing', 'vcr_scenario_grid_empty', 'vcr_scenario_unknown_fields',
-  'vcr_model_not_applicable', 'vcr_model_not_found',
+  'vcr_model_not_applicable', 'vcr_model_not_found', 'vcr_model_interface_not_hosted',
   // members and access to data
   'vcr_member_role_unknown',
   'vcr_member_user_required',
@@ -1536,6 +1544,9 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_number_unbound: '报告里引用的结果字段不存在；核对字段名。',
   vcr_number_unparsed: '报告里有读不成数字引用的 {{n:…}}；写成 {{n:路径|格式}}，格式用小写。',
   vcr_interval_unnamed: '区间没有写明是哪一种（置信、可信、预测或蒙特卡洛），补上再写。',
+  vcr_model_card_incomplete: '这张模型卡缺少它所用接口要求的内容；模型已保存，适用性检查会逐项说明缺什么，补齐后再写一个版本。',
+  vcr_model_assessment_incomplete: '这条模型评估记录还有没填的项（关注的问题、使用情境、评级及理由、技术标准等）；已保存，文件里会写「未填写」，补上后再写一个版本。',
+  vcr_report_section_invalid: '这份文件的文字只写规定的几节，表格与登记项由平台写；这次提交的文字没有保存，换成允许的节再写。',
   // The trial registry channel.
   registry_not_configured: '这个试验登记库没有可用的凭据，登记信息取不到；可以在「设置 → 数据源」添加 EviMed 证据库的凭据。报告会写「不可得」，不会编造。',
   registry_not_found: '登记库里没有这条记录；报告会写「不可得」，不会编造。',
@@ -1676,6 +1687,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_scenario_grid_empty: '方案网格里没有可比较的设计或真值。',
   vcr_scenario_unknown_fields: '情景里有这项计算不读取的字段，已拒绝。',
   vcr_model_not_applicable: '这个模型的适用范围没有覆盖当前研究（终点、变量或取值范围不符）；未排队计算，换一个适用的模型或补齐条件。',
+  vcr_model_interface_not_hosted: '这个模型用的调用接口，本部署还没有接入能执行它的模型包；这一步不用替代模型，其他研究继续。',
   constraint_unsatisfiable: '人群的约束条件在重抽 200 轮后仍无法同时满足；放宽或改写约束。',
   cpu_budget_exhausted: '这项计算用完了它的计算时间上限；已完成的部分作为有限结果保留。',
   grid_cell_failed: '方案网格里有一个格子没有算出来；其余格子照常给出。',

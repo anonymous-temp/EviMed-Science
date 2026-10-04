@@ -3,6 +3,7 @@ import { DOCUMENT_EXPORT_FORMATS, documentExportDigest, VCR_EXPORT_KIND_LABELS_Z
 import { HttpError } from './security.mjs';
 import { exportHash, freezeDocumentAssets } from './documentExport.mjs';
 import { renderVcrNumbers, vcrReportReviewRevision } from './vcrRender.mjs';
+import { renderModelDocument } from './vcrModelDocuments.mjs';
 import { readVcrReviewExportProof } from './vcrReview.mjs';
 import { studyReviewDigest } from './studyReview.mjs';
 import { randomUUID } from 'node:crypto';
@@ -40,7 +41,11 @@ export function canonicalVcrDocument(study, row) {
     reviewLines.length ? reviewLines.join('\n') : '尚未完成复核。',
     ...((model.stale ?? []).map(mark => `- ${mark.node}: ${mark.reason}`)),
     seal.required ? `分析计划冻结：${seal.planFrozenAt ?? '未记录'}；首次读取结局：${seal.outcomeFirstReadAt ?? '未记录'}。` : '结局封存：不适用。', ''];
-  const sections = reports.map(report => `${report.section === 'main' ? '' : `## ${report.section}\n\n`}${renderVcrNumbers(report.template, model).text}`);
+  // The two model documents are the platform's structure with a run's words in it: the same report write fills the prose
+  // of each section, and the tables, the registers and every number come from the frozen report model.
+  const modelDocument = renderModelDocument(row.kind, model, reports);
+  const sections = modelDocument ? [modelDocument.markdown]
+    : reports.map(report => `${report.section === 'main' ? '' : `## ${report.section}\n\n`}${renderVcrNumbers(report.template, model).text}`);
   const canonicalMarkdown = [...header, ...sections].join('\n\n');
   return { title, canonicalMarkdown, cover: { exportKind: row.kind, reviews: reviewRecords, stale: model.stale ?? [], seal: model.seal ?? null, intendedUse: model.intendedUse ?? model.study.intendedUse ?? study.intendedUse }, assets: [],
     revision: exportHash(documentExportDigest({ reports, model, ...(refreshed ? { reviewRecords } : {}) })) };

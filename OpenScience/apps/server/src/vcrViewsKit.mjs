@@ -670,3 +670,25 @@ export function presentVcrReview(review) {
     findings: findings.map(finding => ({ id: finding.id, kind: finding.kind, location: finding.location, evidence: finding.evidence,
       message: finding.message, fix: finding.fix, response: finding.response ?? null })) };
 }
+
+/** The evidence items a model card lists, in Chinese. */
+const EVIDENCE_LABELS = Object.freeze(/** @type {Record<string, string>} */ ({
+  code_verification: "代码核对", seed_reproducible: "种子可复现", input_traceable: "输入可追溯", sensitivity_analysis: "敏感性分析",
+  external_validation: "外部验证", model_locked: "模型已锁定", model_analysis_plan: "模型分析计划", prospective_validation: "前瞻验证",
+  independent_review: "独立评审", regulatory_contact: "监管沟通", individual_conditioned: "以个体为条件",
+  updates_with_new_data: "随新数据更新", calibrated_uncertainty: "不确定性已校准", validation_record: "验证记录",
+}));
+/** @param {string} key */
+export const evidenceLabel = (key) => EVIDENCE_LABELS[key] ?? key;
+
+/** The model-card validation rows a card may carry, in Chinese. */
+export const VALIDATION_LABELS = Object.freeze(/** @type {Record<string, string>} */ ({
+  codeVerification: "代码核对", seedReproducible: "种子可复现", calibrationSlope: "校准斜率", ici: "综合校准指数",
+  predictionIntervalCoverage: "预测区间覆盖率", crps: "CRPS", subgroups: "亚组表现", temporal: "时间外验证", drift: "漂移监测",
+  external: "外部验证", internal: "内部验证",
+}));
+/** What kind of model a card says it is, in Chinese. */
+export const MODEL_TYPE_LABELS = Object.freeze(/** @type {Record<string, string>} */ ({
+  mathematical_simulation: "数学仿真", fitted_prediction_model: "拟合预测", generative: "生成模型", mechanistic: "机制模型",
+}));
+

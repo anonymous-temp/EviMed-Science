@@ -37,9 +37,9 @@
 import { VCR_PRIVATE_MATCHING_PROVENANCE_KEYS } from './vcrMatching.mjs';
 import { loadMethodValidation, validatedMethods } from './vcrMethodValidation.mjs';
 import {
-  VCR_COMPARATOR_ROUTES, VCR_COUNT_KEYS, VCR_DATA_TIERS, VCR_DATA_TIER_LABELS_ZH, VCR_ENGINE_METHODS, VCR_MIN_CELL_SIZE, VCR_ROUTE_MIN_TIER,
-  VCR_SCENARIO_SCHEMAS, VCR_STEPS, VCR_STEP_CAPABILITIES, VCR_TABS, reviewStateFor, roleAllows, suppressForModel, twinLabel, vcrTierIsSupported,
-  vcrTierNeedsSupport, vcrTierOffer, whenHolds,
+  VCR_COMPARATOR_ROUTES, VCR_COUNT_KEYS, VCR_DATA_TIERS, VCR_DATA_TIER_LABELS_ZH, VCR_ENGINE_METHODS, VCR_MIN_CELL_SIZE, VCR_MODEL_INTERFACES, VCR_ROUTE_MIN_TIER,
+  VCR_SCENARIO_SCHEMAS, VCR_STEPS, VCR_STEP_CAPABILITIES, VCR_TABS, reviewStateFor, roleAllows, suppressForModel, twinLabel, vcrAssessmentIssues,
+  vcrModelCardIssues, vcrModelInterfaceOf, vcrTierIsSupported, vcrTierNeedsSupport, vcrTierOffer, whenHolds,
 } from "@evimed/domain";
 
 import { HttpError } from "./security.mjs";
@@ -55,6 +55,7 @@ import {
 } from "./vcrViewsTabs.mjs";
 import { numeric, withReviewState } from "./vcrViewsKit.mjs";
 import { vcrReportModel } from "./vcrRender.mjs";
+import { buildModelAnalysis, isModelDocumentKind, readModelAnalysisInputs } from "./vcrModelDocuments.mjs";
 
 export { VCR_DEFAULT_STUDY_NAME };
 
@@ -65,7 +66,7 @@ export const VCR_READ_MAX_ITEMS = 50;
 export const VCR_READ_WHATS = Object.freeze([
   "study", "definition", "criteria", "assumptions", "evidence", "population", "patients", "comparator", "trial",
   "precedents", "matching", "subject_document", "results", "report_model", "snapshot_profile", "models", "jobs",
-  "trial_registry_record",
+  "trial_registry_record", "model_assessments",
 ]);
 
 /**
@@ -121,7 +122,7 @@ export const VCR_PUBLISHED_FIGURE_READS = Object.freeze(["evidence", "precedents
 export const VCR_WRITE_WHATS = Object.freeze([
   "definition", "protocol", "criteria", "assumption", "evidence_item", "precedent", "population", "patient_set",
   "comparator", "trial_scenario", "design_grid", "decision", "report", "model", "forecast", "step", "plan",
-  "fact", "language_judgment", "site", "followup", "field_map",
+  "fact", "language_judgment", "site", "followup", "field_map", "model_assessment",
 ]);
 
 /** @param {unknown} value */
@@ -764,7 +765,13 @@ export class VcrService {
     const study = await this.requireStudy(user, id);
     const row = await this.store.exportRow(study.id, exportId);
     if (!row) throw failure(404, "vcr_export_not_found", "Export not found.");
-    return presentExport(row, await this.#bundle(study, user, "overview"));
+    const bundle = await this.#bundle(study, user, "overview");
+    // The page compares a model document with the records as they stand, so it reads the same inputs the document was built from.
+    if (isModelDocumentKind(row.kind)) {
+      bundle.modelAnalysis = buildModelAnalysis({ inputs: await readModelAnalysisInputs(this.store, study), results: bundle.results,
+        versions: await this.store.modelPlanVersions(study.id) });
+    }
+    return presentExport(row, bundle);
   }
 
   /**
@@ -1009,18 +1016,24 @@ export class VcrService {
   async adoptModel(user, input) {
     const study = input.studyId ? await this.requireStudy(user, String(input.studyId)) : null;
     const sources = list(input.sources).map((source) => String(object(source).label ?? source));
+    // The call shape a card declares is one of the two plan §5.2 names (a card that says nothing is the first). A model of the second
+    // shape is taken in with the card it arrives with; what that card has not said is returned as notices, never as a refusal, and
+    // the applicability check then declines to answer for it field by field (`vcrModelCardIssues`).
+    const shape = vcrModelInterfaceOf({ card: object(input.card) });
+    if (shape === null) throw failure(400, "vcr_model_invalid", `card.interfaceShape is one of: ${VCR_MODEL_INTERFACES.join(", ")}.`);
+    const card = { ...object(input.card), type: shape === "event_history_to_trajectories" ? "generative" : "fitted_prediction_model",
+      provider: study ? `研究 ${study.name}` : "虚拟临研" };
+    const applicability = { ...object(input.applicability), population: sources.length ? `来源试验的人群：${sources.join("、")}` : "来源试验的人群", sources };
+    const validation = object(input.validation);
     const saved = await this.store.saveModel({
       userId: String(user.id), studyId: study?.id ?? null,
       name: String(input.name), version: String(input.version ?? "1.0.0"),
       tier: "literature", risk: String(input.risk ?? "low"), endpointType: input.endpointType ?? null,
-      card: { ...object(input.card), type: "fitted_prediction_model", provider: study ? `研究 ${study.name}` : "虚拟临研" },
-      applicability: { ...object(input.applicability), population: sources.length ? `来源试验的人群：${sources.join("、")}` : "来源试验的人群", sources },
-      validation: object(input.validation),
-      evidence: list(input.evidence).map(String),
+      card, applicability, validation, evidence: list(input.evidence).map(String),
     });
     await this.store.audit({ studyId: study?.id ?? null, userId: String(user.id), actor: String(user.id),
-      action: "vcr.model.adopt", object: String(saved?.id ?? ""), detail: { name: String(input.name), tier: "literature" } });
-    return saved;
+      action: "vcr.model.adopt", object: String(saved?.id ?? ""), detail: { name: String(input.name), tier: "literature", shape } });
+    return saved ? { ...saved, issues: vcrModelCardIssues({ version: String(input.version ?? "1.0.0"), card, applicability, validation }) } : saved;
   }
 
   /**
@@ -1085,13 +1098,19 @@ export class VcrService {
    * of it goes through {@link forModel}.
    * @param {any} study
    */
-  async reportModel(study) {
+  async reportModel(study, options = {}) {
     return this.store.reportSnapshot ? this.store.reportSnapshot(async (snapshot) =>
-      this.reportModelFromStore(await snapshot.studyById(study.id), snapshot)) : this.reportModelFromStore(study, this.store);
+      this.reportModelFromStore(await snapshot.studyById(study.id), snapshot, options)) : this.reportModelFromStore(study, this.store, options);
   }
 
-  /** @param {any} study @param {any} store */
-  async reportModelFromStore(study, store) {
+  /**
+   * `options.kind` is the export the model is for: the two model documents
+   * carry, in addition, the `modelAnalysis` block they are rendered from, built
+   * from the same reads the plan's freeze uses (so a deviation is a real change
+   * and never a difference in how much was read).
+   * @param {any} study @param {any} store @param {{ kind?: string | null }} [options]
+   */
+  async reportModelFromStore(study, store, options = {}) {
     if (!study) throw failure(404, "vcr_study_not_found", "Study not found.");
     const [definition, assumptions, results, reviews, stale, population, comparator, scenarios, models, populations, patientSets, comparators, grid, protocol, exports] = await Promise.all([
       store.latestDefinition(study.id), store.assumptions(study.id), store.results(study.id),
@@ -1100,8 +1119,10 @@ export class VcrService {
       store.populations(study.id, 20), store.patientSets(study.id, 20), store.comparatorDesigns(study.id, 20), store.latestDesignGrid(study.id), store.latestProtocolVersion(study.id), store.exports(study.id),
     ]);
     const current = vcrCurrentNodes({ study, assumptions, populations, patientSets, comparators, scenarios, grid, results, definition, protocol });
+    const modelAnalysis = isModelDocumentKind(String(options.kind ?? ""))
+      ? buildModelAnalysis({ inputs: await readModelAnalysisInputs(store, study), results, versions: await store.modelPlanVersions(study.id) }) : null;
     return vcrReportModel({ study, definition, assumptions, results, reviews: reviews.map(review => ({ ...review, current: vcrReviewIsCurrent(review, { results, stale, current, exports }) })), staleMarks: stale, population, comparator,
-      scenarios, models, seal: vcrSealState(study) });
+      scenarios, models, seal: vcrSealState(study), modelAnalysis });
   }
 
   /**
@@ -1183,10 +1204,17 @@ export class VcrService {
         const stale = await this.store.staleMarks(study.id);
         return { results: results.slice(0, limit).map((result) => this.#resultView(result, stale)), more: results.length > limit };
       }
-      case "report_model": return { model: await this.reportModel(study) };
+      case "report_model": return { model: await this.reportModel(study, { kind: filter.kind ? String(filter.kind) : null }) };
       case "jobs": return { jobs: await this.store.jobs(study.id, limit) };
       case "models": return { models: await this.store.models(study.userId), methods: validatedMethods(await this.store.methods(),
         await loadMethodValidation({ file: this.config.vcrMethodValidationFile, engine: this.engine })) };
+      case "model_assessments": {
+        // The records the model analysis plan is built from, each with what it has not said yet, so a run knows what to fill.
+        const assessments = await this.store.modelAssessments(study.id);
+        return { assessments: assessments.slice(0, limit).map((record) => ({ ...record, gaps: vcrAssessmentIssues(record, "planning").map((found) => found.text) })),
+          more: assessments.length > limit, plan: (await this.store.modelPlanVersions(study.id)).slice(0, 1).map((version) => ({
+            version: version.version, frozenAt: version.frozenAt, contentHash: version.contentHash })) };
+      }
       case "snapshot_profile": {
         const dataPlane = this.packages.dataPlane;
         if (!dataPlane?.runtimeProfile) {

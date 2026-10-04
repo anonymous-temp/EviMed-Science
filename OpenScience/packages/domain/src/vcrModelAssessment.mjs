@@ -204,9 +204,9 @@ export function vcrAssessmentIssues(record, stage = 'planning') {
 /**
  * One record as the rows of its assessment table, in M15's order, for the
  * stage asked about. `rating` is the low/medium/high word where the row has
- * one; `entry` is the text the row carries; `justification` is the reason.
+ * one (`rated` says whether the row is one that has); `entry` is the text the row carries; `justification` is the reason.
  * @param {Record<string, any>} record @param {'planning' | 'submission'} [stage]
- * @returns {Array<{ key: string, zh: string, en: string, m15: string, rating: string | null, entry: string, justification: string }>}
+ * @returns {Array<{ key: string, zh: string, en: string, m15: string, rated: boolean, rating: string | null, entry: string, justification: string }>}
  */
 export function vcrAssessmentRows(record, stage = 'planning') {
   const shown = normalizeVcrAssessment(record)
@@ -220,7 +220,7 @@ export function vcrAssessmentRows(record, stage = 'planning') {
       risk: [shown.riskRule ? VCR_MODEL_RISK_RULE_LABELS_ZH[/** @type {keyof typeof VCR_MODEL_RISK_RULE_LABELS_ZH} */ (shown.riskRule)] : '', shown.riskJustification].filter(Boolean).join(' '),
     })
     const justification = row.rated ? reasons[row.key] ?? '' : ''
-    return { key: row.key, zh: row.zh, en: row.en, m15: row.m15, rating, entry, justification }
+    return { key: row.key, zh: row.zh, en: row.en, m15: row.m15, rated: row.rated, rating, entry, justification }
   })
 }
 

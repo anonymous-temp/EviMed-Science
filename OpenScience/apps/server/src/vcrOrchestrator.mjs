@@ -60,19 +60,23 @@ import { createHash } from "node:crypto";
 
 import {
   VCR_DESIGN_SUPPORT, VCR_ENGINE_METHODS, VCR_EXPORT_KINDS, VCR_EXPORT_KIND_LABELS_ZH, VCR_JOB_METHODS, VCR_PATIENT_LEVEL_JOB_KINDS,
-  VCR_SCENARIO_SCHEMAS, VCR_STALE_REASONS, VCR_STEPS, VCR_STEP_CAPABILITIES, VCR_STEP_NEEDS, VCR_STEP_PRODUCTS, allowanceWaitingNote, lineageNode, parseLineageNode,
-  recomputePlan, stepWaitingFor, whenHolds,
+  VCR_HOSTED_MODEL_INTERFACES, VCR_MODEL_DOCUMENT_KINDS, VCR_MODEL_DOCUMENT_SECTIONS, VCR_MODEL_DOCUMENT_SECTION_LABELS_ZH,
+  VCR_MODEL_INTERFACE_LABELS_ZH, VCR_SCENARIO_SCHEMAS, VCR_STALE_REASONS, VCR_STEPS, VCR_STEP_CAPABILITIES, VCR_STEP_NEEDS, VCR_STEP_PRODUCTS,
+  allowanceWaitingNote, lineageNode, parseLineageNode, recomputePlan, stepWaitingFor, vcrModelInterfaceOf, whenHolds,
 } from "@evimed/domain";
 
 import { HttpError, randomId } from "./security.mjs";
 import { readVcrReviewExportProof } from "./vcrReview.mjs";
 import { studyReviewDigest } from "./studyReview.mjs";
+import { vcrModelApplicabilityIssues, vcrPopulationVariables } from "./vcrModelApplicability.mjs";
 import { VCR_SCHEMA } from "./vcrPersistence.mjs";
 import { vcrSealRequired } from "./vcrSeal.mjs";
 import { vcrRouteOptions } from "./vcrService.mjs";
 import { vcrObjectNode } from "./vcrStore.mjs";
 import { vcrCurrentNodes, vcrReviewIsCurrent } from "./vcrViews.mjs";
 import { vcrExportHoldsDocument, vcrReportReviewRevision } from "./vcrRender.mjs";
+
+export { vcrModelApplicabilityIssues, vcrPopulationVariables };
 
 /** Which capability thinks each step (the domain's map, named here for readers). */
 export const VCR_RUN_CAPABILITIES = VCR_STEP_CAPABILITIES;
@@ -198,7 +202,13 @@ export const VCR_EXPORT_OUTLINES = Object.freeze(/** @type {Record<string, strin
   cde_communication_pack: "按《真实世界证据支持药物注册申请的沟通交流指导原则》的要点组织：必要性与可行性、数据适用性、方案与统计分析计划、偏倚控制与敏感性分析。",
   simulation_report: "按复杂创新设计的模拟报告清单写：设计总述、一个示例试验、情景参数及其依据（零假设情景必写）、每个情景的重复次数及理由、各情景的运行特征与蒙特卡洛误差、敏感性情景、方法版本与随机种子、总结。",
   validation_pack: "按方法逐个写：这项研究用到的每个方法及其版本、前提假设、数值验证的记录与参照用例、每次执行的种子与计算环境；平台没有记录的项照实写「未记录」，不要补写。",
+  model_analysis_plan: "平台已按研究的记录写好这份计划的结构、表格和登记项（评估表、模型、假设、方法、情景），你只写各节的文字：引言（为什么要用模型、背景）、目的（模型的预期用途，对应关注的问题）、数据（数据来源与纳入排除的理由）、方法（建模与评价的做法、假设的依据）。每节提交一次，section 写 introduction、objectives、data、methods 之一；不要重写评估表、版本和哈希，也不要写任何结果。",
+  model_analysis_report: "平台已写好这份报告的结构、表格和数字（所依据的计划版本、与计划的偏离、评估表、结果表、附录），你只写各节的文字：摘要、引言、目的、数据与方法、结果、讨论、结论。每节提交一次，section 写 executive_summary、introduction、objectives、data_methods、results、discussion、conclusions 之一；数仍写成 {{n:…}} 引用；平台列出的每一处偏离，在讨论里说明原因；平台标成「不可估计」的结果照样当成完成的结果来写，不要补数。",
 }));
+
+/** Which of the platform's own documents a kind is, and the sections a run writes words for (the domain's closed lists). @param {string} kind */
+const modelDocumentSections = (kind) => (VCR_MODEL_DOCUMENT_KINDS.includes(kind)
+  ? /** @type {Record<string, { prose: readonly string[] }>} */ (VCR_MODEL_DOCUMENT_SECTIONS)[kind].prose : null);
 
 /**
  * The lines of a brief that say which document an export run is for and where
@@ -213,7 +223,8 @@ export function vcrExportBriefLines(kind) {
     `本次只写一份资料：这项研究的「${label}」（kind: ${kind}）${kind === "study_package" ? "" : "，不是研究包，也不是别的资料"}。`,
     VCR_EXPORT_OUTLINES[kind] ?? "",
     `正文用 vcr_write 提交：what 写 report，data.kind 写 ${kind}。这次运行的报告只收进这一份导出；写成别的 kind 会被拒绝，不会另建一份。`,
-    "工作区交付文件的文件名照能力清单不变，study-package.md 里放的就是这份正文。",
+    ...(modelDocumentSections(kind) ? [`文字按节提交，data.section 只能是：${modelDocumentSections(kind)?.map((section) => `${section}（${/** @type {Record<string, string>} */ (VCR_MODEL_DOCUMENT_SECTION_LABELS_ZH)[section]}）`).join("、")}。其他 section 会被拒绝，平台写的表格和登记项不接受改写。`] : []),
+    modelDocumentSections(kind) ? "工作区交付文件的文件名照能力清单不变，study-package.md 里按节放这些文字（每节一个小标题）。" : "工作区交付文件的文件名照能力清单不变，study-package.md 里放的就是这份正文。",
     "用 vcr_read 读研究已有的定义、假设、结果和可引用的字段（report_model）；报告里的数一律写成 {{n:…}} 引用，由平台渲染，不要自己算数，也不要手打数字。",
   ].filter(Boolean);
 }
@@ -702,65 +713,6 @@ export function vcrJobKindFor(kind, row, context = {}) {
  */
 
 /**
- * The variables a population carries, by name, with the bounds it states for them
- * (`min`/`max` of a bounded variable) — read from whichever shape the population
- * step stored: a scenario population's variable list, a literature population's
- * baseline table, a built cohort's profile rows.
- * @param {Record<string, any> | null | undefined} population
- * @returns {Map<string, { min: number | null, max: number | null }>}
- */
-export function vcrPopulationVariables(population) {
-  /** @type {Map<string, { min: number | null, max: number | null }>} */
-  const found = new Map();
-  const bound = (/** @type {unknown} */ value) => (typeof value === "number" && Number.isFinite(value) ? value : null);
-  const put = (/** @type {unknown} */ name, /** @type {Record<string, any>} */ entry) => {
-    if (typeof name === "string" && name) found.set(name, { min: bound(entry.min), max: bound(entry.max) });
-  };
-  const definition = object(object(population).definition);
-  for (const variable of list(object(definition.population).variables)) put(object(variable).name, object(variable));
-  for (const row of list(definition.baselineTable)) put(object(row).variable, object(row));
-  const profile = object(object(population).profile);
-  for (const row of list(profile.rows ?? profile.covariates ?? (Array.isArray(profile) ? profile : []))) put(object(row).key ?? object(row).covariate, object(row));
-  return found;
-}
-
-/**
- * Can this model answer for this study? The control plane's port of the engine's
- * applicability check (R/quality.R): what a model declares it covers (its endpoint
- * types, the fields it needs, the input ranges it was fitted on) held against
- * what the study has (the endpoint it asks about, the variables its population
- * carries and the bounds it states). An empty list means nothing was found
- * against it; a model with no declaration has none to fail.
- * @param {Record<string, any>} model a row of the model library
- * @param {{ endpointType: string | null, variables: Map<string, { min: number | null, max: number | null }> }} study
- * @returns {Array<{ code: string, field: string, text: string }>}
- */
-export function vcrModelApplicabilityIssues(model, { endpointType, variables }) {
-  /** @type {Array<{ code: string, field: string, text: string }>} */
-  const issues = [];
-  const applicability = object(model.applicability);
-  const card = object(model.card);
-  const declared = list(applicability.endpoints).map(String);
-  if (endpointType && declared.length && !declared.includes(endpointType)) {
-    issues.push({ code: "endpoint_not_covered", field: "endpoint.type", text: `它只覆盖 ${declared.join("、")} 终点，这个研究的终点是 ${endpointType}` });
-  } else if (endpointType && !declared.length && model.endpointType && String(model.endpointType) !== endpointType) {
-    issues.push({ code: "endpoint_not_covered", field: "endpoint.type", text: `它是 ${model.endpointType} 终点的模型，这个研究的终点是 ${endpointType}` });
-  }
-  for (const field of list(applicability.requiredFields ?? card.requiredFields).map(String)) {
-    if (!variables.has(field)) issues.push({ code: "required_field_missing", field, text: `它需要「${field}」，研究的人群里没有这个变量` });
-  }
-  for (const [field, range] of Object.entries(object(applicability.inputRanges ?? card.inputRanges))) {
-    const limits = list(range).map(Number);
-    const seen = variables.get(field);
-    if (!seen || limits.length < 2 || !limits.every(Number.isFinite)) continue;
-    if ((seen.min !== null && seen.min < limits[0]) || (seen.max !== null && seen.max > limits[1])) {
-      issues.push({ code: "input_out_of_range", field, text: `「${field}」在人群里的取值范围超出了它声明的 ${limits[0]}–${limits[1]}` });
-    }
-  }
-  return issues;
-}
-
-/**
  * The analysis a covariate-set comparison re-runs, from the design's declared method and estimand:
  * the doubly robust one when it says `aipw`, the propensity weights when it says `propensity` or the
  * estimand is not the ATT (entropy balancing estimates the ATT and nothing else), else entropy balancing.
@@ -1036,6 +988,13 @@ export function vcrBuildStages(item, context) {
       const matches = exact.length ? exact : models.filter((model) => model.name === row.modelId && (!row.modelVersion || model.version === row.modelVersion));
       const named = matches.length === 1 ? matches[0] : null;
       if (!named) return { ok: false, refused: { code: "vcr_model_not_found", message: "选定模型的确切版本已不可用；这一步不使用替代模型，其他研究结果继续保留。" } };
+      // A model of a call shape this deployment has no executor for is not run through a generator that is not that model.
+      const shape = vcrModelInterfaceOf(named);
+      if (shape !== null && !VCR_HOSTED_MODEL_INTERFACES.includes(shape)) {
+        const word = /** @type {Record<string, string>} */ (VCR_MODEL_INTERFACE_LABELS_ZH)[shape] ?? shape;
+        return { ok: false, refused: { code: "vcr_model_interface_not_hosted",
+          message: `模型「${named.name}」用的是「${word}」接口：这个部署还没有接入能执行这类接口的模型包，这一步不用替代模型，其他研究结果继续保留。` } };
+      }
       const population = row.populationId ? (context.populations ?? []).find((entry) => entry.id === row.populationId) : null;
       const issues = named ? vcrModelApplicabilityIssues(named, { endpointType: String(type), variables: vcrPopulationVariables(population) }) : [];
       if (issues.length) {

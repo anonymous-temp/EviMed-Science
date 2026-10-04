@@ -40,8 +40,8 @@ import { createHash } from "node:crypto";
 
 import {
   VCR_DATA_TIERS, VCR_EXPORT_KINDS, VCR_INTENDED_USES, VCR_MEMBER_ROLES, VCR_REVIEW_KINDS, VCR_STALE_REASONS, VCR_STEPS,
-  STEP_WAITING_ALLOWANCE, VCR_STEP_STATUSES, VCR_STUDY_STATUSES, intendedUseCeiling, intendedUseCeilingDetail, lineageNode, missingModelEvidence, roleAllows,
-  useWithin,
+  STEP_WAITING_ALLOWANCE, VCR_STEP_STATUSES, VCR_STUDY_STATUSES, intendedUseCeiling, intendedUseCeilingDetail, lineageNode, missingModelEvidence,
+  normalizeVcrAssessment, roleAllows, useWithin,
 } from "@evimed/domain";
 
 import { HttpError } from "./security.mjs";
@@ -239,6 +239,24 @@ function criterionFromRow(row) {
     ordinal: Number(row.ordinal), kind: String(row.kind), criterionType: String(row.criterion_type),
     requirement: object(row.requirement), sourceText: String(row.source_text ?? ""), sourceLocator: object(row.source_locator),
     evidenceNeeded: list(row.evidence_needed), reviewState: String(row.review_state ?? "ai_set"), createdAt: iso(row.created_at),
+  };
+}
+
+/** @param {any} row */
+function modelAssessmentFromRow(row) {
+  if (!row) return null;
+  return { ...normalizeVcrAssessment({ ...object(row.record), key: String(row.key) }), id: String(row.id), studyId: String(row.study_id),
+    version: Number(row.version), createdAt: iso(row.created_at) };
+}
+
+/** @param {any} row */
+function modelPlanVersionFromRow(row) {
+  if (!row) return null;
+  return {
+    id: String(row.id), studyId: String(row.study_id), version: Number(row.version), content: object(row.content),
+    contentHash: String(row.content_hash), sealPlanVersion: Number(row.seal_plan_version ?? 0), sealPlanHash: String(row.seal_plan_hash ?? ""),
+    frozenAt: /** @type {string} */ (iso(row.frozen_at)), frozenBy: String(row.frozen_by ?? ""), outcomeFirstReadAt: iso(row.outcome_first_read_at),
+    changes: list(row.changes), issues: list(row.issues), createdAt: iso(row.created_at),
   };
 }
 
@@ -1128,6 +1146,77 @@ export class VcrStore extends VcrStoreBase {
   async decisions(studyId) {
     return (await this.rows(`SELECT * FROM ${VCR_SCHEMA}.decisions WHERE study_id = $1 ORDER BY created_at DESC LIMIT 200`, [studyId]))
       .map((row) => this.#decisionFromRow(row));
+  }
+
+  // --- model assessments and frozen model analysis plans (ICH M15) ---------------------------
+
+  /**
+   * One assessment record, one version: an edit is the next version under the
+   * same key, so a frozen plan's copy of the record never moves. The record is
+   * stored as the domain normalizes it — ratings outside the three words are
+   * dropped to empty, the model risk is derived from the two ratings — and the
+   * caller's own `risk` is not read.
+   * @param {{ studyId: string, userId: string, actor?: string, record: Record<string, any> }} input
+   */
+  async saveModelAssessment(input) {
+    const record = normalizeVcrAssessment(input.record);
+    return this.transaction(async (client) => {
+      const version = await this.nextVersion(client, "model_assessments", "study_id = $1 AND key = $2", [input.studyId, record.key]);
+      const row = (await client.query(`INSERT INTO ${VCR_SCHEMA}.model_assessments
+        (id, study_id, user_id, key, version, model_name, model_version, risk, record)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb) RETURNING *`,
+      [vcrId("modelAssessment"), input.studyId, String(input.userId), record.key, version, record.modelName, record.modelVersion,
+        record.risk, JSON.stringify(record)])).rows[0];
+      await this.audit({ client, studyId: input.studyId, userId: String(input.userId), actor: String(input.actor ?? ""),
+        action: "vcr.model_assessment.save", object: String(row.id), detail: { key: record.key, version, risk: record.risk } });
+      return modelAssessmentFromRow(row);
+    });
+  }
+
+  /** The current version of every assessment key. @param {string} studyId */
+  async modelAssessments(studyId) {
+    return (await this.rows(`SELECT DISTINCT ON (key) * FROM ${VCR_SCHEMA}.model_assessments
+      WHERE study_id = $1 ORDER BY key, version DESC`, [studyId])).map((row) => modelAssessmentFromRow(row));
+  }
+
+  /**
+   * Freeze a model analysis plan: the next version when its content differs
+   * from the latest frozen one, nothing when it does not. Under the study row's
+   * lock, so two freezes arriving together make one version; the previous
+   * content is read inside it so `diff` says exactly what changed against the
+   * version this one follows.
+   * @param {{ studyId: string, userId: string, content: Record<string, any>, contentHash: string, frozenAt: string, frozenBy: string,
+   *   sealPlanVersion?: number, sealPlanHash?: string, outcomeFirstReadAt?: string | null, issues?: unknown[],
+   *   diff: (previous: Record<string, any>) => unknown[] }} input
+   * @returns {Promise<{ created: boolean, plan: NonNullable<ReturnType<typeof modelPlanVersionFromRow>> }>}
+   */
+  async freezeModelPlanVersion(input) {
+    return this.transaction(async (client) => {
+      await client.query(`SELECT 1 FROM ${VCR_SCHEMA}.studies WHERE id = $1 FOR UPDATE`, [input.studyId]);
+      const latest = (await client.query(`SELECT * FROM ${VCR_SCHEMA}.model_plan_versions WHERE study_id = $1
+        ORDER BY version DESC LIMIT 1`, [input.studyId])).rows[0];
+      if (latest && String(latest.content_hash) === input.contentHash) {
+        return { created: false, plan: /** @type {any} */ (modelPlanVersionFromRow(latest)) };
+      }
+      const version = Number(latest?.version ?? 0) + 1;
+      const row = (await client.query(`INSERT INTO ${VCR_SCHEMA}.model_plan_versions
+        (id, study_id, user_id, version, content, content_hash, seal_plan_version, seal_plan_hash, frozen_at, frozen_by,
+         outcome_first_read_at, changes, issues)
+        VALUES ($1, $2, $3, $4, $5::jsonb, $6, $7, $8, $9, $10, $11, $12::jsonb, $13::jsonb) RETURNING *`,
+      [vcrId("modelPlan"), input.studyId, String(input.userId), version, JSON.stringify(input.content), input.contentHash,
+        Number(input.sealPlanVersion ?? 0), String(input.sealPlanHash ?? ""), input.frozenAt, String(input.frozenBy ?? ""),
+        input.outcomeFirstReadAt ?? null, JSON.stringify(latest ? input.diff(object(latest.content)) : []),
+        JSON.stringify(input.issues ?? [])])).rows[0];
+      await this.audit({ client, studyId: input.studyId, userId: String(input.userId), actor: String(input.frozenBy ?? ""),
+        action: "vcr.model_plan.freeze", object: String(row.id), detail: { version, contentHash: input.contentHash } });
+      return { created: true, plan: /** @type {any} */ (modelPlanVersionFromRow(row)) };
+    });
+  }
+
+  /** Every frozen version of the study's model analysis plan, newest first. @param {string} studyId */
+  async modelPlanVersions(studyId) {
+    return (await this.rows(`SELECT * FROM ${VCR_SCHEMA}.model_plan_versions WHERE study_id = $1
+      ORDER BY version DESC LIMIT 50`, [studyId])).map((row) => modelPlanVersionFromRow(row));
   }
 
   /** @param {{ studyId: string, userId: string, kind: string, cover?: Record<string, any> }} input

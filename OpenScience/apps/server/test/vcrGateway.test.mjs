@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import { Readable } from "node:stream";
 import test from "node:test";
 import { readFile } from "node:fs/promises";
-import { VCR_EXPORT_KINDS, VCR_EXPORT_KIND_LABELS_ZH } from "@evimed/domain";
+import { VCR_EXPORT_KINDS, VCR_EXPORT_KIND_LABELS_ZH, VCR_MODEL_DOCUMENT_KINDS, VCR_MODEL_DOCUMENT_SECTIONS } from "@evimed/domain";
 import {
   VCR_GATEWAY_OPERATIONS, VCR_GATEWAY_PATH, VCR_GATEWAY_WINDOW_LIMITS, createVcrGatewayHandler, vcrGatewayProviderUrl,
   vcrGatewayRoutePattern, vcrRuntimeWrite,
@@ -357,13 +357,15 @@ async function writeReport(handler, data) {
   return res.json().data;
 }
 
-test("a run sent out for an export fills that export and no other, whichever of the four documents it is", async () => {
+test("a run sent out for an export fills that export and no other, whichever of the six documents it is", async () => {
   for (const kind of VCR_EXPORT_KINDS) {
     const { calls, handler } = exportRunFixture({ kind });
-    const written = await writeReport(handler, { kind, template: "方法与局限。" });
+    // The two model documents take their words by named section; every other document takes one body.
+    const section = VCR_MODEL_DOCUMENT_KINDS.includes(kind) ? { section: VCR_MODEL_DOCUMENT_SECTIONS[kind].prose[0] } : {};
+    const written = await writeReport(handler, { kind, template: "方法与局限。", ...section });
     assert.deepEqual([written.ok, written.ids], [true, ["exp_wanted"]], kind);
     // No kind typed is the same export: the dispatch says which, the run does not have to.
-    const unnamed = await writeReport(handler, { template: "方法与局限。" });
+    const unnamed = await writeReport(handler, { template: "方法与局限。", ...section });
     assert.deepEqual([unnamed.ok, unnamed.ids], [true, ["exp_wanted"]], kind);
     assert.deepEqual(calls.filter((call) => call[0] === "export"), [], `no export is made for a run that already has one (${kind})`);
     assert.deepEqual(calls.filter((call) => call[0] === "updateExport").map((call) => call[1]), ["exp_wanted", "exp_wanted"]);

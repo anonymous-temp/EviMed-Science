@@ -62,12 +62,12 @@ import public_sources
 READ_WHATS = (
     "study", "definition", "criteria", "assumptions", "evidence", "population", "patients", "comparator", "trial",
     "precedents", "matching", "subject_document", "results", "report_model", "snapshot_profile", "models", "jobs",
-    "trial_registry_record",
+    "trial_registry_record", "model_assessments",
 )
 WRITE_WHATS = (
     "definition", "protocol", "criteria", "assumption", "evidence_item", "precedent", "population", "patient_set",
     "comparator", "trial_scenario", "design_grid", "decision", "report", "model", "forecast", "step", "plan",
-    "fact", "language_judgment", "site", "followup", "field_map",
+    "fact", "language_judgment", "site", "followup", "field_map", "model_assessment",
 )
 # The engine's job kinds, in the domain's order (`VCR_JOB_KINDS` in
 # `packages/domain/src/vcrVocabulary.mjs`): the 24 of the first release, then the
@@ -172,7 +172,7 @@ def tool_definitions():
                 "Write this 虚拟临研 study's definitions and designs: the research definition, a protocol version and "
                 "its structured eligibility criteria, assumption cards and their evidence items, precedents, population, "
                 "patient-set, comparator and trial designs, a design grid, a decision record, a fitted literature model, "
-                "patient facts, sites and follow-up, or the report text. Numbers are not writable: results, counts, "
+                "a model's ICH M15 assessment record, patient facts, sites and follow-up, or the report text. Numbers are not writable: results, counts, "
                 "measures and execution records come from the engine, and an object's configuration carries only the "
                 "keys the engine reads (see vcr_simulate). Items are checked one by one; refused items come back in "
                 "issues and the rest are written."

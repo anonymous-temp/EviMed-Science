@@ -48,6 +48,13 @@
  *   thing that ran.
  * - A study whose plan is frozen and whose outcomes were never read is the
  *   normal, good case: `ordered: true`, `outcomeFirstReadAt: null`.
+ * - **The model analysis plan freezes with it, and first.** M15 asks for the
+ *   plan to be pre-defined, meaning documented before the data are accessed, and
+ *   the instant the seal row commits is the instant the outcome columns become
+ *   readable (`vcrEffectiveSeal`). So `modelPlans.freeze` runs before the seal's
+ *   write, under the same `at`, and a failure of it is audited and goes no
+ *   further: the analysis plan's own freeze is the control, the model analysis
+ *   plan is a record of it, and a record cannot refuse the thing it records.
  *
  * @module vcrSeal
  */
@@ -222,16 +229,43 @@ async function mutateSeal(store, studyId, actor, compute) {
 /**
  * @param {{ store: any,
  *   dataPlane?: { liftStudySeal?: (input: { studyId: string, at: string, actor?: string, reason?: string }) => Promise<any[]> } | null,
+ *   modelPlans?: { freeze: (input: { studyId: string, actor?: string, frozenAt?: string | null,
+ *     seal?: { planVersion?: number, planHash?: string | null, outcomeFirstReadAt?: string | null } }) => Promise<any> } | null,
  *   audit?: (event: string, status: string, details: Record<string, any>) => unknown,
  *   now?: () => Date }} dependencies
  *   `store` is the VCR store (`studyById`, `updateStudy`, `audit`, and a
  *   `transaction` when it is the real one). `dataPlane` is what actually
  *   withholds the columns; it is asked to lift, per study, as of the freeze
  *   instant. Without it the seal is recorded and reported as a note, never as a
- *   claim that rows were withheld.
+ *   claim that rows were withheld. `modelPlans` freezes the model analysis plan
+ *   at the same instant (`vcrModelDocuments.createVcrModelPlans`); without it
+ *   nothing is frozen beyond the analysis plan.
  */
-export function createVcrSeal({ store, dataPlane = null, audit = () => {}, now = () => new Date() }) {
+export function createVcrSeal({ store, dataPlane = null, modelPlans = null, audit = () => {}, now = () => new Date() }) {
   if (!store) throw new TypeError("The VCR seal needs the VCR store.");
+
+  /**
+   * Freeze the study's model analysis plan under the analysis plan's own time and hash. Never throws: a plan that could not be
+   * frozen is audited, and the analysis plan's freeze goes on.
+   * @param {{ studyId: string, actor: string, at: string, planHash: string }} input
+   * @returns {Promise<{ version: number, created: boolean, contentHash: string } | null>}
+   */
+  async function freezeModelPlan({ studyId, actor, at, planHash }) {
+    if (!modelPlans) return null;
+    try {
+      const study = await store.studyById(studyId);
+      if (!study) return null;
+      const state = vcrSealState(study);
+      const same = state.planHash === planHash && Boolean(state.planFrozenAt);
+      const frozen = await modelPlans.freeze({ studyId, actor: actor || "platform", frozenAt: at,
+        seal: { planHash, planVersion: same ? state.planVersion : state.planVersion + 1, outcomeFirstReadAt: state.outcomeFirstReadAt } });
+      return frozen ? { version: Number(frozen.plan.version), created: frozen.created === true, contentHash: String(frozen.plan.contentHash) } : null;
+    } catch (error) {
+      await store.audit?.({ studyId, actor, action: "vcr.model_plan.freeze_failed", object: studyId, outcome: "failed",
+        reason: String(/** @type {any} */ (error)?.code ?? "freeze_failed") }).catch(() => null);
+      return null;
+    }
+  }
 
   return {
     /**
@@ -248,6 +282,8 @@ export function createVcrSeal({ store, dataPlane = null, audit = () => {}, now =
       const planHash = vcrPlanHash(input.plan ?? {});
       const at = now().toISOString();
       const named = [...new Set(list(input.sealedFields).map(String))];
+      // Before the seal's write, which is what makes the outcome columns readable.
+      const modelPlan = await freezeModelPlan({ studyId, actor, at, planHash });
       const outcome = await mutateSeal(store, studyId, actor, (study) => {
         const state = vcrSealState(study);
         if (state.planHash === planHash && state.planFrozenAt) {
@@ -284,7 +320,7 @@ export function createVcrSeal({ store, dataPlane = null, audit = () => {}, now =
       }
       if (!outcome.unchanged) audit("vcr.seal.freeze_plan", "completed", { userId: outcome.study.userId, code: studyId, detail: planHash });
       const sealedNow = [...new Set(lifted.flatMap((snapshot) => list(snapshot?.sealedFields).map(String)))].sort();
-      return { ...vcrSealState(outcome.study), unchanged: outcome.unchanged, lifted: lifted.length, liftedFields: sealedNow };
+      return { ...vcrSealState(outcome.study), unchanged: outcome.unchanged, lifted: lifted.length, liftedFields: sealedNow, modelPlan };
     },
 
     /**
