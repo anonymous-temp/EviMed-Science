@@ -80,6 +80,18 @@ const SELF_MEASUREMENT_PROJECT = /^(?:acceptance|audit)-[a-z0-9-]+$/;
  */
 export const RUNTIME_YIELDED_CODE = "runtime_yielded";
 
+/**
+ * The acceptance battery's and the standing audit's projects: the platform
+ * measuring itself by using the product the way an ordinary account does. They
+ * are internal (hidden, never a researcher's work) and yet what they did is a
+ * real operation on the deployment, which is why the availability collector
+ * counts them where it does not count a lesson or an evaluation cell.
+ * @param {unknown} projectId @returns {boolean}
+ */
+export function isSelfMeasurementProject(projectId) {
+  return SELF_MEASUREMENT_PROJECT.test(String(projectId ?? ""));
+}
+
 /** @param {unknown} projectId @returns {boolean} */
 export function isInternalProject(projectId) {
   const id = String(projectId ?? "");
