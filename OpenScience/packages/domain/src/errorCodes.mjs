@@ -1089,6 +1089,10 @@ export const VCR_MODULE_ERROR_CODES = Object.freeze([
   'vcr_field_map_invalid', 'vcr_field_map_changed', 'vcr_field_map_unconfirmed',
   'vcr_snapshot_no_tables', 'vcr_snapshot_profile_timeout', 'vcr_snapshot_profile_too_large',
   'vcr_grant_invalid', 'vcr_grant_not_found', 'vcr_grant_owner_only',
+  // a PDF or Word record converted to text inside the deployment, and the
+  // disposable container that does it (vcrRecordExtract.mjs, vcrIntakeController.mjs)
+  'vcr_document_needs_text', 'vcr_document_unreadable', 'vcr_document_too_long', 'vcr_document_converter_unavailable',
+  'vcr_intake_busy', 'vcr_intake_timeout', 'vcr_intake_failed', 'vcr_intake_input_invalid',
   // evidence and matching
   'vcr_asof_invalid', 'vcr_assessment_not_found', 'vcr_criteria_missing', 'vcr_pool_endpoint_key_required',
   'vcr_precedent_not_in_study', 'vcr_protocol_version_not_found',
@@ -1520,7 +1524,15 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_data_file_name_invalid: '文件名缺失或没有扩展名。',
   vcr_data_file_too_large: '文件超过了本部署允许的上传大小。',
   vcr_data_file_unreadable: '文件读不成一张表（列名重复、编码不对或不是表格）。',
-  vcr_data_format_unsupported: '这种文件格式暂不支持上传；请导出为 CSV、TSV、XLSX 或 JSON。',
+  vcr_data_format_unsupported: '这种文件格式暂不支持上传；数据文件请导出为 CSV、TSV、XLSX 或 JSON，患者文档请用 .txt、.md、PDF 或 .docx。',
+  vcr_document_needs_text: '这份文件里没有可提取的文字（多半是扫描件或图片）。请提供文字版：可复制文字的 PDF、Word（.docx）或 .txt。',
+  vcr_document_unreadable: '这份文件打不开：可能已损坏、加密，或并不是 PDF / .docx。请另存为未加密的 PDF、.docx 或 .txt 后再上传。',
+  vcr_document_too_long: '这份文档的页数超过了本部署转换的上限。请按受试者或时间段拆开，分别上传。',
+  vcr_document_converter_unavailable: '本部署暂时不能转换 PDF 和 Word。请先另存为 .txt 后再上传。',
+  vcr_intake_busy: '文件转换正忙，请稍后再试。',
+  vcr_intake_timeout: '文件转换用时过长，已经停止。请拆小文件，或另存为文字版后再试。',
+  vcr_intake_failed: '文件转换没有完成。请另存为 .txt 或可复制文字的 PDF 后再试。',
+  vcr_intake_input_invalid: '待转换的文件不完整或已发生变化，请重新上传。',
   vcr_source_file_not_found: '这个数据文件不存在或已删除。',
   vcr_source_file_frozen: '这个文件已被冻结进快照，不能删除。',
   vcr_source_file_changed: '文件内容与上传时记录的哈希不一致，已拒绝使用。',

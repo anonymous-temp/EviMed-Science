@@ -491,6 +491,14 @@ function vcrSettings(overrides) {
     }
     return value.replace(/\/$/, "");
   };
+  /** A Docker memory size: a whole number of megabytes or gigabytes, the only forms the launch plan writes. @param {string} key @param {string} name @param {string} fallback */
+  const memoryLimit = (key, name, fallback) => {
+    const value = String(read(key, name, fallback)).trim().toLowerCase();
+    if (!/^[1-9][0-9]{0,5}[mg]$/.test(value)) {
+      throw new Error(`${name} must be a whole number of megabytes or gigabytes such as 768m or 2g, got ${JSON.stringify(value)}.`);
+    }
+    return value;
+  };
   const audience = String(read("vcrAudience", "OPEN_SCIENCE_VCR_AUDIENCE", "operators")).trim().toLowerCase();
   if (!["all", "operators"].includes(audience)) {
     throw new Error(`OPEN_SCIENCE_VCR_AUDIENCE must be "all" or "operators", got ${JSON.stringify(audience)}.`);
@@ -563,6 +571,24 @@ function vcrSettings(overrides) {
     // and cut off at it, and the whole file is read twice (validate, derive), so
     // this bounds memory as well as disk (principle 15). 50 MB by default.
     vcrDataMaxBytes: integer("vcrDataMaxBytes", "OPEN_SCIENCE_VCR_DATA_MAX_BYTES", 50 * 1024 * 1024, 1024 * 1024, 2 * 1024 * 1024 * 1024),
+    // Intake conversions: a patient record as PDF or Word becomes text, and a
+    // published figure becomes curve points, each inside a disposable container
+    // with no network and two directories (vcrIntakeController.mjs). Every limit
+    // protects the host and none of them alters what a reader asked for
+    // (principle 15): the byte and page ceilings refuse a document that would not
+    // fit, the characters-per-page floor is what "scanned" means in code, and the
+    // timeout and the memory cap bound one container. All of them reach the
+    // controller as well as the API (compose passes both), because the controller
+    // builds the container and the API decides what its answer means.
+    vcrIntakeMaxBytes: integer("vcrIntakeMaxBytes", "OPEN_SCIENCE_VCR_INTAKE_MAX_BYTES", 25 * 1024 * 1024, 1024 * 1024, 200 * 1024 * 1024),
+    vcrIntakeMaxPages: integer("vcrIntakeMaxPages", "OPEN_SCIENCE_VCR_INTAKE_MAX_PAGES", 300, 1, 5_000),
+    vcrIntakeMinCharsPerPage: integer("vcrIntakeMinCharsPerPage", "OPEN_SCIENCE_VCR_INTAKE_MIN_CHARS_PER_PAGE", 100, 1, 5_000),
+    vcrIntakeTimeoutMs: integer("vcrIntakeTimeoutMs", "OPEN_SCIENCE_VCR_INTAKE_TIMEOUT_MS", 60_000, 5_000, 600_000),
+    vcrIntakeMemory: memoryLimit("vcrIntakeMemory", "OPEN_SCIENCE_VCR_INTAKE_MEMORY", "768m"),
+    vcrIntakeConcurrency: integer("vcrIntakeConcurrency", "OPEN_SCIENCE_VCR_INTAKE_CONCURRENCY", 2, 1, 8),
+    // A figure larger than this many pixels is not decoded: a 10 MB PNG can hold
+    // far more pixels than the container's memory holds arrays for.
+    vcrDigitizeMaxPixels: integer("vcrDigitizeMaxPixels", "OPEN_SCIENCE_VCR_DIGITIZE_MAX_PIXELS", 24_000_000, 100_000, 100_000_000),
   };
 }
 

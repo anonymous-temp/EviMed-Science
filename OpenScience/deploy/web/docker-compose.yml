@@ -19,6 +19,22 @@ x-runtime-caps: &runtime-caps
   OPEN_SCIENCE_USER_RUN_SPEND_LIMIT: ${OPEN_SCIENCE_USER_RUN_SPEND_LIMIT:-0}
   OPEN_SCIENCE_MAX_PROJECTS_PER_USER: ${OPEN_SCIENCE_MAX_PROJECTS_PER_USER:-20}
 
+# The 「虚拟临研」 intake conversions' limits (config.mjs `vcrIntake*`,
+# `vcrDigitizeMaxPixels`): a PDF or Word record converted to text and a figure
+# digitized, each in a disposable container. The controller builds the container
+# (memory, deadline, slots) and the API decides what its answer means (pages,
+# characters per page, bytes), so the two read ONE definition and cannot drift:
+# a controller that kills at 60 s while the API waits for 30 is the class this
+# anchor removes. Value-less, so the code's defaults hold until .env says more.
+x-vcr-intake: &vcr-intake
+  OPEN_SCIENCE_VCR_INTAKE_MAX_BYTES:
+  OPEN_SCIENCE_VCR_INTAKE_MAX_PAGES:
+  OPEN_SCIENCE_VCR_INTAKE_MIN_CHARS_PER_PAGE:
+  OPEN_SCIENCE_VCR_INTAKE_TIMEOUT_MS:
+  OPEN_SCIENCE_VCR_INTAKE_MEMORY:
+  OPEN_SCIENCE_VCR_INTAKE_CONCURRENCY:
+  OPEN_SCIENCE_VCR_DIGITIZE_MAX_PIXELS:
+
 services:
   evimed-postgres:
     # pgvector's build of the official postgres:16 image (deps-version.json
@@ -831,7 +847,7 @@ services:
       OPEN_SCIENCE_COMMAND_RATE_LIMIT_MAX_REQUESTS: ${OPEN_SCIENCE_COMMAND_RATE_LIMIT_MAX_REQUESTS:-120}
       OPEN_SCIENCE_TRUST_PROXY: ${OPEN_SCIENCE_TRUST_PROXY:-true}
       OPEN_SCIENCE_MAX_CONCURRENT_COMMANDS: ${OPEN_SCIENCE_MAX_CONCURRENT_COMMANDS:-8}
-      <<: *runtime-caps
+      <<: [*runtime-caps, *vcr-intake]
       OPEN_SCIENCE_MAX_CONCURRENT_TASKS: ${OPEN_SCIENCE_MAX_CONCURRENT_TASKS:-2}
       OPEN_SCIENCE_MAX_CONCURRENT_TASKS_PER_PROJECT: ${OPEN_SCIENCE_MAX_CONCURRENT_TASKS_PER_PROJECT:-1}
       OPEN_SCIENCE_MAX_QUEUED_TASKS: ${OPEN_SCIENCE_MAX_QUEUED_TASKS:-100}
@@ -1770,7 +1786,7 @@ services:
       OPEN_SCIENCE_RUNTIME_SANDBOX_ENFORCEMENT:
       OPEN_SCIENCE_WEB_SEARCH_URL: ${OPEN_SCIENCE_WEB_SEARCH_URL:-}
       OPEN_SCIENCE_WEB_SEARCH_GATEWAY_INTERNAL_URL: ${OPEN_SCIENCE_WEB_SEARCH_GATEWAY_INTERNAL_URL:-http://open-science-web:8787/internal/search/v1/query}
-      <<: *runtime-caps
+      <<: [*runtime-caps, *vcr-intake]
     volumes:
       # Writable since 2026-10-03. The controller stages each personal-skill
       # validation input and keeps the render and validation recovery markers

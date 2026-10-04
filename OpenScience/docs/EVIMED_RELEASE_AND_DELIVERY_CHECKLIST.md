@@ -179,6 +179,12 @@ pnpm smoke:deployment
    - 任意一个运行时容器的挂载里没有数据平面：`docker inspect <runtime> --format '{{json .Mounts}}'` 不含
      `/data-plane`，也不含它的主机路径。引擎容器只接在 `vcr-engine-internal` 网络上，出不了网。
    - 用一个空的 T0 研究提交一次 `design.analytic` 作业，回执验签通过、作业目录出现在 `/jobs`。
+   - 病历文件转换（PDF / Word 在部署内转成文字，不发给外部解析服务）：上传一份可复制文字的 PDF 和一份 `.docx`，
+     各得到文字；上传一份扫描件，得到「请提供文字版」的拒绝，数据平面里没有留下东西。转换跑在运行时控制器起的
+     一次性容器里：`docker ps -a --filter label=open-science.vcr-intake` 转换后为空；转换进行中对它
+     `docker inspect`，`NetworkMode` 为 `none`、挂载只有 `/input`（只读）和 `/output` 两个；`/data/vcr-intake/`
+     （web 与控制器共用的数据卷里的暂存目录）转换后为空。镜像里要有 `/opt/evimed/mcp/evimed-research/vcr_record_extract.py`
+     与 `vcr_curve_digitize.py`（随研究 MCP 的 Python 源码一起发，增量发布即可），控制器协议版本为 9。
    - **通过：** 上面每条都成立，且探针文件已删。
 
 4. **五个能力的真实 DSH 运行。** `vcr-protocol`、`vcr-evidence`、`vcr-analysis`、`vcr-matching`、`vcr-package`

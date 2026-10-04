@@ -254,6 +254,20 @@ const operatorLevers = {
   // ask for and every job is turned away.
   OPEN_SCIENCE_ENGINE_MODEL_GATEWAY_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_ENGINE_MODEL_TOKEN_TTL_SECONDS: ["open-science-web"],
+  // 「虚拟临研」 intake conversions (2026-10-04): the controller builds the
+  // disposable container (memory, deadline, slots) and the API decides what its
+  // answer means (pages, characters per page, bytes), so every limit reaches
+  // both. A limit that reached only one would be a ceiling the other side
+  // enforces at a different number: a controller killing at 60 s while the API
+  // waits for 30, or an API that refuses at 25 MB a file the controller would
+  // not have started.
+  OPEN_SCIENCE_VCR_INTAKE_MAX_BYTES: ["open-science-web", "open-science-runtime-controller"],
+  OPEN_SCIENCE_VCR_INTAKE_MAX_PAGES: ["open-science-web", "open-science-runtime-controller"],
+  OPEN_SCIENCE_VCR_INTAKE_MIN_CHARS_PER_PAGE: ["open-science-web", "open-science-runtime-controller"],
+  OPEN_SCIENCE_VCR_INTAKE_TIMEOUT_MS: ["open-science-web", "open-science-runtime-controller"],
+  OPEN_SCIENCE_VCR_INTAKE_MEMORY: ["open-science-web", "open-science-runtime-controller"],
+  OPEN_SCIENCE_VCR_INTAKE_CONCURRENCY: ["open-science-web", "open-science-runtime-controller"],
+  OPEN_SCIENCE_VCR_DIGITIZE_MAX_PIXELS: ["open-science-web", "open-science-runtime-controller"],
 };
 
 async function composeFiles() {
@@ -294,7 +308,9 @@ test("the operator levers reach the services that read them", async () => {
   for (const [key, services] of Object.entries(operatorLevers)) {
     for (const service of services) {
       const carriers = files.filter(({ text }) => {
-        const environment = YAML.parse(text)?.services?.[service]?.environment;
+        // `merge`: a lever may arrive through a shared anchor (`<<: [*runtime-caps, *vcr-intake]`),
+        // which is how the controller and the API are made to read one definition.
+        const environment = YAML.parse(text, { merge: true })?.services?.[service]?.environment;
         return environment != null && Object.hasOwn(environment, key);
       });
       assert.ok(
@@ -418,7 +434,7 @@ test("no compose file pins an operator lever to a literal", async () => {
   const files = await composeFiles();
   const levers = Object.keys(operatorLevers);
   for (const { name, text } of files) {
-    const document = YAML.parse(text);
+    const document = YAML.parse(text, { merge: true });
     for (const [service, definition] of Object.entries(document?.services ?? {})) {
       for (const [key, value] of Object.entries(definition?.environment ?? {})) {
         if (!levers.includes(key)) continue;
