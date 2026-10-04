@@ -2303,29 +2303,6 @@
         "nct02065791",
         "nct02540993"
       ]
-    },
-    {
-      "id": "c_bmi_at_least_25",
-      "kind": "inclusion",
-      "criterionType": "other",
-      "requirement": {
-        "op": "compare",
-        "variable": "bmi",
-        "comparator": "gte",
-        "value": 25,
-        "unit": "kg/m2"
-      },
-      "text": "BMI of at least 25 kg/m2, as in the tirzepatide trials read; other programmes use 23 kg/m2 or an upper limit instead.",
-      "textZh": "BMI ≥25 kg/m²，与所读替尔泊肽试验一致；其他项目采用23 kg/m²或设有上限。",
-      "terms": [
-        "t_bmi"
-      ],
-      "sources": [
-        "nct03987919",
-        "nct03882970",
-        "nct03730662",
-        "nct04255433"
-      ]
     }
   ],
   "mappings": [
