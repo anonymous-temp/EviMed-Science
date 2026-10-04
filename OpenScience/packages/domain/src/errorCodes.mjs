@@ -1746,7 +1746,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_model_interface_not_hosted: '这个模型用的调用接口，本部署还没有接入能执行它的模型包；这一步不用替代模型，其他研究继续。',
   constraint_unsatisfiable: '人群的约束条件在重抽 200 轮后仍无法同时满足；放宽或改写约束。',
   cpu_budget_exhausted: '这项计算用完了它的计算时间上限；已完成的部分作为有限结果保留。',
-  design_effect_null: '这个情景没有效应（风险比 1、效应 0，或两组事件率相同）：没有任何样本量能在「没有效应」下谈检验效能，解析法无从计算。方案的 I 类错误请用同一情景的模拟运行来测；要算样本量，请给出方案想检出的效应。',
+  design_effect_null: '这个情景没有效应，解析法给不出样本量；方案的 I 类错误请用同一情景的模拟来测。',
   grid_cell_failed: '方案网格里有一个格子没有算出来；其余格子照常给出。',
   handler_error: '统计引擎在这项计算里遇到了意外错误，没有给出任何数字。',
   input_format_unsupported: '数据文件的格式不受支持：请用 CSV、TSV、JSON 或 Excel（.xlsx）；Parquet 请先转成 CSV。',

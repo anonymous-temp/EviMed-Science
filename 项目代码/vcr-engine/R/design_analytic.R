@@ -181,7 +181,7 @@ vcr_analytic_effect_guard <- function(kind, endpoint, truth) {
   tiny <- function(x) is.finite(x) && abs(x) < 1e-12
   refuse <- function(field, what) {
     vcr_abort("design_effect_null", field, sprintf(
-      "The scenario has no effect (%s). No sample size gives any power against no effect, so design.analytic has nothing to size. Ask design.simulate on this same scenario for the type I error of the design; give design.analytic the effect the design is meant to detect.", what))
+      "The scenario has no effect (%s), so there is no sample size to compute. The type I error of a design is design.simulate's measure on this same scenario; give design.analytic the effect the design is meant to detect.", what))
   }
   if (identical(kind, "single_arm") || identical(kind, "simon_two_stage")) return(invisible(NULL))
   if (identical(endpoint, "time_to_event")) {
