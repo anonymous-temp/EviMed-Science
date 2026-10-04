@@ -118,6 +118,17 @@ test("provider refusal releases the reservation and budget refusal never calls u
   assert.equal(denied.status, 402);
   assert.equal(upstreamCalls, 0);
   assert.deepEqual(deniedEvents.map((event) => event.type), ["reserve"]);
+  // The kernel records this sentence and shows it as it is: it names the limit, not an outage.
+  const deniedBody = await denied.json();
+  assert.equal(deniedBody.error.code, "usage_budget_exceeded");
+  assert.match(deniedBody.error.message, /spending limit of this account refused/);
+  assert.doesNotMatch(deniedBody.error.message, /temporarily unavailable/);
+  const runDenied = await call(t, async (_req, res) => { res.end(); }, {
+    ...ledger([]),
+    async reserveModel() { throw Object.assign(new Error("budget"), { status: 402, code: "usage_budget_exceeded", details: { window: "run" } }); },
+  }, { messages: [{ role: "user", content: "Over the run's budget." }] });
+  assert.equal(runDenied.status, 402);
+  assert.match((await runDenied.json()).error.message, /spending limit of this run refused/);
 });
 
 test("a refusal before any output is released and a 5xx is uncertain, at the gateway as everywhere", async (t) => {

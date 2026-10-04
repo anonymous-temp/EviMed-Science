@@ -769,6 +769,21 @@ export const TURN_END_WIRE_ERROR_CODES = Object.freeze({
   HTTP_402: 'runtime_spend_limit_reached',
 })
 
+/**
+ * The same refusal, keyed by the HTTP status the kernel recorded beside its
+ * code. The code is the kernel's vocabulary and was renamed under us: 0.1.5
+ * said `HTTP_402`, 0.1.7 says `QUOTA` — and from the pin change of 2026-09-28
+ * a run its budget stopped read `runtime_session_error` again (found on
+ * production 2026-10-05). The status is ours: the gateway answers 402 for the spending limit and
+ * nothing else. `QUOTA` alone is not read as the limit, because the kernel
+ * derives it from wording as well, and the gateway's 502 for a provider whose
+ * own balance is exhausted would qualify — that one is the operator's to fix,
+ * not the researcher's budget.
+ */
+export const TURN_END_WIRE_STATUS_ERROR_CODES = Object.freeze({
+  402: 'runtime_spend_limit_reached',
+})
+
 /** Sub-codes that qualify a kernel-boundary code without multiplying the codes. */
 export const TURN_END_SUB_CODES = Object.freeze({
   blocked: 'turn_blocked',
@@ -1487,11 +1502,15 @@ export function classifyEvidenceSourceError(code) {
  * adds a variant shows up as a counted unknown instead of a silent success.
  * @param {string} kind
  * @param {string} [wireCode] the kernel's code for the error that ended the turn
+ * @param {number} [wireStatus] the HTTP status the kernel recorded for the refused model call
  * @returns {{ errorCode: string | null, subCode?: string, unknownKind?: string }}
  */
-export function turnEndErrorCode(kind, wireCode) {
+export function turnEndErrorCode(kind, wireCode, wireStatus) {
   const text = String(kind ?? '')
   const wire = String(wireCode ?? '')
+  if (text === 'error' && Object.prototype.hasOwnProperty.call(TURN_END_WIRE_STATUS_ERROR_CODES, String(wireStatus))) {
+    return { errorCode: TURN_END_WIRE_STATUS_ERROR_CODES[/** @type {keyof typeof TURN_END_WIRE_STATUS_ERROR_CODES} */ (wireStatus)] }
+  }
   if (text === 'error' && Object.prototype.hasOwnProperty.call(TURN_END_WIRE_ERROR_CODES, wire)) {
     return { errorCode: TURN_END_WIRE_ERROR_CODES[/** @type {keyof typeof TURN_END_WIRE_ERROR_CODES} */ (wire)] }
   }

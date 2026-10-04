@@ -173,6 +173,13 @@ test("an unknown turn-end kind lands on a counted unknown code, never on success
   assert.deepEqual(turnEndErrorCode("error", "HTTP_402"), { errorCode: "runtime_spend_limit_reached" });
   assert.deepEqual(turnEndErrorCode("error", "HTTP_502"), { errorCode: "runtime_session_error" });
   assert.deepEqual(turnEndErrorCode("blocked", "HTTP_402"), { errorCode: "runtime_session_error", subCode: "turn_blocked" });
+  // The kernel renamed its code for the refusal (0.1.7: `QUOTA`); the status our gateway answered did not change.
+  assert.deepEqual(turnEndErrorCode("error", "QUOTA", 402), { errorCode: "runtime_spend_limit_reached" });
+  assert.deepEqual(turnEndErrorCode("error", undefined, 402), { errorCode: "runtime_spend_limit_reached" });
+  // `QUOTA` by wording alone is not the researcher's limit: a provider whose own balance ran out is answered 502.
+  assert.deepEqual(turnEndErrorCode("error", "QUOTA", 502), { errorCode: "runtime_session_error" });
+  assert.deepEqual(turnEndErrorCode("error", "QUOTA"), { errorCode: "runtime_session_error" });
+  assert.deepEqual(turnEndErrorCode("blocked", "QUOTA", 402), { errorCode: "runtime_session_error", subCode: "turn_blocked" });
   const unknown = turnEndErrorCode("teleported");
   assert.equal(unknown.errorCode, "runtime_turn_end_unknown");
   assert.equal(unknown.unknownKind, "teleported");

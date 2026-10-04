@@ -238,6 +238,24 @@ function gatewayError(status, code, message) {
   return new GatewayError(status, code, message);
 }
 
+/**
+ * The sentence for the one refusal the gateway answers that it did not raise:
+ * the usage ledger's 402. Answered with the generic sentence below, a call its
+ * budget refused was recorded by the kernel — and shown in the kernel's own
+ * conversation window — as "The model gateway is temporarily unavailable.",
+ * which tells the reader to wait for something that is not coming back
+ * (2026-10-05: an autopilot episode with a CNY 1.11 budget, refused on its
+ * second call). The ledger knows which limit it was; the body says so.
+ * @param {any} error
+ * @returns {string | null}
+ */
+function spendLimitRefusalMessage(error) {
+  if (error?.status !== 402 || error?.code !== "usage_budget_exceeded") return null;
+  return error?.details?.window === "run"
+    ? "The spending limit of this run refused the model call; nothing was sent to the provider."
+    : "The spending limit of this account refused the model call; nothing was sent to the provider.";
+}
+
 function sendError(res, error, onFailure) {
   const status = Number.isSafeInteger(error?.status) ? error.status : 502;
   const code = typeof error?.code === "string" ? error.code : "model_gateway_unavailable";
@@ -256,7 +274,7 @@ function sendError(res, error, onFailure) {
   }
   const message = error instanceof GatewayError
     ? error.message
-    : "The model gateway is temporarily unavailable.";
+    : spendLimitRefusalMessage(error) ?? "The model gateway is temporarily unavailable.";
   const body = Buffer.from(JSON.stringify({ error: { code, message } }));
   res.writeHead(status, {
     "content-type": "application/json; charset=utf-8",

@@ -65,8 +65,11 @@
 
 /**
  * Why a turn ended. `unknown` carries the raw kind so a DSH release that adds a
- * variant is a counted unknown, not a silent success.
- * @typedef {{ kind: 'completed'|'aborted'|'blocked'|'error'|'max-tokens'|'interrupted'|'unknown', code?: string, rawKind?: string }} TurnEnd
+ * variant is a counted unknown, not a silent success. `status` is the HTTP
+ * status of the model call that ended the turn, when the kernel recorded one:
+ * the kernel's `code` for a refusal is its own vocabulary and has been renamed
+ * between pins, the status is what our gateway answered.
+ * @typedef {{ kind: 'completed'|'aborted'|'blocked'|'error'|'max-tokens'|'interrupted'|'unknown', code?: string, status?: number, rawKind?: string }} TurnEnd
  */
 
 /**
