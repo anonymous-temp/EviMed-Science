@@ -775,6 +775,10 @@ def _capture_roots(source_id: str) -> list[tuple[str, tuple[str, ...]]]:
     doi = re.sub(r"^(?:https?://(?:dx\.)?doi\.org/|doi:\s*)", "", value, flags=re.I)
     if doi.startswith("10.") and not any(character.isspace() for character in doi):
         return [("%s/%s" % (SOURCES_DIR, _doi_slug(doi.casefold())), ("fulltext.md",))]
+    trial = re.fullmatch(r"NCT\d{8}", value, re.I)
+    if trial:
+        # `clinical_trial_snapshot` files a trial's record under its registry id.
+        return [("%s/clinicaltrials/%s" % (SOURCES_DIR, value.upper()), ("record.md",))]
     page = re.fullmatch(r"web-page:([0-9a-f]{16})", value)
     if page:
         return [("%s/web-pages/%s" % (SOURCES_DIR, page.group(1)), ("page.md",))]

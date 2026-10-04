@@ -3,6 +3,61 @@
  "note": "Every file here is a response recorded from the live API on the date shown (origin live), or a constructed fixture (origin constructed) written from the provider's documentation and marked so. `record.py` re-records the live ones through the gateway from a deployment.",
  "files": [
   {
+   "file": "clinicaltrials__search_page.json",
+   "request": "GET https://clinicaltrials.gov/api/v2/studies?query.term=osimertinib&filter.overallStatus=COMPLETED&aggFilters=results:with&pageSize=3&countTotal=true&format=json&fields=NCTId,BriefTitle,OverallStatus,HasResults,EnrollmentCount,LastUpdatePostDate",
+   "status": 200,
+   "contentType": "application/json",
+   "origin": "live",
+   "recordedAt": "2026-10-04T07:47:05Z",
+   "bytes": 1258,
+   "sha256": "68b644f102e1c37d729483d2e13ca6f484304530e9574741e5b027232f77cb9f",
+   "note": "totalCount 38 and a nextPageToken: a page of a larger answer."
+  },
+  {
+   "file": "clinicaltrials__study_NCT02197234.json",
+   "request": "GET https://clinicaltrials.gov/api/v2/studies/NCT02197234?format=json",
+   "status": 200,
+   "contentType": "application/json",
+   "origin": "live",
+   "recordedAt": "2026-10-04T07:47:12Z",
+   "bytes": 58781,
+   "sha256": "aaeff9e415c05babc78b879ee4503f3e6f7d1bc82c3fb73fa0b994af164f36cd",
+   "note": "A completed phase 1 study with posted results (7 outcome measures, 14 serious and 47 other adverse-event terms). Fetched twice a second apart: byte-identical. derivedSection.miscInfoModule.versionHolder is the date the API's copy was loaded (equal to /version dataTimestamp's date), not a property of the study, so it is not part of a snapshot's identity."
+  },
+  {
+   "file": "clinicaltrials__study_bad_id.txt",
+   "request": "GET https://clinicaltrials.gov/api/v2/studies/NOTANCT?format=json",
+   "status": 400,
+   "contentType": "text/plain; charset=UTF-8",
+   "origin": "live",
+   "recordedAt": "2026-10-04T07:51:19Z",
+   "bytes": 38,
+   "sha256": "79b9393a1c7e8ad6b696685a880b9ddfa30f9b5886a94fa59cae8d4bd271c664",
+   "note": "A malformed id: 400."
+  },
+  {
+   "file": "clinicaltrials__study_not_found.txt",
+   "request": "GET https://clinicaltrials.gov/api/v2/studies/NCT99999999?format=json",
+   "status": 404,
+   "contentType": "text/plain; charset=UTF-8",
+   "origin": "live",
+   "recordedAt": "2026-10-04T07:51:17Z",
+   "bytes": 32,
+   "sha256": "ab3ed2be5234e20ad8798d53deab17ebc40dd91d73dc29c3fe8fec4526e5e06b",
+   "note": "A well-formed id the registry does not hold: 404 with a plain sentence."
+  },
+  {
+   "file": "clinicaltrials__version.json",
+   "request": "GET https://clinicaltrials.gov/api/v2/version",
+   "status": 200,
+   "contentType": "application/json",
+   "origin": "live",
+   "recordedAt": "2026-10-04T07:39:21Z",
+   "bytes": 71,
+   "sha256": "5047551326b7a1f41663d0c374a0b29a9e97b37876803916974d73c08c5a6b84",
+   "note": "apiVersion and dataTimestamp: the registry data version a read was made at."
+  },
+  {
    "file": "crossref__work_404.txt",
    "request": "GET https://api.crossref.org/works/10.9999/does-not-exist",
    "status": 404,
@@ -22,6 +77,116 @@
    "bytes": 581,
    "sha256": "801959ed7284a68adba912099616241e169f87e891aa6209db966d6aa553b977",
    "note": "Only the DOIs Crossref holds come back: a missing one is absent from the list, not an error."
+  },
+  {
+   "file": "dailymed__history_tagrisso.json",
+   "request": "GET https://dailymed.nlm.nih.gov/dailymed/services/v2/spls/5e81b4a7-b971-45e1-9c31-29cea8c87ce7/history.json",
+   "status": 200,
+   "contentType": "application/json",
+   "origin": "live",
+   "recordedAt": "2026-10-04T07:41:36Z",
+   "bytes": 2349,
+   "sha256": "4a4271de2cc9a6caba263318eb4ac8d8d004d3e11f826ba63053d9eb497ca37e",
+   "note": "Version numbers are not contiguous (34 is absent): a version is listed only if it was published."
+  },
+  {
+   "file": "dailymed__history_unknown_setid.json",
+   "request": "GET https://dailymed.nlm.nih.gov/dailymed/services/v2/spls/00000000-0000-0000-0000-000000000000/history.json",
+   "status": 200,
+   "contentType": "application/json",
+   "origin": "live",
+   "recordedAt": "2026-10-04T07:51:23Z",
+   "bytes": 433,
+   "sha256": "f1e8c30bfe01d4aadb812e5a0d4927c609b00b78a9708b7dc8eecfae46aa0695",
+   "note": "An unknown setid is an empty history, HTTP 200, not a 404."
+  },
+  {
+   "file": "dailymed__history_walmart_saline.json",
+   "request": "GET https://dailymed.nlm.nih.gov/dailymed/services/v2/spls/06906744-49a5-4bab-8539-af2d235df9e8/history.json",
+   "status": 200,
+   "contentType": "application/json",
+   "origin": "live",
+   "recordedAt": "2026-10-04T10:05:52Z",
+   "bytes": 649,
+   "sha256": "feec4d0e2dbc9ec7a70dded11264c7e6e3a609bda31aa723df255d394db4da60",
+   "note": "Two versions: 2 (Nov 17, 2025) and 1 (Oct 17, 2024)."
+  },
+  {
+   "file": "dailymed__spl_unknown_setid.txt",
+   "request": "GET https://dailymed.nlm.nih.gov/dailymed/services/v2/spls/00000000-0000-0000-0000-000000000000.xml",
+   "status": 404,
+   "contentType": "application/xml",
+   "origin": "live",
+   "recordedAt": "2026-10-04T07:51:21Z",
+   "bytes": 0,
+   "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+   "note": "An unknown setid on the document endpoint is a 404 with no body."
+  },
+  {
+   "file": "dailymed__spl_walmart_saline_v2.xml",
+   "request": "GET https://dailymed.nlm.nih.gov/dailymed/services/v2/spls/06906744-49a5-4bab-8539-af2d235df9e8.xml",
+   "status": 200,
+   "contentType": "application/xml",
+   "origin": "live",
+   "recordedAt": "2026-10-04T10:05:50Z",
+   "bytes": 18955,
+   "sha256": "66da0b79729cf66d7bde893bd344606d3db03f9e110c445445756b05a727b9de",
+   "note": "A small real OTC SPL (version 2, effectiveTime 20251028). The XML carries no jurisdiction field: DailyMed is the US FDA's repository, which is a fact about the source and not about the document."
+  },
+  {
+   "file": "dailymed__spl_zip_walmart_saline_v1.zip",
+   "request": "GET https://dailymed.nlm.nih.gov/dailymed/getFile.cfm?setid=06906744-49a5-4bab-8539-af2d235df9e8&type=zip&version=1",
+   "status": 200,
+   "contentType": "application/zip",
+   "origin": "live",
+   "recordedAt": "2026-10-04T10:05:59Z",
+   "bytes": 139752,
+   "sha256": "7302af61de4e858f2249bd4cafe71d2ae6b24577822960985f65288082d79ae2",
+   "note": "An OLDER version, as DailyMed serves it: a zip of the SPL XML and its images. The v2 services' document endpoint ignores ?version= and always returns the current document (checked: ?version=36 returned version 37)."
+  },
+  {
+   "file": "dailymed__spls_no_match.json",
+   "request": "GET https://dailymed.nlm.nih.gov/dailymed/services/v2/spls.json?drug_name=zzzzqqqq&pagesize=2",
+   "status": 200,
+   "contentType": "application/json",
+   "origin": "live",
+   "recordedAt": "2026-10-04T07:51:25Z",
+   "bytes": 368,
+   "sha256": "d0d58f6c9ce44f650c60157935f398df227e3b88e5428d9ae909dfafa9042367",
+   "note": "No match: data [] and total_elements 0, HTTP 200."
+  },
+  {
+   "file": "dailymed__spls_osimertinib.json",
+   "request": "GET https://dailymed.nlm.nih.gov/dailymed/services/v2/spls.json?drug_name=osimertinib&pagesize=3",
+   "status": 200,
+   "contentType": "application/json",
+   "origin": "live",
+   "recordedAt": "2026-10-04T07:41:30Z",
+   "bytes": 561,
+   "sha256": "e69ecb4fd09c104e5625f56ee239368af7bde3e0f8770499a85d4d8c4718a45f",
+   "note": "One setid, spl_version 37; metadata carries total_elements/total_pages/next_page_url (the string 'null' when there is none)."
+  },
+  {
+   "file": "dailymed__spls_saline_page1.json",
+   "request": "GET https://dailymed.nlm.nih.gov/dailymed/services/v2/spls.json?drug_name=sodium chloride nasal&pagesize=2",
+   "status": 200,
+   "contentType": "application/json",
+   "origin": "live",
+   "recordedAt": "2026-10-04T10:06:14Z",
+   "bytes": 1202,
+   "sha256": "55e734e5e90da17c8aa2b64dbcde5e3514bff49443a4856816643a0a327d5e06",
+   "note": "Page 1 of 2 of 4 elements: next_page_url names the next page."
+  },
+  {
+   "file": "dailymed__spls_saline_page2.json",
+   "request": "GET https://dailymed.nlm.nih.gov/dailymed/services/v2/spls.json?drug_name=sodium chloride nasal&pagesize=2&page=2",
+   "status": 200,
+   "contentType": "application/json",
+   "origin": "live",
+   "recordedAt": "2026-10-04T10:06:16Z",
+   "bytes": 1325,
+   "sha256": "e59155de08913b8e1e169abf3c6eb0df3dd7c76283f291a708c9fd8ba2f5b16d",
+   "note": "The last page: next_page_url is the string 'null'."
   },
   {
    "file": "europepmc__fulltext_PMC6454835.xml",

@@ -155,6 +155,7 @@ def supports(name):
         "drug_selection_evaluation",
         "biomedical_source_search",
         "identifier_resolve",
+        "clinical_trial_snapshot",
     }
 
 
@@ -4230,4 +4231,7 @@ def call(name, arguments):
     if name == "identifier_resolve":
         import identifier_links  # lazy: it imports this module
         return identifier_links.resolve(arguments)
+    if name == "clinical_trial_snapshot":
+        import trial_snapshots  # lazy: it imports this module
+        return trial_snapshots.snapshot(arguments)
     raise PublicSourceError("public_source_unsupported", "No public connector is available for %s." % name)

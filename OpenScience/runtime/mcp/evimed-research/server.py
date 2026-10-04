@@ -581,6 +581,24 @@ TOOL_DEFINITIONS = [
         ),
     },
     {
+        "name": "clinical_trial_snapshot",
+        "description": (
+            "Read one ClinicalTrials.gov record whole, with posted results, and preserve it as a snapshot: record.json, a "
+            "quotable record.md and alignment.json (populations, registered and reported endpoints, timepoints). Each read "
+            "is compared with the snapshot held before it and the changes are listed by kind (endpoint_timeframe_changed, "
+            "enrollment_changed, result_values_changed ...). The registry's API serves only the current record, so versions "
+            "older than your first snapshot are not available and the result says so."
+        ),
+        "inputSchema": object_schema(
+            {
+                "nctId": {"type": "string", "pattern": r"^[Nn][Cc][Tt]\d{8}$", "description": "NCT and eight digits."},
+                "compareTo": {"type": "string", "maxLength": 64, "description": "previous (default), none, or the leading hex of a held snapshot directory."},
+                "intake": {"type": "boolean", "description": "Default false. Offer record.md to the knowledge base."},
+            },
+            ("nctId",),
+        ),
+    },
+    {
         "name": "guideline_search",
         "description": "Search configured clinical-guideline sources.",
         "inputSchema": object_schema(
@@ -2346,6 +2364,17 @@ def _dispatch(name, arguments, execution_context=None):
                 False,
                 "Stop and link the identifiers another way.",
                 ["Open each record with literature_search pmids or web_read and read its identifiers."],
+            )
+        return _public_adapter_call(name, arguments)
+    if name == "clinical_trial_snapshot":
+        # The registry's record is public and has no private adapter.
+        if not public_sources.enabled():
+            return failure(
+                "public_source_unsupported",
+                "Trial snapshots need the public connectors, which are disabled in this deployment.",
+                False,
+                "Stop and read the registry record another way.",
+                ["Read the study page with web_read, or use clinical_trial_search."],
             )
         return _public_adapter_call(name, arguments)
     if name == "reference_list":
