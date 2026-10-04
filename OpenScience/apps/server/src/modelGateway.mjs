@@ -1249,9 +1249,16 @@ const CONTROL_PLANE_NEVER_SENT = /^(?:ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ENETUNREA
  * personal cap must not stop the feed for everyone, and the feed's spend must
  * not be refused by a limit that was set for a person.
  *
+ * `call.limits.run` (0 or absent = none) is a cap on what `call.runId` has
+ * committed, this call included: the envelope of the unit of work the call is
+ * made for, counted over that unit's own rows. A scheduled agenda's next-action
+ * decision carries its episode's envelope there; the agenda's own daily and
+ * weekly caps are never passed as `daily` and `weekly`, which sum everything
+ * the account spent (`autopilotNextAction.mjs`).
+ *
  * @param {{ config: any, usageLedger: any, fetchImpl?: typeof fetch }} deps
  * @param {{ userId: string, projectId: string, runId?: string | null, purpose?: string, body: any,
- *           signal?: AbortSignal, at?: Date, limits?: { daily?: number, weekly?: number } }} call
+ *           signal?: AbortSignal, at?: Date, limits?: { daily?: number, weekly?: number, run?: number } }} call
  * @returns {Promise<any>} the provider's parsed JSON response
  */
 export async function callModelForControlPlane({ config, usageLedger, fetchImpl = fetch }, call) {
@@ -1281,7 +1288,7 @@ export async function callModelForControlPlane({ config, usageLedger, fetchImpl 
       estimatedCost: estimate.cost,
       dailyLimit: call.limits?.daily !== undefined ? Number(call.limits.daily) : Number(config.userDailySpendLimit) || 0,
       weeklyLimit: call.limits?.weekly !== undefined ? Number(call.limits.weekly) : Number(config.userWeeklySpendLimit) || 0,
-      runLimit: 0,
+      runLimit: Number(call.limits?.run) || 0,
       now: at,
     });
   }

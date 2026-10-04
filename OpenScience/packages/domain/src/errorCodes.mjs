@@ -1060,6 +1060,22 @@ const autopilotMaterialErrorCodes = Object.freeze([
 ])
 
 /**
+ * The two refusals a scheduled task's own spending caps raise before an episode
+ * starts (`AutopilotService.assertAffordable`): what this task has spent in the
+ * last 24 hours or 7 days has reached the 每日上限 or 每周上限 written on the
+ * task. They are not the account's ceiling and must not read as one — on
+ * 2026-10-04 a task with ¥3 a day was refused with 「账户已达用量上限」 because
+ * the researcher's own other research that day had cost ¥16, and the task had
+ * spent nothing. Shown on the page where the researcher presses 立即运行 or
+ * sends a follow-up; the weekly one is named first when both are spent, since
+ * it frees later. Private for the same reason as the materials list.
+ */
+const autopilotBudgetErrorCodes = Object.freeze([
+  'autopilot_daily_budget_spent',
+  'autopilot_weekly_budget_spent',
+])
+
+/**
  * Codes the personal library answers with (`libraryService.mjs`): shown where
  * a document is added to the library, removed from it, or published from it
  * into the capsule. Private for the same reason as the intake list.
@@ -1437,6 +1453,7 @@ export const ALL_ERROR_CODES = Object.freeze([...new Set([
   ...terminalEvidenceSourceErrorCodes,
   ...sourceIntakeErrorCodes,
   ...autopilotMaterialErrorCodes,
+  ...autopilotBudgetErrorCodes,
   ...libraryErrorCodes,
   ...capsuleTransferErrorCodes,
   ...GEO_ROUTE_ERROR_CODES,
@@ -2006,6 +2023,12 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   library_source_invalid: '没有找到这份资料，刷新知识库后再试。',
   autopilot_material_not_found: '找不到这份资料，或它不属于这个研究问题所在的项目。先把文件加入这个项目的知识库，再关联到问题。',
   autopilot_materials_full: '这个研究问题已关联了足够多的资料。先移除不再需要的，再添加新的。',
+  autopilot_daily_budget_spent:
+    '这个任务近 24 小时的花费已达它自己设定的“每日上限”，这次没有开始。这个上限只计这个任务自己的花费，账户里其他研究的花费不占用它。'
+    + '等预算随时间释放，或在“编辑任务”里调高每日上限即可。',
+  autopilot_weekly_budget_spent:
+    '这个任务近 7 天的花费已达它自己设定的“每周上限”，这次没有开始。这个上限只计这个任务自己的花费，账户里其他研究的花费不占用它。'
+    + '等预算随时间释放，或在“编辑任务”里调高每周上限即可。',
   library_item_not_found: '这份资料不在个人资料库里。',
   library_full: '个人资料库已满。先移出不再需要的资料，再加入新的。',
   library_source_removed: '这份资料在各个项目里都已删除，它的资料理解结果也随之删除，没有可以发布到记忆胶囊的内容；资料库里的正文副本仍然可以阅读和检索。',
@@ -2295,6 +2318,8 @@ export function errorCodeOutcome(code) {
   // A question's material is a list the researcher keeps: a full list is a
   // ceiling, and a source that is not there is nothing to act on.
   if (text === 'autopilot_materials_full') return 'capped'
+  // A task's own spending cap is a ceiling like the account's, and frees the same way.
+  if (autopilotBudgetErrorCodes.includes(text)) return 'capped'
   if (autopilotMaterialErrorCodes.includes(text)) return 'upstream'
   if (libraryErrorCodes.includes(text)) return 'upstream'
   // Sharing a capsule refuses for what the pack holds or who it is for —
