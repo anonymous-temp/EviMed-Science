@@ -39,7 +39,7 @@ test("a result names the method record it ran, no more and no less than the engi
   assert.deepEqual(projectResultVersion({ ...version, method }).method, projectResultMethod(method));
   // A digest that is not a digest, a seed that is not an integer, a field that is not a boolean: unknown, not made up.
   assert.deepEqual(projectResultMethod({ id: "m", version: "1", digest: "nope", seeded: "no", seed: 1.5 }), { id: "m", version: "1", digest: null, seeded: null, seed: null });
-  assert.equal(projectResultMethod({ id: "m", version: "1", seed: 7 }).seed, 7);
+  assert.equal(projectResultMethod({ id: "m", version: "1", seed: 7 })?.seed, 7);
   for (const missing of [undefined, null, {}, { id: "m" }, { version: "1" }, { id: "", version: "1" }, { id: "m", version: "" }, { id: "x".repeat(201), version: "1" }, { id: "m", version: "v".repeat(65) }, "meta.dl"]) {
     assert.equal(projectResultMethod(missing), null);
   }

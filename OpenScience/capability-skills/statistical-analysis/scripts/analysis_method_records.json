@@ -1,6 +1,6 @@
 {
  "schemaVersion": 1,
- "note": "Records of the reference-checked analysis methods in analysis_methods.py, in the shape of packages/domain/src/method-records.json. `version` changes when the method's numbers, inputs, checks or diagnostics change; a result carries it with the record's digest and the digest of the module. Only strings, integers and booleans appear here. `seeded: false` means the method draws no random numbers.",
+ "note": "Records of the reference-checked analysis methods in analysis_methods.py, in the shape of packages/domain/src/method-records.json. `dependencies` are the runtime image's pins (deploy/runtime-dsh/install-runtime.sh, held equal by a test); a result also reports the versions it actually ran on. `version` changes when the method's numbers, inputs, checks or diagnostics change; a result carries it with the record's digest and the digest of the module. Only strings, integers and booleans appear here. `seeded: false` means the method draws no random numbers.",
  "methods": {
   "compare_groups": {
    "id": "compare_groups",
@@ -165,10 +165,10 @@
    ],
    "seeded": false,
    "dependencies": [
-    "numpy",
-    "scipy",
-    "pandas",
-    "statsmodels"
+    "numpy==2.2.6",
+    "scipy==1.15.3",
+    "pandas==2.2.3",
+    "statsmodels==0.14.6"
    ],
    "references": [
     {
@@ -227,10 +227,10 @@
    ],
    "seeded": false,
    "dependencies": [
-    "numpy",
-    "scipy",
-    "pandas",
-    "statsmodels"
+    "numpy==2.2.6",
+    "scipy==1.15.3",
+    "pandas==2.2.3",
+    "statsmodels==0.14.6"
    ],
    "references": [
     {
@@ -334,10 +334,10 @@
    ],
    "seeded": false,
    "dependencies": [
-    "numpy",
-    "scipy",
-    "pandas",
-    "statsmodels"
+    "numpy==2.2.6",
+    "scipy==1.15.3",
+    "pandas==2.2.3",
+    "statsmodels==0.14.6"
    ],
    "references": [
     {
@@ -493,10 +493,10 @@
    ],
    "seeded": false,
    "dependencies": [
-    "numpy",
-    "scipy",
-    "pandas",
-    "statsmodels"
+    "numpy==2.2.6",
+    "scipy==1.15.3",
+    "pandas==2.2.3",
+    "statsmodels==0.14.6"
    ],
    "references": [
     {
@@ -630,10 +630,10 @@
    ],
    "seeded": false,
    "dependencies": [
-    "numpy",
-    "scipy",
-    "pandas",
-    "statsmodels"
+    "numpy==2.2.6",
+    "scipy==1.15.3",
+    "pandas==2.2.3",
+    "statsmodels==0.14.6"
    ],
    "references": [
     {
@@ -774,10 +774,10 @@
    ],
    "seeded": false,
    "dependencies": [
-    "numpy",
-    "scipy",
-    "pandas",
-    "statsmodels"
+    "numpy==2.2.6",
+    "scipy==1.15.3",
+    "pandas==2.2.3",
+    "statsmodels==0.14.6"
    ],
    "references": [
     {
@@ -910,10 +910,10 @@
    ],
    "seeded": false,
    "dependencies": [
-    "numpy",
-    "scipy",
-    "pandas",
-    "statsmodels"
+    "numpy==2.2.6",
+    "scipy==1.15.3",
+    "pandas==2.2.3",
+    "statsmodels==0.14.6"
    ],
    "references": [
     {
@@ -1107,10 +1107,10 @@
    ],
    "seeded": false,
    "dependencies": [
-    "numpy",
-    "scipy",
-    "pandas",
-    "statsmodels"
+    "numpy==2.2.6",
+    "scipy==1.15.3",
+    "pandas==2.2.3",
+    "statsmodels==0.14.6"
    ],
    "references": [
     {
@@ -1170,8 +1170,8 @@
    "diagnostics": [],
    "seeded": false,
    "dependencies": [
-    "numpy",
-    "pandas"
+    "numpy==2.2.6",
+    "pandas==2.2.3"
    ],
    "references": [
     {

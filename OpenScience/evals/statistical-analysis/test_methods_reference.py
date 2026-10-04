@@ -75,8 +75,17 @@ def test_every_method_has_a_record_in_the_shape_of_the_calculators(method):
         assert (SCRIPTS.parents[2] / reference["test"].replace("OpenScience/", "", 1)).is_file(), reference["test"]
     # Strings, integers and booleans only, as in the domain's records: the digest is the same in every language.
     assert all(type(item) in (str, int, bool) for item in scalars(record)), method
-    # The dependencies a record names are the libraries the result will report.
-    assert set(record["dependencies"]) <= set(am.environment()["packages"])
+    # The dependencies a record names are the libraries the result will report, at the runtime image's pins.
+    assert {pin.split("==")[0] for pin in record["dependencies"]} <= set(am.environment()["packages"])
+
+
+def test_the_dependencies_a_record_pins_are_the_runtime_images_pins():
+    pins = dict(re.findall(r"^\s+([A-Za-z0-9_.-]+)==([0-9][^\s\\]*)", (SCRIPTS.parents[2] / "deploy" / "runtime-dsh" / "install-runtime.sh").read_text(encoding="utf-8"), flags=re.M))
+    assert {"numpy", "scipy", "pandas", "statsmodels"} <= set(pins), "the image's pin list was read"
+    for method, record in am.method_records().items():
+        for pin in record["dependencies"]:
+            name, version = pin.split("==")
+            assert pins[name] == version, f"{method} pins {pin}, the runtime image installs {name}=={pins[name]}"
 
 
 def test_a_result_names_its_record_its_module_no_seed_and_the_libraries_it_ran_on():
