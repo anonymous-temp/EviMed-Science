@@ -190,6 +190,30 @@ class ResearchCalculationTests(unittest.TestCase):
         result = self.server.call_tool("research_calculate", {"action": "cancel", "jobId": "calculation-job"})
         self.assertEqual(result["next_actions"], ["Read the named failure and continue from preserved work."])
 
+    def test_a_calculation_the_executor_declined_says_why_and_what_to_correct(self):
+        # The control plane passes the executor's named refusal through as the job's error code; the run is told what
+        # it means, and is not sent to compare its file with the method's shape when the executor already said what is wrong.
+        for code, reason in research_calculate.REFUSAL_REASONS.items():
+            with self.subTest(code=code):
+                Gateway.answer = {"data": {"id": "calculation-job", "state": "failed", "error": {"code": code}}}
+                result = self.server.call_tool("research_calculate", {"action": "status", "jobId": "calculation-job"})
+                self.assertEqual(result["status"], "warning")
+                self.assertEqual(result["warnings"][0], reason)
+                self.assertIn("prior results remain available", result["warnings"][1])
+                self.assertIn("Correct that one input", result["next_actions"][-1])
+                self.assertNotIn("compare the input file", " ".join(result["next_actions"]))
+        # A code it does not know is not given a sentence, and an unreadable input keeps the older hint.
+        for code in ("replay_input_invalid", "replay_made_up", "result_replay_failed"):
+            with self.subTest(code=code):
+                Gateway.answer = {"data": {"id": "calculation-job", "state": "failed", "error": {"code": code}}}
+                result = self.server.call_tool("research_calculate", {"action": "status", "jobId": "calculation-job"})
+                self.assertEqual(len(result["warnings"]), 1)
+                self.assertIn("compare the input file with its method's shape", result["next_actions"][-1])
+        # A refusal is only a failed calculation's reason: a canceled one with the same code is just canceled.
+        Gateway.answer = {"data": {"id": "calculation-job", "state": "canceled", "error": {"code": "replay_single_study"}}}
+        result = self.server.call_tool("research_calculate", {"action": "status", "jobId": "calculation-job"})
+        self.assertEqual(len(result["warnings"]), 1)
+
     def test_streamed_response_uses_one_total_deadline_and_size_limit(self):
         class Stream:
             def read1(self, _size):

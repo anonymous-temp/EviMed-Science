@@ -3,6 +3,15 @@
 The dispatcher names three existing engine functions. It never imports a module
 named by the request, invokes model/retrieval code, installs a dependency or
 executes an imported script. VCR jobs remain on the existing protected R service.
+
+Every method has a record (`method_records.json`, one file for the adapter, the
+control plane and the calculation tool): its assumptions, inputs, the refusals it
+may answer with, the diagnostics it may attach, whether it draws random numbers,
+and the references its numbers were checked against. A result carries the record's
+identity, version and digest, the seed (none: no admitted method is seeded) and the
+diagnostics its own input earned, so a rerun can say whether it ran the same method
+and what it noticed about the data. A refusal declines that one calculation under a
+named code; the rest of the research is untouched.
 """
 from __future__ import annotations
 
@@ -43,12 +52,36 @@ METHODS = {
     },
 }
 MAX_INPUT_BYTES = 8 * 1024 * 1024
+RECORDS_FILE = "method_records.json"
+_RECORDS: dict[str, Any] | None = None
 
 
 class ReplayError(ValueError):
     def __init__(self, code: str):
         super().__init__(code)
         self.code = code
+
+
+def method_records() -> dict[str, Any]:
+    """The method records shipped beside this module (read once)."""
+    global _RECORDS
+    if _RECORDS is None:
+        try:
+            loaded = json.loads((Path(__file__).with_name(RECORDS_FILE)).read_bytes())
+            if not isinstance(loaded, dict) or loaded.get("schemaVersion") != 1 or not isinstance(loaded.get("methods"), dict):
+                raise ValueError()
+        except (OSError, ValueError):
+            raise ReplayError("replay_environment_unavailable") from None
+        _RECORDS = loaded["methods"]
+    return _RECORDS
+
+
+def record_identity(method: str) -> dict[str, str]:
+    """The record's id, version and digest, which a result carries to say what ran."""
+    record = method_records().get(method)
+    if not isinstance(record, dict) or record.get("id") != method or not isinstance(record.get("version"), str):
+        raise ReplayError("replay_method_unsupported")
+    return {"id": method, "version": record["version"], "digest": digest(canonical(record))}
 
 
 def canonical(value: Any) -> bytes:
@@ -91,7 +124,7 @@ def manifest(method: str) -> dict[str, Any]:
         raise ReplayError("replay_environment_unavailable") from None
     return {"method": method, "version": "1", "codeDigest": digest(canonical(files)), "codeFiles": files,
             "environmentDigest": digest(canonical(environment)), "environment": environment,
-            "comparison": spec["comparison"]}
+            "comparison": spec["comparison"], "methodRecord": record_identity(method)}
 
 
 def _object(value: Any, allowed: set[str], required: set[str] | None = None) -> dict:
@@ -100,8 +133,17 @@ def _object(value: Any, allowed: set[str], required: set[str] | None = None) -> 
     return value
 
 
-def _number(value: Any, *, positive=False, integer=False) -> float:
-    if type(value) not in (int, float) or not math.isfinite(value) or (positive and value <= 0) or (integer and (value < 0 or int(value) != value)):
+def _number(value: Any, *, positive=False, integer=False, nonpositive="replay_input_invalid") -> float:
+    """A finite number, in range. A NaN or infinity is its own refusal: it is a missing or broken
+    value, not a malformed request, and the researcher can fix it. `nonpositive` names the refusal for a
+    value that must be above zero and is not."""
+    if type(value) not in (int, float):
+        raise ReplayError("replay_input_invalid")
+    if not math.isfinite(value):
+        raise ReplayError("replay_nonfinite_value")
+    if positive and value <= 0:
+        raise ReplayError(nonpositive)
+    if integer and (value < 0 or int(value) != value):
         raise ReplayError("replay_input_invalid")
     return value
 
@@ -118,6 +160,99 @@ def _rows(value: Any, limit: int) -> list:
     return value
 
 
+def _diagnostic(code: str, severity: str, **detail: Any) -> dict[str, Any]:
+    """One thing a method noticed about this input. The codes are the record's `diagnostics`."""
+    return {"code": code, "severity": severity, **({"detail": detail} if detail else {})}
+
+
+def _pooling_diagnostics(rows: list[dict], measure: str, fitted: dict[str, Any]) -> list[dict[str, Any]]:
+    """What a random-effects pooling should say about the data it was given.
+
+    `fitted` is the engine's result as a plain dict; a missing field reads as absent, so a
+    result that does not carry it earns no diagnostic from it rather than a failure.
+    """
+    found = []
+    k = len(rows)
+    if fitted.get("fallback_reason") == "fewer_than_three_studies":
+        found.append(_diagnostic("two_studies_fixed_effect_fallback", "notice", studies=k))
+    elif k < 5:
+        found.append(_diagnostic("few_studies", "notice", studies=k))
+    if fitted.get("model") == "random" and fitted.get("tau_squared") == 0:
+        found.append(_diagnostic("tau_squared_at_boundary", "notice", studies=k))
+    i_squared = fitted.get("i_squared")
+    if isinstance(i_squared, (int, float)) and i_squared >= 75:
+        found.append(_diagnostic("heterogeneity_considerable", "warning", iSquaredPercent=i_squared))
+    weights = [(item.get("study_id"), item.get("weight")) for item in fitted.get("studies") or [] if isinstance(item, dict)]
+    heaviest = max(((weight, study) for study, weight in weights if isinstance(weight, (int, float))), default=None)
+    if heaviest is not None and heaviest[0] >= 50:
+        found.append(_diagnostic("dominant_study", "notice", studyId=heaviest[1], weightPercent=heaviest[0]))
+    seen: dict[tuple[float, float], list[str]] = {}
+    for row in rows:
+        seen.setdefault((float(row["yi"]), float(row["vi"])), []).append(row["id"])
+    twins = [ids for ids in seen.values() if len(ids) > 1]
+    if twins:
+        found.append(_diagnostic("duplicate_effects", "warning", studyIds=sorted(item for ids in twins for item in ids)[:20]))
+    if measure in {"OR", "RR", "HR", "IRR"} and any(abs(float(row["yi"])) > 10 for row in rows):
+        found.append(_diagnostic("ratio_effect_on_raw_scale_suspected", "warning", effectMeasure=measure))
+    if "prediction_interval" in fitted and fitted["prediction_interval"] is None:
+        found.append(_diagnostic("prediction_interval_unavailable", "notice"))
+    found.append(_diagnostic("small_study_tests_not_run", "notice"))
+    return found
+
+
+def _signal_diagnostics(rows: list[dict], corrected: dict[str, bool]) -> list[dict[str, Any]]:
+    found = []
+    for row in rows:
+        a, b, c, d = (row[cell] for cell in "abcd")
+        if corrected.get(row["id"]):
+            found.append(_diagnostic("zero_cell_corrected", "notice", tableId=row["id"]))
+        if a < 3:
+            found.append(_diagnostic("small_case_count", "warning", tableId=row["id"], cases=a))
+        n = a + b + c + d
+        smallest_expected = min((a + b) * (a + c), (a + b) * (b + d), (c + d) * (a + c), (c + d) * (b + d)) / n
+        if smallest_expected < 5:
+            found.append(_diagnostic("chi_square_expected_count_below_5", "warning", tableId=row["id"], smallestExpected=smallest_expected))
+    if len(rows) > 1:
+        found.append(_diagnostic("multiplicity_unadjusted", "notice", tables=len(rows)))
+    return found
+
+
+def _network_diagnostics(rows: list[dict], max_nodes: int, graph_edges: int) -> list[dict[str, Any]]:
+    found = []
+    frequency: dict[str, float] = {}
+    for row in rows:
+        frequency[row["source"]] = max(frequency.get(row["source"], 0), row["source_freq"])
+        frequency[row["target"]] = max(frequency.get(row["target"], 0), row["target_freq"])
+    over = [(row["source"], row["target"]) for row in rows if row["weight"] > min(frequency[row["source"]], frequency[row["target"]])]
+    if over:
+        found.append(_diagnostic("cooccurrence_exceeds_frequency", "warning", edges=len(over)))
+    ranked = sorted(frequency, key=frequency.get, reverse=True)
+    if len(ranked) > max_nodes and frequency[ranked[max_nodes - 1]] == frequency[ranked[max_nodes]]:
+        found.append(_diagnostic("node_limit_cutoff_tie", "notice", maxNodes=max_nodes, frequency=frequency[ranked[max_nodes]]))
+    kept = set(ranked[:max_nodes])
+    parent = {node: node for node in kept}
+
+    def find(node):
+        while parent[node] != node:
+            parent[node] = parent[parent[node]]
+            node = parent[node]
+        return node
+    joined = [row for row in rows if row["source"] in kept and row["target"] in kept]
+    for row in joined:
+        parent[find(row["source"])] = find(row["target"])
+    touched = {node for row in joined for node in (row["source"], row["target"])}
+    if not joined or not graph_edges:
+        found.append(_diagnostic("no_edges_between_kept_nodes", "warning", maxNodes=max_nodes))
+    elif len({find(node) for node in touched}) > 1:
+        found.append(_diagnostic("disconnected_graph", "notice", components=len({find(node) for node in touched})))
+    return found
+
+
+def _with_identity(method: str, result: dict[str, Any], diagnostics: list[dict[str, Any]]) -> dict[str, Any]:
+    """Attach what a result must say about itself: the method record it ran, no seed, what it noticed."""
+    return {**result, "methodRecord": record_identity(method), "seeded": False, "seed": None, "diagnostics": diagnostics}
+
+
 def compute(method: str, value: dict[str, Any], parameters: dict[str, Any]) -> dict[str, Any]:
     """Call fixed numeric engine functions; no narrative generation involved."""
     root = engine_root(method)
@@ -131,14 +266,22 @@ def compute(method: str, value: dict[str, Any], parameters: dict[str, Any]) -> d
             raise ReplayError("replay_input_invalid")
         from new_meta.engines.meta_engine import random_effects_dl
         from new_meta.schemas.meta_result import StudyEffect
-        studies = []
+        rows, studies = [], []
         for row in _rows(value["studies"], 1024):
             _object(row, {"id", "label", "yi", "vi"})
-            vi = _number(row["vi"], positive=True)
-            studies.append(StudyEffect(study_id=_label(row["id"]), study_label=_label(row["label"]),
-                                       yi=_number(row["yi"]), vi=vi, se=math.sqrt(vi)))
+            vi = _number(row["vi"], positive=True, nonpositive="replay_nonpositive_variance")
+            yi = _number(row["yi"])
+            rows.append({"id": _label(row["id"]), "yi": yi, "vi": vi})
+            studies.append(StudyEffect(study_id=rows[-1]["id"], study_label=_label(row["label"]), yi=yi, vi=vi, se=math.sqrt(vi)))
+        # A study entered twice is counted twice; one study alone has nothing to pool.
+        if len({row["id"] for row in rows}) != len(rows):
+            raise ReplayError("replay_duplicate_study_ids")
+        if len(rows) < 2:
+            raise ReplayError("replay_single_study")
         result = random_effects_dl(studies, value["effectMeasure"], _label(value["outcome"]))
-        return {"method": method, "values": result.model_dump(mode="json"), "executedMethod": result.execution_metadata().model_dump(mode="json")}
+        fitted = result.model_dump(mode="json")
+        return _with_identity(method, {"method": method, "values": fitted, "executedMethod": result.execution_metadata().model_dump(mode="json")},
+                              _pooling_diagnostics(rows, value["effectMeasure"], fitted))
     if method == "faers.signals":
         _object(parameters, {"yates", "correctZeroCells"}, set())
         if any(type(flag) is not bool for flag in parameters.values()):
@@ -146,21 +289,29 @@ def compute(method: str, value: dict[str, Any], parameters: dict[str, Any]) -> d
         _object(value, {"tables"})
         from safety_agent.signals.tables import ContingencyTable2x2
         from safety_agent.signals.disproportionality import ror, prr, chi_square, information_component
-        rows = []
+        rows, panels, corrected_tables = [], [], {}
         for row in _rows(value["tables"], 1024):
             _object(row, {"id", "a", "b", "c", "d"})
-            table = ContingencyTable2x2(**{cell: _number(row[cell], integer=True) for cell in "abcd"})
+            rows.append({"id": _label(row["id"]), **{cell: _number(row[cell], integer=True) for cell in "abcd"}})
+        if len({row["id"] for row in rows}) != len(rows):
+            raise ReplayError("replay_duplicate_table_ids")
+        for row in rows:
+            if sum(row[cell] for cell in "abcd") == 0:
+                raise ReplayError("replay_empty_table")
+            table = ContingencyTable2x2(**{cell: row[cell] for cell in "abcd"})
             corrected = table.needs_correction
             if corrected:
                 if not parameters.get("correctZeroCells", True):
                     raise ReplayError("replay_not_estimable")
                 table = table.corrected()
-            rows.append({"id": _label(row["id"]), "table": asdict(table), "haldaneAnscombeApplied": corrected,
-                         "ror": asdict(ror(table)), "prr": asdict(prr(table)),
-                         "chi2": asdict(chi_square(table, yates=parameters.get("yates", False))),
-                         "ic": asdict(information_component(table))})
+            corrected_tables[row["id"]] = corrected
+            panels.append({"id": row["id"], "table": asdict(table), "haldaneAnscombeApplied": corrected,
+                           "ror": asdict(ror(table)), "prr": asdict(prr(table)),
+                           "chi2": asdict(chi_square(table, yates=parameters.get("yates", False))),
+                           "ic": asdict(information_component(table))})
         # EBGM is omitted: a captured 2x2 table alone does not identify the fitted prior.
-        return {"method": method, "values": rows, "omitted": [{"statistic": "EBGM", "reason": "fitted_prior_not_part_of_this_recipe"}]}
+        return _with_identity(method, {"method": method, "values": panels, "omitted": [{"statistic": "EBGM", "reason": "fitted_prior_not_part_of_this_recipe"}]},
+                              _signal_diagnostics(rows, corrected_tables))
     if method == "bibliometric.network":
         _object(parameters, {"maxNodes"})
         max_nodes = _number(parameters["maxNodes"], positive=True, integer=True)
@@ -177,11 +328,18 @@ def compute(method: str, value: dict[str, Any], parameters: dict[str, Any]) -> d
                          "source_freq": _number(row["source_freq"], positive=True), "target_freq": _number(row["target_freq"], positive=True)})
         if len({row[field] for row in rows for field in ("source", "target")}) > 2000:
             raise ReplayError("replay_input_invalid")
+        # The graph keeps one weight per unordered pair, so a pair given twice would silently lose a count.
+        if any(row["source"] == row["target"] for row in rows):
+            raise ReplayError("replay_self_loop_edge")
+        pairs = [frozenset((row["source"], row["target"])) for row in rows]
+        if len(set(pairs)) != len(pairs):
+            raise ReplayError("replay_duplicate_edges")
         graph = _build_graph(pd.DataFrame(rows), int(max_nodes))
         centrality = _compute_centrality(graph) if graph.number_of_nodes() else {}
-        return {"method": method, "values": {"nodeCount": graph.number_of_nodes(), "edgeCount": graph.number_of_edges(),
+        return _with_identity(method, {"method": method, "values": {"nodeCount": graph.number_of_nodes(), "edgeCount": graph.number_of_edges(),
                 "centrality": {node: centrality[node] for node in sorted(centrality)}},
-                "omitted": [{"statistic": "community_detection_and_layout", "reason": "original_path_not_declared_deterministic"}]}
+                "omitted": [{"statistic": "community_detection_and_layout", "reason": "original_path_not_declared_deterministic"}]},
+                _network_diagnostics(rows, int(max_nodes), graph.number_of_edges()))
     raise ReplayError("replay_method_unsupported")
 
 
@@ -273,7 +431,8 @@ def execute(recipe: dict[str, Any], input_bytes: bytes) -> dict[str, Any]:
             "receipt": {"method": recipe["method"], "version": "1",
             "recipeDigest": digest(canonical(recipe)), "inputDigest": digest(input_bytes), "outputDigest": digest(encoded),
             "codeDigest": observed["codeDigest"], "environmentDigest": observed["environmentDigest"],
-            "codeFiles": observed["codeFiles"], "environment": observed["environment"], "comparison": observed["comparison"]}}
+            "codeFiles": observed["codeFiles"], "environment": observed["environment"], "comparison": observed["comparison"],
+            "methodRecord": observed["methodRecord"], "seed": None}}
 
 
 def main() -> int:

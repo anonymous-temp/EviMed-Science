@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import path from "node:path";
-import { projectResultInput, projectResultVersion, normalizeResultPath, RESULT_PRODUCER_KINDS } from "@evimed/domain/result-provenance";
+import { projectResultInput, projectResultMethod, projectResultVersion, normalizeResultPath, RESULT_PRODUCER_KINDS } from "@evimed/domain/result-provenance";
 import { claimEvidenceSources } from "@evimed/domain/clinical-evidence";
 import { HttpError, assertProjectCapacity, mimeFor, openScopedFileNoFollow, readStableFileHandle,
   resolveScopedPath, withProjectStorageMutation, writeFileExclusiveNoFollow } from "./security.mjs";
@@ -54,7 +54,7 @@ export class ResultProvenanceService {
    * binds an owned producer receipt to these bytes; observations without that
    * receipt remain explicitly observed, since a path may have changed already.
    * @param {{userId:string,project:any,relativePath:string,producer?:any,expectedDigest?:string,
-   * inputs?:any[],code?:any,environment?:any,findings?:any[],machineValues?:any[],review?:any,supersedesVersionId?:string}} input */
+   * inputs?:any[],code?:any,environment?:any,method?:any,findings?:any[],machineValues?:any[],review?:any,supersedesVersionId?:string}} input */
   async captureFile(input) {
     const project = await this.scope(input.userId, input.project.id);
     if (project.userId !== input.project.userId || project.workspaceDir !== input.project.workspaceDir) {
@@ -119,7 +119,7 @@ export class ResultProvenanceService {
       if (coverage.environment !== "captured") coverage.gaps.push("environment_not_captured");
       const payload = { recordType: "result-version", artifactId, versionId, projectId: project.id,
         path: relativePath, digest, size: bytes.length, mimeType: mimeFor(full), capturedAt: this.now().toISOString(),
-        producer, inputs, code, environment, findings: input.findings ?? [], machineValues: input.machineValues ?? [],
+        producer, inputs, code, environment, method: projectResultMethod(input.method), findings: input.findings ?? [], machineValues: input.machineValues ?? [],
         review: input.review ?? null, coverage, supersedesVersionId: input.supersedesVersionId ?? null, storagePath };
       // Validate before publication; ProductDocuments bounds serialized metadata.
       projectResultVersion(payload);

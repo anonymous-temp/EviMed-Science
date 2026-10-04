@@ -20,6 +20,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from evimed_specialist_adapter import deterministic_replay as replay
 from evimed_specialist_adapter.replay_service import ReplayJobs, install_replay_routes
 
+# The 97.5th percentile of the standard normal as tables print it; the engine's 95% intervals use it in full.
+Z_975 = 1.959963984540054
+
 linux_process_join = pytest.mark.skipif(
     sys.platform != "linux" or not hasattr(os, "waitid"),
     reason="Real worker ownership requires Linux waitid(WNOWAIT); run in the replay image or Linux CI.",
@@ -53,7 +56,7 @@ def test_meta_dl_reference_and_same_recipe_numerical_replay(engines):
     result = first["result"]["values"]
     assert result["pooled_effect"] == pytest.approx(4 / 3, abs=1e-12)
     assert result["tau_squared"] == pytest.approx(want_tau, abs=1e-12)
-    assert result["ci_lower"] == pytest.approx(4 / 3 - 1.96 * want_se, abs=1e-12)
+    assert result["ci_lower"] == pytest.approx(4 / 3 - Z_975 * want_se, abs=1e-12)
     assert second["receipt"]["outputDigest"] == first["receipt"]["outputDigest"]
     assert all(item["unit"] for item in first["machineValues"])
     assert first["result"]["executedMethod"]["tau_estimator"] == "DL"
@@ -107,9 +110,11 @@ def test_the_real_engines_compute_every_input_the_calculation_tool_describes(eng
             with pytest.raises(replay.ReplayError, match="replay_input_invalid"):
                 replay.compute(method, value, supplied)
     described = calculation_inputs.cases("meta.dl")["admitted"][0]
-    for value in ({"studies": described["studies"]}, {**described, "studies": described["studies"][:1]}):
+    # `{"studies": [...]}` alone is not an input; a single study is one, and is refused under its own name.
+    for value, code in (({"studies": described["studies"]}, "replay_input_invalid"),
+                        ({**described, "studies": described["studies"][:1]}, "replay_single_study")):
         frozen, blob = recipe("meta.dl", value)
-        with pytest.raises(replay.ReplayError, match="replay_input_invalid"):
+        with pytest.raises(replay.ReplayError, match=code):
             replay.execute(frozen, blob)
 
 

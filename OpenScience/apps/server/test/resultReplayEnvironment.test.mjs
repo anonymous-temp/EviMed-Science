@@ -4,7 +4,8 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 import { ResultProvenanceService } from "../src/resultProvenanceService.mjs";
-import { ResultReplayService, replayEnvironment } from "../src/resultReplayService.mjs";
+import { ResultReplayService, ranMethod, replayEnvironment } from "../src/resultReplayService.mjs";
+import { resultMethodDifference } from "@evimed/domain";
 import { replayDigest, ResultReplayClient } from "../src/resultReplayClient.mjs";
 import { productDocumentsDouble } from "./helpers/productDocumentsDouble.mjs";
 
@@ -46,7 +47,9 @@ async function fixture(t, { engine = {} } = {}) {
     const output = JSON.stringify({ receipt: { recipeDigest: prepared.execution.recipeDigest }, machineValues: MACHINE_VALUES });
     await write(resultPath, output);
     const answer = { jobId: job.id, recipeDigest: prepared.execution.recipeDigest, state: "succeeded", cleanup: "confirmed", resultPath,
-      artifacts: [{ path: resultPath, sha256: tamper ? sha("not the output") : sha(output), bytes: Buffer.byteLength(output) }], machineValues: MACHINE_VALUES };
+      artifacts: [{ path: resultPath, sha256: tamper ? sha("not the output") : sha(output), bytes: Buffer.byteLength(output) }], machineValues: MACHINE_VALUES,
+      // The numerical adapter's receipt names the method record the result ran; an engine with none says nothing.
+      ...(capability.methodRecord ? { receipt: { recipeDigest: prepared.execution.recipeDigest, methodRecord: capability.methodRecord } } : {}) };
     return { job, prepared, answer, complete: () => replays.complete(job, prepared, answer) };
   };
   await write("input.json", '{"studies":[]}');
@@ -181,4 +184,66 @@ test("a refusal by the engine says why, from the engine's own closed list and no
     await assert.rejects(answering(body).status(scope), error => error.code === "result_engine_rejected" && /HTTP 401/.test(error.message) && !/credential|stack|nested|xxxx/.test(error.message));
   }
   await assert.rejects(new ResultReplayClient({ config: {} }).status(scope), error => error.code === "result_replay_unavailable" && /not deployed/.test(error.message));
+});
+
+const RECORD = { id: "meta.dl", version: "2.0.0", digest: "1".repeat(64) };
+
+test("a result says which method record its engine ran, and a replay on the same record says nothing about it", async t => {
+  const f = await fixture(t);
+  f.capability.methodRecord = RECORD;
+  const calculated = await f.original();
+  // The version names the method that produced it, and that no seed was involved.
+  assert.deepEqual(calculated.method, { ...RECORD, seeded: false, seed: null });
+  assert.deepEqual((await f.replays.recipe(OWNER, calculated)).method, calculated.method, "the recipe keeps what the original ran");
+
+  const again = await f.finish((await f.replays.request(OWNER, calculated.versionId, { projectId: "p", digest: calculated.digest, requestId: "same-record" })).id);
+  const output = await again.complete();
+  assert.deepEqual(again.prepared.environment.changed, []);
+  assert.equal(again.prepared.environment.status, "same");
+  assert.equal(output.findings.some(item => item.id === "environment-differs"), false);
+  assert.equal(resultMethodDifference(calculated.method, output.method), "identical");
+});
+
+test("an engine whose method record moved is named, the replay still runs, and the numbers are still compared", async t => {
+  const f = await fixture(t);
+  f.capability.methodRecord = RECORD;
+  const calculated = await f.original();
+  f.capability.methodRecord = { id: "meta.dl", version: "2.1.0", digest: "2".repeat(64) };
+
+  const run = await f.finish((await f.replays.request(OWNER, calculated.versionId, { projectId: "p", digest: calculated.digest, requestId: "moved-record" })).id);
+  assert.equal(f.starts.length, 2, "prepared and started, not refused");
+  assert.deepEqual(run.prepared.environment.changed, ["method"], "the code and environment did not move, the method record did");
+  assert.deepEqual(run.prepared.environment.recorded.method, { ...RECORD, seeded: false, seed: null });
+  const output = await run.complete();
+  assert.equal(output.method.version, "2.1.0", "the new result names what it ran, never the original's record");
+  assert.equal(resultMethodDifference(calculated.method, output.method), "changed");
+  const message = output.findings.find(item => item.id === "environment-differs").message;
+  assert.match(message, /方法记录 meta\.dl@2\.0\.0（11111111） → meta\.dl@2\.1\.0（22222222）/);
+  assert.match(message, /不能当作同一方法下的复现/);
+  assert.doesNotMatch(message, /代码摘要|运行环境摘要/);
+  const status = await f.replays.status(OWNER, "p", run.job.payload.replayId);
+  assert.equal(status.comparison.numbers.status, "identical", "the numbers are compared on whatever the replay ran, and labelled");
+  assert.equal(status.comparison.environment.status, "differs");
+  // The original is untouched, and still says what it ran.
+  assert.equal((await f.results.get(OWNER, "p", calculated.versionId)).method.version, "2.0.0");
+});
+
+test("a result from before method records is not said to differ from an engine that has one", async t => {
+  const f = await fixture(t);
+  const legacy = await f.original();
+  assert.equal(legacy.method, null);
+  f.capability.methodRecord = RECORD;
+  const run = await f.finish((await f.replays.request(OWNER, legacy.versionId, { projectId: "p", digest: legacy.digest, requestId: "legacy" })).id);
+  const output = await run.complete();
+  assert.deepEqual(run.prepared.environment.changed, [], "no record is not a different record");
+  assert.equal(output.findings.some(item => item.id === "environment-differs"), false);
+  assert.equal(output.method.version, "2.0.0");
+  assert.equal(resultMethodDifference(legacy.method, output.method), "unknown", "a comparison with a missing side says so rather than passing");
+});
+
+test("the method an answer names is read from the adapter's receipt or the R path's own field, and from nothing else", () => {
+  assert.deepEqual(ranMethod({ receipt: { methodRecord: RECORD } }), { ...RECORD, seeded: false, seed: null });
+  assert.deepEqual(ranMethod({ methodRecord: { id: "design.analytic", version: "1.1.0", digest: null } }), { id: "design.analytic", version: "1.1.0", digest: null, seeded: false, seed: null });
+  for (const answer of [null, {}, { receipt: {} }, { methodRecord: { id: "", version: "1" } }, { methodRecord: { id: "x", version: "" } }, { methodRecord: "meta.dl" }]) assert.equal(ranMethod(answer), null);
+  assert.deepEqual(replayEnvironment({ codeDigest: "a", environmentDigest: "b", method: { ...RECORD } }, { codeDigest: "a", environmentDigest: "b" }).changed, [], "a side with no record is never compared");
 });

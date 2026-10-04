@@ -220,8 +220,11 @@ export class ResultVcrReplay {
       environmentDigest: record.recipe.environmentDigest, signed: checked.signed === true, outputHash: checked.outputHash ?? null,
       artifacts: [artifact], machineValues })}\n`);
     await this.exclusive(project, resolveScopedPath(project.workspaceDir, receiptPath), receipt);
+    // What ran, for the result's record: the R engine's own method version (the record's version for these two
+    // methods; a test holds the two equal). It carries no digest of its own and no seed: neither method is seeded.
     return this.answer(scope, result.status === "not_estimable" ? "failed" : result.status, "confirmed", {
       resultPath, machineValues, scientificStatus: result.status, partial: result.conclusion === "limited",
+      methodRecord: { id: record.method, version: record.job.methodVersion, digest: null },
       artifacts: [artifact, { path: receiptPath, sha256: sha(receipt), bytes: receipt.length }] });
   }
 

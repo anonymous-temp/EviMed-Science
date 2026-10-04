@@ -43,19 +43,19 @@ METHOD_INPUTS = {
         "input": {"studies": [{"id": "s1", "label": "Study 1", "yi": 0.12, "vi": 0.04},
                               {"id": "s2", "label": "Study 2", "yi": 0.3, "vi": 0.09}],
                   "effectMeasure": ("MD", "SMD", "RD", "OR", "RR", "HR", "IRR"), "outcome": "Outcome"},
-        "note": "two or more studies; yi is a study's effect on the analysis scale (the natural log for OR, RR, HR, "
-                "IRR) and vi its variance, above 0",
+        "note": "two or more studies with distinct ids; yi is a study's effect on the analysis scale (the natural log "
+                "for OR, RR, HR, IRR) and vi its variance, above 0",
     },
     "faers.signals": {
         "input": {"tables": [{"id": "T1", "a": 10, "b": 90, "c": 20, "d": 1880}]},
-        "note": "2x2 counts, integers of 0 or more: a the drug with the event, b the drug with other events, c other "
-                "drugs with the event, d other drugs with other events",
+        "note": "2x2 counts, integers of 0 or more, one table per id: a the drug with the event, b the drug with other "
+                "events, c other drugs with the event, d other drugs with other events",
         "parameters": {"optional": ("yates", "correctZeroCells")},
     },
     "bibliometric.network": {
         "input": {"edges": [{"source": "A", "target": "B", "weight": 2, "source_freq": 8, "target_freq": 7}]},
-        "note": "weight is the pair's co-occurrence count, source_freq and target_freq each node's own frequency, all "
-                "above 0",
+        "note": "each pair once; weight is the pair's co-occurrence count, source_freq and target_freq each node's own "
+                "frequency, all above 0",
         "parameters": {"required": ("maxNodes",)},
     },
     "design.analytic": {
@@ -89,6 +89,21 @@ METHOD_INPUTS = {
         "note": "riskRatio is the estimate on that scale and confidenceLimit the interval limit nearer 1; rare reads "
                 "an odds or hazard ratio of a rare outcome as a risk ratio",
     },
+}
+
+# Why the executor declines a calculation, in its closed vocabulary (the `refusals` of each method's record in
+# method_records.json; a test holds this table to it). A refusal declines that one calculation: it names what
+# to correct, and no other result is touched.
+REFUSAL_REASONS = {
+    "replay_single_study": "meta.dl needs at least two studies; one study has nothing to pool and no between-study variance.",
+    "replay_duplicate_study_ids": "Two studies share an id, so the same study would be counted twice; give each study one row.",
+    "replay_nonpositive_variance": "A study variance is zero or negative; each vi must be above 0.",
+    "replay_nonfinite_value": "A value is not a finite number (NaN or infinity); a missing value must be left out or supplied, not passed on.",
+    "replay_not_estimable": "A table has a zero cell and correctZeroCells is false, so its ratios are not estimable.",
+    "replay_duplicate_table_ids": "Two tables share an id, so the same pair would be counted twice; give each pair one table.",
+    "replay_empty_table": "A table has no reports at all (a, b, c and d are all 0).",
+    "replay_duplicate_edges": "The same pair of nodes appears twice, and the graph would silently keep only one of the counts.",
+    "replay_self_loop_edge": "An edge joins a node to itself.",
 }
 MAX_RESPONSE_BYTES = 4 * 1024 * 1024
 TIMEOUT_SECONDS = 30
@@ -263,12 +278,19 @@ def calculate(arguments, execution_context=None):
         raise ResearchCalculateError("result_response_invalid", "Calculation response did not identify an owned job.") from None
     state = data["state"]
     next_actions = ["Read the named failure and continue from preserved work."]
-    if state == "failed":
+    reported = data.get("error") if isinstance(data.get("error"), dict) else {}
+    refusal = REFUSAL_REASONS.get(reported.get("code")) if isinstance(reported.get("code"), str) else None
+    if state == "failed" and refusal:
+        # The executor declined this calculation and said why: that, not the input's shape, is what to correct.
+        next_actions.append("Correct that one input and start the calculation again; every other result is unaffected.")
+    elif state == "failed":
         # A wrong input shape arrives here as a bare failure; without this the
         # run looks for the cause in its container instead of in its file.
         next_actions.append("Before starting another, compare the input file with its method's shape in this tool's "
                             "description: the engine fails a missing or unread key without naming it.")
-    return {"status": "warning" if state in {"failed", "canceled", "timed_out", "ownership_unknown"} else "success",
+    warned = {"failed", "canceled", "timed_out", "ownership_unknown"}
+    return {"status": "warning" if state in warned else "success",
             "summary": "Deterministic calculation is " + state + ".", "data": data,
-            **({"warnings": ["The selected calculation has no usable new result; prior results remain available."],
-                "next_actions": next_actions} if state in {"failed", "canceled", "timed_out", "ownership_unknown"} else {})}
+            **({"warnings": [*([refusal] if state == "failed" and refusal else []),
+                             "The selected calculation has no usable new result; prior results remain available."],
+                "next_actions": next_actions} if state in warned else {})}
