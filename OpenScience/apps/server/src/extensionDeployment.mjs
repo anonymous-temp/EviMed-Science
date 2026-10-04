@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
-import { canonicalJson, canonicalExtensionCoordinate, EXTENSION_EXECUTION_CLASSES, validateExtensionProofIdentity, extensionProofAdapterRevision } from '@evimed/domain';
+import { canonicalJson, canonicalExtensionCoordinate, EXTENSION_EXECUTION_CLASSES, EXTENSION_SUPPORTED_DSH_VERSION, validateExtensionProofIdentity, extensionProofAdapterRevision } from '@evimed/domain';
 import { extensionRequestObject, extensionArray, extensionIdentifier } from './extensionAccess.mjs';
 import { extensionToolArtifactDigest } from './extensionToolController.mjs';
 import { HttpError } from './security.mjs';
@@ -108,7 +108,7 @@ export function loadExtensionDeployment(config) {
       fatal: true
     }).decode(bytes.subarray(0, read)));
     extensionRequestObject(manifest, ['schemaVersion', 'generatedAt', 'dshVersion', 'policy', 'catalogue', 'admittedArtifacts', 'admittedDescriptors', 'surfaces']);
-    if (manifest.schemaVersion !== 1 || manifest.dshVersion !== '0.1.7-rc.2' || typeof manifest.generatedAt !== 'string' || !Number.isFinite(Date.parse(manifest.generatedAt))) throw failure();
+    if (manifest.schemaVersion !== 1 || manifest.dshVersion !== EXTENSION_SUPPORTED_DSH_VERSION || typeof manifest.generatedAt !== 'string' || !Number.isFinite(Date.parse(manifest.generatedAt))) throw failure();
     extensionRequestObject(manifest.policy, ['adapterRevision', 'permissionProfileRevision']);
     const policy = currentExtensionSourcePolicy();
     if (canonicalJson(policy) !== canonicalJson(manifest.policy)) throw failure();
@@ -210,7 +210,7 @@ export function deploymentProofIdentity(deployment, entry, immutableRuntimeImage
     packageIntegrity: known.integrity,
     sourceCommit: known.coordinate.kind === 'github' ? known.coordinate.commit : null,
     adapterRevision: extensionProofAdapterRevision(artifact.adapterRevision,identities.adapterRevision,sha),
-    dshVersion: '0.1.7-rc.2',
+    dshVersion: EXTENSION_SUPPORTED_DSH_VERSION,
     runtimeImageDigest: immutableRuntimeImageId,
     executionClass: known.executionClass,
     permissionProfileRevision: identities.permissionProfileRevision,

@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import {
-  EXTENSION_SAAS_CASE_IDS, canonicalExtensionCoordinate, validateExtensionInstallRequest,
-  validateSkillWriteRequest, personalSkillName, extensionGenerationIdentity,
-  extensionProofDigest, qualifyExtensionProof,
+  EXTENSION_SAAS_CASE_IDS, EXTENSION_SUPPORTED_DSH_VERSION, EXTENSION_QUALIFICATION_STATES, EXTENSION_EVIDENCE_STATES,
+  canonicalExtensionCoordinate, validateExtensionInstallRequest, validateSkillWriteRequest, personalSkillName,
+  extensionGenerationIdentity, extensionProofDigest, qualifyExtensionProof, extensionQualificationStateOf, extensionEvidenceState,
 } from '../src/extensions.mjs'
 
 /** @param {string} value */
@@ -13,7 +14,7 @@ const hash = value => createHash('sha256').update(value).digest('hex')
 const digest = value => `sha256:${hash(value)}`
 /** @returns {import('../src/extensions.mjs').ExtensionProofIdentity} */
 const identity = () => ({packageIntegrity:digest('package'),sourceCommit:'a'.repeat(40),adapterRevision:digest('adapter'),
-  dshVersion:'0.1.7-rc.2',runtimeImageDigest:digest('image'),executionClass:'isolated-tool',
+  dshVersion:EXTENSION_SUPPORTED_DSH_VERSION,runtimeImageDigest:digest('image'),executionClass:'isolated-tool',
   permissionProfileRevision:digest('permission'),suiteRevision:digest('suite')})
 const proof = () => ({schemaVersion:1,identity:identity(),cases:EXTENSION_SAAS_CASE_IDS.map(caseId=>({caseId,status:'pass',
   observationDigests:[digest('observation-'+caseId)],artifactDigests:[digest('artifact-'+caseId)]}))})
@@ -160,4 +161,31 @@ test('personal resources share NFC Unicode paths, UTF8/depth bounds and portable
   for(const value of ['../证据','/证据','资料\\证据','资料/\u0001数据','资料/.密钥','资料/.git/config','node_modules/数据','credentials.json','secrets.json','id_ecdsa.pub','证据.pem','证据.key','ＮＯＤＥ_ＭＯＤＵＬＥＳ/数据','se\u0301crets.json','资料/💉.csv'])assert.throws(()=>canonical(value),value)
   const prefixes=new Map();canonical('资料/Report.csv',prefixes);assert.throws(()=>canonical('资料/report.csv',prefixes))
   const aliases=new Map();canonical('引用/Σ/a.csv',aliases);assert.throws(()=>canonical('引用/ς/b.csv',aliases))
+})
+
+test('the kernel version the extension contracts are written for is the pin, written once in deps-version.json',()=>{
+  const pin=JSON.parse(readFileSync(new URL('../../../deps-version.json',import.meta.url),'utf8')).dsh.version
+  assert.equal(EXTENSION_SUPPORTED_DSH_VERSION,pin,'moving the pin must move this constant with it (and revalidate the extension contracts)')
+  // The identity check reads the constant, so a receipt measured on another kernel is not an identity at all.
+  assert.throws(()=>qualifyExtensionProof(trusted(proof()),{...identity(),dshVersion:'0.0.0-unsupported.1'},authority(trusted(proof()))),{code:'extension_contract_invalid'})
+})
+test('a record is a label: every way of reading it maps to one of four states and one word the centre shows',()=>{
+  const receipt=trusted(proof())
+  /** @param {unknown} value @param {unknown} current @param {any} [trustedAuthority] */
+  const read=(value,current,trustedAuthority=authority(receipt))=>{try{qualifyExtensionProof(value,current,trustedAuthority);return 'qualified'}catch(error){return extensionQualificationStateOf(error)}}
+  assert.equal(read(receipt,identity()),'qualified')
+  assert.equal(read(receipt,{...identity(),runtimeImageDigest:digest('moved-image')}),'stale','a genuine record for an earlier identity')
+  assert.equal(read(trusted({...proof(),cases:proof().cases.slice(1)}),identity(),authority(trusted({...proof(),cases:proof().cases.slice(1)}))),'incomplete','a genuine record with unmet cases')
+  assert.equal(read(receipt,identity(),{...authority(receipt),trustedReceiptDigests:new Set()}),'unqualified','a record nobody trusts')
+  assert.equal(read({...receipt,forged:true},identity()),'unqualified','a malformed record')
+  assert.equal(extensionQualificationStateOf(new Error('unreadable')),'unqualified')
+  assert.equal(extensionQualificationStateOf(undefined),'unqualified')
+  assert.equal(extensionQualificationStateOf(null),'unqualified')
+  // One vocabulary: each state has exactly one word on the centre's ladder, and the words are the ladder's own.
+  assert.deepEqual([...EXTENSION_QUALIFICATION_STATES],['qualified','unqualified','stale','incomplete'])
+  const words=EXTENSION_QUALIFICATION_STATES.map(extensionEvidenceState)
+  assert.deepEqual(words,['saas-qualified','source-assessed','qualification-stale','qualification-incomplete'])
+  assert.equal(new Set(words).size,4)
+  for(const word of words)assert.ok(EXTENSION_EVIDENCE_STATES.includes(word),word)
+  assert.equal(extensionEvidenceState('anything-else'),'source-assessed','an unknown state is shown as the unverified one, never as qualified')
 })
