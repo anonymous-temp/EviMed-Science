@@ -1,5 +1,11 @@
 import type { ClaimVerification } from "./claimCitations";
-import { fetchWithWebAuth, getWebProjectId, webApiBase } from "./apiClient";
+import { knownErrorCodeMessage } from "@evimed/domain";
+import { WebApiError, fetchWithWebAuth, getWebProjectId, webApiBase, webErrorMessage } from "./apiClient";
+
+/** A refusal in the registry's sentence for its code when there is one, else the failure's own words. */
+export function resultActionFailure(error: unknown, fallback: (error: unknown) => string): string {
+  return error instanceof WebApiError && error.code && knownErrorCodeMessage(error.code) ? webErrorMessage(error) : fallback(error);
+}
 
 export interface ResultInput {
   kind: string; id: string; digest?: string; versionId?: string; path?: string;
@@ -17,7 +23,7 @@ export interface ResultVersion {
   artifactId: string; versionId: string; projectId: string; path: string; digest: string;
   size: number; mimeType: string; capturedAt: string;
   producer: { kind: string; sessionId?: string; runId?: string; callId?: string; branchId?: string };
-  inputs: ResultInput[]; code: unknown; environment: unknown;
+  inputs: ResultInput[]; code: ResultInput | null; environment: ResultInput | null;
   findings: ResultFinding[]; machineValues: ResultMachineValue[];
   coverage: { snapshot: string; producer: string; inputs: string; code: string; environment: string; gaps: string[] };
   supersedesVersionId: string | null;
@@ -40,7 +46,9 @@ function resultUrl(path: string, query: Record<string, string> = {}): string {
 async function resultJson<T>(path: string, init?: RequestInit, query?: Record<string, string>): Promise<T> {
   const response = await fetchWithWebAuth(resultUrl(path, query), init);
   const body = await response.json();
-  if (!response.ok) throw new Error(typeof body.error === "string" ? body.error : "无法读取结果，请重试");
+  // The code travels with the message, so a refusal can be read out of the
+  // registry's sentence for it (`webErrorMessage`) instead of its English.
+  if (!response.ok) throw new WebApiError(typeof body.error === "string" ? body.error : "无法读取结果，请重试", { status: response.status, code: typeof body.code === "string" ? body.code : null, requestId: typeof body.requestId === "string" ? body.requestId : null });
   return body.data ?? body;
 }
 export async function listResultVersions(path: string, runId?: string, cursor?: string) {
@@ -73,9 +81,17 @@ export function requestResultRevision(version: ResultVersion, anchor: ResultAnch
   return resultJson<{ sessionId?: string; draft: string; referenceId: string }>(`/${encodeURIComponent(version.versionId)}/revisions`,
     { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(request) });
 }
+/** What a recalculation ran on, against what the original recorded. `differs` names the parts that moved. */
+export interface ReplayEnvironment { status: "same" | "differs"; changed: Array<"code" | "environment"> }
+export interface ReplayComparison {
+  bytes?: "identical" | "changed";
+  numbers?: { status: "identical" | "within-tolerance" | "changed" | "not-assessed" };
+  environment?: ReplayEnvironment | null;
+}
 export interface ResultReplay {
   id: string; state: string; versionId?: string | null; resultVersionId?: string | null;
   error?: string | { code?: string } | null; cleanup?: string | null;
+  comparison?: ReplayComparison | null; environment?: ReplayEnvironment | null;
 }
 export function replayResult(version: ResultVersion) {
   return resultJson<ResultReplay>(`/${encodeURIComponent(version.versionId)}/replays`,
@@ -155,6 +171,39 @@ export function resultValueDifference(before: ResultMachineValue | undefined, af
   if (!Number.isFinite(threshold) || absolute < 0 || relative < 0) return "无法比较数值";
   return threshold >= 0 && Math.abs(after.value - before.value) <= threshold ? "在允许误差内" : "有变化";
 }
+const ENVIRONMENT_PART_LABELS = { code: "代码", environment: "运行环境" } as const;
+/**
+ * The environment a recalculation ran on, in words: it says the numbers were
+ * compared on the same engine only when the record says so, and otherwise which
+ * part moved. Nothing is claimed when the record has nothing to say.
+ */
+export function replayEnvironmentLabel(environment: ReplayEnvironment | null | undefined, against = "原结果"): string | null {
+  if (!environment) return null;
+  if (environment.status === "same") return `运行环境与${against}相同`;
+  return `运行环境与${against}不同（${environment.changed.map((part) => ENVIRONMENT_PART_LABELS[part]).join("、") || "未能确认差异所在"}已变化），数值比较不是在同一环境下得到的`;
+}
+/** A recalculation's failure in the registry's own sentence for its code. */
+export function replayErrorText(error: ResultReplay["error"]): string {
+  if (typeof error === "string") return error;
+  return (error?.code ? knownErrorCodeMessage(error.code) : null) ?? "计算未完成，请查看进度后重试";
+}
+export function replayNumbersLabel(comparison: ReplayComparison | null | undefined): string | null {
+  const status = comparison?.numbers?.status;
+  if (!status) return null;
+  return ({ identical: "数值与原结果完全一致", "within-tolerance": "数值与原结果在允许误差内一致", changed: "数值与原结果有变化", "not-assessed": "数值无法与原结果比较" } as const)[status] ?? null;
+}
+/** What two related versions say they ran on: the same, different in named parts, or nothing recorded. */
+export function resultEnvironmentDifference(current: ResultVersion, prior: ResultVersion): ReplayEnvironment | null {
+  const changed: Array<"code" | "environment"> = [];
+  let known = false;
+  for (const part of ["code", "environment"] as const) {
+    const left = current[part]?.digest; const right = prior[part]?.digest;
+    if (!left || !right) continue;
+    known = true;
+    if (left !== right) changed.push(part);
+  }
+  return known ? { status: changed.length ? "differs" : "same", changed } : null;
+}
 export function resultGapLabel(reason: string): string {
-  return ({ no_owned_deterministic_recipe: "未保存受支持的计算配方", unknown_inputs: "输入关系未记录", inputs_unknown: "输入关系未记录", code_unknown: "生成代码未记录", environment_unknown: "运行环境未记录", legacy_record: "仅有旧版记录", producer_unknown: "生成来源未确认", no_authoritative_inputs: "缺少已确认的输入", producer_bytes_not_bound: "文件内容未经核验", missing_inputs: "输入文件不可用", unsupported_method: "暂不支持该计算方法", incompatible_environment: "运行环境不兼容", restricted_input: "输入资料不能导出", unavailable_review: "核对意见不可用", unobserved_execution: "执行过程未记录" } as Record<string, string>)[reason] ?? (/^[a-z][a-z0-9_:-]*$/.test(reason) ? "部分来源、代码或环境未完整保存" : reason);
+  return ({ no_owned_deterministic_recipe: "未保存受支持的计算配方", engine_unavailable: "这个部署没有用于重算的计算引擎", unknown_inputs: "输入关系未记录", inputs_unknown: "输入关系未记录", code_unknown: "生成代码未记录", environment_unknown: "运行环境未记录", legacy_record: "仅有旧版记录", producer_unknown: "生成来源未确认", no_authoritative_inputs: "缺少已确认的输入", producer_bytes_not_bound: "文件内容未经核验", missing_inputs: "输入文件不可用", unsupported_method: "暂不支持该计算方法", incompatible_environment: "运行环境不兼容", restricted_input: "输入资料不能导出", unavailable_review: "核对意见不可用", unobserved_execution: "执行过程未记录" } as Record<string, string>)[reason] ?? (/^[a-z][a-z0-9_:-]*$/.test(reason) ? "部分来源、代码或环境未完整保存" : reason);
 }

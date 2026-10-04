@@ -108,7 +108,7 @@ export class ResultVcrReplay {
 
   async start(scope, recipe, { signal = undefined } = {}) {
     const project = await this.scoped(scope);
-    if (!this.configured(scope.method)) fail("result_replay_unavailable", "The calculation engine is unavailable.", 503);
+    if (!this.configured(scope.method)) fail("result_replay_unavailable", `The calculation engine for ${scope.method} is not deployed in this environment.`, 503);
     if (signal?.aborted) throw signal.reason ?? new Error("Calculation canceled.");
     const existing = await this.recorded(project, scope);
     if (existing) return this.observe(project, scope, existing);
@@ -138,7 +138,7 @@ export class ResultVcrReplay {
       || cpuSecondsLimit < 1 || cpuSecondsLimit > this.maxCpuSeconds) fail("result_recipe_invalid", "Invalid fixed calculation limits.", 400);
     const capability = (await this.capabilities(scope)).methods.find(item => item.method === scope.method);
     if (!capability?.available || capability.codeDigest !== recipe.codeDigest || capability.environmentDigest !== recipe.environmentDigest) {
-      fail("result_replay_environment_changed", "The recorded calculation environment is unavailable.");
+      fail("result_replay_environment_changed", "The engine's code or environment is not the one this recipe names: it changed between the calculation being prepared and being started. Start the calculation again.");
     }
     const engineId = this.engineId(project, scope);
     const job = { jobId: engineId, studyId: `replay-${replayDigest([project.userId, project.id])}`, protocolVersion: VCR_ENGINE_PROTOCOL_VERSION,
@@ -198,10 +198,13 @@ export class ResultVcrReplay {
     const result = checked.result;
     if (result.status !== progress.state) fail("result_replay_scope_invalid", "The engine state changed during result retrieval.");
     const retained = result.status === "succeeded" || result.conclusion === "limited";
-    if (retained && (checked.refused || identity(await this.engine.health())?.codeDigest !== record.recipe.codeDigest
+    if (retained && checked.refused) {
+      fail("result_replay_environment_changed", "The engine's own check of its result against what was submitted refused it, so it was not saved. Start the calculation again.");
+    }
+    if (retained && (identity(await this.engine.health())?.codeDigest !== record.recipe.codeDigest
       || replayDigest({ engineVersion: result.manifest?.engineVersion, rVersion: result.manifest?.rVersion,
         packageLockHash: result.manifest?.packageLockHash }) !== record.recipe.environmentDigest)) {
-      fail("result_replay_environment_changed", "The result does not match the frozen calculation environment.");
+      fail("result_replay_environment_changed", "The result was produced by an engine whose code or environment is not the one this calculation was started on, so its record would name the wrong engine and it was not saved. Start the calculation again.");
     }
     const machineValues = retained ? (result.measures ?? []).filter(measure => Number.isFinite(measure.value)).map(measure => ({
       key: measure.name, value: measure.value, ...(typeof measure.unit === "string" ? { unit: measure.unit } : {}), absoluteTolerance: 1e-10, relativeTolerance: 1e-10,

@@ -12,7 +12,7 @@ export function replayCanonical(value) {
 export const replayDigest = value => createHash("sha256").update(replayCanonical(value)).digest("hex");
 
 export function issueResultReplayToken(secret, scope, now = Math.floor(Date.now() / 1000)) {
-  if (typeof secret !== "string" || secret.length < 32) throw new HttpError(503, "result_replay_unavailable", "Calculation authentication is unavailable.");
+  if (typeof secret !== "string" || secret.length < 32) throw new HttpError(503, "result_replay_unavailable", "The shared workload signing secret is missing or shorter than 32 characters, so no job token for the calculation engine can be issued.");
   for (const key of ["userId", "projectId", "jobId"]) {
     if (typeof scope[key] !== "string" || !/^[A-Za-z0-9_-]{1,160}$/.test(scope[key])) throw new HttpError(400, "result_replay_scope_invalid", "Invalid calculation scope.");
   }
@@ -23,6 +23,50 @@ export function issueResultReplayToken(secret, scope, now = Math.floor(Date.now(
   return `${header}.${payload}.${createHmac("sha256", secret).update(`${header}.${payload}`).digest("base64url")}`;
 }
 
+/**
+ * Why an engine refused, in its own closed vocabulary.
+ *
+ * The adapter answers a refusal with `{"detail": "<code>"}` from a list we
+ * wrote (`replay_service.py`), and "the calculation engine refused this
+ * operation" told nobody which of them it was: a job token that did not verify
+ * and a recipe that is not the one the token was issued for are different things
+ * to put right. Only a code on this list is read out of the body, and only the
+ * sentence written here is repeated; nothing else the engine said is.
+ */
+const ENGINE_REFUSALS = Object.freeze({
+  replay_job_token_required: "it did not accept the job token (missing, expired, or not signed with the shared workload secret)",
+  replay_job_not_owned: "the job id in the request is not the one the job token was issued for",
+  replay_recipe_not_owned: "the recipe is not the one the job token was issued for",
+  replay_job_conflict: "it already holds a record for this job under another recipe",
+  replay_job_not_found: "it holds no record of this job",
+  replay_job_invalid: "the request did not have the job's id and recipe",
+  replay_recipe_invalid: "it found the recipe malformed",
+  replay_method_unsupported: "it does not offer the recipe's method",
+  replay_input_changed: "the input bytes are not the ones the recipe names",
+  replay_code_changed: "its code is not the code the recipe names",
+  replay_environment_incompatible: "its environment is not the environment the recipe names",
+  replay_engine_busy: "it is running another calculation",
+});
+
+async function engineRefusal(response) {
+  try {
+    const reader = response.body?.getReader();
+    if (!reader) return null;
+    const chunks = []; let size = 0;
+    try {
+      for (;;) {
+        const next = await reader.read();
+        if (next.done) break;
+        size += next.value.byteLength;
+        if (size > 4096) return null;
+        chunks.push(Buffer.from(next.value));
+      }
+    } finally { await reader.cancel().catch(() => {}); }
+    const detail = JSON.parse(Buffer.concat(chunks).toString("utf8"))?.detail;
+    return typeof detail === "string" && Object.hasOwn(ENGINE_REFUSALS, detail) ? { code: detail, reason: ENGINE_REFUSALS[detail] } : null;
+  } catch { return null; }
+}
+
 /** Server-configured engine only; no caller URL, redirect, provider credential
  * or arbitrary script is accepted. The deadline covers streamed response bytes. */
 export class ResultReplayClient {
@@ -31,7 +75,7 @@ export class ResultReplayClient {
   }
   configured() { return Boolean(this.config.resultEngineUrl && this.config.evimedWorkloadSigningSecret); }
   async request(scope, suffix, { method = "GET", body = undefined, signal = undefined } = {}) {
-    if (!this.configured()) throw new HttpError(503, "result_replay_unavailable", "The calculation engine is unavailable.");
+    if (!this.configured()) throw new HttpError(503, "result_replay_unavailable", "The calculation engine is not deployed: its address or the shared workload signing secret is not configured here.");
     const url = new URL(this.config.resultEngineUrl);
     if (!["http:", "https:"].includes(url.protocol) || url.username || url.password || url.search || url.hash) throw new HttpError(503, "result_engine_configuration_invalid", "The calculation engine is unavailable.");
     url.pathname = `/api/v1/evimed/result-replays${suffix}`;
@@ -49,7 +93,12 @@ export class ResultReplayClient {
         headers: { Authorization: `Bearer ${issueResultReplayToken(this.config.evimedWorkloadSigningSecret, scope)}`, "Content-Type": "application/json" },
         ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
       if (abort.signal.aborted) { await response.body?.cancel().catch(() => {}); throw new HttpError(499, "result_calculation_canceled", "The calculation request was canceled."); }
-      if (!response.ok) { await response.body?.cancel().catch(() => {}); throw new HttpError(response.status === 404 ? 404 : 502, "result_engine_rejected", "The calculation engine refused this operation."); }
+      if (!response.ok) {
+        const refusal = await engineRefusal(response);
+        await response.body?.cancel().catch(() => {});
+        throw new HttpError(response.status === 404 ? 404 : 502, "result_engine_rejected",
+          refusal ? `The calculation engine refused this operation (${refusal.code}): ${refusal.reason}.` : `The calculation engine refused this operation (HTTP ${response.status}) without a reason it can be asked about.`);
+      }
       if (!response.body) throw new HttpError(502, "result_engine_response_invalid", "The calculation engine returned an empty response.");
       reader = response.body.getReader(); const chunks = []; let size = 0;
       try {
