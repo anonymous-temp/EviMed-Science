@@ -166,12 +166,13 @@ test("a dispatched run may finish before it is ever observed to progress", () =>
 test("an unknown turn-end kind lands on a counted unknown code, never on success", () => {
   assert.deepEqual(turnEndErrorCode("completed"), { errorCode: null });
   assert.deepEqual(turnEndErrorCode("aborted"), { errorCode: "runtime_canceled" });
-  assert.deepEqual(turnEndErrorCode("blocked"), { errorCode: "runtime_tool_error", subCode: "turn_blocked" });
+  // A pre-step rejection is a session error with its own sub-code, as the ledger records it; no tool had a part in it.
+  assert.deepEqual(turnEndErrorCode("blocked"), { errorCode: "runtime_session_error", subCode: "turn_blocked" });
   assert.deepEqual(turnEndErrorCode("max-tokens"), { errorCode: "runtime_session_error", subCode: "model_max_tokens" });
   assert.deepEqual(turnEndErrorCode("interrupted"), { errorCode: "runtime_stopped" });
   assert.deepEqual(turnEndErrorCode("error", "HTTP_402"), { errorCode: "runtime_spend_limit_reached" });
   assert.deepEqual(turnEndErrorCode("error", "HTTP_502"), { errorCode: "runtime_session_error" });
-  assert.deepEqual(turnEndErrorCode("blocked", "HTTP_402"), { errorCode: "runtime_tool_error", subCode: "turn_blocked" });
+  assert.deepEqual(turnEndErrorCode("blocked", "HTTP_402"), { errorCode: "runtime_session_error", subCode: "turn_blocked" });
   const unknown = turnEndErrorCode("teleported");
   assert.equal(unknown.errorCode, "runtime_turn_end_unknown");
   assert.equal(unknown.unknownKind, "teleported");

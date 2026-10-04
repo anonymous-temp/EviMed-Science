@@ -670,11 +670,17 @@ export const terminalEvidenceSourceErrorCodes = new Set([
  * Kernel-boundary codes the adapter lands a DSH turn on (§6.4). `interrupted`
  * is written by the persistence backend on cold load, not by the loop, so it
  * reaches us as a stopped run rather than a failed one.
+ *
+ * `blocked` is a pre-step rejection: a plugin refused the turn before its first
+ * model call, which no tool had a part in. It mapped to `runtime_tool_error`
+ * while a tool failure could end a run; the ledger has recorded it as a session
+ * error with the sub-code `turn_blocked` since, and the wire now says the same
+ * (2026-10-04).
  */
 export const TURN_END_ERROR_CODES = Object.freeze({
   completed: null,
   aborted: 'runtime_canceled',
-  blocked: 'runtime_tool_error',
+  blocked: 'runtime_session_error',
   error: 'runtime_session_error',
   'max-tokens': 'runtime_session_error',
   interrupted: 'runtime_stopped',
@@ -715,10 +721,9 @@ export const RUNTIME_ERROR_CODES = Object.freeze([
   // Not written onto a run by the ledger since 2026-10-04: a research tool that
   // failed and was not corrected is a notice on the run (`run_tool_failed`),
   // and a turn that ended on its own is judged by what it produced. Kept, with
-  // its sentence, so a run recorded before then is still explained by name;
-  // `TURN_END_ERROR_CODES` still names the kernel's `blocked` turn end with it
-  // on the wire, which the ledger records as `runtime_session_error` with the
-  // sub-code `turn_blocked`.
+  // its sentence, so a run recorded before then is still explained by name.
+  // Nothing maps onto it any more: the kernel's `blocked` turn end is
+  // `runtime_session_error` with the sub-code `turn_blocked`.
   'runtime_tool_error',
   'runtime_turn_end_unknown',
   'runtime_history_unavailable',

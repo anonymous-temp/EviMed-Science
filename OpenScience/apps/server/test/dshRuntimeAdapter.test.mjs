@@ -482,7 +482,7 @@ test("each turn-end kind lands on its own code, and an unknown kind is counted",
   const cases = [
     ["completed", null, undefined],
     ["aborted", "runtime_canceled", undefined],
-    ["blocked", "runtime_tool_error", "turn_blocked"],
+    ["blocked", "runtime_session_error", "turn_blocked"],
     ["error", "runtime_session_error", undefined],
     ["max-tokens", "runtime_session_error", "model_max_tokens"],
     ["interrupted", "runtime_stopped", undefined],
