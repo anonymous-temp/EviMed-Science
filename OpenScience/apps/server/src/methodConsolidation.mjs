@@ -373,6 +373,13 @@ export class MethodConsolidation {
     const retirements = await this.learning.retirementProposals(job.userId, { nowMs: this.now().getTime() });
     for (const entry of retirements) {
       if (!entry.proposal.immediate) continue;
+      // The results produced under the body it holds were found wrong more often than its predecessors': the answer is
+      // the exact earlier body when there is a sound one, a stop when there is not (`scientificRegression`), and the
+      // link that says why stays on the record either way.
+      if (entry.proposal.code === "scientific_regression") {
+        await this.learning.applyRegression(job.userId, entry.document, entry.proposal, { retire: retirementSentence(entry.proposal) }).catch(() => null);
+        continue;
+      }
       await this.learning.retire(job.userId, entry.document.id, {
         expectedRevision: entry.document.revision,
         reason: retirementSentence(entry.proposal),
@@ -725,6 +732,7 @@ export function retirementSentence(proposal) {
     incident: "它牵涉到一起已确认的问题",
     evaluated_worse: "对照评测显示，用上它比不用更差",
     harm: `用上它的 ${proposal.runs ?? "几"} 次研究里有 ${proposal.rejected ?? "多"} 次交付被退回，明显多于平常`,
+    scientific_regression: `用上它后做出的 ${proposal.runs ?? "几"} 个结果里，有 ${proposal.rejected ?? "多"} 个没能被重算复现或被你改正过，明显多于它之前的版本（只说明相伴出现，不证明因果）`,
     contribution: `用上它的 ${proposal.runs ?? "多"} 次研究，整体结果偏差`,
     superseded: "它已经很久没被用到，而且已有新的做法取代它",
   }[String(proposal.code ?? "")] ?? "它最近没有帮上忙";

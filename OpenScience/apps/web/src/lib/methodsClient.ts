@@ -38,6 +38,17 @@ export interface WebMethod {
   /** How many successful deliveries it was distilled from — the 「从你改过的 3
    *  份报告学到」 in a learned method's own sentence. */
   trajectories?: number;
+  /** What later became of the results produced under the body it holds now: reproduced by a trusted recalculation, or not
+   *  or corrected. Association, never cause: `causalBenefit` is always "unproven" and `applicability` "unknown" until
+   *  the engine's own diagnostics say otherwise. A separate axis from `counts`, which are about deliveries. */
+  scientific?: {
+    results: number; supports: number; against: number; assessed: number; neutral: number;
+    applicability: "unknown" | "flagged" | "unflagged" | string; causalBenefit: "unproven" | string;
+  };
+  /** The situation it is for and the ones it must not be loaded into, as declared when it was learnt. */
+  scope?: { applicability: string; counterexamples: string[]; current: boolean } | null;
+  /** What was left when it was returned to an earlier body or stopped because results produced under it were found wrong. */
+  links?: { type: string; at: string; results: number; against: number }[];
   createdAt: string;
   updatedAt: string;
 }

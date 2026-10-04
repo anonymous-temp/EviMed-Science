@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import { cleanMethodDisplay, mountedMethodDigest, parseSkillFrontmatter, promotionVerdict, successfulFamilies } from "@evimed/domain";
-import { bodyVersionOf, effectiveStatusReason, methodRecordFrom, methodStepsOf } from "./learningService.mjs";
+import { cleanMethodDisplay, methodScientific, mountedMethodDigest, parseSkillFrontmatter, promotionVerdict, successfulFamilies } from "@evimed/domain";
+import { bodyVersionOf, effectiveStatusReason, methodRecordFrom, methodScopeOf, methodStepsOf } from "./learningService.mjs";
 import { HttpError, readJson, sendJson } from "./security.mjs";
 
 /**
@@ -100,6 +100,15 @@ export function methodView(document) {
     derivedFrom: payload.frontmatter?.metadata?.derived_from ?? "",
     dependsOn: payload.frontmatter?.metadata?.depends_on ?? "",
     counts: payload.learning?.counts ?? null,
+    // What later became of the results produced under the body it holds now (N14): a second axis beside `counts`, which
+    // are about deliveries. What it says is association; `causalBenefit` is always `unproven` and `applicability`
+    // `unknown` until the engine's own diagnostics say otherwise.
+    scientific: methodScientific(payload.scientific, payload.contentDigest),
+    // The situation it is for and the ones it must not be loaded into, as declared when it was learnt.
+    scope: methodScopeOf(payload),
+    // The result versions it was learnt from, and what was left when it was returned to an earlier body or stopped.
+    learntFrom: payload.provenance?.results ?? [],
+    links: payload.links ?? [],
     level: payload.learning?.level ?? 0,
     relations: payload.learning?.relations ?? [],
     evaluations: payload.learning?.evaluations ?? [],

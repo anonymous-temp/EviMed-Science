@@ -70,7 +70,7 @@ export const METHOD_FEEDBACK_POLARITY = Object.freeze({
 export const METHOD_APPLICABILITY_STATES = Object.freeze(['unknown', 'flagged', 'unflagged'])
 
 /** How many entries one method record keeps. The oldest go first; a count is never a megabyte. */
-export const METHOD_FEEDBACK_LIMIT = 80
+export const METHOD_FEEDBACK_LIMIT = 60
 
 /** What a method's record says about how it was left: returned to an earlier body, or stopped. */
 export const METHOD_LINK_TYPES = Object.freeze(['rolled_back_for_regression', 'retired_for_regression'])
