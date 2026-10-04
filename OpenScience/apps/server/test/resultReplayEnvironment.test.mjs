@@ -170,7 +170,7 @@ test("what is still refused says plainly what is missing", async t => {
     error => error.code === "result_replay_receipt_invalid" && /not a finished calculation/.test(error.message));
 });
 
-test("a refusal by the engine says why, from the engine's own closed list and nothing it merely wrote", async t => {
+test("a refusal by the engine says why, from the engine's own closed list and nothing it merely wrote", async () => {
   const config = { resultEngineUrl: "http://engine:8031", evimedWorkloadSigningSecret: "test-only-".repeat(8), resultEngineRequestTimeoutMs: 200 };
   const scope = { userId: "user", projectId: "project", jobId: "c40e90ce-caa7-46af-90e2-61b581e23c30", recipeDigest: "a".repeat(64), method: "meta.dl" };
   const answering = body => new ResultReplayClient({ config, fetchImpl: async () => new Response(body, { status: 401 }) });
