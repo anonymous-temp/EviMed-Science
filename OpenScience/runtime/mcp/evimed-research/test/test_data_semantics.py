@@ -219,6 +219,13 @@ class Establish(Tool):
         self.assertEqual([item["table"] for item in result["data"]["bound"]], ["visits.csv"])
         self.assertEqual(sorted(issue["code"] for issue in result["data"]["issues"]), ["file_file_unreadable", "file_file_unreadable"])
 
+    def test_two_files_that_would_be_one_table_name_are_told_apart_by_the_run(self):
+        (self.workspace / "other").mkdir()
+        shutil.copy(FIXTURES / "patients.csv", self.workspace / "other" / "patients.csv")
+        result = self.call(action="write", datasetId="d", **INFERRED, files=[{"path": "data/patients.csv"}, {"path": "other/patients.csv"}])
+        self.assertEqual([item["code"] for item in result["data"]["issues"]], ["file_table_name_conflict"])
+        self.assertEqual([item["table"] for item in result["data"]["bound"]], ["patients.csv"])
+
     def test_the_binding_holds_aggregates_and_no_row_of_a_patient(self):
         self.record_first_delivery()
         stored = json.dumps(self.ledger())
@@ -227,6 +234,56 @@ class Establish(Tool):
         binding = next(row for row in self.ledger()["rows"])["payload"]["bindings"]
         patient_id = next(c for b in binding for c in b["columns"] if c["name"] == "patient_id")
         self.assertEqual(set(patient_id), {"name", "type", "missing", "distinct"})   # no numeric summary, no vocabulary
+
+
+class ThroughTheServer(Tool):
+    """The arguments the schema shows the model are the arguments the server's validator admits, for every action."""
+
+    def tool(self, **arguments):
+        import server
+        result = server.call_tool("dataset_semantics", arguments)
+        self.assertNotEqual(result["status"], "error", result)
+        return result
+
+    def test_every_action_accepts_the_shapes_its_own_schema_describes(self):
+        written = self.tool(
+            action="write", datasetId="visits", title="Sepsis visits", basis="model_inferred", inferredFrom=["header", "values"],
+            population="Adults with sepsis", timeWindow={"start": "2023-01-01", "end": "2023-12-31", "note": "calendar 2023"},
+            files=[{"path": "data/visits.csv"}, {"path": "data/patients.csv", "table": "patients.csv"}],
+            tables=[{"name": "visits.csv", "observationUnit": "one row per visit", "subjectKey": ["patient_id"], "observationKey": ["patient_id", "visit_no"]}],
+            variables=[
+                {"table": "visits.csv", "name": "sbp", "definition": "Systolic BP", "type": "integer", "unit": "mmHg", "codeSystem": "local", "range": [40, 300],
+                 "missingness": {"tokens": ["NA"], "reason": "not_recorded"}, "role": "covariate", "measuredAt": {"column": "visit_date", "timeKind": "occurred_at"},
+                 "valueSource": "observed", "aliases": ["sbp_old"]},
+                {"table": "visits.csv", "name": "heart_rate", "unit": None},
+                {"table": "patients.csv", "name": "arm", "allowedValues": "observed"},
+                {"table": "patients.csv", "name": "sex", "allowedValues": [{"code": "M", "label": "male"}, "F"]},
+            ],
+            joins=[{"left": {"table": "visits.csv", "columns": ["patient_id"]}, "right": {"table": "patients.csv", "columns": ["patient_id"]}, "cardinality": "many_to_one"}])
+        self.assertEqual(written["status"], "success", written)
+        self.assertEqual(self.tool(action="read", datasetId="visits", table="visits.csv")["data"]["dataset"]["datasetId"], "visits")
+        checked = self.tool(action="check", datasetId="visits", files=[{"path": "data/visits.csv"}, {"path": "data/patients.csv", "table": "patients.csv"}], complete=True,
+                            observationKeys={"visits.csv": ["patient_id", "visit_no"]}, subjectKeys={"visits.csv": ["patient_id"]},
+                            joins=[{"left": {"table": "visits.csv", "columns": ["patient_id"]}, "right": {"table": "patients.csv", "columns": ["patient_id"]}}],
+                            leakage={"cutoff": {"table": "visits.csv", "column": "visit_date"}, "subjectColumns": ["patient_id"],
+                                     "predictors": [{"table": "visits.csv", "column": "sbp", "timeColumn": "visit_date"}]},
+                            steps=[{"label": "all", "kind": "filter", "table": "visits.csv", "subjectColumns": ["patient_id"]}, {"label": "kept", "kind": "filter", "rows": 100, "subjects": 30}])
+        self.assertIn(checked["status"], ("success", "warning"))
+        self.assertEqual(checked["data"]["provenance"]["tool"], "dataset_semantics")
+        script = self.workspace / "make.py"
+        script.write_text("print(1)\n", encoding="utf-8")
+        transformed = self.tool(action="transform", datasetId="visits", transformation={
+            "name": "age_group", "kind": "recode", "description": "decades", "inputs": [{"table": "visits.csv", "columns": ["sbp"]}],
+            "output": {"table": "visits.csv", "column": "sbp_band"}, "codePath": "make.py", "parameters": {"width": 10}})
+        self.assertEqual(transformed["data"]["status"], "new")
+
+    def test_the_server_refuses_what_the_schema_does_not_admit_and_the_run_is_told_by_field(self):
+        import server
+        for arguments in ({"action": "forget"}, {"action": "write", "basis": "guessed"}, {"action": "write", "datasetId": "Has Capitals"},
+                          {"action": "write", "variables": [{"table": "t.csv", "name": "c", "type": "decimal"}]}, {"action": "check", "steps": [{"label": "x", "kind": "magic"}]},
+                          {"action": "read", "surprise": True}):
+            result = server.call_tool("dataset_semantics", arguments)
+            self.assertEqual(result["status"], "error", arguments)
 
 
 class SecondDelivery(Tool):

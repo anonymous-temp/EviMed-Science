@@ -195,7 +195,8 @@ test("a bad item is refused by name and every other item is written", () => {
     `join:${joinId({ table: "visits.csv", columns: ["patient_id"] }, { table: "patients.csv", columns: ["patient_id"] })}:cardinality`]) {
     assert.ok(targets.has(written), written);
   }
-  assert.deepEqual(factAt(result.asset, "variable:visits.csv/sex:allowedValues")?.value, [{ code: "M" }, { code: "F", label: "Female" }]);
+  // A code list is a set: sorted, de-duplicated, so the same codes in another order are the same fact.
+  assert.deepEqual(factAt(result.asset, "variable:visits.csv/sex:allowedValues")?.value, [{ code: "F", label: "Female" }, { code: "M" }]);
   assert.equal(factAt(result.asset, "variable:visits.csv/sbp:measuredAt")?.value.timeKind, "occurred_at");
   // The vocabularies of missing reasons and value sources are the 虚拟临研 ones.
   for (const reason of VCR_MISSING_REASONS) {
@@ -397,4 +398,12 @@ test("a renamed column keeps its meaning: the variable that lists a former name 
   assert.equal(factAt(renamed.asset, "variable:v.csv/systolic_bp:type")?.value, "number");
   assert.deepEqual(factAt(renamed.asset, "variable:v.csv/systolic_bp:aliases")?.value, ["sbp"]);
   assert.equal(factAt(renamed.asset, "variable:v.csv/sbp:unit"), undefined);
+});
+
+test("the same code list written in another order, or the same missing tokens, is the same fact", () => {
+  const first = applySemanticsPatch(null, { datasetId: "d", ...confirmed("编码就是 M、F、U"), variables: [{ table: "t.csv", name: "sex", allowedValues: ["U", "M", "F"], missingness: { tokens: ["NA", "-"], reason: "not_recorded" } }] }, { now: T0, via: "conversation" });
+  const again = applySemanticsPatch(first.asset, { ...inferred, variables: [{ table: "t.csv", name: "sex", allowedValues: ["F", "M", "U"], missingness: { tokens: ["-", "NA"], reason: "not_recorded" } }] }, { now: T1, via: "conversation" });
+  // Not a disagreement with the researcher's statement, so nothing is "kept_stronger" and nothing is contested.
+  assert.deepEqual(again.outcomes.map((outcome) => outcome.outcome), ["unchanged", "unchanged"]);
+  assert.equal(again.changed, false);
 });

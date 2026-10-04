@@ -321,7 +321,8 @@ def _asset_view(dataset: dict, workspace: str | None, only_table=None) -> tuple:
         entry["variables"] = variables
         tables.append(entry)
     view = {
-        "datasetId": asset["datasetId"], "title": asset.get("title"), "revision": dataset["revision"], "interpretation": dataset["interpretation"],
+        # The digest is a handle a run cites ("I used interpretation 3f9a…"); twelve characters name it.
+        "datasetId": asset["datasetId"], "title": asset.get("title"), "revision": dataset["revision"], "interpretation": dataset["interpretation"][:12],
         "summary": dataset["summary"], "tables": tables,
     }
     for facet, fact in asset.get("facts", {}).items():
@@ -416,6 +417,9 @@ def _expand_files(arguments: dict, workspace: str, declared_tables: dict):
             continue
         for table in read_tables:
             name = entry.get("table") if entry.get("table") and len(read_tables) == 1 else table.name
+            if name in tables:
+                problems.append({"path": entry["path"], "reason": "table_name_conflict", "message": "%s is already the name of another file's table in this call; give one of them a table name." % name})
+                continue
             table.name = name
             tables[name] = table
             declared = {"variables": declared_tables.get(name, {}).get("variables", {}), "identifierColumns": declared_tables.get(name, {}).get("identifierColumns", set())}

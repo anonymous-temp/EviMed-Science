@@ -327,7 +327,8 @@ const FACET_RULES = {
         entries.push({ code, label })
       } else entries.push({ code })
     }
-    return ok(entries)
+    // A code list is a set: the same codes written in another order are the same fact.
+    return ok(entries.sort((a, b) => (a.code < b.code ? -1 : a.code > b.code ? 1 : 0)))
   },
   range: (value) => (Array.isArray(value) && value.length === 2 && value.every((bound) => typeof bound === 'number' && Number.isFinite(bound)) && value[0] <= value[1]
     ? ok([value[0], value[1]]) : bad('A range is [lower, upper], two finite numbers with lower not above upper.')),
@@ -337,7 +338,7 @@ const FACET_RULES = {
     if (tokens.length > 10 || tokens.some((token) => asText(typeof token === 'number' ? String(token) : token, 20) === null)) return bad('Missing tokens are at most 10 short strings.')
     const reason = value.reason == null || value.reason === '' ? null : value.reason
     if (reason !== null && !VCR_MISSING_REASONS.includes(reason)) return bad(`A missing reason is one of: ${VCR_MISSING_REASONS.join(', ')}.`)
-    return ok({ tokens: [...new Set(tokens.map((token) => String(token).trim()))], reason })
+    return ok({ tokens: [...new Set(tokens.map((token) => String(token).trim()))].sort(), reason })
   },
   role: oneOf(DATA_VARIABLE_ROLES, 'A role'),
   // Which column of the same table says when this variable was measured.
@@ -572,7 +573,7 @@ export function applySemanticsPatch(current, input, { now, via }) {
   const setFact = (facts, facet, raw, target, index) => {
     if (!provenance) return false
     const checked = FACET_RULES[facet](raw)
-    if (!checked.ok) { issues.push({ index, path: target, code: `${facet}_invalid`, message: checked.message }); return false }
+    if ('message' in checked) { issues.push({ index, path: target, code: `${facet}_invalid`, message: checked.message }); return false }
     const into = facts()
     if (!into) return false
     const merged = mergeFact(into[facet], makeFact(checked.value, provenance))
@@ -1038,7 +1039,7 @@ export function applyCheckReport(asset, report, denominators, now) {
   for (const [label, item] of Object.entries(seen)) merged[label] = { ...item, at: now }
   // Oldest labels fall away first: the bound is on the record, not on the analysis.
   asset.denominators = Object.fromEntries(Object.entries(merged).sort((a, b) => a[1].at.localeCompare(b[1].at)).slice(-DATA_SEMANTICS_LIMITS.denominators))
-  asset.updatedAt = now
+  // `updatedAt` is when the meaning last changed, and a check does not change it.
   return { ok: true }
 }
 

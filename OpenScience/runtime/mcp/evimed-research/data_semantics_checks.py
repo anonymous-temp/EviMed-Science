@@ -95,8 +95,9 @@ TYPES = ("integer", "number", "date", "text")
 
 # --- reading ----------------------------------------------------------------
 
-MAX_BYTES = 64 * 1024 * 1024
-MAX_ROWS = 2_000_000
+# A table is held in memory as strings, a few times the size of its file; the runtime container is small.
+MAX_BYTES = 32 * 1024 * 1024
+MAX_ROWS = 1_000_000
 
 
 class TableError(Exception):

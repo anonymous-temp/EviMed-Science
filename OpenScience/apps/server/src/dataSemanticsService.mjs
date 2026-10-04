@@ -85,8 +85,10 @@ export class DataSemanticsService {
    * @template T
    * @param {string} userId @param {string} projectId @param {string} datasetId @param {boolean} create
    * @param {(asset: any, now: string) => { asset: any, answer: T, changed: boolean }} change
+   * @param {{ telemetry?: boolean }} [options] `telemetry`: the change is derived from the data rather than a change of the
+   *   meaning (a check's findings), so the ledger moves the revision and keeps no history row for it
    */
-  async #mutate(userId, projectId, datasetId, create, change) {
+  async #mutate(userId, projectId, datasetId, create, change, { telemetry = false } = {}) {
     const id = dataSemanticsDocumentId(projectId, datasetId);
     for (let attempt = 1; ; attempt += 1) {
       const row = await this.documents.get(userId, DATA_SEMANTICS_KIND, id);
@@ -104,7 +106,7 @@ export class DataSemanticsService {
       const fitted = fitAsset(outcome.asset);
       if (!fitted) throw new HttpError(413, "semantics_asset_too_large", "The recorded meaning of this dataset no longer fits one record; split it into several datasets.");
       try {
-        const saved = await this.documents.put(userId, DATA_SEMANTICS_KIND, id, fitted.asset, { expectedRevision: row ? row.revision : 0, projectId });
+        const saved = await this.documents.put(userId, DATA_SEMANTICS_KIND, id, fitted.asset, { expectedRevision: row ? row.revision : 0, projectId, telemetry: telemetry && Boolean(row) });
         return { ...outcome, asset: fitted.asset, revision: saved.revision, trimmed: fitted.trimmed };
       } catch (error) {
         if (error instanceof HttpError && error.code === "product_revision_conflict" && attempt < WRITE_ATTEMPTS) continue;
@@ -158,9 +160,11 @@ export class DataSemanticsService {
     const done = await this.#mutate(userId, projectId, datasetId, false, (asset, now) => {
       const stored = structuredClone(asset);
       const result = applyCheckReport(stored, report, denominators, now);
-      if (!result.ok) throw new HttpError(400, "semantics_request_invalid", result.problem);
+      if ("problem" in result) throw new HttpError(400, "semantics_request_invalid", result.problem);
       return { asset: stored, changed: true, answer: null };
-    });
+      // A check is how the data looked on a day, not a change of what it means: it would otherwise add a full copy of
+      // the asset to the history every time an analysis looks.
+    }, { telemetry: true });
     return { datasetId, revision: done.revision, recorded: true };
   }
 

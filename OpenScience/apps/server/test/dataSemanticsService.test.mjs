@@ -152,11 +152,15 @@ test("the page confirms what it shows with the researcher's basis and cannot sta
 });
 
 test("a check's findings are kept with the denominators it saw, and a transformation says what changed", async () => {
-  const { service } = fixture();
+  const { service, documents } = fixture();
   await service.write("u", "p", { datasetId: "d", title: "d" }, { via: "conversation" });
   const report = { checkedAt: "2026-10-04T09:00:00.000Z", bindings: [], findings: [{ outcome: "duplicate_exact", subject: { table: "t.csv" }, count: 3, rows: [4, 9] }], notChecked: [], clean: [] };
+  const before = (await documents.history("u", "dataset-semantics", dataSemanticsDocumentId("p", "d"))).length;
   const recorded = await service.recordCheck("u", "p", "d", report, { analysed: { rows: 150, subjects: 35 } });
   assert.equal(recorded.recorded, true);
+  // A check is how the data looked, not a change of its meaning: it moves the revision and adds no history row.
+  assert.equal((await documents.history("u", "dataset-semantics", dataSemanticsDocumentId("p", "d"))).length, before);
+  assert.equal(recorded.revision, 2);
   const stored = (await service.get("u", "p", "d")).asset;
   assert.deepEqual(stored.lastCheck.summary, { attention: 1, information: 0, notChecked: 0, clean: 0 });
   assert.deepEqual(stored.denominators.analysed, { rows: 150, subjects: 35, source: "measured", at: stored.denominators.analysed.at });

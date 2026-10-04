@@ -156,3 +156,44 @@ test("the files page lists a project's datasets, reads one, and confirms facts a
   const unavailable = createDataSemanticsRoutes({ store, service: null, maxJsonBytes: 65_536 });
   await assert.rejects(() => unavailable(request("GET", "/api/projects/p1/data-semantics"), response()), (error) => error.code === "product_state_unavailable");
 });
+
+// ---- how a runtime is given the address -----------------------------------------------------------
+
+test("a runtime is given the gateway where the module is on and the ledger exists, and a remote one through the public prefix", async () => {
+  const { mkdtemp, rm } = await import("node:fs/promises");
+  const os = await import("node:os");
+  const path = await import("node:path");
+  const { buildRuntimeLaunchPlan, dshProfileInput, dataSemanticsGatewayProviderUrl } = await import("../src/runtimeManager.mjs");
+  const { publicRuntimeGatewayUrls, resolveRuntimeGatewayPath, RUNTIME_GATEWAY_NAMES } = await import("../src/runtimeGatewayEntry.mjs");
+
+  const base = { modelGatewayInternalUrl: "http://127.0.0.1:8787/internal/model/v1", stateStore: "postgres", dataSemanticsEnabled: true };
+  assert.equal(dataSemanticsGatewayProviderUrl(base), "http://127.0.0.1:8787/internal/semantics/v1");
+  assert.equal(dataSemanticsGatewayProviderUrl({ ...base, dataSemanticsEnabled: false }), "");
+  assert.equal(dataSemanticsGatewayProviderUrl({ ...base, stateStore: "file" }), "");
+
+  // The public prefix: offered exactly where the internal address is, and mapped to the internal path by name.
+  assert.ok(RUNTIME_GATEWAY_NAMES.includes("semantics"));
+  assert.equal(publicRuntimeGatewayUrls({ ...base, runtimeGatewayPublicUrl: "https://example.test/runtime-gateway" }).semantics, "https://example.test/runtime-gateway/semantics/v1");
+  assert.equal(publicRuntimeGatewayUrls({ ...base, dataSemanticsEnabled: false, runtimeGatewayPublicUrl: "https://example.test/runtime-gateway" }).semantics, "");
+  assert.deepEqual(resolveRuntimeGatewayPath("/runtime-gateway/semantics/v1/read"), { kind: "internal", url: "/internal/semantics/v1/read" });
+
+  // The launch: the tool finds the address in its own environment, or none.
+  const tmp = await mkdtemp(path.join(os.tmpdir(), "semantics-launch-"));
+  try {
+    const project = { id: "paper1", userId: "user-1", rootDir: tmp, workspaceDir: path.join(tmp, "workspace"), runtimeDir: path.join(tmp, "runtime") };
+    const launch = {
+      runtimeSandboxMode: "docker", runtimeContainerBin: "docker", runtimeContainerImage: "evimed-runtime-dsh:test", runtimeTransport: "unix", runtimeNetworkMode: "none",
+      runtimeCpuLimit: "1", runtimeMemoryLimit: "1g", runtimePidsLimit: 64, allowRuntimeHostNetwork: false, deepseekProviderEnabled: true, deepseekModel: "deepseek-v4-pro",
+      modelGatewaySigningSecret: "model-gateway-signing-secret-with-at-least-32-bytes", runtimeSandboxEnforcement: "full", evimedDisabledTools: "",
+      publicSourceGatewayInternalUrl: "http://127.0.0.1:8787/internal/sources/v1/fetch", ...base,
+    };
+    const environment = (config) => dshProfileInput(config, project, buildRuntimeLaunchPlan(config, project, 49152), "deepseek-v4-pro", null).mcpEnvironment;
+    assert.equal(environment(launch).EVIMED_SEMANTICS_GATEWAY_URL, "http://127.0.0.1:8787/internal/semantics/v1");
+    assert.equal(environment({ ...launch, dataSemanticsEnabled: false }).EVIMED_SEMANTICS_GATEWAY_URL, undefined);
+    assert.equal(environment({ ...launch, stateStore: "file" }).EVIMED_SEMANTICS_GATEWAY_URL, undefined);
+    // The tool is never withheld: with no address it answers `semantics_disabled` itself (it is not an optional tool).
+    assert.doesNotMatch(environment({ ...launch, dataSemanticsEnabled: false }).EVIMED_DISABLED_TOOLS, /dataset_semantics/);
+  } finally {
+    await rm(tmp, { recursive: true, force: true });
+  }
+});
