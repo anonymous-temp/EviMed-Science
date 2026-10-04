@@ -1045,6 +1045,10 @@ export function vcrGapsForRule(rule) {
     // own gap where one is known (`ROUTE_GAPS`); these are the general sentences.
     data_tier_insufficient: { title: "现有数据不够走这条路线", detail: "研究现在的数据档位达不到这条对照路线需要的档位。", answers: "补上这条路线需要的数据后再算，或先用对数据要求更低的路线。" },
     route_unavailable_in_version: { title: "这条路线在当前版本还没有方法", detail: "模型预测对照需要一个声明了适用范围的模型包，当前版本还没有可用的实现。", answers: "改用文献对照或外部对照；模型包上线后可以回到这条路线。" },
+    // robustness methods (2026-10-04)
+    negative_controls_not_estimable: { title: "没有一个阴性对照能得出估计", detail: "每个阴性对照结局都有一组没有事件，或没有提供可用的数据，算不出效应。", answers: "换事件更多的阴性对照结局，或用随访更长的数据。" },
+    primary_analysis_not_estimable: { title: "这项分析本身的主要估计不存在", detail: "某一组没有事件或没有人，或模型没有收敛，或预后评分没有变异，主要估计算不出来。", answers: "补充事件或样本，或换一个有变异的预后评分。" },
+    // end robustness methods
   };
   return table[rule] ? [table[rule]] : [];
 }

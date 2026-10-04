@@ -67,6 +67,8 @@ const snapshot = {
   valueSources: [...vocab.VCR_VALUE_SOURCES],
   realPatientSources: [...vocab.VCR_REAL_PATIENT_SOURCES],
   nonIndividualSources: [...vocab.VCR_NON_INDIVIDUAL_SOURCES],
+  // robustness methods: what the negative-control bias screen may say of a control
+  negativeControlVerdicts: [...vocab.VCR_NEGATIVE_CONTROL_VERDICTS],
   populationKinds: [...vocab.VCR_POPULATION_KINDS],
   comparatorRoutes: [...vocab.VCR_COMPARATOR_ROUTES],
   estimands: [...vocab.VCR_ESTIMANDS],
@@ -93,6 +95,8 @@ const snapshot = {
     // Deployment presets for the deterministic 「不可估计」 rules. A scenario
     // cannot loosen them: the engine reads them here, never from a job.
     essFloor: vocab.VCR_ESS_FLOOR,
+    // robustness methods: the fewest negative controls an empirical null is fitted on
+    negativeControlCalibrationMin: vocab.VCR_NEGATIVE_CONTROL_CALIBRATION_MIN,
     supportCeiling: vocab.VCR_SUPPORT_CEILING,
     conflictBound: vocab.VCR_MAP_CONFLICT_BOUND,
     tolerance: { ...vocab.VCR_RECONSTRUCTION_TOLERANCE },

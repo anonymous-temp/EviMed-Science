@@ -666,7 +666,8 @@ test("a not-estimable result names what is missing and what would answer it, for
 test("a superseded version is found where the graph knows it: an earlier version of the same object is what a change replaces", () => {
   const edges = [{ from: "assumption:dropout_rate@1", to: "trial_scenario:scn_1@1" }];
   assert.deepEqual([...vcrSupersededNodes(edges, ["assumption:dropout_rate@2"])].sort(), ["assumption:dropout_rate@1", "assumption:dropout_rate@2"]);
-  assert.ok(Object.keys(VCR_SCENARIO_SCHEMAS).length === 24);
+  assert.ok(Object.keys(VCR_SCENARIO_SCHEMAS).length >= 24, "the first release's 24 schemas, and one per method added after them");
+  assert.equal(Object.keys(VCR_SCENARIO_SCHEMAS).length, VCR_JOB_KINDS.length, "one schema per job kind");
 });
 
 test("C2-5 the assurance stage binds what its own schema takes from the cards — the outcome's standard deviation, the control rate — and says it used exactly those", () => {

@@ -319,8 +319,8 @@ async function seedT0(label, patch = {}) {
 test("the engine service is the real one: R, the receipt key and the table route", options, async () => {
   const health = await engine.health();
   assert.equal(health.ok, true);
-  assert.deepEqual([...health.methods].sort(), Object.keys(VCR_ENGINE_METHODS).sort(), "the engine and the domain publish the same 24 methods");
-  assert.equal(VCR_JOB_KINDS.length, 24);
+  assert.deepEqual([...health.methods].sort(), Object.keys(VCR_ENGINE_METHODS).sort(), "the engine and the domain publish the same methods");
+  assert.equal(VCR_JOB_KINDS.length, Object.keys(VCR_ENGINE_METHODS).length, "one job kind per method");
   assert.match(health.rVersion, /^R 4\./);
 });
 

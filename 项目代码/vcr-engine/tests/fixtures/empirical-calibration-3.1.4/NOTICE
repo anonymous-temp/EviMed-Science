@@ -1,0 +1,11 @@
+sccs.csv is the `sccs` example data set of the R package EmpiricalCalibration 3.1.4
+(CRAN, Apache License 2.0; Martijn Schuemie and Marc Suchard, OHDSI): 45 negative-control
+drugs and one drug of interest (sertraline) with the log rate ratio and its standard error
+from a self-controlled case series. It is copied unchanged (data(sccs), written with
+write.csv) so that the engine's empirical-null case can be held to the numbers that package
+documents in its vignette (null mean 0.7922, SD 0.2834, calibrated p 0.8389) without adding
+the package to any locked library. The license text is LICENSE-Apache-2.0.txt.
+
+References: Schuemie MJ, Ryan PB, DuMouchel W, Suchard MA, Madigan D. Interpreting
+observational studies: why empirical calibration is needed to correct p-values.
+Stat Med 2014;33:209-218 (PMID 23900808).

@@ -98,6 +98,9 @@ export const VCR_ENGINE_METHODS = Object.freeze({
   'design.procova': { version: '1.0.0', endpoints: frozen(['continuous']), crossChecks: frozen(['EMA 2022 qualification opinion']), modelTier: 'scenario' },
   'accrual.poisson_gamma': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['Anisimov & Fedorov 2007']), modelTier: 'scenario' },
   'matching.evaluate': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['Kleene truth table']), modelTier: null },
+  // --- robustness methods (2026-10-04). A new method is a new entry here, a job kind, a schema and a handler; none of the methods above changed. ---
+  'comparator.negative_control': { version: '1.0.0', endpoints: frozen(['binary', 'time_to_event']), crossChecks: frozen(['EmpiricalCalibration 3.1.4 (sccs example)', 'Lipsitch 2010', 'Schuemie 2014']), modelTier: 'data' },
+  // --- end robustness methods ---
 })
 
 export const VCR_ENGINE_METHOD_IDS = frozen(Object.keys(VCR_ENGINE_METHODS))
@@ -133,6 +136,9 @@ export const VCR_JOB_METHODS = Object.freeze({
   accrual_forecast: 'accrual.poisson_gamma',
   map_prior: 'comparator.map_prior',
   match_criteria: 'matching.evaluate',
+  // --- robustness methods ---
+  negative_control_comparator: 'comparator.negative_control',
+  // --- end robustness methods ---
 })
 
 /** Job kinds that read patient-level rows, and so need a snapshot grant (plan §8.1). */
@@ -157,6 +163,8 @@ export const VCR_INDIVIDUAL_INPUT_SOURCES = Object.freeze({
   'comparator.entropy_balance': VCR_REAL_PATIENT_SOURCES,
   'comparator.propensity_weight': VCR_REAL_PATIENT_SOURCES,
   'comparator.maic': VCR_REAL_PATIENT_SOURCES,
+  // robustness methods
+  'comparator.negative_control': VCR_REAL_PATIENT_SOURCES,
   'comparator.rmst': frozen([...VCR_REAL_PATIENT_SOURCES, 'reconstructed']),
 })
 /** The methods above, by name (kept for callers that only need the list). */

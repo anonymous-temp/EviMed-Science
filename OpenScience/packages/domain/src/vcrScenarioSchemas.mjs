@@ -347,6 +347,22 @@ const WEIGHTING_CONTEXT = {
   targetTrial: TARGET_TRIAL,
 }
 
+// --- robustness methods (2026-10-04): shared pieces of their schemas ---
+
+/**
+ * One outcome of a negative-control job: a column of the subject table (a 0/1
+ * event indicator the engine analyses with the primary's adjustment) or an
+ * estimate and its standard error on the log scale that was analysed elsewhere.
+ */
+const effectSource = (/** @type {Record<string, any>} */ extra = {}) => object({
+  ...extra,
+  column: COLUMN,
+  estimate: number(),
+  se: number({ gt: 0 }),
+}, { exactlyOne: [['column', 'estimate']], requires: { estimate: ['se'], se: ['estimate'] } })
+
+// --- end robustness methods ---
+
 // ---------------------------------------------------------------------------
 // The schemas
 // ---------------------------------------------------------------------------
@@ -649,6 +665,26 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
       notApplicable: boolean(),
     }), { min: 1, max: 500 })),
   }),
+
+  // --- robustness methods (2026-10-04) ---
+
+  // Negative-control outcomes: outcomes the treatment cannot affect, analysed with the primary's adjustment. The weighting keys are
+  // those of the weighted comparators, so "the same adjustment" is the same words. `covariates` is required only when a control is a
+  // column (the engine refuses by name when it is missing).
+  'comparator.negative_control': object({
+    endpoint: ENDPOINT(),
+    covariates: COLUMN_LIST,
+    treatmentColumn: { ...COLUMN, default: 'arm' },
+    weighting: string({ values: ['entropy_balance', 'propensity'], default: 'entropy_balance' }),
+    estimand: string({ values: ['ATT', 'ATE', 'ATO'], default: 'ATT' }),
+    moments: integer({ min: 1, max: 3, default: 1 }),
+    cohortRules: COHORT_STEPS,
+    effectScale: string({ values: ['log_risk_ratio', 'log_odds_ratio', 'log_hazard_ratio'], default: 'log_risk_ratio' }),
+    controls: req(array(effectSource({ name: req(string(CRITERION_NAME)) }), { min: 1, max: 500 })),
+    primary: effectSource({ name: string(CRITERION_NAME) }),
+  }),
+
+  // --- end robustness methods ---
 })
 
 /** Design × endpoint combinations each method implements; anything else is refused. */

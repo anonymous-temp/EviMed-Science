@@ -45,6 +45,8 @@ import {
 /** JSON-safe deep copy: the fixture is JSON, and a job is never anything else. @template T @param {T} value @returns {T} */
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const fixture = JSON.parse(readFileSync(new URL("./fixtures/vcr-engine-jobs.json", import.meta.url), "utf8"));
+// the robustness methods keep their parity jobs in a file of their own (read by vcrRobustness.test.mjs and the engine case N40a)
+const robustnessFixture = JSON.parse(readFileSync(new URL("./fixtures/vcr-engine-jobs-robustness.json", import.meta.url), "utf8"));
 /** @param {readonly { code: string, field: string }[]} issues */
 const keys = (issues) => issues.map((issue) => `${issue.code}@${issue.field}`).sort();
 const validJob = () => clone(fixture.valid.find((/** @type {any} */ item) => item.job.method === "design.simulate").job);
@@ -53,7 +55,7 @@ const validJob = () => clone(fixture.valid.find((/** @type {any} */ item) => ite
 
 test("every valid job of the fixture validates clean, and the walk proves it walked", () => {
   assert.ok(fixture.valid.length >= 30, `only ${fixture.valid.length} valid jobs`);
-  const methods = new Set(fixture.valid.map((/** @type {any} */ item) => item.job.method));
+  const methods = new Set([...fixture.valid, ...robustnessFixture.valid].map((/** @type {any} */ item) => item.job.method));
   assert.deepEqual([...methods].sort(), [...VCR_ENGINE_METHOD_IDS].sort(), "every method has at least one valid job");
   for (const item of fixture.valid) assert.deepEqual(validateEngineJob(item.job), [], item.name);
 });
@@ -99,7 +101,8 @@ test("the engine's generated snapshot carries exactly the live schemas, patterns
 
 test("every method has one scenario schema, every kind one method, and both tables are total", () => {
   assert.deepEqual(Object.keys(VCR_SCENARIO_SCHEMAS).sort(), [...VCR_ENGINE_METHOD_IDS].sort());
-  assert.equal(VCR_ENGINE_METHOD_IDS.length, 24);
+  assert.ok(VCR_ENGINE_METHOD_IDS.length >= 25, "the 24 methods of the first release and the comparator-effect methods after them");
+  assert.equal(VCR_ENGINE_METHOD_IDS.length, VCR_JOB_KINDS.length, "one kind per method");
   assert.deepEqual(Object.keys(VCR_JOB_METHODS).sort(), [...VCR_JOB_KINDS].sort());
   assert.equal(new Set(Object.values(VCR_JOB_METHODS)).size, VCR_JOB_KINDS.length, "no two kinds run one method");
   for (const kind of VCR_PATIENT_LEVEL_JOB_KINDS) assert.ok(VCR_JOB_KINDS.includes(kind), kind);

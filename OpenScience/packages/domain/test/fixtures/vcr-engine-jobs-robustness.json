@@ -1,0 +1,469 @@
+{
+  "description": "Engine-protocol parity jobs for the robustness methods (negative controls, tipping point, prognostic adjustment), kept apart from vcr-engine-jobs.json so the two streams that add methods do not edit one file. Same shape and same two readers: packages/domain/test/vcrRobustness.test.mjs and the engine case N40a (through tests/helpers/emit-job-verdicts.mjs, which takes this file as its argument). `valid` jobs validate clean; every `invalid` job names the issues in `expected`, written here by hand and checked against the domain at generation, and the engine compares its whole verdict, sorted, with the domain module's.",
+  "valid": [
+    {
+      "name": "negative_control, estimates analysed elsewhere",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "negative_control_comparator",
+        "method": "comparator.negative_control",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "controls": [
+            {
+              "name": "fracture",
+              "estimate": 0.12,
+              "se": 0.2
+            },
+            {
+              "name": "cataract",
+              "estimate": -0.05,
+              "se": 0.15
+            }
+          ],
+          "primary": {
+            "name": "death",
+            "estimate": -0.4,
+            "se": 0.1
+          },
+          "effectScale": "log_hazard_ratio",
+          "endpoint": {
+            "type": "time_to_event"
+          }
+        },
+        "inputs": []
+      }
+    },
+    {
+      "name": "negative_control, columns with the primary's adjustment",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "negative_control_comparator",
+        "method": "comparator.negative_control",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariates": [
+            "age",
+            "ecog"
+          ],
+          "treatmentColumn": "arm",
+          "weighting": "propensity",
+          "estimand": "ATE",
+          "effectScale": "log_odds_ratio",
+          "controls": [
+            {
+              "name": "fracture",
+              "column": "fracture"
+            },
+            {
+              "name": "cataract",
+              "column": "cataract"
+            }
+          ],
+          "primary": {
+            "column": "death"
+          }
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      }
+    },
+    {
+      "name": "negative_control, columns and supplied estimates together",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "negative_control_comparator",
+        "method": "comparator.negative_control",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariates": [
+            "age"
+          ],
+          "moments": 2,
+          "endpoint": {
+            "type": "binary"
+          },
+          "controls": [
+            {
+              "name": "fracture",
+              "column": "fracture"
+            },
+            {
+              "name": "cataract",
+              "estimate": 0.1,
+              "se": 0.2
+            }
+          ]
+        },
+        "inputs": [
+          {
+            "kind": "snapshot_file",
+            "id": "snp_1:1",
+            "location": "std_1/snp_1/raw1.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      }
+    }
+  ],
+  "invalid": [
+    {
+      "name": "negative_control: a control that is both a column and an estimate",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "negative_control_comparator",
+        "method": "comparator.negative_control",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "controls": [
+            {
+              "name": "a",
+              "column": "x",
+              "estimate": 0.1,
+              "se": 0.2
+            }
+          ]
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.controls[0].estimate"
+      ]
+    },
+    {
+      "name": "negative_control: a control that is neither",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "negative_control_comparator",
+        "method": "comparator.negative_control",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "controls": [
+            {
+              "name": "a"
+            }
+          ]
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_field_missing@scenario.controls[0].column"
+      ]
+    },
+    {
+      "name": "negative_control: an estimate without its standard error",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "negative_control_comparator",
+        "method": "comparator.negative_control",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "controls": [
+            {
+              "name": "a",
+              "estimate": 0.1
+            }
+          ]
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_field_missing@scenario.controls[0].se"
+      ]
+    },
+    {
+      "name": "negative_control: a standard error that is not positive",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "negative_control_comparator",
+        "method": "comparator.negative_control",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "controls": [
+            {
+              "name": "a",
+              "estimate": 0.1,
+              "se": 0
+            }
+          ]
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.controls[0].se"
+      ]
+    },
+    {
+      "name": "negative_control: no controls at all",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "negative_control_comparator",
+        "method": "comparator.negative_control",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "controls": []
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.controls"
+      ]
+    },
+    {
+      "name": "negative_control: controls missing",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "negative_control_comparator",
+        "method": "comparator.negative_control",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "primary": {
+            "estimate": 0.1,
+            "se": 0.2
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_field_missing@scenario.controls"
+      ]
+    },
+    {
+      "name": "negative_control: a control with no name",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "negative_control_comparator",
+        "method": "comparator.negative_control",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "controls": [
+            {
+              "estimate": 0.1,
+              "se": 0.2
+            }
+          ]
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_field_missing@scenario.controls[0].name"
+      ]
+    },
+    {
+      "name": "negative_control: a key the engine does not read",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "negative_control_comparator",
+        "method": "comparator.negative_control",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "controls": [
+            {
+              "name": "fracture",
+              "estimate": 0.12,
+              "se": 0.2
+            },
+            {
+              "name": "cataract",
+              "estimate": -0.05,
+              "se": 0.15
+            }
+          ],
+          "calibrationThreshold": 5
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.calibrationThreshold"
+      ]
+    },
+    {
+      "name": "negative_control: an unknown effect scale",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "negative_control_comparator",
+        "method": "comparator.negative_control",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "controls": [
+            {
+              "name": "fracture",
+              "estimate": 0.12,
+              "se": 0.2
+            },
+            {
+              "name": "cataract",
+              "estimate": -0.05,
+              "se": 0.15
+            }
+          ],
+          "effectScale": "log_rate_ratio"
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.effectScale"
+      ]
+    },
+    {
+      "name": "negative_control: a continuous endpoint",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "negative_control_comparator",
+        "method": "comparator.negative_control",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "controls": [
+            {
+              "name": "fracture",
+              "estimate": 0.12,
+              "se": 0.2
+            },
+            {
+              "name": "cataract",
+              "estimate": -0.05,
+              "se": 0.15
+            }
+          ],
+          "endpoint": {
+            "type": "continuous"
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "endpoint_not_supported@scenario.endpoint.type"
+      ]
+    },
+    {
+      "name": "negative_control: the wrong kind for the method",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "rmst",
+        "method": "comparator.negative_control",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "controls": [
+            {
+              "name": "fracture",
+              "estimate": 0.12,
+              "se": 0.2
+            },
+            {
+              "name": "cataract",
+              "estimate": -0.05,
+              "se": 0.15
+            }
+          ]
+        },
+        "inputs": []
+      },
+      "expected": [
+        "kind_method_mismatch@method"
+      ]
+    },
+    {
+      "name": "negative_control: a synthetic table",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "negative_control_comparator",
+        "method": "comparator.negative_control",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "covariates": [
+            "age"
+          ],
+          "controls": [
+            {
+              "name": "a",
+              "column": "x"
+            }
+          ]
+        },
+        "inputs": [
+          {
+            "kind": "snapshot_file",
+            "id": "snp_1:1",
+            "location": "std_1/snp_1/raw1.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "synthetic"
+          }
+        ]
+      },
+      "expected": [
+        "input_source_not_individual@inputs[0].valueSource"
+      ]
+    }
+  ],
+  "validResults": [],
+  "invalidResults": []
+}

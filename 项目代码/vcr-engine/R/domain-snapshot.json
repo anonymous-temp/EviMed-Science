@@ -248,6 +248,19 @@
         "Kleene truth table"
       ],
       "modelTier": null
+    },
+    "comparator.negative_control": {
+      "version": "1.0.0",
+      "endpoints": [
+        "binary",
+        "time_to_event"
+      ],
+      "crossChecks": [
+        "EmpiricalCalibration 3.1.4 (sccs example)",
+        "Lipsitch 2010",
+        "Schuemie 2014"
+      ],
+      "modelTier": "data"
     }
   },
   "jobMethods": {
@@ -274,7 +287,8 @@
     "procova": "design.procova",
     "accrual_forecast": "accrual.poisson_gamma",
     "map_prior": "comparator.map_prior",
-    "match_criteria": "matching.evaluate"
+    "match_criteria": "matching.evaluate",
+    "negative_control_comparator": "comparator.negative_control"
   },
   "patientLevelJobKinds": [
     "profile_snapshot",
@@ -291,6 +305,7 @@
     "comparator.entropy_balance",
     "comparator.propensity_weight",
     "comparator.maic",
+    "comparator.negative_control",
     "comparator.rmst"
   ],
   "engineTableInputKeys": [
@@ -327,6 +342,12 @@
       "imputed"
     ],
     "comparator.maic": [
+      "observed",
+      "extracted",
+      "calculated",
+      "imputed"
+    ],
+    "comparator.negative_control": [
       "observed",
       "extracted",
       "calculated",
@@ -5559,6 +5580,182 @@
           "req": true
         }
       }
+    },
+    "comparator.negative_control": {
+      "t": "object",
+      "fields": {
+        "endpoint": {
+          "t": "object",
+          "fields": {
+            "type": {
+              "t": "string",
+              "values": [
+                "continuous",
+                "binary",
+                "time_to_event"
+              ],
+              "badValueCode": "endpoint_unknown",
+              "req": true
+            }
+          }
+        },
+        "covariates": {
+          "t": "array",
+          "items": {
+            "t": "string",
+            "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+            "maxLength": 64
+          },
+          "min": 1,
+          "max": 100,
+          "unique": true
+        },
+        "treatmentColumn": {
+          "t": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+          "maxLength": 64,
+          "default": "arm"
+        },
+        "weighting": {
+          "t": "string",
+          "values": [
+            "entropy_balance",
+            "propensity"
+          ],
+          "default": "entropy_balance"
+        },
+        "estimand": {
+          "t": "string",
+          "values": [
+            "ATT",
+            "ATE",
+            "ATO"
+          ],
+          "default": "ATT"
+        },
+        "moments": {
+          "t": "integer",
+          "min": 1,
+          "max": 3,
+          "default": 1
+        },
+        "cohortRules": {
+          "t": "array",
+          "items": {
+            "t": "object",
+            "fields": {
+              "name": {
+                "t": "string",
+                "minLength": 1,
+                "maxLength": 80,
+                "req": true
+              },
+              "rule": {
+                "t": "rule",
+                "req": true
+              },
+              "unknownAs": {
+                "t": "string",
+                "values": [
+                  "include",
+                  "exclude"
+                ],
+                "default": "exclude"
+              }
+            }
+          },
+          "min": 1,
+          "max": 100
+        },
+        "effectScale": {
+          "t": "string",
+          "values": [
+            "log_risk_ratio",
+            "log_odds_ratio",
+            "log_hazard_ratio"
+          ],
+          "default": "log_risk_ratio"
+        },
+        "controls": {
+          "t": "array",
+          "items": {
+            "t": "object",
+            "fields": {
+              "name": {
+                "t": "string",
+                "minLength": 1,
+                "maxLength": 80,
+                "req": true
+              },
+              "column": {
+                "t": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                "maxLength": 64
+              },
+              "estimate": {
+                "t": "number"
+              },
+              "se": {
+                "t": "number",
+                "gt": 0
+              }
+            },
+            "exactlyOne": [
+              [
+                "column",
+                "estimate"
+              ]
+            ],
+            "requires": {
+              "estimate": [
+                "se"
+              ],
+              "se": [
+                "estimate"
+              ]
+            }
+          },
+          "min": 1,
+          "max": 500,
+          "req": true
+        },
+        "primary": {
+          "t": "object",
+          "fields": {
+            "name": {
+              "t": "string",
+              "minLength": 1,
+              "maxLength": 80
+            },
+            "column": {
+              "t": "string",
+              "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+              "maxLength": 64
+            },
+            "estimate": {
+              "t": "number"
+            },
+            "se": {
+              "t": "number",
+              "gt": 0
+            }
+          },
+          "exactlyOne": [
+            [
+              "column",
+              "estimate"
+            ]
+          ],
+          "requires": {
+            "estimate": [
+              "se"
+            ],
+            "se": [
+              "estimate"
+            ]
+          }
+        }
+      }
     }
   },
   "designSupport": {
@@ -5692,7 +5889,8 @@
     "procova",
     "accrual_forecast",
     "map_prior",
-    "match_criteria"
+    "match_criteria",
+    "negative_control_comparator"
   ],
   "endpointTypes": [
     "continuous",
@@ -5727,6 +5925,8 @@
     "tau_beyond_followup",
     "reconstruction_failed_qc",
     "map_prior_conflict",
+    "negative_controls_not_estimable",
+    "primary_analysis_not_estimable",
     "data_tier_insufficient",
     "route_unavailable_in_version"
   ],
@@ -5761,6 +5961,11 @@
     "aggregate",
     "synthetic",
     "predicted"
+  ],
+  "negativeControlVerdicts": [
+    "signals_bias",
+    "consistent_with_null",
+    "uninformative"
   ],
   "populationKinds": [
     "real",
@@ -5872,6 +6077,7 @@
     "replicatesAltMin": 5000,
     "smdFloor": 0.1,
     "essFloor": 10,
+    "negativeControlCalibrationMin": 30,
     "supportCeiling": 0.1,
     "conflictBound": 0.01,
     "tolerance": {

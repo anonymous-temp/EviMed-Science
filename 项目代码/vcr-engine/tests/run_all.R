@@ -10,6 +10,7 @@ options(warn = 1)
 source(file.path(VCR_ROOT, "R", "engine.R"))
 vcr_engine_load(VCR_ROOT)
 source(file.path(VCR_ROOT, "tests", "helpers", "harness.R"))
+source(file.path(VCR_ROOT, "tests", "helpers", "robustness.R"))   # the robustness methods' handler jobs
 invisible(vcr_test_data_root())
 invisible(vcr_test_apply_schema_additions(VCR_ROOT))
 # Every job a case runs goes through this wrapper, so the coverage case can say
