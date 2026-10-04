@@ -1492,7 +1492,47 @@ def _adapter_timeout_seconds(arguments, name=None):
     return max(configured, min(wait_seconds + 5, STATUS_WAIT_MAX_SECONDS + 5))
 
 
+def _workload_token_or_none():
+    try:
+        return _read_workload_token()
+    except (OSError, UnicodeDecodeError, ValueError):
+        return None
+
+
+def _refused_for_workload_token(result):
+    """Whether an adapter's answer is the control plane refusing the workload
+    token the adapter forwarded while it admitted the job. Nothing ran: the job
+    is admitted before it starts, so asking again is not a second execution."""
+    error = result.get("error") if isinstance(result, dict) else None
+    return (
+        isinstance(error, dict)
+        and error.get("code") == "specialist_model_gateway_unavailable"
+        and "evimed_workload_token_invalid" in str(error.get("message", ""))
+    )
+
+
 def _adapter_call(name, arguments, execution_context=None):
+    """One adapter call, asked once more when the platform replaced the workload
+    token while the adapter was admitting the job.
+
+    The control plane accepts only the token currently in the token file and
+    rewrites it every half lifetime, so the token this call read, passed to the
+    adapter and the adapter forwarded can be superseded before it is checked: the
+    job is then refused although the token was good when it left (53 refusals of
+    `evimed_workload_token_invalid` in the week from 2026-09-28). Authentication is
+    exactly as strict; the call is asked again, once, with what the file holds
+    now, and only when the file does hold another token."""
+    used = _workload_token_or_none()
+    result = _adapter_call_once(name, arguments, execution_context)
+    if not _refused_for_workload_token(result):
+        return result
+    fresh = _workload_token_or_none()
+    if not fresh or fresh == used:
+        return result
+    return _adapter_call_once(name, arguments, execution_context)
+
+
+def _adapter_call_once(name, arguments, execution_context=None):
     env_name = ADAPTER_ENV[name]
     url = os.environ.get(env_name, "").strip()
     if not url:

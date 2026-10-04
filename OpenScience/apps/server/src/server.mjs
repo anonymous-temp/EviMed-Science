@@ -7438,6 +7438,13 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
   });
   addMetric(
     lines,
+    "open_science_workload_token_refusals_total",
+    "Workload tokens the control plane refused, by what the check was doing: the token itself, the runtime it names, whether it was the token the file holds now (superseded by a rewrite while in flight), or reading that file.",
+    "counter",
+    Object.entries(runtimeStats.workloadTokenRefusals ?? {}).map(([reason, value]) => ({ value: Number(value) || 0, labels: { reason } })),
+  );
+  addMetric(
+    lines,
     "open_science_model_gateway_files_refused_total",
     "Provider-side image uploads the kernel's adapter tried and the model gateway refused by design (images travel inline); not a gateway failure.",
     "counter",

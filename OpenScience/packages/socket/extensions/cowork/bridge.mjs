@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import {Buffer} from 'node:buffer';
 import {constants} from 'node:fs';
 import {setTimeout as pause} from 'node:timers/promises';
+import {sendWithFreshWorkloadToken} from '../../src/workloadRequest.mjs';
 
 const Schema=await configSchema();
 export const name='evimed-cowork-bridge';
@@ -31,9 +32,11 @@ export async function callCoworkGateway(config,invocation,request,signal,transpo
   const lifetime=AbortSignal.any([signal,AbortSignal.timeout(30000)]);
   const submission={descriptorId:config.descriptorId,idempotencyKey:invocation.callId,request};
   if(typeof config.descriptorId!=='string'||!config.descriptorId)throw fail();
+  const readToken=async()=>(await fixedFile(config.tokenFile,8192)).trim();
   const send=async(operation,body,currentSignal)=>{
-    const token=(await fixedFile(config.tokenFile,8192)).trim();if(!token)throw fail();
-    const response=await transport(`${url.href}/${operation}`,{method:'POST',redirect:'error',headers:{authorization:`Bearer ${token}`,'content-type':'application/json','x-evimed-extension-invocation':JSON.stringify(invocation)},body:JSON.stringify(body),signal:currentSignal});
+    const token=await readToken();if(!token)throw fail();
+    // A token the control plane replaced while the request was in flight is asked once more with the one the file holds now.
+    const response=await sendWithFreshWorkloadToken({token,readToken,send:current=>transport(`${url.href}/${operation}`,{method:'POST',redirect:'error',headers:{authorization:`Bearer ${current}`,'content-type':'application/json','x-evimed-extension-invocation':JSON.stringify(invocation)},body:JSON.stringify(body),signal:currentSignal})});
     if(!response.ok||!response.body)throw fail();const chunks=[];let size=0;for await(const chunk of response.body){size+=chunk.length;if(size>12*1024*1024+16384){await response.body.cancel().catch(()=>{});throw fail();}chunks.push(chunk);}return JSON.parse(Buffer.concat(chunks).toString());
   };
   let jobId=null;

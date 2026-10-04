@@ -949,6 +949,123 @@ class AdapterTests(unittest.TestCase):
             "Bearer rotated.signed.workload-token",
         ])
 
+    def _serve_adapter(self, answers):
+        """An adapter that answers each POST with the next of `answers` and records the
+        Authorization it was given. Returns (authorizations, shutdown)."""
+        authorizations = []
+
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self, *_args):
+                return
+
+            def do_POST(self):
+                length = int(self.headers.get("content-length", "0"))
+                self.rfile.read(length)
+                authorizations.append(self.headers.get("authorization"))
+                payload = json.dumps(answers[min(len(authorizations) - 1, len(answers) - 1)]).encode()
+                self.send_response(200)
+                self.send_header("content-type", "application/json")
+                self.send_header("content-length", str(len(payload)))
+                self.end_headers()
+                self.wfile.write(payload)
+
+        httpd = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        thread = threading.Thread(target=httpd.serve_forever, daemon=True)
+        thread.start()
+        os.environ["EVIMED_LITERATURE_SEARCH_URL"] = f"http://127.0.0.1:{httpd.server_port}/search"
+
+        def shutdown():
+            httpd.shutdown()
+            thread.join()
+            httpd.server_close()
+
+        return authorizations, shutdown
+
+    @staticmethod
+    def _admission_refused():
+        message = "The model gateway did not admit this job: the control plane refused the job's model credential (HTTP 401, evimed_workload_token_invalid)."
+        return {
+            "status": "error",
+            "summary": message,
+            "next_actions": ["Retry once."],
+            "error": {"code": "specialist_model_gateway_unavailable", "message": message, "retryable": True, "stopReason": "Stop after one retry."},
+        }
+
+    @staticmethod
+    def _evidence():
+        return {
+            "data": {"items": [{"id": "PMID:1"}]},
+            "sources": [{"id": "PMID:1", "source": "pubmed", "retrievedAt": "2026-07-16T00:00:00Z"}],
+        }
+
+    def test_adapter_is_asked_again_when_the_token_was_replaced_while_the_job_was_admitted(self):
+        # The platform rewrites the token file every half lifetime; the token this call
+        # read and the adapter forwarded can be superseded before it is checked.
+        authorizations, shutdown = self._serve_adapter([self._admission_refused(), self._evidence()])
+        original = self.server._read_workload_token
+        reads = []
+
+        def reading():
+            token = original()
+            reads.append(token)
+            # The wrapper's read, then the call's own read (the token that goes out): the
+            # file is rewritten after the call read it, before the wrapper reads again.
+            if len(reads) == 2:
+                self.token_file.write_text("rotated.signed.workload-token\n", encoding="utf-8")
+                self.token_file.chmod(0o600)
+            return token
+
+        self.server._read_workload_token = reading
+        try:
+            result = self.server.call_tool("literature_search", {"query": "observed"})
+        finally:
+            self.server._read_workload_token = original
+            shutdown()
+        self.assertEqual(result["status"], "success")
+        self.assertEqual(authorizations, [
+            "Bearer test-only.signed.workload-token",
+            "Bearer rotated.signed.workload-token",
+        ])
+
+    def test_adapter_is_not_asked_again_when_the_file_still_holds_the_token_that_was_refused(self):
+        refused = self._admission_refused()
+        authorizations, shutdown = self._serve_adapter([refused, self._evidence()])
+        try:
+            result = self.server.call_tool("literature_search", {"query": "observed"})
+        finally:
+            shutdown()
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(result["error"]["code"], "specialist_model_gateway_unavailable")
+        self.assertEqual(authorizations, ["Bearer test-only.signed.workload-token"])
+
+    def test_adapter_is_asked_only_once_more_and_only_for_this_refusal(self):
+        for label, answers, expected_calls in (
+            ("another admission refusal", [{**self._admission_refused(), "error": {**self._admission_refused()["error"], "message": "The model gateway did not admit this job: HTTP 503."}}], 1),
+            ("a second refusal", [self._admission_refused(), self._admission_refused(), self._evidence()], 2),
+        ):
+            with self.subTest(label=label):
+                self.token_file.write_text("test-only.signed.workload-token\n", encoding="utf-8")
+                self.token_file.chmod(0o600)
+                authorizations, shutdown = self._serve_adapter(answers)
+                original = self.server._read_workload_token
+                state = {"reads": 0}
+
+                def reading(original=original, state=state):
+                    token = original()
+                    state["reads"] += 1
+                    if state["reads"] == 2:
+                        self.token_file.write_text("rotated.signed.workload-token\n", encoding="utf-8")
+                        self.token_file.chmod(0o600)
+                    return token
+
+                self.server._read_workload_token = reading
+                try:
+                    self.server.call_tool("literature_search", {"query": "observed"})
+                finally:
+                    self.server._read_workload_token = original
+                    shutdown()
+                self.assertEqual(len(authorizations), expected_calls)
+
     def test_workload_token_file_rejects_missing_symlink_and_oversize_files(self):
         outside = pathlib.Path(self.token_dir.name) / "outside.token"
         outside.write_text("outside.signed.token\n", encoding="utf-8")

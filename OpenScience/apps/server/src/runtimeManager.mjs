@@ -3317,7 +3317,7 @@ export class RuntimeManager {
     this.workloadTokenWriter = workloadTokenWriter;
     this.setWorkloadTimer = setWorkloadTimer;
     this.clearWorkloadTimer = clearWorkloadTimer;
-    /** @type {(project: any, status: any) => any} */
+    /** @type {(project: any, status: any, errorCode?: string) => any} */
     this.onRuntimeStop = onRuntimeStop;
     /** @type {(project: Record<string, any>) => Promise<void>} */
     this.onRuntimeStopping = onRuntimeStopping;
@@ -3352,6 +3352,9 @@ export class RuntimeManager {
      *  deployment at its ceiling (`makeRoomFor`): how many, and the last time
      *  (`open_science_runtime_background_yielded_total`). */
     this.backgroundYields = { total: 0, failed: 0, lastAt: /** @type {string | null} */ (null) };
+    /** Workload tokens this process refused, by what the check was doing when it did
+     *  (`noteWorkloadTokenRefusal`). */
+    this.workloadTokenRefusals = { token: 0, runtime: 0, superseded: 0, unreadable: 0 };
     /** When each retired background runtime was retired, by project key: what
      *  names a prompt refused behind that stop (`dispatchAdmittedPrompt`) as the
      *  platform's own doing rather than a fault. Dropped when the project's next
@@ -3476,9 +3479,27 @@ export class RuntimeManager {
     return payload;
   }
 
+  /**
+   * Why a workload token was refused, counted by reason
+   * (`open_science_workload_token_refusals_total`). The refusal itself is one
+   * code and one 401 whatever the reason — what a caller can learn about the
+   * check is exactly what it could — but the 53 refusals of the first week of
+   * 0.1.7 could not be told apart afterwards: a token superseded by a rewrite
+   * while its request was in flight, a runtime that was already going down, a
+   * forged one. Counts only; never the token.
+   * @param {"token" | "runtime" | "superseded" | "unreadable"} reason
+   */
+  noteWorkloadTokenRefusal(reason) {
+    this.workloadTokenRefusals[reason] = (this.workloadTokenRefusals[reason] ?? 0) + 1;
+  }
+
   /** Verify the current bounded token file and recheck liveness after I/O.
    * @param {unknown} token */
   async assertActiveEviMedWorkloadToken(token) {
+    /** What the check was doing when it refused: the token itself, the runtime it names,
+     *  whether it is the token the file holds, or reading that file.
+     *  @type {"token" | "runtime" | "superseded" | "unreadable"} */
+    let reason = "token";
     try {
       if (typeof token !== "string" || token.length > 8192) throw workloadTokenError();
       const claims = JSON.parse(Buffer.from(token.split(".")[1] ?? "", "base64url").toString("utf8"));
@@ -3487,8 +3508,10 @@ export class RuntimeManager {
         userId: claims.userId, projectId: claims.projectId });
       const key = this.key({ userId: payload.userId, id: payload.projectId });
       const runtime = this.runtimes.get(key);
+      reason = "runtime";
       if (!runtime?.workloadTokenFile || runtime.closedByManager || runtime.exitedAt) throw workloadTokenError();
       if (typeof this.provider.acceptedWorkloadTokens === "function") {
+        reason = "superseded";
         // A remote runtime's token file is in its session, not on this host:
         // the provider holds what it installed there (and the one it is
         // installing, and the one that one replaces until it expires).
@@ -3504,6 +3527,7 @@ export class RuntimeManager {
           runtimeGeneration: typeof runtime.modelGatewayTokenJti === "string" ? runtime.modelGatewayTokenJti : null,
         };
       }
+      reason = "unreadable";
       const handle = await fs.open(runtime.workloadTokenFile, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW | fsConstants.O_NONBLOCK);
       let current;
       try {
@@ -3514,13 +3538,22 @@ export class RuntimeManager {
       } finally { await handle.close(); }
       const actual = Buffer.from(token);
       const expected = Buffer.from(current);
-      if (expected.length !== actual.length || !timingSafeEqual(expected, actual)
-        || this.runtimes.get(key) !== runtime || runtime.closedByManager || runtime.exitedAt) throw workloadTokenError();
+      // A valid, signed, unexpired token that is not the one the file holds now:
+      // superseded by a rewrite (every half lifetime) while its request was in flight.
+      // The presenters ask once more with a fresh read (`workloadRequest.mjs`);
+      // the rule here is unchanged.
+      reason = "superseded";
+      if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) throw workloadTokenError();
+      reason = "runtime";
+      if (this.runtimes.get(key) !== runtime || runtime.closedByManager || runtime.exitedAt) throw workloadTokenError();
       return {
         ...payload,
         runtimeGeneration: typeof runtime.modelGatewayTokenJti === "string" ? runtime.modelGatewayTokenJti : null,
       };
-    } catch { throw workloadTokenError(); }
+    } catch {
+      this.noteWorkloadTokenRefusal(reason);
+      throw workloadTokenError();
+    }
   }
 
   assertDockerControlBoundary() {
@@ -5134,6 +5167,7 @@ export class RuntimeManager {
       // The platform's own work among the runtimes above, as the ceiling counts
       // it (running and starting), the share it may hold while nobody needs
       // the room, and how often a researcher's start took one back.
+      workloadTokenRefusals: { ...this.workloadTokenRefusals },
       background: {
         active: this.backgroundRuntimeCount(),
         limit: backgroundRuntimeLimit(positiveLimit(this.config.maxRunningRuntimes), positiveLimit(this.config.maxRunningRuntimesPerUser)),

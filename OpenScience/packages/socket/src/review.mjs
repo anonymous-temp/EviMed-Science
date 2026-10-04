@@ -33,6 +33,7 @@
 
 import { REVIEW_FINDING_KIND_LABELS_ZH } from '@evimed/domain'
 import { readFileAt } from '@evimed/harness-port'
+import { sendWithFreshWorkloadToken } from './workloadRequest.mjs'
 
 /** How often a running review is asked after. */
 export const REVIEW_POLL_MS = 3_000
@@ -82,12 +83,22 @@ async function gateway(ctx, config, method, path, body, signal) {
   if (!base) return { status: 0, value: { error: { code: 'review_unconfigured' } } }
   const token = await workloadToken(ctx, config)
   if (!token) return { status: 0, value: { error: { code: 'review_unconfigured' } } }
-  const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS)
-  const response = await fetch(`${base}${path}`, {
-    method,
-    headers: { accept: 'application/json', authorization: `Bearer ${token}`, ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+  // The poll asks every few seconds for minutes, each time with the token as
+  // the file holds it, and one that straddles a rewrite is refused as invalid
+  // though it was good when it left: asked once more with what the file holds
+  // now (`workloadRequest.mjs`) instead of ending the whole review on it.
+  const response = await sendWithFreshWorkloadToken({
+    token,
+    readToken: () => workloadToken(ctx, config),
+    send: (current) => {
+      const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS)
+      return fetch(`${base}${path}`, {
+        method,
+        headers: { accept: 'application/json', authorization: `Bearer ${current}`, ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+        signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+      })
+    },
   })
   let value = null
   try { value = await response.json() } catch { value = null }

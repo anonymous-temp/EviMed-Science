@@ -31,6 +31,7 @@ import { errorMessage } from '../src/runPolicy.mjs'
 import { configSchema, defineTool, injectContext, isSubagentSession, listDirAt, onPreStep, stepUserInputs, readFileAt, registerSection, registerTool } from '@evimed/harness-port'
 import { sha256Hex, skillBodyDigestAsync } from '../src/digest.mjs'
 import { isLearnedMethod } from '../src/learnedMethods.mjs'
+import { sendWithFreshWorkloadToken } from '../src/workloadRequest.mjs'
 
 const Schema = await configSchema()
 
@@ -339,15 +340,25 @@ async function callControlPlane(ctx, config, action, body) {
   if (!config.recallUrl) return { ok: false, message: '本次部署未配置记忆服务' }
   const token = config.tokenFile ? await readFileAt(ctx, '/', config.tokenFile.replace(/^\/+/, '')) : null
   try {
-    const response = await fetch(`${config.recallUrl.replace(/\/$/, '')}/${action}`, {
+    /** @param {string | null} current */
+    const send = (current) => fetch(`${config.recallUrl?.replace(/\/$/, '')}/${action}`, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        ...(token ? { authorization: `Bearer ${token.trim()}` } : {}),
+        ...(current ? { authorization: `Bearer ${current}` } : {}),
       },
       body: JSON.stringify(body),
       signal: AbortSignal.timeout(config.recallTimeoutMs),
     })
+    // A token the control plane replaced while the request was in flight is
+    // asked once more with the one the file holds now (`workloadRequest.mjs`).
+    const response = token?.trim()
+      ? await sendWithFreshWorkloadToken({
+        token: token.trim(),
+        readToken: () => readFileAt(ctx, '/', String(config.tokenFile).replace(/^\/+/, '')),
+        send,
+      })
+      : await send(null)
     if (!response.ok) return { ok: false, message: `胶囊服务返回 ${response.status}` }
     return { ok: true, data: await response.json(), message: '' }
   } catch (error) {
