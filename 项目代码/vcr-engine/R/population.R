@@ -522,3 +522,66 @@ vcr_mechanistic_spec_issues <- function(spec) {
   }
   issues
 }
+
+# --- two versions of a population definition on the same table ------------------
+
+# Hidden knowledge:
+#
+# - **A comparison of two definitions is a comparison of two cohorts of one
+#   table.** Version A and version B of a definition are applied to the same
+#   registered dataset with the cohort rules' own evaluation
+#   (`vcr_apply_cohort_rules`: three-valued, `unknownAs` honoured), so "who is
+#   in" means exactly what it means for the cohort job -- there is no second
+#   reading of a rule here. Counts are people: how many each version keeps, how
+#   many are in both, how many only one version keeps.
+# - **The difference of a covariate is `vcr_smd`'s, not a new formula.** The two
+#   cohorts are stacked (A is the reference group, B the other) and the
+#   weighting methods' own standardized difference is taken with its pooled
+#   denominator (`estimand = "ATE"`): a continuous covariate is
+#   (mean B - mean A) / sqrt((var A + var B) / 2), a 0/1 covariate a difference
+#   of proportions (cobalt's convention, which is what every balance table of
+#   this engine reports). The two cohorts overlap -- a version is usually the
+#   other with one rule changed -- and each person is counted in each cohort they
+#   belong to: this describes the cohorts, it does not test them. Missing values
+#   are dropped per covariate and per cohort, and the number dropped is reported:
+#   a covariate is never imputed here.
+# - **A covariate this method cannot standardize is named, not skipped.** A
+#   column that is not numeric or 0/1 (text, a date) comes back with
+#   `skipped = "not_numeric"`, a covariate a cohort has fewer than two
+#   observations of `skipped = "too_few_observations"`, so the page can say what
+#   was not compared.
+
+#' @param df the table both versions are applied to
+#' @param rules_a,rules_b named rules as `cohort.build` takes them
+#' @param covariates column names to compare the two cohorts on
+#' @return the sizes, the overlap, each version's waterfall and one row per covariate
+vcr_cohort_comparison <- function(df, rules_a, rules_b, covariates) {
+  res_a <- vcr_apply_cohort_rules(df, rules_a)
+  res_b <- vcr_apply_cohort_rules(df, rules_b)
+  in_a <- res_a$alive; in_b <- res_b$alive
+  rows <- lapply(as.character(covariates), function(col) {
+    x <- df[[col]]
+    if (is.logical(x)) x <- as.numeric(x)
+    base <- list(covariate = col)
+    if (!is.numeric(x)) return(c(base, list(skipped = "not_numeric")))
+    xa <- x[in_a]; xb <- x[in_b]
+    missing_a <- sum(is.na(xa)); missing_b <- sum(is.na(xb))
+    xa <- xa[!is.na(xa)]; xb <- xb[!is.na(xb)]
+    if (length(xa) < 2L || length(xb) < 2L) {
+      return(c(base, list(skipped = "too_few_observations", observedA = length(xa), observedB = length(xb), missingA = missing_a, missingB = missing_b)))
+    }
+    v <- c(xa, xb); grp <- c(rep(0L, length(xa)), rep(1L, length(xb)))
+    binary <- all(v %in% c(0, 1))
+    c(base, list(kind = if (binary) "binary" else "continuous",
+                 meanA = mean(xa), meanB = mean(xb),
+                 standardizedDifference = vcr_smd(v, grp, NULL, "ATE"),
+                 observedA = length(xa), observedB = length(xb), missingA = missing_a, missingB = missing_b))
+  })
+  step_rows <- function(res) lapply(res$steps, function(s) list(rule = s$rule, kept = s$kept, excluded = s$excluded, indeterminate = s$indeterminate))
+  list(cohortSizeA = sum(in_a), cohortSizeB = sum(in_b),
+       overlap = list(both = sum(in_a & in_b), onlyA = sum(in_a & !in_b), onlyB = sum(!in_a & in_b)),
+       waterfallA = step_rows(res_a), waterfallB = step_rows(res_b),
+       covariates = rows,
+       standardizedDifferenceFloor = vcr_limit("smdFloor", 0.1),
+       binaryConvention = "difference of proportions")
+}

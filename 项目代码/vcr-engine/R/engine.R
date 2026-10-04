@@ -522,7 +522,22 @@ vcr_job_build_cohort <- function(job, output_dir = NULL, ...) {
   used <- vcr_used_sources(list(list(df = df, columns = c(unlist(lapply(items, function(r) vcr_rule_columns(r$rule))), tz, ex))))
   src <- if (is.na(used$source)) "calculated" else used$source
   size <- sum(res$alive)
-  list(status = "succeeded",
+  # Version comparison: the same table under a second set of rules (`compare`), with the
+  # covariates the two cohorts are compared on. Everything it reads is named in `used`.
+  comparison <- NULL
+  if (!is.null(sc$compare)) {
+    cmp_items <- sc$compare$rules
+    cmp_cons <- vcr_named_rules(cmp_items, names(df), "scenario.compare.rules", allow_empty = FALSE)
+    if (length(cmp_cons$issues)) vcr_abort_issue(cmp_cons$issues[[1]])
+    covs <- as.character(unlist(sc$compare$covariates))
+    missing_cols <- setdiff(covs, names(df))
+    if (length(missing_cols)) vcr_abort("scenario_value_invalid", "scenario.compare.covariates", sprintf("The table has no column %s.", missing_cols[[1]]))
+    comparison <- vcr_cohort_comparison(df, items, cmp_items, covs)
+    comparison$rulesHashA <- .vcr_rules_hash(items); comparison$rulesHashB <- .vcr_rules_hash(cmp_items)
+    used <- vcr_used_sources(list(list(df = df, columns = c(unlist(lapply(c(items, cmp_items), function(r) vcr_rule_columns(r$rule))), tz, ex, covs))))
+    src <- if (is.na(used$source)) "calculated" else used$source
+  }
+  out <- list(status = "succeeded",
        measures = list(vcr_measure("cohort_size", size, source = src),
                        vcr_measure("cohort_size_strict", sum(res$strict), source = src),
                        vcr_measure("cohort_size_lenient", sum(res$lenient), source = src)),
@@ -535,6 +550,9 @@ vcr_job_build_cohort <- function(job, output_dir = NULL, ...) {
                           membership = "kept_after_all_rules; indeterminate follows each rule's unknownAs"),
        tables = .vcr_tables_of(list(vcr_write_table(wf, "cohort-waterfall", output_dir),
                                     vcr_write_table(members, "cohort-members", output_dir))))
+  # present only when asked for, so a cohort that never compared anything reports what it always did
+  if (!is.null(comparison)) out$diagnostics$comparison <- comparison
+  out
 }
 
 #' Cohort rules carried into a downstream job: the same named rules, applied to

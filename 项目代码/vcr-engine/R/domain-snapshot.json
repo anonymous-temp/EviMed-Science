@@ -540,6 +540,52 @@
           "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
           "maxLength": 64,
           "default": "USUBJID"
+        },
+        "compare": {
+          "t": "object",
+          "fields": {
+            "rules": {
+              "t": "array",
+              "items": {
+                "t": "object",
+                "fields": {
+                  "name": {
+                    "t": "string",
+                    "minLength": 1,
+                    "maxLength": 80,
+                    "req": true
+                  },
+                  "rule": {
+                    "t": "rule",
+                    "req": true
+                  },
+                  "unknownAs": {
+                    "t": "string",
+                    "values": [
+                      "include",
+                      "exclude"
+                    ],
+                    "default": "exclude"
+                  }
+                }
+              },
+              "min": 1,
+              "max": 100,
+              "req": true
+            },
+            "covariates": {
+              "t": "array",
+              "items": {
+                "t": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+                "maxLength": 64
+              },
+              "min": 1,
+              "max": 100,
+              "unique": true,
+              "req": true
+            }
+          }
         }
       }
     },

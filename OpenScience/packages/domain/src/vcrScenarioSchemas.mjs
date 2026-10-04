@@ -365,6 +365,10 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
     timeZero: object({ column: req(COLUMN) }),
     exit: object({ column: req(COLUMN) }),
     idColumn: { ...COLUMN, default: 'USUBJID' },
+    // A second version of the definition on the same table, and the baseline columns the two cohorts are
+    // compared on: counts, overlap and a standardized difference per covariate (a definition library's
+    // version comparison). The primary `rules` are version A.
+    compare: object({ rules: req(COHORT_STEPS), covariates: req(COLUMN_LIST) }),
   }),
 
   'population.scenario': object({
