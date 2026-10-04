@@ -626,7 +626,13 @@ not sufficient containment for those events.
   schema. It does not cover separate attachment volumes, the OpenViking recall
   index or OpenList configuration. The OpenViking volume is derived from
   PostgreSQL and is deliberately not backed up: rebuild it after a restore with
-  `pnpm rebuild:memory-index --all`.
+  `pnpm rebuild:memory-index --all`. A memory's validity (`valid_from`,
+  `invalid_since`), what replaced it (`superseded_by`), the statements it
+  disagrees with (`record_conflicts`) and the sources it rests on
+  (`record_sources`, by `src_` id or DOI) are columns and tables of that same
+  schema, so the dump carries them and a restore needs nothing more; the index
+  holds each memory's text and nothing else, and recall decides validity and
+  conflict from PostgreSQL when it reads.
 - The dump also leaves out the rows of `evimed_frontier.item_vectors`, the
   frontier feed's embeddings (derived from the items the dump does carry, and
   otherwise the largest table in every retained archive). The table's
