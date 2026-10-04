@@ -1131,6 +1131,14 @@ services:
     read_only: true
     tmpfs:
       - /tmp:rw,nosuid,nodev,size=256m
+    # The same bound as the five adapter engines below, set the same way: a
+    # MetaAgent job is as large as any of theirs, and without these the container
+    # was limited by nothing but the host (on the production host `docker stats`
+    # showed a memory limit equal to the whole machine), so one runaway review
+    # could take down every product that shares it.
+    cpus: 1.5
+    mem_limit: 2g
+    pids_limit: 256
     networks:
       - default
       - runtime-internal

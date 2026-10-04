@@ -836,10 +836,10 @@ stop it with `stop_runtime` under that project's header.
 
 ### Specialist job slots on a small host
 
-The five adapter engines (MR, bibliometric, research-topic, peer-review,
-drug-safety) are each limited to 2 GiB while a job runs, and MetaAgent's container
-carries no memory limit at all, so on a host shared with other products the six
-have to take turns.
+The six engines (MR, bibliometric, research-topic, peer-review, drug-safety
+and MetaAgent) are each limited to 2 GiB, 1.5 CPUs and 256 processes while a job
+runs (MetaAgent's container had no limit at all until 2026-10-04), so on a host
+shared with other products they have to take turns.
 `OPEN_SCIENCE_SPECIALIST_MAX_CONCURRENT_JOBS` caps the specialist jobs running at
 once across all six (`1` on a small host; `0` or unset is no cap, which is how it
 behaved before 2026-10-04). Each engine receives it as

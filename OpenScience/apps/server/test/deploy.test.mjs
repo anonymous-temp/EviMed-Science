@@ -572,6 +572,23 @@ test("production compose exposes every specialist adapter configured by the serv
   }
 });
 
+// The host is shared with other products, so every specialist engine is bounded
+// the same way. MetaAgent's container had none of the three keys (the production
+// host showed a memory limit equal to the whole machine, 2026-10-04) while the
+// five adapter engines had them, because it is built from its own Dockerfile and
+// the adapter services are written out one by one.
+test("every specialist engine container carries the same CPU, memory and process limits", async () => {
+  const compose = YAML.parse(await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8"));
+  const adapters = Object.entries(compose.services)
+    .filter(([, service]) => /specialist-adapter\/Dockerfile$/.test(service.build?.dockerfile ?? ""))
+    .map(([name]) => name).sort();
+  assert.equal(adapters.length, 5, "the five adapter engines are found by their Dockerfile");
+  const engines = [...adapters, "evimed-meta-agent"];
+  const limits = (name) => ({ cpus: compose.services[name].cpus, mem_limit: compose.services[name].mem_limit, pids_limit: compose.services[name].pids_limit });
+  assert.deepEqual(limits("evimed-mr-agent"), { cpus: 1.5, mem_limit: "2g", pids_limit: 256 });
+  for (const name of engines) assert.deepEqual(limits(name), limits("evimed-mr-agent"), `${name} must carry the engines' limits`);
+});
+
 test("web compose defaults to the hosted docker runtime boundary", async () => {
   const compose = await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8");
   const metaStart = compose.indexOf("\n  evimed-meta-agent:\n    image:");
