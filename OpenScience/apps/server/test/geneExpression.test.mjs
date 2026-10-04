@@ -11,6 +11,10 @@ import { promisify } from "node:util";
 import zlib from "node:zlib";
 import { GENE_EXPRESSION_LIMITS, GENE_EXPRESSION_LIMIT_NAMES } from "@evimed/domain";
 import { loadConfig } from "../src/config.mjs";
+import { ResultProvenanceService } from "../src/resultProvenanceService.mjs";
+import { stableBytes } from "../src/resultDeliveryCapture.mjs";
+import { readSkillExecution } from "../src/skillExecution.mjs";
+import { productDocumentsDouble } from "./helpers/productDocumentsDouble.mjs";
 import { geneExpressionMetricFamilies, resetGeneExpressionMetrics } from "../src/geneExpressionMetrics.mjs";
 import { createPublicSourceGatewayHandler, PUBLIC_SOURCE_ALLOWED_HOSTS } from "../src/publicSourceGateway.mjs";
 
@@ -305,4 +309,30 @@ test("a limit only the runtime can see is reported to the gateway's counter, and
   assert.deepEqual([result.series.data.limit, result.series.data.observed, result.series.data.allowed], ["samples", 6, 5]);
   assert.equal(counts()["open_science_gene_expression_limits_total{limit=samples,action=refused}"], 1);
   assert.equal(fs.existsSync(path.join(result.workspace, ".evimed-sources")), false);
+});
+
+test("the platform reads what the tool wrote as a producer snapshot: the receipt, the code, the inputs and the machine values a report renders from", async (t) => {
+  resetGeneExpressionMetrics();
+  const { base } = await serve(t, { publicSourceGatewayTimeoutMs: 20_000, publicSourceDownloadTimeoutMs: 60_000 }, { fetchImpl: geo([]) });
+  const written = await runTools(t, base);
+  assert.equal(written.differential.status === "error", false);
+  const root = path.dirname(written.workspace);
+  fs.mkdirSync(path.join(root, "meta"), { recursive: true });
+  const project = { id: "p", userId: "owner", rootDir: root, baseDir: root, workspaceDir: written.workspace, metaDir: path.join(root, "meta") };
+  const results = new ResultProvenanceService({ documents: productDocumentsDouble(), authorizeProject: async () => project, authorizeReference: async (_actor, _project, reference) => reference });
+  const read = await readSkillExecution({
+    results, project, userId: "owner", receiptPath: written.differential.data.receiptPath, resultsPath: written.differential.data.resultsPath,
+    readBytes: (relative, limit) => stableBytes(project, relative, limit),
+  });
+  assert.equal(read.status, "recorded", JSON.stringify(read));
+  const keys = new Map(read.machineValues.map((value) => [value.key, value.value]));
+  for (const key of ["top[0].logFC", "top[0].pValue", "top[0].adjPValue", "diagnostics.probesTested", "diagnostics.probesSignificantAtFdr05", "diagnostics.groupSizes.reference"]) {
+    assert.ok(keys.has(key), `${key} is a machine value a template can reference`);
+  }
+  assert.equal(keys.get("diagnostics.probesTested"), 12488);
+  assert.equal(read.truncated, false);
+  assert.equal(read.snapshot.kind, "skill_script");
+  assert.equal(read.code?.path ?? read.code?.id, written.differential.data.codePath, "the code beside the result is the one the receipt names");
+  assert.ok(read.inputs.length >= 3 && read.inputs.every((input) => /^[a-f0-9]{64}$/.test(input.digest)));
+  assert.match(JSON.stringify(read.snapshot), /numpy/);
 });
