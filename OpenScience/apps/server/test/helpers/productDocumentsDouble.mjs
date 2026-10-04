@@ -2,7 +2,7 @@
  * An in-memory `ProductDocuments` for the capsule tests that do not need a
  * database: the same method surface, the same revision semantics
  * (`expectedRevision: 0` creates, anything else must match), containment
- * filters on the payload, newest-first listing and a history of every write.
+ * filters on the payload (arrays by containment, as `@>` reads them), newest-first listing and a history of every write.
  *
  * It is deliberately not clever about pagination (one page) or about the
  * lexical search (a substring of `payload.content`), because the integration
@@ -12,12 +12,15 @@
 import { productInteger } from "../../src/productPersistence.mjs";
 import { HttpError } from "../../src/security.mjs";
 
-/** @param {any} payload @param {Record<string, any>} filter */
+/**
+ * PostgreSQL's `@>` on a jsonb payload: an object contains each of its filter's keys, an array contains each element of
+ * the filter's array (in any position), a scalar equals.
+ * @param {any} payload @param {any} filter
+ */
 function contains(payload, filter) {
-  return Object.entries(filter ?? {}).every(([key, value]) => {
-    if (value && typeof value === "object" && !Array.isArray(value)) return contains(payload?.[key], value);
-    return JSON.stringify(payload?.[key]) === JSON.stringify(value);
-  });
+  if (Array.isArray(filter)) return Array.isArray(payload) && filter.every((item) => payload.some((candidate) => contains(candidate, item)));
+  if (filter && typeof filter === "object") return Object.entries(filter).every(([key, value]) => contains(payload?.[key], value));
+  return JSON.stringify(payload) === JSON.stringify(filter);
 }
 
 export function productDocumentsDouble() {

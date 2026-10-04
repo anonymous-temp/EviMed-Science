@@ -1341,6 +1341,64 @@ export {
 
 export { DOCUMENT_EXPORT_VERSION, DOCUMENT_RENDERER_VERSION, DOCUMENT_EXPORT_FORMATS, DOCUMENT_EXPORT_MIME, DOCUMENT_EXPORT_ERROR_MESSAGES, documentExportFormats, documentExportDigest } from "./src/documentExport.mjs";
 
+// numberBinding — the one mechanism by which a number in a report is resolved from a result, not typed (plan 2026-10-02 §11.3 N06;
+// lifted out of the 「虚拟临研」 renderer, which keeps its own issue codes and sentences).
+export {
+  NUMBER_FORMATS,
+  NUMBER_REFERENCE_PATTERN,
+  NUMBER_UNCOMPUTED,
+  NUMBER_UNIT_FORMATS,
+  NUMBER_UNPARSED_PATTERN,
+  formatNumberValue,
+  readNumberPath,
+  renderNumberTemplate,
+  resolveNumberPath,
+  typedNumberSpans,
+  typedNumbersOf,
+} from './src/numberBinding.mjs'
+
+// producerSnapshot — what produced a result version's bytes: script/method identity, input versions, environment facts,
+// and, as a closed list, what the platform did not observe (plan 2026-10-02 §11.3 N06).
+export {
+  PRODUCER_SNAPSHOT_KINDS,
+  REPRODUCTION_STATES,
+  SNAPSHOT_ORIGINS,
+  SNAPSHOT_UNKNOWNS,
+  authoredSnapshot,
+  engineJobSnapshot,
+  isCodePath,
+  methodIdentityFromResult,
+  projectProducerSnapshot,
+  renderSnapshot,
+  skillScriptSnapshot,
+  snapshotGaps,
+  unobservedSnapshot,
+} from './src/producerSnapshot.mjs'
+
+// valueBindings — each number a report, table or figure prints, bound to the calculation version, key, unit and format
+// it came from; what binds no value is labelled unbound, never withheld (plan 2026-10-02 §11.3 N06).
+export {
+  MATCHED_BINDING_FORMAT,
+  NUMBER_BINDING_VERSION,
+  RESULT_LINEAGE_LIMITS,
+  UNBOUND_REASONS,
+  VALUE_BINDING_BASES,
+  VALUE_BINDING_STATUSES,
+  applyBindingFormat,
+  bindPrintedNumbers,
+  bindableKind,
+  bindingGaps,
+  bindingSources,
+  changeImpact,
+  emptyValueBindings,
+  flattenMachineValues,
+  locatorIndex,
+  projectValueBindings,
+  renderWithBindings,
+  valueBindingRecord,
+  valueBindingStatus,
+} from './src/valueBindings.mjs'
+
 export { RESULT_PRODUCER_KINDS, RESULT_INPUT_KINDS, RESULT_AVAILABILITY, isResultDigest, normalizeResultPath, projectResultInput, projectResultVersion, projectResultMethod, resultMethodDifference, validateResultAnchor, resultVersionDifference } from "./src/resultProvenance.mjs";
 export { RESULT_REPLAY_METHODS, compareResultNumbers } from "./src/resultReplay.mjs";
 export { RESEARCH_BILLING_VERSION, RESEARCH_MONEY_SCALE, RESEARCH_BILLABLE_PURPOSES, STEP_WAITING_ALLOWANCE, allowanceRefusalSentence, allowanceWaitingNote, allowanceWaitingSentence, stepWaitingFor, researchMoneyUnits, researchMoneyDecimal, researchTaskCharge, SIMULATED_WALLET_LABEL, SIMULATED_START_CREDITS, SIMULATED_LOW_CREDITS, SIMULATED_WALLET_PAGES, SIMULATED_TOPUP_PACKAGES } from './src/researchBilling.mjs';

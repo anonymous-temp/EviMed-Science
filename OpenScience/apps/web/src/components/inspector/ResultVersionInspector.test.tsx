@@ -14,6 +14,7 @@ vi.mock("@/lib/resultProvenance", async (original) => ({ ...await original<typeo
 }));
 vi.mock("@/components/report/ReportReader", () => ({ ReportReader: ({ text, immutableVersion }: { text: string; immutableVersion: ResultVersion }) => <p data-version={immutableVersion.versionId}>{text}</p> }));
 vi.mock("./ResultImpactPanel", () => ({ ResultImpactPanel: () => null }));
+vi.mock("./ResultLineagePanel", () => ({ ResultLineagePanel: () => null }));
 const old: ResultVersion = { artifactId: "a", versionId: "rv_old", projectId: "default", path: "report.md", digest: "a".repeat(64), size: 10, mimeType: "text/markdown", capturedAt: "2026-10-01T00:00:00Z",
   producer: { kind: "tool", sessionId: "ses_1", runId: "run_1" }, inputs: [], code: null, environment: null,
   findings: [{ id: "f_old", kind: "claim", status: "source_unavailable", message: "旧版本原文不可用" }], machineValues: [],

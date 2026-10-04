@@ -55,31 +55,30 @@
  */
 
 import { createHash } from "node:crypto";
-import { documentExportDigest, VCR_COUNT_KEYS, VCR_INTERVAL_KIND_LABELS_ZH, VCR_VALUE_SOURCE_LABELS_ZH } from "@evimed/domain";
+import {
+  documentExportDigest, VCR_COUNT_KEYS, VCR_VALUE_SOURCE_LABELS_ZH,
+  NUMBER_FORMATS, NUMBER_REFERENCE_PATTERN, NUMBER_UNCOMPUTED, NUMBER_UNIT_FORMATS,
+  formatNumberValue, readNumberPath, renderNumberTemplate, resolveNumberPath, typedNumbersOf,
+} from "@evimed/domain";
 
-/**
- * A number reference in a template: `{{n:<path>}}` or `{{n:<path>|<format>}}`.
- * A path segment may carry arguments in parentheses — `measure(power)`,
- * `measure(power, scenario=scn_x)` — and inside them anything but `)` `}` `|`.
- */
-export const VCR_NUMBER_PATTERN = /\{\{\s*n:((?:[A-Za-z0-9_.[\]一-鿿-]|\([^)}|]*\))+?)\s*(?:\|\s*([a-z0-9]+)\s*)?\}\}/g;
+// The mechanism itself — the grammar, the path reader, the formats, the unit
+// rules and the typed-number detector — lives in `@evimed/domain`'s
+// `numberBinding.mjs`, where the meta-analysis and statistical reports read it
+// too (plan 2026-10-02 §11.3 N06). What stays here is what is 「虚拟临研」's own:
+// the issue codes, the Chinese sentences the run is told, and the study's
+// `results.json`.
 
-/**
- * Anything that opens like a reference and is not one the grammar read: `{{n:`
- * in any case, up to the brace that closes it (never across a line or another
- * brace), so what the run meant is quotable in the issue. One that never closes
- * takes only the characters a reference is spelled with, so the sentence after
- * it is not eaten.
- */
-const VCR_UNPARSED_PATTERN = /\{\{\s*n:(?:[^{}\n]{0,200}\}{1,2}|[A-Za-z0-9_.[\]()=,|-]*)/gi;
+/** A number reference in a template: `{{n:<path>}}` or `{{n:<path>|<format>}}`. */
+export const VCR_NUMBER_PATTERN = NUMBER_REFERENCE_PATTERN;
 
 /** What a reference renders as when the study has no such result yet. */
-export const VCR_UNCOMPUTED = "未计算";
+export const VCR_UNCOMPUTED = NUMBER_UNCOMPUTED;
 
 /** The formats a reference may ask for. */
-export const VCR_NUMBER_FORMATS = Object.freeze([
-  "raw", "int", "f1", "f2", "f3", "pct0", "pct1", "pct2", "thousands", "ci", "pm", "months", "text",
-]);
+export const VCR_NUMBER_FORMATS = NUMBER_FORMATS;
+
+/** The formats that print a unit, and so have to agree with the one recorded. */
+export const VCR_UNIT_FORMATS = NUMBER_UNIT_FORMATS;
 
 /** @param {unknown} value */
 const object = (value) => (value && typeof value === "object" && !Array.isArray(value) ? /** @type {Record<string, any>} */ (value) : {});
@@ -87,229 +86,31 @@ const object = (value) => (value && typeof value === "object" && !Array.isArray(
 const list = (value) => (Array.isArray(value) ? value : []);
 
 /**
- * The keys whose number is in the unit its own object records: a measure's or a
- * card's `value`, the Monte-Carlo error beside it, and the two ends of an
- * interval or a range that belongs to it. An interval's `level` (0.95) and a
- * distribution's parameters are not: they are numbers about the value, on
- * scales of their own.
- */
-const UNIT_BEARING_KEYS = Object.freeze(["value", "mcse", "low", "high"]);
-
-/**
- * Read one path out of a results document. Understands dotted keys, array
- * indices, and `measure(<name>)` — which is how a template names a measure
- * without depending on the order the engine happened to return them in.
+ * Read one path out of a results document (see `readNumberPath`).
  * @param {unknown} root @param {string} path
  */
-export function vcrReadPath(root, path) {
-  return vcrResolvePath(root, path).value;
-}
+export const vcrReadPath = (root, path) => readNumberPath(root, path);
 
 /**
- * Read one path and the unit the result recorded for the number it ends at:
- * the `unit` of the nearest object the path passed through that states one —
- * the `{ value, unit }` cell itself, the measure an interval belongs to, the
- * card a range belongs to. `null` when nothing on the way records a unit, or
- * when the path ends at a key a unit does not speak for.
+ * Read one path and the unit the result recorded for the number it ends at (see `resolveNumberPath`).
  * @param {unknown} root @param {string} path
  * @returns {{ value: unknown, unit: string | null }}
  */
-export function vcrResolvePath(root, path) {
-  /** @type {unknown[]} every object the path passed through, outermost first */
-  const passed = [];
-  let lastKey = "";
-  const value = walkPath(root, path, (holder, key) => { passed.push(holder); lastKey = key; });
-  if (value === undefined || !UNIT_BEARING_KEYS.includes(lastKey)) return { value, unit: null };
-  for (const holder of passed.reverse()) {
-    const unit = Array.isArray(holder) ? null : object(holder).unit;
-    if (typeof unit === "string" && unit.trim()) return { value, unit: unit.trim() };
-  }
-  return { value, unit: null };
-}
+export const vcrResolvePath = (root, path) => resolveNumberPath(root, path);
 
 /**
- * @param {unknown} root @param {string} path
- * @param {(holder: unknown, key: string) => void} visit called for each step with what it read from and by which key
- */
-function walkPath(root, path, visit) {
-  let value = root;
-  for (const rawSegment of String(path).split(".")) {
-    if (value == null) return undefined;
-    const segment = rawSegment.trim();
-    if (!segment) return undefined;
-    visit(value, segment);
-    const selector = /^measure\((.+)\)$/.exec(segment);
-    if (selector) {
-      // `measure(power)` is the headline result's measure of that name;
-      // `measure(power, scenario=scn_x)` is the same measure of one trial
-      // scenario, by its id — a study has many scenarios and a report compares
-      // them, so a name alone cannot say which one is meant.
-      const [rawName, ...rawOptions] = selector[1].split(",").map((part) => part.trim());
-      const name = rawName;
-      const scenarioId = rawOptions.map((option) => /^scenario\s*=\s*(\S+)$/.exec(option)?.[1]).find(Boolean) ?? null;
-      let measures = Array.isArray(value) ? value : list(object(value).measures);
-      if (scenarioId) {
-        const scenarioResult = object(object(root).scenarioResults)[scenarioId];
-        if (!scenarioResult) return undefined;
-        measures = list(object(scenarioResult).measures);
-      }
-      value = measures.find((measure) => String(object(measure).name) === name);
-      continue;
-    }
-    const indexed = /^([A-Za-z0-9_一-鿿-]*)\[(\d+)\]$/.exec(segment);
-    if (indexed) {
-      const base = indexed[1] ? /** @type {any} */ (value)[indexed[1]] : value;
-      value = Array.isArray(base) ? base[Number(indexed[2])] : undefined;
-      continue;
-    }
-    value = /** @type {any} */ (value)[segment];
-  }
-  return value;
-}
-
-/** @param {number} value @param {number} digits */
-const fixed = (value, digits) => value.toFixed(digits);
-/** @param {number} value */
-const grouped = (value) => Math.round(value).toLocaleString("en-US");
-
-/**
- * How a recorded unit reads to a format that states a unit of its own. Closed
- * vocabularies, compared trimmed and lower-cased: the engine's own spellings
- * (`%`, `月`, `months`) and the ones a card is written with. A value with no
- * unit is the engine's fraction and a bare duration, which is what both formats
- * were written for. The pooling engine writes the scale where a unit goes, and
- * `identity` is the natural scale — it says nothing about the unit — while a
- * `log` or `logit` value is not the quantity itself. Every other word is a unit
- * the format is not about: a mismatch, never a guess.
- */
-const PERCENT_UNITS = new Set(["percent", "pct", "百分比"]);
-const FRACTION_UNITS = new Set(["proportion", "fraction", "probability", "比例", "概率"]);
-const MONTH_UNITS = new Set(["months", "month", "月", "个月"]);
-const UNITLESS_SCALES = new Set(["identity"]);
-/** A percentage, or a percentage per something: 「%」, and 「%/年」 as a dropout card is kept. @param {string} unit */
-const isPercentUnit = (unit) => PERCENT_UNITS.has(unit) || unit.startsWith("%") || unit.startsWith("％");
-
-/** The formats that print a unit, and so have to agree with the one recorded. */
-export const VCR_UNIT_FORMATS = Object.freeze(["pct0", "pct1", "pct2", "months"]);
-
-/**
- * Render one resolved value in the format the reference asked for. `unit` is
- * what the result recorded for the value (`vcrResolvePath`); a caller that has
- * a bare number and no result behind it leaves it out.
+ * Render one resolved value in the format the reference asked for (see `formatNumberValue`).
  * @param {unknown} value @param {string} format @param {string | null} [unit]
  * @returns {{ ok: boolean, text: string, reason?: string }}
  */
-export function vcrFormatValue(value, format, unit = null) {
-  if (value === undefined || value === null) return { ok: false, text: VCR_UNCOMPUTED, reason: "unbound" };
-  if (format === "text") return { ok: true, text: String(value) };
-  if (format === "ci") {
-    const interval = object(object(value).interval ?? value);
-    const low = Number(interval.low);
-    const high = Number(interval.high);
-    if (!Number.isFinite(low) || !Number.isFinite(high)) return { ok: false, text: VCR_UNCOMPUTED, reason: "interval_incomplete" };
-    const kind = String(interval.kind ?? "");
-    const label = /** @type {Record<string, string>} */ (VCR_INTERVAL_KIND_LABELS_ZH)[kind];
-    if (!label) return { ok: false, text: `${fixed(low, 3)}～${fixed(high, 3)}`, reason: "interval_kind_unnamed" };
-    return { ok: true, text: `${label} ${fixed(low, 3)}～${fixed(high, 3)}` };
-  }
-  if (format === "pm") {
-    const measure = object(value);
-    const point = Number(measure.value);
-    if (!Number.isFinite(point)) return { ok: false, text: VCR_UNCOMPUTED, reason: "value_missing" };
-    const mcse = Number(measure.mcse);
-    if (measure.simulated !== false && !Number.isFinite(mcse)) {
-      return { ok: false, text: fixed(point, 3), reason: "mcse_missing" };
-    }
-    return { ok: true, text: Number.isFinite(mcse) ? `${fixed(point, 3)}（蒙特卡洛标准误 ${fixed(mcse, 4)}）` : fixed(point, 3) };
-  }
-  const number = Number(value);
-  if (!Number.isFinite(number)) return { ok: false, text: VCR_UNCOMPUTED, reason: "not_a_number" };
-  const word = String(unit ?? "").trim().toLowerCase();
-  const recorded = UNITLESS_SCALES.has(word) ? "" : word;
-  const mismatch = { ok: false, text: VCR_UNCOMPUTED, reason: "unit_mismatch" };
-  switch (format) {
-    case "int": return { ok: true, text: String(Math.round(number)) };
-    case "f1": return { ok: true, text: fixed(number, 1) };
-    case "f2": return { ok: true, text: fixed(number, 2) };
-    case "f3": return { ok: true, text: fixed(number, 3) };
-    case "pct0": case "pct1": case "pct2": {
-      const digits = Number(format.slice(3));
-      // Already a percentage: printed as it stands. A fraction, said or unsaid: scaled.
-      if (isPercentUnit(recorded)) return { ok: true, text: `${fixed(number, digits)}%` };
-      if (recorded && !FRACTION_UNITS.has(recorded)) return mismatch;
-      return { ok: true, text: `${fixed(number * 100, digits)}%` };
-    }
-    case "thousands": return { ok: true, text: grouped(number) };
-    case "months":
-      if (recorded && !MONTH_UNITS.has(recorded)) return mismatch;
-      return { ok: true, text: `${fixed(number, 1)} 个月` };
-    default: return { ok: true, text: String(number) };
-  }
-}
-
-/**
- * Stretches of prose whose digits are not a statement of the study: a source's
- * own words in 「」 or “”, and an ISO date or instant. Closed formats, not a
- * reading of language (principle 5).
- */
-const QUOTED_OR_DATED = [
-  /「[^」\n]*」/g,
-  /“[^”\n]*”/g,
-  /\d{4}-\d{2}-\d{2}(?:[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:\d{2})?)?/g,
-];
-
-/**
- * Whether the digits at `start` label something rather than measure it: a day
- * of the month (`29 日`), a locator (`第 35 页`, `图 3`, `表 2`, `#25`).
- * @param {string} text @param {number} start @param {number} end @param {number} value
- */
-function isLabelNumber(text, start, end, value) {
-  const after = text.slice(end);
-  const before = text.slice(Math.max(0, start - 6), start);
-  if (Number.isInteger(value) && value <= 31 && /^\s*[日号]/.test(after)) return true;
-  if (/第\s*$/.test(before) && /^\s*(?:页|条|节|章|表|图|项)/.test(after)) return true;
-  return /(?:图|表|附录|#)\s*$/.test(before);
-}
-
-/**
- * The typed numbers of one stretch of prose, with where each stands. What
- * the report may say in digits without a reference: a year, an ordinal or month
- * up to twelve, a day, a locator, a quoted source, a date.
- * @param {string} text
- * @returns {Array<{ raw: string, start: number, end: number }>}
- */
-function typedNumberSpans(text) {
-  /** @type {Array<[number, number]>} */
-  const exempt = [];
-  for (const pattern of QUOTED_OR_DATED) for (const match of text.matchAll(pattern)) exempt.push([match.index, match.index + match[0].length]);
-  /** @type {Array<{ raw: string, start: number, end: number }>} */
-  const found = [];
-  const pattern = /(?<![\w.])(\d{1,3}(?:,\d{3})+|\d+\.\d+|\d+)(?![\w.])/g;
-  let match;
-  while ((match = pattern.exec(text))) {
-    const raw = match[1];
-    const start = match.index;
-    const end = start + raw.length;
-    const value = Number(raw.replace(/,/g, ""));
-    if (!Number.isFinite(value)) continue;
-    if (Number.isInteger(value) && value >= 1900 && value <= 2100) continue;
-    if (Number.isInteger(value) && value <= 12) continue;
-    if (exempt.some(([from, to]) => start >= from && end <= to)) continue;
-    if (isLabelNumber(text, start, end, value)) continue;
-    found.push({ raw, start, end });
-  }
-  return found;
-}
+export const vcrFormatValue = (value, format, unit = null) => formatNumberValue(value, format, unit);
 
 /**
  * Numbers a template typed instead of referencing. Years, ordinals up to
  * twelve and everything inside a `{{n:…}}` reference are not counted.
  * @param {string} template
  */
-export function vcrTypedNumbers(template) {
-  const withoutRefs = String(template ?? "").replace(VCR_NUMBER_PATTERN, " ");
-  return typedNumberSpans(withoutRefs).map((span) => span.raw);
-}
+export const vcrTypedNumbers = (template) => typedNumbersOf(template);
 
 /**
  * Render a report template against a results document.
@@ -320,99 +121,46 @@ export function vcrTypedNumbers(template) {
  *   issues: Array<{ code: string, path: string, message: string, severity: string, reason?: string, unit?: string | null, format?: string }>, typed: string[] }}
  */
 export function renderVcrNumbers(template, results) {
-  /** @type {Array<{ ref: string, path: string, format: string, value: unknown, rendered: string, ok: boolean, unit?: string }>} */
-  const bindings = [];
   /** @type {Array<{ code: string, path: string, message: string, severity: string, reason?: string, unit?: string | null, format?: string }>} */
   const issues = [];
   const document = object(results);
-  const source = String(template ?? "");
-
-  /**
-   * The digits one stretch of words types, replaced and counted.
-   * @param {string} words
-   */
-  const withoutTyped = (words) => {
-    let out = "";
-    let cursor = 0;
-    for (const span of typedNumberSpans(words)) {
-      out += words.slice(cursor, span.start) + VCR_UNCOMPUTED;
-      cursor = span.end;
-      typed.push(span.raw);
-    }
-    return out + words.slice(cursor);
-  };
-
-  /**
-   * Prose between references: the digits it types are replaced and counted,
-   * and anything that opens as a reference and is not one is named and
-   * replaced. Rendered references are never scanned again — a value that
-   * itself contains digits or braces is a result, not prose.
-   * @param {string} words
-   */
-  const prose = (words) => {
-    let out = "";
-    let cursor = 0;
-    for (const found of words.matchAll(VCR_UNPARSED_PATTERN)) {
-      out += withoutTyped(words.slice(cursor, found.index)) + VCR_UNCOMPUTED;
-      unparsed.push(found[0].trim());
-      cursor = found.index + found[0].length;
-    }
-    return out + withoutTyped(words.slice(cursor));
-  };
-
-  /** @type {string[]} */
-  const typed = [];
-  /** @type {string[]} */
-  const unparsed = [];
-  let text = "";
-  let cursor = 0;
-  for (const match of source.matchAll(VCR_NUMBER_PATTERN)) {
-    const [ref, rawPath, rawFormat] = match;
-    text += prose(source.slice(cursor, match.index));
-    cursor = match.index + ref.length;
-    const path = String(rawPath);
-    const format = rawFormat && VCR_NUMBER_FORMATS.includes(String(rawFormat)) ? String(rawFormat) : "raw";
-    if (rawFormat && !VCR_NUMBER_FORMATS.includes(String(rawFormat))) {
+  const rendered = renderNumberTemplate(template, (path) => resolveNumberPath(document, path));
+  const bindings = rendered.bindings.map(({ ref, path, format, value, rendered: text, ok, unit }) => ({ ref, path, format, value, rendered: text, ok, ...(unit ? { unit } : {}) }));
+  for (const binding of rendered.bindings) {
+    const { path, format, unit, reason, unknownFormat } = binding;
+    if (unknownFormat) {
       issues.push({ code: "vcr_number_format_unknown", path,
-        message: `「${rawFormat}」不是已知的数字格式，按原值呈现。`, severity: "advisory" });
+        message: `「${unknownFormat}」不是已知的数字格式，按原值呈现。`, severity: "advisory" });
     }
-    const { value, unit } = vcrResolvePath(document, path);
-    const rendered = vcrFormatValue(value, format, unit);
-    // The unit is kept beside the binding: it is why a percentage was not scaled.
-    bindings.push({ ref: String(ref), path, format, value, rendered: rendered.text, ok: rendered.ok, ...(unit ? { unit } : {}) });
-    if (!rendered.ok) {
-      issues.push({
-        // A unit the format cannot be true of is filed with the references that
-        // did not bind — the report reads 「未计算」 there just the same — and the
-        // sentence says which unit and which format, so the run changes the
-        // format rather than looking for a field that is not missing.
-        code: rendered.reason === "mcse_missing" ? "vcr_number_mcse_missing"
-          : rendered.reason === "interval_kind_unnamed" ? "vcr_interval_unnamed" : "vcr_number_unbound",
-        path,
-        message: rendered.reason === "mcse_missing" ? `「${path}」是仿真结果但没有蒙特卡洛标准误（AC-28）。`
-          : rendered.reason === "interval_kind_unnamed" ? `「${path}」的区间没有写明是哪一种（方案 §8.3）。`
-            : rendered.reason === "unit_mismatch"
-              ? `「${path}」在结果里记的单位是「${unit}」，不能按 ${format} 呈现，报告此处写「${VCR_UNCOMPUTED}」；改用 f1、f2 这类不带单位的格式，单位写在文字里。`
-              : `结果里没有「${path}」，报告此处写「${VCR_UNCOMPUTED}」。`,
-        severity: "advisory",
-        ...(rendered.reason === "unit_mismatch" ? { reason: "unit_mismatch", unit, format } : {}),
-      });
-    }
-    text += rendered.text;
+    if (binding.ok) continue;
+    issues.push({
+      // A unit the format cannot be true of is filed with the references that
+      // did not bind — the report reads 「未计算」 there just the same — and the
+      // sentence says which unit and which format, so the run changes the
+      // format rather than looking for a field that is not missing.
+      code: reason === "mcse_missing" ? "vcr_number_mcse_missing"
+        : reason === "interval_kind_unnamed" ? "vcr_interval_unnamed" : "vcr_number_unbound",
+      path,
+      message: reason === "mcse_missing" ? `「${path}」是仿真结果但没有蒙特卡洛标准误（AC-28）。`
+        : reason === "interval_kind_unnamed" ? `「${path}」的区间没有写明是哪一种（方案 §8.3）。`
+          : reason === "unit_mismatch"
+            ? `「${path}」在结果里记的单位是「${unit}」，不能按 ${format} 呈现，报告此处写「${VCR_UNCOMPUTED}」；改用 f1、f2 这类不带单位的格式，单位写在文字里。`
+            : `结果里没有「${path}」，报告此处写「${VCR_UNCOMPUTED}」。`,
+      severity: "advisory",
+      ...(reason === "unit_mismatch" ? { reason: "unit_mismatch", unit, format } : {}),
+    });
   }
-  text += prose(source.slice(cursor));
-
-  for (const found of unparsed) {
+  for (const found of rendered.unparsed) {
     issues.push({ code: "vcr_number_unparsed", path: found.slice(0, 80),
       message: `「${found.slice(0, 80)}」读不成数字引用，报告此处写「${VCR_UNCOMPUTED}」；引用写成 {{n:路径|格式}}，格式用小写。`,
       severity: "advisory" });
   }
-  if (typed.length) {
+  if (rendered.typed.length) {
     issues.push({ code: "vcr_number_typed", path: "",
-      message: `模板里有 ${typed.length} 个手写数字（${typed.slice(0, 5).join("、")}${typed.length > 5 ? "…" : ""}）：报告里这些位置写了「${VCR_UNCOMPUTED}」，数应由结果渲染（方案 §8.3）；改成引用。`,
+      message: `模板里有 ${rendered.typed.length} 个手写数字（${rendered.typed.slice(0, 5).join("、")}${rendered.typed.length > 5 ? "…" : ""}）：报告里这些位置写了「${VCR_UNCOMPUTED}」，数应由结果渲染（方案 §8.3）；改成引用。`,
       severity: "advisory" });
   }
-  return { text, bindings, issues, typed };
+  return { text: rendered.text, bindings, issues, typed: rendered.typed };
 }
 
 /**

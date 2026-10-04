@@ -6,6 +6,7 @@ import { attachClaimSourceLocations, claimEvidenceSources, claimVerification } f
 import { normalizeResultPath } from "@evimed/domain/result-provenance";
 import { clinicalResultLinks } from "./resultImpact.mjs";
 import { describedQualityNotices } from "./runNotices.mjs";
+import { askOnce, captureSkillResults, findSkillExecutions, readSkillExecution } from "./skillExecution.mjs";
 import { HttpError, openScopedFileNoFollow, readStableFileHandle, resolveScopedPath } from "./security.mjs";
 
 const sha = bytes => createHash("sha256").update(bytes).digest("hex");
@@ -13,7 +14,8 @@ const DIGEST = /^[a-f0-9]{64}$/;
 const MAX_MATRIX_BYTES = 8 * 1024 * 1024;
 const MAX_SOURCES = 48;
 
-async function stableBytes(project, relativePath, limit) {
+/** One workspace file, read whole and checked not to have changed while it was read. Exported for the lineage view's render. */
+export async function stableBytes(project, relativePath, limit) {
   let opened;
   try {
     const normalized = normalizeResultPath(relativePath);
@@ -112,9 +114,16 @@ function unreceiptedEntries(files, receipt) {
  * file with no receipt behind it, or one that changed after its receipt, is
  * captured as observed: its bytes are exact, its producer is not bound to them,
  * and no claim metadata is promoted from a matrix nothing graded.
- * @param {{results:any,project:any,run:any,receipt?:any,files?:readonly string[]}} input
+ *
+ * A results file an admitted skill script's execution record accounts for
+ * (`skillExecution.mjs`) is captured with that record as its producer snapshot
+ * — the script, the inputs, the reported environment, each re-checked against
+ * the bytes readable now — and before its siblings, so a report captured beside
+ * it can bind its numbers to it. `transformationsFor` joins the script to the
+ * dataset transformations N03 recorded for it.
+ * @param {{results:any,project:any,run:any,receipt?:any,files?:readonly string[],transformationsFor?:((digests:string[])=>Promise<any[]>)|null,runtimeImageId?:(()=>Promise<string|null>)|null}} input
  */
-export async function captureResultDelivery({ results, project, run, receipt = null, files = [] }) {
+export async function captureResultDelivery({ results, project, run, receipt = null, files = [], transformationsFor = null, runtimeImageId = null }) {
   const items = [];
   const sourceItems = [];
   const failures = [];
@@ -180,13 +189,30 @@ export async function captureResultDelivery({ results, project, run, receipt = n
       } catch (error) { fail(matrixFile.path, error); links = { inputs: [], findings: [] }; review = null; }
     }
     const capturedOutputs = [];
-    for (const file of recorded) {
+    // Results an admitted skill script's execution record accounts for, found by the record's shape and the bytes it names.
+    const readBytes = (/** @type {string} */ relativePath, /** @type {number} */ limit) => stableBytes(project, relativePath, limit);
+    /** @type {Map<string, any>} */
+    const executions = new Map();
+    try {
+      for (const pair of await findSkillExecutions({ paths: recorded.map(file => file.path), readBytes })) {
+        if (executions.has(pair.resultsPath)) continue;
+        const read = await readSkillExecution({ results, project, userId: project.userId, ...pair, readBytes, transformationsFor, runtimeImageId });
+        if (read.status === "recorded") executions.set(pair.resultsPath, read);
+      }
+    } catch { /* An execution record that cannot be read leaves the files as they would have been. */ }
+    const lineageOf = (/** @type {string} */ relativePath) => {
+      const found = executions.get(relativePath);
+      return found ? { snapshot: found.snapshot, code: found.code, machineValues: found.machineValues } : {};
+    };
+    // The calculation first, so its siblings can bind their numbers to it.
+    const ordered = [...recorded].sort((left, right) => Number(executions.has(right.path)) - Number(executions.has(left.path)));
+    for (const file of ordered) {
       if (matrixVersion && file.path === matrixFile.path) { capturedOutputs.push(matrixVersion); continue; }
       try {
         const input = { userId: project.userId, project, relativePath: file.path, producer, expectedDigest: file.sha256, review,
           inputs: [...links.inputs, ...(matrixVersion ? [{ kind: "artifact", id: matrixVersion.artifactId, digest: matrixVersion.digest,
-            versionId: matrixVersion.versionId, path: matrixVersion.path, availability: "captured" }] : [])],
-          findings: [...links.findings, ...findings] };
+            versionId: matrixVersion.versionId, path: matrixVersion.path, availability: "captured" }] : []), ...(executions.get(file.path)?.inputs ?? [])],
+          findings: [...links.findings, ...findings], ...lineageOf(file.path) };
         let output;
         if (graded) {
           if (!DIGEST.test(file.sha256 ?? "")) throw new HttpError(409, "result_capture_receipt_invalid", "A delivery output must carry its exact byte digest.");
@@ -196,11 +222,13 @@ export async function captureResultDelivery({ results, project, run, receipt = n
             // Changed after its receipt: still the file the run produced. It
             // is captured as the bytes it is now, with nothing the receipt
             // vouched for — no digest binding, no claim links, no review.
-            output = await results.captureFile({ userId: project.userId, project, relativePath: file.path, producer, findings });
+            output = await results.captureFile({ userId: project.userId, project, relativePath: file.path, producer, findings,
+              inputs: executions.get(file.path)?.inputs ?? [], ...lineageOf(file.path) });
             unbound.push(file.path);
           }
         } else {
-          output = await results.captureFile({ userId: project.userId, project, relativePath: file.path, producer, findings });
+          output = await results.captureFile({ userId: project.userId, project, relativePath: file.path, producer, findings,
+            inputs: executions.get(file.path)?.inputs ?? [], ...lineageOf(file.path) });
           unbound.push(file.path);
         }
         items.push(output); capturedOutputs.push(output);
@@ -219,11 +247,29 @@ export async function captureResultDelivery({ results, project, run, receipt = n
  * `unreceipted` is off for the platform's own background projects, whose runs
  * are jobs rather than something a researcher was handed: what they got
  * captured before — the files a receipt vouches for — is all they get.
- * @param {{results:any,project:any,run:any,readReceipt:(project:any, run:any)=>Promise<any>,unreceipted?:boolean}} input
+ * @param {{results:any,project:any,run:any,readReceipt:(project:any, run:any)=>Promise<any>,unreceipted?:boolean,transformationsFor?:((digests:string[])=>Promise<any[]>)|null,runtimeImageId?:(()=>Promise<string|null>)|null}} input
  */
-export async function captureFinishedRun({ results, project, run, readReceipt, unreceipted = true }) {
+export async function captureFinishedRun({ results, project, run, readReceipt, unreceipted = true, transformationsFor = null, runtimeImageId = null }) {
   const receipt = await readReceipt(project, run);
   const files = unreceipted ? [...(run.artifacts ?? []), ...(run.unverifiedArtifacts ?? [])] : [];
   if (!receipt && files.length === 0) return null;
-  return captureResultDelivery({ results, project, run, receipt, files });
+  const imageOnce = askOnce(runtimeImageId);
+  // Results a script left outside the deliverable layout (a statistical package at the workspace root) are preserved as
+  // the run's calculations first; those inside it are captured with their deliverable, below.
+  const readBytes = (/** @type {string} */ relativePath, /** @type {number} */ limit) => stableBytes(project, relativePath, limit);
+  const prefix = `${workspaceLayout.deliverablesDir}/`;
+  const failures = [];
+  try {
+    for (const pair of await findSkillExecutions({ paths: files, readBytes })) {
+      if (pair.resultsPath.startsWith(prefix)) continue;
+      const captured = await captureSkillResults({ results, project, userId: project.userId, ...pair, readBytes, transformationsFor, runtimeImageId: imageOnce,
+        producer: { sessionId: run.sessionId, runId: run.id, parentSessionId: run.parentSessionId ?? run.forkedFrom ?? null,
+          branchId: run.branchId ?? (run.forkedFrom ? run.sessionId : null) } }).catch((/** @type {any} */ error) => ({ status: "unavailable", reason: error?.code ?? "result_capture_failed" }));
+      if (captured.status === "unavailable") failures.push({ path: pair.resultsPath, code: "result_skill_execution_unavailable" });
+    }
+  } catch { /* An execution record that cannot be read leaves the files as they would have been. */ }
+  const delivered = await captureResultDelivery({ results, project, run, receipt, files, transformationsFor, runtimeImageId: imageOnce });
+  // Reports written while the run was still working were captured before its calculations existed.
+  try { await results.rebindRun?.(project.userId, project, run.id); } catch { /* the labels stay as they were captured */ }
+  return failures.length ? { ...delivered, failures: [...delivered.failures, ...failures] } : delivered;
 }

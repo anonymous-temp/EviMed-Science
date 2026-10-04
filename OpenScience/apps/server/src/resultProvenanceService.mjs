@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import path from "node:path";
 import { projectResultInput, projectResultMethod, projectResultVersion, normalizeResultPath, RESULT_PRODUCER_KINDS } from "@evimed/domain/result-provenance";
 import { claimEvidenceSources } from "@evimed/domain/clinical-evidence";
+import { RESULT_LINEAGE_LIMITS, SNAPSHOT_UNKNOWNS, authoredSnapshot, bindPrintedNumbers, bindableKind, bindingGaps, bindingSources,
+  projectProducerSnapshot, projectValueBindings, snapshotGaps, valueBindingRecord } from "@evimed/domain";
 import { HttpError, assertProjectCapacity, mimeFor, openScopedFileNoFollow, readStableFileHandle,
   resolveScopedPath, withProjectStorageMutation, writeFileExclusiveNoFollow } from "./security.mjs";
 
@@ -54,7 +56,10 @@ export class ResultProvenanceService {
    * binds an owned producer receipt to these bytes; observations without that
    * receipt remain explicitly observed, since a path may have changed already.
    * @param {{userId:string,project:any,relativePath:string,producer?:any,expectedDigest?:string,
-   * inputs?:any[],code?:any,environment?:any,method?:any,findings?:any[],machineValues?:any[],review?:any,supersedesVersionId?:string}} input */
+   * inputs?:any[],code?:any,environment?:any,method?:any,findings?:any[],machineValues?:any[],review?:any,supersedesVersionId?:string,
+   * snapshot?:any,bindings?:any}} input `snapshot`: the producer snapshot an owned producer built (engine job, skill script, render);
+   * absent, one is derived from the producer kind and says what was not observed. `bindings`: value bindings an owned
+   * renderer already made; absent, the file's printed numbers are matched against the calculations of the same run. */
   async captureFile(input) {
     const project = await this.scope(input.userId, input.project.id);
     if (project.userId !== input.project.userId || project.workspaceDir !== input.project.workspaceDir) {
@@ -117,10 +122,22 @@ export class ResultProvenanceService {
       if (coverage.inputs !== "captured") coverage.gaps.push("inputs_not_fully_captured");
       if (coverage.code !== "captured") coverage.gaps.push("code_not_captured");
       if (coverage.environment !== "captured") coverage.gaps.push("environment_not_captured");
+      // How the bytes came about, as far as the platform can say, and which calculation each printed number came from.
+      // Neither refuses anything: a gap is a label (owner ruling 2026-10-04).
+      const producerSnapshot = projectProducerSnapshot(input.snapshot) ?? this.defaultSnapshot(producer, relativePath);
+      const machineValues = input.machineValues ?? [];
+      // A scan that cannot run leaves the version captured and its numbers "not checked": the label never costs the bytes.
+      const bindings = input.bindings ? projectValueBindings(input.bindings)
+        : await this.bindNumbers(project, { relativePath, bytes, mimeType: mimeFor(full), producer, inputs, hasValues: machineValues.length > 0 })
+          .catch(() => projectValueBindings({ status: "not_checked" }));
+      for (const gap of [...snapshotGaps(producerSnapshot), ...bindingGaps(bindings)]) if (!coverage.gaps.includes(gap)) coverage.gaps.push(gap);
       const payload = { recordType: "result-version", artifactId, versionId, projectId: project.id,
         path: relativePath, digest, size: bytes.length, mimeType: mimeFor(full), capturedAt: this.now().toISOString(),
-        producer, inputs, code, environment, method: projectResultMethod(input.method), findings: input.findings ?? [], machineValues: input.machineValues ?? [],
-        review: input.review ?? null, coverage, supersedesVersionId: input.supersedesVersionId ?? null, storagePath };
+        producer, inputs, code, environment, method: projectResultMethod(input.method), findings: input.findings ?? [], machineValues,
+        review: input.review ?? null, coverage, supersedesVersionId: input.supersedesVersionId ?? null, storagePath,
+        snapshot: producerSnapshot, bindings,
+        // Index fields for the two lookups the inspection needs, never shown: the calculations in a run, and the versions bound to one.
+        ...(machineValues.length ? { hasMachineValues: true } : {}), bindingSources: bindingSources(bindings) };
       // Validate before publication; ProductDocuments bounds serialized metadata.
       projectResultVersion(payload);
       try { await this.documents.put(project.userId, "result-version", versionId, payload, { expectedRevision: 0, projectId: project.id }); }
@@ -132,6 +149,109 @@ export class ResultProvenanceService {
       }
       return this.project(input.userId, project, payload);
     });
+  }
+
+  /**
+   * What a version with no owned snapshot says about itself. A native write or edit call's bytes are authored, nothing
+   * computed; every other producer left no record of how the bytes were made, and each part of that is named.
+   * @param {any} producer @param {string} relativePath
+   */
+  defaultSnapshot(producer, relativePath) {
+    if (producer.kind === "tool") return authoredSnapshot({ path: relativePath });
+    return projectProducerSnapshot({ kind: "unobserved", origin: "unknown", unknown: [...SNAPSHOT_UNKNOWNS] });
+  }
+
+  /**
+   * The calculations a file's printed numbers may be bound to: the ones its own recorded inputs name and the ones the
+   * same run produced. Being in the same run makes a calculation a candidate, never a dependency: what binds a number
+   * is that it equals a machine value. A version is a calculation when it carries machine values.
+   * @param {any} project @param {{producer:any,inputs:any[]}} scope
+   */
+  async calculationsFor(project, { producer, inputs }) {
+    /** @type {Map<string, any>} */
+    const found = new Map();
+    /** @param {any} row */
+    const consider = row => {
+      const payload = row?.payload;
+      if (!payload || row.projectId !== project.id || payload.recordType !== "result-version" || !Array.isArray(payload.machineValues)) return;
+      const values = payload.machineValues.filter((/** @type {any} */ value) => typeof value?.key === "string" && value.key.length <= 512 && Number.isFinite(value.value))
+        .slice(0, RESULT_LINEAGE_LIMITS.machineValues).map((/** @type {any} */ value) => ({ key: value.key, value: value.value, unit: typeof value.unit === "string" ? value.unit : null }));
+      if (values.length) found.set(payload.versionId, { versionId: payload.versionId, digest: payload.digest, path: payload.path, values });
+    };
+    for (const input of inputs) {
+      if (found.size >= RESULT_LINEAGE_LIMITS.calculations) break;
+      if (typeof input?.versionId === "string" && ["artifact", "data"].includes(input.kind)) consider(await this.documents.get(project.userId, "result-version", input.versionId));
+    }
+    const scope = producer.runId ? { runId: producer.runId } : producer.sessionId ? { sessionId: producer.sessionId } : null;
+    if (scope) {
+      const page = await this.documents.list(project.userId, "result-version", { projectId: project.id, limit: RESULT_LINEAGE_LIMITS.calculations * 4,
+        filter: { recordType: "result-version", hasMachineValues: true, producer: scope } });
+      for (const row of page.items) { if (found.size >= RESULT_LINEAGE_LIMITS.calculations) break; consider(row); }
+    }
+    return [...found.values()];
+  }
+
+  /**
+   * Bind the numbers a captured file prints. A results document is not scanned (its numbers are the values), a
+   * preserved source or an engine's own input and output is not a report, and a file with no calculation beside it has
+   * nothing to be bound or unbound against; each of those says so rather than being silently skipped.
+   * @param {any} project @param {{relativePath:string,bytes:Buffer,mimeType:string,producer:any,inputs:any[],hasValues:boolean}} file
+   */
+  async bindNumbers(project, { relativePath, bytes, mimeType, producer, inputs, hasValues }) {
+    const kind = bindableKind(relativePath, mimeType);
+    const notAReport = producer.kind === "workspace" || relativePath.startsWith(".evimed-sources/") || relativePath.startsWith("result-replays/");
+    if (hasValues || kind === "values" || notAReport) return projectValueBindings({ status: "not_checked" });
+    const calculations = await this.calculationsFor(project, { producer, inputs });
+    return this.bindBytes(calculations, { relativePath, bytes, mimeType });
+  }
+
+  /** @param {any[]} calculations @param {{relativePath:string,bytes:Buffer,mimeType:string}} file */
+  bindBytes(calculations, { relativePath, bytes, mimeType }) {
+    const kind = bindableKind(relativePath, mimeType);
+    if (!calculations.length) return projectValueBindings({ status: "no_calculation" });
+    if (kind === "binary") return valueBindingRecord({ kind, calculations, items: [], unbound: [], examined: 0 });
+    if (bytes.length > RESULT_LINEAGE_LIMITS.textBytes) return valueBindingRecord({ kind: "values", calculations, items: [], unbound: [], examined: 0, truncated: true });
+    const body = new TextDecoder("utf-8").decode(bytes);
+    return valueBindingRecord({ ...bindPrintedNumbers({ body, path: relativePath, mimeType, calculations }), calculations });
+  }
+
+  /**
+   * At the end of a run, bind the reports, tables and figures it wrote before its calculations existed.
+   *
+   * A native write is captured the moment it completes; a script run through the shell leaves its results file for the
+   * end of the run to capture. A report captured before that holds `no_calculation`, which was true then. Once the
+   * run's calculations are preserved, those versions are bound against them — an annotation on the version, written as
+   * a new revision of its row (the ledger keeps the one it replaces), never a change to its bytes, digest or producer.
+   * Anything that cannot be read or written is skipped: the version stays as it was.
+   * @param {string} userId @param {any} project @param {string} runId
+   */
+  async rebindRun(userId, project, runId) {
+    const scoped = await this.scope(userId, project.id);
+    const calculations = await this.calculationsFor(scoped, { producer: { runId }, inputs: [] });
+    if (!calculations.length) return { rebound: 0 };
+    let rebound = 0;
+    let cursor = null;
+    // A run that wrote many files is read a page at a time, to a bound.
+    for (let pageNumber = 0; pageNumber < 5; pageNumber += 1) {
+      const page = await this.documents.list(scoped.userId, "result-version", { projectId: scoped.id, limit: 100, cursor,
+        filter: { recordType: "result-version", producer: { runId }, bindings: { status: "no_calculation" } } });
+      for (const row of page.items) {
+        const payload = row.payload;
+        if (payload.producer?.kind === "workspace" || (payload.machineValues ?? []).length) continue;
+        try {
+          const bytes = await this.readSnapshot(scoped, { ...payload, storagePath: `result-snapshots/${payload.digest}` });
+          const bindings = this.bindBytes(calculations, { relativePath: payload.path, bytes, mimeType: payload.mimeType });
+          if (bindings.status === "no_calculation") continue;
+          const gaps = [...new Set([...(payload.coverage?.gaps ?? []), ...bindingGaps(bindings)])];
+          await this.documents.put(scoped.userId, "result-version", payload.versionId, { ...payload, bindings, bindingSources: bindingSources(bindings),
+            coverage: { ...payload.coverage, gaps } }, { projectId: scoped.id, expectedRevision: row.revision });
+          rebound += 1;
+        } catch { /* The version stays as it was captured. */ }
+      }
+      cursor = page.nextCursor ?? null;
+      if (!cursor) break;
+    }
+    return { rebound };
   }
 
   /** Partial files survive an unavailable sibling; each failure is explicit.
@@ -152,6 +272,8 @@ export class ResultProvenanceService {
     value.inputs = await Promise.all(value.inputs.map(reference => this.reference(userId, project, reference)));
     value.code = value.code ? await this.reference(userId, project, value.code) : null;
     value.environment = value.environment ? await this.reference(userId, project, value.environment) : null;
+    // The snapshot's inputs are the same references, reauthorized the same way.
+    value.snapshot = { ...value.snapshot, inputs: await Promise.all(value.snapshot.inputs.map((/** @type {any} */ reference) => this.reference(userId, project, reference))) };
     value.findings = await Promise.all(value.findings.map(async finding => ({ ...finding,
       sourceRefs: await Promise.all((Array.isArray(finding.sourceRefs) ? finding.sourceRefs : []).map(reference =>
         this.reference(userId, project, { kind: "source", ...reference }))),
@@ -193,6 +315,19 @@ export class ResultProvenanceService {
       ...(runId ? { producer: { runId } } : {}) };
     const page = await this.documents.list(project.userId, "result-version", { projectId, filter, limit, cursor });
     return { items: await Promise.all(page.items.map(row => this.project(userId, project, row.payload))), nextCursor: page.nextCursor };
+  }
+
+  /**
+   * Versions of one project by a containment filter on their record, newest first. The lineage view asks for the versions
+   * bound to a calculation and for a calculation's successors; each answer is projected, so every reference in it is
+   * reauthorized like any other read.
+   * @param {string} userId @param {string} projectId @param {Record<string, any>} filter @param {{limit?:number,cursor?:string|null}} [options]
+   */
+  async query(userId, projectId, filter, { limit = 50, cursor = null } = {}) {
+    const project = await this.scope(userId, projectId);
+    const page = await this.documents.list(project.userId, "result-version", { projectId, limit, cursor,
+      filter: { recordType: "result-version", ...filter } });
+    return { items: await Promise.all(page.items.map((/** @type {any} */ row) => this.project(userId, project, row.payload))), nextCursor: page.nextCursor };
   }
 
   /** Directly recorded successors and the exact parent, never filename similarity. */

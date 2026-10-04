@@ -8,6 +8,7 @@ import { ResultReplayClient } from "./resultReplayClient.mjs";
 import { ResultEngineRouter } from "./resultEngineRouter.mjs";
 import { ResultVcrReplay } from "./resultVcrReplay.mjs";
 import { ResultReplayService } from "./resultReplayService.mjs";
+import { ResultLineageService } from "./resultLineage.mjs";
 import { ResultReplayWorker } from "./resultReplayWorker.mjs";
 import { createResultReplayRoutes } from "./resultReplayRoutes.mjs";
 import { createResultGateway, RESULT_GATEWAY_PATH } from "./resultGateway.mjs";
@@ -1934,7 +1935,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const resultReplayRoutes = createResultReplayRoutes({ store, service: resultReplays });
   const resultImpacts = resultProvenance ? new ResultImpactService({ documents: productDocuments, results: resultProvenance,
     autopilot: autopilotService, notifications: notificationService }) : null;
-  const resultRoutes = createResultProvenanceRoutes({ store, service: resultProvenance });
+  // The numerical chain: which calculation a printed number came from, and the platform writing a report's numbers itself.
+  const resultLineage = resultProvenance ? new ResultLineageService({ results: resultProvenance, replays: resultReplays, config,
+    mirror: (project, full, bytes) => runtimeManager.mirrorWorkspaceUpload(project, full, bytes),
+    transformationsFor: dataSemantics ? (project, digests) => dataSemantics.transformationsByCode(project.userId, project.id, digests) : null,
+    runtimeImageId: async () => (await runtimeManager.inspectRuntimeImage().catch(() => null))?.imageId ?? null }) : null;
+  if (resultRevisions) resultRevisions.lineage = resultLineage;
+  const resultRoutes = createResultProvenanceRoutes({ store, service: resultProvenance, lineage: resultLineage });
   const resultReuseRoutes = createResultReuseRoutes({ store, exporter: resultExporter, revisions: resultRevisions });
   const resultImpactRoutes = createResultImpactRoutes({ store, service: resultImpacts, maxJsonBytes: config.maxJsonBytes });
   const resultCapture = resultProvenance ? createResultProducerCapture({ service: resultProvenance,
@@ -2569,7 +2576,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           // export either way. Those the receipt does not vouch for are
           // captured as observed.
           const captured = await captureFinishedRun({ results: resultProvenance, project, run, readReceipt: readDeliveryReceipt,
-            unreceipted: !isInternalProject(project.id) });
+            unreceipted: !isInternalProject(project.id),
+            transformationsFor: dataSemantics ? digests => dataSemantics.transformationsByCode(project.userId, project.id, digests) : null,
+            runtimeImageId: async () => (await runtimeManager.inspectRuntimeImage().catch(() => null))?.imageId ?? null });
           for (const failure of captured?.failures ?? []) await securityAudit(config, "result.capture", "failed", {
             userId: project.userId, projectId: project.id, runId: run.id, code: failure.code });
         } catch (error) {
@@ -3641,7 +3650,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const memoryTimelineRoutes = createMemoryTimelineRoutes({ config, researchMemory, agentRuns, feedbackEvents, learning: learningService,
     capsules: capsuleService, context });
   const revisionGatewayHandler = createRevisionGatewayHandler({ runtimeManager, store, agentRuns });
-  const resultGatewayHandler = createResultGateway({ runtimeManager, store, service: resultReplays, agentRuns,
+  const resultGatewayHandler = createResultGateway({ runtimeManager, store, service: resultReplays, agentRuns, lineage: resultLineage,
     resolveSession: (project, sessionId) => runtimeEventPump.sessionOwner(project, sessionId) });
   const dataSemanticsGatewayHandler = createDataSemanticsGateway({ config, runtimeManager, store, service: dataSemantics });
   const toolUniverseGatewayHandler = createToolUniverseGateway({ config, runtimeManager, store });

@@ -7,6 +7,7 @@ import { Disclosure } from "@/components/ui/Disclosure";
 import { ReportReader } from "@/components/report/ReportReader";
 import { TablePreview } from "./TablePreview";
 import { ResultImpactPanel } from "./ResultImpactPanel";
+import { ResultLineagePanel } from "./ResultLineagePanel";
 import { parseTableFile } from "@/lib/csv";
 import { getWebProjectId } from "@/lib/apiClient";
 import type { RuntimeUiIntent } from "@/lib/runtimeUiNavigation";
@@ -261,6 +262,8 @@ export function ResultVersionInspector({ path, runId, initialVersionId, onLegacy
         {version.coverage.gaps.length > 0 && <p className="py-2 text-verify-pending">记录不完整：{version.coverage.gaps.map(resultGapLabel).join("；")}</p>}
         {version.machineValues.length > 0 && <MachineValues version={version} />}
       </Disclosure>
+      <ResultLineagePanel key={version.versionId} version={version} selectedText={anchor && anchor.versionId === version.versionId ? anchor.selection.selectedText : null}
+        onOpen={({ versionId, path: target, runId: targetRun }) => navigate(`/app/runs/${encodeURIComponent(targetRun ?? version.producer.runId ?? version.producer.sessionId ?? "result")}/files/${target.split("/").map(encodeURIComponent).join("/")}?version=${encodeURIComponent(versionId)}`)} />
       {items.length > 1 && <label className="block">与历史版本比较<select aria-label="比较版本" value={comparisonId} className={inputClasses({ className: "mt-2" })} onChange={(event) => setComparisonId(event.target.value)}><option value="">选择比较版本</option>{items.filter((item) => item.versionId !== selectedId && canCompareResults(version, item)).map((item) => <option key={item.versionId} value={item.versionId}>{item.path !== path ? `${item.path.split("/").pop()} · ` : ""}{new Date(item.capturedAt).toLocaleString("zh-CN")} · {item.digest.slice(0, 8)}</option>)}</select></label>}
       <ResultImpactPanel key={version.versionId} projectId={version.projectId} versionId={version.versionId} digest={version.digest} />
       {comparing && <Loading text="正在比较版本" />}

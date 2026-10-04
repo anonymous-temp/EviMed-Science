@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { normalizeResultPath } from "@evimed/domain/result-provenance";
+import { authoredSnapshot } from "@evimed/domain";
 
 /** Convert a kernel-observed path to this project's workspace. No guessed
  * filename extraction from shell scripts or conversational output is allowed.
@@ -59,6 +60,8 @@ export function createResultProducerCapture({ service, runtimeWorkspaceRoot = ()
     try {
       return await service.captureFile({ userId: project.userId, project, relativePath,
         ...(content != null ? { expectedDigest: createHash("sha256").update(content).digest("hex") } : {}),
+        // The model typed these bytes into the call: nothing was computed, and code written this way is generated, not executed.
+        snapshot: authoredSnapshot({ tool: call.tool, path: relativePath }),
         producer: { kind: "tool", sessionId: observed.sessionId, runId, callId: event.callId,
           eventId: String(event.seq), parentSessionId: observed.parentSessionId ?? null, branchId: observed.branchId ?? null } });
     } catch (error) {

@@ -19,6 +19,36 @@ export interface ResultMachineValue {
   name?: string; key?: string; value: unknown; unit?: string; absoluteTolerance?: number; relativeTolerance?: number;
 }
 export interface ResultEligibility { status: "available" | "partial" | "unavailable"; reasons: string[] }
+
+/** What produced a version's bytes, and what the platform did not observe (`@evimed/domain` producerSnapshot). */
+export interface ProducerSnapshot {
+  kind: "engine_job" | "skill_script" | "authored" | "render" | "unobserved";
+  origin: "platform_measured" | "receipt_declared" | "unknown";
+  method: { id: string; version: string | null; engineVersion: string | null; executed: Record<string, string | number | boolean> | null; seed: number | null; parameters: Record<string, string | number | boolean> | null } | null;
+  script: { path: string | null; digest: string | null; bytes: number | null; files: { path: string; sha256: string; bytes: number | null }[] | null; executed: boolean; verified: boolean } | null;
+  inputs: ResultInput[];
+  transformations: { datasetId: string; name: string; version: number; codeDigest: string | null }[];
+  environment: { status: "reported" | "unknown"; digest: string | null; facts: { imageId?: string; interpreter?: string; implementation?: string; platform?: string; machine?: string; lockDigest?: string; packages?: Record<string, string> } | null; truncated?: boolean };
+  process: { exitCode: number | null; startedAt: string | null; endedAt: string | null; sourcesUnchanged: boolean | null; observation: string | null } | null;
+  reproduction: "observed_execution" | "declared_execution" | "generated_not_executed" | "not_applicable";
+  unknown: string[];
+  recorded: boolean;
+}
+/** Where a printed number stands in the file. */
+export type BindingLocator = { kind: "text"; line: number; column: number } | { kind: "cell"; row: number; column: number } | { kind: "svg"; index: number };
+export interface ValueBinding {
+  basis: "rendered" | "matched"; locator: BindingLocator; printed: string;
+  calculation: { versionId: string; digest: string | null; key: string; value: number; unit: string | null };
+  format: { id: string; places?: number; scale?: number; grouped?: boolean; magnitude?: boolean };
+}
+export interface UnboundNumber { locator: BindingLocator; printed: string; reason: "no_matching_value" | "differs_from_value" | "ambiguous"; candidates: { versionId: string; key: string; value?: number }[] }
+/** Each number a report, table or figure prints, tied to the calculation value it came from. */
+export interface ValueBindings {
+  status: "bound" | "partly_bound" | "unbound" | "no_numbers" | "no_calculation" | "not_checkable" | "not_checked";
+  calculations: { versionId: string; digest: string | null; path: string | null; alias: string | null }[];
+  items: ValueBinding[]; unbound: UnboundNumber[]; unresolved: { path: string; reason: string }[];
+  counts: { bound: number; rendered: number; unbound: number; ambiguous: number; unresolved: number }; truncated: boolean;
+}
 export interface ResultVersion {
   artifactId: string; versionId: string; projectId: string; path: string; digest: string;
   size: number; mimeType: string; capturedAt: string;
@@ -31,6 +61,20 @@ export interface ResultVersion {
   supersedesVersionId: string | null;
   review?: { status: string; matrixText?: string; verification?: ClaimVerification; matrixVersionId?: string; matrixDigest?: string };
   reuseEligibility?: { replay: ResultEligibility; export: ResultEligibility };
+  snapshot?: ProducerSnapshot; bindings?: ValueBindings;
+}
+/** A version in the numerical chain: a calculation, or a report whose numbers are bound to one. */
+export interface LineageVersion { versionId: string; path: string; capturedAt: string; digest: string; runId: string | null; boundValues: number; keys: string[] }
+export interface LineageChangeRow {
+  versionId: string; path: string; bound: number; unchanged: number; needsSuccessor: boolean;
+  affected: { locator: BindingLocator; printed: string; key: string; unit: string | null; before: number; after: number | null; printedNow: string | null; status: "changed" | "removed" | "unit_changed" }[];
+}
+export interface ResultLineage {
+  versionId: string; role: "calculation" | "report" | "both" | "none";
+  calculations: { versionId: string; path: string; digest: string; capturedAt: string; runId: string | null; method: string | null; producer: string | null }[];
+  dependents: LineageVersion[];
+  changes: { calculationVersionId: string; successorVersionId: string; successorCapturedAt: string; successorPath: string; successorRunId: string | null; dependents: LineageChangeRow[];
+    summary: { dependents: number; affectedValues: number; unaffectedValues: number; needSuccessor: number } }[];
 }
 export interface ResultAnchor {
   kind: "text" | "table-cell" | "figure" | "claim" | "rendered-element";
@@ -66,6 +110,10 @@ export function directlyRelatedResults(left: ResultVersion, right: ResultVersion
 }
 export function getResultVersion(versionId: string) {
   return resultJson<ResultVersion>(`/${encodeURIComponent(versionId)}`);
+}
+/** From a number to its calculation and from a calculation to the numbers printed from it. */
+export function getResultLineage(versionId: string) {
+  return resultJson<ResultLineage>(`/${encodeURIComponent(versionId)}/lineage`);
 }
 export async function readResultBytes(version: ResultVersion): Promise<Blob> {
   const response = await fetchWithWebAuth(resultUrl(`/${encodeURIComponent(version.versionId)}/raw`));
@@ -210,5 +258,76 @@ export function resultEnvironmentDifference(current: ResultVersion, prior: Resul
   return known ? { status: changed.length ? "differs" : "same", changed } : null;
 }
 export function resultGapLabel(reason: string): string {
-  return ({ no_owned_deterministic_recipe: "未保存受支持的计算配方", engine_unavailable: "这个部署没有用于重算的计算引擎", unknown_inputs: "输入关系未记录", inputs_unknown: "输入关系未记录", code_unknown: "生成代码未记录", environment_unknown: "运行环境未记录", legacy_record: "仅有旧版记录", producer_unknown: "生成来源未确认", no_authoritative_inputs: "缺少已确认的输入", producer_bytes_not_bound: "文件内容未经核验", missing_inputs: "输入文件不可用", unsupported_method: "暂不支持该计算方法", incompatible_environment: "运行环境不兼容", restricted_input: "输入资料不能导出", unavailable_review: "核对意见不可用", unobserved_execution: "执行过程未记录" } as Record<string, string>)[reason] ?? (/^[a-z][a-z0-9_:-]*$/.test(reason) ? "部分来源、代码或环境未完整保存" : reason);
+  return ({ no_owned_deterministic_recipe: "未保存受支持的计算配方", engine_unavailable: "这个部署没有用于重算的计算引擎", unknown_inputs: "输入关系未记录", inputs_unknown: "输入关系未记录", code_unknown: "生成代码未记录", environment_unknown: "运行环境未记录", legacy_record: "仅有旧版记录", producer_unknown: "生成来源未确认", no_authoritative_inputs: "缺少已确认的输入", producer_bytes_not_bound: "文件内容未经核验", missing_inputs: "输入文件不可用", unsupported_method: "暂不支持该计算方法", incompatible_environment: "运行环境不兼容", restricted_input: "输入资料不能导出", unavailable_review: "核对意见不可用", unobserved_execution: "执行过程未记录", dependencies_not_observed: "运行中读取的其他文件和网络访问未被记录", code_not_executed: "代码是对话中生成的，没有运行记录", values_unbound: "文中有数值没有对应的计算值", values_unresolved: "渲染时有引用没有找到对应的计算值", values_not_checkable: "此格式的数值无法核对" } as Record<string, string>)[reason] ?? (/^[a-z][a-z0-9_:-]*$/.test(reason) ? "部分来源、代码或环境未完整保存" : reason);
 }
+
+const SNAPSHOT_KIND_LABELS = { engine_job: "确定性计算引擎", skill_script: "技能脚本（含执行记录）", authored: "对话中直接写入", render: "平台按计算值渲染", unobserved: "生成过程未被观察" } as const;
+/** How a version's bytes came about, in words. */
+export function snapshotKindLabel(kind: ProducerSnapshot["kind"]): string { return SNAPSHOT_KIND_LABELS[kind] ?? "生成过程未被观察"; }
+/** Whether code ran: said as a record, never implied. */
+export function reproductionLabel(state: ProducerSnapshot["reproduction"]): string | null {
+  return ({ observed_execution: "运行已记录，所用代码已核对", declared_execution: "运行记录由脚本自述，现存代码与记录不一致，未能核对", generated_not_executed: "这是对话中生成的代码，没有它运行过的记录", not_applicable: null } as const)[state] ?? null;
+}
+/** What the platform did not observe about how a version was made. */
+export function snapshotUnknownLabel(code: string): string {
+  return ({ script: "所用代码未记录", inputs: "读取了哪些输入未完整记录", environment: "运行环境未记录", undeclared_dependencies: "运行中读取的其他文件和网络访问未被记录" } as Record<string, string>)[code] ?? "部分生成过程未被记录";
+}
+/** The state of a report's numbers against its calculations. */
+export function bindingStatusLabel(bindings: ValueBindings): string {
+  const { counts } = bindings;
+  switch (bindings.status) {
+    case "bound": return "文中数值都已对应到计算值";
+    case "partly_bound": return `${counts.bound} 个数值已对应到计算值，${counts.unbound} 个没有对应的计算值`;
+    case "unbound": return `文中 ${counts.unbound} 个数值没有对应的计算值`;
+    case "no_numbers": return "文中没有需要核对的数值";
+    case "no_calculation": return "本次运行没有可对照的计算结果，数值未核对";
+    case "not_checkable": return "此格式的数值无法核对，请查看同一次生成的文本或表格";
+    default: return "数值尚未核对";
+  }
+}
+/** Why a printed number is not tied to a calculation value. */
+export function unboundReasonLabel(item: UnboundNumber): string {
+  const near = item.candidates[0];
+  if (item.reason === "differs_from_value") return near ? `与计算值 ${near.key}${near.value !== undefined ? `（${near.value}）` : ""}接近但不相等，可能已过时或录入有误` : "与某个计算值接近但不相等";
+  if (item.reason === "ambiguous") return `有多个计算值与之吻合（${item.candidates.map(candidate => candidate.key).join("、")}），无法确定来源`;
+  return "没有对应的计算值";
+}
+/** The formatting applied between the machine value and the printed words. */
+export function bindingFormatLabel(format: ValueBinding["format"]): string {
+  if (format.id === "round") {
+    const parts = [`保留 ${format.places ?? 0} 位小数`];
+    if (format.scale === 100) parts.unshift("小数乘 100 显示为百分数");
+    if (format.grouped) parts.push("千分位");
+    if (format.magnitude) parts.push("省略负号");
+    return parts.join("，");
+  }
+  return ({ raw: "原值", int: "取整", f1: "保留 1 位小数", f2: "保留 2 位小数", f3: "保留 3 位小数", pct0: "百分数，不保留小数", pct1: "百分数，保留 1 位小数", pct2: "百分数，保留 2 位小数",
+    thousands: "千分位取整", ci: "置信区间", pm: "含蒙特卡洛标准误", months: "月数", text: "原文" } as Record<string, string>)[format.id] ?? "已格式化";
+}
+/** Where in the file a number stands. */
+export function bindingLocatorLabel(locator: BindingLocator): string {
+  if (locator.kind === "cell") return `第 ${locator.row} 行第 ${locator.column} 列`;
+  if (locator.kind === "svg") return `图中第 ${locator.index} 处文字`;
+  return `第 ${locator.line} 行`;
+}
+/**
+ * The bindings a selection could be: those whose printed words are the selection, or one of the numbers inside it ("OR 0.71"
+ * selects the number 0.71). One calculation value is a definite answer; several are listed rather than guessed between. A
+ * selection that holds no bound number answers none.
+ */
+export function bindingsForSelection(version: ResultVersion, selectedText: string): { bound: ValueBinding[]; unbound: UnboundNumber[] } {
+  const wanted = selectedText.trim();
+  if (!wanted || !version.bindings) return { bound: [], unbound: [] };
+  const exact = { bound: version.bindings.items.filter(item => item.printed === wanted), unbound: version.bindings.unbound.filter(item => item.printed === wanted) };
+  if (exact.bound.length || exact.unbound.length || wanted.length > 200) return exact;
+  const tokens = new Set((wanted.match(/[-−]?\d[\d,]*(?:\.\d+)?%?/g) ?? []).map(token => token.replace("−", "-")).slice(0, 8));
+  const known = (printed: string) => tokens.has(printed.replace("−", "-"));
+  return { bound: version.bindings.items.filter(item => known(item.printed)), unbound: version.bindings.unbound.filter(item => known(item.printed)) };
+}
+/** The words a changed printed value would now read, for the dependents of a calculation that has a successor. */
+export function lineageChangeLabel(row: LineageChangeRow["affected"][number]): string {
+  if (row.status === "removed") return `${row.printed}：新版本的计算里没有这个值`;
+  if (row.status === "unit_changed") return `${row.printed}：新版本的计算换了单位`;
+  return `${row.printed} → ${row.printedNow ?? "无法按原格式显示"}`;
+}
+

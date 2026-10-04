@@ -225,6 +225,38 @@ class ResearchCalculationTests(unittest.TestCase):
             research_calculate._read_response(Stream(), research_calculate.time.monotonic() + 1, 1)
         self.assertEqual(caught.exception.code, "result_response_too_large")
 
+    def test_render_sends_the_two_paths_and_the_named_calculations_for_an_owned_turn(self):
+        version = "rv_" + "a" * 64
+        Gateway.answer = {"data": {"id": version, "state": "rendered", "unresolved": [{"path": "pool.nothing", "reason": "no_such_value"}], "unbound": []}}
+        calculations = {"pool": {"jobId": "replay_" + "b" * 64}, "stat": {"resultsPath": "analysis-results.json", "receiptPath": "analysis-run.json"},
+                        "earlier": {"versionId": version}}
+        result = self.server.call_tool("research_calculate", {"action": "render", "templatePath": "reports/template.md",
+                                                              "outputPath": "reports/report.md", "calculations": calculations,
+                                                              "__evimed_execution_context": CONTEXT})
+        self.assertEqual(result["status"], "success")
+        self.assertIn("未计算", result["warnings"][0], "an unresolved reference is said, not hidden, and the report was still written")
+        observed = Gateway.seen[0]
+        self.assertEqual(observed["path"], "/internal/results/v1/render")
+        self.assertEqual(observed["context"], CONTEXT)
+        self.assertEqual(observed["body"], {"templatePath": "reports/template.md", "outputPath": "reports/report.md", "calculations": calculations})
+
+    def test_render_refuses_what_cannot_be_an_operation_before_any_request_is_made(self):
+        base = {"action": "render", "templatePath": "reports/template.md", "outputPath": "reports/report.md",
+                "calculations": {"pool": {"versionId": "rv_" + "a" * 64}}, "__evimed_execution_context": CONTEXT}
+        self.assertEqual(self.server.call_tool("research_calculate", {key: value for key, value in base.items() if key != "__evimed_execution_context"})
+                         ["error"]["code"], "result_execution_context_unavailable")
+        for changed in [{"templatePath": "../template.md"}, {"outputPath": "/etc/report.md"}, {"outputPath": "a\\b.md"}, {"calculations": {}},
+                        {"calculations": {"1pool": {"versionId": "rv_" + "a" * 64}}}, {"calculations": {"pool": {"jobId": "not-a-job"}}},
+                        {"calculations": {"pool": {"versionId": "rv_" + "a" * 64, "jobId": "replay_" + "b" * 64}}},
+                        {"calculations": {"pool": {"receiptPath": "analysis-run.json"}}},
+                        {"calculations": {"pool": {"resultsPath": "../../secret.json"}}},
+                        {"calculations": {"a%d" % index: {"versionId": "rv_" + "a" * 64} for index in range(9)}}]:
+            with self.subTest(changed=changed):
+                result = self.server.call_tool("research_calculate", {**base, **changed})
+                self.assertEqual(result["error"]["code"], "result_input_invalid")
+        self.assertEqual(self.server.call_tool("research_calculate", {**base, "method": "meta.dl"})["status"], "error")
+        self.assertEqual(Gateway.seen, [])
+
 
 if __name__ == "__main__":
     unittest.main()

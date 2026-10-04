@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { RESULT_REPLAY_METHODS, compareResultNumbers, isResultDigest, normalizeResultPath, projectResultMethod, resultMethodDifference } from "@evimed/domain";
+import { RESULT_REPLAY_METHODS, compareResultNumbers, engineJobSnapshot, isResultDigest, normalizeResultPath, projectResultMethod, resultMethodDifference } from "@evimed/domain";
 import { migrateProductStore } from "./productPersistence.mjs";
 import { CONTROL_PLANE_SCHEMA } from "./controlPlaneDatabase.mjs";
 import { replayDigest } from "./resultReplayClient.mjs";
@@ -49,6 +49,27 @@ function offeredMethod(capability) {
 
 /** @param {any} method */
 const describeMethod = method => `${method.id}@${method.version}${method.digest ? `（${method.digest.slice(0, 8)}）` : ""}`;
+
+/**
+ * What an engine's own measurement says it ran, kept only where it is evidence: a file list, an installed-package
+ * record or a manifest is taken when it hashes to the identity the recipe names, and left out when it does not. The
+ * digests stay in the snapshot either way; only the unverified detail is dropped (plan 2026-10-02 §11.3 N06).
+ * @param {any} recipe @param {any} capability @param {any} output the engine's output file, parsed
+ */
+export function verifiedEngineFacts(recipe, capability, output) {
+  /** @param {unknown} value */
+  const digestOf = value => { try { return replayDigest(value); } catch { return null; } };
+  const files = [output?.receipt?.codeFiles, capability?.codeFiles].find(candidate => Array.isArray(candidate) && digestOf(candidate) === recipe.codeDigest);
+  const environment = [output?.receipt?.environment, capability?.environment]
+    .find(candidate => candidate && typeof candidate === "object" && !Array.isArray(candidate) && digestOf(candidate) === recipe.environmentDigest);
+  const manifest = output?.manifest && typeof output.manifest === "object"
+    && digestOf({ engineVersion: output.manifest.engineVersion, rVersion: output.manifest.rVersion, packageLockHash: output.manifest.packageLockHash }) === recipe.environmentDigest
+    ? output.manifest : null;
+  return { capability: { ...(files ? { codeFiles: files } : {}), ...(environment ? { environment } : {}),
+    ...(capability?.engineMethodVersion != null ? { engineMethodVersion: capability.engineMethodVersion } : {}) },
+  output: { ...(output?.result?.executedMethod ? { result: { executedMethod: output.result.executedMethod } } : {}),
+    ...(output?.methodRecord ? { methodRecord: output.methodRecord } : {}), ...(manifest ? { manifest } : {}) } };
+}
 
 /** The finding a result carries when it was recalculated on another environment than its original's. */
 function environmentFinding(environment) {
@@ -265,6 +286,7 @@ export class ResultReplayService {
         || replayDigest(existing.payload.initial.recipe.parameters) !== replayDigest(parameters)) throw new HttpError(409, "result_replay_conflict", "This call already owns another calculation.");
       return this.status(userId, project.id, id);
     }
+    const supersedesVersionId = await this.previousCalculation(userId, project, { method: input.method, inputVersion, producer }).catch(() => null);
     const capabilities = await this.engine.capabilities({ userId: project.userId, projectId: project.id, jobId: id,
       recipeDigest: "0".repeat(64), method: input.method });
     const capability = capabilities.methods?.find(item => item.method === input.method && item.available !== false);
@@ -277,11 +299,35 @@ export class ResultReplayService {
         { idempotencyKey: id, projectId: project.id, maxAttempts: 3, transactionClient: client });
       await this.documents.put(project.userId, "result-replay", id, { recordType: "result-replay", id, projectId: project.id,
         versionId: null, requestedBy: userId, jobId: job.id, state: "queued", initial: { recipe, inputVersionId: inputVersion.versionId,
-          producer, capability }, createdAt: new Date().toISOString() }, { projectId: project.id, expectedRevision: 0, transactionClient: client });
+          producer, capability, ...(supersedesVersionId ? { supersedesVersionId } : {}) }, createdAt: new Date().toISOString() }, { projectId: project.id, expectedRevision: 0, transactionClient: client });
     };
     if (this.documents.database) { await migrateProductStore(this.documents.database); await this.documents.database.transaction(operation); }
     else await operation(null);
     return this.status(userId, project.id, id);
+  }
+
+  /**
+   * The calculation this one re-runs: the latest finished calculation of the same method, in this conversation (or the
+   * one it was forked from), whose input is an earlier version of the file this one reads. A new version of the same
+   * input file is what "the input changed" means, so the new result is recorded as the successor of the old one — and
+   * the values bound to the old one are the values the change reaches (plan 2026-10-02 §11.3 N06). Nothing is
+   * inferred from a file name that is not the input's own path, and a calculation of another branch is never taken.
+   * @param {string} userId @param {any} project @param {{method: string, inputVersion: any, producer: any}} next
+   * @returns {Promise<string | null>}
+   */
+  async previousCalculation(userId, project, { method, inputVersion, producer }) {
+    const sessions = new Set([producer.sessionId, producer.parentSessionId].filter(Boolean));
+    if (!sessions.size) return null;
+    const earlier = (await this.results.query(userId, project.id, { artifactId: inputVersion.artifactId }, { limit: 20 })).items
+      .filter((/** @type {any} */ version) => version.versionId !== inputVersion.versionId);
+    /** @type {any[]} */
+    const candidates = [];
+    for (const version of earlier) {
+      const page = await this.results.query(userId, project.id, { hasMachineValues: true, snapshot: { method: { id: method } }, inputs: [{ versionId: version.versionId }] }, { limit: 5 });
+      candidates.push(...page.items.filter((/** @type {any} */ calculation) => sessions.has(calculation.producer.sessionId)));
+    }
+    candidates.sort((left, right) => String(right.capturedAt).localeCompare(String(left.capturedAt)));
+    return candidates[0]?.versionId ?? null;
   }
 
   async owned(userId, projectId, id) {
@@ -403,7 +449,7 @@ export class ResultReplayService {
     const currentMethod = offeredMethod(available);
     const environment = replayEnvironment({ codeDigest: frozen.recipe.codeDigest, environmentDigest: frozen.recipe.environmentDigest, ...(recordedMethod ? { method: recordedMethod } : {}) },
       { ...current, ...(currentMethod ? { method: currentMethod } : {}) });
-    return { project, row, original, frozen, recipe, execution, environment };
+    return { project, row, original, frozen, recipe, execution, environment, capability: available };
   }
 
   /** Serialize admission with cancellation and commit the stable execution
@@ -505,17 +551,22 @@ export class ResultReplayService {
     } else if (payload.receipt?.recipeDigest !== prepared.execution.recipeDigest || replayDigest(payload.machineValues) !== replayDigest(answer.machineValues)) {
       throw new HttpError(409, "result_replay_receipt_invalid", "The numbers the engine reported do not match the result file it saved, so none of it was saved as a result.");
     }
+    const inputs = [{ kind: "data", id: prepared.frozen.inputVersionId, versionId: prepared.frozen.inputVersionId,
+      digest: prepared.recipe.input.sha256, availability: "captured" }];
+    // What the engine ran, as its own receipt measured it: the method and version, the code files and installed packages
+    // that hash to the identity the recipe names, the parameters and seed, and the exact input version.
+    const facts = verifiedEngineFacts(prepared.recipe, prepared.capability ?? prepared.frozen.capability, payload);
+    const snapshot = engineJobSnapshot({ recipe: prepared.recipe, capability: facts.capability, output: facts.output, inputs });
     return this.results.captureFile({ userId: job.payload.requestedBy, project: prepared.project, relativePath: outputPath,
       expectedDigest: artifact.sha256, producer: { ...(prepared.frozen.producer ?? prepared.original?.producer), kind: "engine", callId: job.id, eventId: job.id },
-      inputs: [{ kind: "data", id: prepared.frozen.inputVersionId, versionId: prepared.frozen.inputVersionId,
-        digest: prepared.recipe.input.sha256, availability: "captured" }],
+      inputs, snapshot,
       // What actually ran: the original's own references while the engine is the
       // one it recorded, this engine's when it is not.
       code: !prepared.environment?.changed.includes("code") && prepared.original?.code
         ? prepared.original.code : { kind: "code", id: prepared.recipe.method, digest: prepared.recipe.codeDigest, availability: "reference" },
       environment: !prepared.environment?.changed.includes("environment") && prepared.original?.environment
         ? prepared.original.environment : { kind: "code", id: "engine-environment", digest: prepared.recipe.environmentDigest, availability: "reference" },
-      machineValues: answer.machineValues, supersedesVersionId: prepared.original?.versionId, method: ranMethod(answer),
+      machineValues: answer.machineValues, supersedesVersionId: prepared.original?.versionId ?? prepared.frozen.supersedesVersionId, method: ranMethod(answer),
       findings: [...(answer.state === "succeeded" ? [] : [{ id: "partial-calculation", kind: "execution", status: "partial",
         message: "计算在完成之前停止了，保存下来的数值只是部分输出。" }]),
       ...(prepared.environment?.status === "differs" ? [environmentFinding(prepared.environment)] : [])] });

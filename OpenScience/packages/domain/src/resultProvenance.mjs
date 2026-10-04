@@ -1,36 +1,10 @@
+import { RESULT_PRODUCER_KINDS, RESULT_INPUT_KINDS, RESULT_AVAILABILITY, isResultDigest, normalizeResultPath, projectResultInput } from "./resultIdentity.mjs";
+import { projectProducerSnapshot, unobservedSnapshot } from "./producerSnapshot.mjs";
+import { emptyValueBindings, projectValueBindings } from "./valueBindings.mjs";
+
 /** Immutable result vocabulary. Inputs are facts captured by owned producers,
  * never an execution recipe inferred from an artifact's filename or prose. */
-export const RESULT_PRODUCER_KINDS = Object.freeze([
-  "tool", "deliverable", "engine", "revision", "workspace", "legacy",
-]);
-export const RESULT_INPUT_KINDS = Object.freeze(["source", "artifact", "data", "code", "method"]);
-export const RESULT_AVAILABILITY = Object.freeze(["captured", "reference", "unknown", "restricted", "deleted"]);
-
-/** @param {unknown} value @returns {value is string} */
-export function isResultDigest(value) { return typeof value === "string" && /^[a-f0-9]{64}$/.test(value); }
-
-/** @param {unknown} value @returns {string} */
-export function normalizeResultPath(value) {
-  if (typeof value !== "string" || value.length < 1 || value.length > 4096
-    || [...value].some(char => char.charCodeAt(0) < 32 || char === "\\") || value.startsWith("/") || /^[a-z]:/i.test(value)) {
-    throw new Error("Invalid result path.");
-  }
-  const segments = value.split("/").filter(part => part !== "." && part !== "");
-  if (!segments.length || segments.some(part => part === "..")) throw new Error("Invalid result path.");
-  return segments.join("/");
-}
-
-/** @param {any} value @returns {any} */
-export function projectResultInput(value) {
-  if (!value || !RESULT_INPUT_KINDS.includes(value.kind) || typeof value.id !== "string"
-    || !value.id || value.id.length > 200) throw new Error("Invalid result input.");
-  const digest = isResultDigest(value.digest) ? value.digest : null;
-  const availability = RESULT_AVAILABILITY.includes(value.availability) ? value.availability : "reference";
-  return { kind: value.kind, id: value.id, digest,
-    versionId: typeof value.versionId === "string" ? value.versionId : null,
-    path: typeof value.path === "string" ? normalizeResultPath(value.path) : null,
-    availability: availability === "captured" && !digest ? "reference" : availability };
-}
+export { RESULT_PRODUCER_KINDS, RESULT_INPUT_KINDS, RESULT_AVAILABILITY, isResultDigest, normalizeResultPath, projectResultInput };
 
 /**
  * What produced a calculated result, from the engine's own method record: the
@@ -78,6 +52,10 @@ export function projectResultVersion(value) {
       matrixVersionId: typeof value.review.matrixVersionId === "string" ? value.review.matrixVersionId : null,
       matrixDigest: isResultDigest(value.review.matrixDigest) ? value.review.matrixDigest : null } : { status: "unknown" },
     coverage: value.coverage, supersedesVersionId: value.supersedesVersionId ?? null,
+    // How the bytes were produced and which calculation each printed number came from (`resultLineage.mjs`).
+    // A version captured before either was recorded says so: it is unobserved, and its numbers are not checked.
+    snapshot: projectProducerSnapshot(value.snapshot) ?? unobservedSnapshot(),
+    bindings: value.bindings ? projectValueBindings(value.bindings) : emptyValueBindings(),
   };
 }
 

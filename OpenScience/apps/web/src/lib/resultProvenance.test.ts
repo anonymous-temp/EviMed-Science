@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { assignResultAnchors, replayEnvironmentLabel, resultEnvironmentDifference, resultGapLabel, resultTextDifference, resultValueDifference, selectionResultAnchor, type ResultVersion } from "./resultProvenance";
+import { assignResultAnchors, bindingFormatLabel, bindingsForSelection, bindingStatusLabel, replayEnvironmentLabel, reproductionLabel, resultEnvironmentDifference, resultGapLabel, resultTextDifference, resultValueDifference, selectionResultAnchor, snapshotKindLabel, snapshotUnknownLabel, type ResultVersion, type ValueBindings } from "./resultProvenance";
 
 describe("result anchors and differences", () => {
   it("anchors a selected table cell to its immutable row and column", () => {
@@ -69,5 +69,44 @@ describe("which parts of two results ran differently", () => {
     expect(resultEnvironmentDifference(version(method), version({ ...method }))).toEqual({ status: "same", changed: [] });
     const noRecordAtAll = { code: null, environment: null } as unknown as ResultVersion;
     expect(resultEnvironmentDifference(noRecordAtAll, noRecordAtAll)).toBeNull();
+  });
+});
+
+describe("the numerical chain in words", () => {
+  const counts = { bound: 3, rendered: 1, unbound: 2, ambiguous: 0, unresolved: 0 };
+  const bindings = (status: ValueBindings["status"]): ValueBindings => ({ status, calculations: [], items: [], unbound: [], unresolved: [], counts, truncated: false });
+  it("says what a state of a report's numbers is, and never reads a missing check as clean", () => {
+    expect(bindingStatusLabel(bindings("bound"))).toBe("文中数值都已对应到计算值");
+    expect(bindingStatusLabel(bindings("partly_bound"))).toBe("3 个数值已对应到计算值，2 个没有对应的计算值");
+    expect(bindingStatusLabel(bindings("unbound"))).toBe("文中 2 个数值没有对应的计算值");
+    expect(bindingStatusLabel(bindings("no_calculation"))).toMatch(/数值未核对/);
+    expect(bindingStatusLabel(bindings("not_checkable"))).toMatch(/无法核对/);
+    expect(bindingStatusLabel(bindings("not_checked"))).toBe("数值尚未核对");
+  });
+  it("names the formatting between a machine value and what was printed", () => {
+    expect(bindingFormatLabel({ id: "f2" })).toBe("保留 2 位小数");
+    expect(bindingFormatLabel({ id: "pct1" })).toBe("百分数，保留 1 位小数");
+    expect(bindingFormatLabel({ id: "round", places: 1, scale: 100 })).toBe("小数乘 100 显示为百分数，保留 1 位小数");
+    expect(bindingFormatLabel({ id: "round", places: 0, grouped: true })).toBe("保留 0 位小数，千分位");
+    expect(bindingFormatLabel({ id: "round", places: 2, magnitude: true })).toBe("保留 2 位小数，省略负号");
+  });
+  it("labels how bytes came about, whether code ran and what was not observed", () => {
+    expect(snapshotKindLabel("unobserved")).toBe("生成过程未被观察");
+    expect(reproductionLabel("generated_not_executed")).toMatch(/没有它运行过的记录/);
+    expect(reproductionLabel("declared_execution")).toMatch(/未能核对/);
+    expect(reproductionLabel("not_applicable")).toBeNull();
+    expect(snapshotUnknownLabel("undeclared_dependencies")).toMatch(/其他文件和网络/);
+    expect(resultGapLabel("dependencies_not_observed")).toMatch(/其他文件和网络/);
+    expect(resultGapLabel("values_unbound")).toBe("文中有数值没有对应的计算值");
+  });
+  it("finds the bindings of exactly the words a researcher selected, and lists several rather than guessing", () => {
+    const item = (key: string) => ({ basis: "matched" as const, locator: { kind: "text" as const, line: 1, column: 0 }, printed: "0.71", format: { id: "round", places: 2 },
+      calculation: { versionId: "rv_1", digest: null, key, value: 0.7134, unit: null } });
+    const version = { bindings: { ...bindings("partly_bound"), items: [item("a"), item("b")], unbound: [{ locator: { kind: "text" as const, line: 2, column: 0 }, printed: "9.9", reason: "no_matching_value" as const, candidates: [] }] } } as unknown as ResultVersion;
+    expect(bindingsForSelection(version, " 0.71 ").bound.map((entry) => entry.calculation.key)).toEqual(["a", "b"]);
+    expect(bindingsForSelection(version, "9.9").unbound).toHaveLength(1);
+    expect(bindingsForSelection(version, "OR 0.71（95% CI）").bound.map((entry) => entry.calculation.key)).toEqual(["a", "b"]);
+    expect(bindingsForSelection(version, "unrelated")).toEqual({ bound: [], unbound: [] });
+    expect(bindingsForSelection({} as ResultVersion, "0.71")).toEqual({ bound: [], unbound: [] });
   });
 });
