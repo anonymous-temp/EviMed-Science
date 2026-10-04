@@ -900,3 +900,5 @@ DONE S507 2026-09-04T18:55:00+00:00 **计量在生产里真的记到数了**,不
 2026-10-04T15:07Z DONE REL-1004-line-isolated worktree=/home/coder/evimed-wt/release head=d4ed5fd82 reason=another-session-works-in-the-shared-directory clean-battery=web-2260,server-unit-5701(2 env),product-state-1121(2 env),chains-12,checks-8,lint,typecheck
 2026-10-04T15:55Z DONE REL-1004-r2-prepared release=d60e3053a2a8 artifact=11306829372 engines=8-deltas manifest=verified
 2026-10-04T16:12Z DONE REL-1004-r2-live release=d60e3053a2a8 ready=29/29 switch=exit0 ui-walk=54/0 tables=141->158 rows-lost=none smoke=passed(runtime,docx,pdf,html) backup-set=pre-d60e3053a2a8-20261004T160131Z note=first-attempt-aborted-before-change(vcr-recovery-set-needs-app-up)
+2026-10-04T16:30Z DONE REL-1004-rc10-pushed head=0722777962e4 line-ci=37213704125-success vcr-audience=all acceptance-accounts=vcr-acceptance-a,b
+2026-10-04T17:10Z DONE REL-1004-merge-scenario-help head=82ed5ceea clean-battery=server-unit-5709,web-2260,product-state-1120(2 env,1 load flake reran green),chains-11,checks-9 acceptance-so-far=protocol-a,protocol-b,evidence-a,t1-intake,3-design-jobs
