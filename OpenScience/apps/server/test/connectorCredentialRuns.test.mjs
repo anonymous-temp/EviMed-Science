@@ -1,8 +1,9 @@
 // A data source nobody configured for this researcher is not a failed run
 // (2026-10-04 ruling): the run goes on with the sources it has, the ledger keeps
-// which ones it left out, and the conversation offers the form for them. What
-// the account says about how many are waiting (2026-09-18, S4's asks) is
-// unchanged.
+// which ones it left out, and the conversation offers the form for them. The
+// account does not count them: the badge that read `/api/me`'s count went with
+// the sidebar's data-source row (2026-09-23), and a standing tally of keys
+// somebody lacks is the opposite of asking at the moment of use.
 import assert from "node:assert/strict";
 import { mkdir, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -140,34 +141,23 @@ test("the inbox says a finished run left a source out and where to add it, and s
   assert.doesNotMatch(runFinishedNotice({ status: "canceled", canceledBy: "user", connectorNeeds: ["opengwas"], qualityNotices: [], artifacts: [] }).body, /未配置/);
 });
 
-test("the account payload counts the data sources waiting for a credential", async () => {
-  const run = async (overrides, check) => {
-    const dataDir = await mkdtemp(path.join(tmpdir(), "os-me-credentials-"));
-    const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: true, ...overrides });
-    const address = await app.listen(0, "127.0.0.1");
-    try {
-      const me = (await (await fetch(`http://127.0.0.1:${address.port}/api/me`)).json()).data;
-      await check(me);
-    } finally {
-      await app.close();
-      await rm(dataDir, { recursive: true, force: true });
-    }
-  };
-  await run({}, (me) => assert.equal(me.missingConnectorCredentials, 0, "a deployment that keeps no personal credentials has nothing to ask for"));
-  await run({
-    connectorCredentials: {
-      async migrate() {},
-      async status() {
-        return [
-          { id: "opengwas", source: "none", needsAttention: true },
-          { id: "unpaywall", source: "deployment", needsAttention: false },
-          { id: "core", source: "user", needsAttention: false },
-          { id: "omim", source: "none", needsAttention: true },
-        ];
-      },
-    },
-  }, (me) => assert.equal(me.missingConnectorCredentials, 2));
-  await run({
-    connectorCredentials: { async migrate() {}, async status() { throw new Error("database down"); } },
-  }, (me) => assert.equal(me.missingConnectorCredentials, 0, "the shell renders whatever the store says"));
+test("the account payload carries no tally of missing keys, and serving it never reads the credential store", async () => {
+  // It was the badge's number: one store read on every page load, for a count no
+  // page showed once the sidebar's data-source row went (2026-09-23).
+  const dataDir = await mkdtemp(path.join(tmpdir(), "os-me-credentials-"));
+  let reads = 0;
+  const app = createWebApiApp({
+    dataDir, port: 0, runtimeMode: "mock", devAuth: true,
+    connectorCredentials: { async migrate() {}, async status() { reads += 1; return [{ id: "opengwas", source: "none", needsAttention: true }]; } },
+  });
+  const address = await app.listen(0, "127.0.0.1");
+  try {
+    const me = (await (await fetch(`http://127.0.0.1:${address.port}/api/me`)).json()).data;
+    assert.equal(me.user.id !== undefined, true, "the payload itself is served");
+    assert.equal(Object.hasOwn(me, "missingConnectorCredentials"), false);
+    assert.equal(reads, 0);
+  } finally {
+    await app.close();
+    await rm(dataDir, { recursive: true, force: true });
+  }
 });

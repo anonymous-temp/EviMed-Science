@@ -4686,15 +4686,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             // the researcher has not worked here yet — or the ledger cannot be
             // read, which is not a reason the shell should fail to render.
             lastSessionId: await agentRuns.lastSessionId(project).catch(() => null),
-            // How many data sources nothing serves for this researcher and
-            // that need a key — the badge on the account page. 0 where the
-            // deployment keeps no personal credentials or cannot say now: the
-            // shell must render either way.
-            missingConnectorCredentials: connectorCredentials
-              ? await connectorCredentials.status(user.id)
-                .then((entries) => entries.filter((entry) => entry.needsAttention).length)
-                .catch(() => 0)
-              : 0,
             csrfToken: session.csrfToken,
             // Whether this account sees the operations page. Presentation
             // only: `config.operatorUsers` decides which menu the shell draws,
