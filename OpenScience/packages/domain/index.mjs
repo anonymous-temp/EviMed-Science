@@ -1124,6 +1124,7 @@ export {
   VCR_ESTIMANDS,
   VCR_ESTIMAND_LABELS_ZH,
   VCR_EXPORT_KINDS,
+  VCR_FIELD_ROLES,
   VCR_EXPORT_KIND_LABELS_ZH,
   VCR_FOLLOWUP_KINDS,
   VCR_FOLLOWUP_KIND_LABELS_ZH,
@@ -1254,6 +1255,34 @@ export {
   validateRequirement,
   validateRowRule,
 } from './src/vcrRules.mjs'
+
+// vcrKnowledgePack — 22 exports: 「虚拟临研」's disease knowledge pack: the contract a pack is written to
+// (sections, closed licence and code-system tables, restricted sources), its validator at two levels, and
+// the pure readers a page and a tool use (entry sources, summary, name search, concept-to-column mapping)
+export {
+  VCR_PACK_CODE_SYSTEMS,
+  VCR_PACK_ID_PATTERN,
+  VCR_PACK_LEVELS,
+  VCR_PACK_LICENCES,
+  VCR_PACK_LIMITS,
+  VCR_PACK_MAPPING_TYPES,
+  VCR_PACK_REFUSED_CODE_SYSTEMS,
+  VCR_PACK_RESTRICTED_SOURCES,
+  VCR_PACK_SCHEMA,
+  VCR_PACK_SECTIONS,
+  VCR_PACK_SECTION_LABELS_ZH,
+  VCR_PACK_STATUSES,
+  VCR_PACK_STATUS_LABELS_ZH,
+  VCR_PACK_TERM_KINDS,
+  VCR_PACK_USE_CLASSES,
+  validateKnowledgePack,
+  vcrPackConceptColumns,
+  vcrPackEntrySources,
+  vcrPackMatchesName,
+  vcrPackRestrictedSource,
+  vcrPackSummary,
+  vcrRequirementVariables,
+} from './src/vcrKnowledgePack.mjs'
 
 // vcrEngineJob — 28 exports: the engine protocol: a frozen scenario, its canonical bytes, the replicate
 // arithmetic behind every Monte-Carlo standard error, the input kinds a caller

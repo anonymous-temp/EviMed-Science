@@ -43,7 +43,7 @@ import {
   VCR_EXPORT_KINDS, VCR_FOLLOWUP_KINDS, VCR_INTENDED_USES, VCR_JOB_KINDS, VCR_JOB_STATES, VCR_MEMBER_ROLES,
   VCR_MISSING_REASONS, VCR_MODEL_RISKS, VCR_MODEL_TIERS, VCR_POOLING_METHODS, VCR_POPULATION_KINDS,
   VCR_REFERRAL_STATES, VCR_REVIEW_KINDS, VCR_REVIEW_STATES, VCR_STALE_REASONS, VCR_STEPS, VCR_STUDY_STATUSES,
-  VCR_TRIAL_DESIGNS, VCR_VALUE_SOURCES,
+  VCR_TRIAL_DESIGNS, VCR_VALUE_SOURCES, VCR_FIELD_ROLES,
 } from "@evimed/domain";
 import { refreshVocabularyChecks } from "./vocabularyChecks.mjs";
 
@@ -51,20 +51,12 @@ import { refreshVocabularyChecks } from "./vocabularyChecks.mjs";
 export const VCR_SCHEMA = "evimed_vcr";
 
 /**
- * What a column of a source is *for* in the study — the one thing the analysis
- * tables are derived from (plan §8.1 step 2). `subject_key` is the person's key
- * in the source (it becomes a per-study pseudonym and never leaves the data
- * plane); `arm` and `covariate` are baseline attributes (the subject table);
- * `outcome_time` / `outcome_event` are one time-to-event outcome, paired by
- * their `parameter` (the events table); `measurement` is one longitudinal
- * parameter (the longitudinal table); `time_zero` is the index date; `visit_date`
- * dates a measurement row; `other` is kept in the snapshot and never derived.
- * A vocabulary of this file's own, spliced into a CHECK like the domain's: it
- * belongs in `@evimed/domain` the next time that package is open.
+ * What a column of a source is *for* in the study: `VCR_FIELD_ROLES` in `@evimed/domain`
+ * (moved there on 2026-10-04 so a knowledge pack's data mappings read the same list),
+ * re-exported here for the modules that import it from this file.
  */
-export const VCR_FIELD_ROLES = Object.freeze([
-  "subject_key", "arm", "covariate", "outcome_time", "outcome_event", "time_zero", "measurement", "visit_date", "other",
-]);
+export { VCR_FIELD_ROLES };
+
 /** What an uploaded file is: the rows, the dictionary that explains them, or a patient document. */
 export const VCR_SOURCE_FILE_ROLES = Object.freeze(["data", "dictionary", "document"]);
 /** Where a source's field map stands: nothing yet, proposed (by the run or a person), or confirmed by a person. */
