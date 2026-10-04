@@ -116,7 +116,7 @@ test('disabled billing is explicit and has no fabricated wallet or checkout', op
   const result = await f.get('', owner);
   assert.equal(result.status, 200); assert.equal(result.body.data.status, 'disabled'); assert.equal(result.body.data.available, null);
   assert.deepEqual(result.body.data.commerce, { rechargeUrl: null, membershipUrl: null, ordersUrl: null, refundsUrl: null });
-  assert.deepEqual((await f.get('/statements', owner)).body.data, { items: [], nextCursor: null });
+  assert.deepEqual((await f.get('/statements', owner)).body.data, { simulated: false, items: [], nextCursor: null });
   assert.equal(f.wallet.reads.length, 0); assert.equal(f.wallet.deductions, 0);
 });
 
@@ -159,7 +159,7 @@ test('HTTP account erasure retains redacted financial evidence but a recreated i
   assert.equal(registered.data.user.id, owner.user.id);
   const reincarnation = { headers: { cookie: registration.headers.get('set-cookie').split(';')[0], 'x-open-science-csrf': registered.data.csrfToken } };
   const statements = await f.get('/statements', reincarnation);
-  assert.equal(statements.status, 200); assert.deepEqual(statements.body.data, { items: [], nextCursor: null });
+  assert.equal(statements.status, 200); assert.deepEqual(statements.body.data, { simulated: false, items: [], nextCursor: null });
   const summary = await f.get('', reincarnation);
   assert.equal(summary.status, 200); assert.equal(summary.body.data.month.paid, 0); assert.equal(summary.body.data.month.pending, 0);
   assert.equal(summary.body.data.available, null); assert.equal(summary.body.data.status, 'unlinked');

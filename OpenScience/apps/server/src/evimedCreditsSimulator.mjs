@@ -28,9 +28,10 @@
  * - **The payer carries the account's incarnation.** An account deleted and
  *   registered again under the same name is a new person; the old wallet is not
  *   theirs, exactly as an old statement is not (`owner_created_at`).
- * - **A wallet exists from its first sight.** The first read of an account grants
- *   the starting allowance, once, in the same transaction that creates the
- *   wallet, so two concurrent first reads grant it once.
+ * - **A wallet exists from its first sight.** The first read, deduction or top-up
+ *   of an account grants the starting allowance, once, in the same transaction
+ *   that creates the wallet, so two concurrent first sights grant it once — and a
+ *   task finished by an account that never opened the page is still charged.
  * - **Whole credits only, never negative.** A deduction larger than the balance
  *   is refused (nothing is taken); a top-up is one of the closed packages in
  *   `@evimed/domain`, idempotent on the caller's request id.
@@ -242,8 +243,11 @@ export class SimulatedWallet {
     const at = typeof occurredAt === "string" && Number.isFinite(Date.parse(occurredAt)) ? new Date(occurredAt).toISOString() : null;
     await this.ready();
     return this.database.transaction(async (/** @type {any} */ client) => {
+      // A wallet exists from its first sight, a deduction's included: work that
+      // was done is charged, and an account that never opened the page has the
+      // allowance it would have been granted when it did.
+      await this.#provision(client, payer);
       const wallet = (await client.query("SELECT balance FROM evimed_credits.simulated_wallets WHERE payer=$1 FOR UPDATE", [payer])).rows[0];
-      if (!wallet) throw new SimulatedWalletRefusal("simulated_wallet_account_unknown", 404);
       const prior = (await client.query(
         "SELECT payer,kind,credits,balance_after,receipt_id FROM evimed_credits.simulated_entries WHERE request_id=$1", [requestId])).rows[0];
       if (prior) {

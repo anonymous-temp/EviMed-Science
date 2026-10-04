@@ -28,7 +28,7 @@ async function eventually(predicate) {
   assert.ok(predicate(), "condition did not become true within 500ms");
 }
 
-async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = null, preparePrompt = null, recordPromptActor = null, agentRuns = null, audit = undefined, managedBrowser = null } = {}) {
+async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = null, preparePrompt = null, recordPromptActor = null, agentRuns = null, audit = undefined, managedBrowser = null, balanceGate = null } = {}) {
   const dataDir = await mkdtemp(path.join(os.tmpdir(), "evimed-ui-policy-"));
   const config = loadConfig({
     dataDir, devAuth: true, runtimeMode: "mock", runtimeUiProxyEnabled: true,
@@ -74,7 +74,7 @@ async function fixture(t, overrides = {}, muxOptions = {}, { authorizePrompt = n
     response.writeHead(200, { "content-type": "application/json" });
     response.end('{"ok":true}');
   };
-  const ui = createRuntimeUiServer({ config, store, runtimeManager: manager, authorizePrompt, preparePrompt, recordPromptActor, agentRuns, audit, managedBrowser });
+  const ui = createRuntimeUiServer({ config, store, runtimeManager: manager, authorizePrompt, preparePrompt, recordPromptActor, agentRuns, audit, managedBrowser, balanceGate });
   const address = await ui.listen(0, "127.0.0.1");
   const origin = `http://127.0.0.1:${address.port}`;
   const base = `${origin}${frame.prefix.slice(0, -1)}`;
@@ -382,6 +382,64 @@ test("mux refuses spending at admission and preserves already available reads", 
   assert.deepEqual(f.received.map((frame) => frame.type), ["open", "cancel"]);
   assert.equal(f.received[0].endpoint, "session/page");
   assert.equal(c.ws.readyState, WebSocket.OPEN);
+});
+
+test("a turn typed into the kernel's own window asks the research allowance before it begins, on both transports, and a steer is never refused for it", { timeout: 5000 }, async (t) => {
+  // A turn begun here never passes through the dispatch route, so the allowance
+  // is asked at the one method that begins a turn. Work already under way is
+  // not cut off for a balance: a steer is that turn's own message.
+  /** @type {{ sessionId: string, mode: string | undefined }[]} */
+  const asked = [];
+  let allowance = false;
+  const balanceGate = async (/** @type {any} */ project, /** @type {any} */ payload) => {
+    asked.push({ sessionId: payload?.args?.request?.sessionId, mode: payload?.args?.request?.mode });
+    assert.equal(project.id, "default", "the gate is told whose project the turn is in");
+    if (!allowance) throw new HttpError(402, "simulated_credits_exhausted", "The simulated allowance is too low.");
+  };
+  const f = await fixture(t, {}, {}, { balanceGate });
+  const prompt = (streamId, mode) => open(streamId, "session/prompt",
+    { request: { requestId: streamId, sessionId: "s-allowance", ...(mode ? { mode } : {}), content: [{ type: "text", text: "做一个系统综述" }] } });
+  const c = f.connect();
+  assert.equal(await c.opened, 101);
+  // A turn that begins — plain, or queued as a turn of its own — is asked, and refused with the code that says 模拟.
+  for (const [streamId, mode] of [["begin", undefined], ["queued", "queue"]]) {
+    c.send(prompt(streamId, mode));
+    assertNativeError(await c.next(), streamId, "simulated_credits_exhausted");
+    assert.deepEqual(await c.next(), { type: "end", streamId });
+  }
+  assert.deepEqual(f.received, [], "nothing reached the kernel");
+  // The kernel answers a prompt it accepted with an end; until then the proxy holds that prompt's admission.
+  const answered = async (/** @type {string} */ streamId) => {
+    for (const peer of f.peers) peer.send(JSON.stringify({ type: "end", streamId }));
+    assert.equal((await c.next()).type, "end");
+  };
+  // A steer into a running turn is not asked, and reaches the kernel exactly as sent.
+  const steer = prompt("steer", "steer");
+  c.send(steer);
+  assert.equal((await c.next()).type, "item");
+  await answered("steer");
+  assert.deepEqual(f.received, [steer]);
+  assert.deepEqual(asked.map((entry) => entry.mode), [undefined, "queue"], "the steer was never asked");
+  // Reading is not spending.
+  c.send(open("read", "session/page"));
+  assert.equal((await c.next()).type, "item");
+  assert.equal(asked.length, 2);
+  // HTTP: the same method, the same refusal, and a steer passes.
+  const http = (requestId, mode) => fetch(`${f.base}/api/session/prompt`, { method: "POST",
+    headers: { cookie: f.cookie, origin: UI_ORIGIN, "content-type": "application/json" },
+    body: JSON.stringify({ type: "client-request", rpcId: requestId, method: "session/prompt",
+      payload: { args: { request: { requestId, sessionId: "s-allowance", ...(mode ? { mode } : {}), content: [{ type: "text", text: "再做一个" }] } } } }) });
+  assert.equal((await http("http-begin")).status, 402);
+  assert.equal((await http("http-steer", "steer")).status, 200);
+  assert.deepEqual(asked.map((entry) => entry.mode), [undefined, "queue", undefined], "only the turn that begins was asked, on HTTP too");
+  // With an allowance the same turn begins.
+  allowance = true;
+  const begin = prompt("funded");
+  c.send(begin);
+  assert.equal((await c.next()).type, "item");
+  await answered("funded");
+  assert.deepEqual(f.received.at(-1), begin);
+  assert.equal((await http("http-funded")).status, 200);
 });
 
 test("a revoked session terminates both mux peers before another operation", { timeout: 5000 }, async (t) => {
