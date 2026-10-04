@@ -89,6 +89,18 @@ long-lived constraint, an ordered workflow the researcher spelled out, and an
 instruction to remember something as a method. Anything else the researcher said
 in passing is conversation, not a method.
 
+When `feedback` holds a `result-corrected` event, the researcher selected
+something in a result this run delivered and asked for it to be changed;
+`transcriptExcerpts` are this run's, the run that produced what was corrected.
+`detail.instruction` is their own words (absent when they carried something that
+must not be kept), `detail.anchor` what they selected, and `detail.kind` and
+`detail.effects` what the revision changed, decided from the two versions' bytes
+and `unknown` where they could not be compared. The revised result was generated
+by the platform and nobody approved it (`successorOrigin: "system_generated"`,
+`adoption: "not_recorded"`): learn what was wrong or missing in what this run
+delivered, never that the revision is right, and a change of wording or style
+that carries no repeatable rule is `no_change`.
+
 **`delivered` — a delivery finished and was accepted on its first submission.**
 A routine success of work already covered is the commonest case, and its answer
 is `no_change`. Propose something only when the run followed a procedure that

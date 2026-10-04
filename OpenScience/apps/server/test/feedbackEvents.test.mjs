@@ -523,3 +523,26 @@ test("an adoption with only a later edit behind it waits for that edit's own pro
   assert.equal(adoption.distillJob, null, "an adoption must not be paired with a revision that did not exist yet");
   assert.equal(jobs.jobs.length, 0);
 });
+
+test("a correction is one event per immutable pair, never enqueues a lesson by itself and is never an adoption", async () => {
+  const { feedback, jobs, database } = fixture();
+  const original = `rv_${"a".repeat(64)}`;
+  const successor = `rv_${"b".repeat(64)}`;
+  const correction = { revisionId: `rr_${"e".repeat(64)}`, original: { versionId: original, digest: "1".repeat(64), path: "report.md" }, successor: { versionId: successor, digest: "2".repeat(64), path: "o/report.md" },
+    kind: "analytic", instruction: "核对分母", instructionDigest: "3".repeat(64) };
+  const first = await feedback.recordResultCorrection("user_1", { correction, projectId: "project_1", runId: "run_orig" });
+  assert.equal(first.created, true);
+  assert.equal(first.event.trigger, "result-corrected");
+  assert.deepEqual(first.event.subject, { type: "result-version", id: original });
+  assert.equal(first.event.runId, "run_orig");
+  assert.equal(first.event.detail.adoption, "not_recorded");
+  assert.equal(first.distillJob, null, "the lesson is the learning triggers' to queue, under their switches");
+  assert.deepEqual(jobs.jobs, []);
+  assert.equal((await feedback.recordResultCorrection("user_1", { correction, projectId: "project_1", runId: "run_orig" })).created, false);
+  const later = await feedback.recordResultCorrection("user_1", { correction: { ...correction, successor: { versionId: `rv_${"c".repeat(64)}`, digest: "4".repeat(64) } }, projectId: "project_1", runId: "run_orig" });
+  assert.equal(later.created, true, "another successor of the same original is its own event");
+  assert.equal(first.event.id, feedbackEventId("user_1", "result-corrected", { type: "result-version", id: original }, [successor]));
+  assert.equal([...database.rows.values()].some((row) => row.trigger_kind === "deliverable-adopted"), false);
+  // A record that names no immutable version is refused rather than written under a path.
+  await assert.rejects(() => feedback.recordResultCorrection("user_1", { correction: { original: { path: "report.md" }, successor: { path: "o/report.md" } } }), /both immutable versions/);
+});

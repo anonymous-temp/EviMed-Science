@@ -1734,7 +1734,9 @@ export async function dispatchWebAgentRun(
  * events server-side, but nothing can observe an adoption or an edit from the
  * server: only the page that shows the file knows the researcher kept it or
  * revised it, so this call is the only way those two facts are ever recorded —
- * and they are the only two the distillation producer reads.
+ * and they are the only two this producer reads. A correction made through the
+ * anchored revision needs no page: the platform records it itself, with the
+ * pair of result versions it produced (`result-corrected`).
  *
  * The body is exactly the four fields the route accepts; it refuses any other
  * with 400. The content digest is not among them and must not be: the server

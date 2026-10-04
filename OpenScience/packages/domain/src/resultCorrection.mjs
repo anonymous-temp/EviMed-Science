@@ -63,7 +63,8 @@ const WORD_LIMIT = 12;
 /** @param {unknown} value @returns {value is Record<string, any>} */
 const isObject = (value) => Boolean(value) && typeof value === "object" && !Array.isArray(value);
 /** @param {unknown} value @param {number} max */
-const bounded = (value, max) => (typeof value === "string" ? value.replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, "").trim().slice(0, max) : "");
+const bounded = (value, max) => (typeof value === "string"
+  ? [...value].filter((char) => char.charCodeAt(0) >= 32 || char === "\t" || char === "\n" || char === "\r").join("").trim().slice(0, max) : "");
 /** @param {unknown} value */
 const digestOf = (value) => (typeof value === "string" && /^[a-f0-9]{64}$/.test(value) ? value : null);
 /** @param {unknown} value */

@@ -177,7 +177,7 @@ test("a correction names what it changed in a closed vocabulary: evidence, prese
   const f = await fixture(t);
   await f.deliver("疗效见研究 [1]。\n");
   const { directory } = await f.revise("再补一项依据", "疗效见研究");
-  const successor = await f.capture(`${directory}/report.md`, "疗效见研究 [1]，另见 NCT01234567。[claim:CLM-002]\n");
+  await f.capture(`${directory}/report.md`, "疗效见研究 [1]，另见 NCT01234567。[claim:CLM-002]\n");
   const [evidence] = await f.events();
   assert.equal(evidence.detail.kind, "evidence", "sources and claims moved and no number did");
   assert.deepEqual(evidence.detail.effects.identifiersAdded, ["nct:NCT01234567"]);

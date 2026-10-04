@@ -7,7 +7,7 @@ import { productErrorMessage } from '@/lib/productClient';
 const FORMATS: Array<[DocumentFormat, string]> = [['docx', 'Word'], ['pdf', 'PDF'], ['html', 'HTML']];
 
 /** The same conversion action is available for any existing text report. */
-export function DocumentExportActions({ source, initialId }: { source: DocumentSource; initialId?: string | null }) {
+export function DocumentExportActions({ source, initialId, groupLabel = '导出报告' }: { source: DocumentSource; initialId?: string | null; groupLabel?: string }) {
   const [record, setRecord] = useState<DocumentExport | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -62,7 +62,7 @@ export function DocumentExportActions({ source, initialId }: { source: DocumentS
     catch (failure) { if (generation.current === current) setError(productErrorMessage(failure)); }
     finally { if (generation.current === current) setBusy(false); }
   }
-  return <div className="flex flex-wrap items-center gap-2" aria-label="导出报告">
+  return <div className="flex flex-wrap items-center gap-2" aria-label={groupLabel}>
     {FORMATS.map(([format, label]) => <Button key={format} size="sm" variant="text"
       disabled={busy || (pending && record?.formats[format]?.state !== 'ready')}
       onClick={() => void choose(format)}>

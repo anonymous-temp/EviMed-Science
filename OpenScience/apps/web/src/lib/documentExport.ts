@@ -2,7 +2,7 @@ import { fetchWithWebAuth, getWebProjectId, webApiBase } from './apiClient';
 import { productRequest } from './productClient';
 
 export type DocumentFormat = 'docx' | 'pdf' | 'html';
-export type DocumentSource = { artifactId: string; root?: 'workspace' | 'base' } | { studyId: string; exportId: string };
+export type DocumentSource = { artifactId: string; root?: 'workspace' | 'base' } | { studyId: string; exportId: string } | { versionId: string };
 export interface DocumentExport {
   id: string;
   state: 'queued' | 'running' | 'ready' | 'partial' | 'failed' | 'canceled';

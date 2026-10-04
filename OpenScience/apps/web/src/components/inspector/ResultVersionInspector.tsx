@@ -7,6 +7,8 @@ import { Disclosure } from "@/components/ui/Disclosure";
 import { ReportReader } from "@/components/report/ReportReader";
 import { TablePreview } from "./TablePreview";
 import { ResultImpactPanel } from "./ResultImpactPanel";
+import { ResultCorrectionPanel } from "./ResultCorrectionPanel";
+import { DocumentExportActions } from "@/components/document/DocumentExportActions";
 import { ResultLineagePanel } from "./ResultLineagePanel";
 import { parseTableFile } from "@/lib/csv";
 import { getWebProjectId } from "@/lib/apiClient";
@@ -262,6 +264,8 @@ export function ResultVersionInspector({ path, runId, initialVersionId, onLegacy
         {version.coverage.gaps.length > 0 && <p className="py-2 text-verify-pending">记录不完整：{version.coverage.gaps.map(resultGapLabel).join("；")}</p>}
         {version.machineValues.length > 0 && <MachineValues version={version} />}
       </Disclosure>
+      {text !== null && /\.(md|markdown|txt)$/i.test(version.path) && <DocumentExportActions source={{ versionId: version.versionId }} groupLabel="导出此版本" />}
+      <ResultCorrectionPanel key={`correction:${version.versionId}`} versionId={version.versionId} onOpen={(id) => void openSuccessor(id)} />
       <ResultLineagePanel key={version.versionId} version={version} selectedText={anchor && anchor.versionId === version.versionId ? anchor.selection.selectedText : null}
         onOpen={({ versionId, path: target, runId: targetRun }) => navigate(`/app/runs/${encodeURIComponent(targetRun ?? version.producer.runId ?? version.producer.sessionId ?? "result")}/files/${target.split("/").map(encodeURIComponent).join("/")}?version=${encodeURIComponent(versionId)}`)} />
       {items.length > 1 && <label className="block">与历史版本比较<select aria-label="比较版本" value={comparisonId} className={inputClasses({ className: "mt-2" })} onChange={(event) => setComparisonId(event.target.value)}><option value="">选择比较版本</option>{items.filter((item) => item.versionId !== selectedId && canCompareResults(version, item)).map((item) => <option key={item.versionId} value={item.versionId}>{item.path !== path ? `${item.path.split("/").pop()} · ` : ""}{new Date(item.capturedAt).toLocaleString("zh-CN")} · {item.digest.slice(0, 8)}</option>)}</select></label>}
