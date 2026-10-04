@@ -24,8 +24,10 @@ async function stableBytes(project, relativePath, limit) {
   } finally { await opened?.handle.close(); }
 }
 
-/** The existing preserving tool's content address binds its manifest; no manifest can rename changed bytes into this version. */
-async function sourceCapture(project, relativePath, limit) {
+/** The existing preserving tool's content address binds its manifest; no manifest can rename changed bytes into this version.
+ * Exported for source intake (`sourceIntakeHandoff.mjs`), which hands a preserved file to the knowledge base only
+ * after this check has shown the bytes are the ones the tool preserved. */
+export async function sourceCapture(project, relativePath, limit) {
   const normalized = normalizeResultPath(relativePath);
   if (normalized !== relativePath || !relativePath.startsWith(".evimed-sources/")) throw new HttpError(400, "result_source_path_invalid", "Only an exact preserved source path can become a captured input.");
   const directory = path.posix.dirname(relativePath);

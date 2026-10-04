@@ -568,15 +568,22 @@ def _ncbi_params(params):
     return output
 
 
-def _ncbi_rate_limited(fetch):
+def _ncbi_pace():
+    """Space NCBI requests the way E-utilities asks (3/s anonymous, 10/s with a
+    key). One lock for every caller, so an identifier resolution and an abstract
+    fetch running side by side still keep to it."""
     global _NCBI_LAST_REQUEST
     minimum_interval = 0.11 if os.environ.get("NCBI_API_KEY", "").strip() else 0.34
+    with _NCBI_RATE_LOCK:
+        wait = minimum_interval - (time.monotonic() - _NCBI_LAST_REQUEST)
+        if wait > 0:
+            time.sleep(wait)
+        _NCBI_LAST_REQUEST = time.monotonic()
+
+
+def _ncbi_rate_limited(fetch):
     for attempt in range(3):
-        with _NCBI_RATE_LOCK:
-            wait = minimum_interval - (time.monotonic() - _NCBI_LAST_REQUEST)
-            if wait > 0:
-                time.sleep(wait)
-            _NCBI_LAST_REQUEST = time.monotonic()
+        _ncbi_pace()
         try:
             return fetch()
         except PublicSourceError as error:

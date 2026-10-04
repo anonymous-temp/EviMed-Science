@@ -90,6 +90,17 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   "public_source_gateway_unavailable",
   "public_source_gateway_timeout",
   "public_source_gateway_rate_limited",
+  // A source that said no to this caller (HTTP 401 or 403): the item exists and
+  // the source will not serve it, so it is a limitation to report and retrying
+  // cannot change it. The gateway names it apart from `..._upstream_error` so
+  // a run is told "refused" and not "down" (plan section 5.7).
+  "public_source_gateway_upstream_denied",
+  // The three whole-result failures of the record and file operations
+  // (`source_outcome.py`): refused, out of time, unreachable. Each is a fact
+  // about a source, never a defect in the run; the tool says what to do next.
+  "source_access_denied",
+  "source_timeout",
+  "source_unavailable",
   "public_source_gateway_response_invalid",
   "public_source_gateway_response_too_large",
   // `reference_list` asked Europe PMC about a DOI it holds no record of. The
