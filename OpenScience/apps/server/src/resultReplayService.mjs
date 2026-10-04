@@ -365,6 +365,27 @@ export class ResultReplayService {
       error: row.payload.stopError ? { code: row.payload.stopError } : job?.error ? { code: job.error.code } : null, cleanup: row.payload.cleanup ?? null };
   }
 
+  /**
+   * The calculations that re-ran one result, newest first, each as `status` reads it plus when it was asked for and the
+   * identity of the bytes it produced. The research package carries these as the result's replay comparisons. A
+   * calculation that first produced a result (it has no original) is not a re-run and is not listed.
+   * @param {string} userId @param {string} projectId @param {string} versionId @param {{limit?: number}} [options]
+   */
+  async listFor(userId, projectId, versionId, { limit = 10 } = {}) {
+    const project = await this.results.scope(userId, projectId);
+    await this.results.get(userId, project.id, versionId);
+    const page = await this.documents.list(project.userId, "result-replay", { projectId: project.id, limit,
+      filter: { recordType: "result-replay", versionId } });
+    const items = [];
+    for (const row of page.items) {
+      const status = await this.status(userId, project.id, row.id);
+      let outputDigest = null;
+      if (status.outputVersionId) outputDigest = (await this.results.get(userId, project.id, status.outputVersionId).catch(() => null))?.digest ?? null;
+      items.push({ ...status, createdAt: row.payload.createdAt ?? null, outputDigest });
+    }
+    return items;
+  }
+
   async cancel(userId, projectId, id) {
     const { project, row } = await this.owned(userId, projectId, id);
     if (row.payload.requestedBy !== userId && project.userId !== userId) throw new HttpError(403, "result_replay_forbidden", "This calculation belongs to another researcher.");

@@ -366,6 +366,7 @@ services:
       OPEN_SCIENCE_RESULT_REPLAY_TIMEOUT_MS:
       OPEN_SCIENCE_RESULT_SNAPSHOT_MAX_BYTES:
       OPEN_SCIENCE_RESULT_EXPORT_MAX_BYTES:
+      OPEN_SCIENCE_RESULT_EXPORT_MAX_FILES: ${OPEN_SCIENCE_RESULT_EXPORT_MAX_FILES:-96}
       OPEN_SCIENCE_RESEARCH_HANDOFF_ENABLED:
       # A run's budgets, the delivery retry ceiling and the runtime's own
       # switches, read wherever a launch plan is built — here and in the

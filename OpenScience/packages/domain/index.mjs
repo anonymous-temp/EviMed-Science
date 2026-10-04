@@ -1580,6 +1580,28 @@ export {
   renderingFormat,
 } from './src/resultCorrection.mjs'
 
+// resultPackage — the selected research package: its omission and exclusion vocabulary, the credential check that keeps
+// a secret out of its bytes, and the execution, verification and reproduction records beside its files (plan §11.3 N16).
+export {
+  RESULT_PACKAGE_EXCLUSIONS,
+  RESULT_PACKAGE_FILE_ROLES,
+  RESULT_PACKAGE_FORMAT,
+  RESULT_PACKAGE_OMISSION_REASONS,
+  RESULT_PACKAGE_RECORD_FILES,
+  RESULT_PACKAGE_SCAN_LIMIT_BYTES,
+  RESULT_PACKAGE_VERSION,
+  credentialShapedText,
+  executionRecord,
+  omissionReason,
+  packageCompleteness,
+  packageCorrection,
+  packageCredentialScan,
+  packageReplay,
+  pinnedRequirements,
+  reproductionRecord,
+  verificationRecord,
+} from './src/resultPackage.mjs'
+
 export { RESULT_PRODUCER_KINDS, RESULT_INPUT_KINDS, RESULT_AVAILABILITY, isResultDigest, normalizeResultPath, projectResultInput, projectResultVersion, projectResultMethod, resultMethodDifference, validateResultAnchor, resultVersionDifference } from "./src/resultProvenance.mjs";
 export { RESULT_REPLAY_METHODS, compareResultNumbers } from "./src/resultReplay.mjs";
 export { RESEARCH_BILLING_VERSION, RESEARCH_MONEY_SCALE, RESEARCH_BILLABLE_PURPOSES, STEP_WAITING_ALLOWANCE, allowanceRefusalSentence, allowanceWaitingNote, allowanceWaitingSentence, stepWaitingFor, researchMoneyUnits, researchMoneyDecimal, researchTaskCharge, SIMULATED_WALLET_LABEL, SIMULATED_START_CREDITS, SIMULATED_LOW_CREDITS, SIMULATED_WALLET_PAGES, SIMULATED_TOPUP_PACKAGES } from './src/researchBilling.mjs';

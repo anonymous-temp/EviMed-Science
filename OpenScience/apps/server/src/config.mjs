@@ -2657,6 +2657,11 @@ export function loadConfig(overrides = {}) {
     resultExportMaxBytes: Math.max(1024, Math.min(256 * 1024 * 1024, Number(
       overrides.resultExportMaxBytes ?? process.env.OPEN_SCIENCE_RESULT_EXPORT_MAX_BYTES ?? 64 * 1024 * 1024,
     ) || 64 * 1024 * 1024)),
+    // How many files one research package may hold. A dependency past it is a named omission in the package
+    // (reason over_package_limit), not a refusal; only the selected result itself not fitting refuses.
+    resultExportMaxFiles: Math.max(8, Math.min(512, Math.trunc(Number(
+      overrides.resultExportMaxFiles ?? process.env.OPEN_SCIENCE_RESULT_EXPORT_MAX_FILES ?? 96,
+    )) || 96)),
     // One Crossref request for twenty cited works, made while a reader waits
     // for a report's 「依据」 marks: past this the badges are simply absent.
     // Counted in open_science_source_updates_total{outcome="failed"}. Six

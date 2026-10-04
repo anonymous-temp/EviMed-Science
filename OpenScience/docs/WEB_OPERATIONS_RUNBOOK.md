@@ -1221,6 +1221,22 @@ is not serving qualification: exercise an authorized replay through the deployed
 control plane and record its exact input, recipe, image, output, and cancellation
 receipt before claiming the provider available.
 
+### Selected research package
+
+`GET /api/results/<version>/export` returns one result version and the versions it
+recorded as inputs, code and environment, with three records beside the files
+(`execution.json`, `verification.json`, `reproduction.json`) and `verify.py`, a
+standard-library Python verifier that runs nothing from the package
+(`apps/server/src/resultPackageVerify.py`). `OPEN_SCIENCE_RESULT_EXPORT_MAX_BYTES` and
+`OPEN_SCIENCE_RESULT_EXPORT_MAX_FILES` bound it; a dependency past either limit, a
+stored version that can no longer be read and a captured text in the shape of a
+credential are named omissions in the manifest, and only the selected result's own
+bytes not fitting refuses the package. Nothing is signed: the manifest digest that
+`python3 -I verify.py package.zip` prints is what a sender states to a recipient over
+another channel. To prove the row on a deployment, export a replayed engine result,
+run the verifier on the ZIP, rebuild the engine at the recorded code digests and
+compare the numbers it writes with `verify.py --compare`.
+
 ## Research allowance billing
 
 The account page uses CNY research allowance. The existing EviMed wallet remains
