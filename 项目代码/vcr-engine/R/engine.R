@@ -525,11 +525,11 @@ vcr_job_build_cohort <- function(job, output_dir = NULL, ...) {
   # Version comparison: the same table under a second set of rules (`compare`), with the
   # covariates the two cohorts are compared on. Everything it reads is named in `used`.
   comparison <- NULL
-  if (!is.null(sc$compare)) {
-    cmp_items <- sc$compare$rules
+  if (!is.null(sc[["compare"]])) {
+    cmp_items <- sc[["compare"]][["rules"]]
     cmp_cons <- vcr_named_rules(cmp_items, names(df), "scenario.compare.rules", allow_empty = FALSE)
     if (length(cmp_cons$issues)) vcr_abort_issue(cmp_cons$issues[[1]])
-    covs <- as.character(unlist(sc$compare$covariates))
+    covs <- as.character(unlist(sc[["compare"]][["covariates"]]))
     missing_cols <- setdiff(covs, names(df))
     if (length(missing_cols)) vcr_abort("scenario_value_invalid", "scenario.compare.covariates", sprintf("The table has no column %s.", missing_cols[[1]]))
     comparison <- vcr_cohort_comparison(df, items, cmp_items, covs)
