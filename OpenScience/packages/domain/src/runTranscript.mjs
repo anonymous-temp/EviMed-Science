@@ -156,9 +156,17 @@ export function totalOutputTokens(transcript) {
 }
 
 /**
- * The RunEvent union the control plane forwards to the browser (§18.4). The
- * browser exhausts this switch; an unknown variant is counted and shown rather
- * than dropped.
+ * The RunEvent union the control plane decodes from the kernel's session log
+ * (§18.4). The browser exhausts this switch.
+ *
+ * `unknown` is how a record the control plane has no variant for stays
+ * countable instead of vanishing, and it is the decoder's word, not the
+ * page's: the event pump publishes none of them. A record the kernel keeps for
+ * its own bookkeeping (`sessionEventPlumbing` in the seam manifest) and one
+ * nobody has classified yet both decode to `unknown` with their raw type; the
+ * pump follows both for the log's sequence, counts the unclassified by raw type
+ * for operators, and puts neither on a run's stream — a page that drew a card
+ * for one drew a blank one.
  *
  * @typedef {(
  *   | { type: 'turn/start', seq: number, turn: number }
@@ -174,6 +182,7 @@ export function totalOutputTokens(transcript) {
  *   | { type: 'workflow/stage', seq: number, runId: string, stage: string, state: string }
  *   | { type: 'compaction', seq: number, replaced: number, estimatedTokens: number }
  *   | { type: 'plan/updated', seq: number, revision: number, deliverableCount: number }
+ *   | { type: 'session/title', seq: number, title: string, source: string }
  *   | { type: 'unknown', seq: number, rawType: string }
  * )} RunEvent
  */
@@ -193,6 +202,7 @@ export const RUN_EVENT_TYPES = Object.freeze([
   'workflow/stage',
   'compaction',
   'plan/updated',
+  'session/title',
   'unknown',
 ])
 

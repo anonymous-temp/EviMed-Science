@@ -4547,6 +4547,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           credits,
           learning: { enabled: Boolean(learningWorker), counters: learningMetrics },
           alertReceiver,
+          eventPump: runtimeEventPump,
         });
         return;
       }
@@ -7329,7 +7330,7 @@ function addHistogramMetric(lines, name, help, series) {
   }
 }
 
-async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, alertReceiver = null }) {
+async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, alertReceiver = null, eventPump = null }) {
   const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate, frontier, review, geo, vcr, credits);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
@@ -7650,6 +7651,15 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
     },
   );
   if (runMetrics) lines.push(...runMetrics.lines());
+  // Kernel session records nobody has classified, by raw type. None of them is
+  // shown to a reader (`dshEventPump.mjs`); this is how an operator sees which
+  // one a new kernel started writing, to give it a RunEvent or name it as the
+  // kernel's own bookkeeping (`sessionEventPlumbing` in the seam manifest).
+  if (eventPump) {
+    addMetric(lines, "open_science_runtime_session_records_unclassified_total",
+      "Kernel session records the control plane has neither decoded nor classified as bookkeeping, by raw type since process start.",
+      "counter", eventPump.unclassifiedCounts().map(([rawType, value]) => ({ value, labels: { raw_type: rawType } })));
+  }
   // The IM module's counters (inbound, dispatches, card updates, pushes,
   // refusals), by kind. Absent when the module is not composed.
   if (imMetrics) {

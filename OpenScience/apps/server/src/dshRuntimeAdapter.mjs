@@ -53,6 +53,16 @@ export const ALLOWED_WIRE_METHODS = Object.freeze(
 export const DENIED_WIRE_METHODS = Object.freeze(new Set(SEAMS.wire.denied));
 
 /**
+ * Session records the kernel keeps for its own bookkeeping, which no reader has
+ * a use for: the system prompt and request header, route metadata, the inbox
+ * splice, the session-start permission facts, the compaction brackets. Derived
+ * from the manifest, never restated (§5.5). They decode to `unknown` like any
+ * record without a variant; what tells them from one nobody has classified is
+ * this set, and the event pump is what reads it.
+ */
+export const KERNEL_PLUMBING_EVENT_TYPES = Object.freeze(new Set(SEAMS.sessionEventPlumbing));
+
+/**
  * Decodes one non-`emit` host frame into the interaction it represents.
  *
  * Pure, and separate from the pump, because this is the shape a golden frame
@@ -985,8 +995,9 @@ export function decodeSessionFrame(sessionId, frame) {
  * Decodes one session event into the browser-facing union.
  *
  * An unrecognized frame becomes an `unknown` RunEvent carrying its raw type,
- * so a kernel that adds a frame shows up as a counted unknown in the trajectory
- * inspector rather than disappearing (§14 rule 12).
+ * so a kernel that adds a frame is counted rather than disappearing (§14 rule
+ * 12). Whether it is shown is not decided here: the event pump publishes no
+ * `unknown`, and counts the ones `KERNEL_PLUMBING_EVENT_TYPES` does not name.
  *
  * @param {Record<string, any>} frame
  * @returns {{ sessionId: string, event: import('@evimed/domain').RunEvent } | null}
@@ -1177,6 +1188,17 @@ export function decodeMuxFrame(frame) {
           state: String(event.type).endsWith("end") ? "ended" : "started",
         },
       };
+    // The kernel's name for the conversation. Two arrive for a new session, as
+    // recorded at 0.1.7-rc.2: the first prompt's own words at once, as
+    // `{ kind: "fallback" }`, then the title a model made from it, as
+    // `{ kind: "provider", provider, model }`. The source is kept so a reader
+    // can tell a stand-in from a name; a record with no title in it is not a
+    // title change, and stays a counted unknown rather than a blank one.
+    case "session/title": {
+      const title = typeof data.title === "string" ? data.title.trim().slice(0, 200) : "";
+      if (!title) return { sessionId, event: { type: "unknown", seq, rawType: "session/title" } };
+      return { sessionId, event: { type: "session/title", seq, title, source: String(data.source?.kind ?? "") } };
+    }
     case "compaction/end":
       return {
         sessionId,
