@@ -182,6 +182,29 @@ raise SystemExit(EXIT_CODE)
         self.assertTrue(result["error"]["retryable"])
         self.assertEqual(result["data"]["phaseStatus"], "failed")
 
+    def test_a_state_file_replaced_under_an_open_read_is_read_again_not_called_invalid(self):
+        # The worker writes its state by rename. A poll that opened the old file just before the rename holds a
+        # descriptor with link count 0: a whole older state, which used to be answered `meta_job_state_invalid`.
+        state_path = self.root / "replaced-state.json"
+        self.meta_agent._atomic_json(state_path, {"status": "running", "n": 1})
+        real_open = os.open
+        replaced = []
+
+        def open_then_replace(path, flags, *args, **kwargs):
+            descriptor = real_open(path, flags, *args, **kwargs)
+            if not replaced and str(path) == str(state_path):
+                replaced.append(True)
+                self.meta_agent._atomic_json(state_path, {"status": "succeeded", "n": 2})
+            return descriptor
+
+        with mock.patch.object(self.meta_agent.os, "open", side_effect=open_then_replace):
+            state = self.meta_agent._read_json_no_follow(state_path)
+        self.assertEqual(state, {"status": "succeeded", "n": 2}, "the name was opened again after it moved")
+        # A second name for the same bytes is still refused: that is what the link count is checked for.
+        os.link(state_path, self.root / "second-name.json")
+        with self.assertRaises(self.meta_agent.MetaAgentError):
+            self.meta_agent._read_json_no_follow(state_path)
+
     def test_phase_parent_symlink_cannot_supply_diagnostics(self):
         project = self.workspace / "phase-project"
         project.mkdir()

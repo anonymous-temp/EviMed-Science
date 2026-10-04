@@ -59,12 +59,26 @@ def _atomic_json(path, value):
     os.replace(temporary, path)
 
 
+# How many times a read re-opens a state file that was replaced under it before it gives up.
+STATE_READ_ATTEMPTS = 5
+
+
 def _read_json_no_follow(path, directory_fd=None):
     path = Path(path)
     descriptor = None
     try:
-        descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0), dir_fd=directory_fd)
-        before = os.fstat(descriptor)
+        # The worker replaces this file atomically (`_atomic_json`: write beside, then rename over). A poll that
+        # opened the old file a moment before the rename holds a descriptor whose link count has just become 0:
+        # a whole, older state, not an invalid one. It is the name that moved, so open the name again. Only a
+        # count above 1 — another name for the same bytes — is refused. Read as invalid, this failed a status
+        # poll for no reason (and a release candidate, 2026-10-04).
+        for attempt in range(STATE_READ_ATTEMPTS):
+            descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_NONBLOCK", 0), dir_fd=directory_fd)
+            before = os.fstat(descriptor)
+            if before.st_nlink != 0 or attempt == STATE_READ_ATTEMPTS - 1:
+                break
+            os.close(descriptor)
+            descriptor = None
         if not stat.S_ISREG(before.st_mode) or before.st_nlink != 1 or before.st_size <= 0 or before.st_size > MAX_STATE_BYTES:
             raise MetaAgentError("meta_job_state_invalid", "MetaAgent job state is not a valid regular file.")
         raw = os.read(descriptor, MAX_STATE_BYTES + 1)
