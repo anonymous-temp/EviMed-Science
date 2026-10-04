@@ -10,6 +10,10 @@ export interface AgendaPayload {
   /** The agenda-zone day (`YYYY-MM-DD`) the scheduler last queued a run for. */
   lastScheduledDate?: string | null;
   userSignal?: { score: number; decided: number; rejected: boolean } | null;
+  /** Task types paused after repeated failures to run; the others go on. */
+  taskTypeState?: Record<string, { consecutiveFailures?: number; pausedAt?: string | null; pauseReason?: string | null }>;
+  /** Why the agenda was paused because another episode would add nothing, until the researcher starts it again. */
+  plannerStop?: { kind: "answered" | "exhausted" | "needs_input"; reason: string; at: string } | null;
   followUps?: Array<{ digestId: string; claimId: string; note: string; at: string; consumedBy?: string }> }
 export interface AutopilotArtifactRef { projectId: string; runId: string; sessionId: string; path: string }
 export interface DigestClaim { id: string; statement: string;
@@ -32,6 +36,8 @@ export interface EpisodePayload {
   runId: string | null; sessionId?: string | null; digestId?: string | null;
   artifactRefs?: AutopilotArtifactRef[]; claims?: DigestClaim[];
   resourceDeferrals?: Record<string, { code: string; status: "waiting" | "exhausted"; retryAt?: string | null } | null>;
+  /** What the episode was chosen to do: by the model from the progress, or by the date rotation when the model could not be asked. */
+  selection?: { source: "model" | "date-rotation"; taskType: string; focus?: string; reason?: string; fallbackReason?: string; priority?: "normal" | "reduced" } | null;
   error?: { code: string } | null; createdAt: string; updatedAt: string }
 export type EpisodeRecord = ProductRecord<EpisodePayload> & { projectId: string };
 export type AgendaRecord = ProductRecord<AgendaPayload> & { projectId: string };

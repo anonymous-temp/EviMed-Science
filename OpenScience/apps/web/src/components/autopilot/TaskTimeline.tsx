@@ -37,6 +37,7 @@ export function TaskTimeline({ agenda, episodes, onOpen }: { agenda: AgendaRecor
         <div className="space-y-3 text-ui text-text">
           <div className="flex flex-wrap items-center gap-2"><span className="font-medium">{state}</span><span className="text-caption text-text-3">{payload?.trigger === "manual" ? "手动运行" : payload?.trigger === "follow-up" ? "任务追问" : payload ? "定时运行" : "任务追问"}</span></div>
           {waiting?.retryAt && <p className="text-caption text-text-3">预计重试 {instant(waiting.retryAt, zone)}</p>}
+          {payload?.selection?.source === "model" && (payload.selection.focus || payload.selection.reason) && <p className="whitespace-pre-wrap break-words text-caption text-text-2">本次关注：{payload.selection.focus || payload.selection.reason}</p>}
           {(payload?.claims ?? []).map(claim => <p key={claim.id} className="whitespace-pre-wrap break-words leading-relaxed">{claim.tier === "reproduced" && claim.verification?.status === "recorded" && claim.verification.reproductionMatched && claim.verification.isolationEnforced ? "已复现：" : "研究线索："}{claim.statement}</p>)}
           {(payload?.claims?.length ?? 0) > 0 && artifacts.length === 0 && <p className="text-caption text-text-3">成果文件暂不可用</p>}
           <div className="flex flex-wrap gap-x-4 gap-y-2">{artifacts.map(ref => <Link key={`${ref.runId}:${ref.path}`} to={snapshotHref(ref.runId, ref.path)} onClick={() => onOpen(payload?.digestId)} className="text-link hover:underline">{artifactDisplayName(ref.path)}</Link>)}

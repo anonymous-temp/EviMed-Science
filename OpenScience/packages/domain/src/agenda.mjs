@@ -299,6 +299,15 @@ export const STOPPING_RULES = Object.freeze({
 
 /**
  * Whether a direction should keep running.
+ *
+ * The five actions are not about one thing. `pause-type` is about a task type
+ * whose episodes keep failing to run, so `consecutiveFailures` is that type's
+ * own count and the type alone is paused. `halve` is about a direction whose
+ * episodes ran and found nothing, so `episodesWithoutGatedClaim` counts only
+ * episodes that ran to a result — a failed or canceled episode never looked at
+ * the question and is no evidence about it — and the direction's next scheduled
+ * episode gets half the budget. `park` and `pause-thread` are about the whole
+ * agenda. The server applies each at its scope (`autopilotOutcome.mjs`).
  * @param {{ episodesWithoutGatedClaim: number, consecutiveFailures: number, daysSinceDigestOpened: number, userRejected: boolean }} state
  * @returns {{ action: 'run' | 'halve' | 'park' | 'pause-type' | 'pause-thread', reason: string }}
  */

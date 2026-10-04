@@ -200,3 +200,16 @@ test("a success between failures starts the count again", async () => {
   }
   assert.equal(instance.counters.circuitOpen, 0);
 });
+
+test("the operator sees how each decision ended, per process", async () => {
+  const { autopilotPlannerMetricFamily } = await import("../src/autopilotNextAction.mjs");
+  assert.deepEqual(autopilotPlannerMetricFamily(null).series, [], "no planner, no series");
+  const { instance } = planner(async (_call, n) => n === 1 ? answer(run) : answer("not json"));
+  await instance.decide(input());
+  await assert.rejects(() => instance.decide(input()), { code: "autopilot_planner_invalid" });
+  const family = autopilotPlannerMetricFamily(instance);
+  assert.equal(family.name, "open_science_autopilot_planner_decisions_total");
+  assert.equal(family.type, "counter");
+  assert.deepEqual(Object.fromEntries(family.series.map((item) => [item.labels.result, item.value])),
+    { run: 1, stop: 0, invalid: 1, failed: 0, circuit_open: 0, budget_spent: 0 });
+});

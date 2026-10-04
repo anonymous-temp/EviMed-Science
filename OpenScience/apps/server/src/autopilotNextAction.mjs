@@ -336,3 +336,23 @@ export class AutopilotPlanner {
     }
   }
 }
+
+/**
+ * The planner's counters as the operator's metric family: how many decisions
+ * were asked for and how each ended. Per process, so a restart reads as a
+ * counter reset; what each episode actually did is durable on the episode
+ * (`selection`). A fallback rate that climbs says the date rotation, not the
+ * model, is choosing.
+ * @param {AutopilotPlanner | null | undefined} planner
+ * @returns {{ name: string, help: string, type: "counter", series: Array<{ value: number, labels: Record<string, string> }> }}
+ */
+export function autopilotPlannerMetricFamily(planner) {
+  const counters = planner?.counters;
+  const results = /** @type {const} */ ([["run", "runs"], ["stop", "stops"], ["invalid", "invalid"], ["failed", "failures"], ["circuit_open", "circuitOpen"], ["budget_spent", "budgetSpent"]]);
+  return {
+    name: "open_science_autopilot_planner_decisions_total",
+    help: "Next-action decisions of scheduled research agendas this process asked for, by how they ended: run and stop were used; invalid (an answer outside the closed vocabulary), failed (provider, timeout), circuit_open (resting after repeated failures) and budget_spent fell back to the date rotation.",
+    type: "counter",
+    series: counters ? results.map(([result, key]) => ({ value: counters[key], labels: { result } })) : [],
+  };
+}

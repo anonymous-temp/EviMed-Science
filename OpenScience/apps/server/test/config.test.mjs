@@ -409,6 +409,27 @@ test("the routing classifier has its own total deadline, not the gateway's strea
   }
 });
 
+test("the proactive-research planner is on by default, one lever turns it off, and its deadline is short", () => {
+  // It sits on the scheduler's path, which walks every due agenda in one loop,
+  // so a provider that hangs must cost each agenda seconds and not minutes; and
+  // an off switch that does not arrive is a model call nobody can stop.
+  const saved = process.env.OPEN_SCIENCE_AUTOPILOT_PLANNER_ENABLED;
+  delete process.env.OPEN_SCIENCE_AUTOPILOT_PLANNER_ENABLED;
+  try {
+    const config = loadConfig({ rootDir: repoRoot });
+    assert.equal(config.autopilotPlannerEnabled, true);
+    assert.ok(config.autopilotPlannerTimeoutMs <= 30_000);
+    process.env.OPEN_SCIENCE_AUTOPILOT_PLANNER_ENABLED = "false";
+    assert.equal(loadConfig({ rootDir: repoRoot }).autopilotPlannerEnabled, false);
+    process.env.OPEN_SCIENCE_AUTOPILOT_PLANNER_ENABLED = "";
+    assert.equal(loadConfig({ rootDir: repoRoot }).autopilotPlannerEnabled, true, "empty reads as unset");
+    assert.equal(loadConfig({ rootDir: repoRoot, autopilotPlannerEnabled: false }).autopilotPlannerEnabled, false);
+  } finally {
+    if (saved == null) delete process.env.OPEN_SCIENCE_AUTOPILOT_PLANNER_ENABLED;
+    else process.env.OPEN_SCIENCE_AUTOPILOT_PLANNER_ENABLED = saved;
+  }
+});
+
 test("the retired kernel's runtime mode is refused by name, not ignored", async () => {
   // The value "opencode" meant "a real kernel in a container" back when there
   // was only one. A deployment still setting it is configuring something this

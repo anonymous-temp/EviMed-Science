@@ -29,6 +29,15 @@ export function scheduleStatus(agenda: AgendaRecord): string {
   if (!activeAgenda(agenda)) return "已暂停";
   return agenda.payload.nextRunAt ? `下次 ${instant(agenda.payload.nextRunAt, scheduleOf(agenda).timeZone)}` : "暂无下次运行";
 }
+/** What the researcher should know about a task that is not simply running: the planner's stop, and any task type paused after failures. */
+export function pauseNotes(agenda: AgendaRecord): string[] {
+  const notes: string[] = [];
+  const stop = agenda.payload.plannerStop;
+  if (stop && !activeAgenda(agenda)) notes.push(`${stop.kind === "needs_input" ? "需要你补充：" : "已暂停："}${stop.reason}`);
+  const paused = Object.entries(agenda.payload.taskTypeState ?? {}).filter(([, state]) => state.pausedAt).map(([type]) => TASK_TYPES.find(([value]) => value === type)?.[1] ?? type);
+  if (paused.length > 0) notes.push(`${paused.join("、")}连续未能运行，已暂停；编辑任务类型或重新启用任务可恢复。`);
+  return notes;
+}
 export function revisionConflict(error: unknown): boolean {
   return typeof error === "object" && error !== null && "status" in error && error.status === 409;
 }
