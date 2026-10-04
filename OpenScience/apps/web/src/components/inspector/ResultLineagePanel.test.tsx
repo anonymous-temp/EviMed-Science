@@ -76,7 +76,7 @@ describe("the numerical chain of a version", () => {
 
   it("answers, for a selected number, which calculation it is and how it was formatted", async () => {
     mount({ ...base, snapshot: engine, bindings }, "0.71");
-    expect(await screen.findByRole("status", { name: "" })).toHaveTextContent("“0.71”来自 analysis/pooled.json 的 values.pooled_effect（0.7134 odds_ratio），保留 2 位小数。");
+    expect(await screen.findByRole("status", { name: "" })).toHaveTextContent("“0.71”与 analysis/pooled.json 的 values.pooled_effect（0.7134 odds_ratio）一致，保留 2 位小数。");
   });
 
   it("says a calculation's printed dependents and what its successor would move, and what the rounding leaves alone", async () => {

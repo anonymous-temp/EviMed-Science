@@ -229,21 +229,27 @@ export class ResultProvenanceService {
     const scoped = await this.scope(userId, project.id);
     const calculations = await this.calculationsFor(scoped, { producer: { runId }, inputs: [] });
     if (!calculations.length) return { rebound: 0 };
-    const page = await this.documents.list(scoped.userId, "result-version", { projectId: scoped.id, limit: 100,
-      filter: { recordType: "result-version", producer: { runId }, bindings: { status: "no_calculation" } } });
     let rebound = 0;
-    for (const row of page.items) {
-      const payload = row.payload;
-      if (payload.producer?.kind === "workspace" || (payload.machineValues ?? []).length) continue;
-      try {
-        const bytes = await this.readSnapshot(scoped, { ...payload, storagePath: `result-snapshots/${payload.digest}` });
-        const bindings = this.bindBytes(calculations, { relativePath: payload.path, bytes, mimeType: payload.mimeType });
-        if (bindings.status === "no_calculation") continue;
-        const gaps = [...new Set([...(payload.coverage?.gaps ?? []), ...bindingGaps(bindings)])];
-        await this.documents.put(scoped.userId, "result-version", payload.versionId, { ...payload, bindings, bindingSources: bindingSources(bindings),
-          coverage: { ...payload.coverage, gaps } }, { projectId: scoped.id, expectedRevision: row.revision });
-        rebound += 1;
-      } catch { /* The version stays as it was captured. */ }
+    let cursor = null;
+    // A run that wrote many files is read a page at a time, to a bound.
+    for (let pageNumber = 0; pageNumber < 5; pageNumber += 1) {
+      const page = await this.documents.list(scoped.userId, "result-version", { projectId: scoped.id, limit: 100, cursor,
+        filter: { recordType: "result-version", producer: { runId }, bindings: { status: "no_calculation" } } });
+      for (const row of page.items) {
+        const payload = row.payload;
+        if (payload.producer?.kind === "workspace" || (payload.machineValues ?? []).length) continue;
+        try {
+          const bytes = await this.readSnapshot(scoped, { ...payload, storagePath: `result-snapshots/${payload.digest}` });
+          const bindings = this.bindBytes(calculations, { relativePath: payload.path, bytes, mimeType: payload.mimeType });
+          if (bindings.status === "no_calculation") continue;
+          const gaps = [...new Set([...(payload.coverage?.gaps ?? []), ...bindingGaps(bindings)])];
+          await this.documents.put(scoped.userId, "result-version", payload.versionId, { ...payload, bindings, bindingSources: bindingSources(bindings),
+            coverage: { ...payload.coverage, gaps } }, { projectId: scoped.id, expectedRevision: row.revision });
+          rebound += 1;
+        } catch { /* The version stays as it was captured. */ }
+      }
+      cursor = page.nextCursor ?? null;
+      if (!cursor) break;
     }
     return { rebound };
   }

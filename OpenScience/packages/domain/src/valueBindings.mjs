@@ -290,9 +290,13 @@ export function bindPrintedNumbers({ body, path, mimeType = "", calculations, sk
   let examined = 0;
   let truncated = false;
   const usable = calculations.slice(0, RESULT_LINEAGE_LIMITS.calculations);
+  // Past either bound the record is full: what is listed is labelled, the rest is said not to be, and the scan stops
+  // rather than comparing a megabyte of numbers against every value.
+  const full = () => truncated;
 
   /** @param {{ raw: string, negative: boolean, percentSign: boolean }} number @param {Record<string, any>} locator */
   const bindOne = (number, locator) => {
+    if (full()) return;
     const literal = number.raw.replace(/,/g, "");
     const written = Number(literal);
     if (!Number.isFinite(written)) return;
@@ -320,6 +324,7 @@ export function bindPrintedNumbers({ body, path, mimeType = "", calculations, sk
   if (kind === "text") {
     const locate = locatorIndex(body);
     for (const { line, start } of textUnits(body)) {
+      if (full()) break;
       for (const span of typedNumberSpans(line, { report: true })) {
         const at = start + span.start;
         if (skip.some(([from, to]) => at >= from && at < to)) continue;
@@ -332,6 +337,7 @@ export function bindPrintedNumbers({ body, path, mimeType = "", calculations, sk
   } else if (kind === "table") {
     const separator = path.toLowerCase().endsWith(".tsv") ? "\t" : ",";
     body.split(/\r?\n/).forEach((line, row) => {
+      if (full()) return;
       splitDelimited(line, separator).forEach((cell, column) => {
         const number = cellNumber(cell);
         if (!number) return;

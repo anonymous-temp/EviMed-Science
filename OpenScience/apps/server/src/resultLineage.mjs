@@ -212,7 +212,6 @@ export class ResultLineageService {
         throw error;
       }
     });
-    await this.mirror(project, full, bytes);
 
     const templateVersion = await this.templateVersion(userId, project, templatePath, templateBytes, producer);
     const inputs = [
@@ -224,6 +223,8 @@ export class ResultLineageService {
       snapshot: renderSnapshot({ inputs, version: NUMBER_BINDING_VERSION }), bindings,
       producer: { kind: "tool", sessionId: producer.sessionId, runId: producer.runId ?? null, callId: producer.callId, eventId: `render:${producer.callId}`,
         parentSessionId: producer.parentSessionId ?? null, branchId: producer.branchId ?? null } });
+    // The runtime sees the file the platform wrote. Done after the capture so a failure here leaves the version it describes.
+    await this.mirror(project, full, bytes);
     return {
       id: version.versionId, state: "rendered", outputPath, versionId: version.versionId, digest: version.digest, status: version.bindings.status,
       counts: version.bindings.counts,

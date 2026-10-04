@@ -1,5 +1,5 @@
 import { beforeEach, expect, it, vi } from "vitest";
-import { listRelatedResultVersions, readResultBytes, type ResultVersion } from "./resultProvenance";
+import { getResultLineage, listRelatedResultVersions, readResultBytes, type ResultVersion } from "./resultProvenance";
 const fetchAuth = vi.hoisted(() => vi.fn());
 vi.mock("./apiClient", () => ({ fetchWithWebAuth: fetchAuth, getWebProjectId: () => "p", webApiBase: "/api" }));
 const version = { versionId: "rv_old", digest: "a".repeat(64), size: 3 } as ResultVersion;
@@ -25,4 +25,10 @@ it("refuses an unavailable, unsigned, mismatched or incomplete snapshot", async 
   await expect(readResultBytes(version)).rejects.toThrow("文件版本发生冲突");
   fetchAuth.mockResolvedValueOnce(new Response("truncated", { headers: { ETag: `"${version.digest}"` } }));
   await expect(readResultBytes(version)).rejects.toThrow("此版本文件不完整");
+});
+it("reads the numerical chain of exactly the selected immutable version, in the project it belongs to", async () => {
+  const lineage = { versionId: "rv_old", role: "report", calculations: [], dependents: [], changes: [] };
+  fetchAuth.mockResolvedValue(new Response(JSON.stringify({ data: lineage })));
+  await expect(getResultLineage("rv_old")).resolves.toEqual(lineage);
+  expect(fetchAuth).toHaveBeenCalledWith("/api/results/rv_old/lineage?projectId=p", undefined);
 });

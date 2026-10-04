@@ -53,7 +53,7 @@ export function ResultLineagePanel({ version, selectedText = null, onOpen }: {
       {bindings && <section aria-label="数值核对" className="space-y-2">
         <p className={["bound", "no_numbers"].includes(bindings.status) ? undefined : "text-verify-pending"}>{bindingStatusLabel(bindings)}</p>
         {selected && (selected.bound.length > 0 || selected.unbound.length > 0) && <div role="status" className="space-y-1 rounded-card border border-border p-3">
-          {selected.bound.map((item, index) => <p key={index}>“{item.printed}”来自 {calculationPath(item.calculation.versionId)} 的 {item.calculation.key}（{item.calculation.value}{item.calculation.unit ? ` ${item.calculation.unit}` : ""}），{bindingFormatLabel(item.format)}。</p>)}
+          {selected.bound.map((item, index) => <p key={index}>“{item.printed}”{item.basis === "rendered" ? "由平台按" : "与"} {calculationPath(item.calculation.versionId)} 的 {item.calculation.key}（{item.calculation.value}{item.calculation.unit ? ` ${item.calculation.unit}` : ""}）{item.basis === "rendered" ? "渲染" : "一致"}，{bindingFormatLabel(item.format)}。</p>)}
           {selected.unbound.map((item, index) => <p key={`u${index}`} className="text-verify-pending">“{item.printed}”：{unboundReasonLabel(item)}。</p>)}
         </div>}
         {bindings.items.length > 0 && <div className="max-h-64 overflow-auto"><table className="w-full text-left text-ui"><caption className="py-2 text-left">文中数值与计算值的对应</caption>
