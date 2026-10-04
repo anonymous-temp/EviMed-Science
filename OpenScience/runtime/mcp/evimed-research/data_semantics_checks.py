@@ -423,12 +423,15 @@ def profile_column(name, cells, missing_tokens=(), identifying=False) -> dict:
     return profile
 
 
-def binding_of(table: Table, declared: dict | None = None) -> dict:
-    """What a binding records of one table: the file's hash and size, the row count and the column profiles."""
+def binding_of(table: Table, declared: dict | None = None, limit=COLUMNS_PROFILED) -> dict:
+    """What a binding records of one table: the file's hash and size, the row count and the column profiles.
+
+    A record keeps at most `COLUMNS_PROFILED` columns (the ledger document is bounded); a check profiles them all.
+    """
     declared = declared or {}
     identifier_columns = declared.get("identifierColumns", set())
     columns = []
-    for index, name in enumerate(table.columns[:COLUMNS_PROFILED]):
+    for index, name in enumerate(table.columns[:limit]):
         cells = [row[index] for row in table.rows]
         variable = declared.get("variables", {}).get(name, {})
         identifying = column_is_identifying(name, cells, name in identifier_columns or variable.get("role") == "identifier")
@@ -575,11 +578,14 @@ def check_drift(table: Table, previous: dict | None, declared_table: dict, found
         previous_columns = {column["name"]: column for column in previous.get("columns", [])}
     variables = declared_table.get("variables", {})
     former = _former_names(declared_table)
-    new_profiles = {column["name"]: column for column in binding_of(table, declared_table)["columns"]}
+    new_profiles = {column["name"]: column for column in binding_of(table, declared_table, limit=None)["columns"]}
     new_names = set(table.columns)
+    # The record holds the first COLUMNS_PROFILED columns of a wider table; a column past them is not "added".
+    recorded_width = len(previous_columns)
+    considered = table.columns[:COLUMNS_PROFILED] if recorded_width >= COLUMNS_PROFILED else table.columns
 
     removed = [name for name in previous_columns if name not in new_names]
-    added = [name for name in table.columns if name not in previous_columns]
+    added = [name for name in considered if name not in previous_columns]
     paired = {}  # new name -> previous name, for columns that carry on under another header
     # A header whose unit changed is the same column, not a removed one and an added one.
     for old in list(removed):
@@ -895,11 +901,13 @@ MONOTONE_ROWS = ("filter", "dedupe", "recode")
 MONOTONE_SUBJECTS = ("filter", "dedupe", "recode", "derive")
 
 
-def check_denominators(steps: list, tables: dict, declared: dict, recorded: dict, found: list, notes: list, clean: list) -> dict:
+def check_denominators(steps: list, tables: dict, declared: dict, recorded: dict, found: list, notes: list, clean: list, analysis: str = "") -> dict:
     """The size of every step, the steps that grew, and the ones that are not what was recorded.
 
-    Returns the denominators observed, by label, for the next check to compare with.
+    Returns the denominators observed, by label, for the next check to compare with. `analysis` names which
+    analysis the steps belong to, so two analyses that both have a step called "analysed" are not compared.
     """
+    scoped = (lambda label: "%s/%s" % (analysis, label)) if analysis else (lambda label: label)
     observed = []
     for step in steps:
         label = str(step["label"])
@@ -938,7 +946,7 @@ def check_denominators(steps: list, tables: dict, declared: dict, recorded: dict
                                      "; ".join("%d of %d %s (%.1f%%) are gone" % (w - n, w, x, (w - n) / w * 100) for x, w, n in shrank)),
                                  count=was - now, detail={**counts, "what": [x for x, _w, _n in shrank], "share": _round((was - now) / was)}))
     for item in observed:
-        was = recorded.get(item["label"])
+        was = recorded.get(scoped(item["label"]))
         subject = {"step": item["label"]}
         if was and (was["rows"] != item["rows"] or (was.get("subjects") is not None and item["subjects"] is not None and was["subjects"] != item["subjects"])):
             found.append(finding("denominator_changed", subject,
@@ -948,7 +956,7 @@ def check_denominators(steps: list, tables: dict, declared: dict, recorded: dict
                                  detail={"rowsBefore": was["rows"], "rowsAfter": item["rows"], "subjectsBefore": was.get("subjects"), "subjectsAfter": item["subjects"], "source": item["source"]}))
         elif was:
             clean.append(_clean("denominators", subject))
-    return {item["label"]: {"rows": item["rows"], "subjects": item["subjects"], "source": item["source"]} for item in observed}
+    return {scoped(item["label"]): {"rows": item["rows"], "subjects": item["subjects"], "source": item["source"]} for item in observed}
 
 
 # --- leakage ----------------------------------------------------------------
@@ -1120,7 +1128,7 @@ def run_checks(request: dict) -> dict:
 
     `request`: {workspace, files: [{path, table?}], asset (the stored asset or None), complete? (the files are the
     whole delivery, so a recorded table with no file is `table_removed`), observationKeys?, subjectKeys?, joins?,
-    leakage?, steps?}. Returns {findings, notChecked, clean, tables, denominators, joins, warnings}. A file
+    leakage?, steps?, analysis? (names the analysis whose step counts are compared)}. Returns {findings, notChecked, clean, tables, denominators, joins, warnings}. A file
     nobody can read is reported as not checked, never raised: the rest of the files are still checked.
     """
     resolved = resolve(request.get("asset"), request)
@@ -1179,7 +1187,7 @@ def run_checks(request: dict) -> dict:
                     by_name["step:" + str(step["label"])] = chosen
                     step["table"] = "step:" + str(step["label"])
             steps.append(step)
-        denominators = check_denominators(steps, by_name, resolved, resolved["denominators"], found, notes, clean)
+        denominators = check_denominators(steps, by_name, resolved, resolved["denominators"], found, notes, clean, str(request.get("analysis") or ""))
     check_transformations(resolved["transformations"], request["workspace"], found, clean)
     return {"findings": found, "notChecked": notes, "clean": clean, "tables": tables_out, "denominators": denominators, "joins": profiles, "warnings": warnings}
 

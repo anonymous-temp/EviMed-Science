@@ -426,6 +426,17 @@ class Denominators(Workspace):
         step = find(changed, "denominator_changed", step="delivered")
         self.assertEqual((step["detail"]["rowsBefore"], step["detail"]["rowsAfter"]), (180, 183))
 
+    def test_two_analyses_with_a_step_of_the_same_name_are_not_compared(self):
+        recorded = semantics_asset.build([{"datasetId": "d", **INFERRED}])["asset"]
+        first = self.check(self.asset(), files=("visits.csv",), steps=self.steps(), analysis="egfr-by-arm")
+        self.assertEqual(sorted(first["denominators"]), ["egfr-by-arm/analysed", "egfr-by-arm/delivered"])
+        recorded["denominators"] = {label: {**value, "at": "2026-10-04T08:00:00.000Z"} for label, value in first["denominators"].items()}
+        other_steps = [{"label": "delivered", "kind": "filter", "rows": 90, "subjects": 20}, {"label": "analysed", "kind": "filter", "rows": 80, "subjects": 18}]
+        other = checks.run_checks({"workspace": self.workspace, "files": [{"path": "data/visits.csv"}], "asset": recorded, "steps": other_steps, "analysis": "survival"})
+        self.assertNotIn("denominator_changed", outcomes(other))
+        same = checks.run_checks({"workspace": self.workspace, "files": [{"path": "data/visits.csv"}], "asset": recorded, "steps": other_steps, "analysis": "egfr-by-arm"})
+        self.assertEqual(find(same, "denominator_changed", step="delivered")["detail"]["rowsBefore"], 180)
+
     def test_a_step_given_as_a_file_is_counted_from_the_file(self):
         shutil.copy(self.path("visits.csv"), self.path("cohort.csv"))
         steps = [{"label": "delivered", "path": "data/visits.csv", "subjectColumns": ["patient_id"]}, {"label": "cohort", "path": "data/cohort.csv", "subjectColumns": ["patient_id"]}]
@@ -627,6 +638,55 @@ class Profiles(unittest.TestCase):
         self.assertEqual(checks.parse_time("2023-04-05"), (checks.datetime(2023, 4, 5), False))
         self.assertEqual(checks.parse_time("2023/04/05 10:30"), (checks.datetime(2023, 4, 5, 10, 30), True))
         self.assertEqual(checks.parse_time("20230405"), (checks.datetime(2023, 4, 5), False))
+
+
+class EdgeCases(Workspace):
+    def test_chinese_headers_and_full_width_units_are_read_like_any_other(self):
+        path = self.path("labs.csv")
+        rows = ["编号,肌酐（μmol/L）,采样日期"] + ["P%03d,%d,2023-01-%02d" % (index, 60 + index, index % 28 + 1) for index in range(1, 31)]
+        path.write_text("\n".join(rows) + "\n", encoding="utf-8")
+        first = checks.read_tables(self.workspace, "data/labs.csv")[0]
+        binding = checks.binding_of(first)
+        self.assertEqual(binding["columns"][1]["headerUnit"], "μmol/L")
+        asset = semantics_asset.build([{"datasetId": "labs", **INFERRED, "bindings": [binding], "variables": [{"table": "labs.csv", "name": "肌酐（μmol/L）", "unit": "µmol/L"}]}])["asset"]
+        path.write_text("\n".join(rows).replace("μmol/L", "mg/dL") + "\n", encoding="utf-8")
+        result = checks.run_checks({"workspace": self.workspace, "files": [{"path": "data/labs.csv"}], "asset": asset})
+        unit = find(result, "unit_changed", table="labs.csv", column="肌酐")
+        self.assertEqual((unit["detail"]["from"], unit["detail"]["to"]), ("μmol/L", "mg/dL"))
+        # The same unit written with the other micro sign is not a change.
+        path.write_text("\n".join(rows).replace("μmol/L", "µmol/L") + "\n", encoding="utf-8")
+        again = checks.run_checks({"workspace": self.workspace, "files": [{"path": "data/labs.csv"}], "asset": asset})
+        self.assertNotIn("unit_changed", outcomes(again))
+
+    def test_a_header_only_file_an_empty_file_and_a_wide_table_are_checked_not_crashed_on(self):
+        self.path("header_only.csv").write_text("patient_id,sbp\n", encoding="utf-8")
+        self.path("empty.csv").write_text("", encoding="utf-8")
+        wide = ["c%d" % index for index in range(checks.COLUMNS_PROFILED + 40)]
+        self.path("wide.csv").write_text(",".join(wide) + "\n" + "\n".join(",".join(str(row + column) for column in range(len(wide))) for row in range(12)) + "\n", encoding="utf-8")
+        for name in ("header_only.csv", "empty.csv", "wide.csv"):
+            result = checks.run_checks({"workspace": self.workspace, "files": [{"path": "data/" + name}], "asset": None})
+            self.assertEqual(result["tables"][0]["file"], name)
+        first = checks.read_tables(self.workspace, "data/wide.csv")[0]
+        binding = checks.binding_of(first)
+        self.assertEqual(len(binding["columns"]), checks.COLUMNS_PROFILED)
+        asset = semantics_asset.build([{"datasetId": "wide", **INFERRED, "bindings": [binding]}])["asset"]
+        # A new delivery of the same wide table: columns beyond the recorded width are not reported as new.
+        result = checks.run_checks({"workspace": self.workspace, "files": [{"path": "data/wide.csv"}], "asset": asset})
+        self.assertEqual(outcomes(result), ["source_unchanged"])
+        self.path("wide.csv").write_text(self.path("wide.csv").read_text(encoding="utf-8") + ",".join("9" for _ in wide) + "\n", encoding="utf-8")
+        changed = checks.run_checks({"workspace": self.workspace, "files": [{"path": "data/wide.csv"}], "asset": asset})
+        self.assertNotIn("column_added", outcomes(changed))
+
+    def test_an_excel_date_with_a_midnight_time_is_not_after_the_same_day(self):
+        outcomes_file = self.path("outcomes.csv")
+        outcomes_file.write_text("patient_id,window_start,event_date,event\nP001,2023-04-05 00:00:00,2023-12-01,0\n", encoding="utf-8")
+        self.path("visits.csv").write_text("patient_id,visit_no,visit_date,sbp,creatinine,heart_rate\nP001,1,2023-04-05 00:00:00,120,90,70\nP001,2,2023-04-06 00:00:00,121,90,70\n", encoding="utf-8")
+        result = self.check(self.asset(bind=()), files=("visits.csv", "outcomes.csv"), leakage={"cutoff": self.cutoff_column(), "predictors": [{"table": "visits.csv", "column": "sbp"}]})
+        self.assertEqual(find(result, "temporal_leakage", predictor="sbp")["rows"], [2])
+
+    @staticmethod
+    def cutoff_column():
+        return {"table": "outcomes.csv", "column": "window_start"}
 
 
 class Vocabulary(unittest.TestCase):

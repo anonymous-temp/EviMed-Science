@@ -1015,7 +1015,7 @@ export function normalizeDenominators(raw) {
   const out = {}
   if (!isRecord(raw)) return out
   for (const [label, item] of Object.entries(raw).slice(0, DATA_SEMANTICS_LIMITS.denominators)) {
-    const name = asText(label, 80)
+    const name = asText(label, 150)
     if (!name || !isRecord(item) || !Number.isSafeInteger(item.rows) || item.rows < 0) continue
     out[name] = {
       rows: item.rows, subjects: Number.isSafeInteger(item.subjects) && item.subjects >= 0 ? item.subjects : null,

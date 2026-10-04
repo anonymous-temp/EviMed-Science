@@ -175,6 +175,7 @@ def tool_definitions():
                     "table": {"type": "string"}, "path": {"type": "string"}, "rows": {"type": "integer", "minimum": 0}, "subjects": {"type": "integer", "minimum": 0},
                     "subjectColumns": columns}, "required": ["label"], "additionalProperties": False},
                     "description": "check: the analysis's steps in order, each measured from a file (table or path) or reported (rows, subjects), to size every exclusion."},
+                "analysis": {"type": "string", "minLength": 1, "maxLength": 60, "description": "check: a name for this analysis, so its step counts are compared only with the same analysis's last run."},
                 # transform
                 "transformation": {"type": "object", "properties": {
                     "name": {"type": "string", "minLength": 1, "maxLength": 64}, "kind": {"type": "string", "enum": list(TRANSFORM_KINDS)},
@@ -522,7 +523,7 @@ def _choose_dataset(arguments: dict, listing: list, files: list):
 
 
 def check(arguments: dict) -> dict:
-    allowed = ("datasetId", "files", "complete", "observationKeys", "subjectKeys", "joins", "leakage", "steps")
+    allowed = ("datasetId", "files", "complete", "observationKeys", "subjectKeys", "joins", "leakage", "steps", "analysis")
     _need(arguments, allowed, "check")
     workspace = _workspace()
     asset_view, absent, listing = None, None, []
@@ -549,7 +550,7 @@ def check(arguments: dict) -> dict:
         for table, columns in (arguments.get(key) or {}).items():
             if not isinstance(columns, list) or not columns or not all(isinstance(c, str) and c for c in columns):
                 raise DataSemanticsError("semantics_request_invalid", "%s.%s is a list of column names." % (key, table))
-    request = {"workspace": workspace, "files": files, "asset": asset, **{k: arguments[k] for k in ("complete", "observationKeys", "subjectKeys", "joins", "leakage", "steps") if k in arguments}}
+    request = {"workspace": workspace, "files": files, "asset": asset, **{k: arguments[k] for k in ("complete", "observationKeys", "subjectKeys", "joins", "leakage", "steps", "analysis") if k in arguments}}
     result = checks.run_checks(request)
     findings = sorted(result["findings"], key=lambda item: (item["severity"] != "attention", item["family"], item["outcome"]))
     counts = {
