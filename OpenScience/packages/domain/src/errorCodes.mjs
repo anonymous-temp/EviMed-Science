@@ -264,6 +264,9 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   "vcr_upstream_error",
   "vcr_response_invalid",
   "vcr_response_too_large",
+  // The scenario help the runtime renders on request (`vcr_simulate` action shape) is generated into the
+  // image from the domain's schemas; a build that lacks it says so and the run writes from the refusal's own list.
+  "vcr_scenario_help_unavailable",
   "engine_unavailable",
   "registry_unavailable",
   // The trial registry answered, or could not, in a way that is a fact about the
@@ -1563,6 +1566,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_upstream_error: '虚拟临研的研究数据这次没能读写；运行会如实记下这一点，用已有的资料继续。',
   vcr_response_invalid: '虚拟临研返回的内容读不出来，这次没有采用；运行会如实记下，用已有的资料继续。',
   vcr_response_too_large: '虚拟临研返回的内容太大，这次没有采用；缩小范围再问。',
+  vcr_scenario_help_unavailable: '这个运行环境里没有各计算方法的字段清单；按平台拒绝时给出的字段列表改写，其余研究步骤照常。',
   vcr_write_empty: '这次写入没有任何内容，什么都没有保存。',
   vcr_write_field_forbidden: '这次写入里带了不允许由运行写入的字段，那一项没有保存，其余照常。',
   vcr_write_refused: '平台拒绝了这一项，原因见提示；其余各项照常保存。',

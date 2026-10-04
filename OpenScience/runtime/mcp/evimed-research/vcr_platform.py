@@ -20,7 +20,10 @@ Six tools a 虚拟临研 capability's run uses; none is ever forced into a turn.
 - ``vcr_simulate`` queues a frozen scenario on the deterministic engine and
   reports where it got to (``start`` / ``status`` / ``cancel``, the same shape
   as ``meta_analysis``). The model never computes a statistic itself; it states
-  the scenario and reads the result.
+  the scenario and reads the result. ``shape`` is the one action that asks the
+  platform nothing: it renders, from ``vcr_scenario_help.json`` (generated from
+  the domain's scenario schemas), every key a job kind's scenario reads, and a
+  refused start carries the keys of the place it was refused from the same file.
 - ``trial_registry_record`` fetches one registry record as structured fields --
   eligibility text, arms, endpoints, planned and actual enrolment. The run
   never reaches a registry itself; the control plane does.
@@ -85,7 +88,22 @@ JOB_KINDS = (
 )
 POOLING_METHODS = ("single_study", "random_effects_dl", "random_effects_reml", "random_effects_hksj", "fixed_effect")
 POOLING_CALIBRES = ("closest", "overall", "next_closest")
-SIMULATE_ACTIONS = ("start", "status", "cancel")
+SIMULATE_ACTIONS = ("start", "status", "cancel", "shape")
+# The objects `vcr_write` takes whose configuration, scenario or definition carries the keys of a job kind's scenario (the
+# platform projects the object onto that kind's schema and refuses what it does not read): where to look a shape up before
+# writing one. `test_vcr_platform.py` holds every name to the domain's job kinds.
+OBJECT_SHAPES = {
+    "trial_scenario (configuration)": ("design_analytic", "design_simulation"),
+    "design_grid": ("design_grid",),
+    "patient_set (scenario)": ("generate_patients", "generate_patients_continuous", "generate_patients_binary"),
+    "population (definition)": ("generate_population", "literature_population", "synthesize_population"),
+    "comparator (configuration)": ("weight_comparator", "propensity_weight_comparator", "weighted_cox_comparator", "aipw_comparator",
+                                   "covariate_set_comparator", "maic_comparator", "maic_time_to_event_comparator", "map_prior", "procova",
+                                   "prognostic_adjustment_comparator", "negative_control_comparator", "tipping_point"),
+}
+# What the platform generates from the domain's scenario schemas (`pnpm generate:vcr-scenario-help`): every key each method's
+# scenario reads. It rides in the image beside this file and is never edited by hand.
+HELP_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "vcr_scenario_help.json")
 READ_MAX_LIMIT = 50
 WRITE_MAX_ITEMS = 200
 # The one operation whose answer waits on a container: the gateway's budget is the
@@ -107,10 +125,12 @@ AUTH_CODES = ("vcr_gateway_token_invalid", "vcr_gateway_token_missing", "vcr_unc
 
 
 class VcrPlatformError(Exception):
-    def __init__(self, code: str, message: str, retryable: bool = False):
+    def __init__(self, code: str, message: str, retryable: bool = False, issues: list | None = None):
         super().__init__(message)
         self.code = code
         self.retryable = retryable
+        # The gateway's per-field findings of a refused job ({code, field}), when it sent them.
+        self.issues = issues or []
 
     def stop_reason(self) -> str:
         """What the run should do next: fix the call, retry, or go on without.
@@ -178,9 +198,13 @@ def tool_definitions():
                 "a model's ICH M15 assessment record, patient facts, sites and follow-up, or the report text. A disease pack: data {use: <catalogue id>} binds one, "
                 "data {disease, sources, terms, endpoints, criteria…} drafts one for a disease with none (marked AI draft); a population "
                 "item may carry fromLibrary {definitionId, version?} instead of a definition. Numbers are not writable: results, counts, "
-                "measures and execution records come from the engine, and an object's configuration carries only the "
-                "keys the engine reads (see vcr_simulate). Items are checked one by one; refused items come back in "
-                "issues and the rest are written."
+                "measures and execution records come from the engine, and an object's configuration, scenario or definition "
+                "carries only the keys the engine reads for the job that computes it: before you write a trial scenario, "
+                "patient set, population or comparator, call vcr_simulate with action shape and that job's kind "
+                "(design_analytic and design_simulation for a trial scenario; generate_patients, "
+                "generate_patients_continuous or generate_patients_binary for a patient set; generate_population for a "
+                "population; the comparator kind for a comparator) and write those keys and no others. Items are checked "
+                "one by one; refused items come back in issues and the rest are written."
             ),
             "inputSchema": {
                 "type": "object",
@@ -193,40 +217,24 @@ def tool_definitions():
                 "additionalProperties": False,
             },
         },
-        # The shapes below are held to the domain's scenario schemas by
-        # `test/test_vcr_platform.py`: every key a shape offers is one the
-        # method's schema reads, and a key the schema reads for some endpoint
-        # types only says which (`key[time_to_event]`). `accrual?` used to stand
-        # unmarked on all three patient generators; a run that followed it for a
-        # binary set was refused for a field the engine does not read.
+        # The per-method shapes are not typed here: `action: "shape"` renders them from `vcr_scenario_help.json`, which is
+        # generated from the domain's scenario schemas (`pnpm generate:vcr-scenario-help`), and a refusal of a started job
+        # carries the keys of the place it was refused. The description stays short on purpose: it rides every request of the run.
         {
             "name": "vcr_simulate",
             "description": (
                 "Queue a deterministic computation on the 虚拟临研 engine and read where it got to. start returns a "
                 "jobId; status reports state, progress and the saved result; cancel stops it and keeps the completed "
                 "batches. Every number in the answer is the engine's -- never compute one yourself. The scenario is the "
-                "frozen setting of one method and is refused by name (the field's path) when it carries a key the "
-                "engine does not read, lacks a required one, or asks for a design or endpoint the method does not "
-                "implement. Shapes (key? is optional; key[e] is read only when endpoint.type is e and refused for "
-                "any other): design_analytic {design{kind,informationRates?,spending?,allocation?}, "
-                "endpoint{type}, truth{...}, analysis{alpha,power,sided}, accrual?[time_to_event]}; design_simulation "
-                "{design{kind,nTreat,nControl?,informationRates?}, endpoint{type}, truth{null?,...}, "
-                "analysis{method,alpha,sided,tau?}, accrual?[time_to_event], performance?, targetMcse?}; design_grid "
-                "the same plus designs[] and truths[]; assurance {design, endpoint, designPrior{mean,sd,kind,basis}, "
-                "truth[continuous|binary], analysis}; generate_population {n, population{variables[{name,family,...}],"
-                "correlation?,constraints?,missing?}}; literature_population {n, "
-                "baselineTable[{variable,mean,sd|proportion|proportions}]}; generate_patients {design{nTreat,nControl?}, "
-                "endpoint, truth, accrual?}; generate_patients_binary and generate_patients_continuous "
-                "{design{nTreat,nControl?}, endpoint, truth}; reconstruct_km {curve[{time,surv}], "
-                "riskTable[{time,atRisk}], provenance{kind,tool}, totalEvents?, treatmentArm?}; rmst {tau, ...}; "
-                "weight_comparator {covariates[], estimand, endpoint, tau[time_to_event], ...}; map_prior "
-                "{historical{...}, ...}; procova {endpoint, truth{effect,sd}, prognostic{rho}, analysis}. Truth spells "
-                "the null case truth.null (boolean); accrual (enrolment, follow-up, dropout as accrual.dropoutAnnual) "
-                "exists only for a time_to_event endpoint; alpha is the total, "
-                "sided is 1 or 2. Patient-level kinds (profile_snapshot, build_cohort, weight_comparator, ...) name "
-                "their data as inputs [{kind:'snapshot', id}] and nothing else. pool_evidence and match_criteria are "
-                "built by the platform. The other comparator and robustness kinds and all shapes are in the "
-                "vcr-analysis skill; maic_time_to_event_comparator takes reconstructionResultId, never rows."
+                "frozen setting of one method (kind). The engine reads only the keys its method names: a key it does not "
+                "read, a required one that is missing, or a design or endpoint the method does not implement is refused "
+                "by the field's path -- never guess a key. Before you write a scenario here, or the configuration of a "
+                "trial scenario, patient set, population or comparator in vcr_write, call action shape with the kind: it "
+                "answers every key that method reads (type, unit, range, default, required or optional, the endpoint or "
+                "design it is read for) and a valid example; shape with no kind lists the kinds. Patient-level kinds "
+                "name their data as inputs [{kind:'snapshot', id}] and nothing else. pool_evidence is evidence_pool and "
+                "match_criteria is built by the platform from the protocol; maic_time_to_event_comparator takes "
+                "reconstructionResultId, never rows. How to read the results is in the vcr-analysis skill."
             ),
             "inputSchema": {
                 "type": "object",
@@ -417,6 +425,18 @@ def _gateway():
     return base, settings[1]
 
 
+def _field_issues(raw) -> list:
+    """The per-field findings of a refused job, as the gateway sends them: a code and a path, nothing else the run reads."""
+    out = []
+    for item in raw if isinstance(raw, list) else []:
+        if not isinstance(item, dict):
+            continue
+        code, field = item.get("code"), item.get("field")
+        if isinstance(code, str) and re.match(r"^[a-z0-9_]{1,60}$", code) and isinstance(field, str) and 0 < len(field) <= 200:
+            out.append({"code": code, "field": field})
+    return out[:20]
+
+
 def _post(operation: str, payload: dict, timeout: int = TIMEOUT_SECONDS) -> dict:
     base, token = _gateway()
     request = urllib.request.Request(
@@ -436,10 +456,12 @@ def _post(operation: str, payload: dict, timeout: int = TIMEOUT_SECONDS) -> dict
     except urllib.error.HTTPError as error:
         code = ""
         message = ""
+        issues = []
         try:
             parsed_error = json.loads(error.read(64 * 1024).decode("utf-8", "replace"))
             code = parsed_error.get("code", "") if isinstance(parsed_error, dict) else ""
             message = parsed_error.get("error", "") if isinstance(parsed_error, dict) else ""
+            issues = _field_issues(parsed_error.get("issues") if isinstance(parsed_error, dict) else None)
         except Exception:  # noqa: BLE001 - the status is the finding, not the parse
             code = ""
         # Only the gateway's own words reach the run: a code from anything else
@@ -453,6 +475,7 @@ def _post(operation: str, payload: dict, timeout: int = TIMEOUT_SECONDS) -> dict
             message,
             # A module that is off, or a deployment with no digitizer, is not an outage that passes.
             retryable=error.code in (429, 502, 503, 504) and code not in ("vcr_disabled", "vcr_curve_digitizer_unavailable"),
+            issues=issues,
         ) from error
     except (urllib.error.URLError, TimeoutError, OSError) as error:
         raise VcrPlatformError("vcr_gateway_unreachable", "The 虚拟临研 gateway is unreachable.", retryable=True) from error
@@ -562,10 +585,289 @@ def _issue_line(issue: dict) -> str:
     return "%s%s" % (prefix, str(issue.get("message") or issue.get("code") or "refused"))
 
 
+# --- the shape of a scenario, rendered from the generated help file ---------------------------------------------------------
+
+_HELP = {}
+
+
+def scenario_help() -> dict:
+    """The generated help: every job kind's method and every key each method's scenario reads, read once."""
+    if "help" not in _HELP:
+        try:
+            with open(HELP_FILE, "r", encoding="utf-8") as handle:
+                parsed = json.load(handle)
+        except (OSError, ValueError) as error:
+            raise VcrPlatformError("vcr_scenario_help_unavailable", "The scenario help this build ships could not be read.") from error
+        if not isinstance(parsed, dict) or not isinstance(parsed.get("kinds"), dict) or not isinstance(parsed.get("methods"), dict):
+            raise VcrPlatformError("vcr_scenario_help_unavailable", "The scenario help this build ships is not in the shape this tool reads.")
+        _HELP["help"] = parsed
+    return _HELP["help"]
+
+
+def _normal(path: str) -> str:
+    """A path with a list index read as the list's item: ``designs[0].kind`` is ``designs[].kind``."""
+    return re.sub(r"\[\d+\]", "[]", path)
+
+
+def _parent_of(path: str) -> str:
+    normal = _normal(path)
+    cut = normal.rfind(".")
+    return "" if cut < 0 else normal[:cut]
+
+
+def _find_row(by_path: dict, path: str):
+    normal = _normal(path)
+    if normal in by_path:
+        return by_path[normal]
+    return by_path.get(normal[:-2]) if normal.endswith("[]") else None
+
+
+def _number(value) -> str:
+    return json.dumps(value, ensure_ascii=False)
+
+
+def _condition(condition: dict) -> str:
+    path = str(condition.get("path", ""))
+    if isinstance(condition.get("in"), list):
+        return "%s is %s" % (path, "|".join(str(item) for item in condition["in"]))
+    if isinstance(condition.get("notIn"), list):
+        return "%s is not %s" % (path, "|".join(str(item) for item in condition["notIn"]))
+    if condition.get("present") is True:
+        return "%s is given" % path
+    if condition.get("present") is False:
+        return "%s is not given" % path
+    return path
+
+
+def _own_gates(row: dict, parent) -> list:
+    """The conditions this row adds to the ones its object already carries (every row repeats its ancestors')."""
+    inherited = parent.get("when", []) if isinstance(parent, dict) else []
+    gates = [_condition(item) for item in row.get("when", []) if item not in inherited]
+    variant = row.get("variant")
+    if isinstance(variant, dict) and not (isinstance(parent, dict) and parent.get("variant") == variant):
+        gates.append("%s is %s" % (variant.get("on"), "|".join(str(item) for item in variant.get("is", []))))
+    return gates
+
+
+def _bounds(row: dict) -> str:
+    parts = []
+    for key, mark in (("min", ">="), ("gt", ">"), ("max", "<="), ("lt", "<")):
+        if key in row:
+            parts.append("%s%s" % (mark, _number(row[key])))
+    return " ".join(parts)
+
+
+def _type_text(row: dict) -> str:
+    kind = row.get("type")
+    if kind in ("number", "integer"):
+        text = " ".join(part for part in (kind, _bounds(row)) if part)
+        return "%s (%s)" % (text, row["unit"]) if row.get("unit") else text
+    if kind == "boolean":
+        return "true|false"
+    if kind == "string":
+        if isinstance(row.get("values"), list):
+            return "one of %s" % "|".join(str(item) for item in row["values"])
+        if isinstance(row.get("valuesBy"), dict):
+            by = row["valuesBy"]
+            return "one of, by %s: %s" % (by.get("path"), "; ".join("%s %s" % (key, "|".join(value)) for key, value in by.get("map", {}).items()))
+        text = {"column": "column name", "input id": "id of one of the job's inputs"}.get(row.get("role"), "string")
+        return "%s (at most %s characters)" % (text, row["maxLength"]) if "maxLength" in row else text
+    if kind == "list":
+        items = row.get("items") or {}
+        text = "list of %s" % ("objects" if items.get("type") == "object" else _type_text(items))
+        count = row.get("count") or {}
+        if count:
+            text += " (%s..%s items)" % (count.get("min", 0), count.get("max", "any"))
+        for key, words in (("increasing", "strictly increasing"), ("unique", "distinct")):
+            if row.get(key):
+                text += ", %s" % words
+        if "last" in row:
+            text += ", last = %s" % _number(row["last"])
+        return text
+    if kind == "object":
+        return "object"
+    if kind == "map":
+        text = "object of %s keyed by column name" % _type_text(row.get("of") or {})
+        return "%s, the keys exactly the columns named in %s" % (text, row["keysFrom"]) if row.get("keysFrom") else text
+    if kind == "matrix":
+        text = "square matrix of numbers from %s to %s" % (_number(row.get("min")), _number(row.get("max")))
+        return "%s, as many rows as %s lists" % (text, row["size"]) if row.get("size") else text
+    if kind == "rules":
+        return "list of {name, rule} in the row-rule grammar"
+    if kind == "rule":
+        return "one row rule in the row-rule grammar"
+    return str(kind)
+
+
+def _row_line(row: dict, by_path: dict) -> str:
+    parent = _find_row(by_path, _parent_of(row["path"])) if _parent_of(row["path"]) else None
+    if row.get("required") is True:
+        need = "required once %s is given" % row["within"] if row.get("within") else "required"
+    elif row.get("requiredWhen"):
+        need = "required when %s" % " and ".join(_condition(item) for item in row["requiredWhen"])
+    else:
+        need = "optional"
+    text = "%s: %s; %s" % (row["path"], _type_text(row), need)
+    if "default" in row:
+        text += "; default %s" % _number(row["default"])
+    gates = _own_gates(row, parent)
+    if gates:
+        text += "; read only when %s" % " and ".join(gates)
+    return text
+
+
+def _rule_line(rule: dict) -> str:
+    kind = rule.get("kind")
+    if kind == "exactlyOne":
+        text = "exactly one of %s" % ", ".join(rule.get("keys", []))
+    elif kind == "atLeastOne":
+        text = "at least one of %s" % ", ".join(rule.get("keys", []))
+    else:
+        text = "when %s is given, %s must be given too" % (rule.get("key"), ", ".join(rule.get("needs", [])))
+    gates = [_condition(item) for item in rule.get("when", [])]
+    variant = rule.get("variant")
+    if isinstance(variant, dict):
+        gates.append("%s is %s" % (variant.get("on"), "|".join(str(item) for item in variant.get("is", []))))
+    return "%s (when %s)" % (text, " and ".join(gates)) if gates else text
+
+
+def _children(rows: list, by_path: dict, node: str) -> list:
+    """The keys the engine reads directly inside a node, each with the endpoint, design or variant that gates it."""
+    parent = _find_row(by_path, node) if node else None
+    out = []
+    for row in rows:
+        if _parent_of(row["path"]) != node:
+            continue
+        key = row["path"][len(node) + 1:] if node else row["path"]
+        inherited = parent.get("when", []) if isinstance(parent, dict) else []
+        # `key[time_to_event]`: read only for that endpoint; `key[piecewise]`: only for that variant; anything else is said in full.
+        tags = []
+        for condition in row.get("when", []):
+            if condition not in inherited:
+                tags.append("|".join(condition["in"]) if condition.get("path") == "endpoint.type" and isinstance(condition.get("in"), list) else _condition(condition))
+        variant = row.get("variant")
+        if isinstance(variant, dict) and not (isinstance(parent, dict) and parent.get("variant") == variant):
+            tags.append("|".join(str(item) for item in variant.get("is", [])))
+        out.append("%s[%s]" % (key, " and ".join(tags)) if tags else key)
+    return out
+
+
+def _method_of(kind: str):
+    help_ = scenario_help()
+    entry = help_["kinds"].get(kind)
+    if not isinstance(entry, dict):
+        return None, None, None
+    method_id = entry.get("method")
+    method = help_["methods"].get(method_id)
+    return (entry, method_id, method) if isinstance(method, dict) else (None, None, None)
+
+
+def shape(arguments: dict) -> dict:
+    """``vcr_simulate`` action shape: what a job kind's scenario reads, rendered from the generated help. Asks the
+    platform nothing, so it answers with the module off too."""
+    kind = arguments.get("kind")
+    help_ = scenario_help()
+    if kind is None:
+        return {
+            "status": "success",
+            "summary": "%d job kinds; ask for one with action shape and its kind." % len(help_["kinds"]),
+            "data": {
+                "kinds": {name: "%s%s" % (entry["method"], " (%s)" % "|".join(help_["methods"][entry["method"]].get("endpoints", []))
+                                         if help_["methods"].get(entry["method"], {}).get("endpoints") else "")
+                          for name, entry in help_["kinds"].items()},
+                "objects": {name: list(kinds) for name, kinds in OBJECT_SHAPES.items()},
+            },
+            "warnings": [],
+            "next_actions": ["Call vcr_simulate with action shape and the kind you are about to write or queue."],
+        }
+    if kind not in JOB_KINDS:
+        raise VcrPlatformError("vcr_simulate_payload_invalid", "kind must be one of: %s." % ", ".join(JOB_KINDS))
+    entry, method_id, method = _method_of(kind)
+    if method is None:
+        raise VcrPlatformError("vcr_scenario_help_unavailable", "This build's scenario help has no entry for %s." % kind)
+    rows = method.get("rows", [])
+    by_path = {row["path"]: row for row in rows}
+    platform = entry.get("platformBuilt")
+    notes = list(method.get("notes", []))
+    data = {"kind": kind, "method": method_id}
+    if method.get("endpoints"):
+        data["endpoints"] = list(method["endpoints"])
+    if platform is not None:
+        # The platform freezes this scenario itself; the run states only the keys named here.
+        keys = [_row_line(by_path[name], by_path) for name in platform if name in by_path]
+        data["builtByPlatform"] = True
+        data["runStates"] = list(platform)
+        data["keys"] = keys
+        if kind == "pool_evidence":
+            notes.append("Use the evidence_pool tool: you name the parameter and the endpoint definition, never the numbers; the pooled values are this study's verified extractions.")
+        elif kind == "match_criteria":
+            notes.append("Start it with an empty scenario: the platform freezes the newest protocol version's criteria and the facts written for the study.")
+        else:
+            notes.append("State only %s; the sites' rates come from the study's ledger and site records." % ", ".join(platform))
+        data["notes"] = notes
+        summary = "%s is built by the platform from the study; you state %s." % (kind, ", ".join(platform) if platform else "nothing")
+    else:
+        data["keys"] = [_row_line(row, by_path) for row in rows]
+        if method.get("rules"):
+            data["rules"] = [_rule_line(rule) for rule in method["rules"]]
+        if method.get("gridCells"):
+            notes.append("A grid has at most %s cells (designs x truths), and every cell is a valid scenario of its own." % method["gridCells"])
+        if notes:
+            data["notes"] = notes
+        data["examples"] = list(method.get("examples", []))
+        summary = "The scenario of %s (method %s) reads %d keys." % (kind, method_id, len(rows))
+    data["legend"] = ("path: type; required or optional (required whenever the key is read); default; read only when <condition> (the key is refused "
+                      "when the condition does not hold). A path with [] is inside each item of a list. A key not listed is refused by its path.")
+    return {
+        "status": "success",
+        "summary": summary,
+        "data": data,
+        "warnings": [],
+        "next_actions": [
+            "Write exactly these keys and no others; a number the engine computes (a result, a count, a measure) is never a key.",
+            "Then queue it with vcr_simulate action start, or write it as the object's configuration with vcr_write.",
+        ],
+    }
+
+
+def refusal_hint(kind, issues: list) -> str:
+    """The keys of the place a job was refused, from the same generated help, so the repair needs no second lookup."""
+    if not isinstance(kind, str) or not issues:
+        return ""
+    try:
+        entry, method_id, method = _method_of(kind)
+    except VcrPlatformError:
+        return ""
+    if method is None or entry.get("platformBuilt") is not None:
+        return ""
+    rows = method.get("rows", [])
+    by_path = {row["path"]: row for row in rows}
+    lines = []
+    for issue in issues[:6]:
+        field = issue["field"]
+        path = field[len("scenario."):] if field.startswith("scenario.") else ("" if field == "scenario" else field)
+        row = _find_row(by_path, path) if path else None
+        if issue["code"] in ("scenario_value_invalid", "scenario_field_missing") and row is not None:
+            line = _row_line(row, by_path)
+        elif issue["code"] in ("design_not_supported", "endpoint_not_supported"):
+            line = "; ".join(method.get("notes", [])[:1]) or "endpoints this method implements: %s" % "|".join(method.get("endpoints", []))
+        else:
+            node = _parent_of(path) if path else ""
+            line = "inside %s the engine reads: %s" % (node or "the scenario", ", ".join(_children(rows, by_path, node)))
+        if line not in lines:
+            lines.append(line)
+    if not lines:
+        return ""
+    return "From the engine's schema for %s (method %s) -- %s. Every key, its range and an example: vcr_simulate action shape, kind %s." % (
+        kind, method_id, " | ".join(lines), kind)
+
+
 def simulate(arguments: dict) -> dict:
     action = arguments.get("action") or "start"
     if action not in SIMULATE_ACTIONS:
         raise VcrPlatformError("vcr_simulate_action_invalid", "action must be one of: %s." % ", ".join(SIMULATE_ACTIONS))
+    if action == "shape":
+        return shape(arguments)
     payload = {"action": action}
     if action == "start":
         kind = arguments.get("kind")
@@ -585,6 +887,10 @@ def simulate(arguments: dict) -> dict:
     except VcrPlatformError as error:
         if error.code in _absent_codes():
             return _module_absent(error, "computation", "queue")
+        # A refused scenario names the keys of the place it was refused, read from the same help the shape action renders.
+        hint = refusal_hint(payload.get("kind"), error.issues) if action == "start" else ""
+        if hint:
+            raise VcrPlatformError(error.code, "%s %s" % (error, hint), error.retryable, error.issues) from error
         raise
     return _job_answer(data, action)
 

@@ -1489,11 +1489,26 @@ export {
   vcrResultOutputPayload,
 } from './src/vcrEngineJob.mjs'
 
-// vcrScenarioSchemas — 2 exports: the walker that checks a scenario against its method's schema
+// vcrScenarioSchemas — 4 exports: the walker that checks a scenario against its method's schema, and the two tables of
+// which analysis a design may run
 export {
+  VCR_SINGLE_ARM_ANALYSIS_METHODS,
+  VCR_TWO_ARM_ANALYSIS_METHODS,
   validateScenario,
   whenHolds,
 } from './src/vcrScenarioSchemas.mjs'
+
+// vcrScenarioHelp — 7 exports: what a model is given to write a scenario from, rendered from the schemas above
+// (`runtime/mcp/evimed-research/vcr_scenario_help.json` is generated from it), and the keys read inside a node
+export {
+  VCR_RUN_SCENARIO_FIELDS,
+  VCR_SCENARIO_EXAMPLES,
+  VCR_SCENARIO_HELP_VERSION,
+  vcrScenarioChildKeys,
+  vcrScenarioHelp,
+  vcrScenarioParentOf,
+  vcrScenarioRows,
+} from './src/vcrScenarioHelp.mjs'
 
 // vcrLineage — 8 exports: lineage: which results a changed input makes stale, and whether a
 // countersignature still holds

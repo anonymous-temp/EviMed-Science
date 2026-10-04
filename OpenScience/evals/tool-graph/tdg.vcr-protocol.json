@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-protocol",
-  "version": "sha256:73a5bd66f5897a2ded5a4abb8fc47fcb6ed040d7f247991551761db9df245fcd",
+  "version": "sha256:9095d63a429d45986f232d66e407ed62e474c735af7b7bb87279cc5a5a6c1df6",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 28,
@@ -1156,7 +1156,7 @@
     {
       "name": "mcp__evimed__vcr_simulate",
       "source": "mcp",
-      "description": "Queue a deterministic computation on the 虚拟临研 engine and read where it got to. start returns a jobId; status reports state, progress and the saved result; cancel stops it and keeps the completed batches. Every number in the answer is the engine's -- never compute one yourself. The scenario is the frozen setting of one method and is refused by name (the field's path) when it carries a key the engine does not read, lacks a required one, or asks for a design or endpoint the method does not implement. Shapes (key? is optional; key[e] is read only when endpoint.type is e and refused for any other): design_analytic {design{kind,informationRates?,spending?,allocation?}, endpoint{type}, truth{...}, analysis{alpha,power,sided}, accrual?[time_to_event]}; design_simulation {design{kind,nTreat,nControl?,informationRates?}, endpoint{type}, truth{null?,...}, analysis{method,alpha,sided,tau?}, accrual?[time_to_event], performance?, targetMcse?}; design_grid the same plus designs[] and truths[]; assurance {design, endpoint, designPrior{mean,sd,kind,basis}, truth[continuous|binary], analysis}; generate_population {n, population{variables[{name,family,...}],correlation?,constraints?,missing?}}; literature_population {n, baselineTable[{variable,mean,sd|proportion|proportions}]}; generate_patients {design{nTreat,nControl?}, endpoint, truth, accrual?}; generate_patients_binary and generate_patients_continuous {design{nTreat,nControl?}, endpoint, truth}; reconstruct_km {curve[{time,surv}], riskTable[{time,atRisk}], provenance{kind,tool}, totalEvents?, treatmentArm?}; rmst {tau, ...}; weight_comparator {covariates[], estimand, endpoint, tau[time_to_event], ...}; map_prior {historical{...}, ...}; procova {endpoint, truth{effect,sd}, prognostic{rho}, analysis}. Truth spells the null case truth.null (boolean); accrual (enrolment, follow-up, dropout as accrual.dropoutAnnual) exists only for a time_to_event endpoint; alpha is the total, sided is 1 or 2. Patient-level kinds (profile_snapshot, build_cohort, weight_comparator, ...) name their data as inputs [{kind:'snapshot', id}] and nothing else. pool_evidence and match_criteria are built by the platform. The other comparator and robustness kinds and all shapes are in the vcr-analysis skill; maic_time_to_event_comparator takes reconstructionResultId, never rows.",
+      "description": "Queue a deterministic computation on the 虚拟临研 engine and read where it got to. start returns a jobId; status reports state, progress and the saved result; cancel stops it and keeps the completed batches. Every number in the answer is the engine's -- never compute one yourself. The scenario is the frozen setting of one method (kind). The engine reads only the keys its method names: a key it does not read, a required one that is missing, or a design or endpoint the method does not implement is refused by the field's path -- never guess a key. Before you write a scenario here, or the configuration of a trial scenario, patient set, population or comparator in vcr_write, call action shape with the kind: it answers every key that method reads (type, unit, range, default, required or optional, the endpoint or design it is read for) and a valid example; shape with no kind lists the kinds. Patient-level kinds name their data as inputs [{kind:'snapshot', id}] and nothing else. pool_evidence is evidence_pool and match_criteria is built by the platform from the protocol; maic_time_to_event_comparator takes reconstructionResultId, never rows. How to read the results is in the vcr-analysis skill.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -1165,7 +1165,8 @@
             "enum": [
               "start",
               "status",
-              "cancel"
+              "cancel",
+              "shape"
             ],
             "default": "start"
           },
@@ -1267,7 +1268,7 @@
     {
       "name": "mcp__evimed__vcr_write",
       "source": "mcp",
-      "description": "Write this 虚拟临研 study's definitions and designs: the research definition, a protocol version and its structured eligibility criteria, assumption cards and their evidence items, precedents, population, patient-set, comparator and trial designs, a design grid, a decision record, a fitted literature model, a model's ICH M15 assessment record, patient facts, sites and follow-up, or the report text. A disease pack: data {use: <catalogue id>} binds one, data {disease, sources, terms, endpoints, criteria…} drafts one for a disease with none (marked AI draft); a population item may carry fromLibrary {definitionId, version?} instead of a definition. Numbers are not writable: results, counts, measures and execution records come from the engine, and an object's configuration carries only the keys the engine reads (see vcr_simulate). Items are checked one by one; refused items come back in issues and the rest are written.",
+      "description": "Write this 虚拟临研 study's definitions and designs: the research definition, a protocol version and its structured eligibility criteria, assumption cards and their evidence items, precedents, population, patient-set, comparator and trial designs, a design grid, a decision record, a fitted literature model, a model's ICH M15 assessment record, patient facts, sites and follow-up, or the report text. A disease pack: data {use: <catalogue id>} binds one, data {disease, sources, terms, endpoints, criteria…} drafts one for a disease with none (marked AI draft); a population item may carry fromLibrary {definitionId, version?} instead of a definition. Numbers are not writable: results, counts, measures and execution records come from the engine, and an object's configuration, scenario or definition carries only the keys the engine reads for the job that computes it: before you write a trial scenario, patient set, population or comparator, call vcr_simulate with action shape and that job's kind (design_analytic and design_simulation for a trial scenario; generate_patients, generate_patients_continuous or generate_patients_binary for a patient set; generate_population for a population; the comparator kind for a comparator) and write those keys and no others. Items are checked one by one; refused items come back in issues and the rest are written.",
       "inputSchema": {
         "type": "object",
         "properties": {

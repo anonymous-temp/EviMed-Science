@@ -497,7 +497,7 @@
       "id": "vcr-protocol",
       "visibility": "public",
       "evalHarness": "evals/vcr-protocol",
-      "briefCount": 5,
+      "briefCount": 6,
       "realDelivery": {
         "status": "not-run",
         "evidence": null,
