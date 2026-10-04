@@ -54,7 +54,9 @@
  * asking for a change is not approving what was produced. This is the evidence
  * the learning loop reads for a correction (`LearningTriggers.afterCorrection`),
  * and it is the join key for N14: the original version, the successor version,
- * the original's run (the event's `run_id`) and its method digest.
+ * the original's run (the event's `run_id`) and its method digest. The join itself is
+ * `MethodFeedbackService.fromCorrection` (`methodFeedback.mjs`), which writes it onto the
+ * record of each learned method that run read.
  *
  * @module
  */
