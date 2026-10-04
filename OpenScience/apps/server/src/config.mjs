@@ -2630,6 +2630,13 @@ export function loadConfig(overrides = {}) {
     // (principle 13); off, the source cards simply carry none.
     sourceUpdatesEnabled: overrides.sourceUpdatesEnabled ?? boolEnv("OPEN_SCIENCE_SOURCE_UPDATES_ENABLED", true),
     resultsEnabled: overrides.resultsEnabled ?? boolEnv("OPEN_SCIENCE_RESULTS_ENABLED", true),
+    // How many result impacts of ONE source change an agenda the researcher is already running rechecks without being
+    // asked again (resultImpact.mjs, N15). The agenda's own budgets still apply to each recheck; this bounds how many
+    // episodes one retraction of a widely used paper may queue at once. The rest stay in the result's impact panel for the
+    // researcher to continue. 0 turns the automatic recheck off; the labels and the panel do not depend on it.
+    sourceChangeRecheckLimit: Math.max(0, Math.min(20, Math.trunc(Number(
+      overrides.sourceChangeRecheckLimit ?? process.env.OPEN_SCIENCE_SOURCE_CHANGE_RECHECK_LIMIT ?? 3,
+    )) || 0)),
     // What a project's datasets mean (dataSemanticsService.mjs): the recorded interpretation a repeat analysis starts
     // from, the exact source versions it was read from, and the named outcomes of the data checks. The tool the two
     // data capabilities use reaches it through its own gateway; off, that tool answers `semantics_disabled` and every

@@ -206,6 +206,37 @@ test("exact content is deduplicated while a changed path remains in one version 
   assert.equal(jobs.enqueued.length, 2, "an exact duplicate must not enqueue extraction twice");
 });
 
+test("a file that arrives with new bytes tells what rests on the document it replaces, once, and never costs the registration", async () => {
+  const events = [];
+  const reported = [];
+  const documents = new MemoryDocuments();
+  const jobs = new MemoryJobs();
+  let failing = false;
+  const service = new SourceService(documents, jobs, { now: () => new Date("2026-09-06T01:00:00.000Z"), report: (code) => reported.push(code),
+    afterReplace: async (event) => { events.push(event); if (failing) throw Object.assign(new Error("impact store down"), { code: "product_state_unavailable" }); } });
+  const first = await service.register("user-one", upload());
+  assert.deepEqual(events, [], "a first document replaces nothing");
+  await service.register("user-one", upload({ path: "knowledge-base/copy.docx" }));
+  assert.deepEqual(events, [], "the same bytes under another name replace nothing");
+  const second = await service.register("user-one", upload({ sha256: "b".repeat(64), size: 8192 }));
+  assert.equal(events.length, 1);
+  assert.deepEqual(events[0], { userId: "user-one", projectId: "project-one",
+    replaced: { sourceId: first.source.id, sha256: "a".repeat(64), version: 1 },
+    by: { sourceId: second.source.id, version: 2, at: "2026-09-06T01:00:00.000Z" } });
+  assert.equal("replaces" in second, false, "the event is not part of what the caller is handed");
+  await service.register("user-one", upload({ sha256: "b".repeat(64), size: 8192 }));
+  assert.equal(events.length, 1, "the same replacement again is not a second one");
+  failing = true;
+  const third = await service.register("user-one", upload({ sha256: "d".repeat(64), size: 9000 }));
+  assert.equal(third.duplicate, false);
+  assert.equal(third.source.payload.version, 3);
+  assert.equal(events[1].replaced.sourceId, second.source.id, "what rests on the newest earlier version is told, since older ones were told before");
+  assert.deepEqual(reported, ["product_state_unavailable"], "the failure is traceable and the registration stands");
+  const other = await service.register("user-one", upload({ path: "knowledge-base/another-file.docx", sha256: "e".repeat(64) }));
+  assert.equal(other.duplicate, false);
+  assert.equal(events.length, 2, "a different file is not a replacement");
+});
+
 test("parser coverage is separate from the unperformed understanding omission audit", async () => {
   const { service } = fixture();
   const { source } = await service.register("user-one", upload());

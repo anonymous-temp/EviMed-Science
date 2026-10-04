@@ -19,6 +19,7 @@ import { ResultExportService } from "./resultExport.mjs";
 import { ResultRevisionService } from "./resultRevision.mjs";
 import { ResultCorrectionService } from "./resultCorrection.mjs";
 import { createResultReuseRoutes } from "./resultReuseRoutes.mjs";
+import { KnowledgeChangeService, producingAgenda } from "./knowledgeChange.mjs";
 import { ResultImpactService } from "./resultImpact.mjs";
 import { createResultImpactRoutes } from "./resultImpactRoutes.mjs";
 import { createResultSourceUpdatesRoutes } from "./resultSourceUpdatesRoutes.mjs";
@@ -1401,7 +1402,12 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const deleteAgentSubjects = (ownerId, only = null) => deleteSubjectAccounts(
     { apiKeys: agentApiKeys, store, memorySubstrate, memoryIndexing, capsuleTransfers: capsuleTransferService }, ownerId, { only });
   const agentKeyRoutes = createAgentKeyRoutes({ config, apiKeys: agentApiKeys, context, audit });
-  const sourceService = productDocuments && productJobs ? new SourceService(productDocuments, productJobs) : null;
+  // A file that arrives with new bytes for one the project already held is a source change: what rests on the old
+  // document is labelled and told (N15). `resultImpacts` is composed below; the hook runs only after boot.
+  const sourceService = productDocuments && productJobs ? new SourceService(productDocuments, productJobs, {
+    afterReplace: event => resultImpacts?.reconcileReplacement(event.userId, event) ?? Promise.resolve(null),
+    report: code => { void securityAudit(config, "source.replacement", "failed", { code }).catch(() => {}); },
+  }) : null;
   const documentParser = new DocumentParserClient({
     baseUrl: config.documentParserUrl,
     token: config.documentParserToken,
@@ -1961,8 +1967,16 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     engine: resultEngine, config, admission: client => heavyWorkAdmission(client, "replay"),
     report: code => process.stderr.write(`result replay: ${code}\n`) }) : null;
   const resultReplayRoutes = createResultReplayRoutes({ store, service: resultReplays });
+  // What a changed source reaches besides result versions: the memories that name it and the learned methods linked to the
+  // results that rest on it, each labelled (N15). And the one standing authorization a recheck may use: the running agenda
+  // whose episode produced the result. A paused or not-started agenda is none, and nothing here asks for another approval.
+  const knowledgeChange = new KnowledgeChangeService({ memory: researchMemory, methods: learningService,
+    report: code => { void securityAudit(config, "knowledge.change", "failed", { code }).catch(() => {}); } });
   const resultImpacts = resultProvenance ? new ResultImpactService({ documents: productDocuments, results: resultProvenance,
-    autopilot: autopilotService, notifications: notificationService }) : null;
+    autopilot: autopilotService, notifications: notificationService, knowledge: knowledgeChange,
+    authorizeContinuation: autopilotService && config.sourceChangeRecheckLimit > 0 ? producingAgenda({ results: resultProvenance, autopilot: autopilotService }) : null,
+    autoRecheckLimit: config.sourceChangeRecheckLimit,
+    report: code => { void securityAudit(config, "result.impact", "failed", { code }).catch(() => {}); } }) : null;
   // The numerical chain: which calculation a printed number came from, and the platform writing a report's numbers itself.
   const resultLineage = resultProvenance ? new ResultLineageService({ results: resultProvenance, replays: resultReplays, config,
     mirror: (project, full, bytes) => runtimeManager.mirrorWorkspaceUpload(project, full, bytes),
