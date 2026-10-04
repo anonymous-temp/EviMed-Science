@@ -35,7 +35,7 @@ function project({ calculationInputs = [source(DOI)] } = {}) {
   const containing = (version, filter) => (filter.inputs ? filter.inputs.some(want => (version.inputs ?? []).some(input => Object.entries(want).every(([key, value]) => input[key] === value)))
     : filter.bindingSources ? (version.bindings?.items ?? []).some(item => filter.bindingSources.includes(item.calculation.versionId)) : true);
   const results = {
-    async scope(userId, projectId) { if (userId === "alice" && projectId === "p") return { userId: "alice", id: "p" }; throw new Error("scope denied"); },
+    async scope(userId, projectId) { if (["alice", "bob"].includes(userId) && projectId === "p") return { userId: "alice", id: "p" }; throw new Error("scope denied"); },
     async list() { return { items: structuredClone(versions), nextCursor: null }; },
     async get(userId, projectId, id) {
       const row = versions.find(item => item.versionId === id);
@@ -349,7 +349,9 @@ test("the agenda that produced a result is the one authorization, and only while
   const resolve = producingAgenda({ results: f.service.results, autopilot });
   const impact = (versionId, calculations = []) => ({ projectId: "p", payload: { versionId, affected: { calculations: { items: calculations.map(id => ({ versionId: id })) } } } });
   assert.equal(await resolve("alice", impact(rv("1"))), "running");
-  assert.equal(await resolve("alice", impact(rv("2"), [rv("1")])), "running", "a report whose own run is unknown takes the agenda of the calculation it rests on");
+  delete f.versions[1].producer;
+  assert.equal(await resolve("alice", impact(rv("2"))), null, "a report that records no run has no agenda of its own");
+  assert.equal(await resolve("alice", impact(rv("2"), [rv("1")])), "running", "and takes the agenda of the calculation it rests on");
   assert.equal(await resolve("alice", impact(rv("3"))), null, "a chat run is no agenda's");
   assert.equal(await resolve("alice", impact(rv("6"))), null);
   for (const [run, expected] of [["run-paused", null], ["run-archived", null], ["run-elsewhere", null]]) {
@@ -375,4 +377,18 @@ test("the automatic recheck bound is a lever whose compose fallback is the code'
   assert.match(compose, new RegExp(`^ +OPEN_SCIENCE_SOURCE_CHANGE_RECHECK_LIMIT: \\$\\{OPEN_SCIENCE_SOURCE_CHANGE_RECHECK_LIMIT:-${config.sourceChangeRecheckLimit}\\}$`, "m"),
     "a compose fallback that differed from the code's default would override it");
   assert.match(await readFile(path.join(repoRoot, "deploy/web/.env.example"), "utf8"), new RegExp(`^OPEN_SCIENCE_SOURCE_CHANGE_RECHECK_LIMIT=${config.sourceChangeRecheckLimit}$`, "m"));
+});
+
+test("another member of the project sees the project's memories on an impact and not the account's own", async () => {
+  const memory = memoryDouble({ rows: [memoryRow("project-fact"), memoryRow("profile", { scope: "user", scopeId: null, kind: "profile" })] });
+  const f = fixture({ memory });
+  await f.service.reconcileSourceUpdate("alice", { projectId: "p", source: { id: DOI }, status: correction() });
+  const own = (await f.service.list("alice", { projectId: "p", versionId: rv("3") })).items[0].payload.affected.memories;
+  assert.deepEqual(own.items.map(item => item.recordId).sort(), ["profile", "project-fact"]);
+  const shared = (await f.service.list("bob", { projectId: "p", versionId: rv("3") })).items[0].payload.affected.memories;
+  assert.deepEqual(shared.items.map(item => item.recordId), ["project-fact"]);
+  assert.equal(shared.total, 1);
+  const alone = fixture({ memory: memoryDouble({ rows: [memoryRow("profile", { scope: "user", scopeId: null })] }) });
+  const reply = await alone.service.reconcileSourceUpdate("bob", { projectId: "p", source: { id: DOI }, status: correction() });
+  assert.equal(reply.items[0].payload.affected.memories.status, "none", "nothing of the account's is read out to a member who is not its owner");
 });

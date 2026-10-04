@@ -9,10 +9,11 @@ import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import { METHOD_SKILL_SCHEMA, parseSkillFrontmatter } from "@evimed/domain";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
-import { KnowledgeChangeService } from "../src/knowledgeChange.mjs";
+import { AutopilotService } from "../src/autopilotService.mjs";
+import { KnowledgeChangeService, producingAgenda } from "../src/knowledgeChange.mjs";
 import { LearningService } from "../src/learningService.mjs";
 import { migrateProductStore } from "../src/productPersistence.mjs";
-import { ProductDocuments } from "../src/productStore.mjs";
+import { ProductDocuments, ProductJobs } from "../src/productStore.mjs";
 import { ResearchMemoryStore } from "../src/researchMemory.mjs";
 import { ResultImpactService } from "../src/resultImpact.mjs";
 
@@ -56,7 +57,7 @@ const binding = (calculationId, key, printed) => ({ basis: "matched", printed, c
 
 /** A project's result ledger as the real documents hold it: one calculation, the report bound to it, a report that read a
  * knowledge-base document by its bytes, and two versions that rest on nothing the tests change. */
-async function setup() {
+async function setup({ runId = null } = {}) {
   const owner = `knowledge_change_${randomUUID()}`; owners.push(owner);
   await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Knowledge change test','development')", [owner]);
   const project = `prj_${randomUUID().slice(0, 8)}`;
@@ -64,9 +65,10 @@ async function setup() {
   const put = (versionId, payload) => documents.put(owner, "result-version", versionId, { recordType: "result-version", versionId, projectId: project, digest: hex("9"),
     machineValues: [], bindings: { items: [] }, findings: [], inputs: [], bindingSources: [], capturedAt: "2026-10-04T00:00:00Z", ...payload },
   { expectedRevision: 0, projectId: project });
-  await put(rv(1), { path: "results/pool.json", inputs: [source(DOI)], machineValues: [{ key: "pooled", value: 0.71 }], hasMachineValues: true });
+  const producer = runId ? { producer: { kind: "tool", runId } } : {};
+  await put(rv(1), { ...producer, path: "results/pool.json", inputs: [source(DOI)], machineValues: [{ key: "pooled", value: 0.71 }], hasMachineValues: true });
   const items = [binding(rv(1), "pooled", "0.71"), binding(rv(1), "ci.low", "0.5")];
-  await put(rv(2), { path: "report.md", bindings: { items }, bindingSources: [rv(1)] });
+  await put(rv(2), { ...producer, path: "report.md", bindings: { items }, bindingSources: [rv(1)] });
   await put(rv(3), { path: "kb-report.md", inputs: [{ kind: "data", id: "knowledge-base/trial.xlsx", path: "knowledge-base/trial.xlsx", digest: BYTES_OLD, versionId: null, availability: "captured" }] });
   await put(rv(4), { path: "results/other.json", inputs: [source("10.9999/other")], machineValues: [{ key: "x", value: 2 }], hasMachineValues: true });
   await put(rv(5), { path: "other-report.md", bindings: { items: [binding(rv(4), "x", "2")] }, bindingSources: [rv(4)] });
@@ -184,4 +186,57 @@ test("Postgres: the memory lookup is one account's, and a failed one is unknown 
   const degraded = await broken.reconcileSourceUpdate(f.owner, { projectId: f.project, source: { id: DOI, doi: DOI }, status: correction("retraction") });
   assert.equal(degraded.items.length, 2);
   assert.equal(degraded.items[0].payload.affected.memories.status, "unknown");
+});
+
+test("Postgres: the running agenda whose episode produced a result rechecks only what rests on the source; a paused or not started one starts nothing", options, async () => {
+  const f = await setup({ runId: "run-origin" });
+  const jobs = new ProductJobs(database);
+  let impacts;
+  const autopilot = new AutopilotService({ documents, jobs, authorizeContinuation: (...args) => impacts.assertContinuation(...args) });
+  const created = await autopilot.create(f.owner, { projectId: f.project, title: "Pooled effect upkeep", topics: ["pooled effect"], taskTypes: ["evidence-update"],
+    dailyBudgetCny: 20, weeklyBudgetCny: 80, maxEpisodeCny: 8, timeZone: "UTC", scheduleHour: 1 });
+  const origin = async () => {
+    const started = await autopilot.start(f.owner, created.id, { expectedRevision: (await autopilot.get(f.owner, created.id)).revision });
+    const { episode } = await autopilot.schedule(f.owner, started.id, { trigger: "manual", requestId: `origin-${randomUUID()}` });
+    await autopilot.markEpisodeDispatched(f.owner, episode.id, { runId: "run-origin", sessionId: "session-origin" });
+    return started;
+  };
+  const results = f.impacts.results;
+  impacts = new ResultImpactService({ documents, results, autopilot, knowledge: new KnowledgeChangeService({ memory, methods: learning }),
+    authorizeContinuation: producingAgenda({ results, autopilot }), now: () => new Date("2026-10-04T12:00:00Z") });
+
+  // Not started: the agenda exists and has produced nothing yet, so no standing authorization exists.
+  const notStarted = await impacts.reconcileSourceUpdate(f.owner, { projectId: f.project, source: { id: DOI, doi: DOI }, status: correction() });
+  assert.equal(notStarted.items.length, 2);
+  assert.ok(notStarted.items.every(item => item.payload.continuation.status === "awaiting_user"));
+  const queued = async () => (await documents.list(f.owner, "episode", { projectId: f.project })).items.filter(row => row.payload.continuationBinding);
+  assert.equal((await queued()).length, 0);
+
+  // Running: the agenda whose episode produced the result is the authorization, and nothing asks again.
+  const running = await origin();
+  await impacts.reconcileSourceUpdate(f.owner, { projectId: f.project, source: { id: DOI, doi: DOI }, status: correction() });
+  const scheduled = (await impacts.list(f.owner, { projectId: f.project })).items;
+  assert.ok(scheduled.every(item => item.payload.continuation.status === "scheduled" && item.payload.continuation.agendaId === running.id), "both affected versions continue in the agenda that produced them");
+  const episodes = await queued();
+  assert.equal(episodes.length, 2);
+  for (const episode of episodes) {
+    const note = episode.payload.followUpNote;
+    assert.match(note, new RegExp(rv(1)), "the calculation that rests on the source is named");
+    assert.doesNotMatch(note, new RegExp(`${rv(3)}|${rv(4)}|${rv(5)}`), "no unaffected version is named");
+    assert.match(note, /does not by itself show the result's conclusion is wrong/);
+    assert.match(note, /leave every other result, calculation, memory and method as it is/);
+  }
+  // The versions nothing rests on were not touched.
+  assert.equal((await documents.list(f.owner, "result-impact", { projectId: f.project })).items.length, 2);
+
+  // Paused afterwards: a later change of the same kind starts nothing, and the researcher's own choice is still open.
+  const current = await autopilot.get(f.owner, running.id);
+  const paused = await documents.put(f.owner, "agenda", running.id, { ...current.payload, enabled: false, status: "paused", pauseReason: "Paused by the researcher." },
+    { expectedRevision: current.revision, projectId: f.project });
+  assert.equal(paused.payload.status, "paused");
+  const before = (await queued()).length;
+  const later = await impacts.reconcileSourceUpdate(f.owner, { projectId: f.project, source: { id: DOI, doi: DOI }, status: correction("retraction") });
+  assert.equal(later.items.length, 2);
+  assert.ok(later.items.every(item => item.payload.continuation.status === "awaiting_user"));
+  assert.equal((await queued()).length, before);
 });

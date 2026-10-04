@@ -109,6 +109,17 @@ function impactBody(checked, affected) {
     + `${unknown.some(name => name === "memories" || name === "methods") ? "有些依赖暂时查不到，不能当作没有。" : ""}可以检查受影响的部分并继续研究。`;
 }
 
+/**
+ * What a reader of the project is shown of the memories that rest on the source: the account's own memories (its profile,
+ * its preferences) are the owner's, so another member of the project sees only the ones scoped to the project.
+ * @param {any} affected @param {boolean} owner
+ */
+function readableBy(affected, owner) {
+  if (owner || !affected?.memories?.items) return affected;
+  const items = affected.memories.items.filter(item => item.scope === "project");
+  return { ...affected, memories: { ...affected.memories, items, total: items.length, status: items.length ? "found" : "none" } };
+}
+
 /** The printed values of a version that are bound to one calculation: how many, and the first few keys. */
 function boundTo(version, calculationId) {
   const items = (version.bindings?.items ?? []).filter(item => item.calculation?.versionId === calculationId);
@@ -158,21 +169,21 @@ export class ResultImpactService {
     if (versionId) await this.results.get(userId, projectId, versionId);
     const page = await this.documents.list(project.userId, "result-impact", { projectId, limit, cursor,
       filter: { recordType: "result-impact", ...(versionId ? { versionId } : {}) } });
-    return { ...page, items: await Promise.all(page.items.map(row => this.projectImpact(userId, projectId, row))) };
+    return { ...page, items: await Promise.all(page.items.map(row => this.projectImpact(userId, projectId, row, { owner: userId === project.userId }))) };
   }
 
   async get(userId, projectId, id) {
     const project = await this.results.scope(userId, projectId);
     const row = await this.documents.get(project.userId, "result-impact", id);
     if (!row || row.projectId !== projectId) throw new HttpError(404, "result_impact_not_found", "This result impact is unavailable.");
-    return this.projectImpact(userId, projectId, row);
+    return this.projectImpact(userId, projectId, row, { owner: userId === project.userId });
   }
 
   /**
    * Preserve the advisory row; current source permissions bound every public read. A version that rests on the source
    * through a calculation among its bound values is read the same way, by that calculation's own recorded inputs.
    */
-  async projectImpact(userId, projectId, row) {
+  async projectImpact(userId, projectId, row, { owner = true } = {}) {
     const version = await this.results.get(userId, projectId, row.payload.versionId);
     const holders = [version];
     for (const item of row.payload.affected?.calculations?.items ?? []) {
@@ -182,7 +193,7 @@ export class ResultImpactService {
     const matchesSource = holders.flatMap(holder => (holder.inputs ?? []).filter(input => matches({ ...input,
       availability: input.availability === "restricted" ? "reference" : input.availability }, row.payload.source)));
     if (matchesSource.some(input => !["restricted", "deleted"].includes(input.availability))) {
-      return row.payload.affected ? { ...row, payload: { ...row.payload, affected: projectAffected(row.payload.affected) } } : row;
+      return row.payload.affected ? { ...row, payload: { ...row.payload, affected: readableBy(projectAffected(row.payload.affected), owner) } } : row;
     }
     return { ...row, payload: { schemaVersion: row.payload.schemaVersion, recordType: "result-impact", versionId: row.payload.versionId,
       source: { id: "unavailable-source" }, sourceStatus: { state: "unavailable", checkedAt: null,
@@ -303,7 +314,7 @@ export class ResultImpactService {
     /** Does a calculation still rest on the source, and what is bound to it. @param {string} calculationId */
     const calculation = async calculationId => {
       if (!calculations.has(calculationId)) {
-        const entry = { version: null, rests: false, dependents: null, unknown: null };
+        const entry = { version: null, rests: false, unknown: null };
         try {
           entry.version = await this.results.get(userId, projectId, calculationId);
           entry.rests = (entry.version.inputs ?? []).some(input => matches(input, ref) && input.availability !== "deleted");
@@ -384,7 +395,7 @@ export class ResultImpactService {
           } catch (error) { this.report(typeof error?.code === "string" ? error.code : "result_impact_continuation_failed"); row = await this.documents.get(ownerId, "result-impact", id) ?? row; }
         }
       }
-      items.push(await this.projectImpact(userId, projectId, row));
+      items.push(await this.projectImpact(userId, projectId, row, { owner: userId === ownerId }));
     }
     // A source that changed and that no result of this project names may still be one the researcher's memories and methods
     // rest on: that is told in the inbox too, once for the change.
