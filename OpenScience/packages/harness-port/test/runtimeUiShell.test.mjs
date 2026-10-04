@@ -108,6 +108,11 @@ test("operators can use native kernel statistics while ordinary reader chrome st
   // tool-view outlet anchor (both anchors `display:contents`); a call with
   // sub-calls keeps its row.
   assert.ok(css.includes('[data-chat-flow-kind="tool-call"]:has(> [data-slot="conversation.chat.node"] > [data-chat-call-id] > [data-slot="tool.call.toolview"]:only-child:empty){display:none !important}'));
+  // A row the researcher's transcript draws nothing for leaves no band either:
+  // the flow item is hidden when its chat-node outlet anchor holds nothing, and
+  // only for the three kinds `runtimeUiTranscript.mjs` takes over.
+  assert.ok(css.includes(':is([data-chat-flow-kind="unknown"],[data-chat-flow-kind="system-prompt"],[data-chat-flow-kind="context"]):has(> [data-slot="conversation.chat.node"]:empty){display:none !important}'));
+  assert.doesNotMatch(css, /\[data-chat-flow-kind="(?:assistant-step|user|compaction)"\]/, 'a row the reader is meant to see is never hidden by shape');
   // The host supplies the existing operator flag; this is presentation only.
   const operator = fixture();
   operator.target.__EVIMED_FRAME__.operator = true;
