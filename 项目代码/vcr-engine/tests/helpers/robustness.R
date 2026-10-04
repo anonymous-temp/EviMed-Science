@@ -19,11 +19,18 @@
 #' replicates)` -- the shape `vcr_test_handler_jobs()` returns.
 vcr_test_robustness_handler_jobs <- function() {
   .vcr_with_seed(41L, {
-    n <- 90L
-    d <- data.frame(USUBJID = sprintf("R%03d", seq_len(n)), arm = rep(0:1, times = c(60L, 30L)), x1 = stats::rnorm(n), x2 = stats::rbinom(n, 1L, 0.5), stringsAsFactors = FALSE)
-    d$x1[d$arm == 1L] <- d$x1[d$arm == 1L] + 0.3
+    n <- 120L
+    d <- data.frame(USUBJID = sprintf("R%03d", seq_len(n)), arm = rep(0:1, each = n / 2L), x1 = stats::rnorm(n), x2 = stats::rbinom(n, 1L, 0.5), stringsAsFactors = FALSE)
+    d$x1[d$arm == 1L] <- d$x1[d$arm == 1L] + 0.15
     d$fracture <- stats::rbinom(n, 1L, 0.25); d$cataract <- stats::rbinom(n, 1L, 0.3); d$death <- stats::rbinom(n, 1L, 0.2)
     in_nc <- vcr_test_input(d, "snp_e05r:subject", "subject")
+    # a small time-to-event trial for the tipping-point analysis: exponential, dropout, administrative censoring at 24
+    nt <- 120L; arm <- rep(0:1, each = nt / 2L)
+    t_event <- stats::rexp(nt, 0.08 * ifelse(arm == 1L, 0.6, 1)); t_drop <- stats::rexp(nt, 0.05)
+    tm <- pmin(t_event, t_drop, 24); st <- as.integer(t_event <= pmin(t_drop, 24))
+    tt <- data.frame(USUBJID = sprintf("Q%03d", seq_len(nt)), arm = arm)
+    in_tt_s <- vcr_test_input(tt, "snp_e05r:tt_subject", "subject")
+    in_tt_e <- vcr_test_input(data.frame(USUBJID = tt$USUBJID, PARAMCD = "OS", AVAL = tm, CNSR = 1L - st), "snp_e05r:tt_event", "event")
     list(
       list("comparator.negative_control", list(
         controls = list(list(name = "fracture", estimate = 0.12, se = 0.2), list(name = "cataract", estimate = -0.05, se = 0.15),
@@ -33,7 +40,14 @@ vcr_test_robustness_handler_jobs <- function() {
       list("comparator.negative_control", list(
         covariates = list("x1", "x2"), treatmentColumn = "arm",
         controls = list(list(name = "fracture", column = "fracture"), list(name = "cataract", column = "cataract")),
-        primary = list(name = "death", column = "death")), list(in_nc))
+        primary = list(name = "death", column = "death")), list(in_nc)),
+      list("comparator.tipping_point", list(
+        endpoint = list(type = "binary"), design = list(kind = "two_arm"),
+        counts = list(treatment = list(n = 60, responders = 36, missing = 6), control = list(n = 60, responders = 22, missing = 8)),
+        analysis = list(method = "fisher_exact", alpha = 0.025, sided = 1)), NULL),
+      list("comparator.tipping_point", list(
+        endpoint = list(type = "time_to_event"), horizon = 24, treatmentColumn = "arm", deltas = list(1, 1.5, 2, 4)),
+        list(in_tt_s, in_tt_e), 40L)
     )
   })
 }

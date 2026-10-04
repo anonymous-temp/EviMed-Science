@@ -139,7 +139,8 @@ vcr_case("E05", c("AC-04", "AC-28"), function() {
                        vcr_test_issue_codes(r)), collapse = "+"))
   })
   bad <- Filter(function(o) !o$ok, out)
-  ok <- isTRUE(h$ok) && length(bad) == 0L && length(out) == length(d$methods)
+  # every declared method has a job here (a method may have more than one: the robustness methods run once per way in)
+  ok <- isTRUE(h$ok) && length(bad) == 0L && setequal(vapply(out, function(o) o$method, character(1)), names(d$methods))
   list(pass = ok,
        detail = sprintf("health ok=%s, %d methods, lock %s; %d/%d handler results succeed, validate, echo the job, carry a source on every measure and a recomputable output hash%s",
                         h$ok, length(h$methods), substr(h$packageLockHash, 1, 12), length(out) - length(bad), length(out),

@@ -125,6 +125,175 @@
           }
         ]
       }
+    },
+    {
+      "name": "tipping_point, binary two-arm counts",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "tipping_point",
+        "method": "comparator.tipping_point",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "binary"
+          },
+          "design": {
+            "kind": "two_arm"
+          },
+          "counts": {
+            "treatment": {
+              "n": 60,
+              "responders": 36,
+              "missing": 6
+            },
+            "control": {
+              "n": 60,
+              "responders": 22,
+              "missing": 8
+            }
+          },
+          "analysis": {
+            "method": "fisher_exact",
+            "alpha": 0.025,
+            "sided": 1
+          }
+        },
+        "inputs": []
+      }
+    },
+    {
+      "name": "tipping_point, binary single arm from a column",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "tipping_point",
+        "method": "comparator.tipping_point",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "binary"
+          },
+          "design": {
+            "kind": "single_arm"
+          },
+          "outcomeColumn": "response",
+          "missingHandling": "complete_cases",
+          "analysis": {
+            "method": "exact_binomial",
+            "nullRate": 0.3,
+            "alpha": 0.05,
+            "sided": 1
+          },
+          "direction": "in_favour"
+        },
+        "inputs": [
+          {
+            "kind": "snapshot_file",
+            "id": "snp_1:1",
+            "location": "std_1/snp_1/raw1.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      }
+    },
+    {
+      "name": "tipping_point, binary two-arm risk-difference test from a column",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "tipping_point",
+        "method": "comparator.tipping_point",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "binary"
+          },
+          "design": {
+            "kind": "two_arm"
+          },
+          "outcomeColumn": "response",
+          "treatmentColumn": "arm",
+          "analysis": {
+            "method": "risk_difference",
+            "sided": 2
+          }
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      }
+    },
+    {
+      "name": "tipping_point, time to event",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "tipping_point",
+        "method": "comparator.tipping_point",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "horizon": 24,
+          "treatmentColumn": "arm",
+          "parameterCode": "OS",
+          "deltas": [
+            1,
+            1.5,
+            2,
+            4,
+            1000000000
+          ],
+          "deltaApplies": "both_opposite",
+          "direction": "against_treatment",
+          "analysis": {
+            "alpha": 0.025,
+            "sided": 1
+          },
+          "timeUnit": "months"
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          },
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:events",
+            "shape": "events",
+            "location": "std_1/snp_1/events.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ],
+        "replicates": 200
+      }
     }
   ],
   "invalid": [
@@ -454,6 +623,617 @@
             "kind": "snapshot_file",
             "id": "snp_1:1",
             "location": "std_1/snp_1/raw1.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "synthetic"
+          }
+        ]
+      },
+      "expected": [
+        "input_source_not_individual@inputs[0].valueSource"
+      ]
+    },
+    {
+      "name": "tipping_point: counts and a column together",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "tipping_point",
+        "method": "comparator.tipping_point",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "binary"
+          },
+          "design": {
+            "kind": "two_arm"
+          },
+          "counts": {
+            "treatment": {
+              "n": 60,
+              "responders": 36,
+              "missing": 6
+            },
+            "control": {
+              "n": 60,
+              "responders": 22,
+              "missing": 8
+            }
+          },
+          "analysis": {
+            "method": "fisher_exact",
+            "alpha": 0.025,
+            "sided": 1
+          },
+          "outcomeColumn": "y"
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.outcomeColumn"
+      ]
+    },
+    {
+      "name": "tipping_point: neither counts nor a column",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "tipping_point",
+        "method": "comparator.tipping_point",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "binary"
+          },
+          "design": {
+            "kind": "two_arm"
+          },
+          "analysis": {
+            "method": "fisher_exact"
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_field_missing@scenario.counts"
+      ]
+    },
+    {
+      "name": "tipping_point: a two-arm design with no control counts",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "tipping_point",
+        "method": "comparator.tipping_point",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "binary"
+          },
+          "design": {
+            "kind": "two_arm"
+          },
+          "counts": {
+            "treatment": {
+              "n": 60,
+              "responders": 36,
+              "missing": 6
+            }
+          },
+          "analysis": {
+            "method": "fisher_exact",
+            "alpha": 0.025,
+            "sided": 1
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_field_missing@scenario.counts.control"
+      ]
+    },
+    {
+      "name": "tipping_point: a single-arm design with control counts",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "tipping_point",
+        "method": "comparator.tipping_point",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "binary"
+          },
+          "design": {
+            "kind": "single_arm"
+          },
+          "counts": {
+            "treatment": {
+              "n": 60,
+              "responders": 36,
+              "missing": 6
+            },
+            "control": {
+              "n": 60,
+              "responders": 22,
+              "missing": 8
+            }
+          },
+          "analysis": {
+            "method": "exact_binomial",
+            "nullRate": 0.3
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.counts.control"
+      ]
+    },
+    {
+      "name": "tipping_point: a single-arm design with no null rate",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "tipping_point",
+        "method": "comparator.tipping_point",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "binary"
+          },
+          "design": {
+            "kind": "single_arm"
+          },
+          "counts": {
+            "treatment": {
+              "n": 60,
+              "responders": 36,
+              "missing": 6
+            }
+          },
+          "analysis": {
+            "method": "exact_binomial"
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_field_missing@scenario.analysis.nullRate"
+      ]
+    },
+    {
+      "name": "tipping_point: a test that does not belong to the design",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "tipping_point",
+        "method": "comparator.tipping_point",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "binary"
+          },
+          "design": {
+            "kind": "two_arm"
+          },
+          "counts": {
+            "treatment": {
+              "n": 60,
+              "responders": 36,
+              "missing": 6
+            },
+            "control": {
+              "n": 60,
+              "responders": 22,
+              "missing": 8
+            }
+          },
+          "analysis": {
+            "method": "exact_binomial"
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.analysis.method"
+      ]
+    },
+    {
+      "name": "tipping_point: an analysis with no test",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "tipping_point",
+        "method": "comparator.tipping_point",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "binary"
+          },
+          "design": {
+            "kind": "two_arm"
+          },
+          "counts": {
+            "treatment": {
+              "n": 60,
+              "responders": 36,
+              "missing": 6
+            },
+            "control": {
+              "n": 60,
+              "responders": 22,
+              "missing": 8
+            }
+          },
+          "analysis": {
+            "alpha": 0.05
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_field_missing@scenario.analysis.method"
+      ]
+    },
+    {
+      "name": "tipping_point: a design missing",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "tipping_point",
+        "method": "comparator.tipping_point",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "binary"
+          },
+          "counts": {
+            "treatment": {
+              "n": 60,
+              "responders": 36,
+              "missing": 6
+            },
+            "control": {
+              "n": 60,
+              "responders": 22,
+              "missing": 8
+            }
+          },
+          "analysis": {
+            "method": "fisher_exact"
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_field_missing@scenario.design"
+      ]
+    },
+    {
+      "name": "tipping_point: a count that is not a whole number",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "tipping_point",
+        "method": "comparator.tipping_point",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "binary"
+          },
+          "design": {
+            "kind": "two_arm"
+          },
+          "counts": {
+            "treatment": {
+              "n": 60.5,
+              "responders": 36,
+              "missing": 6
+            },
+            "control": {
+              "n": 60,
+              "responders": 22,
+              "missing": 8
+            }
+          },
+          "analysis": {
+            "method": "fisher_exact",
+            "alpha": 0.025,
+            "sided": 1
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.counts.treatment.n"
+      ]
+    },
+    {
+      "name": "tipping_point: a time-to-event key in a binary scenario",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "tipping_point",
+        "method": "comparator.tipping_point",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "binary"
+          },
+          "design": {
+            "kind": "two_arm"
+          },
+          "counts": {
+            "treatment": {
+              "n": 60,
+              "responders": 36,
+              "missing": 6
+            },
+            "control": {
+              "n": 60,
+              "responders": 22,
+              "missing": 8
+            }
+          },
+          "analysis": {
+            "method": "fisher_exact",
+            "alpha": 0.025,
+            "sided": 1
+          },
+          "horizon": 24
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.horizon"
+      ]
+    },
+    {
+      "name": "tipping_point: a binary key in a time-to-event scenario",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "tipping_point",
+        "method": "comparator.tipping_point",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "horizon": 24,
+          "counts": {
+            "treatment": {
+              "n": 60,
+              "responders": 36,
+              "missing": 6
+            },
+            "control": {
+              "n": 60,
+              "responders": 22,
+              "missing": 8
+            }
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.counts"
+      ]
+    },
+    {
+      "name": "tipping_point: a time-to-event analysis with no horizon",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "tipping_point",
+        "method": "comparator.tipping_point",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "time_to_event"
+          }
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "observed"
+          }
+        ]
+      },
+      "expected": [
+        "scenario_field_missing@scenario.horizon"
+      ]
+    },
+    {
+      "name": "tipping_point: deltas that do not increase",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "tipping_point",
+        "method": "comparator.tipping_point",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "horizon": 24,
+          "deltas": [
+            2,
+            1
+          ]
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.deltas"
+      ]
+    },
+    {
+      "name": "tipping_point: a delta below one",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "tipping_point",
+        "method": "comparator.tipping_point",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "horizon": 24,
+          "deltas": [
+            0.5,
+            2
+          ]
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.deltas[0]"
+      ]
+    },
+    {
+      "name": "tipping_point: an unknown direction",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "tipping_point",
+        "method": "comparator.tipping_point",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "horizon": 24,
+          "direction": "sideways"
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.direction"
+      ]
+    },
+    {
+      "name": "tipping_point: a continuous endpoint",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "tipping_point",
+        "method": "comparator.tipping_point",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "continuous"
+          },
+          "horizon": 24
+        },
+        "inputs": []
+      },
+      "expected": [
+        "endpoint_not_supported@scenario.endpoint.type"
+      ]
+    },
+    {
+      "name": "tipping_point: a non-binary effect keyed in analysis for time to event",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "tipping_point",
+        "method": "comparator.tipping_point",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "horizon": 24,
+          "analysis": {
+            "method": "fisher_exact"
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.analysis.method"
+      ]
+    },
+    {
+      "name": "tipping_point: a synthetic table",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "tipping_point",
+        "method": "comparator.tipping_point",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20260929,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "horizon": 24
+        },
+        "inputs": [
+          {
+            "kind": "analysis_table",
+            "id": "snp_1:subject",
+            "shape": "subject",
+            "location": "std_1/snp_1/subject.csv",
             "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             "valueSource": "synthetic"
           }

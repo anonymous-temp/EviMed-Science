@@ -603,7 +603,7 @@ export const VCR_JOB_KINDS = frozen([
   'evalue', 'rmst', 'design_analytic', 'design_simulation', 'design_grid', 'assurance', 'procova',
   'accrual_forecast', 'map_prior', 'match_criteria',
   // --- appended (2026-10-04): the robustness methods ---
-  'negative_control_comparator',
+  'negative_control_comparator', 'tipping_point',
   // --- end robustness methods ---
 ])
 export const VCR_JOB_STATES = frozen(['queued', 'running', 'succeeded', 'failed', 'canceled', 'awaiting_budget'])

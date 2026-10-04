@@ -88,12 +88,13 @@ vcr_engine_handlers <- function() list(
   "accrual.poisson_gamma" = vcr_job_accrual,
   "matching.evaluate" = vcr_job_match_criteria,
   # --- robustness methods (2026-10-04); their code is in their own files ---
-  "comparator.negative_control" = vcr_job_negative_control
+  "comparator.negative_control" = vcr_job_negative_control,
+  "comparator.tipping_point" = vcr_job_tipping_point
   # --- end robustness methods ---
 )
 
 # --- robustness methods: modules sourced after the core list (their own files) ---
-VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "negative_control")
+VCR_ENGINE_SOURCE_FILES <- c(VCR_ENGINE_SOURCE_FILES, "negative_control", "tipping_point")
 # --- end robustness methods ---
 
 #' Startup self-check: the local registry and the domain must agree, exactly.

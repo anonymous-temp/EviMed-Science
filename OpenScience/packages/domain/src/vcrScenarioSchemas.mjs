@@ -361,6 +361,15 @@ const effectSource = (/** @type {Record<string, any>} */ extra = {}) => object({
   se: number({ gt: 0 }),
 }, { exactlyOne: [['column', 'estimate']], requires: { estimate: ['se'], se: ['estimate'] } })
 
+/** One arm of a binary tipping-point analysis: everyone in it, the observed responders, and how many outcomes are missing. */
+const TIPPING_ARM = object({
+  n: req(integer({ min: 1, max: 10_000_000 })),
+  responders: req(integer({ min: 0, max: 10_000_000 })),
+  missing: req(integer({ min: 0, max: 10_000_000 })),
+})
+const TWO_ARM = is('design.kind', 'two_arm')
+const SINGLE_ARM_DESIGN = is('design.kind', 'single_arm')
+
 // --- end robustness methods ---
 
 // ---------------------------------------------------------------------------
@@ -683,6 +692,37 @@ export const VCR_SCENARIO_SCHEMAS = deepFreeze({
     controls: req(array(effectSource({ name: req(string(CRITERION_NAME)) }), { min: 1, max: 500 })),
     primary: effectSource({ name: string(CRITERION_NAME) }),
   }),
+
+  // Tipping-point analysis for missing outcomes. Binary: exact enumeration over how many of the missing responded, from counts or
+  // from a 0/1 column with NA for a missing outcome. Time to event: a delta-adjusted hazard after censoring, by seeded multiple
+  // imputation (the job's `replicates` is the number of imputations; the engine refuses fewer than 40). The binary keys and the
+  // time-to-event keys are each gated by the endpoint, so a key of the other kind is refused by its path.
+  'comparator.tipping_point': object({
+    endpoint: req(ENDPOINT()),
+    treatmentColumn: { ...COLUMN, default: 'arm' },
+    cohortRules: COHORT_STEPS,
+    direction: string({ values: ['against_treatment', 'in_favour'] }),
+    // binary
+    design: req(gated(object({ kind: req(string({ values: ['two_arm', 'single_arm'] })) }), BINARY)),
+    counts: gated(object({
+      treatment: req(TIPPING_ARM),
+      control: { ...TIPPING_ARM, reqWhen: TWO_ARM, when: TWO_ARM },
+    }), BINARY),
+    outcomeColumn: gated(COLUMN, BINARY),
+    missingHandling: gated(string({ values: ['non_responders', 'complete_cases'], default: 'non_responders' }), BINARY),
+    // time to event
+    horizon: req(gated(number({ gt: 0, unit: 'time units' }), TIME_TO_EVENT)),
+    parameterCode: gated(string({ maxLength: 64 }), TIME_TO_EVENT),
+    timeUnit: gated(string({ maxLength: 20, default: 'months' }), TIME_TO_EVENT),
+    deltas: gated(array(number({ min: 1, max: 1_000_000_000 }), { min: 2, max: 60, increasing: true }), TIME_TO_EVENT),
+    deltaApplies: gated(string({ values: ['treatment', 'both_opposite'], default: 'treatment' }), TIME_TO_EVENT),
+    analysis: object({
+      method: req(gated(string({ valuesBy: { path: 'design.kind', map: { two_arm: ['fisher_exact', 'risk_difference'], single_arm: ['exact_binomial'] } } }), BINARY)),
+      nullRate: req(gated(number({ ...PROBABILITY }), [BINARY, SINGLE_ARM_DESIGN])),
+      alpha: ALPHA,
+      sided: integer({ min: 1, max: 2, default: 1 }),
+    }, { reqWhen: BINARY }),
+  }, { exactlyOne: [{ keys: ['counts', 'outcomeColumn'], when: BINARY }] }),
 
   // --- end robustness methods ---
 })

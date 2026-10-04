@@ -33,6 +33,7 @@ const keys = (issues) => issues.map((issue) => `${issue.code}@${issue.field}`).s
 /** The methods this file is about, with the job kind that runs each. */
 const METHODS = /** @type {const} */ ([
   ["comparator.negative_control", "negative_control_comparator"],
+  ["comparator.tipping_point", "tipping_point"],
 ])
 
 test("the robustness parity jobs: every valid one is clean, every invalid one names what it says, and each method has both", () => {

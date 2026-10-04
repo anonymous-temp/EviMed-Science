@@ -80,7 +80,7 @@ JOB_KINDS = (
     "evalue", "rmst", "design_analytic", "design_simulation", "design_grid", "assurance", "procova",
     "accrual_forecast", "map_prior", "match_criteria",
     # robustness methods (2026-10-04)
-    "negative_control_comparator",
+    "negative_control_comparator", "tipping_point",
 )
 POOLING_METHODS = ("single_study", "random_effects_dl", "random_effects_reml", "random_effects_hksj", "fixed_effect")
 POOLING_CALIBRES = ("closest", "overall", "next_closest")

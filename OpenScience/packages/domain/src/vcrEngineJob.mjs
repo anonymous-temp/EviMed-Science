@@ -100,6 +100,7 @@ export const VCR_ENGINE_METHODS = Object.freeze({
   'matching.evaluate': { version: '1.0.0', endpoints: frozen([]), crossChecks: frozen(['Kleene truth table']), modelTier: null },
   // --- robustness methods (2026-10-04). A new method is a new entry here, a job kind, a schema and a handler; none of the methods above changed. ---
   'comparator.negative_control': { version: '1.0.0', endpoints: frozen(['binary', 'time_to_event']), crossChecks: frozen(['EmpiricalCalibration 3.1.4 (sccs example)', 'Lipsitch 2010', 'Schuemie 2014']), modelTier: 'data' },
+  'comparator.tipping_point': { version: '1.0.0', endpoints: frozen(['binary', 'time_to_event']), crossChecks: frozen(['stats::fisher.test and stats::binom.test', 'closed-form worst case (censoring as event)', 'Jackson et al. 2014']), modelTier: 'data' },
   // --- end robustness methods ---
 })
 
@@ -138,6 +139,7 @@ export const VCR_JOB_METHODS = Object.freeze({
   match_criteria: 'matching.evaluate',
   // --- robustness methods ---
   negative_control_comparator: 'comparator.negative_control',
+  tipping_point: 'comparator.tipping_point',
   // --- end robustness methods ---
 })
 
@@ -165,6 +167,7 @@ export const VCR_INDIVIDUAL_INPUT_SOURCES = Object.freeze({
   'comparator.maic': VCR_REAL_PATIENT_SOURCES,
   // robustness methods
   'comparator.negative_control': VCR_REAL_PATIENT_SOURCES,
+  'comparator.tipping_point': VCR_REAL_PATIENT_SOURCES,
   'comparator.rmst': frozen([...VCR_REAL_PATIENT_SOURCES, 'reconstructed']),
 })
 /** The methods above, by name (kept for callers that only need the list). */

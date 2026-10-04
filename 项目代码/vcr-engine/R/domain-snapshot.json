@@ -261,6 +261,19 @@
         "Schuemie 2014"
       ],
       "modelTier": "data"
+    },
+    "comparator.tipping_point": {
+      "version": "1.0.0",
+      "endpoints": [
+        "binary",
+        "time_to_event"
+      ],
+      "crossChecks": [
+        "stats::fisher.test and stats::binom.test",
+        "closed-form worst case (censoring as event)",
+        "Jackson et al. 2014"
+      ],
+      "modelTier": "data"
     }
   },
   "jobMethods": {
@@ -288,7 +301,8 @@
     "accrual_forecast": "accrual.poisson_gamma",
     "map_prior": "comparator.map_prior",
     "match_criteria": "matching.evaluate",
-    "negative_control_comparator": "comparator.negative_control"
+    "negative_control_comparator": "comparator.negative_control",
+    "tipping_point": "comparator.tipping_point"
   },
   "patientLevelJobKinds": [
     "profile_snapshot",
@@ -306,6 +320,7 @@
     "comparator.propensity_weight",
     "comparator.maic",
     "comparator.negative_control",
+    "comparator.tipping_point",
     "comparator.rmst"
   ],
   "engineTableInputKeys": [
@@ -348,6 +363,12 @@
       "imputed"
     ],
     "comparator.negative_control": [
+      "observed",
+      "extracted",
+      "calculated",
+      "imputed"
+    ],
+    "comparator.tipping_point": [
       "observed",
       "extracted",
       "calculated",
@@ -5756,6 +5777,326 @@
           }
         }
       }
+    },
+    "comparator.tipping_point": {
+      "t": "object",
+      "fields": {
+        "endpoint": {
+          "t": "object",
+          "fields": {
+            "type": {
+              "t": "string",
+              "values": [
+                "continuous",
+                "binary",
+                "time_to_event"
+              ],
+              "badValueCode": "endpoint_unknown",
+              "req": true
+            }
+          },
+          "req": true
+        },
+        "treatmentColumn": {
+          "t": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+          "maxLength": 64,
+          "default": "arm"
+        },
+        "cohortRules": {
+          "t": "array",
+          "items": {
+            "t": "object",
+            "fields": {
+              "name": {
+                "t": "string",
+                "minLength": 1,
+                "maxLength": 80,
+                "req": true
+              },
+              "rule": {
+                "t": "rule",
+                "req": true
+              },
+              "unknownAs": {
+                "t": "string",
+                "values": [
+                  "include",
+                  "exclude"
+                ],
+                "default": "exclude"
+              }
+            }
+          },
+          "min": 1,
+          "max": 100
+        },
+        "direction": {
+          "t": "string",
+          "values": [
+            "against_treatment",
+            "in_favour"
+          ]
+        },
+        "design": {
+          "t": "object",
+          "fields": {
+            "kind": {
+              "t": "string",
+              "values": [
+                "two_arm",
+                "single_arm"
+              ],
+              "req": true
+            }
+          },
+          "when": {
+            "path": "endpoint.type",
+            "in": [
+              "binary"
+            ]
+          },
+          "req": true
+        },
+        "counts": {
+          "t": "object",
+          "fields": {
+            "treatment": {
+              "t": "object",
+              "fields": {
+                "n": {
+                  "t": "integer",
+                  "min": 1,
+                  "max": 10000000,
+                  "req": true
+                },
+                "responders": {
+                  "t": "integer",
+                  "min": 0,
+                  "max": 10000000,
+                  "req": true
+                },
+                "missing": {
+                  "t": "integer",
+                  "min": 0,
+                  "max": 10000000,
+                  "req": true
+                }
+              },
+              "req": true
+            },
+            "control": {
+              "t": "object",
+              "fields": {
+                "n": {
+                  "t": "integer",
+                  "min": 1,
+                  "max": 10000000,
+                  "req": true
+                },
+                "responders": {
+                  "t": "integer",
+                  "min": 0,
+                  "max": 10000000,
+                  "req": true
+                },
+                "missing": {
+                  "t": "integer",
+                  "min": 0,
+                  "max": 10000000,
+                  "req": true
+                }
+              },
+              "reqWhen": {
+                "path": "design.kind",
+                "in": [
+                  "two_arm"
+                ]
+              },
+              "when": {
+                "path": "design.kind",
+                "in": [
+                  "two_arm"
+                ]
+              }
+            }
+          },
+          "when": {
+            "path": "endpoint.type",
+            "in": [
+              "binary"
+            ]
+          }
+        },
+        "outcomeColumn": {
+          "t": "string",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_.]{0,63}$",
+          "maxLength": 64,
+          "when": {
+            "path": "endpoint.type",
+            "in": [
+              "binary"
+            ]
+          }
+        },
+        "missingHandling": {
+          "t": "string",
+          "values": [
+            "non_responders",
+            "complete_cases"
+          ],
+          "default": "non_responders",
+          "when": {
+            "path": "endpoint.type",
+            "in": [
+              "binary"
+            ]
+          }
+        },
+        "horizon": {
+          "t": "number",
+          "gt": 0,
+          "unit": "time units",
+          "when": {
+            "path": "endpoint.type",
+            "in": [
+              "time_to_event"
+            ]
+          },
+          "req": true
+        },
+        "parameterCode": {
+          "t": "string",
+          "maxLength": 64,
+          "when": {
+            "path": "endpoint.type",
+            "in": [
+              "time_to_event"
+            ]
+          }
+        },
+        "timeUnit": {
+          "t": "string",
+          "maxLength": 20,
+          "default": "months",
+          "when": {
+            "path": "endpoint.type",
+            "in": [
+              "time_to_event"
+            ]
+          }
+        },
+        "deltas": {
+          "t": "array",
+          "items": {
+            "t": "number",
+            "min": 1,
+            "max": 1000000000
+          },
+          "min": 2,
+          "max": 60,
+          "increasing": true,
+          "when": {
+            "path": "endpoint.type",
+            "in": [
+              "time_to_event"
+            ]
+          }
+        },
+        "deltaApplies": {
+          "t": "string",
+          "values": [
+            "treatment",
+            "both_opposite"
+          ],
+          "default": "treatment",
+          "when": {
+            "path": "endpoint.type",
+            "in": [
+              "time_to_event"
+            ]
+          }
+        },
+        "analysis": {
+          "t": "object",
+          "fields": {
+            "method": {
+              "t": "string",
+              "valuesBy": {
+                "path": "design.kind",
+                "map": {
+                  "two_arm": [
+                    "fisher_exact",
+                    "risk_difference"
+                  ],
+                  "single_arm": [
+                    "exact_binomial"
+                  ]
+                }
+              },
+              "when": {
+                "path": "endpoint.type",
+                "in": [
+                  "binary"
+                ]
+              },
+              "req": true
+            },
+            "nullRate": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "when": [
+                {
+                  "path": "endpoint.type",
+                  "in": [
+                    "binary"
+                  ]
+                },
+                {
+                  "path": "design.kind",
+                  "in": [
+                    "single_arm"
+                  ]
+                }
+              ],
+              "req": true
+            },
+            "alpha": {
+              "t": "number",
+              "gt": 0,
+              "lt": 1,
+              "default": 0.025
+            },
+            "sided": {
+              "t": "integer",
+              "min": 1,
+              "max": 2,
+              "default": 1
+            }
+          },
+          "reqWhen": {
+            "path": "endpoint.type",
+            "in": [
+              "binary"
+            ]
+          }
+        }
+      },
+      "exactlyOne": [
+        {
+          "keys": [
+            "counts",
+            "outcomeColumn"
+          ],
+          "when": {
+            "path": "endpoint.type",
+            "in": [
+              "binary"
+            ]
+          }
+        }
+      ]
     }
   },
   "designSupport": {
@@ -5890,7 +6231,8 @@
     "accrual_forecast",
     "map_prior",
     "match_criteria",
-    "negative_control_comparator"
+    "negative_control_comparator",
+    "tipping_point"
   ],
   "endpointTypes": [
     "continuous",
