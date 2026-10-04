@@ -30,7 +30,7 @@ import { runtimeReleasePolicyError } from "./releaseManifest.mjs";
 import { RuntimeControllerClient } from "./runtimeControllerClient.mjs";
 import { canonicalJson } from "@evimed/domain";
 import { extensionGenerationRoot, validateExtensionGenerationReference, verifyExtensionGeneration } from "./extensionGenerationService.mjs";
-import { PERSONAL_SKILLS_RUNTIME_DIR, personalGenerationRoot, validatePersonalGenerationReference, verifyPersonalSkillGeneration } from "./personalSkillGenerationService.mjs";
+import { PERSONAL_SKILLS_RUNTIME_DIR, personalGenerationRoot, samePersonalPackages, validatePersonalGenerationReference, verifyPersonalSkillGeneration } from "./personalSkillGenerationService.mjs";
 // Knowledge-base search reaches the MCP server by this one variable (2026-09-20).
 import { kbSearchGatewayProviderUrl } from "./kbSearchGateway.mjs";
 // So does 「前沿动态」 search (2026-09-22), for an account the module is open to.
@@ -3951,8 +3951,14 @@ export class RuntimeManager {
       catch { extensionGeneration = null; }
     }
     if (extensionGeneration && !this.extensionGenerationOverrides.has(key)
-      && canonicalJson(extensionGeneration.projection.personal.reference ?? null) !== canonicalJson(personalSkillGeneration?.reference ?? null)) {
-      // A fresh personal apply/removal must never be overwritten by an older composite stamp.
+      && !samePersonalPackages(extensionGeneration.projection.personal, personalSkillGeneration)) {
+      // A fresh personal apply/removal must never be overwritten by an older
+      // composite stamp. "Fresh" is a change of the skills themselves: a
+      // generation's reference embeds the runtime image, so after a release the
+      // reference of every project's personal skills differs from the one the
+      // composite was stamped with while the skills are what they were — and
+      // comparing references unmounted the installed extension of every project
+      // that also has personal skills (2026-10-04).
       extensionGeneration = null;
     }
     if (extensionGeneration) {
