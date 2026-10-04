@@ -812,14 +812,15 @@ export const CREDIT_ERROR_CODES = Object.freeze([
  * overwhelming majority are tool-boundary codes that never end a run (until
  * 2026-10-04 `terminalFromMessages` collapsed an uncorrected one into
  * `runtime_tool_error`; now it reaches a researcher only as a notice on a run
- * that finished), while fifteen codes that really do end runs — `runtime_monitor_stalled`,
- * `specialist_deliverable_not_accepted`, `superseded_by_dispatch` and the rest
- * of this list — were in no registry at all. The browser filled the gap with a
- * twenty-key table of its own whose default sentence was 「运行未通过核验。」,
- * so a run killed on a fifteen-minute stall timer told the researcher their
- * evidence had failed quality control. Every member here therefore carries an
- * *exact* sentence (the family fallback is not good enough for a verdict) and
- * an outcome class, and the test holds that line.
+ * that finished), while fifteen codes that really do end runs —
+ * `runtime_monitor_stalled`, `specialist_deliverable_not_accepted`,
+ * `superseded_by_dispatch` and the rest of this list — were in no registry at
+ * all. The browser filled the gap with a twenty-key table of its own whose
+ * default sentence was 「运行未通过核验。」, so a run killed on a fifteen-minute
+ * stall timer told the researcher their evidence had failed quality control.
+ * Every member here therefore carries an *exact* sentence (the family fallback
+ * is not good enough for a verdict) and an outcome class, and the test holds
+ * that line.
  *
  * Not a closed set at runtime, and deliberately not treated as one:
  * `sanitizeErrorCode` admits any well-formed lowercase identifier, and the run
