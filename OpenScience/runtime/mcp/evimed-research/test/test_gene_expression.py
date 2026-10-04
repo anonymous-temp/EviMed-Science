@@ -9,6 +9,7 @@ base R's `t.test` and `p.adjust`, computed by `evals/gene-expression-analysis/re
 nothing of this module; the comparison below states its tolerance. Everything else is synthetic and says so.
 """
 
+import importlib.util
 import csv
 import gzip
 import hashlib
@@ -186,6 +187,9 @@ class ParseTests(unittest.TestCase):
 
 
 class StatisticsTests(unittest.TestCase):
+    # statsmodels is in the runtime image and in CI's test environment at the image's pin; a machine without it
+    # skips this one cross-check by name (the base-R reference table and the scipy comparison still run).
+    @unittest.skipUnless(importlib.util.find_spec("statsmodels"), "statsmodels is not installed here")
     def test_benjamini_hochberg_equals_statsmodels(self):
         import numpy as np
         from statsmodels.stats.multitest import multipletests
