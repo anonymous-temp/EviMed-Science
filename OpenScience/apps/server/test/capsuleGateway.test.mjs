@@ -51,6 +51,19 @@ test("runtime capsule gateway derives identity only from an active signed worklo
   assert.deepEqual(f.calls[0].input.factKinds, ["preference"]);
 });
 
+test("a recall may name the time its question is about, and nothing else new", async (t) => {
+  const asked = [];
+  const memorySubstrate = { recall: async (userId, query, scope) => { asked.push({ userId, query, scope }); return []; } };
+  const f = await fixture(t, { memorySubstrate });
+  const timed = await f.request("recall", { query: "dose", scope: "conversation", asOf: "2025-06-30" });
+  assert.equal(timed.status, 200);
+  assert.equal((await timed.json()).asOf, "2025-06-30T23:59:59.999Z");
+  assert.equal(asked[0].scope.asOf, Date.parse("2025-06-30T23:59:59.999Z"));
+  assert.deepEqual([asked[0].userId, asked[0].scope.projectId], ["owner", "project-one"], "the account and the project still come from the credential");
+  assert.equal((await f.request("recall", { query: "dose", scope: "conversation", asOf: "last spring" })).status, 400);
+  assert.equal((await f.request("recall", { query: "dose", asOf: "2025-06-30", userId: "someone-else" })).status, 400);
+});
+
 test("capsule credentials stop working on expiry, rotation, runtime stop or account deletion", async (t) => {
   const f = await fixture(t);
   assert.equal((await f.request("recall", { query: "x" }, f.issue({ nowSeconds: Math.floor(Date.now() / 1000) - 400 }))).status, 401);
