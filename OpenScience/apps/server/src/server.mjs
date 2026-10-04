@@ -2,7 +2,7 @@ import { DocumentExportService, freezeArtifactDocument } from "./documentExport.
 import { ResultProvenanceService } from "./resultProvenanceService.mjs";
 import { createResultProvenanceRoutes } from "./resultProvenanceRoutes.mjs";
 import { createResultProducerCapture, createResultCaptureQueue } from "./resultProducerCapture.mjs";
-import { captureResultDelivery } from "./resultDeliveryCapture.mjs";
+import { captureFinishedRun } from "./resultDeliveryCapture.mjs";
 import { ResultReplayClient } from "./resultReplayClient.mjs";
 import { ResultEngineRouter } from "./resultEngineRouter.mjs";
 import { ResultVcrReplay } from "./resultVcrReplay.mjs";
@@ -2480,12 +2480,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (resultProvenance) {
         await resultCaptureQueue.drain();
         try {
-          const receipt = await readDeliveryReceipt(project, run);
-          if (receipt) {
-            const captured = await captureResultDelivery({ results: resultProvenance, project, run, receipt });
-            for (const failure of captured.failures) await securityAudit(config, "result.capture", "failed", {
-              userId: project.userId, projectId: project.id, runId: run.id, code: failure.code });
-          }
+          // Every deliverable file the run left gets a version, receipt or not
+          // (2026-10-04): the receipt labels what was graded, and the files a
+          // researcher was handed are theirs to inspect, revise, replay and
+          // export either way. Those the receipt does not vouch for are
+          // captured as observed.
+          const captured = await captureFinishedRun({ results: resultProvenance, project, run, readReceipt: readDeliveryReceipt });
+          for (const failure of captured?.failures ?? []) await securityAudit(config, "result.capture", "failed", {
+            userId: project.userId, projectId: project.id, runId: run.id, code: failure.code });
         } catch (error) {
           await securityAudit(config, "result.capture", "failed", { userId: project.userId, projectId: project.id,
             runId: run.id, code: error?.code ?? "result_capture_failed" });

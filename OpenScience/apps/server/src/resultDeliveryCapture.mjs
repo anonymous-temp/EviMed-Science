@@ -1,6 +1,7 @@
 /** Join a verified delivery receipt to exact clinical matrix and source snapshots. */
 import { createHash } from "node:crypto";
 import path from "node:path";
+import { workspaceLayout } from "@evimed/domain";
 import { claimEvidenceSources, claimVerification } from "@evimed/domain/clinical-evidence";
 import { normalizeResultPath } from "@evimed/domain/result-provenance";
 import { clinicalResultLinks } from "./resultImpact.mjs";
@@ -51,18 +52,55 @@ async function sourceCapture(project, relativePath, limit) {
 }
 
 /**
+ * The files of every deliverable the run left that its receipt holds no entry
+ * for, grouped by deliverable, as entries that carry no digest — there is
+ * nothing they were graded against, and the version they get says so
+ * (`producer: observed`, the gap `producer_bytes_not_bound`: the existing
+ * vocabulary for exactly this). A deliverable the receipt does vouch for keeps
+ * to the files it names.
+ *
+ * Only `deliverables/<id>/…`: the layout the platform writes a package into.
+ * @param {readonly string[]} files @param {any} receipt
+ * @returns {{ deliverableId: string, unbound: true, files: { path: string }[] }[]}
+ */
+function unreceiptedEntries(files, receipt) {
+  const graded = new Set((receipt?.entries ?? []).map(entry => String(entry.deliverableId)));
+  const prefix = `${workspaceLayout.deliverablesDir}/`;
+  /** @type {Map<string, string[]>} */
+  const byDeliverable = new Map();
+  for (const file of new Set(files)) {
+    if (typeof file !== "string" || !file.startsWith(prefix)) continue;
+    const [id, ...rest] = file.slice(prefix.length).split("/");
+    if (!id || id === "." || id === ".." || !rest.length || rest.some(part => !part) || graded.has(id)) continue;
+    byDeliverable.set(id, [...(byDeliverable.get(id) ?? []), file]);
+  }
+  return [...byDeliverable].map(([deliverableId, paths]) => ({ deliverableId, unbound: /** @type {const} */ (true), files: paths.map(file => ({ path: file })) }));
+}
+
+/**
  * Internal only. `receipt` has already passed readDeliveryReceipt; hashes are rechecked at publication.
  * Partial capture never withholds the delivered report. A failed matrix capture cannot promote its claims.
- * @param {{results:any,project:any,run:any,receipt:any}} input
+ *
+ * A receipt is our own record of what was graded, and it labels a result; it does
+ * not decide whether there is one (2026-10-04). Every deliverable file the run
+ * left — `files`, whether or not the receipt names it — gets a version, so what
+ * a researcher was handed can be inspected, revised, replayed and exported. A
+ * file with no receipt behind it, or one that changed after its receipt, is
+ * captured as observed: its bytes are exact, its producer is not bound to them,
+ * and no claim metadata is promoted from a matrix nothing graded.
+ * @param {{results:any,project:any,run:any,receipt?:any,files?:readonly string[]}} input
  */
-export async function captureResultDelivery({ results, project, run, receipt }) {
+export async function captureResultDelivery({ results, project, run, receipt = null, files = [] }) {
   const items = [];
   const sourceItems = [];
   const failures = [];
   const entries = [];
+  /** Paths captured without a receipt digest behind them. @type {string[]} */
+  const unbound = [];
   const sourceCache = new Map();
   const fail = (relativePath, error) => failures.push({ path: relativePath, code: error?.code ?? "result_capture_failed" });
-  for (const entry of receipt?.entries ?? []) {
+  for (const entry of [...(receipt?.entries ?? []), ...unreceiptedEntries(files, receipt)]) {
+    const graded = entry.unbound !== true;
     const producer = { kind: "deliverable", runId: run.id, sessionId: run.sessionId,
       eventId: String(entry.deliverableId), parentSessionId: run.parentSessionId ?? run.forkedFrom ?? null,
       branchId: run.branchId ?? (run.forkedFrom ? run.sessionId : null) };
@@ -71,7 +109,7 @@ export async function captureResultDelivery({ results, project, run, receipt }) 
     let links = { inputs: [], findings: [] };
     let matrixVersion = null;
     let review = null;
-    if (matrixFile) {
+    if (matrixFile && graded) {
       try {
         const bytes = await stableBytes(project, matrixFile.path, MAX_MATRIX_BYTES);
         if (sha(bytes) !== matrixFile.sha256 || bytes.length !== matrixFile.bytes) throw new HttpError(409, "result_capture_changed", "Evidence matrix no longer matches its delivery receipt.");
@@ -117,18 +155,46 @@ export async function captureResultDelivery({ results, project, run, receipt }) 
     for (const file of recorded) {
       if (matrixVersion && file.path === matrixFile.path) { capturedOutputs.push(matrixVersion); continue; }
       try {
+        const findings = (run.qualityFindings ?? []).map((finding, index) => ({
+          id: `run-finding-${index}`, kind: finding.code ?? "run_finding", status: finding.severity ?? "notice", message: finding.message ?? finding.text ?? "",
+        }));
         const input = { userId: project.userId, project, relativePath: file.path, producer, expectedDigest: file.sha256, review,
           inputs: [...links.inputs, ...(matrixVersion ? [{ kind: "artifact", id: matrixVersion.artifactId, digest: matrixVersion.digest,
             versionId: matrixVersion.versionId, path: matrixVersion.path, availability: "captured" }] : [])],
-          findings: [...links.findings, ...(run.qualityFindings ?? []).map((finding, index) => ({
-            id: `run-finding-${index}`, kind: finding.code ?? "run_finding", status: finding.severity ?? "notice", message: finding.message ?? finding.text ?? "",
-          }))] };
-        if (!DIGEST.test(file.sha256 ?? "")) throw new HttpError(409, "result_capture_receipt_invalid", "A delivery output must carry its exact byte digest.");
-        const output = await results.captureFile(input);
+          findings: [...links.findings, ...findings] };
+        let output;
+        if (graded) {
+          if (!DIGEST.test(file.sha256 ?? "")) throw new HttpError(409, "result_capture_receipt_invalid", "A delivery output must carry its exact byte digest.");
+          try { output = await results.captureFile(input); }
+          catch (error) {
+            if (error?.code !== "result_capture_changed") throw error;
+            // Changed after its receipt: still the file the run produced. It
+            // is captured as the bytes it is now, with nothing the receipt
+            // vouched for — no digest binding, no claim links, no review.
+            output = await results.captureFile({ userId: project.userId, project, relativePath: file.path, producer, findings });
+            unbound.push(file.path);
+          }
+        } else {
+          output = await results.captureFile({ userId: project.userId, project, relativePath: file.path, producer, findings });
+          unbound.push(file.path);
+        }
         items.push(output); capturedOutputs.push(output);
       } catch (error) { fail(file.path, error); }
     }
     entries.push({ deliverableId: entry.deliverableId, versions: capturedOutputs, metadata: matrixVersion ? "clinical_links_captured" : matrixFile ? "unavailable" : "not_applicable" });
   }
-  return { items, sourceItems, failures, entries };
+  return { items, sourceItems, failures, entries, unbound };
+}
+
+/**
+ * What a finished run hands to capture: its receipt when it left a valid one,
+ * and every deliverable file it listed, graded or not. Nothing to capture is
+ * `null`; a run that left neither a receipt nor a file is not an error.
+ * @param {{results:any,project:any,run:any,readReceipt:(project:any, run:any)=>Promise<any>}} input
+ */
+export async function captureFinishedRun({ results, project, run, readReceipt }) {
+  const receipt = await readReceipt(project, run);
+  const files = [...(run.artifacts ?? []), ...(run.unverifiedArtifacts ?? [])];
+  if (!receipt && files.length === 0) return null;
+  return captureResultDelivery({ results, project, run, receipt, files });
 }
