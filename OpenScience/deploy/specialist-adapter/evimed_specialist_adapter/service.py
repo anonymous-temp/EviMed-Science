@@ -601,24 +601,50 @@ def _model_ready() -> bool:
     return os.getenv("LLM_MODEL", "").strip() == "deepseek-flash"
 
 
-# The connectors this adapter's engine reads directly, outside the control
-# plane's public-source gateway, keyed by the environment variable the engine
+# The connectors each engine reads directly from its own environment, outside the
+# control plane's public-source gateway: connector id -> the variable the engine
 # expects. Every other source goes through the gateway, which applies the same
 # precedence — deployment first, then the researcher's own — without our help.
-_JOB_CONNECTOR_ENV = {"mendelian-randomization": {"opengwas": "OPENGWAS_JWT"}}
+#
+# A source nobody configured is the researcher's to configure when they use it
+# (2026-10-04 ruling), so what they saved reaches the engine for their job: asked
+# of the control plane with the caller's own workload token, handed to the worker
+# as an environment variable of that one process, never written to the state file
+# and never logged. `apps/server/test/connectorCredentials.test.mjs` holds the
+# connector ids here to the control plane's `JOB_SCOPED_CONNECTORS`.
+_JOB_CONNECTOR_ENV = {
+    "mendelian-randomization": {"opengwas": "OPENGWAS_JWT", "umls": "UMLS_API_KEY"},
+    "bibliometric-analysis": {"ncbi": "NCBI_API_KEY"},
+    "research-topic-selection": {"ncbi": "NCBI_API_KEY"},
+    "drug-safety-analysis": {"openfda": "OPENFDA_API_KEY"},
+}
+# The connectors where this container's own value wins: the deployment decided
+# how the source is reached, so a researcher's key is asked for only where the
+# container has none. (OpenGWAS keeps its older shape: its token belongs to a
+# person, and the control plane answers with the deployment's one when it holds
+# one.) The control plane's answer for these is the researcher's own key only,
+# never the deployment's.
+_DEPLOYMENT_FIRST_CONNECTORS = frozenset({"umls", "ncbi", "openfda"})
 _JOB_ENV_PREFIX = "EVIMED_JOB_CREDENTIAL_"
 
 
-def _job_credentials(workload_token: str | None) -> dict[str, str]:
+def _job_credentials(workload_token: str | None, only: tuple[str, ...] | None = None) -> dict[str, str]:
     """Credentials for one job, resolved from the control plane for the workload that asked.
 
     Asked with the runtime's own workload token while it is still valid, and
     handed to the worker only through its spawn environment: the value never
     reaches the queued state file. A control plane without the endpoint, or a
     connector nobody configured, leaves the engine on this container's own
-    environment exactly as before.
+    environment exactly as before. `only` narrows the question to the
+    connectors a caller needs (a readiness probe asks about OpenGWAS alone).
     """
-    wanted = _JOB_CONNECTOR_ENV.get(_kind(), {})
+    wanted = {
+        connector: env_name
+        for connector, env_name in _JOB_CONNECTOR_ENV.get(_kind(), {}).items()
+        if (only is None or connector in only)
+        # Deployment first: this container already holds a value, so nothing is asked.
+        and not (connector in _DEPLOYMENT_FIRST_CONNECTORS and os.environ.get(env_name, "").strip())
+    }
     url = os.getenv("EVIMED_CONNECTOR_CREDENTIAL_URL", "").strip()
     if not wanted or not url or not workload_token:
         return {}
@@ -1640,7 +1666,12 @@ def _create_app() -> FastAPI:
         # `capabilities` resolves them too, so it answers for this researcher:
         # their own OpenGWAS token, not only the deployment's, decides it.
         job_credentials = (
-            _job_credentials(bearer.credentials if bearer is not None else None)
+            _job_credentials(
+                bearer.credentials if bearer is not None else None,
+                # A readiness probe is only about OpenGWAS; the engine keys are
+                # asked for when a job starts.
+                only=("opengwas",) if validated.get("action") == "capabilities" else None,
+            )
             if validated.get("action") in {"start", "capabilities"}
             else None
         )
