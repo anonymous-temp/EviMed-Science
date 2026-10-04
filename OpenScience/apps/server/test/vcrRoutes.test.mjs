@@ -74,6 +74,15 @@ function fixture({ who = OWNER, roles = {}, overrides = {}, operators = [] } = {
     async rolesOf(/** @type {string} */ _studyId, /** @type {string} */ userId) { calls.push(["vcr.rolesOf", userId]); return roles[userId] ?? []; },
     async members() { calls.push(["vcr.members"]); return [{ userId: OWNER, role: "lead" }]; },
     async saveAssumption(/** @type {any} */ input) { calls.push(["vcr.assumption", input.key, input.reviewState]); return { id: "asm_1", version: 4, ...input }; },
+    // The study's one assessment record, as the module's store reads it: the run wrote version 1.
+    async modelAssessments() {
+      return [{ key: "pfs_projection", version: 1, modelName: "weibull", modelVersion: "1.2", influence: "medium", consequence: "high",
+        influenceJustification: "与文献对照并用", technicalCriteria: [{ criterion: "重建 QC 通过", rationale: "" }], by: "runtime" }];
+    },
+    async saveModelAssessment(/** @type {any} */ input) {
+      calls.push(["vcr.assessment", input.actor, input.record.key, input.record.influence, input.record.consequence, input.record.modelName, input.record.influenceJustification]);
+      return { id: "mia_1", key: input.record.key, version: 2, risk: "high", riskRule: "driven_by_consequence" };
+    },
     async addReview(/** @type {any} */ input) { calls.push(["vcr.review", input.kind, input.reviewer]); return { id: "rvw_1", ...input }; },
     async addDecision(/** @type {any} */ input) { calls.push(["vcr.decision", input.decidedBy]); return { id: "dec_1", ...input }; },
     async exportRow(/** @type {string} */ _studyId, /** @type {string} */ id) { calls.push(["vcr.export", id]); return id === "exp_1" ? { id: "exp_1", kind: "study_package", state: "ready" } : null; },
@@ -392,6 +401,7 @@ const REQUESTS = {
   "POST /studies/:id/jobs/:job/cancel": ["POST", "/api/vcr/studies/std_1/jobs/job_1/cancel", {}],
   "POST /studies/:id/budget": ["POST", "/api/vcr/studies/std_1/budget", { cpuSeconds: 600 }],
   "POST /studies/:id/assumptions": ["POST", "/api/vcr/studies/std_1/assumptions", { key: "dropout" }],
+  "POST /studies/:id/model-assessments": ["POST", "/api/vcr/studies/std_1/model-assessments", { key: "pfs_projection", influence: "low" }],
   "POST /studies/:id/correction-cases": ["POST", "/api/vcr/studies/std_1/correction-cases", {}],
   "GET /studies/:id/correction-cases/:dataset": ["GET", "/api/vcr/studies/std_1/correction-cases/eds_fixture", undefined],
   "POST /studies/:id/correction-cases/:dataset/replay": ["POST", "/api/vcr/studies/std_1/correction-cases/eds_fixture/replay", {}],
@@ -825,4 +835,55 @@ test("a request to save, use or compare a definition is checked before anything 
     await assert.rejects(routes(request("POST", path, body), response()), { status: 400, code: "vcr_payload_invalid" }, `${path} ${JSON.stringify(body)}`);
   }
   assert.deepEqual(reached, []);
+});
+
+// F3: the lead edits an assessment record the run wrote; the edit is the next version by that person.
+test("the lead edits a model assessment record as themselves; the risk is not a field, and only a record that exists is edited", async () => {
+  const { calls, routes, audits } = fixture();
+  const saved = response();
+  await routes(request("POST", "/api/vcr/studies/std_1/model-assessments", { key: "pfs_projection", influence: "high", technicalCriteria: ["重建 QC 通过"] }), saved);
+  assert.equal(saved.status, 201);
+  assert.deepEqual(saved.json().data, { id: "mia_1", key: "pfs_projection", version: 2, risk: "high", riskRule: "driven_by_consequence" });
+  // By the person, not the run; what the edit did not name is the record as it stands; the model is the record's own.
+  assert.deepEqual(calls.find((call) => call[0] === "vcr.assessment"), ["vcr.assessment", OWNER, "pfs_projection", "high", "high", "weibull", "与文献对照并用"]);
+  assert.deepEqual(audits.find((line) => line[0] === "vcr.model_assessment.edit"), ["vcr.model_assessment.edit", "completed", "mia_1"]);
+
+  // The platform derives the risk and the model is not the person's to change.
+  for (const body of [{ key: "pfs_projection", risk: "low" }, { key: "pfs_projection", riskRule: "both_low" }, { key: "pfs_projection", modelName: "other" }]) {
+    await assert.rejects(routes(request("POST", "/api/vcr/studies/std_1/model-assessments", body), response()), { status: 400, code: "vcr_payload_invalid" }, JSON.stringify(body));
+  }
+  // The fields are held to the limits the run's write holds.
+  for (const body of [
+    {}, { key: "Bad Key" }, { key: "pfs_projection", influence: "severe" }, { key: "pfs_projection", contextOfUse: "x".repeat(2_001) },
+    { key: "pfs_projection", technicalCriteria: "one" }, { key: "pfs_projection", technicalCriteria: [{ criterion: "" }] },
+    { key: "pfs_projection", technicalCriteria: Array.from({ length: 31 }, () => "x") },
+  ]) {
+    await assert.rejects(routes(request("POST", "/api/vcr/studies/std_1/model-assessments", body), response()), { status: 400, code: "vcr_payload_invalid" }, JSON.stringify(body));
+  }
+  assert.equal(calls.filter((call) => call[0] === "vcr.assessment").length, 1, "nothing refused was saved");
+  // A rating may be cleared with an empty word, and the record's text with an empty string.
+  await routes(request("POST", "/api/vcr/studies/std_1/model-assessments", { key: "pfs_projection", influence: "", influenceJustification: "" }), response());
+  assert.deepEqual(calls.filter((call) => call[0] === "vcr.assessment").at(-1)?.slice(3), ["", "high", "weibull", ""]);
+
+  // A new record is the run's to write.
+  await assert.rejects(routes(request("POST", "/api/vcr/studies/std_1/model-assessments", { key: "no_such_record", influence: "low" }), response()),
+    { status: 404, code: "vcr_assessment_not_found" });
+  assert.ok(audits.some((line) => line[0] === "vcr.model_assessment.edit" && line[1] === "refused"));
+});
+
+test("only the study's lead edits a model assessment record, and another account's study is not found", async () => {
+  const body = { key: "pfs_projection", influence: "low" };
+  const { routes, as, calls } = fixture({ roles: { dm: ["data_manager"], viewer: ["viewer"], clinician: ["clinical_reviewer"], lead2: ["lead"] } });
+  for (const who of ["dm", "viewer", "clinician"]) {
+    as(who);
+    await assert.rejects(routes(request("POST", "/api/vcr/studies/std_1/model-assessments", body), response()), { status: 403, code: "vcr_forbidden" }, who);
+  }
+  as("lead2");
+  const saved = response();
+  await routes(request("POST", "/api/vcr/studies/std_1/model-assessments", body), saved);
+  assert.equal(saved.status, 201);
+  assert.equal(calls.find((call) => call[0] === "vcr.assessment")?.[1], "lead2", "a lead who is not the owner is recorded as themselves");
+  as("stranger");
+  await assert.rejects(routes(request("POST", "/api/vcr/studies/std_1/model-assessments", body), response()), { status: 404, code: "vcr_study_not_found" });
+  assert.equal(calls.filter((call) => call[0] === "vcr.assessment").length, 1, "only the lead's edit was saved");
 });

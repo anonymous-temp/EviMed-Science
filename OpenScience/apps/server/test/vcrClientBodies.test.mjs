@@ -16,7 +16,7 @@ import test from "node:test";
 
 import { createVcrRoutes } from "../src/vcrRoutes.mjs";
 import {
-  assumptionBody, budgetBody, cancelBody, contactBody, decisionBody, definitionCompareBody, definitionSaveBody, definitionUseBody, exportBody,
+  assessmentBody, assumptionBody, budgetBody, cancelBody, contactBody, decisionBody, definitionCompareBody, definitionSaveBody, definitionUseBody, exportBody,
   jobBody, memberBody, packBindBody, reviewBody, runBody, studyCreateBody, studyPatchBody,
 } from "../../web/src/lib/vcrBodies.ts";
 
@@ -45,6 +45,8 @@ function harness() {
     async rolesOf() { return ["lead"]; },
     async members() { return []; },
     async saveAssumption(/** @type {any} */ input) { return { id: "asm_1", version: 2, key: input.key }; },
+    async modelAssessments() { return [{ key: "pfs_projection", modelName: "weibull", modelVersion: "1.2" }]; },
+    async saveModelAssessment(/** @type {any} */ input) { return { id: "mia_1", key: input.record.key, version: 2, risk: null, riskRule: null }; },
     async addReview(/** @type {any} */ input) { return { id: "rvw_1", ...input }; },
     async addDecision(/** @type {any} */ input) { return { id: "dec_1", ...input }; },
     async exportRow() { return { id: "exp_1" }; },
@@ -123,6 +125,9 @@ const CASES = /** @type {Array<[string, string, string, unknown]>} */ ([
   ["add fractional CPU time (rounded up to a whole second)", "POST", "/api/vcr/studies/std_1/budget", budgetBody({ cpuSeconds: 90.4 })],
   ["write a new assumption version", "POST", "/api/vcr/studies/std_1/assumptions",
     assumptionBody({ key: "control_median_pfs", name: "对照组中位 PFS", pointValue: 4.2, unit: "个月", note: "改为最新汇总" })],
+  ["edit a model assessment record, clearing a rating and listing criteria with their reasons", "POST", "/api/vcr/studies/std_1/model-assessments",
+    assessmentBody({ key: "pfs_projection", questionOfInterest: "对照组的 PFS 能否用", influence: "", consequence: "high", influenceJustification: "与文献并用",
+      technicalCriteria: [{ criterion: "重建 QC 通过", rationale: "" }], outcome: "" })],
   ["countersign a version", "POST", "/api/vcr/studies/std_1/reviews", reviewBody({ kind: "statistical", nodes: ["assumption:control_median_pfs@1"], note: "已核对" })],
   ["record a decision with its goal, choice, alternatives and reason", "POST", "/api/vcr/studies/std_1/decisions",
     decisionBody({ question: "成功把握尽量高、样本量尽量少", chosen: { id: "scn_2", code: "B", label: "方案 B" }, alternatives: [{ code: "A" }], rationale: "折中" })],

@@ -38,6 +38,7 @@ import {
   VCR_ANALYSIS_TABLE_LABELS_ZH, VCR_MEMBER_ROLE_LABELS_ZH, VCR_MISSING_REASONS, VCR_MISSING_REASON_LABELS_ZH,
   VCR_QUALITY_CATEGORY_LABELS_ZH, VCR_TIME_KINDS, VCR_TIME_KIND_LABELS_ZH, VCR_VALUE_SOURCE_LABELS_ZH,
   VCR_PROGNOSTIC_QUALIFICATION, VCR_PROGNOSTIC_QUALIFICATION_LABEL_ZH, VCR_ROBUSTNESS_STAGES, VCR_ROBUSTNESS_STAGE_LABELS_ZH,
+  VCR_MODEL_RISK_RULE_LABELS_ZH, VCR_RATING_LABELS_ZH, vcrAssessmentIssues, vcrAssessmentRows,
 } from "@evimed/domain";
 
 import { vcrObjectNode } from "./vcrStore.mjs";
@@ -385,6 +386,48 @@ function compareVersions(populations, now) {
 // --- 虚拟患者 -----------------------------------------------------------------------------------------------------------------
 
 /**
+ * The study's model assessment records (ICH M15 Appendix 1) as the page reads them: each record's rows in the guideline's order
+ * with the rating and the reason, the model risk the platform derived and the one rule that settled it, who wrote this version
+ * (a run, or a person by name), what the record has not said yet, and the fields the lead's edit form starts from. The frozen
+ * model analysis plan, when there is one, is named so the page can say an edit does not move it.
+ * @param {Record<string, any>} bundle
+ */
+export function presentModelAssessments(bundle) {
+  const frozen = bundle.modelPlan ? object(bundle.modelPlan) : null;
+  return {
+    records: list(bundle.assessments).slice(0, 30).map((/** @type {any} */ record) => {
+      const rule = text(record.riskRule);
+      const by = text(record.by);
+      return {
+        key: String(record.key), version: Number(record.version) || 1,
+        modelName: String(record.modelName ?? ""), modelVersion: String(record.modelVersion ?? ""),
+        risk: text(record.risk), riskLabel: text(record.risk) ? (/** @type {Record<string, string>} */ (VCR_RATING_LABELS_ZH))[String(record.risk)] ?? null : null,
+        riskRule: rule, riskRuleText: rule ? (/** @type {Record<string, string>} */ (VCR_MODEL_RISK_RULE_LABELS_ZH))[rule] ?? null : null,
+        // The risk row's reason is the author's own; the rule that fired is said once, beside the risk.
+        rows: vcrAssessmentRows(record, "submission").map((row) => ({
+          key: row.key, label: row.zh, rated: row.rated, derived: row.key === "risk",
+          rating: row.rating, ratingLabel: row.rating ? (/** @type {Record<string, string>} */ (VCR_RATING_LABELS_ZH))[row.rating] ?? null : null,
+          entry: row.entry, justification: row.key === "risk" ? String(record.riskJustification ?? "") : row.justification,
+        })),
+        savedBy: !by ? null : by === "runtime" ? { kind: "run", name: "AI" } : { kind: "person", name: personName(bundle.people, by) },
+        savedAt: zhDate(record.createdAt, bundle.now),
+        gaps: vcrAssessmentIssues(record, "planning").map((found) => found.text),
+        fields: {
+          questionOfInterest: String(record.questionOfInterest ?? ""), contextOfUse: String(record.contextOfUse ?? ""),
+          influence: String(record.influence ?? ""), influenceJustification: String(record.influenceJustification ?? ""),
+          consequence: String(record.consequence ?? ""), consequenceJustification: String(record.consequenceJustification ?? ""),
+          riskJustification: String(record.riskJustification ?? ""),
+          impact: String(record.impact ?? ""), impactJustification: String(record.impactJustification ?? ""),
+          technicalCriteria: list(record.technicalCriteria).map((/** @type {any} */ entry) => ({ criterion: String(entry.criterion ?? ""), rationale: String(entry.rationale ?? "") })),
+          appropriateness: String(record.appropriateness ?? ""), evaluation: String(record.evaluation ?? ""), outcome: String(record.outcome ?? ""),
+        },
+      };
+    }),
+    plan: frozen ? { version: Number(frozen.version) || 1, frozenAt: zhDate(frozen.frozenAt, bundle.now) } : null,
+  };
+}
+
+/**
  * `GET /api/vcr/studies/:id/patients`.
  * @param {Record<string, any>} bundle
  */
@@ -424,6 +467,7 @@ export function presentPatientsTab(bundle) {
   }
   return {
     model,
+    assessments: presentModelAssessments(bundle),
     twin: modelRow || current?.twinLabel ? {
       label: (/** @type {Record<string, string>} */ (VCR_TWIN_LABELS_ZH))[String(current?.twinLabel ?? model?.twin ?? "baseline_conditioned_prediction")],
       reason: model?.twinReason ?? null,

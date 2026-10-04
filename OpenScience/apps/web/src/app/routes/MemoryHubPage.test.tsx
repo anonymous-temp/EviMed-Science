@@ -393,7 +393,7 @@ describe("记忆胶囊", () => {
   // F1: the memory page shows a disagreement on both of its rows and settles it.
   it("shows a disagreement on both rows and settles it for the researcher, then reads the page again", async () => {
     const user = userEvent.setup();
-    const conflict = (id: string, text: string) => ({
+    const conflict = (id: string, text: string): WebStructuredMemory["relations"] => ({
       validity: { from: null, until: null }, caveats: ["conflict"], sources: [],
       conflicts: [{ id, status: "active", scope: "user", scopeId: "", origin: "explicit", sensitive: false, text, createdAt: null }],
     });

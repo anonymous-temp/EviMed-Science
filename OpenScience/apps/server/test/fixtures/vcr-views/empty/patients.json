@@ -1,5 +1,9 @@
 {
   "model": null,
+  "assessments": {
+    "records": [],
+    "plan": null
+  },
   "twin": null,
   "headline": null,
   "trajectories": null,

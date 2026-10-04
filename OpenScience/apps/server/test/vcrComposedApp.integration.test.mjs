@@ -186,6 +186,8 @@ function requests(target, ids) {
     "POST /studies/:id/jobs/:job/cancel": async () => ["POST", `${S}/jobs/job_none/cancel`, {}],
     "POST /studies/:id/budget": async () => ["POST", `${S}/budget`, { cpuSeconds: 600 }],
     "POST /studies/:id/assumptions": async () => ["POST", `${S}/assumptions`, { key: "dropout_rate", name: "脱落率", pointValue: 0.15, sourceKind: "expert_set" }],
+    // The lead's edit of a record the run wrote: an allowed role reaches the store, which answers 404 for a record this study does not have.
+    "POST /studies/:id/model-assessments": async () => ["POST", `${S}/model-assessments`, { key: "no_such_record", influence: "low" }],
     "POST /studies/:id/reviews clinical": async () => ["POST", `${S}/reviews`, { kind: "clinical", nodes: ["result:res_1@1"], note: "临床复核" }],
     "POST /studies/:id/reviews statistical": async () => ["POST", `${S}/reviews`, { kind: "statistical", nodes: ["result:res_1@1"], note: "统计复核" }],
     "POST /studies/:id/reviews data": async () => ["POST", `${S}/reviews`, { kind: "data", nodes: ["result:res_1@1"], note: "数据复核" }],

@@ -46,6 +46,22 @@ export const VCR_ASSESSMENT_KEY_PATTERN = '^[a-z][a-z0-9_]{0,63}$'
 export const VCR_ASSESSMENT_KEY = new RegExp(VCR_ASSESSMENT_KEY_PATTERN)
 
 /**
+ * How much of each field a record may hold: the one set of limits the run's
+ * write (`vcr_write what: "model_assessment"`) and a person's edit on the study
+ * page both read, so a record one of them may write is a record the other may.
+ */
+export const VCR_ASSESSMENT_LIMITS = Object.freeze({
+  key: 64, modelName: 120, modelVersion: 40, text: 2000, criteria: 30, criterion: 600,
+})
+
+/** The text fields of a record, and the ratings, in the order the table lists them. */
+export const VCR_ASSESSMENT_TEXT_FIELDS = frozen([
+  'questionOfInterest', 'contextOfUse', 'influenceJustification', 'consequenceJustification', 'riskJustification',
+  'impactJustification', 'appropriateness', 'evaluation', 'outcome',
+])
+export const VCR_ASSESSMENT_RATING_FIELDS = frozen(['influence', 'consequence', 'impact'])
+
+/**
  * The rows of M15's assessment table (Appendix 1), in the guideline's order.
  * `stage` says when M15 wants the row: the key assessment elements always, the
  * planning rows at planning (and again at submission), the submission rows only

@@ -37,16 +37,16 @@ import { useEffect, useState } from "react";
 import { fetchWebMe, WebApiError, type WebMe } from "./apiClient";
 import { productRequest } from "./productClient";
 import {
-  assessmentReviewBody, assumptionBody, budgetBody, cancelBody, contactBody, decisionBody, definitionCompareBody, definitionSaveBody,
+  assessmentBody, assessmentReviewBody, assumptionBody, budgetBody, cancelBody, contactBody, decisionBody, definitionCompareBody, definitionSaveBody,
   definitionUseBody, exportBody, jobBody, judgmentBody, memberBody, modelBody, packBindBody, reviewBody, runBody, studyCreateBody,
   studyPatchBody, transitionBody,
-  type VcrAssumptionBody, type VcrBudgetBody, type VcrContactBody, type VcrCreateBody, type VcrDecisionBody, type VcrDefinitionCompareBody,
+  type VcrAssessmentBody, type VcrAssumptionBody, type VcrBudgetBody, type VcrContactBody, type VcrCreateBody, type VcrDecisionBody, type VcrDefinitionCompareBody,
   type VcrDefinitionSaveBody, type VcrDefinitionUseBody, type VcrJobBody,
   type VcrJudgmentBody, type VcrMemberBody, type VcrModelBody, type VcrPatchBody, type VcrReviewBody, type VcrTransitionBody,
 } from "./vcrBodies";
 
 export type {
-  VcrAssumptionBody, VcrBudgetBody, VcrContactBody, VcrCreateBody, VcrDecisionBody, VcrDefinitionCompareBody, VcrDefinitionSaveBody,
+  VcrAssessmentBody, VcrAssumptionBody, VcrBudgetBody, VcrContactBody, VcrCreateBody, VcrDecisionBody, VcrDefinitionCompareBody, VcrDefinitionSaveBody,
   VcrDefinitionUseBody, VcrJobBody, VcrJudgmentBody, VcrMemberBody, VcrModelBody,
   VcrPatchBody, VcrReviewBody, VcrTransitionBody,
 } from "./vcrBodies";
@@ -617,8 +617,46 @@ export interface VcrSeries {
   unobserved?: Array<{ from: number; to: number }>;
 }
 
+/** One row of a model assessment table (ICH M15 Appendix 1). `derived` is the model risk, which the platform works out. */
+export interface VcrAssessmentRow {
+  key: string;
+  label: string;
+  rated: boolean;
+  derived: boolean;
+  rating: "low" | "medium" | "high" | null;
+  ratingLabel: string | null;
+  entry: string;
+  justification: string;
+}
+
+/** One assessment record as the page reads it, and the fields the lead's edit starts from. */
+export interface VcrAssessmentRecord {
+  key: string;
+  version: number;
+  modelName: string;
+  modelVersion: string;
+  risk: "low" | "medium" | "high" | null;
+  riskLabel: string | null;
+  /** The one rule that settled the risk, in a sentence. */
+  riskRuleText: string | null;
+  rows: VcrAssessmentRow[];
+  /** Who wrote this version: a run, or a person by name. */
+  savedBy: { kind: "run" | "person"; name: string | null } | null;
+  savedAt: string | null;
+  /** What the record has not said yet, in words. */
+  gaps: string[];
+  fields: Required<Omit<VcrAssessmentBody, "key">> & { technicalCriteria: Array<{ criterion: string; rationale: string }> };
+}
+
+export interface VcrAssessments {
+  records: VcrAssessmentRecord[];
+  /** The frozen model analysis plan, when there is one: an edit does not move it. */
+  plan: { version: number; frozenAt: string | null } | null;
+}
+
 export interface VcrPatientsTab {
   model: VcrModelCard | null;
+  assessments: VcrAssessments;
   /** The label the model's output has earned: never 「数字孪生」 by default. */
   twin: { label: string; reason: string | null } | null;
   headline?: string | null;
@@ -1364,6 +1402,24 @@ export function readVcrPopulation(raw: unknown): VcrPopulationTab {
   };
 }
 
+/** Total over what the server might send: no records is an empty list, and a record the page cannot read is dropped. */
+export function readVcrAssessments(raw: unknown): VcrAssessments {
+  const value = obj(raw);
+  const plan = obj(value.plan);
+  return {
+    records: arr(value.records).filter((record) => typeof record.key === "string" && record.key).map((record) => ({
+      ...(record as unknown as VcrAssessmentRecord),
+      rows: arr(record.rows) as unknown as VcrAssessmentRow[],
+      gaps: strings(record.gaps),
+      fields: {
+        ...(obj(record.fields) as unknown as VcrAssessmentRecord["fields"]),
+        technicalCriteria: arr(obj(record.fields).technicalCriteria) as unknown as VcrAssessmentRecord["fields"]["technicalCriteria"],
+      },
+    })),
+    plan: Object.keys(plan).length ? plan as unknown as VcrAssessments["plan"] : null,
+  };
+}
+
 export function readVcrPatients(raw: unknown): VcrPatientsTab {
   const value = obj(raw);
   const trajectories = obj(value.trajectories);
@@ -1372,6 +1428,7 @@ export function readVcrPatients(raw: unknown): VcrPatientsTab {
   return {
     ...(value as unknown as VcrPatientsTab),
     model: value.model ? readVcrModelCard(value.model) : null,
+    assessments: readVcrAssessments(value.assessments),
     twin: value.twin && typeof value.twin === "object" ? value.twin as VcrPatientsTab["twin"] : null,
     trajectories: Object.keys(trajectories).length ? {
       xLabel: text(trajectories.xLabel), yLabel: text(trajectories.yLabel), ticks: strings(trajectories.ticks), series: readSeries(trajectories.series),
@@ -1701,6 +1758,11 @@ export function confirmVcrBudget(studyId: string, input: VcrBudgetBody) {
 /** A new version of one assumption card; downstream results go stale by lineage. */
 export function saveVcrAssumption(studyId: string, input: VcrAssumptionBody) {
   return productRequest<{ id: string; key: string; version: number }>(`${study(studyId)}/assumptions`, "POST", assumptionBody(input));
+}
+
+/** 「保存」 on a model assessment record: the next version of it, by the person who edits. The model risk is the server's to work out. */
+export function saveVcrModelAssessment(studyId: string, input: VcrAssessmentBody) {
+  return productRequest<{ id: string; key: string; version: number; risk: string | null }>(`${study(studyId)}/model-assessments`, "POST", assessmentBody(input));
 }
 
 /** 「签注复核」: a countersignature on named versions, never a gate (plan §10.2). */

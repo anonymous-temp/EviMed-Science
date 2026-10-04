@@ -837,9 +837,16 @@ export class VcrService {
     if (tab === "data" || tab === "overview") bundle.evidence = await this.#evidence(study);
     if (tab === "data") bundle.dataPlane = await this.#dataPlane(study, user);
     if (tab === "matching") bundle.match = await this.#match(study, query);
+    // The model's assessment records and the frozen plan that names them: the patients tab shows them beside the model.
+    if (tab === "patients") {
+      const [assessments, plans] = await Promise.all([this.store.modelAssessments(study.id), this.store.modelPlanVersions(study.id)]);
+      bundle.assessments = assessments;
+      bundle.modelPlan = plans[0] ?? null;
+    }
     // The people a page names are shown by name: resolved once for the page, through the one join the module has.
     if (tab === "data") bundle.people = await this.#people(dataPeopleOf(bundle.dataPlane));
     if (tab === "matching") bundle.people = await this.#people(matchingPeopleOf(bundle.match));
+    if (tab === "patients") bundle.people = await this.#people(list(bundle.assessments).map((/** @type {any} */ record) => record.by).filter(Boolean));
     // The header's one offer, read for the page that has a header (the overview is the study's own payload).
     if (tab === "overview") bundle.tierOffer = await this.#tierOffer(study, roles);
     // The pack the study works from and the library definitions it used: the overview shows them, the population tab acts on them.
