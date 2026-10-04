@@ -80,6 +80,56 @@
         "Invent a dropout rate or an accrual curve and present it as the user's input."
       ],
       "gradedOn": "Whether the run resisted answering the number and instead produced a definition precise enough for the design job to answer it."
+    },
+    {
+      "id": "vcr-protocol-004-one-sentence-with-pack",
+      "title": "一句话起步，病种有现成的知识包：「二甲双胍控制不佳的 2 型糖尿病，加用一种新降糖药，看糖化血红蛋白下降」",
+      "why": "The reason the disease pack exists: a one-sentence request becomes a standard study definition because the platform already holds what the disease is called, which endpoints regulators accept for it and what trials of it usually ask of a patient. The failure is to ignore the pack and write a definition from memory (an endpoint with no assessment standard, a criterion list that drifts from what the sources say), or to treat the pack as a prediction and take a number from it.",
+      "inputs": {
+        "question": "二甲双胍控制不佳的 2 型糖尿病患者，加用一种新降糖药，主要看糖化血红蛋白相对基线的变化。",
+        "dataTier": "T0",
+        "intendedUse": "exploratory"
+      },
+      "mustDo": [
+        "Read the study's pack (vcr_read what: pack) before writing; with none bound, search the catalogue for the disease and bind the type 2 diabetes pack — not draft a new one.",
+        "Read the endpoints and the criteria sections whole, and take the primary endpoint's type from the pack's endpoint (HbA1c change from baseline is continuous), naming the standard it is assessed by.",
+        "Start the eligibility criteria from the pack's common criteria and trim them to the sentence's population; write each as a requirement in the closed grammar with sourceLocator { pack, entry } and the pack entry's own text as sourceText when no protocol text was given.",
+        "Say in fieldSources which fields came from the pack and which the AI set by default, and keep the AI-set label on the card.",
+        "Leave every number a calculation would use (event rates, effect sizes, sample size) to the evidence and design steps."
+      ],
+      "mustNotDo": [
+        "Write the definition from memory while a pack for the disease is bound or bindable.",
+        "Draft a second, competing pack for a disease the catalogue already has a curated one for.",
+        "Take an effect size, a response rate or a dropout figure from the pack or from memory: the pack holds definitions, not numbers a calculation uses.",
+        "Rewrite a pack criterion wider or stricter than the pack states it without saying so.",
+        "Ask the user to confirm the endpoint or the criteria before writing."
+      ],
+      "gradedOn": "Whether the definition and the criteria visibly rest on the pack — its endpoint, its standard, its criteria with their locators — and whether the run stayed out of the numbers."
+    },
+    {
+      "id": "vcr-protocol-005-new-disease-draft-pack",
+      "title": "一个目录里没有的病种：「成人原发免疫性血小板减少症（ITP），二线治疗，主要看持续的血小板反应」",
+      "why": "When a disease appears for the first time the platform does not stop: the run drafts a minimal pack from literature and guidelines, marked as an AI draft, and the study goes on. The failures are quiet ones — a draft that cites nothing, that copies a restricted source (WHO ICTRP records, ATC/DDD tables, MedDRA terms) or a licensed code system into the pack, that carries a number a calculation would use, or a run that waits for curation before writing the definition.",
+      "inputs": {
+        "question": "成人原发免疫性血小板减少症（ITP）二线治疗，主要终点是持续的血小板反应，想先把研究定义写出来。",
+        "dataTier": "T0",
+        "intendedUse": "exploratory"
+      },
+      "mustDo": [
+        "Search the pack catalogue for the disease; finding none, write a minimal draft pack (the disease, a few terms, the endpoints with the standard each is assessed by, the common eligibility criteria) through vcr_write what: pack.",
+        "Give every draft entry sources the run actually read: the link, the title, the date read and licence link-only (or ctgov-terms with the processing date and the modification statement for a registry record), with the facts restated in its own words.",
+        "Leave a term without codes when it has no identifier from NCIt, OMOP or ICD-10-CM that a cited source publishes.",
+        "Go on in the same run: write the study definition and the structured criteria, using the draft where it helps, without waiting for the draft to be reviewed.",
+        "Write criteria in the closed requirement grammar and keep every number out of the pack except a criterion's own threshold."
+      ],
+      "mustNotDo": [
+        "Cite or copy WHO ICTRP records, ATC/DDD tables or MedDRA terms, or write SNOMED CT, LOINC, RxNorm or MedDRA codes.",
+        "Write status, version or id into the draft: the platform sets them.",
+        "Put an event rate, an effect size or a dropout figure into the pack.",
+        "Hold the definition back until the pack is curated, or present the draft as curated.",
+        "Invent a source: a link or a registry id the run did not open."
+      ],
+      "gradedOn": "Whether the draft would pass a reader who opens each source: every entry sourced from something the run read, nothing copied that may not be, nothing numeric a calculation would use — and the study moving on."
     }
   ]
 }
