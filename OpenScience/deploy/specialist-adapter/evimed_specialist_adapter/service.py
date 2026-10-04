@@ -515,7 +515,7 @@ def _evidence_health() -> dict[str, str]:
     """
     try:
         observed = _observe_evidence(_agent_root())
-    except RuntimeError:  # no engine source to hash: `serving` already says so
+    except Exception:  # noqa: BLE001 — no engine source to hash (`serving` already says so); /health never raises over evidence
         return {"adapterManifest": audit_receipt.pinned_manifest_status(), "sourceEvidence": "agent_source_unavailable"}
     return {
         "adapterManifest": observed["pinnedManifest"],

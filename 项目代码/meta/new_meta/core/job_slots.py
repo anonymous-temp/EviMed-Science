@@ -352,7 +352,10 @@ def acquire(
                 if registered is None:
                     registered = _register(location, WAITING, job_id, kind)
                     queue = _live(location, WAITING, purge=False)
-                ahead = [name for _, name in queue].index(registered.name)
+                try:
+                    ahead = [name for _, name in queue].index(registered.name)
+                except ValueError:  # our own held file cannot be missing; if it is, the directory is not to be trusted
+                    raise _unavailable("The specialist slot queue lost track of this job.") from None
                 if len(running) < cap and ahead == 0:
                     slot = _register(location, RUNNING, job_id, kind)
                     registered.release()
