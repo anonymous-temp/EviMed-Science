@@ -29,7 +29,9 @@ DPI = 100
 
 
 def km_arm(seed, n, median, censor_rate, horizon):
-    """A Kaplan-Meier step function from simulated exponential survival with uniform censoring."""
+    """A Kaplan-Meier step function from simulated exponential survival with uniform censoring.
+
+    Returns the event knots and the censoring times; the cohort size is the caller's ``n``."""
     rng = np.random.default_rng(seed)
     event_time = rng.exponential(median / np.log(2), n)
     censor_time = rng.uniform(0, horizon / max(censor_rate, 1e-9), n) if censor_rate > 0 else np.full(n, np.inf)
@@ -99,10 +101,20 @@ def draw(path, arms, *, xlim, ylim, xticks, yticks, xlabel, ylabel, percent=Fals
     return area, {"width": int(width), "height": int(height)}
 
 
-def truth(path_stem, arms, calibration, area, size, extra=None):
+def at_risk(n, knots, censored, t):
+    """The number still at risk at time t: everyone minus the events and the censorings before it."""
+    return int(n - sum(1 for k, _ in knots[1:] if k < t) - sum(1 for c, _ in censored if c < t))
+
+
+def truth(path_stem, arms, calibration, area, size, extra=None, sizes=None, risk_times=None):
+    """`sizes` (cohort size per arm) and `risk_times` add the published numbers at risk and the total events
+    to each curve: what a paper prints beside the figure, so the reconstruction can be checked end to end."""
     body = {
         "calibration": calibration, "plotArea": area, "size": size,
-        "curves": [{"name": name, "color": color, "times": [t for t, _ in knots], "surv": [s for _, s in knots]} for name, color, knots, _ in arms],
+        "curves": [{"name": name, "color": color, "times": [t for t, _ in knots], "surv": [s for _, s in knots],
+                    **({"n": sizes[i], "totalEvents": len(knots) - 1,
+                        "riskTable": [{"time": t, "atRisk": at_risk(sizes[i], knots, censored, t)} for t in risk_times]} if sizes else {})}
+                   for i, (name, color, knots, censored) in enumerate(arms)],
         **(extra or {}),
     }
     pathlib.Path(str(path_stem) + ".truth.json").write_text(json.dumps(body, indent=1), encoding="utf-8")
@@ -129,7 +141,7 @@ def main():
     cal48 = {"x": {"min": 0, "max": 48, "unit": "months"}, "y": {"min": 0, "max": 1, "scale": "fraction"}}
     area, size = draw(HERE / "km_two_colors.png", arms, xlim=(0, 48), ylim=(0, 1.05), xticks=range(0, 49, 6), yticks=np.arange(0, 1.01, 0.2),
                       xlabel="Months since randomisation", ylabel="Progression-free survival", grid=True, legend=True)
-    truth(HERE / "km_two_colors", arms, cal48, area, size, {"legendOrder": ["Control", "Experimental"]})
+    truth(HERE / "km_two_colors", arms, cal48, area, size, {"legendOrder": ["Control", "Experimental"]}, sizes=[220, 220], risk_times=[0, 12, 24, 36])
     jpeg(HERE / "km_two_colors.png", HERE / "km_two_colors.jpg", 60)
 
     # 3. a black curve, survminer-like (no top or right spine), percent axis, annotation text in the plot, vertical censor ticks

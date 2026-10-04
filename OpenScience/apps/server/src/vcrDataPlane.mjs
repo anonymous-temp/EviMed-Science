@@ -1730,7 +1730,7 @@ export class VcrDataPlane {
   /**
    * @param {{ store: import("./vcrDataStore.mjs").VcrDataStore, config: VcrDataPlaneConfig, profiler?: VcrProfiler | null,
    *   access?: VcrAccess | null, seal?: { recordOutcomeAccess?: (input: any) => Promise<unknown> } | null,
-   *   extractor?: { available: boolean, describe?: () => any, extract: (input: { path: string, format: string, signal?: AbortSignal }) => Promise<{ text: string, extraction: Record<string, any> }> } | null,
+   *   extractor?: { available: boolean, counters?: Record<string, number>, describe?: () => any, extract: (input: { path: string, format: string, signal?: AbortSignal }) => Promise<{ text: string, extraction: Record<string, any> }> } | null,
    *   now?: () => Date }} options
    *   `access` judges every operation (one is made from the store when none is
    *   given); `seal` records the first outcome read — it is composed after the
@@ -1909,7 +1909,10 @@ export class VcrDataPlane {
     const cap = needsConversion
       ? Math.min(this.maxBytes, Number(this.config.vcrIntakeMaxBytes) > 0 ? Number(this.config.vcrIntakeMaxBytes) : 25 * 1024 * 1024)
       : Math.min(this.maxBytes, /** @type {Record<string, number>} */ (VCR_UPLOAD_ROLE_CAPS)[role] ?? this.maxBytes);
+    // A PDF or Word file refused for its size is counted with the conversions' other outcomes.
+    const countTooLarge = () => { if (needsConversion && this.extractor?.counters) this.extractor.counters.tooLarge = (this.extractor.counters.tooLarge ?? 0) + 1; };
     if (entry.declaredLength != null && entry.declaredLength > cap) {
+      countTooLarge();
       throw refuse(413, VCR_DATA_PLANE_CODES.fileTooLarge, `A ${role} file is at most ${cap} bytes.`, { cap });
     }
 
@@ -1926,7 +1929,7 @@ export class VcrDataPlane {
       try {
         for await (const chunk of entry.stream) {
           total += chunk.length;
-          if (total > cap) throw refuse(413, VCR_DATA_PLANE_CODES.fileTooLarge, `A ${role} file is at most ${cap} bytes.`, { cap });
+          if (total > cap) { countTooLarge(); throw refuse(413, VCR_DATA_PLANE_CODES.fileTooLarge, `A ${role} file is at most ${cap} bytes.`, { cap }); }
           digest.update(chunk);
           await handle.write(chunk);
         }

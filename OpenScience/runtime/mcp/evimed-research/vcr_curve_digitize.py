@@ -900,7 +900,8 @@ def digitize(request: dict, image_path: Path, max_pixels: int = MAX_PIXELS_DEFAU
         for curve in curves:
             start = curve["quality"]["startSurvival"]
             if not start["anchored"]:
-                warnings.append("curve_start_not_one: %s starts at %.3f, not 1; check y.min, y.max and the scale." % (curve["name"], start["measured"]))
+                warnings.append("curve_start_not_one: %s is first seen at %.3g %s with survival %.3f, not 1: its start is hidden under another curve, or y.min, y.max and the scale need checking." % (
+                    curve["name"], curve["quality"]["firstTime"], calibration["x"]["unit"], start["measured"]))
             if curve["quality"]["xCoverage"] < 0.3:
                 warnings.append("curve_covers_little: %s spans %.0f%% of the x range." % (curve["name"], 100 * curve["quality"]["xCoverage"]))
         return {

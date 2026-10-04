@@ -176,7 +176,13 @@ test('a text record is read exactly as before: no conversion, no original, the s
 
 test('a PDF or Word file has its own byte ceiling, and the text that comes out is held to the document cap', async t => {
   const small = await world(t, { config: { vcrIntakeMaxBytes: 2048 }, extractor: { available: true, extract: async () => { throw new Error('never reached'); } } });
+  small.plane.extractor.counters = { tooLarge: 0 };
   await assert.rejects(small.upload('large.pdf', Buffer.alloc(4096, 0x20)), { status: 413, code: 'vcr_data_file_too_large' });
+  assert.equal(small.plane.extractor.counters.tooLarge, 1, 'a file refused for its size is counted with the other outcomes');
+  await assert.rejects(small.upload('large.pdf', Buffer.alloc(4096, 0x20), { declaredLength: 4096 }), { status: 413, code: 'vcr_data_file_too_large' });
+  assert.equal(small.plane.extractor.counters.tooLarge, 2);
+  await assert.rejects(small.upload('large.txt', Buffer.alloc(4096, 0x20), { declaredLength: 4096 * 1024 }), { status: 413, code: 'vcr_data_file_too_large' });
+  assert.equal(small.plane.extractor.counters.tooLarge, 2, 'a text file is not a conversion');
   const long = 'a'.repeat(1024 * 1024 + 10);
   const generous = await world(t, { extractor: { available: true, extract: async () => ({ text: long, extraction: { sourceFormat: 'pdf', pages: 1 } }) } });
   await assert.rejects(generous.upload('long.pdf', Buffer.from('%PDF-1.4 stand-in')), { status: 413, code: 'vcr_data_file_too_large' });

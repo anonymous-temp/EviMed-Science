@@ -22,6 +22,7 @@ import hashlib
 import json
 import pathlib
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -411,6 +412,50 @@ class Synthetic(unittest.TestCase):
             near = min(points, key=lambda p: abs(p["time"] - time))
             self.assertAlmostEqual(near["surv"], survival, delta=0.006)
         self.assertLessEqual(drop_error(points, truth, per_pixel), 1.5)
+
+
+ENGINE_R = ROOT.parents[3] / "项目代码" / "vcr-engine" / "R"
+GUYOT_CHECK = r"""
+args <- commandArgs(trailingOnly = TRUE)
+source(file.path(args[1], "rmst.R"))
+source(file.path(args[1], "reconstruct.R"))
+cur <- read.csv(args[2])
+t_risk <- as.numeric(strsplit(args[3], ",")[[1]]); n_risk <- as.numeric(strsplit(args[4], ",")[[1]]); total <- as.numeric(args[5])
+r <- vcr_guyot(cur$time, cur$surv, t_risk, n_risk, total_events = total)
+qc <- vcr_reconstruction_qc(r, t_risk, n_risk, total_events_reported = total)
+km <- vcr_km(r$ipd$time, r$ipd$status)
+cat(sprintf("%d %d %.4f %s %s\n", nrow(r$ipd), sum(r$ipd$status), vcr_km_median(km),
+            tolower(as.character(qc$checks$atRisk$pass)), tolower(as.character(qc$checks$events$pass))))
+"""
+
+
+@unittest.skipUnless(HAVE_LIBRARIES and shutil.which("Rscript") and ENGINE_R.is_dir(), "R and the engine's sources are needed")
+class EngineAcceptsIt(unittest.TestCase):
+    """The shape the reconstruction consumes: the engine's own Guyot code runs on what the digitizer wrote."""
+
+    def test_the_engines_reconstruction_runs_on_the_digitized_curves_and_its_quality_control_passes(self):
+        truth = load_truth("km_two_colors")
+        result = digitizer.digitize({"calibration": truth["calibration"], "curves": [{"name": "control", "color": "#d62728"}, {"name": "experimental", "color": "#1f77b4"}]},
+                                    FIXTURES / "km_two_colors.png")
+        self.assertEqual(result["outcome"], "digitized")
+        directory = pathlib.Path(tempfile.mkdtemp(prefix="vcr-guyot-"))
+        self.addCleanup(shutil.rmtree, directory, True)
+        script = directory / "check.R"
+        script.write_text(GUYOT_CHECK, encoding="utf-8")
+        for curve, expected in zip(result["curves"], truth["curves"]):
+            csv = directory / (curve["name"] + ".csv")
+            csv.write_text("time,surv\n" + "".join("%s,%s\n" % (p["time"], p["surv"]) for p in curve["points"]), encoding="utf-8")
+            times = ",".join(str(row["time"]) for row in expected["riskTable"])
+            at_risk = ",".join(str(row["atRisk"]) for row in expected["riskTable"])
+            done = subprocess.run(["Rscript", str(script), str(ENGINE_R), str(csv), times, at_risk, str(expected["totalEvents"])], capture_output=True, text=True, timeout=120)
+            self.assertEqual(done.returncode, 0, done.stderr)
+            patients, events, median, risk_ok, events_ok = done.stdout.split()
+            true_median = next(t for t, s in zip(expected["times"], expected["surv"]) if s <= 0.5)
+            print("  engine reconstruction %-13s pseudo-patients %s, events %s (reported %d), median %.2f (true %.2f, %.1f%%), at risk %s, events %s" % (
+                curve["name"], patients, events, expected["totalEvents"], float(median), true_median, 100 * abs(float(median) - true_median) / true_median, risk_ok, events_ok))
+            self.assertEqual(int(patients), expected["n"], "every patient of the cohort is rebuilt")
+            self.assertEqual((risk_ok, events_ok), ("true", "true"), "the engine's quality control passes: numbers at risk and total events")
+            self.assertLessEqual(abs(float(median) - true_median) / true_median, 0.08)
 
 
 @unittest.skipUnless(HAVE_LIBRARIES, "numpy, Pillow and scipy are the runtime image's")
