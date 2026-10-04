@@ -1945,7 +1945,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   }) : null;
   const resultRevisions = resultProvenance ? new ResultRevisionService({ results: resultProvenance,
     documents: productDocuments, config, mirror: (project, full, bytes) => runtimeManager.mirrorWorkspaceUpload(project, full, bytes) }) : null;
-  const resultExporter = resultProvenance ? new ResultExportService({ results: resultProvenance, maxBytes: config.resultExportMaxBytes }) : null;
   const resultEngine = overrides.resultReplayEngine ?? new ResultEngineRouter({ python: new ResultReplayClient({ config }),
     vcr: resultProvenance && vcr?.engine ? new ResultVcrReplay({ engine: vcr.engine, config,
       authorizeProject: (userId, projectId) => resultProvenance.scope(userId, projectId) }) : null });
@@ -1972,6 +1971,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     learning: () => (learningWorker ? learningTriggers : null),
     report: code => { void securityAudit(config, "result.correction", "failed", { code }).catch(() => {}); } }) : null;
   const resultRoutes = createResultProvenanceRoutes({ store, service: resultProvenance, lineage: resultLineage, corrections: resultCorrections });
+  // The selected research package: the result, its recorded dependencies, and the replays and corrections read beside them.
+  const resultExporter = resultProvenance ? new ResultExportService({ results: resultProvenance, replays: resultReplays, corrections: resultCorrections,
+    maxBytes: config.resultExportMaxBytes, maxFiles: config.resultExportMaxFiles }) : null;
   const resultReuseRoutes = createResultReuseRoutes({ store, exporter: resultExporter, revisions: resultRevisions });
   const resultImpactRoutes = createResultImpactRoutes({ store, service: resultImpacts, maxJsonBytes: config.maxJsonBytes });
   const resultCapture = resultProvenance ? createResultProducerCapture({ service: resultProvenance,
