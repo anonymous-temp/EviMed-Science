@@ -41,7 +41,8 @@ before(async () => {
     const found = await database.query('SELECT id FROM evimed_control.projects WHERE user_id=$1 AND id=$2', [actor.id, selected.id])
     assert.equal(found.rowCount, 1)
   } })
-  plugins = new PluginService(database)
+  // A short wait: the fence test below holds the project's lock and expects the refusal.
+  plugins = new PluginService(database, { admissionWaitMs: 50 })
   generations = new PersonalSkillGenerationService(database, { config: { dataDir: root }, skillService: skills, pluginService: plugins,
     resolveUser: async () => user, identities: async () => identities, ledgerBusy: async () => false })
   created = await skills.create(user, { expectedRevision: 0, title: 'Review', description: 'Review sources', instructions: 'Old instructions.' })

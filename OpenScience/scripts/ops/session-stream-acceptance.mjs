@@ -34,6 +34,7 @@
  */
 
 import { randomBytes } from "node:crypto";
+import { patientFetch } from "./transient-refusal.mjs";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
@@ -61,7 +62,9 @@ function secret(name) {
 }
 
 async function jsonFetch(url, options = {}, expected = null) {
-  const response = await fetch(url, options);
+  // The first start after a release can answer 423 `plugin_apply_in_progress`
+  // for a few seconds; the product's own client waits, so this does.
+  const response = await patientFetch(url, options);
   const text = await response.text();
   let body = null;
   if (text) {

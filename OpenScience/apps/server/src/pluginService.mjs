@@ -316,11 +316,35 @@ export function pluginState(entry, row, { availability = null, maxTimeoutMs = 15
   };
 }
 
+/**
+ * How long a start or a prompt waits for a plugin apply on its project to
+ * settle before it is refused with 423 `plugin_apply_in_progress`.
+ *
+ * An apply restarts the project's runtime and probes the plugin while it holds
+ * the project's exclusive lock, and the first start after a release queues one
+ * for every project with saved plugin settings — so the first conversation
+ * after a release met that refusal for the ten to forty seconds the apply took
+ * (2026-10-04: the kernel's page said 「对话暂时打不开」, the acceptance drivers
+ * failed). The wait is the server's, not the person's: short of the 30 s
+ * request timeouts the shell's calls and the acceptance drivers carry, so a
+ * client that is waiting is never cut off by its own clock first, and long
+ * enough for the restart and probe an apply is. An apply that takes longer is
+ * refused as before and the shell and the drivers ask again.
+ */
+const ADMISSION_WAIT_MS = 20_000;
+
+/** How often the lock is asked for again while waiting. Each ask is its own
+ *  short transaction: a waiter must not hold a pool connection the apply needs
+ *  to finish. */
+const ADMISSION_POLL_MS = [100, 200, 400, 800];
+
 /** Configuration history is immutable; observations never create a configuration revision. */
 export class PluginService {
-  /** @param {any} database @param {{maxTimeoutMs?:number,jobs?:any,registry?:Map<string,any>,availabilityFile?:string}} options */
-  constructor(database, { maxTimeoutMs = 15000, jobs = null, registry = PLUGIN_REGISTRY, availabilityFile = DEFAULT_AVAILABILITY_FILE } = {}) {
+  /** @param {any} database @param {{maxTimeoutMs?:number,jobs?:any,registry?:Map<string,any>,availabilityFile?:string,admissionWaitMs?:number}} options */
+  constructor(database, { maxTimeoutMs = 15000, jobs = null, registry = PLUGIN_REGISTRY, availabilityFile = DEFAULT_AVAILABILITY_FILE, admissionWaitMs = ADMISSION_WAIT_MS } = {}) {
     this.database = database;
+    /** How long `withAdmission` waits for an apply on the project; zero refuses at once. */
+    this.admissionWaitMs = Number.isFinite(admissionWaitMs) ? Math.max(0, Math.trunc(admissionWaitMs)) : ADMISSION_WAIT_MS;
     this.admission = new AsyncLocalStorage();
     this.documents = new ProductDocuments(database);
     /** @type {((project:any)=>string|null)|null} */ this.runtimeGeneration = null;
@@ -521,6 +545,11 @@ export class PluginService {
     return borrowed.finally(() => current.borrowers.delete(borrowed));
   }
   /** A shared transaction lock surrounds prompt acceptance; apply takes its exclusive counterpart.
+   *
+   *  While an apply holds the project's lock the admission waits for it, up to
+   *  `admissionWaitMs`, and only then refuses with 423 `plugin_apply_in_progress`.
+   *  Only the lock is waited for: a refusal the operation itself raises is
+   *  returned as it is, and the operation never runs twice.
    * @param {any} project @param {() => Promise<any>} operation @param {{prompt?:boolean}} options */
   async withAdmission(project, operation, { prompt = false } = {}) {
     const previous = this.admission.getStore();
@@ -548,26 +577,36 @@ export class PluginService {
     };
     const nested = this.borrowAdmission(projectKey, accept);
     if (nested) return nested;
-    const outcome = await this.database.transaction(async client => {
-      const lock = await client.query("SELECT pg_try_advisory_xact_lock_shared(hashtextextended($1,0)) AS acquired", [`plugin-project:${projectKey}`]);
-      if (!lock.rows[0].acquired) throw new HttpError(423, "plugin_apply_in_progress", "Plugin settings are being applied; retry shortly.");
-      await this.scope(project.userId, project, client);
-      const store = { projectKey, client, open: true, borrowers: new Set() };
-      const admitted = () => this.admission.run(store, async () => {
-        try { return { value: await accept(client) }; }
-        // Commit an unknown acceptance receipt before surfacing its transport
-        // error. The shared lock excludes apply until that receipt is durable.
-        catch (error) { return { error }; }
-        finally {
-          store.open = false;
-          await Promise.allSettled([...store.borrowers]);
-        }
+    const deadline = Date.now() + this.admissionWaitMs;
+    for (let asked = 0; ; asked++) {
+      const outcome = await this.database.transaction(async client => {
+        const lock = await client.query("SELECT pg_try_advisory_xact_lock_shared(hashtextextended($1,0)) AS acquired", [`plugin-project:${projectKey}`]);
+        // Not an error yet: an apply holds the project, and it ends.
+        if (!lock.rows[0].acquired) return { applying: true };
+        await this.scope(project.userId, project, client);
+        const store = { projectKey, client, open: true, borrowers: new Set() };
+        const admitted = () => this.admission.run(store, async () => {
+          try { return { value: await accept(client) }; }
+          // Commit an unknown acceptance receipt before surfacing its transport
+          // error. The shared lock excludes apply until that receipt is durable.
+          catch (error) { return { error }; }
+          finally {
+            store.open = false;
+            await Promise.allSettled([...store.borrowers]);
+          }
+        });
+        return typeof this.database.withTransactionClient === "function"
+          ? this.database.withTransactionClient(client, admitted) : admitted();
       });
-      return typeof this.database.withTransactionClient === "function"
-        ? this.database.withTransactionClient(client, admitted) : admitted();
-    });
-    if (outcome.error) throw outcome.error;
-    return outcome.value;
+      if (outcome.applying) {
+        const remaining = deadline - Date.now();
+        if (remaining <= 0) throw new HttpError(423, "plugin_apply_in_progress", "Plugin settings are being applied; retry shortly.");
+        await new Promise((resolve) => setTimeout(resolve, Math.min(remaining, ADMISSION_POLL_MS[Math.min(asked, ADMISSION_POLL_MS.length - 1)])));
+        continue;
+      }
+      if (outcome.error) throw outcome.error;
+      return outcome.value;
+    }
   }
   /** @param {any} project */
   async hasPendingPrompts(project) {

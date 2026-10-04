@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import fs from "node:fs";
+import { sendThroughApply } from "./transient-refusal.mjs";
 
 const DEFAULT_PROJECT_PREFIX = "smoke";
 
@@ -58,15 +59,23 @@ function log(message) {
   process.stdout.write(`[smoke] ${message}\n`);
 }
 
+/**
+ * One request, patient with a project's runtime settings being applied (the first
+ * start after a release answers 423 `plugin_apply_in_progress` for a few
+ * seconds): each attempt has its own timeout, the way the product's own client
+ * opens a conversation.
+ */
 async function fetchWithTimeout(url, options = {}) {
   const timeoutMs = Number(process.env.OPEN_SCIENCE_SMOKE_TIMEOUT_MS ?? 30_000);
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 30_000);
-  try {
-    return await fetch(url, { ...options, signal: controller.signal });
-  } finally {
-    clearTimeout(timer);
-  }
+  return sendThroughApply(async () => {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : 30_000);
+    try {
+      return await fetch(url, { ...options, signal: controller.signal });
+    } finally {
+      clearTimeout(timer);
+    }
+  });
 }
 
 async function jsonFetch(url, options = {}) {
