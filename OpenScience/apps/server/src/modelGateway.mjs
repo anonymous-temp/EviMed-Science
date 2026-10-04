@@ -58,7 +58,7 @@ const messagesGatewayPath = "/internal/model/v1/messages";
  * send the images inline, which is what the chat route has always carried.
  *
  * Not a failure, so not ledgered as one. The pinned kernel's DeepSeek adapter
- * (0.1.7-rc.2) tries `POST <base>/files` before every model request whose
+ * (the `dsh` pin in deps-version.json, measured 2026-10-04) tries `POST <base>/files` before every model request whose
  * history holds an image, and has no setting that turns the attempt off — the
  * only keys near it are byte and count budgets, and a budget small enough to
  * skip the upload makes the image-offload plugin replace the image with
