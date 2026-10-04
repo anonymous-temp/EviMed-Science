@@ -1581,8 +1581,11 @@ export class VcrOrchestrator {
     const read = await this.#read(study);
     const criteria = read.protocol ? Number((await this.store.one(`SELECT count(*)::integer AS n FROM ${VCR_SCHEMA}.criteria
       WHERE study_id = $1 AND protocol_version_id = $2`, [study.id, read.protocol.id]))?.n ?? 0) : 0;
-    const assessments = Number((await this.store.one(`SELECT count(*)::integer AS n FROM ${VCR_SCHEMA}.matching_assessments
-      WHERE study_id = $1`, [study.id]))?.n ?? 0);
+    // Only what was judged against the criteria as they stand now. An assessment made against an earlier version of the
+    // protocol stays in the history and answers a question that is no longer asked; counting it called the step done while
+    // nobody had been judged against the criteria the study holds (`protocol_version_id` is that version).
+    const assessments = read.protocol ? Number((await this.store.one(`SELECT count(*)::integer AS n FROM ${VCR_SCHEMA}.matching_assessments
+      WHERE study_id = $1 AND protocol_version_id = $2`, [study.id, read.protocol.id]))?.n ?? 0) : 0;
 
     const objects = this.#objectStates(read);
     /** @param {string} step */
