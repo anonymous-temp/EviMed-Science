@@ -62,6 +62,23 @@ class AdapterTests(unittest.TestCase):
         self.assertEqual(seen["auth"], "Bearer evk_x")
         self.assertTrue(result["data"]["reviewRequired"])
 
+    def test_a_recall_names_the_time_of_the_question_only_when_it_has_one(self):
+        bodies = []
+
+        def opener(request, timeout=None):
+            bodies.append(json.loads(request.data.decode("utf-8")))
+            return Response({"data": {"items": [], "contextOnly": True}})
+
+        with mock.patch.dict(server.os.environ, CONFIGURED, clear=True):
+            server.call_tool("memory_recall", {"query": "dose"}, opener)
+            server.call_tool("memory_recall", {"query": "dose", "asOf": "2025-06-30"}, opener)
+
+        self.assertNotIn("asOf", bodies[0])
+        self.assertEqual(bodies[1]["asOf"], "2025-06-30")
+        recall = server.TOOLS[0]
+        self.assertIn("asOf", recall["inputSchema"]["properties"])
+        self.assertIn("uncertain", recall["description"])
+
     def test_the_services_own_code_reaches_the_model(self):
         # A scope refusal and a rate limit need different next moves, and
         # "HTTP 403" tells the model neither.
