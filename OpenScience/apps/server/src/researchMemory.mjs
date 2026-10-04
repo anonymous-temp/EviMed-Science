@@ -1517,11 +1517,12 @@ export class ResearchMemoryStore {
       WHERE s.user_id=$1 AND s.source_type=$2 AND s.source_id=$3 ORDER BY r.id LIMIT $4`,
     [assertUserId(userId), link.type, link.id, Math.max(1, Math.min(2000, Number(limit) || 500))]);
     return result.rows.map((/** @type {any} */ row) => {
-      const link = sourceLinkRow(row);
+      const recorded = sourceLinkRow(row);
       return {
         recordId: row.id, scope: row.scope, scopeId: row.scope_id, kind: row.kind, key: row.key, status: row.status,
         recordVersion: Number(row.version) || 1,
-        sourceVersion: link.version, state: link.state, stateReason: link.stateReason, stateAt: link.stateAt, linkedAt: link.linkedAt,
+        sourceVersion: recorded.version, state: recorded.state, stateReason: recorded.stateReason,
+        stateAt: recorded.stateAt, linkedAt: recorded.linkedAt,
       };
     });
   }

@@ -174,9 +174,12 @@ export function versionsInForce(records, context = {}) {
   const waiting = new Set([...held, ...upcoming].map((record) => record.supersededBy).filter(Boolean));
   const ahead = upcoming.filter((record) => !waiting.has(record.id));
 
-  const chosen = new Map([...held.map((record) => [record.id, []]), ...ahead.map((record) => [record.id, ["not_yet_valid"]])]);
+  /** @type {Map<string, string[]>} */
+  const chosen = new Map();
+  for (const record of held) chosen.set(record.id, []);
+  for (const record of ahead) chosen.set(record.id, ["not_yet_valid"]);
   return records.filter((record) => chosen.has(record.id))
-    .map((record) => ({ record, caveats: [.../** @type {string[]} */ (chosen.get(record.id))] }));
+    .map((record) => ({ record, caveats: [...(chosen.get(record.id) ?? [])] }));
 }
 
 /**

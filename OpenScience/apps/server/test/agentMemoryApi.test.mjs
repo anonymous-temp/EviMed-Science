@@ -479,3 +479,23 @@ test("forgetting one person is an integration key's act on a named subject, and 
   const audit = integration.calls.filter((entry) => entry[0] === "audit").map((entry) => JSON.stringify(entry));
   assert.ok(audit.length > 0 && audit.every((line) => !line.includes("doc-7")), "the HIS identifier never reaches an audit line");
 });
+
+test("recall may name the time its question is about; the answer is the account's records at that time", async () => {
+  const asked = [];
+  const memorySubstrate = {
+    async recall(_userId, _query, scope) {
+      asked.push(scope);
+      return [{ id: "record:r1", content: "利伐沙班 20 mg", kind: "project_fact", scope: "project", memoryType: "structured", caveats: ["not_yet_valid"] }];
+    },
+  };
+  const { routes } = fixture({ memorySubstrate });
+  const res = response();
+  await routes(request(`${AGENT_MEMORY_PATH}/recall`, { query: "剂量", scope: "conversation", asOf: "2025-06-30" }), res);
+  assert.equal(res.captured.status, 200);
+  assert.equal(asked[0].asOf, Date.parse("2025-06-30T23:59:59.999Z"));
+  assert.equal(res.captured.body.data.asOf, "2025-06-30T23:59:59.999Z");
+  const [item] = res.captured.body.data.items;
+  assert.deepEqual([item.uncertain, item.caveats, item.contextOnly], [true, ["not_yet_valid"], true]);
+  await assert.rejects(() => routes(request(`${AGENT_MEMORY_PATH}/recall`, { query: "x", asOf: "last spring" }), response()),
+    (error) => error.status === 400 && error.code === "agent_memory_payload_invalid");
+});
