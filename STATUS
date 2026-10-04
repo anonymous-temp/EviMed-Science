@@ -902,3 +902,6 @@ DONE S507 2026-09-04T18:55:00+00:00 **计量在生产里真的记到数了**,不
 2026-10-04T16:12Z DONE REL-1004-r2-live release=d60e3053a2a8 ready=29/29 switch=exit0 ui-walk=54/0 tables=141->158 rows-lost=none smoke=passed(runtime,docx,pdf,html) backup-set=pre-d60e3053a2a8-20261004T160131Z note=first-attempt-aborted-before-change(vcr-recovery-set-needs-app-up)
 2026-10-04T16:30Z DONE REL-1004-rc10-pushed head=0722777962e4 line-ci=37213704125-success vcr-audience=all acceptance-accounts=vcr-acceptance-a,b
 2026-10-04T17:10Z DONE REL-1004-merge-scenario-help head=82ed5ceea clean-battery=server-unit-5709,web-2260,product-state-1120(2 env,1 load flake reran green),chains-11,checks-9 acceptance-so-far=protocol-a,protocol-b,evidence-a,t1-intake,3-design-jobs
+2026-10-04T17:13Z DONE REL-1004-rc12-pushed head=9aeb21c23e9b supersedes=rc10,rc11 adds=deterministic-binding-test
+2026-10-04T17:30Z DONE REL-1004-rc13-pushed head=8bddf33979f1 supersedes=rc12(flaky meta state read) fix=reader-reopens-after-atomic-replace
+2026-10-04T18:29Z DONE REL-1004-merge-acceptance-fixes head=a6ec24e98 clean-battery=server-unit-5681,web-2260,product-state-1126(2 env),engine-39/39,chains-11,checks-9 method-validation=installed(31 methods, vcr labels executable)
