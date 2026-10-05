@@ -36,9 +36,28 @@ export function createEvolutionVerificationController(config,hooks={}){
   const tools=hooks.tools??new ExtensionToolController({admittedDescriptors:[],stateRoot:path.join(config.dataDir,'.openscience','evolution-controller'),dataDir:config.dataDir,runtimeDataVolume:config.runtimeDataVolume,adapterRoot:config.dataDir,inputRoot:config.dataDir,dockerBin:config.runtimeContainerBin,maxConcurrent:config.evolutionExecutionMaxConcurrency??1,timeoutMs:config.evolutionExecutionTimeoutMs??30000});
   const imageId=hooks.imageId??(async()=>String((await tools.command(['image','inspect','--format','{{.Id}}',config.runtimeContainerImage])).stdout).trim());
   const preparer=createEvolutionDependencyPreparer(config,{tools,imageId});
-  return{
-    prepareDependencies:(body,options={})=>preparer.prepare(body.requests,options),
-    async execute(body,{signal=undefined}={}){
+  /** What this executor did and refused since the process started, for the operator (`open_science_evolution_executor_total`, read by
+   * the control plane through the admission endpoint — this runs in the runtime controller, which has no metrics of its own).
+   * `unavailable`: refused as unavailable — no slot or admission lock could be had, the executor is blocked by an unconfirmed attempt, or the
+   * container daemon failed (the one answer the shared executor gives for all of them); `timedOut`: the execution
+   * outlived `evolutionExecutionTimeoutMs` and was killed; `canceled`: the caller went away. */
+  const counters={ok:0,candidateFailed:0,unavailable:0,timedOut:0,canceled:0,errored:0,dependenciesPrepared:0,dependencyPreparationFailed:0};
+  /** @param {any} error */
+  const classify=error=>{
+    if(error?.status===503&&error?.code==='product_state_unavailable'){if(error.canceled===false)counters.timedOut+=1;else if(error.canceled===true)counters.canceled+=1;else counters.unavailable+=1;}
+    else counters.errored+=1;
+  };
+  const controller={
+    counters:()=>({...counters}),
+    async prepareDependencies(body,options={}){
+      try{const prepared=await preparer.prepare(body.requests,options);counters.dependenciesPrepared+=1;return prepared;}
+      catch(error){counters.dependencyPreparationFailed+=1;throw error;}
+    },
+    async execute(body,options={}){
+      try{const result=await controller.executeCandidate(body,options);if(result?.ok===true)counters.ok+=1;else counters.candidateFailed+=1;return result;}
+      catch(error){classify(error);throw error;}
+    },
+    async executeCandidate(body,{signal=undefined}={}){
       if(config.evolutionEnabled!==true)throw new HttpError(503,'product_state_unavailable','Evolution verification is disabled.');
       const request=verificationRequest(body);await tools.reconcileEvolutionAttempts?.();
       /** @type {string} */
@@ -91,4 +110,5 @@ for source in glob.glob('/dependencies/*.zip')+glob.glob('/dependencies/*.tar.gz
     admissionAvailable:()=>tools.admissionAvailable(),
     close:()=>hooks.tools?Promise.resolve():tools.close(),
   };
+  return controller;
 }

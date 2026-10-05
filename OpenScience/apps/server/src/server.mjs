@@ -262,6 +262,7 @@ import { createGeoNotifier } from "./geoNotify.mjs";
 import { composeVcr, vcrMetricFamilies, vcrMetricsSnapshot, withVcrEngineWarnings } from "./vcrComposition.mjs";
 import { createAvailability } from "./availabilityModule.mjs";
 import { availabilityMetricFamilies } from "./availabilityService.mjs";
+import { evolutionOpsMetricFamilies, evolutionOpsSnapshot } from "./evolutionOpsMetrics.mjs";
 import { loadMethodValidation } from "./vcrMethodValidation.mjs";
 import { createVcrRoutes, vcrRoutePattern } from "./vcrRoutes.mjs";
 import { VCR_GATEWAY_PATH, createVcrGatewayHandler, vcrGatewayRoutePattern } from "./vcrGateway.mjs";
@@ -4774,6 +4775,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           alertReceiver,
           availability,
           eventPump: runtimeEventPump,
+          evolution,
+          evaluationIsolation,
         });
         return;
       }
@@ -7570,7 +7573,7 @@ function addHistogramMetric(lines, name, help, series) {
   }
 }
 
-async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null }) {
+async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null }) {
   const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate, frontier, review, geo, vcr, credits);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
@@ -7924,6 +7927,10 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
   // `enabled` gauge alone.
   const availabilitySnapshot = availability ? await availability.service.metrics().catch(() => null) : null;
   for (const family of availabilityMetricFamilies(Boolean(availability), availabilitySnapshot)) addMetric(lines, family.name, family.help, family.type, family.series);
+  // 循证进化's limits (evolutionOpsMetrics.mjs): the tool gateway's admission, the platform-skill supply's fallbacks, the exclusion
+  // layer's lookups and the candidate executor's slots and timeout. `open_science_evolution_enabled 0` when it is off.
+  const evolutionSnapshot = await evolutionOpsSnapshot({ evolution, evaluationIsolation }).catch(() => null);
+  for (const family of evolutionOpsMetricFamilies(Boolean(evolution), evolutionSnapshot, config.evolutionRefusal ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
   // The independent reviewer: reviews, findings by kind, answers, reply
   // checks and safety alerts (reviewService.mjs `reviewMetricFamilies`).
   for (const family of reviewMetricFamilies(Boolean(review), review ? review.service.stats() : null)) addMetric(lines, family.name, family.help, family.type, family.series);

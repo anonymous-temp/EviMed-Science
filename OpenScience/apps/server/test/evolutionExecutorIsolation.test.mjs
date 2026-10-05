@@ -60,3 +60,22 @@ test('a program too large to be one argv string is refused before a container is
   assert.throws(() => verificationRequest({ files: {}, code: 'x'.repeat(EVOLUTION_EXECUTION_CODE_MAX_BYTES + 1) }), (error) => error.code === 'extension_contract_invalid');
   assert.throws(() => verificationRequest({ files: {}, code: 'é'.repeat(EVOLUTION_EXECUTION_CODE_MAX_BYTES / 2 + 1) }), { code: 'extension_contract_invalid' }, 'bytes, not characters');
 });
+
+test('the controller reports what its executor did through the admission endpoint the control plane already polls', async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'ev-executor-counters-'));
+  const socketPath = path.join(dataDir, 'controller.sock');
+  const tools = { run: async () => 'verified', admissionAvailable: async () => true };
+  const server = createRuntimeController({ dataDir, runtimeControllerSocket: socketPath, runtimeContainerBin: 'docker', runtimeContainerImage: 'fixture', evolutionEnabled: true },
+    { evolutionVerification: { tools, imageId: async () => image } });
+  try {
+    await server.listen();
+    const client = new RuntimeControllerClient({ runtimeControllerSocket: socketPath });
+    assert.equal((await client.evolutionAdmissionAvailable()).executor.ok, 0);
+    await client.execVerify({ files: {}, code: "print('x')" });
+    await client.execVerify({ files: {}, code: "print('y')" });
+    const answer = await client.evolutionAdmissionAvailable();
+    assert.equal(answer.executor.ok, 2);
+    assert.deepEqual(Object.keys(answer.executor).sort(), ['canceled', 'candidateFailed', 'dependenciesPrepared', 'dependencyPreparationFailed', 'errored', 'ok', 'timedOut', 'unavailable']);
+    assert.equal(typeof answer.available, 'boolean', 'the answer the worker reads is unchanged');
+  } finally { await server.close(); await fs.rm(dataDir, { recursive: true, force: true }); }
+});

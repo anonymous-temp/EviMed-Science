@@ -419,7 +419,9 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
     const maxBackground=backgroundRuntimeLimit(limits.maxGlobal,limits.maxPerUser);
     return {enabled,total:inventory.size,maxGlobal:limits.maxGlobal,reservedResearchSlots,
       availableSlots:Math.max(0,limits.maxGlobal-reservedResearchSlots-inventory.size),background,maxBackground,
-      available:inventory.size<limits.maxGlobal-reservedResearchSlots&&(maxBackground==null||background<maxBackground)};
+      available:inventory.size<limits.maxGlobal-reservedResearchSlots&&(maxBackground==null||background<maxBackground),
+      // What the candidate executor has done and refused, for the control plane's metrics: this process exposes none of its own.
+      executor:evolutionVerification.counters?.()??null};
   }
 
   function reserveRuntimeCapacity(project) {

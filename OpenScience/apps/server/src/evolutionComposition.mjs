@@ -457,6 +457,8 @@ export function createEvolution({ config, store, documents, jobs, database, usag
       await maintenance.observe(toolId, { runId: run.id, outcome: "pending", at: run.finishedAt ?? service.now().toISOString() });
     }
   };
-  return { service, decisions, maintenance, worker, integration, routes, gateway, toolAdmission, supply, runs, paperGold, candidateEvaluator, frontier, finishRun, onExecution, onRetrieval,
+  // What the candidate executor has done and refused, read from the runtime controller where it acts (`evolutionOpsMetrics.mjs`).
+  const executorCounters = async () => (await controller.evolutionAdmissionAvailable())?.executor ?? null;
+  return { service, decisions, maintenance, worker, integration, routes, gateway, toolAdmission, executorCounters, supply, runs, paperGold, candidateEvaluator, frontier, finishRun, onExecution, onRetrieval,
     observeFeedback: feedback.observeFeedback };
 }
