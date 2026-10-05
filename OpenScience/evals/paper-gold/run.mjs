@@ -2,7 +2,15 @@ import { readFile, writeFile, rename } from "node:fs/promises";
 import path from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
+import { usagePurposeOfRun } from "@evimed/domain";
 import { freezeCycle, scoreUnit, reportReplicates, validateRewrite, screenRetractions, digest } from "./evaluator.mjs";
+/**
+ * How many times one unit may be dispatched after administrative refusals (a spent model allowance).
+ * Each attempt is a fresh isolated project and a fresh run, so an unbounded counter is an unbounded
+ * number of projects: a unit that is still refused after this many attempts is recorded as unscored
+ * (`administrative_retry_limit`) and the cycle moves on. Unscored is never read as a score.
+ */
+export const PAPER_GOLD_ADMINISTRATIVE_ATTEMPTS = 5;
 /** Control-only administrative stop; not a scientific assessment or a day-window claim. */
 export class PaperGoldAdministrativeDeferral extends Error {
   /** @param {any} run @param {string} projectId */
@@ -14,9 +22,26 @@ export class PaperGoldAdministrativeDeferral extends Error {
     this.details = {runId:run.id,projectId,administrativeCode:run.errorCode,cause:"unknown"};
   }
 }
-/** Runs through the existing session/dispatch API; policy registration precedes runtime start. */
+/**
+ * Dispatch one unit from outside the server, through the public session and dispatch routes, for an
+ * operator's standalone adapter. Policy registration precedes runtime start.
+ *
+ * What these runs are, said plainly: ordinary runs of the signed-in operator account. A run's usage
+ * purpose is decided by the server from what its own dispatcher stamps (`usagePurposeOfRun`), and the
+ * public dispatch route never takes a purpose, a route reason or a classification from its caller. The
+ * dispatch id sent here is an identity for replay and nothing else. So a unit dispatched this way is
+ * charged to that operator account, under that account's own caps and billing, and the evolution daily
+ * budget (`OPEN_SCIENCE_EVOLUTION_DAILY_BUDGET_CNY`) does not hold it. Bound a standalone cycle with
+ * `maxNewUnits`.
+ *
+ * The path the budget does hold is the in-process one the worker uses: an `evolution-evaluate` job for
+ * the cycle, which runs this same `runCycle` with the control plane's adapter and dispatches through
+ * `evolutionRuns.mjs`, where the platform's route reason is stamped and the allowance is checked first.
+ * `runCycle` records on every unit the purpose the server's rule gives its run, so a report shows which
+ * of the two a unit was.
+ */
 export async function platformDispatch({ base, headers, caseRecord, replicate, cycleId, attempt = 0 }) {
-  if (!Number.isSafeInteger(attempt) || attempt < 0) throw new Error("Invalid administrative dispatch attempt.");
+  if (!Number.isSafeInteger(attempt) || attempt < 0 || attempt >= PAPER_GOLD_ADMINISTRATIVE_ATTEMPTS) throw new Error("Invalid administrative dispatch attempt.");
   const identity = `${cycleId}:${caseRecord.id}:${replicate}${attempt ? `:administrative-retry:${attempt}` : ""}`;
   const projectId = `eval-paper-${createHash("sha256").update(identity).digest("hex").slice(0, 40)}`;
   const request = async (route, body, scoped = true) => {
@@ -56,6 +81,7 @@ export async function runCycle({ dataDir, cycleId, definition, adapter, signal =
   const rows = progress.rows;
   progress.dispatchAttempts ??= {};
   progress.administrativeStops ??= [];
+  progress.unscored ??= [];
   const checkpoint = async () => {
     const temporary = `${progressFile}.${randomUUID()}.tmp`;
     await writeFile(temporary, JSON.stringify(progress), { mode: 0o600 });
@@ -85,6 +111,12 @@ export async function runCycle({ dataDir, cycleId, definition, adapter, signal =
       const attemptKey = `${testCase.id}:${variant}:${replicate}`;
       const attempt = progress.dispatchAttempts[attemptKey] ?? 0;
       if (!Number.isSafeInteger(attempt) || attempt < 0) throw new Error("Invalid administrative dispatch attempt checkpoint.");
+      if (progress.unscored.some(row => row.caseId === testCase.id && row.variant === variant && row.replicate === replicate)) continue;
+      if (attempt >= PAPER_GOLD_ADMINISTRATIVE_ATTEMPTS) {
+        progress.unscored.push({ caseId: testCase.id, variant, replicate, reason: "administrative_retry_limit", attempts: attempt, at: new Date().toISOString() });
+        await checkpoint();
+        continue;
+      }
       let execution;
       try {
         execution = await adapter.dispatch({ caseRecord: { id: testCase.id, policy: testCase.policy, capabilityId: testCase.capabilityId, input }, replicate: variant * Math.max(2, definition.replicates ?? 2) + replicate, variant, cycleId, attempt });
@@ -105,23 +137,33 @@ export async function runCycle({ dataDir, cycleId, definition, adapter, signal =
         goldSourceHash: testCase.sourceHash ?? testCase.gold.sourceHash ?? null,
         retracted: screens.length > 0 && screens.every(row => row.admissible && row.status === "clear") ? false : null,
         independent: assessed.independentAssessment === true, assessmentModel: assessed.assessmentModel ?? null,
-        engineId: testCase.engineId ?? null, capabilityId: testCase.capabilityId });
+        engineId: testCase.engineId ?? null, capabilityId: testCase.capabilityId,
+        // What the server's own rule says this run was for: `evolution` when the in-process dispatcher made it,
+        // `kernel` (an ordinary run of the operator's account) when it came through the public route.
+        spendPurpose: execution.run ? usagePurposeOfRun(execution.run) : null });
       newUnits++;
       await checkpoint();
       }
     }
   }
   const plannedUnits = definition.cases.filter(c => !rows.some(r => r.id === c.id && r.excluded)).reduce((n,c) => n + c.rewrite.variants.length * Math.max(2, definition.replicates ?? 2), 0);
-  const complete = rows.filter(r => !r.excluded).length === plannedUnits;
-  const report = { complete, plannedUnits, newUnits, cycleId, evaluatorHash: frozen.hash, at: new Date().toISOString(), units: rows.filter(row => !row.excluded), excluded: rows.filter(row => row.excluded), cases: complete ? reportReplicates(rows.filter(row => !row.excluded)) : [] };
+  const scored = rows.filter(r => !r.excluded);
+  const complete = scored.length === plannedUnits;
+  const byPurpose = {};
+  for (const row of scored) if (row.spendPurpose) byPurpose[row.spendPurpose] = (byPurpose[row.spendPurpose] ?? 0) + 1;
+  const report = { complete, plannedUnits, newUnits, cycleId, evaluatorHash: frozen.hash, at: new Date().toISOString(), units: scored, excluded: rows.filter(row => row.excluded), cases: complete ? reportReplicates(scored) : [],
+    // A unit whose dispatch was refused for administrative reasons every time it was tried: in the denominator, with no score.
+    unscored: progress.unscored, settled: scored.length + progress.unscored.length === plannedUnits,
+    spend: { byPurpose, outsideEvolutionBudget: scored.filter(row => row.spendPurpose && row.spendPurpose !== "evolution").length } };
   await writeFile(path.join(frozen.directory, "report.json"), JSON.stringify(report), { mode: 0o600 });
   return report;
 }
 if (process.argv[1]?.endsWith("run.mjs")) {
-  const [definitionFile, adapterFile, cycleId] = process.argv.slice(2);
-  if (!definitionFile || !adapterFile || !cycleId || !process.env.OPEN_SCIENCE_EVALUATION_DATA_DIR) throw new Error("Usage: OPEN_SCIENCE_EVALUATION_DATA_DIR=/protected node run.mjs definition.json adapter.mjs cycle-id");
+  const [definitionFile, adapterFile, cycleId, unitLimit] = process.argv.slice(2);
+  if (!definitionFile || !adapterFile || !cycleId || !process.env.OPEN_SCIENCE_EVALUATION_DATA_DIR || (unitLimit !== undefined && !/^[1-9]\d{0,5}$/.test(unitLimit))) throw new Error("Usage: OPEN_SCIENCE_EVALUATION_DATA_DIR=/protected node run.mjs definition.json adapter.mjs cycle-id [max-new-units]");
   const definition = JSON.parse(await readFile(definitionFile, "utf8"));
   const adapter = (await import(pathToFileURL(path.resolve(adapterFile)).href)).default;
-  const report = await runCycle({ dataDir: process.env.OPEN_SCIENCE_EVALUATION_DATA_DIR, cycleId, definition, adapter });
-  process.stdout.write(`${JSON.stringify({ cycleId, evaluatorHash: report.evaluatorHash, completed: report.cases.length, excluded: report.excluded.length })}\n`);
+  process.stderr.write("Standalone cycle: a unit an adapter dispatches through the public route (platformDispatch) is an ordinary run of the signed-in operator account, charged to that account under its own caps; the evolution daily budget does not hold it. The in-process path (an evolution-evaluate job for this cycle) is the one the budget holds.\n");
+  const report = await runCycle({ dataDir: process.env.OPEN_SCIENCE_EVALUATION_DATA_DIR, cycleId, definition, adapter, maxNewUnits: unitLimit === undefined ? null : Number(unitLimit) });
+  process.stdout.write(`${JSON.stringify({ cycleId, evaluatorHash: report.evaluatorHash, complete: report.complete, completed: report.cases.length, excluded: report.excluded.length, unscored: report.unscored.length, spend: report.spend })}\n`);
 }

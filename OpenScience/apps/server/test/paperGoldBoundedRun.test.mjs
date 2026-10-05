@@ -71,3 +71,36 @@ test('ordinary scientific terminal failure is assessed once and is not an admini
  await runCycle({dataDir,cycleId:'scientific',definition,adapter,maxNewUnits:1});assert.deepEqual(calls,[[0,0],[1,0]]);assert.equal(assessed,2);
  const progress=JSON.parse(await fs.readFile(path.join(dataDir,'paper-gold/cycles/scientific/progress.json'),'utf8'));assert.deepEqual(progress.administrativeStops,[]);assert.deepEqual(progress.dispatchAttempts,{});
 });
+
+test('an administrative refusal is retried a bounded number of times; the unit is then recorded unscored and the cycle moves on',async t=>{
+ const {PaperGoldAdministrativeDeferral,PAPER_GOLD_ADMINISTRATIVE_ATTEMPTS,platformDispatch}=await import('../../../evals/paper-gold/run.mjs');
+ const dataDir=await fs.mkdtemp(path.join(os.tmpdir(),'gold-retry-bound-'));t.after(()=>fs.rm(dataDir,{recursive:true,force:true}));
+ const definition={replicates:2,cases:[{id:'a',type:'question',policy:{aliases:[]},rewrite:{writer:'flash',qaExecutor:'qwen',qaPassed:true,question:'Produce a report.',variants:['Produce report A.','Produce report B.','Produce report C.']},gold:{numeric:{},inputAvailable:false,benchmarkScope:'question-only',stageChecks:{}}}]};
+ const refused=[];let dispatched=0;
+ const adapter={noToolBaseline:async()=>({}),baselineMemorized:()=>false,dispatch:async request=>{
+  if(request.replicate===1){refused.push(request.attempt);throw new PaperGoldAdministrativeDeferral({id:`quota-${request.attempt}`,status:'failed',errorCode:'runtime_spend_limit_reached'},`eval-paper-attempt-${request.attempt}`);}
+  dispatched++;return {run:{id:`actual-${request.replicate}`}};
+ },extract:async()=>({numeric:{},exposureTier:'unknown'})};
+ // Every resumption used to dispatch the refused unit again, in a fresh project, for as long as it was asked to.
+ for(let round=0;round<PAPER_GOLD_ADMINISTRATIVE_ATTEMPTS;round++)await assert.rejects(runCycle({dataDir,cycleId:'bounded-retry',definition,adapter}),{code:'paper_gold_administrative_deferred'});
+ assert.deepEqual(refused,Array.from({length:PAPER_GOLD_ADMINISTRATIVE_ATTEMPTS},(_,attempt)=>attempt));
+ const report=await runCycle({dataDir,cycleId:'bounded-retry',definition,adapter});
+ assert.equal(refused.length,PAPER_GOLD_ADMINISTRATIVE_ATTEMPTS,'the unit is not dispatched again once its attempts are spent');
+ assert.equal(dispatched,5);assert.equal(report.units.length,5);
+ assert.deepEqual(report.unscored.map(({caseId,variant,replicate,reason,attempts})=>({caseId,variant,replicate,reason,attempts})),[{caseId:'a',variant:0,replicate:1,reason:'administrative_retry_limit',attempts:PAPER_GOLD_ADMINISTRATIVE_ATTEMPTS}]);
+ // Unscored is not scored: the cycle is settled (nothing more will be dispatched) and it is not complete.
+ assert.equal(report.complete,false);assert.equal(report.settled,true);assert.deepEqual(report.cases,[]);
+ const again=await runCycle({dataDir,cycleId:'bounded-retry',definition,adapter});assert.equal(refused.length,PAPER_GOLD_ADMINISTRATIVE_ATTEMPTS);assert.equal(again.unscored.length,1);
+ await assert.rejects(platformDispatch({base:'http://unused.invalid',headers:{},caseRecord:{id:'a'},replicate:0,cycleId:'c',attempt:PAPER_GOLD_ADMINISTRATIVE_ATTEMPTS}),/administrative dispatch attempt/);
+});
+
+test('each unit records the purpose the server\'s own rule gives its run, and the report says what the evolution budget did not hold',async t=>{
+ const dataDir=await fs.mkdtemp(path.join(os.tmpdir(),'gold-spend-'));t.after(()=>fs.rm(dataDir,{recursive:true,force:true}));
+ const definition={replicates:2,cases:[{id:'a',type:'question',policy:{aliases:[]},rewrite:{writer:'flash',qaExecutor:'qwen',qaPassed:true,question:'Produce a report.',variants:['Produce report A.','Produce report B.','Produce report C.']},gold:{numeric:{},inputAvailable:false,benchmarkScope:'question-only',stageChecks:{}}}]};
+ // The in-process dispatcher stamps the platform's route reason; the public dispatch route computes its own and never takes one from a caller.
+ const adapter={noToolBaseline:async()=>({}),baselineMemorized:()=>false,extract:async()=>({numeric:{},exposureTier:'unknown'}),
+  dispatch:async request=>({run:request.replicate<4?{id:`in-process-${request.replicate}`,effectiveAgentId:'meta-analysis',effectiveRouteReason:'platform-evolution'}:{id:`public-${request.replicate}`,effectiveAgentId:'meta-analysis',effectiveRouteReason:'choice:meta-analysis',automated:true}})};
+ const report=await runCycle({dataDir,cycleId:'spend',definition,adapter});
+ assert.deepEqual(report.units.map(unit=>unit.spendPurpose),['evolution','evolution','evolution','evolution','kernel','kernel']);
+ assert.deepEqual(report.spend,{byPurpose:{evolution:4,kernel:2},outsideEvolutionBudget:2});
+});
