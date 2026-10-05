@@ -60,7 +60,14 @@ test("a sign-up on the old release after the migration gets its sign-up gift lot
   assert.deepEqual([read.available, read.gifted, read.purchased, read.balance], ["200.00000000", "200.00000000", "0.00000000", "200.00000000"]);
   const { lots, entries } = await auditWallet(database, payer);
   assert.deepEqual(lots.map((lot) => [lot.kind, lot.source]), [["gifted", "signup"]]);
-  assert.equal(new Date(lots[0].expires_at).toISOString(), "2026-11-04T16:00:00.000Z", "a sign-up gift with the date the new release fixes: 30 days from the entry");
+  // The old release wrote the entry on the database's clock, not the test's, so the date is worked out from the entry
+  // itself — and by hand, not by the wallet's own function: the Shanghai date the entry was made on, thirty days on, to
+  // that date's 24:00 (16:00Z). Written as the literal date of the day the test was added, this failed from the first
+  // midnight in Shanghai onward (2026-10-06 00:12, in the release battery).
+  const made = (await database.query("SELECT created_at FROM evimed_credits.simulated_entries WHERE payer=$1 ORDER BY entry_id LIMIT 1", [payer])).rows[0].created_at;
+  const entered = new Date(new Date(made).getTime() + 8 * 3_600_000);
+  const through = new Date(Date.UTC(entered.getUTCFullYear(), entered.getUTCMonth(), entered.getUTCDate() + 30, 16));
+  assert.equal(new Date(lots[0].expires_at).toISOString(), through.toISOString(), "a sign-up gift with the date the new release fixes: 30 days from the entry");
   assert.equal(entries.length, 1, "no entry was added: the old grant line is the gift's line");
   assert.equal((await database.query("SELECT lot_id FROM evimed_credits.simulated_entries WHERE payer=$1", [payer])).rows[0].lot_id, lots[0].lot_id, "and says when it ends");
 });
