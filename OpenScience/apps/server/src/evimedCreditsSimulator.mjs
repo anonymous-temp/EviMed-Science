@@ -57,6 +57,8 @@ const MAX_GIFT_DAYS = 3660;
  *
  * - A simulated wallet beside a real wallet's address is a deployment that could
  *   charge neither or both: refused rather than guessed at.
+ * - The platform's wallet charges under the versioned research-billing policy and
+ *   nothing else: without it there is no rule to charge by.
  * - A starting allowance that is not a whole number of credits is a typo.
  * - A gift that lasts no days, or longer than ten years, and a monthly gift that
  *   is not an exact amount, are typos: a mistyped number must not make a gift
@@ -69,6 +71,7 @@ export function evimedCreditsRefusal(config) {
   if (String(config.evimedCreditsUrl ?? "").trim() || String(config.evimedCreditsBalanceUrl ?? "").trim()) {
     return "evimed_credits_simulated_conflict";
   }
+  if (config.researchBillingEnabled !== true) return "evimed_credits_simulated_policy_required";
   const start = Number(config.evimedCreditsSimulatedStartCredits ?? SIMULATED_START_CREDITS);
   if (!Number.isSafeInteger(start) || start < 1 || start > MAX_START_CREDITS) return "evimed_credits_simulated_start_invalid";
   const days = Number(config.evimedCreditsSignupGiftDays ?? 30);

@@ -234,7 +234,7 @@ test("credits come from the injected estimator, and its absence costs the caller
   });
   assert.deepEqual(seen, [{ mode: "deep", capabilityId: "bibliometric-analysis", minutes: { min: 20, max: 120 } }]);
   assert.deepEqual(withCredits.credits, { min: 80, max: 240 });
-  assert.equal(withCredits.summary, "会做深度研究 · 文献计量分析 · 约 20–120 分钟 · 约 80–240 灵豆");
+  assert.equal(withCredits.summary, "会做深度研究 · 文献计量分析 · 约 20–120 分钟 · 约 80.00–240.00 灵豆");
 
   // A quick answer is EviMed's own line: its seconds and its price are not ours
   // to quote, so the estimator is never asked about one.
@@ -257,8 +257,18 @@ test("credits come from the injected estimator, and its absence costs the caller
     estimateCredits: async ({ capabilityId }) => ({ capabilityId, unit: "灵豆", low: 46, high: 118, basis: "manifest" }),
   });
   assert.deepEqual(service.credits, { min: 46, max: 118 });
-  assert.equal(service.summary, "会做深度研究 · 文献计量分析 · 约 20–120 分钟 · 约 46–118 灵豆");
+  assert.equal(service.summary, "会做深度研究 · 文献计量分析 · 约 20–120 分钟 · 约 46.00–118.00 灵豆");
   assert.equal("simulated" in service, false, "a real wallet's price carries no simulated field");
+
+  // An exact estimate is a fraction of a credit: it is drawn with the one display rule, never rounded to a whole number.
+  const exact = await decideRouting({
+    question: "对 GLP-1 肥胖研究做 CiteSpace 文献计量分析",
+    agents: catalogue,
+    classifier: null,
+    estimateCredits: async () => ({ low: 0.0043, high: 0.4, basis: "history", simulated: true }),
+  });
+  assert.deepEqual(exact.credits, { min: 0.0043, max: 0.4 });
+  assert.equal(exact.summary, "会做深度研究 · 文献计量分析 · 约 20–120 分钟 · 约 0.0043–0.40 灵豆（模拟）");
 
   // A simulated wallet's price says so, in the structure and in the line beside the duration.
   const simulated = await decideRouting({
@@ -269,7 +279,7 @@ test("credits come from the injected estimator, and its absence costs the caller
   });
   assert.deepEqual(simulated.credits, { min: 46, max: 118 });
   assert.equal(simulated.simulated, true);
-  assert.equal(simulated.summary, "会做深度研究 · 文献计量分析 · 约 20–120 分钟 · 约 46–118 灵豆（模拟）");
+  assert.equal(simulated.summary, "会做深度研究 · 文献计量分析 · 约 20–120 分钟 · 约 46.00–118.00 灵豆（模拟）");
 
   // A settlement service that is down costs the reader the price, never the
   // prediction.
