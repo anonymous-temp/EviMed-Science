@@ -314,7 +314,9 @@ test("the worker reads a moved lesson's run from the copy kept for it, and the h
 test("a stop reads the bounded run it releases, and the counters reach the metrics page", () => {
   // L-G6: a bounded run's finish released its runtime before writing the
   // transcript, so every one of them recorded `history_unavailable`.
-  const hook = serverSource.slice(serverSource.indexOf("onRuntimeStopping: async (project) => {"), serverSource.indexOf("onRuntimeStop: (project, status) => {"));
+  const begins = serverSource.indexOf("onRuntimeStopping: async (project");
+  assert.notEqual(begins, -1, "the stop hook is where this test reads it");
+  const hook = serverSource.slice(begins, serverSource.indexOf("onRuntimeStop: (project, status) => {"));
   assert.match(hook, /runsToReadBeforeStop\(await agentRuns\.list\(project\), \{\s*boundedRunId: runtimeManager\.boundedRuntimeScope\(project\)\?\.runId \?\? null,/);
   // L-G5: the ledger's counts and the process counters, on the operator page
   // and beside the method list.
