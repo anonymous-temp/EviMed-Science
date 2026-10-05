@@ -18,6 +18,7 @@ import { NotificationService } from "../src/notificationService.mjs";
 import { migrateProductStore } from "../src/productPersistence.mjs";
 import { ProductDocuments } from "../src/productStore.mjs";
 import { createSourceChanges } from "../src/sourceChanges.mjs";
+import { migrateEvidenceZones } from "../src/evidenceZonePersistence.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
 import { insertItem, insertSource } from "./helpers/frontierFixtures.mjs";
 
@@ -620,8 +621,8 @@ test("an AI-kept card nobody follows is retired after enough quiet checks over e
   assert.match(retiredEntry.summary, /不再更新.*最后核对日期/);
   assert.equal((await cardRow(watched.id)).retired_at, null, "a card whose zone someone follows is not retired");
   // It leaves the editor's rotation.
-  await db.query("UPDATE evimed_frontier.evidence_automation SET next_run_at=clock_timestamp() WHERE zone_id=$1", [zone.id]);
-  await worker.schedule();
+  await db.query("UPDATE evimed_frontier.evidence_automation SET next_run_at=CASE WHEN zone_id=$1 THEN clock_timestamp() ELSE clock_timestamp()+interval '1 day' END", [zone.id]);
+  assert.equal(await worker.schedule(), 0, "the zone's one AI card is retired, and nothing else matches it");
   assert.equal((await rows("SELECT count(*)::int AS n FROM evimed_frontier.evidence_editorial_jobs WHERE card_id=$1", [card.id]))[0].n, 0);
   // A new matching item re-opens it.
   clock.at += 2 * DAY;
@@ -743,6 +744,38 @@ test("a changed source reaches the result impact path and the memory labels from
   assert.equal(await upkeep.downstreamTick(), 0);
   assert.equal(impacts.length, again, "nothing new on the feed, nothing asked");
   assert.equal(await build().upkeep.downstreamTick(), 0, "built without the readers it asks no one");
+});
+
+test("the migration takes a database that holds release-5 evidence data, gives every card a clean current label, and runs again unchanged", options, async () => {
+  const own = await createGeoTestDatabase(url, "upkeepmig");
+  /** @type {any[]} */ const opened = [];
+  const open = () => { const database = new ControlPlaneDatabase({ databaseUrl: own.url, databasePoolMax: 2, databaseConnectionTimeoutMs: 2000 }); opened.push(database); return database; };
+  try {
+    const first = open();
+    await migrateFrontier(first, { dimension: 1024 });
+    // Release 5 had none of what this adds: put the schema back as it was, then add a published card the way release 5 wrote one.
+    await first.query(`DROP TABLE IF EXISTS evimed_frontier.evidence_change_log, evimed_frontier.evidence_challenges, evimed_frontier.evidence_upkeep_state;
+      DROP FUNCTION IF EXISTS evimed_frontier.evidence_change_log_append_only();
+      ALTER TABLE evimed_frontier.evidence_cards DROP COLUMN currency, DROP COLUMN pending_item_ids, DROP COLUMN currency_detail, DROP COLUMN last_checked_at,
+        DROP COLUMN withdrawn, DROP COLUMN retired_at, DROP COLUMN no_change_checks, DROP COLUMN no_change_since, DROP COLUMN source_keys, DROP COLUMN source_keys_revision`);
+    await first.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES('mig_user','Mig','development')");
+    await first.query("INSERT INTO evimed_frontier.evidence_zones(id,user_id,title,state) VALUES('ez_mig','mig_user','Old zone','published')");
+    await first.query(`INSERT INTO evimed_frontier.evidence_cards(id,zone_id,user_id,title,subtype,summary,body,sources,state) VALUES('ec_mig','ez_mig','mig_user','Old card','academic','s','b','[]','published')`);
+    const second = open();
+    await migrateEvidenceZones(second);
+    const card = (await second.query("SELECT currency,pending_item_ids,last_checked_at,withdrawn,retired_at,no_change_checks,source_keys,source_keys_revision FROM evimed_frontier.evidence_cards WHERE id='ec_mig'")).rows[0];
+    assert.deepEqual(card, { currency: "current", pending_item_ids: [], last_checked_at: null, withdrawn: null, retired_at: null, no_change_checks: 0, source_keys: [], source_keys_revision: null });
+    for (const database of [open(), second, open()]) await migrateEvidenceZones(database);
+    const tables = (await second.query("SELECT table_name FROM information_schema.tables WHERE table_schema='evimed_frontier' AND table_name IN ('evidence_change_log','evidence_challenges','evidence_upkeep_state') ORDER BY 1")).rows.map((row) => row.table_name);
+    assert.deepEqual(tables, ["evidence_challenges", "evidence_change_log", "evidence_upkeep_state"]);
+    assert.equal((await second.query("SELECT count(*)::int AS n FROM pg_trigger WHERE tgrelid='evimed_frontier.evidence_change_log'::regclass AND NOT tgisinternal")).rows[0].n, 2, "a second run adds no trigger");
+    await second.query("INSERT INTO evimed_frontier.evidence_change_log(zone_id,card_id,category,trigger,summary_zh) VALUES('ez_mig','ec_mig','retired','scheduled_check','x')");
+    await assert.rejects(second.query("DELETE FROM evimed_frontier.evidence_change_log"), { code: "55000" }, "the log is protected on a migrated database as on a fresh one");
+    assert.equal((await second.query("SELECT count(*)::int AS n FROM evimed_frontier.evidence_cards")).rows[0].n, 1, "no card was lost");
+  } finally {
+    for (const database of opened) await database.close();
+    await own.drop();
+  }
 });
 
 test("the card's identifier keys are the sources' and the verified study's, in the one record's form", () => {
