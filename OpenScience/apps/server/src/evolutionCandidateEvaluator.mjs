@@ -331,8 +331,14 @@ export function createEvolutionCandidateEvaluator({ config, controller, fetchImp
       const verificationLevel = published.size >= 2 && !failedCaseIds.size && exposure.tier === "unexposed" && behaviour?.status === "passed" ? "V2" : simulationPassed && !failedCaseIds.size ? "V1" : "V0";
       const ok = kind === "workflow" ? workflowSmoke : verificationLevel === "V2" || (definition.noPublishedExamples === true && verificationLevel === "V1");
       const generalisationFailed = behaviour?.status === "failed";
+      // The last branch: every published case and behavioural check passed, and what keeps the candidate from V2 is the
+      // exposure tier of its development chain. That wait used to carry no code at all (live acceptance, 2026-10-05: a
+      // candidate that passed everything waited under `resourceCode: null`), and it is not a wait any validation material
+      // ends — the chain keeps its worst tier, so only a new branch can publish.
       const resourceCode = ok || failedCaseIds.size || generalisationFailed ? undefined : behaviour?.status === "unavailable" ? "behavioural_checks_unavailable"
-        : simulationScores.length > 0 && simulationScores.every(score => score.valid) && !simulationPassed ? "simulation_cannot_discriminate_trivial_estimator" : undefined;
+        : simulationScores.length > 0 && simulationScores.every(score => score.valid) && !simulationPassed ? "simulation_cannot_discriminate_trivial_estimator"
+        : kind !== "workflow" && published.size >= 2 && behaviour?.status === "passed" && exposure.tier !== "unexposed"
+          ? (["exposed_uncited", "cited"].includes(exposure.tier) ? "development_chain_exposed" : "development_chain_exposure_unknown") : undefined;
       return finish({ ok, verificationLevel, smokePassed: workflowSmoke, status: ok ? "verified" : workflowResourcePending ? "waiting_resource" : failedCaseIds.size || generalisationFailed ? "repair" : "waiting_resource", failedCaseIds: [...failedCaseIds], assessments, evaluatorHash, publishedReferenceCount: published.size, exposureTier: exposure.tier,
         behaviour, notices, ...(resourceCode ? { resourceCode } : {}), ...(generalisationFailed ? { issueCodes: ["candidate_generalisation_failed"] } : {}) });
       }catch(error){await finish({ok:false,status:"error",assessments:executionEvidence.map(item=>({caseId:item.caseId,replicate:item.replicate,passed:false,reason:"candidate_execution_failed"}))});throw error;}
