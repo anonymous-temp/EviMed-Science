@@ -11,6 +11,7 @@ import pg from "pg";
 import { researchMoneyUnits } from "@evimed/domain";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { SimulatedWallet, migrateSimulatedWallet } from "../src/evimedCreditsSimulator.mjs";
+import { exactBillingPolicy, migrateEvimedCredits, researchBillingPolicy } from "../src/evimedCreditsPersistence.mjs";
 import { auditWallet, databaseOptions as options, databaseUrl, freshPayer } from "./helpers/creditWalletFixture.mjs";
 
 /** The one-number wallet's DDL as it shipped on 2026-10-04, verbatim. */
@@ -170,4 +171,46 @@ test("existing wallets migrate onto lots without anyone losing anything: the gif
   // A wallet made after the migration gets its own sign-up gift and is not touched by the marker.
   const fresh = freshPayer("after");
   assert.equal((await wallet.snapshot(fresh)).gifted, "200.00000000");
+});
+
+test("the settlement ledger's whole-credit column becomes exact without touching a row, and the old policy stays the old policy", options, async () => {
+  // The settlements table and the policy row as the whole-credit version shipped them.
+  await database.query(`
+    CREATE TABLE IF NOT EXISTS evimed_credits.settlements (
+      run_id text PRIMARY KEY, user_id text NOT NULL, project_id text, capability_id text NOT NULL DEFAULT '', memo text NOT NULL DEFAULT '',
+      cost_cny numeric(20,8) NOT NULL CHECK (cost_cny >= 0), credits bigint NOT NULL CHECK (credits >= 0), credits_per_cny numeric(20,8) NOT NULL CHECK (credits_per_cny > 0),
+      status text NOT NULL CHECK (status IN ('pending','settled','refused','abandoned')), attempts integer NOT NULL DEFAULT 0 CHECK (attempts >= 0),
+      next_attempt_at timestamptz(3), receipt_id text, error_code text, created_at timestamptz(3) NOT NULL DEFAULT clock_timestamp(), settled_at timestamptz(3),
+      CHECK ((status = 'pending') = (next_attempt_at IS NOT NULL))
+    );
+    CREATE TABLE IF NOT EXISTS evimed_credits.research_policy (singleton boolean PRIMARY KEY DEFAULT true CHECK(singleton), pricing_version text NOT NULL, activated_at timestamptz(3) NOT NULL);
+    INSERT INTO evimed_credits.research_policy(singleton,pricing_version,activated_at) VALUES(true,'research-allowance-v1-20261003','2026-10-03T00:00:00Z') ON CONFLICT DO NOTHING;
+    INSERT INTO evimed_credits.settlements(run_id,user_id,memo,cost_cny,credits,credits_per_cny,status,settled_at) VALUES('run_old_1','u_old','Old charge',3.4,3,1,'settled',now());
+    INSERT INTO evimed_credits.settlements(run_id,user_id,memo,cost_cny,credits,credits_per_cny,status,attempts,next_attempt_at) VALUES('run_old_2','u_old','Old pending',2.1,2,1,'pending',1,now());`);
+  assert.equal((await database.query("SELECT data_type FROM information_schema.columns WHERE table_schema='evimed_credits' AND table_name='settlements' AND column_name='credits'")).rows[0].data_type, "bigint");
+
+  await migrateEvimedCredits(database);
+
+  const column = (await database.query("SELECT data_type, numeric_precision, numeric_scale FROM information_schema.columns WHERE table_schema='evimed_credits' AND table_name='settlements' AND column_name='credits'")).rows[0];
+  assert.deepEqual([column.data_type, column.numeric_precision, column.numeric_scale], ["numeric", 20, 8]);
+  const rows = (await database.query("SELECT run_id,status,credits::text AS credits,absorbed::text AS absorbed,requested,wallet_contract,charge_basis,wallet FROM evimed_credits.settlements ORDER BY run_id")).rows;
+  assert.deepEqual(rows, [
+    { run_id: "run_old_1", status: "settled", credits: "3.00000000", absorbed: "0.00000000", requested: null, wallet_contract: "legacy-integer-floor", charge_basis: null, wallet: "live" },
+    { run_id: "run_old_2", status: "pending", credits: "2.00000000", absorbed: "0.00000000", requested: null, wallet_contract: "legacy-integer-floor", charge_basis: null, wallet: "live" },
+  ], "every row is as it was: the whole-credit rule it was charged under, and nothing recomputed");
+  // The constraints came through the change: a charge cannot be negative, and a settled amount is still bounded.
+  await assert.rejects(database.query("UPDATE evimed_credits.settlements SET credits=-1 WHERE run_id='run_old_1'"), (/** @type {any} */ error) => error?.code === "23514");
+  await assert.rejects(database.query("UPDATE evimed_credits.settlements SET wallet_contract='made-up' WHERE run_id='run_old_1'"), (/** @type {any} */ error) => error?.code === "23514");
+  // The whole-credit policy is still that, with its own activation; the exact rule's is a separate row with an instant of its own.
+  const whole = await researchBillingPolicy(database, { activate: true, now: new Date("2027-01-01T00:00:00Z") });
+  assert.deepEqual([whole?.pricing_version, new Date(whole?.activated_at).toISOString()], ["research-allowance-v1-20261003", "2026-10-03T00:00:00.000Z"], "an activation is sticky");
+  assert.equal(await exactBillingPolicy(database), null, "the exact rule has not begun");
+  const exact = await exactBillingPolicy(database, { activate: true, now: new Date("2026-10-06T03:00:00Z") });
+  assert.deepEqual([exact?.pricing_version, new Date(exact?.activated_at).toISOString()], ["research-allowance-v2-20261005", "2026-10-06T03:00:00.000Z"]);
+  const later = await exactBillingPolicy(database, { activate: true, now: new Date("2027-06-01T00:00:00Z") });
+  assert.equal(new Date(later?.activated_at).toISOString(), "2026-10-06T03:00:00.000Z", "a later activation never moves the instant");
+  // Idempotent: another process, another handle.
+  const second = new ControlPlaneDatabase({ databaseUrl: new URL(`/${name}`, databaseUrl).toString(), databasePoolMax: 2, databaseConnectionTimeoutMs: 3_000 });
+  try { await migrateEvimedCredits(second); } finally { await second.close(); }
+  assert.equal((await database.query("SELECT credits::text AS credits FROM evimed_credits.settlements WHERE run_id='run_old_1'")).rows[0].credits, "3.00000000");
 });

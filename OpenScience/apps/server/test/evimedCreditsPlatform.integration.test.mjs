@@ -205,6 +205,36 @@ test("the same run settled five times at once is one charge", options, async () 
   await auditWallet(database, w.payer);
 });
 
+test("two runs finishing at once on a balance that covers one of them: what the wallet held is taken, the rest is absorbed, and nothing goes below zero", options, async () => {
+  for (let round = 0; round < 5; round += 1) {
+    const w = await world({ startCredits: 10 });
+    const [a, b] = await Promise.all([w.finish({}, { costs: [8] }), w.finish({}, { costs: [8] })]);
+    const taken = [a.result.credits, b.result.credits].sort();
+    assert.deepEqual(taken, ["2.00000000", "8.00000000"], `round ${round}: one is covered and the other takes what is left`);
+    assert.deepEqual([a.result.absorbed, b.result.absorbed].sort(), ["0.00000000", "6.00000000"]);
+    assert.equal((await w.balance()).balance, "0.00000000");
+    const lines = (await w.service.statements(w.userId)).items.filter((line) => line.kind === "charge");
+    assert.deepEqual(lines.map((line) => line.status).sort(), ["absorbed", "settled"]);
+    await auditWallet(database, w.payer);
+  }
+});
+
+test("a settlement racing the expiry sweep through the service: the lapsed gift is its own line, and the charge is taken from what is still valid", options, async () => {
+  for (let round = 0; round < 5; round += 1) {
+    const w = await world({ startCredits: 4, signupGiftDays: 1 });
+    await w.service.simulatedTopUp(w.userId, { packageId: "topup-50", requestId: `request_${randomUUID().slice(0, 12)}` });
+    // The gift's date passes; a run that began long after it finishes while the sweep is running.
+    w.time.advance(3 * DAY);
+    const [done] = await Promise.all([w.finish({}, { costs: [1.5] }), w.service.sweepWallet(), w.service.sweepWallet()]);
+    assert.equal(done.result.credits, "1.50000000");
+    const { entries, balance } = await auditWallet(database, w.payer);
+    assert.equal(balance, units("48.5"), `round ${round}`);
+    assert.deepEqual(entries.filter((entry) => entry.kind === "expire").map((entry) => entry.credits), ["4.00000000"], "once");
+    const line = (await w.service.statements(w.userId)).items.find((item) => item.runId === done.runId);
+    assert.deepEqual(line?.paidBy, { gifted: "0.00000000", purchased: "1.50000000" }, "a gift past its date pays for nothing");
+  }
+});
+
 test("the start check compares in exact units: an estimate of ¥0.40 is 0.40 and not 0, a run a person starts needs the P50 and one nobody watches needs the P90", options, async () => {
   const w = await world({ startCredits: 1 });
   // A capability with a history whose P50 is 0.40 and P90 is 0.80.

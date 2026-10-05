@@ -603,6 +603,7 @@ export class CreditWallet {
    *
    * @param {{ payer: string, requestId: string, amount: string | number, holdRunId?: string | null, occurredAt?: string | null, client?: any }} request
    * @returns {Promise<{ taken: string, shortfall: string, lots: LotDraw[], balance: string, receiptId: string | null, replay: boolean }>}
+   *   `balance` is what the charge left, the balance its own entry records
    */
   async settle({ payer, requestId, amount, holdRunId = null, occurredAt = null, client = null }) {
     payerOf(payer);
@@ -674,10 +675,11 @@ export class CreditWallet {
           draws.push({ lotId: String(row.lot_id), kind: row.kind, source: row.source, expiresAt: row.expires_at == null ? null : new Date(row.expires_at).toISOString(), amount: researchMoneyDecimal(part) });
         }
       }
-      // A gift a hold kept alive past its date goes now, as its own line.
+      // The balance this charge left: what its entry records and its statement line shows. A gift a hold kept alive
+      // past its date goes right after, as a line of its own that records its own balance.
+      const afterCharge = balance;
       await this.#expireDue(tx, payer, at);
-      balance = unitsOf((await tx.query("SELECT balance::text AS balance FROM evimed_credits.simulated_wallets WHERE payer=$1", [payer])).rows[0].balance);
-      return { taken: researchMoneyDecimal(take), shortfall: researchMoneyDecimal(requested - take), lots: draws, balance: researchMoneyDecimal(balance), receiptId, replay: false };
+      return { taken: researchMoneyDecimal(take), shortfall: researchMoneyDecimal(requested - take), lots: draws, balance: researchMoneyDecimal(afterCharge), receiptId, replay: false };
     });
   }
 
