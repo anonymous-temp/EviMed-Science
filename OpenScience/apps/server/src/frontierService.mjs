@@ -375,7 +375,7 @@ const ITEM_COLUMNS = `i.id, i.public_id, i.title_raw, i.title_zh, i.summary_zh, 
   i.evidence_type, i.evidence_basis, i.specialties, i.entities, i.flags, i.doi, i.pmid, i.registry_ids, i.canonical_url,
   i.published_at, i.date_precision, i.timeline_at, i.visible_at, i.selected, i.selected_rule, i.safety_alert, i.verification,
   i.score_authority, i.score_impact, i.score_novelty, i.score_relevance, i.score_total, i.primary_source_id,
-  s.name AS source_name, s.owner_entity AS source_owner, s.homepage AS source_homepage,
+  s.name AS source_name, s.owner_entity AS source_owner, s.homepage AS source_homepage, s.platform_produced AS source_platform_produced,
   t.open_access, t.enrichment->>'oa_pdf_url' AS oa_pdf_url, t.enrichment - '{${CARD_HIDDEN_ENRICHMENT.join(",")}}'::text[] AS card_enrichment,
   CASE WHEN e.report_count > 1 THEN e.public_id END AS event_public_id, e.title_zh AS event_title,
   (SELECT coalesce(jsonb_agg(jsonb_build_object('sourceId', r.source_id, 'sourceName', r.name, 'ownerEntity', r.owner_entity, 'url', r.url)
@@ -383,11 +383,11 @@ const ITEM_COLUMNS = `i.id, i.public_id, i.title_raw, i.title_zh, i.summary_zh, 
      FROM (SELECT d.source_id, d.name, d.owner_entity, d.url, row_number() OVER (ORDER BY d.published_at DESC NULLS LAST, d.source_id) AS rank
              FROM (SELECT DISTINCT ON (ms.owner_entity) im.source_id, ms.name, ms.owner_entity, im.url, im.published_at
                      FROM evimed_frontier.item_mentions im JOIN evimed_frontier.sources ms ON ms.id = im.source_id
-                    WHERE im.item_id = i.id AND ms.owner_entity <> s.owner_entity AND ms.enabled
+                    WHERE im.item_id = i.id AND ms.owner_entity <> s.owner_entity AND ms.enabled AND NOT ms.platform_produced
                     ORDER BY ms.owner_entity, im.published_at DESC NULLS LAST, im.source_id) d
             ORDER BY d.published_at DESC NULLS LAST, d.source_id LIMIT 5) r) AS mentions,
   (SELECT count(DISTINCT ms.owner_entity)::integer FROM evimed_frontier.item_mentions im JOIN evimed_frontier.sources ms ON ms.id = im.source_id
-    WHERE im.item_id = i.id AND ms.owner_entity <> s.owner_entity AND ms.enabled) AS mention_count`;
+    WHERE im.item_id = i.id AND ms.owner_entity <> s.owner_entity AND ms.enabled AND NOT ms.platform_produced) AS mention_count`;
 
 const ITEM_FROM = `evimed_frontier.items i
   JOIN evimed_frontier.sources s ON s.id = i.primary_source_id
@@ -517,8 +517,10 @@ export class FrontierService {
         .map((key) => ({ key, label: labels.specialties[key] })),
       flags: (row.flags ?? []).filter((key) => Object.hasOwn(labels.flags, key)).map((key) => ({ key, label: labels.flags[key] })),
       entities: { drugs: stringList(entities.drugs), trials: stringList(entities.trials), orgs: stringList(entities.orgs), diseases: stringList(entities.diseases) },
+      // `platformProduced`: the source's content is EviMed's own (contract 1.3.0) — the label 「EviMed 出品」, and the reason such
+      // an item is never counted as another institution's report of anything.
       source: { id: row.primary_source_id, name: frontierSourceDisplayName({ id: row.primary_source_id, name: row.source_name, ownerEntity: row.source_owner }),
-        homepage: row.source_homepage ?? null },
+        homepage: row.source_homepage ?? null, platformProduced: row.source_platform_produced === true },
       url: row.canonical_url,
       doi: row.doi ?? null,
       pmid: row.pmid ?? null,

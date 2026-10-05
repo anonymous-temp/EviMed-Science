@@ -262,6 +262,8 @@ export function validateSource(raw) {
       egress: text(value.egress, 40) ?? null,
       authority: integer(value.authority, 1, 5) ?? null,
       safety_feed: value.safety_feed === true,
+      // Contract 1.3.0: the source's content is the platform's own. Absent (an older plugin) is false.
+      platform_produced: value.platform_produced === true,
       owner_entity: text(value.owner_entity, 200) ?? null,
       launch_tier: text(value.launch_tier, 16) ?? null,
       language: text(value.language, 35) ?? null,

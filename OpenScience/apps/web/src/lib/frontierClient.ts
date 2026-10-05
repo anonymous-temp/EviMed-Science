@@ -123,7 +123,8 @@ export interface FrontierItem {
   specialties: FrontierLabelled[];
   flags: FrontierLabelled[];
   entities: { drugs: string[]; trials: string[]; orgs: string[]; diseases: string[] };
-  source: { id: string; name: string; homepage: string | null };
+  /** `platformProduced`: the source's content is EviMed's own (contract 1.3.0) — shown as 「EviMed 出品」, never as another institution's report. */
+  source: { id: string; name: string; homepage: string | null; platformProduced: boolean };
   url: string;
   doi: string | null;
   pmid: string | null;
@@ -594,7 +595,7 @@ export function parseFrontierItem(value: unknown): FrontierItem | null {
       orgs: strings(entities?.orgs, 20),
       diseases: strings(entities?.diseases, 20),
     },
-    source: { id: text(source?.id) ?? "", name: sourceName, homepage: safeLink(source?.homepage) },
+    source: { id: text(source?.id) ?? "", name: sourceName, homepage: safeLink(source?.homepage), platformProduced: source?.platformProduced === true },
     url,
     doi: text(raw.doi),
     pmid: text(raw.pmid),

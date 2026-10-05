@@ -105,6 +105,9 @@ CREATE TABLE IF NOT EXISTS evimed_frontier.sources (
   mirrored_at        timestamptz(3) NOT NULL DEFAULT clock_timestamp()
 );
 CREATE INDEX IF NOT EXISTS frontier_sources_lane_idx ON evimed_frontier.sources (lane) WHERE retired_at IS NULL;
+-- Contract 1.3.0 (flywheel F09, 2026-10-05): the source's content is the platform's own. A label the cards show and the
+-- reason an item of such a source is never independent corroboration of another's; scoring never reads it.
+ALTER TABLE evimed_frontier.sources ADD COLUMN IF NOT EXISTS platform_produced boolean NOT NULL DEFAULT false;
 
 CREATE TABLE IF NOT EXISTS evimed_frontier.entries (
   id              bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,

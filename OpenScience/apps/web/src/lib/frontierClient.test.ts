@@ -104,6 +104,14 @@ describe("reading an item", () => {
     expect(item.source.homepage).toBeNull();
   });
 
+  it("reads whether the source's content is the platform's own, and only a true says so", () => {
+    expect(parseFrontierItem(rawItem({ source: { id: "evimed-evidence", name: "EviMed 证据中心", platformProduced: true } }))!.source.platformProduced).toBe(true);
+    for (const value of [false, "true", 1, null, undefined]) {
+      expect(parseFrontierItem(rawItem({ source: { id: "nejm", name: "NEJM", platformProduced: value } }))!.source.platformProduced).toBe(false);
+    }
+    expect(parseFrontierItem(rawItem({ source: { id: "nejm", name: "NEJM" } }))!.source.platformProduced).toBe(false);
+  });
+
   it("drops what a card cannot stand without, and fills words the server left out", () => {
     expect(parseFrontierItem(rawItem({ id: "" }))).toBeNull();
     expect(parseFrontierItem(rawItem({ source: { id: "x" } }))).toBeNull();
