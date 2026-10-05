@@ -15,7 +15,7 @@
  * `other` — bookkeeping never fails a model call.
  */
 
-/** @typedef {'kernel'|'memory-extraction'|'routing'|'title'|'engine'|'capsule-scan'|'channel-intent'|'source-understanding'|'learning'|'autopilot'|'frontier'|'review'|'geo'|'vcr'|'web-search'|'evolution'|'other'} UsagePurpose */
+/** @typedef {'kernel'|'memory-extraction'|'routing'|'title'|'engine'|'capsule-scan'|'channel-intent'|'source-understanding'|'learning'|'autopilot'|'frontier'|'review'|'geo'|'vcr'|'web-search'|'evolution'|'evidence'|'evidence-upkeep'|'other'} UsagePurpose */
 
 /** Every purpose, in report order. `frontier` is the frontier feed reading
  *  the literature for everyone (screening, editing, the daily issue): one
@@ -35,7 +35,17 @@
  *  episode should do, from the progress so far — made on a researcher's own
  *  agenda and charged to them like the episode it chooses for, caps included;
  *  a line of its own so what choosing costs is never folded into what
- *  researching costs. */
+ *  researching costs. `evidence` is the platform's own evidence programme
+ *  (2026-10-05, evidence-flywheel plan §5.1, B7): the topic selector and the
+ *  agendas the publisher account runs in its internal `evimed-evidence`
+ *  project, held by the programme's own daily budget like `frontier` and
+ *  never by anyone's caps. `evidence-upkeep` is the other half of the same
+ *  money: the AI upkeep of a zone that is not the platform's — what keeping
+ *  a researcher's own evidence zone current costs — made on that account's
+ *  behalf, booked to it, counted against its caps and charged to it through
+ *  the research allowance like a run's model calls. The platform's budget
+ *  pays for official zones only; until 2026-10-05 any account's zone ran on
+ *  the frontier budget (plan §3.3). */
 export const USAGE_PURPOSES = /** @type {readonly UsagePurpose[]} */ (Object.freeze([
   'kernel',
   'memory-extraction',
@@ -53,6 +63,8 @@ export const USAGE_PURPOSES = /** @type {readonly UsagePurpose[]} */ (Object.fre
   'vcr',
   'web-search',
   'evolution',
+  'evidence',
+  'evidence-upkeep',
   'other',
 ]))
 
@@ -74,6 +86,8 @@ export const USAGE_PURPOSE_LABELS_ZH = /** @type {Readonly<Record<UsagePurpose, 
   vcr: '虚拟临研',
   'web-search': '联网搜索',
   evolution: '循证进化',
+  evidence: '证据中心',
+  'evidence-upkeep': '证据专区维护',
   other: '其他',
 }))
 

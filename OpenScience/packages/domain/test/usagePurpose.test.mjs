@@ -28,7 +28,8 @@ test("the purpose vocabulary is the closed set the ledger's CHECK is built from"
   // insert the database refuses.
   assert.deepEqual([...USAGE_PURPOSES], [
     "kernel", "memory-extraction", "routing", "title", "engine",
-    "capsule-scan", "channel-intent", "source-understanding", "learning", "autopilot", "frontier", "review", "geo", "vcr", "web-search", "evolution", "other",
+    "capsule-scan", "channel-intent", "source-understanding", "learning", "autopilot", "frontier", "review", "geo", "vcr", "web-search", "evolution",
+    "evidence", "evidence-upkeep", "other",
   ]);
   assert.ok(Object.isFrozen(USAGE_PURPOSES));
   for (const purpose of USAGE_PURPOSES) {
@@ -110,3 +111,20 @@ test('whether a run is charged follows its purpose, never what its caller said a
     null, undefined,
   ]) assert.equal(isChargeableResearchRun(run), false, JSON.stringify(run))
 })
+
+test("the evidence programme's overhead and an account's own zone upkeep are two purposes with two payers", async () => {
+  // 2026-10-05 (evidence-flywheel §3.3): any frontier-audience account could switch on AI upkeep of its zone
+  // and have it booked to the platform's frontier budget. `evidence` is what the platform's own programme costs;
+  // `evidence-upkeep` is what keeping an account's own zone current costs, and the account pays it.
+  const { RESEARCH_BILLABLE_PURPOSES, researchTaskCharge } = await import("../index.mjs");
+  assert.ok(USAGE_PURPOSES.includes("evidence") && USAGE_PURPOSES.includes("evidence-upkeep"));
+  assert.equal(USAGE_PURPOSE_LABELS_ZH.evidence, "证据中心");
+  assert.equal(USAGE_PURPOSE_LABELS_ZH["evidence-upkeep"], "证据专区维护");
+  assert.equal(RESEARCH_BILLABLE_PURPOSES.includes("evidence-upkeep"), true, "the owner's own upkeep is billed to the owner");
+  assert.equal(RESEARCH_BILLABLE_PURPOSES.includes("evidence"), false, "the platform's programme is overhead the platform carries");
+  assert.equal(RESEARCH_BILLABLE_PURPOSES.includes("frontier"), false);
+  const row = (/** @type {string} */ id, /** @type {string} */ purpose) => ({ id, status: "settled", priced: true, currency: "CNY", purpose, actual_cost: "0.50000000", price_version: "v1" });
+  const charge = researchTaskCharge([row("a", "evidence-upkeep"), row("b", "evidence")], { owned: true, mode: "precision-v1" });
+  assert.equal(charge.billableCny, "0.50000000", "only the upkeep row is the owner's");
+  assert.equal(charge.platformCostCny, "0.50000000", "the programme row stays overhead");
+});

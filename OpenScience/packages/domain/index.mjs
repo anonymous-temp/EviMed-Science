@@ -157,6 +157,7 @@ export {
   ERROR_DETAIL_FIELDS,
   EXTENSION_ERROR_CODES,
   EVIMED_CREDITS_ROUTE_ERROR_CODES,
+  EVIDENCE_PLATFORM_ERROR_CODES,
   GEO_ROUTE_ERROR_CODES,
   MANAGED_BROWSER_ERROR_CODES,
   VCR_GATEWAY_ERROR_CODES,
@@ -893,6 +894,14 @@ export {
   PLATFORM_ROUTE_PURPOSES,
   LEARNING_EVALUATION_DISPATCH_PREFIX,
 } from './src/usagePurpose.mjs'
+// platformAccount — the platform's own publishing account: its id, name and auth type (evidence-flywheel B2, 2026-10-05)
+export {
+  PLATFORM_PUBLISHER_USER_ID,
+  PLATFORM_PUBLISHER_NAME,
+  PLATFORM_ACCOUNT_AUTH_TYPE,
+  isPlatformAccountId,
+  isPlatformAccountName,
+} from './src/platformAccount.mjs'
 // sourceUpdates — 5 exports (retraction and correction notices on a cited work, 2026-09-20)
 export {
   SOURCE_UPDATE_KINDS,
