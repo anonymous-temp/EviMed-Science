@@ -94,7 +94,7 @@ import { LearningMetrics, learningLedgerCounts, learningMetricFamilies, learning
 import { archivedLessonRun, ensureLearningProject, preserveProjectLessons, resolveLessonSourceRun } from "./learningPreservation.mjs";
 import { learnedMethodFamilyForRuntime, methodFamily } from "./learnedMethodMount.mjs";
 import { persistExecutedToolEdges, persistGoldenTraces } from "./toolExecutionEdges.mjs";
-import { CONNECTOR_CREDENTIAL_IDS, MIN_PASSWORD_LENGTH, autopilotEpisodeCapability, deliverableIdOfPath, geoMetricDefinition, isResearcherOwnedWork, meetsPasswordMinimum, mountedMethodDigest, usagePurposeOfRun } from "@evimed/domain";
+import { CONNECTOR_CREDENTIAL_IDS, MIN_PASSWORD_LENGTH, accountMonthStart, autopilotEpisodeCapability, deliverableIdOfPath, geoMetricDefinition, isResearcherOwnedWork, meetsPasswordMinimum, mountedMethodDigest, usagePurposeOfRun } from "@evimed/domain";
 import { ResearchSessionStore } from "./researchSessions.mjs";
 import { prepareResearchContext } from "./researchContext.mjs";
 import {
@@ -5610,8 +5610,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         const user = await store.ensureUser(req, res);
         // This month, because that is the period a person is asked to pay for
         // and the one they can still change their behaviour within.
-        const now = new Date();
-        const since = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+        // 00:00 on the first of the month in Asia/Shanghai — the same window the
+        // allowance page's month total and statements use.
+        const since = accountMonthStart(new Date());
         if (usageLedger) {
           const summary = await usageLedger.summary(user.id, { since });
           sendJson(res, 200, { data: {
@@ -5638,8 +5639,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // of its spend is `other`.
       if (pathname === "/api/account/usage/runs" && req.method === "GET") {
         const user = await store.ensureUser(req, res);
-        const now = new Date();
-        const since = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+        const since = accountMonthStart(new Date());
         if (!usageLedger) {
           const summary = summarizeUsage(await readServerUsageJsonl(config, user), { userId: user.id, since });
           sendJson(res, 200, { data: { since: since.toISOString(), currency: summary.currency, items: [], other: { calls: summary.calls, cost: summary.cost } } });

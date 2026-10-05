@@ -5,6 +5,7 @@
  * Where the wallet is simulated (`evimedCreditsSimulator.mjs`) every answer that
  * carries an amount says `simulated: true`, so no consumer can draw one as money.
  */
+import { accountMonthStart } from "@evimed/domain";
 import { HttpError, sendJson } from "./security.mjs";
 
 const ROOT = "/api/account/allowance";
@@ -19,11 +20,6 @@ const NO_LINKS = Object.freeze({ rechargeUrl: null, membershipUrl: null, ordersU
 export function researchAllowanceRoutePattern(pathname) {
   return [ROOT, `${ROOT}/statements`, `${ROOT}/estimate`, `${ROOT}/estimates`].includes(pathname)
     ? pathname : `${ROOT}/:route`;
-}
-
-/** @param {Date} now */
-function monthStart(now) {
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
 }
 
 /** @param {unknown} value */
@@ -89,7 +85,9 @@ export function createResearchAllowanceRoutes({ store, service, commerce, config
     const enabled = config.evimedCreditsEnabled === true && Boolean(service);
     const simulated = enabled && config.evimedCreditsSimulated === true;
     if (url.pathname === ROOT) {
-      const since = monthStart(now());
+      // The month a person reads begins at 00:00 on its first day in Asia/Shanghai, the
+      // calendar every gift's expiry and every statement line already uses.
+      const since = accountMonthStart(now());
       const summary = enabled ? await financialRead(() => service.allowanceSummary(user.id, { since })) : null;
       const available = typeof summary?.balanceCny === "number" && Number.isFinite(summary.balanceCny)
         && summary.balanceCny >= 0 ? summary.balanceCny : null;

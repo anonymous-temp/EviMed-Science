@@ -1646,7 +1646,30 @@ export {
 
 export { RESULT_PRODUCER_KINDS, RESULT_INPUT_KINDS, RESULT_AVAILABILITY, isResultDigest, normalizeResultPath, projectResultInput, projectResultVersion, projectResultMethod, resultMethodDifference, validateResultAnchor, resultVersionDifference } from "./src/resultProvenance.mjs";
 export { RESULT_REPLAY_METHODS, compareResultNumbers } from "./src/resultReplay.mjs";
-export { RESEARCH_BILLING_VERSION, RESEARCH_MONEY_SCALE, RESEARCH_BILLABLE_PURPOSES, STEP_WAITING_ALLOWANCE, allowanceRefusalSentence, allowanceWaitingNote, allowanceWaitingSentence, stepWaitingFor, researchMoneyUnits, researchMoneyDecimal, researchTaskCharge, SIMULATED_WALLET_LABEL, SIMULATED_START_CREDITS, SIMULATED_LOW_CREDITS, SIMULATED_WALLET_PAGES, SIMULATED_TOPUP_PACKAGES } from './src/researchBilling.mjs';
+export { RESEARCH_BILLING_VERSION, RESEARCH_BILLING_VERSION_WHOLE_CREDIT, RESEARCH_BILLING_VERSIONS, WALLET_CONTRACT_WHOLE_CREDIT, WALLET_CONTRACT_EXACT, RESEARCH_MONEY_SCALE, RESEARCH_BILLABLE_PURPOSES, STEP_WAITING_ALLOWANCE, allowanceRefusalSentence, allowanceWaitingNote, allowanceWaitingSentence, stepWaitingFor, researchMoneyUnits, researchMoneyDecimal, researchTaskCharge, creditUnitsOrNull, formatCredits, estimateRunCostUnits, SIMULATED_WALLET_LABEL, SIMULATED_START_CREDITS, SIMULATED_LOW_CREDITS, SIMULATED_WALLET_PAGES, SIMULATED_TOPUP_PACKAGES } from './src/researchBilling.mjs';
+
+// creditLots — 灵豆 held as lots: the two kinds, where a gift comes from, and the Asia/Shanghai calendar of expiry and monthly dates.
+export {
+  CREDIT_EXPIRY_REMINDER_DAYS,
+  CREDIT_GIFT_MAX_DAYS,
+  CREDIT_GIFT_SOURCES,
+  CREDIT_LOT_KINDS,
+  CREDIT_LOT_SOURCES,
+  CREDIT_NOT_CHARGED_REASONS,
+  CREDIT_OPERATOR_GRANT_DEFAULT_DAYS,
+  CREDIT_OPERATOR_GRANT_SOURCES,
+  CREDIT_SOURCE_LABELS,
+  CREDIT_STATEMENT_KINDS,
+  CREDIT_TIME_ZONE,
+  accountMonthStart,
+  expiryDateOf,
+  expiryInstantAfterDays,
+  expiryInstantOfDate,
+  expiryReminderDue,
+  expiryWords,
+  monthlyCycleAt,
+  monthlyDateOf,
+} from './src/creditLots.mjs';
 
 // dataSemantics — the reusable meaning of a researcher's tables (plan 2026-10-02 §11.3 N03): facts with a basis,
 // exact source versions, versioned transformations and the named outcomes of the deterministic data checks.

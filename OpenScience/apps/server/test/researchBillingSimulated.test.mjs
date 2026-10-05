@@ -232,7 +232,7 @@ test("every allowance answer on a simulated deployment says so, and the four com
   assert.equal(data.status, "ready");
   assert.equal(data.available, 188);
   assert.equal(data.lowThreshold, SIMULATED_LOW_CREDITS);
-  assert.deepEqual(data.month, { since: "2026-10-01T00:00:00.000Z", paid: 12, pending: 0 });
+  assert.deepEqual(data.month, { since: "2026-09-30T16:00:00.000Z", paid: 12, pending: 0 });
   assert.deepEqual(data.commerce, { rechargeUrl: SIMULATED_WALLET_PAGES.recharge, membershipUrl: SIMULATED_WALLET_PAGES.membership,
     ordersUrl: SIMULATED_WALLET_PAGES.orders, refundsUrl: SIMULATED_WALLET_PAGES.refunds });
   const statements = response();

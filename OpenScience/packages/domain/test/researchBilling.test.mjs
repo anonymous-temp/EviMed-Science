@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
+  RESEARCH_BILLING_VERSION, RESEARCH_BILLING_VERSION_WHOLE_CREDIT, estimateRunCostUnits, formatCredits,
   researchMoneyUnits, researchMoneyDecimal, researchTaskCharge,
   SIMULATED_LOW_CREDITS, SIMULATED_START_CREDITS, SIMULATED_TOPUP_PACKAGES, SIMULATED_WALLET_LABEL, SIMULATED_WALLET_PAGES,
 } from '../src/researchBilling.mjs';
@@ -22,6 +23,10 @@ test('confirmed requests are deduplicated, overhead and uncertain money excluded
   assert.equal(result.waivedCny, '0.90000001');
   assert.equal(result.evidence.length, 3);
   assert.equal(researchTaskCharge([request], { mode: 'precision-v1' }).creditsAmount, '1.90000001');
+  // Each rule is its own version, recorded on the charge.
+  assert.equal(result.pricingVersion, RESEARCH_BILLING_VERSION_WHOLE_CREDIT);
+  assert.equal(researchTaskCharge([request], { mode: 'precision-v1' }).pricingVersion, RESEARCH_BILLING_VERSION);
+  assert.notEqual(RESEARCH_BILLING_VERSION, RESEARCH_BILLING_VERSION_WHOLE_CREDIT);
   assert.equal(researchTaskCharge([request], { owned: false }).billableCny, '0.00000000');
 });
 
@@ -95,4 +100,55 @@ test('a step the allowance would not start waits for one of two reasons, named b
   assert.ok([...allowanceWaitingNote('simulated_allowance')].length <= 12, 'short enough for a rail');
   assert.equal(allowanceWaitingSentence('定义', 'allowance'), '「定义」这一步在等科研额度，充值后会自动开始。');
   assert.equal(allowanceWaitingSentence('定义', 'simulated_allowance'), '「定义」这一步在等模拟额度，模拟充值后会自动开始。');
+});
+
+test('an exact charge is the sum of the billable calls to the last 1e-8, and says what it is made of', () => {
+  /** @param {string} id @param {string} cost @param {Record<string, any>} [extra] */
+  const call = (id, cost, extra = {}) => ({ id, status: 'settled', priced: true, currency: 'CNY', purpose: 'kernel', actual_cost: cost, price_version: 'p1',
+    cache_hit_tokens: '1000', cache_miss_tokens: '200', output_tokens: '50', ...extra });
+  const result = researchTaskCharge([call('a', '0.01230000'), call('b', '0.03080000', { price_version: 'p2' }),
+    call('c', '5.00000000', { purpose: 'title' }), call('d', '9.00000000', { status: 'reserved' })], { mode: 'precision-v1' });
+  assert.equal(result.chargedCny, '0.04310000', 'a run costing 0.0431 is charged exactly 0.0431');
+  assert.equal(result.waivedCny, '0.00000000');
+  assert.deepEqual(result.usage, { calls: 2, cacheHitTokens: '2000', cacheMissTokens: '400', outputTokens: '100', priceVersions: ['p1', 'p2'] });
+  // The same calls under the whole-credit rule are free.
+  assert.equal(researchTaskCharge([call('a', '0.01230000'), call('b', '0.03080000')]).chargedCny, '0.00000000');
+});
+
+test('an amount is drawn with two decimals, and a small one with its first two significant digits, never as 0.00', () => {
+  assert.equal(formatCredits('12.30000000'), '12.30');
+  assert.equal(formatCredits('7.3'), '7.30');
+  assert.equal(formatCredits('0.04310000'), '0.04');
+  assert.equal(formatCredits('0.00430000'), '0.0043');
+  assert.equal(formatCredits('0.00439999'), '0.0043', 'cut, not rounded: it can never read as the next digit');
+  assert.equal(formatCredits('0.00600000'), '0.006');
+  assert.equal(formatCredits('0.00999999'), '0.0099', 'never reads as 0.01');
+  assert.equal(formatCredits('0.00000003'), '0.00000003');
+  assert.equal(formatCredits('0'), '0.00');
+  assert.equal(formatCredits(0), '0.00');
+  assert.equal(formatCredits(0.0043), '0.0043', 'a number is accepted for drawing');
+  assert.equal(formatCredits(12345678901n), '123.46', 'bigint units of 1e-8');
+  // Rounding: a charge to the nearest, a balance down, a need up.
+  assert.equal(formatCredits('1.23500000'), '1.24');
+  assert.equal(formatCredits('1.23999999', { rounding: 'down' }), '1.23');
+  assert.equal(formatCredits('1.23000001', { rounding: 'up' }), '1.24');
+  assert.equal(formatCredits('1.23000000', { rounding: 'up' }), '1.23');
+  assert.equal(formatCredits('0.009', { rounding: 'down' }), '0.009', 'a balance above zero is never drawn as 0.00');
+  assert.equal(formatCredits('99.99999999', { rounding: 'down' }), '99.99');
+  assert.equal(formatCredits('99.99999999'), '100.00');
+  assert.equal(formatCredits('-0.0043'), '-0.0043');
+  for (const bad of ['', 'abc', '1.123456789', null, undefined, Number.NaN, {}]) assert.equal(formatCredits(bad), '', String(bad));
+});
+
+test('the exact estimate is P50 and P90 of the history in integer units, and a 0.40 estimate is not 0', () => {
+  /** @param {string} value */
+  const sample = (value) => researchMoneyUnits(value);
+  const history = estimateRunCostUnits({ samples: ['0.30', '0.40', '0.40', '0.50', '1.00'].map(sample) });
+  assert.equal(history.basis, 'history');
+  assert.equal(researchMoneyDecimal(history.p50), '0.40000000');
+  assert.equal(researchMoneyDecimal(history.p90), '0.80000000', 'interpolated between 0.50 and 1.00');
+  // Too little history falls back to the manifest's minutes at the reference rate; none at all is no basis.
+  const manifest = estimateRunCostUnits({ samples: [sample('9')], estimatedMinutes: [2, 5] });
+  assert.deepEqual([manifest.basis, researchMoneyDecimal(manifest.p50), researchMoneyDecimal(manifest.p90)], ['manifest', '0.40000000', '1.00000000']);
+  assert.deepEqual(estimateRunCostUnits({}), { p50: 0n, p90: 0n, basis: 'none' });
 });
