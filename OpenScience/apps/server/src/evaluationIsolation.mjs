@@ -1,4 +1,5 @@
 import { HttpError } from "./security.mjs";
+import { isEvolutionProject } from "./internalProjects.mjs";
 import { createHash } from "node:crypto";
 import { mkdir, writeFile, readFile, appendFile } from "node:fs/promises";
 import path from "node:path";
@@ -7,24 +8,76 @@ import path from "node:path";
 export function evaluationFingerprint(value) {
   return String(value ?? "").normalize("NFKC").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "");
 }
-/** Policies are control-plane owned; no policy is accepted from a tool request. @param {any} options */
-export function createEvaluationIsolation({ dataDir, resolveRunId = identity => identity.runId, report = () => {} }) {
+/**
+ * Whose requests an evaluation policy can touch. A policy exists only for a run
+ * of the platform's own evaluation projects (`registerPending` refuses any
+ * other, and `eval-paper-*` is what the evolution module names them), so a
+ * request from any other project is not asked about at all: no run lookup, no
+ * file read, nothing that can fail. That is what keeps an ordinary
+ * researcher's literature fetch, web search or capsule recall exactly what it
+ * was before this module existed — the gateways run this on every request, and
+ * a request of a run nobody registered as an evaluation must never be refused
+ * for a reason that lives in this module's store.
+ *  - `evaluation`: an `eval-paper-*` project. Every run of it is an evaluation
+ *    run, so a policy that cannot be read refuses the request by name.
+ *  - `platform`: the evolution module's other projects. Their runs are not
+ *    evaluations; a lookup problem is counted and ignored.
+ *  - `audit`: no project named — the evaluator reading its own record by run id.
+ *  - `tenant`: everything else.
+ * @param {any} identity @returns {"evaluation" | "platform" | "audit" | "tenant"}
+ */
+function scopeOf(identity) {
+  const projectId = identity?.projectId;
+  if (projectId == null) return "audit";
+  if (/^eval-paper-/.test(String(projectId))) return "evaluation";
+  return isEvolutionProject(projectId) ? "platform" : "tenant";
+}
+
+/** Policies are control-plane owned; no policy is accepted from a tool request.
+ * `report` takes an exclusion event; `reportFailure` takes the code of a lookup that
+ * went wrong and was not allowed to cost a request (counted in `counters` too).
+ * @param {any} options */
+export function createEvaluationIsolation({ dataDir, resolveRunId = identity => identity.runId, report = () => {}, reportFailure = () => {} }) {
   const directory = path.join(dataDir, "evaluation-isolation");
   const policies = new Map();
   const events = new Map();
   const pending = new Map();
   const bindings = new Map();
+  /** What the lookups could not do, by what the request was allowed to be. `refused` is a request an
+   * evaluation run was refused for an unreadable policy; the other two never cost a request. */
+  const counters = { runLookupFailed: 0, platformLookupFailed: 0, refused: 0 };
   const file = runId => path.join(directory, `${createHash("sha256").update(String(runId)).digest("hex")}.json`);
+  /** One stored JSON by name: null when it was never written, an error for anything else. */
+  const stored = async name => {
+    try { return JSON.parse(await readFile(file(name), "utf8")); }
+    catch (error) { if (error.code === "ENOENT") return null; throw error; }
+  };
   const policyFor = async identity => {
-    let runId = await resolveRunId(identity);
+    const scope = scopeOf(identity);
+    if (scope === "tenant") return null;
+    try { return await lookup(identity); }
+    catch (error) {
+      if (scope === "audit") throw error;
+      if (scope === "platform") { counters.platformLookupFailed += 1; reportFailure("evaluation_policy_lookup_failed"); return null; }
+      counters.refused += 1;
+      reportFailure("evaluation_policy_unreadable");
+      throw new HttpError(503, "evaluation_policy_unreadable", "The evaluation's exclusion policy could not be read, so this request was not served.");
+    }
+  };
+  const lookup = async identity => {
+    let runId = null;
+    // The run ledger is a file that can be unreadable. Not knowing the run is not knowing
+    // nothing: the project's own scope and binding below still apply.
+    try { runId = await resolveRunId(identity); }
+    catch { counters.runLookupFailed += 1; reportFailure("evaluation_run_lookup_failed"); }
     const projectKey = `${identity.userId}\0${identity.projectId}`;
     if (!pending.has(projectKey)) {
-      try { const scope = JSON.parse(await readFile(file(`scope:${projectKey}`), "utf8")); pending.set(projectKey, scope); }
-      catch (error) { if (error.code !== "ENOENT") throw error; }
+      const scope = await stored(`scope:${projectKey}`);
+      if (scope) pending.set(projectKey, scope);
     }
     if (!bindings.has(projectKey)) {
-      try { bindings.set(projectKey, JSON.parse(await readFile(file(`binding:${projectKey}`), "utf8"))); }
-      catch (error) { if (error.code !== "ENOENT") throw error; }
+      const binding = await stored(`binding:${projectKey}`);
+      if (binding) bindings.set(projectKey, binding);
     }
     const binding = bindings.get(projectKey);
     if (binding) {
@@ -33,8 +86,9 @@ export function createEvaluationIsolation({ dataDir, resolveRunId = identity => 
     }
     if (!runId) return pending.has(projectKey) ? { runId: pending.get(projectKey).id, policy: pending.get(projectKey).policy } : null;
     if (!policies.has(runId)) {
-      try { policies.set(runId, JSON.parse(await readFile(file(runId), "utf8"))); }
-      catch (error) { if (error.code !== "ENOENT") throw error; return pending.has(projectKey) ? { runId: pending.get(projectKey).id, policy: pending.get(projectKey).policy } : null; }
+      const policy = await stored(runId);
+      if (!policy) return pending.has(projectKey) ? { runId: pending.get(projectKey).id, policy: pending.get(projectKey).policy } : null;
+      policies.set(runId, policy);
     }
     return { runId, policy: policies.get(runId) };
   };
@@ -70,6 +124,7 @@ export function createEvaluationIsolation({ dataDir, resolveRunId = identity => 
     return ["doi", "pmid", "pmcid", "title", "publication_date", "publicationDate", "pubdate"].some(key => typeof value[key] === "string") ? "cutoff_date_unknown" : null;
   };
   return {
+    counters,
     async register(runId, policy) {
       if (!runId || !Array.isArray(policy.aliases) || !Array.isArray(policy.titles)) throw new Error("An evaluation policy needs run identity, aliases and titles.");
       if (policy.cutoff && !Number.isFinite(Date.parse(policy.cutoff))) throw new Error("Invalid evaluation cutoff.");

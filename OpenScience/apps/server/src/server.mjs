@@ -3761,8 +3761,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     steerRun: ({ user, project, runId, text }) => steerChannelRun(user, project, runId, text),
     loadSdk: overrides.loadFeishuSdk,
   });
-  const evaluationIsolation = createEvaluationIsolation({ dataDir: config.dataDir,
-    resolveRunId: identity => identity.runId ?? attributeRun(identity) });
+  // The evaluation exclusion layer exists only where evolution does: the gateways below run it on
+  // every request of every tenant, so with the module off it is not composed at all and each of
+  // them behaves as it did before the module existed (every gateway takes null). Switched on, it
+  // still answers only for the evaluation projects' own runs (`evaluationIsolation.mjs`).
+  const evaluationIsolation = config.evolutionEnabled === true
+    ? createEvaluationIsolation({ dataDir: config.dataDir, resolveRunId: identity => identity.runId ?? attributeRun(identity),
+      reportFailure: code => process.stderr.write(`evaluation isolation: ${code}\n`) })
+    : null;
   const capsuleGatewayHandler = createCapsuleGatewayHandler({ runtimeManager, store, service: capsuleService, memorySubstrate, handbooks: nativeHandbookContext, evaluationIsolation,
     // Whose conversation a runtime's recall is (capsuleGateway.mjs): the
     // project's running runs, each conversation's own state, and the run
