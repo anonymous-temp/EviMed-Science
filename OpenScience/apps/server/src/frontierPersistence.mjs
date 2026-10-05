@@ -211,6 +211,10 @@ CREATE INDEX IF NOT EXISTS frontier_items_safety_idx
   ON evimed_frontier.items (timeline_at DESC) WHERE state = 'published' AND safety_alert;
 CREATE INDEX IF NOT EXISTS frontier_items_specialties_idx ON evimed_frontier.items USING gin (specialties);
 CREATE INDEX IF NOT EXISTS frontier_items_entity_keys_idx ON evimed_frontier.items USING gin (entity_keys);
+-- Both the event clusterer's trial lookup and the shared entity vocabulary's
+-- identifier lookup (entityVocabulary.mjs, frontierItemsMatching) ask which
+-- items state a registry number; without it each is a scan of every item.
+CREATE INDEX IF NOT EXISTS frontier_items_registry_ids_idx ON evimed_frontier.items USING gin (registry_ids);
 CREATE INDEX IF NOT EXISTS frontier_items_lexemes_idx ON evimed_frontier.items USING gin (lexemes);
 CREATE INDEX IF NOT EXISTS frontier_items_event_idx ON evimed_frontier.items (event_id) WHERE event_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS frontier_items_published_idx

@@ -118,38 +118,52 @@ export class FrontierGlossary {
   get size() { return this.entries.length; }
 
   /**
-   * The entries a text names, in the order it names them, at most
-   * `GLOSSARY_MAX_HITS`.
+   * Every place a text names an entry: where it starts and ends (UTF-16
+   * offsets into the NFKC-normalised text) and which entry, an entry named
+   * twice found twice. The scan `match` and the entity vocabulary share.
    * @param {unknown} text
-   * @returns {GlossaryEntry[]}
+   * @returns {Array<{ start: number, end: number, entry: GlossaryEntry }>}
    */
-  match(text) {
+  spans(text) {
     const source = String(text ?? "").normalize("NFKC");
-    /** @type {Array<{ at: number, entry: GlossaryEntry }>} */
-    const hits = [];
-    const seen = new Set();
-    /** @param {number} at @param {GlossaryEntry} entry */
-    const hit = (at, entry) => {
-      const id = `${entry.kind}\u0000${entry.termEn}`;
-      if (seen.has(id)) return;
-      seen.add(id);
-      hits.push({ at, entry });
-    };
+    /** @type {Array<{ start: number, end: number, entry: GlossaryEntry }>} */
+    const found = [];
     const tokens = latinTokens(source);
     for (let index = 0; index < tokens.length; index += 1) {
-      const candidates = [...(this.latin.get(tokens[index].lower) ?? []), ...(this.latin.get(tokens[index].token) ?? [])];
+      // A lower-case token is its own exact spelling: the one list, once.
+      const candidates = new Set([...(this.latin.get(tokens[index].lower) ?? []), ...(this.latin.get(tokens[index].token) ?? [])]);
       for (const { entry, tokens: wanted, exact } of candidates) {
         if (index + wanted.length > tokens.length) continue;
         const matches = wanted.every((token, offset) => (exact ? tokens[index + offset].token : tokens[index + offset].lower) === token);
-        if (matches) hit(tokens[index].at, entry);
+        const last = tokens[index + wanted.length - 1];
+        if (matches) found.push({ start: tokens[index].at, end: last.at + last.token.length, entry });
       }
     }
     const chars = [...source];
     let offset = 0;
     for (let index = 0; index < chars.length - 1; index += 1) {
       const candidates = this.chinese.get(chars[index] + chars[index + 1]);
-      if (candidates) for (const entry of candidates) if (source.startsWith(entry.termZh, offset)) hit(offset, entry);
+      if (candidates) for (const entry of candidates) if (source.startsWith(entry.termZh, offset)) found.push({ start: offset, end: offset + entry.termZh.length, entry });
       offset += chars[index].length;
+    }
+    return found;
+  }
+
+  /**
+   * The entries a text names, in the order it names them, at most
+   * `GLOSSARY_MAX_HITS`.
+   * @param {unknown} text
+   * @returns {GlossaryEntry[]}
+   */
+  match(text) {
+    /** @type {Array<{ at: number, entry: GlossaryEntry }>} */
+    const hits = [];
+    const seen = new Set();
+    for (const { start, entry } of this.spans(text)) {
+      const id = `${entry.kind}\u0000${entry.termEn}`;
+      if (seen.has(id)) continue;
+      seen.add(id);
+      hits.push({ at: start, entry });
     }
     return hits.sort((left, right) => left.at - right.at).slice(0, GLOSSARY_MAX_HITS).map((item) => item.entry);
   }
@@ -216,6 +230,16 @@ export class FrontierGlossaryStore {
     if (!this.loading) {
       this.loading = this.#load().finally(() => { this.loading = null; });
     }
+    return this.loading;
+  }
+
+  /**
+   * Load again now, whatever the time to live says: after the seed script ran,
+   * and when the last load found nothing.
+   * @returns {Promise<FrontierGlossary>}
+   */
+  async refresh() {
+    if (!this.loading) this.loading = this.#load().finally(() => { this.loading = null; });
     return this.loading;
   }
 
