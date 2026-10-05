@@ -1,5 +1,3 @@
-import { renderEvolutionToolContext } from './evolutionToolContext.mjs';
-import { routeExplicitEvolutionTool } from './evolutionToolRouting.mjs';
 import { DocumentExportService, freezeArtifactDocument, freezeResultVersionDocument } from "./documentExport.mjs";
 import { ResultProvenanceService } from "./resultProvenanceService.mjs";
 import { createResultProvenanceRoutes } from "./resultProvenanceRoutes.mjs";
@@ -3672,7 +3670,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             if (prepared.memories.length > 0) {
               await agentRuns.recordLearning(project, dispatchedRun.id, { recalledMemories: prepared.memories });
             }
-            const requestedToolContext = evolution ? renderEvolutionToolContext(promptText, runtimeManager.runtimePlatformSkills(project), selected.id) : '';
             const budgetMarker = issueModelGatewayBudgetMarker({
               secret: config.modelGatewaySigningSecret, userId: user.id, projectId: project.id,
               runId: episode.episodeId, dailyLimit,
@@ -3689,7 +3686,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
               },
               // The question first, markers last (see the verification above).
               text: `${promptText}\n\n<evimed-autopilot-episode>${episode.episodeId}</evimed-autopilot-episode>\n${budgetMarker}`,
-              system: prepared.system, memoryContext: (prepared.memoryContext ?? "") + requestedToolContext, residentProfile: true, agent: selected.runtimeAgent, strictContext: true,
+              system: prepared.system, memoryContext: prepared.memoryContext, residentProfile: true, agent: selected.runtimeAgent, strictContext: true,
               model: `deepseek/${config.deepseekModel}`, runId: dispatchedRun.id, allowBounded: true,
               requestId: dispatchedRun.kernelRequestIds?.at(-1),
             });
@@ -5334,8 +5331,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         if (boundSession?.mode === "open-domain" && !chosenLine) {
           const named = routeNamedSpecialist(text, routableAgents);
           // Naming the package is an instruction, not a guess at intent.
-          const installedTool = !named && evolution ? routeExplicitEvolutionTool(text,await evolution.service.tools(),routableAgents,boundSession,chosenLine) : null;
-          routedSpecialist = named ?? installedTool ?? await specialistClassifier.classify(text, routableAgents, classifierTrace,
+          routedSpecialist = named ?? await specialistClassifier.classify(text, routableAgents, classifierTrace,
             { userId: ctx.project.userId, projectId: ctx.project.id });
           if (!routedSpecialist) {
             const net = routeOpenDomainSpecialist(text, routableAgents, {
@@ -5459,7 +5455,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             });
           }
           await runtimeManager.start(ctx.project);
-          const requestedToolContext = evolution ? renderEvolutionToolContext(text, runtimeManager.runtimePlatformSkills(ctx.project), dispatchedRun.effectiveAgentId ?? dispatchedRun.agentId ?? null) : '';
           return runtimeManager.dispatchPrompt(ctx.project, session.sessionId, {
             recordPromptActor: request => recordExtensionPromptActor(ctx.user, ctx.project, request),
             text: promptText,
@@ -5467,7 +5462,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             // the capsule plugin at its first step (memorySessions.mjs), for a
             // dispatch and a conversation typed in the kernel's own surface alike.
             system: prepared.system,
-            memoryContext: (prepared.memoryContext ?? "") + requestedToolContext,
+            memoryContext: prepared.memoryContext,
             residentProfile: true,
             agent: routedSpecialist?.runtimeAgent ?? session.runtimeAgent ?? answerAgent?.runtimeAgent ?? null,
             model: `deepseek/${config.deepseekModel}`,
