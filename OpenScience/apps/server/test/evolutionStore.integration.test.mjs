@@ -71,7 +71,7 @@ test('evolution reservations share their own budget across internal projects and
 test('durable resource wait wakes the exact agenda, while researcher pause and foreign project remain untouched', options, async () => {
   const autopilot = new AutopilotService({documents,jobs});
   const running = new Set();
-  autopilot.runNow = async (userId, agendaId, {requestId}) => {running.add(`${userId}:${agendaId}:${requestId}`); return {job: {id:requestId}};};
+  autopilot.schedule = async (userId, agendaId, {requestId, trigger}) => {assert.equal(trigger,'wake'); running.add(`${userId}:${agendaId}:${requestId}`); return {job: {id:requestId}};};
   const integration = new EvolutionIntegration({service,autopilot});
   service.callbacks.wakeAgenda = input=>integration.wakeAgenda(input);
   await service.registerTool({id:'integration-tool',track:'M',toolKind:'workflow',smokePassed:true,artifactDigest:'fixed',capabilityIds:['statistical-analysis']});
@@ -150,7 +150,7 @@ test('matched upload performs preserved known-effect checks before PostgreSQL ag
     const asset={bindings:[{path:'cohort.csv',sha256:hash,bytes:bytes.length,rows:30,columns:[{name:'age'}]}]};
     await documents.put(researcher,'knowledge','uploaded-semantics',{recordType:'dataset-semantics',asset},{expectedRevision:0,projectId:'research'});
     const autopilot=new AutopilotService({documents,jobs}); let started=0;
-    autopilot.runNow=async()=>{started++;return{job:{id:'started-after-self-check'}};};
+    autopilot.schedule=async(_userId,_agendaId,{trigger})=>{assert.equal(trigger,'wake');started++;return{job:{id:'started-after-self-check'}};};
     const integration=new EvolutionIntegration({service,autopilot}); service.callbacks.wakeAgenda=input=>integration.wakeAgenda(input);
     await documents.put(researcher,'agenda','uploaded-agenda',{title:'Data study',enabled:false,status:'paused',plannerStop:{kind:'needs_input'},evolutionWaiting:{sourceEpisodeId:'uploaded-episode'}},{expectedRevision:0,projectId:'research'});
     await service.waitFor({userId:researcher,projectId:'research',agendaId:'uploaded-agenda',sourceEpisodeId:'uploaded-episode',kind:'data',toolId:'uploaded-check-tool',dataRequirements:{schema:{fields:[{name:'age',type:'number',unit:'a'}]}}});
