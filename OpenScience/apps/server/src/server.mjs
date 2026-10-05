@@ -112,7 +112,7 @@ import { runEstimate } from "./runRoute.mjs";
 import { BUNDLED_EXAMPLES, createCommandRegistry } from "./commands.mjs";
 import { loadConfig } from "./config.mjs";
 import { assertDockerVolumeName } from "./dockerMounts.mjs";
-import { createModelGatewayHandler, isModelGatewayPath, issueModelGatewayBudgetMarker, MODEL_GATEWAY_PATH, modelGatewayFilesRefusals, supportedDeepSeekModels } from "./modelGateway.mjs";
+import { callModelForControlPlane, createModelGatewayHandler, isModelGatewayPath, issueModelGatewayBudgetMarker, MODEL_GATEWAY_PATH, modelGatewayFilesRefusals, supportedDeepSeekModels } from "./modelGateway.mjs";
 import { createRuntimeGatewayEntry } from "./runtimeGatewayEntry.mjs";
 import { assertSpendWithinLimits, readUsageEvents, summarizeUsage } from "./usageMetering.mjs";
 import { UsageLedger, usageUncertainMetricFamily } from "./usageLedger.mjs";
@@ -230,6 +230,13 @@ import { createEvidenceSourceReader } from "./evidenceSourceReader.mjs";
 import { EvidenceEditorial } from "./evidenceEditorial.mjs";
 import { EvidenceZoneService } from "./evidenceZoneService.mjs";
 import { createEvidenceZoneRoutes } from "./evidenceZoneRoutes.mjs";
+// Keeping the cards current and answering readers' challenges (flywheel F13, F14): composed after the result impact path they feed.
+import { createEvidenceChangeLog, evidenceChangeLogMetricFamilies } from "./evidenceChangeLog.mjs";
+import { createEvidenceUpkeep, evidenceUpkeepMetricFamilies } from "./evidenceCurrency.mjs";
+import { createChallengeJudge, createEvidenceChallenges, evidenceChallengeMetricFamilies } from "./evidenceChallenges.mjs";
+import { createEvidenceFigures } from "./evidenceFigures.mjs";
+import { createEvidenceUpkeepRoutes } from "./evidenceUpkeepRoutes.mjs";
+import { parseModelJson } from "./frontierEditor.mjs";
 import { FrontierWorker, ensureFrontierProject } from "./frontierWorker.mjs";
 // Its second wave: events and the hot list, the daily and its push, 与你相关,
 // the two reader actions, and the composer the worker ticks.
@@ -1689,7 +1696,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // to the first operator's internal project, which the worker makes before
   // its first batch and hands to the editor then.
   /** @type {{ client: KnowledgePluginClient, ingest: FrontierIngest, editor: any, pipeline: any, service: FrontierService, worker: FrontierWorker,
-   *   evidenceZones: EvidenceZoneService, evidenceEditorial: EvidenceEditorial, composer: FrontierComposer, actions: FrontierActions, profiles: FrontierProfiles,
+   *   evidenceZones: EvidenceZoneService, evidenceEditorial: EvidenceEditorial, evidenceUpkeep?: any, composer: FrontierComposer, actions: FrontierActions, profiles: FrontierProfiles,
    *   weekly: FrontierWeekly, notifications: FrontierNotifications } | null} */
   let frontier = null;
   if (config.frontierEnabled && productDatabase) {
@@ -2046,6 +2053,35 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     authorizeContinuation: autopilotService && config.sourceChangeRecheckLimit > 0 ? producingAgenda({ results: resultProvenance, autopilot: autopilotService }) : null,
     autoRecheckLimit: config.sourceChangeRecheckLimit,
     report: code => { void securityAudit(config, "result.impact", "failed", { code }).catch(() => {}); } }) : null;
+  // Keeping the evidence cards current and answering a reader's challenge (evidenceCurrency.mjs, evidenceChallenges.mjs; flywheel F13, F14). Composed with
+  // the frontier and switched by OPEN_SCIENCE_EVIDENCE_UPKEEP_ENABLED; off, the editor is exactly what it was and its routes answer 404. The editor ticks
+  // the loops (its own tick: no new scheduler), and what a changed source reaches besides cards — the result impact path and the memory labels — is driven
+  // from the same feed, which nothing polled until now. `notifyZoneFollowers` is the frontier-links package's push to a zone's followers; absent, none.
+  /** @type {{ changeLog: ReturnType<typeof createEvidenceChangeLog>, upkeep: ReturnType<typeof createEvidenceUpkeep>, challenges: ReturnType<typeof createEvidenceChallenges>, figures: ReturnType<typeof createEvidenceFigures> } | null} */
+  let evidenceUpkeep = null;
+  if (frontier && config.evidenceUpkeepEnabled && productDatabase) {
+    const zones = frontier.evidenceZones;
+    const followers = /** @type {any} */ (frontier.notifications);
+    const notifyZoneFollowers = typeof followers?.notifyZoneFollowers === "function" ? (/** @type {any} */ event) => followers.notifyZoneFollowers(event) : null;
+    const changeLog = createEvidenceChangeLog({ database: productDatabase });
+    const upkeep = createEvidenceUpkeep({
+      database: productDatabase, changeLog, sourceChanges, notifications: notificationService, notifyZoneFollowers, resultImpacts, knowledgeChange,
+      levers: { batch: config.evidenceUpkeepBatch, intervalHours: config.evidenceUpkeepIntervalHours, retireAfterChecks: config.evidenceRetireAfterChecks,
+        retireAfterDays: config.evidenceRetireAfterDays, challengesPerDay: config.evidenceChallengesPerDay },
+      isOperator: (/** @type {string} */ userId) => config.operatorUsers.includes(userId),
+      report: (code) => process.stderr.write(`${code}\n`),
+    });
+    const judge = createChallengeJudge({ config, usageLedger, fetchImpl: overrides.frontierModelFetch ?? globalThis.fetch, callModel: callModelForControlPlane,
+      parseJson: parseModelJson, billing: () => ensureEvidenceProject(store) });
+    const challenges = createEvidenceChallenges({ database: productDatabase, service: zones, changeLog, notifications: notificationService, judge, budget: evidenceBudget,
+      levers: { challengesPerDay: config.evidenceChallengesPerDay }, notifyZoneFollowers, report: (code) => process.stderr.write(`${code}\n`) });
+    zones.onCardSaved = async (event) => { await upkeep.onCardRevision(event); await challenges.onCardRevision(event); };
+    frontier.evidenceEditorial.useUpkeep({ sourceChanges, upkeep, challenges });
+    evidenceUpkeep = { changeLog, upkeep, challenges, figures: createEvidenceFigures({ database: productDatabase }) };
+    frontier.evidenceUpkeep = evidenceUpkeep;
+  }
+  const evidenceUpkeepRoutes = createEvidenceUpkeepRoutes({ store, service: frontier?.evidenceZones ?? null, frontier: frontier?.service ?? null, config,
+    challenges: evidenceUpkeep?.challenges ?? null, upkeep: evidenceUpkeep?.upkeep ?? null, changeLog: evidenceUpkeep?.changeLog ?? null, maxJsonBytes: config.maxJsonBytes });
   // The numerical chain: which calculation a printed number came from, and the platform writing a report's numbers itself.
   const resultLineage = resultProvenance ? new ResultLineageService({ results: resultProvenance, replays: resultReplays, config,
     mirror: (project, full, bytes) => runtimeManager.mirrorWorkspaceUpload(project, full, bytes),
@@ -4825,6 +4861,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (await sourceRoutes(req, res)) return;
       if (await library.routes(req, res)) return;
       if (await autopilotRoutes(req, res)) return;
+      if (await evidenceUpkeepRoutes(req, res)) return;
       if (await evidenceZoneRoutes(req, res)) return;
       if (await frontierRoutes(req, res)) return;
       if (await researchHandoffRoutes(req, res)) return;
@@ -4902,6 +4939,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           evaluationIsolation,
           evidenceBudget,
           entityVocabulary,
+          evidenceUpkeep,
         });
         return;
       }
@@ -7708,7 +7746,7 @@ function addHistogramMetric(lines, name, help, series) {
   }
 }
 
-async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, evidenceBudget = null, entityVocabulary = null }) {
+async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, evidenceBudget = null, entityVocabulary = null, evidenceUpkeep = null }) {
   const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate, frontier, review, geo, vcr, credits);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
@@ -8107,6 +8145,11 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
   // The evidence card's guardrails (evidenceCardMetrics.mjs): cards without a producer (must be 0), writes refused by
   // origin, cards refused for a simulated value. Read from the zone service only while the frontier is composed.
   for (const family of evidenceCardMetricFamilies(frontier ? await frontier.evidenceZones.metrics().catch(() => null) : null)) addMetric(lines, family.name, family.help, family.type, family.series);
+  // Keeping the cards current (evidenceCurrency.mjs, evidenceChallenges.mjs, evidenceChangeLog.mjs): the loops' counters, the reader challenges and the public log.
+  // With the upkeep off these are not exported at all.
+  for (const family of [...evidenceUpkeepMetricFamilies(evidenceUpkeep?.upkeep.stats() ?? null), ...evidenceChallengeMetricFamilies(evidenceUpkeep?.challenges.stats() ?? null),
+    ...evidenceChangeLogMetricFamilies(evidenceUpkeep?.changeLog.stats() ?? null)]) addMetric(lines, family.name, family.help, family.type, family.series);
+  addMetric(lines, "open_science_evidence_upkeep_enabled", "Whether keeping the evidence cards current is switched on (OPEN_SCIENCE_EVIDENCE_UPKEEP_ENABLED).", "gauge", [{ value: config.evidenceUpkeepEnabled ? 1 : 0 }]);
   // The entity vocabulary the frontier, the zones, agendas, products and studies share: the glossary's size and what
   // the taggings found (entityVocabulary.mjs `entityVocabularyMetricFamilies`).
   for (const family of entityVocabularyMetricFamilies(entityVocabulary?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);

@@ -28,6 +28,7 @@ import {
 import { asHttpError, evidenceContract, evidenceHash, evidenceStructuredContent, evidenceEditorialReceipt, evidencePublicationStatus, evidenceContentHash } from "./evidenceCardContent.mjs";
 import { recordEvidenceSimulatedRefused, recordEvidenceWriteAccepted, recordEvidenceWriteRefused } from "./evidenceCardMetrics.mjs";
 import { migrateEvidenceZones } from "./evidenceZonePersistence.mjs";
+import { EVIDENCE_ZONE_CURRENCY_SQL, evidenceCurrencyView, evidenceZoneCurrencyView } from "./evidenceCurrency.mjs";
 
 const error = (
   /** @type {number} */ status,
@@ -143,12 +144,16 @@ export class EvidenceZoneService {
    * `platformPublisherUserId` is the account official zones belong to; both
    * belong to other packages. With no publisher account configured (the state
    * before flywheel B2), the owner of an official zone stands in for it.
-   * @param {{database:any, entityKeysFor?:((input:{texts:string[],identifiers:string[]})=>Promise<string[]>)|null, platformPublisherUserId?:string|null}} options
+   * `onCardSaved` is told after a card was saved (its origin, ids and new revision), so the loops that keep a card current can record a
+   * producer's own edit; it is advice to them and never part of the save — one that throws is ignored.
+   * @param {{database:any, entityKeysFor?:((input:{texts:string[],identifiers:string[]})=>Promise<string[]>)|null, platformPublisherUserId?:string|null,
+   *   onCardSaved?:((event:{origin:string,zoneId:string,cardId:string,revision:number,state:string})=>Promise<unknown>)|null}} options
    */
-  constructor({ database, entityKeysFor = null, platformPublisherUserId = null }) {
+  constructor({ database, entityKeysFor = null, platformPublisherUserId = null, onCardSaved = null }) {
     this.database = database;
     this.entityKeysFor = entityKeysFor;
     this.platformPublisherUserId = platformPublisherUserId;
+    this.onCardSaved = onCardSaved;
   }
   /** What the operator metrics read: the guardrail that must stay at zero. */
   async metrics() {
@@ -266,7 +271,7 @@ export class EvidenceZoneService {
   async zoneView(client, user, row) {
     const counts = (
       await client.query(
-        "SELECT count(*) FILTER(WHERE state='published')::integer AS n,count(*) FILTER(WHERE state='draft')::integer AS drafts FROM evimed_frontier.evidence_cards WHERE zone_id=$1",
+        `SELECT count(*) FILTER(WHERE state='published')::integer AS n,count(*) FILTER(WHERE state='draft')::integer AS drafts,${EVIDENCE_ZONE_CURRENCY_SQL} FROM evimed_frontier.evidence_cards WHERE zone_id=$1`,
         [row.id],
       )
     ).rows[0];
@@ -297,6 +302,7 @@ export class EvidenceZoneService {
       canResearch: published,
       evidenceCount: published ? counts.n : 0,
       draftCount: row.user_id === user.id ? counts.drafts : null,
+      ...evidenceZoneCurrencyView(counts),
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
@@ -331,7 +337,9 @@ export class EvidenceZoneService {
     // against the sources' preserved text on every read, so a ✓ is never older
     // than the text it was made against. The list is light and carries none.
     const lineage = cardLineage(row);
-    const contract = detail ? {
+    // A card taken back keeps its page and its explanation but no claims: nothing it said stands as evidence (`withdrawn`).
+    const currency = evidenceCurrencyView(row);
+    const contract = detail && !currency.withdrawn ? {
       title: row.title, content: row.content ?? null, sources: row.sources ?? [], claims: row.claims ?? [], producer: row.producer ?? null,
       originality: row.originality ?? null, lineage, journeyStage: row.journey_stage ?? null, disclosure: row.disclosure ?? null,
       publicView: row.public_view ?? null, editorial: row.editorial ?? null,
@@ -351,7 +359,8 @@ export class EvidenceZoneService {
       reviewedAt: current?.createdAt ?? null,
       // `text` is the statement under the name the reading page has always rendered its 「证据要点」 from.
       claims: contract ? contract.claims.map((/** @type {any} */ claim) => ({ ...claim, text: claim.claim, verification: verdicts.get(claim.claimId) ?? null })) : [],
-      claimCount: contract ? contract.claims.length : Number(row.claim_count ?? 0),
+      claimCount: contract ? contract.claims.length : currency.withdrawn ? 0 : Number(row.claim_count ?? 0),
+      ...currency,
       claimVerification: verification?.counts ?? null,
       producer: row.producer ?? null,
       originality: row.originality ?? null,
@@ -512,7 +521,7 @@ export class EvidenceZoneService {
       );
       const rows = (
         await client.query(
-          `SELECT ${cards ? "c.id,c.zone_id,c.user_id,c.revision,c.title,c.subtype,c.summary,c.state,c.source_item_id,c.content,c.editorial,c.producer,c.originality,c.lineage,c.entity_keys,c.journey_stage,c.disclosure,jsonb_array_length(c.claims) AS claim_count,c.created_at,c.updated_at" : "z.*"},z.state AS zone_state,u.name AS creator FROM ${from} WHERE ${predicate} ORDER BY ${alias}.updated_at DESC,${alias}.id LIMIT ${param(limit)} OFFSET ${param(offset)}`,
+          `SELECT ${cards ? "c.id,c.zone_id,c.user_id,c.revision,c.title,c.subtype,c.summary,c.state,c.source_item_id,c.content,c.editorial,c.producer,c.originality,c.lineage,c.entity_keys,c.journey_stage,c.disclosure,jsonb_array_length(c.claims) AS claim_count,c.currency,c.pending_item_ids,c.last_checked_at,c.withdrawn,c.retired_at,c.created_at,c.updated_at" : "z.*"},z.state AS zone_state,u.name AS creator FROM ${from} WHERE ${predicate} ORDER BY ${alias}.updated_at DESC,${alias}.id LIMIT ${param(limit)} OFFSET ${param(offset)}`,
           values,
         )
       ).rows;
@@ -874,6 +883,10 @@ export class EvidenceZoneService {
           };
     });
     if (card) recordEvidenceWriteAccepted(origin);
+    if (card && this.onCardSaved) {
+      try { await this.onCardSaved({ origin, zoneId: saved.evidence.zoneId, cardId: saved.evidence.id, revision: saved.evidence.revision, state: saved.evidence.state }); }
+      catch { /* what keeps a card current is told of the save and is never part of it */ }
+    }
     return saved;
   }
   /**
