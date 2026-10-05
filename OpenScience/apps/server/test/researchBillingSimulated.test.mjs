@@ -125,7 +125,10 @@ test("a configuration the module refuses boots the module refusing, for good, wi
   assert.deepEqual(await service.assertBalanceForStart("u_1", "adr-analysis"), { allowed: true, reason: "billing_unavailable" });
   assert.deepEqual(await service.settleRun({ userId: "u_1", runId: "run_refused" }), { status: "skipped", reason: "billing_unavailable" });
   assert.equal((await service.allowanceSummary("u_1")).status, "billing_unavailable");
-  await assert.rejects(creditsReadiness({ config, credits: { service }, database: db }), (/** @type {any} */ error) => error.code === refusal);
+  // A refusal is the module's own and it is quiet: readiness names it as a warning on a green check, so a typo in a billing
+  // knob never fails the platform's readiness while research goes on.
+  assert.deepEqual(await creditsReadiness({ config, credits: { service }, database: db }),
+    { required: true, enabled: true, simulated: true, policy: true, refused: refusal, warning: refusal });
   // A module that is off, or not composed, is told apart in readiness.
   assert.deepEqual(await creditsReadiness({ config: { evimedCreditsEnabled: false }, credits: null, database: null }), { required: false, enabled: false });
   await assert.rejects(creditsReadiness({ config, credits: null, database: db }), (/** @type {any} */ error) => error.code === "evimed_credits_unavailable" && error.details.reason === "not_composed");
@@ -334,6 +337,13 @@ test("the release check reports a simulated wallet as simulated, can never certi
   assert.equal(checkResearchBillingReadiness(simulated, { requireSimulated: true }).ok, true);
   const incomplete = checkResearchBillingReadiness({ ...simulated, researchBillingEnabled: false }, { requireSimulated: true });
   assert.ok(incomplete.issues.some((issue) => issue.code === "research_billing_policy_disabled"));
+  // The module's own refusal has its own issue code (review F10): the wallet charges under the policy and nothing else.
+  assert.ok(checkResearchBillingReadiness({ ...simulated, researchBillingEnabled: false }).issues.some((issue) => issue.code === "research_billing_simulated_policy_required"));
+  // The platform's wallet holds exact amounts, so a requirement for the precision contract is met there — and still unmet on EviMed's.
+  assert.equal(checkResearchBillingReadiness(simulated, { requirePrecision: true }).issues.some((issue) => issue.code === "research_billing_precision_contract_unverified"), false);
+  assert.equal(checkResearchBillingReadiness({ evimedCreditsEnabled: true, researchBillingEnabled: true, evimedCreditsPerCny: 1,
+    evimedCreditsUrl: "https://wallet.evimed.com/deduct", evimedCreditsBalanceUrl: "https://wallet.evimed.com/balance" }, { requirePrecision: true })
+    .issues.some((issue) => issue.code === "research_billing_precision_contract_unverified"), true);
   assert.ok(checkResearchBillingReadiness({ evimedCreditsEnabled: true, researchBillingEnabled: true, evimedCreditsPerCny: 1 }, { requireSimulated: true })
     .issues.some((issue) => issue.code === "research_billing_simulated_disabled"));
   // The refusals the module makes are the check's issues too.
@@ -423,4 +433,20 @@ test("the compose defaults for the gift settings are the code's own, so the two 
   } finally {
     process.env = saved;
   }
+});
+
+test("a simulated wallet without research billing is refused by name and that is a warning on a green check, never a red one (review F10)", async () => {
+  const noPolicy = { ...config, researchBillingEnabled: false };
+  const refusal = evimedCreditsRefusal(noPolicy);
+  assert.equal(refusal, "evimed_credits_simulated_policy_required");
+  const service = new EvimedCreditsService({ config: noPolicy, database: database(), client: null, simulator: null, refusal });
+  const line = await creditsReadiness({ config: noPolicy, credits: { service }, database: database() });
+  assert.deepEqual([line.required, line.enabled, line.refused, line.warning], [true, true, "evimed_credits_simulated_policy_required", "evimed_credits_simulated_policy_required"]);
+  // The module goes quiet: every start is admitted, nothing is charged, and the answer names why.
+  assert.deepEqual(await service.assertBalanceForStart("u_1", "adr-analysis"), { allowed: true, reason: "billing_unavailable" });
+  assert.deepEqual(await service.settleRun({ userId: "u_1", runId: "run_quiet" }), { status: "skipped", reason: "billing_unavailable" });
+  // What is still red: the module's own invariants — a schema that cannot be written.
+  const outage = Object.assign(new Error("relation does not exist"), { code: "42P01" });
+  const broken = new EvimedCreditsService({ config, database: database({ failure: outage }), client: null, simulator: stubWallet() });
+  await assert.rejects(creditsReadiness({ config, credits: { service: broken }, database: database({ failure: outage }) }), (/** @type {any} */ error) => error.code === "42P01");
 });

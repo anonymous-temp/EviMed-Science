@@ -167,10 +167,12 @@ export function creditUnitsOrNull(value) {
  *
  * Two decimals. A non-zero amount below 0.01 shows its first two significant
  * digits (0.0043) and is never drawn as 0.00, because a run that cost something
- * must not read as free. That form is cut, not rounded, so it can never read as
- * the 0.01 it is not. A balance is drawn with `rounding: 'down'`, so a page never
- * shows more than is held; an amount that must be reached (what a start needs) with
- * `'up'`; a charge with the default `'nearest'`.
+ * must not read as free. That form is cut, so it can never read as more than it is
+ * — except for an amount that must be reached, which is carried up to the next step
+ * of those two digits (and to 0.01, if that is where it reaches). A balance is drawn
+ * with `rounding: 'down'`, so a page never shows more than is held; an amount that
+ * must be reached (what a start needs) with `'up'`; a charge with the default
+ * `'nearest'`.
  * @param {unknown} value an exact decimal string, a bigint of 1e-8 units, or a number
  * @param {{ rounding?: 'nearest' | 'down' | 'up' }} [options]
  * @returns {string} '' when the value is not an amount
@@ -186,8 +188,13 @@ export function formatCredits(value, { rounding = 'nearest' } = {}) {
   if (magnitude < cent) {
     const digits = String(magnitude).padStart(8, '0')
     const first = digits.search(/[1-9]/)
-    const shown = digits.slice(0, first + 2).replace(/0+$/, '')
-    return `${sign}0.${shown}`
+    const end = Math.min(first + 2, 8)
+    // Cut to the first two significant digits — or, for an amount that must be reached, carried up to the next
+    // step of them, so a need of 0.00999999 is never drawn as the 0.0099 a balance of 0.0099 would also be drawn as.
+    const step = 10n ** BigInt(8 - end)
+    const cut = rounding === 'up' ? (magnitude + step - 1n) / step * step : magnitude / step * step
+    if (cut >= cent) return `${sign}0.01`
+    return `${sign}0.${String(cut).padStart(8, '0').slice(0, end).replace(/0+$/, '')}`
   }
   const hundredths = rounding === 'down' ? magnitude / cent
     : rounding === 'up' ? (magnitude + cent - 1n) / cent

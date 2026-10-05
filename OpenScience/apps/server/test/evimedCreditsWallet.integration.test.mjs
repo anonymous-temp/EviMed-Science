@@ -258,6 +258,47 @@ test("a gifted lot's expiry is its own statement line, written once; the reminde
   assert.deepEqual(await mine(), []);
 });
 
+test("one wallet that cannot be swept is skipped and counted, and the rest of the batch goes on (review F10)", options, async () => {
+  const bad = setup();
+  const good = setup();
+  for (const { wallet, payer } of [bad, good]) await wallet.grant({ payer, requestId: request(), source: "campaign", amount: "5", days: 2 });
+  await database.query(`CREATE OR REPLACE FUNCTION evimed_credits.test_fail_expiry() RETURNS trigger AS $f$
+    BEGIN IF NEW.kind = 'expire' AND NEW.payer = '${bad.payer}' THEN RAISE EXCEPTION 'test: this wallet cannot be written' USING ERRCODE = 'P0001'; END IF; RETURN NEW; END $f$ LANGUAGE plpgsql`);
+  await database.query("CREATE TRIGGER test_fail_expiry BEFORE INSERT ON evimed_credits.simulated_entries FOR EACH ROW EXECUTE FUNCTION evimed_credits.test_fail_expiry()");
+  try {
+    for (const { time } of [bad, good]) time.advance(3 * DAY);
+    // The sweep is the deployment's: another test's due wallets may be in the batch, so read what this one did to its own two.
+    const swept = await good.wallet.sweepExpiry({ limit: 1_000 });
+    assert.ok(swept.failed >= 1, `the bad wallet was counted: ${JSON.stringify(swept)}`);
+    const read = await auditWallet(database, good.payer);
+    assert.deepEqual(read.entries.filter((entry) => entry.kind === "expire").map((entry) => entry.credits), ["5.00000000"], "the good wallet's gift expired in the same batch");
+    const stuck = await auditWallet(database, bad.payer);
+    assert.deepEqual(stuck.entries.filter((entry) => entry.kind === "expire"), [], "and the bad one is left exactly as it was");
+  } finally {
+    await database.query("DROP TRIGGER test_fail_expiry ON evimed_credits.simulated_entries");
+  }
+});
+
+test("a thousand gifts that end at one instant are read for reminders a batch at a time, each once, and none is left without one (review F10)", options, async () => {
+  const wallets = [setup(), setup(), setup(), setup(), setup()];
+  const lots = [];
+  for (const { wallet, payer } of wallets) lots.push((await wallet.grant({ payer, requestId: request(), source: "campaign", amount: "3", expiresOn: "2026-10-12" })).lot.lotId);
+  const reader = wallets[0];
+  reader.time.set("2026-10-11T00:00:00.000Z");
+  const mine = (/** @type {Array<{ lotId: string }>} */ rows) => rows.filter((row) => lots.includes(row.lotId));
+  // Read two at a time: what is read and marked is not read again, so the next batch is the next lots.
+  const seen = /** @type {string[]} */ ([]);
+  for (let round = 0; round < 40 && seen.length < lots.length; round += 1) {
+    const batch = await reader.wallet.lotsDueForReminder({ limit: 2, skip: seen });
+    const ours = mine(batch);
+    if (batch.length === 0) break;
+    for (const row of ours) { assert.equal(await reader.wallet.markReminded(row.lotId, row.days), true); seen.push(row.lotId); }
+    if (ours.length === 0) break;
+  }
+  assert.deepEqual([...seen].sort(), [...lots].sort(), "every lot was reached, though no batch held them all");
+  assert.deepEqual(mine(await reader.wallet.lotsDueForReminder({ limit: 1_000 })), [], "and none is read again once written down");
+});
+
 test("the monthly gift: one lot per cycle on the account's own date, ending where the next begins, never backfilled", options, async () => {
   const { wallet, time, payer } = setup({ monthlyGift: "5", start: "2026-01-31T10:00:00Z" });
   await wallet.snapshot(payer);

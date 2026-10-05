@@ -3399,7 +3399,7 @@ export class RuntimeManager {
     this.workloadTokenWriter = workloadTokenWriter;
     this.setWorkloadTimer = setWorkloadTimer;
     this.clearWorkloadTimer = clearWorkloadTimer;
-    /** @type {(project: any, status: any, errorCode?: string) => any} */
+    /** @type {(project: any, status: any, errorCode?: string, options?: { by?: 'user' | 'platform' | null }) => any} */
     this.onRuntimeStop = onRuntimeStop;
     /** @type {(project: Record<string, any>) => Promise<void>} */
     this.onRuntimeStopping = onRuntimeStopping;

@@ -1338,7 +1338,7 @@ a simulated wallet beside a real wallet's address is refused by name
 (`evimed_credits_simulated_conflict`, as is a start allowance that is not a whole
 number, `evimed_credits_simulated_start_invalid`). Only the billing module refuses; the
 platform boots, the allowance reads as unavailable, nothing is charged and
-`/api/ready` carries the code in its `credits` check. `pnpm check:research-billing
+`/api/ready` carries the code as a `warning` in its `credits` check (the check stays green). `pnpm check:research-billing
 --require-simulated` checks the configuration; it reports `simulated: true`, and
 `--require-billing` fails in this mode because a simulated wallet never satisfies a
 requirement for real billing. Recreate the web container to apply.
@@ -1351,6 +1351,30 @@ a simulated row is never sent to a real wallet (the real client refuses a `sim:`
 payer). Each account gets its starting allowance on its first read, deduction or top-up;
 an account deleted and registered again under the same name starts a new wallet, and its
 wallet rows go with the account (the settlement rows stay, marked and redacted).
+
+Since 2026-10-05 the simulated wallet is the platform's own wallet and holds 灵豆 as lots
+(`simulated_lots`, `simulated_draws`, `simulated_holds`, `simulated_reminders`): 充值 (a
+top-up) never expires; each gift (sign-up, monthly, an operator's compensation or campaign)
+is a lot with a source and an expiry fixed at grant time, ending at 24:00 Asia/Shanghai on
+its date. `OPEN_SCIENCE_EVIMED_CREDITS_SIGNUP_GIFT_DAYS` (default 30) and
+`OPEN_SCIENCE_EVIMED_CREDITS_MONTHLY_GIFT` (default 0, off) set the platform's gifts;
+`POST /api/credits/grants` (operators only) makes the others and
+`GET /api/credits/absorbed` reads what the platform carried when a balance could not cover
+a charge. The first start of this build moves every existing wallet onto lots once (gifted
+left = max(0, grants − deductions), purchased the rest; entries untouched).
+
+Rolling back, and two releases serving one database: the one-number build keeps working
+on the migrated tables, but it moves a wallet's balance and appends entries without
+touching a lot. That is not a hazard to fence: every operation of this build begins, under
+the wallet's lock, by reconciling the lots with whatever was written since
+(`simulated_wallets.reconciled_through` is the last entry the lots reflect) — a sign-up
+becomes a gifted lot, a top-up a purchased lot, a charge is drawn from the lots in the
+normal order — so a rollback followed by a roll forward needs no repair. What it cannot
+repair: a database that ran the first lots build, was then written by the one-number build,
+and only then moved to this build (the mark appears with this build and trusts what it
+finds). A refused billing configuration (including a simulated wallet without
+`OPEN_SCIENCE_RESEARCH_BILLING_ENABLED`) is a named warning in the `credits` line of
+`/api/ready`, never a red one.
 
 What a researcher sees, every amount marked 「模拟」: the balance and month on 设置 →
 科研额度; an estimate on each tool of 科研工具; a charge per finished task and the

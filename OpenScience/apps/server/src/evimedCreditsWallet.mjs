@@ -427,7 +427,7 @@ export class CreditWallet {
         expiresAt: expiryInstantAfterDays(at, this.signupGiftDays), at, entryKind: "grant", receiptPrefix: "sim_grant_",
       });
     }
-    await this.#reconcile(client, payer, at);
+    await this.#reconcile(client, payer);
     await this.#expireDue(client, payer, at);
     await this.#grantMonthly(client, payer, new Date(wallet.created_at), at);
     return { payer, userId, createdAt: new Date(wallet.created_at), at };
@@ -447,10 +447,10 @@ export class CreditWallet {
    * It never throws on what it finds. A charge the lots cannot cover in full — they
    * lapsed, or the history was never what the row said — draws what there is, and
    * `#syncBalance` makes the row what the lots are.
-   * @param {any} client @param {string} payer @param {Date} at
+   * @param {any} client @param {string} payer
    * @returns {Promise<number>} how many entries were applied
    */
-  async #reconcile(client, payer, at) {
+  async #reconcile(client, payer) {
     const mark = (await client.query("SELECT reconciled_through::text AS mark FROM evimed_credits.simulated_wallets WHERE payer=$1", [payer])).rows[0];
     const entries = (await client.query(
       `SELECT entry_id, kind, request_id, credits::text AS credits, created_at FROM evimed_credits.simulated_entries
@@ -936,7 +936,7 @@ export class CreditWallet {
           // Lock first; then bring the lots up to what the old code wrote, then expire what is due under the lock.
           await tx.query("SELECT 1 FROM evimed_credits.simulated_wallets WHERE payer=$1 FOR UPDATE", [payer]);
           const at = this.now();
-          await this.#reconcile(tx, payer, at);
+          await this.#reconcile(tx, payer);
           await this.#expireDue(tx, payer, at);
         });
       } catch {

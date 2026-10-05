@@ -63,7 +63,7 @@
 
 import { createHash } from "node:crypto";
 import {
-  CAPABILITY_DISPLAY, CREDIT_EXPIRY_REMINDER_DAYS, CREDIT_NOT_CHARGED_REASONS, CREDIT_SOURCE_LABELS, RESEARCH_BILLING_VERSION_WHOLE_CREDIT,
+  CAPABILITY_DISPLAY, CREDIT_NOT_CHARGED_REASONS, CREDIT_SOURCE_LABELS, RESEARCH_BILLING_VERSION_WHOLE_CREDIT,
   SIMULATED_LOW_CREDITS, SIMULATED_WALLET_LABEL, WALLET_CONTRACT_EXACT, WALLET_CONTRACT_WHOLE_CREDIT,
   allowanceRefusalSentence, capabilityTitle, creditUnitsOrNull, estimateCost, estimateRunCostUnits, expiryReminderDue, expiryWords,
   formatCredits, isChargeableResearchRun, researchMoneyDecimal, researchMoneyUnits, researchTaskCharge, spendingPermission,
@@ -255,7 +255,7 @@ export class EvimedCreditsService {
       unlinked: 0,
       // The platform wallet's: charges the user's stop made, charges the balance could not cover (the platform carried
       // the rest), holds placed, holds released by the sweep, lots expired, reminders written.
-      userStops: 0, absorbed: 0, holds: 0, holdsSwept: 0, reminders: 0, expiryFailed: 0,
+      userStops: 0, absorbed: 0, holds: 0, holdsShort: 0, holdsSwept: 0, reminders: 0, expiryFailed: 0,
     };
   }
 
@@ -578,7 +578,11 @@ export class EvimedCreditsService {
       const mode = exact ? WALLET_CONTRACT_EXACT : WALLET_CONTRACT_WHOLE_CREDIT;
       const userId = productId(run.userId, 'user');
       const physicalId = productId(run.runId, 'run');
-      const decision = chargeDecision(run);
+      let decision = chargeDecision(run);
+      // A run that began under the whole-credit rule keeps that rule's whole terms, the stop's included: it waived every
+      // cancellation, and charging one now with the old rounding would be a rule neither version has. Only runs alive
+      // across the activation are ever here.
+      if (!exact && decision.basis === 'user_stop') decision = { charges: false, basis: 'not_charged', reason: 'earlier_rule_stop' };
       const logical = decision.basis === 'completed' ? autopilotUsageScope(run) : null;
       const runId = logical ? `research_${createHash('sha256').update(`${userId}\0${logical}`).digest('hex')}` : physicalId;
       await migrateEvimedCredits(this.database);
@@ -706,6 +710,10 @@ export class EvimedCreditsService {
       if (!payer) return null;
       const held = await this.simulator.hold({ payer, runId: productId(runId, 'run'), amount: researchMoneyDecimal(estimate.p90), ttlMs: this.holdTtlMs });
       if (!held.replay && researchMoneyUnits(held.held) > 0n) this.counters.holds += 1;
+      // A start admitted against a balance that could not freeze all of what it is estimated to need (the admission and
+      // the hold are two steps, so a burst of starts is each admitted against the same balance): what it costs beyond
+      // the balance is absorbed, and this is how many it happened to.
+      if (!held.replay && researchMoneyUnits(held.held) < estimate.p90) this.counters.holdsShort += 1;
       return { held: held.held };
     } catch (error) {
       this.report(typeof /** @type {any} */ (error)?.code === 'string' ? /** @type {any} */ (error).code : 'evimed_credits_hold_failed');
@@ -746,7 +754,8 @@ export class EvimedCreditsService {
       return { id: row.run_id, runId: null, title, at, status: 'settled', kind: evidence.kind,
         amount: exactAmount(evidence.credits), requestedAmount: exactAmount(evidence.credits), waivedCny: '0.00000000',
         balanceAfter: evidence.balanceAfter == null ? null : exactAmount(evidence.balanceAfter),
-        source, sourceLabel, expiresAt, note: typeof evidence.note === 'string' ? evidence.note : null, simulated: this.simulated };
+        // Not the lot's note: an operator's free-text remark and a migrated lot's bookkeeping are not the account's to read.
+        source, sourceLabel, expiresAt, simulated: this.simulated };
     }
     const taken = exactAmount(evidence.takenCredits ?? evidence.chargedCny);
     const absorbed = exactAmount(evidence.absorbedCredits);
@@ -791,7 +800,7 @@ export class EvimedCreditsService {
         UNION ALL
         SELECT e.request_id,w.user_id,''::text,
           jsonb_build_object('kind',e.kind,'credits',e.credits::text,'balanceAfter',e.balance_after::text,
-            'source',l.source,'expiresAt',l.expires_at,'note',l.note),e.created_at,'settled'::text,
+            'source',l.source,'expiresAt',l.expires_at),e.created_at,'settled'::text,
           'e'||lpad(e.entry_id::text,20,'0')
         FROM evimed_credits.simulated_entries e
           JOIN evimed_credits.simulated_wallets w ON w.payer=e.payer
@@ -841,7 +850,21 @@ export class EvimedCreditsService {
     const result = await this.database.query(`SELECT t.run_id,t.user_id,t.title,t.evidence,t.created_at,t.status FROM evimed_credits.research_tasks t
       JOIN evimed_control.users u ON u.id=t.user_id AND u.created_at=t.owner_created_at WHERE t.user_id=$1 AND t.run_id=$2 AND t.wallet=$3`,
     [productId(userId, 'user'), String(id).slice(0, 200), this.walletKind]);
-    const row = result.rows[0];
+    let row = result.rows[0];
+    if (!row) {
+      // A line from before the task ledger existed lives in the settlement ledger alone, and the statement lists it: what
+      // is known of it is its amount, and nothing is invented about its calls or tokens.
+      const legacy = await this.database.query(`SELECT s.run_id,s.user_id,s.memo AS title,jsonb_build_object(
+          'actualCny',s.cost_cny::text,'billableCny',(s.credits/s.credits_per_cny)::numeric(20,8)::text,
+          'chargedCny',(s.credits/s.credits_per_cny)::numeric(20,8)::text,'waivedCny','0.00000000',
+          'takenCredits',(s.credits/s.credits_per_cny)::numeric(20,8)::text,'absorbedCredits',s.absorbed::text,
+          'requestedCny',coalesce(s.requested,s.credits/s.credits_per_cny)::numeric(20,8)::text,
+          'pricingVersion','legacy','walletContract','legacy-integer') AS evidence,s.created_at,s.status
+        FROM evimed_credits.settlements s JOIN evimed_control.users u ON u.id=s.user_id AND u.created_at=s.owner_created_at
+        WHERE s.user_id=$1 AND s.run_id=$2 AND s.wallet=$3 AND NOT EXISTS(SELECT 1 FROM evimed_credits.research_tasks t WHERE t.run_id=s.run_id)`,
+      [productId(userId, 'user'), String(id).slice(0, 200), this.walletKind]);
+      row = legacy.rows[0];
+    }
     if (!row) throw new HttpError(404, 'credit_statement_not_found', 'No such statement line.');
     const item = this.#statementItem(row);
     const evidence = row.evidence;
@@ -1519,8 +1542,8 @@ function readinessFailure(code, details = null) {
 
 /**
  * The module's line of `/api/ready`: red only for its own invariants — the
- * schema and the policy's activation (`ensureReady`), and a configuration it
- * refused — and each says what it is by a named code. A wallet that cannot be
+ * schema and the policy's activation (`ensureReady`) — and each says what it is by a
+ * named code. A configuration it refused is a named warning (`refused`), not a red. A wallet that cannot be
  * reached, or is not wired yet, is a warning on a green check: it is outside
  * the platform, and nothing is charged until it answers. Asking is also what
  * lets a module that came up broken recover.
@@ -1530,6 +1553,13 @@ export async function creditsReadiness({ config, credits, database }) {
   if (!config.evimedCreditsEnabled) return { required: false, enabled: false };
   if (!credits || !database) throw readinessFailure("evimed_credits_unavailable", { reason: database ? "not_composed" : "no_product_database" });
   const failure = await credits.service.ensureReady();
+  // A configuration the module refuses to run under is a named detail on a green check, not a red one (principle 14): the
+  // module is quiet — it charges nothing, refuses nothing and says why — and research goes on. The platform's own readiness
+  // does not fail for an operator's typo in a billing knob; the warning is what an operator reads to find it. What stays red is
+  // the module's own invariants: a schema that cannot be written, a policy that cannot be activated.
+  if (failure && failure === credits.service.refusal) {
+    return { required: true, enabled: true, simulated: credits.service.simulated, policy: config.researchBillingEnabled === true, refused: failure, warning: failure };
+  }
   if (failure) throw readinessFailure(failure, { simulated: credits.service.simulated });
   const status = credits.service.status();
   return {

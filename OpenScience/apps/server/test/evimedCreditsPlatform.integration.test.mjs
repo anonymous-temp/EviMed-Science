@@ -19,6 +19,7 @@ import { createEvimedCreditsRoutes } from "../src/evimedCreditsRoutes.mjs";
 import { NotificationService } from "../src/notificationService.mjs";
 import { UsageLedger } from "../src/usageLedger.mjs";
 import { auditWallet, clock, databaseOptions as options, databaseUrl } from "./helpers/creditWalletFixture.mjs";
+import { SimulatedWallet as LegacyWallet } from "./helpers/legacyOneNumberWallet.mjs";
 
 const DAY = 86_400_000;
 /** @type {any} */
@@ -389,7 +390,7 @@ test("a gifted lot expires with its own statement line, and the inbox reminds th
   assert.equal(lines[0].title, "模拟赠送到期 · 活动赠送");
   assert.equal(lines[1].title, "模拟赠送 · 活动赠送");
   assert.equal(lines[1].expiresAt, grant.lot.expiresAt, "the grant line says when it ends");
-  assert.equal(lines[1].note, "launch week");
+  assert.equal("note" in lines[1], false, "an operator's free-text note, and a migrated lot's bookkeeping, are not the account's to read (review F10)");
   await auditWallet(database, w.payer);
 });
 
@@ -459,6 +460,85 @@ test("when a charge triggers an expiry and a monthly gift, the lines read in the
   }
   assert.deepEqual(paged, ["charge", "grant", "expire", "grant"]);
   await auditWallet(database, w.payer);
+});
+
+test("a legacy line that exists only in the settlement ledger opens its detail instead of answering 404 (review F10)", options, async () => {
+  const w = await world({ startCredits: 20 });
+  const runId = `run_${randomUUID()}`;
+  await database.query(`INSERT INTO evimed_credits.settlements(run_id,user_id,memo,cost_cny,credits,credits_per_cny,status,settled_at,owner_created_at,wallet)
+    SELECT $1,id,'Old paid line',3.4,3,1,'settled',now(),created_at,'simulated' FROM evimed_control.users WHERE id=$2`, [runId, w.userId]);
+  const line = (await w.service.statements(w.userId)).items.find((item) => item.id === runId);
+  assert.deepEqual([line?.status, line?.amount], ["settled", "3.00000000"]);
+  const detail = await w.service.statementDetail(w.userId, runId);
+  assert.deepEqual([detail.detail.calls, detail.detail.amount, detail.detail.absorbed, detail.detail.lots, detail.detail.pricingVersion], [null, "3.00000000", "0.00000000", [], "legacy"],
+    "what is known about it, and nothing invented: no calls, no tokens");
+  const stranger = await world();
+  await assert.rejects(stranger.service.statementDetail(stranger.userId, runId), { status: 404 });
+});
+
+test("a run that began under the whole-credit rule and is stopped by its user after the exact rule begins keeps that rule's stop: a cancellation is free (review F10)", options, async () => {
+  const w = await world();
+  await database.query("UPDATE evimed_credits.billing_policies SET activated_at=$1 WHERE pricing_version=$2", [new Date(Date.now() + 3_600_000).toISOString(), RESEARCH_BILLING_VERSION]);
+  try {
+    const stopped = await w.finish({ status: "canceled", canceledBy: "user" }, { costs: [7.3] });
+    assert.equal(stopped.result.credits, "0.00000000");
+    assert.equal(stopped.result.reason, "earlier_rule_stop");
+    const line = (await w.service.statements(w.userId)).items.find((item) => item.runId === stopped.runId);
+    assert.deepEqual([line?.status, line?.notChargedCode], ["waived", "earlier_rule_stop"]);
+    assert.match(String(line?.notChargedReason), /不收费/);
+    // A run that finished under the same old rule is charged whole credits, as before.
+    const done = await w.finish({}, { costs: [7.3] });
+    assert.equal(done.result.credits, "7.00000000");
+  } finally {
+    await database.query("UPDATE evimed_credits.billing_policies SET activated_at=now() - interval '1 minute' WHERE pricing_version=$1", [RESEARCH_BILLING_VERSION]);
+  }
+});
+
+test("a hold that could not be placed in full is counted, so a burst of starts admitted against one balance can be seen (review F10)", options, async () => {
+  const w = await world({ startCredits: 10 });
+  const capability = `test-cap-${randomUUID().slice(0, 8)}`;
+  for (const requested of ["6", "6", "6", "6", "6"]) {
+    await database.query(`INSERT INTO evimed_credits.settlements(run_id,user_id,capability_id,memo,cost_cny,credits,credits_per_cny,status,wallet,requested,wallet_contract,charge_basis,settled_at)
+      VALUES($1,$2,$3,'history',$4,$4,1,'settled','simulated',$4,'precision-v1','completed',now())`, [`run_${randomUUID()}`, w.userId, capability, requested]);
+  }
+  const start = (/** @type {string} */ runId) => w.service.holdForRun({ userId: w.userId, runId, capabilityId: capability, startedAt: w.time.now().toISOString() });
+  assert.deepEqual(await start(`run_${randomUUID()}`), { held: "6.00000000" });
+  assert.equal(w.service.status().counters.holdsShort, 0, "the first was held in full");
+  assert.deepEqual(await start(`run_${randomUUID()}`), { held: "4.00000000" });
+  assert.deepEqual(await start(`run_${randomUUID()}`), { held: "0.00000000" });
+  assert.equal(w.service.status().counters.holdsShort, 2, "two starts were admitted against a balance that could not freeze them");
+});
+
+test("a top-up answers what a start may use after it, not the balance with the frozen part in it (review F10)", options, async () => {
+  const w = await world({ startCredits: 10 });
+  await w.wallet.hold({ payer: w.payer, runId: `run_${randomUUID()}`, amount: "6", ttlMs: DAY });
+  const topUp = await w.service.simulatedTopUp(w.userId, { packageId: "topup-50", requestId: `request_${randomUUID().slice(0, 12)}` });
+  assert.deepEqual([topUp.balance, topUp.available], ["60.00000000", "54.00000000"]);
+  const again = await w.service.simulatedTopUp(w.userId, { packageId: "topup-50", requestId: `request_${randomUUID().slice(0, 12)}` });
+  assert.equal(again.available, "104.00000000");
+});
+
+test("one reminder that cannot be written does not stop the ones after it, and only what is actually written is counted (review F10)", options, async () => {
+  const w = await world({ startCredits: 0 });
+  const other = await world({ startCredits: 0 });
+  const bad = await w.service.operatorGrant(w.userId, { requestId: `request_${randomUUID().slice(0, 12)}`, source: "campaign", amount: "2", days: 3 });
+  const good = await other.service.operatorGrant(other.userId, { requestId: `request_${randomUUID().slice(0, 12)}`, source: "campaign", amount: "4", days: 3 });
+  const reported = /** @type {string[]} */ ([]);
+  const failing = new EvimedCreditsService({ config, database, client: null, usageLedger: usage, simulator: w.wallet, now: w.time.now, report: (code) => reported.push(code),
+    notify: async (/** @type {string} */ userId, /** @type {any} */ input) => {
+      if (userId === w.userId) throw Object.assign(new Error("the inbox write failed"), { code: "inbox_unavailable" });
+      return inbox.create(userId, input, { now: w.time.now() });
+    } });
+  w.time.set(new Date(Date.parse(good.lot.expiresAt) - 12 * 3_600_000).toISOString());
+  const sent = await failing.remindExpiries();
+  assert.ok(sent >= 1, "the lot after the failing one was reminded");
+  assert.equal((await inbox.list(other.userId, { limit: 20 })).items.filter((item) => item.source?.id === `credit_lot_${good.lot.lotId}`).length, 1);
+  assert.ok(reported.includes("inbox_unavailable"), "and the failure is said");
+  assert.equal((await database.query("SELECT count(*)::int AS n FROM evimed_credits.simulated_reminders WHERE lot_id=$1", [bad.lot.lotId])).rows[0].n, 0, "the failed one is not written down as sent, so it is tried again later");
+  // The next sweep leaves a lot that failed alone for a while rather than re-trying it on every tick.
+  const before = reported.length;
+  await failing.remindExpiries();
+  assert.equal(reported.length, before, "not retried within the hour");
 });
 
 test("the monthly gift is off at 0 and, when set, arrives on the account's own date as one lot that ends at the next", options, async () => {
@@ -653,4 +733,35 @@ test("a pending row of a deleted account never re-creates that account's wallet 
   assert.equal((await database.query("SELECT count(*)::int AS n FROM evimed_credits.simulated_wallets WHERE payer=$1", [w.payer])).rows[0].n, 0, "no wallet was made for it");
   const row = (await database.query("SELECT status,error_code FROM evimed_credits.settlements WHERE run_id=$1", [runId])).rows[0];
   assert.deepEqual([row.status, row.error_code], ["refused", "evimed_credits_account_unlinked"]);
+});
+
+test("everything at once on one account — settlements, replays, holds, sweeps, top-ups, grants, reads, and the one-number code writing under them — ends conserved to the last 1e-8 (concurrency suite)", options, async () => {
+  for (let round = 0; round < 6; round += 1) {
+    const w = await world({ startCredits: 100, signupGiftDays: 2 });
+    const legacy = new LegacyWallet({ database, startCredits: 100 });
+    const runs = Array.from({ length: 4 }, () => `run_${randomUUID()}`);
+    for (const runId of runs) await w.wallet.hold({ payer: w.payer, runId, amount: "8", ttlMs: 10 * DAY });
+    // The first gift's date passes while the runs are still being settled: expiry joins the race.
+    w.time.advance(3 * DAY);
+    const results = await Promise.all([
+      ...runs.flatMap((runId) => [w.finish({ runId }, { costs: [3] }), w.finish({ runId }, {})]),
+      w.service.simulatedTopUp(w.userId, { packageId: "topup-50", requestId: `request_${randomUUID().slice(0, 12)}` }),
+      w.service.operatorGrant(w.userId, { requestId: `request_${randomUUID().slice(0, 12)}`, source: "campaign", amount: "7", days: 10 }),
+      w.balance(), w.balance(), w.balance(),
+      w.service.sweepWallet(), w.service.sweepWallet(),
+      legacy.deduct({ payer: w.payer, requestId: `run_${randomUUID()}`, credits: 2 }).catch(() => null),
+      legacy.topUp({ payer: w.payer, packageId: "topup-50", requestId: `request_${randomUUID().slice(0, 12)}` }).catch(() => null),
+      w.service.assertBalanceForStart(w.userId, null).catch(() => null),
+    ]);
+    assert.ok(results.length > 0);
+    const settled = await database.query("SELECT count(*)::int AS n, coalesce(sum(credits),0)::text AS taken FROM evimed_credits.settlements WHERE user_id=$1", [w.userId]);
+    assert.equal(settled.rows[0].n, 4, `round ${round}: one charge per run however many times it was settled`);
+    assert.equal((await database.query("SELECT count(*)::int AS n FROM evimed_credits.simulated_holds WHERE payer=$1 AND status='open'", [w.payer])).rows[0].n, 0, "no hold outlives its run");
+    const { balance } = await auditWallet(database, w.payer);
+    assert.ok(balance >= 0n);
+    // The wallet's own account of what was taken for the platform's runs is exactly what the settlements say, to the last 1e-8.
+    const taken = await database.query(`SELECT coalesce(sum(e.credits),0)::text AS taken FROM evimed_credits.simulated_entries e
+      WHERE e.payer=$1 AND e.kind='deduct' AND e.request_id IN (SELECT run_id FROM evimed_credits.settlements WHERE user_id=$2)`, [w.payer, w.userId]);
+    assert.equal(units(taken.rows[0].taken), units(settled.rows[0].taken), `round ${round}`);
+  }
 });

@@ -51,6 +51,7 @@ export const CREDIT_NOT_CHARGED_REASONS = Object.freeze({
   platform_stop: '平台停止了这次运行，不收费',
   stop_unattributed: '无法确认是你主动停止的，不收费',
   platform_work: '平台自己的工作，不收费',
+  earlier_rule_stop: '这次运行开始时，停止的部分还不收费',
   no_usage: '没有产生可计费的用量',
 })
 
