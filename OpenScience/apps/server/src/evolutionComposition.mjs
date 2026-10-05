@@ -27,6 +27,7 @@ import { createEvolutionScout } from "./evolutionScout.mjs";
 import { createEvolutionBuilder } from "./evolutionBuild.mjs";
 import { createEvolutionVerification } from "./evolutionVerification.mjs";
 import { createEvolutionCandidateEvaluator } from "./evolutionCandidateEvaluator.mjs";
+import { createCandidateExposureAudit, priorDevelopmentRuns } from "./evolutionExposureChain.mjs";
 import { createEvolutionReferenceCuration, certifyEvolutionReferenceReview } from "./evolutionReferenceCuration.mjs";
 import { createEvolutionEngineReviewWriter } from "./evolutionEngineReview.mjs";
 import { createPlatformSkillSupply } from "./platformSkillSupply.mjs";
@@ -87,9 +88,8 @@ export function createEvolution({ config, store, documents, jobs, database, usag
   const candidateEvaluator = createEvolutionCandidateEvaluator({ config, controller, fetchImpl,
     withReviewLock: (id, operation) => service.withLock(`candidate-review:${id}`, operation),
     evaluateWorkflowSmoke: createEvolutionWorkflowSmoke({ service, runs, store }),
-    curateReferences: (card, options) => referenceCuration.prepareCases(card, options), auditCandidateExposure: async (candidate, { policy, signal }) => {
-    const runId = candidate.lineage?.developmentRuns?.at(-1);
-    if (!runId) return { tier: "unknown" };
+    // Every development run the candidate's code passed through is audited, and the worst tier stands (evolutionExposureChain.mjs).
+    curateReferences: (card, options) => referenceCuration.prepareCases(card, options), auditCandidateExposure: async (candidate, options) => createCandidateExposureAudit({ auditRun: async ({ runId, projectId }, { policy, signal }) => {
     const artifactHash = createHash("sha256").update(canonicalJson(candidate.files ?? {})).digest("hex");
     const policyHash = createHash("sha256").update(canonicalJson(policy)).digest("hex");
     const proofId = `evolution-exposure-${evolutionKey([runId, artifactHash, policyHash])}`;
@@ -97,7 +97,8 @@ export function createEvolution({ config, store, documents, jobs, database, usag
     if (preserved?.payload.transcriptHash && preserved.payload.artifactHash === artifactHash && preserved.payload.policyHash === policyHash) {
       return { tier: preserved.payload.tier, transcriptHash: preserved.payload.transcriptHash };
     }
-    const user = await store.userById(await service.owner()), project = await store.requireProject(user, candidate.lineage?.developmentProjectId ?? EVOLUTION_PROJECT_ID);
+    const user = await store.userById(await service.owner()), project = await store.requireProject(user, projectId ?? EVOLUTION_PROJECT_ID).catch(() => null);
+    if (!project) return { tier: "unknown" };
     let transcript;
     for (let attempt = 0; attempt < 10; attempt++) {
       transcript = await readRunTranscript(project, runId);
@@ -111,7 +112,7 @@ export function createEvolution({ config, store, documents, jobs, database, usag
     await service.save("exposure-proof", proofId, { runId, artifactHash, policyHash, tier: audit.tier,
       transcriptHash: createHash("sha256").update(canonicalJson(transcript)).digest("hex"), auditedAt: service.now().toISOString() });
     return audit;
-  } });
+  } })(candidate, options) });
   const paperGold = createPaperGoldEvaluator({ config, usageLedger, store, agentRuns, evaluationIsolation,
     dispatch: input => runs.dispatch(input), runtimeManager, controller, fetchImpl });
   const limits = { daily: config.evolutionDailyBudgetCny, weekly: 0 };
@@ -269,6 +270,10 @@ export function createEvolution({ config, store, documents, jobs, database, usag
         const dispatchId = `evolution_build_${evolutionKey([dossier.id, attempt, decisionActionId])}`;
         if (recheck && !(await agentRuns.list(project)).some(run => run.dispatchId === dispatchId && run.status === "succeeded")) throw new HttpError(409, "evolution_evaluation_invalid", "Rechecking cannot dispatch new development work.");
         await evaluationIsolation.registerPending({ userId, projectId }, builderPolicy);
+        const owner = await store.userById(userId);
+        const earlierRuns = await priorDevelopmentRuns({ attempt,
+          identity: earlier => ({ projectId: `eval-paper-build-${evolutionKey([dossier.id, earlier, decisionActionId])}`, dispatchId: `evolution_build_${evolutionKey([dossier.id, earlier, decisionActionId])}` }),
+          find: async expected => { const earlierProject = await store.requireProject(owner, expected.projectId).catch(() => null); return earlierProject ? (await agentRuns.list(earlierProject)).find(item => item.dispatchId === expected.dispatchId) : null; } });
         const developmentCard = await evaluationIsolation.filter({ userId, projectId }, "development-card", safeCard);
         let previousCandidate = !recheck && attempt === 0 ? await evolutionRepairSeed({ service, supply, isolation: evaluationIsolation }, card, { userId, projectId }) : null;
         if (!recheck && attempt > 0) {
@@ -293,7 +298,9 @@ export function createEvolution({ config, store, documents, jobs, database, usag
           publicationKind: proposedKind === "engine-pr" ? proposedKind : executable ? "isolated-tool" : proposedKind,
           ...(card.selfCheck ? { selfCheck: card.selfCheck } : {}),
           ...((card.dataRequirements ?? output.dataRequirements) ? { dataRequirements: normalizeEvolutionDataRequirements(card.dataRequirements ?? output.dataRequirements) } : {}),
-          lineage: { ...output.lineage, developmentRuns: [run.id], developmentProjectId: projectId, papers: card.papers, parents: card.parentToolIds ?? [] } };
+          // The whole chain of this branch, not the last link: each attempt is handed the one before it.
+          lineage: { ...output.lineage, developmentRuns: [...earlierRuns.map(item => item.runId), run.id], developmentRunProjects: { ...Object.fromEntries(earlierRuns.map(item => [item.runId, item.projectId])), [run.id]: projectId },
+            developmentProjectId: projectId, papers: card.papers, parents: card.parentToolIds ?? [] } };
       },
       publisher: { publish: async (candidate, { evaluation: verdict }) => {
         if (card.parentToolIds?.length) await maintenance.verifyMerge(card.parentToolIds, candidate);
