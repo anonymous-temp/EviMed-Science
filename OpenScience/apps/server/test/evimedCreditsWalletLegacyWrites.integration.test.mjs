@@ -27,6 +27,9 @@ before(async () => {
   if (!databaseUrl) return;
   database = new ControlPlaneDatabase({ databaseUrl, databasePoolMax: 8, databaseConnectionTimeoutMs: 3_000 });
   await database.migrate();
+  // The scenario is a schema the lots migration has already run on: the old code then writes onto it. In a database of its
+  // own (how the product-state job runs this file) nothing has created those tables yet, so the test makes them.
+  await new SimulatedWallet({ database, startCredits: 200 }).ready();
 });
 
 after(async () => {

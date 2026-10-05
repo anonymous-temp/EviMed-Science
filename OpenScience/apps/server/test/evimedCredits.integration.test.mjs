@@ -11,6 +11,7 @@ import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { PostgresStore } from "../src/store.mjs";
 import { EVIMED_CREDITS_BACKOFF_MS, EVIMED_CREDITS_MAX_ATTEMPTS, EvimedCreditsService } from "../src/evimedCreditsService.mjs";
 import { migrateEvimedCredits, prepareResearchBillingAccountDeletion } from "../src/evimedCreditsPersistence.mjs";
+import { migrateUsageLedger } from "../src/usagePersistence.mjs";
 import { EvimedCreditsError } from "../src/evimedCreditsClient.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
@@ -366,6 +367,63 @@ test("autopilot retry settlement charges the real owner once and never charges i
     const saved = await service.settlementOf(userId, runId);
     assert.equal(saved.credits, 200);
   }
+});
+
+/**
+ * A database that refuses any statement touching the platform wallet's tables. Those tables exist only where the wallet is
+ * the platform's own and are never created for EviMed's, so on a live wallet nothing may read them — whether or not another
+ * test happened to create them in a shared database.
+ * @param {any} real
+ */
+function withoutPlatformWallet(real) {
+  /** @param {string} text */
+  const guard = (text) => {
+    // `to_regclass` asks whether a table exists, which is the one safe way to look.
+    if (/simulated_(wallets|entries|lots|draws|holds|reminders)/.test(String(text)) && !/to_regclass/.test(String(text))) {
+      throw new Error(`a live wallet read the platform wallet's tables: ${String(text).replace(/\s+/g, " ").slice(0, 120)}`);
+    }
+  };
+  return {
+    query: (/** @type {string} */ text, /** @type {any[]} */ values) => { guard(text); return real.query(text, values); },
+    transaction: (/** @type {(client: any) => Promise<any>} */ work) => real.transaction((/** @type {any} */ client) => work({
+      query: (/** @type {string} */ text, /** @type {any[]} */ values) => { guard(text); return client.query(text, values); },
+    })),
+  };
+}
+
+test("on a live wallet nothing reads the platform wallet's tables: settle, statements, detail, allowance, estimate, sweeps and holds all run on a schema without them", options, async () => {
+  const guarded = withoutPlatformWallet(database);
+  // A settlement reads the usage ledger's table, which in a database of its own nothing else has made yet.
+  await migrateUsageLedger(database);
+  const client = upstream();
+  const service = new EvimedCreditsService({ config: { evimedCreditsEnabled: true, evimedCreditsPerCny: 1, researchBillingEnabled: true },
+    database: guarded, client, usageLedger: ledger({}), evimedUserIdOf });
+  await service.ready();
+  const accountCreatedAt = (await database.query("SELECT created_at::text AS epoch FROM evimed_control.users WHERE id=$1", [userId])).rows[0].epoch;
+  const finish = (/** @type {Record<string, any>} */ run) => service.settleRun({ userId, projectId, dispatchId: null, subject: "A live line", startedAt: new Date().toISOString(),
+    accountCreatedAt, capabilityId: "adr-analysis", ...run });
+  const completed = `run_${randomUUID()}`;
+  const failed = `run_${randomUUID()}`;
+  const first = await finish({ runId: completed, status: "succeeded" });
+  assert.notEqual(first.status, "error", JSON.stringify(first));
+  assert.notEqual((await finish({ runId: failed, status: "failed" })).status, "error");
+  assert.notEqual((await finish({ runId: `run_${randomUUID()}`, status: "canceled", canceledBy: "user" })).status, "error", "a cancellation is free on a live wallet");
+  const statements = await service.statements(userId, { limit: 50 });
+  assert.ok(statements.items.some((item) => item.id === completed), "the statement reads, ordered by run id, with no wallet table");
+  assert.ok(statements.items.length >= 3);
+  const paged = await service.statements(userId, { limit: 1 });
+  assert.ok(paged.nextCursor);
+  assert.equal((await service.statements(userId, { limit: 1, cursor: paged.nextCursor })).items.length, 1);
+  assert.ok((await service.statementDetail(userId, completed)).detail);
+  assert.equal((await service.allowanceSummary(userId, { since: new Date(0) })).ledgerReadable, true);
+  assert.equal((await service.estimate("adr-analysis")).basis, "manifest");
+  assert.equal((await service.balanceFor(userId)).status, "ok");
+  assert.equal((await service.assertBalanceForStart(userId, "adr-analysis")).allowed, true);
+  assert.ok((await service.absorbedSummary({ since: new Date(0) })).settlements >= 0);
+  assert.equal(await service.holdForRun({ userId, runId: `run_${randomUUID()}`, capabilityId: "adr-analysis", startedAt: new Date().toISOString() }), null);
+  assert.deepEqual(await service.sweepWallet(), { holds: 0, expired: 0, reminded: 0 });
+  assert.equal(await service.remindExpiries(), 0);
+  assert.equal(typeof (await service.retryDue()), "number");
 });
 
 test('research task billing preserves fractional evidence and deduplicates child spend', options, async () => {

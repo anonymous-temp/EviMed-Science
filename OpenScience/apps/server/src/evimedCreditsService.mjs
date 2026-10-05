@@ -807,16 +807,22 @@ export class EvimedCreditsService {
           JOIN evimed_control.users u ON u.id=w.user_id AND u.created_at=w.owner_created_at
           LEFT JOIN evimed_credits.simulated_lots l ON l.lot_id=e.lot_id
         WHERE w.user_id=$1 AND e.kind IN ('grant','topup','expire','adjust')` : "";
+    // The platform wallet's tables exist only where the wallet is the platform's own, and are never created for
+    // EviMed's: nothing here reads them unless the wallet is simulated (the charge's place in the wallet's sequence, and
+    // the wallet's own lines above). On a live wallet a line sorts by its run id, as it always did.
+    if (this.simulated) await this.simulator?.ready();
+    const deduct = this.simulated ? "LEFT JOIN evimed_credits.simulated_entries d ON d.request_id=t.run_id AND d.kind='deduct'" : "";
+    const sortKey = this.simulated ? "coalesce('e'||lpad(d.entry_id::text,20,'0'),'r'||t.run_id)" : "'r'||t.run_id";
     // One order for every kind of line: when it was written, and then the wallet's own entry sequence — which
     // is monotonic under the wallet's lock — and never the spelling of an id. A charge takes the sequence of its
     // deduct entry; a line with no entry (a run that was not charged) sorts by its own id after them.
     const result = await this.database.query(`SELECT t.*
       FROM (
         SELECT t.run_id,t.user_id,t.title,t.evidence,t.created_at,t.status,
-          coalesce('e'||lpad(d.entry_id::text,20,'0'),'r'||t.run_id) AS sort_key
+          ${sortKey} AS sort_key
         FROM evimed_credits.research_tasks t
           JOIN evimed_control.users u ON u.id=t.user_id AND u.created_at=t.owner_created_at
-          LEFT JOIN evimed_credits.simulated_entries d ON d.request_id=t.run_id AND d.kind='deduct'
+          ${deduct}
         WHERE t.user_id=$1 AND t.wallet=$5
         UNION ALL
         SELECT s.run_id,s.user_id,s.memo,jsonb_build_object(
