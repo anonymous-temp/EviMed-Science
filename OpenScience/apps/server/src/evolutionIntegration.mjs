@@ -94,7 +94,6 @@ export class EvolutionIntegration {
       await this.datasetOpportunities(event);
       return this.service.resolveWaiters(event);
     } else if (event.type === "tool-ready") {
-      await this.service.callbacks.refreshPlatformReferences?.();
       const owners = event.userId ? [event.userId] : await this.observationOwners();
       for (const owner of owners) {
         const latest = new Map();

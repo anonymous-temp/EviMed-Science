@@ -409,8 +409,6 @@ export function runMethodObservations(input) {
   };
 }
 
-/** Record attached context, explicit reads and associated delivery outcomes separately. None establishes causal improvement.
- * @param {{learning:any,userId:string,projectId?:string,run:any,projection:any,sessions?:readonly any[]}} input */
 /** Closed actual tool error envelopes, never a refusal written as prose. @param {any} part */
 export function handbookMissingComputation(part) {
   if(part?.type!=='tool' || !['completed','failed','error'].includes(part.status))return false;
@@ -424,7 +422,11 @@ export function handbookMissingComputation(part) {
   const code=part.error?.code??part.errorCode??structured?.error?.code??structured?.result?.error?.code;
   return ['method_missing','tool_not_found','command_not_found','extension_tool_not_found'].includes(code);
 }
-export async function recordHandbookRunObservations({ learning, userId, projectId, run, projection, sessions = [] }) {
+/** Record attached context, explicit reads and associated delivery outcomes separately. None establishes causal improvement.
+ * `observeGaps` (the evolution module is on) additionally notes a read of a mounted handbook that met a missing tool or
+ * method, as the closed code `method-missing`; without it an observation is exactly what it was before that module.
+ * @param {{learning:any,userId:string,projectId?:string,run:any,projection:any,sessions?:readonly any[],observeGaps?:boolean}} input */
+export async function recordHandbookRunObservations({ learning, userId, projectId, run, projection, sessions = [], observeGaps = false }) {
   if (!run.id) return;
   // Attachment is preserved independently; a timestamp alone cannot prove
   // that this native request or its assigned child actually read the context.
@@ -454,7 +456,7 @@ export async function recordHandbookRunObservations({ learning, userId, projectI
     const outcomes = items.filter((item) => deliverableOutcome(item)).map((item) => ({ deliverableId: item.id, outcome: deliverableOutcome(item) }));
     const observation = { runId: run.id, projectId: projectId ?? run.projectId ?? null, at: new Date().toISOString(),
       contentDigest: mounted.contentDigest, attached: true, used, outcomes,
-      gapCodes: used && observedSessions.some(session => (session.transcript?.messages??[]).filter(inThisRun).some(message => (message.parts??[]).some(part => handbookMissingComputation(part)))) ? ['method-missing'] : [] };
+      ...(observeGaps && used && observedSessions.some(session => (session.transcript?.messages??[]).filter(inThisRun).some(message => (message.parts??[]).some(part => handbookMissingComputation(part)))) ? { gapCodes: ['method-missing'] } : {}) };
     for (let attempt = 0; attempt < 5; attempt += 1) {
       const row = await learning.documents.get(userId, "method", mounted.id);
       if (row?.payload?.recordType !== "capability-handbook" || row.payload.capabilityId !== mounted.capabilityId

@@ -2953,6 +2953,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             if (!state.learning && !state.trial) {
               await recordHandbookRunObservations({ learning: learningService, userId: project.userId, projectId: project.id,
                 run: await recordNativeHandbookAttachments(project, run), projection: await agentRuns.runWorkflowProjection(project, run), sessions,
+                observeGaps: Boolean(evolution),
               }).catch((error) => securityAudit(config, "handbook.observe", "failed", {
                 userId: project.userId, projectId: project.id, runId: run.id,
                 code: typeof error?.code === "string" ? error.code : "handbook_observation_unavailable",
