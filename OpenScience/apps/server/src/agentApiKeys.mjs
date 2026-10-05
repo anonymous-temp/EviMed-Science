@@ -369,7 +369,11 @@ export async function deleteSubjectAccounts({ apiKeys, store, memorySubstrate, m
     if (only !== null && userId !== only) continue;
     const subject = await store.userById(userId);
     if (!subject || subject.authType !== "subject") continue;
-    await memorySubstrate.forgetUser(userId);
+    // Owed to the index in the deletion's own transaction when the deployment
+    // keeps a ledger for it (`prepareAccountDeletion`); otherwise one attempt,
+    // never waited on: the index holds derived copies only.
+    await memoryIndexing?.withdrawals?.migrate();
+    if (!memoryIndexing?.withdrawals) void Promise.resolve(memorySubstrate.forgetUser(userId)).catch(() => false);
     await store.deleteUser(subject, {
       beforeLock: memoryIndexing ? (/** @type {string} */ id, /** @type {any} */ client) => memoryIndexing.lockAccountDeletion(id, client) : null,
       beforeDelete: async (/** @type {string} */ id, /** @type {any} */ client) => {
@@ -378,6 +382,7 @@ export async function deleteSubjectAccounts({ apiKeys, store, memorySubstrate, m
       },
     });
     if (capsuleTransfers) await capsuleTransfers.finishAccountDeletion(userId);
+    void memoryIndexing?.withdrawals?.drain?.().catch(() => {});
     deleted += 1;
   }
   return deleted;

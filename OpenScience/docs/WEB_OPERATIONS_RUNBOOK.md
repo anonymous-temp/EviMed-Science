@@ -887,6 +887,24 @@ reports as `data.downloadRoutes`. Counted on
 route to the matrix: it redirects to the file server's `suppl/` directory (no
 matrix there) or answers a reCAPTCHA page.
 
+### Deleting a project, resetting memory or erasing an account while the memory index is slow
+
+The recall index (OpenViking) owns no record: every hit is re-read from PostgreSQL
+and a copy whose row is gone is dropped there. So none of these actions waits on
+it any more (until 2026-10-05 a project deletion answered 503
+`memory_index_timeout` when the index was slow). The authoritative rows go, and
+the withdrawal of the deleted subtrees is a row of its own in
+`evimed_memory.index_withdrawals`, written in the same transaction (it has no
+foreign key to the account, so an erased account's debt outlives it). The index
+worker asks the index at once and again every thirty seconds at most, with a
+backoff of thirty seconds doubling to an hour, until it answers.
+`open_science_memory_index_withdrawals_pending`, `..._oldest_seconds` and
+`..._most_attempts` say what the index still owes; a count that does not fall
+means the index is down, and deleted data's copies outlive their rows until it is
+back (recall never serves them). Deleting or archiving one memory record and
+deleting a source never called the index: they queue one record job in their own
+transaction, which the worker retries.
+
 ### Specialist job slots on a small host
 
 The six engines (MR, bibliometric, research-topic, peer-review, drug-safety

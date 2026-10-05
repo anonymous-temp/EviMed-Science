@@ -70,6 +70,17 @@ export function recallTargets(userId, { projectId = null, sessionId = null } = {
   return targets;
 }
 
+/** Everything of one account in the index: the research memory and the capsule tree. */
+export function userMemoryRoot(userId) {
+  return `viking://user/${openVikingUserId(userId)}/memories/evimed`;
+}
+
+/** The three subtrees research memory occupies: the capsule tree beside them is the publication ledger's, not this one's. */
+export function researchMemoryRoots(userId) {
+  const root = userMemoryRoot(userId);
+  return [`${root}/user`, `${root}/project`, `${root}/session`];
+}
+
 /** The subtree a project's memories occupy, for deletion. */
 export function projectMemoryUri(userId, projectId) {
   return `viking://user/${openVikingUserId(userId)}/memories/evimed/project/${openVikingPeerId(projectId)}`;

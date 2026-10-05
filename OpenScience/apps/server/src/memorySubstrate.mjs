@@ -1,9 +1,10 @@
 import {
   memoryUri,
-  openVikingUserId,
   parseMemoryUri,
   projectMemoryUri,
   recallTargets,
+  researchMemoryRoots,
+  userMemoryRoot,
 } from "./openVikingClient.mjs";
 import { recallContent, selectWithinBudget } from "./memoryRecallPolicy.mjs";
 import { annotateVersions, versionFields, versionsInForce } from "./memoryValidity.mjs";
@@ -127,8 +128,7 @@ function fuseByRank(lists) {
  *  publication ledger and its own rebuild, and a research rebuild that removed
  *  it would silently un-publish every approved fact. */
 function researchRoots(userId) {
-  const root = `viking://user/${openVikingUserId(userId)}/memories/evimed`;
-  return [`${root}/user`, `${root}/project`, `${root}/session`];
+  return researchMemoryRoots(userId);
 }
 
 function recordUri(userId, record) {
@@ -680,7 +680,7 @@ export class MemorySubstrate {
   /** Forget everything derived from one user, for account deletion and purge. */
   async forgetUser(userId) {
     if (!this.active) return false;
-    return this.openViking.remove(userId, `viking://user/${openVikingUserId(userId)}/memories/evimed`, {
+    return this.openViking.remove(userId, userMemoryRoot(userId), {
       recursive: true,
     });
   }
