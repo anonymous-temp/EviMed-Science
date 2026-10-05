@@ -1,11 +1,12 @@
 // The source-change record through the real server composition (plan 2026-10-05 B5): the account that owns it is named by
 // the integration, the frontier's notice is written to it, and the Crossref lookup, the result impact path and the memory
-// labels the app composes all read it — and with no account named the composition is exactly what it was.
+// labels the app composes all read it — and with no account named by a test it is the platform publisher account's.
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
+import { PLATFORM_PUBLISHER_USER_ID } from "@evimed/domain";
 import { createWebApiApp } from "../src/server.mjs";
 import { recordFrontierNotices } from "../src/sourceChanges.mjs";
 
@@ -82,16 +83,24 @@ test("through the server: a retraction the frontier recorded reaches a result an
   }
 });
 
-test("through the server: with no account named there is no record, and the lookup, the impact path and the labels are what they were", {
+test("through the server: with no account named by a test the record belongs to the platform publisher account, and the lookup, the impact path and the labels read it", {
   skip: !databaseUrl && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured",
 }, async () => {
   const dataDir = await mkdtemp(path.join("/tmp", "evimed-source-change-app-"));
   const app = appWith(dataDir);
   try {
-    assert.equal(app.sourceChanges, null);
+    // The control plane's own migration creates the publisher account; the record is written under it and nobody else's.
+    assert.ok(app.sourceChanges);
     assert.ok(app.sourceUpdates && app.resultImpacts && app.knowledgeChange);
-    assert.equal(app.resultImpacts.sourceChanges, null);
-    assert.equal(app.knowledgeChange.sourceChanges, null);
+    assert.equal(app.resultImpacts.sourceChanges, app.sourceChanges);
+    assert.equal(app.knowledgeChange.sourceChanges, app.sourceChanges);
+    const doi = `10.9999/publisher.${randomUUID().slice(0, 8)}`;
+    await recordFrontierNotices(app.sourceChanges, [{ kind: "retraction", noticeDoi: `${doi}.notice`, doi, date: "2026-10-01" }]);
+    assert.equal(app.sourceChanges.stats().writeFailures, 0);
+    assert.equal((await app.sourceChanges.get(doi)).state, "changed");
+    const owners = await app.sourceService.documents.database.query(
+      "SELECT DISTINCT user_id FROM evimed_product.documents WHERE kind = 'source-change' AND payload->>'identifier' = $1", [`doi:${doi}`]);
+    assert.deepEqual(owners.rows.map((/** @type {any} */ row) => row.user_id), [PLATFORM_PUBLISHER_USER_ID]);
   } finally {
     await app.close().catch(() => app.store.close());
     await rm(dataDir, { recursive: true, force: true });

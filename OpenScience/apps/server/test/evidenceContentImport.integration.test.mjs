@@ -81,7 +81,10 @@ test('independent review hash mismatch stops before actor or content writes', pg
 });
 test('manual edits refuse overwrite until the operator supplies the exact optimistic revision', pgOptions, async () => {
   const prepared = await prepare(); await apply(prepared); let card = await currentCard();
-  await service.save(publisher, { expectedRevision: card.revision, summary: 'Manual correction' }, card.zone_id, card.id);
+  // An official zone takes no write from a signed-in session (the publisher cannot sign in, and `owner` is not one of an official
+  // zone's origins): a correction made by hand reaches it the way the operator's import does.
+  await assert.rejects(service.save(publisher, { expectedRevision: card.revision, summary: 'Manual correction' }, card.zone_id, card.id), { code: 'evidence_write_origin_refused' });
+  await service.saveEditorial(publisher, { expectedRevision: card.revision, summary: 'Manual correction' }, card.zone_id, card.id, false, 'import');
   await assert.rejects(apply(prepared), /changed; provide its expected revision/); card = await currentCard(); assert.equal(card.summary, 'Manual correction'); assert.equal(card.revision, 2);
   await assert.rejects(applyEvidenceImport(prepared, { store, expectedRevisions: { cards: { 'fixture-card': 1 } } }), /changed; provide its expected revision/);
   const authorized = await applyEvidenceImport(prepared, { store, expectedRevisions: { cards: { 'fixture-card': 2 } } }); assert.equal(authorized.cardsUpdated, 1); card = await currentCard(); assert.equal(card.summary, 'Synthetic answer'); assert.equal(card.revision, 3);
