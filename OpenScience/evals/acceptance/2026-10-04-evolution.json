@@ -845,7 +845,7 @@
         "excludedBeforeScoring": 0,
         "publishedSources": 5,
         "sourcesFullyAgreeing": 5,
-        "reportHash": "b95a2863ec4063608861eb51f0c683a986c05de56db3763a3f34849d9bb9ff46",
+        "reportHash": "08e5384deee3b33ea10b5c48ceb242930199c0e316b511fb077d1c86788c4f89",
         "qualification": "Engine REML against metafor on five public datasets; another implementation, not the papers' printed results, and not full research.",
         "correction": {
           "date": "2026-10-05",
@@ -879,7 +879,7 @@
           "reference_follows_exact_normal_quantile": 15
         },
         "adjudication": "unadjudicated",
-        "reportHash": "642863b7c94f0b3672404a069d6b5baee2e351d608b75d28c4070c9883d2da4a",
+        "reportHash": "d8185af0ffc6193845250cf002b40c01e187e01c4380935b6f2575d027ee7f7d",
         "qualification": "Engine ROR against the printed ROR and bounds of 65 published table rows from five sources; disagreements reported and unadjudicated. Not whole FAERS data reconstruction or seven-stage research.",
         "correction": {
           "date": "2026-10-05",
@@ -908,7 +908,7 @@
         "excludedBeforeScoring": 0,
         "publishedSources": 6,
         "sourcesFullyAgreeing": 5,
-        "reportHash": "4a731c8e96a032f1d09406360b2f3a0ef2b37303fddf3c00d94098d4bfae742b",
+        "reportHash": "32b4c71a83db386df5dd3d5d0f047f2cf3d090f7acb43e0b012c2b8ac100a131",
         "qualification": "TwoSampleMR library functions against the authors' IVW implementation on eleven published per-variant examples; the platform MR engine is not executed. Original same-spec published proof zero, not five clinical original-study replications.",
         "correction": {
           "date": "2026-10-05",
@@ -2065,7 +2065,7 @@
           "Bind original deduplication, drug/event coding and complete analysis contract.",
           "Run the same five publications across all three rulers; aggregate arithmetic and source QA alone do not satisfy complete research."
         ],
-        "originalMethodReceiptReportHash": "642863b7c94f0b3672404a069d6b5baee2e351d608b75d28c4070c9883d2da4a",
+        "originalMethodReceiptReportHash": "d8185af0ffc6193845250cf002b40c01e187e01c4380935b6f2575d027ee7f7d",
         "completeResearchEstablished": false,
         "originalMethodReceiptCorrection": {
           "date": "2026-10-05",
@@ -2132,7 +2132,7 @@
       },
       {
         "path": "OpenScience/evals/paper-gold/published-faers-method-manifest.json",
-        "sha256": "242efaf5faeb6c6b1e52a06289ef19f0862b9a570ebc90fa7fbf7aae7a63f5fe",
+        "sha256": "101126698564ce0ec3dc862e3fa71188db79c2eb02bddb5d07d5eb6c69d43493",
         "kind": "qualification-or-definition-artifact",
         "correction": {
           "date": "2026-10-05",
