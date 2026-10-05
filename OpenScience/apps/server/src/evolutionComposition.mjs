@@ -340,7 +340,10 @@ export function createEvolution({ config, store, documents, jobs, database, usag
   const selfCheck = createEvolutionSelfCheck({ service, dataSemantics, store, controller, supply, config });
   const dailyCost = async client => Number((await client.query(`SELECT coalesce(sum(CASE WHEN status='settled' THEN actual_cost WHEN ${openCostPredicate("24 hours", "$1")} THEN ${OPEN_COST_VALUE} ELSE 0 END),0) AS cost FROM evimed_usage.model_requests WHERE purpose='evolution' AND created_at>=$1::timestamptz-interval '24 hours'`, [new Date().toISOString()])).rows[0]?.cost ?? 0);
   const worker = createEvolutionWorker({ service, decisions, maintenance, config, canRun, callbacks: {
-    dailyCost, canResume: job => runs.canResume(job), admitRuntime: async (_client, { kinds = [] } = {}) => kinds.length > 0 && kinds.every(kind => kind === "evolution-self-check")
+    dailyCost, canResume: job => runs.canResume(job),
+    // Which limit refused a run: the module's own daily allowance when it is spent (it frees with the window), otherwise the run's own cap.
+    // A weekly limit is not set for evolution (`weeklyLimit` is a million), so nothing else can refuse a run that has day budget left.
+    refusalCause: async () => await dailyCost(database) >= config.evolutionDailyBudgetCny ? "day" : "run", admitRuntime: async (_client, { kinds = [] } = {}) => kinds.length > 0 && kinds.every(kind => kind === "evolution-self-check")
       || (await controller.evolutionAdmissionAvailable()).available === true,
     onEvent: event => integration.consume(event), scout: async (payload, context) => { await frontier?.tick(); return scout.scout(payload, context); }, build,
     evaluate: async (payload, { signal, job }) => {

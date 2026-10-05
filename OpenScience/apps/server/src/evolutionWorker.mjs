@@ -55,9 +55,20 @@ export class EvolutionWorker {
         if (lost) throw new Error('Evolution work lease lost.');
         return await this.service.jobs.finish(job.userId, job.id, job.leaseToken, result ?? {});
       } catch (error) {
+        // A model refusal of a run's spend limit does not say which limit it was, and the two are not alike: the day's
+        // allowance frees in time, so the job keeps its checkpoints and waits for the window; a run's own cap does not free,
+        // the same case costs the same again, and retrying it from scratch (each time a fresh project, dispatch id and
+        // budget) spent the day's allowance on one case and starved every other job, hourly and without end.
+        const refusal = await this.administrativeRefusal(job, error);
+        if (refusal === 'run') {
+          const exhausted = { code: 'evolution_run_budget_exhausted', status: 409 };
+          await this.resourceWait(job, exhausted);
+          return this.service.jobs.fail(job.userId, job.id, job.leaseToken,
+            { code: 'evolution_run_budget_exhausted', message: 'The work needs more than one run may spend; the closed failure record preserves its next step.' }, { retry: false });
+        }
         // A refused daily reservation did not buy a model call. Keep this job and its
         // completed checkpoints for the rolling budget window; it is not a method failure.
-        if (error?.code === 'paper_gold_administrative_deferred' && (error.status ?? error.statusCode) === 402) {
+        if (refusal !== null) {
           return await this.service.jobs.fail(job.userId, job.id, job.leaseToken,
             { code: 'paper_gold_administrative_deferred', message: 'Evaluation waits after an observed administrative model refusal.' },
             { retry: true, refundAttempt: true, delayMs: 3600000 });
@@ -73,6 +84,22 @@ export class EvolutionWorker {
         return this.service.jobs.fail(job.userId, job.id, job.leaseToken, { code: 'evolution_job_failed', message: 'Evolution work failed; the closed failure record preserves its next step.' }, { retry: !terminal, delayMs: this.config.evolutionRetryMs ?? 60000 });
       } finally { clearInterval(heartbeat); this.abortController = null; }
     } finally { this.running = false; }
+  }
+  /**
+   * Whether a failure is the model refusing a run's spend limit, and if so which limit: `day` (the module's own allowance, which
+   * frees), `run` (one run's cap, which does not) or `unknown` (nobody could say; treated as the window, as before, for the evaluation's
+   * typed 402 only). `null` when it is no such refusal, or a development run's refusal nobody could attribute. Two shapes arrive: the evaluation's typed 402 and a development run that ended `runtime_spend_limit_reached`.
+   * @param {any} job @param {any} error @returns {Promise<'day'|'run'|'unknown'|null>}
+   */
+  async administrativeRefusal(job, error) {
+    const typed = error?.code === 'paper_gold_administrative_deferred' && (error.status ?? error.statusCode) === 402;
+    if (!typed && error?.code !== 'runtime_spend_limit_reached') return null;
+    /** @type {'day'|'run'|'unknown'} */
+    let cause = 'unknown';
+    try { cause = (await this.callbacks.refusalCause?.(job, error)) ?? 'unknown'; } catch { /* nobody could say */ }
+    // The evaluation's own 402 is a typed statement that the stop was administrative, so it waits when the cause is not known; a
+    // development run that merely ended `runtime_spend_limit_reached` is only waited for when the window is known to be the cause.
+    return !typed && cause === 'unknown' ? null : cause;
   }
   async housekeeping() {
     await this.service.reconcileQueued?.();

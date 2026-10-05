@@ -130,6 +130,7 @@ export const EVOLUTION_ERROR_MESSAGES = Object.freeze({
   'evolution_review_invalid': '这项研究工作暂时无法完成，请稍后重试。',
   'evolution_review_unavailable': '这项研究工作暂时无法完成，请稍后重试。',
   'evolution_route_missing': '这条研究记录已变化，请刷新后重试。',
+  'evolution_run_budget_exhausted': '这项研究工作需要的模型预算超过了单次运行的上限，已记录为资源缺口，其他研究不受影响。',
   'evolution_run_timeout': '这项研究工作暂时无法完成，请稍后重试。',
   'evolution_scope_invalid': '这项研究工作暂时无法完成，请稍后重试。',
   'evolution_setting_invalid': '循证进化的配置有误，该模块暂未启用，其他研究不受影响。',
