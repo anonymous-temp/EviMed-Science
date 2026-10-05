@@ -51,6 +51,7 @@ import { productId } from "./productPersistence.mjs";
 import { EvimedCreditsError } from "./evimedCreditsClient.mjs";
 import { SIMULATED_INCARNATION_SQL, SimulatedWalletRefusal, simulatedPayerId } from "./evimedCreditsSimulator.mjs";
 import { runUsageKeys, autopilotUsageScope } from "./runUsage.mjs";
+import { vcrRunUsageScope } from "./vcrUsageScope.mjs";
 import { migrateEvimedCredits, researchBillingPolicy } from "./evimedCreditsPersistence.mjs";
 
 /**
@@ -373,7 +374,10 @@ export class EvimedCreditsService {
       const logical = successful ? autopilotUsageScope(run) : null;
       const runId = logical ? `research_${createHash('sha256').update(`${userId}\0${logical}`).digest('hex')}` : physicalId;
       await migrateEvimedCredits(this.database);
-      const ids = successful ? runUsageKeys({ ...run, id: physicalId }).map(id => productId(id, 'run')) : [physicalId];
+      // A module run also settles what its study's own model calls cost that no run asked for (`vcrUsageScope.mjs`):
+      // each request is attributed once, to whichever of the study's runs settles first, so a study's cost is complete.
+      const studyScope = successful ? vcrRunUsageScope({ ...run, projectId: run.projectId }) : null;
+      const ids = successful ? [...runUsageKeys({ ...run, id: physicalId }), ...(studyScope ? [studyScope] : [])].map(id => productId(id, 'run')) : [physicalId];
 
       // Failed platform work retains its costs as evidence but is waived. A
       // cancellation is not evidence of an earned stage, so it is waived too.

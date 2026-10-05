@@ -6,6 +6,7 @@ import { vcrCurrentNodes, vcrReviewIsCurrent } from './vcrViews.mjs';
 import { renderVcrNumbers, vcrReportReviewRevision } from './vcrRender.mjs';
 import { studyReviewDigest } from './studyReview.mjs';
 import { HttpError } from './security.mjs';
+import { vcrUsageScope } from './vcrUsageScope.mjs';
 
 /** Whether a stored value holds a number anywhere in it. @param {unknown} value @returns {boolean} */
 const holdsNumber = value => typeof value === 'number' ? Number.isFinite(value)
@@ -151,8 +152,12 @@ export function createVcrReviewAdapter({ vcr, reviewService }) {
       });
       if (!frozen.nodes.length) return [];
       const records = [];
+      // Every review is attributed: to the run that asked for it, and where none did (a review the orchestrator
+      // queued because a computation settled) to the study's scope, which the ledger and the billing both sum
+      // (`vcrUsageScope.mjs`). A review with no run id was charged to nobody and appeared in no run's cost.
+      const attributedTo = runId ?? vcrUsageScope(frozen.study.projectId) ?? undefined;
       for (const role of ['clinical', 'statistical']) {
-        const input = { subjectRef: { kind: 'vcr', studyId, ...(exportId ? { exportId, reportRevision: frozen.reportRevision } : {}) }, role, nodes: frozen.nodes, frozenInput: frozen.frozenInput, deterministic: frozen.deterministic, runId };
+        const input = { subjectRef: { kind: 'vcr', studyId, ...(exportId ? { exportId, reportRevision: frozen.reportRevision } : {}) }, role, nodes: frozen.nodes, frozenInput: frozen.frozenInput, deterministic: frozen.deterministic, runId: attributedTo };
         if (reviewService) records.push(await reviewService.requestStudyReview({ userId: frozen.study.userId, projectId: frozen.study.projectId }, input));
         else {
           const digest = studyReviewDigest(frozen.frozenInput);
