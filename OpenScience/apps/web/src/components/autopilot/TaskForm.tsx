@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { AGENDA_DEFAULT_BUDGETS, AGENDA_MIN_EPISODE_BUDGET_CNY } from "@evimed/domain";
 import { createAgenda, getAgenda, startAgenda, updateAgenda, type AgendaRecord, type AgendaSchedule } from "@/lib/autopilotClient";
 import { productErrorMessage } from "@/lib/productClient";
 import { Button } from "@/components/ui/Button";
@@ -16,7 +17,10 @@ export function TaskForm({ projectId, agenda, recommendation, onSaved, onRecorde
     kind: recommendation?.kind ?? "daily", time: "07:00", timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Shanghai", weekdays: [1],
   });
   const [taskTypes, setTaskTypes] = useState(agenda?.payload.taskTypes ?? ["literature-sentinel"]);
-  const [budgets, setBudgets] = useState({ maxEpisodeCny: agenda?.payload.maxEpisodeCny ?? 100, dailyBudgetCny: agenda?.payload.dailyBudgetCny ?? 500, weeklyBudgetCny: agenda?.payload.weeklyBudgetCny ?? 3000 });
+  // The defaults and the floor are the domain's, the ones the server holds the saved task to: the form cannot offer what the server refuses.
+  const [budgets, setBudgets] = useState({ maxEpisodeCny: agenda?.payload.maxEpisodeCny ?? AGENDA_DEFAULT_BUDGETS.maxEpisodeCny, dailyBudgetCny: agenda?.payload.dailyBudgetCny ?? AGENDA_DEFAULT_BUDGETS.dailyBudgetCny, weeklyBudgetCny: agenda?.payload.weeklyBudgetCny ?? AGENDA_DEFAULT_BUDGETS.weeklyBudgetCny });
+  const minimum = `¥${AGENDA_MIN_EPISODE_BUDGET_CNY.toFixed(2)}`;
+  const episodeTooSmall = budgets.maxEpisodeCny < AGENDA_MIN_EPISODE_BUDGET_CNY;
   const [saving, setSaving] = useState(false);
   const [created, setCreated] = useState<AgendaRecord | null>(null);
   const [conflict, setConflict] = useState(false);
@@ -27,7 +31,7 @@ export function TaskForm({ projectId, agenda, recommendation, onSaved, onRecorde
   try { new Intl.DateTimeFormat("zh-CN", { timeZone: schedule.timeZone }); } catch { validZone = false; }
   const valid = prompt.trim().length > 0 && validZone && taskTypes.length > 0
     && (schedule.kind !== "weekly" || (schedule.weekdays?.length ?? 0) > 0) && (schedule.kind !== "once" || !!schedule.date)
-    && budgets.maxEpisodeCny > 0 && budgets.maxEpisodeCny <= budgets.dailyBudgetCny && budgets.dailyBudgetCny <= budgets.weeklyBudgetCny;
+    && budgets.maxEpisodeCny >= AGENDA_MIN_EPISODE_BUDGET_CNY && budgets.maxEpisodeCny <= budgets.dailyBudgetCny && budgets.dailyBudgetCny <= budgets.weeklyBudgetCny;
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault(); if (!valid || saving || conflict) return;
@@ -75,11 +79,12 @@ export function TaskForm({ projectId, agenda, recommendation, onSaved, onRecorde
       </div>
       {schedule.kind === "once" && <Input label="日期" type="date" required value={schedule.date ?? ""} onChange={event => setSchedule({ ...schedule, date: event.target.value })} />}
       {schedule.kind === "weekly" && <fieldset className="flex flex-wrap gap-3"><legend className="mb-2 text-ui font-medium text-text">星期</legend>{WEEKDAYS.map((day, index) => <label key={day} className="flex items-center gap-1 text-ui text-text"><input type="checkbox" checked={schedule.weekdays?.includes(index + 1) ?? false} onChange={event => setSchedule({ ...schedule, weekdays: event.target.checked ? [...(schedule.weekdays ?? []), index + 1].sort() : schedule.weekdays?.filter(value => value !== index + 1) })} />{day}</label>)}</fieldset>}
-      <Disclosure summary={<span>高级设置<span className="ml-2 text-caption text-text-3">{schedule.timeZone}</span></span>} defaultOpen={!validZone}><div className="space-y-4 pt-2">
+      <Disclosure summary={<span>高级设置<span className="ml-2 text-caption text-text-3">{schedule.timeZone}</span></span>} defaultOpen={!validZone || episodeTooSmall}><div className="space-y-4 pt-2">
         <Input label="时区" value={schedule.timeZone} error={validZone ? undefined : "请输入有效时区，例如 Asia/Shanghai"} required onChange={event => setSchedule({ ...schedule, timeZone: event.target.value })} />
         <fieldset className="flex flex-wrap gap-3"><legend className="mb-2 text-ui font-medium text-text">任务类型</legend>{TASK_TYPES.map(([value, label]) => <label key={value} className="flex items-center gap-1 text-ui text-text"><input type="checkbox" checked={taskTypes.includes(value)} onChange={event => setTaskTypes(event.target.checked ? [...taskTypes, value] : taskTypes.filter(item => item !== value))} />{label}</label>)}</fieldset>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">{([['maxEpisodeCny', '单次上限 ¥'], ['dailyBudgetCny', '每日上限 ¥'], ['weeklyBudgetCny', '每周上限 ¥']] as const).map(([key, label]) => <Input key={key} label={label} type="number" min="0.01" step="0.01" value={budgets[key]} onChange={event => setBudgets({ ...budgets, [key]: Number(event.target.value) })} />)}</div>
-        <p className="text-caption text-text-3">单次 ≤ 每日 ≤ 每周。每日、每周按近 24 小时、近 7 天滚动计算，只计这个任务自己的花费，不含账户里的其他研究。</p>
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">{([['maxEpisodeCny', '单次上限 ¥'], ['dailyBudgetCny', '每日上限 ¥'], ['weeklyBudgetCny', '每周上限 ¥']] as const).map(([key, label]) => <Input key={key} label={label} type="number" min={key === "maxEpisodeCny" ? String(AGENDA_MIN_EPISODE_BUDGET_CNY) : "0.01"} step="0.01" value={budgets[key]}
+          error={key === "maxEpisodeCny" && episodeTooSmall ? `单次上限不能低于 ${minimum}` : undefined} onChange={event => setBudgets({ ...budgets, [key]: Number(event.target.value) })} />)}</div>
+        <p className="text-caption text-text-3">单次上限最低 {minimum}：模型每次调用要先预留约 ¥1，预算再小，研究一开始就会被拒绝。单次 ≤ 每日 ≤ 每周。每日、每周按近 24 小时、近 7 天滚动计算，只计这个任务自己的花费，不含账户里的其他研究。</p>
       </div></Disclosure>
     </fieldset>
     {error && <p role="alert" className="text-ui text-error">{error}</p>}
