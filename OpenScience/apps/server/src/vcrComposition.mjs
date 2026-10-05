@@ -70,6 +70,7 @@ import { VcrDataPlane } from "./vcrDataPlane.mjs";
 import { VcrDataStore } from "./vcrDataStore.mjs";
 import { createVcrEngineClient } from "./vcrEngineClient.mjs";
 import { createVcrEngineProbe } from "./vcrEngineProbe.mjs";
+import { matchingVariablesOf, subjectTableFacts } from "./vcrMatchingTable.mjs";
 import { createVcrEvidencePipeline } from "./vcrEvidence.mjs";
 import { createVcrCorrectionCases } from "./vcrCorrectionCases.mjs";
 import { createVcrCurveEvidence } from "./vcrCurveEvidence.mjs";
@@ -225,10 +226,17 @@ export function matchingContextOf(inputs) {
  * One subject that cannot be evaluated is one subject counted in
  * `diagnostics.errors`; it never stops the others (CS-34).
  *
+ * **A study whose subjects are rows of the data plane's subject table is matched from that table** (`vcrMatchingTable.mjs`):
+ * each row is a candidate, and the columns the field map and the dictionary describe are read as facts for the same
+ * evaluator — judged for the study's owner for this purpose like every other read of patient-level data, held in memory
+ * for this evaluation only, and never written down. A person who is a row of the table and has documents is one candidate
+ * with both kinds of fact (the two keys are the same pseudonym); a row with no documents is a candidate who is table-only.
+ *
  * @param {{ matchStore: VcrMatchStore, store: VcrStore,
- *   documents?: { read: (study: any, input: { subjectKey: string, documentId: string }) => Promise<{ text: string } | null> } | null }} parts
+ *   documents?: { read: (study: any, input: { subjectKey: string, documentId: string }) => Promise<{ text: string } | null> } | null,
+ *   subjectTable?: { read: (study: any) => Promise<any> } | null }} parts
  */
-export function vcrMatchingExecutor({ matchStore, store, documents = null }) {
+export function vcrMatchingExecutor({ matchStore, store, documents = null, subjectTable = null }) {
   /** @param {{ job: Record<string, any>, onProgress: (progress: { done: number, total: number }) => Promise<unknown> }} input */
   return async ({ job, onProgress }) => {
     const startedAt = new Date().toISOString();
@@ -248,6 +256,24 @@ export function vcrMatchingExecutor({ matchStore, store, documents = null }) {
     /** @type {Map<string, any[]>} */
     const factsBySubject = new Map();
     for (const fact of allFacts) factsBySubject.set(fact.subjectKey, [...(factsBySubject.get(fact.subjectKey) ?? []), fact]);
+    // The subject table, when the study has one: every row a candidate. Read through the plane's judged reader; a refusal
+    // (no grant, sealed columns, a table that changed under its hash) leaves the other sources as they were and is said in
+    // the result's diagnostics by its code.
+    /** @type {any} */
+    let tableRead = null;
+    if (subjectTable) {
+      try { tableRead = await subjectTable.read(study); }
+      catch (error) { tableRead = { available: false, reason: String(/** @type {any} */ (error)?.code ?? "vcr_subject_table_unreadable") }; }
+    }
+    const tableFacts = tableRead?.available
+      ? subjectTableFacts({ ...tableRead, variables: matchingVariablesOf(criteria), limit: VCR_MATCHING_MAX_SUBJECTS })
+      : null;
+    /** @type {Set<string>} candidates that exist only as a row of the table */
+    const tableOnly = new Set();
+    for (const { subjectKey, facts } of tableFacts?.subjects ?? []) {
+      if (!factsBySubject.has(subjectKey) && !languageBySubject.has(subjectKey)) tableOnly.add(subjectKey);
+      factsBySubject.set(subjectKey, [...(factsBySubject.get(subjectKey) ?? []), ...facts]);
+    }
     const subjects = [...new Set([...factsBySubject.keys(), ...languageBySubject.keys()])].sort().slice(0, VCR_MATCHING_MAX_SUBJECTS);
 
     /** @type {any[]} */
@@ -274,7 +300,8 @@ export function vcrMatchingExecutor({ matchStore, store, documents = null }) {
           studyId, protocolVersionId, subjectKey, asOf, direction: "trial_to_patient", criteria, facts, documents: loaded, modelJudgments, provenance: { vocabularyVersion },
         });
         voidedTotal += assessment.voidedFacts.length;
-        assessments.push({ ...assessment, counts: { ...assessment.counts, voidedFacts: assessment.voidedFacts.length } });
+        assessments.push({ ...assessment, counts: { ...assessment.counts, voidedFacts: assessment.voidedFacts.length },
+          ...(tableOnly.has(subjectKey) ? { source: "subject_table" } : {}) });
       } catch (error) {
         errors.push(String(/** @type {any} */ (error)?.code ?? "vcr_evaluation_failed"));
       }
@@ -304,6 +331,11 @@ export function vcrMatchingExecutor({ matchStore, store, documents = null }) {
         errors: errors.length, ...(errors.length ? { errorCodes: [...new Set(errors)] } : {}),
         // What this run did not see: subjects past the cap wait for the next run.
         subjectsNotEvaluated: Math.max(0, new Set([...factsBySubject.keys(), ...languageBySubject.keys()]).size - subjects.length),
+        // The subject table, by what it was and what of it answered: names and counts, never a cell.
+        ...(subjectTable ? { subjectTable: tableFacts
+          ? { snapshotId: tableRead.snapshotId, rows: tableFacts.rows, subjects: tableFacts.subjects.length, notEvaluated: tableFacts.notEvaluated,
+            variablesMapped: tableFacts.mapped, variablesUnmapped: tableFacts.unmapped, variablesAmbiguous: tableFacts.ambiguous, withheld: tableRead.withheld }
+          : { available: false, reason: String(tableRead?.reason ?? "unavailable"), ...(tableRead?.fields?.length ? { fields: tableRead.fields } : {}) } } : {}),
       },
       tables: [],
       // Per-subject rows leave through the finish hook only: a result row
@@ -378,10 +410,32 @@ export function vcrDocumentsSeam({ dataPlane }) {
   };
 }
 
+/**
+ * The subject-table seam of the matching flow: the plane's judged read of the study's subject table for the study's
+ * owner, and the identity (snapshot and hash) a job freezes so a changed table is a different job. A refusal is an
+ * answer — `{ available: false, reason }` — never an error that stops the other sources.
+ * @param {{ dataPlane: VcrDataPlane | null }} parts
+ */
+export function vcrSubjectTableSeam({ dataPlane }) {
+  return {
+    /** @param {any} study */
+    async read(study) {
+      if (!dataPlane) return { available: false, reason: "vcr_data_plane_unavailable" };
+      return dataPlane.subjectTableForMatching({ studyId: study.id, principal: study.userId, purpose: VCR_JOB_PURPOSE });
+    },
+    /** @param {any} study */
+    async identity(study) {
+      if (!dataPlane) return null;
+      return dataPlane.subjectTableIdentity(study.id).catch(() => null);
+    },
+  };
+}
+
 /** The frozen inputs of one matching job, and the facts token that keeps two runs of different facts apart. */
-function matchingInputs({ asOf, protocolVersionId, facts, judgments }) {
+function matchingInputs({ asOf, protocolVersionId, facts, judgments, table = null }) {
+  // The table's identity joins the token only when there is a table, so a study without one keeps the token it had.
   const token = createHash("sha256").update(JSON.stringify([
-    facts.map((/** @type {any} */ fact) => fact.id), judgments,
+    facts.map((/** @type {any} */ fact) => fact.id), judgments, ...(table ? [table.snapshotId, table.sha256] : []),
   ])).digest("hex").slice(0, 16);
   return [
     { kind: "evidence", id: `${CONTEXT_INPUT.asOf}${asOf}` },
@@ -399,9 +453,10 @@ function matchingInputs({ asOf, protocolVersionId, facts, judgments }) {
  * the object the service and the gateway read through is assembled here.
  *
  * @param {{ matchStore: VcrMatchStore, store: VcrStore, jobs?: VcrJobs | null,
- *   getNotifier?: (() => any) | null, report?: (code: string) => void, now?: () => Date, dataPlaneDir?: string }} parts
+ *   getNotifier?: (() => any) | null, report?: (code: string) => void, now?: () => Date, dataPlaneDir?: string,
+ *   subjectTable?: { identity: (study: any) => Promise<{ snapshotId: string, sha256: string } | null> } | null }} parts
  */
-export function vcrMatchingSeam({ matchStore, store, jobs = null, getNotifier = null, report = () => {}, now = () => new Date(), dataPlaneDir = "" }) {
+export function vcrMatchingSeam({ matchStore, store, jobs = null, getNotifier = null, report = () => {}, now = () => new Date(), dataPlaneDir = "", subjectTable = null }) {
   /** @param {any} study */
   const languageKeys = async (study) => {
     const criteria = await matchStore.listCriteria({ studyId: study.id }).catch(() => []);
@@ -563,7 +618,7 @@ export function vcrMatchingSeam({ matchStore, store, jobs = null, getNotifier = 
         scenario: { criteria: criteria.map((criterion) => ({
           id: criterion.id, kind: criterion.kind, type: criterion.criterionType, state: "unknown",
         })) },
-        inputs: matchingInputs({ asOf: minute, protocolVersionId: protocol.id, facts, judgments }),
+        inputs: matchingInputs({ asOf: minute, protocolVersionId: protocol.id, facts, judgments, table: await subjectTable?.identity(study) ?? null }),
       };
     },
 
@@ -603,7 +658,11 @@ export function vcrMatchingSeam({ matchStore, store, jobs = null, getNotifier = 
       }
       let created = 0;
       let needsEvidence = 0;
-      for (const candidate of candidateReferrals({ studyId: study.id, assessments: saved })) {
+      // A row of the subject table is a person the study already holds data on, not a patient a site might be asked to
+      // contact: its verdicts are saved and counted, and no referral is made for it. A person who also has documents is
+      // the recruitment flow's as before.
+      const tableOnly = new Set(list(result.assessments).filter((assessment) => assessment?.source === "subject_table").map((assessment) => String(assessment.subjectKey)));
+      for (const candidate of candidateReferrals({ studyId: study.id, assessments: saved.filter((assessment) => !tableOnly.has(String(assessment.subjectKey))) })) {
         try {
           const referral = await matchStore.createReferral({
             userId: study.userId,
@@ -884,9 +943,10 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   // Patient documents are read through the plane's own judged, audited reader;
   // with no plane there are none, and a fact a run wrote about a document is void.
   const documents = vcrDocumentsSeam({ dataPlane });
+  const subjectTable = dataPlane ? vcrSubjectTableSeam({ dataPlane }) : null;
   const jobs = new VcrJobs({
     store, config, engine, report, dataPlane, engineObserver: engineProbe,
-    localExecutors: { "matching.evaluate": vcrMatchingExecutor({ matchStore, store, documents }) },
+    localExecutors: { "matching.evaluate": vcrMatchingExecutor({ matchStore, store, documents, subjectTable }) },
   });
   // The seal asks the plane to lift, per study, as of the instant the plan froze
   // (`liftStudySeal`); the plane records the first outcome read through the seal
@@ -921,7 +981,7 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   /** @type {any} */
   let composed = null;
   const matching = vcrMatchingSeam({
-    matchStore, store, jobs, report, getNotifier: () => composed?.notifier ?? null, dataPlaneDir: String(config.vcrDataPlaneDir ?? ""),
+    matchStore, store, jobs, report, getNotifier: () => composed?.notifier ?? null, dataPlaneDir: String(config.vcrDataPlaneDir ?? ""), subjectTable,
   });
   // A matching job that has finished has its assessments persisted, its
   // candidates made referrals and its coordinators told — by the control plane,

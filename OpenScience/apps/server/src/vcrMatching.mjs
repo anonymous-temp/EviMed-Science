@@ -364,7 +364,11 @@ const unknownBecause = (variable, reason, evidence = []) => verdict(UNKNOWN, { m
  */
 const citation = (fact) => {
   const spoken = fact?.source?.quote ?? fact?.surface ?? null;
-  const rendered = `${String(fact?.variable ?? "")} = ${String(fact?.value ?? "")}${fact?.unit ? ` ${fact.unit}` : ""}`;
+  // A cell of the subject table is read to judge and is not written down: its evidence names the column and not the value, so a
+  // reader who may see a candidate's states may not read the candidate's age off them (`vcrMatchingTable.mjs`).
+  const rendered = fact?.hideValue === true
+    ? `${String(fact?.variable ?? "")}（数据表列 ${String(fact?.snapshot?.field ?? "")}）`
+    : `${String(fact?.variable ?? "")} = ${String(fact?.value ?? "")}${fact?.unit ? ` ${fact.unit}` : ""}`;
   return {
     factId: String(fact?.id ?? ""),
     variable: String(fact?.variable ?? ""),

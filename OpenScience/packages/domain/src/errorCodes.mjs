@@ -1259,7 +1259,7 @@ export const VCR_WRITE_ISSUE_CODES = Object.freeze([
  * this list (`vcrErrorCodesRegistered.test.mjs`).
  */
 export const VCR_MODULE_ERROR_CODES = Object.freeze([
-  'vcr_backup_status_unavailable', 'vcr_backup_unhealthy', 'vcr_backup_references_missing',
+  'vcr_backup_status_unavailable', 'vcr_backup_unhealthy', 'vcr_backup_references_missing', 'vcr_subject_table_unreadable',
   'review_proof_stale', 'document_review_conversion_incomplete', 'document_review_conversion_failed',
   'vcr_evaluation_input_restricted', 'vcr_evaluation_input_changed', 'vcr_evaluation_input_unavailable',
   'vcr_evaluation_dataset_not_found', 'vcr_evaluation_request_invalid', 'vcr_evaluation_holdout_unavailable',
@@ -1560,6 +1560,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   extension_storage_capacity: '技能存储空间暂时不足，请整理技能文件后重试。',
   vcr_backup_status_unavailable: '恢复备份状态暂时无法核对。',
   vcr_backup_unhealthy: '恢复备份尚未通过检查。',
+  vcr_subject_table_unreadable: '这份受试者数据表现在读不出来；这次匹配只用病历文档和已有事实，其余步骤照常。',
   vcr_backup_references_missing: '这一轮恢复备份没有做成：数据库记录的部分文件在备份时被删除了，下一轮会重新备份；PostgreSQL 备份不受影响。',
   review_proof_stale: '复核对应的报告或数据版本已变更，原文件仍保留。',
   document_review_conversion_incomplete: '复核后的文件转换尚未完成，原文件仍可下载。',
