@@ -599,6 +599,10 @@ services:
       # a starting allowance on its first read (2026-10-04).
       OPEN_SCIENCE_EVIMED_CREDITS_SIMULATED:
       OPEN_SCIENCE_EVIMED_CREDITS_SIMULATED_START_CREDITS:
+      # The platform wallet's gifts (2026-10-05): how many days the sign-up gift lasts, and the monthly gift
+      # (0 is off). The defaults are the code's own and are written here so an operator reads them where they set them.
+      OPEN_SCIENCE_EVIMED_CREDITS_SIGNUP_GIFT_DAYS: ${OPEN_SCIENCE_EVIMED_CREDITS_SIGNUP_GIFT_DAYS:-30}
+      OPEN_SCIENCE_EVIMED_CREDITS_MONTHLY_GIFT: ${OPEN_SCIENCE_EVIMED_CREDITS_MONTHLY_GIFT:-0}
       # Versioned task charges opt in independently of the allowance page.
       OPEN_SCIENCE_RESEARCH_BILLING_ENABLED:
       OPEN_SCIENCE_RESEARCH_COMMERCE_ENABLED:

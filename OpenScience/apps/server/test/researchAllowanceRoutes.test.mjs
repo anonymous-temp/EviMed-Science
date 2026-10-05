@@ -46,14 +46,28 @@ test("allowance reads only the session owner and never invents a balance source 
   assert.equal(res.status, 200);
   assert.equal(res.headers["Cache-Control"], "private, no-store");
   assert.equal(calls[2][1], "owner");
-  assert.equal(calls[2][2].since.toISOString(), "2026-10-01T00:00:00.000Z");
+  assert.equal(calls[2][2].since.toISOString(), "2026-09-30T16:00:00.000Z", "1 October begins at 00:00 Asia/Shanghai");
   assert.equal(res.data.available, 120.364);
   assert.equal(res.data.held, null);
   assert.equal(res.data.balances, null);
   assert.equal(res.data.membership, null);
-  assert.deepEqual(res.data.month, { since: "2026-10-01T00:00:00.000Z", paid: 4, pending: 2 });
+  assert.deepEqual(res.data.month, { since: "2026-09-30T16:00:00.000Z", paid: 4, pending: 2 });
   assert.equal(res.data.simulated, false, "a deployment whose wallet is real says so");
   assert.equal(res.data.lowThreshold, null);
+});
+
+test("the month a person reads is the Asia/Shanghai month, so a clock at 16:30Z on 31 October is already November", async () => {
+  // The month total, the statement window and a gift's expiry (24:00 Asia/Shanghai) must agree on which day it is.
+  const { calls, routes } = fixture({ now: () => new Date("2026-10-31T16:30:00Z") });
+  const res = response();
+  await routes({ method: "GET", url: "/api/account/allowance" }, res);
+  assert.equal(calls.find((call) => call[0] === "summary")[2].since.toISOString(), "2026-10-31T16:00:00.000Z");
+  assert.equal(res.data.month.since, "2026-10-31T16:00:00.000Z");
+  // One minute earlier it is still October in Shanghai.
+  const before = fixture({ now: () => new Date("2026-10-31T15:59:00Z") });
+  const earlier = response();
+  await before.routes({ method: "GET", url: "/api/account/allowance" }, earlier);
+  assert.equal(earlier.data.month.since, "2026-09-30T16:00:00.000Z");
 });
 
 test("unavailable wallets remain unknown while confirmed task charges stay readable", async () => {

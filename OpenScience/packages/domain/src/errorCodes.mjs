@@ -1442,6 +1442,15 @@ export const EVIMED_CREDITS_ROUTE_ERROR_CODES = Object.freeze([
   // top-up the page built wrong.
   'simulated_wallet_not_enabled',
   'simulated_wallet_request_invalid',
+  // An operator's grant of gifted 灵豆 (compensation, campaign) and the one charge a
+  // statement line is opened for: who may grant, a grant that is not well formed,
+  // a request id already used for another grant, an account that is not here, a line
+  // that is not this account's.
+  'credit_grant_forbidden',
+  'credit_grant_invalid',
+  'credit_grant_conflict',
+  'credit_grant_account_not_found',
+  'credit_statement_not_found',
 ])
 
 /**
@@ -1888,6 +1897,11 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   evimed_credits_unreachable: '科研额度的记录暂时读不出来，稍后再试。',
   simulated_wallet_not_enabled: '这个部署没有开启模拟额度，没有可以充值的内容。',
   simulated_wallet_request_invalid: '这次模拟充值的内容不对，没有入账。换一个充值额度再试。',
+  credit_grant_forbidden: '只有运营账号可以赠送灵豆，这次没有入账。',
+  credit_grant_invalid: '这笔赠送的内容不对，没有入账。检查账户、来源（补偿或活动）、金额和到期日后再试。',
+  credit_grant_conflict: '这个请求编号已经用于另一笔不同的赠送，没有重复入账。换一个请求编号再试。',
+  credit_grant_account_not_found: '没有找到这个账户，这笔赠送没有入账。',
+  credit_statement_not_found: '没有找到这一条流水。',
   usage_metering_unavailable: '计量暂时不可用，本次用量稍后补记。',
   illegal_state_transition: '状态变更不合法，已拒绝。',
 
@@ -2321,6 +2335,11 @@ const ERROR_CODE_OUTCOMES = Object.freeze({
   evimed_credits_unreachable: 'upstream',
   simulated_wallet_not_enabled: 'upstream',
   simulated_wallet_request_invalid: 'upstream',
+  credit_grant_forbidden: 'upstream',
+  credit_grant_invalid: 'upstream',
+  credit_grant_conflict: 'upstream',
+  credit_grant_account_not_found: 'upstream',
+  credit_statement_not_found: 'upstream',
 })
 
 /**

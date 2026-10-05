@@ -802,7 +802,9 @@ function mediaMarketSettings(overrides) {
  *   addresses, and neither that nor a bad starting allowance is judged here: a
  *   typo in a billing knob must not stop the platform, so the billing module
  *   checks both when it is composed and refuses by a named code
- *   (`evimedCreditsRefusal`), the platform booting regardless.
+ *   (`evimedCreditsRefusal`), the platform booting regardless. The sign-up gift's
+ *   length and the monthly gift (`..._SIGNUP_GIFT_DAYS`, `..._MONTHLY_GIFT`) are
+ *   judged there too.
  *
  * @param {Record<string, any>} overrides
  */
@@ -865,6 +867,12 @@ function evimedCreditsSettings(overrides) {
     // Whole credits a first read of an account's simulated wallet grants. Left
     // as the number it parses to, NaN included: the module judges it.
     evimedCreditsSimulatedStartCredits: Number(read("evimedCreditsSimulatedStartCredits", "OPEN_SCIENCE_EVIMED_CREDITS_SIMULATED_START_CREDITS", SIMULATED_START_CREDITS)),
+    // The sign-up gift is that amount as one gifted lot; this is how many days it lasts (its date is fixed, and shown, when
+    // it is granted). Left as the number it parses to, NaN included: the module judges it.
+    evimedCreditsSignupGiftDays: Number(read("evimedCreditsSignupGiftDays", "OPEN_SCIENCE_EVIMED_CREDITS_SIGNUP_GIFT_DAYS", 30)),
+    // The monthly gift, in 灵豆, on each account's own monthly date; 0 is off. Kept as the text it was written in so an
+    // amount that is not exact (more than 8 decimals) is refused by the module instead of rounded here.
+    evimedCreditsMonthlyGift: String(read("evimedCreditsMonthlyGift", "OPEN_SCIENCE_EVIMED_CREDITS_MONTHLY_GIFT", 0)).trim(),
     // How often the retry sweep looks for a settlement whose backoff elapsed.
     evimedCreditsPollMs: integer("evimedCreditsPollMs", "OPEN_SCIENCE_EVIMED_CREDITS_POLL_MS", 60_000, 5_000, 3_600_000),
   };

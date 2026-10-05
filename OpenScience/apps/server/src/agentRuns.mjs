@@ -4072,6 +4072,11 @@ export class AgentRunStore {
     // Consecutive polls with no new message and no new tool call before a run
     // is called stalled. Zero disables the check and waits out the timeout.
     this.monitorStallPolls = options.monitorStallPolls ?? 0;
+    // Called once, when this process has just created a dispatched run and before its prompt goes
+    // out — the moment a run exists and has not begun to spend. Billing's hold on the run's
+    // budget is placed here. It can never refuse or fail a run: an error is swallowed (principle 14).
+    /** @type {(project: any, run: any) => Promise<any>} */
+    this.onRunReserved = options.onRunReserved ?? (async () => {});
     this.onRunFinished = options.onRunFinished ?? (async () => {});
     this.onRunFinishedError = options.onRunFinishedError ?? (async () => {});
     // Every state change the ledger commits is announced. The browser's live
@@ -4650,6 +4655,7 @@ export class AgentRunStore {
     const record = reservation.run;
     if (!reservation.owner) return this.existingDispatch(project, record);
     this.projects.set(`${project.userId}:${project.id}`, project);
+    try { await this.onRunReserved(project, record); } catch { /* a hold that could not be placed never stops research */ }
     // The brief, before the prompt goes out, so it is held whatever happens
     // next. This is the authoritative copy and the only one the gate reads.
     if (briefText) {

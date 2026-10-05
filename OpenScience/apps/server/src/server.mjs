@@ -93,7 +93,7 @@ import { LearningMetrics, learningLedgerCounts, learningMetricFamilies, learning
 import { archivedLessonRun, ensureLearningProject, preserveProjectLessons, resolveLessonSourceRun } from "./learningPreservation.mjs";
 import { learnedMethodFamilyForRuntime, methodFamily } from "./learnedMethodMount.mjs";
 import { persistExecutedToolEdges, persistGoldenTraces } from "./toolExecutionEdges.mjs";
-import { CONNECTOR_CREDENTIAL_IDS, MIN_PASSWORD_LENGTH, autopilotEpisodeCapability, deliverableIdOfPath, geoMetricDefinition, isResearcherOwnedWork, meetsPasswordMinimum, mountedMethodDigest, usagePurposeOfRun } from "@evimed/domain";
+import { CONNECTOR_CREDENTIAL_IDS, MIN_PASSWORD_LENGTH, accountMonthStart, autopilotEpisodeCapability, deliverableIdOfPath, geoMetricDefinition, isChargeableResearchRun, isResearcherOwnedWork, meetsPasswordMinimum, mountedMethodDigest, usagePurposeOfRun } from "@evimed/domain";
 import { ResearchSessionStore } from "./researchSessions.mjs";
 import { prepareResearchContext } from "./researchContext.mjs";
 import {
@@ -181,10 +181,7 @@ import { ReviewWorker } from "./reviewWorker.mjs";
 import { createReviewRoutes, reviewRoutePattern } from "./reviewRoutes.mjs";
 import { createEvimedCreditsClient } from "./evimedCreditsClient.mjs";
 import { EvimedCreditsService, creditsReadiness } from "./evimedCreditsService.mjs";
-import {
-  SIMULATED_WALLET_BALANCE_URL, SIMULATED_WALLET_DEDUCT_URL, SIMULATED_WALLET_KEY,
-  SimulatedWallet, createSimulatedWalletFetch, evimedCreditsRefusal,
-} from "./evimedCreditsSimulator.mjs";
+import { SimulatedWallet, evimedCreditsRefusal } from "./evimedCreditsSimulator.mjs";
 import { createSimulatedWalletRoutes, simulatedWalletRoutePattern } from "./simulatedWalletRoutes.mjs";
 import { prepareResearchBillingAccountDeletion } from "./evimedCreditsPersistence.mjs";
 import { EvimedCreditsWorker } from "./evimedCreditsWorker.mjs";
@@ -2518,25 +2515,22 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // beside a real wallet's address, a bad starting allowance) is named here
     // and the module comes up refusing: the platform boots either way.
     const refusal = evimedCreditsRefusal(config);
-    // The simulated wallet (evimedCreditsSimulator.mjs): in the control plane,
-    // in PostgreSQL, behind the same client — only the wallet is replaced.
+    // The platform's own wallet (evimedCreditsWallet.mjs, behind the simulated
+    // top-up): in the control plane, in PostgreSQL, called in the settlement's own
+    // transaction. EviMed's wallet is reached through the integer-only client.
     const simulator = config.evimedCreditsSimulated && !refusal
-      ? new SimulatedWallet({ database: productDatabase, startCredits: config.evimedCreditsSimulatedStartCredits }) : null;
+      ? new SimulatedWallet({
+        database: productDatabase, startCredits: config.evimedCreditsSimulatedStartCredits,
+        signupGiftDays: config.evimedCreditsSignupGiftDays, monthlyGift: config.evimedCreditsMonthlyGift,
+      }) : null;
     const service = new EvimedCreditsService({
       config, database: productDatabase, usageLedger, refusal, simulator,
       // Whom EviMed charges: the EviMed user id the account row keeps, since
       // our account id is a hash EviMed cannot resolve (§14).
       evimedUserIdOf: (/** @type {string} */ userId) => store.evimedUserIdOf(userId),
-      client: refusal ? null : createEvimedCreditsClient(simulator ? {
-        deductUrl: SIMULATED_WALLET_DEDUCT_URL,
-        balanceUrl: SIMULATED_WALLET_BALANCE_URL,
-        apiKey: SIMULATED_WALLET_KEY,
-        simulated: true,
-        timeoutMs: config.evimedCreditsTimeoutMs,
-        // `simulatedWalletFaults` is for tests that need an unknown outcome;
-        // nothing in configuration reaches it.
-        fetchImpl: createSimulatedWalletFetch(simulator, overrides.simulatedWalletFaults),
-      } : {
+      // The inbox, for the reminders before a gift ends. Absent, none is sent.
+      notify: notificationService ? (/** @type {string} */ userId, /** @type {any} */ input) => notificationService.create(userId, input) : null,
+      client: refusal || simulator ? null : createEvimedCreditsClient({
         deductUrl: config.evimedCreditsUrl,
         balanceUrl: config.evimedCreditsBalanceUrl,
         // The key EviMed already issued this deployment: the file is read per
@@ -2556,7 +2550,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     });
     credits = { service, worker };
   }
-  const creditsRoutes = createEvimedCreditsRoutes({ store, service: credits?.service ?? null, config });
+  const creditsRoutes = createEvimedCreditsRoutes({
+    store, service: credits?.service ?? null, config,
+    audit: (event, detail) => securityAudit(config, event, "completed", detail),
+  });
   const allowanceRoutes = createResearchAllowanceRoutes({
     store, service: credits?.service ?? null, config, commerce: createResearchCommerce(config),
   });
@@ -2676,6 +2673,18 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // fixed-interval poll does not send the same frame forever.
     onRunProjection: (project, run, type, data) => {
       runEvents.publish(run.id, type, data);
+    },
+    // 灵豆 (design 2026-10-05): a commissioned run freezes its P90 estimate, or what is available if
+    // less, the moment it exists — and the hold is let go when it ends, whatever way it ends
+    // (`settleRun`), and swept after the run's own timeout if the process died. A plain question,
+    // the platform's own work and an evaluation take none. Never throws: billing failing never
+    // stops research.
+    onRunReserved: async (project, run) => {
+      if (!credits || internalFor(project.userId, project.id) || runtimeManager.evaluationMethodSnapshots.has(runtimeManager.key(project))
+        || !isChargeableResearchRun(run)) return;
+      await credits.service.holdForRun({
+        userId: project.userId, runId: run.id, capabilityId: run.effectiveAgentId ?? run.agentId ?? null, startedAt: run.startedAt ?? run.createdAt ?? null,
+      });
     },
     onRunFinished: async (project, run) => {
       await completeEvolutionRuntime({ config, evolution, project, run, evaluationIsolation, runtimeManager, independentProductWork });
@@ -2843,6 +2852,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           userId: project.userId, projectId: project.id, runId: run.id,
           dispatchId: run.dispatchId ?? null,
           status: run.status, dispatchStatus: run.dispatchStatus, errorCode: run.errorCode,
+          // Who stopped a cancelled run: the researcher (charged for what had run) or the platform (not charged).
+          // Absent when the stop cannot be attributed, and then it is not charged either.
+          canceledBy: run.canceledBy ?? null,
           effectiveRouteReason: run.effectiveRouteReason,
           effectiveAgentId: run.effectiveAgentId ?? run.agentId ?? null,
           automated: run.automated === true,
@@ -3406,7 +3418,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       }));
       let permission;
       try {
-        permission = credits ? await credits.service.assertBalanceForStart(user.id, selected.id) : { allowed: true, reason: "not_enabled" };
+        // An episode and its verification run overnight with nobody watching: they need their P90.
+        permission = credits ? await credits.service.assertBalanceForStart(user.id, selected.id, { unattended: true }) : { allowed: true, reason: "not_enabled" };
       } catch (error) {
         await record({ allowed: false, reason: typeof error?.code === "string" ? error.code : "balance_check_unavailable" });
         throw error;
@@ -4103,8 +4116,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // A programme step is researcher-owned work and is charged when it ends, so
     // it asks the same allowance question a chat run does. A refusal is not a
     // terminal dispatch code: the orchestrator leaves the step pending and asks
-    // again on its next tick, so a top-up releases it.
-    if (credits) await credits.service.assertBalanceForStart(user.id, capabilityId);
+    // again on its next tick, so a top-up releases it. Nobody is watching a worker-started
+    // step, so it needs its P90 and not only its P50.
+    if (credits) await credits.service.assertBalanceForStart(user.id, capabilityId, { unattended: true });
     const interactive = runtimeManager.runtimes.has(runtimeManager.key(project)) && !runtimeManager.boundedRuntimeScope(project);
     const session = interactive ? { id: randomId("session_") } : await runtimeManager.reserveBoundedRuntimeSession(project, { runId: dispatchId, ...budget.scope });
     try {
@@ -4187,7 +4201,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     if (usageLedger) await assertBoundedRunAffordable(usageLedger, user.id, budget);
     // The same allowance question as a chat run's, for the same reason as the
     // 虚拟临研 step's: charged at its end, and a refusal leaves the step pending.
-    if (credits) await credits.service.assertBalanceForStart(user.id, capabilityId);
+    if (credits) await credits.service.assertBalanceForStart(user.id, capabilityId, { unattended: true });
     const interactive = runtimeManager.runtimes.has(runtimeManager.key(project)) && !runtimeManager.boundedRuntimeScope(project);
     const session = interactive ? { id: randomId("session_") } : await runtimeManager.reserveBoundedRuntimeSession(project, { runId: dispatchId, ...budget.scope });
     try {
@@ -5233,7 +5247,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         // A conversation still working is stopped first: a hidden run that
         // keeps spending is the one thing a reader could never find again.
         const current = (await agentRuns.list(ctx.project)).find((run) => run.id === runId);
-        if (current && current.status === "running") await agentRuns.cancelRun(ctx.project, runId, { by: ctx.user.id });
+        if (current && current.status === "running") await agentRuns.cancelRun(ctx.project, runId, { by: "user" });
         sendJson(res, 200, { data: await agentRuns.recordRunLabels(ctx.project, runId, { deleted: true }) });
         return;
       }
@@ -5631,8 +5645,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         const user = await store.ensureUser(req, res);
         // This month, because that is the period a person is asked to pay for
         // and the one they can still change their behaviour within.
-        const now = new Date();
-        const since = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+        // 00:00 on the first of the month in Asia/Shanghai — the same window the
+        // allowance page's month total and statements use.
+        const since = accountMonthStart(new Date());
         if (usageLedger) {
           const summary = await usageLedger.summary(user.id, { since });
           sendJson(res, 200, { data: {
@@ -5659,8 +5674,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // of its spend is `other`.
       if (pathname === "/api/account/usage/runs" && req.method === "GET") {
         const user = await store.ensureUser(req, res);
-        const now = new Date();
-        const since = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+        const since = accountMonthStart(new Date());
         if (!usageLedger) {
           const summary = summarizeUsage(await readServerUsageJsonl(config, user), { userId: user.id, since });
           sendJson(res, 200, { data: { since: since.toISOString(), currency: summary.currency, items: [], other: { calls: summary.calls, cost: summary.cost } } });
