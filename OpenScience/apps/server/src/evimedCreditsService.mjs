@@ -45,7 +45,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { CAPABILITY_DISPLAY, allowanceRefusalSentence, capabilityTitle, estimateCost, spendingPermission, researchTaskCharge, researchMoneyUnits, isResearcherOwnedWork, RESEARCH_BILLING_VERSION, SIMULATED_LOW_CREDITS } from "@evimed/domain";
+import { CAPABILITY_DISPLAY, allowanceRefusalSentence, capabilityTitle, estimateCost, spendingPermission, researchTaskCharge, researchMoneyUnits, isChargeableResearchRun, RESEARCH_BILLING_VERSION, SIMULATED_LOW_CREDITS } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 import { productId } from "./productPersistence.mjs";
 import { EvimedCreditsError } from "./evimedCreditsClient.mjs";
@@ -377,7 +377,7 @@ export class EvimedCreditsService {
 
       // Failed platform work retains its costs as evidence but is waived. A
       // cancellation is not evidence of an earned stage, so it is waived too.
-      const researcherOwned = isResearcherOwnedWork(run);
+      const researcherOwned = isChargeableResearchRun(run);
       const owned = researcherOwned && successful;
       const title = settlementMemo(run);
       const opened = await this.database.transaction(async (/** @type {any} */ client) => {

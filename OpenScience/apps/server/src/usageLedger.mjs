@@ -782,10 +782,15 @@ export class UsageLedger {
     await migrateUsageLedger(this.database);
     return this.database.transaction(async (client) => {
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`evimed-usage:${user}`]);
+      // The named purposes are counted exactly, even a purpose the account's caps leave out:
+      // a cap that belongs to one kind of work (the module's own daily budget) is the only
+      // place that work is counted, as `reserveModel` does for `evolution`. Excluding the
+      // uncapped set first emptied the set for such a purpose, so its check could never
+      // refuse (2026-10-05 review, S7/F9).
       const result = await client.query(`SELECT
         ${SPEND_WINDOW_SUMS}
-        FROM evimed_usage.model_requests WHERE user_id=$1 AND purpose <> ALL($3::text[])
-          AND ($4::text[] IS NULL OR purpose = ANY($4::text[]))`,
+        FROM evimed_usage.model_requests WHERE user_id=$1 AND
+          (CASE WHEN $4::text[] IS NULL THEN purpose <> ALL($3::text[]) ELSE purpose = ANY($4::text[]) END)`,
       [user, at, [...UNCAPPED_USAGE_PURPOSES], only]);
       const day = Number(result.rows[0].day_settled) + Number(result.rows[0].day_open);
       const week = Number(result.rows[0].week_settled) + Number(result.rows[0].week_open);

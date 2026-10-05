@@ -110,28 +110,60 @@ export function usagePurpose(value) {
  * up, and every lesson from that day was refused (production, 2026-09-20: three
  * of three distillations, `usage_budget_exceeded`).
  *
- * @param {{ effectiveAgentId?: string | null, dispatchId?: string | null, effectiveRouteReason?: string | null } | null | undefined} run
+ * Every input here is something the control plane's own code writes into the
+ * run: the capability it bound (`effectiveAgentId`, drawn from the registry —
+ * the public dispatch route refuses an internal capability) and the route
+ * reason its dispatcher stamped. Nothing the browser can type decides a
+ * purpose. Until 2026-10-05 the dispatch id did: `POST /api/agent-runs/dispatch`
+ * takes `dispatchId` from the caller, so an id spelled `evolution_…` or
+ * `methodeval_…` booked an ordinary run outside the account's caps and, under
+ * research billing, waived its charge. A dispatch id is an identity for
+ * replay, never a classification; a dispatcher that wants a platform purpose
+ * says so with a route reason from `PLATFORM_ROUTE_PURPOSES`.
+ *
+ * @param {{ effectiveAgentId?: string | null, effectiveRouteReason?: string | null } | null | undefined} run
  * @returns {UsagePurpose}
  */
 export function usagePurposeOfRun(run) {
-  if (run?.effectiveRouteReason === 'platform-evolution') return 'evolution'
-  if (String(run?.dispatchId ?? '').startsWith('evolution_')) return 'evolution'
-  const agent = run?.effectiveAgentId
-  if (['evolution-scout', 'tool-builder'].includes(String(agent ?? ''))) return 'evolution'
+  const reason = String(run?.effectiveRouteReason ?? '')
+  if (Object.hasOwn(PLATFORM_ROUTE_PURPOSES, reason)) return PLATFORM_ROUTE_PURPOSES[reason]
+  const agent = String(run?.effectiveAgentId ?? '')
+  if (['evolution-scout', 'tool-builder'].includes(agent)) return 'evolution'
   if (agent === 'source-understanding') return 'source-understanding'
-  if (LEARNING_AGENT_IDS.includes(String(agent ?? ''))) return 'learning'
-  // The paired evaluation dispatches ordinary capability runs; its dispatch ids
-  // are the one thing that says whose they are (`learningEvaluation.mjs`).
-  if (String(run?.dispatchId ?? '').startsWith(LEARNING_EVALUATION_DISPATCH_PREFIX)) return 'learning'
+  if (LEARNING_AGENT_IDS.includes(agent)) return 'learning'
   return 'kernel'
+}
+
+/**
+ * Whether a run's spend is the researcher's to pay. The answer is the run's
+ * purpose and nothing else: a run is chargeable exactly when it is the kernel
+ * working on a researcher's question, whoever started it and whatever the
+ * caller said about it.
+ *
+ * It is not `isResearcherOwnedWork`, which answers a different question — is
+ * this a lesson, an interest signal — and rightly lets a caller say that a
+ * run is an evaluation harness's (`automated`). That statement is typed by the
+ * caller of the public dispatch route, so reading it for the charge made
+ * `{"automated": true}` a way to research for nothing under research billing.
+ * Managed work (GEO, proactive, 虚拟临研) is chargeable as it always was: it
+ * is kernel work.
+ * @param {{ effectiveAgentId?: string | null, effectiveRouteReason?: string | null } | null | undefined} run
+ * @returns {boolean}
+ */
+export function isChargeableResearchRun(run) {
+  return Boolean(run) && usagePurposeOfRun(run) === 'kernel'
 }
 
 /**
  * Work performed for a researcher includes their managed GEO and proactive
  * workflows. Platform evaluations and the learning loop's own jobs do not.
  * Callers still enforce project ownership and exclude internal projects.
+ * This is a research-signal question (a lesson, an interest), not a money one:
+ * `automated` is the caller's own statement that a harness started the run, and
+ * it is honoured here so a harness's traffic teaches nothing. What a run costs
+ * its account is `isChargeableResearchRun`.
  * @param {{ automated?: boolean, effectiveRouteReason?: string | null,
- * effectiveAgentId?: string | null, dispatchId?: string | null } | null | undefined} run
+ * effectiveAgentId?: string | null } | null | undefined} run
  * @returns {boolean}
  */
 export function isResearcherOwnedWork(run) {
@@ -144,5 +176,24 @@ export function isResearcherOwnedWork(run) {
 /** The learning loop's two internal capabilities. */
 export const LEARNING_AGENT_IDS = Object.freeze(['method-distillation', 'method-relations'])
 
-/** What every paired-evaluation dispatch id starts with. */
+/**
+ * Route reasons only the control plane writes, for work it dispatches on its
+ * own account, and the purpose each books. The public dispatch route computes
+ * its own reasons (`choice:`, `matched:`, `llm:`, `unrouted:`, `session-binding`)
+ * and never takes one from the caller, so none of these can be produced from a
+ * browser. A new platform dispatcher adds its reason here and stamps it.
+ *  - `platform-evolution`: 「循证进化」's development and evaluation runs.
+ *  - `platform-learning`: a paired-evaluation cell — an ordinary capability run
+ *    the learning loop makes of its own to measure a method.
+ */
+export const PLATFORM_ROUTE_PURPOSES = Object.freeze(/** @type {Record<string, UsagePurpose>} */ ({
+  'platform-evolution': 'evolution',
+  'platform-learning': 'learning',
+}))
+
+/**
+ * What every paired-evaluation dispatch id starts with. An identifier the
+ * evaluation mints for its own cells and looks them up by; it classifies
+ * nothing, because the dispatch route takes a dispatch id from its caller.
+ */
 export const LEARNING_EVALUATION_DISPATCH_PREFIX = 'methodeval_'

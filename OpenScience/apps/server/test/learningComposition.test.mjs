@@ -105,7 +105,7 @@ test("the lessons are queued from the terminal hook by themselves, after the mem
   const noMemory = hook.indexOf("if (!researchMemory.configured) {");
   assert.ok(hook.indexOf("await queueLessons(null);", noMemory) > noMemory,
     "a deployment without a memory store still learns from its runs");
-  const evaluationGuard = hook.indexOf("if (evaluationRun || isInternalProject(project.id)) return;");
+  const evaluationGuard = hook.indexOf("if (evaluationRun || internalFor(project.userId, project.id)) return;");
   assert.ok(evaluationGuard > 0 && evaluationGuard < noMemory,
     "an evaluation cell, or any run in an internal project, never queues a lesson or seeds memory");
 });
@@ -118,7 +118,7 @@ test("background work in an internal project never reaches the inbox as a person
   // `runFinishedReachesInbox`, tested in runFinishedNotice.test.mjs, and this
   // asserts the hook hands it every one of its inputs from where they live.
   const hook = /onRunFinished: async \(project, run\) => \{[\s\S]*?\n    \},/.exec(serverSource)[0];
-  assert.match(hook, /if \(notificationService && runFinishedReachesInbox\(run, \{\s*internalProject: isInternalProject\(project\.id\), evaluation: evaluationRun,\s*automated: automatedRun\(run\), autopilotOwned: autopilotOwned === true,\s*\}\)\) \{/);
+  assert.match(hook, /if \(notificationService && runFinishedReachesInbox\(run, \{\s*internalProject: internalFor\(project\.userId, project\.id\), evaluation: evaluationRun,\s*automated: automatedRun\(run\), autopilotOwned: autopilotOwned === true,\s*\}\)\) \{/);
   assert.doesNotMatch(hook, /silent/, "nothing is recorded quietly any more");
 });
 
@@ -338,7 +338,7 @@ test("a routine is counted across the researcher's own projects, and its peers a
   const triggers = serverSource.slice(serverSource.indexOf("learningTriggers = new LearningTriggers({"), serverSource.indexOf("learningWorker = new LearningWorker({"));
   assert.ok(triggers.length > 0, "the trigger construction is gone; this test now checks nothing");
   assert.match(triggers, /projects: async \(userId\) => \{\s*const user = await store\.userById\(userId\);/);
-  assert.match(triggers, /for \(const entry of await store\.listProjects\(user\)\) \{\s*if \(entry\.archivedAt \|\| isInternalProject\(entry\.id\)\) continue;\s*own\.push\(await store\.requireProject\(user, entry\.id\)\);/);
+  assert.match(triggers, /for \(const entry of await store\.listProjects\(user\)\) \{\s*if \(entry\.archivedAt \|\| internalFor\(user\.id, entry\.id\)\) continue;\s*own\.push\(await store\.requireProject\(user, entry\.id\)\);/);
   assert.match(triggers, /routinePeriodDays: config\.transcriptRetentionDays/, "a peer is never older than the transcript an induction reads");
   const distillation = serverSource.slice(serverSource.indexOf("const distillation = new MethodDistillationRuns({"), serverSource.indexOf("const consolidation = new MethodConsolidation({"));
   assert.match(distillation, /resolveProject: async \(userId, projectId\) => \{\s*const user = await store\.userById\(userId\);\s*return user \? store\.requireProject\(user, projectId\) : null;/);

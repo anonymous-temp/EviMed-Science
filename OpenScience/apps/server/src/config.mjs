@@ -30,6 +30,26 @@ function runtimeEgressPeers(value) {
   return value.map(peer => ({ containerId: peer.containerId, imageId: peer.imageId }));
 }
 
+/**
+ * One JSON setting of the evolution module, read from the environment without
+ * ever throwing. `??` does not cover an empty value and a JSON.parse of one
+ * throws, so a setting that arrived empty or mangled (a private override line
+ * `NAME=`, `.env` quoting, `docker run -e NAME=`) used to stop the API and the
+ * runtime controller at boot — with the module off, where nothing reads it.
+ * Blank is "not set"; anything else that does not parse, or that `check`
+ * refuses, is reported as an issue and the setting falls back to empty. Whether
+ * an issue matters is `loadConfig`'s question: only a module that is on refuses
+ * to start for one, and the platform boots either way.
+ * @param {string} name @param {(value: unknown) => unknown} [check]
+ * @returns {{ value: any, issue: boolean }}
+ */
+function environmentJsonList(name, check = (value) => value) {
+  const raw = process.env[name];
+  if (raw === undefined || raw.trim() === "") return { value: [], issue: false };
+  try { return { value: check(JSON.parse(raw)), issue: false }; }
+  catch { return { value: [], issue: true }; }
+}
+
 // The one place a tracked upstream pin is written. A Dockerfile ARG, a seam
 // manifest, a peer dependency and a release manifest that each carried their
 // own copy meant "bump the pin" was four edits and one was always missed.
@@ -1333,6 +1353,14 @@ export function loadConfig(overrides = {}) {
   const runtimeTransport = runtimeProvider === "agentbay" ? "wss" : runtimeTransportSetting;
   const backupDir = overrides.backupDir ?? process.env.OPEN_SCIENCE_BACKUP_DIR ?? "";
 
+  // The two JSON settings of the evolution module are read without throwing (see
+  // `environmentJsonList`); a value a caller passes in code is still checked as before.
+  const egressPeers = overrides.runtimeEgressAllowedPeers !== undefined
+    ? { value: runtimeEgressPeers(overrides.runtimeEgressAllowedPeers), issue: false }
+    : environmentJsonList("OPEN_SCIENCE_RUNTIME_EGRESS_ALLOWED_PEERS", runtimeEgressPeers);
+  const dependencyAllowlist = overrides.evolutionDependencyAllowlist !== undefined
+    ? { value: overrides.evolutionDependencyAllowlist, issue: false }
+    : environmentJsonList("OPEN_SCIENCE_EVOLUTION_DEPENDENCY_ALLOWLIST");
   const config = {
     host: overrides.host ?? process.env.OPEN_SCIENCE_HOST ?? "127.0.0.1",
     port,
@@ -1743,7 +1771,7 @@ export function loadConfig(overrides = {}) {
       (runtimeTransport === "unix" ? "none" : "bridge"),
     runtimeInternalNetworkName:
       overrides.runtimeInternalNetworkName ?? process.env.OPEN_SCIENCE_RUNTIME_INTERNAL_NETWORK_NAME ?? "",
-    runtimeEgressAllowedPeers: runtimeEgressPeers(overrides.runtimeEgressAllowedPeers ?? JSON.parse(process.env.OPEN_SCIENCE_RUNTIME_EGRESS_ALLOWED_PEERS ?? '[]')),
+    runtimeEgressAllowedPeers: egressPeers.value,
     allowRuntimeNetworkEgress:
       overrides.allowRuntimeNetworkEgress ?? boolEnv("OPEN_SCIENCE_ALLOW_RUNTIME_NETWORK_EGRESS", !production),
     runtimeNetworkEgressPolicyAck:
@@ -2320,7 +2348,21 @@ export function loadConfig(overrides = {}) {
     evolutionSelfCheckMaxBytes: Number(overrides.evolutionSelfCheckMaxBytes ?? process.env.OPEN_SCIENCE_EVOLUTION_SELF_CHECK_MAX_BYTES ?? 4 * 1024 * 1024),
     evolutionSelfCheckMaxRows: Number(overrides.evolutionSelfCheckMaxRows ?? process.env.OPEN_SCIENCE_EVOLUTION_SELF_CHECK_MAX_ROWS ?? 10_000),
     evolutionSelfCheckSampleRows: Number(overrides.evolutionSelfCheckSampleRows ?? process.env.OPEN_SCIENCE_EVOLUTION_SELF_CHECK_SAMPLE_ROWS ?? 256),
-    evolutionDependencyAllowlist: overrides.evolutionDependencyAllowlist ?? JSON.parse(process.env.OPEN_SCIENCE_EVOLUTION_DEPENDENCY_ALLOWLIST ?? "[]"),
+    // Candidate execution has its own controller instance, slots and timeout (`evolutionVerificationController.mjs`):
+    // static checks, self tests, hidden-case replicates and every tenant call of a published tool are one disposable
+    // container each, hundreds per build cycle, and they must never share a slot, an admission lock or the
+    // sticky `blocked` latch with the document tools tenants use (S2).
+    evolutionExecutionMaxConcurrency: Number(overrides.evolutionExecutionMaxConcurrency ?? process.env.OPEN_SCIENCE_EVOLUTION_EXECUTION_MAX_CONCURRENCY ?? 1),
+    evolutionExecutionTimeoutMs: Number(overrides.evolutionExecutionTimeoutMs ?? process.env.OPEN_SCIENCE_EVOLUTION_EXECUTION_TIMEOUT_MS ?? 30_000),
+    // What one tenant project may ask of a published tool through the gateway, so one run's loop cannot queue every
+    // other tenant behind it: calls in flight at once, and calls in a minute (S4).
+    evolutionToolMaxConcurrentPerProject: Number(overrides.evolutionToolMaxConcurrentPerProject ?? process.env.OPEN_SCIENCE_EVOLUTION_TOOL_MAX_CONCURRENT_PER_PROJECT ?? 2),
+    evolutionToolCallsPerMinute: Number(overrides.evolutionToolCallsPerMinute ?? process.env.OPEN_SCIENCE_EVOLUTION_TOOL_CALLS_PER_MINUTE ?? 60),
+    evolutionDependencyAllowlist: dependencyAllowlist.value,
+    // Why the module is off although it was switched on: the first thing wrong with its settings
+    // (`{ code, key }`, never a value), or null. A module that is wrongly configured refuses to
+    // start and says why; it never stops the platform (principle 14).
+    evolutionRefusal: null,
     evaluationDataDir: overrides.evaluationDataDir ?? process.env.OPEN_SCIENCE_EVALUATION_DATA_DIR ?? "",
     learningEnabled: overrides.learningEnabled ?? boolEnv("OPEN_SCIENCE_LEARNING_ENABLED", true),
     learningPollMs: Number(overrides.learningPollMs ?? process.env.OPEN_SCIENCE_LEARNING_POLL_MS ?? 5_000),
@@ -2401,6 +2443,13 @@ export function loadConfig(overrides = {}) {
     operatorUsers: String(overrides.operatorUsers
       ?? process.env.OPEN_SCIENCE_OPERATOR_USERS ?? "")
       .split(",").map((value) => value.trim()).filter(Boolean),
+    // The one account besides the operators that may hold the platform's self-measurement projects
+    // (`acceptance-*`, `audit-*`, `eval-method-*`): the deployment's acceptance account, the one the smoke
+    // and the capability battery sign in as. Empty — the default — means there is none. A project is
+    // internal (not charged, outside the project ceiling and the runtime slots) only when its name says
+    // so AND its owner is one of these accounts: a name a client chose is never a waiver
+    // (`isInternalProjectOf`). The account is an id, as `operatorUsers` are.
+    acceptanceUsername: String(overrides.acceptanceUsername ?? process.env.OPEN_SCIENCE_ACCEPTANCE_USERNAME ?? "").trim(),
     // How long a trial lasts if the caller does not say. A trial that outlives
     // the evaluation that set it would keep an unproven method in front of
     // every later run of that project, which is the failure the allowlist above
@@ -2819,8 +2868,19 @@ export function loadConfig(overrides = {}) {
     runtimeMermaidEnabled: overrides.runtimeMermaidEnabled ?? boolEnv("OPEN_SCIENCE_RUNTIME_MERMAID_ENABLED", true),
   };
   if (config.evolutionEnabled) {
-    const issues = validateEvolutionConfiguration(config);
-    if (issues.length) throw new Error(`Invalid evolution setting: ${issues[0].key}.`);
+    // The module is on: anything wrong with its settings keeps it off, with the code and key of
+    // the first finding in `evolutionRefusal` for the entrypoints to report. It used to throw
+    // here, which stopped the API and the runtime controller — research included — for a
+    // setting of an optional module.
+    const issues = [
+      ...(egressPeers.issue ? [{ code: "evolution_setting_invalid", key: "runtimeEgressAllowedPeers" }] : []),
+      ...(dependencyAllowlist.issue ? [{ code: "evolution_dependency_allowlist_invalid", key: "evolutionDependencyAllowlist" }] : []),
+      ...validateEvolutionConfiguration(config),
+    ];
+    if (issues.length) {
+      config.evolutionEnabled = false;
+      config.evolutionRefusal = { code: issues[0].code, key: issues[0].key };
+    }
   }
   return config;
 }

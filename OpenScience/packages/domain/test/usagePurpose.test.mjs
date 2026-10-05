@@ -7,6 +7,8 @@ import {
   usagePurpose,
   usagePurposeOfRun,
   isResearcherOwnedWork,
+  isChargeableResearchRun,
+  PLATFORM_ROUTE_PURPOSES,
 } from "../index.mjs";
 
 test('managed research belongs to its researcher, but platform self-measurement does not', () => {
@@ -15,8 +17,8 @@ test('managed research belongs to its researcher, but platform self-measurement 
   assert.equal(isResearcherOwnedWork({ automated: true, effectiveRouteReason: 'geo:content' }), true)
   assert.equal(isResearcherOwnedWork({ automated: true, effectiveRouteReason: 'autopilot:literature-sentinel' }), true)
   assert.equal(isResearcherOwnedWork({ automated: true, effectiveRouteReason: 'vcr:review-repair' }), true)
-  assert.equal(isResearcherOwnedWork({ automated: true, effectiveRouteReason: 'vcr:analysis', dispatchId: 'methodeval_abc' }), false)
-  assert.equal(isResearcherOwnedWork({ automated: true, effectiveRouteReason: 'geo:content', dispatchId: 'methodeval_abc' }), false)
+  assert.equal(isResearcherOwnedWork({ automated: true, effectiveRouteReason: 'vcr:analysis', effectiveAgentId: 'method-relations' }), false)
+  assert.equal(isResearcherOwnedWork({ automated: true, effectiveRouteReason: 'platform-learning' }), false)
   assert.equal(isResearcherOwnedWork({ effectiveRouteReason: 'autopilot:verify', effectiveAgentId: 'method-distillation' }), false)
 })
 
@@ -62,9 +64,49 @@ test('the learning loop\'s own runs are metered as learning, so its caps can cou
   // compared with everything the account spent.
   assert.equal(usagePurposeOfRun({ effectiveAgentId: 'method-distillation' }), 'learning')
   assert.equal(usagePurposeOfRun({ effectiveAgentId: 'method-relations' }), 'learning')
-  assert.equal(usagePurposeOfRun({ effectiveAgentId: 'clinical-evidence-synthesis', dispatchId: 'methodeval_0a1b2c' }), 'learning',
-    'a paired-evaluation cell is the loop measuring itself')
+  assert.equal(usagePurposeOfRun({ effectiveAgentId: 'clinical-evidence-synthesis', effectiveRouteReason: 'platform-learning' }), 'learning',
+    'a paired-evaluation cell is the loop measuring itself, and its dispatcher says so')
   assert.equal(usagePurposeOfRun({ effectiveAgentId: 'clinical-evidence-synthesis', dispatchId: 'web-abc' }), 'kernel')
   assert.ok(USAGE_PURPOSES.includes('learning'))
   assert.equal(USAGE_PURPOSE_LABELS_ZH.learning, '学习做法')
+})
+
+test('a purpose is never read from an identifier the caller of the dispatch route types', () => {
+  // `POST /api/agent-runs/dispatch` takes `dispatchId` from the browser. Until
+  // 2026-10-05 an id spelled `evolution_…` booked the run as platform spend —
+  // outside the account's caps, waived under research billing — and
+  // `methodeval_…` did the same as `learning`.
+  for (const dispatchId of ['evolution_free1', 'evolution_paper_x', 'methodeval_0a1b2c', 'EVOLUTION_x']) {
+    const run = { dispatchId, effectiveAgentId: 'open-domain-answer', effectiveRouteReason: 'unrouted:open-domain' }
+    assert.equal(usagePurposeOfRun(run), 'kernel', dispatchId)
+    assert.equal(isChargeableResearchRun(run), true, dispatchId)
+    assert.equal(isResearcherOwnedWork(run), true, dispatchId)
+  }
+  // Nor from the shape of a route reason the router could mint from a question.
+  for (const reason of ['choice:tool-builder', 'matched:named:evolution-scout', 'llm:0.9', 'session-binding', 'platform-evolution-x', 'Platform-Evolution', '__proto__', 'toString']) {
+    assert.equal(usagePurposeOfRun({ effectiveRouteReason: reason, effectiveAgentId: 'meta-analysis' }), 'kernel', reason)
+  }
+  // The platform's own dispatchers name their purpose with a reason only they write.
+  assert.deepEqual({ ...PLATFORM_ROUTE_PURPOSES }, { 'platform-evolution': 'evolution', 'platform-learning': 'learning' })
+  for (const purpose of Object.values(PLATFORM_ROUTE_PURPOSES)) assert.ok(USAGE_PURPOSES.includes(purpose))
+})
+
+test('whether a run is charged follows its purpose, never what its caller said about it', () => {
+  // `automated` is the caller's own statement that a harness started the run
+  // (the dispatch route takes it from the body and from a header). It keeps a
+  // harness's traffic out of lessons; it must not be a way to research for free.
+  const researcher = { effectiveAgentId: 'open-domain-answer', effectiveRouteReason: 'unrouted:open-domain' }
+  assert.equal(isResearcherOwnedWork({ ...researcher, automated: true }), false, 'a harness teaches nothing')
+  assert.equal(isChargeableResearchRun({ ...researcher, automated: true }), true, 'but it is still charged')
+  assert.equal(isChargeableResearchRun(researcher), true)
+  for (const reason of ['geo:content', 'autopilot:literature-sentinel', 'vcr:analysis']) {
+    assert.equal(isChargeableResearchRun({ automated: true, effectiveRouteReason: reason, effectiveAgentId: 'geo-insight' }), true, reason)
+  }
+  for (const run of [
+    { effectiveAgentId: 'source-understanding' }, { effectiveAgentId: 'method-distillation' }, { effectiveAgentId: 'method-relations' },
+    { effectiveAgentId: 'tool-builder' }, { effectiveAgentId: 'evolution-scout' },
+    { effectiveAgentId: 'meta-analysis', effectiveRouteReason: 'platform-evolution' },
+    { effectiveAgentId: 'adr-analysis', effectiveRouteReason: 'platform-learning' },
+    null, undefined,
+  ]) assert.equal(isChargeableResearchRun(run), false, JSON.stringify(run))
 })
