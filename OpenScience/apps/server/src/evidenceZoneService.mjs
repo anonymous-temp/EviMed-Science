@@ -1,6 +1,32 @@
 import { createHash, randomUUID } from "node:crypto";
 import { HttpError } from "./security.mjs";
-import { evidenceHash, evidenceStructuredContent, evidenceEditorialReceipt, evidencePublicationStatus, evidenceContentHash } from "./evidenceCardContent.mjs";
+import {
+  EVIDENCE_PLATFORM_LINEAGE_KEYS,
+  EVIDENCE_WRITE_ORIGINS,
+  EVIDENCE_ZONE_KINDS,
+  EVIDENCE_ZONE_VISIBILITY,
+  assertEvidenceCardForZone,
+  evidenceCardClaims,
+  evidenceCardClinicalView,
+  evidenceCardIdentifiers,
+  evidenceCardPublicView,
+  evidenceCardTexts,
+  evidenceDefaultProducer,
+  evidenceDisclosure,
+  evidenceEntityKeys,
+  evidenceJourneyStage,
+  evidenceLineage,
+  evidenceMergeEntityKeys,
+  evidenceOriginality,
+  evidenceOriginalityIsPrimary,
+  evidenceProducer,
+  evidencePublicViewContent,
+  evidenceValueSourceIssues,
+  evidenceWriteAllowed,
+  verifyEvidenceCardClaims,
+} from "@evimed/domain";
+import { asHttpError, evidenceContract, evidenceHash, evidenceStructuredContent, evidenceEditorialReceipt, evidencePublicationStatus, evidenceContentHash } from "./evidenceCardContent.mjs";
+import { recordEvidenceSimulatedRefused, recordEvidenceWriteAccepted, recordEvidenceWriteRefused } from "./evidenceCardMetrics.mjs";
 import { migrateEvidenceZones } from "./evidenceZonePersistence.mjs";
 
 const error = (
@@ -100,10 +126,40 @@ function sources(value) {
   });
 }
 
+/** The new card fields a writer may send, validated by the domain; each is kept as the caller's own business. */
+const CARD_CONTRACT_FIELDS = ["claims", "producer", "originality", "lineage", "entityKeys", "journeyStage", "disclosure", "publicView"];
+/** @param {unknown} value */
+const jsonOrNull = (value) => (value == null ? null : JSON.stringify(value));
+/** Stored lineage never repeats the frontier item: `source_item_id` is the one place it lives.
+ * @param {any} row */
+function cardLineage(row) {
+  const lineage = { ...(row.lineage ?? {}), ...(row.source_item_id ? { frontierItemId: row.source_item_id } : {}) };
+  return Object.keys(lineage).length ? lineage : null;
+}
+
 export class EvidenceZoneService {
-  /** @param {{database:any}} options */
-  constructor({ database }) {
+  /**
+   * `entityKeysFor` fills a card's entity keys from the frontier glossary and
+   * `platformPublisherUserId` is the account official zones belong to; both
+   * belong to other packages. With no publisher account configured (the state
+   * before flywheel B2), the owner of an official zone stands in for it.
+   * @param {{database:any, entityKeysFor?:((input:{texts:string[],identifiers:string[]})=>Promise<string[]>)|null, platformPublisherUserId?:string|null}} options
+   */
+  constructor({ database, entityKeysFor = null, platformPublisherUserId = null }) {
     this.database = database;
+    this.entityKeysFor = entityKeysFor;
+    this.platformPublisherUserId = platformPublisherUserId;
+  }
+  /** What the operator metrics read: the guardrail that must stay at zero. */
+  async metrics() {
+    await this.ready();
+    const row = (await this.database.query("SELECT count(*)::integer AS n FROM evimed_frontier.evidence_cards WHERE producer IS NULL OR producer='null'::jsonb")).rows[0];
+    return { cardsWithoutProducer: row.n };
+  }
+  /** Whether this account writes for the platform in this zone.
+   * @param {any} user @param {any} zone */
+  actorIsPlatformPublisher(user, zone) {
+    return this.platformPublisherUserId != null ? user.id === this.platformPublisherUserId : zone.user_id === user.id;
   }
   async ready() {
     await migrateEvidenceZones(this.database);
@@ -113,6 +169,72 @@ export class EvidenceZoneService {
     await client.query(
       "UPDATE evimed_frontier.evidence_zone_meta SET version=version+1 WHERE singleton",
     );
+  }
+  /** A write reaches a zone only from an origin its kind accepts (plan §4.3 rule 1). The refusal names the origin and the kind and touches this write alone.
+   *
+   * Until the platform publisher account exists the operator import writes into the zone of the account it names, which is
+   * a user zone, and `import` is not one of a user zone's origins; it keeps that reach for now rather than be refused by a
+   * rule written for the day the publisher exists. Nothing but an operator script can send it.
+   * @param {string} origin @param {any} zone @param {any} user */
+  assertWriteOrigin(origin, zone, user) {
+    const actorIsZoneOwner = zone.user_id === user.id;
+    const legacyImport = origin === "import" && zone.kind === "user" && actorIsZoneOwner && this.platformPublisherUserId == null;
+    const verdict = legacyImport ? { allowed: true } : evidenceWriteAllowed({ origin, zoneKind: zone.kind, actorIsZoneOwner, actorIsPlatformPublisher: this.actorIsPlatformPublisher(user, zone) });
+    if (verdict.allowed) return;
+    recordEvidenceWriteRefused(origin, zone.kind);
+    throw error(403, "write_origin_refused", /** @type {any} */ (verdict).message);
+  }
+  /**
+   * The card's contract fields beyond its text — who made it, how it came to be, where it stands on the patient's
+   * journey, who stands behind it, which entities it is about — validated by the domain and joined to the zone it sits
+   * in. A field the writer did not send keeps what the card has; a card with no producer gets the one its writer can
+   * truthfully be: the platform in an official zone, the owner in a user zone. A product zone has no such default, because
+   * only the company or doctor can say who they are.
+   * @param {{body:any,existing:any,parent:any,value:any,origin:string,internalOperation:any,lineage:any}} input
+   */
+  async cardContractFields({ body, existing, parent, value, origin, internalOperation, lineage }) {
+    const parse = evidenceContract((/** @type {(value:any)=>any} */ validate, /** @type {any} */ input) => validate(input));
+    let producer = body.producer === undefined ? (existing?.producer ?? null) : parse(evidenceProducer, body.producer);
+    const producerChanged = body.producer !== undefined || !existing?.producer;
+    producer ??= evidenceDefaultProducer({ zoneKind: parent.kind, ownerName: parent.creator });
+    const aiAuthored = value.editorial?.author?.kind === "ai";
+    const originality = body.originality === undefined ? (existing?.originality ?? (aiAuthored ? "brief" : "synthesis")) : parse(evidenceOriginality, body.originality);
+    // A session may link a card to what it came from; the platform's own writers alone stamp a run, a result or an agenda.
+    const platformLineage = Object.fromEntries(EVIDENCE_PLATFORM_LINEAGE_KEYS.filter(key => existing?.lineage?.[key] != null).map(key => [key, existing.lineage[key]]));
+    const { frontierItemId: _frontierItemId, ...linked } = lineage === undefined ? (existing?.lineage ?? {}) : (lineage ?? {});
+    const stored = { ...(internalOperation ? {} : platformLineage), ...linked };
+    const journeyStage = body.journeyStage === undefined ? (existing?.journey_stage ?? null) : parse(evidenceJourneyStage, body.journeyStage);
+    let disclosure = body.disclosure === undefined ? (existing?.disclosure ?? null) : parse(evidenceDisclosure, body.disclosure);
+    // What an AI did is disclosed by the code that ran it, not by the AI's own say-so: the model it names, when the card
+    // was made and last checked, and the steps the editor takes. Who stands behind a card is a human's to name.
+    if (body.disclosure === undefined && aiAuthored && ["import", "model"].includes(origin)) {
+      const author = value.editorial.author;
+      disclosure = parse(evidenceDisclosure, {
+        ...disclosure,
+        ...(typeof author.model === "string" && author.model ? { model: author.model } : {}),
+        generatedAt: disclosure?.generatedAt ?? new Date().toISOString(),
+        ...(value.editorial.sourceCheckedAt ? { lastCheckedAt: value.editorial.sourceCheckedAt } : {}),
+        aiSteps: ["screen", "extract", "synthesize", ...(value.editorial.status === "ai-reviewed" ? ["review"] : [])],
+      });
+    }
+    try {
+      assertEvidenceCardForZone({ zoneKind: parent.kind, producer, journeyStage, disclosure, producerChanged });
+    } catch (failure) {
+      throw asHttpError(failure);
+    }
+    const [issue] = evidenceValueSourceIssues({ claims: value.claims, content: value.content });
+    if (issue) {
+      recordEvidenceSimulatedRefused(issue.valueSource);
+      throw error(400, "value_source_refused", issue.message);
+    }
+    let entityKeys = body.entityKeys === undefined ? (existing?.entity_keys ?? []) : parse(evidenceEntityKeys, body.entityKeys);
+    if (this.entityKeysFor) {
+      const draft = { ...value, lineage: { ...stored, ...(value.source_item_id ? { frontierItemId: value.source_item_id } : {}) } };
+      // A resolver that cannot answer leaves the card as it was written: the keys are a label, never a gate.
+      const found = await this.entityKeysFor({ texts: evidenceCardTexts(draft), identifiers: evidenceCardIdentifiers(draft) }).catch(() => null);
+      entityKeys = evidenceMergeEntityKeys(entityKeys, found);
+    }
+    return { producer, originality, lineage: Object.keys(stored).length ? stored : null, entity_keys: entityKeys, journey_stage: journeyStage, disclosure };
   }
   /** @param {any} client @param {any} user @param {string} id @param {boolean} [lock] */
   async zoneRow(client, user, id, lock = false) {
@@ -165,6 +287,8 @@ export class EvidenceZoneService {
       background: row.background,
       experts: [],
       state: row.state,
+      kind: row.kind,
+      visibility: row.visibility,
       creator: row.creator,
       canEdit: row.user_id === user.id,
       following,
@@ -203,6 +327,17 @@ export class EvidenceZoneService {
           )
         ).rows
       : [];
+    // The card as the domain's rules read it: the stored claims are checked
+    // against the sources' preserved text on every read, so a ✓ is never older
+    // than the text it was made against. The list is light and carries none.
+    const lineage = cardLineage(row);
+    const contract = detail ? {
+      title: row.title, content: row.content ?? null, sources: row.sources ?? [], claims: row.claims ?? [], producer: row.producer ?? null,
+      originality: row.originality ?? null, lineage, journeyStage: row.journey_stage ?? null, disclosure: row.disclosure ?? null,
+      publicView: row.public_view ?? null, editorial: row.editorial ?? null,
+    } : null;
+    const verification = contract ? verifyEvidenceCardClaims(contract, { locations: contract.claims.length > 0 }) : null;
+    const verdicts = new Map((verification?.claims ?? []).map((/** @type {any} */ claim) => [claim.claimId, claim]));
     return {
       id: row.id,
       zoneId: row.zone_id,
@@ -214,7 +349,19 @@ export class EvidenceZoneService {
       creator: row.creator,
       reviewer: current?.author ?? null,
       reviewedAt: current?.createdAt ?? null,
-      claims: [],
+      // `text` is the statement under the name the reading page has always rendered its 「证据要点」 from.
+      claims: contract ? contract.claims.map((/** @type {any} */ claim) => ({ ...claim, text: claim.claim, verification: verdicts.get(claim.claimId) ?? null })) : [],
+      claimCount: contract ? contract.claims.length : Number(row.claim_count ?? 0),
+      claimVerification: verification?.counts ?? null,
+      producer: row.producer ?? null,
+      originality: row.originality ?? null,
+      primary: evidenceOriginalityIsPrimary(row.originality),
+      lineage,
+      entityKeys: row.entity_keys ?? [],
+      journeyStage: row.journey_stage ?? null,
+      disclosure: row.disclosure ?? null,
+      publicView: row.public_view ?? null,
+      views: contract && verification ? { clinical: evidenceCardClinicalView(contract, { verification }), public: evidenceCardPublicView(contract, { verification }) } : null,
       sources: detail ? (row.sources ?? []).map((/** @type {any} */ source) => { const { documentText: _documentText, ...visible } = source; return visible; }) : [],
       content: row.content ?? null,
       editorial: row.editorial ?? null,
@@ -365,7 +512,7 @@ export class EvidenceZoneService {
       );
       const rows = (
         await client.query(
-          `SELECT ${cards ? "c.id,c.zone_id,c.user_id,c.revision,c.title,c.subtype,c.summary,c.state,c.source_item_id,c.content,c.editorial,c.created_at,c.updated_at" : "z.*"},z.state AS zone_state,u.name AS creator FROM ${from} WHERE ${predicate} ORDER BY ${alias}.updated_at DESC,${alias}.id LIMIT ${param(limit)} OFFSET ${param(offset)}`,
+          `SELECT ${cards ? "c.id,c.zone_id,c.user_id,c.revision,c.title,c.subtype,c.summary,c.state,c.source_item_id,c.content,c.editorial,c.producer,c.originality,c.lineage,c.entity_keys,c.journey_stage,c.disclosure,jsonb_array_length(c.claims) AS claim_count,c.created_at,c.updated_at" : "z.*"},z.state AS zone_state,u.name AS creator FROM ${from} WHERE ${predicate} ORDER BY ${alias}.updated_at DESC,${alias}.id LIMIT ${param(limit)} OFFSET ${param(offset)}`,
           values,
         )
       ).rows;
@@ -436,8 +583,10 @@ export class EvidenceZoneService {
     });
   }
   /** Internal operator import / model worker entry; never mounted as an HTTP route.
-   * @param {any} user @param {any} body @param {string|null} [zoneId] @param {string|null} [cardId] @param {boolean} [createCard] @param {"model"|"import"} [origin] @param {{jobId:string,workerId:string}|null} [lease] */
+   * `origin` is one of `EVIDENCE_WRITE_ORIGINS`: which writer this is decides which zones accept it.
+   * @param {any} user @param {any} body @param {string|null} [zoneId] @param {string|null} [cardId] @param {boolean} [createCard] @param {"owner"|"import"|"model"|"programme"|"result"|"geo"} [origin] @param {{jobId:string,workerId:string}|null} [lease] */
   async saveEditorial(user, body, zoneId = null, cardId = null, createCard = false, origin = "import", lease = null) {
+    if (!EVIDENCE_WRITE_ORIGINS.includes(origin)) throw error(400, "invalid", "Unknown evidence write origin.");
     const operation = {origin,lease,id:`er_${randomUUID().replaceAll("-","")}`};
     return this.save(user,body,zoneId,cardId,createCard,operation);
   }
@@ -460,6 +609,7 @@ export class EvidenceZoneService {
             "sourceItemId",
             "content",
             "editorial",
+            ...CARD_CONTRACT_FIELDS,
             "state",
             "expectedRevision",
             "requestId",
@@ -468,13 +618,19 @@ export class EvidenceZoneService {
             "title",
             "description",
             "background",
+            "kind",
             "state",
             "expectedRevision",
             "requestId",
           ],
     );
+    const origin = internalOperation?.origin ?? "owner";
+    // Platform-stamped lineage (a run, a result version, an agenda) is vouched for by the platform's own writers.
+    // A signed-in session may link a frontier item or an earlier card, and nothing it cannot prove.
+    if (!internalOperation && card && body.lineage != null && typeof body.lineage === "object" && EVIDENCE_PLATFORM_LINEAGE_KEYS.some(key => body.lineage[key] != null))
+      throw error(400, "invalid", "Run lineage is written by the platform, not by a session.");
     await this.ready();
-    return this.database.transaction(async (/** @type {any} */ client) => {
+    const saved = await this.database.transaction(async (/** @type {any} */ client) => {
       if(internalOperation?.lease) {
         const lease=internalOperation.lease;
         const held=await client.query(`SELECT j.id FROM evimed_frontier.evidence_editorial_jobs j JOIN evimed_frontier.evidence_automation a ON a.zone_id=j.zone_id
@@ -492,11 +648,13 @@ export class EvidenceZoneService {
           "owner_required",
           "Only the zone owner may edit its evidence.",
         );
+      if (parent) this.assertWriteOrigin(origin, parent, user);
       const existing = cardId
         ? await this.cardRow(client, user, zoneId ?? "", cardId, true)
         : !card && zoneId
           ? await this.zoneRow(client, user, zoneId, true)
           : null;
+      if (!card && existing && existing.user_id === user.id) this.assertWriteOrigin(origin, existing, user);
       if (existing) {
         if(internalOperation?.lease && card && existing.state!=="published") throw error(409,"revision_conflict","The card was withdrawn during the editorial operation.");
         if (existing.user_id !== user.id)
@@ -528,19 +686,46 @@ export class EvidenceZoneService {
       value.state = body.state ?? existing?.state ?? "draft";
       if (!["draft", "published"].includes(value.state))
         throw error(400, "invalid", "Invalid publication state.");
+      if (!card) {
+        // A zone's kind is who owns its voice. It is fixed when the zone is made: a product zone by its owner, an official
+        // zone only by the platform's own operations, and nothing changes it afterwards.
+        if (existing && body.kind !== undefined && body.kind !== existing.kind)
+          throw error(403, "zone_kind_forbidden", "A zone's kind cannot be changed.");
+        value.kind = existing?.kind ?? body.kind ?? "user";
+        if (!EVIDENCE_ZONE_KINDS.includes(value.kind)) throw error(400, "invalid", "Invalid zone kind.");
+        if (!existing && value.kind === "official") {
+          const publisher = this.platformPublisherUserId != null ? user.id === this.platformPublisherUserId : true;
+          const verdict = internalOperation ? evidenceWriteAllowed({ origin, zoneKind: "official", actorIsZoneOwner: true, actorIsPlatformPublisher: publisher }) : { allowed: false };
+          if (!verdict.allowed) {
+            recordEvidenceWriteRefused(origin, "official");
+            throw error(403, "zone_kind_forbidden", "Official zones are made only by the platform's own operations.");
+          }
+        }
+        // Reading on the open internet is the owner's separate choice (setVisibility); a zone taken back to a draft leaves it.
+        value.visibility = value.state === "draft" ? "platform" : (existing?.visibility ?? "platform");
+      }
       if (card) {
         value.subtype = body.subtype ?? existing?.subtype;
         if (!["knowledge", "academic"].includes(value.subtype))
           throw error(400, "invalid", "Invalid evidence type.");
+        // A card's lineage names the frontier item it grew from; `source_item_id` is the one place that fact lives, so a
+        // lineage that names one sets it (or must agree with it).
+        const lineage = body.lineage === undefined ? undefined : evidenceContract(evidenceLineage)(body.lineage);
+        let sourceItemInput = body.sourceItemId;
+        if (lineage?.frontierItemId) {
+          if (sourceItemInput === undefined && !existing?.source_item_id) sourceItemInput = lineage.frontierItemId;
+          else if ((sourceItemInput ?? existing?.source_item_id) !== lineage.frontierItemId)
+            throw error(400, "invalid", "Lineage names a different frontier item than sourceItemId.");
+        }
         value.source_item_id =
-          body.sourceItemId === undefined
+          sourceItemInput === undefined
             ? (existing?.source_item_id ?? null)
-            : body.sourceItemId;
+            : sourceItemInput;
         if (
           value.source_item_id != null &&
           (!existing ||
-            (body.sourceItemId !== undefined &&
-              body.sourceItemId !== existing.source_item_id))
+            (sourceItemInput !== undefined &&
+              sourceItemInput !== existing.source_item_id))
         ) {
           if (
             typeof value.source_item_id !== "string" ||
@@ -570,7 +755,12 @@ export class EvidenceZoneService {
           return {...retained,publicationStatus};
         });
         value.content = evidenceStructuredContent(body.content === undefined ? existing?.content ?? null : body.content, value.sources.length);
-        const changed = ["title","summary","body","sources","limitations","content"].some(key => JSON.stringify(value[key]) !== JSON.stringify(existing?.[key]));
+        // Claims quote the card's own sources by index, so they are checked against the sources the card now has; the
+        // public view's panels may name only claims the card has.
+        value.claims = evidenceContract(evidenceCardClaims)(body.claims === undefined ? (existing?.claims ?? []) : body.claims, value.sources.length);
+        value.public_view = evidenceContract(evidencePublicViewContent)(body.publicView === undefined ? (existing?.public_view ?? null) : body.publicView, value.claims);
+        const changed = ["title","summary","body","sources","limitations","content"].some(key => JSON.stringify(value[key]) !== JSON.stringify(existing?.[key]))
+          || ["claims","public_view"].some(key => evidenceHash(value[key] ?? null) !== evidenceHash(existing?.[key] ?? null));
         const receipt = body.editorial === undefined
           ? changed && existing?.editorial ? {...existing.editorial,status:"review-pending",reviewer:null,...(!internalOperation ? {sourceChecks:[],...(JSON.stringify(value.sources)!==JSON.stringify(existing.sources) ? {sourceCheckedAt:null} : {})} : {})} : existing?.editorial ?? null
           : body.editorial;
@@ -584,6 +774,7 @@ export class EvidenceZoneService {
         if(value.editorial) value.editorial={...value.editorial,automationContentHash:internalOperation ? value.editorial.contentHash : existing?.editorial?.automationContentHash ?? null};
         if (body.editorial !== undefined && value.editorial?.status === "ai-reviewed")
           value.editorial = {...value.editorial,reviewOperationId:internalOperation?.id,reviewOrigin:internalOperation?.origin};
+        Object.assign(value, await this.cardContractFields({ body, existing, parent, value, origin, internalOperation, lineage }));
         if (
           value.state === "published" &&
           (!value.body || !value.sources.length)
@@ -607,11 +798,21 @@ export class EvidenceZoneService {
             "source_item_id",
             "content",
             "editorial",
+            "claims",
+            "producer",
+            "originality",
+            "lineage",
+            "entity_keys",
+            "journey_stage",
+            "disclosure",
+            "public_view",
             "state",
           ]
-        : ["title", "description", "background", "state"];
+        : ["title", "description", "background", "state", "visibility"];
+      // JSONB sorts object keys, so the fields added with the card contract are compared by their canonical hash.
+      const canonicalColumns = ["claims", "producer", "lineage", "journey_stage", "disclosure", "public_view"];
       const values = columns.map((key) =>
-        ["sources","content","editorial"].includes(key) ? JSON.stringify(value[key]) : value[key],
+        ["sources","content","editorial"].includes(key) ? JSON.stringify(value[key]) : canonicalColumns.includes(key) ? jsonOrNull(value[key]) : value[key],
       );
       const table = card ? "evidence_cards" : "evidence_zones";
       if (existing)
@@ -620,8 +821,8 @@ export class EvidenceZoneService {
           [id, ...values],
         );
       else {
-        const extras = card ? ["zone_id", "user_id"] : ["user_id"],
-          extraValues = card ? [zoneId, user.id] : [user.id];
+        const extras = card ? ["zone_id", "user_id"] : ["user_id", "kind"],
+          extraValues = card ? [zoneId, user.id] : [user.id, value.kind];
         const inserted = await client.query(
           `INSERT INTO evimed_frontier.${table}(id,${extras.join(",")},${columns.join(",")}) VALUES(${[id, ...extraValues, ...values].map((_, i) => `$${i + 1}`).join(",")}) ON CONFLICT(id) DO NOTHING RETURNING id`,
           [id, ...extraValues, ...values],
@@ -637,8 +838,9 @@ export class EvidenceZoneService {
             !old ||
             old.user_id !== user.id ||
             (card && old.zone_id !== zoneId) ||
+            (!card && old.kind !== value.kind) ||
             columns.some(
-              (key) => JSON.stringify(old[key]) !== JSON.stringify(value[key]),
+              (key) => canonicalColumns.includes(key) ? evidenceHash(old[key] ?? null) !== evidenceHash(value[key] ?? null) : JSON.stringify(old[key]) !== JSON.stringify(value[key]),
             )
           )
             throw error(
@@ -670,6 +872,31 @@ export class EvidenceZoneService {
               await this.zoneRow(client, user, id),
             ),
           };
+    });
+    if (card) recordEvidenceWriteAccepted(origin);
+    return saved;
+  }
+  /**
+   * Whether a published zone is read by the platform's signed-in accounts or by anyone: the owner's own choice, made apart
+   * from publishing. A zone must be published to be opened to the internet, and a zone taken back to a draft leaves it.
+   * @param {any} user @param {string} zoneId @param {any} body
+   */
+  async setVisibility(user, zoneId, body) {
+    fields(body, ["visibility", "expectedRevision"]);
+    if (!EVIDENCE_ZONE_VISIBILITY.includes(body.visibility)) throw error(400, "invalid", "Invalid zone visibility.");
+    await this.ready();
+    return this.database.transaction(async (/** @type {any} */ client) => {
+      const zone = await this.zoneRow(client, user, zoneId, true);
+      if (zone.user_id !== user.id) throw error(403, "owner_required", "Only the zone owner may choose who reads it.");
+      revision(zone, body);
+      if (body.visibility === "internet" && zone.state !== "published")
+        throw error(409, "visibility_requires_publication", "Publish the zone before opening it to the internet.");
+      await client.query(
+        "UPDATE evimed_frontier.evidence_zones SET visibility=$2,revision=revision+1,updated_at=clock_timestamp() WHERE id=$1 AND visibility<>$2",
+        [zoneId, body.visibility],
+      );
+      await this.bump(client);
+      return { zone: await this.zoneView(client, user, await this.zoneRow(client, user, zoneId)) };
     });
   }
   /** @param {any} user @param {string} zoneId @param {string} action @param {any} body @param {string|null} [cardId] @param {boolean} [remove] */

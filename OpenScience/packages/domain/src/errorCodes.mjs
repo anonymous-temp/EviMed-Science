@@ -5,6 +5,7 @@ import { DOCUMENT_EXPORT_ERROR_MESSAGES } from "./documentExport.mjs";
 import { SOURCE_CHANGE_ERROR_MESSAGES } from "./sourceChange.mjs";
 import { CONNECTOR_MISSING_CODES } from "./connectorCredentials.mjs";
 import { DATA_SEMANTICS_ERROR_CODES, DATA_SEMANTICS_ERROR_MESSAGE_ZH } from "./dataSemantics.mjs";
+import { EVIDENCE_CARD_ERROR_MESSAGES_ZH } from "./evidenceCard.mjs";
 import { GENE_EXPRESSION_ERROR_MESSAGE_ZH, GENE_EXPRESSION_LIMITATION_ERROR_CODES, GENE_EXPRESSION_LIMIT_MESSAGE_ZH, GENE_EXPRESSION_RUN_FIX_ERROR_CODES } from "./geneExpression.mjs";
 
 /** The tool's own refusals a run repairs by changing what it sent, as opposed to the outages it waits out. */
@@ -1534,6 +1535,7 @@ export const ALL_ERROR_CODES = Object.freeze([...new Set([
   ...VCR_ENGINE_ISSUE_CODES,
   ...EVIMED_CREDITS_ROUTE_ERROR_CODES,
   ...EVIDENCE_PLATFORM_ERROR_CODES,
+  ...Object.keys(EVIDENCE_CARD_ERROR_MESSAGES_ZH),
 ])])
 
 /**
@@ -1584,6 +1586,9 @@ export function turnEndErrorCode(kind, wireCode, wireStatus) {
  */
 export const ERROR_CODE_MESSAGES = Object.freeze({
   ...EVOLUTION_ERROR_MESSAGES,
+  // The evidence card's own refusals (`evidenceCard.mjs`): who may write where, a simulated value, a producer a card
+  // must name. Each touches the one write it names.
+  ...EVIDENCE_CARD_ERROR_MESSAGES_ZH,
   // Why a data-semantics check could not read a table. The check is reported as
   // not run; the other checks and the analysis go on.
   file_unreadable: '这个数据文件没能读取，对应的数据检查未执行；其他检查和分析不受影响。',
@@ -2437,6 +2442,8 @@ export function errorCodeOutcome(code) {
   if (capsuleTransferErrorCodes.includes(text)) return 'upstream'
   // Optional extension refusals affect that operation, not research delivery.
   if (Object.hasOwn(EVOLUTION_ERROR_MESSAGES, text)) return 'upstream'
+  // An evidence card's refusals are about one write to one zone, never a verdict on a run.
+  if (Object.hasOwn(EVIDENCE_CARD_ERROR_MESSAGES_ZH, text)) return 'upstream'
   if (EXTENSION_ERROR_CODES.includes(text)) return 'upstream'
   if (text === 'managed_browser_busy') return 'capped'
   if (MANAGED_BROWSER_ERROR_CODES.includes(text)) return 'upstream'
