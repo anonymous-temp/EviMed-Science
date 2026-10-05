@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
+import http from "node:http";
 import { before, after, beforeEach, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { EvidenceZoneService } from "../src/evidenceZoneService.mjs";
+import { createEvidenceZoneRoutes } from "../src/evidenceZoneRoutes.mjs";
 import { EVIDENCE_ZONE_SQL } from "../src/evidenceZonePersistence.mjs";
 import { evidenceCardMetricFamilies, resetEvidenceCardMetrics } from "../src/evidenceCardMetrics.mjs";
 import { migrateFrontier } from "../src/frontierPersistence.mjs";
@@ -447,4 +449,60 @@ test("a retried request identity returns the same card, and reuse for different 
   assert.equal(second.producer.relation, "user_of_therapy");
   await assert.rejects(service.save(alice, { ...body, producer: { kind: "user", name: "Alice", relation: "none" } }, zone.id, null, true), { code: "evidence_request_conflict" });
   await assert.rejects(service.save(alice, { ...body, entityKeys: ["drug:c"] }, zone.id, null, true), { code: "evidence_request_conflict" });
+});
+
+test("over HTTP a product zone is the owner's to make, an official one is not, and visibility is its own route", options, async () => {
+  const users = { alice, bob };
+  const handler = createEvidenceZoneRoutes({
+    store: { ensureSessionUser: async (/** @type {any} */ req) => ({ user: users[/** @type {"alice"|"bob"} */ (req.headers["x-test-user"])] }), assertCsrf: async () => {} },
+    service,
+    frontier: { allows: () => true },
+    config: { frontierEnabled: true },
+    maxJsonBytes: 1_000_000,
+  });
+  const server = http.createServer(async (req, res) => {
+    try {
+      if (!(await handler(req, res))) { res.statusCode = 404; res.end("{}"); }
+    } catch (/** @type {any} */ failure) {
+      res.statusCode = failure.status ?? 500;
+      res.setHeader("content-type", "application/json");
+      res.end(JSON.stringify({ error: { code: failure.code } }));
+    }
+  });
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve(undefined)));
+  const base = `http://127.0.0.1:${/** @type {any} */ (server.address()).port}`;
+  const call = async (/** @type {string} */ method, /** @type {string} */ path, /** @type {string} */ as, /** @type {any} */ body) => {
+    const response = await fetch(`${base}${path}`, { method, headers: { "x-test-user": as, "content-type": "application/json" }, ...(body ? { body: JSON.stringify(body) } : {}) });
+    return { status: response.status, body: await response.json() };
+  };
+  try {
+    const official = await call("POST", "/api/frontier/zones", "alice", { title: "Mine", kind: "official" });
+    assert.equal(official.status, 403);
+    assert.equal(official.body.error.code, "evidence_zone_kind_forbidden");
+    const made = await call("POST", "/api/frontier/zones", "alice", { title: "Product zone", kind: "product" });
+    assert.equal(made.status, 200);
+    assert.equal(made.body.data.zone.kind, "product");
+    const zone = made.body.data.zone;
+    const refused = await call("POST", `/api/frontier/zones/${zone.id}/evidence`, "alice", cardInput);
+    assert.equal(refused.status, 400);
+    assert.equal(refused.body.error.code, "evidence_producer_required");
+    const card = await call("POST", `/api/frontier/zones/${zone.id}/evidence`, "alice", { ...cardInput, ...productFields });
+    assert.equal(card.status, 200);
+    assert.equal(card.body.data.evidence.claims[0].verification.mark, "✓");
+    assert.equal(card.body.data.evidence.claims[0].text, cardInput.claims[0].claim);
+    assert.equal(card.body.data.evidence.views.clinical.rows[0].absoluteEffect.control, 120);
+    // The default is the platform's audience until the owner chooses; the choice is a route of its own.
+    const early = await call("PUT", `/api/frontier/zones/${zone.id}/visibility`, "alice", { visibility: "internet", expectedRevision: zone.revision });
+    assert.equal(early.status, 409);
+    assert.equal(early.body.error.code, "evidence_visibility_requires_publication");
+    const published = (await call("PATCH", `/api/frontier/zones/${zone.id}`, "alice", { expectedRevision: zone.revision, state: "published" })).body.data.zone;
+    assert.equal((await call("PUT", `/api/frontier/zones/${zone.id}/visibility`, "bob", { visibility: "internet", expectedRevision: published.revision })).body.error.code, "evidence_owner_required");
+    const open = await call("PUT", `/api/frontier/zones/${zone.id}/visibility`, "alice", { visibility: "internet", expectedRevision: published.revision });
+    assert.equal(open.status, 200);
+    assert.equal(open.body.data.zone.visibility, "internet");
+    assert.equal((await call("GET", `/api/frontier/zones/${zone.id}`, "bob")).body.data.zone.visibility, "internet");
+    assert.equal((await call("POST", `/api/frontier/zones/${zone.id}/visibility`, "alice", {})).status, 404, "visibility is set by PUT only");
+  } finally {
+    await new Promise((resolve) => server.close(resolve));
+  }
 });
