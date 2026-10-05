@@ -447,6 +447,28 @@ test("the operator's grant over HTTP: operators only, the sources a compensation
   void researchMoneyDecimal;
 });
 
+test("a simulated top-up goes through the service once per request, as a closed package, into a purchased lot, for a simulated deployment only", options, async () => {
+  const w = await world({ startCredits: 10 });
+  const requestId = `request_${randomUUID().slice(0, 12)}`;
+  const first = await w.service.simulatedTopUp(w.userId, { packageId: "topup-100", requestId });
+  assert.deepEqual([first.duplicate, first.balance, first.order.amount, first.order.title], [false, "110.00000000", 100, "模拟充值"]);
+  const again = await w.service.simulatedTopUp(w.userId, { packageId: "topup-100", requestId });
+  assert.deepEqual([again.duplicate, again.balance], [true, "110.00000000"]);
+  const read = await w.balance();
+  assert.deepEqual([read.purchased, read.gifted], ["100.00000000", "10.00000000"], "what was bought is told from what was given");
+  assert.deepEqual((await w.service.simulatedOrders(w.userId)).items.map((order) => order.amount), [100]);
+  for (const bad of [{ packageId: "topup-7", requestId: `request_${randomUUID().slice(0, 12)}` }, { packageId: "topup-100", requestId: "x" }, { packageId: "topup-50", requestId }, {}]) {
+    await assert.rejects(w.service.simulatedTopUp(w.userId, bad), { status: 400, code: "simulated_wallet_request_invalid" });
+  }
+  await assert.rejects(w.service.simulatedOrders(w.userId, { cursor: "nonsense" }), { status: 400, code: "simulated_wallet_request_invalid" });
+  const stranger = await world();
+  assert.deepEqual((await stranger.service.simulatedOrders(stranger.userId)).items, [], "another account has no orders of this one's");
+  const live = new EvimedCreditsService({ config: { evimedCreditsEnabled: true, evimedCreditsPerCny: 1 }, database, client: { configured: true } });
+  await assert.rejects(live.simulatedTopUp(w.userId, { packageId: "topup-50", requestId: `request_${randomUUID().slice(0, 12)}` }), { status: 404, code: "simulated_wallet_not_enabled" });
+  await assert.rejects(live.simulatedOrders(w.userId), { status: 404, code: "simulated_wallet_not_enabled" });
+  await auditWallet(database, w.payer);
+});
+
 test("off means off, and a billing module that fails never stops a run: nothing is charged, held or refused", options, async () => {
   const w = await world();
   const off = new EvimedCreditsService({ config: { ...config, evimedCreditsEnabled: false }, database, client: null, simulator: w.wallet, usageLedger: usage });
