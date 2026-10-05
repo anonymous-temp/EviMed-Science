@@ -547,3 +547,94 @@ test("off means off, and a billing module that fails never stops a run: nothing 
   assert.equal(await failing.holdForRun({ userId: w.userId, runId: `run_${randomUUID()}`, capabilityId: "adr-analysis", startedAt: new Date().toISOString() }), null);
   assert.ok(reported.length > 0, "and it says why");
 });
+
+/** The one-number wallet's outbox row: a charge it asked for and never got an answer to. @param {any} w @param {{ credits: number, withTask?: boolean }} row */
+async function pendingRow(w, { credits, withTask = true }) {
+  const runId = `run_${randomUUID()}`;
+  await database.query(`INSERT INTO evimed_credits.settlements(run_id,user_id,memo,cost_cny,credits,credits_per_cny,status,attempts,next_attempt_at,owner_created_at,upstream_user_id,wallet)
+    SELECT $1,id,'Pending from before',$3,$3,1,'pending',1,$4::timestamptz,created_at,$5,'simulated' FROM evimed_control.users WHERE id=$2`,
+  [runId, w.userId, credits, new Date(Date.now() - 1_000).toISOString(), w.payer]);
+  if (withTask) {
+    const evidence = { actualCny: `${credits}.00000000`, billableCny: `${credits}.00000000`, chargedCny: `${credits}.00000000`, waivedCny: "0.00000000", platformCostCny: "0.00000000",
+      pricingVersion: "research-allowance-v1-20261003", walletContract: "legacy-integer-floor", physicalRunId: runId, evidence: [] };
+    await database.query(`INSERT INTO evimed_credits.research_tasks(run_id,user_id,title,evidence,status,owner_created_at,wallet)
+      SELECT $1,id,'Pending from before',$3::jsonb,'pending',created_at,'simulated' FROM evimed_control.users WHERE id=$2`, [runId, w.userId, JSON.stringify(evidence)]);
+  }
+  return runId;
+}
+
+test("a pending settlement the one-number wallet left finishes like any other: what the wallet took, the rest absorbed, the statement and the month agreeing, in one commit (review F5)", options, async () => {
+  for (const withTask of [true, false]) {
+    const w = await world({ startCredits: 3 });
+    const runId = await pendingRow(w, { credits: 12, withTask });
+    assert.equal(await w.service.retryDue(), 1);
+    // The wallet gave what it had.
+    assert.equal((await w.balance()).balance, "0.00000000", `withTask=${withTask}`);
+    const row = (await database.query("SELECT status,credits::text AS credits,requested::text AS requested,absorbed::text AS absorbed,receipt_id FROM evimed_credits.settlements WHERE run_id=$1", [runId])).rows[0];
+    assert.deepEqual([row.status, row.credits, row.requested, row.absorbed], ["settled", "3.00000000", "12.00000000", "9.00000000"], "the row says what was taken, what was asked and what the platform carried");
+    assert.match(row.receipt_id, /^sim_rcpt_/);
+    const line = (await w.service.statements(w.userId)).items.find((item) => item.id === runId);
+    assert.deepEqual([line?.status, line?.amount, line?.requestedAmount, line?.absorbed], ["absorbed", "3.00000000", "12.00000000", "9.00000000"], "the statement does not say 12 was charged");
+    const month = await w.service.allowanceSummary(w.userId, { since: new Date(Date.now() - DAY) });
+    assert.deepEqual([month.spentCny, month.pendingCny], [3, 0]);
+    // Σ settlements.credits = Σ deduct entries, to the last 1e-8, and the platform's figure counts what it carried.
+    const sums = (await database.query(`SELECT (SELECT coalesce(sum(credits),0)::text FROM evimed_credits.settlements WHERE user_id=$1 AND wallet='simulated') AS settled,
+      (SELECT coalesce(sum(credits),0)::text FROM evimed_credits.simulated_entries WHERE payer=$2 AND kind='deduct') AS taken`, [w.userId, w.payer])).rows[0];
+    assert.equal(sums.settled, sums.taken);
+    const figure = await w.service.absorbedSummary({ since: new Date(Date.now() - DAY) });
+    assert.ok(units(figure.absorbed) >= units("9"), `the platform's figure counts it: ${figure.absorbed}`);
+    assert.equal(w.service.status().counters.absorbed >= 1, true);
+    await auditWallet(database, w.payer);
+    // Replayed by a second sweep: nothing more.
+    assert.equal(await w.service.retryDue(), 0);
+    assert.equal((await w.balance()).balance, "0.00000000");
+  }
+});
+
+test("a pending settlement covered in full is settled for its full amount, and one the old release already took (the answer was lost) is not taken twice (review F5)", options, async () => {
+  const w = await world({ startCredits: 50 });
+  const covered = await pendingRow(w, { credits: 12 });
+  assert.equal(await w.service.retryDue(), 1);
+  assert.equal((await w.balance()).balance, "38.00000000");
+  const line = (await w.service.statements(w.userId)).items.find((item) => item.id === covered);
+  assert.deepEqual([line?.status, line?.amount, line?.absorbed], ["settled", "12.00000000", null]);
+  // The old release took 5 and lost the answer: its deduct entry exists under the run id, the row is still pending.
+  const lost = await pendingRow(w, { credits: 5, withTask: false });
+  await w.wallet.settle({ payer: w.payer, requestId: lost, amount: "5" });
+  assert.equal((await w.balance()).balance, "33.00000000");
+  assert.equal(await w.service.retryDue(), 1);
+  assert.equal((await w.balance()).balance, "33.00000000", "taken once");
+  assert.equal((await database.query("SELECT status FROM evimed_credits.settlements WHERE run_id=$1", [lost])).rows[0].status, "settled");
+  await auditWallet(database, w.payer);
+});
+
+test("the wallet's take and the row's update are one commit: a failure after the take leaves the wallet untouched and the row pending (review F5)", options, async () => {
+  const w = await world({ startCredits: 20 });
+  const runId = await pendingRow(w, { credits: 7, withTask: false });
+  await database.query(`CREATE OR REPLACE FUNCTION evimed_credits.test_fail_settlement() RETURNS trigger AS $f$
+    BEGIN IF NEW.status = 'settled' THEN RAISE EXCEPTION 'test: the row update fails after the take' USING ERRCODE = 'P0001'; END IF; RETURN NEW; END $f$ LANGUAGE plpgsql`);
+  await database.query(`CREATE TRIGGER test_fail_settlement BEFORE UPDATE ON evimed_credits.settlements FOR EACH ROW WHEN (NEW.run_id = '${runId}') EXECUTE FUNCTION evimed_credits.test_fail_settlement()`);
+  try {
+    await w.service.retryDue();
+    assert.equal((await w.balance()).balance, "20.00000000", "the wallet was not debited for a row that did not land");
+    assert.equal((await database.query("SELECT status FROM evimed_credits.settlements WHERE run_id=$1", [runId])).rows[0].status, "pending");
+  } finally {
+    await database.query("DROP TRIGGER test_fail_settlement ON evimed_credits.settlements");
+  }
+  // And once the cause is gone it settles, once.
+  await database.query("UPDATE evimed_credits.settlements SET next_attempt_at=now() - interval '1 second' WHERE run_id=$1", [runId]);
+  assert.equal(await w.service.retryDue(), 1);
+  assert.equal((await w.balance()).balance, "13.00000000");
+});
+
+test("a pending row of a deleted account never re-creates that account's wallet to take the charge from (review F10)", options, async () => {
+  const w = await world({ startCredits: 20 });
+  const runId = await pendingRow(w, { credits: 4, withTask: false });
+  // The account is erased; the financial row stays (money outlives its account) but the wallet goes with it.
+  await database.query("DELETE FROM evimed_credits.simulated_wallets WHERE user_id=$1", [w.userId]);
+  await database.query("UPDATE evimed_credits.settlements SET owner_created_at='-infinity' WHERE run_id=$1", [runId]);
+  assert.equal(await w.service.retryDue(), 1);
+  assert.equal((await database.query("SELECT count(*)::int AS n FROM evimed_credits.simulated_wallets WHERE payer=$1", [w.payer])).rows[0].n, 0, "no wallet was made for it");
+  const row = (await database.query("SELECT status,error_code FROM evimed_credits.settlements WHERE run_id=$1", [runId])).rows[0];
+  assert.deepEqual([row.status, row.error_code], ["refused", "evimed_credits_account_unlinked"]);
+});

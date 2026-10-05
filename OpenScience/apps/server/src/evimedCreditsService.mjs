@@ -1038,20 +1038,47 @@ export class EvimedCreditsService {
 
   /**
    * A settlement the one-number wallet left pending in its outbox (a run charged
-   * through the simulated wire that never got its answer): it is taken from the
-   * platform's wallet now, in whole credits as it was asked, up to what is
-   * there — a charge that cannot be covered in full is not owed. Idempotent by the
-   * run id, like every charge.
+   * through the simulated wire that never got its answer), finished like any other
+   * charge on the platform's wallet (review F5): taken up to what the account holds,
+   * whatever is short recorded as absorbed by the platform and counted, the row's
+   * credits what was actually taken, the statement and the month saying the same —
+   * and the wallet's take and the row's update one commit, so a failure after the take
+   * leaves neither. Idempotent by the run id: a charge the old release already took
+   * (its deduct entry exists under the run id) is answered, never taken twice.
+   *
+   * The account must still be the one the row was made for: a row of a deleted
+   * account is refused, and never re-creates that account's wallet to take from.
    * @param {{ runId: string, userId: string, credits: number, upstreamUserId?: string | null }} row
    */
   async #chargeOnPlatformWallet(row) {
     try {
-      const payer = row.upstreamUserId ?? await this.#payer(row.userId);
-      if (!payer) throw new EvimedCreditsError("evimed_credits_account_unlinked", "This account has no wallet to charge.", { final: true });
-      const outcome = await this.simulator.settle({ payer, requestId: row.runId, amount: String(row.credits) });
-      await this.#finish(row.runId, "settled", { receiptId: outcome.receiptId });
+      const outcome = await this.#retrying(() => this.database.transaction(async (/** @type {any} */ client) => {
+        const current = (await client.query("SELECT * FROM evimed_credits.settlements WHERE run_id=$1 FOR UPDATE", [row.runId])).rows[0];
+        if (!current || current.status !== "pending") return null;
+        const owner = await client.query(
+          "SELECT 1 FROM evimed_credits.settlements s JOIN evimed_control.users u ON u.id=s.user_id AND u.created_at=s.owner_created_at WHERE s.run_id=$1", [row.runId]);
+        if (!owner.rowCount) throw new EvimedCreditsError("evimed_credits_account_unlinked", "This account is gone.", { final: true });
+        const payer = current.upstream_user_id ?? await this.#payer(current.user_id);
+        if (!payer) throw new EvimedCreditsError("evimed_credits_account_unlinked", "This account has no wallet to charge.", { final: true });
+        const asked = researchMoneyUnits(exactAmount(current.credits));
+        const taken = await this.simulator.settle({ payer, requestId: row.runId, amount: researchMoneyDecimal(asked), client });
+        const at = new Date(taken.at);
+        await client.query(
+          `UPDATE evimed_credits.settlements SET status='settled', next_attempt_at=NULL, error_code=NULL, receipt_id=$2, settled_at=$3::timestamptz,
+             credits=$4, requested=$5, absorbed=$6, charge_basis='completed' WHERE run_id=$1 AND status='pending'`,
+          [row.runId, taken.receiptId, at.toISOString(), taken.taken, researchMoneyDecimal(asked), taken.shortfall]);
+        await client.query(
+          `UPDATE evimed_credits.research_tasks SET status='settled', receipt_id=$2, error_code=NULL, settled_at=$3::timestamptz,
+             evidence = evidence || $4::jsonb WHERE run_id=$1`,
+          [row.runId, taken.receiptId, at.toISOString(), JSON.stringify({
+            requestedCny: researchMoneyDecimal(asked), takenCredits: taken.taken, absorbedCredits: taken.shortfall, chargedCny: taken.taken, creditsAmount: taken.taken,
+            lots: taken.lots, balanceAfter: taken.balance, chargeBasis: "completed" })]);
+        return taken;
+      }));
+      if (!outcome) return { status: "pending" };
       this.counters.settled += 1;
-      return { status: "settled", credits: outcome.taken };
+      if (researchMoneyUnits(outcome.shortfall) > 0n) this.counters.absorbed += 1;
+      return { status: "settled", credits: outcome.taken, absorbed: outcome.shortfall };
     } catch (error) {
       const code = typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : "evimed_credits_settle_failed";
       if (error instanceof EvimedCreditsError || error instanceof SimulatedWalletRefusal) {
