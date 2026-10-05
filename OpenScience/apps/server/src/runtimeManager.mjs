@@ -5701,6 +5701,8 @@ export class RuntimeManager {
   /** Adopt only between completed runs, before the next run's immutable snapshot is reserved.
    * The existing plugin exclusive fence excludes all prompt admissions during replacement. */
   async setPlatformSkillScope(project,capabilityId) {
+    // No supply (the module is off): nothing to scope, and no entry is kept for every project that ever dispatched.
+    if(!this.platformSkillSupply)return{adopted:false};
     const key=this.key(project),previous=this.platformSkillRefreshes.get(key)??Promise.resolve();
     const task=previous.catch(()=>{}).then(async()=>{
       this.platformSkillScopes.set(key,capabilityId);

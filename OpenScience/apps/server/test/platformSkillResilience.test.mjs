@@ -99,3 +99,15 @@ test('the runtime manager starts without platform skills when the supply cannot 
   manager.platformSkillSupply = null;
   assert.deepEqual(await manager.selectPlatformSkills(project, 'statistics'), { generation: null, degraded: false });
 });
+
+test('with no platform tool mounted a dispatch keeps no scope entry and a run observes nothing', async () => {
+  const { createPlatformSkillTelemetry } = await import('../src/platformSkillTelemetry.mjs');
+  const manager = new RuntimeManager({ dataDir: os.tmpdir(), runtimeMode: 'kernel', runtimeSandboxMode: 'docker' });
+  assert.deepEqual(await manager.setPlatformSkillScope({ id: 'p', userId: 'u' }, 'statistics'), { adopted: false });
+  assert.equal(manager.platformSkillScopes.size, 0, 'the map is not grown by a module that is off');
+  for (const pins of [[], undefined, null]) {
+    const telemetry = createPlatformSkillTelemetry(pins);
+    assert.deepEqual(telemetry.observe({ type: 'tool/call', callId: 'c1', tool: 'bash', input: { command: 'ls' } }), []);
+    assert.deepEqual(telemetry.observe({ type: 'tool/result', callId: 'c1', tool: 'bash', status: 'completed', output: '{}' }), []);
+  }
+});
