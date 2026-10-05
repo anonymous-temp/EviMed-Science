@@ -124,9 +124,23 @@ export function vcrStudyFromRow(row) {
     steps: normalizedVcrSteps(row.steps),
     budget: object(row.budget),
     outcomeSeal: object(row.outcome_seal),
+    // What the study is about, by the shared entity vocabulary (`entityVocabulary.mjs`); none until it could be tagged.
+    entityKeys: Array.isArray(row.entity_keys) ? row.entity_keys.map(String) : [],
     createdAt: iso(row.created_at),
     updatedAt: iso(row.updated_at),
   };
+}
+
+/**
+ * The texts of a study's tagging beyond its name and question: the strings of
+ * its definition's PICO (population, conditions, interventions, comparator,
+ * outcome — whatever the definition states), bounded.
+ * @param {unknown} value @param {number} [depth] @returns {string[]}
+ */
+function stringLeaves(value, depth = 0) {
+  if (typeof value === "string") return value.trim() ? [value.slice(0, 2_000)] : [];
+  if (depth >= 3 || !value || typeof value !== "object") return [];
+  return Object.values(value).flatMap((item) => stringLeaves(item, depth + 1)).slice(0, 40);
 }
 
 /** The sha256 of a canonical JSON value, as every hash in this module is taken. @param {unknown} value */
@@ -268,6 +282,48 @@ export { comparatorFromRow, criterionFromRow, jobSummaryFromRow, patientSetFromR
  * no package migrates a table another one reads.
  */
 export class VcrStore extends VcrStoreBase {
+  /**
+   * @param {{ database: any, statementTimeoutMs?: number, entityVocabulary?: { tag: (input: { texts: string[] }) => Promise<string[] | null> } | null }} options
+   *   `entityVocabulary` tags a study; without it, or while it cannot tag, a study has no keys.
+   */
+  constructor({ entityVocabulary = null, ...options }) {
+    super(options);
+    this.entityVocabulary = entityVocabulary;
+  }
+
+  /**
+   * The entity keys of a study from its name, its question and its definition's
+   * PICO, or null where there is no vocabulary or it cannot tag. Read outside
+   * any transaction: tagging may read the glossary on another connection.
+   * @param {{ name: string, question: string }} study @param {Record<string, any> | null | undefined} pico
+   */
+  async #entityKeys(study, pico) {
+    return (await this.entityVocabulary?.tag({ texts: [study.name, study.question, ...stringLeaves(pico ?? {})] })) ?? null;
+  }
+
+  /**
+   * Tag the studies that carry no entity keys yet, `limit` at a time, from
+   * each one's own name, question and latest definition; `userId` narrows a
+   * pass to one account's studies. A study edited meanwhile was tagged by the
+   * edit, and is left.
+   * @param {{ userId?: string | null, limit?: number }} [options]
+   * @returns {Promise<{ tagged: number }>}
+   */
+  async backfillEntityKeys({ userId = null, limit = 100 } = {}) {
+    if (!this.entityVocabulary) return { tagged: 0 };
+    const rows = await this.rows(`SELECT id, name, question FROM ${VCR_SCHEMA}.studies
+      WHERE entity_keys IS NULL AND deleted_at IS NULL AND ($1::text IS NULL OR user_id = $1::text) ORDER BY id LIMIT $2`,
+    [userId, Math.max(1, Math.min(500, Math.trunc(limit) || 100))]);
+    let tagged = 0;
+    for (const row of rows) {
+      const keys = await this.#entityKeys({ name: String(row.name), question: String(row.question) }, (await this.latestDefinition(String(row.id)))?.pico);
+      if (!keys) break;
+      const result = await this.query(`UPDATE ${VCR_SCHEMA}.studies SET entity_keys = $2::text[] WHERE id = $1 AND entity_keys IS NULL AND deleted_at IS NULL`, [row.id, keys]);
+      tagged += result.rowCount ?? 0;
+    }
+    return { tagged };
+  }
+
   /** Read every report input at one PostgreSQL snapshot. @param {(store:VcrStore) => Promise<any>} operation */
   async reportSnapshot(operation) {
     await this.ready();
@@ -361,11 +417,14 @@ export class VcrStore extends VcrStoreBase {
     const id = vcrId("study");
     const dataTier = VCR_DATA_TIERS.includes(String(input.dataTier)) ? String(input.dataTier) : "T0";
     const intendedUse = VCR_INTENDED_USES.includes(String(input.intendedUse)) ? String(input.intendedUse) : "exploratory";
+    const name = String(input.name ?? VCR_DEFAULT_STUDY_NAME);
+    const question = String(input.question ?? "");
+    const entityKeys = await this.#entityKeys({ name, question }, null);
     return this.transaction(async (client) => {
-      const row = (await client.query(`INSERT INTO ${VCR_SCHEMA}.studies (id, user_id, project_id, name, question, data_tier, intended_use, budget)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb) RETURNING *`,
-      [id, userId, String(input.projectId), String(input.name ?? VCR_DEFAULT_STUDY_NAME), String(input.question ?? ""),
-        dataTier, intendedUse, JSON.stringify(input.budget ?? {})])).rows[0];
+      const row = (await client.query(`INSERT INTO ${VCR_SCHEMA}.studies (id, user_id, project_id, name, question, data_tier, intended_use, budget, entity_keys)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::text[]) RETURNING *`,
+      [id, userId, String(input.projectId), name, question,
+        dataTier, intendedUse, JSON.stringify(input.budget ?? {}), entityKeys])).rows[0];
       await client.query(`INSERT INTO ${VCR_SCHEMA}.members (study_id, user_id, role, invited_by)
         VALUES ($1, $2, 'lead', $2) ON CONFLICT DO NOTHING`, [id, userId]);
       await this.audit({ client, studyId: id, userId, actor: userId, action: "vcr.study.create", object: id,
@@ -389,6 +448,14 @@ export class VcrStore extends VcrStoreBase {
     };
     if (patch.name !== undefined) put("name", String(patch.name));
     if (patch.question !== undefined) put("question", String(patch.question));
+    if (this.entityVocabulary && (patch.name !== undefined || patch.question !== undefined)) {
+      // The keys describe the name and question they were made from: new ones, or none until they can be made.
+      const current = await this.studyById(studyId);
+      if (current) {
+        put("entity_keys", await this.#entityKeys({ name: String(patch.name ?? current.name), question: String(patch.question ?? current.question) },
+          (await this.latestDefinition(studyId))?.pico), "::text[]");
+      }
+    }
     if (patch.dataTier !== undefined) put("data_tier", String(patch.dataTier));
     if (patch.intendedUse !== undefined) put("intended_use", String(patch.intendedUse));
     if (patch.status !== undefined) put("status", String(patch.status));
@@ -463,8 +530,12 @@ export class VcrStore extends VcrStoreBase {
    *   endpointType?: string | null, intendedUse?: string, fieldSources?: Record<string, any>, reviewState?: string }} input
    */
   async saveDefinition(input) {
+    // The definition names the disease and the treatment: the study is tagged again from it.
+    const study = this.entityVocabulary ? await this.studyById(input.studyId) : null;
+    const entityKeys = study ? await this.#entityKeys(study, input.pico) : null;
     return this.transaction(async (client) => {
       const version = await this.nextVersion(client, "study_definitions", "study_id = $1", [input.studyId]);
+      if (study) await client.query(`UPDATE ${VCR_SCHEMA}.studies SET entity_keys = $2::text[] WHERE id = $1`, [input.studyId, entityKeys]);
       const row = (await client.query(`INSERT INTO ${VCR_SCHEMA}.study_definitions
         (id, study_id, user_id, version, pico, estimand, endpoint_type, intended_use, field_sources, review_state)
         VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7, $8, $9::jsonb, $10) RETURNING *`,

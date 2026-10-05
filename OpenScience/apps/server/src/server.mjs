@@ -229,6 +229,7 @@ import { createEvidenceZoneRoutes } from "./evidenceZoneRoutes.mjs";
 import { FrontierWorker, ensureFrontierProject } from "./frontierWorker.mjs";
 // Its second wave: events and the hot list, the daily and its push, 与你相关,
 // the two reader actions, and the composer the worker ticks.
+import { createEntityVocabulary, entityVocabularyMetricFamilies } from "./entityVocabulary.mjs";
 import { FrontierEvents } from "./frontierEvents.mjs";
 import { FrontierDaily } from "./frontierDaily.mjs";
 import { FrontierWeekly } from "./frontierWeekly.mjs";
@@ -1648,9 +1649,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const library = createLibrary({ config, store, documents: productDocuments, sources: sourceService, capsules: capsuleService,
     kbIndex, report: (code) => process.stderr.write(`personal library: ${code}\n`) });
   libraryService = library.service;
+  // The one entity vocabulary (entityVocabulary.mjs, plan §4.2): the frontier's glossary and entity keys, read by
+  // the pipeline, the evidence zones, autopilot agendas, GEO products and VCR studies. It follows the frontier
+  // module: off, every answer is empty and no table is read.
+  const entityVocabulary = createEntityVocabulary({ database: productDatabase, enabled: Boolean(config.frontierEnabled && productDatabase),
+    report: (code) => process.stderr.write(`${code}\n`) });
   const autopilotPlanner = new AutopilotPlanner(config, { usageLedger });
   const autopilotService = productDocuments && productJobs ? new AutopilotService({
-    documents: productDocuments, jobs: productJobs, usage: usageLedger, notifications: notificationService,
+    documents: productDocuments, jobs: productJobs, usage: usageLedger, notifications: notificationService, entityVocabulary,
     // The account's own spending caps, which cover everything the researcher spends;
     // an agenda's daily and weekly caps count only the agenda's own (agendaBudget.mjs).
     accountCaps: () => ({ userDailySpendLimit: config.userDailySpendLimit, userWeeklySpendLimit: config.userWeeklySpendLimit }),
@@ -1689,7 +1695,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       dimension: config.kbEmbeddingDimension, pollMs: config.knowledgePluginPollMs });
     const editor = new FrontierEditor(config, { usageLedger, fetchImpl: overrides.frontierModelFetch ?? globalThis.fetch });
     const pipeline = new FrontierPipeline({ database: productDatabase, editor, plugin: client, embedder, config,
-      workerId: randomId("frontier-") });
+      glossary: entityVocabulary.glossaryStore, workerId: randomId("frontier-") });
     // One implementation of "today's spend": the pipeline's, which it gates on.
     const budget = typeof pipeline.budget === "function" ? () => pipeline.budget(new Date()) : null;
     // The second wave (build spec D): events and the hot list, the daily and
@@ -1729,7 +1735,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     const composer = new FrontierComposer({ events, daily, weekly, profiles, notifications: frontierNotifications,
       canRun: () => !maintenanceService || maintenanceService.claimingAllowed(),
       report: (loop, code) => process.stderr.write(`frontier ${loop}: ${code}\n`) });
-    const evidenceZones = new EvidenceZoneService({database:productDatabase});
+    // `entityKeysFor` is the zone service's option for tagging a zone and a card; until it reads it the cast keeps the type check honest.
+    const evidenceZones = new EvidenceZoneService(/** @type {any} */ ({database:productDatabase,entityKeysFor:entityVocabulary.entityKeysFor}));
     const evidenceEditorial = new EvidenceEditorial({database:productDatabase,service:evidenceZones,editor,budget,
       readSource:createEvidenceSourceReader({readWeb:(url,options)=>webReader.read(url,options),transport:(request)=>webTransport(request),userAgent:webReadUserAgent(config)}),canRun:()=>!maintenanceService||maintenanceService.claimingAllowed()});
     const worker = new FrontierWorker({
@@ -1821,7 +1828,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
    *   importDelivery: ReturnType<typeof createGeoDeliveryImport> } | null} */
   let geo = null;
   if (config.geoEnabled && productDatabase) {
-    const geoStore = new GeoStore({ database: productDatabase });
+    const geoStore = new GeoStore({ database: productDatabase, entityVocabulary });
     const social = createSocialCrawlClient({ baseUrl: config.geoSocialUrl, timeoutMs: config.geoSocialTimeoutMs,
       fetchImpl: overrides.geoSocialFetch ?? globalThis.fetch });
     geo = {
@@ -1868,7 +1875,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // A record document to text and a figure to curve points run in the runtime
     // controller's disposable container, like a document export does.
     intakeController,
+    entityVocabulary,
   });
+  // Rows made while the vocabulary could not tag (the frontier off, the glossary not yet seeded) are tagged once it
+  // can: a bounded pass per module after each glossary load, each row through its own owner (entityVocabulary.mjs).
+  if (autopilotService && productDatabase) entityVocabulary.registerBackfill("autopilot", ({ limit }) => autopilotService.backfillEntityKeys(productDatabase, { limit }));
+  if (geo) entityVocabulary.registerBackfill("geo", ({ limit }) => geo.store.backfillEntityKeys({ limit }));
+  if (vcr) entityVocabulary.registerBackfill("vcr", ({ limit }) => vcr.store.backfillEntityKeys({ limit }));
 
   /**
    * The newest run of a GEO project's control-plane project that holds the
@@ -4861,6 +4874,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           eventPump: runtimeEventPump,
           evolution,
           evaluationIsolation,
+          entityVocabulary,
         });
         return;
       }
@@ -7660,7 +7674,7 @@ function addHistogramMetric(lines, name, help, series) {
   }
 }
 
-async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null }) {
+async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, entityVocabulary = null }) {
   const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate, frontier, review, geo, vcr, credits);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
@@ -8051,6 +8065,9 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
   // contract (frontierService.mjs `frontierMetricFamilies`).
   const frontierSnapshot = frontier ? await frontierMetricsSnapshot(frontier) : null;
   for (const family of frontierMetricFamilies(Boolean(frontier), frontierSnapshot)) addMetric(lines, family.name, family.help, family.type, family.series);
+  // The entity vocabulary the frontier, the zones, agendas, products and studies share: the glossary's size and what
+  // the taggings found (entityVocabulary.mjs `entityVocabularyMetricFamilies`).
+  for (const family of entityVocabularyMetricFamilies(entityVocabulary?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
   // 循证 GEO: `open_science_geo_enabled 0` when off (geoService.mjs `geoMetricFamilies`).
   const geoSnapshot = geo ? await geoMetricsSnapshot(geo) : null;
   for (const family of geoMetricFamilies(Boolean(geo), geoSnapshot)) addMetric(lines, family.name, family.help, family.type, family.series);

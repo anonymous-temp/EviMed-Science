@@ -898,12 +898,14 @@ export function createVcrEngineJobRemover({ config, fetchImpl, engine = null }) 
  *   report?: (code: string) => void,
  *   connectorCredentials?: { resolveOwn(userId: string, connector: string): Promise<string | null> } | null,
  *   intakeController?: { runVcrIntake?: Function } | null,
+ *   entityVocabulary?: { tag: (input: { texts: string[] }) => Promise<string[] | null> } | null,
  * }} input
  */
-export function composeVcr({ config, productDatabase, projectStore = null, audit = async () => {}, fetchImpl, report = () => {}, connectorCredentials = null, intakeController = null }) {
+export function composeVcr({ config, productDatabase, projectStore = null, audit = async () => {}, fetchImpl, report = () => {}, connectorCredentials = null, intakeController = null, entityVocabulary = null }) {
   if (!config?.vcrEnabled || !productDatabase) return null;
 
-  const store = new VcrStore({ database: productDatabase });
+  // The shared entity vocabulary tags a study with what it is about (`entityVocabulary.mjs`).
+  const store = new VcrStore({ database: productDatabase, entityVocabulary });
   const dataStore = new VcrDataStore({ database: productDatabase });
   const matchStore = new VcrMatchStore({ database: productDatabase });
   const evidenceStore = new VcrEvidenceStore({ database: productDatabase });
