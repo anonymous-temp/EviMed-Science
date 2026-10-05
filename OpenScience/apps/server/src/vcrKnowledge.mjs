@@ -41,7 +41,7 @@
  */
 
 import {
-  VCR_PACK_SCHEMA, VCR_PACK_SECTIONS, validateKnowledgePack, validateNamedRules, vcrPackConceptColumns, vcrPackEntrySources,
+  DISPLAY_TIME_ZONE, agendaLocalDate, VCR_PACK_SCHEMA, VCR_PACK_SECTIONS, validateKnowledgePack, validateNamedRules, vcrPackConceptColumns, vcrPackEntrySources,
   vcrPackMatchesName, vcrPackSummary, vcrRemapRowRuleColumns, vcrRequirementVariables, vcrRowRuleColumns, vcrSuggestColumnRemap, VCR_SHIPPED_PACKS,
 } from "@evimed/domain";
 
@@ -248,7 +248,7 @@ export class VcrKnowledge {
       return { ok: false, issues: [{ code: "pack_curated_in_use", field: "", detail: `这个研究已经按整理过的知识包「${bound.pack.disease?.nameZh ?? bound.pack.disease?.name ?? bound.pack.id}」工作，不再起草新的；要补充内容请改用定义与条件的写入。` }] };
     }
     const draftId = String(object(document.disease).key ?? "");
-    const pack = { ...document, schema: VCR_PACK_SCHEMA, id: draftId, version: 1, status: "ai-draft", updated: this.now().toISOString().slice(0, 10) };
+    const pack = { ...document, schema: VCR_PACK_SCHEMA, id: draftId, version: 1, status: "ai-draft", updated: agendaLocalDate(DISPLAY_TIME_ZONE, this.now()) };
     const issues = validateKnowledgePack(pack, { level: "draft" });
     if (issues.length) return { ok: false, issues };
     const row = await this.store.savePack({ userId: study.userId, studyId: study.id, diseaseKey: draftId, status: "ai-draft", body: pack, actor });

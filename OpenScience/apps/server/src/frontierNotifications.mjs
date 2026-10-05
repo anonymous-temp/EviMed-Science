@@ -1,4 +1,4 @@
-import { frontierNoticeTarget, frontierSourceDisplayName } from '@evimed/domain';
+import { DISPLAY_TIME_ZONE, agendaLocalDate, frontierNoticeTarget, frontierSourceDisplayName } from '@evimed/domain';
 import { migrateFrontier } from './frontierPersistence.mjs';
 import { migrateProductStore } from './productPersistence.mjs';
 import { migrateNotifications } from './notificationPersistence.mjs';
@@ -18,11 +18,12 @@ function safetyPublicationPredicate(now, param) {
       AND NOT ('date-inferred'=ANY(i.flags))`;
 }
 /** Public-only immutable payload: no private query, interest, project or match reason.
- * @param {any} row */
-export function frontierSafetyNotice(row) {
+ * The publication day is the reader's, in the feed's zone: an announcement at 20:00 UTC was made the next morning in China.
+ * @param {any} row @param {string} [timeZone] */
+export function frontierSafetyNotice(row, timeZone = DISPLAY_TIME_ZONE) {
     const key = `frontier-safety:${row.public_id}`;
     return { noticeType: 'notify', title: String(row.title_zh || row.title_raw).slice(0, 200),
-        body: `${frontierSourceDisplayName({ id: row.primary_source_id, name: row.source_name, ownerEntity: row.source_owner })} · ${new Date(row.published_at).toISOString().slice(0, 10)}`,
+        body: `${frontierSourceDisplayName({ id: row.primary_source_id, name: row.source_name, ownerEntity: row.source_owner })} · ${agendaLocalDate(timeZone, new Date(row.published_at))}`,
         actions: [{ id: 'open', label: '查看安全公告', style: 'primary' }], source: { type: 'system', id: key }, idempotencyKey: key, groupKey: key, severity: 'safety' };
 }
 /** @param {string} week */
@@ -169,7 +170,7 @@ export class FrontierNotifications {
                   AND NOT EXISTS(SELECT 1 FROM evimed_product.jobs j WHERE j.user_id=u.id AND j.idempotency_key=$4)
                 ORDER BY u.id LIMIT $3`, [checkpoint.afterUserId ?? '', row.visible_at, this.batch, `frontier-notify:safety:${row.public_id}`])).rows;
                 // Freeze the item's public payload across every page of this fan-out as well as per recipient.
-                const notice = checkpoint.notice ?? frontierSafetyNotice(row);
+                const notice = checkpoint.notice ?? frontierSafetyNotice(row, this.timeZone);
                 let queued = 0;
                 for (const reader of readers) {
                     if (await this.eligible(reader.id, { kind: 'safety', key: row.public_id }, client) && await this.enqueue(client, reader.id, 'safety', row.public_id, notice))

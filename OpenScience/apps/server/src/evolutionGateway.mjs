@@ -7,7 +7,8 @@ export const EVOLUTION_GATEWAY_PATH='/internal/evolution/v1';
  * resolveRun reads the active accepted run ledger; admit holds shared heavy-work + budget ownership.
  * @param {{config:any,authenticateWorkload:any,resolveRun:any,runtimeManager:any,controller:any,supply:any,admit:any,onExecution?:any}} dependencies */
 export function createEvolutionGatewayHandler({config,authenticateWorkload,resolveRun,runtimeManager,controller,supply,admit,onExecution=async()=>{}}){
-  return async(req,res)=>{
+  /** @param {any} req @param {any} res @param {((failure:{code:string,status:number})=>void)|null} [onFailure] the server's failure funnel, so a failure here leaves the error record and the metric label every other gateway's does */
+  return async(req,res,onFailure=null)=>{
     const url=new URL(req.url??'/','http://localhost');if(!url.pathname.startsWith(EVOLUTION_GATEWAY_PATH+'/'))return false;
     const abort=new AbortController(),disconnected=()=>{if(!res.writableEnded)abort.abort();};req.once('aborted',disconnected);res.once('close',disconnected);
     /** @type {any} */
@@ -29,7 +30,9 @@ export function createEvolutionGatewayHandler({config,authenticateWorkload,resol
       },{signal:abort.signal,pins}));
       if(observation)await onExecution({...observation,result:{ok:true},resultEvidence:evolutionResultEvidence(result)});
       if(!res.destroyed)sendJson(res,200,{data:result,tool:{id:pin.id,revision:pin.revision,digest:pin.digest}});
-    }catch(error){if(observation)await onExecution({...observation,result:{ok:false,code:error?.code??'extension_contract_invalid'}}).catch(()=>{});if(!res.destroyed){
+    }catch(error){if(observation)await onExecution({...observation,result:{ok:false,code:error?.code??'extension_contract_invalid'}}).catch(()=>{});
+      try{onFailure?.({code:typeof error?.code==='string'?error.code:'evolution_gateway_failed',status:Number.isSafeInteger(error?.status)?error.status:502});}catch{/* recording a failure never changes the answer */}
+      if(!res.destroyed){
       const binding=error?.argumentBinding;
       if(error?.code==='extension_contract_invalid'&&error.status===422&&binding?.code==='argument-binding-invalid'&&[binding.expectedParameters,binding.receivedKeys].every(keys=>Array.isArray(keys)&&keys.length<=128&&keys.every(key=>typeof key==='string'&&/^[A-Za-z_][A-Za-z0-9_]{0,127}$/.test(key)))){
         // Historical urllib clients expose the HTTP reason but do not print the response body.

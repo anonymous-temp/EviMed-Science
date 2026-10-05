@@ -210,10 +210,14 @@ test("what is left bounds the next episode: the envelope is the smaller of its c
   const { userId, service, planner } = await account("envelope");
   const agenda = await started(service, userId);
   const first = await service.runNow(userId, agenda.id, { requestId: requestId() });
-  await spend(userId, { runId: first.episode.id, cost: 2.6 });
+  await spend(userId, { runId: first.episode.id, cost: 1.7 });
   const tight = await service.runNow(userId, agenda.id, { requestId: requestId() });
-  assert.equal(planner.calls.at(-1).envelopeCny, 0.4, "¥0.40 of the day is left, less than the ¥1.50 an episode may spend");
-  assert.ok(tight.episode.payload.budgetCny + tight.episode.payload.verificationBudgetCny * 3 <= 0.4 + 1e-9);
+  assert.equal(planner.calls.at(-1).envelopeCny, 1.3, "¥1.30 of the day is left, less than the ¥1.50 an episode may spend, and enough for a run");
+  assert.ok(tight.episode.payload.budgetCny + tight.episode.payload.verificationBudgetCny * 3 <= 1.3 + 1e-9);
+  // Less than a run needs is a spent day, refused as the task's (the account has spent nothing here).
+  await spend(userId, { runId: tight.episode.id, cost: 0.2 });
+  const spentDay = await service.runNow(userId, agenda.id, { requestId: requestId() }).then(() => null, (caught) => caught);
+  assert.equal(spentDay.code, "autopilot_daily_budget_spent", "¥1.10 left cannot make a model call: the day is spent");
 });
 
 test("an account cap is the account's, refused as the account's, whatever the agenda has left", options, async () => {

@@ -1,5 +1,5 @@
 /** One dispatch boundary for owner-scoped capability supplements. */
-import { LEARNING_EVALUATION_DISPATCH_PREFIX } from "@evimed/domain";
+import { usagePurposeOfRun } from "@evimed/domain";
 import { handbookContextFor, prepareCapabilityHandbooks } from "./capabilityHandbooks.mjs";
 import { isInternalProject } from "./internalProjects.mjs";
 import { prepareResearchContext } from "./researchContext.mjs";
@@ -20,7 +20,7 @@ export function createOwnedHandbookSelector({ learning, registry, config, runtim
     const capabilityId = run.effectiveAgentId ?? options.routedSpecialist?.agentId ?? session.agentId ?? OPEN_DOMAIN_ANSWER_AGENT_ID;
     let handbooks = null;
     if (learning && config.learningEnabled && !isInternalProject(project.id) && !run.learningEvaluation
-      && !String(run.dispatchId ?? "").startsWith(LEARNING_EVALUATION_DISPATCH_PREFIX)) {
+      && usagePurposeOfRun(run) === "kernel") {
       try {
         const state = await paused(project.userId, project.id, session.sessionId);
         if (!state.learning && !state.trial) {

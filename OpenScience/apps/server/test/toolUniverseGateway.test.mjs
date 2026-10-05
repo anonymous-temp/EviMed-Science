@@ -11,7 +11,7 @@ import { createToolUniverseGateway, TOOL_UNIVERSE_GATEWAY_PATH } from "../src/to
 async function fixture(t, options = {}) {
   const calls = [];
   let active = true;
-  const project = { userId: "owner", id: "project" };
+  const project = { userId: "owner", id: options.projectId ?? "project" };
   const runtimeManager = { async assertActiveEviMedWorkloadToken(token) {
     if (!active || token !== "workload") throw new HttpError(401, "evimed_workload_token_invalid", "Invalid workload");
     return { userId: project.userId, projectId: project.id };
@@ -139,7 +139,7 @@ test("the declared MCP grep schema offers only the deployed literal mode", async
 test("actual isolation rejection preserves HTTP403 and code before upstream while forged arbitrary error remains502",async t=>{
  const directory=await fs.mkdtemp(path.join(os.tmpdir(),'tool-universe-exclusion-'));t.after(()=>fs.rm(directory,{recursive:true,force:true}));
  const isolation=createEvaluationIsolation({dataDir:directory,resolveRunId:()=> 'actual-run'});await isolation.register('actual-run',{aliases:['10.1136/bmj.n71'],titles:[]});
- const blocked=await fixture(t,{evaluationIsolation:isolation});const body={method:'tools/call',params:{name:'grep_tools',arguments:{pattern:'10.1136/bmj.n71',search_mode:'text'}}};
+ const blocked=await fixture(t,{evaluationIsolation:isolation,projectId:'eval-paper-tooluniverse'});const body={method:'tools/call',params:{name:'grep_tools',arguments:{pattern:'10.1136/bmj.n71',search_mode:'text'}}};
  const response=await blocked.request(body);assert.equal(response.status,403);assert.equal((await response.json()).code,'evaluation_source_excluded');assert.equal(blocked.calls.length,0);assert.equal((await isolation.audit('actual-run')).events[0].gateway,'tooluniverse');
- const unexpected=await fixture(t,{evaluationIsolation:{assertRequest:async()=>{throw Object.assign(new Error('unexpected'),{status:403,code:'evaluation_source_excluded'});}}});const failure=await unexpected.request(body);assert.equal(failure.status,502);assert.equal((await failure.json()).code,'tooluniverse_upstream_unavailable');
+ const unexpected=await fixture(t,{projectId:'eval-paper-tooluniverse',evaluationIsolation:{assertRequest:async()=>{throw Object.assign(new Error('unexpected'),{status:403,code:'evaluation_source_excluded'});}}});const failure=await unexpected.request(body);assert.equal(failure.status,502);assert.equal((await failure.json()).code,'tooluniverse_upstream_unavailable');
 });

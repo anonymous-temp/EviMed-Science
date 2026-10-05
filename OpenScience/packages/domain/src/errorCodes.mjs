@@ -1,4 +1,5 @@
 import { EVOLUTION_ERROR_MESSAGES } from './evolution.mjs';
+import { AGENDA_MIN_EPISODE_BUDGET_CNY, MIN_RUN_BUDGET_CNY } from './agenda.mjs';
 import { RESULT_WORKBENCH_ERROR_MESSAGES } from "./resultErrors.mjs";
 import { DOCUMENT_EXPORT_ERROR_MESSAGES } from "./documentExport.mjs";
 import { CONNECTOR_MISSING_CODES } from "./connectorCredentials.mjs";
@@ -1028,6 +1029,10 @@ export const CONTROL_PLANE_ERROR_CODES = Object.freeze([
   'verification_result_schema_invalid',
   'verification_verdict_invalid',
   'verification_verdict_missing',
+  // A re-check that was cancelled together with its agenda, and the floor an
+  // agenda's per-episode cap is held to (`AGENDA_MIN_EPISODE_BUDGET_CNY`).
+  'verification_canceled_by_stop',
+  'autopilot_episode_budget_too_small',
 ])
 
 /**
@@ -2016,6 +2021,8 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   verification_result_schema_invalid: '独立复核的结论文件格式与约定不符，这次不采信它。原结论未被推翻。',
   verification_verdict_invalid: '独立复核给出的结论不在允许的取值范围内，这次不采信它。原结论未被推翻。',
   verification_verdict_missing: '独立复核没有给出结论。原结论未被推翻。',
+  verification_canceled_by_stop: '任务被停止时，这条结论的独立复核还在进行，已随任务一起取消，所以没有复核结果。原结论未被推翻。'
+    + '重新启用任务不会补做这次复核；下一次研究会重新检查新的结论。',
 
   // ——— Knowledge-base intake: what a source card and an upload refusal say ———
   // The in-house parser's refusals reach a researcher on the source card, and
@@ -2047,11 +2054,14 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   autopilot_material_not_found: '找不到这份资料，或它不属于这个研究问题所在的项目。先把文件加入这个项目的知识库，再关联到问题。',
   autopilot_materials_full: '这个研究问题已关联了足够多的资料。先移除不再需要的，再添加新的。',
   autopilot_daily_budget_spent:
-    '这个任务近 24 小时的花费已达它自己设定的“每日上限”，这次没有开始。这个上限只计这个任务自己的花费，账户里其他研究的花费不占用它。'
+    '这个任务近 24 小时的花费已达它自己设定的“每日上限”（或剩下的额度已不够支付一次运行），这次没有开始。这个上限只计这个任务自己的花费，账户里其他研究的花费不占用它。'
     + '等预算随时间释放，或在“编辑任务”里调高每日上限即可。',
   autopilot_weekly_budget_spent:
-    '这个任务近 7 天的花费已达它自己设定的“每周上限”，这次没有开始。这个上限只计这个任务自己的花费，账户里其他研究的花费不占用它。'
+    '这个任务近 7 天的花费已达它自己设定的“每周上限”（或剩下的额度已不够支付一次运行），这次没有开始。这个上限只计这个任务自己的花费，账户里其他研究的花费不占用它。'
     + '等预算随时间释放，或在“编辑任务”里调高每周上限即可。',
+  autopilot_episode_budget_too_small:
+    `“单次上限”不能低于 ¥${AGENDA_MIN_EPISODE_BUDGET_CNY.toFixed(2)}：一次模型调用要先预留约 ¥1 才能发出，预算低于 ¥${MIN_RUN_BUDGET_CNY.toFixed(2)} 的研究一开始就会被拒绝。`
+    + '在“编辑任务”里调高单次上限即可，每日、每周上限也不能低于它。',
   library_item_not_found: '这份资料不在个人资料库里。',
   library_full: '个人资料库已满。先移出不再需要的资料，再加入新的。',
   library_source_removed: '这份资料在各个项目里都已删除，它的资料理解结果也随之删除，没有可以发布到记忆胶囊的内容；资料库里的正文副本仍然可以阅读和检索。',
@@ -2295,6 +2305,9 @@ const ERROR_CODE_OUTCOMES = Object.freeze({
   verification_result_schema_invalid: 'stopped',
   verification_verdict_invalid: 'stopped',
   verification_verdict_missing: 'stopped',
+  verification_canceled_by_stop: 'stopped',
+  // A floor on a setting, raised by editing the task: a ceiling's sibling, not a verdict on any run.
+  autopilot_episode_budget_too_small: 'capped',
   illegal_state_transition: 'stopped',
   // Prefixed like a ceiling, but nothing was refused: the run went ahead and
   // the usage is recorded late. Calling it `capped` would tell a reader to wait

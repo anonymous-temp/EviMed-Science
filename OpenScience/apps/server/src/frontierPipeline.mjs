@@ -1251,7 +1251,7 @@ export class FrontierPipeline {
       const gained = Boolean(available && (available.abstract || available.body_excerpt) && !existing?.abstract_raw && !existing?.body_excerpt);
       // The text the edit will use; the edit stores what it actually sent.
       const modelInput = existing && item.editor_version ? existing.model_input
-        : buildModelInput(this.#editItem(item, texts, entry, source, glossary));
+        : buildModelInput(this.#editItem(item, texts, entry, source, glossary), { timeZone: this.timeZone });
       await client.query(`INSERT INTO evimed_frontier.item_texts (item_id, abstract_raw, body_excerpt, model_input, model_input_sha256,
           publication_types, mesh, journal, authors_short, open_access, enrichment)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11::jsonb)

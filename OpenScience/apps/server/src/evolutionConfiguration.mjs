@@ -17,6 +17,10 @@ export const EVOLUTION_CONFIG_SCHEMA=Object.freeze({
   evolutionSelfCheckMaxBytes:{env:'OPEN_SCIENCE_EVOLUTION_SELF_CHECK_MAX_BYTES',default:4*1024*1024,min:1024,max:16*1024*1024,integer:true},
   evolutionSelfCheckMaxRows:{env:'OPEN_SCIENCE_EVOLUTION_SELF_CHECK_MAX_ROWS',default:10000,min:20,max:100000,integer:true},
   evolutionSelfCheckSampleRows:{env:'OPEN_SCIENCE_EVOLUTION_SELF_CHECK_SAMPLE_ROWS',default:256,min:20,max:2048,integer:true},
+  evolutionExecutionMaxConcurrency:{env:'OPEN_SCIENCE_EVOLUTION_EXECUTION_MAX_CONCURRENCY',default:1,min:1,max:4,integer:true},
+  evolutionExecutionTimeoutMs:{env:'OPEN_SCIENCE_EVOLUTION_EXECUTION_TIMEOUT_MS',default:30000,min:1000,max:30000,integer:true},
+  evolutionToolMaxConcurrentPerProject:{env:'OPEN_SCIENCE_EVOLUTION_TOOL_MAX_CONCURRENT_PER_PROJECT',default:2,min:1,max:4,integer:true},
+  evolutionToolCallsPerMinute:{env:'OPEN_SCIENCE_EVOLUTION_TOOL_CALLS_PER_MINUTE',default:60,min:1,max:1000,integer:true},
 });
 /** Closed validation findings never echo URLs, credentials, archive contents or customer values.
  * @param {any} config @returns {{code:string,key:string}[]} */

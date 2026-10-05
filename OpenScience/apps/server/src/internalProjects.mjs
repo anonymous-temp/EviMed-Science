@@ -104,6 +104,54 @@ export function isInternalProject(projectId) {
 }
 
 /**
+ * The names a client can give a project through the public route, and so no evidence of anything: the
+ * self-measurement shapes, and the paired evaluation's `eval-method-*`. Every other internal name is
+ * the server's own — made through the store, or refused at creation (`isReservedProjectId`).
+ */
+const CLIENT_NAMEABLE_INTERNAL = /^(?:(?:acceptance|audit)-[a-z0-9-]+|eval-method-[a-z0-9-]+)$/;
+
+/**
+ * Whether an account may hold the platform's self-measurement projects: an operator, or the
+ * deployment's configured acceptance account (`OPEN_SCIENCE_ACCEPTANCE_USERNAME`).
+ * @param {{ operatorUsers?: string[], acceptanceUsername?: string } | null | undefined} config @param {unknown} userId
+ */
+export function isMeasurementAccount(config, userId) {
+  const id = String(userId ?? "");
+  if (!id) return false;
+  return (config?.operatorUsers ?? []).includes(id) || (Boolean(config?.acceptanceUsername) && config?.acceptanceUsername === id);
+}
+
+/**
+ * Whether a project is the platform's own, for everything that is about money or limits: whether its
+ * runs are charged, whether it counts against the account's project ceiling, whether its runtime takes
+ * one of the researcher's slots. The answer needs both the name and the owner.
+ *
+ * A name alone is a waiver anyone can type: `POST /api/projects` takes an id from its caller, and
+ * `projectIdFromName` derives one from a researcher's own title (an English "Audit trial" becomes
+ * `audit-trial`). So `acceptance-*`, `audit-*` and `eval-method-*` are internal only when the account
+ * that owns them is an operator or the acceptance account, and are ordinary projects for everyone
+ * else. The names the server makes itself (the loop's, the knowledge base's, the frontier's, an
+ * evaluation cell's, the evolution module's) are reserved at creation and stay internal by name.
+ * @param {{ operatorUsers?: string[], acceptanceUsername?: string } | null | undefined} config
+ * @param {unknown} userId @param {unknown} projectId @returns {boolean}
+ */
+export function isInternalProjectOf(config, userId, projectId) {
+  if (!isInternalProject(projectId)) return false;
+  return !CLIENT_NAMEABLE_INTERNAL.test(String(projectId)) || isMeasurementAccount(config, userId);
+}
+
+/**
+ * Ids the public project route never lets an account name: the platform makes them itself. An
+ * evaluation cell's id, the frontier's and the loop's are internal by name for every owner, so they
+ * must not be reachable by typing (`createResearcherProject`).
+ * @param {unknown} projectId @returns {boolean}
+ */
+export function isReservedProjectId(projectId) {
+  const id = String(projectId ?? "");
+  return id === LEARNING_PROJECT_ID || id === SOURCES_PROJECT_ID || id === FRONTIER_PROJECT_ID || EVALUATION_CELL_PROJECT.test(id);
+}
+
+/**
  * How many of the deployment's runtimes the platform's own background work may
  * hold at once: all but one researcher's full share, and never fewer than one.
  *

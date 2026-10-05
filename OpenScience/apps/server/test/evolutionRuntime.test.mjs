@@ -55,7 +55,7 @@ test('disposable executor enforces no-network/read-only input and scans cheating
     const aliases=await controller.execute({files:{'scripts/aliases.py':'import os as system\nsystem._exit(0)\nassert 1==1\nvalue=getattr(object,"__subclasses__")\n'},code:EVOLUTION_STATIC_CHECK});
     assert.ok(JSON.parse(aliases.output).issues.some(issue=>issue.code==='candidate_control_override'));
     const issues=JSON.parse(checked.output).issues.map(item=>item.code);for(const code of ['candidate_network_import_denied','candidate_constant_assert','candidate_constant_equality','candidate_exception_swallowed'])assert.ok(issues.includes(code));
-    assert.equal((await fs.readdir(path.join(dataDir,'.openscience','extension-controller'))).filter(name=>name.endsWith('.json')).length,0);
+    assert.equal((await fs.readdir(path.join(dataDir,'.openscience','evolution-controller'))).filter(name=>name.endsWith('.json')).length,0);
   }finally{await controller.close();await fs.rm(dataDir,{recursive:true,force:true});}
 });
 

@@ -108,9 +108,17 @@ export class AutopilotWorker {
         // must not keep spending on re-checking last week's claims.
         const agenda = await this.service.checkInactivity(job.userId, job.payload?.agendaId);
         if (!agenda.payload.enabled || agenda.payload.status !== "active") {
+          // Skipping the job is not enough: the claim it was queued for would read "queued" for ever.
+          await this.service.endVerificationsOfAgenda?.(job.userId, job.payload.episodeId,
+            agenda.payload.status === "stopped" ? "agenda_stopped" : "agenda_paused", job.payload.verificationId);
           return await this.jobs.finish(job.userId, job.id, job.leaseToken, { skipped: true, reason: "agenda_inactive" });
         }
         await holdsLease();
+        // The claim, not the job, says whether this re-check is still wanted: one that ended while the
+        // agenda was stopped is not run for the old episode because the agenda was started again.
+        if (await this.service.verificationPending?.(job.userId, job.payload.episodeId, job.payload.verificationId) === false) {
+          return await this.jobs.finish(job.userId, job.id, job.leaseToken, { skipped: true, reason: "verification_settled" });
+        }
         await this.service.assertEpisodeContinuation?.(job.userId, job.payload.episodeId);
         const verification = await this.dispatchVerification({ ...job.payload, userId: job.userId, projectId: job.projectId, dispatchId: autopilotAttemptDispatchId(job.payload.verificationId, job.attempts), assertDispatchAllowed });
         verificationDispatched = true;
@@ -187,6 +195,10 @@ export class AutopilotWorker {
       }
       if (job.payload?.action !== "cancel" && !dispatched && !verificationDispatched && ["autopilot_paused", "autopilot_stopped"].includes(code)) {
         await holdsLease();
+        if (job.kind === "verify") {
+          await this.service.endVerificationsOfAgenda?.(job.userId, job.payload.episodeId,
+            code === "autopilot_stopped" ? "agenda_stopped" : "agenda_paused", job.payload.verificationId).catch(() => {});
+        }
         await this.jobs.finish(job.userId, job.id, job.leaseToken, { skipped: true, reason: "agenda_inactive" });
         return null;
       }
