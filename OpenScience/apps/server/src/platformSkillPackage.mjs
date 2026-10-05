@@ -11,7 +11,7 @@ function splitFrontmatter(text) {
 }
 /** One line: control characters and runs of whitespace become one space. @param {unknown} value */
 function collapse(value) {
-  return String(value ?? '').replace(/[\u0000-\u001f\u007f\u2028\u2029]+/g, ' ').replace(/\s+/g, ' ').trim();
+  return String(value ?? '').replace(/[\p{Cc}\u2028\u2029]+/gu, ' ').replace(/\s+/g, ' ').trim();
 }
 /**
  * The SKILL.md every tenant's runtime reads: front matter the platform writes — its own native name and one

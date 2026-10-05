@@ -37,7 +37,7 @@ export async function verifyPlatformSkillGeneration(config,reference){
 }
 /** Immutable shared methods only; researcher data/results never enter this store.
  * Active selection is copied to a generation at runtime launch and never changed during a run.
- * @param {any} config @param {{listActive?:()=>Promise<any[]>}} [dependencies] */
+ * @param {any} config @param {{listActive?:()=>Promise<any[]>,report?:(code:string)=>void}} [dependencies] */
 export function createPlatformSkillSupply(config,{listActive,report=()=>{}}={}){
   const root=path.join(config.dataDir,'.openscience','platform-skills'),activeFile=path.join(root,'active.json');
   let mutation=Promise.resolve();
