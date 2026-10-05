@@ -42,6 +42,22 @@ test("a run the dispatch route records is the kernel's whatever dispatch id or f
       assert.equal(usagePurposeOfRun(run), "kernel", `${run.dispatchId} must not choose a purpose`);
       assert.equal(isChargeableResearchRun(run), true, `${run.dispatchId} is still the researcher's to pay`);
     }
+    // Nor can the public route name a capability whose runs are the platform's: an internal capability is no line a caller may choose.
+    for (const [index, line] of ["tool-builder", "evolution-scout", "method-distillation", "method-relations", "source-understanding"].entries()) {
+      const session = `ses_internal_${index}`;
+      assert.equal((await fetch(`${base}/api/research-sessions/${session}`, { method: "PUT", headers, body: JSON.stringify({ mode: "open-domain" }) })).status, 200);
+      const refused = await fetch(`${base}/api/agent-runs/dispatch`, { method: "POST", headers, body: JSON.stringify({ sessionId: session, dispatchId: `internal_${index}`, text: "x", line }) });
+      assert.equal(refused.status, 400, `line ${line}`);
+    }
+    // A conversation bound to one of them is refused too, wherever the refusal falls: binding it, or the dispatch.
+    for (const agentId of ["tool-builder", "method-distillation", "source-understanding"]) {
+      const session = `ses_bound_${agentId}`;
+      const bound = await fetch(`${base}/api/research-sessions/${session}`, { method: "PUT", headers, body: JSON.stringify({ mode: "specialist", agentId }) });
+      if (bound.status < 400) {
+        const refused = await fetch(`${base}/api/agent-runs/dispatch`, { method: "POST", headers, body: JSON.stringify({ sessionId: session, dispatchId: `bound_${agentId}`, text: "x" }) });
+        assert.ok(refused.status >= 400, `a session bound to ${agentId} must not dispatch (${refused.status})`);
+      }
+    }
     const claimedAutomated = ledger.find((run) => run.automated === true);
     assert.ok(claimedAutomated, "the harness flag is still recorded");
     assert.equal(isResearcherOwnedWork(claimedAutomated), false, "a harness teaches nothing");
