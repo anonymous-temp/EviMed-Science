@@ -2,6 +2,7 @@ import { evidenceCardIdentifiers, verifyEvidenceCardClaims } from "@evimed/domai
 import { HttpError } from "./security.mjs";
 import { productId } from "./productPersistence.mjs";
 import { recordSubscriptionEvent } from "./capsuleShareMetrics.mjs";
+import { migrateEvidenceZones } from "./evidenceZonePersistence.mjs";
 
 /**
  * Subscribing a project to an evidence zone, and reading the state of the cards and frontier items that memories name
@@ -72,6 +73,7 @@ const matchedAtLeast = (/** @type {readonly string[]} */ terms) => (terms.length
 const columnCache = new WeakMap();
 /** The columns of `evidence_cards` this build may read when they exist. @param {any} database @returns {Promise<Set<string>>} */
 async function evidenceCardColumns(database) {
+  await migrateEvidenceZones(database);
   const cached = columnCache.get(database);
   if (cached) { const known = await cached; if (known.has("currency") || known.has("__absent__")) return known; }
   const read = (async () => {
@@ -157,6 +159,7 @@ export class EvidenceZoneSubscriptions {
    */
   async #readableZone(zoneId) {
     if (!ZONE_ID.test(zoneId)) return null;
+    await migrateEvidenceZones(this.database);
     const row = (await this.database.query(`SELECT z.id,z.title,z.kind,(SELECT count(*) FROM evimed_frontier.evidence_cards c WHERE c.zone_id=z.id AND c.state='published')::integer AS cards
       FROM evimed_frontier.evidence_zones z WHERE z.id=$1 AND z.state='published'`, [zoneId])).rows[0];
     return row ? { id: String(row.id), title: String(row.title), kind: String(row.kind), cards: Number(row.cards) } : null;
@@ -225,6 +228,7 @@ export class EvidenceZoneSubscriptions {
   async #zonesById(ids) {
     const valid = ids.filter((id) => ZONE_ID.test(id));
     if (!valid.length) return new Map();
+    await migrateEvidenceZones(this.database);
     const rows = (await this.database.query(`SELECT z.id,z.title,z.kind,z.state,(SELECT count(*) FROM evimed_frontier.evidence_cards c WHERE c.zone_id=z.id AND c.state='published')::integer AS cards
       FROM evimed_frontier.evidence_zones z WHERE z.id=ANY($1::text[])`, [valid])).rows;
     return new Map(rows.map((/** @type {any} */ row) => [String(row.id), { id: String(row.id), title: String(row.title), kind: String(row.kind), cards: Number(row.cards), state: String(row.state) }]));

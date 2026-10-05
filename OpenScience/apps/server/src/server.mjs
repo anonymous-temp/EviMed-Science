@@ -165,6 +165,11 @@ import { MaintenanceService } from "./maintenanceService.mjs";
 import { CapsuleService } from "./capsuleService.mjs";
 import { CapsuleIdentityStore } from "./capsuleIdentityStore.mjs";
 import { CapsuleTransferService } from "./capsuleTransferService.mjs";
+import { CapsuleShareLinks } from "./capsuleShareLinks.mjs";
+import { CapsuleSharing } from "./capsuleSharing.mjs";
+import { capsuleShareMetricFamilies } from "./capsuleShareMetrics.mjs";
+import { createGuestInfluence } from "./capsuleShareTrust.mjs";
+import { EvidenceZoneSubscriptions, createEvidenceLinkStates } from "./evidenceZoneSubscription.mjs";
 import { createCapsuleRoutes } from "./capsuleRoutes.mjs";
 import { SourceService, assertKnowledgeBaseFormat, projectSourceManifestRecord, sourceIndexDocument } from "./sourceService.mjs";
 import { verifySourceMetadata } from "./sourceMetadata.mjs";
@@ -1418,7 +1423,19 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const capsuleTransferService = productDocuments ? new CapsuleTransferService({ documents: productDocuments, capsules: capsuleService, identities: new CapsuleIdentityStore(config.dataDir), dataDir: config.dataDir, scanner: capsuleScanner,
     privateAccountCleanup: userId => removePrivateExtensionFiles(config.dataDir, userId),
   }) : null;
+  // Sharing a capsule with other accounts of this deployment, in the app (plan §7, F17): share links, deliveries to named accounts, and
+  // taking either back. Needs the control-plane database and the transfer service; absent either, the routes answer 503 by name.
+  const capsuleShareLinks = productDatabase && capsuleTransferService
+    ? new CapsuleShareLinks({ database: productDatabase, ttlDays: config.capsuleShareLinkTtlDays, maxUses: config.capsuleShareLinkMaxUses }) : null;
+  const capsuleSharing = capsuleShareLinks && notificationService
+    ? new CapsuleSharing({ database: productDatabase, transfers: capsuleTransferService, links: capsuleShareLinks, notifications: notificationService,
+      perDay: config.capsuleShareDeliveriesPerDay, report: code => { void securityAudit(config, "capsule.share", "failed", { code }).catch(() => {}); } }) : null;
+  // A project's evidence-zone subscriptions (F18): off with the switch, and read only for the project that subscribed.
+  const zoneSubscriptions = productDatabase && productDocuments
+    ? new EvidenceZoneSubscriptions({ database: productDatabase, documents: productDocuments, enabled: config.evidenceZoneSubscriptionEnabled,
+      maxPerProject: config.evidenceZoneSubscriptionMaxPerProject, maxItems: config.evidenceZoneSubscriptionMaxItems }) : null;
   const capsuleRoutes = createCapsuleRoutes({ store, service: capsuleService, transferService: capsuleTransferService, maxJsonBytes: config.maxJsonBytes,
+    sharing: capsuleSharing, links: capsuleShareLinks, subscriptions: zoneSubscriptions, isOperator: user => config.operatorUsers.includes(user.id),
     // A 「试用一次」 conversation is marked in its own memory state.
     trials: researchMemory.configured ? { mark: (userId, projectId, sessionId, capsuleId) => researchMemory.updateSessionState(userId, projectId, sessionId,
       { trialCapsuleId: capsuleId }) } : null,
@@ -2040,6 +2057,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // results that rest on it, each labelled (N15). And the one standing authorization a recheck may use: the running agenda
   // whose episode produced the result. A paused or not-started agenda is none, and nothing here asks for another approval.
   const knowledgeChange = new KnowledgeChangeService({ memory: researchMemory, methods: learningService, sourceChanges,
+    evidence: productDatabase ? createEvidenceLinkStates(productDatabase) : null,
     report: code => { void securityAudit(config, "knowledge.change", "failed", { code }).catch(() => {}); } });
   const resultImpacts = resultProvenance ? new ResultImpactService({ documents: productDocuments, results: resultProvenance,
     autopilot: autopilotService, notifications: notificationService, knowledge: knowledgeChange, sourceChanges,
@@ -2131,6 +2149,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   let consolidationScheduleTimer = null;
   let consolidationScheduleRun = null;
   let capsuleCleanupTimer = null;
+  /** The hourly look at the cards and frontier items memories name (knowledgeChange.mjs `sweepEvidenceLinks`, F19). */
+  let evidenceLinkTimer = null;
   let capsuleCleanupRun = null;
   const retryCapsuleCleanup = () => {
     if (!capsuleTransferService) return Promise.resolve();
@@ -3400,6 +3420,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     });
     learningTriggers = new LearningTriggers({
       jobs: productJobs, agentRuns, memory: researchMemory,
+      // A run that drew on a received pack no other account has vouched for still learns for its own account and is kept from
+      // every platform-level consumer (capsuleShareTrust.mjs, plan §7).
+      guestInfluence: productDatabase ? createGuestInfluence({ database: productDatabase, documents: productDocuments,
+        minAccounts: config.capsuleShareCorroborationMinAccounts, keptDays: config.capsuleShareCorroborationKeptDays }) : null,
       // A conversation trying someone else's capsule teaches the loop nothing.
       sessionState: researchMemory.configured
         ? (userId, projectId, sessionId) => researchMemory.sessionState(userId, projectId, sessionId) : null,
@@ -3877,6 +3901,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       reportFailure: code => process.stderr.write(`evaluation isolation: ${code}\n`) })
     : null;
   const capsuleGatewayHandler = createCapsuleGatewayHandler({ runtimeManager, store, service: capsuleService, memorySubstrate, handbooks: nativeHandbookContext, evaluationIsolation,
+    subscriptions: zoneSubscriptions?.enabled ? zoneSubscriptions : null,
     // Whose conversation a runtime's recall is (capsuleGateway.mjs): the
     // project's running runs, each conversation's own state, and the run
     // ledger line that records what it was handed.
@@ -6667,6 +6692,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (worker) worker.reconcileTimer = null;
     }
     if (capsuleCleanupTimer) clearInterval(capsuleCleanupTimer);
+    if (evidenceLinkTimer) clearInterval(evidenceLinkTimer);
     if (autopilotScheduleTimer) clearInterval(autopilotScheduleTimer);
     if (consolidationScheduleTimer) clearInterval(consolidationScheduleTimer);
     if (notificationTimer) clearInterval(notificationTimer);
@@ -6674,6 +6700,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     if (sessionPurgeTimer) clearInterval(sessionPurgeTimer);
     if (idleRuntimeSweepTimer) clearInterval(idleRuntimeSweepTimer);
     capsuleCleanupTimer = null;
+    evidenceLinkTimer = null;
     autopilotScheduleTimer = null;
     consolidationScheduleTimer = null;
     notificationTimer = null;
@@ -6711,6 +6738,12 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (capsuleTransferService && !capsuleCleanupTimer) {
         capsuleCleanupTimer = setInterval(() => { void retryCapsuleCleanup(); }, 30_000);
         capsuleCleanupTimer.unref();
+      }
+      // A memory that names an evidence card or a frontier item the zone or the feed has taken back is labelled, once an hour and only
+      // while the frontier is on: the pass reads recorded links and the evidence tables, writes labels and nothing else.
+      if (config.frontierEnabled && researchMemory.configured && !evidenceLinkTimer) {
+        evidenceLinkTimer = setInterval(() => { void knowledgeChange.sweepEvidenceLinks().catch(() => {}); }, 3_600_000);
+        evidenceLinkTimer.unref();
       }
       await scheduleAutopilot();
       if (maintenanceService && !maintenanceService.claimingAllowed()) { pauseRecurringWork(); return; }
@@ -6893,6 +6926,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       evolution?.worker.interrupt();
       for (const controller of evaluationAbortControllers) controller.abort();
       if (capsuleCleanupTimer) clearInterval(capsuleCleanupTimer);
+      if (evidenceLinkTimer) clearInterval(evidenceLinkTimer);
       await capsuleCleanupRun;
       await pluginApplyWorker?.close();
       await personalSkillWorker?.close();
@@ -8104,6 +8138,9 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
   // for the zone upkeep this process ran. No reading is taken while the programme is off.
   const evidenceReading = evidenceBudget?.enabled ? await evidenceBudget.budget().catch(() => null) : null;
   for (const family of evidenceBudgetMetricFamilies(config, evidenceBudget, evidenceReading, frontier?.evidenceEditorial?.status().counters ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
+  // Sharing memory inside the platform (capsuleShareMetrics.mjs): shares, imports, trials, declines, take-downs, what the write-side
+  // defences refused, zone subscriptions, and what learning did with runs that used a guest capsule.
+  for (const family of capsuleShareMetricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
   // The evidence card's guardrails (evidenceCardMetrics.mjs): cards without a producer (must be 0), writes refused by
   // origin, cards refused for a simulated value. Read from the zone service only while the frontier is composed.
   for (const family of evidenceCardMetricFamilies(frontier ? await frontier.evidenceZones.metrics().catch(() => null) : null)) addMetric(lines, family.name, family.help, family.type, family.series);

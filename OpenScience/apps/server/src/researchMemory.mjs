@@ -1629,6 +1629,21 @@ export class ResearchMemoryStore {
   }
 
   /**
+   * The evidence cards and frontier items memories name, one row per link, with the state each holds — what
+   * `KnowledgeChangeService.sweepEvidenceLinks` looks the current state up for (flywheel F19). Links not yet moved first, so a
+   * bounded pass reaches the ones nobody has looked at before it revisits the ones it has.
+   * @param {{ userId?: string | null, limit?: number }} [options]
+   * @returns {Promise<{ userId: string, type: string, id: string, state: string }[]>}
+   */
+  async linkedEvidenceSources({ userId = null, limit = 500 } = {}) {
+    const result = await this.#query(`SELECT user_id, source_type, source_id, state FROM evimed_memory.record_sources
+      WHERE source_type IN ('evidence_card','frontier_item') AND ($1::text IS NULL OR user_id=$1)
+      ORDER BY state_at NULLS FIRST, user_id, record_id LIMIT $2`,
+    [userId == null ? null : assertUserId(userId), Math.max(1, Math.min(5000, Number(limit) || 500))]);
+    return result.rows.map((/** @type {any} */ row) => ({ userId: String(row.user_id), type: String(row.source_type), id: String(row.source_id), state: String(row.state) }));
+  }
+
+  /**
    * Say what a check found about a source, on every memory that rests on it:
    * `retracted`, `changed`, `expired`, `current` again, or `unknown` when the
    * check could not answer — which is recorded as unknown and not as clean.
