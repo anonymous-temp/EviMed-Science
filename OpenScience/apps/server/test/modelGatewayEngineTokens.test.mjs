@@ -159,7 +159,7 @@ function ledger(events) {
 }
 
 async function gatewayCall(t, { cfg = config(), token, path = "/internal/model/v1/chat/completions", body, upstreamBodies = [],
-  attributeRun = async () => { throw new Error("an engine call must not re-guess its run"); }, events = [] } = {}) {
+  attributeRun = async () => { throw new Error("an engine call must not re-guess its run"); }, events = [], usageLedger = null } = {}) {
   const upstream = await listen(t, async (req, res) => {
     const chunks = [];
     for await (const chunk of req) chunks.push(chunk);
@@ -171,7 +171,7 @@ async function gatewayCall(t, { cfg = config(), token, path = "/internal/model/v
       usage: { prompt_tokens: 40, completion_tokens: 12, prompt_cache_hit_tokens: 10, prompt_cache_miss_tokens: 30 } }));
   });
   const base = await listen(t, createModelGatewayHandler({ ...cfg, deepseekBaseUrl: upstream }, runtimeManager(), {
-    usageLedger: ledger(events), attributeRun, runPurpose: async () => "kernel",
+    usageLedger: usageLedger ?? ledger(events), attributeRun, runPurpose: async () => "kernel",
   }));
   return fetch(`${base}${path}`, {
     method: "POST",
@@ -286,4 +286,26 @@ test("admission freezes the validated session policy in each job and rejects unr
   const response = await requestToken(t, { body: { v: 1, kind: "peer-review", jobId,
     executionContext: { sessionId: "other-project", reasoningEffort: "max" } } });
   assert.equal(response.status, 400);
+});
+
+test('trusted operator evaluation engine calls share evolution purpose and daily cap without runtime-reported purpose', async t => {
+  const cfg = config({ evolutionEnabled: true, operatorUsers: ['user-1'], evolutionDailyBudgetCny: 50 });
+  for (const projectId of ['eval-paper-budget', 'evimed-evolution']) {
+    const events = [];
+    const response = await gatewayCall(t, { cfg, token: engineToken({ projectId, limits: { dailyLimit: 100, runLimit: 1 } }), events });
+    assert.equal(response.status, 200);
+    assert.equal(events[0].input.purpose, 'evolution');
+    assert.equal(events[0].input.dailyLimit, 50);
+    assert.equal(events[0].input.weeklyLimit, 0);
+    assert.equal(events[0].input.runLimit, 1);
+  }
+  for (const overrides of [{ projectId: 'ordinary' }, { userId: 'other', projectId: 'eval-paper-budget' }]) {
+    const events = [];
+    await gatewayCall(t, { cfg, token: engineToken(overrides), events });
+    assert.equal(events[0].input.purpose, 'engine');
+  }
+  const upstreamBodies = [];
+  const response = await gatewayCall(t, { cfg, token: engineToken({ projectId: 'eval-paper-budget' }), upstreamBodies, usageLedger: { reserveModel: async input => { assert.equal(input.purpose, 'evolution'); assert.equal(input.dailyLimit, 50); throw Object.assign(new Error('Shared daily budget exhausted'), { status: 402, code: 'usage_budget_exceeded' }); } } });
+  assert.equal(response.status, 402);
+  assert.equal(upstreamBodies.length, 0);
 });

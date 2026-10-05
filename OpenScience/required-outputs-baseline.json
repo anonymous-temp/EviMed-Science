@@ -12,7 +12,9 @@
     "geo-content-pack": "9 required on 2026-08-30 (the measurement ledger, the monitor table, the content-block pack and its companions); 2 on 2026-09-25, when geo-content 2.0.0 stopped measuring — measurement moved to the platform's own queue (build spec 2026-09-25 §0.3) — and the pack became layered articles: geo-content.md (the reader's index) and articles.json (the index the gate reads the articles through). Every 1.x file is gone, geo-probe-log.jsonl stays optional for an ad-hoc probe.",
     "geo-insight-pack": "3 required on 2026-09-25, the opening contract of the 「循证 GEO」 insight step: the reader's report, the claim library and the question map.",
     "geo-strategy-pack": "2 required on 2026-09-25, the opening contract of the 「循证 GEO」 strategy step: the reader's report and strategy.json.",
-    "geo-proposal-pack": "2 required on 2026-09-25, the opening contract of the 「循证 GEO」 client package: the cover and the package index. The office files are binary and listed in the index, never declared as outputs: the gate reads text."
+    "geo-proposal-pack": "2 required on 2026-09-25, the opening contract of the 「循证 GEO」 client package: the cover and the package index. The office files are binary and listed in the index, never declared as outputs: the gate reads text.",
+    "evolution-research-card": "1 required on 2026-10-04, opening internal development artifact under the approved evolution plan; advisory contract validation never withholds researcher deliveries.",
+    "evolution-tool-candidate": "1 required on 2026-10-04, opening internal development artifact under the approved evolution plan; advisory contract validation never withholds researcher deliveries."
   },
   "contracts": {
     "adr-analysis-report": {
@@ -689,6 +691,26 @@
         {
           "path": "gene-expression-receipt.json",
           "required": false,
+          "addedOn": "2026-10-04"
+        }
+      ]
+    },
+    "evolution-research-card": {
+      "requiredCount": 1,
+      "outputs": [
+        {
+          "path": "research-card.json",
+          "required": true,
+          "addedOn": "2026-10-04"
+        }
+      ]
+    },
+    "evolution-tool-candidate": {
+      "requiredCount": 1,
+      "outputs": [
+        {
+          "path": "tool-candidate.json",
+          "required": true,
           "addedOn": "2026-10-04"
         }
       ]

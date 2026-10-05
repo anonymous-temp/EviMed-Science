@@ -1,0 +1,52 @@
+{
+  "schemaVersion": 1,
+  "window": {
+    "from": "2024-10-04",
+    "to": "2026-10-04"
+  },
+  "countMethod": "Europe PMC exact query counts; published MED only; not a deduplicated systematic review; validation tutorials are older and excluded from demand count",
+  "counts": [
+    {
+      "query": "\"cohort state-transition\" AND \"cost-effectiveness\" AND SRC:MED AND FIRST_PDATE:[2024-10-04 TO 2026-10-04]",
+      "sourceUrl": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=%22cohort+state-transition%22+AND+%22cost-effectiveness%22+AND+SRC%3AMED+AND+FIRST_PDATE%3A%5B2024-10-04+TO+2026-10-04%5D&format=json&pageSize=2&resultType=lite",
+      "at": "2026-10-04T15:12:02.802Z",
+      "total": 68,
+      "scope": "specific_cohort_state_transition_demand",
+      "sample": [
+        {
+          "pmid": "42447986",
+          "doi": "10.1016/j.jval.2026.06.014",
+          "date": "2026-07-14",
+          "sourceUrl": "https://europepmc.org/article/MED/42447986"
+        },
+        {
+          "pmid": "42230467",
+          "doi": "10.1007/s40273-026-01630-3",
+          "date": "2026-06-02",
+          "sourceUrl": "https://europepmc.org/article/MED/42230467"
+        }
+      ]
+    },
+    {
+      "query": "Markov AND \"cost-effectiveness\" AND SRC:MED AND FIRST_PDATE:[2024-10-04 TO 2026-10-04]",
+      "sourceUrl": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=Markov+AND+%22cost-effectiveness%22+AND+SRC%3AMED+AND+FIRST_PDATE%3A%5B2024-10-04+TO+2026-10-04%5D&format=json&pageSize=2&resultType=lite",
+      "at": "2026-10-04T15:12:03.175Z",
+      "total": 3671,
+      "scope": "broad_demand_includes_noncohort_Markov_applications",
+      "sample": [
+        {
+          "pmid": "42810193",
+          "doi": "10.1016/j.vhri.2026.102131",
+          "date": "2026-09-29",
+          "sourceUrl": "https://europepmc.org/article/MED/42810193"
+        },
+        {
+          "pmid": "42824885",
+          "doi": "10.1080/20523211.2026.2735077",
+          "date": "2026-09-28",
+          "sourceUrl": "https://europepmc.org/article/MED/42824885"
+        }
+      ]
+    }
+  ]
+}

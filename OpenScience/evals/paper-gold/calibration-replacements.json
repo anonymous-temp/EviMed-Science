@@ -1,0 +1,30 @@
+{
+  "schemaVersion": 1,
+  "status": "primary_preserved_candidate_not_independently_qa_admitted",
+  "cases": [
+    {
+      "id": "meta-31679516",
+      "replacesId": "meta-41344873",
+      "track": "meta",
+      "doi": "10.1186/s12916-019-1428-0",
+      "pmid": "31679516",
+      "pmcid": "PMC6827248",
+      "sourceUrl": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC6827248/fullTextXML",
+      "hiddenHash": "c0d86d6ac2ca198b4f53dbf07efe441c74508dc8b1e14a616d50c913c501e1d5",
+      "fullTextStatus": "preserved",
+      "numericGold": "unavailable_pending_verified_extraction"
+    },
+    {
+      "id": "mr-28855160",
+      "replacesId": "mr-41428133",
+      "track": "mr",
+      "doi": "10.1136/bmj.j3542",
+      "pmid": "28855160",
+      "pmcid": "PMC5594424",
+      "sourceUrl": "https://www.ebi.ac.uk/europepmc/webservices/rest/PMC5594424/fullTextXML",
+      "hiddenHash": "f38bf76a2e4bb2358aa07dda183092122291b17281f17b73fa56e7152a6d1255",
+      "fullTextStatus": "preserved",
+      "numericGold": "unavailable_pending_verified_extraction"
+    }
+  ]
+}

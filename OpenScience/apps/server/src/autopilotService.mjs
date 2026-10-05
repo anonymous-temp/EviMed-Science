@@ -408,9 +408,9 @@ function continuationBindingKey(value) {
 /** Persistent proactive-research policy and decision ledger. Episodes remain
  * ordinary ProductJobs and are dispatched through the ordinary AgentRun path. */
 export class AutopilotService {
-  /** @param {{documents:any,jobs:any,usage?:any,accountCaps?:()=>Record<string,any>,notifications?:any,capsules?:any,planner?:{decide:(input:any)=>Promise<any>}|null,authorizeContinuation?:((userId:string,projectId:string,binding:any)=>Promise<void>)|null,now?:()=>Date,id?:(prefix:string)=>string}} dependencies */
+  /** @param {{documents:any,jobs:any,usage?:any,accountCaps?:()=>Record<string,any>,notifications?:any,capsules?:any,planner?:{decide:(input:any)=>Promise<any>}|null,evolution?:any,authorizeContinuation?:((userId:string,projectId:string,binding:any)=>Promise<void>)|null,now?:()=>Date,id?:(prefix:string)=>string}} dependencies */
   constructor({ documents, jobs, usage = null, accountCaps = () => ({}), notifications = null, capsules = null, planner = null,
-    authorizeContinuation = null, now = () => new Date(), id = (prefix) => `${prefix}${randomUUID()}` }) {
+    evolution = null, authorizeContinuation = null, now = () => new Date(), id = (prefix) => `${prefix}${randomUUID()}` }) {
     if (!documents || !jobs) throw new TypeError("AutopilotService requires product documents and jobs.");
     this.documents = documents;
     this.jobs = jobs;
@@ -421,6 +421,7 @@ export class AutopilotService {
     this.capsules = capsules;
     /** The one model decision before each episode; without it the date rotation chooses (`chooseNextAction`). */
     this.planner = planner;
+    this.evolution = evolution;
     this.now = now;
     this.id = id;
     this.authorizeContinuation = authorizeContinuation;
@@ -1207,7 +1208,7 @@ export class AutopilotService {
     this.assertNotArchived(agenda);
     this.revision(agenda, input.expectedRevision);
     return this.documents.put(userId, "agenda", agenda.id, {
-      ...agenda.payload, enabled: true, status: "active", pauseReason: null, userSignal: null,
+      ...agenda.payload, enabled: true, status: "active", pauseReason: null, userSignal: null, evolutionWaiting: null,
       // A researcher's start is a fresh authorization: the pauses automatic rules
       // put on task types and the stop the planner chose are lifted with it.
       consecutiveFailures: 0, taskTypeState: {}, plannerStop: null,
@@ -1761,13 +1762,16 @@ export class AutopilotService {
     // one stop their own message can bring, and only the model reads it as such.
     const pauseAllowed = trigger === "follow-up" && typeof note === "string" && note.trim().length > 0;
     try {
+      const availableTools = await this.evolution?.availableTools(agenda) ?? [];
       const decision = await this.planner.decide({
         userId, projectId: agenda.projectId, episodeId, eligible, stopAllowed, pauseAllowed,
-        context: buildPlannerContext({ agenda, progress, eligible, date, trigger, note, reducedPriority: reduced, stopAllowed, pauseAllowed }),
+        context: buildPlannerContext({ agenda, progress, eligible, date, trigger, note, reducedPriority: reduced, stopAllowed, pauseAllowed,
+          availableTools, evolutionEnabled: Boolean(this.evolution) }),
         envelopeCny: Number.isFinite(envelopeCny) ? envelopeCny : 0,
       });
       return decision.action === "stop"
-        ? { ...base, source: "model", model: decision.model, action: "stop", stopKind: decision.stopKind, reason: decision.reason }
+        ? { ...base, source: "model", model: decision.model, action: "stop", stopKind: decision.stopKind, reason: decision.reason,
+          ...(decision.resourceNeed ? { resourceNeed: decision.resourceNeed } : {}) }
         : { ...base, source: "model", model: decision.model, action: "run", taskType: decision.taskType, focus: decision.focus, reason: decision.reason };
     } catch (error) {
       // A decision that cannot be had never holds the research back; the code is
@@ -1800,6 +1804,7 @@ export class AutopilotService {
         const messages = current.payload.messages ?? [];
         await this.documents.put(userId, "agenda", current.id, {
           ...current.payload, enabled: false, status: "paused", pauseReason: selection.reason, plannerStop, updatedAt: at,
+          ...(selection.resourceNeed ? { evolutionWaiting: { ...selection.resourceNeed, sourceEpisodeId: episodeId } } : {}),
           ...(message && !messages.some((/** @type {any} */ item) => item.requestId === message.requestId)
             ? { messages: [...messages, { ...message, runEpisodeId: null, outcome: "paused", at }].slice(-20) } : {}),
         }, { expectedRevision: current.revision, projectId: current.projectId });
@@ -1815,7 +1820,25 @@ export class AutopilotService {
       body: String(selection.reason).slice(0, 1000), projectId: agenda.projectId,
       source: { type: "system", id: `autopilot-stop-${agenda.id}` }, idempotencyKey: `autopilot-stop:${agenda.id}:${episodeId}`,
     }).catch(() => null);
+    if (selection.resourceNeed && this.evolution) await this.evolution.plannerStopped({ userId, projectId: agenda.projectId,
+      agendaId: agenda.id, episodeId, resourceNeed: selection.resourceNeed });
     return { episode: null, job: null, stopped: plannerStop };
+  }
+
+  /** Resume only the exact resource wait, never a later researcher pause or stop. @param {any} input */
+  async wakeForEvolution({ userId, agendaId, sourceEpisodeId, event }) {
+    const requestId = `evolution-${hash(String(event.id ?? event.toolId)).slice(0, 32)}`;
+    const agenda = await this.get(userId, agendaId);
+    if (agenda.payload.archivedAt || agenda.payload.status === "stopped") return { resumed: false };
+    if (agenda.payload.lastEvolutionWake !== requestId) {
+      if (agenda.payload.enabled || agenda.payload.status !== "paused" || agenda.payload.plannerStop?.kind !== "needs_input"
+        || agenda.payload.evolutionWaiting?.sourceEpisodeId !== sourceEpisodeId) return { resumed: false };
+      await this.documents.put(userId, "agenda", agenda.id, { ...agenda.payload, enabled: true, status: "active",
+        pauseReason: null, plannerStop: null, evolutionWaiting: null, lastEvolutionWake: requestId,
+        lastStartedAt: this.now().toISOString(), updatedAt: this.now().toISOString() },
+      { expectedRevision: agenda.revision, projectId: agenda.projectId });
+    }
+    return { resumed: true, ...await this.runNow(userId, agendaId, { requestId }) };
   }
 
   /** @param {string} userId @param {string} agendaId @param {Record<string,any>} input */

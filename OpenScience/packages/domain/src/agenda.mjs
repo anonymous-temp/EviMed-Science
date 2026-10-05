@@ -270,6 +270,15 @@ export function tierRaiseAllowed(input) {
 }
 
 /**
+ * The caps a new agenda is offered before its researcher edits them, in CNY:
+ * what the task form shows, and what an agenda created on a researcher's behalf
+ * (an adopted research opportunity) starts with. Ceilings, not spend — an
+ * episode costs what its model calls cost — and an agenda created with them is
+ * not running until its researcher starts it.
+ */
+export const AGENDA_DEFAULT_BUDGETS = Object.freeze({ maxEpisodeCny: 100, dailyBudgetCny: 500, weeklyBudgetCny: 3000 })
+
+/**
  * The stopping rules.
  *
  * Every one of them exists because unattended work fails quietly: a direction

@@ -76,8 +76,8 @@ export class ProductJobs {
   }
 
   /** Worker-only operation. Never expose cross-account claiming as a customer API.
-   * @param {string[]} kinds @param {string} workerId @param {{ leaseMs?: number, admission?: (client:any) => Promise<boolean> }} options */
-  async claim(kinds, workerId, { leaseMs = 60_000, admission = null } = {}) {
+   * @param {string[]} kinds @param {string} workerId @param {{ leaseMs?: number, admission?: (client:any) => Promise<boolean>, candidateAdmission?: (client:any, candidate:any) => Promise<boolean> }} options */
+  async claim(kinds, workerId, { leaseMs = 60_000, admission = null, candidateAdmission = null } = {}) {
     if (!Array.isArray(kinds) || !kinds.length || kinds.length > PRODUCT_JOB_KINDS.length) throw new HttpError(400, "product_kind_invalid", "A worker must declare supported job kinds.");
     const allowed = kinds.map((kind) => productKind(kind, PRODUCT_JOB_KINDS));
     productInteger(leaseMs, 1000, 3_600_000);
@@ -94,6 +94,7 @@ export class ProductJobs {
         error='{"code":"product_job_attempts_exhausted","message":"The job exhausted its retry limit."}'::jsonb
         FROM exhausted e WHERE j.id=e.id`, [allowed]);
       // Separate ranges prevent a mixed OR plus ORDER BY from walking every future job.
+      if (candidateAdmission) await client.query('SAVEPOINT candidate_admission');
       const result = await client.query(`WITH queued AS MATERIALIZED (
         SELECT id,run_after AS due FROM evimed_product.jobs WHERE kind=ANY($1::text[]) AND attempts<max_attempts
         AND status='queued' AND run_after<=statement_timestamp()
@@ -107,7 +108,14 @@ export class ProductJobs {
       ) UPDATE evimed_product.jobs j SET status='running',worker_id=$2,lease_token=$3,
         lease_expires_at=clock_timestamp()+($4::integer*interval '1 millisecond'),attempts=attempts+1,updated_at=clock_timestamp()
         FROM candidate c WHERE j.id=c.id RETURNING j.*`, [allowed, workerId, randomUUID(), leaseMs]);
-      return job(result.rows[0]);
+      const claimed = job(result.rows[0]);
+      if (candidateAdmission) {
+        const accepted = !claimed || await candidateAdmission(client, claimed);
+        if (!accepted) await client.query('ROLLBACK TO SAVEPOINT candidate_admission');
+        await client.query('RELEASE SAVEPOINT candidate_admission');
+        if (!accepted) return null;
+      }
+      return claimed;
     });
   }
 

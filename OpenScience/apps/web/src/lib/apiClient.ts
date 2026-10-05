@@ -1349,6 +1349,7 @@ export interface WebMe {
    *  server decides from an id allowlist; a browser that flips this gains a
    *  menu entry, not access — every route behind it authorizes itself. */
   operator?: boolean;
+  evolutionEnabled?: boolean;
   project: WebProject;
   projects: WebProject[];
   csrfToken?: string;

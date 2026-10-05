@@ -212,6 +212,7 @@
       - !!js process.env.EVIMED_PRESET_SKILLS_DIR + '/community'
       # Exact selected personal revisions, mounted read-only outside the workspace.
       - !!js process.env.EVIMED_PERSONAL_SKILLS_DIR || '/opt/evimed/personal-skills'
+      - !!js process.env.EVIMED_PLATFORM_SKILLS_DIR || '/opt/evimed/platform-skills'
 - id: tool-skill
   name: '@deepseek-ai/dsh-tool-skill'
 

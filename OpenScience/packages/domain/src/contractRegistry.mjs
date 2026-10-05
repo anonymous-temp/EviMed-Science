@@ -868,6 +868,8 @@ const VALIDATORS = Object.freeze({
   'surveillance-diff': (input) => validateJsonShaped(input, { file: 'surveillance-diff.json', check: checkSurveillanceDiff }),
   'hypothesis-set': (input) => validateJsonShaped(input, { file: 'hypothesis-set.json', check: checkHypothesisSet }),
   'method-candidate': validateMethodCandidatePackage,
+  'evolution-research-card': (input) => validateEvolutionPackage(input, 'research-card.json', false),
+  'evolution-tool-candidate': (input) => validateEvolutionPackage(input, 'tool-candidate.json', true),
   'method-relations': validateMethodRelationsPackage,
 })
 
@@ -1602,4 +1604,36 @@ export function layeredIssues(issues) {
     advisory: issues.filter((item) => item.severity === 'advisory'),
     optional: issues.filter((item) => item.severity === 'optional'),
   }
+}
+
+/** Internal development artifacts: schema findings are advisory, never research-delivery vetoes.
+ * @param {GateInput} input @param {string} file @param {boolean} candidate @returns {GateVerdict} */
+function validateEvolutionPackage(input, file, candidate) {
+  const value = json(input, file)
+  /** @type {GateIssue[]} */
+  const issues = []
+  /** @param {string} message */
+  const finding = message => issues.push(issue('deliverable_rejected', `${file}: ${message}`, { path: file, check: 'structured-output', severity: 'advisory' }))
+  if (!isRecord(value)) finding('Expected a JSON object.')
+  else {
+    if (typeof value.id !== 'string' || !/^[A-Za-z0-9_-]{1,100}$/.test(value.id)) finding('A canonical candidate identity is required.')
+    if (!['E','P','M','U','X','T'].includes(String(value.track))) finding('A supported research track is required.')
+    if (!['skill','isolated-tool','engine-pr'].includes(String(value.publicationKind))) finding('A supported publication form is required.')
+    if (candidate && value.status === 'impossible') {
+      if (typeof value.reason !== 'string' || !value.reason.trim()) finding('Faithful impossibility must name what is missing.')
+    } else if (candidate) {
+      const inline = isRecord(value.files) ? value.files : {}
+      const references = isRecord(value.filePaths) ? value.filePaths : {}
+      const safePath = resource => typeof resource === 'string' && /^(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_.-]+$/.test(resource) && !resource.split('/').some(part => part === '.' || part === '..')
+      if ((value.files !== undefined && !isRecord(value.files)) || (value.filePaths !== undefined && !isRecord(value.filePaths)) || (!Object.keys(inline).length && !Object.keys(references).length)) finding('The candidate must carry reusable artifact files or delivered file references.')
+      for (const [name, artifactText] of Object.entries(inline)) if (!safePath(name) || typeof artifactText !== 'string' || /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u.test(artifactText)) finding('Artifact paths must be relative regular UTF-8 resources.')
+      for (const [name, reference] of Object.entries(references)) if (!safePath(name) || !safePath(reference) || Object.hasOwn(inline,name)) finding('Delivered artifact references must use safe relative paths and distinct artifact keys.')
+      if (value.publicationKind === 'isolated-tool' && !/^scripts\/[A-Za-z0-9_-]+\.py:[A-Za-z_][A-Za-z0-9_]*$/.test(String(value.entrypoint ?? ''))) finding('An isolated implementation must name its script and callable.')
+    } else {
+      if (typeof value.goal !== 'string' || !value.goal.trim()) finding('A development goal is required.')
+      if (!Array.isArray(value.developmentCases)) finding('Visible development cases must be listed separately.')
+    }
+    if (Object.hasOwn(value, 'hiddenCases') || Object.hasOwn(value, 'scoringRules') || Object.hasOwn(value, 'goldAnswers')) finding('Evaluator assets do not belong in a development artifact.')
+  }
+  return { ok: true, contractKind: input.contractKind, issues, metrics: {}, errorCode: null }
 }

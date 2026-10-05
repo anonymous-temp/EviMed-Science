@@ -28,7 +28,7 @@ const openCostWindowValues = new Set(Object.values(openCostWindows));
  *  would starve the feed. 「循证 GEO」's rows (`geo`) are the same: the
  *  platform parsing and judging measured answers on its own schedule, held by
  *  the module's own daily budget. Bound as a query parameter, never spliced. */
-export const UNCAPPED_USAGE_PURPOSES = Object.freeze(["engine", "frontier", "geo", "vcr"]);
+export const UNCAPPED_USAGE_PURPOSES = Object.freeze(["engine", "frontier", "geo", "vcr", "evolution"]);
 const placeholderPattern = /^\$[1-9][0-9]*$/;
 
 /**
@@ -328,8 +328,9 @@ export class UsageLedger {
         ${SPEND_WINDOW_SUMS},
         coalesce(sum(CASE WHEN run_id=$3 AND status='settled' THEN actual_cost
           WHEN run_id=$3 AND ${openCostPredicate(openCostWindows.week, "$2")} THEN ${OPEN_COST_VALUE} ELSE 0 END),0) AS run_committed
-        FROM evimed_usage.model_requests WHERE user_id=$1 AND purpose <> ALL($4::text[])`,
-      [values.userId, values.now, values.runId, [...UNCAPPED_USAGE_PURPOSES]]);
+        FROM evimed_usage.model_requests WHERE user_id=$1 AND
+        (CASE WHEN $5::boolean THEN purpose='evolution' ELSE purpose <> ALL($4::text[]) END)`,
+      [values.userId, values.now, values.runId, [...UNCAPPED_USAGE_PURPOSES], values.purpose === "evolution"]);
       const day = Number(totals.rows[0].day_settled) + Number(totals.rows[0].day_open);
       const week = Number(totals.rows[0].week_settled) + Number(totals.rows[0].week_open);
       const overDay = values.dailyLimit > 0 && day + values.estimatedCost > values.dailyLimit;

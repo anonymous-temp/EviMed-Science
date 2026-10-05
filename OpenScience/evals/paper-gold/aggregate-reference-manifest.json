@@ -1,0 +1,63 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+    {
+      "methodId": "diagnostic-posterior",
+      "id": "pulmonary-posterior",
+      "doi": "10.4103/picr.picr_41_18",
+      "pmid": "29862204",
+      "pmcid": "PMC5950618",
+      "title": "Understanding the properties of diagnostic tests - Part 2: Likelihood ratios.",
+      "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC5950618/",
+      "sourceHash": "c7cbeadecfa0c7565dfb72cc169ce48c968261804b5a4cae75aa361b9c8bc282",
+      "kind": "published_method_worked_example"
+    },
+    {
+      "methodId": "diagnostic-posterior",
+      "id": "ocular-rounded-odds",
+      "doi": "10.4103/0301-4738.49397",
+      "pmid": "19384017",
+      "pmcid": "PMC2683447",
+      "title": "Likelihood ratios: clinical application in day-to-day practice.",
+      "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC2683447/",
+      "sourceHash": "c04d205250d4c64ff228c6b7d7f3850228148059b5971ca4cb6d87e6612438b7",
+      "kind": "published_method_worked_example"
+    },
+    {
+      "methodId": "decision-net-benefit",
+      "id": "marker-net-benefit",
+      "doi": "10.1136/bmj.i6",
+      "pmid": "26810254",
+      "pmcid": "PMC4724785",
+      "title": "Net benefit approaches to the evaluation of prediction models, molecular markers, and diagnostic tests.",
+      "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4724785/",
+      "sourceHash": "3e223dbd66753e62fcf80d7696b77f8994a5114ca79cbbfd14fda9990f2deb60",
+      "kind": "published_method_worked_example"
+    },
+    {
+      "methodId": "decision-net-benefit",
+      "id": "baseline-net-benefit",
+      "doi": "10.1016/j.eururo.2018.08.038",
+      "pmid": "30241973",
+      "pmcid": "PMC6261531",
+      "title": "Reporting and Interpreting Decision Curve Analysis: A Guide for Investigators.",
+      "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC6261531/",
+      "sourceHash": "33679879c51c74ae02c51d2f92ed953364e2f6423a3940d63a5d0dfc5823c7b5",
+      "kind": "published_method_worked_example"
+    }
+  ],
+  "admittedCaseSets": [
+    {
+      "methodId": "diagnostic-posterior",
+      "sha256": "2f4f316a3ea1329d7d16c82cc062c79bf66b36fd47209d461d05ca78ecc52573",
+      "publishedReferenceCount": 2,
+      "verification": "Printed primary arithmetic independently reproduced with trusted R formulas; exact preserved input and rounding specifications apply. No candidate tool has yet been live evaluated."
+    },
+    {
+      "methodId": "decision-net-benefit",
+      "sha256": "309291abb4f3632eff708a1e53e23e12e506c8c30ad05f3d163d73e7cd39b604",
+      "publishedReferenceCount": 2,
+      "verification": "Printed primary arithmetic independently reproduced with trusted R formulas; exact preserved input and rounding specifications apply. No candidate tool has yet been live evaluated."
+    }
+  ]
+}

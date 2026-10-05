@@ -505,6 +505,11 @@ test("a turn the spending limit refused says so, and any other model error stays
   const ended = (error) => normalizeTranscript("s", [{ type: "event", event: {
     type: "turn/end", seq: 1, data: { turn: 1, reason: { kind: "error", error } } } }]).turnEnd;
   assert.equal(ended({ message: "The model gateway is temporarily unavailable.", code: "HTTP_402", status: 402 }).code, "runtime_spend_limit_reached");
+  // Actual v6 kernel specimen: rejected before any assistant computation, preserved as QUOTA.
+  const quota={message:"The model gateway is temporarily unavailable.",code:"QUOTA",status:402};
+  assert.equal(ended(quota).code,"runtime_spend_limit_reached");
+  const quotaFrame=decodeSessionFrame("s",{type:"event",event:{type:"turn/end",seq:1,data:{turn:1,reason:{kind:"error",error:quota}}}});
+  assert.equal(/** @type {any} */ (quotaFrame.event).errorCode,"runtime_spend_limit_reached");
   assert.equal(ended({ message: "The model gateway is temporarily unavailable.", code: "HTTP_502", status: 502 }).code, "runtime_session_error");
   // As kernel 0.1.7 recorded the same refusal on production (2026-10-05): the code was renamed, the status was not.
   assert.equal(ended({ message: "The model gateway is temporarily unavailable.", code: "QUOTA", status: 402 }).code, "runtime_spend_limit_reached");

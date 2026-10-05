@@ -98,9 +98,9 @@ export function kbSearchGatewayProviderUrl(config) {
 /**
  * @param {any} config
  * @param {any} runtimeManager
- * @param {{ index: any }} dependencies the knowledge-base index, or null when switched off
+ * @param {{ index: any, evaluationIsolation?: any }} dependencies the knowledge-base index, or null when switched off
  */
-export function createKbSearchGatewayHandler(config, runtimeManager, { index }) {
+export function createKbSearchGatewayHandler(config, runtimeManager, { index, evaluationIsolation = null }) {
   const windows = new Map();
   return async function kbSearchGatewayHandler(req, res, onFailure) {
     try {
@@ -133,7 +133,7 @@ export function createKbSearchGatewayHandler(config, runtimeManager, { index }) 
           timer.unref?.();
         }),
       ]).finally(() => clearTimeout(timer));
-      sendJson(res, 200, { data: result });
+      sendJson(res, 200, { data: evaluationIsolation ? await evaluationIsolation.filter(identity, "knowledge-base", result) : result });
     } catch (error) {
       const known = error instanceof KbSearchGatewayError;
       const status = known ? error.status : 503;

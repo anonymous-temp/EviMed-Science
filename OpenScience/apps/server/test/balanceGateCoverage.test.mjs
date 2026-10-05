@@ -33,6 +33,7 @@ const RESEARCHER_OWNED = [
 const PLATFORM_INTERNAL = {
   "learningRuntime.mjs": "the learning loop distils and relates methods in an internal project",
   "sourceUnderstandingRuntime.mjs": "reading a document into the knowledge base is the platform's cost",
+  "evolutionRuns.mjs": "literature-driven tool development and protected paper evaluation use the platform's own budget",
 };
 
 test("every researcher-owned dispatch asks the allowance first, and the platform's own background jobs ask nobody", async () => {

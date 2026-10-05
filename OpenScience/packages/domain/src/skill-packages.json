@@ -465,6 +465,33 @@
     },
     {
       "schemaVersion": 1,
+      "id": "capability/evolution-scout",
+      "name": "evolution-scout",
+      "origin": "capability",
+      "version": "1.0.0",
+      "source": {"kind":"release"},
+      "digest": "sha256:b31a35201cced840dfbc30fc5292850cce7d8bf55138abefb41c89afeffaab00",
+      "digestAlgorithm": "release-directory-v1",
+      "references": [{"path":"capability.yaml","sha256":"8f61a83ecdaf01ffab62e239f4e2d0f5b79f1eff4663b2ef7b482c1868e1471e"}],
+      "dependencies": [
+        {"kind":"platform-tool","name":"literature_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
+        {"kind":"platform-tool","name":"locate_quote","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
+        {"kind":"platform-tool","name":"open_access_full_text","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
+        {"kind":"platform-tool","name":"web_read","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"},
+        {"kind":"platform-tool","name":"web_search","supply":"platform","basis":"declared","evidence":"capability.yaml: tools"}
+      ],
+      "operations": [
+        {
+          "name": "evolution-research-card",
+          "kind": "deliverable",
+          "summary": "Turn preserved literature method tuples and closed failure signals into a research card for a missing tool.",
+          "accepts": ["scoutingInput"],
+          "produces": ["research-card.json"]
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
       "id": "capability/gene-expression-analysis",
       "name": "gene-expression-analysis",
       "origin": "capability",
@@ -977,6 +1004,26 @@
           "accepts": ["datasetPath","analysisQuestion","analysisPreferences","priorAnalysisPath","outputLanguage"],
           "produces": ["statistical-report.md","analysis-results.json","analysis-run.json","analysis.py","analysis.R"],
           "limits": ["结论取决于数据质量与研究设计；缺少有效输入的计算会注明限制。"]
+        }
+      ]
+    },
+    {
+      "schemaVersion": 1,
+      "id": "capability/tool-builder",
+      "name": "tool-builder",
+      "origin": "capability",
+      "version": "1.0.0",
+      "source": {"kind":"release"},
+      "digest": "sha256:253f0edaa4b5498067a37f08375016b06aedff8bf30f682561b998fa8a251371",
+      "digestAlgorithm": "release-directory-v1",
+      "references": [{"path":"capability.yaml","sha256":"b96f8bfebb1c628f03e5d7896a27fd13bd7f761bd3d16a4f2a6e6f9db8c50ee2"}],
+      "operations": [
+        {
+          "name": "evolution-tool-candidate",
+          "kind": "deliverable",
+          "summary": "Implement one literature-grounded candidate tool and its development tests in an internal workspace.",
+          "accepts": ["researchCard"],
+          "produces": ["tool-candidate.json"]
         }
       ]
     },

@@ -172,7 +172,7 @@ test("the controller audit accepts only validated internal endpoints in a recons
   const { controllerLaunchPlanIsScoped } = await import("../../../scripts/ops/audit-hosted-compliance.mjs");
   const controller = await readFile(new URL("../src/runtimeControllerServer.mjs", import.meta.url), "utf8");
   assert.equal(controllerLaunchPlanIsScoped(controller), true);
-  const call = "buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, revisionGatewayUrl, publicSourceGatewayUrl, pluginConfig,\n      personalSkillGeneration: personal?.reference ?? null, personalSkillImageId: personal?.identity.baseRuntimeImageDigest ?? null, extensionGeneration: extension?.reference ?? null, extensionImageId: extension?.identity.baseRuntimeImageDigest ?? null })";
+  const call = "buildRuntimeLaunchPlan(config, project, port, { capsuleGatewayUrl, revisionGatewayUrl, publicSourceGatewayUrl, pluginConfig, platformSkillGeneration: platform?.reference ?? null,\n      personalSkillGeneration: personal?.reference ?? null, personalSkillImageId: personal?.identity.baseRuntimeImageDigest ?? null, extensionGeneration: extension?.reference ?? null, extensionImageId: extension?.identity.baseRuntimeImageDigest ?? null })";
   const guard = controller.match(/    if \(\s*typeof capsuleGatewayUrl[\s\S]*?\n    \}/)?.[0];
   const revisionGuard = controller.match(/    if \(\s*typeof revisionGatewayUrl[\s\S]*?\n    \}/)?.[0];
   assert.ok(guard, "the endpoint guard must be exercised by the negative controls");
@@ -195,7 +195,7 @@ test("the controller audit accepts only validated internal endpoints in a recons
     ["endpoint comparison removed", controller.replace("capsuleGatewayUrl !== capsuleGatewayEndpointUrl(config)", "false")],
     ["guard only mentioned in a comment", controller.replace(guard, `/* ${guard} */`)],
     ["revision guard only mentioned in a comment", controller.replace(revisionGuard, `/* ${revisionGuard} */`)],
-    ["unknown fields allowed", controller.replace('"personalSkillGeneration", "extensionGeneration"]', '"personalSkillGeneration", "extensionGeneration", "args"]')],
+    ["unknown fields allowed", controller.replace('"personalSkillGeneration", "extensionGeneration", "platformSkillGeneration"]', '"personalSkillGeneration", "extensionGeneration", "platformSkillGeneration", "args"]')],
     ["plugin shape guard removed", controller.replace(pluginGuard, "")],
     ["plugin validator removed", controller.replace(pluginValidation, "")],
     ["plugin validation only mentioned in a comment", controller.replace(pluginValidation, `/* ${pluginValidation} */`)],
@@ -342,8 +342,8 @@ test("the boot proof boots under the environment production actually emits", asy
   assert.equal(shell.status, 0, shell.stderr);
   const defaults = runtimeEnvironment({ flags: {}, limits: {} });
   assert.deepEqual(shell.stdout.trim().split("\n"), citeNames.map(name => defaults[name]), "the actual shell exports must equal shipped plugin defaults");
-  const optionalNames = ["EVIMED_PERSONAL_SKILLS_DIR", "EVIMED_EXTENSION_PROJECTION_FILE", "EVIMED_EXTENSION_GATEWAY_URL"];
-  const optionalExport = smoke.split("\n").filter(line => /^export\s.*EVIMED_(?:PERSONAL_SKILLS_DIR|EXTENSION_(?:PROJECTION_FILE|GATEWAY_URL))=/.test(line)).join("\n");
+  const optionalNames = ["EVIMED_PERSONAL_SKILLS_DIR", "EVIMED_EXTENSION_PROJECTION_FILE", "EVIMED_EXTENSION_GATEWAY_URL", "EVIMED_PLATFORM_SKILLS_DIR", "EVIMED_EVOLUTION_GATEWAY_URL"];
+  const optionalExport = smoke.split("\n").filter(line => /^export\s.*EVIMED_(?:PERSONAL_SKILLS_DIR|PLATFORM_SKILLS_DIR|EVOLUTION_GATEWAY_URL|EXTENSION_(?:PROJECTION_FILE|GATEWAY_URL))=/.test(line)).join("\n");
   const optionalShell = spawnSync("bash", ["-c", `${optionalExport}\nfor name in ${optionalNames.join(" ")}; do printf '%s\\n' "\${!name}"; done`], {
     encoding: "utf8", env: { PATH: process.env.PATH },
   });

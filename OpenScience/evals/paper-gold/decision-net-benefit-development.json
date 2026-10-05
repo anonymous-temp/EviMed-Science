@@ -1,0 +1,47 @@
+{
+  "methodId": "decision-net-benefit",
+  "entrypointContract": "function(specification) -> {netBenefit,treatAll,treatNone,netReductionPer100}",
+  "basis": "Synthetic development arithmetic, not published-paper validation. Input one threshold summary: n>0, 0<threshold<1, 0<=TP<=eventCount<=n, 0<=FP<=n-eventCount. Net benefit = TP/n - FP/n * threshold/(1-threshold); treat all = eventCount/n-(1-eventCount/n)*threshold/(1-threshold); treat none=0; netReductionPer100=100*(netBenefit-treatAll)/(threshold/(1-threshold)). Do not choose a clinical threshold or infer a fitted prediction model.",
+  "cases": [
+    {
+      "id": "toy-development-1",
+      "kind": "synthetic-development",
+      "input": {
+        "specification": {
+          "n": 200,
+          "truePositive": 40,
+          "falsePositive": 30,
+          "eventCount": 50,
+          "threshold": 0.2
+        }
+      },
+      "expected": {
+        "netBenefit": 0.1625,
+        "treatAll": 0.0625,
+        "treatNone": 0,
+        "netReductionPer100": 40.0
+      },
+      "absoluteTolerance": 1e-10
+    },
+    {
+      "id": "toy-development-2",
+      "kind": "synthetic-development",
+      "input": {
+        "specification": {
+          "n": 80,
+          "truePositive": 12,
+          "falsePositive": 20,
+          "eventCount": 16,
+          "threshold": 0.4
+        }
+      },
+      "expected": {
+        "netBenefit": -0.016666666666666698,
+        "treatAll": -0.3333333333333334,
+        "treatNone": 0,
+        "netReductionPer100": 47.5
+      },
+      "absoluteTolerance": 1e-10
+    }
+  ]
+}

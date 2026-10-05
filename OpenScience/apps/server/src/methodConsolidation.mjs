@@ -200,13 +200,21 @@ export function groupPairs(pairs, limits = {}) {
   return groups;
 }
 
+/** Bounded public context for the existing relation pass, never personal method promotion. @param {any[]} tools @param {readonly any[]} members */
+export function relevantPlatformTools(tools,members) {
+  const capabilities=new Set(members.flatMap(member=>[member.payload?.capabilityId,...(member.payload?.capabilityIds??[])].filter(Boolean)));
+  const tokens=new Set(members.flatMap(member=>`${member.payload?.frontmatter?.name??''} ${member.payload?.frontmatter?.description??''}`.toLowerCase().split(/[^a-z0-9]+/).filter(word=>word.length>3)));
+  const relevant=tools.filter(tool=>tool.capabilityIds?.some(id=>capabilities.has(id)) || `${tool.name??''} ${tool.description??''}`.toLowerCase().split(/[^a-z0-9]+/).some(word=>tokens.has(word))).sort((a,b)=>String(a.id).localeCompare(String(b.id)));
+  return {items:relevant.slice(0,30).map(tool=>({id:tool.id,digest:tool.digest??tool.artifactDigest,revision:tool.revision,capabilityIds:(tool.capabilityIds??[]).slice(0,30),name:String(tool.name??'').slice(0,160),description:String(tool.description??'').slice(0,1000)})),omitted:Math.max(0,relevant.length-30),irrelevant:tools.length-relevant.length,selectionBasis:'declared-capability-or-public-description-overlap'};
+}
+
 export class MethodConsolidation {
   /**
    * No inbox: what a pass did rides on its job result, and a refusal on the
    * audit line (plan 2026-09-23 §5.8).
    *
    * @param {{dispatch: (input: any) => Promise<any>, readResult: (identity: any) => Promise<any>, learning: any,
-   *          jobs?: any, handbookConsolidation?: any, evaluate?: ((request: any) => Promise<any>) | null,
+   *          jobs?: any, handbookConsolidation?: any, platformTools?: () => Promise<any[]>, evaluate?: ((request: any) => Promise<any>) | null,
    *          audit?: ((job: any, event: string, detail: any) => Promise<any>) | null, now?: () => Date,
    *          stepWaitMs?: number, pollMs?: number, wait?: (ms: number) => Promise<void>,
    *          describe?: ((document: any, owner: {userId: string, projectId: string | null}) => Promise<any>) | null}} dependencies
@@ -214,7 +222,7 @@ export class MethodConsolidation {
   constructor({
     dispatch, readResult, learning, jobs = null, evaluate = null, audit = null, now = () => new Date(),
     stepWaitMs = 24 * 60 * 60_000, pollMs = 15_000, wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
-    describe = null, handbookConsolidation = null,
+    describe = null, handbookConsolidation = null, platformTools = async () => [],
   }) {
     if (typeof dispatch !== "function" || typeof readResult !== "function") {
       throw new TypeError("Method consolidation requires the bounded run dispatcher and result reader.");
@@ -226,6 +234,7 @@ export class MethodConsolidation {
     this.jobs = jobs;
     this.evaluate = evaluate;
     this.handbookConsolidation = handbookConsolidation;
+    this.platformTools = platformTools;
     // Optional, and optional on purpose: a consolidation pass that cannot write
     // an audit line still has to finish, because the line is a record of what
     // happened and not a step in it.
@@ -636,6 +645,7 @@ export class MethodConsolidation {
         schemaVersion: 1,
         action: "decide",
         relationTypes: [...METHOD_RELATION_TYPES],
+        platformTools: relevantPlatformTools(await this.platformTools(),members),
         methods: members.map((member) => ({
           id: member.id,
           name: member.payload?.frontmatter?.name,

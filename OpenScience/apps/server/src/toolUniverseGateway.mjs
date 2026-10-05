@@ -132,8 +132,8 @@ function boundedToolInfo(result) {
   };
 }
 
-/** @param {{config:any,runtimeManager:any,store:any,fetchImpl?:typeof fetch}} dependencies */
-export function createToolUniverseGateway({ config, runtimeManager, store, fetchImpl = fetch }) {
+/** @param {{config:any,runtimeManager:any,store:any,evaluationIsolation?:any,fetchImpl?:typeof fetch}} dependencies */
+export function createToolUniverseGateway({ config, runtimeManager, store, fetchImpl = fetch, evaluationIsolation = null }) {
   const active = new Set();
   const windows = new Map();
   let inFlight = 0;
@@ -154,6 +154,7 @@ export function createToolUniverseGateway({ config, runtimeManager, store, fetch
       windows.set(key, window);
       if (++window.count > 120) throw new HttpError(429, "tooluniverse_rate_limited", "Too many scientific tool requests.");
       const input = validateRequest(await readJson(req, 1024 * 1024));
+      await evaluationIsolation?.assertRequest(identity, "tooluniverse", input);
       await runtimeManager.assertActiveEviMedWorkloadToken(token);
       const currentUser = await store.userById(identity.userId);
       if (!currentUser) throw new HttpError(401, "evimed_workload_token_invalid", "The workload is unavailable.");
@@ -212,7 +213,7 @@ export function createToolUniverseGateway({ config, runtimeManager, store, fetch
       }
       await runtimeManager.assertActiveEviMedWorkloadToken(token);
       if (!await store.userById(identity.userId)) throw new HttpError(401, "evimed_workload_token_invalid", "The workload is unavailable.");
-      sendJson(res, 200, { result });
+      sendJson(res, 200, { result: evaluationIsolation ? await evaluationIsolation.filter(identity, "tooluniverse", result) : result });
     } catch (error) {
       const failure = error instanceof HttpError ? error : unavailable();
       onFailure?.({ code: failure.code, status: failure.status });

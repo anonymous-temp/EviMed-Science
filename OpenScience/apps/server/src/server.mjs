@@ -1,3 +1,5 @@
+import { renderEvolutionToolContext } from './evolutionToolContext.mjs';
+import { routeExplicitEvolutionTool } from './evolutionToolRouting.mjs';
 import { DocumentExportService, freezeArtifactDocument, freezeResultVersionDocument } from "./documentExport.mjs";
 import { ResultProvenanceService } from "./resultProvenanceService.mjs";
 import { createResultProvenanceRoutes } from "./resultProvenanceRoutes.mjs";
@@ -27,6 +29,9 @@ import { DocumentExportWorker } from "./documentExportWorker.mjs";
 import { createDocumentExportRoutes } from "./documentExportRoutes.mjs";
 import { createVcrDocumentAdapter } from "./vcrDocumentExport.mjs";
 import { RuntimeControllerClient } from "./runtimeControllerClient.mjs";
+import { createEvolution } from "./evolutionComposition.mjs";
+import { createEvaluationIsolation } from "./evaluationIsolation.mjs";
+import { EVOLUTION_GATEWAY_PATH } from "./evolutionGateway.mjs";
 import { heavyWorkAdmission, heavyWorkBlockerCount } from "./heavyWorkAdmission.mjs";
 import { completeOwnedAutopilotRun } from "./autopilotRunCompletion.mjs";
 import { PluginService } from "./pluginService.mjs";
@@ -66,7 +71,8 @@ import path from "node:path";
 import { createGzip } from "node:zlib";
 import { postgresBackupReadiness } from "./postgresBackupReadiness.mjs";
 import { vcrBackupReadiness } from "./vcrBackupReadiness.mjs";
-import { LEARNING_PROJECT_ID, SOURCES_PROJECT_ID, isInternalProject } from "./internalProjects.mjs";
+import { LEARNING_PROJECT_ID, SOURCES_PROJECT_ID, isInternalProject, isEvolutionProject } from "./internalProjects.mjs";
+import { completeEvolutionRuntime } from './evolutionRuntimeCompletion.mjs';
 import { loadAgentRegistry } from "./agentRegistry.mjs";
 import { AgentRunStore, readRunStateProjection, readDeliveryReceipt, runNotice } from "./agentRuns.mjs";
 import { PreStopTranscripts, collectRunTranscripts, persistRunTranscript, pruneRunTranscripts, readRunTranscript, runsToReadBeforeStop } from "./runTranscripts.mjs";
@@ -966,6 +972,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       })
       : null);
   let maintenanceService = null;
+  /** @type {ReturnType<typeof createEvolution> | null} */
+  let evolution = null;
   const maintenanceMutation = (operation) => maintenanceService ? maintenanceService.withMutation(operation) : operation();
   const productDocuments = productDatabase ? new ProductDocuments(productDatabase) : null;
   const productJobs = productDatabase ? new ProductJobs(productDatabase) : null;
@@ -1161,7 +1169,18 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // never happen. With no queue the ledger still records the fact, which is the
   // half of this that stands on its own, and answers `null` for the job.
   const feedbackEvents = productDatabase
-    ? new FeedbackEvents({ database: productDatabase, jobs: config.learningEnabled ? productJobs : null }) : null;
+    ? new FeedbackEvents({ database: productDatabase, jobs: config.learningEnabled ? productJobs : null,
+      onRecorded: async event => {
+        if (!config.evolutionEnabled || !evolution || !event.runId || !event.projectId) return;
+        try {
+          await evolution.service.ingestEvent({ id: `feedback:${event.id}`, type: "researcher-feedback", userId: event.userId,
+            projectId: event.projectId, runId: event.runId, sourceFeedbackId: event.id, trigger: event.trigger,
+            correctionKind: event.detail?.kind ?? null, occurredAt: event.occurredAt, origin: "user-statement" });
+        } catch (error) {
+          await securityAudit(config, "evolution.feedback", "failed", { userId: event.userId,
+            code: typeof error?.code === "string" ? error.code : "evolution_event_unavailable" });
+        }
+      } }) : null;
   /** Optional infrastructure says so, rather than answering 500 to a valid request. */
   function requireFeedbackEvents() {
     if (!feedbackEvents) throw new HttpError(503, "feedback_unavailable", "Recording feedback requires the shared product store.");
@@ -1920,7 +1939,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const documentExportRoutes = createDocumentExportRoutes({ store, service: documentExportService });
   // What a project's datasets mean: one ledger document per dataset, read and written by the two data capabilities
   // through their tool's gateway and shown beside the dataset on the files page. No patient row is ever in it.
-  const dataSemantics = productDocuments && config.dataSemanticsEnabled ? new DataSemanticsService({ documents: productDocuments }) : null;
+  const dataSemantics = productDocuments && config.dataSemanticsEnabled ? new DataSemanticsService({ documents: productDocuments,
+    onChanged: async event => { await evolution?.integration.datasetChanged(event); } }) : null;
   const dataSemanticsRoutes = createDataSemanticsRoutes({ store, service: dataSemantics, maxJsonBytes: config.maxJsonBytes });
   const resultProvenance = productDocuments && config.resultsEnabled ? new ResultProvenanceService({
     documents: productDocuments, config, maxSnapshotBytes: config.resultSnapshotMaxBytes,
@@ -2315,6 +2335,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const preStopTranscripts = new PreStopTranscripts();
   const runtimeManager = runtimeManagerFactory(config, {
     agentRegistry,
+    recordRuntimeEgressDispatch: (project, runId, at) => agentRuns?.recordRuntimeEgressDispatch(project, runId, at),
+    readRuntimeEgressRun: async (project, runId) => {
+      const user = await store.userById(project.userId);
+      if (!user) return null;
+      const owned = await store.requireProject(user, project.id);
+      return (await agentRuns?.list(owned))?.find(run => run.id === runId) ?? null;
+    },
     // Read the conversations while the container is still answering.
     //
     // `onRuntimeStop` below is what finishes these runs, and it runs after the
@@ -2535,6 +2562,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   });
   agentRuns = new AgentRunStore(researchSessions, {
     agentRegistry,
+    captureRuntimeEgressProof: (project, run) => config.evolutionEnabled === true && isEvolutionProject(project.id)
+      ? runtimeManager.captureRunEgressProof({ project, runId: run.id, phase: 'start' }) : null,
     independentWork: independentProductWork,
     maxClinicalRepairAttempts: config.gateRepairRounds,
     model: `deepseek/${config.deepseekModel}`,
@@ -2561,6 +2590,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // The independent reviewer's findings, first in a finished run's notices.
     ...(review ? { reviewNotices: (project, runId) => review.service.reviewNoticesForRun(project.userId, project.id, runId) } : {}),
     runtimeGeneration: (project) => runtimeManager.runtimeGeneration(project),
+    runtimePlatformSkills: (project) => runtimeManager.runtimePlatformSkills(project),
+    setRuntimePlatformSkillScope: (project, capabilityId) => runtimeManager.setPlatformSkillScope(project, capabilityId),
+    onPlatformSkillExecution: (event) => evolution?.onExecution(event),
+    onPlatformSkillRetrieval: (event) => evolution?.onRetrieval(event),
     runtimePersonalSkills: (project, observation = {}) => {
       if (observation.nativeTurn) {
         const runtime = runtimeManager.runtimes.get(runtimeManager.key(project));
@@ -2609,7 +2642,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // a fresh run's session becomes routable the moment the ledger knows
       // it, and a finished run's stops being routed at all.
       runtimeEventPump.noteRun(project, run);
-      independentProductWork(() => runTitles.consider(project, run));
+      if (usagePurposeOfRun(run) !== "evolution") independentProductWork(() => runTitles.consider(project, run));
       // A run started or ended: which one a model request belongs to may
       // have changed.
       runAttribution.delete(`${project.userId}\0${project.id}`);
@@ -2630,6 +2663,12 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       runEvents.publish(run.id, type, data);
     },
     onRunFinished: async (project, run) => {
+      await completeEvolutionRuntime({ config, evolution, project, run, evaluationIsolation, runtimeManager, independentProductWork });
+      if (evolution && !isInternalProject(project.id) && run.status === "failed") {
+        const gapCode = /tool|engine|command/.test(run.errorCode ?? "") ? "method-implementation" : "model-capability";
+        await evolution.integration.publish({ id: `run-gap:${project.id}:${run.id}`, type: "runtime-gap", gapCode,
+          code: gapCode, track: "M", origin: "platform-inference" });
+      }
       if (resultProvenance) {
         await resultCaptureQueue.drain();
         try {
@@ -2852,6 +2891,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             ?? await collectRunTranscripts(runtimeManager, project, run, { children });
           const receipt = await persistRunTranscript({ project, run, sessions });
           await agentRuns.recordLearning(project, run.id, { transcript: receipt });
+          if (evolution) await evolution.finishRun(project, run).catch(error => securityAudit(config, "evolution.outcome", "failed", { code: error?.code ?? "evolution_outcome_unavailable" }));
           // The web pages the run read (contract X5), off the same transcript:
           // each `web_read` result carries the gateway's receipt. A write of
           // its own, so a ledger at its ceiling costs this list and never the
@@ -3192,6 +3232,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     }));
     const consolidation = new MethodConsolidation({
       handbookConsolidation: { run: async (input) => (await handbookConsolidation).run(input) },
+      platformTools: async () => evolution ? evolution.service.availableTools({}) : [],
       dispatch: dispatchLearningRun,
       readResult: (identity) => readLearningResult({ ...identity, capabilityId: "method-relations" }),
       learning: learningService, jobs: productJobs,
@@ -3581,6 +3622,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             sessionId: session.id,
             dispatchId,
             question: episode.prompt,
+            ...(agenda.payload.acceptanceFixture === true ? {automated:true} : {}),
             effectiveAgentId: selected.id,
             effectiveAgentVersion: selected.version,
             effectiveRuntimeAgent: selected.runtimeAgent,
@@ -3629,6 +3671,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             if (prepared.memories.length > 0) {
               await agentRuns.recordLearning(project, dispatchedRun.id, { recalledMemories: prepared.memories });
             }
+            const requestedToolContext = evolution ? renderEvolutionToolContext(promptText, runtimeManager.runtimePlatformSkills(project), selected.id) : '';
             const budgetMarker = issueModelGatewayBudgetMarker({
               secret: config.modelGatewaySigningSecret, userId: user.id, projectId: project.id,
               runId: episode.episodeId, dailyLimit,
@@ -3645,7 +3688,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
               },
               // The question first, markers last (see the verification above).
               text: `${promptText}\n\n<evimed-autopilot-episode>${episode.episodeId}</evimed-autopilot-episode>\n${budgetMarker}`,
-              system: prepared.system, memoryContext: prepared.memoryContext, residentProfile: true, agent: selected.runtimeAgent, strictContext: true,
+              system: prepared.system, memoryContext: (prepared.memoryContext ?? "") + requestedToolContext, residentProfile: true, agent: selected.runtimeAgent, strictContext: true,
               model: `deepseek/${config.deepseekModel}`, runId: dispatchedRun.id, allowBounded: true,
               requestId: dispatchedRun.kernelRequestIds?.at(-1),
             });
@@ -3709,7 +3752,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     steerRun: ({ user, project, runId, text }) => steerChannelRun(user, project, runId, text),
     loadSdk: overrides.loadFeishuSdk,
   });
-  const capsuleGatewayHandler = createCapsuleGatewayHandler({ runtimeManager, store, service: capsuleService, memorySubstrate, handbooks: nativeHandbookContext,
+  const evaluationIsolation = createEvaluationIsolation({ dataDir: config.dataDir,
+    resolveRunId: identity => identity.runId ?? attributeRun(identity) });
+  const capsuleGatewayHandler = createCapsuleGatewayHandler({ runtimeManager, store, service: capsuleService, memorySubstrate, handbooks: nativeHandbookContext, evaluationIsolation,
     // Whose conversation a runtime's recall is (capsuleGateway.mjs): the
     // project's running runs, each conversation's own state, and the run
     // ledger line that records what it was handed.
@@ -3733,7 +3778,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const resultGatewayHandler = createResultGateway({ runtimeManager, store, service: resultReplays, agentRuns, lineage: resultLineage,
     resolveSession: (project, sessionId) => runtimeEventPump.sessionOwner(project, sessionId) });
   const dataSemanticsGatewayHandler = createDataSemanticsGateway({ config, runtimeManager, store, service: dataSemantics });
-  const toolUniverseGatewayHandler = createToolUniverseGateway({ config, runtimeManager, store });
+  const toolUniverseGatewayHandler = createToolUniverseGateway({ config, runtimeManager, store, evaluationIsolation });
   const modelGatewayHandler = createModelGatewayHandler(config, runtimeManager, {
     fetchImpl: overrides.modelGatewayFetch ?? globalThis.fetch,
     usageLedger,
@@ -3784,6 +3829,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     documentParser,
   });
   const publicSourceGatewayHandler = createPublicSourceGatewayHandler(config, runtimeManager, {
+    evaluationIsolation,
     fetchImpl: gatewayFetch,
     // An open-access PDF sits on whichever publisher Unpaywall names, so it
     // is fetched like a web page: over the pinned transport.
@@ -3820,6 +3866,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   });
   const connectorCredentialGatewayHandler = createConnectorCredentialGatewayHandler({ runtimeManager, store: connectorCredentials });
   const webSearchGatewayHandler = createWebSearchGatewayHandler(config, runtimeManager, {
+    evaluationIsolation,
+    runPurpose,
     fetchImpl: overrides.webSearchFetch ?? globalThis.fetch,
     edge: edgeProxy,
     // Bailian's search is a paid Qwen call, booked like the kernel's.
@@ -3844,10 +3892,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   });
   const resultSourceUpdatesRoutes = createResultSourceUpdatesRoutes({ store, results: resultProvenance,
     lookup: sourceUpdates, impacts: resultImpacts, maxJsonBytes: config.maxJsonBytes });
-  const kbSearchGatewayHandler = createKbSearchGatewayHandler(config, runtimeManager, { index: kbIndex });
+  const kbSearchGatewayHandler = createKbSearchGatewayHandler(config, runtimeManager, { index: kbIndex, evaluationIsolation });
   // `frontier_search`: the page's own list, read for the runtime's account;
   // with the module off it answers `frontier_disabled` (frontierGateway.mjs).
   const frontierGatewayHandler = createFrontierGatewayHandler(config, runtimeManager, {
+    evaluationIsolation,
     service: frontier?.service ?? null,
     report: (code) => process.stderr.write(`frontier search: ${code}\n`),
   });
@@ -4168,6 +4217,15 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   }
   // A submission's independent review: started, asked after, answered
   // (reviewGateway.mjs); off, it answers `review_disabled`.
+  evolution = createEvolution({ config, store, documents: productDocuments, jobs: productJobs, database: productDatabase,
+    usageLedger, notifications: notificationService, registry: agentRegistry, runtimeManager, researchSessions, agentRuns,
+    evaluationIsolation, sourceService, autopilot: autopilotService, dataSemantics, controller: overrides.evolutionController ?? new RuntimeControllerClient(config),
+    canRun: () => maintenanceService ? maintenanceService.claimingAllowed() : !productDatabase,
+    report: code => process.stderr.write(`evolution: ${code}\n`) });
+  if (evolution) {
+    runtimeManager.platformSkillSupply = evolution.supply;
+    if (autopilotService) autopilotService.evolution = evolution.integration;
+  }
   const reviewGatewayHandler = createReviewGatewayHandler({
     runtimeManager, service: review?.service ?? null, config,
     report: (code) => process.stderr.write(`review gateway: ${code}\n`),
@@ -4222,6 +4280,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           sourceWorker?.status?.().running,
           autopilotWorker?.status?.().running,
           learningWorker?.status?.().running,
+          evolution?.worker.status().running,
           frontier?.worker.status().running,
           review?.worker.status().running,
           geo?.worker?.status?.().running,
@@ -4492,7 +4551,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         upstream: failure?.upstream ?? null,
       });
     };
-    const gateway = pathname.startsWith(`${RESULT_GATEWAY_PATH}/`)
+    const gateway = pathname.startsWith(`${EVOLUTION_GATEWAY_PATH}/`)
+      ? (request, response) => evolution ? evolution.gateway(request, response) : sendError(response, new HttpError(404, "evolution_disabled", "Evolution is disabled."))
+      : pathname.startsWith(`${RESULT_GATEWAY_PATH}/`)
       ? resultGatewayHandler
       : pathname.startsWith(`${DATA_SEMANTICS_GATEWAY_PATH}/`)
       ? dataSemanticsGatewayHandler
@@ -4617,6 +4678,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (await capsuleRoutes(req, res)) return;
       if (await notificationRoutes(req, res)) return;
       if (await learningRoutes(req, res)) return;
+      if (evolution && await evolution.routes(req, res)) return;
       if (await sourceRoutes(req, res)) return;
       if (await library.routes(req, res)) return;
       if (await autopilotRoutes(req, res)) return;
@@ -4896,6 +4958,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             // and every route the page calls keeps its own authorization, so a
             // browser that sets this to true by hand gains a link, not access.
             operator: config.operatorUsers.includes(user.id),
+            evolutionEnabled: Boolean(evolution),
             // Which optional modules this account sees. Presentation too: the
             // module's own routes answer 404 to anyone it does not.
             // `openList`: whether 连接网盘 has anything to import — OpenList
@@ -5270,7 +5333,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         if (boundSession?.mode === "open-domain" && !chosenLine) {
           const named = routeNamedSpecialist(text, routableAgents);
           // Naming the package is an instruction, not a guess at intent.
-          routedSpecialist = named ?? await specialistClassifier.classify(text, routableAgents, classifierTrace,
+          const installedTool = !named && evolution ? routeExplicitEvolutionTool(text,await evolution.service.tools(),routableAgents,boundSession,chosenLine) : null;
+          routedSpecialist = named ?? installedTool ?? await specialistClassifier.classify(text, routableAgents, classifierTrace,
             { userId: ctx.project.userId, projectId: ctx.project.id });
           if (!routedSpecialist) {
             const net = routeOpenDomainSpecialist(text, routableAgents, {
@@ -5394,6 +5458,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             });
           }
           await runtimeManager.start(ctx.project);
+          const requestedToolContext = evolution ? renderEvolutionToolContext(text, runtimeManager.runtimePlatformSkills(ctx.project), dispatchedRun.effectiveAgentId ?? dispatchedRun.agentId ?? null) : '';
           return runtimeManager.dispatchPrompt(ctx.project, session.sessionId, {
             recordPromptActor: request => recordExtensionPromptActor(ctx.user, ctx.project, request),
             text: promptText,
@@ -5401,7 +5466,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             // the capsule plugin at its first step (memorySessions.mjs), for a
             // dispatch and a conversation typed in the kernel's own surface alike.
             system: prepared.system,
-            memoryContext: prepared.memoryContext,
+            memoryContext: (prepared.memoryContext ?? "") + requestedToolContext,
             residentProfile: true,
             agent: routedSpecialist?.runtimeAgent ?? session.runtimeAgent ?? answerAgent?.runtimeAgent ?? null,
             model: `deepseek/${config.deepseekModel}`,
@@ -6439,7 +6504,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       process.stderr.write("managed browser pause: cleanup remains unconfirmed\n");
     });
     for (const worker of [pluginApplyWorker, personalSkillWorker, hostedExtensions?.preparation, hostedExtensions?.worker, memoryIndexWorker, sourceWorker, autopilotWorker, learningWorker, im.worker, kbIndex, frontier?.worker, review?.worker,
-      geo?.worker, vcr?.worker, credits?.worker, documentExportWorker, resultReplayWorker, availability.worker]) {
+      geo?.worker, vcr?.worker, evolution?.worker, credits?.worker, documentExportWorker, resultReplayWorker, availability.worker]) {
       if (worker?.timer) clearInterval(worker.timer);
       if (worker) worker.timer = null;
     }
@@ -6478,6 +6543,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       kbIndex?.start();
       autopilotWorker?.start();
       learningWorker?.start();
+      evolution?.worker.start();
       im.worker?.start();
       frontier?.worker.start();
       review?.worker.start();
@@ -6574,6 +6640,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // `app.learningWorker`, got `undefined`, filtered it out and passed on an
     // empty list — a test of a collision that could not see either side of it.
     learningWorker,
+    evolution,
+    evaluationIsolation,
     // 「前沿动态」: null when the module is off or there is no product database.
     frontier,
     frontierService: frontier?.service ?? null,
@@ -6664,6 +6732,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // First, so the evaluation the abort below ends is handed back as a
       // restart and not counted against its three attempts.
       learningWorker?.interrupt();
+      evolution?.worker.interrupt();
       for (const controller of evaluationAbortControllers) controller.abort();
       if (capsuleCleanupTimer) clearInterval(capsuleCleanupTimer);
       await capsuleCleanupRun;
@@ -6676,6 +6745,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       await kbIndex?.close();
       await autopilotWorker?.close();
       await learningWorker?.close();
+      await evolution?.worker.close();
       await im.worker?.close();
       await frontier?.worker.close();
       await review?.worker.close();

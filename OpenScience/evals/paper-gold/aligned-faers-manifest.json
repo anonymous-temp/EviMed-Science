@@ -1,0 +1,50 @@
+{
+  "schemaVersion": 1,
+  "access": "control-only",
+  "directory": "paper-gold/aligned-faers-v1",
+  "methodId": "faers-ror-published-data-v3",
+  "methodReportHash": "b5042c74627153b3d41d3799891ce71d06f5e7b70613c172eb21ca8dee5995c7",
+  "cases": [
+    {
+      "id": "aligned-faers-173bc2e19419ed7e",
+      "publicationId": "10.3390/medsci13040327",
+      "methodCaseId": "faers-published-ror-1",
+      "sourceHash": "e9925955de025509b303af296d80edabe1e4f35bff49427ecbc9e1bceb9ffe34",
+      "definitionHash": "062b3eb9092f5a43809296a5d5f2462fc408a62877c8423cf01b71a100bc3244",
+      "file": "aligned-faers-173bc2e19419ed7e.json"
+    },
+    {
+      "id": "aligned-faers-1b26c4d17ac447ba",
+      "publicationId": "10.3389/fphar.2025.1682276",
+      "methodCaseId": "faers-e78c4fe4e4a80e042e481c51",
+      "sourceHash": "b06aefd23133786eafd16ac41c1200f3fb2fd379817af6406c5e5540aae714e2",
+      "definitionHash": "3068bd7a5eb47698d9097057fde70935c7f6f6933a49bda3da8bfba29a8d0761",
+      "file": "aligned-faers-1b26c4d17ac447ba.json"
+    },
+    {
+      "id": "aligned-faers-1c964bc353ce0bf3",
+      "publicationId": "10.1007/s00210-026-05748-1",
+      "methodCaseId": "faers-ace254e44b7b0bf34102ab77",
+      "sourceHash": "88f8848392e2c807d0472f12416851532e64d79cc5999131c5103d8085c8b2ca",
+      "definitionHash": "a700d67931f9d5e3208777a3584d397461404c2f069c14e3fdb28d6132934ea3",
+      "file": "aligned-faers-1c964bc353ce0bf3.json"
+    },
+    {
+      "id": "aligned-faers-21cb5a2b9e874172",
+      "publicationId": "10.3390/ph19081181",
+      "methodCaseId": "faers-0754cfba2bcccf5fb1f9a44f",
+      "sourceHash": "fa1bbae3c490b99be38cf7667295bf79e80483f806882e2c411947a06f7564f5",
+      "definitionHash": "1ee4edc3b941f941d86461dba98547cbf3153d89ad2c686e4ac316c4f17dfda0",
+      "file": "aligned-faers-21cb5a2b9e874172.json"
+    },
+    {
+      "id": "aligned-faers-f5a8254fe9ba7324",
+      "publicationId": "10.3390/ijerph23081088",
+      "methodCaseId": "faers-ebbb034d22cba340348d09a9",
+      "sourceHash": "df3403b92b498fb38ea587d18ae387ba58e36da6d7d2ea7e0a7420d5fdd91326",
+      "definitionHash": "816d394180b3d7dd525bebf5a8023eebcae9fea03146c9ca94cf4cd4ed77d680",
+      "file": "aligned-faers-f5a8254fe9ba7324.json"
+    }
+  ],
+  "wholeResearchEligible": false
+}

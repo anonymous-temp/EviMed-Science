@@ -1,3 +1,4 @@
+import { EvolutionDecisionCard } from '@/components/evolution/EvolutionDecisionCard';
 import { frontierNoticeHref } from "@evimed/domain";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Bell, Check, CheckCheck, ShieldAlert } from "lucide-react";
@@ -267,7 +268,8 @@ function InboxRow({ item, operator, busy, open, onToggle, onRead, onResolve, onO
   const openAction = item.actions.find((action) => actionHref(item, action) != null);
   const href = openAction ? actionHref(item, openAction) : null;
   // A decision disappears once made; the way to what the notice names does not.
-  const decisions = resolved ? [] : item.actions.filter((action) => actionHref(item, action) == null);
+  const evolutionDecision = item.source?.type === 'system' && item.source.id.startsWith('evolution-decision-');
+  const decisions = resolved || evolutionDecision ? [] : item.actions.filter((action) => actionHref(item, action) == null);
   const waiting = !resolved && (unread || decisions.length > 0) ? WAITING[item.noticeType] : undefined;
   const decided = resolved && item.resolution != null && item.resolution.actionId !== "open";
   const body = splitNoticeBody(item.body);
@@ -286,7 +288,7 @@ function InboxRow({ item, operator, busy, open, onToggle, onRead, onResolve, onO
       expanded={href ? undefined : open}
       unread={unread}
       muted={!unread}
-      meta={hasBody ? <InboxBody body={item.body} open={!href && open} operator={operator} /> : undefined}
+      meta={hasBody ? <><InboxBody body={item.body} open={!href && open} operator={operator} />{operator && open && item.source?.type === 'system' && item.source.id.startsWith('evolution-decision-') && <EvolutionDecisionCard id={item.source.id} />}</> : undefined}
       trailing={(
         <>
           {waiting && <Tag>{waiting}</Tag>}

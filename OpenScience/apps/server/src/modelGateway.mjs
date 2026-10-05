@@ -1059,7 +1059,10 @@ export function createModelGatewayHandler(config, runtimeManager, {
         // A runtime's request is the kernel's unless its run says otherwise.
         // Asking can fail (the run ledger is a file); the answer is a report
         // column, so a failure records `kernel` rather than costing the call.
-        const purpose = caller.engine ? "engine" : runPurpose
+        const evolutionEngine = caller.engine && config.evolutionEnabled === true && config.operatorUsers?.includes(caller.userId)
+          && (caller.projectId === 'evimed-evolution' || /^eval-paper-[a-z0-9_-]+$/.test(caller.projectId));
+        // Project/owner are authenticated signed engine-token claims, never request-body purpose.
+        const purpose = caller.engine ? (evolutionEngine ? "evolution" : "engine") : runPurpose
           ? await runPurpose({ userId: caller.userId, projectId: caller.projectId, runId }).catch(() => "kernel")
           : "kernel";
         reservation = await usageLedger.reserveModel({
@@ -1067,8 +1070,8 @@ export function createModelGatewayHandler(config, runtimeManager, {
           runId, sessionId, purpose,
           priceVersion: REFERENCE_PRICE_LIST.version, currency: estimate.currency, requestFingerprint: fingerprint,
           estimatedCost: estimate.cost,
-          dailyLimit: minimumPositive(caller.dailyLimit, config.userDailySpendLimit),
-          weeklyLimit: minimumPositive(caller.weeklyLimit, config.userWeeklySpendLimit),
+          dailyLimit: purpose === "evolution" ? minimumPositive(caller.dailyLimit, config.evolutionDailyBudgetCny) : minimumPositive(caller.dailyLimit, config.userDailySpendLimit),
+          weeklyLimit: purpose === "evolution" ? 0 : minimumPositive(caller.weeklyLimit, config.userWeeklySpendLimit),
           runLimit: caller.runId != null ? Number(caller.runLimit) || 0 : (attributed ? Number(config.userRunSpendLimit) || 0 : 0),
           now: requestStartedAt,
         });

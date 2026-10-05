@@ -26,12 +26,12 @@ export const CAPSULE_GATEWAY_PATH = "/internal/capsules/v1";
  *
  * 无痕 and 「本次不用」 were read here until 2026-09-20 and are gone with the bar
  * that was their only control.
- * @param {{ runtimeManager: any, store: any, service: any, memorySubstrate?: any, handbooks?: any,
+ * @param {{ runtimeManager: any, store: any, service: any, memorySubstrate?: any, evaluationIsolation?: any, handbooks?: any,
  *   sessions?: { running: (user: any, project: any) => Promise<{ id: string, sessionId: string }[]>,
  *     state: (userId: string, projectId: string, sessionId: string) => Promise<{ trialCapsuleId?: string | null }>,
  *     notes?: (userId: string, projectId: string, sessionId: string) => Promise<string[]>,
  *     recordRecall: (project: any, runId: string, items: any[]) => Promise<unknown> } | null }} dependencies */
-export function createCapsuleGatewayHandler({ runtimeManager, store, service, memorySubstrate = null, sessions = null, handbooks = null }) {
+export function createCapsuleGatewayHandler({ runtimeManager, store, service, memorySubstrate = null, sessions = null, handbooks = null, evaluationIsolation = null }) {
   const windows = new Map();
   /** @param {any} req @param {any} res @param {(failure:any)=>void} [onFailure] */
   return async (req, res, onFailure) => {
@@ -70,7 +70,7 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, me
       if (action === "handbook-context" || action === "handbook-attached") {
         if (!handbooks) { sendJson(res, 200, action === "handbook-context" ? { contexts: [] } : { attached: [] }); return; }
         const answer = action === "handbook-context" ? await handbooks.read(project, body) : await handbooks.acknowledge(project, body);
-        sendJson(res, 200, answer);
+        sendJson(res, 200, evaluationIsolation ? await evaluationIsolation.filter(identity, "handbook", answer) : answer);
         return;
       }
       if (action === "session") {
@@ -80,7 +80,7 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, me
         // Best effort, like every read of a conversation's own state: nothing
         // to add is an answer, and so is a store that cannot say.
         const notes = sessions?.notes ? await sessions.notes(currentUser.id, identity.projectId, body.sessionId).catch(() => []) : [];
-        sendJson(res, 200, { context: notes.join("\n\n") });
+        sendJson(res, 200, evaluationIsolation ? await evaluationIsolation.filter(identity, "session-memory", { context: notes.join("\n\n") }) : { context: notes.join("\n\n") });
         return;
       }
       // Whose conversation this is, as far as the ledger can say (see above).
@@ -95,7 +95,7 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, me
       // memory and reads none of it: the pack reaches the conversation as its
       // first-step context (`memorySessions.mjs`), and that is all it reads
       // (build spec §9.4-5; the recall half landed on 2026-09-29).
-      const writesNothing = states.some((state) => Boolean(state.trialCapsuleId));
+      const writesNothing = await evaluationIsolation?.isEvaluation(identity) || states.some((state) => Boolean(state.trialCapsuleId));
       const trialConversation = running.length === 1 && Boolean(states[0]?.trialCapsuleId);
       if (action === "recall") {
         if (body.factKinds !== undefined && (!Array.isArray(body.factKinds) || body.factKinds.length > CAPSULE_FACT_KINDS.length || body.factKinds.some((kind) => !CAPSULE_FACT_KINDS.includes(kind)))) {
@@ -119,7 +119,7 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, me
         if (sessions && running.length === 1) {
           await sessions.recordRecall(project, running[0].id, recalled.items).catch(() => null);
         }
-        sendJson(res, 200, recalled);
+        sendJson(res, 200, evaluationIsolation ? await evaluationIsolation.filter(identity, "capsule-memory", recalled) : recalled);
       } else if (writesNothing) {
         // A conversation trying someone else's capsule leaves nothing behind.
         sendJson(res, 200, {

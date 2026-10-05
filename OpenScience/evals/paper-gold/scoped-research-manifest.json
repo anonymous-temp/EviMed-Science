@@ -1,0 +1,11 @@
+{
+  "schemaVersion": 1,
+  "id": "hackshaw-main-dl",
+  "publicationId": "10.1136/bmj.315.7114.980",
+  "proofHash": "0387d8a7c102dbe3e768d8152841a617fb659145b9489126292757a8948802c8",
+  "authorDocumentHash": "78c11d889f7be144bd58216276c6a5bfe50547e35dd76277283b7d2f31bdcaa6",
+  "dataHash": "a0a8476ab3ce31723e8ebd1a6ca365d77dd9a384bef32c21834f7dfc69d51275",
+  "status": "actual-numeric-comparison-passed-pending-independent-semantic-qa",
+  "scope": "positive-scoped-analysis-not-full-research",
+  "fullResearchEligible": false
+}

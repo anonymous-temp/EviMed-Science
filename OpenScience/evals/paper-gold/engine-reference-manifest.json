@@ -1,0 +1,59 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+    {
+      "id": "meta-existing-published-anchors",
+      "engine": "meta",
+      "sourcePath": "\u9879\u76ee\u4ee3\u7801/meta/validation/corpora/published_worked_examples.json",
+      "sha256": "38235b2d2bac97fc11af1b1f1be054a899c803759dc48e833e7792e144f5a8fb",
+      "readiness": "existing_engine_published_reference_cases",
+      "qualification": "source-defined comparison limits preserved; FAERS version mismatches not exact reproduction"
+    },
+    {
+      "id": "pharmacovigilance-existing-published-anchors",
+      "engine": "pharmacovigilance",
+      "sourcePath": "\u9879\u76ee\u4ee3\u7801/\u836f\u7269\u5b89\u5168\u5206\u6790agent/tests/data/faers_regression/v1/publication_anchors.json",
+      "sha256": "182a2e0ed297c843e4cb7a8ed2731f3607b7f5d1e848361cb0c17ccca2da5124",
+      "readiness": "existing_engine_published_reference_cases",
+      "qualification": "source-defined comparison limits preserved; FAERS version mismatches not exact reproduction"
+    }
+  ],
+  "mr": {
+    "readiness": "unavailable-in-original-engine-test-inventory",
+    "reason": "No independent published numerical oracle corpus exists in current MR engine tests; deterministic fixtures are synthetic and may not be relabeled as published gold."
+  },
+  "status": "baseline-original-engine-test-inventory-superseded-for-current-calibration",
+  "inventoryQualification": "Original repository test inventory collected before the control-plane published-input calibration preparation on 2026-10-04. Synthetic original MR fixtures remain synthetic; the later independent published-source corpus is recorded below.",
+  "currentPublishedCalibration": {
+    "meta": {
+      "methodId": "meta-reml-published-data-v2",
+      "manifest": "published-meta-method-manifest.json",
+      "reportHash": "850fe79bf17b3cb38957471f276c571826df9d27b28739b4cf81108b23add40b",
+      "passedPublishedSources": 5,
+      "methodUnits": 10,
+      "passedUnits": 10,
+      "unsupportedUnits": 0,
+      "fullResearchReproductions": 0
+    },
+    "pharmacovigilance": {
+      "methodId": "faers-ror-published-data-v3",
+      "manifest": "published-faers-method-manifest.json",
+      "reportHash": "b5042c74627153b3d41d3799891ce71d06f5e7b70613c172eb21ca8dee5995c7",
+      "passedPublishedSources": 5,
+      "methodUnits": 92,
+      "passedUnits": 92,
+      "unsupportedUnits": 0,
+      "fullResearchReproductions": 0
+    },
+    "mr": {
+      "methodId": "mr-ivw-published-data-v5",
+      "manifest": "published-mr-method-manifest.json",
+      "reportHash": "5939f2d5ef5771a691890da562c8c0832adae668543fd7c6137f91f57d262964",
+      "passedPublishedSources": 6,
+      "methodUnits": 22,
+      "passedUnits": 20,
+      "unsupportedUnits": 2,
+      "fullResearchReproductions": 0
+    }
+  }
+}

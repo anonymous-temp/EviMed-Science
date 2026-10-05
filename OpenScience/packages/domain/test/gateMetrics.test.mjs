@@ -38,6 +38,8 @@ const JSON_SHAPED = new Set([
   // The two learning contracts. A method proposal cites the run it was induced
   // from, not the literature, so citation coverage over it would be a hard 0.0
   // reported about a package that has no citations to cover.
+  "evolution-research-card",
+  "evolution-tool-candidate",
   "method-candidate",
   "method-relations",
 ]);

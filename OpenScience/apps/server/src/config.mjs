@@ -7,6 +7,7 @@ import { readReleaseManifestFile, validateReleaseManifest } from "./releaseManif
 import { GENE_EXPRESSION_LIMITS, GEO_DEFAULT_ENGINES, GEO_ENGINES, SIMULATED_START_CREDITS } from "@evimed/domain";
 import { MAX_MOUNTED_CAPSULE_METHOD_BYTES } from "./capsuleMethods.mjs";
 import { researchBillingSettings } from "./researchBillingConfig.mjs";
+import { validateEvolutionConfiguration } from "./evolutionConfiguration.mjs";
 
 /**
  * How much of the caller's window a gateway leaves itself to answer in.
@@ -17,6 +18,17 @@ import { researchBillingSettings } from "./researchBillingConfig.mjs";
  * other way is an error message nobody receives.
  */
 const GATEWAY_RESPONSE_MARGIN_MS = 30_000;
+
+/** Trusted immutable Docker identities; names cannot certify peer isolation. @param {unknown} value */
+function runtimeEgressPeers(value) {
+  if (!Array.isArray(value) || value.length > 16 || value.some(peer => !peer || typeof peer !== 'object'
+    || Object.keys(peer).some(key => !['containerId', 'imageId'].includes(key))
+    || !/^[a-f0-9]{64}$/.test(peer.containerId) || !/^sha256:[a-f0-9]{64}$/.test(peer.imageId))
+    || new Set(value.map(peer => peer.containerId)).size !== value.length) {
+    throw new Error('OPEN_SCIENCE_RUNTIME_EGRESS_ALLOWED_PEERS must contain unique immutable containerId/imageId tuples.');
+  }
+  return value.map(peer => ({ containerId: peer.containerId, imageId: peer.imageId }));
+}
 
 // The one place a tracked upstream pin is written. A Dockerfile ARG, a seam
 // manifest, a peer dependency and a release manifest that each carried their
@@ -1321,7 +1333,7 @@ export function loadConfig(overrides = {}) {
   const runtimeTransport = runtimeProvider === "agentbay" ? "wss" : runtimeTransportSetting;
   const backupDir = overrides.backupDir ?? process.env.OPEN_SCIENCE_BACKUP_DIR ?? "";
 
-  return {
+  const config = {
     host: overrides.host ?? process.env.OPEN_SCIENCE_HOST ?? "127.0.0.1",
     port,
     rootDir,
@@ -1731,6 +1743,7 @@ export function loadConfig(overrides = {}) {
       (runtimeTransport === "unix" ? "none" : "bridge"),
     runtimeInternalNetworkName:
       overrides.runtimeInternalNetworkName ?? process.env.OPEN_SCIENCE_RUNTIME_INTERNAL_NETWORK_NAME ?? "",
+    runtimeEgressAllowedPeers: runtimeEgressPeers(overrides.runtimeEgressAllowedPeers ?? JSON.parse(process.env.OPEN_SCIENCE_RUNTIME_EGRESS_ALLOWED_PEERS ?? '[]')),
     allowRuntimeNetworkEgress:
       overrides.allowRuntimeNetworkEgress ?? boolEnv("OPEN_SCIENCE_ALLOW_RUNTIME_NETWORK_EGRESS", !production),
     runtimeNetworkEgressPolicyAck:
@@ -2289,6 +2302,26 @@ export function loadConfig(overrides = {}) {
     // under a budget it shares with the researcher cannot be tested at all.
     // Both remain settable; setting `OPEN_SCIENCE_LEARNING_ENABLED=false`
     // still turns the loop off.
+    // Literature-driven platform development has its own accounting and is opt-in.
+    evolutionEnabled: overrides.evolutionEnabled ?? boolEnv("OPEN_SCIENCE_EVOLUTION_ENABLED", false),
+    evolutionEvaluationNetwork: overrides.evolutionEvaluationNetwork ?? process.env.OPEN_SCIENCE_EVOLUTION_EVALUATION_NETWORK ?? '',
+    evolutionDailyBudgetCny: Number(overrides.evolutionDailyBudgetCny ?? process.env.OPEN_SCIENCE_EVOLUTION_DAILY_BUDGET_CNY ?? 50),
+    evolutionRunBudgetCny: Number(overrides.evolutionRunBudgetCny ?? process.env.OPEN_SCIENCE_EVOLUTION_RUN_BUDGET_CNY ?? 10),
+    evolutionMaxConcurrency: Number(overrides.evolutionMaxConcurrency ?? process.env.OPEN_SCIENCE_EVOLUTION_MAX_CONCURRENCY ?? 1),
+    evolutionMaxDecisionCards: Number(overrides.evolutionMaxDecisionCards ?? process.env.OPEN_SCIENCE_EVOLUTION_MAX_DECISION_CARDS ?? 3),
+    evolutionDecisionTimeoutMs: Number(overrides.evolutionDecisionTimeoutMs ?? process.env.OPEN_SCIENCE_EVOLUTION_DECISION_TIMEOUT_MS ?? 86_400_000),
+    evolutionPollMs: Number(overrides.evolutionPollMs ?? process.env.OPEN_SCIENCE_EVOLUTION_POLL_MS ?? 15_000),
+    evolutionLeaseMs: Number(overrides.evolutionLeaseMs ?? process.env.OPEN_SCIENCE_EVOLUTION_LEASE_MS ?? 120_000),
+    evolutionRetryMs: Number(overrides.evolutionRetryMs ?? process.env.OPEN_SCIENCE_EVOLUTION_RETRY_MS ?? 60_000),
+    evolutionEvaluationTimeoutMs: Number(overrides.evolutionEvaluationTimeoutMs ?? process.env.OPEN_SCIENCE_EVOLUTION_EVALUATION_TIMEOUT_MS ?? 3_600_000),
+    evolutionMaxBuildAttempts: Number(overrides.evolutionMaxBuildAttempts ?? process.env.OPEN_SCIENCE_EVOLUTION_MAX_BUILD_ATTEMPTS ?? 3),
+    evolutionMaxJobAttempts: Number(overrides.evolutionMaxJobAttempts ?? process.env.OPEN_SCIENCE_EVOLUTION_MAX_JOB_ATTEMPTS ?? 3),
+    evolutionMaxArtifactBytes: Number(overrides.evolutionMaxArtifactBytes ?? process.env.OPEN_SCIENCE_EVOLUTION_MAX_ARTIFACT_BYTES ?? 2_000_000),
+    evolutionSelfCheckMaxBytes: Number(overrides.evolutionSelfCheckMaxBytes ?? process.env.OPEN_SCIENCE_EVOLUTION_SELF_CHECK_MAX_BYTES ?? 4 * 1024 * 1024),
+    evolutionSelfCheckMaxRows: Number(overrides.evolutionSelfCheckMaxRows ?? process.env.OPEN_SCIENCE_EVOLUTION_SELF_CHECK_MAX_ROWS ?? 10_000),
+    evolutionSelfCheckSampleRows: Number(overrides.evolutionSelfCheckSampleRows ?? process.env.OPEN_SCIENCE_EVOLUTION_SELF_CHECK_SAMPLE_ROWS ?? 256),
+    evolutionDependencyAllowlist: overrides.evolutionDependencyAllowlist ?? JSON.parse(process.env.OPEN_SCIENCE_EVOLUTION_DEPENDENCY_ALLOWLIST ?? "[]"),
+    evaluationDataDir: overrides.evaluationDataDir ?? process.env.OPEN_SCIENCE_EVALUATION_DATA_DIR ?? "",
     learningEnabled: overrides.learningEnabled ?? boolEnv("OPEN_SCIENCE_LEARNING_ENABLED", true),
     learningPollMs: Number(overrides.learningPollMs ?? process.env.OPEN_SCIENCE_LEARNING_POLL_MS ?? 5_000),
     learningLeaseMs: Number(overrides.learningLeaseMs ?? process.env.OPEN_SCIENCE_LEARNING_LEASE_MS ?? 900_000),
@@ -2785,4 +2818,9 @@ export function loadConfig(overrides = {}) {
     runtimeAnnotationEnabled: overrides.runtimeAnnotationEnabled ?? boolEnv("OPEN_SCIENCE_RUNTIME_ANNOTATION_ENABLED", true),
     runtimeMermaidEnabled: overrides.runtimeMermaidEnabled ?? boolEnv("OPEN_SCIENCE_RUNTIME_MERMAID_ENABLED", true),
   };
+  if (config.evolutionEnabled) {
+    const issues = validateEvolutionConfiguration(config);
+    if (issues.length) throw new Error(`Invalid evolution setting: ${issues[0].key}.`);
+  }
+  return config;
 }

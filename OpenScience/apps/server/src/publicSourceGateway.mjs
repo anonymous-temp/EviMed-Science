@@ -1354,11 +1354,11 @@ async function serveDownload(request, { res, fetchImpl, signal, maxBytes }) {
  * @param {{ fetchImpl?: typeof fetch, resolveImpl?: any, connectorCredentials?: any,
  *   webReader?: { read: (url: string, options: { signal?: AbortSignal, runtime?: { userId: string, projectId: string } }) => Promise<any> } | null,
  *   documentParser?: any, pdfTransport?: import("./webReadNetwork.mjs").WebTransport | null, capturePdf?: any, preparePdfCapture?: any,
- *   sourceIntake?: ((request: { identity: any, group: string, files: string[] }) => Promise<any>) | null }} [options]
+ *   evaluationIsolation?: any, sourceIntake?: ((request: { identity: any, group: string, files: string[] }) => Promise<any>) | null }} [options]
  */
 export function createPublicSourceGatewayHandler(config, runtimeManager, {
   fetchImpl = fetch, resolveImpl = dnsLookup, connectorCredentials = null, webReader = null, documentParser = null,
-  pdfTransport = null, capturePdf = null, preparePdfCapture = null, sourceIntake = null,
+  pdfTransport = null, capturePdf = null, preparePdfCapture = null, sourceIntake = null, evaluationIsolation = null,
 } = {}) {
   const openAccessTransport = pdfTransport ?? nodeWebTransport({ resolveImpl });
   return async function publicSourceGatewayHandler(req, res, onFailure) {
@@ -1393,6 +1393,9 @@ export function createPublicSourceGatewayHandler(config, runtimeManager, {
         throw gatewayError(401, "public_source_gateway_token_invalid", "Public-source gateway authentication failed.");
       }
       const request = validatedRequest(await readJsonBody(req, 16 * 1024));
+      await evaluationIsolation?.assertRequest(identity, "public-source", { ...request, url: String(request.url ?? "") });
+      const evaluating = await evaluationIsolation?.isEvaluation(identity);
+      if (evaluating && ["open-access-pdf", "download"].includes(request.mode)) throw gatewayError(403, "evaluation_opaque_source_excluded", "Opaque downloads are unavailable during isolated evaluation; use parsed sources.");
       if (request.mode === "open-access-pdf") {
         const captureContext = preparePdfCapture ? await preparePdfCapture(identity) : null;
         await serveOpenAccessPdf(request, {
@@ -1472,7 +1475,7 @@ export function createPublicSourceGatewayHandler(config, runtimeManager, {
           if (error instanceof WebReadError) throw gatewayError(error.status === 499 ? 504 : error.status, error.code, error.message);
           throw gatewayError(502, "web_read_failed", "The web page could not be read.");
         }
-        const body = Buffer.from(JSON.stringify(result));
+        const body = Buffer.from(JSON.stringify(evaluationIsolation ? await evaluationIsolation.filter(identity, "web-read", result) : result));
         res.writeHead(200, {
           "content-type": "application/json; charset=utf-8",
           "content-length": String(body.length),
@@ -1606,6 +1609,15 @@ export function createPublicSourceGatewayHandler(config, runtimeManager, {
           throw gatewayError(504, "public_source_gateway_timeout", "The official public source stopped sending its answer in time.");
         }
         throw error;
+      }
+      if (evaluating) {
+        const text = new TextDecoder().decode(buffer);
+        if (contentType.includes("json")) buffer = Buffer.from(JSON.stringify(await evaluationIsolation.filter(identity, "public-source", JSON.parse(text))));
+        else {
+          const filtered = await evaluationIsolation.filterRaw(identity, "public-source", text, contentType);
+          if (typeof filtered !== "string") throw gatewayError(403, "evaluation_source_excluded", "The source is excluded from this evaluation.");
+          buffer = Buffer.from(filtered);
+        }
       }
       res.writeHead(200, {
         "content-type": contentType,

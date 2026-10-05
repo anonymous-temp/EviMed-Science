@@ -50,13 +50,33 @@ export class ExtensionToolController{
     this.dockerBin=dockerBin;this.maxConcurrent=maxConcurrent;this.timeoutMs=timeoutMs;this.active=new Map();this.blocked=false;this.admitted=new Map();this.descriptors=new Map();
     this.mountConfig={dataDir:path.resolve(dataDir),runtimeDataVolume:runtimeDataVolume?assertDockerVolumeName(runtimeDataVolume):''};
     if(this.mountConfig.runtimeDataVolume)dockerRuntimeMount(this.mountConfig,this.stateRoot,'/input');
-    this.closed=false;
+    this.closed=false;this.bootInstance=randomUUID();this.processStart=null;
     this.resolvePreparation=resolvePreparation;this.canRetireAttempt=canRetireAttempt;this.receiptCursor=0;
     if(!Number.isInteger(maxConcurrent)||maxConcurrent<1||maxConcurrent>4||!Number.isInteger(timeoutMs)||timeoutMs<100||timeoutMs>30000)throw refusal();
     for(const item of admittedDescriptors){const descriptor=structuredClone(item);extensionIdentifier(descriptor.id);canonicalExtensionCoordinate(descriptor.coordinate);
       if(this.descriptors.has(descriptor.id)||!DIGEST.test(descriptor.imageId)||!DIGEST.test(descriptor.integrity)||!HEX.test(descriptor.closureExpectedSHA)||!HEX.test(descriptor.runnerSHA)||!HEX.test(descriptor.policySHA)||!HEX.test(descriptor.inventorySHA))throw refusal();
       const adapter=`sha256:${hash(canonicalJson({runnerSHA:descriptor.runnerSHA,policySHA:descriptor.policySHA,inventorySHA:descriptor.inventorySHA}))}`;
       if(descriptor.adapterDigest!==adapter||descriptor.artifactDigest!==extensionToolArtifactDigest(descriptor))throw refusal();this.descriptors.set(descriptor.id,Object.freeze(descriptor));}
+  }
+  async ownerIdentity(){
+    this.processStart??=(await fs.readFile('/proc/self/stat','utf8')).split(') ').at(-1).split(' ')[19];
+    return {ownerProcessId:process.pid,ownerProcessStart:this.processStart,ownerBootInstance:this.bootInstance};
+  }
+  /** A PID is not an identity: process start ticks prevent reuse after controller restart. @param {any} owner */
+  async ownerAlive(owner){
+    if(!Number.isSafeInteger(owner?.ownerProcessId)||owner.ownerProcessId<1||typeof owner.ownerProcessStart!=='string'||typeof owner.ownerBootInstance!=='string')throw Object.assign(unavailable(),{details:{reason:'orphan_owner_unknown'}});
+    try{return (await fs.readFile(`/proc/${owner.ownerProcessId}/stat`,'utf8')).split(') ').at(-1).split(' ')[19]===owner.ownerProcessStart;}
+    catch(error){if(error.code==='ENOENT'||error.code==='ESRCH')return false;throw unavailable();}
+  }
+  async acquireAdmissionLock(){
+    const target=path.join(this.stateRoot,'admission.lock'),owner=await this.ownerIdentity();
+    const create=async()=>{const lock=await fs.open(target,'wx',0o600);await lock.writeFile(JSON.stringify(owner));return lock;};
+    try{return await create();}catch(error){if(error.code!=='EEXIST')throw error;}
+    let record;try{record=await this.readRecord(target);}catch{throw Object.assign(unavailable(),{details:{reason:'orphan_lock_owner_unknown'}});}
+    const before=await fs.lstat(target);
+    if(await this.ownerAlive(record))throw unavailable();
+    const current=await fs.lstat(target);if(before.ino!==current.ino||before.dev!==current.dev)throw unavailable();
+    await fs.unlink(target);return create();
   }
   /** @param {string} id */
   descriptor(id){const descriptor=this.descriptors.get(extensionIdentifier(id));if(!descriptor)throw refusal();return descriptor;}
@@ -71,11 +91,12 @@ export class ExtensionToolController{
   async reserve(identity){
     if(this.blocked||this.closed)throw unavailable();
     await fs.mkdir(this.stateRoot,{recursive:true,mode:0o750});await assertNoSymlinkPath(path.join(path.parse(this.stateRoot).root,this.stateRoot.slice(path.parse(this.stateRoot).root.length).split(path.sep)[0]),this.stateRoot);const stat=await fs.lstat(this.stateRoot);if(!stat.isDirectory()||stat.isSymbolicLink())throw unavailable();
-    let lock;try{lock=await fs.open(path.join(this.stateRoot,'admission.lock'),'wx',0o600);}catch{throw unavailable();}
+    const lock=await this.acquireAdmissionLock();
     try{await this.pruneSettledLocked();if(await this.receipt(identity))throw unavailable();const records=(await fs.readdir(this.stateRoot)).filter(name=>name.endsWith('.json'));if(records.length>=this.maxConcurrent)throw unavailable();
       for(const record of records){let existing;try{existing=await this.readRecord(path.join(this.stateRoot,record));}catch{throw unavailable();}if(existing.state==='unknown'||existing.state==='reserved'&&![...this.active.values()].some(active=>active.scope.name===existing.name)||identity?.jobId&&existing.identity?.jobId===identity.jobId)throw unavailable();}
+      this.processStart??=(await fs.readFile('/proc/self/stat','utf8')).split(') ').at(-1).split(' ')[19];
       const name=`evimed-extension-tool-${randomUUID()}`,directory=path.join(this.stateRoot,name),marker=path.join(this.stateRoot,name+'.json');
-      await fs.mkdir(directory,{mode:0o755});await fs.writeFile(marker,JSON.stringify({name,identity,state:'reserved'}),{flag:'wx',mode:0o600});return{name,directory,marker,identity};
+      await fs.mkdir(directory,{mode:0o755});await fs.writeFile(marker,JSON.stringify({name,identity,state:'reserved',...(identity?.evolution===true?{ownerProcessId:process.pid,ownerProcessStart:this.processStart,ownerBootInstance:this.bootInstance}:{})}),{flag:'wx',mode:0o600});return{name,directory,marker,identity};
     }finally{await lock.close();await fs.unlink(path.join(this.stateRoot,'admission.lock'));}
   }
   /** A bounded exact-identity tombstone prevents late dispatch after an acknowledged cancel. @param {any} identity */
@@ -115,7 +136,7 @@ export class ExtensionToolController{
   /** Protected maintenance hook; composition may call periodically. No API route exposes it. */
   async gcSettled(){
     if(!this.canRetireAttempt||this.closed)return{retired:0};try{await fs.access(this.stateRoot);}catch(error){if(error.code==='ENOENT')return{retired:0};throw unavailable();}
-    let lock;try{lock=await fs.open(path.join(this.stateRoot,'admission.lock'),'wx',0o600);}catch{return{retired:0};}
+    let lock;try{lock=await this.acquireAdmissionLock();}catch{return{retired:0};}
     try{return await this.pruneSettledLocked();}finally{await lock.close();await fs.unlink(path.join(this.stateRoot,'admission.lock'));}
   }
   /** Cleanup addresses immutable Docker IDs and independently checks fixed ownership labels. @param {any} scope */
@@ -144,7 +165,8 @@ export class ExtensionToolController{
   }
   /** @param {any} descriptor @param {any} identity @param {any} args @param {Buffer|null} input @param {AbortSignal|null} signal @param {any} [snapshot] */
   async run(descriptor,identity,args,input,signal=null,snapshot=null,persist=true){
-    const scope=await this.reserve(identity);scope.artifactDigest=descriptor.artifactDigest;const abort=new AbortController();let created=false,uncertain=false,physicallyAbsent=false,result,failure;
+    const scope=await this.reserve(identity);scope.artifactDigest=descriptor.artifactDigest;const abort=new AbortController();let created=false,uncertain=false,physicallyAbsent=false,executionStarted=false,result,failure;
+    if(identity?.evolution===true)await fs.writeFile(scope.marker,JSON.stringify({...scope,state:'reserved',ownerProcessId:process.pid,ownerProcessStart:this.processStart,ownerBootInstance:this.bootInstance}),{mode:0o600});
     const relay=()=>abort.abort();signal?.addEventListener('abort',relay,{once:true});if(signal?.aborted)relay();
     const key=identity?.jobId??scope.name;let settle=(_value)=>{};const settled=new Promise(resolve=>{settle=resolve;});
     this.active.set(key,{identity,abort,settled,scope});const timer=setTimeout(()=>abort.abort('timeout'),this.timeoutMs);timer.unref();
@@ -156,9 +178,26 @@ export class ExtensionToolController{
         await fs.chmod(scope.directory,0o755);await fs.writeFile(path.join(scope.directory,'inventory.mjs'),args.inventory,{flag:'wx',mode:0o444});await fs.chmod(path.join(scope.directory,'inventory.mjs'),0o444);
         projections.push({target:'/proof',directory:scope.directory});
       }
+      if(args.dependencyFiles){
+        const root=path.join(scope.directory,'dependencies');await fs.mkdir(root,{mode:0o755});await fs.chmod(root,0o755);
+        for(const [name,bytes]of Object.entries(args.dependencyFiles)){
+          if(!/^[-A-Za-z0-9_.]+\.(?:whl|zip|tar\.gz)$/.test(name)||!Buffer.isBuffer(bytes)||bytes.length>8*1024*1024)throw refusal();
+          const target=path.join(root,name);await fs.writeFile(target,bytes,{flag:'wx',mode:0o444});await fs.chmod(target,0o444);
+        }
+        projections.push({target:'/dependencies',directory:root});
+      }
+      if(args.candidateFiles){
+        const root=path.join(scope.directory,'candidate');await fs.mkdir(root,{mode:0o755});await fs.chmod(root,0o755);
+        for(const [relative,content] of Object.entries(args.candidateFiles)){
+          if(!/^(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_.-]+$/.test(relative)||relative.split('/').some(part=>part==='.'||part==='..'))throw refusal();
+          const target=path.join(root,relative);await fs.mkdir(path.dirname(target),{recursive:true,mode:0o755});await fs.writeFile(target,String(content),{flag:'wx',mode:0o444});await fs.chmod(target,0o444);
+        }
+        const readable=async directory=>{await fs.chmod(directory,0o755);for(const item of await fs.readdir(directory,{withFileTypes:true}))if(item.isDirectory())await readable(path.join(directory,item.name));};await readable(root);
+        projections.push({target:'/candidate',directory:root});
+      }
       if(snapshot){projections.push({target:'/input',directory:scope.directory});await fs.chmod(scope.directory,0o755);await fs.writeFile(path.join(scope.directory,'input.'+snapshot.format),snapshot.bytes,{mode:0o444});await fs.writeFile(path.join(scope.directory,'manifest.json'),JSON.stringify({resources:{[snapshot.resourceId]:{file:'input.'+snapshot.format,format:snapshot.format,bytes:snapshot.bytes.length,sha256:snapshot.sha256,dataClass:snapshot.dataClass}}}),{mode:0o444});for(const name of ['input.'+snapshot.format,'manifest.json'])await fs.chmod(path.join(scope.directory,name),0o444);}
       if(abort.signal.aborted)throw Object.assign(unavailable(),{canceled:abort.signal.reason!=='timeout'});
-      try{const createdContainer=await this.command(['create','--pull','never','-i','--name',scope.name,'--label','com.evimed.extension-tool=owned','--label',`com.evimed.extension-scope=${scope.name}`,'--label',`com.evimed.extension-artifact=${scope.artifactDigest}`,'--label',`com.evimed.extension-attempt=${hash(canonicalJson(identity))}`,'--network','none','--read-only','--user','10001:10001','--cpus','1','--memory','512m','--pids-limit','64','--cap-drop','ALL','--security-opt','no-new-privileges','--tmpfs','/tmp:rw,nosuid,nodev,size=64m',...args.mounts,...projections.flatMap(item=>['--mount',`${dockerRuntimeMount(this.mountConfig,item.directory,item.target)},readonly`]),...args.entrypoint,descriptor.imageId,...args.command]);scope.containerId=createdContainer.stdout.trim();if(!/^[a-f0-9]{64}$/.test(scope.containerId))throw unavailable();created=true;await fs.writeFile(scope.marker,JSON.stringify({name:scope.name,containerId:scope.containerId,artifactDigest:scope.artifactDigest,identity,state:'reserved'}),{mode:0o600});}catch(error){uncertain=true;throw error;}
+      try{const createdContainer=await this.command(['create','--pull','never','-i','--name',scope.name,'--label','com.evimed.extension-tool=owned','--label',`com.evimed.extension-scope=${scope.name}`,'--label',`com.evimed.extension-artifact=${scope.artifactDigest}`,'--label',`com.evimed.extension-attempt=${hash(canonicalJson(identity))}`,'--network',args.network??'none','--read-only','--user','10001:10001','--cpus','1','--memory','512m','--pids-limit','64','--cap-drop','ALL','--security-opt','no-new-privileges','--tmpfs','/tmp:rw,nosuid,nodev,size=64m',...args.mounts,...projections.flatMap(item=>['--mount',`${dockerRuntimeMount(this.mountConfig,item.directory,item.target)},readonly`]),...args.entrypoint,descriptor.imageId,...args.command]);scope.containerId=createdContainer.stdout.trim();if(!/^[a-f0-9]{64}$/.test(scope.containerId))throw unavailable();created=true;await fs.writeFile(scope.marker,JSON.stringify({name:scope.name,containerId:scope.containerId,artifactDigest:scope.artifactDigest,identity,state:'reserved',...(identity?.evolution===true?{ownerProcessId:process.pid,ownerProcessStart:this.processStart,ownerBootInstance:this.bootInstance}:{})}),{mode:0o600});}catch(error){uncertain=true;throw error;}
       if(abort.signal.aborted)throw Object.assign(unavailable(),{canceled:abort.signal.reason!=='timeout'});
       if(this.mountConfig.runtimeDataVolume){
         const actual=JSON.parse((await this.command(['inspect','--format','{{json .}}',scope.containerId])).stdout),mounts=actual.HostConfig?.Mounts??[];
@@ -168,17 +207,49 @@ export class ExtensionToolController{
       }
       result=await this.startContainer(scope,input,abort.signal);
     }catch(error){failure=error;}finally{
+      if(identity?.evolution===true&&created){
+        try { const state=JSON.parse((await this.command(['inspect','--format','{{json .State}}',scope.containerId])).stdout); executionStarted=typeof state.StartedAt==='string'&&!state.StartedAt.startsWith('0001-'); } catch { executionStarted=false; }
+      }
       clearTimeout(timer);signal?.removeEventListener('abort',relay);
       try{if(!uncertain){if(created)await this.provePhysicalAbsence(scope);await fs.rm(scope.directory,{recursive:true,force:true});if(persist)await this.recordSettled(identity,scope.containerId??null);await fs.unlink(scope.marker);physicallyAbsent=true;}}catch{ /* Keep the durable marker and refuse capacity reuse. */ }
-      if(!physicallyAbsent){this.blocked=true;try{await fs.writeFile(scope.marker,JSON.stringify({name:scope.name,containerId:scope.containerId??null,artifactDigest:scope.artifactDigest,identity,state:'unknown'}),{mode:0o600});}catch{ /* The initial durable marker remains; restarted admission treats orphan reservations as unknown. */ }}
+      if(!physicallyAbsent){this.blocked=true;try{await fs.writeFile(scope.marker,JSON.stringify({name:scope.name,containerId:scope.containerId??null,artifactDigest:scope.artifactDigest,identity,state:'unknown',...(identity?.evolution===true?{ownerProcessId:process.pid,ownerProcessStart:this.processStart,ownerBootInstance:this.bootInstance}:{})}),{mode:0o600});}catch{ /* The initial durable marker remains; restarted admission treats orphan reservations as unknown. */ }}
       this.active.delete(key);settle({physicallyAbsent});
     }
-    if(!physicallyAbsent)throw Object.assign(unavailable(),{joined:false});if(failure)throw Object.assign(failure,{joined:true});return result;
+    if(!physicallyAbsent)throw Object.assign(unavailable(),{joined:false});if(failure)throw Object.assign(failure,{joined:true,...(identity?.evolution===true?{executionStarted:executionStarted===true}:{})});return result;
   }
   /** @param {any} body @param {{signal?:AbortSignal}} options */
   async prepare(body,{signal}={}){
     extensionRequestObject(body,['descriptorId','identity']);const descriptor=this.descriptor(body.descriptorId),identity=extensionPreparationIdentity(body.identity);
     await this.authorizePreparation(identity,descriptor);const result=await this.inspectArtifact(descriptor,identity,signal);await this.authorizePreparation(identity,descriptor);return result;
+  }
+  /** Recover only controller-authored ephemeral evolution jobs after restart. Unknown create IDs
+   * and a held admission lock stay unavailable; no age-based capacity release is permitted. */
+  async reconcileEvolutionAttempts(){
+    await fs.mkdir(this.stateRoot,{recursive:true,mode:0o750});
+    const lock=await this.acquireAdmissionLock();
+    try{
+      const names=(await fs.readdir(this.stateRoot)).filter(name=>name.endsWith('.json'));
+      for(const name of names){
+        const marker=path.join(this.stateRoot,name),scope=await this.readRecord(marker);
+        if(scope.identity?.evolution!==true||Object.keys(scope.identity).sort().join(',')!=='evolution,jobId')continue;
+        if(this.active.has(scope.identity.jobId))continue;
+        if(await this.ownerAlive(scope))continue;
+        if(!/^evimed-extension-tool-[a-f0-9-]{36}$/.test(scope.name)||name!==scope.name+'.json')throw unavailable();
+        scope.marker=marker;scope.directory=path.join(this.stateRoot,scope.name);
+        if(HEX.test(scope.containerId??'')&&DIGEST.test(scope.artifactDigest??''))await this.provePhysicalAbsence(scope);
+        else {
+          let found;
+          try{found=JSON.parse((await this.command(['inspect','--format','{{json .}}',scope.name])).stdout);}catch(error){if(!error.missing)throw unavailable();}
+          if(found){
+            const labels=found.Config?.Labels;
+            if(found.Name!=='/'+scope.name||!HEX.test(found.Id??'')||!DIGEST.test(scope.artifactDigest??'')||labels?.['com.evimed.extension-tool']!=='owned'||labels?.['com.evimed.extension-scope']!==scope.name||labels?.['com.evimed.extension-artifact']!==scope.artifactDigest||labels?.['com.evimed.extension-attempt']!==hash(canonicalJson(scope.identity)))throw unavailable();
+            scope.containerId=found.Id;await this.provePhysicalAbsence(scope);
+          }
+        }
+        await fs.rm(scope.directory,{recursive:true,force:true});await fs.unlink(marker);
+      }
+      if(!(await fs.readdir(this.stateRoot)).some(name=>name.endsWith('.json')))this.blocked=false;
+    }finally{await lock.close();await fs.unlink(path.join(this.stateRoot,'admission.lock'));}
   }
   /** The privileged resolver supplies current leased ProductJobs identity, never customer metadata. @param {any} identity @param {any} descriptor */
   async authorizePreparation(identity,descriptor){
@@ -241,7 +312,7 @@ export class ExtensionToolController{
     if(active){if(canonicalJson(active.identity)!==canonicalJson(identity))throw unavailable();active.abort.abort('cancel');const outcome=await active.settled;if(!outcome.physicallyAbsent)throw unavailable();await this.recordSettled(identity,active.scope.containerId??null);return{identity,settled:true,joined:true,physicallyAbsent:true};}
     const receipt=await this.receipt(identity);if(receipt&&(await this.markers(identity)).length===0)return receipt;
     // The same admission lock serializes early cancellation against reservation.
-    await fs.mkdir(this.stateRoot,{recursive:true,mode:0o750});await assertNoSymlinkPath(path.join(path.parse(this.stateRoot).root,this.stateRoot.slice(path.parse(this.stateRoot).root.length).split(path.sep)[0]),this.stateRoot);let lock;try{lock=await fs.open(path.join(this.stateRoot,'admission.lock'),'wx',0o600);}catch{throw unavailable();}
+    await fs.mkdir(this.stateRoot,{recursive:true,mode:0o750});await assertNoSymlinkPath(path.join(path.parse(this.stateRoot).root,this.stateRoot.slice(path.parse(this.stateRoot).root.length).split(path.sep)[0]),this.stateRoot);const lock=await this.acquireAdmissionLock();
     try{const records=await this.markers(identity);for(const scope of records){if(!HEX.test(scope.containerId??'')||!DIGEST.test(scope.artifactDigest??''))throw unavailable();await this.stopPhysical(scope);try{await this.command(['inspect','--format','{{.Id}}',scope.containerId]);throw unavailable();}catch(error){if(!error.missing)throw error;}}
       for(const scope of records)await fs.rm(scope.directory,{recursive:true,force:true});await this.recordSettled(identity,records[0]?.containerId??null);for(const scope of records)await fs.unlink(scope.marker);this.blocked=false;return{identity,settled:true,joined:true,physicallyAbsent:true};
     }finally{await lock.close();await fs.unlink(path.join(this.stateRoot,'admission.lock'));}

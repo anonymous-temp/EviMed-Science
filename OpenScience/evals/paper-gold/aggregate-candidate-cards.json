@@ -1,0 +1,73 @@
+{
+  "schemaVersion": 1,
+  "cards": [
+    {
+      "id": "diagnostic-posterior",
+      "methodId": "diagnostic-posterior",
+      "methodFamily": "diagnostic-posterior",
+      "toolKind": "calculation",
+      "goal": "Calculate Bayesian diagnostic post-test odds/probabilities from a declared prior and independent alternative likelihood-ratio results; preserve declared prior rounding.",
+      "papers": [
+        {
+          "doi": "10.1016/j.bjpt.2026.101581",
+          "pmid": "42070317",
+          "pmcid": "PMC13147772",
+          "title": "An independent validation of a clinical prediction rule for the diagnosis of cervical radiculopathy with radicular pain.",
+          "firstPublicationDate": "2026-05-02",
+          "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/42070317/"
+        },
+        {
+          "doi": "10.1002/acr2.90129",
+          "pmid": "42689760",
+          "pmcid": "PMC13539617",
+          "title": "Spondyloarthritis Research and Treatment Network Recommendations for the Referral of Adults With Chronic Back Pain and Suspected Axial Spondyloarthritis to a Rheumatologist.",
+          "firstPublicationDate": "2026-09-01",
+          "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/42689760/"
+        }
+      ],
+      "frequency24Months": 806,
+      "demandSourceUrl": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=SRC%3AMED+AND+FIRST_PDATE%3A%5B2024-10-04+TO+2026-10-04%5D+AND+%28%28%22post-test+probability%22+OR+%22posttest+probability%22%29+AND+%28diagnostic+OR+diagnosis%29%29&format=json&pageSize=4&resultType=core&sort_date=y",
+      "demandQueriedAt": "2026-10-04T15:51:53.972652+00:00",
+      "publicInputCount": 2,
+      "publishedReferenceCount": 2,
+      "access": "evaluation-only",
+      "entrypointContract": "function(specification) -> {results: {label: {posteriorOdds,posteriorProbability}}}",
+      "developmentContractPath": "evals/paper-gold/diagnostic-posterior-development.json",
+      "primaryReferenceManifest": "evals/paper-gold/aggregate-reference-manifest.json"
+    },
+    {
+      "id": "decision-net-benefit",
+      "methodId": "decision-net-benefit",
+      "methodFamily": "decision-net-benefit",
+      "toolKind": "calculation",
+      "goal": "Calculate decision-curve net benefit and default strategies from explicit aggregate confusion counts at a researcher-specified threshold; never choose the clinical threshold or pretend to refit a prediction model.",
+      "papers": [
+        {
+          "doi": "10.1186/s12967-026-08775-x",
+          "pmid": "42768349",
+          "pmcid": "PMC13595787",
+          "title": "Decision-curve analysis should be a bridge, not an endpoint, for clinical artificial intelligence in oncology.",
+          "firstPublicationDate": "2026-09-21",
+          "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/42768349/"
+        },
+        {
+          "doi": "10.1007/s11255-026-05428-2",
+          "pmid": "42827186",
+          "pmcid": null,
+          "title": "Predicting clinically significant prostate cancer in PI-RADS 3 lesions: an internally validated PSA density-based model with decision-curve analysis.",
+          "firstPublicationDate": "2026-10-02",
+          "sourceUrl": "https://pubmed.ncbi.nlm.nih.gov/42827186/"
+        }
+      ],
+      "frequency24Months": 19858,
+      "demandSourceUrl": "https://www.ebi.ac.uk/europepmc/webservices/rest/search?query=SRC%3AMED+AND+FIRST_PDATE%3A%5B2024-10-04+TO+2026-10-04%5D+AND+%28%22decision+curve+analysis%22%29&format=json&pageSize=4&resultType=core&sort_date=y",
+      "demandQueriedAt": "2026-10-04T15:51:55.345220+00:00",
+      "publicInputCount": 2,
+      "publishedReferenceCount": 2,
+      "access": "evaluation-only",
+      "entrypointContract": "function(specification) -> {netBenefit,treatAll,treatNone,netReductionPer100}",
+      "developmentContractPath": "evals/paper-gold/decision-net-benefit-development.json",
+      "primaryReferenceManifest": "evals/paper-gold/aggregate-reference-manifest.json"
+    }
+  ]
+}

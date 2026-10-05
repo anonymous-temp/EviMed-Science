@@ -1,0 +1,310 @@
+{
+  "schemaVersion": 1,
+  "methodId": "faers-ror-published-data-v3",
+  "track": "P",
+  "engineId": "pharmacovigilance",
+  "benchmarkType": "method",
+  "controlPlaneOnlyGold": true,
+  "referenceHash": "5ca261a146c900bb988e25be72e761522714e3c8868d629188f2a98e46a35683",
+  "status": "actual-existing-engine-method-ruler-scored-not-full-research",
+  "distinctPublishedSources": 5,
+  "references": [
+    {
+      "id": "faers-published-ror-1",
+      "publicationId": "10.3390/medsci13040327",
+      "sourceHash": "e9925955de025509b303af296d80edabe1e4f35bff49427ecbc9e1bceb9ffe34",
+      "independentImplementation": "R-normal-log-ror"
+    },
+    {
+      "id": "faers-published-ror-2",
+      "publicationId": "10.3390/medsci13040327",
+      "sourceHash": "e9925955de025509b303af296d80edabe1e4f35bff49427ecbc9e1bceb9ffe34",
+      "independentImplementation": "R-normal-log-ror"
+    },
+    {
+      "id": "faers-published-ror-3",
+      "publicationId": "10.3390/medsci13040327",
+      "sourceHash": "e9925955de025509b303af296d80edabe1e4f35bff49427ecbc9e1bceb9ffe34",
+      "independentImplementation": "R-normal-log-ror"
+    },
+    {
+      "id": "faers-published-ror-4",
+      "publicationId": "10.3390/medsci13040327",
+      "sourceHash": "e9925955de025509b303af296d80edabe1e4f35bff49427ecbc9e1bceb9ffe34",
+      "independentImplementation": "R-normal-log-ror"
+    },
+    {
+      "id": "faers-published-ror-5",
+      "publicationId": "10.3390/medsci13040327",
+      "sourceHash": "e9925955de025509b303af296d80edabe1e4f35bff49427ecbc9e1bceb9ffe34",
+      "independentImplementation": "R-normal-log-ror"
+    },
+    {
+      "id": "faers-published-ror-6",
+      "publicationId": "10.3390/medsci13040327",
+      "sourceHash": "e9925955de025509b303af296d80edabe1e4f35bff49427ecbc9e1bceb9ffe34",
+      "independentImplementation": "R-normal-log-ror"
+    },
+    {
+      "id": "faers-published-ror-7",
+      "publicationId": "10.3390/medsci13040327",
+      "sourceHash": "e9925955de025509b303af296d80edabe1e4f35bff49427ecbc9e1bceb9ffe34",
+      "independentImplementation": "R-normal-log-ror"
+    },
+    {
+      "id": "faers-published-ror-9",
+      "publicationId": "10.3390/medsci13040327",
+      "sourceHash": "e9925955de025509b303af296d80edabe1e4f35bff49427ecbc9e1bceb9ffe34",
+      "independentImplementation": "R-normal-log-ror"
+    },
+    {
+      "id": "faers-published-ror-11",
+      "publicationId": "10.3390/medsci13040327",
+      "sourceHash": "e9925955de025509b303af296d80edabe1e4f35bff49427ecbc9e1bceb9ffe34",
+      "independentImplementation": "R-normal-log-ror"
+    },
+    {
+      "id": "faers-published-ror-13",
+      "publicationId": "10.3390/medsci13040327",
+      "sourceHash": "e9925955de025509b303af296d80edabe1e4f35bff49427ecbc9e1bceb9ffe34",
+      "independentImplementation": "R-normal-log-ror"
+    },
+    {
+      "id": "faers-published-ror-14",
+      "publicationId": "10.3390/medsci13040327",
+      "sourceHash": "e9925955de025509b303af296d80edabe1e4f35bff49427ecbc9e1bceb9ffe34",
+      "independentImplementation": "R-normal-log-ror"
+    },
+    {
+      "id": "faers-ebbb034d22cba340348d09a9",
+      "publicationId": "10.3390/ijerph23081088",
+      "sourceHash": "df3403b92b498fb38ea587d18ae387ba58e36da6d7d2ea7e0a7420d5fdd91326",
+      "independentImplementation": "R-normal-log-ror"
+    },
+    {
+      "id": "faers-0c52e76d879f42b6831188ed",
+      "publicationId": "10.3390/ijerph23081088",
+      "sourceHash": "df3403b92b498fb38ea587d18ae387ba58e36da6d7d2ea7e0a7420d5fdd91326",
+      "independentImplementation": "R-normal-log-ror"
+    },
+    {
+      "id": "faers-b9dc3c94ee626e4fba48c1d8",
+      "publicationId": "10.3390/ijerph23081088",
+      "sourceHash": "df3403b92b498fb38ea587d18ae387ba58e36da6d7d2ea7e0a7420d5fdd91326",
+      "independentImplementation": "R-normal-log-ror"
+    },
+    {
+      "id": "faers-e3e30188e95a2181801d9229",
+      "publicationId": "10.3390/ijerph23081088",
+      "sourceHash": "df3403b92b498fb38ea587d18ae387ba58e36da6d7d2ea7e0a7420d5fdd91326",
+      "independentImplementation": "R-normal-log-ror"
+    },
+    {
+      "id": "faers-c4a14d1fa2aa813939bf7546",
+      "publicationId": "10.3390/ijerph23081088",
+      "sourceHash": "df3403b92b498fb38ea587d18ae387ba58e36da6d7d2ea7e0a7420d5fdd91326",
+      "independentImplementation": "R-normal-log-ror"
+    },
+    {
+      "id": "faers-0754cfba2bcccf5fb1f9a44f",
+      "publicationId": "10.3390/ph19081181",
+      "sourceHash": "fa1bbae3c490b99be38cf7667295bf79e80483f806882e2c411947a06f7564f5",
+      "independentImplementation": "R-normal-log-ror"
+    },
+    {
+      "id": "faers-fe9f87db9a40912ff32de995",
+      "publicationId": "10.3390/ph19081181",
+      "sourceHash": "fa1bbae3c490b99be38cf7667295bf79e80483f806882e2c411947a06f7564f5",
+      "independentImplementation": "R-normal-log-ror"
+    },
+    {
+      "id": "faers-53c49f0393e80de06556019f",
+      "publicationId": "10.3390/ph19081181",
+      "sourceHash": "fa1bbae3c490b99be38cf7667295bf79e80483f806882e2c411947a06f7564f5",
+      "independentImplementation": "R-normal-log-ror"
+    },
+    {
+      "id": "faers-484ea0a550fb3badaf84d411",
+      "publicationId": "10.3390/ph19081181",
+      "sourceHash": "fa1bbae3c490b99be38cf7667295bf79e80483f806882e2c411947a06f7564f5",
+      "independentImplementation": "R-normal-log-ror"
+    },
+    {
+      "id": "faers-e54405136e74f94f5aff31bb",
+      "publicationId": "10.3390/ph19081181",
+      "sourceHash": "fa1bbae3c490b99be38cf7667295bf79e80483f806882e2c411947a06f7564f5",
+      "independentImplementation": "R-normal-log-ror"
+    },
+    {
+      "id": "faers-410e8d55ea69ca1a6f64490c",
+      "publicationId": "10.3390/ph19081181",
+      "sourceHash": "fa1bbae3c490b99be38cf7667295bf79e80483f806882e2c411947a06f7564f5",
+      "independentImplementation": "R-normal-log-ror"
+    },
+    {
+      "id": "faers-261a3c2ab7f717f951cb1ec7",
+      "publicationId": "10.3390/ph19081181",
+      "sourceHash": "fa1bbae3c490b99be38cf7667295bf79e80483f806882e2c411947a06f7564f5",
+      "independentImplementation": "R-normal-log-ror"
+    },
+    {
+      "id": "faers-06dd9fe20303e323cf6bb30d",
+      "publicationId": "10.3390/ph19081181",
+      "sourceHash": "fa1bbae3c490b99be38cf7667295bf79e80483f806882e2c411947a06f7564f5",
+      "independentImplementation": "R-normal-log-ror"
+    },
+    {
+      "id": "faers-e78c4fe4e4a80e042e481c51",
+      "publicationId": "10.3389/fphar.2025.1682276",
+      "sourceHash": "b06aefd23133786eafd16ac41c1200f3fb2fd379817af6406c5e5540aae714e2",
+      "independentImplementation": "R-normal-log-ror"
+    },
+    {
+      "id": "faers-37a37161b5cdb243f70ffe01",
+      "publicationId": "10.3389/fphar.2025.1682276",
+      "sourceHash": "b06aefd23133786eafd16ac41c1200f3fb2fd379817af6406c5e5540aae714e2",
+      "independentImplementation": "R-normal-log-ror"
+    },
+    {
+      "id": "faers-4c0d36f29bdda733094b903e",
+      "publicationId": "10.3389/fphar.2025.1682276",
+      "sourceHash": "b06aefd23133786eafd16ac41c1200f3fb2fd379817af6406c5e5540aae714e2",
+      "independentImplementation": "R-normal-log-ror"
+    },
+    {
+      "id": "faers-2c8e19a791f8ba7cec7503d5",
+      "publicationId": "10.3389/fphar.2025.1682276",
+      "sourceHash": "b06aefd23133786eafd16ac41c1200f3fb2fd379817af6406c5e5540aae714e2",
+      "independentImplementation": "R-normal-log-ror"
+    },
+    {
+      "id": "faers-a9b13ebae0fc2a8ac1eb457c",
+      "publicationId": "10.3389/fphar.2025.1682276",
+      "sourceHash": "b06aefd23133786eafd16ac41c1200f3fb2fd379817af6406c5e5540aae714e2",
+      "independentImplementation": "R-normal-log-ror"
+    },
+    {
+      "id": "faers-cb8fdcbbb13ca9bd3c3622e3",
+      "publicationId": "10.3389/fphar.2025.1682276",
+      "sourceHash": "b06aefd23133786eafd16ac41c1200f3fb2fd379817af6406c5e5540aae714e2",
+      "independentImplementation": "R-normal-log-ror"
+    },
+    {
+      "id": "faers-e367fa2dee169e605d3b09d5",
+      "publicationId": "10.3389/fphar.2025.1682276",
+      "sourceHash": "b06aefd23133786eafd16ac41c1200f3fb2fd379817af6406c5e5540aae714e2",
+      "independentImplementation": "R-normal-log-ror"
+    },
+    {
+      "id": "faers-caca30c73c29860176e7cb27",
+      "publicationId": "10.3389/fphar.2025.1682276",
+      "sourceHash": "b06aefd23133786eafd16ac41c1200f3fb2fd379817af6406c5e5540aae714e2",
+      "independentImplementation": "R-normal-log-ror"
+    },
+    {
+      "id": "faers-8a9fd91212d9377da7aec64b",
+      "publicationId": "10.3389/fphar.2025.1682276",
+      "sourceHash": "b06aefd23133786eafd16ac41c1200f3fb2fd379817af6406c5e5540aae714e2",
+      "independentImplementation": "R-normal-log-ror"
+    },
+    {
+      "id": "faers-d2bf35bf7b78906e620f18b4",
+      "publicationId": "10.3389/fphar.2025.1682276",
+      "sourceHash": "b06aefd23133786eafd16ac41c1200f3fb2fd379817af6406c5e5540aae714e2",
+      "independentImplementation": "R-normal-log-ror"
+    },
+    {
+      "id": "faers-25170d2be026e3e8a6a36228",
+      "publicationId": "10.3389/fphar.2025.1682276",
+      "sourceHash": "b06aefd23133786eafd16ac41c1200f3fb2fd379817af6406c5e5540aae714e2",
+      "independentImplementation": "R-normal-log-ror"
+    },
+    {
+      "id": "faers-ace254e44b7b0bf34102ab77",
+      "publicationId": "10.1007/s00210-026-05748-1",
+      "sourceHash": "88f8848392e2c807d0472f12416851532e64d79cc5999131c5103d8085c8b2ca",
+      "independentImplementation": "R-normal-log-ror"
+    },
+    {
+      "id": "faers-499bd79661d260bb7f9484f0",
+      "publicationId": "10.1007/s00210-026-05748-1",
+      "sourceHash": "88f8848392e2c807d0472f12416851532e64d79cc5999131c5103d8085c8b2ca",
+      "independentImplementation": "R-normal-log-ror"
+    },
+    {
+      "id": "faers-81acd4df885c43860cf1ff99",
+      "publicationId": "10.1007/s00210-026-05748-1",
+      "sourceHash": "88f8848392e2c807d0472f12416851532e64d79cc5999131c5103d8085c8b2ca",
+      "independentImplementation": "R-normal-log-ror"
+    },
+    {
+      "id": "faers-c3ee3bd3b9d1af745dab5333",
+      "publicationId": "10.1007/s00210-026-05748-1",
+      "sourceHash": "88f8848392e2c807d0472f12416851532e64d79cc5999131c5103d8085c8b2ca",
+      "independentImplementation": "R-normal-log-ror"
+    },
+    {
+      "id": "faers-434ce63da186d622d9278f50",
+      "publicationId": "10.1007/s00210-026-05748-1",
+      "sourceHash": "88f8848392e2c807d0472f12416851532e64d79cc5999131c5103d8085c8b2ca",
+      "independentImplementation": "R-normal-log-ror"
+    },
+    {
+      "id": "faers-5e8e349fb027f9af064cf0c3",
+      "publicationId": "10.1007/s00210-026-05748-1",
+      "sourceHash": "88f8848392e2c807d0472f12416851532e64d79cc5999131c5103d8085c8b2ca",
+      "independentImplementation": "R-normal-log-ror"
+    },
+    {
+      "id": "faers-d343c4e2f9bdc6ed91020686",
+      "publicationId": "10.1007/s00210-026-05748-1",
+      "sourceHash": "88f8848392e2c807d0472f12416851532e64d79cc5999131c5103d8085c8b2ca",
+      "independentImplementation": "R-normal-log-ror"
+    },
+    {
+      "id": "faers-006f49811ad649a79dd472ae",
+      "publicationId": "10.1007/s00210-026-05748-1",
+      "sourceHash": "88f8848392e2c807d0472f12416851532e64d79cc5999131c5103d8085c8b2ca",
+      "independentImplementation": "R-normal-log-ror"
+    },
+    {
+      "id": "faers-4281ca59778e70524cd71e2d",
+      "publicationId": "10.1007/s00210-026-05748-1",
+      "sourceHash": "88f8848392e2c807d0472f12416851532e64d79cc5999131c5103d8085c8b2ca",
+      "independentImplementation": "R-normal-log-ror"
+    },
+    {
+      "id": "faers-650fa43e927aa45a59be3441",
+      "publicationId": "10.1007/s00210-026-05748-1",
+      "sourceHash": "88f8848392e2c807d0472f12416851532e64d79cc5999131c5103d8085c8b2ca",
+      "independentImplementation": "R-normal-log-ror"
+    },
+    {
+      "id": "faers-cc54945e104cb1ef8d680ff5",
+      "publicationId": "10.1007/s00210-026-05748-1",
+      "sourceHash": "88f8848392e2c807d0472f12416851532e64d79cc5999131c5103d8085c8b2ca",
+      "independentImplementation": "R-normal-log-ror"
+    }
+  ],
+  "fullResearchReproductions": 0,
+  "actualCalibrationReceipt": {
+    "ok": true,
+    "methodId": "faers-ror-published-data-v3",
+    "engineId": "pharmacovigilance",
+    "scored": true,
+    "scope": "deterministic-method-only",
+    "methodCases": 92,
+    "passed": 92,
+    "unsupported": 0,
+    "passedPublishedSources": 5,
+    "sourceDefinitionHash": "5ca261a146c900bb988e25be72e761522714e3c8868d629188f2a98e46a35683",
+    "evaluationScorerHash": "f0e73bb4804a45ca8a61963103b7ffde04875b880e5ad3a34f3e007eade04721",
+    "engineDigest": "70980cecb125c9e4bd2958b25f631ad66176d44c480f7731f46eb014a8f3ffe0",
+    "runtimeDigest": "d63a9b31a9f96a3cca721cab263d4311e96a7442a71c00f4502825accfb70e76",
+    "scorerDigest": "42f18fee01d89d8a3d3c9e1f24df2377aad121ce490bbc84d84faa90e6cee697",
+    "reportHash": "b5042c74627153b3d41d3799891ce71d06f5e7b70613c172eb21ca8dee5995c7",
+    "scoredReportHash": "ecc61fbbfecedc51a73ed7505b158b5bd519de3d1d7c95907d2846ccbb1cd8e2",
+    "fullResearchReproductions": 0,
+    "executedAt": "2026-10-04T18:24:52.980027+00:00"
+  }
+}

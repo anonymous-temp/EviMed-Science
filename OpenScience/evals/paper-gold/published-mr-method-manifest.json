@@ -1,0 +1,103 @@
+{
+  "schemaVersion": 1,
+  "methodId": "mr-ivw-published-data-v5",
+  "track": "P",
+  "engineId": "mr",
+  "benchmarkType": "method",
+  "controlPlaneOnlyGold": true,
+  "referenceHash": "a56ecfd2996502bc3369a3804ceed5abcf7d6f5df15e9335518d9cc6861ce1dc",
+  "status": "actual-existing-engine-method-ruler-scored-not-full-research",
+  "distinctPublishedSources": 6,
+  "supportedUncorrelatedIvwSources": 5,
+  "additionalSupportedWaldSources": 1,
+  "unsupportedCorrelatedCases": 1,
+  "references": [
+    {
+      "id": "published-mr-ldlc",
+      "publicationId": "10.1161/ATVBAHA.109.201020",
+      "sourceHash": "0851e91f826424f20fd4a58348ffe161d147bdc091d24d676e14d4cd6180e13c",
+      "independentImplementation": "MendelianRandomization-0.10.0-author-R"
+    },
+    {
+      "id": "published-mr-hdlc",
+      "publicationId": "10.1161/ATVBAHA.109.201020",
+      "sourceHash": "0851e91f826424f20fd4a58348ffe161d147bdc091d24d676e14d4cd6180e13c",
+      "independentImplementation": "MendelianRandomization-0.10.0-author-R"
+    },
+    {
+      "id": "published-mr-trig",
+      "publicationId": "10.1161/ATVBAHA.109.201020",
+      "sourceHash": "0851e91f826424f20fd4a58348ffe161d147bdc091d24d676e14d4cd6180e13c",
+      "independentImplementation": "MendelianRandomization-0.10.0-author-R"
+    },
+    {
+      "id": "published-mr-calcium",
+      "publicationId": "10.1007/s10654-015-0011-z",
+      "sourceHash": "0851e91f826424f20fd4a58348ffe161d147bdc091d24d676e14d4cd6180e13c",
+      "independentImplementation": "MendelianRandomization-0.10.0-author-R"
+    },
+    {
+      "id": "published-mr-raps-bmi.cad",
+      "publicationId": "10.1214/19-AOS1866",
+      "sourceHash": "4b282f1aaf4236cd6981cd6d7e50dfd5a9248bbe948fec951fc73cb76b6e070c",
+      "independentImplementation": "MendelianRandomization-0.10.0-author-R"
+    },
+    {
+      "id": "published-mr-raps-bmi.sbp",
+      "publicationId": "10.1214/19-AOS1866",
+      "sourceHash": "96c0a5b6eab2692c1465dd1bbf921aa219d872c8ed7cdc3fd4003a65e7d70beb",
+      "independentImplementation": "MendelianRandomization-0.10.0-author-R"
+    },
+    {
+      "id": "published-mr-raps-crp.cad",
+      "publicationId": "10.1214/19-AOS1866",
+      "sourceHash": "d6c37af00bc56872347f96baca907607a11d34b4323205f53504a4b2179b5d88",
+      "independentImplementation": "MendelianRandomization-0.10.0-author-R"
+    },
+    {
+      "id": "published-mr-mrcml",
+      "publicationId": "10.1016/j.ajhg.2021.05.014",
+      "sourceHash": "b3580415091f76445c377dda6078c9a71e90f761cfd06b18785219760cf6d40f",
+      "independentImplementation": "MendelianRandomization-0.10.0-author-R"
+    },
+    {
+      "id": "published-mr-mrmix",
+      "publicationId": "10.1038/s41467-019-09432-2",
+      "sourceHash": "d45f5511e6a6e8cd05247a72cb3b1168992a12d79b90d96560d04d39ea90d5ac",
+      "independentImplementation": "MendelianRandomization-0.10.0-author-R"
+    },
+    {
+      "id": "published-mr-mvmr",
+      "publicationId": "10.1002/sim.9133",
+      "sourceHash": "789ccf742732fa613b6f6cdca89ac259ca350efc6d9dd4764e0a7b223effcfef",
+      "independentImplementation": "MendelianRandomization-0.10.0-author-R"
+    },
+    {
+      "id": "published-mr-calcium-single-wald",
+      "publicationId": "10.1007/s10654-015-0011-z",
+      "sourceHash": "0851e91f826424f20fd4a58348ffe161d147bdc091d24d676e14d4cd6180e13c",
+      "independentImplementation": "base-R-first-order-Wald"
+    }
+  ],
+  "fullResearchReproductions": 0,
+  "actualCalibrationReceipt": {
+    "ok": false,
+    "methodId": "mr-ivw-published-data-v5",
+    "engineId": "mr",
+    "scored": true,
+    "scope": "deterministic-method-only",
+    "methodCases": 22,
+    "passed": 20,
+    "unsupported": 2,
+    "passedPublishedSources": 6,
+    "sourceDefinitionHash": "a56ecfd2996502bc3369a3804ceed5abcf7d6f5df15e9335518d9cc6861ce1dc",
+    "evaluationScorerHash": "f0e73bb4804a45ca8a61963103b7ffde04875b880e5ad3a34f3e007eade04721",
+    "engineDigest": "f761961fc0d6977c3710376c544193f65ea8adb8df2e8e1b4e2d1498bc2ad30c",
+    "runtimeDigest": "d63a9b31a9f96a3cca721cab263d4311e96a7442a71c00f4502825accfb70e76",
+    "scorerDigest": "42f18fee01d89d8a3d3c9e1f24df2377aad121ce490bbc84d84faa90e6cee697",
+    "reportHash": "5939f2d5ef5771a691890da562c8c0832adae668543fd7c6137f91f57d262964",
+    "scoredReportHash": "b973da08f5bf4020281d784b13e95430003d8d0b536ed93de64bbcfacd653267",
+    "fullResearchReproductions": 0,
+    "executedAt": "2026-10-04T18:24:53.744688+00:00"
+  }
+}

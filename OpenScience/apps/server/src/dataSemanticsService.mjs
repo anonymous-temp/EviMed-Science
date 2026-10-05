@@ -51,10 +51,11 @@ function requireDatasetId(datasetId) {
 }
 
 export class DataSemanticsService {
-  /** @param {{ documents: any, now?: () => string }} dependencies */
-  constructor({ documents, now = () => new Date().toISOString() }) {
+  /** @param {{ documents: any, now?: () => string, onChanged?: ((event:any)=>Promise<void>)|null }} dependencies */
+  constructor({ documents, now = () => new Date().toISOString(), onChanged = null }) {
     this.documents = documents;
     this.now = now;
+    this.onChanged = onChanged;
   }
 
   /** The datasets a project has, newest first, in the short form a list shows.
@@ -130,6 +131,7 @@ export class DataSemanticsService {
       if (!fitted) throw new HttpError(413, "semantics_asset_too_large", "The recorded meaning of this dataset no longer fits one record; split it into several datasets.");
       try {
         const saved = await this.documents.put(userId, DATA_SEMANTICS_KIND, id, fitted.asset, { expectedRevision: row ? row.revision : 0, projectId, telemetry: telemetry && Boolean(row) });
+        await this.onChanged?.({ userId, projectId, datasetId, revision: saved.revision, asset: fitted.asset });
         return { ...outcome, asset: fitted.asset, revision: saved.revision, trimmed: fitted.trimmed };
       } catch (error) {
         if (error instanceof HttpError && error.code === "product_revision_conflict" && attempt < WRITE_ATTEMPTS) continue;

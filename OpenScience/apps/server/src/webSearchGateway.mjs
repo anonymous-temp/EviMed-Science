@@ -354,10 +354,10 @@ async function bailianSearch(config, request, fetcher, signal, onDispatch = () =
  * A reservation the caps refuse leaves Bailian out of this search — the other
  * engines still answer.
  *
- * @param {{ config: any, request: any, fetcher: typeof fetch, signal: AbortSignal, usageLedger: any, caller: any, attributeRun: any }} options
+ * @param {{ config: any, request: any, fetcher: typeof fetch, signal: AbortSignal, usageLedger: any, caller: any, attributeRun: any, runPurpose: any }} options
  * @returns {Promise<any[]>}
  */
-async function meteredBailianSearch({ config, request, fetcher, signal, usageLedger, caller, attributeRun }) {
+async function meteredBailianSearch({ config, request, fetcher, signal, usageLedger, caller, attributeRun, runPurpose }) {
   if (!usageLedger) {
     if (config.requireDurableUsageLedger === true) {
       throw gatewayError(503, "web_search_unavailable", "The Bailian search is unavailable: its spend cannot be recorded right now.");
@@ -371,17 +371,18 @@ async function meteredBailianSearch({ config, request, fetcher, signal, usageLed
     ? await attributeRun({ userId: caller.userId, projectId: caller.projectId, sessionId: null }).catch(() => null)
     : null;
   const runId = caller.runId ?? attributed ?? null;
+  const purpose = runPurpose && await runPurpose({ userId: caller.userId, projectId: caller.projectId, runId }) === "evolution" ? "evolution" : "web-search";
   const estimate = priceUsage({ resourceType: "model", model, cacheMiss: bailianReservedPromptTokens, output: bailianMaxTokens, peak });
   let reservation;
   try {
     reservation = await usageLedger.reserveModel({
-      id: randomUUID(), userId: caller.userId, projectId: caller.projectId, runId, purpose: "web-search", model,
+      id: randomUUID(), userId: caller.userId, projectId: caller.projectId, runId, purpose, model,
       priceVersion: REFERENCE_PRICE_LIST.version, currency: "CNY",
       requestFingerprint: createHash("sha256").update(JSON.stringify({ model, query: request.query, strategy: "turbo" })).digest("hex"),
       estimatedCost: estimate.cost,
-      dailyLimit: minimumPositive(caller.dailyLimit, config.userDailySpendLimit),
-      weeklyLimit: minimumPositive(caller.weeklyLimit, config.userWeeklySpendLimit),
-      runLimit: caller.runId != null ? Number(caller.runLimit) || 0 : (attributed ? Number(config.userRunSpendLimit) || 0 : 0),
+      dailyLimit: purpose === "evolution" ? Number(config.evolutionDailyBudgetCny) || 0 : minimumPositive(caller.dailyLimit, config.userDailySpendLimit),
+      weeklyLimit: purpose === "evolution" ? 0 : minimumPositive(caller.weeklyLimit, config.userWeeklySpendLimit),
+      runLimit: purpose === "evolution" ? 0 : caller.runId != null ? Number(caller.runLimit) || 0 : (attributed ? Number(config.userRunSpendLimit) || 0 : 0),
       now: at,
     });
   } catch (error) {
@@ -417,11 +418,11 @@ async function meteredBailianSearch({ config, request, fetcher, signal, usageLed
 
 /**
  * @param {any} config @param {any} runtimeManager
- * @param {{ fetchImpl?: typeof fetch, edge?: ReturnType<typeof import("./edgeProxy.mjs").edgeProxyFromConfig>, edgeFetchImpl?: typeof fetch | null, usageLedger?: any, attributeRun?: ((input: { userId: string, projectId: string, sessionId: string | null }) => Promise<string | null>) | null }} [options]
+ * @param {{ fetchImpl?: typeof fetch, edge?: ReturnType<typeof import("./edgeProxy.mjs").edgeProxyFromConfig>, edgeFetchImpl?: typeof fetch | null, usageLedger?: any, evaluationIsolation?: any, runPurpose?: any, attributeRun?: ((input: { userId: string, projectId: string, sessionId: string | null }) => Promise<string | null>) | null }} [options]
  *   `usageLedger` / `attributeRun`: what the Bailian call is booked in and
  *   which run it is charged to, as for the model gateway
  */
-export function createWebSearchGatewayHandler(config, runtimeManager, { fetchImpl = fetch, edge = null, edgeFetchImpl = null, usageLedger = null, attributeRun = null } = {}) {
+export function createWebSearchGatewayHandler(config, runtimeManager, { fetchImpl = fetch, edge = null, edgeFetchImpl = null, usageLedger = null, attributeRun = null, evaluationIsolation = null, runPurpose = null } = {}) {
   const throughEdge = edgeFetchImpl ?? ((url, init) => edgeFetch(/** @type {any} */ (edge), /** @type {URL} */ (url), /** @type {any} */ (init)));
   return async function webSearchGatewayHandler(req, res, onFailure) {
     if (req.method !== "POST" || new URL(req.url ?? "/", "http://localhost").pathname !== gatewayPath) {
@@ -465,7 +466,7 @@ export function createWebSearchGatewayHandler(config, runtimeManager, { fetchImp
         return searxngSearch(searchEndpoint(localUrl), request, fetchImpl, controller.signal);
       })() : Promise.resolve(null);
       const bailian = bailianOn
-        ? meteredBailianSearch({ config, request, fetcher: fetchImpl, signal: controller.signal, usageLedger, caller, attributeRun })
+        ? meteredBailianSearch({ config, request, fetcher: fetchImpl, signal: controller.signal, usageLedger, caller, attributeRun, runPurpose })
         : Promise.resolve(null);
       const [searxOutcome, bailianOutcome] = await Promise.allSettled([searx, bailian]);
       const bailianAnswered = bailianOn && bailianOutcome.status === "fulfilled";
@@ -481,10 +482,11 @@ export function createWebSearchGatewayHandler(config, runtimeManager, { fetchImp
       const payload = searxOutcome.status === "fulfilled" ? searxOutcome.value : null;
       if (!payload && bailianOutcome.status === "rejected") throw bailianOutcome.reason;
       const bailianRows = bailianAnswered ? bailianOutcome.value ?? [] : [];
-      const results = mergedResults([Array.isArray(payload?.results) ? payload.results : [], bailianRows], request.limit);
+      let results = mergedResults([Array.isArray(payload?.results) ? payload.results : [], bailianRows], request.limit);
       // Which engines actually answered is part of the finding, not
       // diagnostics: a result set assembled from one engine that happened to be
       // up is a different claim about the web than one assembled from four.
+      if (evaluationIsolation) results = await evaluationIsolation.filter(caller, "web-search", results);
       const engines = [...new Set(results.map((row) => row.engine).filter(Boolean))].sort();
       const unresponsiveEngines = [...new Set([
         ...unresponsiveEnginesOf(payload),

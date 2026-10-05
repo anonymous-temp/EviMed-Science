@@ -411,6 +411,19 @@ export function runMethodObservations(input) {
 
 /** Record attached context, explicit reads and associated delivery outcomes separately. None establishes causal improvement.
  * @param {{learning:any,userId:string,projectId?:string,run:any,projection:any,sessions?:readonly any[]}} input */
+/** Closed actual tool error envelopes, never a refusal written as prose. @param {any} part */
+export function handbookMissingComputation(part) {
+  if(part?.type!=='tool' || !['completed','failed','error'].includes(part.status))return false;
+  const output=part.output??part.result;
+  let structured=output;
+  if(typeof output==='string'){try{structured=JSON.parse(output);}catch{return false;}}
+  if(Array.isArray(structured?.content)){
+    const text=structured.content.find(item=>item.type==='text')?.text;
+    try{structured=JSON.parse(text);}catch{return false;}
+  }
+  const code=part.error?.code??part.errorCode??structured?.error?.code??structured?.result?.error?.code;
+  return ['method_missing','tool_not_found','command_not_found','extension_tool_not_found'].includes(code);
+}
 export async function recordHandbookRunObservations({ learning, userId, projectId, run, projection, sessions = [] }) {
   if (!run.id) return;
   // Attachment is preserved independently; a timestamp alone cannot prove
@@ -440,7 +453,8 @@ export async function recordHandbookRunObservations({ learning, userId, projectI
       })));
     const outcomes = items.filter((item) => deliverableOutcome(item)).map((item) => ({ deliverableId: item.id, outcome: deliverableOutcome(item) }));
     const observation = { runId: run.id, projectId: projectId ?? run.projectId ?? null, at: new Date().toISOString(),
-      contentDigest: mounted.contentDigest, attached: true, used, outcomes };
+      contentDigest: mounted.contentDigest, attached: true, used, outcomes,
+      gapCodes: used && observedSessions.some(session => (session.transcript?.messages??[]).filter(inThisRun).some(message => (message.parts??[]).some(part => handbookMissingComputation(part)))) ? ['method-missing'] : [] };
     for (let attempt = 0; attempt < 5; attempt += 1) {
       const row = await learning.documents.get(userId, "method", mounted.id);
       if (row?.payload?.recordType !== "capability-handbook" || row.payload.capabilityId !== mounted.capabilityId

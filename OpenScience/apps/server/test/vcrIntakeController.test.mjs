@@ -562,8 +562,8 @@ test('the controller serves the intake operations at protocol 11 and refuses any
   t.after(() => server.close());
   await server.listen();
   const client = new RuntimeControllerClient({ runtimeControllerSocket: socketPath, runtimeControllerTimeoutMs: 5_000, vcrIntakeTimeoutMs: 20_000 });
-  assert.equal(RUNTIME_CONTROLLER_PROTOCOL_VERSION, 11);
-  assert.equal((await client.health()).protocolVersion, 11);
+  assert.equal(RUNTIME_CONTROLLER_PROTOCOL_VERSION, 12);
+  assert.equal((await client.health()).protocolVersion, 12);
 
   const record = recordReference();
   assert.deepEqual(await client.runVcrIntake('extract', record), { finished: true });
