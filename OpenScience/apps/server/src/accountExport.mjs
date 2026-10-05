@@ -1,6 +1,7 @@
 import { DOCUMENT_EXPORT_FORMATS, priceListFor, projectAffected, projectCorrectionOutcome, projectResultInput, projectResultVersion } from "@evimed/domain";
 import { PLUGIN_REGISTRY, exportPluginPayload, projectPluginId } from "./pluginService.mjs";
 import { HttpError } from "./security.mjs";
+import { assertNotPlatformAccount } from "./platformAccount.mjs";
 import { migrateProductStore } from "./productPersistence.mjs";
 import { migrateNotifications } from "./notificationPersistence.mjs";
 import { migrateUsageLedger } from "./usagePersistence.mjs";
@@ -341,6 +342,8 @@ export function exportedPriceLists(usageRows) {
  * @param {(snapshot:any) => Promise<any>} operation
  * @param {{maxRows?:number,maxBytes?:number,skillArtifacts?:any,report?:(line:string)=>void}} limits */
 export async function withAccountExportSnapshot(database, user, config, operation, limits = {}) {
+  // The platform's publishing account is nobody's to take a copy of (evidence-flywheel B2).
+  assertNotPlatformAccount(user);
   if (!database) return operation(null);
   const report = limits.report ?? ((/** @type {string} */ line) => { process.stderr.write(line); });
   if (typeof user.accountCreatedAt !== "string" || !user.accountCreatedAt) {

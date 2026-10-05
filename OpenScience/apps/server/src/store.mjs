@@ -4,6 +4,7 @@ import fs from "node:fs/promises";
 import { MIN_PASSWORD_LENGTH, meetsPasswordMinimum } from "@evimed/domain";
 import { ControlPlaneDatabase, CONTROL_PLANE_SCHEMA, CONTROL_PLANE_SCHEMA_VERSION } from "./controlPlaneDatabase.mjs";
 import { DEVICE_REQUEST } from "./channels/deviceTokens.mjs";
+import { externalDisplayName, isPlatformAccount, isReservedAccountIdentity, platformAccountProtected, platformAccountReserved } from "./platformAccount.mjs";
 import {
   assertNoSymlinkPath,
   HttpError,
@@ -137,7 +138,7 @@ function serializeStateWrite(file, operation) {
  */
 function deviceSessionOf(req) {
   const device = req?.[DEVICE_REQUEST];
-  return device?.user ? { user: device.user, session: { userId: device.user.id, csrfToken: null, device: true } } : null;
+  return device?.user && !isPlatformAccount(device.user) ? { user: device.user, session: { userId: device.user.id, csrfToken: null, device: true } } : null;
 }
 
 function sessionKey(sessionId) {
@@ -268,7 +269,7 @@ export class InMemoryStore {
       const session = this.sessions.get(key);
       if (session.expiresAt > Date.now()) {
         const user = await this.userById(session.userId);
-        if (user) return { user, session };
+        if (user && !isPlatformAccount(user)) return { user, session };
       }
       this.sessions.delete(key);
       await this.saveSessions();
@@ -288,7 +289,8 @@ export class InMemoryStore {
     await this.loadUsers();
     const id = safeId(username, "username");
     const user = await this.userById(id);
-    if (!user || !verifyPassword(password, user.passwordHash)) {
+    // The platform account has no password and the same answer a wrong one gets: nothing says it exists.
+    if (!user || isPlatformAccount(user) || !verifyPassword(password, user.passwordHash)) {
       throw new HttpError(401, "invalid_credentials", "Invalid username or password.");
     }
     const session = await this.createSession(user, req, res);
@@ -306,6 +308,7 @@ export class InMemoryStore {
   }
 
   async createSession(user, req, res) {
+    if (isPlatformAccount(user)) throw platformAccountProtected();
     await this.loadSessions();
     const newSession = randomId("sess_");
     const ttlMs = sessionTtlMs(this.config);
@@ -491,6 +494,7 @@ export class InMemoryStore {
 
   async createUser(username, password, name = username) {
     const id = safeId(username, "username");
+    if (isReservedAccountIdentity(id, name)) throw platformAccountReserved();
     if (!meetsPasswordMinimum(password)) {
       throw new HttpError(400, "weak_password", `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
     }
@@ -537,6 +541,7 @@ export class InMemoryStore {
    */
   async upsertExternalUser(userId, name, authType, { evimedUserId = null } = {}) {
     const id = safeId(userId, `${authType} user id`);
+    if (isReservedAccountIdentity(id, null)) throw platformAccountReserved();
     const subject = authType === "evimed" ? evimedSubject(evimedUserId) : "";
     await this.loadUsers();
     const existing = this.users.get(id);
@@ -546,7 +551,7 @@ export class InMemoryStore {
     if (existing && existing.authType !== authType) {
       throw new HttpError(409, "identity_collision", "External identity conflicts with an existing account.");
     }
-    const displayName = typeof name === "string" && name.trim() ? name.trim().slice(0, 128) : "EviMed User";
+    const displayName = externalDisplayName(name);
     const userRoot = path.join(this.config.dataDir, "users", id);
     await ensureUserRoot(this.config, userRoot);
     const user = existing ?? {
@@ -747,6 +752,7 @@ export class InMemoryStore {
 
   /** @param {any} user @param {{beforeDelete?: ((userId: string, client: any) => Promise<void>) | null}} options */
   async deleteUser(user, { beforeDelete = null } = {}) {
+    if (isPlatformAccount(user)) throw platformAccountProtected();
     const id = safeId(user.id, "user id");
     await this.loadUsers();
     await this.loadSessions();
@@ -1088,7 +1094,9 @@ export class PostgresStore extends InMemoryStore {
           WHERE s.id_hash = $1 AND s.expires_at > now()`,
         [key],
       );
-      if (result.rowCount === 1) {
+      // A session row naming the platform account is no session: nothing signs in as it, and a row that says
+      // otherwise is deleted like an expired one (`isPlatformAccount`).
+      if (result.rowCount === 1 && !isPlatformAccount({ id: result.rows[0].id, authType: result.rows[0].auth_type })) {
         const row = result.rows[0];
         return { user: databaseUser(this.config, row), session: databaseSession(row) };
       }
@@ -1107,7 +1115,8 @@ export class PostgresStore extends InMemoryStore {
     await this.loadUsers();
     const id = safeId(username, "username");
     const user = await this.userById(id);
-    if (!user || !verifyPassword(password, user.passwordHash)) {
+    // The platform account has no password and the same answer a wrong one gets: nothing says it exists.
+    if (!user || isPlatformAccount(user) || !verifyPassword(password, user.passwordHash)) {
       throw new HttpError(401, "invalid_credentials", "Invalid username or password.");
     }
     const session = await this.createSession(user, req, res);
@@ -1126,6 +1135,7 @@ export class PostgresStore extends InMemoryStore {
   }
 
   async createSession(user, req, res) {
+    if (isPlatformAccount(user)) throw platformAccountProtected();
     const newSession = randomId("sess_");
     const ttlMs = sessionTtlMs(this.config);
     const session = {
@@ -1191,6 +1201,7 @@ export class PostgresStore extends InMemoryStore {
 
   async createUser(username, password, name = username) {
     const id = safeId(username, "username");
+    if (isReservedAccountIdentity(id, name)) throw platformAccountReserved();
     if (!meetsPasswordMinimum(password)) {
       throw new HttpError(400, "weak_password", `Password must be at least ${MIN_PASSWORD_LENGTH} characters.`);
     }
@@ -1228,8 +1239,9 @@ export class PostgresStore extends InMemoryStore {
     if (!EXTERNAL_AUTH_TYPES.includes(authType)) {
       throw new HttpError(400, "invalid_id", "Unknown external identity kind.");
     }
+    if (isReservedAccountIdentity(id, null)) throw platformAccountReserved();
     const subject = authType === "evimed" ? evimedSubject(evimedUserId) : "";
-    const displayName = typeof name === "string" && name.trim() ? name.trim().slice(0, 128) : "EviMed User";
+    const displayName = externalDisplayName(name);
     return this.database.transaction(async (client) => {
       await lockUserIdentity(client, id);
       const existing = await client.query(
@@ -1541,6 +1553,7 @@ export class PostgresStore extends InMemoryStore {
 
   /** @param {any} user @param {{beforeLock?: ((userId: string, client: any) => Promise<void>) | null,beforeDelete?: ((userId: string, client: any) => Promise<void>) | null}} options */
   async deleteUser(user, { beforeLock = null, beforeDelete = null } = {}) {
+    if (isPlatformAccount(user)) throw platformAccountProtected();
     const id = safeId(user.id, "user id");
     const root = usersRoot(this.config);
     const userRoot = path.join(root, id);
