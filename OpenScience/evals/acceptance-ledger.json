@@ -17,7 +17,7 @@
     },
     "evidence": "Either a repository-relative path that must exist, or 'PROGRESS.md@YYYY-MM-DD HH:MM' naming a log entry that must be there. Line numbers are not a form: PROGRESS.md is written newest first, so every new milestone would invalidate every anchor below it.",
     "evalHarness": "The directory under evals/ that holds this capability's eval assets, or null when it has none. Most rows name their own evals/<id>; comprehensive-drug-evaluation and drug-selection still share evals/drug-evidence-quality, and two rows point at a differently named harness (evals/clinical-review-quality, evals/research-topic-quality).",
-    "briefCount": "The number of entries in <evalHarness>/briefs.json. Zero is honest and common: a smoke or benchmark-case harness ships no briefs, and a capability package is supposed to carry at least three real ones. Exemption: an internal capability that only a platform job dispatches (method-distillation, method-relations — the learning loop) has no researcher request to write a brief from; its inputs are the platform's own run records, and it is evaluated by the job-level harness its row names (evals/method-quality splits) instead. An internal capability a person's material reaches (source-understanding) is not exempt.",
+    "briefCount": "The number of entries in <evalHarness>/briefs.json. Zero is honest and common: a smoke or benchmark-case harness ships no briefs, and a capability package is supposed to carry at least three real ones. Exemption: an internal capability that only a platform job dispatches (method-distillation, method-relations — the learning loop; tool-builder, evolution-scout — 循证进化) has no researcher request to write a brief from; its inputs are the platform's own run records, or public literature and closed gap codes, and it is evaluated by the job-level harness its row names (evals/method-quality splits for the learning loop; evals/paper-gold, the published-case evaluation 循证进化 builds and scores a tool with, for the evolution pair) instead. An internal capability a person's material reaches (source-understanding) is not exempt.",
     "relatedEvidence": "References that exist and are worth keeping in view but that do not establish a capability-level accepted delivery. The checker resolves each one so it cannot rot."
   },
   "capabilities": [
@@ -149,6 +149,23 @@
         "evals/evidence-appraisal/briefs.json"
       ],
       "note": "Accepted on 2026-09-10 against evimed-20260910-dae363e on a fresh project: brief appraisal-001 (SGLT2 inhibitors in HFpEF) ended succeeded in 15 minutes. Read before this row changed: the root planned and delegated once (the plan-then-delegate instruction under test), the child was injected with all four manifest skills, the appraisal-table deliverable was accepted on its second submission with no gate issue at all (the first carried a required runtime_leakage finding and advisories the child repaired in place), nine studies each rated on the three domains under the domains object the skill now shows, three outcome bodies at high / moderate / moderate with every downgrade named, and the root completed without redoing anything. The independent reviewer left fourteen notices, two of them contradictions (a pooled all-cause-death estimate recorded as incoherent with its inputs but not verified; an interaction P value used as proof of consistent direction while a cited pre-specified analysis points the other way) — delivered, and kept here as the eval cases they are. History of this row: the 2026-09-09 acceptance was withdrawn when its transcript showed the gate counting an errored skill call as a load; the 2026-09-10 02:09 run on a8f9c0f proved the delegation fix but was stopped by hand in its third redo of an already-accepted deliverable, after six false appraisal_domain_missing advisories (the validator read only study.domains while the skill never said the ratings live there) — kept beside this one as ...-interrupted, and fixed in dae363e in the skill, the validator and the orchestration guidance. The attempt on the previous release that wrote the clinical-evidence package's file names is kept as ...-attempt1-failed."
+    },
+    {
+      "id": "evolution-scout",
+      "visibility": "internal",
+      "evalHarness": "evals/paper-gold",
+      "briefCount": 0,
+      "realDelivery": {
+        "status": "not-run",
+        "evidence": null,
+        "at": null,
+        "surface": null
+      },
+      "relatedEvidence": [
+        "capabilities/evolution-scout/capability.yaml",
+        "evals/paper-gold/run.mjs"
+      ],
+      "note": "Internal: dispatched only by the evolution worker (evolutionRuns.mjs), never by a user request; no researcher's material reaches it, so it is exempt from the three-brief rule as a platform-job-only internal capability (definitions.briefCount). New with 循证进化 (OPEN_SCIENCE_EVOLUTION_ENABLED, off by default): it turns preserved literature method tuples and closed failure codes into one research card for a missing tool. The module has never been switched on in production, so no scouting run is on record; the row reads not-run until one is. Its contract validator accepts any input and only labels (advisory findings); what accepts a card is the dossier's reference preparation and the evaluator (evals/paper-gold), not this package."
     },
     {
       "id": "gene-expression-analysis",
@@ -436,6 +453,23 @@
         "evals/statistical-analysis/results/2026-09-30-statistics-001-wdbc-group-comparison-run2/scientific-review.txt"
       ],
       "note": "The current DSH + DeepSeek production run delivered the WDBC comparison and executable analysis. Independent replay confirms the input hash and primary Welch statistics; preserved source fingerprints match. The review retains residual threshold-interval and report-framing findings, so delivery acceptance is not an unqualified scientific quality pass. Sequential Python and native R scenarios remain in progress."
+    },
+    {
+      "id": "tool-builder",
+      "visibility": "internal",
+      "evalHarness": "evals/paper-gold",
+      "briefCount": 0,
+      "realDelivery": {
+        "status": "not-run",
+        "evidence": null,
+        "at": null,
+        "surface": null
+      },
+      "relatedEvidence": [
+        "capabilities/tool-builder/capability.yaml",
+        "evals/paper-gold/run.mjs"
+      ],
+      "note": "Internal: dispatched only by the evolution worker (evolutionRuns.mjs), never by a user request; no researcher's material reaches it, so it is exempt from the three-brief rule as a platform-job-only internal capability (definitions.briefCount). New with 循证进化: it implements one candidate tool and its development tests from a frozen research card, with no tools of its own and no evaluator access. The module has never been switched on in production, so no build run is on record; the row reads not-run until one is. Its contract validator accepts any input and only labels (advisory findings); what accepts a candidate is the static package check, the independent execution check and the paper-gold evaluator, not this package."
     },
     {
       "id": "vcr-analysis",

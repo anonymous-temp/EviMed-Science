@@ -13,9 +13,22 @@ export const EVOLUTION_BUILD_FORMS = Object.freeze(['compose', 'extend', 'wrap',
 export const EVOLUTION_CASE_GROUPS = Object.freeze(['development', 'holdout', 'time-holdout', 'prospective'])
 export const EVOLUTION_TOOL_STATES = Object.freeze(['staged', 'active', 'alias', 'retired'])
 export const EVOLUTION_JOB_KINDS = Object.freeze(['evolution-event', 'evolution-scout', 'evolution-build', 'evolution-evaluate', 'evolution-decision', 'evolution-digest', 'evolution-maintain', 'evolution-self-check'])
+/**
+ * What a decision's option can do, as the control plane's executor knows it (`evolutionComposition.mjs`). This list is
+ * closed, and it is what stops the engine: an option whose operation is not here is refused when it is chosen, by a
+ * person or by default. None of these deletes data, sends anything outside the platform, spends past the daily budget
+ * or touches a clinical safety rule; the nearest to irreversible, a soft retirement, keeps every version and can be
+ * restored. Adding one that does is adding it to `EVOLUTION_ONE_WAY_OPERATIONS` as well, which makes its decision a
+ * one-way door that no default can take.
+ */
+export const EVOLUTION_EXECUTABLE_OPERATIONS = Object.freeze(['wait', 'defer', 'keep', 'build', 'retry', 'recommended', 'alternative', 'rescout',
+  'maintenance-retire', 'maintenance-merge', 'maintenance-repair'])
+/** Operations that cannot be taken back; a decision that offers one is class C whatever else it says (plan 9.1). */
+export const EVOLUTION_ONE_WAY_OPERATIONS = Object.freeze(['delete-data', 'external-send', 'over-budget-spend', 'clinical-safety-change'])
 /** @param {any} input */
 export function evolutionDecisionClass(input) {
   if (input.overBudget || input.deleteData || input.externalSend || input.clinicalSafetyChange) return 'C'
+  if ((input.options ?? []).some((/** @type {any} */ option) => EVOLUTION_ONE_WAY_OPERATIONS.includes(option?.operation ?? option?.id))) return 'C'
   if (input.resourceOnly) return 'D'
   return input.directional && new Set(input.attemptedPaths ?? []).size >= 2 ? 'B' : 'A'
 }
@@ -105,6 +118,7 @@ export const EVOLUTION_ERROR_MESSAGES = Object.freeze({
   'evolution_assessment_invalid': '这项研究工作暂时无法完成，请稍后重试。',
   'evolution_capability_missing': '这条研究记录已变化，请刷新后重试。',
   'evolution_card_invalid': '这项研究工作暂时无法完成，请稍后重试。',
+  'evolution_decision_executing': '这条裁决正在执行，稍后刷新再答复。',
   'evolution_decision_invalid': '这项研究工作暂时无法完成，请稍后重试。',
   'evolution_decision_missing': '这条研究记录已变化，请刷新后重试。',
   'evolution_dependency_allowlist_invalid': '循证进化的依赖白名单配置有误，该模块暂未启用，其他研究不受影响。',

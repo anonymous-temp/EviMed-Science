@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import { setTimeout as delay } from 'node:timers/promises';
 import { waitForEvolutionTranscript, evolutionTranscriptHash } from './evolution-transcript-wait.mjs';
-/** Closed proof of natural installed-tool routing and its exact actual execution receipt. */
+/** Closed proof that a conversation in the capability the researcher chose used an installed tool, and of its exact actual execution receipt.
+ * The tool is found through the capability's own native skill catalogue; nothing in the question routes it. */
 export function verifyNaturalToolAcceptance({ run, tool, capabilityId, receipts, transcript }) {
   assert.equal(run.status, 'succeeded');
-  assert.ok(String(run.effectiveRouteReason).startsWith('installed-tool:'));
+  assert.equal(run.effectiveRouteReason, `choice:${capabilityId}`);
   assert.equal(run.effectiveAgentId, capabilityId);
   assert.equal(transcript.header.completeness, 'complete');
   const matching = receipts.filter(row => {
@@ -35,7 +36,7 @@ export async function runEvolutionNaturalToolAcceptance({ app, ownerId, password
   const listing = await fetch(baseUrl + '/api/projects', { headers, signal });
   assert.ok(listing.ok);
   const listed = (await listing.json()).data;
-  const project = (Array.isArray(listed) ? listed : listed.projects ?? []).find(item => item.id === projectId) ?? await request('/api/projects', { id: projectId, name: `进化工具自然路由验收 ${probeId}` });
+  const project = (Array.isArray(listed) ? listed : listed.projects ?? []).find(item => item.id === projectId) ?? await request('/api/projects', { id: projectId, name: `进化工具自然使用验收 ${probeId}` });
   headers['X-Open-Science-Project'] = project.id;
   const owned = await app.store.requireProject(await app.store.userById(ownerId), project.id);
   const dispatchId = `acceptance_evolution_natural_${probeId}`;
@@ -44,7 +45,7 @@ export async function runEvolutionNaturalToolAcceptance({ app, ownerId, password
   if (!run) {
     const session = await request('/api/runtime/sessions', {});
     await request(`/api/research-sessions/${encodeURIComponent(session.id)}`, { mode: 'open-domain' }, 'PUT');
-    const dispatched = await request('/api/agent-runs/dispatch', { sessionId: session.id, dispatchId, text: `调用平台工具 ${tool.id}。使用以下公开合成输入执行一次，报告实际结构化数值结果，不使用替代工具：${JSON.stringify(publicInput)}`, automated: true });
+    const dispatched = await request('/api/agent-runs/dispatch', { sessionId: session.id, dispatchId, line: capabilityId, text: `调用平台工具 ${tool.id}。使用以下公开合成输入执行一次，报告实际结构化数值结果，不使用替代工具：${JSON.stringify(publicInput)}`, automated: true });
     const runId = dispatched.id ?? dispatched.run?.id, deadline = Date.now() + app.config.evolutionEvaluationTimeoutMs;
     do { await delay(1000, undefined, { signal }); run = (await app.agentRuns.list(owned)).find(item => item.id === runId); } while (Date.now() < deadline && (!run || ['queued', 'dispatching', 'running'].includes(run.status)));
   }

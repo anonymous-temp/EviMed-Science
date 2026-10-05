@@ -4,15 +4,16 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createEvolutionLearningCoupling } from '../src/evolutionLearningCoupling.mjs';
 import { publishEvaluationGaps } from '../src/evolutionEvaluationGaps.mjs';
-test('only repeated actually used handbook missing-computation observations create a private durable gap; publication links exact public pins',async()=>{
+test('only repeated actually used handbook missing-computation observations create a private durable gap, and the researcher\'s handbook is never written',async()=>{
   const book={user_id:'researcher',id:'book',revision:3,payload:{capabilityId:'statistics',contentDigest:'immutable-body',body:'private text',observations:[{runId:'a',used:true,gapCodes:['method-missing']},{runId:'a',used:true,gapCodes:['method-missing']},{runId:'b',used:false,gapCodes:['method-missing']}]}};
   const events=[],writes=[];
-  const service={ingestEvent:async event=>events.push(event),tools:async()=>[{id:'visible',payload:{status:'active',validationLevel:'V2',capabilityIds:['statistics'],revision:1,artifactDigest:'pin'}},{id:'wrong-capability',payload:{status:'active',validationLevel:'V2',capabilityIds:['other']}},{id:'hidden',payload:{status:'staged',validationLevel:'V2',capabilityIds:['statistics']}}]};
-  const coupling=createEvolutionLearningCoupling({service,database:{query:async()=>({rows:[book]})},documents:{put:async(...args)=>writes.push(args)}});
+  const service={ingestEvent:async event=>events.push(event),tools:async()=>[{id:'visible',payload:{status:'active',validationLevel:'V2',capabilityIds:['statistics'],revision:1,artifactDigest:'pin'}}],documents:{put:async(...args)=>writes.push(args)}};
+  const coupling=createEvolutionLearningCoupling({service,database:{query:async()=>({rows:[book]})}});
   await coupling.scan();assert.equal(events.length,0);
   book.payload.observations.push({runId:'c',used:true,gapCodes:['method-missing']});
   await coupling.scan();await coupling.scan();assert.equal(events[0].id,events[1].id);assert.equal(events[0].userId,'researcher');assert.equal(JSON.stringify(events).includes('private text'),false);
-  assert.equal(writes[0][3].contentDigest,'immutable-body');assert.equal(writes[0][3].body,'private text');assert.deepEqual(writes[0][3].platformToolReferences.map(row=>row.toolId),['visible']);assert.equal(writes[0][4].expectedRevision,3);
+  assert.deepEqual(writes,[],'a platform job rewrites no document a researcher owns');
+  assert.equal('refresh' in coupling,false,'the platform catalogue reaches a run through its native skill mount, not through the handbook');
 });
 test('only independently replayed adjudication emits an opaque opportunity event; model assertions and raw gold never do',async()=>{
   const events=[],review={verdict:'paper_error',codeVerified:false,reviewerFamily:'qwen',evidenceIds:['public-source'],verificationProof:{proofHash:'a'.repeat(64)}};
@@ -32,10 +33,15 @@ test('native MCP and socket tool-result envelopes yield only closed actual missi
   assert.equal(handbookMissingComputation({type:'tool',status:'completed',output:{error:{code:'invalid_input'}}}),false);
 });
 
-test('existing method-relations context is relevant, bounded and omits large source/data payloads explicitly',()=>{
+test('existing method-relations context is bounded, chosen by declared capability, and omits large source/data payloads explicitly',()=>{
   const tools=Array.from({length:35},(_,i)=>({id:`tool-${i}`,capabilityIds:['statistics'],digest:'pin',description:'Public description',papers:['secret-large'],dataRequirements:{rows:'private'}}));
   tools.push({id:'other',capabilityIds:['other'],description:'Unrelated'});
-  const result=relevantPlatformTools(tools,[{payload:{capabilityId:'statistics'}}]);
-  assert.equal(result.items.length,30);assert.equal(result.omitted,5);assert.equal(result.irrelevant,1);
-  assert.equal(JSON.stringify(result).includes('secret-large'),false);assert.equal(JSON.stringify(result).includes('private'),false);
+  const {platformTools}=relevantPlatformTools(tools,[{payload:{capabilityId:'statistics'}}]);
+  assert.equal(platformTools.items.length,30);assert.equal(platformTools.omitted,5);assert.equal(platformTools.irrelevant,1);
+  assert.equal(JSON.stringify(platformTools).includes('secret-large'),false);assert.equal(JSON.stringify(platformTools).includes('private'),false);
+  // Shared words are not a relation: a description that happens to repeat a method's vocabulary is not selected,
+  // and a description in Chinese is judged no differently from one in English.
+  const method={payload:{capabilityId:'statistics',frontmatter:{name:'denominator check',description:'Check denominators'}}};
+  assert.deepEqual(relevantPlatformTools([{id:'x',capabilityIds:['other'],name:'denominator',description:'Check denominators'},{id:'y',capabilityIds:['other'],name:'分母',description:'核对分母'}],[method]),{});
+  assert.deepEqual(relevantPlatformTools([],[method]),{});
 });

@@ -18,7 +18,7 @@ import { HttpError } from "./security.mjs";
 import { EVOLUTION_PROJECT_ID, isInternalProject } from "./internalProjects.mjs";
 import { createEvolutionToolAdmission } from "./evolutionToolAdmission.mjs";
 import { createEvolutionService, evolutionKey } from "./evolutionService.mjs";
-import { createEvolutionDecisions, evolutionDecisionReviewProof } from "./evolutionDecisions.mjs";
+import { createEvolutionDecisions, evolutionDecisionReviewProof, evolutionExecutableOperation, evolutionRetirementNotice } from "./evolutionDecisions.mjs";
 import { createEvolutionMaintenance, evolutionRetrievalScore } from "./evolutionMaintenance.mjs";
 import { createEvolutionWorker } from "./evolutionWorker.mjs";
 import { persistExistingEngineEvaluation } from "./existingEngineCalibration.mjs";
@@ -72,7 +72,7 @@ export function createEvolution({ config, store, documents, jobs, database, usag
     wakeAgenda: input => integration.wakeAgenda(input),
   } });
   const integration = new EvolutionIntegration({ service, autopilot, report });
-  const learningCoupling = createEvolutionLearningCoupling({service,documents,database});
+  const learningCoupling = createEvolutionLearningCoupling({service,database});
   service.callbacks.adjudicationOpportunity = async input => {
     const userId=await service.owner(), user=await store.userById(userId);
     const project=await store.projectFor(user,'evolution-research-opportunities','循证进化研究机会');
@@ -80,7 +80,6 @@ export function createEvolution({ config, store, documents, jobs, database, usag
       title:'核对复现分析中的证据分歧',prompt:`${input.publicPaperId ? `独立核查公开论文 ${input.publicPaperId}。` : ''}平台的独立复现和跨家族复核发现值得进一步核对的证据分歧。请开展独立文献核查，保留来源并区分已发表结论与平台推断；不将平台裁定作为新的实证证据。`,taskTypes:['evidence-update'],basis:{kind:'adjudicated-platform-inference',...input}});
   };
   service.callbacks.scanHandbookGaps = () => learningCoupling.scan();
-  service.callbacks.refreshPlatformReferences = () => learningCoupling.refresh();
   const executionEvidence = createProspectiveExecutionEvidence(config);
   const evidenceRegistration = createEvolutionEvidenceRegistration({ service, integration, store, agentRuns, runtimeManager, sourceService, executionEvidence });
   service.callbacks.pollProspectiveTargets = () => evidenceRegistration.pollProspectiveTargets();
@@ -187,7 +186,7 @@ export function createEvolution({ config, store, documents, jobs, database, usag
     execute: async action => {
       const id = `evolution-action-${evolutionKey(action.actionId)}`, prior = await service.get(id);
       if (prior?.payload.status === "complete") return prior.payload.result;
-      const selected = action.options.find(item => item.id === action.option), operation = selected.operation ?? action.option;
+      const selected = action.options.find(item => item.id === action.option), operation = evolutionExecutableOperation(action);
       let result;
       if(operation==='keep' && (await service.get(action.subjectId))?.payload.recordType==='evolution-maintenance-review') result=await maintenance.executeReview(action);
       else if (["wait", "defer", "keep"].includes(operation)) result = { state: "waiting" };
@@ -213,7 +212,9 @@ export function createEvolution({ config, store, documents, jobs, database, usag
     notifyAffected: async ({ toolId, reason }) => {
       await supply.retire(toolId);
       const uses = await database.query("SELECT user_id,project_id,id,payload FROM evimed_product.documents WHERE kind='knowledge' AND deleted_at IS NULL AND payload->>'recordType'='evolution-use' AND payload->>'toolId'=$1", [toolId]);
-      for (const row of uses.rows) await notifications.create(row.user_id, { noticeType: "notify", title: "科研工具已更新状态", body: `先前结果使用的工具 ${toolId} 已停用（${reason}）。原始结果和工具版本保留，可重新检查。`, source: { type: "system", id: row.id }, projectId: row.project_id, idempotencyKey: `evolution-retired:${row.id}:${toolId}` });
+      const retired = await service.get(toolId);
+      const wording = evolutionRetirementNotice({ name: retired?.payload.name ?? retired?.payload.description, toolId, reason });
+      for (const row of uses.rows) await notifications.create(row.user_id, { noticeType: "notify", title: wording.title, body: wording.body, source: { type: "system", id: row.id }, projectId: row.project_id, idempotencyKey: `evolution-retired:${row.id}:${toolId}` });
     },
     replayCases: async ({ candidate, cases }) => {
       const parents = await Promise.all((candidate.lineage?.parents ?? []).map(id => service.get(id)));
@@ -437,7 +438,10 @@ export function createEvolution({ config, store, documents, jobs, database, usag
     admit: toolAdmission.admit,
     onExecution });
   const finishRun = async (project, run) => {
-    const uses = (await service.list("use", project.userId)).filter(row => row.projectId === project.id && row.payload.runId === run.id);
+    // Only this run's calls of platform tools: a run that made none (nearly every run of every researcher) has nothing to
+    // complete and nothing to observe, and neither the account's whole record of uses nor its transcript is read for it.
+    const uses = (await service.list("use", project.userId, { runId: run.id })).filter(row => row.projectId === project.id);
+    if (!uses.length) return;
     const transcript = await readRunTranscript(project, run.id).catch(() => null);
     if (isInternalProject(project.id)) {
       if (uses.length && transcript?.header?.completeness === "complete") {

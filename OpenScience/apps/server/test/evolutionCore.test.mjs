@@ -135,7 +135,10 @@ test('three cards daily, replay once, C overflow conservative, expiry refresh re
 
 test('expiry rejects same-family review and resource ask appears once in digest', async () => {
   const f = fixture(); const d = new EvolutionDecisions({ service: f.service, callbacks: { refresh: async () => ({ family: 'x' }), review: async () => ({ independent: true, family: 'x' }), execute: async () => ({}) } });
-  const card = await d.deliver(await d.propose(proposal('x'))); f.advance(86400001); await assert.rejects(d.expire(card.id), /cross-family/);
+  const card = await d.deliver(await d.propose(proposal('x'))); f.advance(86400001);
+  // A same-family review is never accepted; the card says so, is asked again, and meanwhile nothing was executed on its strength.
+  const waiting = await d.expire(card.id);
+  assert.equal(waiting.payload.status, 'pending'); assert.equal(waiting.payload.expiry.state, 'review-unavailable'); assert.equal(waiting.payload.expiry.code, 'evolution_review_invalid');
   await d.propose(proposal('resource', { resourceOnly: true })); await d.digest(); f.advance(86400000); const next = await d.digest(); assert.equal(next.payload.resources.length, 0);
 });
 
@@ -290,7 +293,7 @@ test('compute-only self-check claims retain budget and concurrency without requi
 test('measured failed self-check is a label; incomplete execution never authorizes wake', async () => {
   const input={waiterId:'waiter',userId:'owner',projectId:'project',datasetId:'dataset',toolId:'tool',sourceEventId:'source'};
   let wakes=0,saved;
-  const service={get:async()=>({id:'waiter',projectId:'project',payload:{status:'waiting',projectId:'project'}}),callbacks:{wakeAgenda:async({event})=>{wakes++;assert.equal(event.selfCheckStatus,'failed');return{resumed:true};}},save:async(...args)=>{saved=args;},now:()=>new Date()};
+  const service={get:async()=>({id:'waiter',projectId:'project',payload:{status:'waiting',projectId:'project'}}),callbacks:{wakeAgenda:async({event})=>{wakes++;assert.equal(event.selfCheckStatus,'failed');return{resumed:true};}},save:async(...args)=>{saved=args;},now:()=>new Date(),wakeWait:EvolutionService.prototype.wakeWait};
   const complete=(payload)=>EvolutionService.prototype.completeSelfCheck.call(service,input,{id:'check',payload});
   assert.equal((await complete({status:'failed'})).resumed,false);
   assert.equal((await complete({status:'pending',measurementCompleted:true})).resumed,false);
@@ -366,11 +369,13 @@ test('restoration failure compensates pin and retries; later harm retirement sta
 
 test('daily autonomous digest reports every category and retains at most three highlights',async()=>{
  const f=fixture();const decisions=new EvolutionDecisions({service:f.service,notifications:f.service.notifications,callbacks:{execute:async()=>({state:'complete'})}});
- for(let index=0;index<6;index++) await decisions.propose(proposal(`autonomous-${index}`,{category:`category-${index%4}`,directional:false,title:`Highlighted decision ${index}`}));
+ const categories=['implementation','tool-repair','tool-merge','tool-retire'];
+ for(let index=0;index<6;index++) await decisions.propose(proposal(`autonomous-${index}`,{category:categories[index%4],directional:false,title:`Highlighted decision ${index}`}));
  const manual=await decisions.propose(proposal('manual-decision',{category:'manual-only',title:'Manually selected item'}));
  await decisions.resolve(manual.id,{expectedRevision:manual.revision,option:'hold'});
  await decisions.digest();const body=f.notices.at(-1).body;
- for(let index=0;index<4;index++) assert.ok(body.includes(`category-${index}：${index<2?2:1} 项`));
+ for(const [index,label] of ['工具研发方向','工具修复','工具合并','工具退役'].entries()) assert.ok(body.includes(`${label}：${index<2?2:1} 项`));
+ for(const category of categories) assert.equal(body.includes(category),false,'an internal category identifier is not text for the operator');
  assert.equal((body.match(/Highlighted decision/g)??[]).length,3);
  assert.equal(body.includes('manual-only'),false);assert.equal(body.includes('Manually selected item'),false);
 });
@@ -379,4 +384,64 @@ test('actual imported engine units appear as method cases, never complete resear
  const summary=evolutionEvaluationDigest({id:'imported',payload:{scope:'deterministic-method-only',summary:{scored:true,methodCases:10,passed:8},units:Array.from({length:10},(_,index)=>({type:'method',capabilityId:'meta-analysis',allStagesValid:index<8}))}});
  assert.ok(summary.lines[0].includes('方法算例：8/10 有效'));
  assert.equal(summary.lines[0].includes('完整研究'),false);
+});
+
+test('one failing wake is recorded on its own wait and never stops the waits behind it', async () => {
+  const f=fixture();f.service.callbacks.waiterOwners=async()=>['alice','bob'];
+  const seen=[];
+  f.service.callbacks.wakeAgenda=async({agendaId})=>{
+    seen.push(agendaId);
+    if(agendaId==='deleted')throw Object.assign(new Error('Research agenda is unavailable.'),{status:404,code:'autopilot_agenda_not_found'});
+    if(agendaId==='broken')throw Object.assign(new Error('provider said: secret prose'),{code:'Some Provider Text'});
+    return {resumed:true};
+  };
+  await f.service.save('tool','new-tool',{status:'active',validationLevel:'V2',methodId:'m',capabilityIds:['statistics']});
+  for(const [userId,agendaId] of [['alice','deleted'],['alice','broken'],['alice','fine'],['bob','fine-too']])
+    await f.service.waitFor({userId,projectId:'p',agendaId,kind:'tool',methodId:'m',capabilityId:'statistics'});
+  const resolved=await f.service.resolveWaiters({type:'tool-ready',toolId:'new-tool'});
+  assert.deepEqual(seen.sort(),['broken','deleted','fine','fine-too']);
+  assert.equal(resolved.length,2,'the waits behind a failing one are woken');
+  const state=async(userId,agendaId)=>(await f.service.list('waiter',userId)).find(row=>row.payload.agendaId===agendaId).payload;
+  const broken=await state('alice','broken');
+  assert.equal(broken.status,'waiting');assert.equal(broken.wakeFailure.code,'evolution_wake_failed','only a closed code is kept, never the error text');
+  assert.equal(JSON.stringify(broken).includes('secret prose'),false);
+  const deleted=await state('alice','deleted');
+  assert.equal(deleted.status,'closed');assert.equal(deleted.closedReason,'autopilot_agenda_not_found');
+});
+
+test('a wake that waits for budget resolves its wait, and one the researcher holds back keeps it', async () => {
+  const f=fixture();f.service.callbacks.waiterOwners=async()=>['alice'];
+  const answers={deferred:{resumed:true,deferred:'autopilot_daily_budget_spent'},held:{resumed:false,held:'pause-thread'},gone:{resumed:false,closed:'autopilot_agenda_gone'}};
+  f.service.callbacks.wakeAgenda=async({agendaId})=>answers[agendaId];
+  await f.service.save('tool','new-tool',{status:'active',validationLevel:'V2',methodId:'m',capabilityIds:['statistics']});
+  for(const agendaId of Object.keys(answers))await f.service.waitFor({userId:'alice',projectId:'p',agendaId,kind:'tool',methodId:'m',capabilityId:'statistics'});
+  await f.service.resolveWaiters({type:'tool-ready',toolId:'new-tool'});
+  const state=async agendaId=>(await f.service.list('waiter','alice')).find(row=>row.payload.agendaId===agendaId).payload;
+  assert.equal((await state('deferred')).status,'resolved');assert.equal((await state('deferred')).wakeDeferred,'autopilot_daily_budget_spent');
+  assert.equal((await state('held')).status,'waiting');
+  assert.equal((await state('gone')).status,'closed');
+});
+
+test('a failing wake after a measured self-check does not fail the check', async () => {
+  const f=fixture();
+  const wait=await f.service.waitFor({userId:'alice',projectId:'p',agendaId:'agenda',kind:'data',toolId:'tool'});
+  f.service.callbacks.wakeAgenda=async()=>{throw Object.assign(new Error('x'),{status:402,code:'usage_budget_exceeded'});};
+  const done=await f.service.completeSelfCheck({waiterId:wait.id,userId:'alice',projectId:'p',datasetId:'d',toolId:'tool',sourceEventId:'e'},{id:'check',payload:{status:'passed'}});
+  assert.equal(done.resumed,false);
+  assert.equal((await f.service.get(wait.id,'alice')).payload.status,'waiting');
+});
+
+test('a retirement notice names the tool and the reason in words, never the identifier or the code', async () => {
+  const { evolutionRetirementNotice } = await import('../src/evolutionDecisions.mjs');
+  const notice = evolutionRetirementNotice({ name: '调查加权分析', toolId: 'tool-survey-0a1b2c', reason: 'sequential-harm' });
+  assert.match(notice.body, /“调查加权分析”已停用，原因：使用中连续出现需要纠正的结果/);
+  assert.doesNotMatch(notice.body, /tool-survey|sequential-harm/);
+  assert.match(evolutionRetirementNotice({ toolId: 'x', reason: 'an-unnamed-code' }).body, /“科研工具”已停用，原因：不再满足验证要求/);
+});
+
+test('only a run that could not use a tool or engine is a lead for the module; a spent budget, a stop or an outage is not', async () => {
+  const { evolutionRunGap } = await import('../src/evolutionIntegration.mjs');
+  assert.equal(evolutionRunGap({ errorCode: 'runtime_tool_error' }), 'method-implementation');
+  for (const errorCode of ['usage_budget_exceeded', 'runtime_spend_limit_reached', 'runtime_stopped', 'runtime_session_error', 'autopilot_daily_budget_spent', 'canceled', undefined, null])
+    assert.equal(evolutionRunGap({ errorCode }), null, String(errorCode));
 });

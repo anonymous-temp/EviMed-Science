@@ -9,6 +9,7 @@ import { foldOutcome, reducedPriority } from "./autopilotOutcome.mjs";
 import { AGENDA_WINDOW_MS, agendaAllowance, agendaBudget, budgetFreesAt, taskBudgetRefusal } from "./agendaBudget.mjs";
 import { sourceIdFor } from "./sourceService.mjs";
 import { HttpError } from "./security.mjs";
+import { AUTOPILOT_BUDGET_ERROR_CODES } from "@evimed/domain";
 
 /** @param {unknown} value @param {string} field @param {number} max */
 function text(value, field, max = 500) {
@@ -1729,7 +1730,7 @@ export class AutopilotService {
     const database = this.documents.database;
     if (!database) return this.#schedule(userId, agendaId, input);
     const manual = input?.trigger === "manual" || input?.trigger === "follow-up";
-    const identity = manual ? `manual:${input?.requestId}` : `date:${input?.date}`;
+    const identity = manual ? `manual:${input?.requestId}` : input?.trigger === "wake" ? `wake:${input?.requestId}` : `date:${input?.date}`;
     return database.transaction(async (/** @type {any} */ client) => {
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`evimed-autopilot-episode:${userId}:${agendaId}:${identity}`]);
       return this.#schedule(userId, agendaId, input);
@@ -1745,20 +1746,24 @@ export class AutopilotService {
     if (agenda.payload.status === "stopped") throw new HttpError(409, "autopilot_stopped", "This research agenda has been stopped.");
     if (!agenda.payload.enabled || agenda.payload.status !== "active") throw new HttpError(409, "autopilot_paused", "This research agenda is paused.");
     const manual = input.trigger === "manual" || input.trigger === "follow-up";
+    // The platform's wake of an agenda that was waiting for a tool or data: a scheduled continuation, so every rule
+    // that governs the timer's episodes governs it (the planner may stop, reduced priority is honoured), but not one
+    // of the timer's occurrences, so it neither needs a calendar occurrence nor moves the timer's watermark.
+    const wake = input.trigger === "wake";
     const trigger = manual ? input.trigger : "scheduled";
     const schedule = normalizeAgendaSchedule(agenda.payload);
-    const date = manual ? agendaLocalDate(schedule.timeZone, this.now()) : text(input.date, "episode date", 10);
+    const date = manual || wake ? agendaLocalDate(schedule.timeZone, this.now()) : text(input.date, "episode date", 10);
     if (!validAgendaDate(date)) throw new HttpError(400, "autopilot_payload_invalid", "Episode date is invalid.");
     if (input.scheduleVersion !== undefined && input.scheduleVersion !== (agenda.payload.scheduleVersion ?? 1)) throw new HttpError(409, "product_revision_conflict", "The task schedule changed; retry from its current version.");
     // Version one shares the legacy date identity in either call order and
     // under concurrent old/new timer requests. Updated calendars require their
     // exact occurrence; an old date-only client must use explicit run-now.
     const version = agenda.payload.scheduleVersion ?? 1;
-    if (!manual && version > 1 && !input.occurrence) {
+    if (!manual && !wake && version > 1 && !input.occurrence) {
       throw new HttpError(400, "autopilot_payload_invalid", "An updated calendar needs its scheduled occurrence; use run-now for manual work.");
     }
-    const legacy = !manual && (version === 1 || !agenda.payload.schedule);
-    const identity = manual ? `manual:${input.requestId}` : legacy ? date : `schedule:${input.scheduleVersion}:${input.occurrence.key}`;
+    const legacy = !manual && !wake && (version === 1 || !agenda.payload.schedule);
+    const identity = manual ? `manual:${input.requestId}` : wake ? `wake:${input.requestId}` : legacy ? date : `schedule:${input.scheduleVersion}:${input.occurrence.key}`;
     const episodeId = `episode-${hash(`${userId}:${agenda.id}:${identity}`).slice(0, 32)}`;
     const existingEpisode = await this.documents.get(userId, "episode", episodeId);
     if (manual && existingEpisode && (continuationBindingKey(existingEpisode.payload.continuationBinding) !== continuationBindingKey(input.continuationBinding) || existingEpisode.payload.trigger !== trigger
@@ -1824,6 +1829,7 @@ export class AutopilotService {
       trigger, scheduledAt: input.occurrence?.scheduledAt ?? at, occurrenceKey: input.occurrence?.key ?? null,
       scheduleVersion: agenda.payload.scheduleVersion ?? 1, instruction: originalInstruction,
       ...(manual ? { requestId: input.requestId } : {}),
+      ...(wake ? { wakeRequestId: input.requestId } : {}),
       ...(trigger === "follow-up" ? { followUpNote: input.note, replyToEpisodeId: input.episodeId ?? null } : {}),
       ...(input.continuationBinding ? { continuationBinding: input.continuationBinding } : {}),
       prompt, progress, selection, followUpKeys: followUps.map(followUpKey), status: "queued",
@@ -1870,7 +1876,7 @@ export class AutopilotService {
       const messages = current.payload.messages ?? [];
       const messageMissing = trigger === "follow-up" && !messages.some(item => item.requestId === input.requestId)
         && (!existingEpisode || !this.documents.database);
-      const scheduledDate = manual ? current.payload.lastScheduledDate : current.payload.lastScheduledDate > date ? current.payload.lastScheduledDate : date;
+      const scheduledDate = manual || wake ? current.payload.lastScheduledDate : current.payload.lastScheduledDate > date ? current.payload.lastScheduledDate : date;
       if (input.scheduleVersion !== undefined && input.scheduleVersion !== (current.payload.scheduleVersion ?? 1)) throw new HttpError(409, "product_revision_conflict", "The schedule changed before enqueue.");
       const watermarkMissing = !manual && input.occurrence && (!current.payload.lastScheduledOccurrence
         || Date.parse(current.payload.lastScheduledOccurrence.scheduledAt) < Date.parse(input.occurrence.scheduledAt));
@@ -1943,7 +1949,8 @@ export class AutopilotService {
     // one stop their own message can bring, and only the model reads it as such.
     const pauseAllowed = trigger === "follow-up" && typeof note === "string" && note.trim().length > 0;
     try {
-      const availableTools = await this.evolution?.availableTools(agenda) ?? [];
+      // The tools 循证进化 offers are context for the decision; a store that cannot say what they are does not take the decision with it.
+      const availableTools = await Promise.resolve(this.evolution?.availableTools(agenda)).catch(() => []) ?? [];
       const decision = await this.planner.decide({
         userId, projectId: agenda.projectId, episodeId, eligible, stopAllowed, pauseAllowed,
         context: buildPlannerContext({ agenda, progress, eligible, date, trigger, note, reducedPriority: reduced, stopAllowed, pauseAllowed,
@@ -2038,20 +2045,43 @@ export class AutopilotService {
     return { episode: null, job: null, stopped: { kind: "episode_budget_too_small", reason, at, episodeId } };
   }
 
-  /** Resume only the exact resource wait, never a later researcher pause or stop. @param {any} input */
+  /**
+   * Resume only the exact resource wait, never a later researcher pause or stop.
+   *
+   * The platform's wake is a scheduled continuation, not the researcher starting the agenda: the stopping rules that
+   * read how long it was since the researcher read or started it, and what they said of the direction, are asked
+   * first and may refuse it, `lastStartedAt` and the researcher's verdicts are left alone, the stop that is lifted
+   * is remembered for the next decision (`lastStop`, as `start` does), and the episode it makes is an ordinary
+   * scheduled one, which the planner may end with another stop. A refusal for budget — the task's own caps or the
+   * account's — is a wait: the agenda is already active again, so its own schedule continues it when the budget frees.
+   * @param {any} input
+   * @returns {Promise<{ resumed: boolean, held?: string, closed?: string, deferred?: string, episode?: any, job?: any, stopped?: any }>}
+   */
   async wakeForEvolution({ userId, agendaId, sourceEpisodeId, event }) {
     const requestId = `evolution-${hash(String(event.id ?? event.toolId)).slice(0, 32)}`;
     const agenda = await this.get(userId, agendaId);
-    if (agenda.payload.archivedAt || agenda.payload.status === "stopped") return { resumed: false };
+    if (agenda.payload.archivedAt || agenda.payload.status === "stopped") return { resumed: false, closed: "autopilot_agenda_gone" };
     if (agenda.payload.lastEvolutionWake !== requestId) {
       if (agenda.payload.enabled || agenda.payload.status !== "paused" || agenda.payload.plannerStop?.kind !== "needs_input"
         || agenda.payload.evolutionWaiting?.sourceEpisodeId !== sourceEpisodeId) return { resumed: false };
+      // The same two rules `checkInactivity` applies before any scheduled episode; asked before the agenda is
+      // switched back on, so a refusal leaves it exactly as the planner's stop left it.
+      const verdict = directionVerdict({ episodesWithoutGatedClaim: 0, consecutiveFailures: 0,
+        daysSinceDigestOpened: await this.daysWithoutReading(userId, agenda), userRejected: userRejected(agenda) });
+      if (["pause-thread", "park"].includes(verdict.action)) return { resumed: false, held: verdict.action };
+      const at = this.now().toISOString();
       await this.documents.put(userId, "agenda", agenda.id, { ...agenda.payload, enabled: true, status: "active",
         pauseReason: null, plannerStop: null, evolutionWaiting: null, lastEvolutionWake: requestId,
-        lastStartedAt: this.now().toISOString(), updatedAt: this.now().toISOString() },
+        lastStop: { ...agenda.payload.plannerStop, clearedAt: at }, updatedAt: at },
       { expectedRevision: agenda.revision, projectId: agenda.projectId });
     }
-    return { resumed: true, ...await this.runNow(userId, agendaId, { requestId }) };
+    try {
+      return { resumed: true, ...await this.schedule(userId, agendaId, { requestId, trigger: "wake" }) };
+    } catch (error) {
+      const code = /** @type {any} */ (error)?.code;
+      if (AUTOPILOT_BUDGET_ERROR_CODES.includes(code) || code === "usage_budget_exceeded") return { resumed: true, deferred: code };
+      throw error;
+    }
   }
 
   /** @param {string} userId @param {string} agendaId @param {Record<string,any>} input */

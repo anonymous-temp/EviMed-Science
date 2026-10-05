@@ -653,6 +653,19 @@ export class NotificationService {
       `read_at=coalesce(read_at,clock_timestamp()),resolved_at=clock_timestamp(),resolution=jsonb_build_object('actionId',$4::text,'source','user')`, action, true);
   }
 
+  /**
+   * The platform closing an item whose question was settled without its reader — a review that expired and took its
+   * default. Recorded as a default, as `applyDueDefaults` records its own, so a reader can tell it from their answer.
+   * @param {string} userId @param {string} id @param {{ actionId: string, expectedRevision: number }} input
+   */
+  async resolveByDefault(userId, id, { actionId, expectedRevision }) {
+    const item = await this.get(userId, id);
+    const action = productId(actionId, "action");
+    if (!item.actions.some((candidate) => candidate.id === action)) throw new HttpError(400, "notification_action_invalid", "Inbox action is unavailable.");
+    return this.#update(userId, id, expectedRevision,
+      `read_at=coalesce(read_at,clock_timestamp()),resolved_at=clock_timestamp(),resolution=jsonb_build_object('actionId',$4::text,'source','default')`, action, true);
+  }
+
   async #update(userId, id, expectedRevision, assignment, extra = null, requireUnresolved = false) {
     productInteger(expectedRevision, 1, 2_147_483_646);
     await migrateNotifications(this.database);

@@ -1,5 +1,3 @@
-import { renderEvolutionToolContext } from './evolutionToolContext.mjs';
-import { routeExplicitEvolutionTool } from './evolutionToolRouting.mjs';
 import { DocumentExportService, freezeArtifactDocument, freezeResultVersionDocument } from "./documentExport.mjs";
 import { ResultProvenanceService } from "./resultProvenanceService.mjs";
 import { createResultProvenanceRoutes } from "./resultProvenanceRoutes.mjs";
@@ -73,6 +71,7 @@ import { postgresBackupReadiness } from "./postgresBackupReadiness.mjs";
 import { vcrBackupReadiness } from "./vcrBackupReadiness.mjs";
 import { LEARNING_PROJECT_ID, isEvolutionProject, isInternalProjectOf, isReservedProjectId } from "./internalProjects.mjs";
 import { completeEvolutionRuntime } from './evolutionRuntimeCompletion.mjs';
+import { evolutionRunGap } from './evolutionIntegration.mjs';
 import { loadAgentRegistry } from "./agentRegistry.mjs";
 import { AgentRunStore, readRunStateProjection, readDeliveryReceipt, runNotice } from "./agentRuns.mjs";
 import { PreStopTranscripts, collectRunTranscripts, persistRunTranscript, pruneRunTranscripts, readRunTranscript, runsToReadBeforeStop } from "./runTranscripts.mjs";
@@ -2606,7 +2605,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     ...(review ? { reviewNotices: (project, runId) => review.service.reviewNoticesForRun(project.userId, project.id, runId) } : {}),
     runtimeGeneration: (project) => runtimeManager.runtimeGeneration(project),
     runtimePlatformSkills: (project) => runtimeManager.runtimePlatformSkills(project),
-    setRuntimePlatformSkillScope: (project, capabilityId) => runtimeManager.setPlatformSkillScope(project, capabilityId),
+    // Only where there are platform skills to scope (循证进化 on): otherwise the call would keep a capability per project for a supply that does not exist.
+    setRuntimePlatformSkillScope: (project, capabilityId) => runtimeManager.platformSkillSupply ? runtimeManager.setPlatformSkillScope(project, capabilityId) : undefined,
     onPlatformSkillExecution: (event) => evolution?.onExecution(event),
     onPlatformSkillRetrieval: (event) => evolution?.onRetrieval(event),
     runtimePersonalSkills: (project, observation = {}) => {
@@ -2679,8 +2679,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     },
     onRunFinished: async (project, run) => {
       await completeEvolutionRuntime({ config, evolution, project, run, evaluationIsolation, runtimeManager, independentProductWork });
-      if (evolution && !internalFor(project.userId, project.id) && run.status === "failed") {
-        const gapCode = /tool|engine|command/.test(run.errorCode ?? "") ? "method-implementation" : "model-capability";
+      const gapCode = evolution && !internalFor(project.userId, project.id) && run.status === "failed" ? evolutionRunGap(run) : null;
+      if (gapCode) {
         await evolution.integration.publish({ id: `run-gap:${project.id}:${run.id}`, type: "runtime-gap", gapCode,
           code: gapCode, track: "M", origin: "platform-inference" });
       }
@@ -2968,6 +2968,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             if (!state.learning && !state.trial) {
               await recordHandbookRunObservations({ learning: learningService, userId: project.userId, projectId: project.id,
                 run: await recordNativeHandbookAttachments(project, run), projection: await agentRuns.runWorkflowProjection(project, run), sessions,
+                observeGaps: Boolean(evolution),
               }).catch((error) => securityAudit(config, "handbook.observe", "failed", {
                 userId: project.userId, projectId: project.id, runId: run.id,
                 code: typeof error?.code === "string" ? error.code : "handbook_observation_unavailable",
@@ -3686,7 +3687,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             if (prepared.memories.length > 0) {
               await agentRuns.recordLearning(project, dispatchedRun.id, { recalledMemories: prepared.memories });
             }
-            const requestedToolContext = evolution ? renderEvolutionToolContext(promptText, runtimeManager.runtimePlatformSkills(project), selected.id) : '';
             const budgetMarker = issueModelGatewayBudgetMarker({
               secret: config.modelGatewaySigningSecret, userId: user.id, projectId: project.id,
               runId: episode.episodeId, dailyLimit,
@@ -3703,7 +3703,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
               },
               // The question first, markers last (see the verification above).
               text: `${promptText}\n\n<evimed-autopilot-episode>${episode.episodeId}</evimed-autopilot-episode>\n${budgetMarker}`,
-              system: prepared.system, memoryContext: (prepared.memoryContext ?? "") + requestedToolContext, residentProfile: true, agent: selected.runtimeAgent, strictContext: true,
+              system: prepared.system, memoryContext: prepared.memoryContext, residentProfile: true, agent: selected.runtimeAgent, strictContext: true,
               model: `deepseek/${config.deepseekModel}`, runId: dispatchedRun.id, allowBounded: true,
               requestId: dispatchedRun.kernelRequestIds?.at(-1),
             });
@@ -5356,8 +5356,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         if (boundSession?.mode === "open-domain" && !chosenLine) {
           const named = routeNamedSpecialist(text, routableAgents);
           // Naming the package is an instruction, not a guess at intent.
-          const installedTool = !named && evolution ? routeExplicitEvolutionTool(text,await evolution.service.tools(),routableAgents,boundSession,chosenLine) : null;
-          routedSpecialist = named ?? installedTool ?? await specialistClassifier.classify(text, routableAgents, classifierTrace,
+          routedSpecialist = named ?? await specialistClassifier.classify(text, routableAgents, classifierTrace,
             { userId: ctx.project.userId, projectId: ctx.project.id });
           if (!routedSpecialist) {
             const net = routeOpenDomainSpecialist(text, routableAgents, {
@@ -5481,7 +5480,6 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             });
           }
           await runtimeManager.start(ctx.project);
-          const requestedToolContext = evolution ? renderEvolutionToolContext(text, runtimeManager.runtimePlatformSkills(ctx.project), dispatchedRun.effectiveAgentId ?? dispatchedRun.agentId ?? null) : '';
           return runtimeManager.dispatchPrompt(ctx.project, session.sessionId, {
             recordPromptActor: request => recordExtensionPromptActor(ctx.user, ctx.project, request),
             text: promptText,
@@ -5489,7 +5487,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             // the capsule plugin at its first step (memorySessions.mjs), for a
             // dispatch and a conversation typed in the kernel's own surface alike.
             system: prepared.system,
-            memoryContext: (prepared.memoryContext ?? "") + requestedToolContext,
+            memoryContext: prepared.memoryContext,
             residentProfile: true,
             agent: routedSpecialist?.runtimeAgent ?? session.runtimeAgent ?? answerAgent?.runtimeAgent ?? null,
             model: `deepseek/${config.deepseekModel}`,

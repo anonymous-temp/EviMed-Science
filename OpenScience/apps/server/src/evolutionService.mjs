@@ -37,13 +37,13 @@ export class EvolutionService {
     });
   }
   async owner() { return this.ownerId ?? (this.ownerId = await this.ensureOwner?.()); }
-  /** @param {string} type @param {string|null} userId */
-  async list(type, userId = null) {
+  /** @param {string} type @param {string|null} userId @param {Record<string, any>} [filter] payload fields the records must carry, to read a part of a large kind */
+  async list(type, userId = null, filter = {}) {
     const owner = userId ?? await this.owner();
     if (!owner) return [];
     const items = [];
     let cursor = null;
-    do { const page = await this.documents.list(owner, 'knowledge', { limit: 100, cursor, filter: { recordType: `evolution-${type}` } }); items.push(...page.items); cursor = page.nextCursor; } while (cursor);
+    do { const page = await this.documents.list(owner, 'knowledge', { limit: 100, cursor, filter: { ...filter, recordType: `evolution-${type}` } }); items.push(...page.items); cursor = page.nextCursor; } while (cursor);
     return items;
   }
   /** @param {string} id @param {string|null} userId */
@@ -154,11 +154,34 @@ export class EvolutionService {
           waiterId: row.id, sourceEventId: event.id, toolId: matched.id, datasetId: event.datasetId }, `check:${row.id}:${event.id}:${matched.id}`);
         continue;
       }
-      const woke = await this.callbacks.wakeAgenda?.({ ...wait, event });
-      if (woke === false || woke?.resumed === false) continue;
-      resolved.push(await this.save('waiter', row.id, { ...wait, status: 'resolved', resolvedAt: this.now().toISOString() }, row, owner));
+      const woke = await this.wakeWait(row, owner, wait, event);
+      if (!woke.woken) continue;
+      resolved.push(await this.save('waiter', row.id, { ...wait, status: 'resolved', resolvedAt: this.now().toISOString(),
+        ...(woke.deferred ? { wakeDeferred: woke.deferred } : {}) }, row, owner));
     }
     return resolved;
+  }
+  /**
+   * One wait's wake is the agenda's business, and an agenda that cannot be woken cannot fail the platform's event
+   * or the waits behind it: the failure is kept on its own wait as a closed code and the wait stays, to be tried at
+   * the next event; an agenda that is gone closes its wait. An agenda the researcher holds back (it stopped reading,
+   * it rejected the direction) keeps its wait too, and one refused for budget is woken, to continue on its schedule.
+   * @param {any} row @param {string} owner @param {any} wait @param {any} event
+   * @returns {Promise<{woken: boolean, deferred?: string}>}
+   */
+  async wakeWait(row, owner, wait, event) {
+    let woke;
+    try { woke = await this.callbacks.wakeAgenda?.({ ...wait, event }); }
+    catch (error) {
+      const code = typeof error?.code === 'string' && /^[a-z0-9_]{1,64}$/.test(error.code) ? error.code : 'evolution_wake_failed';
+      const patch = error?.status === 404 ? { status: 'closed', closedReason: code, closedAt: this.now().toISOString() }
+        : { wakeFailure: { code, at: this.now().toISOString(), count: Number(wait.wakeFailure?.count ?? 0) + 1 } };
+      await this.save('waiter', row.id, { ...wait, ...patch }, row, owner).catch(() => null);
+      return { woken: false };
+    }
+    if (woke?.closed) await this.save('waiter', row.id, { ...wait, status: 'closed', closedReason: woke.closed, closedAt: this.now().toISOString() }, row, owner).catch(() => null);
+    if (woke === false || woke?.resumed === false) return { woken: false };
+    return { woken: true, ...(woke?.deferred ? { deferred: woke.deferred } : {}) };
   }
   /** Dataset matching schedules a check; completed measurements annotate the resumed agenda without gating delivery. @param {any} input @param {any} result */
   async completeSelfCheck(input, result) {
@@ -168,9 +191,10 @@ export class EvolutionService {
     const wait = row.payload;
     const event = { id: input.sourceEventId, type: 'dataset-ready', userId: input.userId, projectId: input.projectId,
       datasetId: input.datasetId, toolId: input.toolId, selfCheckId: result.id, selfCheckStatus: result.payload.status };
-    const woke = await this.callbacks.wakeAgenda?.({ ...wait, event });
-    if (woke === false || woke?.resumed === false) return { resumed: false };
-    await this.save('waiter', row.id, { ...wait, status: 'resolved', resolvedAt: this.now().toISOString(), selfCheckId: result.id }, row, input.userId);
+    const woke = await this.wakeWait(row, input.userId, wait, event);
+    if (!woke.woken) return { resumed: false };
+    await this.save('waiter', row.id, { ...wait, status: 'resolved', resolvedAt: this.now().toISOString(), selfCheckId: result.id,
+      ...(woke.deferred ? { wakeDeferred: woke.deferred } : {}) }, row, input.userId);
     return { resumed: true };
   }
   /** Failed approaches are immutable and wake only on new resources or methods. @param {any} input */

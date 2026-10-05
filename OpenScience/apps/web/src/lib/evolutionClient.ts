@@ -10,7 +10,9 @@ export interface EvolutionTool {
 }
 export interface EvolutionDecision {
   title: string; body: string; decisionClass: string; status: string; selected?: string; recommended: string; conservative: string;
-  options: Array<{id: string; label: string; consequences?: string}>; attemptedPaths?: string[]; rollback?: string; dueAt?: string;
+  options: Array<{id: string; label: string}>; attemptedPaths?: string[]; dueAt?: string;
+  /** Set while the review that decides an expired card could not be had; it is asked again and then the conservative option is taken. */
+  expiry?: {state: 'review-unavailable' | 'conservative-taken'; attempts: number; of: number};
 }
 export interface EvolutionOpportunity { title: string; description?: string; prompt?: string; projectId: string; origin: string; }
 export function useEvolutionAccess() {
