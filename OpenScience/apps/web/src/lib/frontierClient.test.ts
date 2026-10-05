@@ -265,6 +265,25 @@ describe("the routes of the second wave", () => {
     expect(await fetchFrontierDaily("2026-09-21")).toMatchObject({ readingMinutes: 1, previousDay: null, nextDay: null });
   });
 
+  it("reads the reader's own followed zones off an issue, and drops what is not a zone with a card", async () => {
+    fetchMock.mockResolvedValue(reply(200, { data: { daily: { day: "2026-09-23", sections: [], safety: [], markdown: "", followedZones: [
+      { zoneId: "ez_1", zoneTitle: "房颤抗凝", cards: [
+        { id: "ec_1", title: "新卡", summary: "摘要", change: "new", revision: 1, updatedAt: "2026-09-23T01:00:00.000Z" },
+        { id: "ec_2", title: "旧卡", change: "anything else", revision: 3 },
+        { title: "no id" },
+      ] },
+      { zoneId: "ez_2", zoneTitle: "空专区", cards: [] },
+      { zoneTitle: "no id", cards: [{ id: "ec_3", title: "x" }] },
+    ] } } }));
+    const daily = await fetchFrontierDaily("2026-09-23");
+    expect(daily?.followedZones).toEqual([{ zoneId: "ez_1", zoneTitle: "房颤抗凝", cards: [
+      { id: "ec_1", title: "新卡", summary: "摘要", change: "new", revision: 1, updatedAt: "2026-09-23T01:00:00.000Z" },
+      { id: "ec_2", title: "旧卡", summary: "", change: "updated", revision: 3, updatedAt: null },
+    ] }]);
+    fetchMock.mockResolvedValue(reply(200, { data: { daily: { day: "2026-09-21", sections: [], safety: [], markdown: "" } } }));
+    expect((await fetchFrontierDaily("2026-09-21"))?.followedZones).toEqual([]);
+  });
+
   it("reads each reason's topic alone, what 「与我相关」 groups by", async () => {
     fetchMock.mockResolvedValue(reply(200, { data: { state: "available", basis: "vector", items: [
       { item: rawItem(), reason: { text: "因为你在做：SGLT2 抑制剂与心衰", topic: "SGLT2 抑制剂与心衰", memoryId: "m1" } },

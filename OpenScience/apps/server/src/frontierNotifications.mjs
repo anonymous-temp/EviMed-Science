@@ -9,6 +9,9 @@ import { FRONTIER_PUSH_ACTIVE_MS, zonedClock } from './frontierDaily.mjs';
 import { latestFrontierWeek } from './frontierWeekly.mjs';
 const CURSOR = 'safety_scan_cursor';
 const KIND = 'frontier-notify';
+/** Followers one publication reaches at most: a zone nobody has followed this far would be a second scheduler's work. */
+export const FRONTIER_ZONE_FANOUT_MAX = 2000;
+const ZONE_CHANGES = Object.freeze(['published', 'revised']);
 /** Discovery and every delivery use the same publication window. Inferred dates
  * cannot establish recency when a newly added source exposes old announcements.
  * @param {Date} now @param {(value:unknown)=>string} param */
@@ -25,6 +28,18 @@ export function frontierSafetyNotice(row, timeZone = DISPLAY_TIME_ZONE) {
     return { noticeType: 'notify', title: String(row.title_zh || row.title_raw).slice(0, 200),
         body: `${frontierSourceDisplayName({ id: row.primary_source_id, name: row.source_name, ownerEntity: row.source_owner })} · ${agendaLocalDate(timeZone, new Date(row.published_at))}`,
         actions: [{ id: 'open', label: '查看安全公告', style: 'primary' }], source: { type: 'system', id: key }, idempotencyKey: key, groupKey: key, severity: 'safety' };
+}
+/**
+ * A card published, or revised, in a zone the reader follows (flywheel F10). One event per card revision: the
+ * idempotency key names the revision, so a replay of the same one is the same event, and the group key names the
+ * card, so the inbox keeps one item per card that counts its revisions instead of stacking a row for each edit.
+ * @param {{ zoneId: string, cardId: string, cardTitle: string, zoneTitle: string, revision: number, change: 'published' | 'revised' }} input
+ */
+export function frontierZoneNotice({ zoneId, cardId, cardTitle, zoneTitle, revision, change }) {
+    return { noticeType: 'notify', title: String(cardTitle).slice(0, 120),
+        body: `${String(zoneTitle).slice(0, 80)} · ${change === 'published' ? '新证据卡' : `证据卡已更新（第 ${revision} 版）`}`,
+        actions: [{ id: 'open', label: '查看证据卡', style: 'primary' }], source: { type: 'system', id: `frontier-zone:${zoneId}:${cardId}` },
+        idempotencyKey: `frontier-zone:${cardId}:${revision}`, groupKey: `frontier-zone:${cardId}`, severity: 'info' };
 }
 /** @param {string} week */
 export function frontierWeeklyNotice(week) {
@@ -46,7 +61,7 @@ export class FrontierNotifications {
         this.batch = Math.min(200, Math.max(1, Math.floor(Number(config.frontierNotifyBatch)) || 50));
         this.scanBatch = Math.min(500, Math.max(1, Math.floor(Number(config.frontierSafetyScanBatch)) || 100));
         this.timeZone = String(config.frontierTimeZone || 'Asia/Shanghai');
-        this.counters = { queued: 0, delivered: 0, skipped: 0, failed: 0, scanGaps: 0 };
+        this.counters = { queued: 0, delivered: 0, skipped: 0, failed: 0, scanGaps: 0, zoneQueued: 0, zoneCapped: 0 };
     }
     async ready() { await migrateFrontier(this.database, { dimension: Number(this.config.kbEmbeddingDimension) || 1024 }); await migrateProductStore(this.database); await migrateNotifications(this.database); }
     /** Current account, switches, public source and all mutes are read again before every delivery.
@@ -64,6 +79,14 @@ export class FrontierNotifications {
         const toggle = target.kind === 'safety' ? 'frontierSafety' : target.kind === 'weekly' ? 'frontierWeekly' : 'frontier';
         if (switches.notify === false || switches[toggle] === false)
             return false;
+        if (target.kind === 'zone') {
+            // The reader still follows the zone and the card is still published in a published zone: a follow
+            // taken back, or a card withdrawn, between the edit and the delivery is no notice.
+            const [zoneId, cardId] = String(target.key).split(':');
+            return Boolean((await client.query(`SELECT 1 FROM evimed_frontier.evidence_zone_follows f
+        JOIN evimed_frontier.evidence_zones z ON z.id=f.zone_id JOIN evimed_frontier.evidence_cards c ON c.zone_id=z.id
+        WHERE f.user_id=$1 AND z.id=$2 AND c.id=$3 AND z.state='published' AND c.state='published'`, [userId, zoneId, cardId])).rows.length);
+        }
         const subscriptions = await this.subscriptions.read(userId);
         const positive = subscriptions.follows.filter(f => !f.muted);
         const values = /** @type {any[]} */ ([userId]);
@@ -90,14 +113,55 @@ export class FrontierNotifications {
     }
     /** Injected into IM without coupling its service to frontier SQL. @param {any} item */
     async deliveryAllowed(item) { const target = frontierNoticeTarget(item.source); return !target || this.eligible(item.userId, target); }
-    /** Do not reconstruct a payload already frozen by an earlier discovery attempt.
-     * @param {any} client @param {string} userId @param {string} type @param {string} key @param {any} notice */
-    async enqueue(client, userId, type, key, notice) {
+    /** Do not reconstruct a payload already frozen by an earlier discovery attempt. `target` is what eligibility is
+     * read against at delivery; it is the key itself unless a notice's identity and its subject differ (a card
+     * revision is the identity, the card in its zone the subject).
+     * @param {any} client @param {string} userId @param {string} type @param {string} key @param {any} notice
+     * @param {{kind:string,key:string}} [target] */
+    async enqueue(client, userId, type, key, notice, target = { kind: type, key }) {
         const idempotencyKey = `frontier-notify:${type}:${key}`;
         if ((await client.query('SELECT id FROM evimed_product.jobs WHERE user_id=$1 AND idempotency_key=$2', [userId, idempotencyKey])).rows.length)
             return false;
-        await this.jobs.enqueue(userId, KIND, { target: { kind: type, key }, notice }, { idempotencyKey, transactionClient: client });
+        await this.jobs.enqueue(userId, KIND, { target, notice }, { idempotencyKey, transactionClient: client });
         return true;
+    }
+    /**
+     * A card of a followed zone was published or revised (flywheel F10): every follower who may be told gets one
+     * inbox notice for this card revision, under the module's `frontier` notification switch. Called by whoever
+     * publishes or revises a card (`EvidenceZoneService`'s `onCardPublished` hook today); it reads the card and the
+     * followers itself and trusts nothing the caller says about either. A caller that is a publisher wraps it so a
+     * notice that could not be queued is counted and the publication stands (`server.mjs` does).
+     * One event per revision (the job's idempotency key names it), so a replay is a no-op; one inbox item per card
+     * that counts its revisions (the notice's group key), so a burst of edits is one row, not one per edit.
+     * @param {{ zoneId: string, cardId: string, revision: number, change: 'published' | 'revised' }} event
+     * @returns {Promise<{ queued: number, unavailable?: true, capped?: true }>}
+     */
+    async notifyZoneFollowers({ zoneId, cardId, revision, change }) {
+        if (!this.jobs || !this.notifications)
+            return { queued: 0, unavailable: true };
+        if (typeof zoneId !== 'string' || typeof cardId !== 'string' || !Number.isSafeInteger(revision) || revision < 1 || !ZONE_CHANGES.includes(change))
+            throw new TypeError('notifyZoneFollowers needs a zone, a card, its revision and whether it was published or revised.');
+        await this.ready();
+        const card = (await this.database.query(`SELECT c.id,c.title,c.state,z.id AS zone_id,z.title AS zone_title,z.state AS zone_state
+      FROM evimed_frontier.evidence_cards c JOIN evimed_frontier.evidence_zones z ON z.id=c.zone_id WHERE c.id=$1 AND z.id=$2`, [cardId, zoneId])).rows[0];
+        if (!card || card.state !== 'published' || card.zone_state !== 'published')
+            return { queued: 0 };
+        const notice = frontierZoneNotice({ zoneId, cardId, cardTitle: card.title, zoneTitle: card.zone_title, revision, change });
+        const followers = (await this.database.query(`SELECT user_id FROM evimed_frontier.evidence_zone_follows WHERE zone_id=$1 ORDER BY user_id LIMIT $2`,
+            [zoneId, FRONTIER_ZONE_FANOUT_MAX + 1])).rows;
+        const capped = followers.length > FRONTIER_ZONE_FANOUT_MAX;
+        let queued = 0;
+        await this.database.transaction(async (client) => {
+            for (const follower of followers.slice(0, FRONTIER_ZONE_FANOUT_MAX)) {
+                const target = { kind: 'zone', key: `${zoneId}:${cardId}` };
+                if (await this.eligible(follower.user_id, target, client) && await this.enqueue(client, follower.user_id, 'zone', `${cardId}:${revision}`, notice, target))
+                    queued++;
+            }
+        });
+        this.counters.zoneQueued += queued;
+        if (capped)
+            this.counters.zoneCapped++;
+        return { queued, ...(capped ? { capped: true } : {}) };
     }
     /** Bounded keyset scan: NOT EXISTS excludes every already-frozen recipient, including failed deliveries. */
     async queueWeekly() {

@@ -386,6 +386,16 @@ export interface FrontierDailySummary {
 }
 
 /**
+ * 「你关注的专区」 of an issue (flywheel F10): the cards of the zones this reader follows that were published
+ * (`new`) or changed (`updated`) in the issue's window. Theirs alone — the issue's text is the same for everyone.
+ */
+export interface FrontierFollowedZone {
+  zoneId: string;
+  zoneTitle: string;
+  cards: Array<{ id: string; title: string; summary: string; change: "new" | "updated"; revision: number; updatedAt: string | null }>;
+}
+
+/**
  * `GET /api/frontier/dailies/:day`. The header reads 「9月23日 周三 · {itemCount} 条 · 约 {readingMinutes} 分钟」;
  * `previousDay` / `nextDay` are the nearest issues on either side (a quiet day has none), null at either end.
  * `markdown` is the issue as it reads now — the institutions' names, no withdrawn item — ready to copy.
@@ -398,6 +408,8 @@ export interface FrontierDaily {
   lead: { item: FrontierItem; text: string | null; event: { id: string; title: string } | null } | null;
   sections: Array<{ lane: string; laneLabel: string; items: FrontierItem[] }>;
   safety: FrontierItem[];
+  /** This reader's followed zones' new and changed cards; absent from a server that does not send it. */
+  followedZones?: FrontierFollowedZone[];
   aiMinute: string | null;
   markdown: string;
   /** The items the issue shows now. */
@@ -784,6 +796,21 @@ function parseEvent(value: unknown): FrontierEvent | null {
   };
 }
 
+function parseFollowedZones(value: unknown): FrontierFollowedZone[] {
+  return (Array.isArray(value) ? value : []).flatMap((entry) => {
+    const zone = record(entry);
+    const zoneId = text(zone?.zoneId);
+    const zoneTitle = text(zone?.zoneTitle);
+    const cards = (Array.isArray(zone?.cards) ? zone.cards : []).flatMap((card) => {
+      const raw = record(card);
+      const id = text(raw?.id);
+      const title = text(raw?.title);
+      return id && title ? [{ id, title, summary: text(raw?.summary) ?? "", change: raw?.change === "new" ? "new" as const : "updated" as const, revision: count(raw?.revision), updatedAt: moment(raw?.updatedAt) }] : [];
+    });
+    return zoneId && zoneTitle && cards.length > 0 ? [{ zoneId, zoneTitle, cards }] : [];
+  });
+}
+
 function parseDaily(value: unknown): FrontierDaily | null {
   const raw = record(value);
   const day = text(raw?.day);
@@ -809,6 +836,7 @@ function parseDaily(value: unknown): FrontierDaily | null {
     } : null,
     sections,
     safety: parseItems(raw.safety),
+    followedZones: parseFollowedZones(raw.followedZones),
     aiMinute: text(raw.aiMinute),
     markdown: typeof raw.markdown === "string" ? raw.markdown : "",
     itemCount: count(raw.itemCount),

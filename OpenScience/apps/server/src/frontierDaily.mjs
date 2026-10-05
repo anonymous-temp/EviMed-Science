@@ -143,6 +143,57 @@ export function frontierDailyWindow(day, { timeZone, dailyTime }) {
   return { start: zonedInstant(previousDay(day), cut, timeZone), end: zonedInstant(day, cut, timeZone) };
 }
 
+// ───────────────────────── 你关注的专区: per reader, at read time ─────────────────────────
+
+/** Cards of followed zones an issue lists for one reader, at most. */
+export const FRONTIER_FOLLOWED_ZONE_CARDS_MAX = 12;
+/**
+ * What a reader can see of a card's words, as one comparable value: the card as stored and as a revision snapshot
+ * recorded of it are fingerprinted over the same fields, so a card whose only change is a check date (a refresh of
+ * its sources' status) is not 「更新」. A JSON `null` and a missing value are the same nothing on both sides.
+ * @param {(column: string) => string} field the SQL text of one column of the row being fingerprinted
+ */
+const cardWordsFingerprint = (field) => `md5(concat_ws(chr(31), ${["title", "summary", "body", "limitations"].map(field).join(", ")}, ${
+  ["content", "claims", "public_view"].map((column) => `NULLIF(${field(column)}, 'null')`).join(", ")}))`;
+
+/**
+ * The cards that were published, or published in a new form, in the zones this reader follows during an issue's
+ * window (flywheel F10; plan §5.3 「你关注的专区」). Computed for the reader who asks and never written into the
+ * issue, whose text is the same for everyone: the same issue lists different cards to different readers, and none
+ * to one who follows nothing.
+ *
+ * 「新」 is a card with no published form recorded before the window opened; 「更新」 is one that had a published
+ * form then and whose words differ now. The page's own rule for a card's visibility holds: published, in a published
+ * zone.
+ * @param {any} database @param {{ userId: string, from: Date | string, to: Date | string, limit?: number }} window
+ * @returns {Promise<Array<{ zoneId: string, zoneTitle: string, cards: Array<{ id: string, title: string, summary: string, change: "new" | "updated", revision: number, updatedAt: string }> }>>}
+ */
+export async function followedZoneCards(database, { userId, from, to, limit = FRONTIER_FOLLOWED_ZONE_CARDS_MAX }) {
+  const rows = (await database.query(`SELECT * FROM (
+      SELECT c.id, c.zone_id, c.title, c.summary, c.revision, c.updated_at, z.title AS zone_title,
+        ${cardWordsFingerprint((column) => `c.${column}::text`)} AS words_now,
+        before.snapshot IS NULL AS is_new,
+        ${cardWordsFingerprint((column) => (["content", "claims", "public_view"].includes(column) ? `(before.snapshot->'${column}')::text` : `(before.snapshot->>'${column}')`))} AS words_before
+      FROM evimed_frontier.evidence_zone_follows f
+      JOIN evimed_frontier.evidence_zones z ON z.id = f.zone_id AND z.state = 'published'
+      JOIN evimed_frontier.evidence_cards c ON c.zone_id = z.id AND c.state = 'published'
+      LEFT JOIN LATERAL (SELECT r.snapshot FROM evimed_frontier.evidence_card_revisions r
+        WHERE r.card_id = c.id AND r.recorded_at < $2::timestamptz AND r.snapshot->>'state' = 'published'
+        ORDER BY r.revision DESC LIMIT 1) before ON true
+      WHERE f.user_id = $1 AND c.updated_at >= $2::timestamptz AND c.updated_at < $3::timestamptz) listed
+    WHERE is_new OR words_now IS DISTINCT FROM words_before
+    ORDER BY zone_title, updated_at DESC, id LIMIT $4`, [userId, from, to, Math.min(FRONTIER_FOLLOWED_ZONE_CARDS_MAX, Math.max(1, Math.trunc(limit)))])).rows ?? [];
+  /** @type {Map<string, { zoneId: string, zoneTitle: string, cards: any[] }>} */
+  const zones = new Map();
+  for (const row of rows) {
+    const zone = zones.get(row.zone_id) ?? { zoneId: String(row.zone_id), zoneTitle: String(row.zone_title), cards: [] };
+    zones.set(row.zone_id, zone);
+    zone.cards.push({ id: String(row.id), title: String(row.title), summary: String(row.summary ?? "").slice(0, 200),
+      change: row.is_new ? "new" : "updated", revision: Number(row.revision), updatedAt: iso(row.updated_at) });
+  }
+  return [...zones.values()];
+}
+
 // ───────────────────────── the issue (unit-tested) ─────────────────────────
 
 /**
@@ -560,6 +611,12 @@ export class FrontierDaily {
       previousDay: row.previous_day ?? null, nextDay: row.next_day ?? null,
     };
   }
+
+  /**
+   * 「你关注的专区」 of an issue for one reader, over the issue's own window (`followedZoneCards`).
+   * @param {string} userId @param {{ windowStart: string, windowEnd: string }} issue
+   */
+  followedZones(userId, issue) { return followedZoneCards(this.database, { userId, from: issue.windowStart, to: issue.windowEnd }); }
 
   status() {
     return { ...this.state, counters: { ...this.counters } };

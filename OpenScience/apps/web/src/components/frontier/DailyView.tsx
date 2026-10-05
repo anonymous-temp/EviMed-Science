@@ -8,6 +8,7 @@ import {
   listFrontierDailies,
   type FrontierDaily,
   type FrontierDailySummary,
+  type FrontierFollowedZone,
   type FrontierItem,
 } from "@/lib/frontierClient";
 import { toast } from "@/lib/toast";
@@ -147,6 +148,8 @@ export function DailyIssue({ state, onDay, weekly = false }: { state: DailyState
       {issue.safety.length > 0 && <DailySection id="safety" title="安全警示" items={issue.safety} safety />}
       {issue.sections.map((section) => <DailySection key={section.lane} id={section.lane} title={section.laneLabel || "其他"} items={section.items} />)}
 
+      {issue.followedZones && issue.followedZones.length > 0 && <FollowedZones zones={issue.followedZones} />}
+
       {issue.aiMinute && (
         <section aria-labelledby="daily-ai-minute" className="mt-8">
           <h3 id="daily-ai-minute" className="text-ui font-semibold text-text">AI 一分钟</h3>
@@ -161,6 +164,36 @@ export function DailyIssue({ state, onDay, weekly = false }: { state: DailyState
         </nav>
       )}
     </article>
+  );
+}
+
+/**
+ * 「你关注的专区」: this reader's own followed zones, with the cards that are new or changed in the issue's window.
+ * It is the reader's alone — the issue above it reads the same to everyone — so it is a section of its own, not a lane.
+ */
+function FollowedZones({ zones }: { zones: FrontierFollowedZone[] }) {
+  return (
+    <section aria-labelledby="daily-followed-zones" className="mt-8">
+      <h3 id="daily-followed-zones" className="text-ui font-semibold text-text">你关注的专区</h3>
+      {zones.map((zone) => (
+        <div key={zone.zoneId} className="mt-2">
+          <Link to={`/app/frontier/zones/${encodeURIComponent(zone.zoneId)}`} className={cn(INLINE_ACTION, "text-caption text-text-3 hover:text-accent")}>{zone.zoneTitle}</Link>
+          <ul aria-label={zone.zoneTitle}>
+            {zone.cards.map((card) => (
+              <li key={card.id} className="flex gap-2 border-b border-border py-3">
+                <span className="w-8 shrink-0 text-caption leading-6 text-text-3">{card.change === "new" ? "新" : "更新"}</span>
+                <div className="min-w-0 flex-1">
+                  <p className="text-body font-semibold leading-6 text-text">
+                    <Link to={`/app/frontier/zones/${encodeURIComponent(zone.zoneId)}/evidence/${encodeURIComponent(card.id)}`} className="hover:text-accent hover:underline">{card.title}</Link>
+                  </p>
+                  {card.summary && <p className="mt-1 line-clamp-2 max-w-measure text-ui text-text-2">{card.summary}</p>}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </section>
   );
 }
 

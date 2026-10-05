@@ -1751,7 +1751,12 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       canRun: () => !maintenanceService || maintenanceService.claimingAllowed(),
       report: (loop, code) => process.stderr.write(`frontier ${loop}: ${code}\n`) });
     // Official zones belong to the platform publisher; a zone and its cards are tagged with the shared entity keys.
-    const evidenceZones = new EvidenceZoneService({database:productDatabase,entityKeysFor:entityVocabulary.entityKeysFor,platformPublisherUserId:PLATFORM_PUBLISHER_USER_ID});
+    const evidenceZones = new EvidenceZoneService({database:productDatabase,entityKeysFor:entityVocabulary.entityKeysFor,platformPublisherUserId:PLATFORM_PUBLISHER_USER_ID,
+      // A card published or revised in a followed zone is an inbox notice for each follower (flywheel F10): told after the
+      // write committed, and a notice that could not be queued is said on stderr and never reaches the writer.
+      onCardPublished: async (event) => {
+        try { await frontierNotifications.notifyZoneFollowers(event); } catch (error) { process.stderr.write(`frontier zone notice: ${typeof error?.code === "string" ? error.code : error?.name ?? "error"}\n`); }
+      }});
     // An official zone keeps running on the feed's budget; every other zone's upkeep is booked to its owner, in the
     // owner's own `evimed-evidence` project, and charged through the allowance composed below (`useBilling`).
     const evidenceEditorial = new EvidenceEditorial({database:productDatabase,service:evidenceZones,editor,budget,

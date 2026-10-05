@@ -1360,6 +1360,9 @@ export class FrontierService {
         } : null,
         sections: shownSections,
         safety,
+        // The one part of an issue that is the reader's own (flywheel F10): the cards of the zones they follow that
+        // were published or changed in this issue's window. Read now, never part of the issue's text or Markdown.
+        followedZones: typeof producer.followedZones === "function" ? await producer.followedZones(user.id, issue).catch(() => []) : [],
         aiMinute: issue.aiMinute, markdown,
         itemCount: new Set(shown.map((item) => item.id)).size,
         readingMinutes: frontierReadingMinutes([leadText, issue.aiMinute, ...shown.flatMap((item) => [item.title, item.summary])]),
