@@ -12,7 +12,7 @@ import assert from "node:assert/strict";
 import { readFile, readdir } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
-import { isResearcherOwnedWork } from "@evimed/domain";
+import { isChargeableResearchRun, isResearcherOwnedWork } from "@evimed/domain";
 
 const SRC = path.resolve(import.meta.dirname, "../src");
 /** What a function that dispatches a researcher's run must contain before it does. */
@@ -84,5 +84,7 @@ test("what is gated is what is charged: programme and proactive steps are the re
     assert.equal(isResearcherOwnedWork({ automated: true, effectiveAgentId: agent }), false, agent);
     assert.equal(isResearcherOwnedWork({ automated: false, effectiveAgentId: agent }), false, agent);
   }
-  assert.equal(isResearcherOwnedWork({ automated: true, dispatchId: "methodeval_x", effectiveAgentId: "adr-analysis" }), false, "a paired evaluation is the platform's");
+  assert.equal(isResearcherOwnedWork({ automated: true, effectiveRouteReason: "platform-learning", effectiveAgentId: "adr-analysis" }), false, "a paired evaluation is the platform's");
+  assert.equal(isResearcherOwnedWork({ automated: true, dispatchId: "methodeval_x", effectiveAgentId: "adr-analysis" }), false, "a harness's own run teaches nothing");
+  assert.equal(isChargeableResearchRun({ automated: true, dispatchId: "methodeval_x", effectiveAgentId: "adr-analysis" }), true, "but a name typed into a dispatch is not what the platform dispatched");
 });

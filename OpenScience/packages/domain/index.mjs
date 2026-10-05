@@ -872,7 +872,7 @@ export {
   summarizeGateNotices,
 } from './src/gateIssueText.mjs'
 
-// usagePurpose — 8 exports: what a metered model request was for (X1)
+// usagePurpose — 10 exports: what a metered model request was for (X1)
 export {
   USAGE_PURPOSES,
   USAGE_PURPOSE_LABELS_ZH,
@@ -880,7 +880,9 @@ export {
   usagePurpose,
   usagePurposeOfRun,
   isResearcherOwnedWork,
+  isChargeableResearchRun,
   LEARNING_AGENT_IDS,
+  PLATFORM_ROUTE_PURPOSES,
   LEARNING_EVALUATION_DISPATCH_PREFIX,
 } from './src/usagePurpose.mjs'
 // sourceUpdates — 5 exports (retraction and correction notices on a cited work, 2026-09-20)

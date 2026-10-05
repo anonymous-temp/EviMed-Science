@@ -1,6 +1,6 @@
 /** Consume reviewed lessons as owner-scoped supplements, without claiming a measured benefit. */
 import { createHash } from "node:crypto";
-import { LEARNING_EVALUATION_DISPATCH_PREFIX } from "@evimed/domain";
+import { usagePurposeOfRun } from "@evimed/domain";
 import { HANDBOOK_CANDIDATE_RECORD_TYPE } from "./learningService.mjs";
 import { HttpError } from "./security.mjs";
 
@@ -82,7 +82,7 @@ export class HandbookConsolidation {
     const fail = (reason) => this.complete(job, candidate, { ...base, disposition: "failed", reason });
     const source = await this.resolveSourceRun(job.userId, payload.provenance?.sourceProjectId, payload.provenance?.runId);
     if (!source || source.id !== payload.provenance?.runId || source.learningEvaluation
-      || String(source.dispatchId ?? "").startsWith(LEARNING_EVALUATION_DISPATCH_PREFIX)) return fail("handbook_source_unavailable");
+      || usagePurposeOfRun(source) !== "kernel") return fail("handbook_source_unavailable");
     const capability = this.registry.get(source.effectiveAgentId);
     if (!capability || capability.visibility === "internal") return fail("handbook_capability_unavailable");
     if ((payload.capabilityId && payload.capabilityId !== capability.id)

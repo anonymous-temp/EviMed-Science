@@ -78,7 +78,8 @@ test("a researcher's run is theirs: not an automated run, an autopilot episode, 
   assert.equal(isResearcherRun({ id: "r4", effectiveRouteReason: "autopilot:literature-sentinel" }), false);
   assert.equal(isResearcherRun({ id: "r5", effectiveAgentId: "method-distillation" }), false);
   assert.equal(isResearcherRun({ id: "r6", effectiveAgentId: "source-understanding" }), false);
-  assert.equal(isResearcherRun({ id: "r7", dispatchId: "methodeval_abc" }), false);
+  assert.equal(isResearcherRun({ id: "r7", effectiveRouteReason: "platform-learning" }), false);
+  assert.equal(isResearcherRun({ id: "r8", dispatchId: "methodeval_abc" }), true, "a dispatch id a browser can type says nothing about whose run it is");
   assert.equal(isResearcherRun(null), false);
 });
 

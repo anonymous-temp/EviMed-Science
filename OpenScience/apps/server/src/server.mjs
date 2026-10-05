@@ -1765,6 +1765,15 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     if (id === LEARNING_PROJECT_ID || id === SOURCES_PROJECT_ID) {
       throw new HttpError(409, "project_id_reserved", "This project id is reserved for the platform's own work.");
     }
+    // 「循证进化」's own projects are named, not detected: the id is what puts
+    // a project outside the account's project ceiling and the per-user runtime
+    // limit, and what (flag on) gives its runtime the evaluation network and
+    // ends it after each run. The server makes them itself (`store.projectFor`);
+    // an operator may make an evaluation project here, as the standalone
+    // paper-gold harness does before it registers a policy (operator-only).
+    if (isEvolutionProject(id) && !config.operatorUsers.includes(user.id)) {
+      throw new HttpError(409, "project_id_reserved", "This project id is reserved for the platform's own work.");
+    }
     const name = projectDisplayName(body.name ?? id);
     // Counted before the create, and only for a project that is new: a
     // per-project storage quota and a per-user runtime limit bound nothing

@@ -275,7 +275,7 @@ test("researcher-owned GEO and proactive work feed learning while internal evalu
     const subject = run({ automated: true, effectiveAgentId, effectiveRouteReason });
     assert.deepEqual(triggers(learningTriggersFor({ run: subject, runs: [subject], project: projectOf("research") })), ["delivered"]);
     assert.deepEqual(learningTriggersFor({ run: subject, runs: [subject], project: projectOf("acceptance-geo-0929") }), []);
-    const evaluating = { ...subject, dispatchId: "methodeval_a1b2c3" };
+    const evaluating = { ...subject, dispatchId: "methodeval_a1b2c3", effectiveRouteReason: "platform-learning" };
     assert.deepEqual(learningTriggersFor({ run: evaluating, runs: [evaluating], project: projectOf("research") }), []);
   }
 });
