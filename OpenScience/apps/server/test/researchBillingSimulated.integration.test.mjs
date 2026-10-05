@@ -22,7 +22,6 @@ import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { EVIMED_CREDITS_BACKOFF_MS, EvimedCreditsService } from "../src/evimedCreditsService.mjs";
 import { EvimedCreditsError } from "../src/evimedCreditsClient.mjs";
 import { SIMULATED_INCARNATION_SQL, SimulatedWallet, simulatedPayerId } from "../src/evimedCreditsSimulator.mjs";
-import { UsageLedger } from "../src/usageLedger.mjs";
 import { createWebApiApp } from "../src/server.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";

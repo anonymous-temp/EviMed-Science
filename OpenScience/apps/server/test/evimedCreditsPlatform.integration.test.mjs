@@ -90,7 +90,7 @@ async function world({ startCredits = 200, signupGiftDays = 30, monthlyGift = 0,
       startedAt: time.now().toISOString(), finishedAt: time.now().toISOString(), accountCreatedAt: epoch.epoch, capabilityId: "adr-analysis", ...run });
     return { result, runId };
   }
-  const balance = async () => (await wallet.snapshot(payer));
+  const balance = () => wallet.snapshot(payer);
   return { userId, projectId, time, wallet, service, payer, finish, balance, reported };
 }
 

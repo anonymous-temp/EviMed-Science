@@ -280,16 +280,16 @@ async function migrateWalletsToLots(client, now) {
     const key = digest(wallet.payer).slice(0, 40);
     const migrated = JSON.stringify({ grants: wallet.grants, deductions: wallet.deductions, balance: wallet.balance });
     if (gifted > 0n) {
-      const lot = (await client.query(`INSERT INTO evimed_credits.simulated_lots(payer,kind,source,granted,remaining,expires_at,request_id,note)
+      const created = (await client.query(`INSERT INTO evimed_credits.simulated_lots(payer,kind,source,granted,remaining,expires_at,request_id,note)
         VALUES($1,'gifted','signup',$2,$2,$3::timestamptz,$4,$5) RETURNING lot_id`,
       [wallet.payer, researchMoneyDecimal(gifted), expiresAt, `migrated:gifted:${key}`, `migrated ${migrated}`])).rows[0];
-      await client.query("UPDATE evimed_credits.simulated_entries SET lot_id=$2 WHERE payer=$1 AND kind='grant'", [wallet.payer, lot.lot_id]);
+      await client.query("UPDATE evimed_credits.simulated_entries SET lot_id=$2 WHERE payer=$1 AND kind='grant'", [wallet.payer, created.lot_id]);
     }
     if (purchased > 0n) {
-      const lot = (await client.query(`INSERT INTO evimed_credits.simulated_lots(payer,kind,source,granted,remaining,request_id,note)
+      const created = (await client.query(`INSERT INTO evimed_credits.simulated_lots(payer,kind,source,granted,remaining,request_id,note)
         VALUES($1,'purchased','topup',$2,$2,$3,$4) RETURNING lot_id`,
       [wallet.payer, researchMoneyDecimal(purchased), `migrated:purchased:${key}`, `migrated ${migrated}`])).rows[0];
-      await client.query("UPDATE evimed_credits.simulated_entries SET lot_id=$2 WHERE payer=$1 AND kind='topup'", [wallet.payer, lot.lot_id]);
+      await client.query("UPDATE evimed_credits.simulated_entries SET lot_id=$2 WHERE payer=$1 AND kind='topup'", [wallet.payer, created.lot_id]);
     }
   }
   await client.query("INSERT INTO evimed_credits.schema_migrations(version) VALUES($1) ON CONFLICT DO NOTHING", [LOTS_MIGRATION]);

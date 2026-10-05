@@ -387,7 +387,7 @@ export class EvimedCreditsService {
    * notice. The verdict is the returned status.
    *
    * @param {{ userId: string, projectId?: string | null, runId: string, dispatchId?: string | null,
-   *   status?: string, dispatchStatus?: string | null, errorCode?: string | null, effectiveRouteReason?: string | null,
+   *   status?: string, canceledBy?: string | null, dispatchStatus?: string | null, errorCode?: string | null, effectiveRouteReason?: string | null,
    *   capabilityId?: string | null, subject?: string | null, effectiveAgentId?:string|null, automated?:boolean, startedAt?:string|null, finishedAt?:string|null, accountCreatedAt?:string|null }} run
    * @returns {Promise<{ status: string, credits?: number, reason?: string, duplicate?: boolean, errorCode?: string | null }>}
    */
@@ -537,7 +537,7 @@ export class EvimedCreditsService {
       this.counters.settled += 1;
       return { status: 'settled', credits: 0, reason: 'waived' };
     }
-    return await this.#charge(/** @type {any} */ (opened.row));
+    return this.#charge(/** @type {any} */ (opened.row));
   }
 
   /**
