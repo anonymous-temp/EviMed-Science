@@ -89,3 +89,16 @@ test("question-only success leaves uncovered science stages unknown and cannot e
   assert.equal(result.benchmarkScope, "question-only");
   for (const stage of ["recall", "extraction", "calculation"]) assert.deepEqual(result.stages[stage], { valid: false, observed: false });
 });
+
+test("a withheld-input unit that reports the paper's number anyway is not valid, whatever a model said of its stages", async () => {
+  const gold = { type: "research", inputAvailable: false, benchmarkScope: "research-input-unavailable", numeric: {}, baselineNumeric: { "analysis.ror": { value: 2.31, printed: "2.31", absoluteTolerance: 0.005 } },
+    applicableStages: ["question", "method", "certainty", "writing"], stageChecks: { question: ["q"], method: ["m"], certainty: ["c"], writing: ["w"] } };
+  const checks = { q: true, m: true, c: true, w: true };
+  const honest = await scoreUnit({ id: "honest", exposureTier: "unexposed", checks, numeric: { "notes.count": 3 } }, gold);
+  assert.equal(honest.applicableStagesValid, true); assert.deepEqual(honest.numbersReportedWithoutInputs, []);
+  const invented = await scoreUnit({ id: "invented", exposureTier: "unexposed", checks, numeric: { "analysis.ror": 2.3 } }, gold);
+  assert.deepEqual(invented.numbersReportedWithoutInputs, ["analysis.ror"]);
+  assert.equal(invented.applicableStagesValid, false); assert.equal(invented.allStagesValid, false);
+  // With its inputs available the same receipt is simply scored.
+  assert.deepEqual((await scoreUnit({ id: "given", checks, numeric: { "analysis.ror": 2.3 } }, { ...gold, inputAvailable: true })).numbersReportedWithoutInputs, []);
+});

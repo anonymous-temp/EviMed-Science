@@ -18,7 +18,15 @@ test('scorer audit samples frozen completed units, records disagreement and retr
   const service={get:async id=>records.get(id),now:()=>new Date('2026-10-05'),save:async(_kind,id,payload)=>{const row={id,payload};records.set(id,row);return row;}};
   const audit=createEvolutionScorerAudit({service,config:{evaluationDataDir:root},readEvidence:async()=>({transcript:{header:{completeness:'complete'}},numeric:{value:3}}),review:async request=>{assert.equal(request.original,undefined);calls++;return {independent:true,model:'qwen',evidenceIds:['source1'],stages:{method:{observed:true,valid:false},calculation:{observed:true,valid:true}}};}});
   const result=await audit.run({day:'2026-10-05'});assert.equal(result.payload.discrepancies,1);assert.equal(result.payload.findings[0].deterministicNumericPassed,null);
-  await audit.run({day:'2026-10-05'});assert.equal(calls,1);
+  // The unit carries no assessor identity, so a second model reading cannot be called independent of the first.
+  assert.deepEqual({status:result.payload.findings[0].status,independent:result.payload.findings[0].independentOfAssessor,reviewed:result.payload.reviewed,rereads:result.payload.sameFamilyRereads,rate:result.payload.discrepancyRate,threshold:result.payload.discrepancyThreshold},{status:'same-family-reread',independent:false,reviewed:0,rereads:1,rate:1,threshold:null});
+  // A reader of another family than the one that scored the unit is an independent review; the same family is a reread.
+  for(const [assessmentModel,status] of [['deepseek-v4-pro','reviewed'],['qwen3.8-max','same-family-reread']]){
+   records.clear();await fs.writeFile(path.join(directory,'report.json'),JSON.stringify({...report,units:[{...original,assessmentModel}]}));
+   assert.equal((await audit.run({day:'2026-10-05'})).payload.findings[0].status,status);
+  }
+  records.clear();await fs.writeFile(path.join(directory,'report.json'),JSON.stringify(report));await audit.run({day:'2026-10-05'});
+  const again=calls;await audit.run({day:'2026-10-05'});assert.equal(calls,again);
   assert.deepEqual(JSON.parse(await fs.readFile(path.join(directory,'report.json'),'utf8')),report);
   assert.equal(JSON.stringify(result).includes('"numeric"'),false);
   records.clear(); report.units=[original,{...original,producerRunId:'run2'},{...original,producerRunId:'run3'}];
