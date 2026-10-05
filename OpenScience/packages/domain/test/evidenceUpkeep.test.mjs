@@ -47,7 +47,7 @@ test("a conclusion has changed when the answer, a claim or a number moved, not w
       comparisons: [{ outcome: "Stroke", denominator: 100, control: { events: 12 }, intervention: { events: 7 }, relativeEffect: "RR 0.58" }] },
     claims: [{ claimId: "CLM-1", claim: "Stroke fell." }],
   };
-  assert.equal(evidenceConclusionChanged(card, structuredClone(card)), false);
+  assert.equal(evidenceConclusionChanged(card, JSON.parse(JSON.stringify(card))), false);
   assert.equal(evidenceConclusionChanged(card, { ...card, content: { ...card.content, sections: [{ title: "a", text: "entirely different prose" }] } }), false, "prose is not the conclusion");
   assert.equal(evidenceConclusionChanged(card, { ...card, content: { ...card.content, comparisons: [{ ...card.content.comparisons[0], relativeEffect: "RR 0.71" }] } }), true, "an effect that moved is");
   assert.equal(evidenceConclusionChanged(card, { ...card, claims: [] }), true, "a claim removed is");
@@ -64,6 +64,8 @@ test("an entry's sentence is made from facts and says what happened in plain Chi
   assert.match(said({ category: "withdrawal", trigger: "challenge", facts: { claimId: "CLM-2", cardWithdrawn: true } }), /撤回该条结论.*本卡.*撤回/);
   assert.match(said({ category: "searched_no_change", trigger: "challenge", facts: { claimId: "CLM-2" } }), /维持原结论/);
   assert.match(said({ category: "correction", trigger: "producer_edit", facts: { revisionBefore: 1, revisionAfter: 2 } }), /出品方更新了本卡/);
+  assert.match(said({ category: "new_evidence_conclusion_changed", trigger: "producer_edit", facts: { itemCount: 2, revisionBefore: 1, revisionAfter: 2 } }), /核对了 2 项新研究并更新了本卡；结论有变化（第 1 版 → 第 2 版）/);
+  assert.match(said({ category: "new_evidence_conclusion_unchanged", trigger: "producer_edit", facts: { itemCount: 1 } }), /核对了 1 项新研究并更新了本卡；结论未变/);
   assert.match(said({ category: "retired", trigger: "scheduled_check", facts: { lastCheckedAt: "2026-10-05T01:00:00Z" } }), /不再更新.*2026-10-05/);
   assert.match(said({ category: "retired", trigger: "producer_edit", facts: { retiredBy: "producer" } }), /出品方说明/);
   for (const category of EVIDENCE_CHANGE_CATEGORIES) for (const trigger of EVIDENCE_CHANGE_TRIGGERS) {

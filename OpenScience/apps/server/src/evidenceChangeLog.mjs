@@ -120,6 +120,13 @@ export function createEvidenceChangeLog({ database }) {
 }
 
 /**
+ * The log of a zone or a card, read without the composed module: what the public pages package holds, which has a database and no
+ * `createEvidenceChangeLog`. Same page shape as `list`.
+ * @param {any} database @param {Parameters<ReturnType<typeof createEvidenceChangeLog>["list"]>[0]} query
+ */
+export const readEvidenceChangeLog = (database, query) => createEvidenceChangeLog({ database }).list(query);
+
+/**
  * The change log's counters for the operator's metrics endpoint.
  * @param {ReturnType<ReturnType<typeof createEvidenceChangeLog>["stats"]> | null | undefined} stats
  */

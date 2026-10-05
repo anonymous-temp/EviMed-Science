@@ -178,6 +178,9 @@ export function evidenceChangeSummaryZh({ category, trigger, facts = {} }) {
     }
     if (trigger === 'producer_edit') {
       if (category === 'new_evidence_conclusion_unchanged' && facts.reviewed) return `出品方核对了${items ? ` ${items} 项` : ''}新研究，认为不影响本卡，结论未变。`
+      // An edit that answers new studies the platform had pointed to says so, and whether the conclusion moved.
+      if (category === 'new_evidence_conclusion_changed') return `出品方核对了${items ? ` ${items} 项` : ''}新研究并更新了本卡；结论有变化${revisions(facts)}。`
+      if (category === 'new_evidence_conclusion_unchanged') return `出品方核对了${items ? ` ${items} 项` : ''}新研究并更新了本卡；结论未变${revisions(facts)}。`
       return `出品方更新了本卡${revisions(facts)}。`
     }
     if (category === 'new_evidence_conclusion_changed') return `${items ? `有 ${items} 项` : '有'}${facts.sameWork ? '关于本卡所引研究的新报道' : '与本卡对得上的新研究'}，已纳入并更新；结论有变化${revisions(facts)}。`
