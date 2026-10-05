@@ -5,6 +5,10 @@ import {
   EvidenceReferences,
   evidenceSourceId,
 } from "./EvidenceContent";
+import { EvidenceCardHeader } from "./EvidenceCardHeader";
+import { EvidenceCardViews } from "./EvidenceCardViews";
+import { EvidenceClaims, EvidenceDisclosure } from "./EvidenceCardClaims";
+import { evidenceDate } from "./evidenceDate";
 
 /** Source text stays text: imported cards never supply HTML or navigation code. */
 const safeUrl = (value: string | null) => {
@@ -17,18 +21,7 @@ const safeUrl = (value: string | null) => {
   }
 };
 
-export const evidenceDate = (value: string) => {
-  const date = new Date(value);
-  return Number.isNaN(date.getTime())
-    ? value
-    : date.toLocaleString("zh-CN", {
-        year: "numeric",
-        month: "numeric",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-      });
-};
+export { evidenceDate };
 /** Only omit an exact repeated answer; additional authored prose remains visible. */
 const redundantBody = (evidence: EvidenceCard) =>
   !!evidence.content &&
@@ -56,6 +49,7 @@ export function EvidenceReading({
   return (
     <article className="min-w-0 max-w-measure-body space-y-6 break-words">
       <header className="space-y-2">
+        <EvidenceCardHeader evidence={evidence} />
         {publicationSources.length > 0 && (
           <div role="alert" className="space-y-2 text-ui text-warn">
             <p>来源状态有警示，原有结论需要重新核查。以下内容保留供追溯，不能作为已完成核验的临床或科研依据。</p>
@@ -136,6 +130,7 @@ export function EvidenceReading({
           </p>
         </section>
       )}
+      <EvidenceCardViews evidence={evidence} />
       <EvidenceContent evidence={evidence} />
       {evidence.body && !redundantBody(evidence) && (
         <section>
@@ -147,21 +142,7 @@ export function EvidenceReading({
           </p>
         </section>
       )}
-      {evidence.claims.length > 0 && (
-        <section>
-          <h3 className="mb-2 text-ui font-medium text-text">证据要点</h3>
-          <ul className="space-y-3">
-            {evidence.claims.map((claim, index) => (
-              <li
-                key={index}
-                className="whitespace-pre-wrap text-ui leading-relaxed text-text-2"
-              >
-                {claim.text}
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+      <EvidenceClaims evidence={evidence} />
       {evidence.limitations && (
         <section>
           <h3 className="mb-2 text-ui font-medium text-text">适用范围与局限</h3>
@@ -248,6 +229,7 @@ export function EvidenceReading({
           </ol>
         </section>
       )}
+      <EvidenceDisclosure evidence={evidence} />
       {evidence.editorial && (
         <section>
           <h3 className="mb-2 text-ui font-medium text-text">AI 证据评议</h3>

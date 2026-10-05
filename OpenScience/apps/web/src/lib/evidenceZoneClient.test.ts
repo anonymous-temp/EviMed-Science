@@ -9,6 +9,12 @@ import {
   refreshEvidenceZone,
   fetchZoneEvidence,
   fetchEvidenceMaintenance,
+  setEvidenceZoneVisibility,
+  listOwnUserZones,
+  publishResultAsEvidenceCard,
+  continueResearchFromCard,
+  fetchEvidenceCardLinks,
+  fetchEvidenceAuthor,
   type EvidenceMaintenance,
   type EvidenceZone,
   type EvidenceCard,
@@ -142,3 +148,43 @@ describe("evidence API scope", () => {
     expect(await fetchEvidenceMaintenance("zone")).toEqual(maintenance);
   });
 });
+describe("the co-creation calls", () => {
+  it("opens a zone to the internet at its current revision, and nothing else", async () => {
+    request.mockResolvedValue({ zone: { id: "z", visibility: "internet" } });
+    await setEvidenceZoneVisibility({ id: "a/b", revision: 5 } as EvidenceZone, "internet");
+    expect(request).toHaveBeenCalledWith("/frontier/zones/a%2Fb/visibility", "PUT", { visibility: "internet", expectedRevision: 5 });
+  });
+  it("lists only the researcher's own user zones — an older zone with no kind is one — across pages", async () => {
+    request
+      .mockResolvedValueOnce({ items: [{ id: "u", kind: "user" }, { id: "p", kind: "product" }], total: 3, nextCursor: "next" })
+      .mockResolvedValueOnce({ items: [{ id: "legacy" }], total: 3, nextCursor: null });
+    expect((await listOwnUserZones()).map((zone) => zone.id)).toEqual(["u", "legacy"]);
+    expect(request.mock.calls[0][0]).toContain("scope=owned");
+    expect(request.mock.calls[1][0]).toContain("cursor=next");
+  });
+  it("publishes a result version to a zone, with the project and the claims the researcher chose", async () => {
+    request.mockResolvedValue({ evidence: { id: "ec_1" } });
+    await publishResultAsEvidenceCard("rv_1", { projectId: "stroke", zoneId: "ez_1", claimIds: ["CLM-001"] });
+    expect(request).toHaveBeenCalledWith("/results/rv_1/evidence-card", "POST", { projectId: "stroke", zoneId: "ez_1", claimIds: ["CLM-001"] });
+  });
+  it("continues research from a card, reads its links and reads an author by their own id", async () => {
+    request.mockResolvedValue({});
+    await continueResearchFromCard("ec_1", { projectId: "mine" });
+    expect(request).toHaveBeenLastCalledWith("/frontier/evidence/ec_1/continue", "POST", { projectId: "mine" });
+    await continueResearchFromCard("ec_1");
+    expect(request).toHaveBeenLastCalledWith("/frontier/evidence/ec_1/continue", "POST", {});
+    await fetchEvidenceCardLinks("ec_1");
+    expect(request).toHaveBeenLastCalledWith("/frontier/evidence/ec_1/links");
+    await fetchEvidenceAuthor("a@b");
+    expect(request).toHaveBeenLastCalledWith("/frontier/authors/a%40b");
+  });
+  it("explains the refusals of publishing a result and of an author with nothing published in the platform's own words", () => {
+    for (const [code, text] of [
+      ["evidence_result_not_clinical_package", "不是带证据矩阵的临床证据综述"],
+      ["evidence_result_zone_not_owned", "只能发布到你自己的专区"],
+      ["evidence_result_no_verified_claim", "没有已核验的结论"],
+      ["evidence_author_not_found", "没有这位作者公开的内容"],
+    ]) expect(evidenceErrorMessage(new WebApiError("x", { status: 409, code }))).toContain(text);
+  });
+});
+

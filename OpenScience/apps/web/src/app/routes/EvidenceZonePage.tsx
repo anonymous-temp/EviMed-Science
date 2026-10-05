@@ -11,6 +11,7 @@ import {
 } from "@/components/frontier/EvidenceReading";
 import { ZoneEditor, CardEditor } from "@/components/frontier/EvidenceEditors";
 import { EvidenceMaintenance } from "@/components/frontier/EvidenceMaintenance";
+import { EvidenceVisibility } from "@/components/frontier/EvidenceVisibility";
 import { PageShell } from "@/components/layout/PageShell";
 import { FrontierNavigation } from "@/components/frontier/FrontierNavigation";
 import { FrontierSkeleton } from "@/components/frontier/FrontierSkeleton";
@@ -268,6 +269,7 @@ function EvidenceZoneContent({ zoneId }: { zoneId: string }) {
                 </details>
               )}
             </header>
+            {zone.canEdit && <EvidenceVisibility zone={zone} onChanged={setZone} />}
             {zone.canEdit && (
               <EvidenceMaintenance
                 key={zone.id}

@@ -219,6 +219,9 @@ const operatorLevers = {
   OPEN_SCIENCE_EVIDENCE_PROGRAMME_MAX_CONCURRENCY: ["open-science-web"],
   OPEN_SCIENCE_EVIDENCE_PUBLIC_WEB_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_EVIDENCE_PUBLIC_INDEXABLE: ["open-science-web"],
+  // The card-citation gift (F07): off and worth 0 until the owner chooses an amount.
+  OPEN_SCIENCE_EVIDENCE_CITATION_GIFT_ENABLED: ["open-science-web"],
+  OPEN_SCIENCE_EVIDENCE_CITATION_GIFT_AMOUNT: ["open-science-web"],
   OPEN_SCIENCE_KNOWLEDGE_PLUGIN_URL: ["open-science-web"],
   OPEN_SCIENCE_KNOWLEDGE_PLUGIN_TOKEN_FILE: ["open-science-web"],
   OPEN_SCIENCE_KNOWLEDGE_PLUGIN_POLL_MS: ["open-science-web"],

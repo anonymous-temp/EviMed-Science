@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate, useParams } from "react-router";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router";
 import {
   useEvidenceScope,
   useEvidenceRequestId,
@@ -10,6 +10,7 @@ import { PageShell } from "@/components/layout/PageShell";
 import { FrontierNavigation } from "@/components/frontier/FrontierNavigation";
 import { FrontierSkeleton } from "@/components/frontier/FrontierSkeleton";
 import { EvidenceReading } from "@/components/frontier/EvidenceReading";
+import { EvidenceCardLinks, EvidenceContinueAction } from "@/components/frontier/EvidenceCardLinks";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { Button } from "@/components/ui/Button";
 import {
@@ -47,7 +48,9 @@ function EvidenceReadingContent({
   const commentRequestId = useEvidenceRequestId();
   const [score, setScore] = useState<number | "">("");
   const [reviewText, setReviewText] = useState("");
-  const [editing, setEditing] = useState(false);
+  // A draft made from a research result opens straight in the editor (`?edit=1`).
+  const [params] = useSearchParams();
+  const [editing, setEditing] = useState(params.get("edit") === "1");
   const [comment, setComment] = useState("");
   const [zone, setZone] = useState<EvidenceZone | null>(null);
   const [evidence, setEvidence] = useState<EvidenceCard | null>(null);
@@ -159,7 +162,7 @@ function EvidenceReadingContent({
             )}
         </div>
       )}
-      {editing && evidence && (
+      {editing && evidence?.canEdit && (
         <div className="mb-4">
           <CardEditor
             key={`${zoneId}:${cardId}`}
@@ -217,6 +220,10 @@ function EvidenceReadingContent({
                 回到相关动态
               </Link>
             )}
+            <div className="mt-6 space-y-4">
+              <EvidenceContinueAction evidence={evidence} />
+              <EvidenceCardLinks cardId={evidence.id} />
+            </div>
             {evidence.canReview && (
               <form
                 className="mt-6 max-w-measure space-y-3"

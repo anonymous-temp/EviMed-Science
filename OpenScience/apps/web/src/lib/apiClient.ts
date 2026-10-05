@@ -758,6 +758,8 @@ export interface WebAgentRun {
   deliverables?: WebRunDeliverable[];
   /** Set when this run's session was forked from another session. */
   forkedFrom?: string | null;
+  /** The evidence card this conversation was started from (「用这张卡继续研究」). */
+  originCardId?: string | null;
   /** How many of the report's claims were checked against a preserved source. */
   claimSummary?: { total: number; verified: number; unverified: number } | null;
   progress?: WebRunProgress | null;

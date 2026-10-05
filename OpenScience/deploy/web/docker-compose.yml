@@ -541,6 +541,10 @@ services:
       OPEN_SCIENCE_EVIDENCE_PROGRAMME_MAX_CONCURRENCY:
       OPEN_SCIENCE_EVIDENCE_PUBLIC_WEB_ENABLED:
       OPEN_SCIENCE_EVIDENCE_PUBLIC_INDEXABLE:
+      # The card-citation gift (evidence-flywheel plan 2026-10-05, F07): interface only,
+      # off and worth 0 until the owner chooses an amount.
+      OPEN_SCIENCE_EVIDENCE_CITATION_GIFT_ENABLED:
+      OPEN_SCIENCE_EVIDENCE_CITATION_GIFT_AMOUNT:
       # 「循证 GEO」 (geoService.mjs) and the media marketplace it places orders
       # through. Value-less: unset keeps config.mjs's defaults — the module off,
       # open to operators once on, no social channel, no marketplace. The

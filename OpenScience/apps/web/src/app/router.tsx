@@ -36,6 +36,7 @@ const VcrStudyPage = lazy(() => import("./virtual-research/VcrStudyPage").then((
 const EvidenceZonesPage = lazy(() => import("./routes/EvidenceZonesPage").then((m) => ({ default: m.EvidenceZonesPage })));
 const EvidenceZonePage = lazy(() => import("./routes/EvidenceZonePage").then((m) => ({ default: m.EvidenceZonePage })));
 const EvidenceReadingPage = lazy(() => import("./routes/EvidenceReadingPage").then((m) => ({ default: m.EvidenceReadingPage })));
+const EvidenceAuthorPage = lazy(() => import("./routes/EvidenceAuthorPage").then((m) => ({ default: m.EvidenceAuthorPage })));
 const GeoHomePage = lazy(() => import("./routes/GeoHomePage").then((m) => ({ default: m.GeoHomePage })));
 const GeoProjectPage = lazy(() => import("./routes/GeoProjectPage").then((m) => ({ default: m.GeoProjectPage })));
 const GeoAnswerPage = lazy(() => import("./routes/GeoAnswerPage").then((m) => ({ default: m.GeoAnswerPage })));
@@ -94,6 +95,7 @@ export const routes: RouteObject[] = [
         { path: "frontier/zones", element: <EvidenceZonesPage /> },
         { path: "frontier/zones/:zoneId", element: <EvidenceZonePage /> },
         { path: "frontier/zones/:zoneId/evidence/:cardId", element: <EvidenceReadingPage /> },
+        { path: "frontier/authors/:userId", element: <EvidenceAuthorPage /> },
         // 「循证 GEO」: the projects, one project's tabs (概览 when none is
         // named), and one AI answer. Like the frontier feed, each answers for
         // itself when the module is off here.
