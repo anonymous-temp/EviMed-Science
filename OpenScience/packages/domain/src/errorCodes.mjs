@@ -1495,6 +1495,17 @@ export const EVIDENCE_PLATFORM_ERROR_CODES = Object.freeze([
 ])
 
 /**
+ * The public evidence pages' own refusals (flywheel F08, F09): the feed that lets the knowledge-source plugin read
+ * what the platform publishes is a public URL, and with the module's switch off it is a route that answers by name
+ * rather than a path that never existed.
+ */
+export const EVIDENCE_PUBLIC_ERROR_CODES = Object.freeze([
+  'evidence_public_not_enabled',
+  'evidence_feed_cursor_invalid',
+  'evidence_feed_query_invalid',
+])
+
+/**
  * Every code this build knows, so a mapping test can prove a new code was
  * classified rather than silently inheriting a default.
  *
@@ -1539,6 +1550,7 @@ export const ALL_ERROR_CODES = Object.freeze([...new Set([
   ...VCR_ENGINE_ISSUE_CODES,
   ...EVIMED_CREDITS_ROUTE_ERROR_CODES,
   ...EVIDENCE_PLATFORM_ERROR_CODES,
+  ...EVIDENCE_PUBLIC_ERROR_CODES,
   ...Object.keys(EVIDENCE_CARD_ERROR_MESSAGES_ZH),
 ])])
 
@@ -1958,6 +1970,9 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   platform_account_protected: '这是平台出版方账号，不能删除或导出。',
   platform_account_reserved: '这个账号名或显示名留给平台出版方，请换一个。',
   evidence_upkeep_no_allowance: '科研额度不足，这个专区的 AI 更新先放着，充值后会自动继续；平台不会替你付这笔费用。',
+  evidence_public_not_enabled: '这个部署没有开放证据专区的公开页面和订阅源。',
+  evidence_feed_cursor_invalid: '订阅源的翻页游标已经失效，请从第一页重新读取。',
+  evidence_feed_query_invalid: '订阅源的参数不对：每页条数要在 1 到 200 之间。',
   usage_metering_unavailable: '计量暂时不可用，本次用量稍后补记。',
   illegal_state_transition: '状态变更不合法，已拒绝。',
 
@@ -2403,6 +2418,10 @@ const ERROR_CODE_OUTCOMES = Object.freeze({
   platform_account_protected: 'upstream',
   platform_account_reserved: 'upstream',
   evidence_upkeep_no_allowance: 'capped',
+  // The public evidence pages are off in this deployment: about the module, never a verdict on work.
+  evidence_public_not_enabled: 'upstream',
+  evidence_feed_cursor_invalid: 'upstream',
+  evidence_feed_query_invalid: 'upstream',
 })
 
 /**
