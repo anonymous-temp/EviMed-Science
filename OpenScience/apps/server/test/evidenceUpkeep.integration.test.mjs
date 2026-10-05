@@ -258,6 +258,8 @@ test("a user's, a company's or a doctor's card is never rewritten: its producer 
   const { upkeep, worker } = build();
   const mine = drug();
   const zone = await zoneOf(alice);
+  // The owner keeps AI upkeep on in this zone; a card they wrote themselves is still theirs.
+  await db.query("INSERT INTO evimed_frontier.evidence_automation(zone_id,enabled,query,source_types,interval_hours,max_cards_per_run) VALUES($1,true,'x','{journal}',24,2)", [zone.id]);
   const card = await cardOf(zone, alice, { entityKeys: [mine], url: `https://doi.org/10.1000/${unique("own.")}` });
   const first = await itemOf({ entityKeys: [mine], title: "First new study" });
   await upkeep.watchTick();
@@ -268,9 +270,10 @@ test("a user's, a company's or a doctor's card is never rewritten: its producer 
   assert.match(notices[0].body, /First new study/);
   assert.equal((await cardRow(card.id)).revision, card.revision, "the card is not rewritten");
   assert.equal((await rows("SELECT count(*)::int AS n FROM evimed_frontier.evidence_editorial_jobs WHERE card_id=$1", [card.id]))[0].n, 0, "no editor job exists for it");
-  // The same batch again says nothing again; a new item is a new batch.
-  await db.query("UPDATE evimed_frontier.evidence_cards SET last_checked_at=NULL WHERE id=$1", [card.id]);
+  // The same batch announced again (the card's state lost, the check run again) says nothing again; a new item is a new batch.
+  await db.query("UPDATE evimed_frontier.evidence_cards SET last_checked_at=NULL,currency='current',pending_item_ids='{}',currency_detail=NULL WHERE id=$1", [card.id]);
   await upkeep.watchTick();
+  assert.equal((await rows("SELECT currency FROM evimed_frontier.evidence_cards WHERE id=$1", [card.id]))[0].currency, "new_evidence_pending");
   assert.equal((await noticesAbout(alice.id, card, /新研究可能影响你的卡片/)).length, 1, "one notice per card and batch");
   await itemOf({ entityKeys: [mine], title: "Second new study", minutesAfter: 10 });
   await db.query("UPDATE evimed_frontier.evidence_cards SET last_checked_at=NULL WHERE id=$1", [card.id]);
@@ -316,7 +319,8 @@ test("an official synthesis stays pending for the topic programme and is handed 
   const zone = await zoneOf(PUBLISHER, { kind: "official" });
   await db.query("INSERT INTO evimed_frontier.evidence_automation(zone_id,enabled,query,source_types,interval_hours,max_cards_per_run) VALUES($1,true,'x','{journal}',24,2)", [zone.id]);
   const [first, second] = [drug(), drug()];
-  const synthesis = await cardOf(zone, PUBLISHER, { origin: "programme", entityKeys: [first], extra: { lineage: { agendaId: "ag_one" } }, url: `https://doi.org/10.1000/${unique("synthesis.")}` });
+  // The programme's own work is written by a model too; what makes it the programme's is what it is — a synthesis, stamped with its agenda.
+  const synthesis = await cardOf(zone, PUBLISHER, { ai: true, entityKeys: [first], extra: { originality: "synthesis", lineage: { agendaId: "ag_one" } }, url: `https://doi.org/10.1000/${unique("synthesis.")}` });
   const brief = await cardOf(zone, PUBLISHER, { ai: true, entityKeys: [second], url: `https://doi.org/10.1000/${unique("brief.")}` });
   await itemOf({ entityKeys: [first], title: "New trial of the first drug" });
   await itemOf({ entityKeys: [second], title: "New trial of the second drug" });
