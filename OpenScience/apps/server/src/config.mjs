@@ -2309,6 +2309,7 @@ export function loadConfig(overrides = {}) {
     evolutionRunBudgetCny: Number(overrides.evolutionRunBudgetCny ?? process.env.OPEN_SCIENCE_EVOLUTION_RUN_BUDGET_CNY ?? 10),
     evolutionMaxConcurrency: Number(overrides.evolutionMaxConcurrency ?? process.env.OPEN_SCIENCE_EVOLUTION_MAX_CONCURRENCY ?? 1),
     evolutionMaxDecisionCards: Number(overrides.evolutionMaxDecisionCards ?? process.env.OPEN_SCIENCE_EVOLUTION_MAX_DECISION_CARDS ?? 3),
+    evolutionMaxPaperScoutsPerDay: Number(overrides.evolutionMaxPaperScoutsPerDay ?? process.env.OPEN_SCIENCE_EVOLUTION_MAX_PAPER_SCOUTS_PER_DAY ?? 8),
     evolutionDecisionTimeoutMs: Number(overrides.evolutionDecisionTimeoutMs ?? process.env.OPEN_SCIENCE_EVOLUTION_DECISION_TIMEOUT_MS ?? 86_400_000),
     evolutionPollMs: Number(overrides.evolutionPollMs ?? process.env.OPEN_SCIENCE_EVOLUTION_POLL_MS ?? 15_000),
     evolutionLeaseMs: Number(overrides.evolutionLeaseMs ?? process.env.OPEN_SCIENCE_EVOLUTION_LEASE_MS ?? 120_000),

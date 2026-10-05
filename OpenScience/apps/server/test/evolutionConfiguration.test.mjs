@@ -33,3 +33,14 @@ test('job retry admission reads its bounded deployment environment setting',()=>
     process.env[name]='0';assert.ok(validateEvolutionConfiguration(loadConfig()).some(issue=>issue.key==='evolutionMaxJobAttempts'));
   }finally{if(prior===undefined)delete process.env[name];else process.env[name]=prior;}
 });
+
+test('the daily count of paper scouting runs reads its bounded deployment environment setting, and zero turns paper scouting off',()=>{
+  const name='OPEN_SCIENCE_EVOLUTION_MAX_PAPER_SCOUTS_PER_DAY',prior=process.env[name];
+  try{
+    delete process.env[name];assert.equal(loadConfig().evolutionMaxPaperScoutsPerDay,8);
+    process.env[name]='3';assert.equal(loadConfig().evolutionMaxPaperScoutsPerDay,3);
+    process.env[name]='0';assert.deepEqual(validateEvolutionConfiguration(loadConfig()),[]);
+    process.env[name]='201';assert.ok(validateEvolutionConfiguration(loadConfig()).some(issue=>issue.key==='evolutionMaxPaperScoutsPerDay'));
+    process.env[name]='1.5';assert.ok(validateEvolutionConfiguration(loadConfig()).some(issue=>issue.key==='evolutionMaxPaperScoutsPerDay'));
+  }finally{if(prior===undefined)delete process.env[name];else process.env[name]=prior;}
+});
