@@ -61,10 +61,14 @@ test("the public registry excludes internal pipelines while trusted lookup retai
     "vcr-protocol", "vcr-evidence", "vcr-analysis", "vcr-matching", "vcr-package"]) {
     assert.ok(ids.includes(id), `${id} is absent from the public capability catalogue`);
   }
+  for (const id of ["evolution-scout", "tool-builder"]) {
+    assert.equal(ids.includes(id), false);
+    assert.equal(registry.get(id).visibility, "internal");
+  }
   assert.equal(ids.includes("source-understanding"), false);
   assert.equal(registry.get("source-understanding").visibility, "internal");
   assert.ok(registry.getPackage("source-understanding"));
-  assert.equal(registry.list({ includeInternal: true }).length, 29);
+  assert.equal(registry.list({ includeInternal: true }).length, 31);
 });
 
 test("source understanding uses native delivery tools without inventing an external MCP requirement", async () => {

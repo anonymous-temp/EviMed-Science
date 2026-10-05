@@ -15,7 +15,7 @@
  * `other` — bookkeeping never fails a model call.
  */
 
-/** @typedef {'kernel'|'memory-extraction'|'routing'|'title'|'engine'|'capsule-scan'|'channel-intent'|'source-understanding'|'learning'|'autopilot'|'frontier'|'review'|'geo'|'vcr'|'web-search'|'other'} UsagePurpose */
+/** @typedef {'kernel'|'memory-extraction'|'routing'|'title'|'engine'|'capsule-scan'|'channel-intent'|'source-understanding'|'learning'|'autopilot'|'frontier'|'review'|'geo'|'vcr'|'web-search'|'evolution'|'other'} UsagePurpose */
 
 /** Every purpose, in report order. `frontier` is the frontier feed reading
  *  the literature for everyone (screening, editing, the daily issue): one
@@ -52,6 +52,7 @@ export const USAGE_PURPOSES = /** @type {readonly UsagePurpose[]} */ (Object.fre
   'geo',
   'vcr',
   'web-search',
+  'evolution',
   'other',
 ]))
 
@@ -72,6 +73,7 @@ export const USAGE_PURPOSE_LABELS_ZH = /** @type {Readonly<Record<UsagePurpose, 
   geo: '循证 GEO',
   vcr: '虚拟临研',
   'web-search': '联网搜索',
+  evolution: '循证进化',
   other: '其他',
 }))
 
@@ -108,11 +110,14 @@ export function usagePurpose(value) {
  * up, and every lesson from that day was refused (production, 2026-09-20: three
  * of three distillations, `usage_budget_exceeded`).
  *
- * @param {{ effectiveAgentId?: string | null, dispatchId?: string | null } | null | undefined} run
+ * @param {{ effectiveAgentId?: string | null, dispatchId?: string | null, effectiveRouteReason?: string | null } | null | undefined} run
  * @returns {UsagePurpose}
  */
 export function usagePurposeOfRun(run) {
+  if (run?.effectiveRouteReason === 'platform-evolution') return 'evolution'
+  if (String(run?.dispatchId ?? '').startsWith('evolution_')) return 'evolution'
   const agent = run?.effectiveAgentId
+  if (['evolution-scout', 'tool-builder'].includes(String(agent ?? ''))) return 'evolution'
   if (agent === 'source-understanding') return 'source-understanding'
   if (LEARNING_AGENT_IDS.includes(String(agent ?? ''))) return 'learning'
   // The paired evaluation dispatches ordinary capability runs; its dispatch ids

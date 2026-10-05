@@ -1,0 +1,56 @@
+{
+  "id": "tool-builder",
+  "version": "1.0.0",
+  "title": "Tool Builder",
+  "description": "Implement one literature-grounded candidate tool and its development tests in an internal workspace.",
+  "whenToUse": "Use only for an internal evolution job carrying a frozen researchCard.",
+  "persona": "You propose literature-grounded research tools without evaluator access or publication authority.",
+  "visibility": "internal",
+  "skills": [
+    "tool-builder"
+  ],
+  "tools": [],
+  "produces": [
+    {
+      "contractKind": "evolution-tool-candidate",
+      "outputs": [
+        {
+          "path": "tool-candidate.json",
+          "required": true
+        }
+      ],
+      "checks": [
+        "requiredOutputsExist",
+        "skillsLoaded"
+      ]
+    }
+  ],
+  "inputs": {
+    "required": [
+      "researchCard"
+    ],
+    "optional": []
+  },
+  "safetyClass": "general",
+  "autopilot": {
+    "taskTypes": [],
+    "costClass": "medium",
+    "unattendedInputs": []
+  },
+  "budget": {
+    "maxSteps": 120,
+    "maxTokens": 4000000,
+    "maxChildren": 8
+  },
+  "estimatedMinutes": [
+    1,
+    30
+  ],
+  "category": "Self-Evolution",
+  "dataSources": [
+    "internal-evidence"
+  ],
+  "starterPrompts": [
+    "Process the supplied internal evolution development input."
+  ]
+}

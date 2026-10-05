@@ -1,0 +1,20 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtemp, writeFile, readFile, rm } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { readEvolutionPreviousCandidate } from '../src/evolutionRepairSeed.mjs';
+test('malformed generated previous files do not prevent the next repair dispatch; preserved resource failures still throw', async t => {
+ const root = await mkdtemp(path.join(os.tmpdir(),'previous-candidate-'));
+ t.after(()=>rm(root,{recursive:true,force:true}));
+ const file=path.join(root,'tool-candidate.json'), bytes=JSON.stringify({files:['script.py'],entrypoint:'script.py'});
+ await writeFile(file,bytes);let filters=0;
+ const input={project:{workspaceDir:root},run:{artifacts:['tool-candidate.json']},identity:{userId:'operator',projectId:'eval-paper-build-next'},isolation:{filter:async(_identity,_kind,value)=>{filters++;return value;}}};
+ assert.equal(await readEvolutionPreviousCandidate(input),null);assert.equal(filters,0);assert.equal(await readFile(file,'utf8'),bytes);
+ await writeFile(file,JSON.stringify({files:{'script.py':'pass'},entrypoint:'script.py'}));
+ assert.deepEqual(await readEvolutionPreviousCandidate(input),{files:{'script.py':'pass'},entrypoint:'script.py'});assert.equal(filters,1);
+ await assert.rejects(readEvolutionPreviousCandidate({...input,run:{artifacts:[]}}),error=>error.code==='evolution_output_missing');
+ await rm(file);await assert.rejects(readEvolutionPreviousCandidate(input),/File not found/);
+ const composition=await readFile(new URL('../src/evolutionComposition.mjs',import.meta.url),'utf8');
+ assert.ok(composition.includes('previousCandidate = await readEvolutionPreviousCandidate('));
+});

@@ -1,5 +1,5 @@
 import { HttpError } from "./security.mjs";
-import { EXTENSION_PRODUCT_KINDS, EXTENSION_JOB_KINDS } from "@evimed/domain";
+import { EXTENSION_PRODUCT_KINDS, EXTENSION_JOB_KINDS, EVOLUTION_JOB_KINDS } from "@evimed/domain";
 
 export const PRODUCT_KINDS = Object.freeze([
   "capsule", "fact", "method", "source", "source-unit", "knowledge", "profile",
@@ -20,7 +20,7 @@ export const PRODUCT_JOB_KINDS = Object.freeze(["ingest", "distill", "consolidat
   "frontier-daily", "frontier-rebuild", "frontier-weekly", "frontier-notify", "document-export", "study-review", "result-replay",
   // One finished run joined to the capability, skill and tool versions it used and to the result versions it
   // produced (`availabilityCollector.mjs`), and the sweep that finds runs the finish hook missed.
-  "availability-collect", ...EXTENSION_JOB_KINDS]);
+  "availability-collect", ...EVOLUTION_JOB_KINDS, ...EXTENSION_JOB_KINDS]);
 
 /**
  * What the researcher did, as a closed vocabulary.

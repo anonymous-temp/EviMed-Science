@@ -131,7 +131,9 @@ const answerFormat = (/** @type {boolean} */ pause) => [
 export function plannerInstructions(context) {
   const present = (/** @type {unknown} */ value) => Array.isArray(value) ? value.length > 0 : Boolean(value);
   const extra = Object.entries(researcherInstructions).filter(([field]) => present(context?.[field])).map(([, line]) => line);
-  return [instructions, ...extra, answerFormat(Boolean(context?.pauseAllowed))].join("\n");
+  return [instructions, ...extra,
+    ...(context?.evolutionEnabled ? ["availableTools are optional, versioned research methods. Their verification labels describe evidence, not permission. If stopping for needs_input specifically because a method or dataset is missing, add resourceNeed: {kind: 'tool'|'data', capabilityId: '<an available capability id>', methodId?: '<already declared stable method id>', toolId?: '<known tool id>', requirementId?: '<known data requirement id>'}. Do not infer an empirical result from a simulated validation."] : []),
+    answerFormat(Boolean(context?.pauseAllowed))].join("\n");
 }
 
 /** @param {unknown} value @param {number} max */
@@ -181,9 +183,9 @@ function episodeOutcome(status, claims) {
  * not an episode that found nothing.
  *
  * @param {{agenda:any, progress:any, eligible:string[], date:string, trigger:string, note?:string|null,
- *   reducedPriority:boolean, stopAllowed:boolean, pauseAllowed?:boolean}} input
+ *   reducedPriority:boolean, stopAllowed:boolean, pauseAllowed?:boolean, availableTools?:any[], evolutionEnabled?:boolean}} input
  */
-export function buildPlannerContext({ agenda, progress, eligible, date, trigger, note = null, reducedPriority, stopAllowed, pauseAllowed = false }) {
+export function buildPlannerContext({ agenda, progress, eligible, date, trigger, note = null, reducedPriority, stopAllowed, pauseAllowed = false, availableTools = [], evolutionEnabled = false }) {
   const typeState = agenda.payload.taskTypeState ?? {};
   const episodes = (progress?.episodes ?? []).map((/** @type {any} */ episode) => ({
     date: episode.date,
@@ -205,6 +207,10 @@ export function buildPlannerContext({ agenda, progress, eligible, date, trigger,
     request: { trigger, ...(note ? { note: cut(note, NOTE_CHARS) } : {}) },
     priority: reducedPriority ? "reduced" : "normal",
     stopAllowed,
+    ...(evolutionEnabled ? { evolutionEnabled: true, availableTools: availableTools.slice(0, 30).map((tool) => ({
+      id: tool.id, title: cut(tool.title ?? tool.method, 150), capabilityIds: tool.capabilityIds ?? [],
+      validationLevel: tool.validationLevel, dataLevel: tool.dataLevel, dataRequirements: tool.dataRequirements,
+    })) } : {}),
     ...(pauseAllowed ? { pauseAllowed } : {}),
     taskTypes: (agenda.payload.taskTypes ?? []).filter((/** @type {string} */ type) => AUTOPILOT_TASK_TYPES.includes(/** @type {any} */ (type))).map((/** @type {string} */ type) => ({
       id: type, does: TASK_TYPE_SUMMARIES[/** @type {keyof typeof TASK_TYPE_SUMMARIES} */ (type)],
@@ -251,10 +257,10 @@ function parseJsonObject(content) {
  * The model's answer, held to the closed vocabulary or refused. Only format and
  * membership are checked here — whether the choice was wise is the model's.
  *
- * @param {unknown} content @param {{eligible: string[], stopAllowed: boolean, pauseAllowed?: boolean}} options
- * @returns {{action: "run", taskType: string, focus: string, reason: string} | {action: "stop", stopKind: string, reason: string}}
+ * @param {unknown} content @param {{eligible: string[], stopAllowed: boolean, pauseAllowed?: boolean, evolutionEnabled?:boolean}} options
+ * @returns {{action: "run", taskType: string, focus: string, reason: string} | {action: "stop", stopKind: string, reason: string, resourceNeed?:any}}
  */
-export function parsePlannerAnswer(content, { eligible, stopAllowed, pauseAllowed = false }) {
+export function parsePlannerAnswer(content, { eligible, stopAllowed, pauseAllowed = false, evolutionEnabled = false }) {
   const answer = /** @type {any} */ (parseJsonObject(content));
   const invalid = (/** @type {string} */ why) => plannerError("autopilot_planner_invalid", `The next-action decision was refused: ${why}.`);
   if (!answer) throw invalid("no JSON object");
@@ -269,7 +275,11 @@ export function parsePlannerAnswer(content, { eligible, stopAllowed, pauseAllowe
     // The researcher's own pause is the only stop their message can ask for, and
     // the only one allowed in answer to it; every other stop is the scheduler's.
     if (answer.stopKind === RESEARCHER_PAUSE_KIND ? !pauseAllowed : !stopAllowed) throw invalid("a stop where none is allowed");
-    return { action: "stop", stopKind: answer.stopKind, reason };
+    const need = answer.resourceNeed;
+    if (need != null && (!evolutionEnabled || answer.stopKind !== "needs_input" || !["tool", "data"].includes(need.kind))) throw invalid("an invalid resource need");
+    const id = (value) => typeof value === "string" && /^[a-z0-9][a-z0-9-]{0,159}$/.test(value) ? value : undefined;
+    return { action: "stop", stopKind: answer.stopKind, reason,
+      ...(need ? { resourceNeed: { kind: need.kind, capabilityId: id(need.capabilityId), methodId: id(need.methodId), toolId: id(need.toolId), requirementId: id(need.requirementId) } } : {}) };
   }
   throw invalid("an unknown action");
 }
@@ -345,7 +355,7 @@ export class AutopilotPlanner {
       if (choice && Object.hasOwn(choice, "finish_reason") && choice.finish_reason !== "stop") {
         throw plannerError("autopilot_planner_incomplete", "The next-action decision was cut off.");
       }
-      const answer = parsePlannerAnswer(choice?.message?.content, { eligible, stopAllowed, pauseAllowed });
+      const answer = parsePlannerAnswer(choice?.message?.content, { eligible, stopAllowed, pauseAllowed, evolutionEnabled: context?.evolutionEnabled === true });
       this.consecutiveFailures = 0;
       this.counters[answer.action === "run" ? "runs" : "stops"] += 1;
       return { ...answer, model: this.model };

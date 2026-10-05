@@ -38,3 +38,9 @@ evals/**/results/runs
 
 # Live audit workspaces contain transient jobs and workload credentials.
 evals/capability-audit/workspaces
+
+# Private paper-gold cases never enter any build context.
+evals/paper-gold/hidden
+evals/paper-gold/.hidden
+evals/paper-gold/dev_hidden
+evals/paper-gold/private

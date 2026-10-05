@@ -1,0 +1,1233 @@
+{
+  "schemaVersion": 1,
+  "name": "EviMed Evolve implementation and acceptance",
+  "recordedAt": "2026-10-05T02:03:08.017449+00:00",
+  "plan": {
+    "path": "docs/superpowers/plans/2026-10-04-research-evolution-engine.md",
+    "sha256": "1d8edf91154349a6bc98b410bcd2ce8af575d244da78e0ea50f829ad2d7c6901"
+  },
+  "source": {
+    "codeRoot": "OpenScience",
+    "logRoot": "/tmp",
+    "baseCommit": "d4ed5fd82c0411ffca50380207cde48a9e2ee1a6",
+    "branch": "codex/research-evolution-engine-20261004",
+    "reviewBranch": "codex/research-evolution-engine-review-20261004",
+    "controlImageVerification": {
+      "checked": 901,
+      "resolvedDomainChecked": 210,
+      "mismatches": [],
+      "passed": true,
+      "sourceArtifactHash": "d83e41771bb347ebd2dee6c16a1f8df0ce79be051bfbc5422acc3eec8c81dcca",
+      "imageId": "sha256:686ed467f57bff27c912235793a7a5fc53fc927da21a5f215ffc5786f16ad59a",
+      "verifiedAt": "2026-10-05T01:56:16.491970+00:00",
+      "buildNoCache": true
+    },
+    "qualification": "The verified control image closure contains 901 files. Historical executions predate this artifact and retain their own source identities; runtime image identity is separately retained by the acceptance deployment. Online acceptance exercises this control-plane overlay; it does not claim a new production frontend deployment or browser tour."
+  },
+  "status": {
+    "implementation": "implemented",
+    "planExitCriteria": "partially-measured",
+    "wholePlanAccepted": false,
+    "productionDeployment": false,
+    "merged": false
+  },
+  "defaults": {
+    "enabled": false,
+    "operatorAdministrationOnly": true,
+    "researcherScopedToolAccess": true,
+    "dailyBudgetCny": 50,
+    "maximumRunBudgetCny": 10,
+    "maximumConcurrency": 1,
+    "clinicalSafetyRulesChanged": false,
+    "newUserDeliveryBlockingChecks": false
+  },
+  "implementation": [
+    {
+      "phase": "P0",
+      "implemented": [
+        "Internal project and purpose budgets with persistent jobs and admission",
+        "Four decision classes, daily inbox cards, controlled expiry and independent review",
+        "Isolated code verifier, hidden evaluation storage and gateway exclusion policy",
+        "Source retraction checks and method record vocabulary"
+      ],
+      "code": [
+        "apps/server/src/evolutionDecisions.mjs",
+        "apps/server/src/evolutionWorker.mjs",
+        "apps/server/src/evolutionVerificationController.mjs",
+        "apps/server/src/evaluationIsolation.mjs",
+        "packages/domain/src/evolution.mjs"
+      ]
+    },
+    {
+      "phase": "P1",
+      "implemented": [
+        "Frozen three-ruler evaluator and independent stage assessment receipts",
+        "Literature scouting, candidate deduplication, isolated development and repair",
+        "Hidden reference validation, versioned platform tool publication and actual execution provenance",
+        "Trusted observed Docker egress proofs; unsupported coverage remains unknown"
+      ],
+      "code": [
+        "apps/server/src/paperGoldEvaluator.mjs",
+        "evals/paper-gold/evaluator.mjs",
+        "apps/server/src/evolutionScout.mjs",
+        "apps/server/src/evolutionBuild.mjs",
+        "apps/server/src/platformSkillSupply.mjs",
+        "apps/server/src/runtimeEgressProof.mjs",
+        "apps/server/src/evolutionRuntimeCompletion.mjs"
+      ]
+    },
+    {
+      "phase": "P2",
+      "implemented": [
+        "Data requirements, known-effect self-checks and upload matching",
+        "Active research planner tool discovery and durable waiting/wake events",
+        "Engine method health integrated with evolution digest",
+        "Operator-visible components in existing capability, inbox, agenda and dataset pages"
+      ],
+      "code": [
+        "apps/server/src/evolutionIntegration.mjs",
+        "apps/server/src/evolutionSelfCheck.mjs",
+        "apps/server/src/evolutionToolRouting.mjs",
+        "apps/server/src/autopilotNextAction.mjs",
+        "apps/web/src/components/evolution"
+      ]
+    },
+    {
+      "phase": "P3",
+      "implemented": [
+        "Weekly temporal holdout and prospective question jobs",
+        "Monthly metrics, soft retirement and merge verification",
+        "Decision adaptation and scorer audit jobs"
+      ],
+      "code": [
+        "apps/server/src/evolutionTimeHoldout.mjs",
+        "apps/server/src/evolutionMaintenance.mjs",
+        "apps/server/src/evolutionMetrics.mjs",
+        "apps/server/src/evolutionScorerAudit.mjs"
+      ]
+    }
+  ],
+  "localChecks": {
+    "server_full": {
+      "file": "evolution-server-final-25.log",
+      "sha256": "e0c14e3aab5bcbad09268dba929468e776b343e3c31c42562f1f59935b38c144",
+      "bytes": 818127,
+      "summary": {
+        "tests": 7198,
+        "pass": 5977,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 1221,
+        "todo": 0
+      },
+      "status": "passed",
+      "qualification": "This full regression preceded the final end-proof cleanup ordering, typed exclusion error, concurrent proof reuse, authoritative run binding and cutoff-compaction fixes; the focused checks below cover those changes and types/lint27 cover the final source."
+    },
+    "lint_full": {
+      "file": "evolution-lint-final-27.log",
+      "sha256": "9ac38cf898c8d55672f272260ef758550bc9fd24def609cfb72c02ba2af1f866",
+      "bytes": 1602,
+      "kind": "lint",
+      "completed": true,
+      "qualification": "A retained existing LoginPage autofocus warning is not represented as warning-free lint."
+    },
+    "server_types_latest": {
+      "file": "evolution-types-final-27.log",
+      "sha256": "1400b373032ea304064a79f66cebff2f90ecbe621eb74ecb4d77ae7538641774",
+      "bytes": 254,
+      "kind": "types",
+      "completed": true
+    },
+    "mcp": {
+      "path": "/tmp/evolution-mcp-final.log",
+      "exists": true,
+      "bytes": 4541,
+      "sha256": "24f33350fa89bb275ce60f6405e37c1c04fa67c4a81d40c5114b4b36b3abf450",
+      "modifiedAt": "2026-10-04T15:28:21.007118+00:00",
+      "summaryKind": "python-summary",
+      "observedSummary": {
+        "ran": 900,
+        "skipped": 1,
+        "passed": 899
+      },
+      "status": "passed"
+    },
+    "domain": {
+      "path": "/tmp/evolution-domain-final-4.log",
+      "exists": true,
+      "bytes": 84629,
+      "sha256": "d41902319950e49484d50693f97b1fc292f348922e91089d7b84ffd0dc71189a",
+      "modifiedAt": "2026-10-04T19:49:26.828997+00:00",
+      "summaryKind": "node-summary",
+      "observedSummary": {
+        "tests": 845,
+        "pass": 845,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "status": "passed"
+    },
+    "evolution_ui": {
+      "path": "/tmp/evolution-ui-final-23.log",
+      "exists": true,
+      "bytes": 326,
+      "sha256": "8171db1bd6f64b9d2b96283356565bc6884f01b4df2db80ca88ed05336b69c5f",
+      "modifiedAt": "2026-10-05T00:01:02.921607+00:00",
+      "summaryKind": "vitest",
+      "observedSummary": [
+        "Test Files  1 passed (1)",
+        "Tests  5 passed (5)"
+      ],
+      "status": "passed"
+    },
+    "web_build": {
+      "path": "/tmp/evolution-final-build-3.log",
+      "exists": true,
+      "bytes": 21972,
+      "sha256": "5bd29a21b5611ed6fd8a00a448288cb6349fba89e5e8ffc7876b1e007c39cdd6",
+      "modifiedAt": "2026-10-04T18:57:27.064537+00:00",
+      "summaryKind": "build",
+      "observedSummary": [
+        "- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.",
+        "✓ built in 22.70s"
+      ],
+      "status": "passed"
+    },
+    "hosted_compliance": {
+      "path": "/tmp/evolution-final-hosted-3.log",
+      "exists": true,
+      "bytes": 10554,
+      "sha256": "2f61a3facc94f4d8423a40224a1438132ae9c0735eba838fbea3b1f308f52720",
+      "modifiedAt": "2026-10-04T19:15:23.586002+00:00",
+      "summaryKind": "audit",
+      "observedSummary": [
+        "Hosted compliance audit: ok (78 checks, 0 failed, 0 warnings)"
+      ],
+      "status": "passed"
+    },
+    "saas_alignment": {
+      "path": "/tmp/evolution-final-saas-3.log",
+      "exists": true,
+      "bytes": 324,
+      "sha256": "3162694b36e8c4558b3d9acc400e03396a0169ebb30e284e481d79e156d31f8f",
+      "modifiedAt": "2026-10-04T19:15:25.631895+00:00",
+      "summaryKind": "audit",
+      "observedSummary": [
+        "SaaS alignment PASS: 14/23 modules adapted; 9 explicit external, conditional, deferred, or out-of-scope boundaries."
+      ],
+      "status": "passed"
+    },
+    "skill_packages": {
+      "path": "/tmp/evolution-skill-packages-final.log",
+      "exists": true,
+      "bytes": 1814,
+      "sha256": "df8719b4fe07e66610686108ce9941aac296170541a5d59bd416f8048f74f7ec",
+      "modifiedAt": "2026-10-04T18:08:23.266045+00:00",
+      "summaryKind": "node-summary",
+      "observedSummary": {
+        "tests": 15,
+        "pass": 15,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "status": "passed"
+    },
+    "design_tokens": {
+      "path": "/tmp/evolution-final-tokens.log",
+      "exists": true,
+      "bytes": 425,
+      "sha256": "8d1d0f5c1ee8a9c23242e10dce93b740ad7ca71e4c40c35f8e56dc3d793bd492",
+      "modifiedAt": "2026-10-04T19:15:26.846832+00:00",
+      "summaryKind": "audit",
+      "observedSummary": [
+        "design tokens 2.1.2: 12 artifacts up to date",
+        "design tokens: apps/web/src/index.css is up to date"
+      ],
+      "status": "passed"
+    },
+    "postgres_actual": {
+      "path": "/tmp/evolution-budget-deferral-postgres.log",
+      "exists": true,
+      "bytes": 1985,
+      "sha256": "7d100ac03b9aa7746ea154b98f56226414fccd5b73fd6ab750d64b041410648e",
+      "modifiedAt": "2026-10-04T23:48:13.235439+00:00",
+      "summaryKind": "node-summary",
+      "observedSummary": {
+        "tests": 16,
+        "pass": 16,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "status": "passed"
+    },
+    "acceptance_config_focused": {
+      "path": "/tmp/evolution-acceptance-autopilot-tests.log",
+      "exists": true,
+      "bytes": 233,
+      "sha256": "e697c1255d03cb0824931e98983d3d3781ffb68515c28bf4d1e48a8f0a05b5af",
+      "modifiedAt": "2026-10-05T00:38:06.702951+00:00",
+      "summaryKind": "node-summary",
+      "observedSummary": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "status": "passed"
+    },
+    "web_full": {
+      "file": "evolution-web-final-25.log",
+      "sha256": "a9373e3d5afd069cc8c623fb3e0a110996871264c41b209c52fea1c0872af268",
+      "bytes": 139348,
+      "kind": "vitest",
+      "completed": true,
+      "files": 216,
+      "passed": 2265,
+      "failed": 0
+    },
+    "web_types": {
+      "file": "evolution-web-types-final-25.log",
+      "sha256": "dd5f514622b5b4d701697725a5532da0a400491546c07a579cb582a61292197d",
+      "bytes": 221,
+      "kind": "types",
+      "completed": true
+    },
+    "native_egress_controller": {
+      "file": "evolution-egress-controller-tests.log",
+      "sha256": "8c0494fb7afbabde86f57bfc46ce59da27e7bb108bbc42fdd743e459903ae441",
+      "bytes": 3297,
+      "summary": {
+        "tests": 29,
+        "pass": 29,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "status": "passed"
+    },
+    "egress_consumer": {
+      "file": "evolution-paper-egress-consumer-tests.log",
+      "sha256": "4cdf21db3b43f4e3580223514915510a32b1165667de8488d9669b18b756be61",
+      "bytes": 2326,
+      "summary": {
+        "tests": 20,
+        "pass": 20,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "status": "passed"
+    },
+    "egress_dispatch": {
+      "file": "evolution-egress-core-tests.log",
+      "sha256": "6e74afc33f5720b157367b2be290ba31849bb8089978349ade80efe489c15a63",
+      "bytes": 476,
+      "summary": {
+        "tests": 3,
+        "pass": 3,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "status": "passed"
+    },
+    "named_argument_binding": {
+      "file": "evolution-argument-binding-final-tests.log",
+      "sha256": "9855572c0a3692a9df0e3d81e5e7d15c09f21c609fd995cb1a3b73449125fb23",
+      "bytes": 1054,
+      "summary": {
+        "tests": 9,
+        "pass": 9,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "status": "passed"
+    },
+    "evaluation_network_config": {
+      "file": "evolution-evaluation-network-core-tests.log",
+      "sha256": "c826e2d7c9b919168892e4caf642f5a8d22a8ceb8f19c6617c437690a476fa5a",
+      "bytes": 827,
+      "summary": {
+        "tests": 7,
+        "pass": 7,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "status": "passed"
+    },
+    "trusted_peer_compose": {
+      "file": "evolution-peer-env-core-tests.log",
+      "sha256": "3f5e2997917850716afce9022633ff26968d0f80ef1edd10e745834a7c09ccd0",
+      "bytes": 939,
+      "summary": {
+        "tests": 8,
+        "pass": 8,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "status": "passed"
+    },
+    "end_proof_before_cleanup": {
+      "file": "evolution-runtime-completion-tests.log",
+      "sha256": "df009e6dda4dc35ea8a04f64ac91a50c57e9ed9c74ac12f3eabe224a7802ec9b",
+      "bytes": 335,
+      "summary": {
+        "tests": 2,
+        "pass": 2,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "status": "passed"
+    },
+    "signed_proof_concurrency": {
+      "file": "evolution-egress-concurrency-tests.log",
+      "sha256": "866dda8110a3b94214533c2b217752abcc930ae57d56a106de712e5dd57849d4",
+      "bytes": 426,
+      "summary": {
+        "tests": 3,
+        "pass": 3,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "status": "passed"
+    },
+    "typed_gateway_exclusion": {
+      "file": "evolution-tooluniverse-exclusion-fix-tests.log",
+      "sha256": "4adadfc9cc0fc9657e2065fbc22f79bb0c320e985f16d649e0cecc844ede0227",
+      "bytes": 2825,
+      "summary": {
+        "tests": 26,
+        "pass": 26,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "status": "passed"
+    },
+    "authoritative_run_binding": {
+      "file": "evolution-egress-run-binding-tests.log",
+      "sha256": "298253c3abab5f44565f495e839fdd7fa41f0cc723decdf5ffaab267d0a21a9b",
+      "bytes": 229,
+      "summary": {
+        "tests": 1,
+        "pass": 1,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "status": "passed"
+    },
+    "cutoff_compaction": {
+      "file": "evolution-cutoff-compaction-tests.log",
+      "sha256": "d23b99d022fb78466addb7f836bc73a27b0b82a336c2d6c1614c4b076bfcf653",
+      "bytes": 588,
+      "summary": {
+        "tests": 4,
+        "pass": 4,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      },
+      "status": "passed"
+    },
+    "agent_ledger_regression": {
+      "file": "evolution-agent-ledger-final-27.log",
+      "sha256": "75c3448db4982e4a51ba68be52587e1a8a758a9abdde2f62bb5a59d376e996db",
+      "bytes": 18166,
+      "summary": {
+        "tests": 173,
+        "pass": 172,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 1,
+        "todo": 0
+      },
+      "status": "passed"
+    },
+    "source_credentials_final": {
+      "file": "evolution-source-secrets-final-27.log",
+      "sha256": "64bd64bf2a901d1c0dfb170201a08d75aa66ca9c9ce7aa7cbfca68fa44e8a171",
+      "bytes": 68,
+      "status": "passed",
+      "scope": "Exact isolated review checkout, including the acceptance report and progress entry."
+    }
+  },
+  "knownBaselineFailures": {
+    "capability_audit": {
+      "baseRevision": "492fa067aea2f0b52f9b661842065e192a94c119",
+      "meaning": "Same40measured vs54registry and missing sourceIdentity reproduced atbase. Not repaired or a passinggate.",
+      "logs": {
+        "evolution-base-capability-audit-final.log": {
+          "path": "/tmp/evolution-base-capability-audit-final.log",
+          "exists": true,
+          "sha256": "24523603e3d3d6a66eaacb664905d03b4fde798673bcc62f3a820ea628d59351",
+          "bytes": 1208,
+          "status": "failed",
+          "observedDiagnostic": "tool audit evidence does not cover the current source: covers 40 tool(s); the registry declares 54 (53 offered, 1 not offered) - never probed: clinical_trial_snapshot, curve_digitize, dailymed_label, dataset_semantics, evidence_pool, gene_expression_differential, gene_expression_series, identifier_resolve, research_calculate, trial_registry_record, vcr_read, vcr_simulate, vcr_write; does not record the identity of the source it was taken on (no sourceIdentity: it predates the field, which only the runner writes) - identity not recorded, re-probe."
+        },
+        "evolution-capability-audit-final.log": {
+          "path": "/tmp/evolution-capability-audit-final.log",
+          "exists": true,
+          "sha256": "df050a4a017ded8c153a576310130d487a570a32da22a254864e1ca9378523bc",
+          "bytes": 1407,
+          "status": "failed",
+          "observedDiagnostic": "tool audit evidence does not cover the current source: covers 40 tool(s); the registry declares 54 (53 offered, 1 not offered) - never probed: clinical_trial_snapshot, curve_digitize, dailymed_label, dataset_semantics, evidence_pool, gene_expression_differential, gene_expression_series, identifier_resolve, research_calculate, trial_registry_record, vcr_read, vcr_simulate, vcr_write; does not record the identity of the source it was taken on (no sourceIdentity: it predates the field, which only the runner writes) - identity not recorded, re-probe."
+        }
+      }
+    }
+  },
+  "liveEvidence": {
+    "environment": "Owned isolated acceptance containers and database on the test host; not the production deployment.",
+    "p0Decisions": {
+      "source": "Existing preserved P0 real-decision-models acceptance receipt",
+      "controlledClock": "delivery-plus-24-hours; not elapsed wall time",
+      "receipt": {
+        "state": "passed",
+        "controlledClock": "delivery-plus-24-hours",
+        "firstDigestId": "evolution-digest-2026-10-05",
+        "nextDigestId": "evolution-digest-2026-10-06",
+        "cards": [
+          {
+            "id": "evolution-decision-ba92a13ed4d05144a655209fb7ea13de",
+            "state": "executed",
+            "evidenceHash": "9e38878f2b7b627ccc9b9efc484a9e23fe19f1465aec018468a16575a76f808b",
+            "decisionHash": "77c7b42d85c9e1c0792c324167b4c2e0f2388dacb8b199bde0ce829a82c48c1a"
+          },
+          {
+            "id": "evolution-decision-1083db358bb0d517fa9ce98bd48433a2",
+            "state": "executed",
+            "evidenceHash": "b0dd030f46142f2e7b591eb8daa9923088058c53cfa1b76c87841965c603062c",
+            "decisionHash": "9b1335e118195860b6956e4cfd4095868ec9546d364c4c6ebce42bb78e48d06c"
+          },
+          {
+            "id": "evolution-decision-fa1f3a190eccea58a21de2f751124050",
+            "state": "executed",
+            "evidenceHash": "0e437cdae65e29a37babb401c09f39fbb5bf09c0e0744b868460441f27b8eac1",
+            "decisionHash": "b0fd61a5ed8c06d877f394a13a0edc2e9b1137ee8f13ddbd053258d63624d077"
+          }
+        ],
+        "firstDigestHash": "1ec53bc09a0765b9b113b538464603eca8b0c36297f9786ddf05c5b52718b541",
+        "nextDigestHash": "660fbf767d85a70ee1e9ff19e5061bfd104b77ba1f3ffcd44d026a9a0b106328"
+      },
+      "qualification": "Historical reviewer family fields predate actual modelReported guard; do not backfill identity."
+    },
+    "v2ToolPublications": {
+      "tools": [
+        {
+          "id": "tool-cohort-state-transition-ba44b459075a0175",
+          "documentRevision": 14,
+          "methodId": "cohort-state-transition",
+          "status": "active",
+          "validationLevel": "V2",
+          "digest": "sha256:58d774783d24604d21e043cda1e2055dbb3c6ed92ef7d22cb1c4649f2cea2620",
+          "nativeName": "platform-ccf03ad6ea9677585786f6f3",
+          "assessments": [
+            {
+              "id": "5593d791cb6dcd80ea69c08e82991623e2306a1571590c51f310ef82c1e0d67c:darth-time-independent:0",
+              "caseId": "darth-time-independent",
+              "passed": true,
+              "exposed": false,
+              "evaluatorHash": null,
+              "proofHash": null
+            },
+            {
+              "id": "5593d791cb6dcd80ea69c08e82991623e2306a1571590c51f310ef82c1e0d67c:darth-time-independent:1",
+              "caseId": "darth-time-independent",
+              "passed": true,
+              "exposed": false,
+              "evaluatorHash": null,
+              "proofHash": null
+            },
+            {
+              "id": "5593d791cb6dcd80ea69c08e82991623e2306a1571590c51f310ef82c1e0d67c:darth-time-dependent:0",
+              "caseId": "darth-time-dependent",
+              "passed": true,
+              "exposed": false,
+              "evaluatorHash": null,
+              "proofHash": null
+            },
+            {
+              "id": "5593d791cb6dcd80ea69c08e82991623e2306a1571590c51f310ef82c1e0d67c:darth-time-dependent:1",
+              "caseId": "darth-time-dependent",
+              "passed": true,
+              "exposed": false,
+              "evaluatorHash": null,
+              "proofHash": null
+            }
+          ]
+        },
+        {
+          "id": "tool-decision-net-benefit-5b40905673ff59bb",
+          "documentRevision": 6,
+          "methodId": "decision-net-benefit",
+          "status": "active",
+          "validationLevel": "V2",
+          "digest": "sha256:33d8ee9ddf750cbe5cb0829a2599df35fe35935bbe02801357ac51c066048e12",
+          "nativeName": "platform-11adee43dd00aa37062c719d",
+          "assessments": [
+            {
+              "id": "309291abb4f3632eff708a1e53e23e12e506c8c30ad05f3d163d73e7cd39b604:marker-net-benefit:0",
+              "caseId": "marker-net-benefit",
+              "passed": true,
+              "exposed": false,
+              "evaluatorHash": null,
+              "proofHash": null
+            },
+            {
+              "id": "309291abb4f3632eff708a1e53e23e12e506c8c30ad05f3d163d73e7cd39b604:marker-net-benefit:1",
+              "caseId": "marker-net-benefit",
+              "passed": true,
+              "exposed": false,
+              "evaluatorHash": null,
+              "proofHash": null
+            },
+            {
+              "id": "309291abb4f3632eff708a1e53e23e12e506c8c30ad05f3d163d73e7cd39b604:baseline-net-benefit:0",
+              "caseId": "baseline-net-benefit",
+              "passed": true,
+              "exposed": false,
+              "evaluatorHash": null,
+              "proofHash": null
+            },
+            {
+              "id": "309291abb4f3632eff708a1e53e23e12e506c8c30ad05f3d163d73e7cd39b604:baseline-net-benefit:1",
+              "caseId": "baseline-net-benefit",
+              "passed": true,
+              "exposed": false,
+              "evaluatorHash": null,
+              "proofHash": null
+            }
+          ]
+        },
+        {
+          "id": "tool-diagnostic-posterior-cec51fbff4f20349",
+          "documentRevision": 6,
+          "methodId": "diagnostic-posterior",
+          "status": "active",
+          "validationLevel": "V2",
+          "digest": "sha256:cec51fbff4f2034933d384418ab60be6b8d9e8cb3b71a8c85d1f2e591e1d88b7",
+          "nativeName": "platform-544373e5ab83b1309a3a575e",
+          "assessments": [
+            {
+              "id": "2f4f316a3ea1329d7d16c82cc062c79bf66b36fd47209d461d05ca78ecc52573:pulmonary-posterior:0",
+              "caseId": "pulmonary-posterior",
+              "passed": true,
+              "exposed": false,
+              "evaluatorHash": null,
+              "proofHash": null
+            },
+            {
+              "id": "2f4f316a3ea1329d7d16c82cc062c79bf66b36fd47209d461d05ca78ecc52573:pulmonary-posterior:1",
+              "caseId": "pulmonary-posterior",
+              "passed": true,
+              "exposed": false,
+              "evaluatorHash": null,
+              "proofHash": null
+            },
+            {
+              "id": "2f4f316a3ea1329d7d16c82cc062c79bf66b36fd47209d461d05ca78ecc52573:ocular-rounded-odds:0",
+              "caseId": "ocular-rounded-odds",
+              "passed": true,
+              "exposed": false,
+              "evaluatorHash": null,
+              "proofHash": null
+            },
+            {
+              "id": "2f4f316a3ea1329d7d16c82cc062c79bf66b36fd47209d461d05ca78ecc52573:ocular-rounded-odds:1",
+              "caseId": "ocular-rounded-odds",
+              "passed": true,
+              "exposed": false,
+              "evaluatorHash": null,
+              "proofHash": null
+            }
+          ]
+        }
+      ]
+    },
+    "uploadedDataAndActualAutopilotCalculation": {
+      "scope": "Actual isolated public-data upload and ordinary autonomous episode; waiting agenda initialization is an automated fixture, not genuine researcher use.",
+      "stages": [
+        {
+          "stage": "actual-upload-and-wake",
+          "result": {
+            "userId": "p2-aeca31c6-e448-4214-9f98-48ed125b3889",
+            "projectId": "p2-upload-aeca31c6-e448-4214-9f98-48ed125b3889",
+            "sourceId": null,
+            "csvSha256": "c0cc6cd97bfa887c55ec6a14abf62ae047a24d9f3562621a217347dc57edbfc7",
+            "profileRunId": "run_61b3f200f73132db0adc31e6223affe5",
+            "datasetId": "pima-training",
+            "selfCheckId": "evolution-self-check-16a3f09f37e10da80ce327f8098e4a84",
+            "selfCheckStatus": "passed",
+            "waiterId": "evolution-waiter-de38cb8c7c8aeb479666624c04987304",
+            "agendaId": "agenda-7bcdea80-2945-4fee-b26c-188ddccba2ed",
+            "episodeJobId": "46400b3a-9137-4295-8bff-91abde2a071c",
+            "episodeJobStatus": "queued",
+            "syntheticWaitingInitialization": true,
+            "aggregateInput": {
+              "truePositive": 38,
+              "falsePositive": 22,
+              "falseNegative": 30,
+              "trueNegative": 110,
+              "n": 200,
+              "eventCount": 68,
+              "threshold": 0.2
+            },
+            "sourceEvidenceHash": "e7eb6d2a3ea2b3827e9d422362d8c5b8a0ec9b9e6d6c15b7fbda236784d9de8c",
+            "empiricalValidation": false
+          },
+          "sourceArtifactHash": "ca882849d3b0bc9d43626e35ef3d7a8e966370026e760e257246ccbf75c1cbe3"
+        },
+        {
+          "stage": "actual-autopilot-computation",
+          "runId": "run_866f5277efe7fa5f8fc594aaf3945afc",
+          "episodeId": "episode-0132a65eb23905dfd48b2855529429a5",
+          "toolId": "tool-decision-net-benefit-5b40905673ff59bb",
+          "calls": 3,
+          "aggregateInput": {
+            "truePositive": 38,
+            "falsePositive": 22,
+            "falseNegative": 30,
+            "trueNegative": 110,
+            "n": 200,
+            "eventCount": 68,
+            "threshold": 0.2
+          },
+          "receiptIds": [
+            "evolution-use-7273a429558cf319f966e305ad8f8e9f",
+            "evolution-use-fb8ed75849650fe696ffc0453976284a",
+            "evolution-use-d3ec19615f5982e4b76c05e436783c56"
+          ],
+          "csvSha256": "c0cc6cd97bfa887c55ec6a14abf62ae047a24d9f3562621a217347dc57edbfc7",
+          "transcriptHash": "dc51df4b78fb8f78a090defde288dab4ce10392e283017ad537b46d441eadb77",
+          "artifacts": [
+            "deliverables/dataset-scoping-pima/agenda-delta.json",
+            "deliverables/dataset-scoping-pima/confusion-counts.py",
+            "deliverables/dataset-scoping-pima/data-profile.json",
+            "deliverables/dataset-scoping-pima/data-profile.md",
+            "deliverables/dataset-scoping-pima/data-profile.py",
+            "deliverables/dataset-scoping-pima/data-quality.md",
+            "deliverables/dataset-scoping-pima/evidence-map.md",
+            "deliverables/dataset-scoping-pima/invoke-net-benefit.py",
+            "deliverables/dataset-scoping-pima/quality-checks.py",
+            "deliverables/dataset-scoping-pima/research-portfolio.md",
+            "deliverables/dataset-scoping-pima/revision-notes.md",
+            "deliverables/dataset-scoping-pima/scoping-run.json",
+            "deliverables/dataset-scoping-pima/traceability-check.py"
+          ],
+          "verification": null,
+          "sourceArtifactHash": "1af8e22178d880670f34396dcfc15edbf4dd1b6edd1959b86a27a4d736e0f6d2"
+        }
+      ]
+    },
+    "uploadQualification": "Public Pima teaching data, descriptive confusion counts and net-benefit arithmetic. Known-effect self-check passed 200 replicates. No fitted model or empirical clinical validation is claimed. The waiting agenda was an automated acceptance fixture.",
+    "deliberateExposure": {
+      "runId": "run_ea274be916cf489fbecdb88b8fe14540",
+      "transcriptSha256": "75507ab72af47f0204a701c135c24b856a9355b5afa48999d4b335e549695b38",
+      "actualBodyExposed": true,
+      "actualSourceCited": true
+    },
+    "gatewayExclusion": {
+      "publicSourceBlockedEvents": 9,
+      "policyLogBinding": "pending:evolution-acceptance:eval-paper-isolation-live-v2-blocked",
+      "blockedRunId": "run_7c7cee4e006e4adb467b712754189a06",
+      "allGatewaysLiveMeasured": false,
+      "qualification": "Nine events belong to one gateway, not nine gateways. The durable pending-policy log preserves their attribution."
+    },
+    "toolWakeV1": {
+      "runId": "run_7512c6a3514b4d53ea2e2168c0aa00c5",
+      "wakeOccurred": true,
+      "successfulPinnedCalls": 0,
+      "failedArgumentBindingCalls": 18,
+      "independentPublicInputReplayPassed": true,
+      "qualification": "An independent replay does not replace actual awakened-run execution. The v1 failure is retained. Named-argument diagnostics and the v2 public-input prompt were subsequently repaired."
+    },
+    "existingEngineMethodArithmetic": [
+      {
+        "engine": "meta",
+        "definitionId": "meta-reml-published-data-v2",
+        "passed": 10,
+        "cases": 10,
+        "reportHash": "850fe79bf17b3cb38957471f276c571826df9d27b28739b4cf81108b23add40b",
+        "qualification": "Author arithmetic; original model/source binding qualified, not full research."
+      },
+      {
+        "engine": "pharmacovigilance",
+        "definitionId": "faers-ror-published-data-v3",
+        "passed": 92,
+        "cases": 92,
+        "reportHash": "b5042c74627153b3d41d3799891ce71d06f5e7b70613c172eb21ca8dee5995c7",
+        "qualification": "Five published aggregate ROR bounds pass; not whole FAERS data reconstruction or seven-stage research."
+      },
+      {
+        "engine": "mr",
+        "definitionId": "mr-ivw-published-data-v5",
+        "passed": 20,
+        "cases": 22,
+        "unsupported": 2,
+        "reportHash": "5939f2d5ef5771a691890da562c8c0832adae668543fd7c6137f91f57d262964",
+        "qualification": "Six author publication identities establish arithmetic; original same-spec published proof zero, not five clinical original-study replications."
+      }
+    ],
+    "engineHealthInbox": {
+      "scope": "Explicit isolated acceptance inbox fixture using real existing-engine rows and production digest formatter; no 08:00 scheduled delivery claim",
+      "notificationId": "notification:1a91878ad46b14229557bfa6ceb88b1cd757395f57c6f7449b2fcefdec77ef68",
+      "createdAt": "2026-10-05T00:02:13.836Z",
+      "bodyHash": "0447a299bacbd10412ae46d622b7aec5b32aa125aa5f930637982f4f1c2c20b0",
+      "artifactSha256": "7c2c14571f9857070d8e0041fd23ea14d9f383b058877f5243ea3516e545959b",
+      "methodCases": {
+        "meta": {
+          "valid": 10,
+          "total": 10
+        },
+        "pharmacovigilance": {
+          "valid": 92,
+          "total": 92
+        },
+        "mr": {
+          "valid": 20,
+          "total": 22
+        }
+      },
+      "noDigestMutation": true,
+      "actual0800DeliveryMeasured": false,
+      "paidCalls": 0,
+      "fullResearchClaimed": false
+    },
+    "historicalScopedMetaV3": {
+      "cycleId": "acceptance-scoped-research-meta-v3",
+      "evaluatorHash": "339caee55fbf58d86063d19b591994981f838a9d1e32c1bf188e488b86b2fd6f",
+      "reportSha256": "609370dacec328666a6ace0559753cb3bb8aa08427e8bb892f791a598bc7f441",
+      "plannedUnits": 6,
+      "completedUnits": 1,
+      "complete": false,
+      "runId": "run_12ce3581fadeb134d21783dfad943e7f",
+      "projectId": "eval-paper-05975892901b0ffa4f5cda35bbe3d98da405aff1",
+      "codeVerified": true,
+      "calculationValid": true,
+      "methodValid": true,
+      "certaintyValid": true,
+      "questionValid": false,
+      "writingValid": false,
+      "independentAssessment": true,
+      "assessmentModel": "qwen3.8-max-0902",
+      "exposureTier": "unknown",
+      "applicableStagesValid": false,
+      "fullResearchValid": false,
+      "sourceArtifactHash": "4f483461527595dd852b6bcf67723a88a346970132b64358b29e8971894ab5b7",
+      "questionVerdictQualification": "The delivered report appears aligned with the supplied question. Only an independent false verdict was retained, without the original per-stage review rationale, so this is an unadjudicated review disagreement rather than a proven scientific-question error.",
+      "writingVerdictQualification": "The delivered report explicitly states target-source retrieval failed and provides no source citation. The source-binding limitation is observable.",
+      "reviewProvenanceGap": "Original review rationale was not retained. New immutable receipts are prospective; no historical verdict was overwritten."
+    },
+    "monthlyPreview": {
+      "scope": "read-only current UTC month; no durable product mutations",
+      "sourceArtifactHash": "2a4e65cebb34ba1e6d770b7dc7d595606aff5c192780bdf7bfecc5cccd65eaee",
+      "sha256": "400a28d9f966a7882cb2980627f4969f7989d8947ef40d5c283837e0a0b19c62",
+      "completeMonth": false,
+      "allSixTrackDenominators": 0,
+      "allSixTrackValues": null
+    },
+    "toolWakeV2": {
+      "scope": "Actual publication-triggered wake, copied engineering fixture; not a fourth developed method or genuine researcher use.",
+      "sourceArtifactHash": "43d7ce324c7e55cd0d88222312ec20b7bf7b891b0d0ee18782cf70184bf4d470",
+      "mainReportPassed": true,
+      "mainReportSha256": "57106d7fad7e67ab3b961114957f7a61d84242e079e08a8779a566438ff6cf8b",
+      "stages": [
+        {
+          "stage": "actual-tool-publication-wake",
+          "result": {
+            "kind": "tool-publication-wake-engineering-fixture",
+            "newlyDevelopedTool": false,
+            "projectId": "tool-wake-v2",
+            "toolId": "engineering-tool-wake-v2",
+            "sourceToolId": "tool-decision-net-benefit-5b40905673ff59bb",
+            "digest": "sha256:33d8ee9ddf750cbe5cb0829a2599df35fe35935bbe02801357ac51c066048e12",
+            "runId": "run_39d0b3c1278072d4507a1feb8cc7432b",
+            "receiptId": "evolution-use-343ab3200b329f4f4d96bb478b79310b",
+            "waiterId": "evolution-waiter-e229161811e2d9fda1163f7712692b43",
+            "unrelatedWaiterId": "evolution-waiter-df74e387b150149975e2957472ee9fe2"
+          },
+          "sourceArtifactHash": "43d7ce324c7e55cd0d88222312ec20b7bf7b891b0d0ee18782cf70184bf4d470"
+        }
+      ],
+      "actualPinnedCalls": {
+        "successfulAndSubstantive": 1,
+        "failed": 4,
+        "source": "Read-only count of the isolated PostgreSQL evolution-use rows for the exact v2 run and fixture tool."
+      }
+    },
+    "scopedMetaV5": {
+      "cycleId": "acceptance-scoped-research-meta-v5",
+      "freezeHash": "6f3a6706633f291e890720bdcd73469bef6e73c529870175a4bd0a8938db0d25",
+      "evaluatorCodeHash": "03c4950663253fc8454feb7ed35529e26e4cba092308c820d9064e25654ef1f3",
+      "reportSha256": "2853b51ac63e708843e06ec6e4fa1717f095f5aaf5f8514ca7dfcb80cb3921f5",
+      "complete": false,
+      "completedUnits": 1,
+      "units": [
+        {
+          "caseId": "hackshaw-main-dl",
+          "variant": 0,
+          "replicate": 0,
+          "runId": "run_416176d2a55a702479b1f50b6fad25c3",
+          "projectId": "eval-paper-0aa3e98b7fd1a91e1821bae7124128c7bf32dc53",
+          "nativeEgressProofHash": null,
+          "assessmentReceiptHash": "3269d022057994756b4bfc7ebd1414aa29ba9a93e2b691d4cf1d7aa5fc507c26",
+          "assessmentFileSha256": "60b26bbdff28532a87591dc52b29d0be6b0011075c8bf7b5dec8d955c45ff39b",
+          "model": "qwen3.8-max-0902",
+          "modelReported": true,
+          "requestId": "chatcmpl-1db3f1cd-19aa-9f04-b2bf-744e477d4192",
+          "reasons": {
+            "question_aligned": {
+              "preserved": true,
+              "characters": 615,
+              "sha256": "f9fc547173f7b7765c5d3fcabe505ebc8872d75c2eb5448486bad1857f566610"
+            },
+            "method_supported": {
+              "preserved": true,
+              "characters": 517,
+              "sha256": "4bb454ac0524bf15e4f4fe95c26474457f90d13745f8f1de155f6d8064016e4d"
+            },
+            "certainty_supported": {
+              "preserved": true,
+              "characters": 766,
+              "sha256": "947a87bc9c723bd2a46acc9319a6efc77906bae23a20b7ff46a8cb27716c6450"
+            },
+            "writing_sources_bound": {
+              "preserved": true,
+              "characters": 893,
+              "sha256": "b74aacb32d7f118df699b0378fff396e76e8c0621515c6f7c8207911b9432e28"
+            }
+          },
+          "observedInputHash": "ec7565a7dba16da0cd568ce09817db9184088359e84fa3d7adda77f3653ccf3e",
+          "reasoningStatus": "preserved",
+          "codeVerified": true,
+          "calculationValid": true,
+          "applicableValid": false,
+          "fullResearchValid": false,
+          "exposureTier": "unknown",
+          "returnedChecks": {
+            "question_aligned": true,
+            "method_supported": true,
+            "certainty_supported": true,
+            "writing_sources_bound": true
+          },
+          "acceptedEvidenceIds": [],
+          "qualification": "Returned model checks and accepted scoring evidence are separate trust tiers; applicableValid is the evaluator verdict."
+        }
+      ],
+      "scorerAuditEligibleFrozenCycles": [],
+      "scorerAuditExecuted": false,
+      "noHiddenNumericValues": true
+    },
+    "scopedMetaV6": {
+      "cycleId": "acceptance-scoped-research-meta-v6",
+      "freezeHash": "6f3a6706633f291e890720bdcd73469bef6e73c529870175a4bd0a8938db0d25",
+      "evaluatorCodeHash": "03c4950663253fc8454feb7ed35529e26e4cba092308c820d9064e25654ef1f3",
+      "reportSha256": "006ce1b463b0c36d07630fcb0c27d669cc542a9aa521959edec55c059b6f7aa9",
+      "complete": false,
+      "completedUnits": 1,
+      "units": [
+        {
+          "caseId": "hackshaw-main-dl",
+          "variant": 0,
+          "replicate": 0,
+          "runId": "run_ecae0640db300848b04d6f3d9da9c18d",
+          "projectId": "eval-paper-3de045bccef38fe20f659661bf33cc7329f3e6f6",
+          "nativeEgressProofHash": null,
+          "assessmentReceiptHash": "7cdbe040ec8f6b7a5cbd91f53731e235153e6753212dce9b42bb1d408d188f8e",
+          "assessmentFileSha256": "7639cb2d44e9599e66edc22c2c76077669317786e6e9b81d89c8072b338bd6ae",
+          "model": "qwen3.8-max-0902",
+          "modelReported": true,
+          "requestId": "chatcmpl-88625eb4-869e-94e2-bf1b-8be47cd849d1",
+          "reasons": {
+            "question_aligned": {
+              "preserved": true,
+              "characters": 321,
+              "sha256": "e834dcc56dd9e024f1e5630196a662f3ad7ace2eb0f914aef31245d9b9a9e304"
+            },
+            "method_supported": {
+              "preserved": true,
+              "characters": 495,
+              "sha256": "a2e151a78e9097e080eb7c2e31a31fb890f085f77ef82674e7976d519c83fc32"
+            },
+            "certainty_supported": {
+              "preserved": true,
+              "characters": 541,
+              "sha256": "22de6922edde51d39f09630f02e98e32ef9d9173461a61c4072b0d810afd2f91"
+            },
+            "writing_sources_bound": {
+              "preserved": true,
+              "characters": 707,
+              "sha256": "7038956c709da9c8ca7f0e5739bf06c65da7e8695797560d7ad6a5e6c22a1689"
+            }
+          },
+          "observedInputHash": "5347a7febbfb49519a22f2483aa55afe4df630a70094a0eec553c614cb076cba",
+          "reasoningStatus": "preserved",
+          "codeVerified": true,
+          "calculationValid": true,
+          "applicableValid": true,
+          "fullResearchValid": false,
+          "exposureTier": "unknown",
+          "returnedChecks": {
+            "question_aligned": true,
+            "method_supported": true,
+            "certainty_supported": true,
+            "writing_sources_bound": true
+          },
+          "acceptedEvidenceIds": [
+            "hackshaw-main-dl",
+            "author-dataset-documentation"
+          ],
+          "qualification": "Returned model checks and accepted scoring evidence are separate trust tiers; applicableValid is the evaluator verdict."
+        }
+      ],
+      "scorerAuditEligibleFrozenCycles": [],
+      "scorerAuditExecuted": false,
+      "noHiddenNumericValues": true
+    },
+    "toolUniverseLiveExclusion": {
+      "schemaVersion": 1,
+      "at": "2026-10-05T01:41:06.295185+00:00",
+      "userId": "evolution-acceptance",
+      "projectId": "eval-paper-3de045bccef38fe20f659661bf33cc7329f3e6f6",
+      "runId": "run_ecae0640db300848b04d6f3d9da9c18d",
+      "containerName": "open-science-evolution-acceptance-eval-paper-3de045bccef38fe20f659661bf33cc7329f3e6f6-fdef5f93a6",
+      "gateway": "tooluniverse",
+      "response": {
+        "httpStatus": 403,
+        "errorCode": "evaluation_source_excluded",
+        "responseSha256": "8755a1ed81293e3bf31c84e7a20db2977f6541269a35ba066c88bd860fde52e6"
+      },
+      "newBlockedEvents": 1,
+      "observedEventRunIds": [
+        "run_ecae0640db300848b04d6f3d9da9c18d"
+      ],
+      "paidModelCalls": 0,
+      "passed": true,
+      "receiptPath": "/tmp/evimed-evolution-acceptance-20261004/tooluniverse-probe-run_ecae0640db300848b04d6f3d9da9c18d.json",
+      "receiptSha256": "a00aa00fc7cce4fec44c625311aa225b34026dc4f560b997e0b20cfec2bf6ca6"
+    },
+    "finalResourceState": {
+      "at": "2026-10-05T02:02:20.239300+00:00",
+      "activeOwnedRuns": 0,
+      "reservedModelRequests": 0,
+      "runningOwnedRuntimes": 0,
+      "webExited": true,
+      "postgresStopped": true,
+      "databaseOwnershipVerifiedBy": "Exact task-specific name, volume, isolated network, image and sole non-system database; initial test PostgreSQL container has no labels.",
+      "volumesAndControlEvidenceRetained": true,
+      "productionChanged": false,
+      "budgetRaisedOrReset": false,
+      "evolutionDailyBudgetCny": 50,
+      "costByPurpose": [
+        {
+          "purpose": "autopilot",
+          "status": "settled",
+          "calls": 3,
+          "cost_cny": 0.005036
+        },
+        {
+          "purpose": "evolution",
+          "status": "released",
+          "calls": 3,
+          "cost_cny": null
+        },
+        {
+          "purpose": "evolution",
+          "status": "settled",
+          "calls": 1762,
+          "cost_cny": 45.207583
+        },
+        {
+          "purpose": "kernel",
+          "status": "settled",
+          "calls": 664,
+          "cost_cny": 5.53425
+        },
+        {
+          "purpose": "routing",
+          "status": "settled",
+          "calls": 5,
+          "cost_cny": 0.014461
+        },
+        {
+          "purpose": "title",
+          "status": "settled",
+          "calls": 20,
+          "cost_cny": 0.005785
+        }
+      ],
+      "runtimeImageId": "sha256:c44be13ade89870a3dddcf1551e9d23b9fd4588aa30ca596e346ec65afe38698"
+    },
+    "nativeEgressEngineeringProbe": {
+      "kind": "actual-native-egress-engineering-probe",
+      "probe": "ledger-v1",
+      "projectId": "eval-paper-proof-ledger-v1",
+      "scored": false,
+      "promotion": false,
+      "requestedIndependentModelCalls": 0,
+      "runId": "run_d42032fdb399645a1311d4f25b852a7f",
+      "runStatus": "succeeded",
+      "transcriptComplete": true,
+      "transcriptProjectionSha256": "88cf57679beec3a20e652931e55b8484452a41252401c1ed5303d58ce3289164",
+      "nativeCoverage": {
+        "nativeCoverageVerified": true,
+        "proofHash": "c4f8f0a51637d6e86fe2e83eb0d37dd940a876ca2d23cc1c603da7e3759e75af",
+        "startProofHash": "39ecadf991f08896e777f45a43ba7fccf9b5d3795a5493aec565d5dde999a086",
+        "endProofHash": "9b94736d6bee2eaf6f060ded04b8debdf6290239e1eeca3c2950c3ea65c746f9",
+        "reason": "observed_isolated_docker"
+      },
+      "traceCoverage": {
+        "complete": true,
+        "unobservedTools": [],
+        "basis": "durable_runtime_and_gateway_trace",
+        "nativeCoverageVerified": true,
+        "nativeCoverageProofHash": "c4f8f0a51637d6e86fe2e83eb0d37dd940a876ca2d23cc1c603da7e3759e75af"
+      },
+      "actualNativeToolCalls": 10,
+      "passed": true,
+      "at": "2026-10-05T01:58:20.660Z",
+      "receiptPath": "/data/docker/volumes/evimed-evolution-acceptance-control/_data/native-proof-ledger-v1.json",
+      "receiptSha256": "636fc7896b33e819ddc74ec9fe9a21fa3e03113821bf087fbb9dc817223b9d51",
+      "sourceArtifactHash": "d83e41771bb347ebd2dee6c16a1f8df0ce79be051bfbc5422acc3eec8c81dcca",
+      "actualModelLedger": [
+        {
+          "purpose": "evolution",
+          "model": "deepseek-flash",
+          "status": "settled",
+          "calls": 17,
+          "cost_cny": 0.131312
+        }
+      ]
+    },
+    "v6EgressQualification": {
+      "status": "historically-unknown",
+      "signedStartAndEndObserved": true,
+      "sameObservedFacts": true,
+      "acceptedProofHash": null,
+      "reason": "The original runtime verifier required tenant fields absent from real folded runs; the learning gauge also discarded the first prompt cutoff. Both were repaired prospectively with real-ledger tests. Historical v6 scoring and missing cutoff were not modified.",
+      "followUp": "A separate short native engineering probe tests the repaired production path; it is not a new scientific score."
+    },
+    "toolUniverseV5Failure": {
+      "runId": "run_416176d2a55a702479b1f50b6fad25c3",
+      "httpStatus": 502,
+      "errorCode": "tooluniverse_upstream_unavailable",
+      "sameRunBlockedEvents": 1,
+      "passed": false,
+      "receiptPath": "/tmp/evimed-evolution-acceptance-20261004/tooluniverse-probe-run_416176d2a55a702479b1f50b6fad25c3.json",
+      "receiptSha256": "0acd184d701973f3c52760ccb119d4bfbd32440b6f1a966a2d78734bf7b4ecce",
+      "reason": "Target was blocked before upstream access but the untyped exclusion error was incorrectly wrapped as upstream failure; the historical receipt is retained."
+    }
+  },
+  "historicalImageDivergence": {
+    "claimedManifestHash": "1af8e22178d880670f34396dcfc15edbf4dd1b6edd1959b86a27a4d736e0f6d2",
+    "checked": 895,
+    "mismatches": [
+      {
+        "path": "scripts/ops/evolution-aligned-faers-acceptance.mjs",
+        "expected": "e2570770bf4e3e943e4d1971e802eca52ba01c6bfa38aa0990f1a70ebcace65b",
+        "actual": "d26a33824ffee989d1e6060862e21225e9c01ec14c55a3be7be671cb957ad061"
+      },
+      {
+        "path": "scripts/ops/evolution-scoped-research-acceptance.mjs",
+        "expected": "798ec4f185f1aaa74a2b7b316779b004aa46ebe727cde9ec0c82d7880da5623e",
+        "actual": "60cc37f21f9a89d28cd461e32380ecaaf709a05f2676df81ec5f733df394950a"
+      },
+      {
+        "path": "scripts/ops/release-full-build.mjs",
+        "expected": "4eba09bbbee0804677bb05ca3b980f8faa935ec43f8ac151648d8503b17b86a7",
+        "actual": "03f4c7e05c41d7c44014247211987f018f131ee6076fa30f1af9f753cb4d6d35"
+      }
+    ],
+    "notMeasured": [
+      "capability-skills/evolution-scout/SKILL.md",
+      "capability-skills/tool-builder/SKILL.md",
+      "packages/socket/capability-skills/evolution-scout/SKILL.md",
+      "packages/socket/capability-skills/tool-builder/SKILL.md"
+    ],
+    "qualifiedAs": "The recorded sourceArtifactHash identifies the prepared source manifest. It is not proof every historical image file matched.",
+    "impact": "The two affected paper helpers retained v3 defaults; the attempted v4 phase was refused by immutable evaluator freeze before any model call or scientific run. The third mismatch was release-full-build, not used by this main acceptance. Main upload/scout/build/gateway execution files were among the892 matching inspected files.",
+    "rootCause": "Not conclusively established; equal-size script edits and zero archive mtimes coincided with stale build files.",
+    "remediation": "An uncached build from a clean content-addressed context was verified inside the actual new image: 901 files plus 210 resolved-domain files match. The failed v4 attempt made no paid call or scientific run.",
+    "v4ActualUnits": 0,
+    "oldScoresMutated": false
+  },
+  "scientificBoundaries": {
+    "sameFiveToTenPapersPerEngineAcrossAllThreeRulers": false,
+    "completeStudyReproductionEstablished": false,
+    "v3PromotionEstablished": false,
+    "v4RealUseEstablished": false,
+    "futureProspectiveSuccessEstablished": false,
+    "completeCalendarMonthObserved": false,
+    "referenceArithmeticIsNotWholeResearch": true,
+    "syntheticDataIsNotIndependentEvidence": true,
+    "automatedAcceptanceIsNotGenuineResearcherUse": true,
+    "hiddenAnswersNeverCommitted": true,
+    "scopedMetaCycleComplete": false
+  },
+  "deploymentRequirements": {
+    "featureFlag": "OPEN_SCIENCE_EVOLUTION_ENABLED=false until operator activation",
+    "nativeEgressProof": "Configure a dedicated bridge with Internal=true, IPv6 disabled and com.docker.network.bridge.gateway_mode_ipv4=isolated; attach only the runtime and explicitly approved immutable control-gateway container/image identities. Merely naming a network does not establish coverage.",
+    "evaluationStorage": "Control-only evaluationDataDir, never mounted in a research runtime",
+    "unsupportedCoverage": "AgentBay, unmanaged specialist egress or incomplete observed Docker proof remains unknown",
+    "productionActivationPerformed": false
+  },
+  "remainingAcceptance": [
+    {
+      "kind": "immediately-actionable-scientific-coverage",
+      "task": "Bind original main-analysis inputs, method contracts and independent source QA to the same 5–10 papers for each of Meta, pharmacovigilance and MR, then run all three rulers and preserve failures. Existing reference arithmetic and question admission do not satisfy this."
+    },
+    {
+      "kind": "immediately-actionable-integration",
+      "task": "Exercise target filtering at every enabled gateway with actual responses or preserved isolated cache records. Unconfigured services, empty results and 503 responses do not prove filtering."
+    },
+    {
+      "kind": "immediately-actionable-evaluation",
+      "task": "Complete a frozen cycle and run its independent scorer audit. Preserve full stage rationales, exposure status and unsupported results; do not change frozen rules to improve a score."
+    },
+    {
+      "kind": "requires-time-or-real-use",
+      "task": "V3 requires five qualifying independent full-research reproductions; V4 requires genuine-use outcomes. Publication-after-freeze temporal/prospective results and a complete calendar month are separate prerequisites for the main monthly scientific-success metric."
+    }
+  ],
+  "reproduction": {
+    "workingDirectory": "OpenScience",
+    "acceptanceEntry": "scripts/ops/evolution-acceptance.mjs",
+    "scopedMetaEntry": "scripts/ops/evolution-scoped-research-acceptance.mjs",
+    "alignedFaersEntry": "scripts/ops/evolution-aligned-faers-acceptance.mjs",
+    "immutablePriorCyclesPreserved": true,
+    "budgetRaisedOrReset": false,
+    "actualAcceptanceOverrides": {
+      "maximumBuildAttempts": 7,
+      "productionDefaultMaximumBuildAttempts": 3,
+      "hostRuntimeLimit": 3,
+      "runtimeMemoryLimit": "1536m",
+      "controlMemoryLimit": "512m"
+    },
+    "testFixturesDoNotCountAsIndependentEvidence": true
+  },
+  "secretsAndHiddenAssetsIncluded": false
+}

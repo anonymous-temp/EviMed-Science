@@ -65,6 +65,8 @@ export const CONTRACT_KINDS = Object.freeze([
   // back — but they go through the same gate as everything else, because a
   // proposal that edits the methods later runs are mounted with is the last
   // thing that should be graded by the job that produced it.
+  'evolution-research-card',
+  'evolution-tool-candidate',
   'method-candidate',
   'method-relations',
 ])
@@ -171,6 +173,8 @@ export const CONTRACT_KIND_LABELS = Object.freeze({
   'surveillance-diff': '监测差异',
   'hypothesis-set': '假说集',
   'method-candidate': '方法候选',
+  'evolution-research-card': '进化研发卡',
+  'evolution-tool-candidate': '进化工具候选',
   'method-relations': '方法关系',
 })
 

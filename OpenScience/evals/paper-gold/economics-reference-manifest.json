@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "cases": [
+    {
+      "id": "darth-time-independent",
+      "doi": "10.1177/0272989X221103163",
+      "pmid": "35770931",
+      "pmcid": "PMC9742144",
+      "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC9742144/",
+      "code": "https://github.com/DARTH-git/cohort-modeling-tutorial-intro",
+      "preprint": "arxiv:2001.07824",
+      "hiddenHash": "fda1840697ae9f193158b7bad0ef450a3323e03222a8ed7a4a3d15b485c79c2b",
+      "status": "published_table_transcribed_primary_source",
+      "readiness": "published_parameters_and_printed_outputs_reproduced_with_pinned_author_analysis_code",
+      "title": "An Introductory Tutorial on Cohort State-Transition Models in R Using a Cost-Effectiveness Analysis Example."
+    },
+    {
+      "id": "darth-time-dependent",
+      "doi": "10.1177/0272989X221121747",
+      "pmid": "36112849",
+      "pmcid": "PMC9844995",
+      "sourceUrl": "https://pmc.ncbi.nlm.nih.gov/articles/PMC9844995/",
+      "code": "https://github.com/DARTH-git/cohort-modeling-tutorial-timedep",
+      "preprint": "arxiv:2108.13552",
+      "hiddenHash": "28295ee40e182adc29fa8845ca7a59474af064adfc9da1c79598a8a1b6d3c1f9",
+      "status": "published_table_transcribed_primary_source",
+      "readiness": "published_parameters_and_printed_outputs_reproduced_with_pinned_author_analysis_code",
+      "title": "A Tutorial on Time-Dependent Cohort State-Transition Models in R Using a Cost-Effectiveness Analysis Example."
+    }
+  ],
+  "admittedCaseSet": {
+    "methodId": "cohort-state-transition",
+    "sha256": "851fe8466d88177aec99a248e7ef504e31b469509e2f4d0fc0006ee570fe735d",
+    "publicationCount": 2,
+    "verification": "All printed cost/QALY results independently reproduced with pinned publication-author R analysis code; each half-printed-unit tolerance passed.",
+    "inputContract": "specification -> {strategy: {cost, qaly}}",
+    "preparedBy": "prepare_darth.py"
+  }
+}

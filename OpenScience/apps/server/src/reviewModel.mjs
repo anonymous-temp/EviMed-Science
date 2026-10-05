@@ -103,6 +103,7 @@ export function reviewModelApiKey(config) {
  *   schema: Record<string, any>, schemaName: string,
  *   thinking?: { enabled: boolean, budget?: number },
  *   maxTokens?: number, timeoutMs?: number, signal?: AbortSignal, at?: Date,
+ *   purpose?: "review" | "evolution", limits?: { daily?: number, weekly?: number },
  * }} call
  * @returns {Promise<{ value: any, model: string, usage: { cacheHitTokens: number, cacheMissTokens: number, completionTokens: number, reasoningTokens: number }, cost: number, requestId: string | null, reasoningChars: number, modelReported: boolean }>}
  */
@@ -141,12 +142,12 @@ export async function callReviewModel({ config, usageLedger = null, fetchImpl = 
     estimate = estimateModelReservation({ ...body, max_tokens: body.max_tokens + ("thinking_budget" in body ? Number(body.thinking_budget) || 0 : 0) }, config, at);
     reservation = await usageLedger.reserveModel({
       id: randomUUID(), userId: call.userId, projectId: call.projectId, model: body.model,
-      runId: call.runId ?? null, purpose: "review",
+      runId: call.runId ?? null, purpose: call.purpose ?? "review",
       priceVersion: REFERENCE_PRICE_LIST.version, currency: estimate.currency || "CNY",
       requestFingerprint: createHash("sha256").update(JSON.stringify(body)).digest("hex"),
       estimatedCost: estimate.cost,
-      dailyLimit: Number(config.userDailySpendLimit) || 0,
-      weeklyLimit: Number(config.userWeeklySpendLimit) || 0,
+      dailyLimit: call.limits?.daily !== undefined ? Number(call.limits.daily) : Number(config.userDailySpendLimit) || 0,
+      weeklyLimit: call.limits?.weekly !== undefined ? Number(call.limits.weekly) : Number(config.userWeeklySpendLimit) || 0,
       runLimit: 0,
       now: at,
     });

@@ -154,7 +154,7 @@ export const WEB_DOCKERFILE = "deploy/web/Dockerfile";
 // evidence content copies. This digest is calculated from the resolved recipe;
 // independent merge review and complete production image acceptance remain pending.
 // The hosted extension adapters and measured source closure now ship in the Web image.
-export const WEB_DOCKERFILE_SHA256 = "sha256:5af3a0e1430bc73d50206223e686e3fa4cefd9eb467f9212477954ebdb39951e";
+export const WEB_DOCKERFILE_SHA256 = "sha256:d7fde8de63057f5c0d7c286535cdbc74103cd04a2d4c5df21c54a7a63310a3c7";
 export const WEB_INPUTS = Object.freeze([
   "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml", "deps-version.json",
   "apps/web/package.json", "apps/server/package.json", "packages/shared/package.json",

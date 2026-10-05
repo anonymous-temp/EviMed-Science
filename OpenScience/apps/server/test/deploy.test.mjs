@@ -2151,7 +2151,7 @@ test("file-delivery capabilities fix the two pre-delivery steps instead of leavi
     // their capability suites: their numbers are rendered from a tool's or a
     // script's results, not typed from sources. They do not inherit the full
     // report pipeline's mandatory skill sequence.
-    if (["dataset-research-scoping", "statistical-analysis", "gene-expression-analysis"].includes(name)) continue;
+    if (["dataset-research-scoping", "statistical-analysis", "gene-expression-analysis", "evolution-scout", "tool-builder"].includes(name)) continue;
     for (const step of ["traceability-review", "manuscript-humanize"]) {
       assert.ok(skill.includes(step), `${name}/SKILL.md does not name ${step} as a pre-delivery step`);
       assert.ok(shipped.includes(step), `capability-skills/${name}/SKILL.md does not name ${step}; the authored copy is not what the run reads`);

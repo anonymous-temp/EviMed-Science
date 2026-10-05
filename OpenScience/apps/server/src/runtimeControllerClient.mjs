@@ -18,7 +18,8 @@ import { VCR_INTAKE_LONG_KINDS } from "./vcrIntakeLayout.mjs";
 // attempt. Version 8 added isolated native skill validation; the version-7
 // citation runtime-start shape stays explicitly supported during coordinated
 // rollout.
-export const RUNTIME_CONTROLLER_PROTOCOL_VERSION = 11;
+// Version 12 adds disposable candidate execution, without a customer runtime.
+export const RUNTIME_CONTROLLER_PROTOCOL_VERSION = 12;
 
 function controllerError(code, message, status = 503) {
   return new HttpError(status, code, message);
@@ -159,7 +160,10 @@ export class RuntimeControllerClient {
             if ((response.statusCode ?? 500) >= 400) {
               const code = typeof parsed.code === "string" ? parsed.code : "runtime_controller_error";
               const message = typeof parsed.error === "string" ? parsed.error : "Runtime controller rejected the request.";
-              finish(reject, controllerError(code, message, response.statusCode));
+              const failure=controllerError(code,message,response.statusCode);
+              const retryAfter=Number(response.headers['retry-after']);
+              if(Number.isSafeInteger(retryAfter)&&retryAfter>0&&retryAfter<=3600)failure.retryAfterSeconds=retryAfter;
+              finish(reject,failure);
               return;
             }
             finish(resolve, parsed.data ?? parsed);
@@ -232,12 +236,21 @@ export class RuntimeControllerClient {
     return this.request("POST", "/v1/skills/cancel", reference, { timeoutMs: 45000 });
   }
 
+  prepareEvolutionDependencies(body, { signal = undefined } = {}) { return this.request("POST", "/v1/runtime/prepare-evolution-dependencies", body, { signal, timeoutMs: 180000 }); }
+
+  execVerify(body, { signal = undefined } = {}) { return this.request("POST", "/v1/runtime/exec-verify", body, { signal, timeoutMs: 75000, maxResponseBytes: 128 * 1024 }); }
+
+  captureRunEgressProof(project,runId,phase,{signal=undefined}={}) { return this.request('POST','/v1/runtime/egress-proof',{userId:project.userId,projectId:project.id,activeWorkspace:project.activeWorkspace??'',runId,phase},{signal}); }
+  verifyRunEgressProof(project,runId,{signal=undefined,promptDispatchStartedAt=undefined,completedAt=undefined}={}) { return this.request('POST','/v1/runtime/egress-proof-verify',{userId:project.userId,projectId:project.id,activeWorkspace:project.activeWorkspace??'',runId,promptDispatchStartedAt,completedAt},{signal}); }
+
+  evolutionAdmissionAvailable() { return this.request("POST", "/v1/runtime/evolution-admission", {}); }
+
   extensionToolAdmission() { return this.request("POST", "/v1/extensions/tool/admission", {}); }
   async admissionAvailable() { return (await this.extensionToolAdmission())?.available === true; }
 
   /** The private worker supplies an opaque leased identity; cancellation joins even after the HTTP response is lost.
    * @param {'prepare'|'execute'} kind @param {any} body @param {{signal?:AbortSignal}} [options] */
-  async extensionToolRequest(kind, body, { signal } = {}) {
+  async extensionToolRequest(kind, body, { signal = undefined } = {}) {
     let dispatched = false;
     try {
       return await this.request("POST", `/v1/extensions/tool/${kind}`, body,
@@ -280,7 +293,7 @@ export class RuntimeControllerClient {
     return this.request("GET", "/v1/docker/runtime-image");
   }
 
-  startRuntime(project, port, password, capsuleGatewayUrl = "", revisionGatewayUrl = "", publicSourceGatewayUrl = "", pluginConfig = { revision: 0, enabled: true, settings: { timeoutMs: 15000 } }, personalSkillGeneration = null, extensionGeneration = null) {
+  startRuntime(project, port, password, capsuleGatewayUrl = "", revisionGatewayUrl = "", publicSourceGatewayUrl = "", pluginConfig = { revision: 0, enabled: true, settings: { timeoutMs: 15000 } }, personalSkillGeneration = null, extensionGeneration = null, platformSkillGeneration = null) {
     return this.request("POST", "/v1/runtime/start", {
       ...projectReference(project),
       port,
@@ -291,6 +304,7 @@ export class RuntimeControllerClient {
       pluginConfig,
       ...(personalSkillGeneration ? { personalSkillGeneration } : {}),
       ...(extensionGeneration ? { extensionGeneration } : {}),
+      ...(platformSkillGeneration ? { platformSkillGeneration } : {}),
     });
   }
 

@@ -24,6 +24,9 @@
  */
 
 /** Where the learning loop's own runs happen, one per account. */
+export const EVOLUTION_PROJECT_ID = "evimed-evolution";
+export const EVOLUTION_PROJECT_NAME = "EviMed 循证进化";
+
 export const LEARNING_PROJECT_ID = "evimed-learning";
 
 /** What the project is called where an operator lists everything. */
@@ -95,7 +98,7 @@ export function isSelfMeasurementProject(projectId) {
 /** @param {unknown} projectId @returns {boolean} */
 export function isInternalProject(projectId) {
   const id = String(projectId ?? "");
-  return id === LEARNING_PROJECT_ID || id === SOURCES_PROJECT_ID || id === FRONTIER_PROJECT_ID
+  return /^eval-paper-[a-zA-Z0-9_-]+$/.test(id) || id === EVOLUTION_PROJECT_ID || /^evolution-eval-[a-z0-9-]+$/.test(id) || id === LEARNING_PROJECT_ID || id === SOURCES_PROJECT_ID || id === FRONTIER_PROJECT_ID
     || /^eval-method-[a-z0-9-]+$/.test(id) || EVALUATION_CELL_PROJECT.test(id)
     || SELF_MEASUREMENT_PROJECT.test(id);
 }
@@ -125,4 +128,9 @@ export function backgroundRuntimeLimit(maxGlobal, maxPerUser) {
   if (maxGlobal == null || !Number.isFinite(global) || global <= 0) return null;
   const share = Number(maxPerUser);
   return Math.max(1, global - (maxPerUser != null && Number.isFinite(share) && share > 0 ? share : 1));
+}
+
+/** Evolution development and release-replay projects reserve the last research slot. */
+export function isEvolutionProject(projectId) {
+  return projectId === EVOLUTION_PROJECT_ID || /^(?:eval-paper-|evolution-eval-)[A-Za-z0-9_-]+$/.test(String(projectId));
 }

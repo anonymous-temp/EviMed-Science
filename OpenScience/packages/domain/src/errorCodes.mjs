@@ -1,3 +1,4 @@
+import { EVOLUTION_ERROR_MESSAGES } from './evolution.mjs';
 import { RESULT_WORKBENCH_ERROR_MESSAGES } from "./resultErrors.mjs";
 import { DOCUMENT_EXPORT_ERROR_MESSAGES } from "./documentExport.mjs";
 import { CONNECTOR_MISSING_CODES } from "./connectorCredentials.mjs";
@@ -1420,6 +1421,7 @@ export const EXTENSION_ERROR_CODES = Object.freeze([
 export const MANAGED_BROWSER_ERROR_CODES = Object.freeze(['managed_browser_invalid','managed_browser_not_found','managed_browser_sequence_conflict','managed_browser_busy','managed_browser_unavailable','managed_browser_action_unknown']);
 
 export const ALL_ERROR_CODES = Object.freeze([...new Set([
+  ...Object.keys(EVOLUTION_ERROR_MESSAGES),
   ...EXTENSION_ERROR_CODES,
   ...MANAGED_BROWSER_ERROR_CODES,
   ...Object.keys(DOCUMENT_EXPORT_ERROR_MESSAGES),
@@ -1489,6 +1491,7 @@ export function turnEndErrorCode(kind, wireCode) {
  * code is visibly untranslated rather than invisibly generic.
  */
 export const ERROR_CODE_MESSAGES = Object.freeze({
+  ...EVOLUTION_ERROR_MESSAGES,
   // Why a data-semantics check could not read a table. The check is reported as
   // not run; the other checks and the analysis go on.
   file_unreadable: '这个数据文件没能读取，对应的数据检查未执行；其他检查和分析不受影响。',
@@ -2297,6 +2300,7 @@ export function errorCodeOutcome(code) {
   // never as a verdict on a run.
   if (capsuleTransferErrorCodes.includes(text)) return 'upstream'
   // Optional extension refusals affect that operation, not research delivery.
+  if (Object.hasOwn(EVOLUTION_ERROR_MESSAGES, text)) return 'upstream'
   if (EXTENSION_ERROR_CODES.includes(text)) return 'upstream'
   if (text === 'managed_browser_busy') return 'capped'
   if (MANAGED_BROWSER_ERROR_CODES.includes(text)) return 'upstream'

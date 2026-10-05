@@ -52,6 +52,13 @@
       ]
     },
     {
+      "id": "evolution-scout",
+      "safetyClass": "general",
+      "contractKinds": [
+        "evolution-research-card"
+      ]
+    },
+    {
       "id": "gene-expression-analysis",
       "safetyClass": "clinical",
       "contractKinds": [
@@ -161,6 +168,13 @@
       "safetyClass": "clinical",
       "contractKinds": [
         "statistical-analysis-package"
+      ]
+    },
+    {
+      "id": "tool-builder",
+      "safetyClass": "general",
+      "contractKinds": [
+        "evolution-tool-candidate"
       ]
     },
     {

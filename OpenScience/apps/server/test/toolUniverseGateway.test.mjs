@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import test from "node:test";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
+import {createEvaluationIsolation} from "../src/evaluationIsolation.mjs";
 import { HttpError } from "../src/security.mjs";
 import { createToolUniverseGateway, TOOL_UNIVERSE_GATEWAY_PATH } from "../src/toolUniverseGateway.mjs";
 
@@ -29,7 +33,7 @@ async function fixture(t, options = {}) {
     res.end(`event: message\ndata: ${JSON.stringify({ jsonrpc: "2.0", id: body.id, result })}\n\n`);
   });
   await new Promise(resolve => upstream.listen(0, "127.0.0.1", resolve));
-  const handler = createToolUniverseGateway({ config: { toolUniverseMcpUrl: `http://127.0.0.1:${upstream.address().port}/mcp`, toolUniverseApiToken: "s".repeat(64) }, runtimeManager, store });
+  const handler = createToolUniverseGateway({ config: { toolUniverseMcpUrl: `http://127.0.0.1:${upstream.address().port}/mcp`, toolUniverseApiToken: "s".repeat(64) }, runtimeManager, store, evaluationIsolation:options.evaluationIsolation });
   const server = createServer((req, res) => { void handler(req, res); });
   await new Promise(resolve => server.listen(0, "127.0.0.1", resolve));
   t.after(async () => { for (const service of [server, upstream]) { service.closeAllConnections(); await new Promise(resolve => service.close(resolve)); } });
@@ -130,4 +134,12 @@ test("the declared MCP grep schema offers only the deployed literal mode", async
   const grep = result.tools.find(tool => tool.name === "grep_tools");
   assert.deepEqual(grep.inputSchema.properties.search_mode.enum, ["text"]);
   assert.equal(grep.inputSchema.properties.pattern.maxLength, 256);
+});
+
+test("actual isolation rejection preserves HTTP403 and code before upstream while forged arbitrary error remains502",async t=>{
+ const directory=await fs.mkdtemp(path.join(os.tmpdir(),'tool-universe-exclusion-'));t.after(()=>fs.rm(directory,{recursive:true,force:true}));
+ const isolation=createEvaluationIsolation({dataDir:directory,resolveRunId:()=> 'actual-run'});await isolation.register('actual-run',{aliases:['10.1136/bmj.n71'],titles:[]});
+ const blocked=await fixture(t,{evaluationIsolation:isolation});const body={method:'tools/call',params:{name:'grep_tools',arguments:{pattern:'10.1136/bmj.n71',search_mode:'text'}}};
+ const response=await blocked.request(body);assert.equal(response.status,403);assert.equal((await response.json()).code,'evaluation_source_excluded');assert.equal(blocked.calls.length,0);assert.equal((await isolation.audit('actual-run')).events[0].gateway,'tooluniverse');
+ const unexpected=await fixture(t,{evaluationIsolation:{assertRequest:async()=>{throw Object.assign(new Error('unexpected'),{status:403,code:'evaluation_source_excluded'});}}});const failure=await unexpected.request(body);assert.equal(failure.status,502);assert.equal((await failure.json()).code,'tooluniverse_upstream_unavailable');
 });

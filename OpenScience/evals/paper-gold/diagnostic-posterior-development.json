@@ -1,0 +1,49 @@
+{
+  "methodId": "diagnostic-posterior",
+  "entrypointContract": "function(specification) -> {results: {label: {posteriorOdds,posteriorProbability}}}",
+  "basis": "Synthetic development arithmetic, not published-paper validation. Use exactly one priorProbability in [0,1) or finite nonnegative priorOdds. For each independently interpreted likelihood ratio, posterior odds = prior odds * ratio and posterior probability = posterior odds / (1 + posterior odds). Multiple labels are alternative results, not sequentially dependent tests. Reject negative/nonfinite inputs.",
+  "cases": [
+    {
+      "id": "toy-development-1",
+      "kind": "synthetic-development",
+      "input": {
+        "specification": {
+          "priorProbability": 0.2,
+          "likelihoodRatios": {
+            "test": 3
+          }
+        }
+      },
+      "expected": {
+        "results": {
+          "test": {
+            "posteriorOdds": 0.75,
+            "posteriorProbability": 0.42857142857142855
+          }
+        }
+      },
+      "absoluteTolerance": 1e-10
+    },
+    {
+      "id": "toy-development-2",
+      "kind": "synthetic-development",
+      "input": {
+        "specification": {
+          "priorOdds": 2,
+          "likelihoodRatios": {
+            "test": 0.25
+          }
+        }
+      },
+      "expected": {
+        "results": {
+          "test": {
+            "posteriorOdds": 0.5,
+            "posteriorProbability": 0.3333333333333333
+          }
+        }
+      },
+      "absoluteTolerance": 1e-10
+    }
+  ]
+}

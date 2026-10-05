@@ -1469,3 +1469,30 @@ test("a request over the runtime socket carries the authority the cookie was min
   assert.deepEqual(seen, ["dsh.runtime", "someone-else"]);
 
 });
+
+test('evolution admission measures the whole host and reserves its final research slot only when enabled',async t=>{
+  const tmp=await shortTempDir('evolution-capacity-'),dataDir=path.join(tmp,'data'),socketPath=path.join(tmp,'c.sock');
+  await mkdir(dataDir,{recursive:true});const dockerBin=await fakeDocker(tmp),project=await projectTree(dataDir,'alice','evimed-evolution');
+  const priorState=process.env.FAKE_DOCKER_STATE,priorVolume=process.env.FAKE_VOLUME_ROOT;
+  process.env.FAKE_DOCKER_STATE=path.join(tmp,'docker-state');process.env.FAKE_VOLUME_ROOT=dataDir;
+  await mkdir(process.env.FAKE_DOCKER_STATE,{recursive:true});
+  for(let index=0;index<3;index++)await writeFile(path.join(process.env.FAKE_DOCKER_STATE,`external-${index}.json`),JSON.stringify({runtime:true,pid:process.pid,containerName:`external-${index}`,userId:`researcher-${index}`,projectId:'research'}));
+  const config={...controllerConfig({dataDir,socketPath,dockerBin}),evolutionEnabled:true,maxRunningRuntimes:4,maxRunningRuntimesPerUser:4};
+  const controller=createRuntimeController(config);t.after(async()=>{await controller.close();if(priorState===undefined)delete process.env.FAKE_DOCKER_STATE;else process.env.FAKE_DOCKER_STATE=priorState;if(priorVolume===undefined)delete process.env.FAKE_VOLUME_ROOT;else process.env.FAKE_VOLUME_ROOT=priorVolume;await removeTree(tmp);});
+  await controller.listen();const client=new RuntimeControllerClient({runtimeControllerSocket:socketPath});
+  const capacity=await client.evolutionAdmissionAvailable();assert.equal(capacity.total,3);assert.equal(capacity.available,false);assert.equal(capacity.availableSlots,0);assert.equal(capacity.reservedResearchSlots,1);
+  await assert.rejects(()=>client.request('POST','/v1/runtime/evolution-admission',{command:'docker ps'}),error=>error.status===400);
+  for(const id of ['evimed-evolution','eval-paper-one','evolution-eval-one']){
+    const target=id===project.id?project:await projectTree(dataDir,'alice',id);
+    await assert.rejects(()=>client.startRuntime(target,49152,'pw_abcdefghijklmnopqrstuvwxyz'),error=>error.code==='runtime_limit_exceeded'&&error.retryAfterSeconds===60);
+  }
+  await rm(path.join(process.env.FAKE_DOCKER_STATE,'external-2.json'));
+  assert.equal((await client.evolutionAdmissionAvailable()).available,true);
+  controller.config.evolutionEnabled=false;
+  const disabled=await client.evolutionAdmissionAvailable();assert.equal(disabled.reservedResearchSlots,0);assert.equal(disabled.availableSlots,2);
+  const manager=new RuntimeManager({...config,evolutionEnabled:true});manager.runtimeCount=()=>3;manager.runtimeCountForUser=()=>0;manager.backgroundRuntimeCount=()=>0;
+  assert.throws(()=>manager.enforceRuntimeCapacity(project),error=>error.code==='runtime_limit_exceeded');
+  assert.doesNotThrow(()=>manager.enforceRuntimeCapacity({...project,id:'research'}));
+  assert.doesNotThrow(()=>manager.enforceRuntimeCapacity({...project,id:'evimed-sources'}));
+  manager.config.evolutionEnabled=false;assert.doesNotThrow(()=>manager.enforceRuntimeCapacity(project));
+});

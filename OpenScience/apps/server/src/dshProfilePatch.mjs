@@ -86,6 +86,8 @@ export const HOSTED_PERMISSION_PRESET_DESCRIPTION = "只能读写本项目的工
  * @property {string} [answerPersonaDir]
  * @property {string} capabilitySkillsDir
  * @property {string} capsuleMethodsDir
+ * @property {string} [evolutionGatewayUrl]
+ * @property {string} [platformSkillsDir]
  * @property {string} [personalSkillsDir]
  * @property {string} [extensionProjectionFile]
  * @property {string} [extensionGatewayUrl]
@@ -625,7 +627,7 @@ export const SOCKET_PLUGIN_SWITCHES = Object.freeze({
  * asking for the full input would make building an environment depend on
  * something it never reads.
  *
- * @typedef {Pick<ProfilePatchInput, 'presetSkillsDir'|'capabilitiesDir'|'answerPersonaDir'|'capabilitySkillsDir'|'capsuleMethodsDir'|'personalSkillsDir'|'extensionProjectionFile'|'extensionGatewayUrl'|'capsuleGatewayUrl'|'revisionGatewayUrl'|'publicSourceGatewayUrl'|'webSearchGatewayUrl'|'pluginConfig'|'modelGatewayTokenFile'|'workloadTokenFile'|'bundleVersion'|'flags'|'limits'> & { compaction?: Record<string, string>, disabledToolsFile?: string, disabledPlugins?: readonly string[] }} RuntimeEnvironmentInput
+ * @typedef {Pick<ProfilePatchInput, 'presetSkillsDir'|'capabilitiesDir'|'answerPersonaDir'|'capabilitySkillsDir'|'capsuleMethodsDir'|'evolutionGatewayUrl'|'platformSkillsDir'|'personalSkillsDir'|'extensionProjectionFile'|'extensionGatewayUrl'|'capsuleGatewayUrl'|'revisionGatewayUrl'|'publicSourceGatewayUrl'|'webSearchGatewayUrl'|'pluginConfig'|'modelGatewayTokenFile'|'workloadTokenFile'|'bundleVersion'|'flags'|'limits'> & { compaction?: Record<string, string>, disabledToolsFile?: string, disabledPlugins?: readonly string[] }} RuntimeEnvironmentInput
  *
  * @param {RuntimeEnvironmentInput} input
  * @returns {Record<string, string>}
@@ -658,6 +660,8 @@ export function runtimeEnvironment(input) {
     EVIMED_ANSWER_PERSONA_DIR: input.answerPersonaDir ?? "",
     EVIMED_CAPABILITY_SKILLS_DIR: input.capabilitySkillsDir,
     EVIMED_CAPSULE_METHODS_DIR: input.capsuleMethodsDir,
+    EVIMED_EVOLUTION_GATEWAY_URL: input.evolutionGatewayUrl ?? '',
+    EVIMED_PLATFORM_SKILLS_DIR: input.platformSkillsDir ?? '',
     EVIMED_PERSONAL_SKILLS_DIR: input.personalSkillsDir ?? '/opt/evimed/personal-skills',
     EVIMED_EXTENSION_PROJECTION_FILE: input.extensionProjectionFile ?? '',
     EVIMED_EXTENSION_GATEWAY_URL: input.extensionGatewayUrl ?? '',

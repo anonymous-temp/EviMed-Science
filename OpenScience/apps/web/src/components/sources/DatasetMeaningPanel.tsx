@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
+import { EvolutionPanel } from '@/components/evolution/EvolutionPanel';
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { semanticFacts } from "@evimed/domain";
 import { getWebProjectId } from "@/lib/apiClient";
 import { confirmDatasetMeaning, getDatasetMeaning, listDatasetMeanings, type DatasetMeaning, type DatasetMeaningAsset } from "@/lib/dataSemanticsClient";
@@ -60,6 +61,12 @@ function DatasetMeaningView({ projectId, datasetId, path, sha256 }: { projectId:
     finally { setBusy(false); }
   }, [projectId, datasetId]);
 
+  const evolutionDataset = useMemo(() => meaning ? {
+    fields: meaning.asset.tables.flatMap(table => table.variables.map(variable => ({ name: variable.name, type: variable.facts.type?.value, unit: variable.facts.unit?.value, coding: variable.facts.codeSystem?.value, categories: (variable.facts.allowedValues?.value as Array<{code: string}> | undefined)?.map(item => item.code) }))),
+    rowRepresents: meaning.asset.tables[0]?.facts.observationUnit?.value,
+    semanticsChecks: { checkedAt: meaning.asset.lastCheck?.checkedAt, passedFamilies: meaning.asset.lastCheck?.clean.map(item => item.family) ?? [], attentionFamilies: meaning.asset.lastCheck?.findings.filter(item => item.severity === "attention").map(item => item.family) ?? [], unavailableFamilies: meaning.asset.lastCheck?.notChecked.map(item => item.family) ?? [] },
+    semanticsChecksPassed: Boolean(meaning.asset.lastCheck && meaning.asset.lastCheck.summary.clean > 0 && meaning.asset.lastCheck.summary.attention === 0 && meaning.asset.lastCheck.summary.notChecked === 0),
+  } : {}, [meaning]);
   if (error) return <LoadError message={error} onRetry={() => setAttempt((value) => value + 1)} />;
   if (!meaning) return <div role="status" aria-label="正在加载数据含义" className="animate-pulse space-y-2"><div className="h-4 w-1/2 rounded bg-surface-2" /><div className="h-4 w-full rounded bg-surface-2" /></div>;
   const asset = meaning.asset;
@@ -69,6 +76,7 @@ function DatasetMeaningView({ projectId, datasetId, path, sha256 }: { projectId:
   const { summary } = meaning;
   return (
     <section className="space-y-4 text-ui text-text" aria-label="数据含义">
+      <EvolutionPanel projectId={projectId} dataset={evolutionDataset} />
       <div className="space-y-2">
         <h3 className="font-semibold">数据含义{asset.title ? ` · ${asset.title}` : ""}</h3>
         {outdated && <p className="max-w-measure font-medium">这份文件不是记录含义时读的那一版，下面的含义可能已不适用，先核对再用。</p>}

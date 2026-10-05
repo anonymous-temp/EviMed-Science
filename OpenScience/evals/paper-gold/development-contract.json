@@ -1,0 +1,885 @@
+{
+  "methodId": "cohort-state-transition",
+  "entrypointContract": "function(specification) -> {strategyName: {cost: finite number, qaly: finite number}}; preserve every supplied strategy key\nSpecification fields and shapes:\ninitial: Length-N nonnegative finite occupancy vector. Preserve its mass; do not normalize or replace it.\nstrategies: Object keyed by arbitrary strategy names. Evaluate every key independently; keys are not a fixed clinical vocabulary.\ntransitionMatrices: For each strategy, array of T matrices, each N by N. Matrix element [i][j] is the probability of moving from origin i to destination j. Rows sum to one. Matrices are in chronological order and may differ by cycle.\ncostRewards: For each strategy, one static N by N matrix, reused at all T+1 time points. Element [i][j] is cost earned for occupancy flow from origin i to destination j. It is not a cycle-by-state table.\nutilityRewards: Same static N by N flow-reward shape and indexing as costRewards, for QALYs; negative transition rewards are permitted.\ncostWeights: Length T+1 vector. Element 0 weights initial flow; element t weights transition t. Contains the complete supplied discount and correction factors; do not add another correction.\nutilityWeights: Same time indexing and length as costWeights, independently supplied.\nMathematical semantics:\nLet x[0] = initial and F[0][i][j] = initial[i] when i=j, otherwise zero. Initial diagonal flow contributes to both totals.\nFor t=1..T: F[t][i][j] = x[t-1][i] * transitionMatrices[t-1][i][j]; x[t][j] = sum_i F[t][i][j].\ncost = sum_{t=0..T} costWeights[t] * sum_{i,j} F[t][i][j] * costRewards[i][j]. qaly uses utilityWeights and utilityRewards analogously.\nUse every matrix element, including non-diagonal transition rewards. Do not substitute destination occupancy times a single state-reward row.\nReject incompatible dimensions or non-finite inputs clearly; do not guess a different tensor convention. The required interface uses 2D static reward matrices, not 3D reward tensors.\nInput boundaries: Initial occupancy must contain finite non-negative numbers; preserve its supplied total without normalization. Every transition probability must be finite and in [0,1], and each row must sum to 1 within the stated small numerical tolerance. A tolerance is not permission for out-of-range probabilities. Static flow rewards may include negative disutilities or net cost offsets; do not impose the narrower per-state utility convention on flow-reward matrices. Reject malformed dimensions and nonnumeric values rather than calculating.",
+  "basis": "Synthetic arithmetic known truth; development examples, not published-paper validation. Include initial diagonal flow rewards; subsequent flows equal prior occupancy times transition probabilities. Reward and discount weights are provided explicitly.",
+  "cases": [
+    {
+      "id": "toy-development-1",
+      "kind": "synthetic-development",
+      "input": {
+        "specification": {
+          "initial": [
+            1,
+            0
+          ],
+          "strategies": {
+            "soc": {
+              "transitionMatrices": [
+                [
+                  [
+                    0.9,
+                    0.1
+                  ],
+                  [
+                    0,
+                    1
+                  ]
+                ],
+                [
+                  [
+                    0.9,
+                    0.1
+                  ],
+                  [
+                    0,
+                    1
+                  ]
+                ]
+              ],
+              "costRewards": [
+                [
+                  100,
+                  0
+                ],
+                [
+                  100,
+                  0
+                ]
+              ],
+              "utilityRewards": [
+                [
+                  1,
+                  0
+                ],
+                [
+                  1,
+                  0
+                ]
+              ]
+            },
+            "a": {
+              "transitionMatrices": [
+                [
+                  [
+                    0.95,
+                    0.05
+                  ],
+                  [
+                    0,
+                    1
+                  ]
+                ],
+                [
+                  [
+                    0.95,
+                    0.05
+                  ],
+                  [
+                    0,
+                    1
+                  ]
+                ]
+              ],
+              "costRewards": [
+                [
+                  120,
+                  0
+                ],
+                [
+                  120,
+                  0
+                ]
+              ],
+              "utilityRewards": [
+                [
+                  1,
+                  0
+                ],
+                [
+                  1,
+                  0
+                ]
+              ]
+            }
+          },
+          "costWeights": [
+            1,
+            0.970873786407767,
+            0.9425959091337544
+          ],
+          "utilityWeights": [
+            1,
+            0.970873786407767,
+            0.9425959091337544
+          ]
+        }
+      },
+      "expected": {
+        "soc": {
+          "cost": 263.72890941653316,
+          "qaly": 2.6372890941653315
+        },
+        "a": {
+          "cost": 332.762748609671,
+          "qaly": 2.773022905080592
+        }
+      },
+      "absoluteTolerance": 1e-10
+    },
+    {
+      "id": "toy-development-2",
+      "kind": "synthetic-development",
+      "input": {
+        "specification": {
+          "initial": [
+            0.6,
+            0.4,
+            0
+          ],
+          "strategies": {
+            "soc": {
+              "transitionMatrices": [
+                [
+                  [
+                    0.7,
+                    0.2,
+                    0.1
+                  ],
+                  [
+                    0.1,
+                    0.7,
+                    0.2
+                  ],
+                  [
+                    0,
+                    0,
+                    1
+                  ]
+                ],
+                [
+                  [
+                    0.8,
+                    0.1,
+                    0.1
+                  ],
+                  [
+                    0.2,
+                    0.6,
+                    0.2
+                  ],
+                  [
+                    0,
+                    0,
+                    1
+                  ]
+                ]
+              ],
+              "costRewards": [
+                [
+                  10,
+                  25,
+                  0
+                ],
+                [
+                  10,
+                  25,
+                  0
+                ],
+                [
+                  10,
+                  25,
+                  0
+                ]
+              ],
+              "utilityRewards": [
+                [
+                  1,
+                  0.5,
+                  0
+                ],
+                [
+                  1,
+                  0.5,
+                  0
+                ],
+                [
+                  1,
+                  0.5,
+                  0
+                ]
+              ]
+            }
+          },
+          "costWeights": [
+            0.5,
+            1,
+            0.5
+          ],
+          "utilityWeights": [
+            0.5,
+            1,
+            0.5
+          ]
+        }
+      },
+      "expected": {
+        "soc": {
+          "cost": 28.415,
+          "qaly": 1.3555000000000001
+        }
+      },
+      "absoluteTolerance": 1e-10
+    },
+    {
+      "id": "toy-development-flow-rewards",
+      "kind": "synthetic-development",
+      "basis": "Independent two-state, one-transition arithmetic illustrating non-diagonal flow rewards; not a published-paper validation case. Initial contribution cost=2/qaly=1; transition contribution cost=6/qaly=0.375.",
+      "input": {
+        "specification": {
+          "initial": [
+            1,
+            0
+          ],
+          "strategies": {
+            "teaching-example": {
+              "transitionMatrices": [
+                [
+                  [
+                    0.5,
+                    0.5
+                  ],
+                  [
+                    0,
+                    1
+                  ]
+                ]
+              ],
+              "costRewards": [
+                [
+                  2,
+                  10
+                ],
+                [
+                  0,
+                  0
+                ]
+              ],
+              "utilityRewards": [
+                [
+                  1,
+                  -0.25
+                ],
+                [
+                  0,
+                  0
+                ]
+              ]
+            }
+          },
+          "costWeights": [
+            1,
+            1
+          ],
+          "utilityWeights": [
+            1,
+            1
+          ]
+        }
+      },
+      "expected": {
+        "teaching-example": {
+          "cost": 8,
+          "qaly": 1.375
+        }
+      },
+      "absoluteTolerance": 1e-10
+    },
+    {
+      "id": "public-boundary-negative-initial",
+      "kind": "synthetic-development",
+      "input": {
+        "specification": {
+          "initial": [
+            -1,
+            2
+          ],
+          "strategies": {
+            "soc": {
+              "transitionMatrices": [
+                [
+                  [
+                    0.9,
+                    0.1
+                  ],
+                  [
+                    0,
+                    1
+                  ]
+                ],
+                [
+                  [
+                    0.9,
+                    0.1
+                  ],
+                  [
+                    0,
+                    1
+                  ]
+                ]
+              ],
+              "costRewards": [
+                [
+                  100,
+                  0
+                ],
+                [
+                  100,
+                  0
+                ]
+              ],
+              "utilityRewards": [
+                [
+                  1,
+                  0
+                ],
+                [
+                  1,
+                  0
+                ]
+              ]
+            },
+            "a": {
+              "transitionMatrices": [
+                [
+                  [
+                    0.95,
+                    0.05
+                  ],
+                  [
+                    0,
+                    1
+                  ]
+                ],
+                [
+                  [
+                    0.95,
+                    0.05
+                  ],
+                  [
+                    0,
+                    1
+                  ]
+                ]
+              ],
+              "costRewards": [
+                [
+                  120,
+                  0
+                ],
+                [
+                  120,
+                  0
+                ]
+              ],
+              "utilityRewards": [
+                [
+                  1,
+                  0
+                ],
+                [
+                  1,
+                  0
+                ]
+              ]
+            }
+          },
+          "costWeights": [
+            1,
+            0.970873786407767,
+            0.9425959091337544
+          ],
+          "utilityWeights": [
+            1,
+            0.970873786407767,
+            0.9425959091337544
+          ]
+        }
+      },
+      "expectedRefusal": true,
+      "basis": "Predeclared public input-domain regression, not published-paper gold."
+    },
+    {
+      "id": "public-boundary-row-sum-above-one",
+      "kind": "synthetic-development",
+      "input": {
+        "specification": {
+          "initial": [
+            1,
+            0
+          ],
+          "strategies": {
+            "soc": {
+              "transitionMatrices": [
+                [
+                  [
+                    1.2,
+                    0.1
+                  ],
+                  [
+                    0,
+                    1
+                  ]
+                ],
+                [
+                  [
+                    0.9,
+                    0.1
+                  ],
+                  [
+                    0,
+                    1
+                  ]
+                ]
+              ],
+              "costRewards": [
+                [
+                  100,
+                  0
+                ],
+                [
+                  100,
+                  0
+                ]
+              ],
+              "utilityRewards": [
+                [
+                  1,
+                  0
+                ],
+                [
+                  1,
+                  0
+                ]
+              ]
+            },
+            "a": {
+              "transitionMatrices": [
+                [
+                  [
+                    0.95,
+                    0.05
+                  ],
+                  [
+                    0,
+                    1
+                  ]
+                ],
+                [
+                  [
+                    0.95,
+                    0.05
+                  ],
+                  [
+                    0,
+                    1
+                  ]
+                ]
+              ],
+              "costRewards": [
+                [
+                  120,
+                  0
+                ],
+                [
+                  120,
+                  0
+                ]
+              ],
+              "utilityRewards": [
+                [
+                  1,
+                  0
+                ],
+                [
+                  1,
+                  0
+                ]
+              ]
+            }
+          },
+          "costWeights": [
+            1,
+            0.970873786407767,
+            0.9425959091337544
+          ],
+          "utilityWeights": [
+            1,
+            0.970873786407767,
+            0.9425959091337544
+          ]
+        }
+      },
+      "expectedRefusal": true,
+      "basis": "Predeclared public input-domain regression, not published-paper gold."
+    },
+    {
+      "id": "public-boundary-negative-or-above-one-probability",
+      "kind": "synthetic-development",
+      "input": {
+        "specification": {
+          "initial": [
+            1,
+            0
+          ],
+          "strategies": {
+            "soc": {
+              "transitionMatrices": [
+                [
+                  [
+                    -0.1,
+                    1.1
+                  ],
+                  [
+                    0,
+                    1
+                  ]
+                ],
+                [
+                  [
+                    0.9,
+                    0.1
+                  ],
+                  [
+                    0,
+                    1
+                  ]
+                ]
+              ],
+              "costRewards": [
+                [
+                  100,
+                  0
+                ],
+                [
+                  100,
+                  0
+                ]
+              ],
+              "utilityRewards": [
+                [
+                  1,
+                  0
+                ],
+                [
+                  1,
+                  0
+                ]
+              ]
+            },
+            "a": {
+              "transitionMatrices": [
+                [
+                  [
+                    0.95,
+                    0.05
+                  ],
+                  [
+                    0,
+                    1
+                  ]
+                ],
+                [
+                  [
+                    0.95,
+                    0.05
+                  ],
+                  [
+                    0,
+                    1
+                  ]
+                ]
+              ],
+              "costRewards": [
+                [
+                  120,
+                  0
+                ],
+                [
+                  120,
+                  0
+                ]
+              ],
+              "utilityRewards": [
+                [
+                  1,
+                  0
+                ],
+                [
+                  1,
+                  0
+                ]
+              ]
+            }
+          },
+          "costWeights": [
+            1,
+            0.970873786407767,
+            0.9425959091337544
+          ],
+          "utilityWeights": [
+            1,
+            0.970873786407767,
+            0.9425959091337544
+          ]
+        }
+      },
+      "expectedRefusal": true,
+      "basis": "Predeclared public input-domain regression, not published-paper gold."
+    },
+    {
+      "id": "public-boundary-malformed-matrix",
+      "kind": "synthetic-development",
+      "input": {
+        "specification": {
+          "initial": [
+            1,
+            0
+          ],
+          "strategies": {
+            "soc": {
+              "transitionMatrices": [
+                [
+                  [
+                    1
+                  ],
+                  [
+                    0,
+                    1
+                  ]
+                ],
+                [
+                  [
+                    0.9,
+                    0.1
+                  ],
+                  [
+                    0,
+                    1
+                  ]
+                ]
+              ],
+              "costRewards": [
+                [
+                  100,
+                  0
+                ],
+                [
+                  100,
+                  0
+                ]
+              ],
+              "utilityRewards": [
+                [
+                  1,
+                  0
+                ],
+                [
+                  1,
+                  0
+                ]
+              ]
+            },
+            "a": {
+              "transitionMatrices": [
+                [
+                  [
+                    0.95,
+                    0.05
+                  ],
+                  [
+                    0,
+                    1
+                  ]
+                ],
+                [
+                  [
+                    0.95,
+                    0.05
+                  ],
+                  [
+                    0,
+                    1
+                  ]
+                ]
+              ],
+              "costRewards": [
+                [
+                  120,
+                  0
+                ],
+                [
+                  120,
+                  0
+                ]
+              ],
+              "utilityRewards": [
+                [
+                  1,
+                  0
+                ],
+                [
+                  1,
+                  0
+                ]
+              ]
+            }
+          },
+          "costWeights": [
+            1,
+            0.970873786407767,
+            0.9425959091337544
+          ],
+          "utilityWeights": [
+            1,
+            0.970873786407767,
+            0.9425959091337544
+          ]
+        }
+      },
+      "expectedRefusal": true,
+      "basis": "Predeclared public input-domain regression, not published-paper gold."
+    },
+    {
+      "id": "public-boundary-nonnumeric-initial",
+      "kind": "synthetic-development",
+      "input": {
+        "specification": {
+          "initial": [
+            "NaN",
+            0
+          ],
+          "strategies": {
+            "soc": {
+              "transitionMatrices": [
+                [
+                  [
+                    0.9,
+                    0.1
+                  ],
+                  [
+                    0,
+                    1
+                  ]
+                ],
+                [
+                  [
+                    0.9,
+                    0.1
+                  ],
+                  [
+                    0,
+                    1
+                  ]
+                ]
+              ],
+              "costRewards": [
+                [
+                  100,
+                  0
+                ],
+                [
+                  100,
+                  0
+                ]
+              ],
+              "utilityRewards": [
+                [
+                  1,
+                  0
+                ],
+                [
+                  1,
+                  0
+                ]
+              ]
+            },
+            "a": {
+              "transitionMatrices": [
+                [
+                  [
+                    0.95,
+                    0.05
+                  ],
+                  [
+                    0,
+                    1
+                  ]
+                ],
+                [
+                  [
+                    0.95,
+                    0.05
+                  ],
+                  [
+                    0,
+                    1
+                  ]
+                ]
+              ],
+              "costRewards": [
+                [
+                  120,
+                  0
+                ],
+                [
+                  120,
+                  0
+                ]
+              ],
+              "utilityRewards": [
+                [
+                  1,
+                  0
+                ],
+                [
+                  1,
+                  0
+                ]
+              ]
+            }
+          },
+          "costWeights": [
+            1,
+            0.970873786407767,
+            0.9425959091337544
+          ],
+          "utilityWeights": [
+            1,
+            0.970873786407767,
+            0.9425959091337544
+          ]
+        }
+      },
+      "expectedRefusal": true,
+      "basis": "Predeclared public input-domain regression, not published-paper gold."
+    }
+  ],
+  "interfaceVersion": "cohort-flow-rewards-v1",
+  "specificationContract": {
+    "initial": "Length-N nonnegative finite occupancy vector. Preserve its mass; do not normalize or replace it.",
+    "strategies": "Object keyed by arbitrary strategy names. Evaluate every key independently; keys are not a fixed clinical vocabulary.",
+    "transitionMatrices": "For each strategy, array of T matrices, each N by N. Matrix element [i][j] is the probability of moving from origin i to destination j. Rows sum to one. Matrices are in chronological order and may differ by cycle.",
+    "costRewards": "For each strategy, one static N by N matrix, reused at all T+1 time points. Element [i][j] is cost earned for occupancy flow from origin i to destination j. It is not a cycle-by-state table.",
+    "utilityRewards": "Same static N by N flow-reward shape and indexing as costRewards, for QALYs; negative transition rewards are permitted.",
+    "costWeights": "Length T+1 vector. Element 0 weights initial flow; element t weights transition t. Contains the complete supplied discount and correction factors; do not add another correction.",
+    "utilityWeights": "Same time indexing and length as costWeights, independently supplied."
+  },
+  "mathematicalContract": [
+    "Let x[0] = initial and F[0][i][j] = initial[i] when i=j, otherwise zero. Initial diagonal flow contributes to both totals.",
+    "For t=1..T: F[t][i][j] = x[t-1][i] * transitionMatrices[t-1][i][j]; x[t][j] = sum_i F[t][i][j].",
+    "cost = sum_{t=0..T} costWeights[t] * sum_{i,j} F[t][i][j] * costRewards[i][j]. qaly uses utilityWeights and utilityRewards analogously.",
+    "Use every matrix element, including non-diagonal transition rewards. Do not substitute destination occupancy times a single state-reward row.",
+    "Reject incompatible dimensions or non-finite inputs clearly; do not guess a different tensor convention. The required interface uses 2D static reward matrices, not 3D reward tensors.",
+    "Initial occupancy must contain finite non-negative numbers; preserve its supplied total without normalization. Every transition probability must be finite and in [0,1], and each row must sum to 1 within the stated small numerical tolerance. A tolerance is not permission for out-of-range probabilities. Static flow rewards may include negative disutilities or net cost offsets; do not impose the narrower per-state utility convention on flow-reward matrices. Reject malformed dimensions and nonnumeric values rather than calculating."
+  ]
+}

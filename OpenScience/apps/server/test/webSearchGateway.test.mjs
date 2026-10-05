@@ -300,8 +300,8 @@ function fakeLedger({ refuse = null } = {}) {
 const caller = { userId: "alice", projectId: "paper1", runId: null, dailyLimit: 0, weeklyLimit: 0 };
 const identifying = { assertActiveModelGatewayToken: () => caller };
 
-async function metered(config, fetchImpl, usageLedger, { attributeRun = async () => "run-7" } = {}) {
-  const handler = createWebSearchGatewayHandler(config, identifying, { fetchImpl, usageLedger, attributeRun });
+async function metered(config, fetchImpl, usageLedger, { attributeRun = async () => "run-7", runPurpose = null } = {}) {
+  const handler = createWebSearchGatewayHandler(config, identifying, { fetchImpl, usageLedger, attributeRun, runPurpose });
   const res = response();
   await handler(request({ query: "司美格鲁肽 说明书" }), res);
   return res;
@@ -415,4 +415,19 @@ test("the node's SearXNG is searched first, and this host's answers when the nod
   res = response();
   await noNode(request({ query: "semaglutide" }), res);
   assert.deepEqual(res.json().data.results.map((row) => row.url), ["https://example.org/local"], "no node configured, the edge URL is ignored");
+});
+
+test("trusted evolution run purpose reserves paid search against its own budget", async () => {
+  const ledger = fakeLedger();
+  let identity;
+  const res = await metered({ ...withBailian, evolutionDailyBudgetCny: 7, userDailySpendLimit: 1, userWeeklySpendLimit: 2, userRunSpendLimit: 0.01 }, async url => String(url).startsWith("https://dashscope.aliyuncs.com/")
+    ? searxngResponse({ output: { search_info: { search_results: [] } }, usage: { input_tokens: 10, output_tokens: 1 } })
+    : searxngResponse({ results: [] }), ledger, { runPurpose: async input => { identity = input; return "evolution"; } });
+  assert.equal(res.statusCode, 200);
+  assert.deepEqual(identity, { userId: "alice", projectId: "paper1", runId: "run-7" });
+  const reserve = ledger.calls.find(([kind]) => kind === "reserve")[1];
+  assert.equal(reserve.purpose, "evolution");
+  assert.equal(reserve.dailyLimit, 7);
+  assert.equal(reserve.weeklyLimit, 0);
+  assert.equal(reserve.runLimit, 0);
 });

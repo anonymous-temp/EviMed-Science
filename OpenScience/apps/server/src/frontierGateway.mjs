@@ -251,11 +251,11 @@ export function frontierGatewayProviderUrl(config) {
 /**
  * @param {any} config
  * @param {any} runtimeManager
- * @param {{ service: any, report?: (code: string) => void, budgetMs?: number }} dependencies the frontier service,
+ * @param {{ service: any, evaluationIsolation?: any, report?: (code: string) => void, budgetMs?: number }} dependencies the frontier service,
  *   or null when the module is off; `report` hears the code of a failure the run is only told was one; `budgetMs`
  *   is the plan's five seconds everywhere but in a test that would otherwise wait them out
  */
-export function createFrontierGatewayHandler(config, runtimeManager, { service, report = () => {}, budgetMs = answerBudgetMs }) {
+export function createFrontierGatewayHandler(config, runtimeManager, { service, report = () => {}, budgetMs = answerBudgetMs, evaluationIsolation = null }) {
   const windows = new Map();
   return async function frontierGatewayHandler(req, res, onFailure) {
     try {
@@ -293,7 +293,7 @@ export function createFrontierGatewayHandler(config, runtimeManager, { service, 
           timer.unref?.();
         }),
       ]).finally(() => clearTimeout(timer));
-      sendJson(res, 200, { data: result });
+      sendJson(res, 200, { data: evaluationIsolation ? await evaluationIsolation.filter(identity, "frontier-knowledge-plugin", result) : result });
     } catch (error) {
       const known = error instanceof FrontierGatewayError;
       const status = known ? error.status : 503;

@@ -101,6 +101,11 @@ COPY --from=build /app/packages/socket/presets/evimed-universal/agent.cordis.yml
 # a missing file the day the module first meets real data.
 COPY --from=build /app/scripts/vcr ./scripts/vcr
 COPY --from=build /app/content/evidence ./content/evidence
+# Public evaluator code and capability dependency inventory; hidden case bodies are deployment state.
+COPY --from=build /app/evals/paper-gold/*.mjs ./evals/paper-gold/
+COPY --from=build /app/evals/paper-gold/economics-reference-manifest.json /app/evals/paper-gold/calibration-manifest.json /app/evals/paper-gold/calibration-replacements.json /app/evals/paper-gold/scoped-research-manifest.json /app/evals/paper-gold/aggregate-candidate-cards.json /app/evals/paper-gold/aligned-faers-manifest.json /app/evals/paper-gold/score_existing_methods.py /app/evals/paper-gold/aggregate_reference.py /app/evals/paper-gold/darth_reference_export.R ./evals/paper-gold/
+COPY --from=build /app/evals/paper-gold/development-contract.json /app/evals/paper-gold/diagnostic-posterior-development.json /app/evals/paper-gold/decision-net-benefit-development.json ./evals/paper-gold/
+COPY --from=build /app/evals/tool-graph/*.json ./evals/tool-graph/
 COPY --from=build /app/evals/method-quality ./evals/method-quality
 COPY --from=build /app/evals/evidence-appraisal/briefs.json ./evals/evidence-appraisal/briefs.json
 COPY --from=build /app/evals/evidence-appraisal/hidden ./evals/evidence-appraisal/hidden

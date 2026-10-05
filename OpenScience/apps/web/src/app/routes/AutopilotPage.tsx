@@ -1,3 +1,4 @@
+import { EvolutionOpportunities } from '@/components/evolution/EvolutionOpportunities';
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { ArrowLeft, ArrowUp, CalendarClock, Plus, RefreshCw } from "lucide-react";
@@ -250,6 +251,7 @@ function ProjectAutopilotPage({ projectId }: { projectId: string }) {
       {agendas === null ? <FilesSkeleton /> : <div className="space-y-6">
         {railList("即将执行", scheduled)}{railList("已暂停 / 已完成", inactive)}
         {visible.length === 0 && !error && <p className="px-3 text-ui text-text-3">{search ? "没有匹配的任务" : "还没有定时任务"}</p>}
+        <EvolutionOpportunities projectId={projectId} onAdopted={id => { void load(); select(id); }} />
         <section aria-label="推荐" className="space-y-2"><h2 className="px-3 text-caption font-medium text-text-3">推荐</h2><ul className="space-y-1">{RECOMMENDATIONS.map(item => <li key={item.title}><Button variant="text" aria-label={item.title} className="h-auto w-full flex-col items-start whitespace-normal px-3 py-2 text-left" onClick={() => setEditor({ recommendation: item })}><span className="text-ui font-normal text-text-2">{item.title}</span><span className="line-clamp-1 text-caption font-normal text-text-3">{item.prompt}</span></Button></li>)}</ul></section>
       </div>}
     </aside>

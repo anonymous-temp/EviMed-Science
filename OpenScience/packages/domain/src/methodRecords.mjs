@@ -19,6 +19,7 @@
  * Kept off the package index on purpose: the web bundle imports the index and has
  * no use for twenty kilobytes of method text.
  */
+import { evolutionMethodFields } from './evolution.mjs'
 import methodRecordsData from './method-records.json' with { type: 'json' }
 
 /** The records by method id. Readers must not mutate them. */
@@ -44,3 +45,9 @@ export const METHOD_REFUSAL_CODES = Object.freeze(new Set(
  * wrong type, an input too large): not a method's refusal, but as much a reason the researcher can act on.
  */
 export const ENGINE_INPUT_CODES = Object.freeze(new Set(['replay_input_invalid', 'replay_input_too_large']))
+
+/** Evolution dossier fields supplement immutable admitted records without changing their numeric digest. @param {string} method @param {any} fields */
+export function methodRecordWithEvolution(method, fields = {}) {
+  const record = methodRecord(method)
+  return record ? { ...record, ...evolutionMethodFields(fields) } : null
+}

@@ -4,19 +4,11 @@ import { HttpError } from "./security.mjs";
 /**
  * Proving a code skill runs before it is mounted into anyone's project.
  *
- * Hidden knowledge: the plan called for a new privileged controller operation,
- * `runtime.exec-verify`, behind a protocol-version bump. This was built to run
- * through the controller's `/v1/kernel/run` instead — the computational
- * notebook's cell executor, which already ran code under the project's
- * sandbox, workspace bound and output cap, exactly what a code skill's self
- * test needs. That route was deleted with the notebook on 2026-09-19, while
- * nothing called this module yet. So the executor is the caller's to supply,
- * and wiring verification in means adding the plan's own operation after all:
- * one privileged execution path, audited for this use.
- *
- * So verification is a composition, not a capability: the static checks the
- * domain already decides, then the script's own `__main__` block and its test
- * file run through the executor the caller injects.
+ * The privileged protocol-12 exec-verify operation runs immutable candidate
+ * files in a disposable no-network container. The executor remains injected
+ * so tests can distinguish unavailable execution from a failed self test.
+ * Self tests prove executability; the independently isolated evaluator decides
+ * scientific correctness and publication.
  *
  * The result is a verdict, never a mount. A script that passes here is still a
  * candidate; passing its own test says it runs, not that it helps.
@@ -55,12 +47,12 @@ export function codeSkillGroups(files) {
 }
 
 /**
- * Run the static checks and then the script's own tests inside the project's
- * container.
+ * Run the static checks and then the script's own tests in the injected
+ * disposable executor.
  *
  * `runKernel` is injected rather than imported so this is testable without a
  * container, and because the only caller that has one is the composition root.
- * @param {{files: Record<string, string>, project: any, runKernel: (project: any, code: string, signal?: any, language?: string) => Promise<any>, signal?: any}} input
+ * @param {{files: Record<string, string>, project: any, runKernel: (project: any, code: string, signal?: any, language?: string) => Promise<any>, signal?: any, runFiles?: (group: any, stem: string) => Promise<any>}} input
  * @returns {Promise<CodeSkillVerdict>}
  */
 export async function verifyCodeSkill(input) {
@@ -81,14 +73,15 @@ export async function verifyCodeSkill(input) {
       });
       continue;
     }
-    issues.push(...scriptStaticIssues(files[group.script], group.script));
+    const staticSource=files[group.script].replace(/^\uFEFF/, "");
+    issues.push(...scriptStaticIssues(staticSource, group.script));
     let parsed = null;
     try {
       parsed = JSON.parse(files[group.config]);
     } catch {
       issues.push({ code: "method_tool_config_invalid", message: `${group.config} is not valid JSON.`, path: group.config });
     }
-    if (parsed) issues.push(...toolConfigIssues(files[group.script], parsed, group.config, stem));
+    if (parsed) issues.push(...toolConfigIssues(staticSource, parsed, group.config, stem));
   }
   // Nothing is executed while a static check is failing. Running a script that
   // names an absent module or an absolute path only produces a second, less
@@ -109,7 +102,7 @@ export async function verifyCodeSkill(input) {
     ].join("\n");
     let result;
     try {
-      result = await input.runKernel(input.project, program, input.signal, "python");
+      result = input.runFiles ? await input.runFiles(group, stem) : await input.runKernel(input.project, program, input.signal, "python");
     } catch (error) {
       throw new HttpError(503, "code_skill_verification_unavailable",
         `The runtime could not execute the ${stem} self test: ${error?.code ?? error?.message ?? "unavailable"}`);

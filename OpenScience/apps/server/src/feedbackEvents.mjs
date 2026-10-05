@@ -255,11 +255,12 @@ export function memoryFeedbackEvents(before, after) {
 
 /** Append-only feedback ledger, and the one producer that reads it. */
 export class FeedbackEvents {
-  /** @param {{database:any,jobs?:any,now?:()=>Date}} dependencies */
-  constructor({ database, jobs = null, now = () => new Date() }) {
+  /** @param {{database:any,jobs?:any,now?:()=>Date,onRecorded?:((event:any)=>Promise<any>)|null}} dependencies */
+  constructor({ database, jobs = null, now = () => new Date(), onRecorded = null }) {
     this.database = database;
     this.jobs = jobs;
     this.now = now;
+    this.onRecorded = onRecorded;
   }
 
   /**
@@ -303,6 +304,7 @@ export class FeedbackEvents {
     // The producer runs on every record, not only the first, so a replay after
     // a crash between the append and the enqueue still reaches the queue.
     const distillJob = await this.#distill(recorded);
+    await this.onRecorded?.(recorded);
     return { event: recorded, created, distillJob };
   }
 

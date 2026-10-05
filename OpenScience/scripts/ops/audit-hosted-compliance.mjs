@@ -444,7 +444,7 @@ export function controllerLaunchPlanIsScoped(source) {
   const allowed = compact.match(/constallowed=url\.pathname===["']\/v1\/runtime\/start["']\?(\[[^\]]*\])/);
   let fields;
   try { fields = JSON.parse((allowed?.[1] ?? "null").replace(/'/g, '"')); } catch { return false; }
-  const expected = ["userId", "projectId", "activeWorkspace", "port", "password", "capsuleGatewayUrl", "revisionGatewayUrl", "publicSourceGatewayUrl", "pluginConfig", "personalSkillGeneration", "extensionGeneration"].sort();
+  const expected = ["userId", "projectId", "activeWorkspace", "port", "password", "capsuleGatewayUrl", "revisionGatewayUrl", "publicSourceGatewayUrl", "pluginConfig", "platformSkillGeneration", "personalSkillGeneration", "extensionGeneration"].sort();
   return Array.isArray(fields) && JSON.stringify(fields.sort()) === JSON.stringify(expected)
     && /functionassertExactKeys\(value,allowed\)\{constallowlist=newSet\(allowed\);constunexpected=Object\.keys\(value\?\?\{\}\)\.find\(\(key\)=>!allowlist\.has\(key\)\);if\(unexpected\)\{throwcontrollerFailure\(400,["']runtime_controller_payload_invalid["'],/.test(compact)
     && compact.includes("assertExactKeys(payload,allowed);constproject=awaitprojectFromReference(config,payload);")
@@ -461,13 +461,14 @@ export function controllerLaunchPlanIsScoped(source) {
     && compact.includes("assertExtensionAssessmentAuthority(assessmentAuthority);")
     && compact.includes("constverifyGeneration=(project,reference)=>verifyExtensionGeneration(config,project,reference,{assessmentAuthority});")
     && launch.includes("constextension=payload.extensionGeneration?awaitverifyGeneration(project,payload.extensionGeneration):null;")
+    && launch.includes("constplatform=payload.platformSkillGeneration?awaitverifyPlatformSkillGeneration(config,payload.platformSkillGeneration):null;")
     && launch.includes("constpersonal=payload.personalSkillGeneration?awaitverifyPersonalSkillGeneration(config,project,payload.personalSkillGeneration):null;")
     && launch.includes("canonicalJson(extension.projection.personal.reference)!==canonicalJson(payload.personalSkillGeneration??null)")
     && launch.includes("inspectRuntimeImage(config).imageId!==extension.identity.baseRuntimeImageDigest")
-    && launch.includes("constplan=buildRuntimeLaunchPlan(config,project,port,{capsuleGatewayUrl,revisionGatewayUrl,publicSourceGatewayUrl,pluginConfig,personalSkillGeneration:personal?.reference??null,personalSkillImageId:personal?.identity.baseRuntimeImageDigest??null,extensionGeneration:extension?.reference??null,extensionImageId:extension?.identity.baseRuntimeImageDigest??null});")
+    && launch.includes("constplan=buildRuntimeLaunchPlan(config,project,port,{capsuleGatewayUrl,revisionGatewayUrl,publicSourceGatewayUrl,pluginConfig,platformSkillGeneration:platform?.reference??null,personalSkillGeneration:personal?.reference??null,personalSkillImageId:personal?.identity.baseRuntimeImageDigest??null,extensionGeneration:extension?.reference??null,extensionImageId:extension?.identity.baseRuntimeImageDigest??null});")
     && (launch.match(/buildRuntimeLaunchPlan\(/g) ?? []).length === 1
     && launch.includes("spawn(plan.command,plan.args,{")
-    && !/\bpayload\b/.test(body.replace(/\bpayload\s*\.\s*(?:port|password|capsuleGatewayUrl|revisionGatewayUrl|publicSourceGatewayUrl|pluginConfig|personalSkillGeneration|extensionGeneration)\b/g, ""));
+    && !/\bpayload\b/.test(body.replace(/\bpayload\s*\.\s*(?:port|password|capsuleGatewayUrl|revisionGatewayUrl|publicSourceGatewayUrl|pluginConfig|platformSkillGeneration|personalSkillGeneration|extensionGeneration)\b/g, ""));
 }
 
 async function checkRuntimeContainerTopology() {

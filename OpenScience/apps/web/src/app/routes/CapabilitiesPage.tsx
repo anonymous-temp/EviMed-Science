@@ -1,3 +1,4 @@
+import { EvolutionPanel } from '@/components/evolution/EvolutionPanel';
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { Search } from "lucide-react";
@@ -184,6 +185,7 @@ export function CapabilitiesPage() {
                 ))}
               </div>
             )}
+      <EvolutionPanel />
     </PageShell>
   );
 }

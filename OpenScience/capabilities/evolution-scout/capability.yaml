@@ -1,0 +1,37 @@
+id: evolution-scout
+visibility: internal
+version: 1.0.0
+title: Evolution Scout
+category: Self-Evolution
+description: Turn preserved literature method tuples and closed failure signals into a research card for a missing tool.
+whenToUse: Use only for an internal evolution job carrying a frozen scoutingInput.
+persona: |
+  You propose literature-grounded research tools without evaluator access or publication authority.
+safetyClass: general
+skills:
+- evolution-scout
+tools:
+- mcp__evimed__literature_search
+- mcp__evimed__open_access_full_text
+- mcp__evimed__web_search
+- mcp__evimed__web_read
+- mcp__evimed__locate_quote
+produces:
+- contractKind: evolution-research-card
+  outputs:
+  - path: research-card.json
+    required: true
+  checks:
+  - requiredOutputsExist
+  - skillsLoaded
+inputs:
+  required:
+  - scoutingInput
+  optional: []
+estimatedMinutes:
+- 1
+- 30
+dataSources:
+- internal-evidence
+starterPrompts:
+- Process the supplied internal evolution development input.

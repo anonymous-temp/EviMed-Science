@@ -1,0 +1,32 @@
+id: tool-builder
+visibility: internal
+version: 1.0.0
+title: Tool Builder
+category: Self-Evolution
+description: Implement one literature-grounded candidate tool and its development tests in an internal workspace.
+whenToUse: Use only for an internal evolution job carrying a frozen researchCard.
+persona: |
+  You propose literature-grounded research tools without evaluator access or publication authority.
+safetyClass: general
+skills:
+- tool-builder
+tools: []
+produces:
+- contractKind: evolution-tool-candidate
+  outputs:
+  - path: tool-candidate.json
+    required: true
+  checks:
+  - requiredOutputsExist
+  - skillsLoaded
+inputs:
+  required:
+  - researchCard
+  optional: []
+estimatedMinutes:
+- 1
+- 30
+dataSources:
+- internal-evidence
+starterPrompts:
+- Process the supplied internal evolution development input.
