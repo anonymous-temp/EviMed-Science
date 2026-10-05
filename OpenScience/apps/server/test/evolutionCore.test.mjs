@@ -109,6 +109,36 @@ test('five independent reproduced papers require actual pinned calls and cannot 
   assert.equal((await f.service.list('research-proof')).length, 5);
 });
 
+test('V3 counts the papers a tool failed beside the ones it reproduced', async () => {
+  const { reproductionRateLowerBound } = await import('../src/evolutionResearchPromotion.mjs');
+  // Five of five is the least that qualifies; a failure among six does not; it takes seven of eight.
+  assert.ok(Math.abs(reproductionRateLowerBound(5, 5) - 0.05 ** (1 / 5)) < 1e-9);
+  assert.ok(reproductionRateLowerBound(5, 6) < 0.5 && reproductionRateLowerBound(6, 7) < 0.5 && reproductionRateLowerBound(7, 8) >= 0.5 && reproductionRateLowerBound(5, 100) < 0.03);
+  const f = fixture(); await f.service.registerTool({ id: 'research-tool', track: 'E', artifactDigest: 'pin' });
+  const cycle = async (papers, valid) => {
+    const units = [];
+    for (const paper of papers) for (let replicate = 0; replicate < 2; replicate++) {
+      const run = `run-${paper}-${replicate}-${valid}`;
+      units.push({ type: 'research', group: 'holdout', caseId: `case-${paper}`, variant: 0, publishedPaperId: `10.1234/paper${paper}`, producerRunId: run, producerProjectId: 'eval', goldSourceHash: 'a'.repeat(64), fullResearchReproductionValid: valid,
+        ...(valid ? { codeVerified: true, verificationProof: { kind: 'isolated-independent-replay', replicates: 2, proofHash: 'f'.repeat(64), sourceHash: 'a'.repeat(64) } } : { codeVerified: false }), independent: true, retracted: false, exposureTier: 'unexposed' });
+      await f.service.save('use', run, { projectId: 'eval', runId: run, toolId: 'research-tool', digest: 'pin', result: { ok: true } }, null, 'operator');
+    }
+    return recordResearchPromotion({ service: f.service, userId: 'operator', toolId: 'research-tool', artifactDigest: 'pin', report: { units }, canonicalize: async id => ({ verified: true, canonicalId: String(id) }) });
+  };
+  // Twenty papers the tool did not reproduce used to leave no trace at all.
+  const failures = await cycle(Array.from({ length: 20 }, (_, index) => `f${index}`), false);
+  assert.deepEqual({ papers: failures.papers, attempted: failures.attempted, failed: failures.failed, status: failures.status }, { papers: 0, attempted: 20, failed: 20, status: 'waiting' });
+  // Then five it did: five passes ever was V3. It is 5 of 25 now, and it is not.
+  const five = await cycle([1, 2, 3, 4, 5], true);
+  assert.deepEqual({ papers: five.papers, attempted: five.attempted, failed: five.failed, status: five.status, level: five.validationLevel }, { papers: 5, attempted: 25, failed: 20, status: 'waiting', level: 'V0' });
+  assert.ok(five.reproductionRateLowerBound < 0.1);
+  // Trying a failed paper again cannot turn its first measured outcome into a pass.
+  const retried = await cycle(['f0', 'f1', 'f2'], true);
+  assert.deepEqual({ papers: retried.papers, failed: retried.failed }, { papers: 5, failed: 20 });
+  const tool = await f.service.get('research-tool'), assessment = tool.payload.assessments.find(row => row.kind === 'research');
+  assert.deepEqual({ papers: assessment.papers, passed: assessment.passed, failures: assessment.failureIds.length }, { papers: 5, passed: false, failures: 20 });
+});
+
 test('shared leads discard researcher prose and tenant events retain owner/project', async () => {
   const f = fixture(); const lead = await f.service.addLead({ track: 'U', source: 'autopilot', gapCode: 'connector', code: 'private patient narrative', method: 'private secret' });
   assert.equal(lead.payload.code, 'connector'); assert.equal(lead.payload.method, undefined);
