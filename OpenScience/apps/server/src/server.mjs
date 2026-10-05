@@ -5469,7 +5469,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         // after routing, so the estimate is the capability's own; before a run
         // exists, so nothing under way is ever interrupted; and never again. A
         // credits service that cannot be reached admits the start.
-        if (credits) await credits.service.assertBalanceForStart(ctx.user.id, effectiveAgent?.agentId ?? null);
+        // A replay of a dispatch that already started — the first answer was lost — is the run that exists, and
+        // asks nothing: the allowance its own start used up must not refuse it (review F8).
+        if (credits && !(await agentRuns.list(ctx.project)).some((existing) => existing.dispatchId === body.dispatchId)) {
+          await credits.service.assertBalanceForStart(ctx.user.id, effectiveAgent?.agentId ?? null);
+        }
         const dispatch = () => agentRuns.dispatch(ctx.project, {
           sessionId: body.sessionId,
           dispatchId: body.dispatchId,
@@ -6390,7 +6394,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     balanceGate: credits ? async (project, payload) => {
       const sessionId = payload?.args?.request?.sessionId;
       const binding = typeof sessionId === "string" ? await researchSessions.get(project, sessionId).catch(() => null) : null;
-      await credits.service.assertBalanceForStart(project.userId, binding?.mode === "specialist" ? binding.agentId : null);
+      // A follow-up typed into a conversation a run is working in is asked against what that run does not itself hold.
+      const working = typeof sessionId === "string"
+        ? (await agentRuns.list(project).catch(() => [])).find((run) => run.sessionId === sessionId && run.status === "running") : null;
+      await credits.service.assertBalanceForStart(project.userId, binding?.mode === "specialist" ? binding.agentId : null, { ignoreHoldOf: working?.id ?? null });
     } : null,
     recordPromptActor: recordExtensionPromptActor,
     bindResultRevision: resultRevisions ? (user, project, request) => resultRevisions.bind(user.id, project, request) : null,

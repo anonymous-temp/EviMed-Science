@@ -261,6 +261,22 @@ test("the start check compares in exact units: an estimate of ¥0.40 is 0.40 and
   assert.equal((await w.service.assertBalanceForStart(w.userId, null)).allowed, true);
 });
 
+test("a run's own hold is not counted against its own follow-up: the start check can leave one run's hold out (review F8)", options, async () => {
+  const w = await world({ startCredits: 10 });
+  const capability = `test-cap-${randomUUID().slice(0, 8)}`;
+  for (const requested of ["4", "4", "4", "4", "9"]) {
+    await database.query(`INSERT INTO evimed_credits.settlements(run_id,user_id,capability_id,memo,cost_cny,credits,credits_per_cny,status,wallet,requested,wallet_contract,charge_basis,settled_at)
+      VALUES($1,$2,$3,'history',$4,$4,1,'settled','simulated',$4,'precision-v1','completed',now())`, [`run_${randomUUID()}`, w.userId, capability, requested]);
+  }
+  const running = `run_${randomUUID()}`;
+  // P50 is 4 and P90 is 7: the run's hold takes 7 of 10, leaving 3.
+  assert.deepEqual(await w.service.holdForRun({ userId: w.userId, runId: running, capabilityId: capability, startedAt: w.time.now().toISOString() }), { held: "7.00000000" });
+  await assert.rejects(w.service.assertBalanceForStart(w.userId, capability), { code: "simulated_credits_exhausted" }, "another start is asked against what is left");
+  const admitted = await w.service.assertBalanceForStart(w.userId, capability, { ignoreHoldOf: running });
+  assert.deepEqual([admitted.allowed, admitted.balanceDecimal], [true, "10.00000000"], "the run's own follow-up is asked against what the run does not itself hold");
+  await assert.rejects(w.service.assertBalanceForStart(w.userId, capability, { ignoreHoldOf: "run_somebody_else" }), { code: "simulated_credits_exhausted" });
+});
+
 test("a commissioned run freezes its P90 (or what is available), shows it as frozen, and lets it go at every end; a plain question takes none", options, async () => {
   const w = await world({ startCredits: 10 });
   const capability = `test-cap-${randomUUID().slice(0, 8)}`;

@@ -197,6 +197,27 @@ test("a top-up adds simulated credits once per request, shows in statements and 
   assert.deepEqual((await f.get("/api/simulated-wallet/orders", stranger)).body.data.items, []);
 });
 
+test("a replay of a dispatch that already started is answered, not refused by the allowance its own start used up (review F8)", options, async (t) => {
+  const f = await fixture(t);
+  const owner = await f.signIn();
+  const wallet = new SimulatedWallet({ database: f.database, startCredits: START });
+  const payer = await f.payerOf(owner.user.id);
+  assert.equal((await f.send("PUT", `/api/research-sessions/ses_replay`, owner, { mode: "open-domain" })).status, 200);
+  const dispatchId = `turn_${randomUUID().slice(0, 8)}`;
+  const first = await f.send("POST", "/api/agent-runs/dispatch", owner, { sessionId: "ses_replay", dispatchId, text: "你好" });
+  assert.ok([200, 202].includes(first.status), JSON.stringify(first.body));
+  // The first answer was lost, and by now the account has nothing available — as when the run's own hold froze what was left.
+  const left = (await wallet.snapshot(payer)).balance;
+  await wallet.settle({ payer, requestId: `run_${randomUUID()}`, amount: left });
+  assert.equal((await wallet.snapshot(payer)).available, "0.00000000");
+  const again = await f.send("POST", "/api/agent-runs/dispatch", owner, { sessionId: "ses_replay", dispatchId, text: "你好" });
+  assert.ok([200, 202].includes(again.status), `the same dispatch, asked again: ${again.status} ${again.body?.code}`);
+  assert.equal(again.body.data.id, first.body.data.id, "it is the run that exists");
+  // A new dispatch is still asked, and still refused for an empty allowance.
+  const fresh = await f.send("POST", "/api/agent-runs/dispatch", owner, { sessionId: "ses_replay", dispatchId: `turn_${randomUUID().slice(0, 8)}`, text: "再问一个" });
+  assert.deepEqual([fresh.status, fresh.body.code], [402, "simulated_credits_exhausted"]);
+});
+
 test("a run's charge is taken and its hold released even when a step of its completion throws before the settlement (review F7)", options, async (t) => {
   const f = await fixture(t);
   const owner = await f.signIn();

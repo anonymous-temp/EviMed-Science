@@ -1260,10 +1260,11 @@ export class EvimedCreditsService {
    * The platform's wallet answers `available` (what can be used), `balance` (what is
    * held), `purchased`, `gifted`, `frozen` and `nextExpiry`, all exact decimal strings;
    * EviMed's answers whole-credit numbers `balance` and `frozen`.
-   * @param {string} userId
+   * @param {string} userId @param {{ ignoreHoldOf?: string | null }} [options] `ignoreHoldOf` leaves one run's own hold out of
+   *   what is frozen (the question its own follow-up is asked)
    * @returns {Promise<Record<string, any>>}
    */
-  async balanceFor(userId) {
+  async balanceFor(userId, { ignoreHoldOf = null } = {}) {
     const kind = this.simulated ? { simulated: true } : {};
     if (!this.enabled) {
       return { balance: null, frozen: null, unit: "灵豆", ...kind,
@@ -1278,7 +1279,7 @@ export class EvimedCreditsService {
         return { balance: null, frozen: null, unit: "灵豆", status: "evimed_credits_account_unlinked", ...kind };
       }
       if (this.simulated) {
-        const wallet = await this.simulator.snapshot(evimedUserId);
+        const wallet = await this.simulator.snapshot(evimedUserId, { ignoreHoldOf });
         return { ...wallet, unit: "灵豆", status: "ok", ...kind };
       }
       const answer = await this.client.balance(evimedUserId);
@@ -1309,10 +1310,11 @@ export class EvimedCreditsService {
    * interrupted for money: that is settled afterwards, by taking what is there.
    *
    * @param {string} userId @param {string | null | undefined} capabilityId
-   * @param {{ unattended?: boolean }} [options]
+   * @param {{ unattended?: boolean, ignoreHoldOf?: string | null }} [options] `ignoreHoldOf` is the run whose own hold is
+   *   not counted against the start: a follow-up typed into the conversation that run is working in
    * @returns {Promise<{ allowed: true, reason?: string, balance?: number, balanceDecimal?: string, estimate?: any }>}
    */
-  async assertBalanceForStart(userId, capabilityId, { unattended = false } = {}) {
+  async assertBalanceForStart(userId, capabilityId, { unattended = false, ignoreHoldOf = null } = {}) {
     if (!this.#wired()) return { allowed: true, reason: this.failure ? "billing_unavailable" : "not_enabled" };
     // The policy's activation is persisted before research is accepted. A module
     // that cannot do that is not a reason to refuse the research: the start is
@@ -1320,7 +1322,7 @@ export class EvimedCreditsService {
     if ((this.config?.researchBillingEnabled || this.failure) && await this.ensureReady()) {
       return { allowed: true, reason: "billing_unavailable" };
     }
-    const balance = await this.balanceFor(userId);
+    const balance = await this.balanceFor(userId, { ignoreHoldOf });
     if (balance.balance == null && balance.available == null) return { allowed: true, reason: balance.status };
     const estimate = await this.estimate(capabilityId);
     /** The amount short, as drawn in a refusal, and whether this start is refused. */
