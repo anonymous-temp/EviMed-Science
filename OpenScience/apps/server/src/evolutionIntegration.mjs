@@ -25,12 +25,21 @@ export function evolutionDatasetMetadata(asset) {
   };
 }
 
+/**
+ * What a failed run says about a missing method, if anything. A run fails for a spent budget, a stopped container, a
+ * cancel, a provider outage; none of those is a tool the platform lacks, and turning each into a lead made every failure
+ * of every researcher a job for the module. Only the one closed code that names a tool or engine the run could not use
+ * is a gap in the platform's methods; the tools a run found missing are read from its own transcript (the handbook gap).
+ * @param {{errorCode?: string | null}} run @returns {"method-implementation" | null}
+ */
+export function evolutionRunGap(run) { return run?.errorCode === "runtime_tool_error" ? "method-implementation" : null; }
+
 /** The other modules publish observations through the durable evolution queue. */
 export class EvolutionIntegration {
   /** @param {{service:any,autopilot:any,report?:(code:string)=>void}} input */
   constructor({ service, autopilot, report = () => {} }) {
     this.service = service; this.autopilot = autopilot; this.report = report;
-    this.counters = { published: 0, failed: 0 };
+    this.counters = { published: 0, failed: 0, scoutsQueued: 0, scoutsSkipped: 0 };
   }
 
   /** An optional consumer cannot undo the scientific work that emitted its event. @param {any} event */
@@ -94,7 +103,6 @@ export class EvolutionIntegration {
       await this.datasetOpportunities(event);
       return this.service.resolveWaiters(event);
     } else if (event.type === "tool-ready") {
-      await this.service.callbacks.refreshPlatformReferences?.();
       const owners = event.userId ? [event.userId] : await this.observationOwners();
       for (const owner of owners) {
         const latest = new Map();
@@ -114,13 +122,43 @@ export class EvolutionIntegration {
     } else if (event.type === "frontier-publication") {
       await this.temporalObservation(event);
       await this.matchProspectivePublication(event);
-      return this.service.enqueue("scout", { paper: event.paper }, `publication:${event.id}`);
+      return this.scoutPublication(event);
     } else if (event.type === "meta-evidence-update") {
       return this.metaUpdateOpportunity(event);
     } else if (["runtime-gap", "handbook-gap"].includes(event.type)) {
       return this.service.addLead({ source: event.type === "runtime-gap" ? "runtime-failure" : "handbook",
         track: event.track ?? "M", gapCode: event.gapCode, code: event.code });
     }
+  }
+
+  /**
+   * A paper in the feed is a lead for a scouting run, and a run is paid work, so it is bounded three ways: one run
+   * per paper however many times the feed changes it, no more than `evolutionMaxPaperScoutsPerDay` in any 24 hours
+   * (inside the module's own daily budget, which this only keeps from being spent on reading alone), and never ahead
+   * of a build or an evaluation the module has already admitted, which the queue would otherwise serve after it.
+   * A paper the day has no room for is not queued for later; the daily scan still looks at the literature.
+   * @param {any} event
+   * @returns {Promise<any>}
+   */
+  async scoutPublication(event) {
+    const paper = event.paper;
+    const key = `publication:${digest(paper?.identity ?? paper?.id ?? event.id).slice(0, 32)}`;
+    const database = this.service.documents.database;
+    let runAfter = this.service.now();
+    if (database?.query) {
+      const cap = this.service.config?.evolutionMaxPaperScoutsPerDay ?? 8;
+      const state = await database.query(`SELECT count(*) FILTER (WHERE kind='evolution-scout' AND payload->'paper' IS NOT NULL AND created_at>$2)::integer AS scouts,
+          max(run_after) FILTER (WHERE kind IN ('evolution-build','evolution-evaluate') AND status IN ('queued','running')) AS admitted_until
+        FROM evimed_product.jobs WHERE user_id=$1 AND kind IN ('evolution-scout','evolution-build','evolution-evaluate')`,
+      [await this.service.owner(), new Date(runAfter.getTime() - 86_400_000)]);
+      const row = state.rows[0] ?? {};
+      const exists = await database.query("SELECT 1 FROM evimed_product.jobs WHERE user_id=$1 AND idempotency_key=$2", [await this.service.owner(), `evolution:${key}`]);
+      if (!exists.rows.length && Number(row.scouts ?? 0) >= cap) { this.counters.scoutsSkipped++; return { scouted: false, reason: "daily-cap" }; }
+      const admitted = row.admitted_until ? new Date(row.admitted_until) : null;
+      if (admitted && admitted > runAfter) runAfter = admitted;
+    }
+    this.counters.scoutsQueued++;
+    return this.service.enqueue("scout", { paper }, key, runAfter);
   }
 
   /** Source contracts do not expose a verified cutoff or prediction; preserve that uncertainty. */
@@ -286,28 +324,44 @@ export class EvolutionIntegration {
   wakeAgenda(input) { return this.autopilot.wakeForEvolution(input); }
 }
 
-/** Read the frontier's existing change stream; checkpoint only after the durable event exists. */
+/** The furthest back the feed's changes are read when the module has not looked for longer than this. */
+export const EVOLUTION_FRONTIER_LOOKBACK_MS = 3 * 86_400_000;
+
+/**
+ * Read the frontier's existing change stream; checkpoint only after the durable event exists.
+ * The first look at a feed is its present, never its history (a deployment's feed may hold thousands of papers, each
+ * of which would be a paid scouting run), a cursor that has fallen further behind than the look-back jumps to it,
+ * and only a paper's publication is read: the feed also records every rescoring and selection of an item.
+ */
 export class EvolutionFrontierSignals {
   /** @param {{database:any,service:any,integration:EvolutionIntegration}} input */
   constructor({ database, service, integration }) { this.database = database; this.service = service; this.integration = integration; }
   async tick() {
     const id = "evolution-frontier-cursor";
     const cursor = await this.service.get(id);
-    const after = Number(cursor?.payload?.sequence ?? 0);
+    if (!cursor) {
+      const head = Number((await this.database.query("SELECT coalesce(max(seq),0) AS head FROM evimed_frontier.item_changes")).rows[0]?.head ?? 0);
+      await this.service.save("cursor", id, { sequence: head, startedAt: this.service.now().toISOString() }, null);
+      return { sequence: head, count: 0, digest: digest(head) };
+    }
+    const saved = Number(cursor.payload?.sequence ?? 0);
+    const floor = Number((await this.database.query("SELECT coalesce(max(seq),0) AS floor FROM evimed_frontier.item_changes WHERE changed_at<=$1",
+      [new Date(this.service.now().getTime() - EVOLUTION_FRONTIER_LOOKBACK_MS)])).rows[0]?.floor ?? 0);
+    const after = Math.max(saved, floor);
     const found = await this.database.query(`SELECT c.seq, i.id, i.title_raw, i.canonical_url, i.published_at,
       i.identity_key, t.abstract_raw, t.body_excerpt FROM evimed_frontier.item_changes c
       JOIN evimed_frontier.items i ON i.id=c.item_id LEFT JOIN evimed_frontier.item_texts t ON t.item_id=i.id
-      WHERE c.seq>$1 AND i.state='published' ORDER BY c.seq LIMIT 25`, [after]);
+      WHERE c.seq>$1 AND c.op='upsert' AND c.reason='published' AND i.state='published' ORDER BY c.seq LIMIT 25`, [after]);
     let sequence = after;
     for (const row of found.rows) {
       const paper = { id: String(row.id), title: row.title_raw, url: row.canonical_url,
         publishedAt: row.published_at, identity: row.identity_key,
         excerpt: String(row.abstract_raw ?? row.body_excerpt ?? "").slice(0, 24_000) };
-      const saved = await this.integration.publish({ id: `frontier:${row.seq}`, type: "frontier-publication", paper, origin: "literature" });
-      if (!saved) break;
+      const savedEvent = await this.integration.publish({ id: `frontier:${row.seq}`, type: "frontier-publication", paper, origin: "literature" });
+      if (!savedEvent) break;
       sequence = Number(row.seq);
     }
-    if (sequence > after) await this.service.save("cursor", id, { sequence }, cursor);
+    if (sequence > saved) await this.service.save("cursor", id, { sequence }, cursor);
     return { sequence, count: found.rows.length, digest: digest(sequence) };
   }
 }

@@ -371,7 +371,9 @@ async function meteredBailianSearch({ config, request, fetcher, signal, usageLed
     ? await attributeRun({ userId: caller.userId, projectId: caller.projectId, sessionId: null }).catch(() => null)
     : null;
   const runId = caller.runId ?? attributed ?? null;
-  const purpose = runPurpose && await runPurpose({ userId: caller.userId, projectId: caller.projectId, runId }) === "evolution" ? "evolution" : "web-search";
+  // Asking can fail (the run ledger is a file): the model gateway books `kernel` then rather
+  // than costing the call, and so does this one — a search is never lost for a column it writes.
+  const purpose = runPurpose && await runPurpose({ userId: caller.userId, projectId: caller.projectId, runId }).catch(() => "kernel") === "evolution" ? "evolution" : "web-search";
   const estimate = priceUsage({ resourceType: "model", model, cacheMiss: bailianReservedPromptTokens, output: bailianMaxTokens, peak });
   let reservation;
   try {

@@ -47,6 +47,7 @@
  * @module @evimed/domain/src/capabilityAvailability
  */
 
+import { DISPLAY_TIME_ZONE, agendaLocalDate } from './agendaSchedule.mjs'
 import { connectorCredentialSpec } from './connectorCredentials.mjs'
 import { errorCodeMessage, errorCodeOutcome } from './errorCodes.mjs'
 import { mcpToolName } from './toolNames.mjs'
@@ -114,10 +115,10 @@ const verbOf = (detail) => {
   return (base && toolViewPhrase(mcpToolName(base))?.verb) || '一项工具'
 }
 
-/** @param {unknown} value @returns {string | null} */
+/** The day a reader is told something last worked, in the deployment's display zone, not the UTC day. @param {unknown} value @returns {string | null} */
 const dayOf = (value) => {
   const time = Date.parse(String(value ?? ''))
-  return Number.isFinite(time) ? new Date(time).toISOString().slice(0, 10) : null
+  return Number.isFinite(time) ? agendaLocalDate(DISPLAY_TIME_ZONE, new Date(time)) : null
 }
 
 /** @param {Record<string, unknown>} context @returns {string} */

@@ -392,7 +392,9 @@ class RealLedgerTests(unittest.TestCase):
         # Five VCR capabilities remain not-run until their own live evidence exists, and so does gene-expression-analysis
         # (2026-10-04, N17: three briefs and an offline reference check against base R, no capability-level delivery yet).
         # Delivery acceptance does not imply an unqualified scientific-quality pass.
-        self.assertEqual(statuses.count("not-run"), 6)
+        # The two internal 循证进化 packages (tool-builder, evolution-scout) are not-run too: the module has never been
+        # switched on in production. They are not public, so the coverage notice below does not count them.
+        self.assertEqual(statuses.count("not-run"), 8)
         self.assertEqual(statuses.count("accepted"), 22)
         self.assertEqual(statuses.count("failed"), 0)
         self.assertEqual(

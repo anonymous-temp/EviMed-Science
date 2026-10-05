@@ -828,12 +828,23 @@ function normalizeMountedSkills(value) {
   return names.length > 0 ? [...new Set(names)].slice(0, 32) : undefined;
 }
 
-/** Exact observed personal revisions, without resources, instructions or
- * filesystem locations. Malformed observational metadata cannot break a run.
- * @param {any} value */
-/** Public provenance contains only exact method identities, never code, evaluator assets or researcher values. @param {any} value */
+/**
+ * What a run records of the platform tools that were mounted for it: which generation and how many pins, never the
+ * pins. A generation is content-addressed, so `generationId` names the exact manifest — every tool, revision and digest
+ * — under `<data>/.openscience/platform-skills/generations/`, immutable and verified; and what a run actually used is
+ * in the evolution module's own use records, keyed by run. The ledger is one file capped at 1 MiB per project, past
+ * which `serializeNext` answers 413 and the project can record no more runs, and the full pin list (about 250 bytes a
+ * pin, written at the start and again when learning is recorded) was about 7 KB twice over for thirty tools and 37 KB
+ * twice over for an unscoped session of a hundred and fifty. Personal skills, the precedent, cap their list at 64.
+ * A stored record that still carries pins (written before) is validated and reduced to the same two fields.
+ * Public provenance contains only identities, never code, evaluator assets or researcher values. @param {any} value
+ */
 function normalizePlatformSkillGeneration(value) {
   const raw = Array.isArray(value) ? value : value?.pins
+  const generationShape = /^[a-f0-9]{64}$/.test(value?.generationId ?? '')
+  if (raw === undefined && generationShape && Number.isSafeInteger(value.pinCount) && value.pinCount > 0 && value.pinCount <= PLATFORM_SKILL_GENERATION_MAX_PINS) {
+    return { generationId: value.generationId, pinCount: value.pinCount }
+  }
   if (!Array.isArray(raw) || raw.length > PLATFORM_SKILL_GENERATION_MAX_PINS || raw.length === 0) return undefined
   const pins = [], seen = new Set()
   for (const pin of raw) {
@@ -843,11 +854,14 @@ function normalizePlatformSkillGeneration(value) {
     seen.add(pin.id)
     pins.push({ id: pin.id, revision: pin.revision, digest: pin.digest, nativeName: pin.nativeName, publicationKind: pin.publicationKind, source: 'platform' })
   }
-  const generationId = /^[a-f0-9]{64}$/.test(value?.generationId ?? '') ? value.generationId
+  const generationId = generationShape ? value.generationId
     : createHash('sha256').update(JSON.stringify(pins)).digest('hex')
-  return { generationId, pins }
+  return { generationId, pinCount: pins.length }
 }
 
+/** Exact observed personal revisions, without resources, instructions or
+ * filesystem locations. Malformed observational metadata cannot break a run.
+ * @param {any} value */
 function normalizePersonalSkillGeneration(value) {
   if (!value || !/^[a-f0-9]{64}$/.test(value.generationId ?? "") || !Array.isArray(value.pins) || value.pins.length > 64) return undefined;
   const pins = [], seen = new Set();

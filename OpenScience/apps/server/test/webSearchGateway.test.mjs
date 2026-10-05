@@ -431,3 +431,14 @@ test("trusted evolution run purpose reserves paid search against its own budget"
   assert.equal(reserve.weeklyLimit, 0);
   assert.equal(reserve.runLimit, 0);
 });
+
+test("a run ledger that cannot be read does not cost the search its paid engine: the call is booked as web-search", async () => {
+  const ledger = fakeLedger();
+  const res = await metered({ ...withBailian, userDailySpendLimit: 1, userWeeklySpendLimit: 2 }, async url => String(url).startsWith("https://dashscope.aliyuncs.com/")
+    ? searxngResponse({ output: { search_info: { search_results: [] } }, usage: { input_tokens: 10, output_tokens: 1 } })
+    : searxngResponse({ results: [] }), ledger, { runPurpose: async () => { throw new Error("agent_runs_corrupt"); } });
+  assert.equal(res.statusCode, 200);
+  const reserve = ledger.calls.find(([kind]) => kind === "reserve")?.[1];
+  assert.ok(reserve, "the Bailian leg still ran");
+  assert.equal(reserve.purpose, "web-search");
+});

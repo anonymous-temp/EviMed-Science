@@ -1,6 +1,6 @@
 import { PLATFORM_SKILLS_RUNTIME_DIR, platformSkillGenerationRoot, verifyPlatformSkillGeneration } from "./platformSkillSupply.mjs";
 import {assertExtensionAssessmentAuthority} from './extensionAssessmentAuthority.mjs';
-import { RUNTIME_YIELDED_CODE, backgroundRuntimeLimit, isInternalProject, isEvolutionProject } from "./internalProjects.mjs";
+import { RUNTIME_YIELDED_CODE, backgroundRuntimeLimit, isInternalProjectOf, isEvolutionProject } from "./internalProjects.mjs";
 import { Buffer } from "node:buffer";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
@@ -3114,7 +3114,11 @@ export class DockerRuntimeProvider {
     const personal = personalSkillGeneration?.reference ? await verifyPersonalSkillGeneration(this.config, project, personalSkillGeneration.reference,
       personalSkillGeneration.identity.baseRuntimeImageDigest) : null;
     if (personal) await this.assertPersonalImage(personal.identity.baseRuntimeImageDigest);
-    if (platformSkillGeneration) await verifyPlatformSkillGeneration(this.config, platformSkillGeneration.reference);
+    // Verified once more at the last moment before it is mounted; an extension that fails here starts the runtime without it.
+    if (platformSkillGeneration) {
+      try { await verifyPlatformSkillGeneration(this.config, platformSkillGeneration.reference); }
+      catch { manager.platformSkillSupply?.noteFailure?.("platform_skill_generation_unverified"); platformSkillGeneration = null; }
+    }
     const plan = buildRuntimeLaunchPlan(this.config, project, port, { pluginConfig, platformSkillGeneration: platformSkillGeneration?.reference ?? null, personalSkillGeneration: personal?.reference ?? null,
       personalSkillImageId: personal?.identity.baseRuntimeImageDigest ?? null, extensionGeneration: extensionGeneration?.reference ?? null,
       extensionImageId: extensionGeneration?.identity.baseRuntimeImageDigest ?? null });
@@ -4092,7 +4096,7 @@ export class RuntimeManager {
     this.lastMountedCapsuleMethods.set(this.key(project), mountedMethods.capsule ?? []);
     // The provider's own preparation: a container's plan, directories and
     // orphan cleanup, or a cloud session with the project's files carried in.
-    const platformSkillGeneration = this.platformSkillOverrides.has(key)?this.platformSkillOverrides.get(key):(this.platformSkillSupply ? await this.platformSkillSupply.prepareForRuntime({...project,capabilityId:project.capabilityId??this.platformSkillScopes.get(key)}) : null);
+    const platformSkillGeneration = this.platformSkillOverrides.has(key)?this.platformSkillOverrides.get(key):(await this.selectPlatformSkills(project,this.platformSkillScopes.get(key))).generation;
     const plan = await this.provider.prepare(project, { port, pluginConfig, capsuleMethodsMounted, platformSkillGeneration, personalSkillGeneration, extensionGeneration });
 
     // Nothing is copied into a project any more: the image carries the skill
@@ -5321,7 +5325,7 @@ export class RuntimeManager {
     const maxPerUser = positiveLimit(this.config.maxRunningRuntimesPerUser);
     // Background work holds at most its share of the deployment, so a
     // researcher opening a project always finds room (`backgroundRuntimeLimit`).
-    const maxBackground = isInternalProject(project.id) ? backgroundRuntimeLimit(maxGlobal, maxPerUser) : null;
+    const maxBackground = this.isBackgroundProject(project.userId, project.id) ? backgroundRuntimeLimit(maxGlobal, maxPerUser) : null;
     if (maxBackground != null && this.backgroundRuntimeCount() - own >= maxBackground) {
       throw new HttpError(429, "runtime_limit_exceeded", `Background work is holding its share of runtimes (${maxBackground}); it waits so researchers keep theirs.`, {
         retryAfterSeconds: 60,
@@ -5329,7 +5333,7 @@ export class RuntimeManager {
     }
     // A background project is never one of the researcher's slots
     // (`runtimeCountForUser`), so it is not held to their ceiling either.
-    if (maxPerUser != null && !isInternalProject(project.id) && this.runtimeCountForUser(project.userId) - own >= maxPerUser) {
+    if (maxPerUser != null && !this.isBackgroundProject(project.userId, project.id) && this.runtimeCountForUser(project.userId) - own >= maxPerUser) {
       throw new HttpError(429, "runtime_limit_exceeded", `Too many running runtimes for this user; limit is ${maxPerUser}.`, {
         retryAfterSeconds: 5,
       });
@@ -5372,7 +5376,7 @@ export class RuntimeManager {
   async makeRoomFor(project, { opening = false, speculative = false } = {}) {
     // Background work waits for room; it never takes a researcher's idle
     // runtime to make some. The capacity check refuses it and its job defers.
-    if (isInternalProject(project.id)) return;
+    if (this.isBackgroundProject(project.userId, project.id)) return;
     const maxGlobal = positiveLimit(this.config.maxRunningRuntimes);
     const maxPerUser = positiveLimit(this.config.maxRunningRuntimesPerUser);
     const own = this.key(project);
@@ -5393,7 +5397,7 @@ export class RuntimeManager {
       ? Math.max(0, configuredYield) : 30 * 60_000;
     /** @param {[string, any]} entry */
     const eligible = ([key, runtime]) => key !== own && Boolean(runtime.project) && !runtime.modelGatewayScope
-      && !isInternalProject(key.slice(key.indexOf(":") + 1));
+      && !this.isBackgroundKey(key);
     /** @param {[string, any]} left @param {[string, any]} right */
     const byAge = ([a], [b]) => lastUse(a) - lastUse(b);
     const mine = [...this.runtimes.entries()].filter((entry) => eligible(entry) && entry[0].startsWith(prefix)).sort(byAge);
@@ -5479,7 +5483,7 @@ export class RuntimeManager {
    * @returns {Promise<void>}
    */
   async yieldBackgroundRuntimes(own, stillFull) {
-    const background = (/** @type {string} */ key) => key !== own && isInternalProject(key.slice(key.indexOf(":") + 1));
+    const background = (/** @type {string} */ key) => key !== own && this.isBackgroundKey(key);
     const settling = [...this.starts, ...this.runtimeStops].filter(([key]) => background(key)).map(([, work]) => work);
     if (settling.length) {
       const configured = Number(this.config.runtimeBackgroundYieldWaitMs);
@@ -5567,9 +5571,23 @@ export class RuntimeManager {
     return this.runtimeKeys().size;
   }
 
+  /**
+   * Whether a project's runtime is the platform's own background work, which takes no slot of its owner's and
+   * is held to the background share instead — a question of limits, so the name alone does not answer it: an
+   * ordinary account's `acceptance-x` takes its slot like any other project (`isInternalProjectOf`).
+   * @param {unknown} userId @param {unknown} projectId @returns {boolean}
+   */
+  isBackgroundProject(userId, projectId) { return isInternalProjectOf(this.config, userId, projectId); }
+
+  /** @param {string} key `<user>:<project>`, the runtime table's key @returns {boolean} */
+  isBackgroundKey(key) {
+    const split = key.indexOf(":");
+    return split > 0 && this.isBackgroundProject(key.slice(0, split), key.slice(split + 1));
+  }
+
   /** Running and starting runtimes of the platform's own background projects. */
   backgroundRuntimeCount() {
-    const background = (/** @type {string} */ key) => isInternalProject(key.slice(key.indexOf(":") + 1));
+    const background = (/** @type {string} */ key) => this.isBackgroundKey(key);
     return [...this.runtimeKeys()].filter(background).length;
   }
 
@@ -5579,7 +5597,7 @@ export class RuntimeManager {
     // take one of the researcher's slots: a lesson being distilled must never
     // be why they cannot open a second project. The global ceiling still
     // counts them.
-    const counted = (/** @type {string} */ key) => key.startsWith(prefix) && !isInternalProject(key.slice(prefix.length));
+    const counted = (/** @type {string} */ key) => key.startsWith(prefix) && !this.isBackgroundKey(key);
     return [...this.runtimeKeys()].filter(counted).length;
   }
 
@@ -5697,13 +5715,17 @@ export class RuntimeManager {
   /** Adopt only between completed runs, before the next run's immutable snapshot is reserved.
    * The existing plugin exclusive fence excludes all prompt admissions during replacement. */
   async setPlatformSkillScope(project,capabilityId) {
+    // No supply (the module is off): nothing to scope, and no entry is kept for every project that ever dispatched.
+    if(!this.platformSkillSupply)return{adopted:false};
     const key=this.key(project),previous=this.platformSkillRefreshes.get(key)??Promise.resolve();
     const task=previous.catch(()=>{}).then(async()=>{
       this.platformSkillScopes.set(key,capabilityId);
       if(!this.platformSkillSupply||!this.runtimes.has(key))return{adopted:false};
       const refresh=async()=>{
         const runtime=this.runtimes.get(key);if(!runtime)return{adopted:false};
-        const wanted=await this.platformSkillSupply.prepareForRuntime({...project,capabilityId:project.capabilityId??capabilityId});
+        const {generation:wanted,degraded}=await this.selectPlatformSkills(project,capabilityId);
+        // A selection that failed is not a request to mount nothing: what the runtime has stays, and the next boundary asks again.
+        if(degraded)return{adopted:false};
         if((wanted?.reference?.generationHash??null)===(runtime.platformSkillGeneration?.reference?.generationHash??null))return{adopted:false};
         if(this.starts.has(key)||this.runtimeStops.has(key)||this.boundedRuntimeScope(project)||await this.idleVerdict(project)!=='idle')return{adopted:false,pending:true};
         if(this.pluginService&&await this.pluginService.hasPendingPrompts(project))return{adopted:false,pending:true};
@@ -5727,6 +5749,27 @@ export class RuntimeManager {
   }
 
   runtimePlatformSkills(project) { return this.runtimes.get(this.key(project))?.platformSkillGeneration?.pins ?? []; }
+
+  /**
+   * The platform skills a runtime for this project would mount. An optional extension failing never withholds
+   * unrelated research: the supply falls back to the last generation that verified, or to none, and says so
+   * (`degraded`); a supply that throws anyway is counted and treated the same. Every runtime start and every
+   * dispatch on a live runtime asks this, so a corrupt file under `<data>/.openscience/platform-skills/` used to
+   * fail them all.
+   * @param {Record<string, any>} project @param {string | null | undefined} capabilityId
+   * @returns {Promise<{ generation: any, degraded: boolean }>}
+   */
+  async selectPlatformSkills(project, capabilityId) {
+    const supply = this.platformSkillSupply;
+    if (!supply) return { generation: null, degraded: false };
+    const scoped = { ...project, capabilityId: project.capabilityId ?? capabilityId };
+    try {
+      return supply.selectForRuntime ? await supply.selectForRuntime(scoped) : { generation: await supply.prepareForRuntime(scoped), degraded: false };
+    } catch {
+      supply.noteFailure?.("platform_skill_selection_failed");
+      return { generation: null, degraded: true };
+    }
+  }
 
   runtimePersonalSkillGeneration(project) { return this.runtimes.get(this.key(project))?.personalSkillGeneration ?? null; }
   runtimePersonalSkillPins(project) {
@@ -6106,7 +6149,7 @@ export class RuntimeManager {
       .filter(([key]) => key.startsWith(prefix))
       .map(([key, runtime]) => ({
         runtime,
-        background: isInternalProject(key.slice(prefix.length)),
+        background: this.isBackgroundKey(key),
         lastUseAt: Number(this.runtimeActivity.get(key)?.lastUseAt ?? 0),
       }))
       .sort((left, right) => Number(left.background) - Number(right.background) || right.lastUseAt - left.lastUseAt);

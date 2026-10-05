@@ -8,6 +8,8 @@ export interface AgendaPayload {
   scheduleState?: "paused" | "scheduled" | "completed" | "archived"; archivedAt?: string | null;
   messages?: AgendaMessage[]; title: string; topics: string[]; taskTypes: string[]; dailyBudgetCny: number; weeklyBudgetCny: number;
   maxEpisodeCny: number; scheduleHour: number; timeZone: string; enabled: boolean; status: string; pauseReason: string | null; outcomes: unknown[];
+  /** The error code behind a pause that is not the researcher's or the planner's (a per-episode cap below the floor); its sentence is the registry's. */
+  pauseCode?: string | null;
   /** The agenda-zone day (`YYYY-MM-DD`) the scheduler last queued a run for. */
   lastScheduledDate?: string | null;
   userSignal?: { score: number; decided: number; rejected: boolean } | null;
@@ -22,7 +24,8 @@ export interface AgendaPayload {
 export interface ResearchState {
   agendaId: string; asOf: string; truncated: boolean;
   found: Array<{ statement: string; check: "reproduced" | "stands" | "refuted"; sources: number; date: string }>;
-  unresolved: Array<{ kind: "unchecked" | "check_unavailable" | "weakened" | "question" | "not_run"; text?: string; date?: string }>;
+  /** `not_rechecked`: no independent check will be made of it, for the `reason` (`VERIFICATION_UNSCHEDULED_REASONS`). */
+  unresolved: Array<{ kind: "unchecked" | "check_unavailable" | "not_rechecked" | "weakened" | "question" | "not_run"; text?: string; date?: string; reason?: string }>;
   materials: Array<{ sourceId: string; name: string; addedAt: string; state: "reading" | "ready" | "attention" | "unavailable" }>;
 }
 export interface AutopilotArtifactRef { projectId: string; runId: string; sessionId: string; path: string }

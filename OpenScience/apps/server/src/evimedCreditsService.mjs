@@ -66,7 +66,7 @@ import {
   CAPABILITY_DISPLAY, CREDIT_EXPIRY_REMINDER_DAYS, CREDIT_NOT_CHARGED_REASONS, CREDIT_SOURCE_LABELS, RESEARCH_BILLING_VERSION_WHOLE_CREDIT,
   SIMULATED_LOW_CREDITS, SIMULATED_WALLET_LABEL, WALLET_CONTRACT_EXACT, WALLET_CONTRACT_WHOLE_CREDIT,
   allowanceRefusalSentence, capabilityTitle, creditUnitsOrNull, estimateCost, estimateRunCostUnits, expiryReminderDue, expiryWords,
-  formatCredits, isResearcherOwnedWork, researchMoneyDecimal, researchMoneyUnits, researchTaskCharge, spendingPermission,
+  formatCredits, isChargeableResearchRun, researchMoneyDecimal, researchMoneyUnits, researchTaskCharge, spendingPermission,
 } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 import { productId } from "./productPersistence.mjs";
@@ -154,7 +154,7 @@ export function creditsForCost(cny, rate) {
  * @returns {{ charges: boolean, basis: 'completed' | 'user_stop' | 'not_charged', reason: keyof typeof CREDIT_NOT_CHARGED_REASONS | null }}
  */
 export function chargeDecision(run) {
-  if (!isResearcherOwnedWork(/** @type {any} */ (run))) return { charges: false, basis: "not_charged", reason: "platform_work" };
+  if (!isChargeableResearchRun(/** @type {any} */ (run))) return { charges: false, basis: "not_charged", reason: "platform_work" };
   const status = String(run?.status ?? "");
   if (status === "completed" || status === "succeeded") return { charges: true, basis: "completed", reason: null };
   if (status === "canceled") {
@@ -488,7 +488,7 @@ export class EvimedCreditsService {
 
     // Failed platform work retains its costs as evidence but is waived. A
     // cancellation is not evidence of an earned stage, so it is waived too.
-    const researcherOwned = isResearcherOwnedWork(run);
+    const researcherOwned = isChargeableResearchRun(run);
     const owned = researcherOwned && successful;
     const title = settlementMemo(run);
     const opened = await this.database.transaction(async (/** @type {any} */ client) => {
@@ -577,7 +577,7 @@ export class EvimedCreditsService {
       const ids = decision.basis === 'completed' ? runUsageKeys({ ...run, id: physicalId }).map(id => productId(id, 'run'))
         : decision.basis === 'user_stop' ? [...new Set([physicalId, run.dispatchId].filter(id => typeof id === 'string' && id))].map(id => productId(id, 'run'))
           : [physicalId];
-      const researcherOwned = isResearcherOwnedWork(run);
+      const researcherOwned = isChargeableResearchRun(run);
       const title = settlementMemo(run);
       const settled = await this.database.transaction(async (/** @type {any} */ client) => {
         // Serialize request attribution across tasks for this account.

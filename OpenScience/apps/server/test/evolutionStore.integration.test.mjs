@@ -71,7 +71,7 @@ test('evolution reservations share their own budget across internal projects and
 test('durable resource wait wakes the exact agenda, while researcher pause and foreign project remain untouched', options, async () => {
   const autopilot = new AutopilotService({documents,jobs});
   const running = new Set();
-  autopilot.runNow = async (userId, agendaId, {requestId}) => {running.add(`${userId}:${agendaId}:${requestId}`); return {job: {id:requestId}};};
+  autopilot.schedule = async (userId, agendaId, {requestId, trigger}) => {assert.equal(trigger,'wake'); running.add(`${userId}:${agendaId}:${requestId}`); return {job: {id:requestId}};};
   const integration = new EvolutionIntegration({service,autopilot});
   service.callbacks.wakeAgenda = input=>integration.wakeAgenda(input);
   await service.registerTool({id:'integration-tool',track:'M',toolKind:'workflow',smokePassed:true,artifactDigest:'fixed',capabilityIds:['statistical-analysis']});
@@ -150,7 +150,7 @@ test('matched upload performs preserved known-effect checks before PostgreSQL ag
     const asset={bindings:[{path:'cohort.csv',sha256:hash,bytes:bytes.length,rows:30,columns:[{name:'age'}]}]};
     await documents.put(researcher,'knowledge','uploaded-semantics',{recordType:'dataset-semantics',asset},{expectedRevision:0,projectId:'research'});
     const autopilot=new AutopilotService({documents,jobs}); let started=0;
-    autopilot.runNow=async()=>{started++;return{job:{id:'started-after-self-check'}};};
+    autopilot.schedule=async(_userId,_agendaId,{trigger})=>{assert.equal(trigger,'wake');started++;return{job:{id:'started-after-self-check'}};};
     const integration=new EvolutionIntegration({service,autopilot}); service.callbacks.wakeAgenda=input=>integration.wakeAgenda(input);
     await documents.put(researcher,'agenda','uploaded-agenda',{title:'Data study',enabled:false,status:'paused',plannerStop:{kind:'needs_input'},evolutionWaiting:{sourceEpisodeId:'uploaded-episode'}},{expectedRevision:0,projectId:'research'});
     await service.waitFor({userId:researcher,projectId:'research',agendaId:'uploaded-agenda',sourceEpisodeId:'uploaded-episode',kind:'data',toolId:'uploaded-check-tool',dataRequirements:{schema:{fields:[{name:'age',type:'number',unit:'a'}]}}});
@@ -251,4 +251,14 @@ test('actual daily reservation rejection below fifty durably defers and resumes 
   await ledger.release(budgetOwner,held.id,'fixture_provider_not_dispatched');ready=true;
   const finished=await worker.tick({kinds:['evolution-evaluate']});assert.equal(finished.id,queued.id);assert.equal(finished.status,'succeeded');assert.equal(finished.attempts,1);assert.equal(finished.result.checkpointRecovered,true);assert.equal(waits,0);
  } finally {await database.query('DELETE FROM evimed_control.users WHERE id=$1',[budgetOwner]);}
+});
+
+test('a run is completed from its own records of tool use, read by filter and not from the account\'s whole history', options, async () => {
+  for (const runId of ['filter-run-1', 'filter-run-2', 'filter-run-2']) await service.save('use', `evolution-use-${runId}-${randomUUID()}`, { userId: researcher, projectId: 'research', runId, toolId: 'any-tool' }, null, researcher);
+  const all = await service.list('use', researcher);
+  assert.ok(all.length >= 3);
+  const second = await service.list('use', researcher, { runId: 'filter-run-2' });
+  assert.equal(second.length, 2);
+  assert.ok(second.every(row => row.payload.runId === 'filter-run-2'));
+  assert.deepEqual(await service.list('use', researcher, { runId: 'never-ran' }), []);
 });

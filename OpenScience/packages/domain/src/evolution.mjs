@@ -13,9 +13,22 @@ export const EVOLUTION_BUILD_FORMS = Object.freeze(['compose', 'extend', 'wrap',
 export const EVOLUTION_CASE_GROUPS = Object.freeze(['development', 'holdout', 'time-holdout', 'prospective'])
 export const EVOLUTION_TOOL_STATES = Object.freeze(['staged', 'active', 'alias', 'retired'])
 export const EVOLUTION_JOB_KINDS = Object.freeze(['evolution-event', 'evolution-scout', 'evolution-build', 'evolution-evaluate', 'evolution-decision', 'evolution-digest', 'evolution-maintain', 'evolution-self-check'])
+/**
+ * What a decision's option can do, as the control plane's executor knows it (`evolutionComposition.mjs`). This list is
+ * closed, and it is what stops the engine: an option whose operation is not here is refused when it is chosen, by a
+ * person or by default. None of these deletes data, sends anything outside the platform, spends past the daily budget
+ * or touches a clinical safety rule; the nearest to irreversible, a soft retirement, keeps every version and can be
+ * restored. Adding one that does is adding it to `EVOLUTION_ONE_WAY_OPERATIONS` as well, which makes its decision a
+ * one-way door that no default can take.
+ */
+export const EVOLUTION_EXECUTABLE_OPERATIONS = Object.freeze(['wait', 'defer', 'keep', 'build', 'retry', 'recommended', 'alternative', 'rescout',
+  'maintenance-retire', 'maintenance-merge', 'maintenance-repair'])
+/** Operations that cannot be taken back; a decision that offers one is class C whatever else it says (plan 9.1). */
+export const EVOLUTION_ONE_WAY_OPERATIONS = Object.freeze(['delete-data', 'external-send', 'over-budget-spend', 'clinical-safety-change'])
 /** @param {any} input */
 export function evolutionDecisionClass(input) {
   if (input.overBudget || input.deleteData || input.externalSend || input.clinicalSafetyChange) return 'C'
+  if ((input.options ?? []).some((/** @type {any} */ option) => EVOLUTION_ONE_WAY_OPERATIONS.includes(option?.operation ?? option?.id))) return 'C'
   if (input.resourceOnly) return 'D'
   return input.directional && new Set(input.attemptedPaths ?? []).size >= 2 ? 'B' : 'A'
 }
@@ -98,18 +111,24 @@ export function validateEvolutionDataRequirements(requirement) {
 /** Localized module errors for the shared client boundary. */
 export const EVOLUTION_ERROR_MESSAGES = Object.freeze({
   'paper_gold_administrative_deferred': '评测因模型额度限制暂缓，现有进度已保留。',
+  'evaluation_opaque_source_excluded': '评测期间不提供原始文件下载，请改用已解析的来源。',
+  'evaluation_policy_unreadable': '评测的排除规则暂时无法读取，这次请求没有执行，请稍后重试。',
+  'evaluation_source_excluded': '这个来源在本次评测中被排除，请换用其他来源。',
   'evolution_action_unsupported': '这项研究工作暂时无法完成，请稍后重试。',
   'evolution_assessment_invalid': '这项研究工作暂时无法完成，请稍后重试。',
   'evolution_capability_missing': '这条研究记录已变化，请刷新后重试。',
   'evolution_card_invalid': '这项研究工作暂时无法完成，请稍后重试。',
+  'evolution_decision_executing': '这条裁决正在执行，稍后刷新再答复。',
   'evolution_decision_invalid': '这项研究工作暂时无法完成，请稍后重试。',
   'evolution_decision_missing': '这条研究记录已变化，请刷新后重试。',
+  'evolution_dependency_allowlist_invalid': '循证进化的依赖白名单配置有误，该模块暂未启用，其他研究不受影响。',
   'evolution_disabled': '循证进化暂未启用。',
   'evolution_dossier_missing': '这条研究记录已变化，请刷新后重试。',
   'evolution_evaluation_invalid': '这项研究工作暂时无法完成，请稍后重试。',
   'evolution_event_invalid': '这项研究工作暂时无法完成，请稍后重试。',
   'evolution_execution_unavailable': '这项研究工作暂时无法完成，请稍后重试。',
   'evolution_failure_invalid': '这项研究工作暂时无法完成，请稍后重试。',
+  'evolution_job_failed': '这项研究工作暂时无法完成，请稍后重试。',
   'evolution_lead_invalid': '这项研究工作暂时无法完成，请稍后重试。',
   'evolution_merge_case_conflict': '这条研究记录已变化，请刷新后重试。',
   'evolution_merge_unverified': '这项研究工作暂时无法完成，请稍后重试。',
@@ -126,10 +145,14 @@ export const EVOLUTION_ERROR_MESSAGES = Object.freeze({
   'evolution_review_invalid': '这项研究工作暂时无法完成，请稍后重试。',
   'evolution_review_unavailable': '这项研究工作暂时无法完成，请稍后重试。',
   'evolution_route_missing': '这条研究记录已变化，请刷新后重试。',
+  'evolution_run_failed': '这项研究工作暂时无法完成，请稍后重试。',
+  'evolution_run_budget_exhausted': '这项研究工作需要的模型预算超过了单次运行的上限，已记录为资源缺口，其他研究不受影响。',
   'evolution_run_timeout': '这项研究工作暂时无法完成，请稍后重试。',
   'evolution_scope_invalid': '这项研究工作暂时无法完成，请稍后重试。',
+  'evolution_setting_invalid': '循证进化的配置有误，该模块暂未启用，其他研究不受影响。',
   'evolution_temporarily_unavailable': '这项研究工作暂时无法完成，请稍后重试。',
   'evolution_tool_invalid': '这项研究工作暂时无法完成，请稍后重试。',
+  'evolution_tool_rate_limited': '这个项目调用平台工具过于频繁，请稍后重试。',
   'evolution_tool_missing': '这条研究记录已变化，请刷新后重试。',
   'evolution_version_immutable': '这条研究记录已变化，请刷新后重试。',
 })

@@ -16,8 +16,9 @@ import { createHash } from "node:crypto";
 import { AGENDA_DEFAULT_BUDGETS, canonicalJson } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 import { EVOLUTION_PROJECT_ID, isInternalProject } from "./internalProjects.mjs";
+import { createEvolutionToolAdmission } from "./evolutionToolAdmission.mjs";
 import { createEvolutionService, evolutionKey } from "./evolutionService.mjs";
-import { createEvolutionDecisions, evolutionDecisionReviewProof } from "./evolutionDecisions.mjs";
+import { createEvolutionDecisions, evolutionDecisionReviewProof, evolutionExecutableOperation, evolutionRetirementNotice } from "./evolutionDecisions.mjs";
 import { createEvolutionMaintenance, evolutionRetrievalScore } from "./evolutionMaintenance.mjs";
 import { createEvolutionWorker } from "./evolutionWorker.mjs";
 import { persistExistingEngineEvaluation } from "./existingEngineCalibration.mjs";
@@ -57,7 +58,8 @@ export function createEvolution({ config, store, documents, jobs, database, usag
   researchSessions, agentRuns, evaluationIsolation, sourceService, autopilot, dataSemantics, controller, canRun, report = () => {}, fetchImpl = fetch }) {
   if (!config.evolutionEnabled || !database || !documents || !jobs || !usageLedger) return null;
   const settingsIssues = validateEvolutionConfiguration(config);
-  if (settingsIssues.length) throw new HttpError(503, "evolution_setting_invalid", `Invalid evolution setting: ${settingsIssues[0].key}.`);
+  // A module whose settings are wrong stays off with the reason reported; it never stops the platform (`loadConfig` refuses first).
+  if (settingsIssues.length) { report(settingsIssues[0].code); return null; }
   const ensureOwner = async () => {
     const owner = config.operatorUsers[0], user = owner && await store.userById(owner);
     if (!user) throw new HttpError(503, "evolution_owner_missing", "Evolution requires a configured platform operator.");
@@ -70,7 +72,7 @@ export function createEvolution({ config, store, documents, jobs, database, usag
     wakeAgenda: input => integration.wakeAgenda(input),
   } });
   const integration = new EvolutionIntegration({ service, autopilot, report });
-  const learningCoupling = createEvolutionLearningCoupling({service,documents,database});
+  const learningCoupling = createEvolutionLearningCoupling({service,database});
   service.callbacks.adjudicationOpportunity = async input => {
     const userId=await service.owner(), user=await store.userById(userId);
     const project=await store.projectFor(user,'evolution-research-opportunities','循证进化研究机会');
@@ -78,12 +80,11 @@ export function createEvolution({ config, store, documents, jobs, database, usag
       title:'核对复现分析中的证据分歧',prompt:`${input.publicPaperId ? `独立核查公开论文 ${input.publicPaperId}。` : ''}平台的独立复现和跨家族复核发现值得进一步核对的证据分歧。请开展独立文献核查，保留来源并区分已发表结论与平台推断；不将平台裁定作为新的实证证据。`,taskTypes:['evidence-update'],basis:{kind:'adjudicated-platform-inference',...input}});
   };
   service.callbacks.scanHandbookGaps = () => learningCoupling.scan();
-  service.callbacks.refreshPlatformReferences = () => learningCoupling.refresh();
   const executionEvidence = createProspectiveExecutionEvidence(config);
   const evidenceRegistration = createEvolutionEvidenceRegistration({ service, integration, store, agentRuns, runtimeManager, sourceService, executionEvidence });
   service.callbacks.pollProspectiveTargets = () => evidenceRegistration.pollProspectiveTargets();
   const runs = createEvolutionRuns({ config, store, registry, runtimeManager, researchSessions, agentRuns, usageLedger, evaluationIsolation, service });
-  const supply = createPlatformSkillSupply(config);
+  const supply = createPlatformSkillSupply(config, { report });
   const candidateEvaluator = createEvolutionCandidateEvaluator({ config, controller, fetchImpl,
     withReviewLock: (id, operation) => service.withLock(`candidate-review:${id}`, operation),
     evaluateWorkflowSmoke: createEvolutionWorkflowSmoke({ service, runs, store }),
@@ -185,7 +186,7 @@ export function createEvolution({ config, store, documents, jobs, database, usag
     execute: async action => {
       const id = `evolution-action-${evolutionKey(action.actionId)}`, prior = await service.get(id);
       if (prior?.payload.status === "complete") return prior.payload.result;
-      const selected = action.options.find(item => item.id === action.option), operation = selected.operation ?? action.option;
+      const selected = action.options.find(item => item.id === action.option), operation = evolutionExecutableOperation(action);
       let result;
       if(operation==='keep' && (await service.get(action.subjectId))?.payload.recordType==='evolution-maintenance-review') result=await maintenance.executeReview(action);
       else if (["wait", "defer", "keep"].includes(operation)) result = { state: "waiting" };
@@ -211,7 +212,9 @@ export function createEvolution({ config, store, documents, jobs, database, usag
     notifyAffected: async ({ toolId, reason }) => {
       await supply.retire(toolId);
       const uses = await database.query("SELECT user_id,project_id,id,payload FROM evimed_product.documents WHERE kind='knowledge' AND deleted_at IS NULL AND payload->>'recordType'='evolution-use' AND payload->>'toolId'=$1", [toolId]);
-      for (const row of uses.rows) await notifications.create(row.user_id, { noticeType: "notify", title: "科研工具已更新状态", body: `先前结果使用的工具 ${toolId} 已停用（${reason}）。原始结果和工具版本保留，可重新检查。`, source: { type: "system", id: row.id }, projectId: row.project_id, idempotencyKey: `evolution-retired:${row.id}:${toolId}` });
+      const retired = await service.get(toolId);
+      const wording = evolutionRetirementNotice({ name: retired?.payload.name ?? retired?.payload.description, toolId, reason });
+      for (const row of uses.rows) await notifications.create(row.user_id, { noticeType: "notify", title: wording.title, body: wording.body, source: { type: "system", id: row.id }, projectId: row.project_id, idempotencyKey: `evolution-retired:${row.id}:${toolId}` });
     },
     replayCases: async ({ candidate, cases }) => {
       const parents = await Promise.all((candidate.lineage?.parents ?? []).map(id => service.get(id)));
@@ -338,7 +341,10 @@ export function createEvolution({ config, store, documents, jobs, database, usag
   const selfCheck = createEvolutionSelfCheck({ service, dataSemantics, store, controller, supply, config });
   const dailyCost = async client => Number((await client.query(`SELECT coalesce(sum(CASE WHEN status='settled' THEN actual_cost WHEN ${openCostPredicate("24 hours", "$1")} THEN ${OPEN_COST_VALUE} ELSE 0 END),0) AS cost FROM evimed_usage.model_requests WHERE purpose='evolution' AND created_at>=$1::timestamptz-interval '24 hours'`, [new Date().toISOString()])).rows[0]?.cost ?? 0);
   const worker = createEvolutionWorker({ service, decisions, maintenance, config, canRun, callbacks: {
-    dailyCost, canResume: job => runs.canResume(job), admitRuntime: async (_client, { kinds = [] } = {}) => kinds.length > 0 && kinds.every(kind => kind === "evolution-self-check")
+    dailyCost, canResume: job => runs.canResume(job),
+    // Which limit refused a run: the module's own daily allowance when it is spent (it frees with the window), otherwise the run's own cap.
+    // A weekly limit is not set for evolution (`weeklyLimit` is a million), so nothing else can refuse a run that has day budget left.
+    refusalCause: async () => await dailyCost(database) >= config.evolutionDailyBudgetCny ? "day" : "run", admitRuntime: async (_client, { kinds = [] } = {}) => kinds.length > 0 && kinds.every(kind => kind === "evolution-self-check")
       || (await controller.evolutionAdmissionAvailable()).available === true,
     onEvent: event => integration.consume(event), scout: async (payload, context) => { await frontier?.tick(); return scout.scout(payload, context); }, build,
     evaluate: async (payload, { signal, job }) => {
@@ -422,19 +428,20 @@ export function createEvolution({ config, store, documents, jobs, database, usag
     if ((await scientificUseScope(event)).researcherOwned !== true) return;
     await maintenance.observe(event.toolId, { runId: event.runId, retrievalId: event.retrievalId, retrieved: true, outcome: "pending" });
   };
+  const toolAdmission = createEvolutionToolAdmission({ config, database, canRun, heavyWorkAdmission, isInternalProject, dailyCost });
   const gateway = createEvolutionGatewayHandler({ config, authenticateWorkload: token => runtimeManager.assertActiveEviMedWorkloadToken(token), runtimeManager, controller, supply,
     resolveRun: async principal => { const user = await store.userById(principal.userId), project = await store.requireProject(user, principal.projectId);
       const active = (await agentRuns.list(project)).filter(run => run.status === "running");
       if (active.length !== 1) return null;
       return { project, runId: active[0].id, capabilityId: active[0].effectiveAgentId ?? active[0].agentId }; },
-    admit: async (scope, work) => database.transaction(async client => {
-      if (!await canRun() || !await heavyWorkAdmission(client, "compute")) throw new HttpError(503, "evolution_temporarily_unavailable", "Execution waits for host capacity.");
-      if (isInternalProject(scope.project.id) && await dailyCost(client) >= config.evolutionDailyBudgetCny) throw new HttpError(402, "usage_budget_exceeded", "Evolution reached its own daily budget.");
-      return work();
-    }),
+    // Decided in a short transaction and bounded per project; neither the heavy-work lock nor a pooled connection is held while the tool runs.
+    admit: toolAdmission.admit,
     onExecution });
   const finishRun = async (project, run) => {
-    const uses = (await service.list("use", project.userId)).filter(row => row.projectId === project.id && row.payload.runId === run.id);
+    // Only this run's calls of platform tools: a run that made none (nearly every run of every researcher) has nothing to
+    // complete and nothing to observe, and neither the account's whole record of uses nor its transcript is read for it.
+    const uses = (await service.list("use", project.userId, { runId: run.id })).filter(row => row.projectId === project.id);
+    if (!uses.length) return;
     const transcript = await readRunTranscript(project, run.id).catch(() => null);
     if (isInternalProject(project.id)) {
       if (uses.length && transcript?.header?.completeness === "complete") {
@@ -454,6 +461,8 @@ export function createEvolution({ config, store, documents, jobs, database, usag
       await maintenance.observe(toolId, { runId: run.id, outcome: "pending", at: run.finishedAt ?? service.now().toISOString() });
     }
   };
-  return { service, decisions, maintenance, worker, integration, routes, gateway, supply, runs, paperGold, candidateEvaluator, frontier, finishRun, onExecution, onRetrieval,
+  // What the candidate executor has done and refused, read from the runtime controller where it acts (`evolutionOpsMetrics.mjs`).
+  const executorCounters = async () => (await controller.evolutionAdmissionAvailable())?.executor ?? null;
+  return { service, decisions, maintenance, worker, integration, routes, gateway, toolAdmission, executorCounters, supply, runs, paperGold, candidateEvaluator, frontier, finishRun, onExecution, onRetrieval,
     observeFeedback: feedback.observeFeedback };
 }

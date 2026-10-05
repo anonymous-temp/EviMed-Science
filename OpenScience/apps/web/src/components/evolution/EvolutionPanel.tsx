@@ -25,6 +25,8 @@ export function EvolutionPanel({ projectId, dataset }: { projectId?: string; dat
   }, [projectId, access.operator, dataset]);
   useEffect(() => { if (access.enabled && (projectId || access.operator)) void load(); }, [access.enabled, access.operator, projectId, load]);
   if (!access.enabled || (!projectId && !access.operator)) return null;
+  // Beside a dataset's meaning the panel says what the data can use and is silent when it can use nothing yet.
+  if (dataset && tools !== null && tools.length === 0 && !error) return null;
   return <section aria-label="进化工具" className="mt-6 space-y-3">
     <h2 className="text-body font-semibold text-text">{dataset ? "这份数据可用的工具" : "进化工具"}</h2>
     {error && <LoadError message={error} onRetry={() => void load()} />}
@@ -32,9 +34,8 @@ export function EvolutionPanel({ projectId, dataset }: { projectId?: string; dat
       <h3 className="text-ui font-medium text-text">{tool.name ?? tool.description ?? '科研工具'}</h3>
       {tool.description && <p className="mt-1 text-ui text-text-2">{tool.description}</p>}
       <div className="mt-2 flex flex-wrap gap-2"><Tag>{tool.validationLevel === 'V4' && Number.isInteger(tool.usage?.runs) && (tool.usage?.runs ?? -1) >= 0 ? `已用于 ${tool.usage?.runs} 次研究` : VALIDATION[tool.validationLevel] ?? tool.validationLevel}</Tag><Tag>{DATA[tool.dataLevel] ?? tool.dataLevel}</Tag>{tool.maintenanceState === 'deprecating' && <Tag>待修复</Tag>}{access.operator && tool.status && <Tag>{{ staged: "待上线", active: "已上线", alias: "历史别名", retired: "已退役" }[tool.status]}</Tag>}</div>
-      <p className="mt-2 text-caption text-text-2">{Number.isInteger(tool.usage?.invoked) && (tool.usage?.invoked ?? -1) >= 0 ? `实际调用 ${tool.usage?.invoked} 次` : '暂无调用记录'}</p>
       {tool.papers && tool.papers.length > 0 && <Disclosure summary="依据文献"><ul className="mt-2 space-y-2">{tool.papers.map(paper => <li key={paper.id}><a href={paper.url} target="_blank" rel="noreferrer" className="text-ui text-accent">{paper.title}</a></li>)}</ul></Disclosure>}
-      {tool.dataRequirements && <Disclosure summary="数据要求"><pre className="mt-2 overflow-x-auto whitespace-pre-wrap text-caption text-text-2">{JSON.stringify(tool.dataRequirements, null, 2)}</pre><Button variant="text" size="sm" onClick={() => downloadEvolutionRequirements(tool)}>下载数据要求</Button><Button variant="text" size="sm" onClick={() => downloadEvolutionTemplate(tool)}>下载表格模板</Button></Disclosure>}
+      {tool.dataRequirements && <Disclosure summary="数据要求"><Button variant="text" size="sm" onClick={() => downloadEvolutionRequirements(tool)}>下载数据要求</Button><Button variant="text" size="sm" onClick={() => downloadEvolutionTemplate(tool)}>下载表格模板</Button></Disclosure>}
       {access.operator && tool.artifactDigest && <Disclosure summary="版本"><p className="break-all font-mono text-caption text-text-3">{tool.artifactDigest}</p></Disclosure>}
     </li>)}</ul>}
     {!projectId && access.operator && <><Disclosure summary="研发计划"><ul className="space-y-2">{dossiers.map(row => <li key={row.id} className="text-ui text-text-2">{row.payload.title ?? row.payload.goal ?? '研发计划'}</li>)}</ul>{dossiers.length === 0 && <EmptyState title="暂无研发计划" />}</Disclosure><Link to="/app/inbox" className="text-ui text-accent">查看裁决</Link></>}

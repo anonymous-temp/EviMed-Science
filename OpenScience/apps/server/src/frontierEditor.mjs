@@ -50,6 +50,7 @@
 
 import { createHash } from "node:crypto";
 import {
+  DISPLAY_TIME_ZONE,
   FRONTIER_EVIDENCE_TYPES,
   FRONTIER_EVIDENCE_TYPE_LABELS_ZH,
   FRONTIER_ITEM_FLAGS,
@@ -60,6 +61,7 @@ import {
   FRONTIER_SCORE_MAXIMA,
   FRONTIER_SPECIALTIES,
   FRONTIER_SPECIALTY_LABELS_ZH,
+  agendaLocalDate,
 } from "@evimed/domain";
 import { checkNumbers } from "./frontierNumbers.mjs";
 import { callModelForControlPlane } from "./modelGateway.mjs";
@@ -353,10 +355,16 @@ function providerFailureMetadata(error) {
   };
 }
 
-/** An ISO date (UTC) for the prompt, or null. @param {unknown} value */
-function isoDay(value) {
+/**
+ * The day a publication moment falls on, for the prompt, or null: in the feed's zone, which is the
+ * day the reader's card shows. The model repeats it in the summary the reader reads, and a paper
+ * at 20:00 UTC read as "the 21st" under a card that says the 22nd is a contradiction in the page.
+ * A day-precision date is stored at 00:00 UTC, which every zone at or east of UTC reads as the same day.
+ * @param {unknown} value @param {string} [timeZone]
+ */
+function isoDay(value, timeZone = DISPLAY_TIME_ZONE) {
   const time = value instanceof Date ? value.getTime() : Date.parse(String(value ?? ""));
-  return Number.isFinite(time) ? new Date(time).toISOString().slice(0, 10) : null;
+  return Number.isFinite(time) ? agendaLocalDate(timeZone, new Date(time)) : null;
 }
 
 /** @param {unknown} value @param {number} max */
@@ -412,7 +420,7 @@ function glossaryInputLines(entries) {
  * @param {FrontierEditItem} item
  * @returns {string}
  */
-export function buildModelInput(item) {
+export function buildModelInput(item, { timeZone = DISPLAY_TIME_ZONE } = {}) {
   const lanes = (item.allowedLanes?.length ? item.allowedLanes : FRONTIER_LANES)
     .map((lane) => `${lane}（${FRONTIER_LANE_LABELS_ZH[/** @type {keyof typeof FRONTIER_LANE_LABELS_ZH} */ (lane)] ?? lane}）`).join("、");
   const lines = [`允许的栏目：${lanes}`];
@@ -422,7 +430,7 @@ export function buildModelInput(item) {
   lines.push(`中文信源：${item.isChinese ? "是（title_zh 原样照抄标题）" : "否"}`);
   lines.push(...glossaryInputLines(item.glossary ?? []));
   lines.push(`来源：${clip(item.sourceName, 120)}${item.sourceTypeLabel ? `（${item.sourceTypeLabel}）` : ""}`);
-  const day = item.datePrecision === "inferred" ? null : isoDay(item.publishedAt);
+  const day = item.datePrecision === "inferred" ? null : isoDay(item.publishedAt, timeZone);
   if (day) lines.push(`发布日期：${day}`);
   if (item.journal) lines.push(`期刊：${clip(item.journal, 200)}`);
   if (item.publicationTypes?.length) lines.push(`文献类型：${clip(item.publicationTypes.join("; "), 300)}`);
@@ -633,14 +641,14 @@ export function validateScreen(batch, answer) {
  * reports, primary sources first, each bounded; about 9,000 characters.
  * @param {{ reports: FrontierEventReport[], previousDigest?: string | null }} event
  */
-export function buildDigestInput({ reports, previousDigest = null }) {
+export function buildDigestInput({ reports, previousDigest = null }, { timeZone = DISPLAY_TIME_ZONE } = {}) {
   const ordered = [...reports].sort((left, right) => Number(right.role === "primary") - Number(left.role === "primary")
     || String(left.publishedAt ?? "").localeCompare(String(right.publishedAt ?? "")));
   const lines = [`上一版综述：${previousDigest ? clip(previousDigest, 600) : "无"}`, "报道（一手来源在前）："];
   let room = WRITING_INPUT_CHARS - lines.join("\n").length;
   for (const [index, report] of ordered.slice(0, 12).entries()) {
     const block = [
-      `[${index + 1}] ${report.role === "primary" ? "一手来源" : "报道"}｜${clip(report.sourceName, 80)}${report.sourceTypeLabel ? `（${report.sourceTypeLabel}）` : ""}${isoDay(report.publishedAt) ? `｜${isoDay(report.publishedAt)}` : ""}`,
+      `[${index + 1}] ${report.role === "primary" ? "一手来源" : "报道"}｜${clip(report.sourceName, 80)}${report.sourceTypeLabel ? `（${report.sourceTypeLabel}）` : ""}${isoDay(report.publishedAt, timeZone) ? `｜${isoDay(report.publishedAt, timeZone)}` : ""}`,
       `标题：${clip(report.titleRaw, 300)}`,
       report.titleZh ? `中文标题：${clip(report.titleZh, 120)}` : "",
       report.summaryZh ? `导读：${clip(report.summaryZh, 300)}` : "",
@@ -707,8 +715,8 @@ export function verifyWriting(answer, fields, input) {
  */
 
 /** @param {FrontierSameEventReport} report */
-function reportForModel(report) {
-  const day = isoDay(report?.publishedAt);
+function reportForModel(report, timeZone = DISPLAY_TIME_ZONE) {
+  const day = isoDay(report?.publishedAt, timeZone);
   return {
     source: clip(report?.sourceName, 120),
     ...(day ? { date: day } : {}),
@@ -722,9 +730,9 @@ function reportForModel(report) {
     ...(report?.evidenceType ? { evidence_type: clip(report.evidenceType, 80) } : {}),
     ...(report?.sourceType ? { source_type: clip(report.sourceType, 40) } : {}),
     ...(report?.eventTitle ? { event_title: clip(report.eventTitle, 200) } : {}),
-    ...(isoDay(report?.timelineAt) ? { timeline_date: isoDay(report.timelineAt) } : {}),
-    ...(isoDay(report?.eventFirstAt) ? { event_first_date: isoDay(report.eventFirstAt) } : {}),
-    ...(isoDay(report?.eventLastAt) ? { event_last_date: isoDay(report.eventLastAt) } : {}),
+    ...(isoDay(report?.timelineAt, timeZone) ? { timeline_date: isoDay(report.timelineAt, timeZone) } : {}),
+    ...(isoDay(report?.eventFirstAt, timeZone) ? { event_first_date: isoDay(report.eventFirstAt, timeZone) } : {}),
+    ...(isoDay(report?.eventLastAt, timeZone) ? { event_last_date: isoDay(report.eventLastAt, timeZone) } : {}),
   };
 }
 
@@ -733,10 +741,10 @@ function reportForModel(report) {
  * the new report, then the earlier ones numbered from 1.
  * @param {{ report: FrontierSameEventReport, candidates: FrontierSameEventReport[] }} input
  */
-export function buildSameEventInput({ report, candidates }) {
+export function buildSameEventInput({ report, candidates }, { timeZone = DISPLAY_TIME_ZONE } = {}) {
   return JSON.stringify({
-    new: reportForModel(report),
-    earlier: candidates.slice(0, FRONTIER_SAME_EVENT_CANDIDATES).map((candidate, index) => ({ id: String(index + 1), ...reportForModel(candidate) })),
+    new: reportForModel(report, timeZone),
+    earlier: candidates.slice(0, FRONTIER_SAME_EVENT_CANDIDATES).map((candidate, index) => ({ id: String(index + 1), ...reportForModel(candidate, timeZone) })),
   });
 }
 
@@ -905,6 +913,8 @@ export class FrontierEditor {
     this.callModel = callModel;
     this.fetchImpl = fetchImpl;
     this.model = String(this.config.frontierModel || "deepseek-flash");
+    /** The zone the dates the model is shown are read in: the feed's own. */
+    this.timeZone = String(this.config.frontierTimeZone || DISPLAY_TIME_ZONE);
     /** Observable counters (principle 15). */
     this.counters = {
       screenCalls: 0, screenRetries: 0, screenSingles: 0, screenFailures: 0,
@@ -1139,7 +1149,7 @@ export class FrontierEditor {
    * @returns {Promise<FrontierEditResult>}
    */
   async edit(item) {
-    const modelInput = buildModelInput(item);
+    const modelInput = buildModelInput(item, { timeZone: this.timeZone });
     /** @type {FrontierEditResult} */
     const result = {
       verification: "pending", output: null, modelInput, modelInputSha256: sha256(modelInput), attempts: 0,
@@ -1294,7 +1304,7 @@ export class FrontierEditor {
    * @param {{ reports: FrontierEventReport[], previousDigest?: string | null }} event
    */
   async writeEventDigest(event) {
-    const input = buildDigestInput(event);
+    const input = buildDigestInput(event, { timeZone: this.timeZone });
     const result = await this.#write(FRONTIER_DIGEST_INSTRUCTIONS, input, { digest_zh: FRONTIER_WRITING_LIMITS.digest, latest_zh: FRONTIER_WRITING_LIMITS.latest }, DIGEST_MAX_TOKENS);
     return { ...result, digestZh: result.output?.digest_zh ?? null, latestZh: result.output?.latest_zh ?? null };
   }
@@ -1333,7 +1343,7 @@ export class FrontierEditor {
     if (!earlier.length) return { verdicts: [], error: null, attempts: 0 };
     const messages = [
       { role: "system", content: FRONTIER_SAME_EVENT_INSTRUCTIONS },
-      { role: "user", content: buildSameEventInput({ report, candidates: earlier }) },
+      { role: "user", content: buildSameEventInput({ report, candidates: earlier }, { timeZone: this.timeZone }) },
     ];
     let attempts = 0;
     /** @type {string | null} */

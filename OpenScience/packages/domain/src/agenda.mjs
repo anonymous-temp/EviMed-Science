@@ -60,6 +60,28 @@ export const DEFAULT_ENABLED_TASK_TYPES = Object.freeze([
 /** An episode's lifecycle. */
 export const EPISODE_STATES = Object.freeze(['queued', 'running', 'verifying', 'merged', 'failed', 'canceled'])
 
+/**
+ * Why a claim was not given an independent re-check (`verification.status` is
+ * `unscheduled`, and this is its `reason`). Every one of them ends the claim's
+ * verification: nothing reads "queued" for a run that will never be made.
+ *
+ *  - `verification_cap`: more claims than an episode re-checks (`STOPPING_RULES`).
+ *  - `verification_budget_unavailable`: the share held back for re-checks cannot
+ *    pay for this one at `MIN_RUN_BUDGET_CNY` (`splitEpisodeBudget`).
+ *  - `agenda_stopped` / `agenda_paused`: the agenda stopped before the re-check
+ *    started. A restart does not revive it: the next episode brings its own.
+ */
+export const VERIFICATION_UNSCHEDULED_REASONS = Object.freeze([
+  'verification_cap', 'verification_budget_unavailable', 'agenda_stopped', 'agenda_paused',
+])
+
+/**
+ * The `code` of a claim whose re-check was running when its agenda was stopped
+ * and was cancelled with it: not a missing result and not a failed run, which
+ * are what the cancelled run's own ending would otherwise be recorded as.
+ */
+export const VERIFICATION_CANCELED_BY_STOP = 'verification_canceled_by_stop'
+
 /** How a dataset is classified; it decides defaults, not permissions. */
 export const DATASET_CLASSIFICATIONS = Object.freeze(['public', 'patient-level'])
 
@@ -270,15 +292,6 @@ export function tierRaiseAllowed(input) {
 }
 
 /**
- * The caps a new agenda is offered before its researcher edits them, in CNY:
- * what the task form shows, and what an agenda created on a researcher's behalf
- * (an adopted research opportunity) starts with. Ceilings, not spend — an
- * episode costs what its model calls cost — and an agenda created with them is
- * not running until its researcher starts it.
- */
-export const AGENDA_DEFAULT_BUDGETS = Object.freeze({ maxEpisodeCny: 100, dailyBudgetCny: 500, weeklyBudgetCny: 3000 })
-
-/**
  * The stopping rules.
  *
  * Every one of them exists because unattended work fails quietly: a direction
@@ -294,8 +307,8 @@ export const AGENDA_DEFAULT_BUDGETS = Object.freeze({ maxEpisodeCny: 100, dailyB
  * productive night would spend a second night's budget re-checking itself. At
  * most three claims per episode are re-checked, and the share they spend is
  * held back out of the night's own budget before the episode is dispatched
- * (`splitEpisodeBudget` in the server's autopilot service), so a night costs
- * what it said it would cost whether or not its claims earn a second opinion.
+ * (`splitEpisodeBudget` below), so a night costs what it said it would cost
+ * whether or not its claims earn a second opinion.
  */
 export const STOPPING_RULES = Object.freeze({
   episodesWithoutGatedClaimBeforeHalving: 3,
@@ -305,6 +318,84 @@ export const STOPPING_RULES = Object.freeze({
   episodeWallClockHours: 2,
   verificationsPerEpisode: 3,
 })
+
+/**
+ * The caps a new agenda is offered before its researcher edits them, in CNY:
+ * what the task form shows, and what an agenda created on a researcher's behalf
+ * (an adopted research opportunity) starts with. Ceilings, not spend — an
+ * episode costs what its model calls cost — and an agenda created with them is
+ * not running until its researcher starts it.
+ */
+export const AGENDA_DEFAULT_BUDGETS = Object.freeze({ maxEpisodeCny: 100, dailyBudgetCny: 500, weeklyBudgetCny: 3000 })
+
+/**
+ * The smallest budget one run can be given, in CNY.
+ *
+ * A limit on a run compares reservations, not spend. Before a call is sent the
+ * model gateway holds the price of the most it could cost: its output ceiling
+ * (65,536 tokens — ¥0.52 by day at ¥8 per million, half that at the night
+ * rate) plus the prompt at the cache-miss rate (¥2 per million: ¥0.15 for the
+ * median prompt of 73 thousand tokens, ¥0.61 for the 99th percentile of 305
+ * thousand, production 2026-10-05), and settles at the real count afterwards,
+ * usually ¥0.003 to ¥0.04. A call is admitted while the run's settled spend
+ * plus that hold fits under the limit, so ¥1.2 admits a first call with any
+ * prompt the platform has sent and leaves room for the calls after it. It is a
+ * fact about the gateway's reservation (`estimateModelReservation`, and the
+ * ceiling the gateway forwards a call with), written here once; every budget
+ * that becomes a run's limit is held to it: the episode cap an agenda accepts,
+ * each verification's share of it, and what is left of an agenda's own window.
+ * Until 2026-10-05 the hold followed the 256,000 tokens the kernel names on
+ * every request — ¥2.05 by day — and a run limited to ¥2.25 ended on its
+ * second call.
+ */
+export const MIN_RUN_BUDGET_CNY = 1.2
+
+/** The share of an episode's cap held back for the second opinions its claims may earn. */
+export const VERIFICATION_BUDGET_SHARE = 0.25
+
+/**
+ * How one episode's cap is split between the episode and its verifications.
+ *
+ * Both halves spend against the same rolling daily cap, so an episode given the
+ * whole cap can exhaust it and leave every verification of its own claims
+ * refused: the second opinion starved by the first. A share is therefore taken
+ * out before the episode is dispatched — but only a share that can pay for
+ * something. Each verification is a run of its own and needs `MIN_RUN_BUDGET_CNY`,
+ * so the share is divided among as many verifications as it can fund at that
+ * minimum (none to `verificationsPerEpisode`) and each gets an equal part of it;
+ * a share that funds none is not held back, because money held for a run that
+ * cannot start is money the episode could have used. The claims past that count
+ * are recorded as not re-checked, with the reason, instead of queued as runs
+ * that would each end on their first call.
+ *
+ * Whole cents throughout: ¥1.20 is 120, never 1.2000000000000002.
+ *
+ * @param {number} capCny what one episode may spend, its verifications included
+ * @returns {{ episodeCny: number, verificationCny: number, verifications: number }}
+ */
+export function splitEpisodeBudget(capCny) {
+  const capCents = Math.round(Number(capCny) * 100)
+  if (!Number.isFinite(capCents) || capCents <= 0) return { episodeCny: 0, verificationCny: 0, verifications: 0 }
+  const heldCents = Math.floor(Math.round(capCents * VERIFICATION_BUDGET_SHARE * 1e6) / 1e6)
+  const verifications = Math.min(STOPPING_RULES.verificationsPerEpisode, Math.floor(heldCents / Math.round(MIN_RUN_BUDGET_CNY * 100)))
+  if (verifications < 1) return { episodeCny: capCents / 100, verificationCny: 0, verifications: 0 }
+  const eachCents = Math.floor(heldCents / verifications)
+  return { episodeCny: (capCents - eachCents * verifications) / 100, verificationCny: eachCents / 100, verifications }
+}
+
+/**
+ * The smallest per-episode cap an agenda accepts: the smallest whose episode
+ * share, after the split above, is still a budget a run can be given. Found by
+ * asking the split rather than by restating its arithmetic, so a change to the
+ * share or to the minimum moves it too. At today's numbers a share is held back
+ * only once it funds a verification, so the minimum is one run's minimum.
+ */
+export const AGENDA_MIN_EPISODE_BUDGET_CNY = (() => {
+  for (let cents = 1; cents <= 100_000; cents += 1) {
+    if (splitEpisodeBudget(cents / 100).episodeCny >= MIN_RUN_BUDGET_CNY) return cents / 100
+  }
+  throw new Error('No per-episode cap leaves the episode a runnable budget.')
+})()
 
 /**
  * Whether a direction should keep running.

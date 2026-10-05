@@ -461,10 +461,35 @@ function normalizedRequest(body, config) {
     model: config.deepseekModel,
     ...reasoningFields(body, "chat", config),
     stream,
-    ...(body.max_tokens == null && body.max_completion_tokens == null
-      ? { max_completion_tokens: configuredOutputLimit } : {}),
+    ...outputCeiling(body, configuredOutputLimit, "max_completion_tokens"),
     ...(stream ? { stream_options: { ...(body.stream_options ?? {}), include_usage: true } } : {}),
   };
+}
+
+/**
+ * The output limit one call is forwarded with: what the caller asked for, and
+ * never more than the deployment's ceiling
+ * (`OPEN_SCIENCE_MODEL_GATEWAY_RESERVATION_MAX_OUTPUT_TOKENS`, 65,536).
+ *
+ * The ceiling used to be only the default for a caller that named no limit. The
+ * kernel names one — 256,000 tokens on every request — and the reservation
+ * prices whatever is named, so each call held ¥2.05 by day (¥1.03 at the night
+ * rate) against a real cost of a few fen. Every budget is compared with
+ * reservations: an episode limited to ¥2.25 was refused on its second call
+ * (production, 2026-10-05), and a quarter of an agenda's cap split among three
+ * re-checks paid for none below a cap of about ¥26. Of 22,689 kernel calls
+ * settled on production none wrote more than 32,763 tokens, so the ceiling is
+ * twice the largest answer ever given and eight times nearer to it than what
+ * was being held. Lowering the limit that is sent, rather than only the amount
+ * reserved, is what keeps the reservation a true ceiling of the call's cost.
+ * @param {Record<string, any>} body a validated request
+ * @param {number} ceiling
+ * @param {"max_tokens" | "max_completion_tokens"} unnamed the field a request that names no limit is given: each wire has its own
+ */
+function outputCeiling(body, ceiling, unnamed) {
+  if (body.max_tokens != null) return { max_tokens: Math.min(body.max_tokens, ceiling) };
+  if (body.max_completion_tokens != null) return { max_completion_tokens: Math.min(body.max_completion_tokens, ceiling) };
+  return { [unnamed]: ceiling };
 }
 
 /** The kernel's credential on the Messages route: the workload token, in
@@ -604,7 +629,7 @@ function normalizedMessagesRequest(body, config) {
     model: config.deepseekModel,
     ...reasoningFields(body, "messages", config),
     stream: body.stream === true,
-    max_tokens: body.max_tokens ?? configuredOutputLimit,
+    ...outputCeiling(body, configuredOutputLimit, "max_tokens"),
   };
 }
 

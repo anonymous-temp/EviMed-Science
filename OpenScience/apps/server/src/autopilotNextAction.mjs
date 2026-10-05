@@ -270,8 +270,9 @@ export function parsePlannerAnswer(content, { eligible, stopAllowed, pauseAllowe
     // The researcher's own pause is the only stop their message can ask for, and
     // the only one allowed in answer to it; every other stop is the scheduler's.
     if (answer.stopKind === RESEARCHER_PAUSE_KIND ? !pauseAllowed : !stopAllowed) throw invalid("a stop where none is allowed");
-    const need = answer.resourceNeed;
-    if (need != null && (!evolutionEnabled || answer.stopKind !== "needs_input" || !["tool", "data"].includes(need.kind))) throw invalid("an invalid resource need");
+    // A need the module can use rides on the stop; anything else — the module is off, the stop is of another kind, the
+    // need is not a tool or data — is left out, and the stop stands: the decision is the model's, the need an addition to it.
+    const need = evolutionEnabled && answer.stopKind === "needs_input" && ["tool", "data"].includes(answer.resourceNeed?.kind) ? answer.resourceNeed : null;
     const id = (value) => typeof value === "string" && /^[a-z0-9][a-z0-9-]{0,159}$/.test(value) ? value : undefined;
     return { action: "stop", stopKind: answer.stopKind, reason,
       ...(need ? { resourceNeed: { kind: need.kind, capabilityId: id(need.capabilityId), methodId: id(need.methodId), toolId: id(need.toolId), requirementId: id(need.requirementId) } } : {}) };

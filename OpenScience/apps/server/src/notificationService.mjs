@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { NOTICE_PRIORITY, NOTICE_TYPES, connectorCredentialSpec, errorCodeMessage, runOutcomeKind, summarizeGateNotices } from "@evimed/domain";
+import { DISPLAY_TIME_ZONE, NOTICE_PRIORITY, NOTICE_TYPES, agendaLocalDate, connectorCredentialSpec, errorCodeMessage, runOutcomeKind, summarizeGateNotices } from "@evimed/domain";
 import { describedQualityNotices } from "./runNotices.mjs";
 import { HttpError } from "./security.mjs";
 import { migrateNotifications } from "./notificationPersistence.mjs";
@@ -242,18 +242,18 @@ export function runFinishedNotice(run) {
   };
 }
 
-// China Standard Time has kept one offset since 1991, so a fixed +8 h is exact
-// and needs no time-zone database — the control-plane container is UTC and
-// carries none (memory note "Node reads TZ without tzdata").
-const shanghaiOffsetMs = 8 * 3_600_000;
-
 /**
- * The calendar day a moment falls on for a researcher in China, `YYYY-MM-DD`.
+ * The calendar day a moment falls on for a researcher in China, `YYYY-MM-DD`:
+ * the domain's one day-in-a-zone helper (`agendaLocalDate`) in the deployment's
+ * display zone. It was a second implementation with a fixed +8 h; the zone
+ * database it needs is the ICU one inside Node, which every other zoned day in
+ * this control plane already reads, and not the container's (memory note "Node
+ * reads TZ without tzdata").
  * @param {unknown} value @returns {string | null}
  */
 export function shanghaiDay(value) {
   const time = value instanceof Date ? value.getTime() : Date.parse(String(value ?? ""));
-  return Number.isFinite(time) ? new Date(time + shanghaiOffsetMs).toISOString().slice(0, 10) : null;
+  return Number.isFinite(time) ? agendaLocalDate(DISPLAY_TIME_ZONE, new Date(time)) : null;
 }
 
 /**
@@ -651,6 +651,19 @@ export class NotificationService {
     }
     return this.#update(userId, id, expectedRevision,
       `read_at=coalesce(read_at,clock_timestamp()),resolved_at=clock_timestamp(),resolution=jsonb_build_object('actionId',$4::text,'source','user')`, action, true);
+  }
+
+  /**
+   * The platform closing an item whose question was settled without its reader — a review that expired and took its
+   * default. Recorded as a default, as `applyDueDefaults` records its own, so a reader can tell it from their answer.
+   * @param {string} userId @param {string} id @param {{ actionId: string, expectedRevision: number }} input
+   */
+  async resolveByDefault(userId, id, { actionId, expectedRevision }) {
+    const item = await this.get(userId, id);
+    const action = productId(actionId, "action");
+    if (!item.actions.some((candidate) => candidate.id === action)) throw new HttpError(400, "notification_action_invalid", "Inbox action is unavailable.");
+    return this.#update(userId, id, expectedRevision,
+      `read_at=coalesce(read_at,clock_timestamp()),resolved_at=clock_timestamp(),resolution=jsonb_build_object('actionId',$4::text,'source','default')`, action, true);
   }
 
   async #update(userId, id, expectedRevision, assignment, extra = null, requireUnresolved = false) {

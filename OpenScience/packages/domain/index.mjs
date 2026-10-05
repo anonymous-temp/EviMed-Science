@@ -565,7 +565,7 @@ export {
   outputBelowFloor,
 } from './src/analysis.mjs'
 
-// agenda — 17 exports
+// agenda — 24 exports
 export {
   AGENDA_ITEM_TYPES,
   ALLOWED_EFFECT_MEASURES,
@@ -576,11 +576,17 @@ export {
   EPISODE_STATES,
   REFUTATION_VERDICTS,
   AGENDA_DEFAULT_BUDGETS,
+  AGENDA_MIN_EPISODE_BUDGET_CNY,
+  MIN_RUN_BUDGET_CNY,
   STOPPING_RULES,
   USER_SIGNALS,
+  VERIFICATION_BUDGET_SHARE,
+  VERIFICATION_CANCELED_BY_STOP,
+  VERIFICATION_UNSCHEDULED_REASONS,
   datasetPartitionOf,
   digestPlacement,
   directionVerdict,
+  splitEpisodeBudget,
   standingVerdict,
   tierRaiseAllowed,
   userSignalScore,
@@ -872,7 +878,7 @@ export {
   summarizeGateNotices,
 } from './src/gateIssueText.mjs'
 
-// usagePurpose — 8 exports: what a metered model request was for (X1)
+// usagePurpose — 10 exports: what a metered model request was for (X1)
 export {
   USAGE_PURPOSES,
   USAGE_PURPOSE_LABELS_ZH,
@@ -880,7 +886,9 @@ export {
   usagePurpose,
   usagePurposeOfRun,
   isResearcherOwnedWork,
+  isChargeableResearchRun,
   LEARNING_AGENT_IDS,
+  PLATFORM_ROUTE_PURPOSES,
   LEARNING_EVALUATION_DISPATCH_PREFIX,
 } from './src/usagePurpose.mjs'
 // sourceUpdates — 5 exports (retraction and correction notices on a cited work, 2026-09-20)
@@ -1186,7 +1194,7 @@ export {
 } from './src/geoMetrics.mjs'
 export { frontierNoticeTarget, frontierNoticeHref } from './src/frontierPresentation.mjs';
 
-export { validAgendaDate, validateAgendaSchedule, normalizeAgendaSchedule, agendaLocalDate, agendaDueOccurrence, agendaNextOccurrence } from "./src/agendaSchedule.mjs";
+export { validAgendaDate, validateAgendaSchedule, normalizeAgendaSchedule, agendaLocalDate, DISPLAY_TIME_ZONE, agendaDueOccurrence, agendaNextOccurrence } from "./src/agendaSchedule.mjs";
 
 // vcrVocabulary — 127 exports: 「虚拟临研」's closed vocabularies (nine value sources, three scientific
 // conclusions, review states, missing reasons, intended uses, model risk and
@@ -1748,4 +1756,4 @@ export {
   geneExpressionFindings,
 } from './src/geneExpression.mjs'
 
-export { EVOLUTION_ERROR_MESSAGES, EVOLUTION_TRACKS, EVOLUTION_DATA_LEVELS, EVOLUTION_VALIDATION_LEVELS, EVOLUTION_DECISION_CLASSES, EVOLUTION_GAP_CODES, EVOLUTION_LEAD_SOURCES, EVOLUTION_ORIGINS, EVOLUTION_BUILD_FORMS, EVOLUTION_CASE_GROUPS, EVOLUTION_TOOL_STATES, EVOLUTION_JOB_KINDS, evolutionDecisionClass, evolutionAdaptiveClass, evolutionValidationLevel, evolutionToolVisible, evolutionMethodFields, evolutionDataMatch, validateEvolutionDataRequirements } from './src/evolution.mjs'
+export { EVOLUTION_ERROR_MESSAGES, EVOLUTION_TRACKS, EVOLUTION_DATA_LEVELS, EVOLUTION_VALIDATION_LEVELS, EVOLUTION_DECISION_CLASSES, EVOLUTION_GAP_CODES, EVOLUTION_LEAD_SOURCES, EVOLUTION_ORIGINS, EVOLUTION_BUILD_FORMS, EVOLUTION_CASE_GROUPS, EVOLUTION_TOOL_STATES, EVOLUTION_JOB_KINDS, EVOLUTION_EXECUTABLE_OPERATIONS, EVOLUTION_ONE_WAY_OPERATIONS, evolutionDecisionClass, evolutionAdaptiveClass, evolutionValidationLevel, evolutionToolVisible, evolutionMethodFields, evolutionDataMatch, validateEvolutionDataRequirements } from './src/evolution.mjs'

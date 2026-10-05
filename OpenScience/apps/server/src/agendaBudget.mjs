@@ -1,3 +1,4 @@
+import { MIN_RUN_BUDGET_CNY } from "@evimed/domain";
 import { boundedRunBudget } from "./boundedRunBudget.mjs";
 import { HttpError } from "./security.mjs";
 
@@ -46,8 +47,14 @@ import { HttpError } from "./security.mjs";
  * @module agendaBudget
  */
 
-/** The least a run can be funded with: a cent, the unit every task budget is written in. */
-export const FUNDABLE_CNY = 0.01;
+/**
+ * The least a run can be funded with: what a model call reserves before it is
+ * sent (`MIN_RUN_BUDGET_CNY`, with its measurement). It was a cent, the unit
+ * every task budget is written in, and a run given what was left of a window
+ * that small was refused on its first call -- the budget was "available" and
+ * could not buy anything. Less than this is left in a window: that window is spent.
+ */
+export const FUNDABLE_CNY = MIN_RUN_BUDGET_CNY;
 
 /** The rolling windows, as `usageLedger`'s `openCostWindows` say them. */
 export const AGENDA_WINDOW_MS = Object.freeze({ day: 86_400_000, week: 7 * 86_400_000 });

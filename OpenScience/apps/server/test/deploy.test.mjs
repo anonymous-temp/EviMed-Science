@@ -2150,7 +2150,9 @@ test("file-delivery capabilities fix the two pre-delivery steps instead of leavi
     // use proportional numerical checks and optional companions, as covered by
     // their capability suites: their numbers are rendered from a tool's or a
     // script's results, not typed from sources. They do not inherit the full
-    // report pipeline's mandatory skill sequence.
+    // report pipeline's mandatory skill sequence. The two 循证进化 packages
+    // (evolution-scout, tool-builder) deliver one JSON artifact to a platform job,
+    // not prose to a reader, so they have no report to trace or humanize.
     if (["dataset-research-scoping", "statistical-analysis", "gene-expression-analysis", "evolution-scout", "tool-builder"].includes(name)) continue;
     for (const step of ["traceability-review", "manuscript-humanize"]) {
       assert.ok(skill.includes(step), `${name}/SKILL.md does not name ${step} as a pre-delivery step`);

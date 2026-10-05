@@ -150,6 +150,38 @@ test("the researcher's reading of the question is the snapshot's: findings that 
   assert.equal(JSON.stringify(state).includes("runtime_died"), false, "an error code is ours, never the researcher's page");
 });
 
+test("a re-check that will never run reads as that, and a re-check cancelled with its agenda reads the same: not re-checked, and why", () => {
+  const claim = (id, statement, verification) => ({ id, statement, tier: "gated", sources: ["a"], verification });
+  const progress = buildAutopilotProgress({ ...input, agenda: { ...agenda, payload: {} }, episodes: [
+    episode("stopped", "2026-09-29", "merged", { claims: [
+      claim("a", "停止时尚未开始", { id: "v-a", status: "unscheduled", reason: "agenda_stopped" }),
+      claim("b", "停止时已被取消", { id: "v-b", status: "unavailable", reason: "agenda_stopped", code: "verification_canceled_by_stop" }),
+      claim("c", "超出每次复核条数", { status: "unscheduled", reason: "verification_cap" }),
+    ] }),
+    episode("budget", "2026-09-28", "merged", { claims: [
+      claim("d", "预算不够复核", { status: "unscheduled", reason: "verification_budget_unavailable" }),
+      claim("e", "还在排队等复核", { id: "v-e", status: "queued" }),
+      claim("f", "复核跑过但没有结果", { id: "v-f", status: "unavailable", code: "verification_result_missing" }),
+    ] }),
+  ] });
+  const state = projectResearchState(progress);
+  assert.deepEqual(state.unresolved.map(item => [item.kind, item.reason ?? null, item.text]), [
+    ["not_rechecked", "agenda_stopped", "停止时尚未开始"], ["not_rechecked", "agenda_stopped", "停止时已被取消"],
+    ["not_rechecked", "verification_cap", "超出每次复核条数"], ["not_rechecked", "verification_budget_unavailable", "预算不够复核"],
+    ["unchecked", null, "还在排队等复核"], ["check_unavailable", null, "复核跑过但没有结果"]],
+  "only a re-check that is still coming is `unchecked`; the planner's own reading of a claim is unchanged");
+  assert.equal(claimCheck(claim("a", "x", { status: "unscheduled", reason: "agenda_stopped" })), "not_checked");
+  assert.equal(claimCheck(claim("b", "x", { status: "unavailable", reason: "agenda_stopped" })), "check_unavailable");
+});
+
+test("the day a question was asked is the agenda's own day, not the UTC day: 07:30 in Asia/Shanghai is 23:30 the day before in UTC", () => {
+  const late = { ...agenda, payload: { followUps: [{ digestId: "d", claimId: "c", note: "亚组 B 呢？", at: "2026-09-29T23:30:00Z" }] } };
+  const progress = buildAutopilotProgress({ ...input, agenda: late, episodes: [] });
+  assert.equal(projectResearchState(progress, { timeZone: "Asia/Shanghai" }).unresolved[0].date, "2026-09-30");
+  assert.equal(projectResearchState(progress, { timeZone: "America/New_York" }).unresolved[0].date, "2026-09-29");
+  assert.equal(projectResearchState(progress).unresolved[0].date, "2026-09-30", "with no zone named it is the deployment's display zone, never the UTC day");
+});
+
 test("a question with no history reads as empty, and a lead nobody checked is not a finding", () => {
   const empty = projectResearchState(buildAutopilotProgress({ ...input, agenda: { id: "agenda", projectId: "p", payload: {} } }));
   assert.deepEqual([empty.found, empty.unresolved, empty.materials, empty.truncated], [[], [], [], false]);
