@@ -531,6 +531,16 @@ services:
       OPEN_SCIENCE_KNOWLEDGE_PLUGIN_POLL_MS:
       OPEN_SCIENCE_KNOWLEDGE_PLUGIN_TIMEOUT_MS:
       OPEN_SCIENCE_KNOWLEDGE_PLUGIN_MIN_CONTRACT:
+      # The platform's evidence programme and its public pages (evidence-flywheel
+      # plan 2026-10-05, B7): the programme's switch, its day's model money and
+      # its concurrency, and the two public-page switches. Value-less: unset keeps
+      # config.mjs's defaults — everything off, 30 yuan a day, one slot — so a
+      # deployment turns each on in .env and nowhere else.
+      OPEN_SCIENCE_EVIDENCE_PROGRAMME_ENABLED:
+      OPEN_SCIENCE_EVIDENCE_PROGRAMME_DAILY_BUDGET_CNY:
+      OPEN_SCIENCE_EVIDENCE_PROGRAMME_MAX_CONCURRENCY:
+      OPEN_SCIENCE_EVIDENCE_PUBLIC_WEB_ENABLED:
+      OPEN_SCIENCE_EVIDENCE_PUBLIC_INDEXABLE:
       # 「循证 GEO」 (geoService.mjs) and the media marketplace it places orders
       # through. Value-less: unset keeps config.mjs's defaults — the module off,
       # open to operators once on, no social channel, no marketplace. The

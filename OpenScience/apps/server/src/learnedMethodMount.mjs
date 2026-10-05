@@ -32,7 +32,7 @@ import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 
 import { METHOD_FILE_PREFIXES, learnedMethodCardEntry, mountedMethodDigest, renderMethodSkill } from "@evimed/domain";
-import { FRONTIER_PROJECT_ID, LEARNING_PROJECT_ID, SOURCES_PROJECT_ID } from "./internalProjects.mjs";
+import { EVIDENCE_PROJECT_ID, FRONTIER_PROJECT_ID, LEARNING_PROJECT_ID, SOURCES_PROJECT_ID } from "./internalProjects.mjs";
 
 /** @param {string} text @returns {string} */
 const sha256 = (text) => createHash("sha256").update(text, "utf8").digest("hex");
@@ -58,7 +58,7 @@ export function methodFamily(capabilityId) {
  * Which learned methods a runtime may carry, from what it is being started
  * for: null for none.
  *
- *  - The learning, sources and frontier projects run the platform's own
+ *  - The learning, sources, frontier and evidence projects run the platform's own
  *    internal capabilities — a distillation, a relations pass, a document
  *    being read. A researcher's method has nothing to do there, and on
  *    2026-09-25 `claim-verdict-audit` was mounted into every source
@@ -72,7 +72,7 @@ export function methodFamily(capabilityId) {
  * @returns {"geo" | "research" | null}
  */
 export function learnedMethodFamilyForRuntime({ projectId, boundedRunId = null }) {
-  if ([LEARNING_PROJECT_ID, SOURCES_PROJECT_ID, FRONTIER_PROJECT_ID].includes(String(projectId ?? ""))) return null;
+  if ([LEARNING_PROJECT_ID, SOURCES_PROJECT_ID, FRONTIER_PROJECT_ID, EVIDENCE_PROJECT_ID].includes(String(projectId ?? ""))) return null;
   return String(boundedRunId ?? "").startsWith("geo-") ? "geo" : "research";
 }
 

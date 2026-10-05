@@ -1,0 +1,72 @@
+// The evidence programme's levers (evidence-flywheel B7, 2026-10-05): the defaults the plan names, every value outside its range
+// refused at start by the variable's name, and every lever carried by .env.example and the compose file that hands it to the process.
+import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import path from "node:path";
+import test from "node:test";
+import { fileURLToPath } from "node:url";
+import { loadConfig } from "../src/config.mjs";
+
+const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
+const LEVERS = [
+  ["OPEN_SCIENCE_EVIDENCE_PROGRAMME_ENABLED", "evidenceProgrammeEnabled", false],
+  ["OPEN_SCIENCE_EVIDENCE_PROGRAMME_DAILY_BUDGET_CNY", "evidenceProgrammeDailyBudgetCny", 30],
+  ["OPEN_SCIENCE_EVIDENCE_PROGRAMME_MAX_CONCURRENCY", "evidenceProgrammeMaxConcurrency", 1],
+  ["OPEN_SCIENCE_EVIDENCE_PUBLIC_WEB_ENABLED", "evidencePublicWebEnabled", false],
+  ["OPEN_SCIENCE_EVIDENCE_PUBLIC_INDEXABLE", "evidencePublicIndexable", false],
+];
+
+/** loadConfig under exactly `env`. @param {Record<string, string>} env */
+function configUnder(env) {
+  const saved = process.env;
+  process.env = { ...env };
+  try { return loadConfig({ rootDir: repoRoot }); } finally { process.env = saved; }
+}
+
+test("the defaults are the plan's: everything off, 30 yuan a day, one slot — and indexing is its own lever, off", () => {
+  const config = /** @type {Record<string, any>} */ (configUnder({}));
+  for (const [, key, expected] of LEVERS) assert.equal(config[key], expected, key);
+});
+
+test("every lever is read from the environment, and an empty value reads as unset", () => {
+  const config = /** @type {Record<string, any>} */ (configUnder({
+    OPEN_SCIENCE_EVIDENCE_PROGRAMME_ENABLED: "true", OPEN_SCIENCE_EVIDENCE_PROGRAMME_DAILY_BUDGET_CNY: "12.5", OPEN_SCIENCE_EVIDENCE_PROGRAMME_MAX_CONCURRENCY: "2",
+    OPEN_SCIENCE_EVIDENCE_PUBLIC_WEB_ENABLED: "true", OPEN_SCIENCE_EVIDENCE_PUBLIC_INDEXABLE: "true",
+  }));
+  assert.deepEqual([config.evidenceProgrammeEnabled, config.evidenceProgrammeDailyBudgetCny, config.evidenceProgrammeMaxConcurrency, config.evidencePublicWebEnabled, config.evidencePublicIndexable],
+    [true, 12.5, 2, true, true]);
+  const empty = /** @type {Record<string, any>} */ (configUnder({ OPEN_SCIENCE_EVIDENCE_PROGRAMME_DAILY_BUDGET_CNY: "", OPEN_SCIENCE_EVIDENCE_PROGRAMME_MAX_CONCURRENCY: "", OPEN_SCIENCE_EVIDENCE_PROGRAMME_ENABLED: "" }));
+  assert.deepEqual([empty.evidenceProgrammeDailyBudgetCny, empty.evidenceProgrammeMaxConcurrency, empty.evidenceProgrammeEnabled], [30, 1, false], "an empty value is the default, not 0");
+  assert.equal(/** @type {any} */ (configUnder({ OPEN_SCIENCE_EVIDENCE_PROGRAMME_DAILY_BUDGET_CNY: "0" })).evidenceProgrammeDailyBudgetCny, 0, "0 is no cap, as every spend limit here reads 0");
+  assert.equal(/** @type {any} */ (configUnder({ OPEN_SCIENCE_EVIDENCE_PROGRAMME_ENABLED: "false", OPEN_SCIENCE_EVIDENCE_PUBLIC_WEB_ENABLED: "off" })).evidenceProgrammeEnabled, false);
+});
+
+test("a value outside its range stops the start by the variable's name", () => {
+  for (const [name, value] of [
+    ["OPEN_SCIENCE_EVIDENCE_PROGRAMME_DAILY_BUDGET_CNY", "-1"],
+    ["OPEN_SCIENCE_EVIDENCE_PROGRAMME_DAILY_BUDGET_CNY", "lots"],
+    ["OPEN_SCIENCE_EVIDENCE_PROGRAMME_DAILY_BUDGET_CNY", "10001"],
+    ["OPEN_SCIENCE_EVIDENCE_PROGRAMME_MAX_CONCURRENCY", "0"],
+    ["OPEN_SCIENCE_EVIDENCE_PROGRAMME_MAX_CONCURRENCY", "1.5"],
+    ["OPEN_SCIENCE_EVIDENCE_PROGRAMME_MAX_CONCURRENCY", "5"],
+  ]) assert.throws(() => configUnder({ [name]: value }), new RegExp(name), `${name}=${value}`);
+});
+
+test("each lever is documented in .env.example at the code's default and handed to the web service by compose", async () => {
+  const example = await readFile(path.join(repoRoot, "deploy/web/.env.example"), "utf8");
+  const compose = await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8");
+  const defaults = /** @type {Record<string, any>} */ (configUnder({}));
+  for (const [name, key] of LEVERS) {
+    const lines = [...example.matchAll(new RegExp(`^${name}=(.*)$`, "gm"))];
+    assert.equal(lines.length, 1, `${name} appears once in .env.example`);
+    assert.equal(String(lines[0][1]), String(defaults[key]), `${name} in .env.example is the code's default`);
+    assert.match(compose, new RegExp(`^\\s+${name}:\\s*$`, "m"), `${name} is passed by compose, value-less so an unset lever keeps the code's default`);
+  }
+});
+
+test("the api-only shape keeps the programme and the public pages off even from a .env copied from a full deployment", async () => {
+  const apiOnly = await readFile(path.join(repoRoot, "deploy/web/docker-compose.api-only.yml"), "utf8");
+  for (const name of ["OPEN_SCIENCE_EVIDENCE_PROGRAMME_ENABLED", "OPEN_SCIENCE_EVIDENCE_PUBLIC_WEB_ENABLED"]) {
+    assert.match(apiOnly, new RegExp(`${name}: \\$\\{${name}:-false\\}`), name);
+  }
+});

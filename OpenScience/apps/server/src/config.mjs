@@ -351,6 +351,52 @@ function frontierSettings(overrides) {
 }
 
 /**
+ * The platform's evidence programme and its public pages (evidence-flywheel plan §5.1, §9, B7, 2026-10-05),
+ * each checked at load, with the discipline of the frontier's: a lever an operator sets in `.env`, passed
+ * value-less by compose (unset is absent, so the default here applies), and a value outside its range
+ * stops the process at start with the variable's name rather than turning into a 0 or a NaN.
+ *
+ * - The programme is the platform researching on the publisher account's own behalf; it spends model
+ *   money, so it is off by default. Its day is `OPEN_SCIENCE_EVIDENCE_PROGRAMME_DAILY_BUDGET_CNY`
+ *   (30: about four deep syntheses at the 7 yuan measured on 2026-10-04; 0 is no cap, as every spend
+ *   limit on this platform reads 0) and it works one thing at a time
+ *   (`OPEN_SCIENCE_EVIDENCE_PROGRAMME_MAX_CONCURRENCY`, 1) so it can never crowd a researcher's runtime.
+ * - The public pages are off by default; `OPEN_SCIENCE_EVIDENCE_PUBLIC_INDEXABLE` is a second, separate
+ *   lever and also off: until the owner has chosen a domain the pages say `noindex` and no sitemap is
+ *   served, so a page reachable by IP address can never become a search result by accident.
+ * - These are the levers only. What reads them — the programme's selector, the public routes — is the
+ *   later work packages'; each must do nothing at all, and answer 404 by its own code, while its switch
+ *   is off.
+ *
+ * @param {Record<string, any>} overrides
+ */
+function evidenceSettings(overrides) {
+  /** @param {string} key @param {string} name @param {unknown} fallback */
+  const read = (key, name, fallback) => {
+    if (overrides[key] !== undefined) return overrides[key];
+    const value = process.env[name];
+    return value == null || value === "" ? fallback : value;
+  };
+  const budgetValue = read("evidenceProgrammeDailyBudgetCny", "OPEN_SCIENCE_EVIDENCE_PROGRAMME_DAILY_BUDGET_CNY", 30);
+  const budget = Number(budgetValue);
+  if (!Number.isFinite(budget) || budget < 0 || budget > 10_000) {
+    throw new Error(`OPEN_SCIENCE_EVIDENCE_PROGRAMME_DAILY_BUDGET_CNY must be a number from 0 to 10000, got ${JSON.stringify(budgetValue)}.`);
+  }
+  const concurrencyValue = read("evidenceProgrammeMaxConcurrency", "OPEN_SCIENCE_EVIDENCE_PROGRAMME_MAX_CONCURRENCY", 1);
+  const concurrency = Number(concurrencyValue);
+  if (!Number.isSafeInteger(concurrency) || concurrency < 1 || concurrency > 4) {
+    throw new Error(`OPEN_SCIENCE_EVIDENCE_PROGRAMME_MAX_CONCURRENCY must be a whole number from 1 to 4, got ${JSON.stringify(concurrencyValue)}.`);
+  }
+  return {
+    evidenceProgrammeEnabled: overrides.evidenceProgrammeEnabled ?? boolEnv("OPEN_SCIENCE_EVIDENCE_PROGRAMME_ENABLED", false),
+    evidenceProgrammeDailyBudgetCny: budget,
+    evidenceProgrammeMaxConcurrency: concurrency,
+    evidencePublicWebEnabled: overrides.evidencePublicWebEnabled ?? boolEnv("OPEN_SCIENCE_EVIDENCE_PUBLIC_WEB_ENABLED", false),
+    evidencePublicIndexable: overrides.evidencePublicIndexable ?? boolEnv("OPEN_SCIENCE_EVIDENCE_PUBLIC_INDEXABLE", false),
+  };
+}
+
+/**
  * 「循证 GEO」's settings (build spec 2026-09-25 §0, §5, §7), each checked at
  * load, and the media marketplace it places orders through.
  *
@@ -2316,6 +2362,7 @@ export function loadConfig(overrides = {}) {
     autopilotPlannerTimeoutMs: Number(overrides.autopilotPlannerTimeoutMs ?? 20_000),
     // --- frontier: 「前沿动态」 and the knowledge-source plugin (2026-09-22) ---
     ...frontierSettings(overrides),
+    ...evidenceSettings(overrides),
     // --- 循证 GEO and the media marketplace (2026-09-25) ---
     ...geoSettings(overrides),
     // --- 虚拟临研: the virtual clinical research module (2026-09-28) ---

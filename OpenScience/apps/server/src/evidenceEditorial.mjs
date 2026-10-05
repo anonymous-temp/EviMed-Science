@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { FRONTIER_SOURCE_TYPES } from "@evimed/domain";
+import { BALANCE_REFUSAL_CODES, FRONTIER_SOURCE_TYPES, PLATFORM_PUBLISHER_USER_ID } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 import {
   evidenceHash,
@@ -32,9 +32,40 @@ const reviewer = (/** @type {any} */ editor) => ({
   name: "EviMed 证据核对 AI",
   model: editor.model,
 });
+/**
+ * Whose money keeps a zone current (evidence-flywheel plan §3.3, B6, 2026-10-05).
+ *
+ * Hidden knowledge: until 2026-10-05 `automation()` checked that the caller owned the zone and nothing about
+ * who they were, so any account in the frontier audience could make a zone, switch on "automatic updates", and
+ * have the AI write and review its cards on the platform's frontier budget (10 yuan a day, shared with the
+ * feed). The platform's money keeps its own zones current: an **official** zone — one the publisher account
+ * owns, or one marked `kind = 'official'` — keeps running on that budget exactly as before. Every other
+ * zone is its owner's: the model calls are booked to the owner's own account and project under the purpose
+ * `evidence-upkeep`, counted against the owner's own caps, and charged to them through the research allowance
+ * like a run's calls. A job whose owner has no allowance is set aside, not run, with a reason the owner reads
+ * on the zone's update settings; nothing is ever paid by the platform in their place.
+ * @param {any} zone an `evidence_zones` row
+ */
+export function isOfficialZone(zone) {
+  return zone?.kind === "official" || zone?.user_id === PLATFORM_PUBLISHER_USER_ID;
+}
+
+/** The reasons an upkeep job waits, in the owner's words, rather than fails: no allowance, or the owner's own cap. */
+const UPKEEP_DEFERRALS = Object.freeze(["evidence_upkeep_no_allowance", "usage_budget_exceeded"]);
+/** How long a job set aside for an allowance or a cap waits before it is asked again. */
+const UPKEEP_DEFERRAL_MS = 3_600_000;
+
 /** Durable, bounded editorial work; one tick checks or produces one card. */
 export class EvidenceEditorial {
-  /** @param {{database:any,service:any,editor:any,budget?:any,readSource:any,canRun?:()=>boolean,now?:()=>Date,workerId?:string}} dependencies */
+  /**
+   * `credits` and `ensureProject` bill an account's own zone to the account (`isOfficialZone`): `credits` is
+   * the research allowance (`EvimedCreditsService`; null where billing is off, and then attribution and the
+   * account's caps still apply), `ensureProject(userId)` is the account's `evimed-evidence` project the
+   * usage ledger books to. `isOperator` lets an operator manage an official zone, whose owner cannot sign in.
+   * @param {{database:any,service:any,editor:any,budget?:any,readSource:any,canRun?:()=>boolean,now?:()=>Date,workerId?:string,
+   *   credits?:any,ensureProject?:((userId:string)=>Promise<{userId:string,projectId:string}>)|null,isOperator?:(userId:string)=>boolean,
+   *   deferralMs?:number}} dependencies
+   */
   constructor({
     database,
     service,
@@ -44,6 +75,10 @@ export class EvidenceEditorial {
     canRun = () => true,
     now = () => new Date(),
     workerId = randomUUID(),
+    credits = null,
+    ensureProject = null,
+    isOperator = () => false,
+    deferralMs = UPKEEP_DEFERRAL_MS,
   }) {
     this.database = database;
     this.service = service;
@@ -53,10 +88,16 @@ export class EvidenceEditorial {
     this.canRun = canRun;
     this.now = now;
     this.workerId = workerId;
+    this.credits = credits;
+    this.ensureProject = ensureProject;
+    this.isOperator = isOperator;
+    this.deferralMs = deferralMs;
     this.running = false;
     this.lastError = null;
     this.lastRunAt = null;
     this.providerPausedUntil = 0;
+    /** The upkeep the running job is billed as, or null (one job at a time: `running`). @type {any} */
+    this.upkeep = null;
     this.counters = {
       checked: 0,
       unchanged: 0,
@@ -65,7 +106,31 @@ export class EvidenceEditorial {
       skipped: 0,
       failed: 0,
       conflicts: 0,
+      // Upkeep billing (principle 15): jobs run on the platform's budget (official zones) or on the owner's account,
+      // jobs set aside for an allowance or a cap, and settlements the research allowance did or did not make.
+      officialJobs: 0,
+      ownerJobs: 0,
+      deferredNoAllowance: 0,
+      deferredCap: 0,
+      charged: 0,
+      chargeFailed: 0,
     };
+  }
+
+  /**
+   * Late binding of the research allowance: it is composed after the feed (`server.mjs`), and a worker
+   * built without it still attributes and caps an account's upkeep.
+   * @param {{ credits?: any, ensureProject?: ((userId: string) => Promise<{ userId: string, projectId: string }>) | null }} billing
+   */
+  useBilling({ credits, ensureProject }) {
+    if (credits !== undefined) this.credits = credits;
+    if (ensureProject !== undefined) this.ensureProject = ensureProject;
+  }
+
+  /** Whether `user` may manage this zone's updates: its owner, or an operator for an official zone (whose owner is nobody).
+   *  @param {any} user @param {any} zone */
+  canManage(user, zone) {
+    return zone.user_id === user.id || (isOfficialZone(zone) && this.isOperator(user.id) === true);
   }
   /** @param {any} user @param {string} zoneId @param {any} body @param {string} method */
   async automation(user, zoneId, body = {}, method = "GET") {
@@ -79,10 +144,12 @@ export class EvidenceEditorial {
         "Invalid evidence automation request.",
       );
     await migrateEvidenceZones(this.database);
+    let official = false;
     await this.database.transaction(async (/** @type {any} */ client) => {
       const rewriteRequest = method === "POST" && Object.keys(body).length > 0;
       const zone = await this.service.zoneRow(client, user, zoneId, !rewriteRequest);
-      if (zone.user_id !== user.id)
+      official = isOfficialZone(zone);
+      if (!this.canManage(user, zone))
         throw new HttpError(
           403,
           "evidence_owner_required",
@@ -162,7 +229,7 @@ export class EvidenceEditorial {
           if (jobs.some(job=>job.state==="running")) throw new HttpError(409,"evidence_revision_conflict","This card already has an active editorial job.");
           const currentZone = await this.service.zoneRow(client,user,zoneId,true);
           const current = await this.service.cardRow(client,user,zoneId,body.cardId,true);
-          if (currentZone.state !== "published" || current.state !== "published" || current.user_id !== user.id || current.revision !== body.expectedRevision ||
+          if (currentZone.state !== "published" || current.state !== "published" || current.user_id !== currentZone.user_id || current.revision !== body.expectedRevision ||
               current.editorial?.author?.kind !== "ai" || !current.editorial?.contentHash ||
               current.editorial.automationContentHash !== current.editorial.contentHash || evidenceContentHash(current) !== current.editorial.contentHash)
             throw new HttpError(409,"evidence_revision_conflict","Only the current published AI-managed card may be rewritten.");
@@ -219,6 +286,11 @@ export class EvidenceEditorial {
       )
     ).rows;
     return {
+      // Who pays for keeping this zone current, said where the owner switches it on (B6): the platform's
+      // frontier budget for an official zone, the owner's own allowance and caps for every other.
+      billing: official
+        ? { payer: "platform", official: true, purpose: "frontier" }
+        : { payer: "owner", official: false, purpose: "evidence-upkeep" },
       automation: row
         ? {
             enabled: row.enabled,
@@ -353,13 +425,112 @@ export class EvidenceEditorial {
       [job.zone_id, lastError],
     );
   }
-  async requireModel() {
+  /**
+   * Admit one model-using step. An official zone is the platform's: the feed's editor and its frontier budget,
+   * exactly as before. Any other zone is its owner's: the provider must be configured, the owner must have an
+   * allowance to pay with (`evidence_upkeep_no_allowance`), and the call is booked to the owner (`billingFor`);
+   * the frontier budget is never consulted, so an account's zone can neither spend it nor be held by it.
+   * @param {any} [upkeep] the running job's billing (`startUpkeep`)
+   */
+  async requireModel(upkeep = null) {
+    if (upkeep && !upkeep.official) {
+      if (!(this.editor.providerReady ?? this.editor.available))
+        throw Object.assign(new Error("Evidence writing is waiting for its editor."), { code: "evidence_budget_wait" });
+      await this.requireAllowance(upkeep);
+      upkeep.billing ??= await this.billingFor(upkeep);
+      upkeep.called = true;
+      return;
+    }
     const budget = this.budget ? await this.budget() : { state: "ok" };
     if (!this.editor.available || budget.state !== "ok")
       throw Object.assign(
         new Error("Evidence writing is waiting for its editor or budget."),
         { code: "evidence_budget_wait" },
       );
+  }
+  /**
+   * The billing of one job execution: who pays and the scope its model calls are booked under. The scope is a
+   * `run_id` the usage ledger and the research allowance can both sum (`vcrUsageScope.mjs` explains the
+   * pattern): unique per execution, so a retried job settles each attempt on its own.
+   * @param {any} zone @param {any} job
+   */
+  startUpkeep(zone, job) {
+    const official = isOfficialZone(zone);
+    this.counters[official ? "officialJobs" : "ownerJobs"] += 1;
+    const startedAt = this.now().toISOString();
+    this.upkeep = {
+      official, ownerId: zone.user_id, zoneTitle: zone.title, startedAt, called: false, billing: null,
+      scope: `evup_${evidenceHash([job.id, String(job.attempts), String(job.updated_at instanceof Date ? job.updated_at.toISOString() : job.updated_at), startedAt]).slice(0, 32)}`,
+    };
+    return this.upkeep;
+  }
+  /** Who the next call is booked to: the owner's own account and `evimed-evidence` project, purpose `evidence-upkeep`. @param {any} upkeep */
+  async billingFor(upkeep) {
+    // A deployment that cannot say whose project to book to cannot bill the owner, and the platform does not
+    // pay instead: the job waits.
+    if (typeof this.ensureProject !== "function")
+      throw Object.assign(new Error("An account's zone upkeep cannot be attributed in this deployment."), { code: "evidence_budget_wait" });
+    const project = await this.ensureProject(upkeep.ownerId);
+    return { userId: project.userId, projectId: project.projectId, purpose: "evidence-upkeep", runId: upkeep.scope };
+  }
+  /**
+   * Whether the owner can pay: the research allowance's own start check (a plain call, so it asks only that
+   * something is left). Billing off or unreachable admits — attribution and the owner's caps still apply and
+   * refusing work because accounting is down is the one outcome nobody can act on (`evimedCreditsService.mjs`).
+   * @param {any} upkeep
+   */
+  async requireAllowance(upkeep) {
+    if (!this.credits) return;
+    try {
+      await this.credits.assertBalanceForStart(upkeep.ownerId, null, { unattended: true });
+    } catch (error) {
+      if (BALANCE_REFUSAL_CODES.includes(/** @type {any} */ (error)?.code))
+        throw Object.assign(new Error("The zone owner has no allowance to pay for this upkeep."), { code: "evidence_upkeep_no_allowance" });
+      throw error;
+    }
+  }
+  /**
+   * Charge the owner for the model calls this execution made, the way a run's are charged: one settlement per
+   * execution, keyed by its scope, through the research allowance (`settleRun` — idempotent, never throws). A
+   * job that ended without a delivery is recorded and not charged, the rule a failed run follows. Nothing is
+   * settled for an execution that made no call, and nothing at all for the platform's own zones.
+   * @param {any} job @param {any} failure the error the job ended with, or null
+   */
+  async settleUpkeep(job, failure) {
+    const upkeep = this.upkeep;
+    this.upkeep = null;
+    if (!upkeep || upkeep.official || !upkeep.billing || !upkeep.called || !this.credits) return;
+    try {
+      // An execution that made no call has nothing to charge, and a zero line on every no-op job is noise on a statement.
+      const spent = await this.database.query(`SELECT 1 FROM evimed_usage.model_requests WHERE user_id=$1 AND run_id=$2 LIMIT 1`, [upkeep.ownerId, upkeep.scope]);
+      if (!spent.rowCount) return;
+      const account = (await this.database.query("SELECT created_at::text AS \"createdAt\" FROM evimed_control.users WHERE id=$1", [upkeep.ownerId])).rows[0];
+      const result = await this.credits.settleRun({
+        userId: upkeep.ownerId, projectId: upkeep.billing.projectId, runId: upkeep.scope, dispatchId: null,
+        status: failure ? "failed" : "completed", errorCode: failure ? codeOf(failure) : null,
+        accountCreatedAt: account?.createdAt ?? null, startedAt: upkeep.startedAt, finishedAt: this.now().toISOString(),
+        capabilityId: null, statementLine: "证据专区更新", subject: upkeep.zoneTitle,
+      });
+      if (result?.status === "settled" || result?.status === "pending") this.counters.charged++;
+      else if (result?.status === "error") this.counters.chargeFailed++;
+    } catch {
+      this.counters.chargeFailed++;
+    }
+  }
+  /**
+   * Set a job aside, not failed: its owner has no allowance or has reached their own cap. The job goes back to
+   * pending a while later and the reason is on it and on the zone's update settings, where the owner reads it.
+   * @param {any} job @param {string} code
+   */
+  async deferUpkeep(job, code) {
+    const waiting = await this.database.query(`UPDATE evimed_frontier.evidence_editorial_jobs
+      SET state='pending',attempts=greatest(0,attempts-1),available_at=clock_timestamp()+$3*interval '1 millisecond',
+        last_error=$4,lease_owner=NULL,lease_until=NULL,updated_at=clock_timestamp()
+      WHERE id=$1 AND lease_owner=$2 AND state='running' AND lease_until>clock_timestamp() RETURNING id`,
+    [job.id, this.workerId, this.deferralMs, code]);
+    if (waiting.rowCount)
+      await this.database.query("UPDATE evimed_frontier.evidence_automation SET last_error=$2 WHERE zone_id=$1", [job.zone_id, code]);
+    this.counters[code === "evidence_upkeep_no_allowance" ? "deferredNoAllowance" : "deferredCap"]++;
   }
   /** Renew between bounded source/model calls; an expired lease is never revived. @param {any} job */
   async renew(job) {
@@ -387,6 +558,7 @@ export class EvidenceEditorial {
         "The researcher withdrew this zone; automatic writing has stopped.",
       );
     const user = { id: zone.user_id };
+    const upkeep = this.startUpkeep(zone, job);
     const roleAccounts = (
       await this.database.query(
         "SELECT id,name,auth_type FROM evimed_control.users WHERE id=ANY($1::text[])",
@@ -445,7 +617,7 @@ export class EvidenceEditorial {
           throw Object.assign(new Error("No readable source."), {
             code: "evidence_source_empty",
           });
-        await this.requireModel();
+        await this.requireModel(upkeep);
         await this.renew(job);
         const targetId = await this.editor.evidenceTarget({
           zone: zone.title,
@@ -460,7 +632,7 @@ export class EvidenceEditorial {
             text: String(prefetched.text ?? "").slice(0, 12000),
           },
           cards: targets,
-        });
+        }, upkeep.billing);
         await this.renew(job);
         if (targetId?.skip === true) {
           const skipped = await this.database.query(
@@ -722,7 +894,7 @@ export class EvidenceEditorial {
           }),
         ],
       );
-      await this.requireModel();
+      await this.requireModel(upkeep);
       const examples = (
         await this.database.query(
           `SELECT title,summary,content,limitations FROM evimed_frontier.evidence_cards
@@ -770,7 +942,7 @@ export class EvidenceEditorial {
               })),
             }
           : null,
-      });
+      }, upkeep.billing);
       await this.renew(job);
       const saved = await this.service.saveEditorial(
         user,
@@ -832,7 +1004,7 @@ export class EvidenceEditorial {
       if (!authored.rowCount) throw new HttpError(409,"evidence_revision_conflict","The author save lost its editorial lease.");
       this.counters.published++;
     }
-    await this.requireModel();
+    await this.requireModel(upkeep);
     await this.renew(job);
     const review = await this.editor.evidenceReview({
       title: card.title,
@@ -849,7 +1021,7 @@ export class EvidenceEditorial {
         publicationStatus: s.publicationStatus ?? null,
         inputTruncated: (s.documentText ?? s.excerpt ?? "").length > 24000,
       })),
-    });
+    }, upkeep.billing);
     await this.renew(job);
     const findings = [
       ...review.findings,
@@ -917,8 +1089,17 @@ export class EvidenceEditorial {
       try {
         await this.process(job);
         this.lastError = null;
+        await this.settleUpkeep(job, null);
       } catch (e) {
         this.lastError = codeOf(e);
+        // What an account's own zone cost before the job stopped is the account's, the way a failed run's is recorded.
+        const owners = this.upkeep && !this.upkeep.official;
+        await this.settleUpkeep(job, e);
+        // An allowance or a cap is a wait, not a failure: the job is set aside with the reason (`deferUpkeep`).
+        if (owners && UPKEEP_DEFERRALS.includes(this.lastError)) {
+          await this.deferUpkeep(job, this.lastError);
+          return;
+        }
         if (frontierProviderUnavailable(e)) {
           const waitMs = this.lastError === "model_gateway_payment_required" ? FRONTIER_PROVIDER_REFUSED_WAIT_MS : FRONTIER_PROVIDER_RETRY_MS;
           const waiting = await this.database.query(`UPDATE evimed_frontier.evidence_editorial_jobs

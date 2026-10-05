@@ -211,6 +211,14 @@ const operatorLevers = {
   OPEN_SCIENCE_FRONTIER_PROCESS_CONCURRENCY: ["open-science-web"],
   OPEN_SCIENCE_FRONTIER_OFFPEAK: ["open-science-web"],
   OPEN_SCIENCE_FRONTIER_SELECT_THRESHOLD: ["open-science-web"],
+  // The platform's evidence programme and its public pages (evidence-flywheel B7, 2026-10-05): the programme's switch, its
+  // day's model money and its slot, and the two public-page switches. A lever that does not arrive leaves the programme off, or
+  // on and spending, or the public pages indexable, with the operator believing otherwise.
+  OPEN_SCIENCE_EVIDENCE_PROGRAMME_ENABLED: ["open-science-web"],
+  OPEN_SCIENCE_EVIDENCE_PROGRAMME_DAILY_BUDGET_CNY: ["open-science-web"],
+  OPEN_SCIENCE_EVIDENCE_PROGRAMME_MAX_CONCURRENCY: ["open-science-web"],
+  OPEN_SCIENCE_EVIDENCE_PUBLIC_WEB_ENABLED: ["open-science-web"],
+  OPEN_SCIENCE_EVIDENCE_PUBLIC_INDEXABLE: ["open-science-web"],
   OPEN_SCIENCE_KNOWLEDGE_PLUGIN_URL: ["open-science-web"],
   OPEN_SCIENCE_KNOWLEDGE_PLUGIN_TOKEN_FILE: ["open-science-web"],
   OPEN_SCIENCE_KNOWLEDGE_PLUGIN_POLL_MS: ["open-science-web"],

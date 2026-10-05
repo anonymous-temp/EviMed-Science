@@ -69,7 +69,9 @@ import path from "node:path";
 import { createGzip } from "node:zlib";
 import { postgresBackupReadiness } from "./postgresBackupReadiness.mjs";
 import { vcrBackupReadiness } from "./vcrBackupReadiness.mjs";
-import { LEARNING_PROJECT_ID, isEvolutionProject, isInternalProjectOf, isReservedProjectId } from "./internalProjects.mjs";
+import { LEARNING_PROJECT_ID, ensureEvidenceProject, isEvolutionProject, isInternalProjectOf, isReservedProjectId } from "./internalProjects.mjs";
+import { createEvidenceBudget, evidenceBudgetMetricFamilies } from "./evidenceBudget.mjs";
+import { assertNotPlatformAccount } from "./platformAccount.mjs";
 import { completeEvolutionRuntime } from './evolutionRuntimeCompletion.mjs';
 import { evolutionRunGap } from './evolutionIntegration.mjs';
 import { loadAgentRegistry } from "./agentRegistry.mjs";
@@ -1730,7 +1732,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       canRun: () => !maintenanceService || maintenanceService.claimingAllowed(),
       report: (loop, code) => process.stderr.write(`frontier ${loop}: ${code}\n`) });
     const evidenceZones = new EvidenceZoneService({database:productDatabase});
+    // An official zone keeps running on the feed's budget; every other zone's upkeep is booked to its owner, in the
+    // owner's own `evimed-evidence` project, and charged through the allowance composed below (`useBilling`).
     const evidenceEditorial = new EvidenceEditorial({database:productDatabase,service:evidenceZones,editor,budget,
+      isOperator:(/** @type {string} */ userId)=>config.operatorUsers.includes(userId),
+      ensureProject:(/** @type {string} */ userId)=>ensureEvidenceProject(store,userId),
       readSource:createEvidenceSourceReader({readWeb:(url,options)=>webReader.read(url,options),transport:(request)=>webTransport(request),userAgent:webReadUserAgent(config)}),canRun:()=>!maintenanceService||maintenanceService.claimingAllowed()});
     const worker = new FrontierWorker({
       ingest, pipeline, composer, evidence:evidenceEditorial, database: productDatabase,
@@ -1746,6 +1752,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     });
     frontier = { evidenceZones,evidenceEditorial,client, ingest, editor, pipeline, service, worker, composer, actions, profiles, weekly, notifications: frontierNotifications };
   }
+  // The evidence programme's day (evidenceBudget.mjs): the publisher account's `evidence` spend against its own budget, and its
+  // concurrency. A reading is never taken while the programme's switch is off.
+  const evidenceBudget = createEvidenceBudget({ usageLedger, config });
   const frontierRoutes = createFrontierRoutes({ store, service: frontier?.service ?? null, config, maxJsonBytes: config.maxJsonBytes,
     audit: (event, status, details) => securityAudit(config, event, status, details) });
   const evidenceZoneRoutes = createEvidenceZoneRoutes({store,service:frontier?.evidenceZones??null,editorial:frontier?.evidenceEditorial??null,
@@ -2559,6 +2568,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     });
     credits = { service, worker };
   }
+  // The zone editor charges an account's own zone's upkeep through the allowance, composed above after it.
+  frontier?.evidenceEditorial.useBilling({ credits: credits?.service ?? null });
   const creditsRoutes = createEvimedCreditsRoutes({
     store, service: credits?.service ?? null, config,
     audit: (event, detail) => securityAudit(config, event, "completed", detail),
@@ -4861,6 +4872,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           eventPump: runtimeEventPump,
           evolution,
           evaluationIsolation,
+          evidenceBudget,
         });
         return;
       }
@@ -5769,6 +5781,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
 
       if (pathname === "/api/account/export" && req.method === "GET") {
         const user = await store.ensureUser(req, res);
+        assertNotPlatformAccount(user);
         await withAccountExportSnapshot(productDatabase, user, config, async snapshot => {
           const projects = snapshot?.projects ?? await store.listProjects(user);
           // Written as `memory/memory.json`, from the store itself rather than
@@ -5786,6 +5799,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
 
       if (pathname === "/api/account" && req.method === "DELETE") {
         const user = await store.ensureUser(req, res);
+        assertNotPlatformAccount(user);
         const body = await readJson(req, config.maxJsonBytes);
         const confirm = assertString(body.confirm, "confirm", { max: 64 });
         if (confirm !== user.id) {
@@ -7660,7 +7674,7 @@ function addHistogramMetric(lines, name, help, series) {
   }
 }
 
-async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null }) {
+async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, evidenceBudget = null }) {
   const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate, frontier, review, geo, vcr, credits);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
@@ -8051,6 +8065,10 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
   // contract (frontierService.mjs `frontierMetricFamilies`).
   const frontierSnapshot = frontier ? await frontierMetricsSnapshot(frontier) : null;
   for (const family of frontierMetricFamilies(Boolean(frontier), frontierSnapshot)) addMetric(lines, family.name, family.help, family.type, family.series);
+  // The platform's evidence programme (evidenceBudget.mjs): its switches, today's spend against its budget and its slots, and who paid
+  // for the zone upkeep this process ran. No reading is taken while the programme is off.
+  const evidenceReading = evidenceBudget?.enabled ? await evidenceBudget.budget().catch(() => null) : null;
+  for (const family of evidenceBudgetMetricFamilies(config, evidenceBudget, evidenceReading, frontier?.evidenceEditorial?.status().counters ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
   // 循证 GEO: `open_science_geo_enabled 0` when off (geoService.mjs `geoMetricFamilies`).
   const geoSnapshot = geo ? await geoMetricsSnapshot(geo) : null;
   for (const family of geoMetricFamilies(Boolean(geo), geoSnapshot)) addMetric(lines, family.name, family.help, family.type, family.series);

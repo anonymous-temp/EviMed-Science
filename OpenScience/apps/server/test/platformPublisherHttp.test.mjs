@@ -43,3 +43,17 @@ test("signing in as the publisher answers what a wrong password answers", async 
     assert.equal((await platform.json()).code, (await known.json()).code, "nothing says whether the account exists");
   });
 });
+
+test("an account cannot make the platform's evidence project by typing its id", async () => {
+  const dataDir = await mkdtemp(path.join(tmpdir(), "os-evidence-project-http-"));
+  const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: true });
+  const address = await app.listen(0, "127.0.0.1");
+  const base = `http://127.0.0.1:${address.port}`;
+  try {
+    const refused = await post(`${base}/api/projects`, { id: "evimed-evidence", name: "Mine" });
+    assert.equal(refused.status, 409);
+    assert.equal((await refused.json()).code, "project_id_reserved");
+    const made = await post(`${base}/api/projects`, { id: "evimed-evidence-notes", name: "Notes" });
+    assert.equal(made.status, 200, "a lookalike name is an ordinary project");
+  } finally { await app.close(); await rm(dataDir, { recursive: true, force: true }); }
+});
