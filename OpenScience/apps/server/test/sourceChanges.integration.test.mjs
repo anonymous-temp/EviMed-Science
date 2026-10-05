@@ -130,6 +130,17 @@ test("Postgres: the feed has a position, so pages tile it, and parallel writers 
   assert.deepEqual((await store.record(DOI, { kind: "rumour" }, { assertedBy: "crossref" })).changes, [], "an unknown kind records nothing");
 });
 
+test("Postgres: detectors writing one work at once all land, each change once, and the work takes one position per change", options, async () => {
+  const { store } = await fixture();
+  const asserters = ["crossref", "retraction-watch", "pubmed", "europepmc", "registry", "operator"];
+  await Promise.all(asserters.map(assertedBy => store.record(DOI, retraction({ noticeIdentifier: `10.1000/n-${assertedBy}` }), { assertedBy })));
+  await Promise.all(asserters.map(assertedBy => store.record(DOI, retraction(), { assertedBy })));
+  const fact = await store.get(DOI);
+  assert.equal(fact.changes.length, 7, "six notices of their own and the one all six saw");
+  assert.deepEqual(fact.changes.find(change => change.noticeIdentifier === "10.1000/notice")?.assertedBy.slice().sort(), asserters.slice().sort());
+  assert.equal((await store.changedSince(0, 10)).items.length, 1, "one work, one position, however many writers");
+});
+
 test("Postgres: each account's feed is its own, and a store without an owner knows nothing and writes nothing", options, async () => {
   const one = await fixture();
   const other = await fixture();

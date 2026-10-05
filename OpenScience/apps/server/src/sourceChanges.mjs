@@ -36,8 +36,8 @@ import { HttpError } from "./security.mjs";
 
 const KIND = "source-change";
 const SEQ_LOCK = "evimed-source-change-feed";
-/** A record is read-modified-written optimistically; two detectors on one work at once settle within a try or two. */
-const WRITE_ATTEMPTS = 5;
+/** A record is read-modified-written optimistically; each round one writer wins, so this is how many detectors may write one work at once. */
+const WRITE_ATTEMPTS = 8;
 /** Identifiers one call reads or checks; the lookup behind it takes a few dozen at a time too. */
 const MAX_IDENTIFIERS = 500;
 /** Records one page of the feed carries. */
