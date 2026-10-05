@@ -55,6 +55,24 @@ export function completedOutputs(transcript) {
     .filter(part => part.type === "tool" && part.status === "completed" && /web_read|web_search|open_access_full_text|literature_search|public_source|pubmed|europe/i.test(part.tool ?? ""))
     .map(part => ({ tool: part.tool, output: part.output, result: sourceToolResult(part.output) }));
 }
+/** The error codes of the source tools' failed calls, counted: what a control was told instead of a result.
+ * A blocked control with no exclusion event and a column of `evaluation_policy_unreadable` here was refused by the
+ * policy lookup before any matching could happen (2026-10-05), which is a different finding from a model that never asked. */
+export function toolErrorCodes(outputs) {
+  /** @type {Record<string, number>} */
+  const counts = {};
+  for (const row of outputs) {
+    if (row.result?.ok !== false) continue;
+    let code = null;
+    try {
+      const value = typeof row.output === "string" ? JSON.parse(row.output.replace(/^Error: /, "")) : row.output;
+      code = value?.error?.code ?? value?.code ?? null;
+    } catch { /* not a JSON envelope */ }
+    const key = typeof code === "string" && /^[a-z0-9_]{1,80}$/.test(code) ? code : "uncoded";
+    counts[key] = (counts[key] ?? 0) + 1;
+  }
+  return counts;
+}
 /** Call only on an already listening isolated acceptance app; uses its actual runtime and gateways.
  * @param {any} dependencies */
 export async function runEvolutionIsolationAcceptance({ app, userId = "evolution-acceptance", probeId = "live-v2", signal, timeoutMs = 900000 }) {
@@ -112,10 +130,10 @@ export async function runEvolutionIsolationAcceptance({ app, userId = "evolution
     }
     const audit = await app.evaluationIsolation.audit(run.id);
     const filtered = audit.events.filter(event => event.tier === "blocked");
-    if (blocked && !filtered.length) throw new Error("Blocked control produced no actual gateway exclusion event.");
+    if (blocked && !filtered.length) throw new Error(`Blocked control produced no actual gateway exclusion event (run ${run.id}; source tool errors: ${JSON.stringify(toolErrorCodes(outputs))}).`);
     if (!blocked && !["cited", "exposed_uncited"].includes(audit.tier)) throw new Error("Intentional target exposure was not classified.");
     receipt.push({ projectId, runId: run.id, runStatus: run.status, blocked, exposureTier: audit.tier,
-      blockedEvents: filtered.length, completedSourceOutputs: outputs.length,
+      blockedEvents: filtered.length, completedSourceOutputs: outputs.length, toolErrorCodes: toolErrorCodes(outputs),
       observedTools: [...new Set(outputs.map(row => row.tool))],
       observedGateways: [...new Set(audit.events.map(event => event.gateway))],
       gatewayObservations: [...new Set(audit.events.map(event => event.gateway))].map(gateway => ({ gateway,
