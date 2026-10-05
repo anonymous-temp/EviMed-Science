@@ -34,6 +34,23 @@ beforeEach(() => {
   api.get.mockImplementation(async (id: string) => id === old.versionId ? old : latest);
   api.raw.mockImplementation(async (value: ResultVersion) => ({ text: async () => value.versionId === old.versionId ? "旧结论" : "新结论" }));
 });
+vi.mock("@/components/frontier/PublishAsEvidenceCard", async (original) => ({ ...await original<typeof import("@/components/frontier/PublishAsEvidenceCard")>(),
+  PublishAsEvidenceCard: ({ version, onClose }: { version: ResultVersion; onClose: () => void }) => <div role="dialog" aria-label="发布为证据卡"><p data-testid="publishing">{version.versionId}</p><button type="button" onClick={onClose}>关闭对话框</button></div> }));
+describe("publishing a clinical result as an evidence card", () => {
+  it("offers 发布为证据卡 only on a result whose capture recorded an evidence matrix, and opens the dialog for that version", async () => {
+    api.get.mockImplementation(async () => ({ ...latest, review: { status: "available", matrixVersionId: `rv_${"c".repeat(64)}` } }));
+    mount();
+    await userEvent.click(await screen.findByRole("button", { name: "发布为证据卡" }));
+    expect(screen.getByTestId("publishing")).toHaveTextContent("rv_new");
+    await userEvent.click(screen.getByRole("button", { name: "关闭对话框" }));
+    expect(screen.queryByRole("dialog", { name: "发布为证据卡" })).not.toBeInTheDocument();
+  });
+  it("does not offer it on a result that is not a clinical package", async () => {
+    mount();
+    await screen.findByText("新结论");
+    expect(screen.queryByRole("button", { name: "发布为证据卡" })).not.toBeInTheDocument();
+  });
+});
 describe("immutable result inspection", () => {
   it("opens a requested old version and its findings without reading current workspace bytes", async () => {
     mount(old.versionId);

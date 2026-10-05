@@ -10,6 +10,7 @@ import { ResultImpactPanel } from "./ResultImpactPanel";
 import { ResultCorrectionPanel } from "./ResultCorrectionPanel";
 import { DocumentExportActions } from "@/components/document/DocumentExportActions";
 import { ResultLineagePanel } from "./ResultLineagePanel";
+import { PublishAsEvidenceCard, isClinicalPackage } from "@/components/frontier/PublishAsEvidenceCard";
 import { parseTableFile } from "@/lib/csv";
 import { getWebProjectId } from "@/lib/apiClient";
 import type { RuntimeUiIntent } from "@/lib/runtimeUiNavigation";
@@ -40,6 +41,7 @@ export function ResultVersionInspector({ path, runId, initialVersionId, onLegacy
   const [comparisonError, setComparisonError] = useState<string | null>(null);
   const [comparing, setComparing] = useState(false);
   const [action, setAction] = useState<string | null>(null);
+  const [publishing, setPublishing] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [replay, setReplay] = useState<ResultReplay | null>(null);
   const [relatedCursor, setRelatedCursor] = useState<string | null>(null);
@@ -250,8 +252,10 @@ export function ResultVersionInspector({ path, runId, initialVersionId, onLegacy
         <Button variant="secondary" disabled={!blob} onClick={() => blob && saveResultBlob(blob, filename)}>下载此版本</Button>
         <Button variant="secondary" disabled={version.reuseEligibility?.replay.status !== "available" || action !== null} loading={action === "replay"} onClick={() => void act("replay")}>重算此结果</Button>
         <Button variant="secondary" disabled={!version.reuseEligibility || version.reuseEligibility.export.status === "unavailable" || action !== null} loading={action === "export"} onClick={() => void act("export")}>导出研究包</Button>
+        {isClinicalPackage(version) && <Button variant="secondary" disabled={action !== null} onClick={() => setPublishing(true)}>发布为证据卡</Button>}
         {version.producer.sessionId && <Button variant="text" onClick={() => navigate(`/app/chat/${version.producer.sessionId}`)}>来源对话</Button>}
       </div>
+      {publishing && <PublishAsEvidenceCard version={version} onClose={() => setPublishing(false)} />}
       {(!version.reuseEligibility || version.reuseEligibility.replay.status !== "available") && <p className="text-caption text-muted">暂不能重算：{version.reuseEligibility?.replay.reasons.map(resultGapLabel).join("；") || "缺少可用的计算配方"}</p>}
       {version.reuseEligibility?.export.status !== "available" && <p className="text-caption text-muted">{version.reuseEligibility?.export.reasons.map(resultGapLabel).join("；") || "研究包可用性尚未确认"}</p>}
       {actionError && <p role="alert" className="text-error">{actionError}</p>}

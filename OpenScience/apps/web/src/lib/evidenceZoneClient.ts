@@ -50,6 +50,11 @@ export interface EvidenceCard {
   entityKeys?: string[];
   journeyStage?: { key: string; label: string } | null;
   disclosure?: EvidenceDisclosure | null;
+  /**
+   * The 时效 label of plan §4.4 (`SOURCE_CURRENCY_LABELS` in `@evimed/domain`), when the server has computed one.
+   * Absent until it has: the page shows no 时效 tag rather than a guessed 「现行」.
+   */
+  currency?: string | null;
   publicView?: EvidencePublicViewContent | null;
   /** The two views of this card, computed by the server from the same verified claims; absent in lists. */
   views?: { clinical: EvidenceClinicalView; public: EvidencePublicView } | null;
@@ -501,6 +506,8 @@ export interface EvidenceAutomation {
   lastError: string | null;
 }
 export interface EvidenceMaintenance {
+  /** Who pays for keeping the zone current: the platform's frontier budget (an official zone) or the owner's own allowance. */
+  billing?: { payer: "platform" | "owner"; official: boolean; purpose: string };
   automation: EvidenceAutomation;
   jobs: { pending: number; running: number; failed: number };
   recent: Array<{
@@ -539,6 +546,94 @@ export const refreshEvidenceZone = (zone: EvidenceZone) =>
     "POST",
     {},
   );
+
+/** Who may read a published zone is the owner's own choice, apart from publishing it. */
+export async function setEvidenceZoneVisibility(zone: EvidenceZone, visibility: EvidenceZoneVisibility) {
+  return (
+    await productRequest<{ zone: EvidenceZone }>(
+      `/frontier/zones/${id(zone.id)}/visibility`,
+      "PUT",
+      { visibility, expectedRevision: zone.revision },
+    )
+  ).zone;
+}
+
+/** The zones a research result may be published to: the caller's own user zones (an older server's zones have no kind and are user zones). */
+export async function listOwnUserZones(): Promise<EvidenceZone[]> {
+  const zones: EvidenceZone[] = [];
+  let cursor: string | null = null;
+  for (let page = 0; page < 5; page += 1) {
+    const result: EvidencePage<EvidenceZone> = await listEvidenceZones("", cursor, "owned");
+    zones.push(...result.items.filter((zone) => (zone.kind ?? "user") === "user"));
+    cursor = result.nextCursor;
+    if (!cursor) break;
+  }
+  return zones;
+}
+
+/** What a request to publish a result as an evidence card names: its project, one own zone or a new one, and the claims. */
+export interface ResultCardRequest {
+  projectId: string;
+  zoneId?: string;
+  newZone?: { title: string };
+  /** Exactly these claims; absent, the verified ones. */
+  claimIds?: string[];
+}
+export interface ResultCardAnswer {
+  evidence: EvidenceCard;
+  zone: EvidenceZone;
+  created: boolean;
+  outcome: "created" | "existing" | "next_version";
+  previousCardId: string | null;
+  /** Claims left out of the card, each with the code of why. */
+  omitted: Array<{ claimId: string; reason: string }>;
+}
+export const publishResultAsEvidenceCard = (versionId: string, request: ResultCardRequest) =>
+  productRequest<ResultCardAnswer>(`/results/${id(versionId)}/evidence-card`, "POST", request);
+
+export interface EvidenceContinuation {
+  projectId: string;
+  sessionId: string;
+  originCardId: string;
+  /** The question, written and not sent. */
+  draft: string;
+  library: {
+    folder: string;
+    saved: Array<{ index: number; title: string; path: string; kind: "text" | "record" }>;
+    failed: Array<{ index: number; code: string }>;
+  };
+}
+/** 「用这张卡继续研究」: a project, the card's primary sources in its knowledge base, and an unsent question. */
+export const continueResearchFromCard = (cardId: string, input: { projectId?: string } = {}) =>
+  productRequest<EvidenceContinuation>(`/frontier/evidence/${id(cardId)}/continue`, "POST", input);
+
+export interface EvidenceCardRef {
+  id: string;
+  zoneId: string;
+  title: string;
+  creator: string | null;
+  producer: { kind: EvidenceProducerKind; name: string } | null;
+}
+export interface EvidenceCardLinks {
+  author: { id: string; name: string };
+  /** The card this card's research began from, when the reader may read it. */
+  origin: EvidenceCardRef | null;
+  /** The earlier card this one follows, when the reader may read it. */
+  previous: EvidenceCardRef | null;
+  related: Array<EvidenceCardRef & { relation: "next_version" | "research_from_card" }>;
+}
+export const fetchEvidenceCardLinks = (cardId: string) =>
+  productRequest<EvidenceCardLinks>(`/frontier/evidence/${id(cardId)}/links`);
+
+export interface EvidenceAuthorPage {
+  author: { id: string; name: string; platform: boolean };
+  zones: Array<{ id: string; title: string; description: string; kind: EvidenceZoneKind; visibility: EvidenceZoneVisibility; evidenceCount: number; follows: number; updatedAt: string }>;
+  cards: Array<EvidenceCardRef & { summary: string; originality: EvidenceOriginality | null; claimCount: number; updatedAt: string }>;
+  totals: { cards: number; followers: number; runsFromCards: number };
+  /** The author's recent change-log entries, when the deployment keeps a change log. */
+  changes?: Array<{ id?: string; summary?: string; kind?: string; at?: string }>;
+}
+export const fetchEvidenceAuthor = (userId: string) => productRequest<EvidenceAuthorPage>(`/frontier/authors/${id(userId)}`);
 
 /** Native evidence failures explain the action while keeping unsaved input intact. */
 export function evidenceErrorMessage(error: unknown): string {
