@@ -42,6 +42,9 @@ const USAGE_COUNTERS = ['retrieved', 'invoked', 'executionSucceeded', 'execution
 const IDENTITIES_PER_RUN = 500;
 /** Optimistic writes are retried on a revision conflict; two runs calling one tool at once is ordinary. */
 const WRITE_ATTEMPTS = 8;
+/** Usage accounting of one tool is queued inside a process, so a burst of calls of one tool holds one pooled
+ *  connection at a time rather than one per caller waiting on the same lock. */
+const usageQueues = new WeakMap();
 
 /**
  * Exact operating characteristics of the capped sequential test `methodHarmTest` implements, by dynamic
@@ -159,10 +162,41 @@ export class EvolutionMaintenance {
   /** @param {any} dependencies */
   constructor({ service, callbacks = {} }) { this.service = service; this.callbacks = callbacks; }
   /** A strict optimistic write: a revision conflict is thrown to the retry loop, never absorbed.
-   * @param {string} type @param {string} id @param {any} payload @param {any} previous */
-  async write(type, id, payload, previous) {
+   * `telemetry` is the ledger's own kind of write for counters derived from a record rather than a change of it
+   * (`ProductDocuments.put`): the revision still moves, no history row is kept and `updated_at` stays, which is how
+   * the learned-methods loop counts use. It cannot create a record.
+   * @param {string} type @param {string} id @param {any} payload @param {any} previous @param {{telemetry?:boolean}} [options] */
+  async write(type, id, payload, previous, { telemetry = false } = {}) {
     return this.service.documents.put(await this.service.owner(), 'knowledge', id, { ...payload, recordType: `evolution-${type}` },
-      { expectedRevision: previous?.revision ?? 0, projectId: payload.projectId ?? EVOLUTION_PROJECT_ID });
+      { expectedRevision: previous?.revision ?? 0, projectId: payload.projectId ?? EVOLUTION_PROJECT_ID, ...(telemetry && previous ? { telemetry: true } : {}) });
+  }
+  /**
+   * Run `work` as one unit for one tool: on PostgreSQL, one transaction on one connection (every ledger read and
+   * write inside it uses that connection) holding the tool's usage lock until it commits.
+   *
+   * Optimistic writes with a few retries were the whole protection at first, and against the real ledger they were
+   * not enough: forty runs calling one tool at the same moment left fourteen refused with a revision conflict after
+   * eight attempts each, their run records written and their counts never added. A lock held for a few short
+   * statements is the plain answer to many writers of one row. The transaction also makes the run's record and the
+   * tool's counters one write: both are kept or neither is. Callers in this process queue for the tool first, so
+   * the lock is contended between processes and not between forty connections of one. A ledger without a
+   * database (the in-memory double of the unit tests) has no transaction to offer and runs `work` in its turn.
+   * @template T @param {string} toolId @param {() => Promise<T>} work @returns {Promise<T>}
+   */
+  async atomically(toolId, work) {
+    const database = this.service.documents.database;
+    const unit = database?.transaction && database.withTransactionClient
+      ? () => database.transaction((/** @type {any} */ client) => database.withTransactionClient(client, async () => {
+        await database.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`evimed-evolution:tool-usage:${toolId}`]);
+        return work();
+      })) : work;
+    // Called from inside a transaction someone else holds, the unit joins that transaction and must not wait in this
+    // process's queue: the caller ahead of it there may be waiting for the lock that transaction already has.
+    if (database?.transactionScope?.()) return unit();
+    const queue = usageQueues.get(this.service) ?? usageQueues.set(this.service, new Map()).get(this.service);
+    const pending = (queue.get(toolId) ?? Promise.resolve()).catch(() => {}).then(unit);
+    queue.set(toolId, pending);
+    try { return await pending; } finally { if (queue.get(toolId) === pending) queue.delete(toolId); }
   }
   /** @template T @param {() => Promise<T|undefined>} attempt @returns {Promise<T>} */
   async retried(attempt) {
@@ -188,35 +222,48 @@ export class EvolutionMaintenance {
    * Both used to live in one array on the tool's record (integration finding F16): two runs calling a
    * tool at once lost one of the two observations to the revision conflict, and past roughly 500 runs
    * the record exceeded the ledger's 256 KiB limit, after which the most used tool could record nothing
-   * and could not be retired. Now a run contends only with itself on its own record, the counter update
-   * is an increment that is retried on conflict, and the harm trial is an idempotent upsert.
+   * and could not be retired. Now the run's record and the tool's counters are written as one unit under the
+   * tool's usage lock (`atomically`), the counter update is an increment of what this report added, and the harm
+   * trial is an idempotent upsert. Counting use writes no history: a call is not a version of the tool.
    * @param {string} id @param {any} observation `userId` is the account whose run this is
    */
   async observe(id, observation) {
-    let tool = await this.service.get(id);
-    if (!tool) throw new HttpError(404, 'evolution_tool_missing', 'Tool not found.');
-    if (Array.isArray(tool.payload.observations) && tool.payload.observations.length) tool = await this.migrateObservations(tool);
-    const observationId = this.observationId(tool, observation.runId);
-    const folded = await this.retried(async () => {
-      const row = await this.service.get(observationId);
-      const merged = foldRun(row?.payload ?? null, observation, this.service.now().toISOString());
-      if (row && canonicalJson({ ...row.payload, recordType: null }) === canonicalJson({ toolId: tool.id, ...merged, recordType: null })) return { state: row.payload, delta: null };
-      const before = contribution(row?.payload), after = contribution(merged);
-      const saved = await this.write('observation', observationId, { toolId: tool.id, ...merged }, row);
-      return { state: saved.payload, delta: Object.fromEntries(USAGE_COUNTERS.map(key => [key, after[key] - before[key]])) };
+    // Read once before the transaction: an unknown tool is refused without taking a lock, and the ledger's own
+    // one-time schema preparation never happens inside a transaction that may roll back.
+    if (!await this.service.get(id)) throw new HttpError(404, 'evolution_tool_missing', 'Tool not found.');
+    const saved = await this.atomically(id, async () => {
+      let tool = await this.service.get(id);
+      if (!tool) throw new HttpError(404, 'evolution_tool_missing', 'Tool not found.');
+      if (Array.isArray(tool.payload.observations) && tool.payload.observations.length) tool = await this.migrateObservations(tool);
+      const observationId = this.observationId(tool, observation.runId);
+      const folded = await this.retried(async () => {
+        const row = await this.service.get(observationId);
+        const merged = foldRun(row?.payload ?? null, observation, this.service.now().toISOString());
+        if (row && canonicalJson({ ...row.payload, recordType: null }) === canonicalJson({ toolId: tool.id, ...merged, recordType: null })) return { state: row.payload, delta: null };
+        const before = contribution(row?.payload), after = contribution(merged);
+        // The run's record is nothing but what the run did: its first write creates it, every later one is a count.
+        const written = await this.write('observation', observationId, { toolId: tool.id, ...merged }, row, { telemetry: true });
+        return { state: written.payload, delta: Object.fromEntries(USAGE_COUNTERS.map(key => [key, after[key] - before[key]])) };
+      });
+      if (!folded.delta) return null;
+      // What the tool's record says, as opposed to what it counts: the harm test's trials and verdict.
+      const said = (/** @type {any} */ harm) => canonicalJson([harm?.trials ?? [], harm?.state ?? 'watching', harm?.reviewId ?? null, harm?.overriddenAt ?? null]);
+      // Other writers of the tool's record (an assessment, a retirement) do not take the usage lock; they are rare, and a conflict with one is retried.
+      return this.retried(async () => {
+        const current = await this.service.get(id);
+        const usage = { ...current.payload.usage };
+        for (const key of USAGE_COUNTERS) usage[key] = Number(usage[key] ?? 0) + folded.delta[key];
+        usage.executionCount = usage.invoked;
+        usage.harm = foldHarmTrial(usage.harm, folded.state);
+        usage.harmState = usage.harm.overriddenAt ? 'overridden' : usage.harm.state;
+        delete usage.harmEpochs;
+        const { observations: _migrated, ...payload } = current.payload;
+        const countersOnly = said(usage.harm) === said(current.payload.usage?.harm) && usage.harmState === (current.payload.usage?.harmState ?? usage.harmState)
+          && current.payload.observations === undefined && current.payload.usage?.harmEpochs === undefined;
+        return this.write('tool', id, { ...payload, usage }, current, { telemetry: countersOnly });
+      });
     });
-    if (!folded.delta) return tool;
-    const saved = await this.retried(async () => {
-      const current = await this.service.get(id);
-      const usage = { ...current.payload.usage };
-      for (const key of USAGE_COUNTERS) usage[key] = Number(usage[key] ?? 0) + folded.delta[key];
-      usage.executionCount = usage.invoked;
-      usage.harm = foldHarmTrial(usage.harm, folded.state);
-      usage.harmState = usage.harm.overriddenAt ? 'overridden' : usage.harm.state;
-      delete usage.harmEpochs;
-      const { observations: _migrated, ...payload } = current.payload;
-      return this.write('tool', id, { ...payload, usage }, current);
-    });
+    if (!saved) return this.service.get(id);
     const harm = saved.payload.usage.harm;
     if (harm.state === 'harm' && !harm.reviewId && !harm.overriddenAt) return this.proposeHarmReview(saved);
     // The shared test's own parameters decide when live evidence is sufficient.
