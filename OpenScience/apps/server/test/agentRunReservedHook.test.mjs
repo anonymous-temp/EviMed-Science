@@ -49,3 +49,27 @@ test("a hold that cannot be placed never stops the run: the hook's failure is sw
     assert.equal((await f.store.list(f.project)).find((run) => run.id === started.id)?.status, "running");
   } finally { await f.close(); }
 });
+
+test("the hold is placed after the brief is kept and just before the prompt goes out, so a start that fails before then freezes nothing (review F7)", async () => {
+  /** @type {string[]} */
+  const order = [];
+  const f = await fixture({ onRunReserved: async () => { order.push("reserved"); } });
+  try {
+    const keepBrief = f.store.keepBrief.bind(f.store);
+    f.store.keepBrief = async (/** @type {any[]} */ ...args) => { order.push("brief kept"); return keepBrief(...args); };
+    const writeWorkspaceBrief = f.store.writeWorkspaceBrief.bind(f.store);
+    f.store.writeWorkspaceBrief = async (/** @type {any[]} */ ...args) => { order.push("brief written"); return writeWorkspaceBrief(...args); };
+    await f.store.dispatch(f.project, { ...f.route, dispatchId: "turn-brief", question: "A brief the run is sent for." }, async () => { order.push("prompt"); return { accepted: true }; });
+    assert.deepEqual(order, ["brief kept", "brief written", "reserved", "prompt"]);
+  } finally { await f.close(); }
+
+  // A brief that cannot be written stops the start before the hold is ever asked for.
+  /** @type {string[]} */
+  const placed = [];
+  const failing = await fixture({ onRunReserved: async () => { placed.push("reserved"); } });
+  try {
+    failing.store.writeWorkspaceBrief = async () => { throw new Error("the workspace is read-only"); };
+    await assert.rejects(failing.store.dispatch(failing.project, { ...failing.route, dispatchId: "turn-nobrief", question: "x" }, async () => ({ accepted: true })), /read-only/);
+    assert.deepEqual(placed, [], "nothing was frozen for a run that never started");
+  } finally { await failing.close(); }
+});

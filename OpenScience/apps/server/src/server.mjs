@@ -2711,6 +2711,40 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       });
     },
     onRunFinished: async (project, run) => {
+      // 灵豆 settlement (§9.6): one charge per finished run, in EviMed's currency, from the CNY this run already
+      // has recorded against it. It is idempotent on the run id and it never throws, so it can be asked for twice:
+      // where it falls in the completion below, and in the `finally` that ends it. The platform's own background
+      // work is left out for the same reason the usage caps leave it out: an evaluation cell and a lesson are not
+      // the researcher's spend.
+      //
+      // A step of the completion that throws before the settlement (about twenty are awaited ahead of it) must
+      // not leave the run uncharged with its hold frozen for the run's whole timeout (review F7): the `finally`
+      // settles whatever has not been, and `settleRun` lets the hold go on every path of its own.
+      let chargeAsked = false;
+      const settleCharge = async (/** @type {boolean | undefined} */ evaluation = undefined) => {
+        if (chargeAsked || !credits) return;
+        chargeAsked = true;
+        let evaluationRun = evaluation;
+        try { evaluationRun ??= runtimeManager.evaluationMethodSnapshots.has(runtimeManager.key(project)); } catch { evaluationRun = false; }
+        if (evaluationRun || internalFor(project.userId, project.id)) return;
+        await credits.service.settleRun({
+          userId: project.userId, projectId: project.id, runId: run.id,
+          dispatchId: run.dispatchId ?? null,
+          status: run.status, dispatchStatus: run.dispatchStatus, errorCode: run.errorCode,
+          // Who stopped a cancelled run: the researcher (charged for what had run) or the platform (not charged).
+          // Absent when the stop cannot be attributed, and then it is not charged either.
+          canceledBy: run.canceledBy ?? null,
+          effectiveRouteReason: run.effectiveRouteReason,
+          effectiveAgentId: run.effectiveAgentId ?? run.agentId ?? null,
+          automated: run.automated === true,
+          accountCreatedAt: run.accountCreatedAt ?? null,
+          startedAt: run.startedAt ?? run.createdAt ?? null,
+          finishedAt: run.finishedAt ?? null,
+          capabilityId: run.effectiveAgentId ?? run.agentId ?? null,
+          subject: run.title ?? run.question ?? null,
+        });
+      };
+      try {
       await completeEvolutionRuntime({ config, evolution, project, run, evaluationIsolation, runtimeManager, independentProductWork });
       const gapCode = evolution && !internalFor(project.userId, project.id) && run.status === "failed" ? evolutionRunGap(run) : null;
       if (gapCode) {
@@ -2865,30 +2899,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           code: typeof error?.code === "string" ? error.code : "geo_run_completion_failed",
         }));
       }
-      // 灵豆 settlement (§9.6): one charge per finished run, in EviMed's
-      // currency, from the CNY this run already has recorded against it. It is
-      // idempotent on the run id, it never throws, and it is not a condition of
-      // anything below — the platform's own background work is left out for the
-      // same reason the usage caps leave it out: an evaluation cell and a lesson
-      // are not the researcher's spend.
-      if (credits && !evaluationRun && !internalFor(project.userId, project.id)) {
-        await credits.service.settleRun({
-          userId: project.userId, projectId: project.id, runId: run.id,
-          dispatchId: run.dispatchId ?? null,
-          status: run.status, dispatchStatus: run.dispatchStatus, errorCode: run.errorCode,
-          // Who stopped a cancelled run: the researcher (charged for what had run) or the platform (not charged).
-          // Absent when the stop cannot be attributed, and then it is not charged either.
-          canceledBy: run.canceledBy ?? null,
-          effectiveRouteReason: run.effectiveRouteReason,
-          effectiveAgentId: run.effectiveAgentId ?? run.agentId ?? null,
-          automated: run.automated === true,
-          accountCreatedAt: run.accountCreatedAt ?? null,
-          startedAt: run.startedAt ?? run.createdAt ?? null,
-          finishedAt: run.finishedAt ?? null,
-          capabilityId: run.effectiveAgentId ?? run.agentId ?? null,
-          subject: run.title ?? run.question ?? null,
-        });
-      }
+      await settleCharge(evaluationRun);
       // Background work is not a person's research: a lesson, a source being
       // read and an evaluation cell run in the account's internal projects,
       // and each reports where it belongs (the knowledge base's own row). On
@@ -3178,6 +3189,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         extractionError: memoryResult.extractionError,
       }).catch(() => {});
       await queueLessons(memoryResult);
+      } finally {
+        await settleCharge();
+      }
     },
     onRunFinishedError: async (error, project, run) => {
       await securityAudit(config, "memory.agent_run.record", "failed", {

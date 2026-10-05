@@ -4072,8 +4072,8 @@ export class AgentRunStore {
     // Consecutive polls with no new message and no new tool call before a run
     // is called stalled. Zero disables the check and waits out the timeout.
     this.monitorStallPolls = options.monitorStallPolls ?? 0;
-    // Called once, when this process has just created a dispatched run and before its prompt goes
-    // out — the moment a run exists and has not begun to spend. Billing's hold on the run's
+    // Called once, when this process has created a dispatched run and its brief is kept, immediately before its
+    // prompt goes out — the moment a run exists and has not begun to spend. Billing's hold on the run's
     // budget is placed here. It can never refuse or fail a run: an error is swallowed (principle 14).
     /** @type {(project: any, run: any) => Promise<any>} */
     this.onRunReserved = options.onRunReserved ?? (async () => {});
@@ -4662,7 +4662,6 @@ export class AgentRunStore {
     const record = reservation.run;
     if (!reservation.owner) return this.existingDispatch(project, record);
     this.projects.set(`${project.userId}:${project.id}`, project);
-    try { await this.onRunReserved(project, record); } catch { /* a hold that could not be placed never stops research */ }
     // The brief, before the prompt goes out, so it is held whatever happens
     // next. This is the authoritative copy and the only one the gate reads.
     if (briefText) {
@@ -4670,6 +4669,11 @@ export class AgentRunStore {
       await this.writeWorkspaceBrief(project, briefText);
     }
     try {
+      // The hold on the run's budget is placed here, after the brief is kept and immediately before the prompt goes
+      // out (review F7): a start that fails before this point never froze anything, and one that fails after it ends
+      // `failed` through the catch below, which is what releases the hold. A hold that could not be placed never
+      // stops research.
+      try { await this.onRunReserved(project, record); } catch { /* billing failing never stops a run */ }
       try{await this.captureRuntimeEgressProof?.(project,record);}catch{/* Missing observed proof is unknown exposure, never a delivery gate. */}
       const result = await sendPrompt(session, record);
       if (result?.accepted === false) {
