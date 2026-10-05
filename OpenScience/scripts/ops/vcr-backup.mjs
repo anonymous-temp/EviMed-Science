@@ -5,13 +5,22 @@ import { constants } from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { setTimeout as delay } from 'node:timers/promises';
 import { runVcrBackupProcess } from './vcr-backup-process.mjs';
+import { parseFileReferences } from './vcr-backup-references.mjs';
 
 const ops = path.dirname(fileURLToPath(import.meta.url));
 const archiveName = /^open-science-data-\d{8}T\d{6}Z\.tar\.gz\.enc$/;
 const hash = bytes => createHash('sha256').update(bytes).digest('hex');
 const error = code => Object.assign(new Error(code), { code });
+/** A capture receipt carries every data-plane file its dump names (200 thousand at most, about 200 bytes each). */
+const RECEIPT_LIMIT = 64 * 1024 * 1024;
+/**
+ * How many times one run of the cycle takes the set again when a file the dump
+ * names was deleted before the file archive was read. A deletion is a researcher
+ * removing an upload or a study, so two in a row is already unusual; past this the
+ * set is deferred (see \`runVcrBackupCycle\`), not retried until the unit times out.
+ */
+export const VCR_BACKUP_ATTEMPTS = 3;
 
 function inside(parent, child) {
   const relative = path.relative(parent, child);
@@ -26,20 +35,16 @@ export function vcrBackupConfig(env = process.env) {
     if (!value || !path.isAbsolute(value) || path.resolve(value) !== value) throw error('vcr_backup_configuration_invalid');
     return value;
   };
+  // No operator token, URL or compose project: the cycle no longer asks the
+  // running application for anything (see \`runVcrBackupCycle\`), so a deployment's
+  // old values for them are simply not read.
   const config = { enabled: true,
     dataPlaneDir: required('OPEN_SCIENCE_VCR_DATA_PLANE_HOST_DIR'), backupDir: required('OPEN_SCIENCE_VCR_BACKUP_DIR'),
-    statusDir: required('OPEN_SCIENCE_VCR_BACKUP_STATUS_HOST_DIR'), tokenFile: required('OPEN_SCIENCE_OPERATOR_METRICS_TOKEN_HOST_FILE'),
+    statusDir: required('OPEN_SCIENCE_VCR_BACKUP_STATUS_HOST_DIR'),
     passphraseFile: required('OPEN_SCIENCE_BACKUP_PASSPHRASE_FILE'),
     jobsVolume: String(env.OPEN_SCIENCE_VCR_JOBS_VOLUME ?? 'web_evimed-vcr-jobs'),
-    operatorUrl: String(env.OPEN_SCIENCE_VCR_BACKUP_OPERATOR_URL || 'http://127.0.0.1:8787'),
-    operatorProject: String(env.EVIMED_COMPOSE_PROJECT || 'web'), drainSeconds: 60,
     maxSets: Number(env.OPEN_SCIENCE_VCR_BACKUP_MAX_SETS ?? 2) };
-  const url = new URL(config.operatorUrl);
-  if (url.protocol !== 'http:' || url.hostname !== '127.0.0.1' || url.username || url.password || url.pathname !== '/' || url.search || url.hash) {
-    throw error('vcr_backup_operator_loopback_required');
-  }
   if (!/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/.test(config.jobsVolume)) throw error('vcr_backup_configuration_invalid');
-  if (!/^[a-z0-9][a-z0-9_-]{0,62}$/.test(config.operatorProject)) throw error('vcr_backup_configuration_invalid');
   if (!Number.isSafeInteger(config.maxSets) || config.maxSets < 2 || config.maxSets > 32) throw error('vcr_backup_configuration_invalid');
   for (const left of [config.backupDir, config.statusDir]) {
     if (inside(config.dataPlaneDir, left) || inside(left, config.dataPlaneDir)) throw error('vcr_backup_paths_must_be_separate');
@@ -60,12 +65,12 @@ async function safeDirectory(directory, create = false) {
   }
 }
 
-async function readRegular(file, { privateFile = false } = {}) {
+async function readRegular(file, { privateFile = false, limit = 1024 * 1024 } = {}) {
   await safeDirectory(path.dirname(file));
   const handle = await fs.open(file, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
   try {
     const info = await handle.stat();
-    if (!info.isFile() || info.nlink !== 1 || info.size > 1024 * 1024 || info.size === 0
+    if (!info.isFile() || info.nlink !== 1 || info.size > limit || info.size === 0
       || (info.mode & (privateFile ? 0o077 : 0o022))) throw error('vcr_backup_file_invalid');
     return await handle.readFile();
   } finally { await handle.close(); }
@@ -81,91 +86,6 @@ async function writeJson(file, value, mode = 0o600) {
   finally { await handle.close(); }
   await fs.rename(temporary, file);
   await fs.chmod(file, mode);
-}
-
-// The web instance already mounts its operator token. Docker authority stays
-// with the host; this fixed program receives no credential bytes in argv and
-// returns only maintenance state. Native HTTP follows no redirect or proxy.
-export const VCR_OPERATOR_REQUEST_SCRIPT = String.raw`
-const fs=require('node:fs'), http=require('node:http'), crypto=require('node:crypto');
-const [url,action,encoded,expectedTokenHash,deadlineRaw]=process.argv.slice(1);
-let ended=false,dispatched=false;
-const fail=(acknowledged=false)=>{if(ended)return;ended=true;process.stdout.write(JSON.stringify({completed:acknowledged||!dispatched,code:'vcr_backup_maintenance_unavailable'}));};
-try{
- const deadline=Number(deadlineRaw);
- if(!Number.isSafeInteger(deadline)||Date.now()>=deadline)throw Error();
- const parsed=new URL(url);
- if(parsed.protocol!=='http:'||parsed.hostname!=='127.0.0.1'||parsed.username||parsed.password||parsed.pathname!=='/'||parsed.search||parsed.hash)throw Error();
- if(!['status','request','hold','release'].includes(action))throw Error();
- const body=JSON.parse(encoded);
- if(!body||typeof body!=='object'||Array.isArray(body)||Object.keys(body).some(k=>!['requestId','ttlSeconds'].includes(k)))throw Error();
- const file=process.env.OPEN_SCIENCE_OPERATOR_METRICS_TOKEN_FILE;
- if(!file||!file.startsWith('/'))throw Error();
- const token=fs.readFileSync(file,'utf8').trim();
- if(token.length<16||/[\r\n]/.test(token)||crypto.createHash('sha256').update(token).digest('hex')!==expectedTokenHash)throw Error();
- if(Date.now()>=deadline)throw Error();
- const req=http.request(new URL('/api/ops/maintenance',parsed),{method:action==='status'?'GET':'POST',
-  headers:{authorization:'Bearer '+token,'content-type':'application/json'}},res=>{
-  const chunks=[];let size=0;
-  res.on('data',chunk=>{size+=chunk.length;if(size>65536)res.destroy();else chunks.push(chunk);});
-  res.once('error',()=>fail());
-  res.once('end',()=>{try{if(res.statusCode!==200){fail(true);return;}const value=JSON.parse(Buffer.concat(chunks).toString('utf8'));
-   if(!value.data||typeof value.data!=='object'||Array.isArray(value.data))throw Error();
-   if(!ended){ended=true;process.stdout.write(JSON.stringify({completed:true,data:value.data}));}
-  }catch{fail(true);}});
- });
- const timer=setTimeout(()=>req.destroy(),Math.max(1,Math.min(10000,deadline-Date.now())));
- req.once('close',()=>clearTimeout(timer));req.once('error',()=>fail());
- dispatched=true;
- req.end(action==='status'?undefined:JSON.stringify({action,...body}));
-}catch{fail();}`;
-
-/** Pin one inspected live web identity for every request in a backup cycle. */
-export async function createVcrBackupOperatorClient(config, signal, { run = runVcrBackupProcess, onUncertain = () => {} } = {}) {
-  const token = (await readRegular(config.tokenFile, { privateFile: true })).toString('utf8').trim();
-  if (token.length < 16 || /[\r\n]/.test(token)) throw error('vcr_backup_operator_token_invalid');
-  const project = config.operatorProject ?? 'web';
-  if (!/^[a-z0-9][a-z0-9_-]{0,62}$/.test(project)) throw error('vcr_backup_configuration_invalid');
-  let identity;
-  try {
-    const inspected = await run('docker', ['inspect', '--type', 'container', '--format',
-      '{"id":"{{.Id}}","running":{{.State.Running}},"service":"{{index .Config.Labels "com.docker.compose.service"}}","project":"{{index .Config.Labels "com.docker.compose.project"}}"}',
-      `${project}-open-science-web-1`], { signal, timeout: 10000, maxBuffer: 4096 });
-    identity = JSON.parse(inspected.stdout);
-    if (!/^[a-f0-9]{64}$/.test(identity.id) || identity.running !== true
-      || identity.service !== 'open-science-web' || identity.project !== project) throw Error();
-  } catch (failure) {
-    if (signal?.aborted) throw error('vcr_backup_canceled');
-    if (failure.code === 'vcr_backup_process_stop_unconfirmed') throw failure;
-    throw error('vcr_backup_maintenance_unavailable');
-  }
-  return async (action, body = {}) => {
-    const actionSignal = action === 'release' ? null : signal;
-    if (actionSignal?.aborted) throw error('vcr_backup_canceled');
-    if (!['status', 'request', 'hold', 'release'].includes(action) || !body || typeof body !== 'object'
-      || Array.isArray(body) || Object.keys(body).some(key => !['requestId', 'ttlSeconds'].includes(key))) throw error('vcr_backup_maintenance_invalid');
-    let value;
-    try {
-      // Aborting Docker's client does not stop daemon-side exec. Await the
-      // fixed program's bounded completion before cleanup can release a lease.
-      const result = await run('docker', ['exec', identity.id, 'node', '-e', VCR_OPERATOR_REQUEST_SCRIPT,
-        config.operatorUrl, action, JSON.stringify(body), hash(token), String(Date.now() + 10000)],
-      { signal: null, timeout: 15000, maxBuffer: 65536 });
-      value = JSON.parse(result.stdout);
-      if (value.completed !== true) throw Error();
-    } catch {
-      onUncertain();
-      throw error('vcr_backup_process_stop_unconfirmed');
-    }
-    if (actionSignal?.aborted) throw error('vcr_backup_canceled');
-    if (value.code || !value.data || typeof value.data !== 'object' || Array.isArray(value.data)) throw error('vcr_backup_maintenance_unavailable');
-    return value.data;
-  };
-}
-
-function assertIdle(state, requestId) {
-  if (state?.state !== 'idle' || state.lease?.requestId !== requestId || !state.blockers
-    || Object.values(state.blockers).some(value => !Number.isSafeInteger(value) || value !== 0)) throw error('vcr_backup_not_quiescent');
 }
 
 async function jobsOwnerCheck(directory) {
@@ -205,15 +125,55 @@ async function retainVerifiedSets(config, protectedSet) {
   for (const entry of completed) if (!keep.has(entry.name)) await fs.rm(entry.directory, { recursive: true });
 }
 
-/** Test injections observe fixed operations; the production caller supplies none. */
+/** The last status the cycle wrote, or null: only its `lastSuccessAt` is read, to carry it through a deferral. */
+async function previousStatus(file) {
+  try { return JSON.parse((await readRegular(file)).toString('utf8')); } catch { return null; }
+}
+
+/**
+ * One recovery set: a PostgreSQL dump, then the data plane and the jobs volume,
+ * with the files held against what the dump names. Runs while the platform runs.
+ *
+ * Why this no longer asks for a quiet platform, in two sentences. The dump is one
+ * exported snapshot, and every file a row of it names was written before that row
+ * (and is never rewritten in place: it is named by the hash of its bytes, or created
+ * once, or replaced by rename), so a file archive taken *after* the dump holds
+ * every file the dump names unless one was deleted in between. That one case is not
+ * assumed away but checked: the dump records the files it names and the restore
+ * drill of the data-plane archive confirms each is there with the bytes it names
+ * (`vcr-backup-references.mjs`), so a set that is marked healthy is restorable
+ * whatever the platform was doing, and a set where a deletion raced is taken again.
+ *
+ * What the quiet window used to be for, and why it is gone: it made all three
+ * members one instant (and let the data-plane archive be strict, which refuses a
+ * tree that changes), at the price of refusing every mutation platform-wide for the
+ * duration and failing the whole unit — and with it readiness — whenever a
+ * research run or a learning consolidation was in flight. The jobs volume needs
+ * nothing from it: it is the engine's working state, not a record the dump names (a
+ * job the restored database calls running and the engine no longer has is
+ * submitted again; the engine answers 404 and the queue does that already). The
+ * one thing the window did that this does not is stop the platform from deleting
+ * a file mid-capture, and that costs a retry, not a lie.
+ *
+ * Outcomes, three and kept apart. \`healthy\`: a verified set. \`failed\`: something
+ * this host owns did not work (a directory, the passphrase, Docker, an archive or a
+ * file with the wrong bytes) and an operator should look. \`deferred\`: the set could
+ * not be completed because files the dump names kept being deleted under it; the
+ * PostgreSQL archive made by the unit's first step is untouched, readiness reports
+ * the state as a detail rather than a failure, and the next run takes the set again.
+ *
+ * Test injections observe fixed operations; the production caller supplies none.
+ */
 export async function runVcrBackupCycle(config, dependencies = {}) {
   if (!config.enabled) return { status: 'off' };
   const rootCheck = dependencies.rootCheck ?? (() => { if (process.getuid?.() !== 0) throw error('vcr_backup_host_root_required'); });
   rootCheck();
   await safeDirectory(config.statusDir, true);
   const statusFile = path.join(config.statusDir, 'state.json');
+  const previous = await previousStatus(statusFile);
   const started = new Date().toISOString();
   const signal = dependencies.signal ?? new AbortController().signal;
+  const attempts = dependencies.attempts ?? VCR_BACKUP_ATTEMPTS;
   let physicalStopUnconfirmed = false;
   const canceled = () => { if (signal.aborted) throw error('vcr_backup_canceled'); };
   const executeOperation = dependencies.run ?? runVcrBackupProcess;
@@ -226,9 +186,13 @@ export async function runVcrBackupCycle(config, dependencies = {}) {
       throw failure;
     }
   };
+  const failed = async failure => {
+    const reason = signal.aborted && !physicalStopUnconfirmed ? error('vcr_backup_canceled') : failure;
+    await writeJson(statusFile, { schemaVersion: 1, status: 'failed', lastAttemptAt: started, code: reason.code ?? 'vcr_backup_cycle_failed' }, 0o644);
+    return reason;
+  };
   let jobsDir;
   let dataPlaneIdentity;
-  let maintenance;
   try {
     await safeDirectory(config.dataPlaneDir);
     const planeStat = await fs.stat(config.dataPlaneDir);
@@ -241,56 +205,22 @@ export async function runVcrBackupCycle(config, dependencies = {}) {
     await safeDirectory(jobsDir);
     await (dependencies.jobsOwnerCheck ?? jobsOwnerCheck)(jobsDir);
     if ([config.dataPlaneDir, config.backupDir, config.statusDir].some(root => inside(root, jobsDir) || inside(jobsDir, root))) throw error('vcr_backup_paths_must_be_separate');
-    maintenance = dependencies.maintenance ?? await createVcrBackupOperatorClient(config, signal,
-      { run: executeOperation, onUncertain: () => { physicalStopUnconfirmed = true; } });
   } catch (failure) {
     await writeJson(statusFile, { schemaVersion: 1, status: 'failed', lastAttemptAt: started, code: failure.code ?? 'vcr_backup_storage_unavailable' }, 0o644);
     throw failure;
   }
-  const requestId = `vcr-backup-${randomUUID()}`;
-  const directory = path.join(config.backupDir, requestId);
-  let heartbeat;
-  let heartbeatRunning = false;
-  let heartbeatPending = null;
-  let leaseError = null;
-  let requested = false;
-  let completed = null;
-  const check = async () => { canceled(); if (leaseError) throw leaseError; assertIdle(await maintenance('status'), requestId); canceled(); };
-  try {
-    canceled();
-    requested = true;
-    const lease = await maintenance('request', { requestId, ttlSeconds: 3600 });
-    if (lease?.lease?.requestId !== requestId) throw error('vcr_backup_lease_lost');
-    heartbeat = (dependencies.setInterval ?? setInterval)(() => {
-      if (heartbeatRunning || signal.aborted) return;
-      heartbeatRunning = true;
-      heartbeatPending = (async () => {
-        try {
-          const next = await maintenance('request', { requestId, ttlSeconds: 3600 });
-          if (next?.lease?.requestId !== requestId) throw error('vcr_backup_lease_lost');
-        } catch { leaseError = error('vcr_backup_lease_lost'); }
-        finally { heartbeatRunning = false; }
-      })();
-    }, 30_000);
-    const deadline = Date.now() + config.drainSeconds * 1000;
-    while (true) {
-      try { await check(); break; } catch (failure) {
-        if (failure.code !== 'vcr_backup_not_quiescent' || Date.now() >= deadline) throw failure;
-        await delay(1000, undefined, { signal });
-      }
-    }
-    const protective = await maintenance('hold', { requestId });
-    if (protective?.lease?.requestId !== requestId || protective.lease.durableHold !== true) throw error('vcr_backup_protective_hold_unconfirmed');
-    await check();
+
+  /** One attempt at the whole set, in its own directory. */
+  const captureSet = async (requestId, directory) => {
     await safeDirectory(directory, true);
     const postgresDir = path.join(directory, 'postgres'); await safeDirectory(postgresDir, true);
     const container = (await run('docker', ['inspect', '--type', 'container', '--format', '{{.Id}}',
       process.env.EVIMED_POSTGRES_CONTAINER || 'web-evimed-postgres-1'])).stdout.trim();
     if (!/^[a-f0-9]{64}$/.test(container)) throw error('vcr_backup_postgres_container_invalid');
     const operation = randomUUID().replaceAll('-', '');
-    // A crash-recovery operator can fence this exact physical intent before
-    // releasing the persistent hold. No PID/name inference or new capture is
-    // needed, and the private record contains no source rows or credentials.
+    // A crash-recovery operator can fence this exact physical intent. No
+    // PID/name inference or new capture is needed, and the private record
+    // contains no source rows or credentials.
     await writeJson(path.join(directory, 'capture-intent.json'), { schemaVersion: 1, requestId, container, operation });
     const captureEnv = { ...process.env, EVIMED_POSTGRES_PASSPHRASE_FILE: config.passphraseFile,
       EVIMED_RECOVERY_SET_STAGING_ROOT: directory, EVIMED_POSTGRES_CONTAINER: container, EVIMED_POSTGRES_CAPTURE_OPERATION_ID: operation };
@@ -315,59 +245,88 @@ export async function runVcrBackupCycle(config, dependencies = {}) {
     }
     if (postgres.status !== 'captured' || postgres.receipt !== path.join(postgresDir, 'postgres.dump.enc.capture.json')
       || postgres.archive !== path.join(postgresDir, 'postgres.dump.enc')) throw error('vcr_backup_postgres_capture_invalid');
-    const pgReceipt = JSON.parse((await readRegular(postgres.receipt, { privateFile: true })).toString('utf8'));
+    const pgReceipt = JSON.parse((await readRegular(postgres.receipt, { privateFile: true, limit: RECEIPT_LIMIT })).toString('utf8'));
     const pgDigest = await archiveDigest(postgres.archive);
     if (pgReceipt.status !== 'captured' || pgReceipt.archiveSha256 !== pgDigest.sha256 || !pgReceipt.snapshotId
       || !pgReceipt.sourceIdentity || pgReceipt.atomicAcrossComponents !== false) throw error('vcr_backup_postgres_capture_invalid');
+    // A receipt that cannot say which files its dump names cannot be held against
+    // them: refused here rather than certified without the check.
+    const named = parseFileReferences(pgReceipt);
     const members = {};
+    let references = { checked: named.length, missing: 0, mismatched: 0 };
+    // The files come after the dump, never before: a file the dump names was
+    // already there, while one created since is simply not named by it.
     for (const [name, root] of [['data-plane', config.dataPlaneDir], ['jobs', jobsDir]]) {
-      await check();
+      canceled();
       const target = path.join(directory, name); await safeDirectory(target, true);
-      const env = { ...process.env, OPEN_SCIENCE_BACKUP_STRICT: 'true', OPEN_SCIENCE_BACKUP_PASSPHRASE: '',
+      // Not strict: both roots are written while this runs, and strict refuses
+      // a tree that changes. What would make a live copy wrong is checked
+      // against the dump below instead of being excluded by stopping the writers.
+      const env = { ...process.env, OPEN_SCIENCE_BACKUP_STRICT: 'false', OPEN_SCIENCE_BACKUP_PASSPHRASE: '',
         OPEN_SCIENCE_BACKUP_PASSPHRASE_FILE: config.passphraseFile, OPEN_SCIENCE_BACKUP_RETENTION_DAYS: '', OPEN_SCIENCE_OBJECT_BACKUP_URI: '' };
       const archive = (await run('bash', [path.join(ops, 'backup-data.sh'), root, target], { env })).stdout.trim().split(/\r?\n/).at(-1);
       if (path.dirname(archive) !== target || !archiveName.test(path.basename(archive))) throw error('vcr_backup_member_invalid');
       const digest = await archiveDigest(archive);
       const checksum = (await readRegular(`${archive}.sha256`, { privateFile: true })).toString('utf8');
       if (checksum !== `${digest.sha256}  ${path.basename(archive)}\n`) throw error('vcr_backup_member_invalid');
-      const drill = JSON.parse((await run('node', [path.join(ops, 'vcr-restore-drill.mjs'), archive], { env })).stdout);
+      const drill = JSON.parse((await run('node', [path.join(ops, 'vcr-restore-drill.mjs'), archive,
+        ...(name === 'data-plane' ? ['--references', postgres.receipt] : [])], { env })).stdout);
       if (drill.verification !== 'inventory-v1' || drill.numericOwnersVerified !== true) throw error('vcr_backup_drill_invalid');
+      if (name === 'data-plane') {
+        const checked = drill.references;
+        if (!checked || checked.checked !== named.length || !Number.isSafeInteger(checked.missing) || !Number.isSafeInteger(checked.mismatched)) {
+          throw error('vcr_backup_drill_invalid');
+        }
+        references = { checked: checked.checked, missing: checked.missing, mismatched: checked.mismatched };
+        // Bytes that are not the bytes a row names are not a race: nothing
+        // writes such a file. The set is not certified and an operator is told.
+        if (checked.mismatched > 0) throw error('vcr_backup_reference_mismatch');
+        if (checked.missing > 0) throw Object.assign(error('vcr_backup_references_missing'), { missing: checked.missing });
+      }
       members[name] = { archive: `${name}/${path.basename(archive)}`, ...digest, drill };
     }
-    await check();
-    completed = { schemaVersion: 1, status: 'healthy', recoverySet: requestId, captureStartedAt: started,
-      captureFinishedAt: new Date().toISOString(), consistency: 'maintenance-held', atomicAcrossComponents: false,
+    const completed = { schemaVersion: 1, status: 'healthy', recoverySet: requestId, captureStartedAt: started,
+      captureFinishedAt: new Date().toISOString(), consistency: 'references-verified', atomicAcrossComponents: false,
+      references,
       postgres: { archive: 'postgres/postgres.dump.enc', ...pgDigest, sourceIdentity: pgReceipt.sourceIdentity, snapshotId: pgReceipt.snapshotId }, members };
     await writeJson(path.join(directory, 'recovery-set.json'), completed);
-  } catch (failure) {
-    const reason = signal.aborted && !physicalStopUnconfirmed ? error('vcr_backup_canceled') : failure;
-    await writeJson(statusFile, { schemaVersion: 1, status: 'failed', lastAttemptAt: started, code: reason.code ?? 'vcr_backup_cycle_failed' }, 0o644);
-    throw reason;
-  } finally {
-    (dependencies.clearInterval ?? clearInterval)(heartbeat);
-    await heartbeatPending;
-    if (requested && physicalStopUnconfirmed) {
-      await writeJson(statusFile, { schemaVersion: 1, status: 'failed', lastAttemptAt: started,
-        code: 'vcr_backup_capture_stop_unconfirmed', maintenanceHeld: true }, 0o644);
-      throw error('vcr_backup_capture_stop_unconfirmed');
-    }
-    if (requested) {
-      try { await maintenance('release', { requestId }); }
-      catch {
-        await writeJson(statusFile, { schemaVersion: 1, status: 'failed', lastAttemptAt: started, code: 'vcr_backup_lease_release_failed' }, 0o644);
-        throw error('vcr_backup_lease_release_failed');
+    return completed;
+  };
+
+  let completed = null;
+  let missing = 0;
+  let taken = 0;
+  while (!completed && taken < attempts) {
+    canceled();
+    taken += 1;
+    const requestId = `vcr-backup-${randomUUID()}`;
+    const directory = path.join(config.backupDir, requestId);
+    try { completed = await captureSet(requestId, directory); }
+    catch (failure) {
+      if (failure.code !== 'vcr_backup_references_missing' || signal.aborted) {
+        const reason = await failed(failure);
+        throw reason;
       }
+      // A set known to be incomplete is not kept: it is the attempt's own
+      // directory, and the next one starts from a new dump.
+      missing = failure.missing;
+      await fs.rm(directory, { recursive: true, force: true }).catch(() => {});
     }
   }
-  try { await retainVerifiedSets(config, requestId); }
+  if (!completed) {
+    await writeJson(statusFile, { schemaVersion: 1, status: 'deferred', lastAttemptAt: started, code: 'vcr_backup_references_missing',
+      missing, attempts: taken, lastSuccessAt: previous?.lastSuccessAt ?? null }, 0o644);
+    return { status: 'deferred', missing, attempts: taken };
+  }
+  try { await retainVerifiedSets(config, completed.recoverySet); }
   catch {
     await writeJson(statusFile, { schemaVersion: 1, status: 'failed', lastAttemptAt: started, code: 'vcr_backup_retention_failed' }, 0o644);
     throw error('vcr_backup_retention_failed');
   }
-  await writeJson(statusFile, { schemaVersion: 1, status: 'healthy', recoverySet: requestId,
+  await writeJson(statusFile, { schemaVersion: 1, status: 'healthy', recoverySet: completed.recoverySet,
     lastSuccessAt: completed.captureFinishedAt, lastDrillAt: completed.captureFinishedAt, coverage: Object.keys(completed.members),
     numericOwnersVerified: true, consistency: completed.consistency, atomicAcrossComponents: false,
-    postgresSnapshotId: completed.postgres.snapshotId, dataPlaneIdentity,
+    postgresSnapshotId: completed.postgres.snapshotId, dataPlaneIdentity, references: completed.references,
     receiptSha256: hash(Buffer.from(`${JSON.stringify(completed)}\n`)) }, 0o644);
   return completed;
 }

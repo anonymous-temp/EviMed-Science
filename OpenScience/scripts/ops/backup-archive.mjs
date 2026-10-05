@@ -9,9 +9,10 @@
 // re-checks every entry; not strict records what lstat sees, and the writer
 // opens each entry as it is when it gets to it.
 //
-// Strict is for a source nobody writes (the VCR data plane, a cutover capture
-// with the writers stopped): any entry that differs between the two passes
-// refuses the capture. Not strict is for a live product, which is never
+// Strict is for a source nobody writes (a cutover capture with the writers
+// stopped; the VCR data plane was one until its recovery set stopped asking the
+// platform to stop, see `vcr-backup.mjs`): any entry that differs between the two
+// passes refuses the capture. Not strict is for a live product, which is never
 // quiescent, and is what the scheduler runs. A running specialist job rewrites
 // its state file by rename on every heartbeat, the release receipt creates and
 // removes a project, a run's ledger grows; the writer used to fail the whole
@@ -131,6 +132,8 @@ function managedRuntimeDecision(parts) {
 // between a write and its rename, and a restored one is nobody's.
 const inFlightTemporary = /^\..+\.(?:[0-9a-f]{16}\.tmp|\d+\.\d+\.tmp_[0-9a-f]{32}|[^/]+\.tmpdir)$/;
 
+const vcrPartialFile = /\.[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.part$/;
+
 /** Paths the backup never looks at, decided from the path alone.
  *
  *  Volatile control state is excluded by rule, so it can never fail a backup:
@@ -138,7 +141,14 @@ const inFlightTemporary = /^\..+\.(?:[0-9a-f]{16}\.tmp|\d+\.\d+\.tmp_[0-9a-f]{32
  *  - the specialist slot directory (`.openscience/specialist-slots`): `flock`
  *    files that exist while a job holds or waits for a slot and are deleted
  *    with it, created and removed on every job on every engine container;
- *  - in-flight temporaries of the platform's own atomic writes (above).
+ *  - in-flight temporaries of the platform's own atomic writes (above);
+ *  - the VCR data plane's own scratch, which that tree is also archived while the
+ *    platform runs (`vcr-backup.mjs`): a record's conversion copy under
+ *    `studies/<study>/.intake/` (removed after each attempt, patient-level bytes
+ *    nothing restores) and a file mid-write, `<name>.<uuid>.part`, which is
+ *    renamed to its final name or removed (`vcrDataPlane.mjs`
+ *    `writeContentAddressed` and the identity map). A restored copy of either is
+ *    nobody's.
  *  Only outside a workspace: there a name is ours. Inside one it is the
  *  tenant's to choose, so nothing is excluded by name and the entry's type
  *  decides; one that is gone by the time the writer gets to it is recorded as
@@ -154,6 +164,7 @@ function excludedFromBackup(parts) {
   if (!managedRuntimeDecision(parts).included) return true;
   if (parts[0] === ".openscience" && parts[1] === "specialist-slots") return true;
   const name = parts.at(-1) ?? "";
+  if (parts[0] === "studies" && (parts[2] === ".intake" || vcrPartialFile.test(name))) return true;
   return !isBelowWorkspace(parts)
     && (name === ".runtime-sockets" || name.endsWith(".sock") || inFlightTemporary.test(name));
 }

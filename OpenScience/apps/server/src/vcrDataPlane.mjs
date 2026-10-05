@@ -2545,7 +2545,17 @@ export class VcrDataPlane {
     // 0600 (the engine runs as another user), read only through `identityOf`.
     const identityFile = path.join(root, studyRelative(entry.studyId), "identity", `${snapshot.id}.csv`);
     await fs.mkdir(path.dirname(identityFile), { recursive: true, mode: 0o700 });
-    await fs.writeFile(identityFile, toCsv(["pseudonym", "source_id"], derived.identity), { mode: 0o600 });
+    // Replaced by rename, never truncated in place: the plane is archived while it
+    // is written (`scripts/ops/vcr-backup.mjs`), and a copy taken between a
+    // truncate and the write would restore a way back that is half a map.
+    const partialIdentity = `${identityFile}.${randomUUID()}.part`;
+    try {
+      await fs.writeFile(partialIdentity, toCsv(["pseudonym", "source_id"], derived.identity), { mode: 0o600 });
+      await fs.rename(partialIdentity, identityFile);
+    } catch (error) {
+      await fs.rm(partialIdentity, { force: true }).catch(() => {});
+      throw error;
+    }
 
     /** @type {any[]} */
     const registered = [];

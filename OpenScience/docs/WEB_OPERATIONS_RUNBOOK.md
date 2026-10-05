@@ -595,9 +595,16 @@ not sufficient containment for those events.
   special file or a second name for a file where a file was, a directory
   replaced by a link, a path that escapes, another filesystem under the same
   name, an I/O error. `OPEN_SCIENCE_BACKUP_STRICT=true` keeps its meaning —
-  capture a source nobody writes, and refuse any change, which is what the VCR
-  data plane and a cutover capture with the writers stopped want — and is not
-  the mode to run against a live deployment.
+  capture a source nobody writes, and refuse any change, which is what a cutover
+  capture with the writers stopped wants — and is not the mode to run against a
+  live deployment. The VCR recovery set (`scripts/ops/vcr-backup.mjs`, the host
+  unit's `ExecStartPost`) does not ask the platform to stop: it takes the
+  PostgreSQL snapshot first, archives the data plane and the jobs volume live, and
+  holds the restored data plane against the files that dump names, so a set marked
+  healthy is restorable whatever was running. Files deleted under it make it retry
+  and, after three attempts, report `deferred` — a detail of `/api/ready`'s
+  `backup` check while the PostgreSQL archive is fresh, a failure only after three
+  maximum ages without a healthy set.
 - The production host also has the single `evimed-postgres-backup.timer` unit.
   Its versioned implementation is `scripts/ops/postgres-backup.py`, installed
   as `/usr/local/sbin/evimed-postgres-backup`; the existing unit names and daily
