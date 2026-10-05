@@ -750,7 +750,7 @@ test("a table the plane will not hand over leaves the other sources as they were
 });
 
 test("a table that has columns withheld by the access judgment answers only with what was released", async () => {
-  const released = subjectTable({ extra: { header: ["USUBJID", "arm", "sex"], rows: [["P0000000000000001", "TRT", "女"], ["P0000000000000002", "TRT", "男"]],
+  const released = subjectTable({ extra: { header: ["USUBJID", "arm", "sex"], rows: [["P9000000000000001", "TRT", "女"], ["P9000000000000002", "TRT", "男"]],
     withheld: [{ shape: "subject", reason: "sealed", fields: ["AGE"] }] } });
   const run = vcrMatchingExecutor({ matchStore: matchStoreDouble({ async listCriteria() { return TABLE_CRITERIA; }, async listFacts() { return []; } }), store: owner,
     subjectTable: { read: async () => released } });
