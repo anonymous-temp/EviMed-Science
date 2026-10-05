@@ -308,6 +308,22 @@ BEGIN
       CHECK (kind IN (${PRODUCT_JOB_KINDS.map(kind => `'${kind}'`).join(",")}));
   END IF;
 END $availability_kind$;
+DO $evolution_job_kinds$
+BEGIN
+  -- 「循证进化」's eight job kinds. Its own block, for the reason the method-trial block gives: every
+  -- block before this one rebuilds the constraint only when it lacks *its* kind, so on a deployment
+  -- that has run them all (every one that exists) nothing else would ever let these in, and the
+  -- first enqueue would be refused by the database. A fresh database builds the constraint from
+  -- the list above and never shows it.
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint c WHERE c.conrelid='evimed_product.jobs'::regclass
+      AND c.conname='product_jobs_kind_check'
+      AND ${EVOLUTION_JOB_KINDS.map(kind => `position('''${kind}''' in pg_get_constraintdef(c.oid)) > 0`).join(" AND ")}) THEN
+    ALTER TABLE evimed_product.jobs DROP CONSTRAINT IF EXISTS product_jobs_kind_check;
+    ALTER TABLE evimed_product.jobs ADD CONSTRAINT product_jobs_kind_check
+      CHECK (kind IN (${PRODUCT_JOB_KINDS.map(kind => `'${kind}'`).join(",")}));
+  END IF;
+END $evolution_job_kinds$;
+INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-10-05-evolution-job-kinds-v1') ON CONFLICT DO NOTHING;
 -- What finished operations say about a capability version, a tool, a skill or an extension on THIS
 -- deployment (the availability projection's evidence). One row per subject and exact version, folded
 -- by the collector in the same transaction that completes the job for one run. Deployment-wide by
