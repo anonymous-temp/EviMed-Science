@@ -39,8 +39,10 @@ export const MEMORY_STATUSES = Object.freeze(["active", "pending", "superseded",
  *  is a check that could not answer, and stays unknown (it is not `current`). */
 export const MEMORY_SOURCE_STATES = Object.freeze(["current", "changed", "retracted", "expired", "unknown"]);
 /** The kinds of source a memory can record a dependency on: a knowledge-base
- *  document by its `src_` id, or a published work by its DOI. */
-export const MEMORY_SOURCE_TYPES = Object.freeze(["knowledge_source", "doi"]);
+ *  document by its `src_` id, a published work by its DOI, and — since the evidence
+ *  flywheel (F19, 2026-10-05) — an evidence card by its id or a frontier item by its
+ *  public id, which a run's own recall or tool result carried. */
+export const MEMORY_SOURCE_TYPES = Object.freeze(["knowledge_source", "doi", "evidence_card", "frontier_item"]);
 /** Whether two statements that disagree still do: `open` until one replaces
  *  the other (or the researcher settles it), then `resolved`. */
 export const MEMORY_CONFLICT_STATES = Object.freeze(["open", "resolved"]);
@@ -169,6 +171,20 @@ CREATE TABLE IF NOT EXISTS evimed_memory.record_sources (
   FOREIGN KEY (user_id, record_id) REFERENCES evimed_memory.records (user_id, id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS memory_sources_source_idx ON evimed_memory.record_sources (user_id, source_type, source_id);
+-- A table that already exists keeps the CHECK it was created with, and the two newer kinds (an evidence card, a frontier
+-- item) are not in it: the constraint is replaced once, by its generated name, when it does not yet allow them. Run twice,
+-- the second finds the new one and leaves it.
+DO $source_types$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint c JOIN pg_class t ON t.oid=c.conrelid JOIN pg_namespace n ON n.oid=t.relnamespace
+    WHERE n.nspname='evimed_memory' AND t.relname='record_sources' AND c.contype='c' AND pg_get_constraintdef(c.oid) LIKE '%frontier_item%'
+  ) THEN
+    ALTER TABLE evimed_memory.record_sources DROP CONSTRAINT IF EXISTS record_sources_source_type_check;
+    ALTER TABLE evimed_memory.record_sources ADD CONSTRAINT record_sources_source_type_check
+      CHECK (source_type IN (${vocabulary(MEMORY_SOURCE_TYPES)}));
+  END IF;
+END $source_types$;
 -- 「你写下的笔记」 is gone (2026-09-20). It was the third user-writable store of
 -- "what to know about me" beside the records and the capsule's own entries, and
 -- the one the researcher had to fill by hand — a composer for exactly what the

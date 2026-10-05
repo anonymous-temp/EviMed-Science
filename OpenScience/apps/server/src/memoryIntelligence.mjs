@@ -429,25 +429,47 @@ function validityOfCandidate(candidate, sourceText) {
 
 /**
  * The sources a candidate says it rests on, as recorded identifiers: the
- * `src_` id of a knowledge-base document, or a DOI. Which of the sources in a
+ * `src_` id of a knowledge-base document, a DOI, or — F19 — the id of an
+ * evidence card or frontier item the run's tool results carried. Which of the sources in a
  * result a fact rests on is the model's judgement; that the identifier is
  * well-formed and appears in the very source the candidate quotes is checked
  * here, and one that does not is dropped. Never matched by name.
  *
- * @param {unknown} values @param {string} sourceText
+ * @param {unknown} values @param {string} sourceText @param {Set<string>} [carried] the card and item ids the run's tool results carried
  */
-function sourceLinksOfCandidate(values, sourceText) {
+function sourceLinksOfCandidate(values, sourceText, carried = new Set()) {
   if (!Array.isArray(values)) return [];
   const haystack = sourceText.toLowerCase();
   /** @type {{ type: string, id: string, version: string | null }[]} */
   const links = [];
   for (const value of values.slice(0, 8)) {
     const text = typeof value === "string" ? value.trim() : "";
-    const link = sourceLinkOf({ type: text.startsWith("src_") ? "knowledge_source" : "doi", id: text });
-    if (!link || !haystack.includes(link.id.toLowerCase()) || links.some((item) => item.id === link.id && item.type === link.type)) continue;
+    // An evidence card or a frontier item is recorded only when the run's own tool result carried that id in a field of
+    // its structured data (`toolResultIds`): never because a message — the researcher's, the model's — happens to contain a
+    // string of that shape, which is how a link to something the run never saw would be invented (flywheel F19).
+    const kind = text.startsWith("src_") ? "knowledge_source" : /^ec_/.test(text) ? "evidence_card" : /^10\./.test(text) || /^https?:/i.test(text) ? "doi" : "frontier_item";
+    const link = sourceLinkOf({ type: kind, id: text });
+    if (!link || links.some((item) => item.id === link.id && item.type === link.type)) continue;
+    if (link.type === "evidence_card" || link.type === "frontier_item") { if (!carried.has(link.id)) continue; }
+    else if (!haystack.includes(link.id.toLowerCase())) continue;
     links.push(link);
   }
   return links;
+}
+
+/**
+ * The identifiers of evidence cards and frontier items that a run's own tool results carried: the string values of the `id`,
+ * `cardId` and `publicId` fields of each tool source's data, as the extractor was shown it. Structured fields, not prose; a
+ * result that was cut off before an id is a result that did not carry it.
+ * @param {Iterable<{ role?: string, text?: string }>} sources @returns {Set<string>}
+ */
+export function toolResultIds(sources) {
+  const found = new Set();
+  for (const source of sources) {
+    if (source?.role !== "tool") continue;
+    for (const match of String(source.text ?? "").matchAll(/"(?:id|cardId|card_id|publicId|public_id|itemId)"\s*:\s*"([A-Za-z0-9_-]{8,64})"/g)) found.add(match[1]);
+  }
+  return found;
 }
 
 function validateCandidate(candidate, sourceMap, project, run, rejections = null) {
@@ -543,7 +565,7 @@ function validateCandidate(candidate, sourceMap, project, run, rejections = null
     // the same judgement and the same check, and both records stay in force.
     conflictsWithKey: memoryKeyPattern.test(conflictsWithKey) ? conflictsWithKey : "",
     ...validityOfCandidate(candidate, source.text),
-    sourceLinks: sourceLinksOfCandidate(candidate.sources, source.text),
+    sourceLinks: sourceLinksOfCandidate(candidate.sources, source.text, toolResultIds(sourceMap.values())),
     confidence: ORIGIN_CONFIDENCE[origin],
     importance: boundedScore(candidate.importance, 0.6),
     sensitive,
@@ -1502,7 +1524,7 @@ export class MemoryIntelligence {
                 // fails without refusing the memory.
                 "When a fact holds only from or until a date the source itself states — a guideline's effective date, a protocol version, a dose that applied until a change — give validFrom and/or validUntil as ISO dates (YYYY-MM-DD) copied from the source. Never invent a date, and leave both out when the source states none.",
                 "When this conversation states something that disagrees with a stored fact and neither replaces the other — a label that says one thing and the researcher another, two sources that differ — keep both: give the stored fact's key as conflictsWith (it must be in existingMemories, in the same scope) and do not overwrite it. Use supersedes instead when the new fact replaces the old.",
-                "When a fact rests on a knowledge-base document or a published work named in its source, list those as sources: the document id (src_…) or the DOI, exactly as the source gives it. Omit sources when it rests on none.",
+                "When a fact rests on a knowledge-base document or a published work named in its source, list those as sources: the document id (src_…) or the DOI, exactly as the source gives it; when it rests on an evidence card (ec_…) or a frontier item that a tool result returned, list its id as that result gives it. Omit sources when it rests on none.",
                 // Production, 2026-09-19: many of the acceptance account's 54
                 // records began "Reinforced:" or "Refined:" -- the words of the
                 // line above, the likeliest source, turned into labels on the
