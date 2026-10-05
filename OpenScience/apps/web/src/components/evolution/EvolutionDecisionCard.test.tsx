@@ -10,7 +10,7 @@ beforeEach(() => { mocks.access = {enabled: true, operator: true}; mocks.get.moc
 describe('the decision card', () => {
   it('says which option is recommended, and does not print the notice body or internal path ids again', async () => {
     render(<EvolutionDecisionCard id="evolution-decision-1" />);
-    expect(await screen.findByRole('button', { name: '采纳推荐：重新寻找实现路径' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: '按推荐继续：重新寻找实现路径' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: '保留结果并等待新资料' })).toBeInTheDocument();
     expect(screen.queryByText('已经试了两条路。')).not.toBeInTheDocument();
     expect(screen.getByText('已尝试：首次实现；修复后重试')).toBeInTheDocument();
@@ -19,7 +19,7 @@ describe('the decision card', () => {
   it('answers with the recommended option and the revision it was shown', async () => {
     mocks.resolve.mockResolvedValue(card({ status: 'executed', selected: 'rescout' }));
     render(<EvolutionDecisionCard id="evolution-decision-1" />);
-    fireEvent.click(await screen.findByRole('button', { name: '采纳推荐：重新寻找实现路径' }));
+    fireEvent.click(await screen.findByRole('button', { name: '按推荐继续：重新寻找实现路径' }));
     await waitFor(() => expect(mocks.resolve).toHaveBeenCalledWith('evolution-decision-1', { option: 'rescout', expectedRevision: 3 }));
     expect(await screen.findByText(/当前选择：重新寻找实现路径/)).toBeInTheDocument();
   });
