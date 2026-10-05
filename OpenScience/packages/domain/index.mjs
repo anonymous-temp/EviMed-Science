@@ -465,19 +465,24 @@ export {
   traceNumber,
 } from './src/numericTraceability.mjs'
 
-// citedSources — 16 exports
+// citedSources — 21 exports
 export {
   EMPTY_SNAPSHOT_MESSAGE,
   EVIDENCE_SNAPSHOT_FILE,
   INVALID_SNAPSHOT_MESSAGE,
   NOT_OBJECT_SNAPSHOT_MESSAGE,
+  PLATFORM_CARD_CITATION_SENTENCE,
   SNAPSHOT_RETRIEVED_KEY,
   UNRECORDED_LIMIT,
   auditCitedSources,
   citationUrlDefects,
   citationUrlDefectsByLine,
   citedHttpUrls,
+  isPlatformCardAddress,
   normalizedUrl,
+  platformCardCitationMessage,
+  platformCardCitations,
+  platformCardCitationsByLine,
   pmidOfUrl,
   unrecordedCitationMessage,
   unresolvableCitationHost,

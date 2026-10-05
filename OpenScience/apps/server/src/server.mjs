@@ -230,6 +230,7 @@ import { createEvidenceSourceReader } from "./evidenceSourceReader.mjs";
 import { EvidenceEditorial } from "./evidenceEditorial.mjs";
 import { EvidenceZoneService } from "./evidenceZoneService.mjs";
 import { createEvidenceCardSearch } from "./evidenceCardSearch.mjs";
+import { platformContentCitedMetricFamilies } from "./evidenceCitationMetrics.mjs";
 import { createEvidenceZoneRoutes } from "./evidenceZoneRoutes.mjs";
 import { FrontierWorker, ensureFrontierProject } from "./frontierWorker.mjs";
 // Its second wave: events and the hot list, the daily and its push, 与你相关,
@@ -8110,6 +8111,8 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
   // The evidence card's guardrails (evidenceCardMetrics.mjs): cards without a producer (must be 0), writes refused by
   // origin, cards refused for a simulated value. Read from the zone service only while the frontier is composed.
   for (const family of evidenceCardMetricFamilies(frontier ? await frontier.evidenceZones.metrics().catch(() => null) : null)) addMetric(lines, family.name, family.help, family.type, family.series);
+  // Rule 2's guardrail: delivered reports that cite one of EviMed's own cards as a source (evidenceCitationMetrics.mjs).
+  for (const family of platformContentCitedMetricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
   // The entity vocabulary the frontier, the zones, agendas, products and studies share: the glossary's size and what
   // the taggings found (entityVocabulary.mjs `entityVocabularyMetricFamilies`).
   for (const family of entityVocabularyMetricFamilies(entityVocabulary?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);

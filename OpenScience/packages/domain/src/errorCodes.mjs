@@ -852,6 +852,10 @@ export const SOCKET_TOOL_ERROR_CODES = Object.freeze([
   // A link over plain HTTP: reachable, so a notice (the manifest's
   // `citationsResolvable`, applied in the run's gate since 2026-09-28).
   'citation_plain_http',
+  // A link to one of EviMed's own evidence-card pages: the platform's reading of
+  // sources is an index, so the run is asked to cite the card's primary sources
+  // (flywheel plan §4.3 rule 2). Advice; nothing is withheld.
+  'platform_card_cited',
   'deliverable_run_receipt_shape',
   'deliverable_run_receipt_unbound',
   'deliverable_run_artifact_missing',
@@ -1897,6 +1901,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   deliverable_json_unparseable: '交付包里的 JSON 文件无法解析，下游读不到它写的内容。',
   cited_source_unretrieved: '报告链接的来源只出现在运行自己写的证据快照里，本次运行的检索工具没有取回过它。',
   citation_plain_http: '报告里有引用使用未加密的 http 链接；来源可以打开，结论不受影响，出版方提供 https 地址时换用即可。',
+  platform_card_cited: '这是 EviMed 自己的证据卡，请改引原始来源。证据卡只是索引，引用它等于平台引用自己；打开卡片列出的论文、指南或说明书，引用它们。',
   deliverable_run_receipt_shape: '引擎运行回执缺少必要字段（作业 id、终态、产物清单）。',
   deliverable_run_receipt_unbound: '引擎运行回执没有作业 id，交付包无法与产生它的那次引擎运行对上。',
   deliverable_run_artifact_missing: '运行回执点名的产物不在交付包里。',

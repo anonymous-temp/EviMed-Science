@@ -97,9 +97,13 @@ import {
   auditCitedSources,
   citationUrlDefects,
   citationUrlDefectsByLine,
+  platformCardCitationMessage,
+  platformCardCitations,
+  platformCardCitationsByLine,
   unrecordedCitationMessage,
   unretrievedCitationMessage,
 } from "@evimed/domain";
+import { recordPlatformContentCited } from "./evidenceCitationMetrics.mjs";
 import { normalizePagesRead } from "./webReadPages.mjs";
 
 export { repairableEvidencePackageErrorCodes, recoverableEvidenceSourceErrorCodes, terminalEvidenceSourceErrorCodes };
@@ -2472,6 +2476,15 @@ async function requiredSpecialistArtifacts(
   // verbatim; the findings carry each one's identity, so the record can title
   // it in Chinese without translating the sentence (C2).
   const findings = qualityFindingsOf(outcome);
+  // A card page cited as a source is said once: the manifest's citation check and the clinical gate read the same
+  // report, and an invalid package carries the gate's own finding of the same link in the same words.
+  const said = new Set(findings.map((finding) => finding.text));
+  for (let index = advisories.length - 1; index >= 0; index -= 1) {
+    if (advisories[index].code === "platform_card_cited" && said.has(advisories[index].text)) advisories.splice(index, 1);
+  }
+  // Rule 2's counter (plan §11): distinct citations, once per run.
+  recordPlatformContentCited(String(run.id), new Set([...findings, ...advisories]
+    .filter((notice) => notice.check === "platform-card-citation" || notice.code === "platform_card_cited").map((notice) => notice.text)).size);
   if (advisories.length === 0) return { ...outcome, ...unchecked, ...(findings.length ? { qualityFindings: findings } : {}) };
   // An advisory riding along is a second fact, so the rejection is no longer
   // attributable to the structural cause alone and must be charged normally.
@@ -2634,8 +2647,13 @@ async function specialistCompletionOutcome(
       }
     }
     if (agent.completionChecks.includes("citationsResolvable")) {
-      const { blocking, advisory } = citationUrlDefects(assistantProse(assistantMessages));
+      const prose = assistantProse(assistantMessages);
+      const { blocking, advisory } = citationUrlDefects(prose);
       advisories.push(...advisory.map((text) => runNotice("citation_plain_http", text)));
+      // One of EviMed's own card pages cited as a source: advice, never a reason to withhold (plan §4.3 rule 2).
+      for (const { url } of platformCardCitations(prose)) {
+        advisories.push(runNotice("platform_card_cited", platformCardCitationMessage({ path: "回答", url }), { check: "platform-card-citation" }));
+      }
       if (blocking.length > 0) {
         return {
           artifacts: [],
@@ -2792,6 +2810,10 @@ async function specialistCompletionOutcome(
     for (const [relative, text] of markdown) {
       for (const { line, message } of citationUrlDefectsByLine(relative, text).advisory) {
         advisories.push(runNotice("citation_plain_http", message, { file: relative, line }));
+      }
+      // One of EviMed's own card pages cited as a source: advice, never a reason to withhold (plan §4.3 rule 2).
+      for (const { line, message } of platformCardCitationsByLine(relative, text)) {
+        advisories.push(runNotice("platform_card_cited", message, { file: relative, line, check: "platform-card-citation" }));
       }
     }
     const blocking = defects.flatMap((defect) => defect.blocking);
