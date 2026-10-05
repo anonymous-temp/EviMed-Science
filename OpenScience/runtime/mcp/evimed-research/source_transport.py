@@ -444,6 +444,9 @@ def fetch(url, accepted, *, deadline, scope, max_bytes=DEFAULT_MAX_BODY_BYTES, p
 # the upstream address for a deployment with no gateway and for fixture replay,
 # which is keyed on the upstream request; through the gateway the runtime sends
 # the kind and its identifiers and nothing else.
+# What the gateway tells about the way it got a download's bytes (`x-evimed-download-route`): from here at the first ask, from here after a
+# refusal it did not believe, or through the edge node (another address). Anything else it might say is not recorded.
+DOWNLOAD_ROUTES = ("direct", "direct-retry", "edge")
 DOWNLOAD_KINDS = {
     "epmc-supplements": {"direct": lambda p: "https://www.ebi.ac.uk/europepmc/webservices/rest/%s/supplementaryFiles" % p["pmcid"], "accept": ("application/zip", "application/xml")},
     "dailymed-spl-zip": {"direct": lambda p: "https://dailymed.nlm.nih.gov/dailymed/getFile.cfm?setid=%s&type=zip&version=%d" % (str(p["setid"]).lower(), int(p["version"])), "accept": ("application/zip",)},
@@ -466,9 +469,9 @@ class Download:
     must never preserve as the file.
     """
 
-    __slots__ = ("body", "content_type", "complete", "reason", "received", "declared", "attempts", "elapsed")
+    __slots__ = ("body", "content_type", "complete", "reason", "received", "declared", "attempts", "elapsed", "route")
 
-    def __init__(self, body, content_type, complete, reason, declared, attempts, elapsed):
+    def __init__(self, body, content_type, complete, reason, declared, attempts, elapsed, route=None):
         self.body = body
         self.content_type = content_type
         self.complete = complete
@@ -477,6 +480,8 @@ class Download:
         self.declared = declared
         self.attempts = attempts
         self.elapsed = elapsed
+        # Which way the gateway got the bytes (`DOWNLOAD_ROUTES`), when it said: a refused file is asked again before the refusal is believed.
+        self.route = route
 
 
 def _read_download(response, *, max_bytes, deadline, chunk=CHUNK_BYTES):
@@ -557,7 +562,8 @@ def download(kind, params, *, deadline, scope, max_bytes=16 * 1024 * 1024, per_a
         # A small type is an answer in words, not the file: read it whole and bounded.
         limit = max_bytes if content_type in spec.get("stream", ("application/zip",)) else 64 * 1024
         body, reason, declared = _read_download(response, max_bytes=limit, deadline=deadline, chunk=chunk)
-        return Download(body, content_type, reason is None, reason, declared, attempt, deadline.spent() - started)
+        route = _header_map(response).get("x-evimed-download-route")
+        return Download(body, content_type, reason is None, reason, declared, attempt, deadline.spent() - started, route if route in DOWNLOAD_ROUTES else None)
 
     return _run(
         open_response, handle, deadline=deadline, scope=scope, per_attempt=per_attempt, attempts=attempts,

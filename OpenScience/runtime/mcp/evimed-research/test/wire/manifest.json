@@ -373,6 +373,18 @@
    "note": "30153985 exists in PubMed and is not in PMC: the converter says 'Identifier not found in PMC', which is not 'no such PMID'. 99999999 exists nowhere and gets the same words."
   },
   {
+   "file": "ncbi_geo__series_matrix_403.html",
+   "request": "GET https://ftp.ncbi.nlm.nih.gov/geo/series/GSE5nnn/GSE5583/matrix/GSE5583_series_matrix.txt.gz",
+   "accept": "application/x-gzip, application/gzip",
+   "status": 403,
+   "contentType": "text/html; charset=iso-8859-1",
+   "origin": "constructed",
+   "recordedAt": "2026-10-05T07:25:00Z",
+   "bytes": 199,
+   "sha256": "5b13fb5957b84ef7bb9d0b6cd509c947ff6a37d67efdac2b896ddd3b908aad10",
+   "note": "CONSTRUCTED: the status (403), content type (text/html; charset=iso-8859-1) and size class are what NCBI's file server answered on 2026-10-05 07:25Z to a plain request for this public matrix (Apache); the body is Apache's stock 403 page written here, because the refusal is intermittent and was not on hand to record when the fixture was made (70+ identical requests minutes later were all served). The same URL answered 200 on the next request: 7 of 16 identical requests from one machine in that window, whatever the User-Agent. The gateway asks again before it believes the refusal (publicSourceGateway.mjs `denial`). `record.py` will replace this with a live recording whenever the refusal is on hand (it reports `moved` if the answer is 200)."
+  },
+  {
    "file": "pubmed__esearch_no_match.json",
    "request": "GET https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=zzzqqqxxnonexistentterm12345&retmax=3&retmode=json&sort=relevance&tool=evimed_research",
    "status": 200,

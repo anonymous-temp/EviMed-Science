@@ -32,6 +32,7 @@ import gene_expression as engine  # noqa: E402
 import gene_expression_tools as tools  # noqa: E402
 import immutable_capture  # noqa: E402
 import public_sources  # noqa: E402
+import source_outcome  # noqa: E402
 import source_transport  # noqa: E402
 import wire_fixtures as wire  # noqa: E402
 
@@ -88,8 +89,9 @@ def not_found():
 class Door:
     """GEO as a door: the matrix, the platform record and the series brief, or what a test says they are."""
 
-    def __init__(self, matrix=MATRIX, platform=PLATFORM_TEXT, brief=b"", matrix_status=200, platform_status=200):
+    def __init__(self, matrix=MATRIX, platform=PLATFORM_TEXT, brief=b"", matrix_status=200, platform_status=200, matrix_route=None):
         self.matrix, self.platform, self.brief, self.matrix_status, self.platform_status = matrix, platform, brief, matrix_status, platform_status
+        self.matrix_route = matrix_route
         self.calls = []
 
     def __call__(self, url, accepted, **options):
@@ -97,6 +99,11 @@ class Door:
         if "series_matrix.txt.gz" in url:
             if self.matrix_status == 404:
                 raise not_found()
+            if self.matrix_status == 403:
+                raise wire.through_gateway("ncbi_geo__series_matrix_403.html")
+            if self.matrix_route:
+                # The gateway says which way it got the file when it had to ask again (`x-evimed-download-route`).
+                return wire.Response(self.matrix, "application/x-gzip", 200, x_evimed_download_route=self.matrix_route)
             return wire.derived(self.matrix, "application/x-gzip")
         if "view=full" in url:
             if self.platform_status != 200:
@@ -243,6 +250,32 @@ class SeriesTests(Workspace):
         samples = (capture / "samples.tsv").read_text(encoding="utf-8").splitlines()
         self.assertEqual(samples[0].split("\t")[-2:], ["Genotype", "characteristics_2"])
         self.assertEqual(len(samples), 7)
+
+    def test_the_route_a_file_came_by_is_in_the_result_and_never_in_the_capture(self):
+        # The gateway asks again before it believes NCBI's refusal of a public file, and says which way the bytes arrived.
+        direct = self.preserve()
+        self.assertNotIn("downloadRoutes", direct["data"], "a gateway that said nothing is not described")
+        routed = self.preserve(door=Door(matrix_route="edge"))
+        self.assertEqual(routed["data"]["downloadRoutes"], {"matrix": "edge"})
+        self.assertEqual(routed["data"]["captureDir"], direct["data"]["captureDir"], "the same bytes are the same capture whichever way they came")
+        retried = self.preserve(door=Door(matrix_route="direct-retry"))
+        self.assertEqual(retried["data"]["downloadRoutes"], {"matrix": "direct-retry"})
+        # A route this side does not know is not recorded under a made-up name.
+        odd = self.preserve(door=Door(matrix_route="tunnel-of-love"))
+        self.assertNotIn("downloadRoutes", odd["data"])
+
+    def test_a_refusal_of_the_matrix_by_the_file_server_is_not_called_a_400_nor_an_item_held_back(self):
+        # Production, 2026-10-05: NCBI's file server answered 403 and the tool said "refused this request (HTTP 400)" and
+        # "do not retry: it holds the item and does not serve it to an unauthenticated client".
+        result = self.preserve(door=Door(matrix_status=403))
+        self.assertEqual(result["status"], "error")
+        self.assertEqual(result["error"]["code"], "source_access_denied")
+        self.assertIn("(HTTP 403)", result["summary"])
+        self.assertNotIn("HTTP 400", result["summary"])
+        actions = " ".join(result["next_actions"])
+        self.assertNotIn("unauthenticated", actions)
+        self.assertIn("refusal of this server's address", actions)
+        self.assertIn("a later call may be served", actions)
 
     def test_preserving_again_is_the_same_capture(self):
         first = self.preserve()["data"]["captureDir"]

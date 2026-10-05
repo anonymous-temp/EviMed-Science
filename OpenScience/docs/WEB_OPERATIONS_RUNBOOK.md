@@ -869,6 +869,24 @@ minutes) before it is refused; the workers defer without spending an attempt.
 how many are waiting now; a mean wait that grows (seconds_total over waits) or a
 `gave_up` that is not zero is the host being too small.
 
+### NCBI's file server refuses a public GEO file
+
+`gene_expression_series` reads the series matrix from `ftp.ncbi.nlm.nih.gov`,
+which answers some requests for a public file with 403 text/html and the next
+identical request with the file (2026-10-05: 7 of 16 requests from one machine in
+one ten-minute window, any User-Agent, then 70 in a row served). The gateway no
+longer believes the first refusal: the three GEO download kinds are asked again
+twice from this host (after 0.5 s and 1 s) and then once through the Tokyo node
+(`OPEN_SCIENCE_EDGE_PROXY_URL`; the node is used for this whatever
+`OPEN_SCIENCE_EDGE_PROXY_HOSTS` lists), and the answer carries
+`x-evimed-download-route` (`direct`, `direct-retry`, `edge`), which the tool
+reports as `data.downloadRoutes`. Counted on
+`open_science_gene_expression_downloads_total{outcome}`: `served_after_retry`,
+`served_via_edge`, and `denied` when every route refused. The
+`geo/download/?acc=…&format=file&file=…_series_matrix.txt.gz` page is not a second
+route to the matrix: it redirects to the file server's `suppl/` directory (no
+matrix there) or answers a reCAPTCHA page.
+
 ### Specialist job slots on a small host
 
 The six engines (MR, bibliometric, research-topic, peer-review, drug-safety

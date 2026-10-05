@@ -24,7 +24,7 @@ export const GENE_EXPRESSION_DOWNLOAD_KINDS = Object.freeze([
 /** @type {Map<string, Map<string, number>>} limit -> action -> count */
 const limitCounts = new Map(GENE_EXPRESSION_LIMIT_NAMES.map((limit) => [limit, new Map(GENE_EXPRESSION_LIMIT_ACTIONS.map((action) => [action, 0]))]));
 /** @type {Map<string, Map<string, number>>} kind -> outcome -> count */
-const downloadCounts = new Map(GENE_EXPRESSION_DOWNLOAD_KINDS.map((kind) => [kind, new Map([["served", 0], ["over_limit", 0]])]));
+const downloadCounts = new Map(GENE_EXPRESSION_DOWNLOAD_KINDS.map((kind) => [kind, new Map([["served", 0], ["over_limit", 0], ["served_after_retry", 0], ["served_via_edge", 0], ["denied", 0]])]));
 
 /**
  * One limit observation. An unknown limit or action is ignored, never counted under a made-up label.
@@ -38,7 +38,7 @@ export function recordGeneExpressionLimit(limit, action = "refused") {
   return true;
 }
 
-/** @param {string} kind @param {"served" | "over_limit"} outcome */
+/** @param {string} kind @param {"served" | "over_limit" | "served_after_retry" | "served_via_edge" | "denied"} outcome */
 export function recordGeneExpressionDownload(kind, outcome) {
   const byOutcome = downloadCounts.get(kind);
   if (byOutcome?.has(outcome)) byOutcome.set(outcome, (byOutcome.get(outcome) ?? 0) + 1);
@@ -63,7 +63,7 @@ export function geneExpressionMetricFamilies() {
     },
     {
       name: "open_science_gene_expression_downloads_total",
-      help: "Gene Expression Omnibus named downloads through the public-source gateway, by kind and outcome (served, or cut at its byte limit).",
+      help: "Gene Expression Omnibus named downloads through the public-source gateway, by kind and outcome (served; served after the source refused once or twice, or through the edge node; refused (403) on every route; or cut at its byte limit).",
       type: "counter",
       series: [...downloadCounts].flatMap(([kind, byOutcome]) => [...byOutcome].map(([outcome, value]) => ({ value, labels: { kind, outcome } }))),
     },

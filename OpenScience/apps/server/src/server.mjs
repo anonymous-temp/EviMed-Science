@@ -203,7 +203,7 @@ import { removeSourceCopies, sourceAttemptId, sourceReadCopyDirectory } from "./
 import { DocumentParserClient } from "./documentParserClient.mjs";
 import { createConfiguredWebRenderer } from "./webRender.mjs";
 import { createWebReader, webReadMetricFamilies, webReadTransportFor, webReadUserAgent } from "./webRead.mjs";
-import { edgeMetricFamilies, edgeProxyFromConfig, fetchWithEdge } from "./edgeProxy.mjs";
+import { edgeFetch, edgeMetricFamilies, edgeProxyFromConfig, fetchWithEdge } from "./edgeProxy.mjs";
 import { pagesReadFromSessions } from "./webReadPages.mjs";
 import { createSourceUpdateLookup, sourceUpdateMetricFamilies } from "./sourceUpdates.mjs";
 import { OpenListClient } from "./openListClient.mjs";
@@ -3859,6 +3859,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const publicSourceGatewayHandler = createPublicSourceGatewayHandler(config, runtimeManager, {
     evaluationIsolation,
     fetchImpl: gatewayFetch,
+    // The other address for a download a file server refused (publicSourceGateway.mjs `denial`): the node, whatever hosts
+    // it is routed for by default.
+    fallbackFetch: edgeProxy ? /** @type {typeof fetch} */ ((input, init) => edgeFetch(edgeProxy, /** @type {any} */ (input), /** @type {any} */ (init))) : null,
     // An open-access PDF sits on whichever publisher Unpaywall names, so it
     // is fetched like a web page: over the pinned transport.
     pdfTransport: webTransport,
