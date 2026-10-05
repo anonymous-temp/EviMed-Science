@@ -134,6 +134,14 @@ test('an amount is drawn with two decimals, and a small one with its first two s
   assert.equal(formatCredits('1.23000001', { rounding: 'up' }), '1.24');
   assert.equal(formatCredits('1.23000000', { rounding: 'up' }), '1.23');
   assert.equal(formatCredits('0.009', { rounding: 'down' }), '0.009', 'a balance above zero is never drawn as 0.00');
+  // A need is carried up, so a refusal never shows a balance and a need that read the same (review F10).
+  assert.equal(formatCredits('0.00999999', { rounding: 'up' }), '0.01', 'the next step is 0.01');
+  assert.equal(formatCredits('0.00999999', { rounding: 'down' }), '0.0099');
+  assert.equal(formatCredits('0.00431000', { rounding: 'up' }), '0.0044');
+  assert.equal(formatCredits('0.00430000', { rounding: 'up' }), '0.0043', 'an exact amount is not carried');
+  assert.equal(formatCredits('0.00000003', { rounding: 'up' }), '0.00000003');
+  assert.equal(formatCredits('0.00000001', { rounding: 'up' }), '0.00000001');
+  assert.equal(formatCredits('0.00600001', { rounding: 'up' }), '0.0061');
   assert.equal(formatCredits('99.99999999', { rounding: 'down' }), '99.99');
   assert.equal(formatCredits('99.99999999'), '100.00');
   assert.equal(formatCredits('-0.0043'), '-0.0043');

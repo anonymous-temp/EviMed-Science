@@ -63,7 +63,7 @@
 
 import { createHash } from "node:crypto";
 import {
-  CAPABILITY_DISPLAY, CREDIT_EXPIRY_REMINDER_DAYS, CREDIT_NOT_CHARGED_REASONS, CREDIT_SOURCE_LABELS, RESEARCH_BILLING_VERSION_WHOLE_CREDIT,
+  CAPABILITY_DISPLAY, CREDIT_NOT_CHARGED_REASONS, CREDIT_SOURCE_LABELS, RESEARCH_BILLING_VERSION_WHOLE_CREDIT,
   SIMULATED_LOW_CREDITS, SIMULATED_WALLET_LABEL, WALLET_CONTRACT_EXACT, WALLET_CONTRACT_WHOLE_CREDIT,
   allowanceRefusalSentence, capabilityTitle, creditUnitsOrNull, estimateCost, estimateRunCostUnits, expiryReminderDue, expiryWords,
   formatCredits, isChargeableResearchRun, researchMoneyDecimal, researchMoneyUnits, researchTaskCharge, spendingPermission,
@@ -90,6 +90,11 @@ export const EVIMED_CREDITS_MAX_ATTEMPTS = EVIMED_CREDITS_BACKOFF_MS.length + 1;
 const ESTIMATE_SAMPLES = 50;
 /** Characters of a run's subject the memo carries. */
 const MEMO_SUBJECT_CHARS = 40;
+/** Reminders read and written per batch, and how many batches one sweep does: bounded, so a big backlog is worked through over a few ticks. */
+const REMINDER_BATCH = 200;
+const REMINDER_BATCHES_PER_SWEEP = 5;
+/** How long a lot whose notice could not be written is left alone before it is tried again. */
+const REMINDER_RETRY_MS = 3_600_000;
 /** The line a run with no named capability is billed under. */
 const DEFAULT_LINE = "深度研究";
 
@@ -243,12 +248,14 @@ export class EvimedCreditsService {
     /** How long a hold lives if its run's process dies: the run's own timeout and a margin. */
     this.holdTtlMs = (Number.isFinite(Number(config?.agentRunMonitorTimeoutMs)) && Number(config.agentRunMonitorTimeoutMs) > 0
       ? Number(config.agentRunMonitorTimeoutMs) : 24 * 3_600_000) + 10 * 60_000;
+    /** lot id -> the instant before which a reminder that failed is not tried again. @type {Map<string, number>} */
+    this.reminderFailures = new Map();
     this.counters = {
       settled: 0, skipped: 0, duplicates: 0, pending: 0, refused: 0, abandoned: 0, refusedStarts: 0, balanceUnavailable: 0,
       unlinked: 0,
       // The platform wallet's: charges the user's stop made, charges the balance could not cover (the platform carried
       // the rest), holds placed, holds released by the sweep, lots expired, reminders written.
-      userStops: 0, absorbed: 0, holds: 0, holdsSwept: 0, reminders: 0,
+      userStops: 0, absorbed: 0, holds: 0, holdsShort: 0, holdsSwept: 0, reminders: 0, expiryFailed: 0,
     };
   }
 
@@ -571,7 +578,11 @@ export class EvimedCreditsService {
       const mode = exact ? WALLET_CONTRACT_EXACT : WALLET_CONTRACT_WHOLE_CREDIT;
       const userId = productId(run.userId, 'user');
       const physicalId = productId(run.runId, 'run');
-      const decision = chargeDecision(run);
+      let decision = chargeDecision(run);
+      // A run that began under the whole-credit rule keeps that rule's whole terms, the stop's included: it waived every
+      // cancellation, and charging one now with the old rounding would be a rule neither version has. Only runs alive
+      // across the activation are ever here.
+      if (!exact && decision.basis === 'user_stop') decision = { charges: false, basis: 'not_charged', reason: 'earlier_rule_stop' };
       const logical = decision.basis === 'completed' ? autopilotUsageScope(run) : null;
       const runId = logical ? `research_${createHash('sha256').update(`${userId}\0${logical}`).digest('hex')}` : physicalId;
       await migrateEvimedCredits(this.database);
@@ -609,8 +620,7 @@ export class EvimedCreditsService {
           logicalTaskId: logical, policyActivatedAt: new Date(policy.activated_at).toISOString() };
         const requested = researchMoneyUnits(evidence.creditsAmount);
         if (requested > 10_000_000n * 100_000_000n) throw new RangeError('Invalid task credit amount.');
-        const at = this.now();
-        /** @type {{ taken: string, shortfall: string, lots: any[], balance: string | null, receiptId: string | null }} */
+        /** @type {{ taken: string, shortfall: string, lots: any[], balance: string | null, receiptId: string | null, at?: string }} */
         let outcome = { taken: researchMoneyDecimal(0n), shortfall: researchMoneyDecimal(0n), lots: [], balance: null, receiptId: null };
         if (requested > 0n) {
           if (!payer) throw new EvimedCreditsError('evimed_credits_account_unlinked', 'This account has no wallet to charge.', { final: true });
@@ -620,6 +630,10 @@ export class EvimedCreditsService {
           // Nothing to take, but the run is over: its hold goes with it.
           await this.simulator.release({ runId: physicalId, client });
         }
+        // The charge's line is stamped with the instant its deduct entry was written, under the wallet's lock, so it
+        // reads after the expiry and the monthly gift the same operation wrote before it (review F9). A line with
+        // no entry (nothing was taken) is stamped now.
+        const at = outcome.at ? new Date(outcome.at) : this.now();
         // The reason a run that was charged nothing was charged nothing: why it was not charged at all, or that
         // there was nothing billable to charge.
         const notChargedReason = decision.reason ?? (requested === 0n ? 'no_usage' : null);
@@ -696,6 +710,10 @@ export class EvimedCreditsService {
       if (!payer) return null;
       const held = await this.simulator.hold({ payer, runId: productId(runId, 'run'), amount: researchMoneyDecimal(estimate.p90), ttlMs: this.holdTtlMs });
       if (!held.replay && researchMoneyUnits(held.held) > 0n) this.counters.holds += 1;
+      // A start admitted against a balance that could not freeze all of what it is estimated to need (the admission and
+      // the hold are two steps, so a burst of starts is each admitted against the same balance): what it costs beyond
+      // the balance is absorbed, and this is how many it happened to.
+      if (!held.replay && researchMoneyUnits(held.held) < estimate.p90) this.counters.holdsShort += 1;
       return { held: held.held };
     } catch (error) {
       this.report(typeof /** @type {any} */ (error)?.code === 'string' ? /** @type {any} */ (error).code : 'evimed_credits_hold_failed');
@@ -736,7 +754,8 @@ export class EvimedCreditsService {
       return { id: row.run_id, runId: null, title, at, status: 'settled', kind: evidence.kind,
         amount: exactAmount(evidence.credits), requestedAmount: exactAmount(evidence.credits), waivedCny: '0.00000000',
         balanceAfter: evidence.balanceAfter == null ? null : exactAmount(evidence.balanceAfter),
-        source, sourceLabel, expiresAt, note: typeof evidence.note === 'string' ? evidence.note : null, simulated: this.simulated };
+        // Not the lot's note: an operator's free-text remark and a migrated lot's bookkeeping are not the account's to read.
+        source, sourceLabel, expiresAt, simulated: this.simulated };
     }
     const taken = exactAmount(evidence.takenCredits ?? evidence.chargedCny);
     const absorbed = exactAmount(evidence.absorbedCredits);
@@ -781,30 +800,40 @@ export class EvimedCreditsService {
         UNION ALL
         SELECT e.request_id,w.user_id,''::text,
           jsonb_build_object('kind',e.kind,'credits',e.credits::text,'balanceAfter',e.balance_after::text,
-            'source',l.source,'expiresAt',l.expires_at,'note',l.note),e.created_at,'settled'::text
+            'source',l.source,'expiresAt',l.expires_at),e.created_at,'settled'::text,
+          'e'||lpad(e.entry_id::text,20,'0')
         FROM evimed_credits.simulated_entries e
           JOIN evimed_credits.simulated_wallets w ON w.payer=e.payer
           JOIN evimed_control.users u ON u.id=w.user_id AND u.created_at=w.owner_created_at
           LEFT JOIN evimed_credits.simulated_lots l ON l.lot_id=e.lot_id
         WHERE w.user_id=$1 AND e.kind IN ('grant','topup','expire','adjust')` : "";
+    // One order for every kind of line: when it was written, and then the wallet's own entry sequence — which
+    // is monotonic under the wallet's lock — and never the spelling of an id. A charge takes the sequence of its
+    // deduct entry; a line with no entry (a run that was not charged) sorts by its own id after them.
     const result = await this.database.query(`SELECT t.*
       FROM (
-        SELECT t.run_id,t.user_id,t.title,t.evidence,t.created_at,t.status FROM evimed_credits.research_tasks t
-          JOIN evimed_control.users u ON u.id=t.user_id AND u.created_at=t.owner_created_at WHERE t.user_id=$1 AND t.wallet=$5
+        SELECT t.run_id,t.user_id,t.title,t.evidence,t.created_at,t.status,
+          coalesce('e'||lpad(d.entry_id::text,20,'0'),'r'||t.run_id) AS sort_key
+        FROM evimed_credits.research_tasks t
+          JOIN evimed_control.users u ON u.id=t.user_id AND u.created_at=t.owner_created_at
+          LEFT JOIN evimed_credits.simulated_entries d ON d.request_id=t.run_id AND d.kind='deduct'
+        WHERE t.user_id=$1 AND t.wallet=$5
         UNION ALL
         SELECT s.run_id,s.user_id,s.memo,jsonb_build_object(
           'actualCny',s.cost_cny::text,'billableCny',(s.credits/s.credits_per_cny)::numeric(20,8)::text,
           'chargedCny',(s.credits/s.credits_per_cny)::numeric(20,8)::text,'waivedCny','0.00000000',
-          'pricingVersion','legacy','walletContract','legacy-integer'),s.created_at,s.status
+          'takenCredits',(s.credits/s.credits_per_cny)::numeric(20,8)::text,'absorbedCredits',s.absorbed::text,
+          'requestedCny',coalesce(s.requested,s.credits/s.credits_per_cny)::numeric(20,8)::text,
+          'pricingVersion','legacy','walletContract','legacy-integer'),s.created_at,s.status,'r'||s.run_id
         FROM evimed_credits.settlements s JOIN evimed_control.users u ON u.id=s.user_id AND u.created_at=s.owner_created_at WHERE s.user_id=$1 AND s.wallet=$5
           AND NOT EXISTS(SELECT 1 FROM evimed_credits.research_tasks t WHERE t.run_id=s.run_id)${credits}
       ) t
-      WHERE t.user_id=$1 AND ($2::timestamptz IS NULL OR (t.created_at,t.run_id)<($2::timestamptz,$3::text))
-      ORDER BY t.created_at DESC,t.run_id DESC LIMIT $4`, [productId(userId,'user'),position?.[0] ?? null,position?.[1] ?? null,bound+1,this.walletKind]);
+      WHERE t.user_id=$1 AND ($2::timestamptz IS NULL OR (t.created_at,t.sort_key)<($2::timestamptz,$3::text))
+      ORDER BY t.created_at DESC,t.sort_key DESC LIMIT $4`, [productId(userId,'user'),position?.[0] ?? null,position?.[1] ?? null,bound+1,this.walletKind]);
     const rows = result.rows.slice(0,bound);
     const items = rows.map((/** @type {any} */ row) => this.#statementItem(row));
     const last = rows.at(-1);
-    const nextCursor = result.rows.length > bound && last ? Buffer.from(JSON.stringify([new Date(last.created_at).toISOString(),last.run_id])).toString('base64url') : null;
+    const nextCursor = result.rows.length > bound && last ? Buffer.from(JSON.stringify([new Date(last.created_at).toISOString(),last.sort_key])).toString('base64url') : null;
     return { items, nextCursor };
   }
 
@@ -821,7 +850,21 @@ export class EvimedCreditsService {
     const result = await this.database.query(`SELECT t.run_id,t.user_id,t.title,t.evidence,t.created_at,t.status FROM evimed_credits.research_tasks t
       JOIN evimed_control.users u ON u.id=t.user_id AND u.created_at=t.owner_created_at WHERE t.user_id=$1 AND t.run_id=$2 AND t.wallet=$3`,
     [productId(userId, 'user'), String(id).slice(0, 200), this.walletKind]);
-    const row = result.rows[0];
+    let row = result.rows[0];
+    if (!row) {
+      // A line from before the task ledger existed lives in the settlement ledger alone, and the statement lists it: what
+      // is known of it is its amount, and nothing is invented about its calls or tokens.
+      const legacy = await this.database.query(`SELECT s.run_id,s.user_id,s.memo AS title,jsonb_build_object(
+          'actualCny',s.cost_cny::text,'billableCny',(s.credits/s.credits_per_cny)::numeric(20,8)::text,
+          'chargedCny',(s.credits/s.credits_per_cny)::numeric(20,8)::text,'waivedCny','0.00000000',
+          'takenCredits',(s.credits/s.credits_per_cny)::numeric(20,8)::text,'absorbedCredits',s.absorbed::text,
+          'requestedCny',coalesce(s.requested,s.credits/s.credits_per_cny)::numeric(20,8)::text,
+          'pricingVersion','legacy','walletContract','legacy-integer') AS evidence,s.created_at,s.status
+        FROM evimed_credits.settlements s JOIN evimed_control.users u ON u.id=s.user_id AND u.created_at=s.owner_created_at
+        WHERE s.user_id=$1 AND s.run_id=$2 AND s.wallet=$3 AND NOT EXISTS(SELECT 1 FROM evimed_credits.research_tasks t WHERE t.run_id=s.run_id)`,
+      [productId(userId, 'user'), String(id).slice(0, 200), this.walletKind]);
+      row = legacy.rows[0];
+    }
     if (!row) throw new HttpError(404, 'credit_statement_not_found', 'No such statement line.');
     const item = this.#statementItem(row);
     const evidence = row.evidence;
@@ -1018,20 +1061,47 @@ export class EvimedCreditsService {
 
   /**
    * A settlement the one-number wallet left pending in its outbox (a run charged
-   * through the simulated wire that never got its answer): it is taken from the
-   * platform's wallet now, in whole credits as it was asked, up to what is
-   * there — a charge that cannot be covered in full is not owed. Idempotent by the
-   * run id, like every charge.
+   * through the simulated wire that never got its answer), finished like any other
+   * charge on the platform's wallet (review F5): taken up to what the account holds,
+   * whatever is short recorded as absorbed by the platform and counted, the row's
+   * credits what was actually taken, the statement and the month saying the same —
+   * and the wallet's take and the row's update one commit, so a failure after the take
+   * leaves neither. Idempotent by the run id: a charge the old release already took
+   * (its deduct entry exists under the run id) is answered, never taken twice.
+   *
+   * The account must still be the one the row was made for: a row of a deleted
+   * account is refused, and never re-creates that account's wallet to take from.
    * @param {{ runId: string, userId: string, credits: number, upstreamUserId?: string | null }} row
    */
   async #chargeOnPlatformWallet(row) {
     try {
-      const payer = row.upstreamUserId ?? await this.#payer(row.userId);
-      if (!payer) throw new EvimedCreditsError("evimed_credits_account_unlinked", "This account has no wallet to charge.", { final: true });
-      const outcome = await this.simulator.settle({ payer, requestId: row.runId, amount: String(row.credits) });
-      await this.#finish(row.runId, "settled", { receiptId: outcome.receiptId });
+      const outcome = await this.#retrying(() => this.database.transaction(async (/** @type {any} */ client) => {
+        const current = (await client.query("SELECT * FROM evimed_credits.settlements WHERE run_id=$1 FOR UPDATE", [row.runId])).rows[0];
+        if (!current || current.status !== "pending") return null;
+        const owner = await client.query(
+          "SELECT 1 FROM evimed_credits.settlements s JOIN evimed_control.users u ON u.id=s.user_id AND u.created_at=s.owner_created_at WHERE s.run_id=$1", [row.runId]);
+        if (!owner.rowCount) throw new EvimedCreditsError("evimed_credits_account_unlinked", "This account is gone.", { final: true });
+        const payer = current.upstream_user_id ?? await this.#payer(current.user_id);
+        if (!payer) throw new EvimedCreditsError("evimed_credits_account_unlinked", "This account has no wallet to charge.", { final: true });
+        const asked = researchMoneyUnits(exactAmount(current.credits));
+        const taken = await this.simulator.settle({ payer, requestId: row.runId, amount: researchMoneyDecimal(asked), client });
+        const at = new Date(taken.at);
+        await client.query(
+          `UPDATE evimed_credits.settlements SET status='settled', next_attempt_at=NULL, error_code=NULL, receipt_id=$2, settled_at=$3::timestamptz,
+             credits=$4, requested=$5, absorbed=$6, charge_basis='completed' WHERE run_id=$1 AND status='pending'`,
+          [row.runId, taken.receiptId, at.toISOString(), taken.taken, researchMoneyDecimal(asked), taken.shortfall]);
+        await client.query(
+          `UPDATE evimed_credits.research_tasks SET status='settled', receipt_id=$2, error_code=NULL, settled_at=$3::timestamptz,
+             evidence = evidence || $4::jsonb WHERE run_id=$1`,
+          [row.runId, taken.receiptId, at.toISOString(), JSON.stringify({
+            requestedCny: researchMoneyDecimal(asked), takenCredits: taken.taken, absorbedCredits: taken.shortfall, chargedCny: taken.taken, creditsAmount: taken.taken,
+            lots: taken.lots, balanceAfter: taken.balance, chargeBasis: "completed" })]);
+        return taken;
+      }));
+      if (!outcome) return { status: "pending" };
       this.counters.settled += 1;
-      return { status: "settled", credits: outcome.taken };
+      if (researchMoneyUnits(outcome.shortfall) > 0n) this.counters.absorbed += 1;
+      return { status: "settled", credits: outcome.taken, absorbed: outcome.shortfall };
     } catch (error) {
       const code = typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : "evimed_credits_settle_failed";
       if (error instanceof EvimedCreditsError || error instanceof SimulatedWalletRefusal) {
@@ -1213,10 +1283,11 @@ export class EvimedCreditsService {
    * The platform's wallet answers `available` (what can be used), `balance` (what is
    * held), `purchased`, `gifted`, `frozen` and `nextExpiry`, all exact decimal strings;
    * EviMed's answers whole-credit numbers `balance` and `frozen`.
-   * @param {string} userId
+   * @param {string} userId @param {{ ignoreHoldOf?: string | null }} [options] `ignoreHoldOf` leaves one run's own hold out of
+   *   what is frozen (the question its own follow-up is asked)
    * @returns {Promise<Record<string, any>>}
    */
-  async balanceFor(userId) {
+  async balanceFor(userId, { ignoreHoldOf = null } = {}) {
     const kind = this.simulated ? { simulated: true } : {};
     if (!this.enabled) {
       return { balance: null, frozen: null, unit: "灵豆", ...kind,
@@ -1231,7 +1302,7 @@ export class EvimedCreditsService {
         return { balance: null, frozen: null, unit: "灵豆", status: "evimed_credits_account_unlinked", ...kind };
       }
       if (this.simulated) {
-        const wallet = await this.simulator.snapshot(evimedUserId);
+        const wallet = await this.simulator.snapshot(evimedUserId, { ignoreHoldOf });
         return { ...wallet, unit: "灵豆", status: "ok", ...kind };
       }
       const answer = await this.client.balance(evimedUserId);
@@ -1262,10 +1333,11 @@ export class EvimedCreditsService {
    * interrupted for money: that is settled afterwards, by taking what is there.
    *
    * @param {string} userId @param {string | null | undefined} capabilityId
-   * @param {{ unattended?: boolean }} [options]
+   * @param {{ unattended?: boolean, ignoreHoldOf?: string | null }} [options] `ignoreHoldOf` is the run whose own hold is
+   *   not counted against the start: a follow-up typed into the conversation that run is working in
    * @returns {Promise<{ allowed: true, reason?: string, balance?: number, balanceDecimal?: string, estimate?: any }>}
    */
-  async assertBalanceForStart(userId, capabilityId, { unattended = false } = {}) {
+  async assertBalanceForStart(userId, capabilityId, { unattended = false, ignoreHoldOf = null } = {}) {
     if (!this.#wired()) return { allowed: true, reason: this.failure ? "billing_unavailable" : "not_enabled" };
     // The policy's activation is persisted before research is accepted. A module
     // that cannot do that is not a reason to refuse the research: the start is
@@ -1273,7 +1345,7 @@ export class EvimedCreditsService {
     if ((this.config?.researchBillingEnabled || this.failure) && await this.ensureReady()) {
       return { allowed: true, reason: "billing_unavailable" };
     }
-    const balance = await this.balanceFor(userId);
+    const balance = await this.balanceFor(userId, { ignoreHoldOf });
     if (balance.balance == null && balance.available == null) return { allowed: true, reason: balance.status };
     const estimate = await this.estimate(capabilityId);
     /** The amount short, as drawn in a refusal, and whether this start is refused. */
@@ -1339,44 +1411,64 @@ export class EvimedCreditsService {
       try { await step(); } catch (error) { this.report(typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : code); }
     };
     await guarded(async () => { done.holds = await this.simulator.sweepHolds(); this.counters.holdsSwept += done.holds; }, "evimed_credits_hold_sweep_failed");
-    await guarded(async () => { done.expired = (await this.simulator.sweepExpiry()).wallets; }, "evimed_credits_expiry_sweep_failed");
+    await guarded(async () => {
+      const swept = await this.simulator.sweepExpiry();
+      done.expired = swept.wallets;
+      // A wallet that failed is counted and said, once per sweep, and the rest of the batch has gone on without it.
+      if (swept.failed > 0) { this.counters.expiryFailed += swept.failed; this.report("evimed_credits_expiry_wallet_failed"); }
+    }, "evimed_credits_expiry_sweep_failed");
     await guarded(async () => { done.reminded = await this.remindExpiries(); }, "evimed_credits_reminder_failed");
     return done;
   }
 
   /**
    * Remind the account 7 days and 1 day before a gift that still has something in
-   * it ends — in the inbox, once each per gift. The notice's key names the gift and
-   * the day count, so a second sweep, another process or a restart writes nothing
-   * more; a replay of the same key with a different amount in its text is the notice
-   * already sent, not a new one. Without an inbox there are no reminders and nothing
-   * else changes.
-   * @returns {Promise<number>} reminders considered this sweep
+   * it ends — in the inbox, once each per gift. The wallet says which lots are due a reminder and have
+   * not had it (`lotsDueForReminder`, written down by `markReminded`), so a sweep reads only what needs
+   * work: a thousand gifts that all end at one instant are read a batch at a time, each once, and a
+   * second sweep, another process or a restart finds nothing left to do. The notice's own key names the
+   * gift and the day count as well, so even a reminder sent and not yet written down is not sent twice.
+   *
+   * One lot whose notice cannot be written (its account is gone, the inbox failed) is reported and left
+   * for a later sweep; it never stops the lots after it. Without an inbox there are no reminders and
+   * nothing else changes.
+   * @returns {Promise<number>} reminders written this sweep
    */
   async remindExpiries() {
     if (!this.simulated || !this.simulator || typeof this.notify !== "function") return 0;
     const at = this.now();
-    const lots = await this.simulator.lotsEndingWithin(Math.max(...CREDIT_EXPIRY_REMINDER_DAYS));
     let sent = 0;
-    for (const lot of lots) {
-      const days = expiryReminderDue(lot, at);
-      if (!days) continue;
-      const label = /** @type {Record<string, string>} */ (CREDIT_SOURCE_LABELS)[lot.source] ?? lot.source;
-      try {
-        await this.notify(lot.userId, {
-          noticeType: "notify", severity: "info",
-          title: `${SIMULATED_WALLET_LABEL}赠送额度将在 ${days === 1 ? "1 天" : `${days} 天`}内到期`,
-          body: `你的${SIMULATED_WALLET_LABEL}${label}里还有 ${formatCredits(lot.remaining, { rounding: "down" })} 灵豆，将于 ${expiryWords(lot.expiresAt)}到期。到期后这部分会从额度中扣除；已充值的灵豆不会过期。`,
-          source: { type: "system", id: `credit_lot_${lot.lotId}` },
-          idempotencyKey: `credit-expiry:${lot.lotId}:${days}`,
-        });
-        sent += 1;
-        this.counters.reminders += 1;
-      } catch (error) {
-        // The same reminder, already written with other words in it: it was sent.
-        if (/** @type {any} */ (error)?.code === "notification_idempotency_conflict") continue;
-        throw error;
+    for (let batch = 0; batch < REMINDER_BATCHES_PER_SWEEP; batch += 1) {
+      const skip = [...this.reminderFailures].filter(([, until]) => until > at.getTime()).map(([lotId]) => lotId);
+      const lots = await this.simulator.lotsDueForReminder({ limit: REMINDER_BATCH, skip });
+      if (lots.length === 0) break;
+      for (const lot of lots) {
+        // The database decides what is due; this is the rule's own statement of it, so the two cannot drift apart.
+        const days = expiryReminderDue(lot, at);
+        if (days !== lot.days) continue;
+        const label = /** @type {Record<string, string>} */ (CREDIT_SOURCE_LABELS)[lot.source] ?? lot.source;
+        try {
+          await this.notify(lot.userId, {
+            noticeType: "notify", severity: "info",
+            title: `${SIMULATED_WALLET_LABEL}赠送额度将在 ${days === 1 ? "1 天" : `${days} 天`}内到期`,
+            body: `你的${SIMULATED_WALLET_LABEL}${label}里还有 ${formatCredits(lot.remaining, { rounding: "down" })} 灵豆，将于 ${expiryWords(lot.expiresAt)}到期。到期后这部分会从额度中扣除；已充值的灵豆不会过期。`,
+            source: { type: "system", id: `credit_lot_${lot.lotId}` },
+            idempotencyKey: `credit-expiry:${lot.lotId}:${days}`,
+          });
+        } catch (error) {
+          // The same reminder, already written with other words in it: it was sent, and is written down now.
+          if (/** @type {any} */ (error)?.code !== "notification_idempotency_conflict") {
+            this.reminderFailures.set(lot.lotId, at.getTime() + REMINDER_RETRY_MS);
+            this.report(typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : "evimed_credits_reminder_failed");
+            continue;
+          }
+        }
+        if (await this.simulator.markReminded(lot.lotId, days)) {
+          sent += 1;
+          this.counters.reminders += 1;
+        }
       }
+      if (lots.length < REMINDER_BATCH) break;
     }
     return sent;
   }
@@ -1450,8 +1542,8 @@ function readinessFailure(code, details = null) {
 
 /**
  * The module's line of `/api/ready`: red only for its own invariants — the
- * schema and the policy's activation (`ensureReady`), and a configuration it
- * refused — and each says what it is by a named code. A wallet that cannot be
+ * schema and the policy's activation (`ensureReady`) — and each says what it is by a
+ * named code. A configuration it refused is a named warning (`refused`), not a red. A wallet that cannot be
  * reached, or is not wired yet, is a warning on a green check: it is outside
  * the platform, and nothing is charged until it answers. Asking is also what
  * lets a module that came up broken recover.
@@ -1461,6 +1553,13 @@ export async function creditsReadiness({ config, credits, database }) {
   if (!config.evimedCreditsEnabled) return { required: false, enabled: false };
   if (!credits || !database) throw readinessFailure("evimed_credits_unavailable", { reason: database ? "not_composed" : "no_product_database" });
   const failure = await credits.service.ensureReady();
+  // A configuration the module refuses to run under is a named detail on a green check, not a red one (principle 14): the
+  // module is quiet — it charges nothing, refuses nothing and says why — and research goes on. The platform's own readiness
+  // does not fail for an operator's typo in a billing knob; the warning is what an operator reads to find it. What stays red is
+  // the module's own invariants: a schema that cannot be written, a policy that cannot be activated.
+  if (failure && failure === credits.service.refusal) {
+    return { required: true, enabled: true, simulated: credits.service.simulated, policy: config.researchBillingEnabled === true, refused: failure, warning: failure };
+  }
   if (failure) throw readinessFailure(failure, { simulated: credits.service.simulated });
   const status = credits.service.status();
   return {

@@ -47,7 +47,7 @@ function send(peer, data) {
  * observe?: (endpoint: string, payload?: any) => Promise<void>,
  * prepare?: (endpoint: string, payload?: any) => Promise<void>,
  * revalidate: () => Promise<void>, authorize: (endpoint: string, payload?:any) => Promise<void> }} options
- * `observe` sees an admitted prompt immediately before it goes upstream; it
+ * `observe` sees an admitted prompt, and a `session/cancel` stop, immediately before it goes upstream; it
  * records, it never refuses.
  */
 export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload, revalidate, authorize,
@@ -219,7 +219,13 @@ export async function proxyRuntimeUiMux({ req, socket, head, runtime, maxPayload
         streams.delete(frame.streamId);
         if (!closed) await rejectStream(frame.streamId, error);
       }
-    } else await send(upstream, raw);
+    } else {
+      // A stop pressed in the kernel's own window is seen where it passes, before it goes upstream (review F4): who asked
+      // is recorded first, so the run's own monitor reading the aborted turn cannot leave it unattributed. An observer
+      // that fails never holds the stop back.
+      if (frame.type === "open" && frame.endpoint === "session/cancel") await Promise.resolve(observe(frame.endpoint, frame.payload)).catch(() => {});
+      await send(upstream, raw);
+    }
     if (frame.type === "cancel") streams.delete(frame.streamId);
   }
   client.on("message", (raw, binary) => {

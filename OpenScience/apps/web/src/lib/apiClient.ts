@@ -1869,7 +1869,6 @@ export interface WebResearchStatement {
   source?: string | null;
   sourceLabel?: string | null;
   expiresAt?: string | null;
-  note?: string | null;
 }
 
 /** A charge in full, on request: what it is made of, so it can be checked by multiplication. */

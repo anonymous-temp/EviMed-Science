@@ -164,7 +164,9 @@ test("a lot a hold was placed before is not expired while that hold is open, and
   const kept = await auditWallet(database, payer);
   assert.deepEqual(kept.entries.filter((entry) => entry.kind === "expire"), [], "the hold was placed before the date, so the lot stays");
   const read = await wallet.snapshot(payer);
-  assert.deepEqual([read.balance, read.gifted, read.frozen, read.available], ["18.00000000", "8.00000000", "6.00000000", "12.00000000"]);
+  // The gift is past its date and is kept only for the run that held before it (review F3): it is in no figure a start reads,
+  // the 6 the run holds are backed by it, and all of the purchased 10 is free.
+  assert.deepEqual([read.balance, read.gifted, read.frozen, read.available], ["18.00000000", "0.00000000", "0.00000000", "10.00000000"]);
   // Another run, with no hold, cannot spend a gift that is past its date.
   const plain = await wallet.settle({ payer, requestId: run(), amount: "3" });
   assert.deepEqual(split(plain.lots), [["purchased", "topup", "3.00000000"]]);
@@ -231,24 +233,70 @@ test("a hold racing a top-up: either order is valid, and neither overfreezes nor
   }
 });
 
-test("a gifted lot's expiry is its own statement line, written once, and a reminder list shows what is about to end", options, async () => {
+test("a gifted lot's expiry is its own statement line, written once; the reminder list shows only what is due and has not had it", options, async () => {
   const { wallet, time, payer } = setup();
   await wallet.grant({ payer, requestId: request(), source: "campaign", amount: "5", days: 10 });
   /** The sweep is the deployment's: this test reads its own wallet's lots out of it. */
-  const mine = async () => (await wallet.lotsEndingWithin(7)).filter((lot) => lot.payer === payer);
+  const mine = async () => (await wallet.lotsDueForReminder({ limit: 1000 })).filter((lot) => lot.payer === payer);
   assert.deepEqual(await mine(), [], "ends in more than a week");
   time.advance(4 * DAY);
-  const ending = await mine();
-  assert.deepEqual(ending.map((lot) => [lot.userId === payer.split(":")[2], lot.remaining, lot.expiresAt]), [[true, "5.00000000", "2026-10-15T16:00:00.000Z"]]);
+  const due = await mine();
+  assert.deepEqual(due.map((lot) => [lot.userId === payer.split(":")[2], lot.remaining, lot.expiresAt, lot.days]), [[true, "5.00000000", "2026-10-15T16:00:00.000Z", 7]]);
+  assert.equal(await wallet.markReminded(due[0].lotId, 7), true);
+  assert.equal(await wallet.markReminded(due[0].lotId, 7), false, "once");
+  assert.deepEqual(await mine(), [], "a reminder that has been written is not read again");
+  time.set("2026-10-15T00:00:00.000Z");
+  assert.deepEqual((await mine()).map((lot) => lot.days), [1], "the next one is due inside the last day");
   time.set("2026-10-15T15:59:59.000Z");
   assert.equal((await wallet.sweepExpiry({ payer })).wallets, 0, "still valid in the last second");
   time.set("2026-10-15T16:00:00.000Z");
-  assert.equal((await wallet.sweepExpiry({ payer })).wallets, 1);
+  assert.deepEqual(await wallet.sweepExpiry({ payer }), { wallets: 1, failed: 0 });
   assert.equal((await wallet.sweepExpiry({ payer })).wallets, 0, "once");
   const { entries, balance } = await auditWallet(database, payer);
   assert.deepEqual(entries.map((entry) => [entry.kind, entry.credits]), [["grant", "5.00000000"], ["expire", "5.00000000"]]);
   assert.equal(balance, 0n);
   assert.deepEqual(await mine(), []);
+});
+
+test("one wallet that cannot be swept is skipped and counted, and the rest of the batch goes on (review F10)", options, async () => {
+  const bad = setup();
+  const good = setup();
+  for (const { wallet, payer } of [bad, good]) await wallet.grant({ payer, requestId: request(), source: "campaign", amount: "5", days: 2 });
+  await database.query(`CREATE OR REPLACE FUNCTION evimed_credits.test_fail_expiry() RETURNS trigger AS $f$
+    BEGIN IF NEW.kind = 'expire' AND NEW.payer = '${bad.payer}' THEN RAISE EXCEPTION 'test: this wallet cannot be written' USING ERRCODE = 'P0001'; END IF; RETURN NEW; END $f$ LANGUAGE plpgsql`);
+  await database.query("CREATE TRIGGER test_fail_expiry BEFORE INSERT ON evimed_credits.simulated_entries FOR EACH ROW EXECUTE FUNCTION evimed_credits.test_fail_expiry()");
+  try {
+    for (const { time } of [bad, good]) time.advance(3 * DAY);
+    // The sweep is the deployment's: another test's due wallets may be in the batch, so read what this one did to its own two.
+    const swept = await good.wallet.sweepExpiry({ limit: 1_000 });
+    assert.ok(swept.failed >= 1, `the bad wallet was counted: ${JSON.stringify(swept)}`);
+    const read = await auditWallet(database, good.payer);
+    assert.deepEqual(read.entries.filter((entry) => entry.kind === "expire").map((entry) => entry.credits), ["5.00000000"], "the good wallet's gift expired in the same batch");
+    const stuck = await auditWallet(database, bad.payer);
+    assert.deepEqual(stuck.entries.filter((entry) => entry.kind === "expire"), [], "and the bad one is left exactly as it was");
+  } finally {
+    await database.query("DROP TRIGGER test_fail_expiry ON evimed_credits.simulated_entries");
+  }
+});
+
+test("a thousand gifts that end at one instant are read for reminders a batch at a time, each once, and none is left without one (review F10)", options, async () => {
+  const wallets = [setup(), setup(), setup(), setup(), setup()];
+  const lots = [];
+  for (const { wallet, payer } of wallets) lots.push((await wallet.grant({ payer, requestId: request(), source: "campaign", amount: "3", expiresOn: "2026-10-12" })).lot.lotId);
+  const reader = wallets[0];
+  reader.time.set("2026-10-11T00:00:00.000Z");
+  const mine = (/** @type {Array<{ lotId: string }>} */ rows) => rows.filter((row) => lots.includes(row.lotId));
+  // Read two at a time: what is read and marked is not read again, so the next batch is the next lots.
+  const seen = /** @type {string[]} */ ([]);
+  for (let round = 0; round < 40 && seen.length < lots.length; round += 1) {
+    const batch = await reader.wallet.lotsDueForReminder({ limit: 2, skip: seen });
+    const ours = mine(batch);
+    if (batch.length === 0) break;
+    for (const row of ours) { assert.equal(await reader.wallet.markReminded(row.lotId, row.days), true); seen.push(row.lotId); }
+    if (ours.length === 0) break;
+  }
+  assert.deepEqual([...seen].sort(), [...lots].sort(), "every lot was reached, though no batch held them all");
+  assert.deepEqual(mine(await reader.wallet.lotsDueForReminder({ limit: 1_000 })), [], "and none is read again once written down");
 });
 
 test("the monthly gift: one lot per cycle on the account's own date, ending where the next begins, never backfilled", options, async () => {
@@ -318,7 +366,7 @@ test("a top-up is a purchased lot that never expires, once per request id, from 
   assert.equal((await wallet.snapshot(payer)).balance, "150.00000000");
   // Ten years later it is all still there, and nothing has expired.
   time.advance(3650 * DAY);
-  assert.deepEqual(await wallet.sweepExpiry({ payer }), { wallets: 0 });
+  assert.deepEqual(await wallet.sweepExpiry({ payer }), { wallets: 0, failed: 0 });
   const later = await wallet.snapshot(payer);
   assert.deepEqual([later.purchased, later.gifted, later.nextExpiry], ["150.00000000", "0.00000000", null]);
   const { lots } = await auditWallet(database, payer);
@@ -388,7 +436,7 @@ test("the wallet's tables are its own, and migrating them again changes nothing"
   await migrateSimulatedWallet(database);
   const tables = await database.query(`SELECT table_name FROM information_schema.tables
     WHERE table_schema='evimed_credits' AND table_name LIKE 'simulated\\_%' ORDER BY table_name`);
-  assert.deepEqual(tables.rows.map((row) => row.table_name), ["simulated_draws", "simulated_entries", "simulated_holds", "simulated_lots", "simulated_wallets"]);
+  assert.deepEqual(tables.rows.map((row) => row.table_name), ["simulated_draws", "simulated_entries", "simulated_holds", "simulated_lots", "simulated_reminders", "simulated_wallets"]);
   const second = new ControlPlaneDatabase({ databaseUrl, databasePoolMax: 2, databaseConnectionTimeoutMs: 3_000 });
   try { await migrateSimulatedWallet(second); } finally { await second.close(); }
   const types = await database.query(`SELECT table_name, column_name, data_type FROM information_schema.columns WHERE table_schema='evimed_credits'
@@ -396,4 +444,66 @@ test("the wallet's tables are its own, and migrating them again changes nothing"
       OR (table_name='simulated_lots' AND column_name IN ('granted','remaining')) OR (table_name='simulated_holds' AND column_name='amount') OR (table_name='simulated_draws' AND column_name='amount'))`);
   assert.equal(types.rowCount, 7);
   for (const row of types.rows) assert.equal(row.data_type, "numeric", `${row.table_name}.${row.column_name} is an exact amount`);
+});
+
+test("a gift past its date that survives only because one run's hold keeps it alive is that run's alone: no other start may use it, and nobody else draws it (review F3)", options, async () => {
+  const { wallet, time, payer } = setup();
+  const [longRun, secondRun] = [`run_long_${randomUUID().slice(0, 8)}`, `run_second_${randomUUID().slice(0, 8)}`];
+  await wallet.grant({ payer, requestId: request(), source: "campaign", amount: "100", days: 1 });
+  const ends = Date.parse("2026-10-06T16:00:00.000Z");
+  // 23:50 in Shanghai on the last day: a long commissioned run starts and freezes 5.
+  time.set(new Date(ends - 10 * 60_000).toISOString());
+  assert.equal((await wallet.hold({ payer, runId: longRun, amount: "5", ttlMs: 2 * DAY })).held, "5.00000000");
+  // After 24:00 the gift is past its date, kept only for the run that held before it.
+  time.set(new Date(ends + 1_000).toISOString());
+  const read = await wallet.snapshot(payer);
+  assert.deepEqual([read.available, read.gifted, read.purchased, read.frozen, read.nextExpiry], ["0.00000000", "0.00000000", "0.00000000", "0.00000000", null],
+    "it is in no figure a person or a start reads — and in no next expiry that is already behind");
+  assert.equal(read.balance, "100.00000000", "it is still in the wallet, for the run that holds");
+  // A second commissioned run gets nothing frozen, and a run with no hold takes nothing from it: what it cost is the platform's.
+  assert.equal((await wallet.hold({ payer, runId: secondRun, amount: "9", ttlMs: DAY })).held, "0.00000000");
+  const plain = await wallet.settle({ payer, requestId: run(), amount: "7" });
+  assert.deepEqual([plain.taken, plain.shortfall, plain.lots], ["0.00000000", "7.00000000", []]);
+  const other = await wallet.settle({ payer, requestId: run(), amount: "9", holdRunId: secondRun });
+  assert.deepEqual([other.taken, other.shortfall], ["0.00000000", "9.00000000"], "a hold placed after the date never reaches it");
+  // The run that held before the date pays from it, even now.
+  const long = await wallet.settle({ payer, requestId: run(), amount: "4", holdRunId: longRun });
+  assert.deepEqual(split(long.lots), [["gifted", "campaign", "4.00000000"]]);
+  // And when it ends, what is left of the gift lapses, as its own line.
+  const end = await auditWallet(database, payer);
+  assert.deepEqual(end.entries.filter((entry) => entry.kind === "expire").map((entry) => entry.credits), ["96.00000000"]);
+  assert.equal(end.balance, 0n);
+});
+
+test("the mirror image: another run's hold backed by a lapsed gift is not taken out of the purchased 灵豆 a start may use (review F3)", options, async () => {
+  const { wallet, time, payer } = setup();
+  const [longRun, nextRun] = [`run_long_${randomUUID().slice(0, 8)}`, `run_next_${randomUUID().slice(0, 8)}`];
+  await wallet.credit({ payer, amount: "20", requestId: request(), packageId: null });
+  await wallet.grant({ payer, requestId: request(), source: "campaign", amount: "100", days: 1 });
+  const ends = Date.parse("2026-10-06T16:00:00.000Z");
+  time.set(new Date(ends - 10 * 60_000).toISOString());
+  await wallet.hold({ payer, runId: longRun, amount: "5", ttlMs: 2 * DAY });
+  time.set(new Date(ends + 1_000).toISOString());
+  const read = await wallet.snapshot(payer);
+  assert.deepEqual([read.available, read.purchased, read.gifted, read.frozen], ["20.00000000", "20.00000000", "0.00000000", "0.00000000"],
+    "the run's 5 is backed by the lapsed gift, so none of the purchased 20 is frozen for it");
+  assert.equal((await wallet.hold({ payer, runId: nextRun, amount: "25", ttlMs: DAY })).held, "20.00000000", "the whole of what a start may use, and no less");
+  const after = await wallet.snapshot(payer);
+  assert.deepEqual([after.available, after.frozen], ["0.00000000", "20.00000000"]);
+  // A run with no hold of its own is held to what is left after that, and never to less than it.
+  const charge = await wallet.settle({ payer, requestId: run(), amount: "6", holdRunId: nextRun });
+  assert.deepEqual([charge.taken, charge.shortfall], ["6.00000000", "0.00000000"]);
+  await auditWallet(database, payer);
+});
+
+test("a hold that frees what it froze when it ends: the figures a page draws add up at every step (review F3)", options, async () => {
+  const { wallet, payer } = setup();
+  const aRun = `run_a_${randomUUID().slice(0, 8)}`;
+  await wallet.credit({ payer, amount: "10", requestId: request(), packageId: null });
+  await wallet.grant({ payer, requestId: request(), source: "campaign", amount: "5", days: 5 });
+  await wallet.hold({ payer, runId: aRun, amount: "6", ttlMs: DAY });
+  const read = await wallet.snapshot(payer);
+  assert.equal(units(read.purchased) + units(read.gifted) - units(read.frozen), units(read.available), "可用 = 充值 + 赠送 − 冻结");
+  assert.deepEqual([read.available, read.frozen], ["9.00000000", "6.00000000"]);
+  assert.equal((await wallet.snapshot(payer, { ignoreHoldOf: aRun })).available, "15.00000000", "a run's own hold is not counted against its own follow-up");
 });

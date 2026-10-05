@@ -197,6 +197,51 @@ test("a top-up adds simulated credits once per request, shows in statements and 
   assert.deepEqual((await f.get("/api/simulated-wallet/orders", stranger)).body.data.items, []);
 });
 
+test("a replay of a dispatch that already started is answered, not refused by the allowance its own start used up (review F8)", options, async (t) => {
+  const f = await fixture(t);
+  const owner = await f.signIn();
+  const wallet = new SimulatedWallet({ database: f.database, startCredits: START });
+  const payer = await f.payerOf(owner.user.id);
+  assert.equal((await f.send("PUT", `/api/research-sessions/ses_replay`, owner, { mode: "open-domain" })).status, 200);
+  const dispatchId = `turn_${randomUUID().slice(0, 8)}`;
+  const first = await f.send("POST", "/api/agent-runs/dispatch", owner, { sessionId: "ses_replay", dispatchId, text: "你好" });
+  assert.ok([200, 202].includes(first.status), JSON.stringify(first.body));
+  // The first answer was lost, and by now the account has nothing available — as when the run's own hold froze what was left.
+  const left = (await wallet.snapshot(payer)).balance;
+  await wallet.settle({ payer, requestId: `run_${randomUUID()}`, amount: left });
+  assert.equal((await wallet.snapshot(payer)).available, "0.00000000");
+  const again = await f.send("POST", "/api/agent-runs/dispatch", owner, { sessionId: "ses_replay", dispatchId, text: "你好" });
+  assert.ok([200, 202].includes(again.status), `the same dispatch, asked again: ${again.status} ${again.body?.code}`);
+  assert.equal(again.body.data.id, first.body.data.id, "it is the run that exists");
+  // A new dispatch is still asked, and still refused for an empty allowance.
+  const fresh = await f.send("POST", "/api/agent-runs/dispatch", owner, { sessionId: "ses_replay", dispatchId: `turn_${randomUUID().slice(0, 8)}`, text: "再问一个" });
+  assert.deepEqual([fresh.status, fresh.body.code], [402, "simulated_credits_exhausted"]);
+});
+
+test("a run's charge is taken and its hold released even when a step of its completion throws before the settlement (review F7)", options, async (t) => {
+  const f = await fixture(t);
+  const owner = await f.signIn();
+  const wallet = new SimulatedWallet({ database: f.database, startCredits: START });
+  const payer = await f.payerOf(owner.user.id);
+  await wallet.snapshot(payer);
+  const run = await f.finishedRun(owner, [["kernel", 2.75]]);
+  assert.equal((await wallet.hold({ payer, runId: run.runId, amount: "5", ttlMs: 86_400_000 })).held, "5.00000000");
+  // The first thing the completion asks the runtime manager about, ahead of the settlement, fails — once.
+  const snapshots = f.app.runtimeManager.evaluationMethodSnapshots;
+  const has = snapshots.has.bind(snapshots);
+  let asked = 0;
+  snapshots.has = (/** @type {any} */ key) => { if (asked++ === 0) throw new Error("a step before the settlement failed"); return has(key); };
+  await assert.rejects(run.finish(), /a step before the settlement failed/);
+  const hold = (await f.database.query("SELECT status,release_reason FROM evimed_credits.simulated_holds WHERE run_id=$1", [run.runId])).rows[0];
+  assert.deepEqual([hold.status, hold.release_reason], ["released", "settled"], "the hold does not wait out its 24 hours");
+  const settlement = (await f.database.query("SELECT status,credits::text AS credits FROM evimed_credits.settlements WHERE run_id=$1", [run.runId])).rows[0];
+  assert.deepEqual([settlement.status, settlement.credits], ["settled", "2.75000000"], "and the run is charged for what it used");
+  assert.deepEqual([(await wallet.snapshot(payer)).balance, (await wallet.snapshot(payer)).frozen], ["57.25000000", "0.00000000"]);
+  // Delivered again, as a retry is: nothing more.
+  await run.finish();
+  assert.equal((await wallet.snapshot(payer)).balance, "57.25000000");
+});
+
 test("the two wallets' rows are kept apart: a pending row the one-number wallet left is settled from the platform wallet once, and a real wallet's sweep never touches either", options, async (t) => {
   const database = new ControlPlaneDatabase({ databaseUrl, databasePoolMax: 6, databaseConnectionTimeoutMs: 3_000 });
   const userId = `sim_unknown_${randomUUID().replaceAll("-", "")}`;

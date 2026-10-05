@@ -2419,14 +2419,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         clearTimeout(timer);
       }
     },
-    onRuntimeStop: (project, status, errorCode) => {
+    onRuntimeStop: (project, status, errorCode, options) => {
       runtimeEventPump.detach(project);
       // Returned, not fired-and-forgotten here: `notifyRuntimeStop` already
       // wraps this call in its own `.catch()`, and returning the promise is
       // what keeps a rejection — a project whose ledger cannot be read,
       // oversized or corrupted — flowing through that existing handling
       // instead of becoming a second, unguarded unhandled rejection.
-      return agentRuns?.closeProject(project, status, errorCode);
+      return agentRuns?.closeProject(project, status, errorCode, options);
     },
     // The researcher's own stop, relayed through the runtime proxy.
     onSessionAbort: (project, sessionId) => agentRuns?.cancelSession(project, sessionId, { by: "user" }),
@@ -2578,6 +2578,29 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     estimateCredits: overrides.estimateRunCredits
       ?? (credits ? ({ capabilityId }) => credits.service.estimate(capabilityId) : null),
   });
+  /**
+   * The researcher's own stop of one run, in the one order every surface uses (review F4, F6): the intent is
+   * recorded first, so the run's monitor — which can read the aborted turn and write the terminal before this
+   * returns — cannot leave it unattributed; then the kernel's own session is stopped, so nothing goes on
+   * spending; then the ledger is told, as the researcher's. A kernel that is there and cannot be reached leaves
+   * the run running and says so (the error propagates): a ledger that says cancelled while the kernel keeps
+   * spending is worse than an error the page can retry.
+   * @param {any} project @param {any} run
+   * @returns {Promise<{ root: "canceled" | "runtime-not-running" | "session-not-found", canceled: any }>}
+   */
+  async function stopRunForUser(project, run) {
+    await agentRuns.noteStopRequest(project, { runId: run.id });
+    /** @type {"canceled" | "runtime-not-running" | "session-not-found"} */
+    let root = "canceled";
+    try {
+      if (!(await runtimeManager.cancelRuntimeSession(project, run.sessionId))) root = "runtime-not-running";
+    } catch (error) {
+      // A session the kernel no longer holds is not running either.
+      if (/** @type {any} */ (error)?.code !== "runtime_session_not_found") throw error;
+      root = "session-not-found";
+    }
+    return { root, canceled: await agentRuns.cancelRun(project, run.id, { by: "user" }) };
+  }
   agentRuns = new AgentRunStore(researchSessions, {
     agentRegistry,
     captureRuntimeEgressProof: (project, run) => config.evolutionEnabled === true && isEvolutionProject(project.id)
@@ -2701,6 +2724,40 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       });
     },
     onRunFinished: async (project, run) => {
+      // 灵豆 settlement (§9.6): one charge per finished run, in EviMed's currency, from the CNY this run already
+      // has recorded against it. It is idempotent on the run id and it never throws, so it can be asked for twice:
+      // where it falls in the completion below, and in the `finally` that ends it. The platform's own background
+      // work is left out for the same reason the usage caps leave it out: an evaluation cell and a lesson are not
+      // the researcher's spend.
+      //
+      // A step of the completion that throws before the settlement (about twenty are awaited ahead of it) must
+      // not leave the run uncharged with its hold frozen for the run's whole timeout (review F7): the `finally`
+      // settles whatever has not been, and `settleRun` lets the hold go on every path of its own.
+      let chargeAsked = false;
+      const settleCharge = async (/** @type {boolean | undefined} */ evaluation = undefined) => {
+        if (chargeAsked || !credits) return;
+        chargeAsked = true;
+        let evaluationRun = evaluation;
+        try { evaluationRun ??= runtimeManager.evaluationMethodSnapshots.has(runtimeManager.key(project)); } catch { evaluationRun = false; }
+        if (evaluationRun || internalFor(project.userId, project.id)) return;
+        await credits.service.settleRun({
+          userId: project.userId, projectId: project.id, runId: run.id,
+          dispatchId: run.dispatchId ?? null,
+          status: run.status, dispatchStatus: run.dispatchStatus, errorCode: run.errorCode,
+          // Who stopped a cancelled run: the researcher (charged for what had run) or the platform (not charged).
+          // Absent when the stop cannot be attributed, and then it is not charged either.
+          canceledBy: run.canceledBy ?? null,
+          effectiveRouteReason: run.effectiveRouteReason,
+          effectiveAgentId: run.effectiveAgentId ?? run.agentId ?? null,
+          automated: run.automated === true,
+          accountCreatedAt: run.accountCreatedAt ?? null,
+          startedAt: run.startedAt ?? run.createdAt ?? null,
+          finishedAt: run.finishedAt ?? null,
+          capabilityId: run.effectiveAgentId ?? run.agentId ?? null,
+          subject: run.title ?? run.question ?? null,
+        });
+      };
+      try {
       await completeEvolutionRuntime({ config, evolution, project, run, evaluationIsolation, runtimeManager, independentProductWork });
       const gapCode = evolution && !internalFor(project.userId, project.id) && run.status === "failed" ? evolutionRunGap(run) : null;
       if (gapCode) {
@@ -2855,30 +2912,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           code: typeof error?.code === "string" ? error.code : "geo_run_completion_failed",
         }));
       }
-      // 灵豆 settlement (§9.6): one charge per finished run, in EviMed's
-      // currency, from the CNY this run already has recorded against it. It is
-      // idempotent on the run id, it never throws, and it is not a condition of
-      // anything below — the platform's own background work is left out for the
-      // same reason the usage caps leave it out: an evaluation cell and a lesson
-      // are not the researcher's spend.
-      if (credits && !evaluationRun && !internalFor(project.userId, project.id)) {
-        await credits.service.settleRun({
-          userId: project.userId, projectId: project.id, runId: run.id,
-          dispatchId: run.dispatchId ?? null,
-          status: run.status, dispatchStatus: run.dispatchStatus, errorCode: run.errorCode,
-          // Who stopped a cancelled run: the researcher (charged for what had run) or the platform (not charged).
-          // Absent when the stop cannot be attributed, and then it is not charged either.
-          canceledBy: run.canceledBy ?? null,
-          effectiveRouteReason: run.effectiveRouteReason,
-          effectiveAgentId: run.effectiveAgentId ?? run.agentId ?? null,
-          automated: run.automated === true,
-          accountCreatedAt: run.accountCreatedAt ?? null,
-          startedAt: run.startedAt ?? run.createdAt ?? null,
-          finishedAt: run.finishedAt ?? null,
-          capabilityId: run.effectiveAgentId ?? run.agentId ?? null,
-          subject: run.title ?? run.question ?? null,
-        });
-      }
+      await settleCharge(evaluationRun);
       // Background work is not a person's research: a lesson, a source being
       // read and an evaluation cell run in the account's internal projects,
       // and each reports where it belongs (the knowledge base's own row). On
@@ -3168,6 +3202,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         extractionError: memoryResult.extractionError,
       }).catch(() => {});
       await queueLessons(memoryResult);
+      } finally {
+        await settleCharge();
+      }
     },
     onRunFinishedError: async (error, project, run) => {
       await securityAudit(config, "memory.agent_run.record", "failed", {
@@ -5277,8 +5314,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         if (body.deleted !== true) throw new HttpError(400, "invalid_payload", "deleted can only be set to true.");
         // A conversation still working is stopped first: a hidden run that
         // keeps spending is the one thing a reader could never find again.
+        // Stopped the way the stop button stops it — the kernel's own session first, then the ledger — and
+        // settled as the researcher's stop: the session must not go on spending, unseen and uncharged,
+        // behind a conversation that has been hidden (review F6).
         const current = (await agentRuns.list(ctx.project)).find((run) => run.id === runId);
-        if (current && current.status === "running") await agentRuns.cancelRun(ctx.project, runId, { by: "user" });
+        if (current && current.status === "running") await stopRunForUser(ctx.project, current);
         sendJson(res, 200, { data: await agentRuns.recordRunLabels(ctx.project, runId, { deleted: true }) });
         return;
       }
@@ -5449,7 +5489,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         // after routing, so the estimate is the capability's own; before a run
         // exists, so nothing under way is ever interrupted; and never again. A
         // credits service that cannot be reached admits the start.
-        if (credits) await credits.service.assertBalanceForStart(ctx.user.id, effectiveAgent?.agentId ?? null);
+        // A replay of a dispatch that already started — the first answer was lost — is the run that exists, and
+        // asks nothing: the allowance its own start used up must not refuse it (review F8).
+        if (credits && !(await agentRuns.list(ctx.project)).some((existing) => existing.dispatchId === body.dispatchId)) {
+          await credits.service.assertBalanceForStart(ctx.user.id, effectiveAgent?.agentId ?? null);
+        }
         const dispatch = () => agentRuns.dispatch(ctx.project, {
           sessionId: body.sessionId,
           dispatchId: body.dispatchId,
@@ -5629,16 +5673,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           sendJson(res, 200, { data: { run, cancellation: { root: "not-running", children: [] } } });
           return;
         }
-        let root = "canceled";
-        try {
-          if (!(await runtimeManager.cancelRuntimeSession(ctx.project, run.sessionId))) root = "runtime-not-running";
-        } catch (error) {
-          // A session the kernel no longer holds is not running either.
-          if (error?.code !== "runtime_session_not_found") throw error;
-          root = "session-not-found";
-        }
         const children = agentRuns.knownChildSessions(run).map((childSessionId) => ({ childSessionId, stop: "with-root" }));
-        const canceled = await agentRuns.cancelRun(ctx.project, runId, { by: "user" });
+        const { root, canceled } = await stopRunForUser(ctx.project, run);
         await audit(ctx, "agent_run.cancel", "completed", { target: runId });
         sendJson(res, 200, { data: { run: canceled, cancellation: { root, children } } });
         return;
@@ -5768,7 +5804,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             throw new HttpError(409, "account_busy", "Account has queued or running tasks.");
           }
         }
-        await Promise.all(projects.map((project) => runtimeManager.stop(project)));
+        // The account's own deletion of itself stops what was working in it: the researcher's stop.
+        await Promise.all(projects.map((project) => runtimeManager.stop(project, { by: "user" })));
         await managedBrowser.closeOwner(user.id);
         // The accounts an integration key of this one made for the people
         // behind it go first: a subject's memory has no owner once its
@@ -5916,7 +5953,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           if (await taskManager.hasActiveProject(project)) {
             throw new HttpError(409, "project_busy", "Project has queued or running tasks.");
           }
-          await runtimeManager.stop(project);
+          // The researcher deleting their own project stops what was working in it: their stop.
+          await runtimeManager.stop(project, { by: "user" });
           // Where the learning loop's lessons from this project go instead of
           // down with it (learningPreservation.mjs): the account's learning
           // project, made now if the account never learnt anything yet, and
@@ -6377,7 +6415,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     balanceGate: credits ? async (project, payload) => {
       const sessionId = payload?.args?.request?.sessionId;
       const binding = typeof sessionId === "string" ? await researchSessions.get(project, sessionId).catch(() => null) : null;
-      await credits.service.assertBalanceForStart(project.userId, binding?.mode === "specialist" ? binding.agentId : null);
+      // A follow-up typed into a conversation a run is working in is asked against what that run does not itself hold.
+      const working = typeof sessionId === "string"
+        ? (await agentRuns.list(project).catch(() => [])).find((run) => run.sessionId === sessionId && run.status === "running") : null;
+      await credits.service.assertBalanceForStart(project.userId, binding?.mode === "specialist" ? binding.agentId : null, { ignoreHoldOf: working?.id ?? null });
     } : null,
     recordPromptActor: recordExtensionPromptActor,
     bindResultRevision: resultRevisions ? (user, project, request) => resultRevisions.bind(user.id, project, request) : null,

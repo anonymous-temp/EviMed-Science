@@ -308,13 +308,15 @@ export function createCommandRegistry({ config, runtimeManager, sourceUpdates = 
       return null;
     },
 
+    // The researcher pressed these: a run working in the runtime is stopped by them, so it is
+    // charged for what ran (the platform's own stops — a release, the idle reaper — say nothing).
     async stop_runtime(_args, ctx) {
-      await runtimeManager.stop(ctx.project);
+      await runtimeManager.stop(ctx.project, { by: "user" });
       return null;
     },
 
     async restart_runtime(_args, ctx) {
-      await runtimeManager.restart(ctx.project);
+      await runtimeManager.restart(ctx.project, { by: "user" });
       return `${publicApiBase(ctx)}/runtime`;
     },
 
@@ -343,7 +345,7 @@ export function createCommandRegistry({ config, runtimeManager, sourceUpdates = 
       const name = hostedWorkspaceName(ctx.project, args.path);
       if (ctx.project.activeWorkspace === name) return scopedDisplayPath(ctx.project, name);
       await ctx.store.setProjectWorkspace(ctx.project, name);
-      await runtimeManager.stop(ctx.project);
+      await runtimeManager.stop(ctx.project, { by: "user" });
       return scopedDisplayPath(ctx.project, name);
     },
 
@@ -353,7 +355,7 @@ export function createCommandRegistry({ config, runtimeManager, sourceUpdates = 
         throw new HttpError(400, "invalid_workspace", "invalid folder name.");
       }
       await ctx.store.setProjectWorkspace(ctx.project, name);
-      await runtimeManager.stop(ctx.project);
+      await runtimeManager.stop(ctx.project, { by: "user" });
       return scopedDisplayPath(ctx.project, name);
     },
 

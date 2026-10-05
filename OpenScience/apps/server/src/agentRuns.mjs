@@ -4076,11 +4076,18 @@ export class AgentRunStore {
     // Consecutive polls with no new message and no new tool call before a run
     // is called stalled. Zero disables the check and waits out the timeout.
     this.monitorStallPolls = options.monitorStallPolls ?? 0;
-    // Called once, when this process has just created a dispatched run and before its prompt goes
-    // out — the moment a run exists and has not begun to spend. Billing's hold on the run's
+    // Called once, when this process has created a dispatched run and its brief is kept, immediately before its
+    // prompt goes out — the moment a run exists and has not begun to spend. Billing's hold on the run's
     // budget is placed here. It can never refuse or fail a run: an error is swallowed (principle 14).
     /** @type {(project: any, run: any) => Promise<any>} */
     this.onRunReserved = options.onRunReserved ?? (async () => {});
+    // Who asked for a run to stop, recorded before the stop reaches the kernel (`noteStopRequest`), so the
+    // monitor — which may see the aborted turn and write the terminal first — cannot leave a user's own
+    // stop unattributed. Held in memory and for a few minutes only: a stop that did not end the run must
+    // never turn a platform cancel, a long time after, into the user's. runId -> when it was asked.
+    /** @type {Map<string, number>} */
+    this.stopRequests = new Map();
+    this.stopRequestWindowMs = options.stopRequestWindowMs ?? 5 * 60_000;
     this.onRunFinished = options.onRunFinished ?? (async () => {});
     this.onRunFinishedError = options.onRunFinishedError ?? (async () => {});
     // Every state change the ledger commits is announced. The browser's live
@@ -4665,7 +4672,6 @@ export class AgentRunStore {
     const record = reservation.run;
     if (!reservation.owner) return this.existingDispatch(project, record);
     this.projects.set(`${project.userId}:${project.id}`, project);
-    try { await this.onRunReserved(project, record); } catch { /* a hold that could not be placed never stops research */ }
     // The brief, before the prompt goes out, so it is held whatever happens
     // next. This is the authoritative copy and the only one the gate reads.
     if (briefText) {
@@ -4673,6 +4679,11 @@ export class AgentRunStore {
       await this.writeWorkspaceBrief(project, briefText);
     }
     try {
+      // The hold on the run's budget is placed here, after the brief is kept and immediately before the prompt goes
+      // out (review F7): a start that fails before this point never froze anything, and one that fails after it ends
+      // `failed` through the catch below, which is what releases the hold. A hold that could not be placed never
+      // stops research.
+      try { await this.onRunReserved(project, record); } catch { /* billing failing never stops a run */ }
       try{await this.captureRuntimeEgressProof?.(project,record);}catch{/* Missing observed proof is unknown exposure, never a delivery gate. */}
       const result = await sendPrompt(session, record);
       if (result?.accepted === false) {
@@ -5395,6 +5406,14 @@ export class AgentRunStore {
       ...(terminal.status === "canceled" && (terminal.canceledBy === "user" || terminal.canceledBy === "platform")
         ? { canceledBy: terminal.canceledBy } : {}),
     };
+    // A cancel that names nobody — the monitor reading a turn the kernel aborted — is the user's if the user's stop
+    // was recorded for this run a moment ago. What names itself (the platform shutting a runtime) stays as named.
+    const askedAt = this.stopRequests.get(runId);
+    this.stopRequests.delete(runId);
+    if (normalized.status === "canceled" && !("canceledBy" in normalized) && askedAt !== undefined
+      && this.now().getTime() - askedAt <= this.stopRequestWindowMs) {
+      /** @type {any} */ (normalized).canceledBy = "user";
+    }
 
     // Delivery is a label, not a switch.
     //
@@ -5513,6 +5532,28 @@ export class AgentRunStore {
       }
     }
     return result;
+  }
+
+  /**
+   * Record that the user asked for a run to stop, before the stop reaches the kernel (review F4). The run is named
+   * by its id (the runs page's stop) or by the session the kernel's own `session/cancel` names. Nothing that is not
+   * running, or not this project's, is noted. Never throws: attributing a stop is an observation, and a stop is
+   * never held up by it.
+   * @param {any} project @param {{ runId?: string | null, sessionId?: string | null }} target
+   * @returns {Promise<string | null>} the run it was noted for
+   */
+  async noteStopRequest(project, { runId = null, sessionId = null } = {}) {
+    try {
+      const wanted = typeof runId === "string" && runId ? runId : null;
+      const session = typeof sessionId === "string" && sessionId ? sessionId : null;
+      if (!wanted && !session) return null;
+      const run = (await this.list(project)).find((item) => item.status === "running" && (wanted ? item.id === wanted : item.sessionId === session));
+      if (!run) return null;
+      this.stopRequests.set(run.id, this.now().getTime());
+      return run.id;
+    } catch {
+      return null;
+    }
   }
 
   /** @param {any} project @param {string} rawSessionId @param {{ by?: 'user' | 'platform' | null }} [options] */
@@ -7418,8 +7459,9 @@ export class AgentRunStore {
    * @param {string} [errorCode] why, for a cancel: `runtime_canceled` unless the
    *   platform stopped the runtime for someone else's start
    *   (`RUNTIME_YIELDED_CODE`), which the owner of the work reads as "ask again"
+   * @param {{ by?: 'user' | 'platform' | null }} [options] who asked for the stop
    */
-  async closeProject(project, status = "canceled", errorCode = "runtime_canceled") {
+  async closeProject(project, status = "canceled", errorCode = "runtime_canceled", { by = null } = {}) {
     const runs = await this.list(project);
     for (const run of runs.filter((item) => item.status === "running")) {
       const monitor = this.monitors.get(run.id);
@@ -7450,9 +7492,11 @@ export class AgentRunStore {
         status,
         errorCode,
         artifacts: [],
-        // The platform stopping, not the researcher: said, because the inbox
-        // tells the one and not the other.
-        ...(status === "canceled" ? { canceledBy: "platform" } : {}),
+        // Who asked: the researcher, when they stopped or restarted their own runtime or deleted the
+        // project (`runtimeManager.stop`'s `by`), and otherwise the platform shutting down, yielding
+        // its slot or reaping an idle runtime. Said, because the inbox and the charge tell the one
+        // from the other; and when nobody says, the platform — which cannot overcharge.
+        ...(status === "canceled" ? { canceledBy: by === "user" ? "user" : "platform" } : {}),
       });
     }
   }

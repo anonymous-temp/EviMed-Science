@@ -44,6 +44,8 @@ export function checkResearchBillingReadiness(config = {}, options = {}) {
   if (refusal === "evimed_credits_simulated_conflict") issues.push({ code: "research_billing_simulated_with_real_wallet" });
   if (refusal === "evimed_credits_simulated_start_invalid") issues.push({ code: "research_billing_simulated_start_invalid" });
   if (refusal === "evimed_credits_gift_invalid") issues.push({ code: "research_billing_simulated_gift_invalid" });
+  // The platform's wallet charges under the versioned policy and nothing else: without it the module refuses by name.
+  if (refusal === "evimed_credits_simulated_policy_required") issues.push({ code: "research_billing_simulated_policy_required" });
   if (requireBilling || policyEnabled || requireSimulated) {
     if (!walletEnabled) issues.push({ code: "research_billing_wallet_disabled" });
     if (!policyEnabled) issues.push({ code: "research_billing_policy_disabled" });
@@ -52,7 +54,9 @@ export function checkResearchBillingReadiness(config = {}, options = {}) {
     if (!simulated && !deductConfigured) issues.push({ code: "research_billing_deduct_endpoint_invalid" });
     if (!simulated && !balanceConfigured) issues.push({ code: "research_billing_balance_endpoint_invalid" });
   }
-  if (requirePrecision) issues.push({ code: "research_billing_precision_contract_unverified" });
+  // EviMed's wallet is integer-only and its decimal contract has never been verified; the platform's own wallet holds
+  // exact amounts itself (`precision-v1`), which its own tests prove, so there is nothing left to verify on it.
+  if (requirePrecision && !simulated) issues.push({ code: "research_billing_precision_contract_unverified" });
   const commerce = createResearchCommerce(config).status();
   issues.push(...checkResearchCommerceConformance(config, { requiredHandoffs, requireAutomaticCommerce }).issues);
   const status = simulated

@@ -2197,10 +2197,25 @@ test("a simulated wallet beside a real wallet's address refuses the billing modu
   const data = (await (await fetch(`${base}/api/account/allowance`, { headers })).json()).data;
   assert.deepEqual([data.enabled, data.status, data.available], [true, "unavailable", null]);
   const ready = (await (await fetch(`${base}/api/ready`)).json()).data;
-  assert.deepEqual([ready.checks.credits.ok, ready.checks.credits.code], [false, "evimed_credits_simulated_conflict"]);
+  // The module refuses and is quiet; that is a named warning on a green check — never a red line that fails the platform's readiness.
+  assert.deepEqual([ready.checks.credits.ok, ready.checks.credits.warning, ready.checks.credits.refused], [true, "evimed_credits_simulated_conflict", "evimed_credits_simulated_conflict"]);
   assert.equal((await fetch(`${base}/api/health`)).status, 200, "the platform itself is up");
   assert.equal(fixture.pool.count(/evimed_credits/), 0, "a refused module does not even migrate its schema");
   assert.equal(walletCalls, 0);
+});
+
+test("a simulated wallet without research billing refuses the billing module by name — a warning on a green readiness line — and the platform runs (review F10)", async (t) => {
+  const fixture = await composedApp(t, {
+    evimedCreditsEnabled: true, evimedCreditsSimulated: true, researchBillingEnabled: false, evimedCreditsPerCny: 1,
+    evimedCreditsUrl: "", evimedCreditsBalanceUrl: "",
+  });
+  const base = `http://127.0.0.1:${fixture.app.server.address().port}`;
+  const headers = { Cookie: "os_session=composition-session", "x-open-science-project": PROJECT_ID };
+  const ready = (await (await fetch(`${base}/api/ready`)).json()).data;
+  assert.deepEqual([ready.checks.credits.ok, ready.checks.credits.warning], [true, "evimed_credits_simulated_policy_required"], "named, and not red");
+  const data = (await (await fetch(`${base}/api/account/allowance`, { headers })).json()).data;
+  assert.deepEqual([data.enabled, data.status, data.available], [true, "unavailable", null], "the page opens and says billing is unavailable");
+  assert.equal((await fetch(`${base}/api/health`)).status, 200);
 });
 
 test("a programme step and a channel question are asked of the allowance before any run exists", async (t) => {

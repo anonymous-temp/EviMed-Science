@@ -3410,7 +3410,7 @@ export class RuntimeManager {
     this.workloadTokenWriter = workloadTokenWriter;
     this.setWorkloadTimer = setWorkloadTimer;
     this.clearWorkloadTimer = clearWorkloadTimer;
-    /** @type {(project: any, status: any, errorCode?: string) => any} */
+    /** @type {(project: any, status: any, errorCode?: string, options?: { by?: 'user' | 'platform' | null }) => any} */
     this.onRuntimeStop = onRuntimeStop;
     /** @type {(project: Record<string, any>) => Promise<void>} */
     this.onRuntimeStopping = onRuntimeStopping;
@@ -5266,11 +5266,13 @@ export class RuntimeManager {
    * @param {string} status
    * @param {string} [errorCode] why the runs it held end, when it is not the
    *   plain cancel (`RUNTIME_YIELDED_CODE`)
+   * @param {'user' | 'platform' | null} [by] who asked for the stop (`stop`'s `by`): the runs it held end
+   *   `canceledBy` that, and when nobody says, the platform
    */
-  notifyRuntimeStop(project, runtime, status, errorCode) {
+  notifyRuntimeStop(project, runtime, status, errorCode, by = null) {
     if (!runtime.stopNotification) {
       runtime.stopNotification = Promise.resolve()
-        .then(() => this.onRuntimeStop(project, status, errorCode))
+        .then(() => this.onRuntimeStop(project, status, errorCode, { by }))
         .catch(() => {});
     }
     return runtime.stopNotification;
@@ -6006,8 +6008,9 @@ export class RuntimeManager {
     return { generation, upstream: pluginUpstreamHealth(proof.upstream) };
   }
 
-  async restart(project) {
-    await this.stop(project);
+  /** @param {any} project @param {{ by?: 'user' | 'platform' | null }} [options] who asked for the restart */
+  async restart(project, { by = null } = {}) {
+    await this.stop(project, { by });
     return this.start(project);
   }
 
@@ -6027,14 +6030,14 @@ export class RuntimeManager {
    * Failure records become visible only after the terminal callback, so that
    * callback cannot recursively wait for this very shutdown.
    * @param {any} project @param {any} runtime @param {string} status @param {string|null} generation
-   * @param {string} [errorCode] */
-  async closeCapturedRuntime(project, runtime, status, generation, errorCode) {
+   * @param {string} [errorCode] @param {'user' | 'platform' | null} [by] who asked for the stop */
+  async closeCapturedRuntime(project, runtime, status, generation, errorCode, by = null) {
     const key = this.key(project);
     if (this.failedRuntimeStops.get(key)?.runtime === runtime) this.failedRuntimeStops.delete(key);
     let failure = null;
     try { await runtime.close(); await this.pluginService?.clearPromptAdmissions(project); }
     catch (error) { failure = error; }
-    await this.notifyRuntimeStop(project, runtime, status, errorCode);
+    await this.notifyRuntimeStop(project, runtime, status, errorCode, by);
     if (failure) {
       if (!this.runtimes.has(key)) this.failedRuntimeStops.set(key, { runtime, generation });
       await appendRuntimeEvent(project, "cleanup_failed", { kind: runtime.kind, error: "runtime_cleanup_required" }, this.config);
@@ -6042,8 +6045,12 @@ export class RuntimeManager {
     }
   }
 
-  /** @param {any} project @param {{expectedGeneration?:string|null,terminalStatus?:string,failureCode?:string|null,guard?:(()=>boolean)|null}} [options] */
-  async stop(project, { expectedGeneration = null, terminalStatus = "canceled", failureCode = null, guard = null } = {}) {
+  /**
+   * Stop a project's runtime. `by` says who asked: `"user"` for the researcher's own stop, restart or project
+   * deletion — the runs it held are then a user's stop, charged for what ran — and anything else, including
+   * nothing, is the platform's (a release, the idle reaper, a capacity yield, the autopilot): free.
+   * @param {any} project @param {{expectedGeneration?:string|null,terminalStatus?:string,failureCode?:string|null,guard?:(()=>boolean)|null,by?:'user'|'platform'|null}} [options] */
+  async stop(project, { expectedGeneration = null, terminalStatus = "canceled", failureCode = null, guard = null, by = null } = {}) {
     const key = this.key(project);
     const requested = this.runtimes.get(key) ?? this.failedRuntimeStops.get(key)?.runtime ?? null;
     const generation = this.runtimes.has(key) ? this.runtimeGeneration(project) : this.failedRuntimeStops.get(key)?.generation ?? null;
@@ -6053,7 +6060,7 @@ export class RuntimeManager {
       void pendingStart.then(async runtime => {
         // Queue behind this stop, even when start settles while admission
         // cleanup is awaiting its connection. Preserve that exact identity.
-        if (this.runtimes.get(key) === runtime) await this.stop(project, { guard: () => this.runtimes.get(key) === runtime });
+        if (this.runtimes.get(key) === runtime) await this.stop(project, { guard: () => this.runtimes.get(key) === runtime, by });
       }).catch(() => {});
     }
     return this.withRuntimeStop(project, async () => {
@@ -6075,7 +6082,7 @@ export class RuntimeManager {
       this.clearEviMedWorkloadRefresh(key);
       this.runtimeActivity.delete(key);
       requested.closedByManager = true;
-      await this.closeCapturedRuntime(project, requested, terminalStatus, generation);
+      await this.closeCapturedRuntime(project, requested, terminalStatus, generation, undefined, by);
       await appendRuntimeEvent(project, failureCode ? "workload_token_refresh_failed" : "stopped", {
         kind: requested.kind, sandboxMode: requested.sandboxMode ?? "mock", pid: requested.pid,
         containerName: requested.containerName ?? null, ...(failureCode ? { error: failureCode } : {}),
