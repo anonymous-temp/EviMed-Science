@@ -58,3 +58,41 @@ test("an unrouted prompt that names an installed tool is routed by the classifie
     await database.drop();
   }
 });
+
+test("with the module off an ordinary prompt touches nothing of it: no scope call, no scope kept, the dispatch is the pre-module one", { skip: !databaseUrl }, async () => {
+  const database = await createGeoTestDatabase(databaseUrl, "evooff");
+  const dataDir = await mkdtemp(path.join(os.tmpdir(), "evimed-evolution-off-"));
+  const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: false, authMode: "local",
+    bootstrapUser: "", bootstrapPassword: "", stateStore: "postgres", requireSharedStateStore: true, databaseUrl: database.url,
+    evolutionEnabled: false, evimedWorkloadSigningSecret: randomBytes(32).toString("hex"),
+    researchMemory: { configured: false, async status() { return { configured: false }; } } });
+  try {
+    assert.equal(app.evolution, null);
+    const address = await app.listen(0, "127.0.0.1");
+    const user = await app.store.createUser("off-researcher", "test-password", "Researcher");
+    const project = await app.store.defaultProject(await app.store.userById(user.id));
+    const base = `http://127.0.0.1:${address.port}`;
+    const login = await fetch(`${base}/api/auth/login`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ username: "off-researcher", password: "test-password" }) });
+    const auth = await login.json();
+    const headers = { "content-type": "application/json", cookie: login.headers.get("set-cookie").split(";")[0], "x-open-science-csrf": auth.data.csrfToken };
+    app.memorySubstrate.recall = async () => [];
+    await app.runtimeManager.start(project);
+    const scopeCalls = [];
+    const original = app.runtimeManager.setPlatformSkillScope.bind(app.runtimeManager);
+    app.runtimeManager.setPlatformSkillScope = (...args) => { scopeCalls.push(args); return original(...args); };
+    const sent = [];
+    app.runtimeManager.dispatchPrompt = async (_project, _session, input) => { sent.push(input); return { accepted: true }; };
+    await fetch(`${base}/api/research-sessions/ordinary-session`, { method: "PUT", headers, body: JSON.stringify({ mode: "open-domain" }) });
+    const response = await fetch(`${base}/api/agent-runs/dispatch`, { method: "POST", headers,
+      body: JSON.stringify({ sessionId: "ordinary-session", dispatchId: "ordinary-dispatch", text: "使用 tool-cohort 算一下这组数据的净获益" }) });
+    assert.equal(response.status, 202, await response.text());
+    assert.deepEqual(scopeCalls, [], "no platform skill scope is kept for a deployment that has no platform skills");
+    assert.equal(app.runtimeManager.platformSkillScopes.size, 0);
+    assert.equal(sent.length, 1);
+    assert.equal(sent[0].memoryContext ?? "", "", "the memory file is exactly what recall wrote: nothing");
+  } finally {
+    await app.close();
+    await rm(dataDir, { recursive: true, force: true });
+    await database.drop();
+  }
+});

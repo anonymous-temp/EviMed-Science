@@ -46,7 +46,7 @@ const evolution = { availableTools: async () => [], plannerStopped: async () => 
 const tick = (iso) => { now = new Date(iso); };
 
 /** An agenda that ran one episode to success and was then stopped by the planner, waiting for a tool. */
-async function waiting(service, { usage = undefined } = {}) {
+async function waiting(service) {
   tick("2026-10-01T06:00:00Z");
   let row = await service.create(owner, { projectId: "project-test", title: "Wake", prompt: "Preserve the full instruction.", taskTypes: ["literature-sentinel", "evidence-update"],
     schedule: { kind: "daily", timeZone: "UTC", time: "07:35" }, dailyBudgetCny: 20, weeklyBudgetCny: 80, maxEpisodeCny: 8 });
@@ -117,4 +117,20 @@ test("a wake refused for the task's budget leaves the agenda active for its own 
   const woken = await service.get(owner, agenda.id);
   assert.equal(woken.payload.enabled, true);
   assert.equal(woken.payload.lastStartedAt, agenda.startedAt);
+});
+
+test("an evolution read that fails does not cost the agenda its planner decision", options, async () => {
+  const calls = [];
+  const brain = { decide: async (input) => { calls.push(input); return { action: "run", taskType: input.eligible[0], focus: "继续", reason: "新证据", model: "deepseek-flash" }; } };
+  const failing = { availableTools: async () => { throw Object.assign(new Error("tool list unavailable"), { code: "product_store_unavailable" }); }, plannerStopped: async () => {} };
+  const service = new AutopilotService({ documents, jobs, planner: brain, evolution: failing, now: () => now });
+  tick("2026-10-01T06:00:00Z");
+  let row = await service.create(owner, { projectId: "project-test", title: "Read fails", prompt: "Preserve the full instruction.", taskTypes: ["literature-sentinel"],
+    schedule: { kind: "daily", timeZone: "UTC", time: "07:35" }, dailyBudgetCny: 20, weeklyBudgetCny: 80, maxEpisodeCny: 8 });
+  row = await service.start(owner, row.id, { expectedRevision: row.revision });
+  tick("2026-10-01T07:35:00Z");
+  const scheduled = await service.scheduleDue(owner, row.id);
+  assert.equal(calls.length, 1, "the planner was asked");
+  assert.equal(scheduled.episode.payload.selection.source, "model", "and its decision stands, not the date rotation");
+  assert.equal(scheduled.episode.payload.selection.fallbackReason, undefined);
 });

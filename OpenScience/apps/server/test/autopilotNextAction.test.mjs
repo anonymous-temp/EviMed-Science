@@ -271,3 +271,22 @@ test("the operator sees how each decision ended, per process", async () => {
   assert.deepEqual(Object.fromEntries(family.series.map((item) => [item.labels.result, item.value])),
     { run: 1, stop: 0, invalid: 1, failed: 0, circuit_open: 0, budget_spent: 0 });
 });
+
+test("a resource need rides on a stop only when 循证进化 is on, and a need that cannot be used is dropped, never the decision", () => {
+  const stop = (extra) => JSON.stringify({ action: "stop", stopKind: "needs_input", reason: "缺少计算工具", ...extra });
+  const options = { eligible: ["literature-sentinel"], stopAllowed: true };
+  const need = { kind: "tool", capabilityId: "statistical-analysis", methodId: "decision-net-benefit" };
+  // Off: the key is none of the planner's business, as it was before the module existed.
+  assert.deepEqual(parsePlannerAnswer(stop({ resourceNeed: need }), options), { action: "stop", stopKind: "needs_input", reason: "缺少计算工具" });
+  // On: a well-formed need is kept; a malformed one, or one on another kind of stop, is left out and the stop stands.
+  assert.deepEqual(parsePlannerAnswer(stop({ resourceNeed: need }), { ...options, evolutionEnabled: true }).resourceNeed,
+    { kind: "tool", capabilityId: "statistical-analysis", methodId: "decision-net-benefit", toolId: undefined, requirementId: undefined });
+  for (const resourceNeed of [{ kind: "money" }, "tool", 7]) {
+    const parsed = parsePlannerAnswer(stop({ resourceNeed }), { ...options, evolutionEnabled: true });
+    assert.equal(parsed.action, "stop");
+    assert.equal("resourceNeed" in parsed, false);
+  }
+  const exhausted = parsePlannerAnswer(JSON.stringify({ action: "stop", stopKind: "exhausted", reason: "证据已用尽", resourceNeed: need }), { ...options, evolutionEnabled: true });
+  assert.equal(exhausted.stopKind, "exhausted");
+  assert.equal("resourceNeed" in exhausted, false);
+});

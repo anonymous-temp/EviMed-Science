@@ -37,13 +37,13 @@ export class EvolutionService {
     });
   }
   async owner() { return this.ownerId ?? (this.ownerId = await this.ensureOwner?.()); }
-  /** @param {string} type @param {string|null} userId */
-  async list(type, userId = null) {
+  /** @param {string} type @param {string|null} userId @param {Record<string, any>} [filter] payload fields the records must carry, to read a part of a large kind */
+  async list(type, userId = null, filter = {}) {
     const owner = userId ?? await this.owner();
     if (!owner) return [];
     const items = [];
     let cursor = null;
-    do { const page = await this.documents.list(owner, 'knowledge', { limit: 100, cursor, filter: { recordType: `evolution-${type}` } }); items.push(...page.items); cursor = page.nextCursor; } while (cursor);
+    do { const page = await this.documents.list(owner, 'knowledge', { limit: 100, cursor, filter: { ...filter, recordType: `evolution-${type}` } }); items.push(...page.items); cursor = page.nextCursor; } while (cursor);
     return items;
   }
   /** @param {string} id @param {string|null} userId */

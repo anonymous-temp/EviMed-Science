@@ -252,3 +252,13 @@ test('actual daily reservation rejection below fifty durably defers and resumes 
   const finished=await worker.tick({kinds:['evolution-evaluate']});assert.equal(finished.id,queued.id);assert.equal(finished.status,'succeeded');assert.equal(finished.attempts,1);assert.equal(finished.result.checkpointRecovered,true);assert.equal(waits,0);
  } finally {await database.query('DELETE FROM evimed_control.users WHERE id=$1',[budgetOwner]);}
 });
+
+test('a run is completed from its own records of tool use, read by filter and not from the account\'s whole history', options, async () => {
+  for (const runId of ['filter-run-1', 'filter-run-2', 'filter-run-2']) await service.save('use', `evolution-use-${runId}-${randomUUID()}`, { userId: researcher, projectId: 'research', runId, toolId: 'any-tool' }, null, researcher);
+  const all = await service.list('use', researcher);
+  assert.ok(all.length >= 3);
+  const second = await service.list('use', researcher, { runId: 'filter-run-2' });
+  assert.equal(second.length, 2);
+  assert.ok(second.every(row => row.payload.runId === 'filter-run-2'));
+  assert.deepEqual(await service.list('use', researcher, { runId: 'never-ran' }), []);
+});

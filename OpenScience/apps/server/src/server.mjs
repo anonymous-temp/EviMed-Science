@@ -71,6 +71,7 @@ import { postgresBackupReadiness } from "./postgresBackupReadiness.mjs";
 import { vcrBackupReadiness } from "./vcrBackupReadiness.mjs";
 import { LEARNING_PROJECT_ID, SOURCES_PROJECT_ID, isInternalProject, isEvolutionProject } from "./internalProjects.mjs";
 import { completeEvolutionRuntime } from './evolutionRuntimeCompletion.mjs';
+import { evolutionRunGap } from './evolutionIntegration.mjs';
 import { loadAgentRegistry } from "./agentRegistry.mjs";
 import { AgentRunStore, readRunStateProjection, readDeliveryReceipt, runNotice } from "./agentRuns.mjs";
 import { PreStopTranscripts, collectRunTranscripts, persistRunTranscript, pruneRunTranscripts, readRunTranscript, runsToReadBeforeStop } from "./runTranscripts.mjs";
@@ -2589,7 +2590,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     ...(review ? { reviewNotices: (project, runId) => review.service.reviewNoticesForRun(project.userId, project.id, runId) } : {}),
     runtimeGeneration: (project) => runtimeManager.runtimeGeneration(project),
     runtimePlatformSkills: (project) => runtimeManager.runtimePlatformSkills(project),
-    setRuntimePlatformSkillScope: (project, capabilityId) => runtimeManager.setPlatformSkillScope(project, capabilityId),
+    // Only where there are platform skills to scope (循证进化 on): otherwise the call would keep a capability per project for a supply that does not exist.
+    setRuntimePlatformSkillScope: (project, capabilityId) => runtimeManager.platformSkillSupply ? runtimeManager.setPlatformSkillScope(project, capabilityId) : undefined,
     onPlatformSkillExecution: (event) => evolution?.onExecution(event),
     onPlatformSkillRetrieval: (event) => evolution?.onRetrieval(event),
     runtimePersonalSkills: (project, observation = {}) => {
@@ -2662,8 +2664,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     },
     onRunFinished: async (project, run) => {
       await completeEvolutionRuntime({ config, evolution, project, run, evaluationIsolation, runtimeManager, independentProductWork });
-      if (evolution && !isInternalProject(project.id) && run.status === "failed") {
-        const gapCode = /tool|engine|command/.test(run.errorCode ?? "") ? "method-implementation" : "model-capability";
+      const gapCode = evolution && !isInternalProject(project.id) && run.status === "failed" ? evolutionRunGap(run) : null;
+      if (gapCode) {
         await evolution.integration.publish({ id: `run-gap:${project.id}:${run.id}`, type: "runtime-gap", gapCode,
           code: gapCode, track: "M", origin: "platform-inference" });
       }

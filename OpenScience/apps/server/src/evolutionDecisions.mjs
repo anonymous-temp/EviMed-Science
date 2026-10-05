@@ -260,7 +260,7 @@ export function renderEvolutionDigest(snapshot, limit = EVOLUTION_NOTICE_LIMITS.
   const body = sections.join('\n\n');
   if (body.length <= limit) return body;
   const lines = body.split('\n');
-  let kept = [];
+  const kept = [];
   let used = 0;
   for (const line of lines) { if (used + line.length + 1 > limit - 40) break; kept.push(line); used += line.length + 1; }
   return `${kept.join('\n')}\n（日报过长，另有 ${lines.length - kept.length} 行未显示）`;

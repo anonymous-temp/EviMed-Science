@@ -438,3 +438,10 @@ test('a retirement notice names the tool and the reason in words, never the iden
   assert.doesNotMatch(notice.body, /tool-survey|sequential-harm/);
   assert.match(evolutionRetirementNotice({ toolId: 'x', reason: 'an-unnamed-code' }).body, /“科研工具”已停用，原因：不再满足验证要求/);
 });
+
+test('only a run that could not use a tool or engine is a lead for the module; a spent budget, a stop or an outage is not', async () => {
+  const { evolutionRunGap } = await import('../src/evolutionIntegration.mjs');
+  assert.equal(evolutionRunGap({ errorCode: 'runtime_tool_error' }), 'method-implementation');
+  for (const errorCode of ['usage_budget_exceeded', 'runtime_spend_limit_reached', 'runtime_stopped', 'runtime_session_error', 'autopilot_daily_budget_spent', 'canceled', undefined, null])
+    assert.equal(evolutionRunGap({ errorCode }), null, String(errorCode));
+});

@@ -1768,7 +1768,8 @@ export class AutopilotService {
     // one stop their own message can bring, and only the model reads it as such.
     const pauseAllowed = trigger === "follow-up" && typeof note === "string" && note.trim().length > 0;
     try {
-      const availableTools = await this.evolution?.availableTools(agenda) ?? [];
+      // The tools 循证进化 offers are context for the decision; a store that cannot say what they are does not take the decision with it.
+      const availableTools = await Promise.resolve(this.evolution?.availableTools(agenda)).catch(() => []) ?? [];
       const decision = await this.planner.decide({
         userId, projectId: agenda.projectId, episodeId, eligible, stopAllowed, pauseAllowed,
         context: buildPlannerContext({ agenda, progress, eligible, date, trigger, note, reducedPriority: reduced, stopAllowed, pauseAllowed,

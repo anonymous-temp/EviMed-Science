@@ -435,7 +435,10 @@ export function createEvolution({ config, store, documents, jobs, database, usag
     }),
     onExecution });
   const finishRun = async (project, run) => {
-    const uses = (await service.list("use", project.userId)).filter(row => row.projectId === project.id && row.payload.runId === run.id);
+    // Only this run's calls of platform tools: a run that made none (nearly every run of every researcher) has nothing to
+    // complete and nothing to observe, and neither the account's whole record of uses nor its transcript is read for it.
+    const uses = (await service.list("use", project.userId, { runId: run.id })).filter(row => row.projectId === project.id);
+    if (!uses.length) return;
     const transcript = await readRunTranscript(project, run.id).catch(() => null);
     if (isInternalProject(project.id)) {
       if (uses.length && transcript?.header?.completeness === "complete") {

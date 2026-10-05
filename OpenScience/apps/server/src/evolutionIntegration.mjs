@@ -25,6 +25,15 @@ export function evolutionDatasetMetadata(asset) {
   };
 }
 
+/**
+ * What a failed run says about a missing method, if anything. A run fails for a spent budget, a stopped container, a
+ * cancel, a provider outage; none of those is a tool the platform lacks, and turning each into a lead made every failure
+ * of every researcher a job for the module. Only the one closed code that names a tool or engine the run could not use
+ * is a gap in the platform's methods; the tools a run found missing are read from its own transcript (the handbook gap).
+ * @param {{errorCode?: string | null}} run @returns {"method-implementation" | null}
+ */
+export function evolutionRunGap(run) { return run?.errorCode === "runtime_tool_error" ? "method-implementation" : null; }
+
 /** The other modules publish observations through the durable evolution queue. */
 export class EvolutionIntegration {
   /** @param {{service:any,autopilot:any,report?:(code:string)=>void}} input */
