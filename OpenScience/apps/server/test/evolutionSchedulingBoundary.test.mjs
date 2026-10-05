@@ -37,3 +37,36 @@ test('resource release replay composes with actual decisions and repeated replay
  assert.equal(saved[0].payload.status,'pending');assert.equal(saved[0].payload.recommended,'wait');assert.equal(saved[0].payload.conservative,'wait');assert.equal(saved[0].payload.alternative,'wait');
  assert.deepEqual(saved[0].payload.options.map(row=>row.operation),['wait','keep']);assert.equal(tool.payload.status,'active');
 });
+
+// Live acceptance of 2026-10-05: a dossier's first branch waited on validation and the operator answered its record with
+// `rescout`; the branch that opened waited too, and no record was pending — `propose` had answered with the first one.
+test('a validation wait is a branch\'s own record: the branch a rescout opened gets a pending one of its own',async()=>{
+ const {evolutionValidationWait}=await import('../src/evolutionDecisions.mjs');const {evolutionKey}=await import('../src/evolutionService.mjs');
+ const rows=new Map();const time=new Date('2026-10-05T14:00:00Z');
+ const documents={
+  get:async(owner,kind,id)=>structuredClone(rows.get(`${owner}:${kind}:${id}`)??null),
+  list:async(owner,kind,{filter})=>({items:[...rows.values()].filter(row=>row.payload.recordType===filter.recordType).map(row=>structuredClone(row)),nextCursor:null}),
+  put:async(owner,kind,id,payload,{expectedRevision,projectId})=>{const key=`${owner}:${kind}:${id}`,old=rows.get(key);assert.equal(old?.revision??0,expectedRevision);const row={id,payload:structuredClone(payload),projectId,revision:expectedRevision+1,createdAt:old?.createdAt??time.toISOString()};rows.set(key,row);return structuredClone(row);},
+ };
+ const service=new EvolutionService({documents,ownerId:'operator',now:()=>time,jobs:{enqueue:async()=>{}},config:{}});
+ const executed=[];const decisions=new EvolutionDecisions({service,callbacks:{execute:async action=>{executed.push(action);return{state:'queued'};}}});
+ const dossierId='evolution-dossier-one',goal='g';
+ const first=await decisions.propose(evolutionValidationWait({dossierId,goal}));
+ // The first branch's record is the one already stored under the dossier alone.
+ assert.equal(first.id,`evolution-decision-${evolutionKey(['validation-resource',dossierId,1])}`);
+ assert.deepEqual([first.payload.decisionClass,first.payload.status,first.payload.recommended],['D','pending','wait']);
+ assert.equal((await decisions.propose(evolutionValidationWait({dossierId,goal}))).revision,first.revision,'the same branch waits under its one record');
+ const answered=await decisions.resolve(first.id,{option:'rescout',expectedRevision:first.revision});
+ assert.deepEqual([answered.payload.status,answered.payload.selected,executed.length],['executed','rescout',1]);
+ const branch=executed[0].actionId;
+ const second=await decisions.propose(evolutionValidationWait({dossierId,decisionActionId:branch,goal}));
+ assert.notEqual(second.id,first.id);
+ assert.deepEqual([second.payload.status,second.payload.decisionClass,second.payload.subjectId],['pending','D',dossierId]);
+ // A record that only waits re-arms nothing: it is not delivered, so no expiry is scheduled for it.
+ assert.equal(second.payload.deliveredAt,undefined);assert.equal(executed.length,1);
+ assert.equal((await service.list('decision')).filter(row=>row.payload.status==='pending').length,1);
+ // The build proposes its wait through this record with its branch, and writes no validation wait of its own beside it.
+ const composition=await (await import('node:fs/promises')).readFile(new URL('../src/evolutionComposition.mjs',import.meta.url),'utf8');
+ assert.ok(composition.includes('decisions.propose(evolutionValidationWait({ dossierId: dossier.id, decisionActionId, goal: card.goal }))'));
+ assert.ok(!composition.includes('"validation-resource"'));
+});

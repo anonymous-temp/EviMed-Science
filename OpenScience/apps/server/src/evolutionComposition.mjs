@@ -18,7 +18,7 @@ import { HttpError } from "./security.mjs";
 import { EVOLUTION_PROJECT_ID, isInternalProject } from "./internalProjects.mjs";
 import { createEvolutionToolAdmission } from "./evolutionToolAdmission.mjs";
 import { createEvolutionService, evolutionKey } from "./evolutionService.mjs";
-import { createEvolutionDecisions, evolutionDecisionReviewProof, evolutionExecutableOperation, evolutionRetirementNotice } from "./evolutionDecisions.mjs";
+import { createEvolutionDecisions, evolutionDecisionReviewProof, evolutionExecutableOperation, evolutionRetirementNotice, evolutionValidationWait } from "./evolutionDecisions.mjs";
 import { createEvolutionMaintenance, evolutionRetrievalScore } from "./evolutionMaintenance.mjs";
 import { createEvolutionWorker } from "./evolutionWorker.mjs";
 import { persistExistingEngineEvaluation } from "./existingEngineCalibration.mjs";
@@ -331,8 +331,7 @@ export function createEvolution({ config, store, documents, jobs, database, usag
       buildAttempts: Math.max(Number(fresh.payload.buildAttempts ?? 0), attempt + 1), feedback: result.feedback ?? null, toolId: result.publication?.id ?? null, review: result.review ?? null,
       ...(recheck ? { recheckedAttempt: attempt, recheckedAt: service.now().toISOString() } : {}) }, fresh);
     if (result.status === "repair" && evaluation?.status !== "waiting_resource") await service.enqueue("build", { dossierId: dossier.id }, `repair:${dossier.id}:${attempt + 1}`);
-    if (evaluation?.status === "waiting_resource") await decisions.propose({ category: "validation-resource", subjectId: dossier.id, resourceOnly: true,
-      title: "工具等待独立验证资料", body: card.goal, options: [{ id: "wait", label: "等待验证资料" }, { id: "rescout", label: "重查公开实例" }], recommended: "wait", conservative: "wait" });
+    if (evaluation?.status === "waiting_resource") await decisions.propose(evolutionValidationWait({ dossierId: dossier.id, decisionActionId, goal: card.goal }));
     return result;
   };
   const frontier = config.frontierEnabled ? new EvolutionFrontierSignals({ database, service, integration }) : null;
