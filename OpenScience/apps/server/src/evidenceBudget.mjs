@@ -170,8 +170,9 @@ export function evidenceBudgetMetricFamilies(config, budget, reading = null, upk
       series: [{ labels: { reason: "no_allowance" }, value: Number(upkeep.deferredNoAllowance) || 0 }, { labels: { reason: "owner_cap" }, value: Number(upkeep.deferredCap) || 0 }],
     }, {
       name: "open_science_evidence_upkeep_settlements_total", type: "counter",
-      help: "Research-allowance settlements of owner-billed upkeep, by outcome (charged, or the settlement failed and is visible in the ledger).",
-      series: [{ labels: { outcome: "charged" }, value: Number(upkeep.charged) || 0 }, { labels: { outcome: "failed" }, value: Number(upkeep.chargeFailed) || 0 }],
+      help: "Research-allowance settlements of owner-billed upkeep, by outcome: charged to the owner, recorded and waived (the job delivered nothing), or failed (the scope's calls stay in the usage ledger, unsettled).",
+      series: [{ labels: { outcome: "charged" }, value: Number(upkeep.charged) || 0 }, { labels: { outcome: "waived" }, value: Number(upkeep.waived) || 0 },
+        { labels: { outcome: "failed" }, value: Number(upkeep.chargeFailed) || 0 }],
     });
   }
   if (!budget || !budget.enabled) return families;

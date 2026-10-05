@@ -113,6 +113,7 @@ export class EvidenceEditorial {
       deferredNoAllowance: 0,
       deferredCap: 0,
       charged: 0,
+      waived: 0,
       chargeFailed: 0,
     };
   }
@@ -511,8 +512,10 @@ export class EvidenceEditorial {
         accountCreatedAt: account?.createdAt ?? null, startedAt: upkeep.startedAt, finishedAt: this.now().toISOString(),
         capabilityId: null, statementLine: "证据专区更新", subject: upkeep.zoneTitle,
       });
-      if (result?.status === "settled" || result?.status === "pending") this.counters.charged++;
-      else if (result?.status === "error") this.counters.chargeFailed++;
+      // `settled` with nothing taken is a recorded, waived line (a job that delivered nothing); a failed settlement is
+      // visible in the usage ledger (the scope's rows stay unsettled) and in this counter.
+      if (result?.status === "error") this.counters.chargeFailed++;
+      else if (result?.status === "settled" || result?.status === "pending") this.counters[Number(result.credits) > 0 ? "charged" : "waived"]++;
     } catch {
       this.counters.chargeFailed++;
     }

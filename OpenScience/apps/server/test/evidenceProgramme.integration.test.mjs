@@ -163,7 +163,7 @@ test("every lever has a metric family, and the budget's families read today's st
   assert.equal(named(off, "open_science_evidence_programme_enabled").series[0].value, 0);
   const budget = createEvidenceBudget({ usageLedger: ledger, config: programme({ evidencePublicWebEnabled: true }), now: () => noon });
   const reading = await budget.budget();
-  const on = evidenceBudgetMetricFamilies(programme({ evidencePublicWebEnabled: true }), budget, reading, { officialJobs: 3, ownerJobs: 2, deferredNoAllowance: 1, deferredCap: 0, charged: 1, chargeFailed: 0 });
+  const on = evidenceBudgetMetricFamilies(programme({ evidencePublicWebEnabled: true }), budget, reading, { officialJobs: 3, ownerJobs: 2, deferredNoAllowance: 1, deferredCap: 0, charged: 1, waived: 1, chargeFailed: 0 });
   assert.equal(named(on, "open_science_evidence_programme_budget_limit_cny").series[0].value, 30);
   assert.equal(named(on, "open_science_evidence_programme_budget_spent_cny").series[0].value, reading.spentCny);
   assert.equal(named(on, "open_science_evidence_programme_concurrency_limit").series[0].value, 1);

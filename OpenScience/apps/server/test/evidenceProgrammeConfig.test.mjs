@@ -70,3 +70,29 @@ test("the api-only shape keeps the programme and the public pages off even from 
     assert.match(apiOnly, new RegExp(`${name}: \\$\\{${name}:-false\\}`), name);
   }
 });
+
+test("the operator metrics say what the programme levers are, with the programme off and on", async () => {
+  const { mkdtemp, rm } = await import("node:fs/promises");
+  const { tmpdir } = await import("node:os");
+  const { createWebApiApp } = await import("../src/server.mjs");
+  /** @param {Record<string, any>} overrides */
+  async function scrape(overrides) {
+    const dataDir = await mkdtemp(path.join(tmpdir(), "os-evidence-metrics-"));
+    const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: true, operatorMetricsToken: "test-only-metrics-token", ...overrides });
+    const address = await app.listen(0, "127.0.0.1");
+    try { return await (await fetch(`http://127.0.0.1:${address.port}/api/ops/metrics`, { headers: { authorization: "Bearer test-only-metrics-token" } })).text(); }
+    finally { await app.close(); await rm(dataDir, { recursive: true, force: true }); }
+  }
+  const off = await scrape({});
+  assert.match(off, /^open_science_evidence_programme_enabled 0$/m);
+  assert.match(off, /^open_science_evidence_public_web_enabled 0$/m);
+  assert.match(off, /^open_science_evidence_public_indexable 0$/m);
+  assert.doesNotMatch(off, /open_science_evidence_programme_budget/, "a programme that is off exports no budget series");
+  const on = await scrape({ evidenceProgrammeEnabled: true, evidenceProgrammeDailyBudgetCny: 12, evidenceProgrammeMaxConcurrency: 2, evidencePublicWebEnabled: true });
+  assert.match(on, /^open_science_evidence_programme_enabled 1$/m);
+  assert.match(on, /^open_science_evidence_programme_budget_limit_cny 12$/m);
+  assert.match(on, /^open_science_evidence_programme_concurrency_limit 2$/m);
+  assert.match(on, /^open_science_evidence_public_web_enabled 1$/m);
+  assert.match(on, /^open_science_evidence_public_indexable 0$/m, "indexing is its own lever");
+  assert.match(on, /^open_science_evidence_programme_budget_state\{state="unavailable"\} 1$/m, "no ledger in this shape, so the spend is unmeasured, never zero");
+});
