@@ -2443,6 +2443,13 @@ export function loadConfig(overrides = {}) {
     operatorUsers: String(overrides.operatorUsers
       ?? process.env.OPEN_SCIENCE_OPERATOR_USERS ?? "")
       .split(",").map((value) => value.trim()).filter(Boolean),
+    // The one account besides the operators that may hold the platform's self-measurement projects
+    // (`acceptance-*`, `audit-*`, `eval-method-*`): the deployment's acceptance account, the one the smoke
+    // and the capability battery sign in as. Empty — the default — means there is none. A project is
+    // internal (not charged, outside the project ceiling and the runtime slots) only when its name says
+    // so AND its owner is one of these accounts: a name a client chose is never a waiver
+    // (`isInternalProjectOf`). The account is an id, as `operatorUsers` are.
+    acceptanceUsername: String(overrides.acceptanceUsername ?? process.env.OPEN_SCIENCE_ACCEPTANCE_USERNAME ?? "").trim(),
     // How long a trial lasts if the caller does not say. A trial that outlives
     // the evaluation that set it would keep an unproven method in front of
     // every later run of that project, which is the failure the allowlist above

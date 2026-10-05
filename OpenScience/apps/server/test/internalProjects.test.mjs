@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { FRONTIER_PROJECT_ID, LEARNING_PROJECT_ID, SOURCES_PROJECT_ID, backgroundRuntimeLimit, isInternalProject } from "../src/internalProjects.mjs";
+import { FRONTIER_PROJECT_ID, LEARNING_PROJECT_ID, SOURCES_PROJECT_ID, backgroundRuntimeLimit, isInternalProject, isInternalProjectOf, isMeasurementAccount, isReservedProjectId } from "../src/internalProjects.mjs";
 import { createLearningRuntime } from "../src/learningRuntime.mjs";
 import { RuntimeManager } from "../src/runtimeManager.mjs";
 
@@ -25,7 +25,8 @@ test("the platform's background projects are named, and nothing else is", () => 
 });
 
 test("a background runtime never takes one of the researcher's runtime slots", () => {
-  const manager = new RuntimeManager({ maxRunningRuntimesPerUser: 2, maxRunningRuntimes: 8 });
+  // `u1` owns a self-measurement project, so it must be an account that may: an operator.
+  const manager = new RuntimeManager({ maxRunningRuntimesPerUser: 2, maxRunningRuntimes: 8, operatorUsers: ["u1"] });
   manager.runtimes.set(`u1:${LEARNING_PROJECT_ID}`, {});
   manager.runtimes.set("u1:eval-method-release", {});
   manager.runtimes.set("u1:default", {});
@@ -274,5 +275,50 @@ test("a finished step's result survives the next step's clear, outside the works
       { runId: "run_a", sessionId: "s_a", dispatchId: "method-distillation-aaaa" });
   } finally {
     await rm(root, { recursive: true, force: true });
+  }
+});
+
+// A name a client chose is never a waiver (follow-up to the review of 「循证进化」, 2026-10-05, B1). `acceptance-*`, `audit-*`
+// and `eval-method-*` are typed by the account that makes the project — or derived from the title it gives it — so they
+// are the platform's own only for an operator or the deployment's acceptance account.
+const accounts = { operatorUsers: ["operator"], acceptanceUsername: "cdss-access" };
+
+test("a self-measurement name is internal only for the accounts that may hold one", () => {
+  for (const id of ["acceptance-meta-analysis", "audit-worker-probe", "eval-method-release"]) {
+    assert.equal(isInternalProjectOf(accounts, "operator", id), true, `${id} for an operator`);
+    assert.equal(isInternalProjectOf(accounts, "cdss-access", id), true, `${id} for the acceptance account`);
+    assert.equal(isInternalProjectOf(accounts, "researcher", id), false, `${id} for anyone else is an ordinary project`);
+    assert.equal(isInternalProjectOf({ operatorUsers: [], acceptanceUsername: "" }, "researcher", id), false);
+    assert.equal(isInternalProjectOf({ operatorUsers: [], acceptanceUsername: "" }, "", id), false, "no owner, no waiver");
+  }
+  // An unset acceptance account matches nobody, even an empty id.
+  assert.equal(isMeasurementAccount({ operatorUsers: [], acceptanceUsername: "" }, ""), false);
+  assert.equal(isMeasurementAccount(accounts, "operator"), true);
+  assert.equal(isMeasurementAccount(accounts, "cdss-access"), true);
+  assert.equal(isMeasurementAccount(accounts, "cdss-access2"), false);
+  // What the server makes itself stays internal by name for any owner — and cannot be typed.
+  for (const id of [LEARNING_PROJECT_ID, SOURCES_PROJECT_ID, FRONTIER_PROJECT_ID, `methodeval-${"0a".repeat(12)}`]) {
+    assert.equal(isInternalProjectOf(accounts, "researcher", id), true, id);
+    assert.equal(isReservedProjectId(id), true, `${id} is refused at creation`);
+  }
+  for (const id of ["acceptance-x", "audit-x", "eval-method-x", "default"]) assert.equal(isReservedProjectId(id), false, id);
+  assert.equal(isInternalProjectOf(accounts, "researcher", "default"), false);
+});
+
+test("an ordinary account's acceptance-x project takes its runtime slot like any other; an operator's and the acceptance account's do not", () => {
+  const config = { maxRunningRuntimesPerUser: 2, maxRunningRuntimes: 8, ...accounts };
+  const manager = new RuntimeManager(config);
+  manager.runtimes.set("researcher:acceptance-x", {});
+  manager.runtimes.set("researcher:default", {});
+  assert.equal(manager.runtimeCountForUser("researcher"), 2, "both count against the researcher's ceiling");
+  assert.throws(() => manager.enforceRuntimeCapacity({ userId: "researcher", id: "third" }), { code: "runtime_limit_exceeded" });
+  assert.equal(manager.backgroundRuntimeCount(), 0, "and neither is background work");
+  for (const userId of ["operator", "cdss-access"]) {
+    const own = new RuntimeManager(config);
+    own.runtimes.set(`${userId}:acceptance-x`, {});
+    own.runtimes.set(`${userId}:default`, {});
+    assert.equal(own.runtimeCountForUser(userId), 1, `${userId}: the measurement project takes no slot`);
+    assert.equal(own.backgroundRuntimeCount(), 1);
+    assert.doesNotThrow(() => own.enforceRuntimeCapacity({ userId, id: "second" }));
   }
 });

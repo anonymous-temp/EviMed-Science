@@ -71,7 +71,7 @@ import path from "node:path";
 import { createGzip } from "node:zlib";
 import { postgresBackupReadiness } from "./postgresBackupReadiness.mjs";
 import { vcrBackupReadiness } from "./vcrBackupReadiness.mjs";
-import { LEARNING_PROJECT_ID, SOURCES_PROJECT_ID, isInternalProject, isEvolutionProject } from "./internalProjects.mjs";
+import { LEARNING_PROJECT_ID, isEvolutionProject, isInternalProjectOf, isReservedProjectId } from "./internalProjects.mjs";
 import { completeEvolutionRuntime } from './evolutionRuntimeCompletion.mjs';
 import { loadAgentRegistry } from "./agentRegistry.mjs";
 import { AgentRunStore, readRunStateProjection, readDeliveryReceipt, runNotice } from "./agentRuns.mjs";
@@ -954,6 +954,8 @@ function clientAddress(req, config) {
 export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = createHostedExtensionIntegration, runtimeManagerFactory = (config, hooks) => new RuntimeManager(config, hooks)} = {}) {
   if(typeof extensionIntegrationFactory !== "function" || typeof runtimeManagerFactory !== "function") throw new TypeError("Invalid server constructor factory.");
   const config = loadConfig(overrides);
+  // Whether a project is the platform's own, for its owner (`internalProjects.mjs`): a name alone is never enough.
+  const internalFor = (/** @type {unknown} */ userId, /** @type {unknown} */ projectId) => isInternalProjectOf(config, userId, projectId);
   if (config.evolutionRefusal) process.stderr.write(`evolution: ${config.evolutionRefusal.code} (${config.evolutionRefusal.key}); the module stays off and the platform starts\n`);
   const managedBrowser = overrides.managedBrowserService ?? createManagedBrowserService(config);
   const agentRegistry = loadAgentRegistry({ packageDirs: config.agentPackageDirs, capabilityDirs: config.capabilityDirs });
@@ -1706,7 +1708,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         if (!user || !agentRuns) return [];
         const runs = [];
         for (const listed of await store.listProjects(user)) {
-          if (isInternalProject(listed.id)) continue;
+          if (internalFor(userId, listed.id)) continue;
           const project = await store.requireProject(user, listed.id);
           for (const run of await agentRuns.researcherRuns(project, { includeManaged: true })) runs.push({ projectId: project.id, run });
         }
@@ -1754,16 +1756,17 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
    * @param {any} user @param {{ id?: unknown, name?: unknown }} body
    */
   async function createResearcherProject(user, body) {
-    const existing = (await store.listProjects(user)).filter((project) => !isInternalProject(project.id));
+    const existing = (await store.listProjects(user)).filter((project) => !internalFor(user.id, project.id));
     if (body.id == null && body.name == null) throw new HttpError(400, "invalid_payload", "A project needs a name.");
     const id = body.id == null
       ? projectIdFromName(String(body.name), new Set(existing.map((project) => project.id)))
       : safeId(assertString(body.id, "id", { max: 64 }), "project id");
-    // The learning loop's project is made by the loop; the paired
-    // evaluation still makes its own through this route.
-    // Not `isInternalProject`: the paired evaluation makes its `eval-method-*`
-    // projects through this very route.
-    if (id === LEARNING_PROJECT_ID || id === SOURCES_PROJECT_ID) {
+    // The ids the platform makes itself — the loop's, the knowledge base's, the frontier's and an
+    // evaluation cell's — are internal by name for any owner, so they cannot be typed here. Not the
+    // self-measurement shapes (`acceptance-*`, `audit-*`, `eval-method-*`): the paired evaluation makes
+    // its own through this very route, and they are internal only for an operator or the acceptance
+    // account (`isInternalProjectOf`); for everyone else they are ordinary projects.
+    if (isReservedProjectId(id)) {
       throw new HttpError(409, "project_id_reserved", "This project id is reserved for the platform's own work.");
     }
     // 「循证进化」's own projects are named, not detected: the id is what puts
@@ -2659,10 +2662,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       runAttribution.delete(`${project.userId}\0${project.id}`);
       // A researcher's new question, or a conversation deleted, is what
       // 与我相关 is read from: their profile is due at the next round.
-      if (frontier && !isInternalProject(project.id) && isResearcherOwnedWork(run)) frontier.profiles.noteConversation(project.userId, run);
+      if (frontier && !internalFor(project.userId, project.id) && isResearcherOwnedWork(run)) frontier.profiles.noteConversation(project.userId, run);
       // A finished run in a GEO project: the claim library its geo-insight
       // deliverable holds is registered from the file (geoDeliveryImport.mjs).
-      if (geo && !isInternalProject(project.id)) {
+      if (geo && !internalFor(project.userId, project.id)) {
         independentProductWork(() => geo.importDelivery(project, run)).catch((error) => process.stderr.write(`geo import: ${error?.code ?? error?.name ?? "failed"}\n`));
       }
     },
@@ -2675,7 +2678,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     },
     onRunFinished: async (project, run) => {
       await completeEvolutionRuntime({ config, evolution, project, run, evaluationIsolation, runtimeManager, independentProductWork });
-      if (evolution && !isInternalProject(project.id) && run.status === "failed") {
+      if (evolution && !internalFor(project.userId, project.id) && run.status === "failed") {
         const gapCode = /tool|engine|command/.test(run.errorCode ?? "") ? "method-implementation" : "model-capability";
         await evolution.integration.publish({ id: `run-gap:${project.id}:${run.id}`, type: "runtime-gap", gapCode,
           code: gapCode, track: "M", origin: "platform-inference" });
@@ -2689,7 +2692,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           // export either way. Those the receipt does not vouch for are
           // captured as observed.
           const captured = await captureFinishedRun({ results: resultProvenance, project, run, readReceipt: readDeliveryReceipt,
-            unreceipted: !isInternalProject(project.id),
+            unreceipted: !internalFor(project.userId, project.id),
             transformationsFor: dataSemantics ? digests => dataSemantics.transformationsByCode(project.userId, project.id, digests) : null,
             runtimeImageId: async () => (await runtimeManager.inspectRuntimeImage().catch(() => null))?.imageId ?? null });
           for (const failure of captured?.failures ?? []) await securityAudit(config, "result.capture", "failed", {
@@ -2834,7 +2837,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // anything below — the platform's own background work is left out for the
       // same reason the usage caps leave it out: an evaluation cell and a lesson
       // are not the researcher's spend.
-      if (credits && !evaluationRun && !isInternalProject(project.id)) {
+      if (credits && !evaluationRun && !internalFor(project.userId, project.id)) {
         await credits.service.settleRun({
           userId: project.userId, projectId: project.id, runId: run.id,
           dispatchId: run.dispatchId ?? null,
@@ -2860,7 +2863,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // autopilot episode or its verification is known here — the episode's
       // digest is its result, and that is an ordinary notice.
       if (notificationService && runFinishedReachesInbox(run, {
-        internalProject: isInternalProject(project.id), evaluation: evaluationRun,
+        internalProject: internalFor(project.userId, project.id), evaluation: evaluationRun,
         automated: automatedRun(run), autopilotOwned: autopilotOwned === true,
       })) {
         try {
@@ -2959,7 +2962,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           // It runs inside the transcript write on purpose: it needs the same
           // sessions, and both must finish before the run's container is let go.
           await recordMethodUse({ project, run, sessions });
-          if (learningService && config.learningEnabled && !evaluationRun && !isInternalProject(project.id)) {
+          if (learningService && config.learningEnabled && !evaluationRun && !internalFor(project.userId, project.id)) {
             const state = await memoryPausedFor(researchMemory, project.userId, project.id, run.sessionId);
             if (!state.learning && !state.trial) {
               await recordHandbookRunObservations({ learning: learningService, userId: project.userId, projectId: project.id,
@@ -2982,7 +2985,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // The project says so as well as the runtime: `evaluationRun` is read
       // from memory the web process loses on every release, and a cell that
       // finishes after one would otherwise be read as the researcher's own run.
-      if (evaluationRun || isInternalProject(project.id)) return;
+      if (evaluationRun || internalFor(project.userId, project.id)) return;
       // Nor does the platform's own background work: a distillation, a
       // relations pass or a source being understood reads excerpts of the
       // researcher's runs, and extracting memory from it paid a model call to
@@ -3190,7 +3193,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     budget: project => remainingHandbookPromptBytes(config, runtimeManager, project),
     attached: recordNativeSessionHandbooks,
     allowed: async (project, sessionId) => {
-      if (!config.learningEnabled || isInternalProject(project.id)) return false;
+      if (!config.learningEnabled || internalFor(project.userId, project.id)) return false;
       const state = await memoryPausedFor(researchMemory, project.userId, project.id, sessionId);
       return !state.learning && !state.trial;
     },
@@ -3312,7 +3315,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         if (!user) return [];
         const own = [];
         for (const entry of await store.listProjects(user)) {
-          if (entry.archivedAt || isInternalProject(entry.id)) continue;
+          if (entry.archivedAt || internalFor(user.id, entry.id)) continue;
           own.push(await store.requireProject(user, entry.id));
         }
         return own;
@@ -4518,7 +4521,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     void (async () => {
       const user = await store.userById(String(userId));
       if (!user) return;
-      const listed = (await store.listProjects(user)).filter((entry) => !entry.archivedAt && !isInternalProject(entry.id));
+      const listed = (await store.listProjects(user)).filter((entry) => !entry.archivedAt && !internalFor(user.id, entry.id));
       await runtimeManager.warmMostRecent(await Promise.all(listed.map((entry) => store.requireProject(user, entry.id))));
     })().catch(() => {
       // isolated: a warm start is a head start, never a precondition.
@@ -4964,7 +4967,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             user: store.publicUser(user),
             tenant: { id: user.tenantId ?? user.id, model: "individual-account", role: "owner" },
             project: { id: project.id, name: project.name },
-            projects: (await store.listProjects(user)).filter((item) => !isInternalProject(item.id)),
+            projects: (await store.listProjects(user)).filter((item) => !internalFor(user.id, item.id)),
             // The conversation to reopen in this project (C4), or null when
             // the researcher has not worked here yet — or the ledger cannot be
             // read, which is not a reason the shell should fail to render.
@@ -5790,7 +5793,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         // as unknown activity for that row, never as a failed list.
         // The platform's own background projects are not the researcher's
         // (`internalProjects.mjs`).
-        const projects = (await store.listProjects(user)).filter((item) => !isInternalProject(item.id));
+        const projects = (await store.listProjects(user)).filter((item) => !internalFor(user.id, item.id));
         const data = await Promise.all(projects.map(async (item) => {
           try {
             return { ...item, ...(await agentRuns.activitySummary(await store.requireProject(user, item.id))) };
@@ -5870,7 +5873,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           // project, made now if the account never learnt anything yet, and
           // the ledger the waiting lessons' runs are read from. Before the
           // transaction, because making a project is its own.
-          const learningProject = learningService && productDatabase && !isInternalProject(project.id)
+          const learningProject = learningService && productDatabase && !internalFor(project.userId, project.id)
             ? await ensureLearningProject(store, user) : null;
           const lessonRuns = learningProject ? await agentRuns.list(project).catch(() => []) : [];
           /** @type {{moved: number, preserved: string[]}} */

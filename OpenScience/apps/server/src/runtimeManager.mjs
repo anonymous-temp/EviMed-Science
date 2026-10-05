@@ -1,6 +1,6 @@
 import { PLATFORM_SKILLS_RUNTIME_DIR, platformSkillGenerationRoot, verifyPlatformSkillGeneration } from "./platformSkillSupply.mjs";
 import {assertExtensionAssessmentAuthority} from './extensionAssessmentAuthority.mjs';
-import { RUNTIME_YIELDED_CODE, backgroundRuntimeLimit, isInternalProject, isEvolutionProject } from "./internalProjects.mjs";
+import { RUNTIME_YIELDED_CODE, backgroundRuntimeLimit, isInternalProjectOf, isEvolutionProject } from "./internalProjects.mjs";
 import { Buffer } from "node:buffer";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
@@ -5325,7 +5325,7 @@ export class RuntimeManager {
     const maxPerUser = positiveLimit(this.config.maxRunningRuntimesPerUser);
     // Background work holds at most its share of the deployment, so a
     // researcher opening a project always finds room (`backgroundRuntimeLimit`).
-    const maxBackground = isInternalProject(project.id) ? backgroundRuntimeLimit(maxGlobal, maxPerUser) : null;
+    const maxBackground = this.isBackgroundProject(project.userId, project.id) ? backgroundRuntimeLimit(maxGlobal, maxPerUser) : null;
     if (maxBackground != null && this.backgroundRuntimeCount() - own >= maxBackground) {
       throw new HttpError(429, "runtime_limit_exceeded", `Background work is holding its share of runtimes (${maxBackground}); it waits so researchers keep theirs.`, {
         retryAfterSeconds: 60,
@@ -5333,7 +5333,7 @@ export class RuntimeManager {
     }
     // A background project is never one of the researcher's slots
     // (`runtimeCountForUser`), so it is not held to their ceiling either.
-    if (maxPerUser != null && !isInternalProject(project.id) && this.runtimeCountForUser(project.userId) - own >= maxPerUser) {
+    if (maxPerUser != null && !this.isBackgroundProject(project.userId, project.id) && this.runtimeCountForUser(project.userId) - own >= maxPerUser) {
       throw new HttpError(429, "runtime_limit_exceeded", `Too many running runtimes for this user; limit is ${maxPerUser}.`, {
         retryAfterSeconds: 5,
       });
@@ -5376,7 +5376,7 @@ export class RuntimeManager {
   async makeRoomFor(project, { opening = false, speculative = false } = {}) {
     // Background work waits for room; it never takes a researcher's idle
     // runtime to make some. The capacity check refuses it and its job defers.
-    if (isInternalProject(project.id)) return;
+    if (this.isBackgroundProject(project.userId, project.id)) return;
     const maxGlobal = positiveLimit(this.config.maxRunningRuntimes);
     const maxPerUser = positiveLimit(this.config.maxRunningRuntimesPerUser);
     const own = this.key(project);
@@ -5397,7 +5397,7 @@ export class RuntimeManager {
       ? Math.max(0, configuredYield) : 30 * 60_000;
     /** @param {[string, any]} entry */
     const eligible = ([key, runtime]) => key !== own && Boolean(runtime.project) && !runtime.modelGatewayScope
-      && !isInternalProject(key.slice(key.indexOf(":") + 1));
+      && !this.isBackgroundKey(key);
     /** @param {[string, any]} left @param {[string, any]} right */
     const byAge = ([a], [b]) => lastUse(a) - lastUse(b);
     const mine = [...this.runtimes.entries()].filter((entry) => eligible(entry) && entry[0].startsWith(prefix)).sort(byAge);
@@ -5483,7 +5483,7 @@ export class RuntimeManager {
    * @returns {Promise<void>}
    */
   async yieldBackgroundRuntimes(own, stillFull) {
-    const background = (/** @type {string} */ key) => key !== own && isInternalProject(key.slice(key.indexOf(":") + 1));
+    const background = (/** @type {string} */ key) => key !== own && this.isBackgroundKey(key);
     const settling = [...this.starts, ...this.runtimeStops].filter(([key]) => background(key)).map(([, work]) => work);
     if (settling.length) {
       const configured = Number(this.config.runtimeBackgroundYieldWaitMs);
@@ -5571,9 +5571,23 @@ export class RuntimeManager {
     return this.runtimeKeys().size;
   }
 
+  /**
+   * Whether a project's runtime is the platform's own background work, which takes no slot of its owner's and
+   * is held to the background share instead — a question of limits, so the name alone does not answer it: an
+   * ordinary account's `acceptance-x` takes its slot like any other project (`isInternalProjectOf`).
+   * @param {unknown} userId @param {unknown} projectId @returns {boolean}
+   */
+  isBackgroundProject(userId, projectId) { return isInternalProjectOf(this.config, userId, projectId); }
+
+  /** @param {string} key `<user>:<project>`, the runtime table's key @returns {boolean} */
+  isBackgroundKey(key) {
+    const split = key.indexOf(":");
+    return split > 0 && this.isBackgroundProject(key.slice(0, split), key.slice(split + 1));
+  }
+
   /** Running and starting runtimes of the platform's own background projects. */
   backgroundRuntimeCount() {
-    const background = (/** @type {string} */ key) => isInternalProject(key.slice(key.indexOf(":") + 1));
+    const background = (/** @type {string} */ key) => this.isBackgroundKey(key);
     return [...this.runtimeKeys()].filter(background).length;
   }
 
@@ -5583,7 +5597,7 @@ export class RuntimeManager {
     // take one of the researcher's slots: a lesson being distilled must never
     // be why they cannot open a second project. The global ceiling still
     // counts them.
-    const counted = (/** @type {string} */ key) => key.startsWith(prefix) && !isInternalProject(key.slice(prefix.length));
+    const counted = (/** @type {string} */ key) => key.startsWith(prefix) && !this.isBackgroundKey(key);
     return [...this.runtimeKeys()].filter(counted).length;
   }
 
@@ -6135,7 +6149,7 @@ export class RuntimeManager {
       .filter(([key]) => key.startsWith(prefix))
       .map(([key, runtime]) => ({
         runtime,
-        background: isInternalProject(key.slice(prefix.length)),
+        background: this.isBackgroundKey(key),
         lastUseAt: Number(this.runtimeActivity.get(key)?.lastUseAt ?? 0),
       }))
       .sort((left, right) => Number(left.background) - Number(right.background) || right.lastUseAt - left.lastUseAt);

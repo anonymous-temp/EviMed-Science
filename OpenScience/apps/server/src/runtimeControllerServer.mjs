@@ -16,7 +16,7 @@ import net from "node:net";
 import path from "node:path";
 import { loadConfig } from "./config.mjs";
 import { assertDockerDataVolumeSupport } from "./dockerMounts.mjs";
-import { backgroundRuntimeLimit, isInternalProject, isEvolutionProject } from "./internalProjects.mjs";
+import { backgroundRuntimeLimit, isInternalProjectOf, isEvolutionProject } from "./internalProjects.mjs";
 import {
   RUNTIME_EXIT_OUTPUT_BYTES,
   appendTailOutput,
@@ -407,11 +407,15 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
     });
   }
 
+  // The same question the control plane asks (`RuntimeManager.isBackgroundProject`): a name that a client can choose
+  // is background work only for an operator or the acceptance account, from the same two settings.
+  const isBackground = (userId, projectId) => isInternalProjectOf(config, userId, projectId);
+
   function evolutionAdmissionAvailable() {
     const limits=runtimeCapacityLimits(config),inventory=dockerRuntimeInventory(config);
     for(const [name,owner] of runtimeOwners)inventory.set(name,owner);
     const enabled=config.evolutionEnabled===true,reservedResearchSlots=enabled?1:0;
-    const background=[...inventory.values()].filter(owner=>isInternalProject(owner.projectId)).length;
+    const background=[...inventory.values()].filter(owner=>isBackground(owner.userId,owner.projectId)).length;
     const maxBackground=backgroundRuntimeLimit(limits.maxGlobal,limits.maxPerUser);
     return {enabled,total:inventory.size,maxGlobal:limits.maxGlobal,reservedResearchSlots,
       availableSlots:Math.max(0,limits.maxGlobal-reservedResearchSlots-inventory.size),background,maxBackground,
@@ -437,8 +441,8 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
     }
     // Background work holds at most its share of the deployment, the same
     // number the control plane computes (`backgroundRuntimeLimit`).
-    if (isInternalProject(project.id)) {
-      const background = [...inventory.values()].filter((owner) => isInternalProject(owner.projectId)).length;
+    if (isBackground(project.userId, project.id)) {
+      const background = [...inventory.values()].filter((owner) => isBackground(owner.userId, owner.projectId)).length;
       const maxBackground = backgroundRuntimeLimit(limits.maxGlobal, limits.maxPerUser);
       if (maxBackground != null && background >= maxBackground) {
         throw controllerFailure(
@@ -455,8 +459,8 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
     // this count disagreeing refused every upload's understanding run for an
     // account whose learning and evaluation were running (reproduced live).
     // The global ceiling above still counts every container.
-    const userCount = isInternalProject(project.id) ? 0 : [...inventory.values()]
-      .filter((owner) => owner.userId === project.userId && !isInternalProject(owner.projectId)).length;
+    const userCount = isBackground(project.userId, project.id) ? 0 : [...inventory.values()]
+      .filter((owner) => owner.userId === project.userId && !isBackground(owner.userId, owner.projectId)).length;
     if (userCount >= limits.maxPerUser) {
       throw controllerFailure(
         429,
