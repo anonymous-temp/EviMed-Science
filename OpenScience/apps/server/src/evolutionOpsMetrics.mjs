@@ -8,7 +8,8 @@
  *  - the platform-skill supply: selections that failed and were allowed to cost nothing, the last verified
  *    generation used instead, and generations found altered and rebuilt;
  *  - the evaluation exclusion layer: run lookups that failed and were ignored, lookups of the module's own
- *    projects that failed, and evaluation requests refused for an unreadable policy;
+ *    projects that failed, and evaluation requests refused for an unreadable policy; and, beside them, the
+ *    development runs whose model named the reference paper from memory (`recalled`: a label, not a limit);
  *  - the candidate executor's slots and timeout, counted in the runtime controller where they act (it exposes no
  *    metrics of its own) and read through its admission endpoint.
  * `open_science_evolution_enabled` is exported with the module off, and `open_science_evolution_refused` says why a
@@ -72,6 +73,11 @@ export function evolutionOpsMetricFamilies(composed, snapshot, refusal = null) {
     name: "open_science_evolution_isolation_lookup_total", type: "counter",
     help: "Evaluation exclusion layer lookups that went wrong, by outcome: a run lookup that failed and was ignored, a lookup in the module's own other projects that failed and was ignored, and an evaluation request refused for an unreadable policy.",
     series: rows(snapshot.isolation, { runLookupFailed: "run_lookup_failed", platformLookupFailed: "platform_lookup_failed", refused: "refused" }),
+  });
+  if (snapshot.isolation) families.push({
+    name: "open_science_evolution_reference_recalled_total", type: "counter",
+    help: "Development runs whose model named the protected reference paper from its own memory, with nothing served to it and no source event that matched it. Recorded and reported with the result; not an exposure, and it does not make a candidate wait.",
+    series: [{ value: Number(snapshot.isolation.recalled) || 0 }],
   });
   if (snapshot.integration) families.push({
     name: "open_science_evolution_events_total", type: "counter",

@@ -28,7 +28,7 @@ import { createEvolutionScout } from "./evolutionScout.mjs";
 import { createEvolutionBuilder } from "./evolutionBuild.mjs";
 import { createEvolutionVerification } from "./evolutionVerification.mjs";
 import { createEvolutionCandidateEvaluator } from "./evolutionCandidateEvaluator.mjs";
-import { createCandidateExposureAudit, priorDevelopmentRuns } from "./evolutionExposureChain.mjs";
+import { auditDevelopmentTranscript, createCandidateExposureAudit, priorDevelopmentRuns, referenceRecallLabel } from "./evolutionExposureChain.mjs";
 import { createEvolutionReferenceCuration, certifyEvolutionReferenceReview } from "./evolutionReferenceCuration.mjs";
 import { createEvolutionEngineReviewWriter } from "./evolutionEngineReview.mjs";
 import { createPlatformSkillSupply } from "./platformSkillSupply.mjs";
@@ -96,7 +96,7 @@ export function createEvolution({ config, store, documents, jobs, database, usag
     const proofId = `evolution-exposure-${evolutionKey([runId, artifactHash, policyHash])}`;
     const preserved = await service.get(proofId);
     if (preserved?.payload.transcriptHash && preserved.payload.artifactHash === artifactHash && preserved.payload.policyHash === policyHash) {
-      return { tier: preserved.payload.tier, transcriptHash: preserved.payload.transcriptHash };
+      return { tier: preserved.payload.tier, transcriptHash: preserved.payload.transcriptHash, ...(preserved.payload.recalledAt !== undefined ? { recalledAt: preserved.payload.recalledAt } : {}) };
     }
     const user = await store.userById(await service.owner()), project = await store.requireProject(user, projectId ?? EVOLUTION_PROJECT_ID).catch(() => null);
     if (!project) return { tier: "unknown" };
@@ -107,10 +107,9 @@ export function createEvolution({ config, store, documents, jobs, database, usag
       await delay(1000, undefined, { signal });
     }
     if (!transcript || transcript.header?.completeness !== "complete") return { tier: "unknown" };
-    await evaluationIsolation.register(runId, policy);
-    await evaluationIsolation.auditExposure({ userId: user.id, projectId: project.id, runId }, "builder-transcript", transcript);
-    const audit = await evaluationIsolation.audit(runId);
-    await service.save("exposure-proof", proofId, { runId, artifactHash, policyHash, tier: audit.tier,
+    // Heard in two voices: what the run was handed or got back exposes it; what its model named from memory is `recalled`.
+    const audit = await auditDevelopmentTranscript({ isolation: evaluationIsolation, identity: { userId: user.id, projectId: project.id, runId }, policy, transcript });
+    await service.save("exposure-proof", proofId, { runId, artifactHash, policyHash, tier: audit.tier, ...(audit.recalledAt !== undefined ? { recalledAt: audit.recalledAt } : {}),
       transcriptHash: createHash("sha256").update(canonicalJson(transcript)).digest("hex"), auditedAt: service.now().toISOString() });
     return audit;
   } })(candidate, options) });
@@ -310,7 +309,7 @@ export function createEvolution({ config, store, documents, jobs, database, usag
         const publication = await supply.publish(candidate, { card, evaluation: verdict, activate: false });
         await service.registerTool({ ...candidate, dossierId: dossier.id, methodId: card.methodId, files: undefined, name: candidate.name ?? card.goal, description: card.goal,
           nativeName: trustedEvolutionNativeName(publication), artifactDigest: publication.digest, revision: publication.revision, frozenAt: service.now().toISOString(), status: "staged", dataLevel: card.dataLevel ?? "D2", smokePassed: candidate.toolKind === "workflow" && verdict.ok,
-          noPublishedCases: verdict.verificationLevel === "V1", holdoutCases: verdict.assessments.map(assessment => ({ id: assessment.caseId, sha256: verdict.evaluatorHash })) });
+          noPublishedCases: verdict.verificationLevel === "V1", holdoutCases: verdict.assessments.map(assessment => ({ id: assessment.caseId, sha256: verdict.evaluatorHash })), ...referenceRecallLabel(verdict) });
         for (const item of verdict.assessments.filter(assessment => assessment.passed)) await service.recordAssessment(candidate.id, {
           id: `${verdict.evaluatorHash}:${item.caseId}:${item.replicate ?? 0}`, caseId: item.caseId, kind: item.kind === "published" ? "published-case" : item.kind,
           passed: true, independent: true, preRegistered: item.preRegistered === true, monteCarloError: item.monteCarloError,

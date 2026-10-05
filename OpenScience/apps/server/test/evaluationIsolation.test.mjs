@@ -121,7 +121,7 @@ test("an ordinary researcher's request is never looked up, filtered or failed, w
     assert.equal(await isolation.auditExposure(tenant, "web-read", "10.1234/target"), false);
     assert.equal(lookups, 0, "no run lookup: the ledger is not this module's to read for an ordinary project");
     assert.deepEqual(failures, []);
-    assert.deepEqual({ ...isolation.counters }, { runLookupFailed: 0, platformLookupFailed: 0, refused: 0 });
+    assert.deepEqual({ ...isolation.counters }, { runLookupFailed: 0, platformLookupFailed: 0, refused: 0, recalled: 0 });
   } finally { await rm(dataDir, { recursive: true, force: true }); }
 });
 
@@ -204,5 +204,73 @@ test("a bound evaluation run is known by its ledger id and by the dispatch id it
     await assert.rejects(isolation.bindRun(project, "run_ledger", { dispatchId: "evolution_other" }), /immutable/);
     const restarted = createEvaluationIsolation({ dataDir, resolveRunId: identity => identity.runId ?? null });
     await assert.rejects(restarted.assertRequest(bounded, "web-read", "https://pmc.ncbi.nlm.nih.gov/articles/PMC123/"), { status: 403, code: "evaluation_source_excluded" });
+  } finally { await rm(dataDir, { recursive: true, force: true }); }
+});
+
+// Ruling of 2026-10-05, after two builder runs of the live acceptance wrote the method paper's DOI in their own
+// reasoning and parked their branches: what a model names from its own memory is not something the platform served,
+// and no isolation can remove it. It is its own tier, `recalled`: recorded with where it was said, counted, and not an
+// exposure. What disqualifies is unchanged: anything the run was handed or got back that matches the target
+// (`exposed`), a deliverable that cites it (`cited`); a gateway's `blocked` event stays what it was.
+const development = { userId: "operator", projectId: "eval-paper-build-recall" };
+const targetPolicy = { aliases: ["10.1136/bmj.i6", "PMID:26810254"], titles: ["Net benefit approaches to the evaluation of prediction models"] };
+const voices = (parts, tool = null) => ({
+  served: { header: { completeness: "complete" }, messages: [{ role: "user", parts: [{ type: "text", text: "Implement the method from the card." }] }, ...(tool ? [{ role: "assistant", parts: [tool] }] : [])] },
+  own: parts.map((text, index) => ({ step: { message: 2 + index, part: 0, voice: index ? "reply" : "reasoning" }, text })),
+});
+
+test("a target the model names from its own memory is recalled: recorded with its step, counted once, and not an exposure", async () => {
+  const dataDir = await mkdtemp(path.join(os.tmpdir(), "evaluation-"));
+  try {
+    const isolation = createEvaluationIsolation({ dataDir });
+    const run = { ...development, runId: "run_recall" };
+    await isolation.register(run.runId, targetPolicy);
+    const heard = await isolation.auditTranscript(run, "builder-transcript", voices(["Background: Vickers et al., BMJ 2016;352:i6, doi:10.1136/bmj.i6. Let me not over-cite.", "Done."]));
+    assert.deepEqual(heard, { tier: "recalled", reason: "identifier", step: { message: 2, part: 0, voice: "reasoning" } });
+    const audit = await isolation.audit(run.runId);
+    assert.equal(audit.tier, "recalled");
+    assert.deepEqual(audit.events.map(event => [event.gateway, event.tier, event.reason, event.step]), [["builder-transcript", "recalled", "identifier", { message: 2, part: 0, voice: "reasoning" }]]);
+    assert.equal(isolation.counters.recalled, 1);
+    // The same run is audited again for every later candidate of its branch: one finding, not one per audit.
+    await isolation.auditTranscript(run, "builder-transcript", voices(["doi:10.1136/bmj.i6"]));
+    assert.equal((await isolation.audit(run.runId)).events.length, 1); assert.equal(isolation.counters.recalled, 1);
+    // A registered title is matched as the policy matches it everywhere else; nothing else in open language is.
+    const titled = { ...development, runId: "run_recall_title" };
+    await isolation.register(titled.runId, targetPolicy);
+    assert.equal((await isolation.auditTranscript(titled, "builder-transcript", voices(["The tutorial 'Net benefit approaches to the evaluation of prediction models' defines it."]))).tier, "recalled");
+    // Authors, a journal and a topic are open language: only the policy's identifiers and registered titles are matched.
+    const clean = { ...development, runId: "run_clean" };
+    await isolation.register(clean.runId, targetPolicy);
+    assert.deepEqual(await isolation.auditTranscript(clean, "builder-transcript", voices(["A famous BMJ tutorial by Vickers and colleagues defines net benefit."])), { tier: "unexposed" });
+    assert.equal((await isolation.audit(clean.runId)).events.length, 0);
+    // An ordinary project is never asked, as everywhere in this module.
+    assert.deepEqual(await isolation.auditTranscript({ userId: "researcher", projectId: "my-study", runId: run.runId }, "builder-transcript", voices(["doi:10.1136/bmj.i6"])), { tier: "unexposed" });
+  } finally { await rm(dataDir, { recursive: true, force: true }); }
+});
+
+test("what the run was handed or got back still exposes it, a cited deliverable is still cited, and a mention beside a matched source event is not a recall", async () => {
+  const dataDir = await mkdtemp(path.join(os.tmpdir(), "evaluation-"));
+  try {
+    const isolation = createEvaluationIsolation({ dataDir });
+    // Served: a tool result carried the target. The model's own later mention changes nothing.
+    const served = { ...development, runId: "run_served" };
+    await isolation.register(served.runId, targetPolicy);
+    const heard = await isolation.auditTranscript(served, "builder-transcript", voices(["It says doi:10.1136/bmj.i6."], { type: "tool", tool: "mcp__evimed__web_read", status: "completed", output: "{\"status\":\"ok\",\"data\":{\"doi\":\"10.1136/bmj.i6\"}}" }));
+    assert.equal(heard.tier, "exposed");
+    assert.equal((await isolation.audit(served.runId)).tier, "exposed_uncited");
+    // Cited: the deliverable names it; the recall beside it does not soften that.
+    const cited = { ...development, runId: "run_cited" };
+    await isolation.register(cited.runId, targetPolicy);
+    await isolation.recordCitations(cited.runId, { artifacts: ["deliverables/tool-candidate/tool-candidate.json"], reply: "Implemented after doi:10.1136/bmj.i6." });
+    await isolation.auditTranscript(cited, "builder-transcript", voices(["I will cite doi:10.1136/bmj.i6."]));
+    assert.equal((await isolation.audit(cited.runId)).tier, "cited");
+    // Blocked: a gateway matched the target for this run (here its own request named it). The event stays `blocked`,
+    // and a mention beside a matched source event is classified as it always was.
+    const asked = { ...development, runId: "run_asked" };
+    await isolation.register(asked.runId, targetPolicy);
+    await assert.rejects(isolation.assertRequest(asked, "public-source", { url: "https://doi.org/10.1136/bmj.i6" }), { code: "evaluation_source_excluded" });
+    assert.equal((await isolation.auditTranscript(asked, "builder-transcript", voices(["Let me fetch doi:10.1136/bmj.i6."]))).tier, "exposed");
+    assert.deepEqual((await isolation.audit(asked.runId)).events.map(event => event.tier), ["blocked", "exposed"]);
+    assert.equal(isolation.counters.recalled, 0);
   } finally { await rm(dataDir, { recursive: true, force: true }); }
 });

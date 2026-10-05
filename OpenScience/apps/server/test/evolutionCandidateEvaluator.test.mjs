@@ -37,6 +37,20 @@ test("trusted numeric evaluator calls published callable twice per independent h
     assert.ok(exposedResult.assessments.every(row => row.passed === true) && exposedResult.failedCaseIds.length === 0, "the wait is the chain's exposure, not a failed case");
     // The passing evaluation names no resource, and a failed case is a repair, never this wait.
     assert.equal(result.resourceCode, undefined);
+    // Ruling of 2026-10-05: a chain whose only finding is a reference the model named from memory is not exposed.
+    // It reaches the same level as a clean one, and the result says where the reference was named.
+    const step = { message: 20, part: 0, voice: "reasoning" };
+    const recalling = createEvolutionCandidateEvaluator({ config: { dataDir, evaluationDataDir: dataDir }, auditCandidateExposure: async () => ({ tier: "unexposed", recalled: [{ runId: "run-a", step }] }), controller });
+    const recalledResult = await recalling.evaluate(candidate, { card: { methodId: "method" } });
+    assert.deepEqual([recalledResult.ok, recalledResult.verificationLevel, recalledResult.status, recalledResult.exposureTier, recalledResult.resourceCode], [true, "V2", "verified", "unexposed", undefined]);
+    assert.ok(recalledResult.assessments.every(row => row.passed === true && row.exposed === false));
+    assert.deepEqual(recalledResult.referenceRecall, [{ runId: "run-a", step }]);
+    assert.deepEqual(recalledResult.notices.filter(row => row.code === "reference_named_from_memory"), [{ code: "reference_named_from_memory", runId: "run-a", step, message: "The builder named the reference paper from memory, at message 20 (reasoning)." }]);
+    assert.equal(result.referenceRecall, undefined, "a chain with no recall carries no label");
+    // A served exposure elsewhere in the chain still makes the candidate wait, recall or not.
+    const both = createEvolutionCandidateEvaluator({ config: { dataDir, evaluationDataDir: dataDir }, auditCandidateExposure: async () => ({ tier: "exposed_uncited", recalled: [{ runId: "run-a", step }] }), controller });
+    const bothResult = await both.evaluate(candidate, { card: { methodId: "method" } });
+    assert.deepEqual([bothResult.ok, bothResult.status, bothResult.resourceCode], [false, "waiting_resource", "development_chain_exposed"]);
     const unavailable = await evaluator.evaluate(candidate, { card: { methodId: "unknown" } });
     assert.equal(unavailable.status, "waiting_resource");
   } finally { await rm(dataDir, { recursive: true, force: true }); }
