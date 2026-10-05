@@ -84,7 +84,7 @@ export function createSimulatedWalletRoutes({ store, service, config }) {
       }
       const result = await walletRead(() => service.simulatedTopUp(user.id, { packageId: body.packageId, requestId: body.requestId }));
       sendJson(res, result.duplicate ? 200 : 201, { data: {
-        simulated: true, order: result.order, available: result.balance, duplicate: result.duplicate,
+        simulated: true, order: result.order, available: result.available ?? result.balance, duplicate: result.duplicate,
       } }, HEADERS);
       return true;
     }

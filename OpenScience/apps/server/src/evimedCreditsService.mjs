@@ -90,6 +90,11 @@ export const EVIMED_CREDITS_MAX_ATTEMPTS = EVIMED_CREDITS_BACKOFF_MS.length + 1;
 const ESTIMATE_SAMPLES = 50;
 /** Characters of a run's subject the memo carries. */
 const MEMO_SUBJECT_CHARS = 40;
+/** Reminders read and written per batch, and how many batches one sweep does: bounded, so a big backlog is worked through over a few ticks. */
+const REMINDER_BATCH = 200;
+const REMINDER_BATCHES_PER_SWEEP = 5;
+/** How long a lot whose notice could not be written is left alone before it is tried again. */
+const REMINDER_RETRY_MS = 3_600_000;
 /** The line a run with no named capability is billed under. */
 const DEFAULT_LINE = "深度研究";
 
@@ -243,12 +248,14 @@ export class EvimedCreditsService {
     /** How long a hold lives if its run's process dies: the run's own timeout and a margin. */
     this.holdTtlMs = (Number.isFinite(Number(config?.agentRunMonitorTimeoutMs)) && Number(config.agentRunMonitorTimeoutMs) > 0
       ? Number(config.agentRunMonitorTimeoutMs) : 24 * 3_600_000) + 10 * 60_000;
+    /** lot id -> the instant before which a reminder that failed is not tried again. @type {Map<string, number>} */
+    this.reminderFailures = new Map();
     this.counters = {
       settled: 0, skipped: 0, duplicates: 0, pending: 0, refused: 0, abandoned: 0, refusedStarts: 0, balanceUnavailable: 0,
       unlinked: 0,
       // The platform wallet's: charges the user's stop made, charges the balance could not cover (the platform carried
       // the rest), holds placed, holds released by the sweep, lots expired, reminders written.
-      userStops: 0, absorbed: 0, holds: 0, holdsSwept: 0, reminders: 0,
+      userStops: 0, absorbed: 0, holds: 0, holdsSwept: 0, reminders: 0, expiryFailed: 0,
     };
   }
 
@@ -1339,44 +1346,64 @@ export class EvimedCreditsService {
       try { await step(); } catch (error) { this.report(typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : code); }
     };
     await guarded(async () => { done.holds = await this.simulator.sweepHolds(); this.counters.holdsSwept += done.holds; }, "evimed_credits_hold_sweep_failed");
-    await guarded(async () => { done.expired = (await this.simulator.sweepExpiry()).wallets; }, "evimed_credits_expiry_sweep_failed");
+    await guarded(async () => {
+      const swept = await this.simulator.sweepExpiry();
+      done.expired = swept.wallets;
+      // A wallet that failed is counted and said, once per sweep, and the rest of the batch has gone on without it.
+      if (swept.failed > 0) { this.counters.expiryFailed += swept.failed; this.report("evimed_credits_expiry_wallet_failed"); }
+    }, "evimed_credits_expiry_sweep_failed");
     await guarded(async () => { done.reminded = await this.remindExpiries(); }, "evimed_credits_reminder_failed");
     return done;
   }
 
   /**
    * Remind the account 7 days and 1 day before a gift that still has something in
-   * it ends — in the inbox, once each per gift. The notice's key names the gift and
-   * the day count, so a second sweep, another process or a restart writes nothing
-   * more; a replay of the same key with a different amount in its text is the notice
-   * already sent, not a new one. Without an inbox there are no reminders and nothing
-   * else changes.
-   * @returns {Promise<number>} reminders considered this sweep
+   * it ends — in the inbox, once each per gift. The wallet says which lots are due a reminder and have
+   * not had it (`lotsDueForReminder`, written down by `markReminded`), so a sweep reads only what needs
+   * work: a thousand gifts that all end at one instant are read a batch at a time, each once, and a
+   * second sweep, another process or a restart finds nothing left to do. The notice's own key names the
+   * gift and the day count as well, so even a reminder sent and not yet written down is not sent twice.
+   *
+   * One lot whose notice cannot be written (its account is gone, the inbox failed) is reported and left
+   * for a later sweep; it never stops the lots after it. Without an inbox there are no reminders and
+   * nothing else changes.
+   * @returns {Promise<number>} reminders written this sweep
    */
   async remindExpiries() {
     if (!this.simulated || !this.simulator || typeof this.notify !== "function") return 0;
     const at = this.now();
-    const lots = await this.simulator.lotsEndingWithin(Math.max(...CREDIT_EXPIRY_REMINDER_DAYS));
     let sent = 0;
-    for (const lot of lots) {
-      const days = expiryReminderDue(lot, at);
-      if (!days) continue;
-      const label = /** @type {Record<string, string>} */ (CREDIT_SOURCE_LABELS)[lot.source] ?? lot.source;
-      try {
-        await this.notify(lot.userId, {
-          noticeType: "notify", severity: "info",
-          title: `${SIMULATED_WALLET_LABEL}赠送额度将在 ${days === 1 ? "1 天" : `${days} 天`}内到期`,
-          body: `你的${SIMULATED_WALLET_LABEL}${label}里还有 ${formatCredits(lot.remaining, { rounding: "down" })} 灵豆，将于 ${expiryWords(lot.expiresAt)}到期。到期后这部分会从额度中扣除；已充值的灵豆不会过期。`,
-          source: { type: "system", id: `credit_lot_${lot.lotId}` },
-          idempotencyKey: `credit-expiry:${lot.lotId}:${days}`,
-        });
-        sent += 1;
-        this.counters.reminders += 1;
-      } catch (error) {
-        // The same reminder, already written with other words in it: it was sent.
-        if (/** @type {any} */ (error)?.code === "notification_idempotency_conflict") continue;
-        throw error;
+    for (let batch = 0; batch < REMINDER_BATCHES_PER_SWEEP; batch += 1) {
+      const skip = [...this.reminderFailures].filter(([, until]) => until > at.getTime()).map(([lotId]) => lotId);
+      const lots = await this.simulator.lotsDueForReminder({ limit: REMINDER_BATCH, skip });
+      if (lots.length === 0) break;
+      for (const lot of lots) {
+        // The database decides what is due; this is the rule's own statement of it, so the two cannot drift apart.
+        const days = expiryReminderDue(lot, at);
+        if (days !== lot.days) continue;
+        const label = /** @type {Record<string, string>} */ (CREDIT_SOURCE_LABELS)[lot.source] ?? lot.source;
+        try {
+          await this.notify(lot.userId, {
+            noticeType: "notify", severity: "info",
+            title: `${SIMULATED_WALLET_LABEL}赠送额度将在 ${days === 1 ? "1 天" : `${days} 天`}内到期`,
+            body: `你的${SIMULATED_WALLET_LABEL}${label}里还有 ${formatCredits(lot.remaining, { rounding: "down" })} 灵豆，将于 ${expiryWords(lot.expiresAt)}到期。到期后这部分会从额度中扣除；已充值的灵豆不会过期。`,
+            source: { type: "system", id: `credit_lot_${lot.lotId}` },
+            idempotencyKey: `credit-expiry:${lot.lotId}:${days}`,
+          });
+        } catch (error) {
+          // The same reminder, already written with other words in it: it was sent, and is written down now.
+          if (/** @type {any} */ (error)?.code !== "notification_idempotency_conflict") {
+            this.reminderFailures.set(lot.lotId, at.getTime() + REMINDER_RETRY_MS);
+            this.report(typeof /** @type {any} */ (error)?.code === "string" ? /** @type {any} */ (error).code : "evimed_credits_reminder_failed");
+            continue;
+          }
+        }
+        if (await this.simulator.markReminded(lot.lotId, days)) {
+          sent += 1;
+          this.counters.reminders += 1;
+        }
       }
+      if (lots.length < REMINDER_BATCH) break;
     }
     return sent;
   }

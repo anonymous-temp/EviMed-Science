@@ -208,6 +208,32 @@ CREATE TABLE IF NOT EXISTS evimed_credits.simulated_holds (
 CREATE INDEX IF NOT EXISTS simulated_holds_open_idx ON evimed_credits.simulated_holds(payer) WHERE status = 'open';
 CREATE INDEX IF NOT EXISTS simulated_holds_sweep_idx ON evimed_credits.simulated_holds(expires_at) WHERE status = 'open';
 
+-- Which entries of a wallet its lots already reflect (review F1). The one-number
+-- code, still serving after the migration or back after a rollback, moves a wallet's
+-- balance and appends entries without touching a lot; every entry above this mark was
+-- written by somebody who did not keep the lots, and the new code applies it to them
+-- (the reconcile step) under the wallet lock, then moves the mark. A database that has
+-- already migrated is trusted as it stands when the column first appears.
+DO $reconcile$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'evimed_credits'
+      AND table_name = 'simulated_wallets' AND column_name = 'reconciled_through') THEN
+    ALTER TABLE evimed_credits.simulated_wallets ADD COLUMN reconciled_through bigint NOT NULL DEFAULT 0;
+    IF EXISTS (SELECT 1 FROM evimed_credits.schema_migrations WHERE version = 'exact-wallet-lots-v1') THEN
+      UPDATE evimed_credits.simulated_wallets w SET reconciled_through =
+        coalesce((SELECT max(e.entry_id) FROM evimed_credits.simulated_entries e WHERE e.payer = w.payer), 0);
+    END IF;
+  END IF;
+END $reconcile$;
+-- A reminder that has been written, once per lot and day count, so the sweep reads only
+-- what still needs one and never re-submits what it has already sent.
+CREATE TABLE IF NOT EXISTS evimed_credits.simulated_reminders (
+  lot_id bigint NOT NULL REFERENCES evimed_credits.simulated_lots(lot_id) ON DELETE CASCADE,
+  days integer NOT NULL CHECK (days > 0),
+  sent_at timestamptz(3) NOT NULL DEFAULT clock_timestamp(),
+  PRIMARY KEY (lot_id, days)
+);
+
 -- A wallet that was made by the one-number version holds whole credits in bigint
 -- columns and has no lots: bring its columns to exact amounts, and let its entry
 -- kinds name the new lines (expire, adjust). The lots themselves are written by
@@ -292,6 +318,10 @@ async function migrateWalletsToLots(client, now) {
       await client.query("UPDATE evimed_credits.simulated_entries SET lot_id=$2 WHERE payer=$1 AND kind='topup'", [wallet.payer, created.lot_id]);
     }
   }
+  // Everything written so far is what the lots above were made from: the mark says so, and only what the old
+  // code writes from here on is reconciled.
+  await client.query(`UPDATE evimed_credits.simulated_wallets w SET reconciled_through =
+    coalesce((SELECT max(e.entry_id) FROM evimed_credits.simulated_entries e WHERE e.payer = w.payer), 0)`);
   await client.query("INSERT INTO evimed_credits.schema_migrations(version) VALUES($1) ON CONFLICT DO NOTHING", [LOTS_MIGRATION]);
 }
 
@@ -373,19 +403,23 @@ export class CreditWallet {
   }
 
   /**
-   * Make the wallet exist, lock it, and bring it up to the present: its sign-up
-   * gift on first sight, the lots that have expired, and this cycle's monthly
-   * gift. Everything an operation reads afterwards is true at `at`.
-   * @param {any} client @param {string} payer @param {Date} at
-   * @returns {Promise<{ payer: string, userId: string, createdAt: Date, balance: bigint }>}
+   * Make the wallet exist, lock it, and bring it up to the present: the lots
+   * brought into agreement with whatever the one-number code wrote since (review
+   * F1), the sign-up gift on first sight, the lots that have expired, and this
+   * cycle's monthly gift. Everything an operation reads afterwards is true at the
+   * `at` it returns, which is read after the lock is held: entries are stamped in
+   * the order they are written (review F9).
+   * @param {any} client @param {string} payer
+   * @returns {Promise<{ payer: string, userId: string, createdAt: Date, at: Date }>}
    */
-  async #prepare(client, payer, at) {
+  async #prepare(client, payer) {
     const { userId, ownerCreatedAt } = payerOf(payer);
     const created = await client.query(
       `INSERT INTO evimed_credits.simulated_wallets(payer,user_id,owner_created_at,balance,created_at)
        VALUES($1,$2,$3::timestamptz,0,$4::timestamptz) ON CONFLICT (payer) DO NOTHING RETURNING payer`,
-      [payer, userId, ownerCreatedAt, at.toISOString()]);
+      [payer, userId, ownerCreatedAt, this.now().toISOString()]);
     const wallet = (await client.query("SELECT payer,balance::text AS balance,created_at FROM evimed_credits.simulated_wallets WHERE payer=$1 FOR UPDATE", [payer])).rows[0];
+    const at = this.now();
     if (created.rowCount === 1 && this.startCredits > 0) {
       // The loser of two concurrent first sights inserts nothing and grants nothing.
       await this.#addLot(client, {
@@ -393,10 +427,84 @@ export class CreditWallet {
         expiresAt: expiryInstantAfterDays(at, this.signupGiftDays), at, entryKind: "grant", receiptPrefix: "sim_grant_",
       });
     }
+    await this.#reconcile(client, payer, at);
     await this.#expireDue(client, payer, at);
     await this.#grantMonthly(client, payer, new Date(wallet.created_at), at);
-    const fresh = (await client.query("SELECT balance::text AS balance FROM evimed_credits.simulated_wallets WHERE payer=$1", [payer])).rows[0];
-    return { payer, userId, createdAt: new Date(wallet.created_at), balance: unitsOf(fresh.balance) };
+    return { payer, userId, createdAt: new Date(wallet.created_at), at };
+  }
+
+  /**
+   * Bring a wallet's lots into agreement with entries somebody else wrote (review
+   * F1). Called under the wallet lock, so nothing can be writing it. The one-number
+   * code moves `balance` and appends an entry and knows nothing of lots; this reads
+   * each entry above the wallet's mark, in order, and does to the lots what the new
+   * code would have done: a sign-up or any other grant becomes a gifted lot (a
+   * sign-up gift ends as a new sign-up gift does), a top-up a purchased one, and a
+   * charge is drawn from the lots in the normal order. It moves the mark entry by
+   * entry, so it is idempotent and keyed by entry id, and it never writes a new
+   * statement line: the old line is the line.
+   *
+   * It never throws on what it finds. A charge the lots cannot cover in full — they
+   * lapsed, or the history was never what the row said — draws what there is, and
+   * `#syncBalance` makes the row what the lots are.
+   * @param {any} client @param {string} payer @param {Date} at
+   * @returns {Promise<number>} how many entries were applied
+   */
+  async #reconcile(client, payer, at) {
+    const mark = (await client.query("SELECT reconciled_through::text AS mark FROM evimed_credits.simulated_wallets WHERE payer=$1", [payer])).rows[0];
+    const entries = (await client.query(
+      `SELECT entry_id, kind, request_id, credits::text AS credits, created_at FROM evimed_credits.simulated_entries
+        WHERE payer=$1 AND entry_id > $2::bigint ORDER BY entry_id`, [payer, mark.mark])).rows;
+    for (const entry of entries) {
+      const amount = unitsOf(entry.credits);
+      const when = new Date(entry.created_at);
+      if (entry.kind === "grant" || entry.kind === "topup") {
+        const gifted = entry.kind === "grant";
+        const lotRow = (await client.query(
+          `INSERT INTO evimed_credits.simulated_lots(payer,kind,source,granted,remaining,expires_at,request_id,note,created_at)
+           VALUES($1,$2,$3,$4,$4,$5::timestamptz,$6,$7,$8::timestamptz) ON CONFLICT (request_id) DO UPDATE SET request_id=excluded.request_id
+           RETURNING lot_id`,
+          [payer, gifted ? "gifted" : "purchased", gifted ? "signup" : "topup", researchMoneyDecimal(amount),
+            gifted ? expiryInstantAfterDays(when, this.signupGiftDays).toISOString() : null, entry.request_id,
+            "reconciled from the one-number wallet", when.toISOString()])).rows[0];
+        await client.query("UPDATE evimed_credits.simulated_entries SET lot_id=$2 WHERE entry_id=$1", [entry.entry_id, lotRow.lot_id]);
+      } else if (entry.kind === "deduct") {
+        const already = await client.query("SELECT 1 FROM evimed_credits.simulated_draws WHERE entry_id=$1", [entry.entry_id]);
+        if (!already.rowCount) {
+          // The order a charge is drawn in, as of when it happened; a lot that had already lapsed is drawn last, and
+          // only if nothing else is there, because the old code did not know it had.
+          const lots = (await client.query(
+            `SELECT lot_id, remaining::text AS remaining FROM evimed_credits.simulated_lots WHERE payer=$1 AND remaining>0
+              ORDER BY (expires_at IS NOT NULL AND expires_at <= $2::timestamptz), (kind='purchased'), expires_at ASC NULLS LAST, created_at, lot_id FOR UPDATE`,
+            [payer, when.toISOString()])).rows;
+          let left = amount;
+          for (const row of lots) {
+            if (left === 0n) break;
+            const have = unitsOf(row.remaining);
+            const part = have < left ? have : left;
+            await client.query("UPDATE evimed_credits.simulated_lots SET remaining=remaining-$2 WHERE lot_id=$1", [row.lot_id, researchMoneyDecimal(part)]);
+            await client.query("INSERT INTO evimed_credits.simulated_draws(entry_id,lot_id,amount) VALUES($1,$2,$3)", [entry.entry_id, row.lot_id, researchMoneyDecimal(part)]);
+            left -= part;
+          }
+        }
+      }
+      await client.query("UPDATE evimed_credits.simulated_wallets SET reconciled_through=$2::bigint WHERE payer=$1", [payer, entry.entry_id]);
+    }
+    if (entries.length) await this.#syncBalance(client, payer);
+    return entries.length;
+  }
+
+  /**
+   * Make the wallet's row what its lots are: the sum of what is left in them, and never
+   * negative. The row is only a cache of that sum, so any operation that moves a lot ends
+   * by saying so, and a row somebody else moved is corrected by the next one.
+   * @param {any} client @param {string} payer @returns {Promise<bigint>}
+   */
+  async #syncBalance(client, payer) {
+    const row = (await client.query(
+      `UPDATE evimed_credits.simulated_wallets w SET balance = coalesce((SELECT sum(remaining) FROM evimed_credits.simulated_lots l WHERE l.payer = w.payer), 0)
+        WHERE w.payer=$1 RETURNING balance::text AS balance`, [payer])).rows[0];
+    return unitsOf(row.balance);
   }
 
   /**
@@ -407,19 +515,20 @@ export class CreditWallet {
    * @returns {Promise<{ lot: any, entry: any, balance: bigint }>}
    */
   async #addLot(client, { payer, kind, source, amount, requestId, expiresAt = null, at, entryKind, receiptPrefix, packageId = null, note = null }) {
-    const wallet = (await client.query("SELECT balance::text AS balance FROM evimed_credits.simulated_wallets WHERE payer=$1", [payer])).rows[0];
-    const next = unitsOf(wallet.balance) + amount;
-    if (next > MAX_BALANCE_UNITS) throw new SimulatedWalletRefusal("simulated_wallet_balance_cap", 409);
+    const held = unitsOf((await client.query(
+      "SELECT coalesce(sum(remaining),0)::text AS held FROM evimed_credits.simulated_lots WHERE payer=$1", [payer])).rows[0].held);
+    if (held + amount > MAX_BALANCE_UNITS) throw new SimulatedWalletRefusal("simulated_wallet_balance_cap", 409);
     const created = (await client.query(
       `INSERT INTO evimed_credits.simulated_lots(payer,kind,source,granted,remaining,expires_at,request_id,note,created_at)
        VALUES($1,$2,$3,$4,$4,$5::timestamptz,$6,$7,$8::timestamptz) RETURNING *`,
       [payer, kind, source, researchMoneyDecimal(amount), expiresAt?.toISOString() ?? null, requestId, note, at.toISOString()])).rows[0];
-    await client.query("UPDATE evimed_credits.simulated_wallets SET balance=$2 WHERE payer=$1", [payer, researchMoneyDecimal(next)]);
+    const next = await this.#syncBalance(client, payer);
     const entry = (await client.query(
       `INSERT INTO evimed_credits.simulated_entries(payer,kind,request_id,package_id,credits,balance_after,receipt_id,lot_id,created_at)
        VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9::timestamptz) RETURNING *`,
       [payer, entryKind, requestId, packageId, researchMoneyDecimal(amount), researchMoneyDecimal(next),
         `${receiptPrefix}${digest(requestId).slice(0, 20)}`, created.lot_id, at.toISOString()])).rows[0];
+    await client.query("UPDATE evimed_credits.simulated_wallets SET reconciled_through=$2::bigint WHERE payer=$1", [payer, entry.entry_id]);
     return { lot: created, entry, balance: next };
   }
 
@@ -439,16 +548,15 @@ export class CreditWallet {
     let expired = 0n;
     for (const row of due) {
       const amount = unitsOf(row.remaining);
-      const balance = unitsOf((await client.query(
-        "UPDATE evimed_credits.simulated_wallets SET balance=balance-$2 WHERE payer=$1 RETURNING balance::text AS balance",
-        [payer, researchMoneyDecimal(amount)])).rows[0].balance);
+      await client.query("UPDATE evimed_credits.simulated_lots SET remaining=0 WHERE lot_id=$1", [row.lot_id]);
+      const balance = await this.#syncBalance(client, payer);
       const requestId = `expire:${row.lot_id}`;
       const entry = (await client.query(
         `INSERT INTO evimed_credits.simulated_entries(payer,kind,request_id,credits,balance_after,receipt_id,lot_id,created_at)
          VALUES($1,'expire',$2,$3,$4,$5,$6,$7::timestamptz) RETURNING entry_id`,
         [payer, requestId, researchMoneyDecimal(amount), researchMoneyDecimal(balance), `sim_expire_${digest(requestId).slice(0, 20)}`, row.lot_id, at.toISOString()])).rows[0];
       await client.query("INSERT INTO evimed_credits.simulated_draws(entry_id,lot_id,amount) VALUES($1,$2,$3)", [entry.entry_id, row.lot_id, researchMoneyDecimal(amount)]);
-      await client.query("UPDATE evimed_credits.simulated_lots SET remaining=0 WHERE lot_id=$1", [row.lot_id]);
+      await client.query("UPDATE evimed_credits.simulated_wallets SET reconciled_through=$2::bigint WHERE payer=$1", [payer, entry.entry_id]);
       expired += amount;
     }
     return expired;
@@ -477,28 +585,74 @@ export class CreditWallet {
   }
 
   /**
-   * What an account holds and what of it can be used.
-   * @param {any} client @param {string} payer @returns {Promise<WalletSnapshot>}
+   * What a start at `validAt` may use: the one definition every reader, hold and charge shares
+   * (review F3). A lot is usable at `validAt` while its date is after it. A gifted lot past its
+   * date that is still here is here only because an open hold, placed before the date, keeps it
+   * alive: it can back such a hold and nothing else, so it is not counted in what any other
+   * start may use. What the open holds freeze is taken from the usable lots only beyond what those
+   * lapsed lots back, and a hold placed after a lapsed lot's date can never be backed by it:
+   *
+   *     usable = Σ lots valid at validAt − (frozen − backed)
+   *
+   * where `backed` is how much of the frozen the lapsed lots can carry — worked out hold by hold, the latest
+   * placed first (what it can reach is a subset of what an earlier one can, so this is the best assignment).
+   *
+   * @param {any} client @param {string} payer @param {Date} validAt
+   * @param {{ ignoreHoldOf?: string | null, lock?: boolean }} [options] `ignoreHoldOf` leaves one run's own hold out of
+   *   what is frozen; `lock` takes the lots' row locks, for the charge that draws them
+   * @returns {Promise<{ eligible: any[], purchased: bigint, gifted: bigint, lapsed: bigint, frozen: bigint, backed: bigint, usable: bigint }>}
    */
-  async #read(client, payer) {
-    const totals = (await client.query(
-      `SELECT coalesce(sum(remaining) FILTER (WHERE kind='purchased'),0)::text AS purchased,
-              coalesce(sum(remaining) FILTER (WHERE kind='gifted'),0)::text AS gifted
-         FROM evimed_credits.simulated_lots WHERE payer=$1 AND remaining>0`, [payer])).rows[0];
-    const frozen = unitsOf((await client.query(
-      "SELECT coalesce(sum(amount),0)::text AS frozen FROM evimed_credits.simulated_holds WHERE payer=$1 AND status='open'", [payer])).rows[0].frozen);
+  async #usable(client, payer, validAt, { ignoreHoldOf = null, lock = false } = {}) {
+    const lots = (await client.query(
+      `SELECT lot_id, kind, source, expires_at, remaining::text AS remaining FROM evimed_credits.simulated_lots
+        WHERE payer=$1 AND remaining>0 ORDER BY (kind='purchased'), expires_at ASC NULLS LAST, created_at ASC, lot_id ASC${lock ? " FOR UPDATE" : ""}`, [payer])).rows;
+    const eligible = lots.filter((row) => row.expires_at == null || new Date(row.expires_at).getTime() > validAt.getTime());
+    const sum = (/** @type {any[]} */ rows, /** @type {string | null} */ kind = null) => rows
+      .filter((row) => kind === null || row.kind === kind).reduce((total, row) => total + unitsOf(row.remaining), 0n);
+    const lapsedLots = lots.filter((row) => !eligible.includes(row));
+    const holds = (await client.query(
+      `SELECT amount::text AS amount, placed_at FROM evimed_credits.simulated_holds
+        WHERE payer=$1 AND status='open' AND ($2::text IS NULL OR run_id <> $2) ORDER BY placed_at DESC, hold_id DESC`, [payer, ignoreHoldOf])).rows;
+    const pool = lapsedLots.map((row) => ({ ends: new Date(row.expires_at).getTime(), left: unitsOf(row.remaining) }));
+    let frozen = 0n;
+    let backed = 0n;
+    for (const hold of holds) {
+      let need = unitsOf(hold.amount);
+      frozen += need;
+      for (const lapsedLot of pool) {
+        if (need === 0n) break;
+        if (lapsedLot.ends <= new Date(hold.placed_at).getTime() || lapsedLot.left === 0n) continue;
+        const part = lapsedLot.left < need ? lapsedLot.left : need;
+        lapsedLot.left -= part;
+        need -= part;
+        backed += part;
+      }
+    }
+    const owed = frozen - backed;
+    const valid = sum(eligible);
+    return { eligible, purchased: sum(eligible, "purchased"), gifted: sum(eligible, "gifted"), lapsed: sum(lapsedLots), frozen, backed, usable: valid > owed ? valid - owed : 0n };
+  }
+
+  /**
+   * What an account holds and what of it can be used, at `at`. The header the page draws is
+   * true arithmetic: available = purchased + gifted − frozen, where gifted and purchased are what
+   * a start may use now, and frozen is what the open holds take out of it. A gift past its date
+   * that a running run still holds is that run's alone (`#usable`) and is in none of the three;
+   * `balance` is everything in the lots.
+   * @param {any} client @param {string} payer @param {Date} at @param {{ ignoreHoldOf?: string | null }} [options]
+   * @returns {Promise<WalletSnapshot>}
+   */
+  async #read(client, payer, at, { ignoreHoldOf = null } = {}) {
+    const state = await this.#usable(client, payer, at, { ignoreHoldOf });
     const next = (await client.query(
       `SELECT expires_at, sum(remaining)::text AS amount FROM evimed_credits.simulated_lots
-        WHERE payer=$1 AND kind='gifted' AND remaining>0 AND expires_at = (
-          SELECT min(expires_at) FROM evimed_credits.simulated_lots WHERE payer=$1 AND kind='gifted' AND remaining>0)
-        GROUP BY expires_at`, [payer])).rows[0];
-    const purchased = unitsOf(totals.purchased);
-    const gifted = unitsOf(totals.gifted);
-    const balance = purchased + gifted;
-    const available = balance > frozen ? balance - frozen : 0n;
+        WHERE payer=$1 AND kind='gifted' AND remaining>0 AND expires_at > $2::timestamptz AND expires_at = (
+          SELECT min(expires_at) FROM evimed_credits.simulated_lots WHERE payer=$1 AND kind='gifted' AND remaining>0 AND expires_at > $2::timestamptz)
+        GROUP BY expires_at`, [payer, at.toISOString()])).rows[0];
+    const shownFrozen = state.frozen - state.backed;
     return {
-      available: researchMoneyDecimal(available), balance: researchMoneyDecimal(balance),
-      purchased: researchMoneyDecimal(purchased), gifted: researchMoneyDecimal(gifted), frozen: researchMoneyDecimal(frozen),
+      available: researchMoneyDecimal(state.usable), balance: researchMoneyDecimal(state.purchased + state.gifted + state.lapsed),
+      purchased: researchMoneyDecimal(state.purchased), gifted: researchMoneyDecimal(state.gifted), frozen: researchMoneyDecimal(shownFrozen),
       nextExpiry: next ? { amount: String(next.amount), at: new Date(next.expires_at).toISOString() } : null,
     };
   }
@@ -507,15 +661,16 @@ export class CreditWallet {
    * An account's balance: what is held, what of it is frozen, what is available,
    * and the next gift to expire. The first read creates the wallet and grants the
    * sign-up gift.
-   * @param {string} payer @param {{ client?: any }} [options]
+   * @param {string} payer @param {{ client?: any, ignoreHoldOf?: string | null }} [options] `ignoreHoldOf` leaves one run's
+   *   own hold out of what is frozen: the question a run's own follow-up is asked, or a replay of its own start
    * @returns {Promise<WalletSnapshot>}
    */
-  async snapshot(payer, { client = null } = {}) {
+  async snapshot(payer, { client = null, ignoreHoldOf = null } = {}) {
     payerOf(payer);
     await this.ready();
     return this.#within(client, async (/** @type {any} */ tx) => {
-      await this.#prepare(tx, payer, this.now());
-      return this.#read(tx, payer);
+      const { at } = await this.#prepare(tx, payer);
+      return this.#read(tx, payer, at, { ignoreHoldOf });
     });
   }
 
@@ -534,22 +689,16 @@ export class CreditWallet {
     }
     await this.ready();
     return this.#within(client, async (/** @type {any} */ tx) => {
-      const at = this.now();
-      await this.#prepare(tx, payer, at);
+      const { at } = await this.#prepare(tx, payer);
       const prior = (await tx.query("SELECT payer, status, amount::text AS amount FROM evimed_credits.simulated_holds WHERE run_id=$1", [runId])).rows[0];
       if (prior) {
         if (prior.payer !== payer) throw new SimulatedWalletRefusal("simulated_wallet_request_conflict", 409);
         // What is frozen now: a hold that has been released, or swept, freezes nothing and is never placed again.
         return { held: prior.status === "open" ? String(prior.amount) : researchMoneyDecimal(0n), replay: true };
       }
-      // What can be frozen is what is valid now and not already frozen: a lot whose
-      // date has passed is not backing a start that begins after it.
-      const valid = unitsOf((await tx.query(
-        `SELECT coalesce(sum(remaining),0)::text AS valid FROM evimed_credits.simulated_lots
-          WHERE payer=$1 AND remaining>0 AND (expires_at IS NULL OR expires_at > $2::timestamptz)`, [payer, at.toISOString()])).rows[0].valid);
-      const frozen = unitsOf((await tx.query(
-        "SELECT coalesce(sum(amount),0)::text AS frozen FROM evimed_credits.simulated_holds WHERE payer=$1 AND status='open'", [payer])).rows[0].frozen);
-      const free = valid > frozen ? valid - frozen : 0n;
+      // What can be frozen is what a start may use now (`#usable`): a lot whose date has passed is not backing a
+      // start that begins after it, and what another run's hold has frozen is not free.
+      const free = (await this.#usable(tx, payer, at)).usable;
       const held = wanted < free ? wanted : free;
       if (held <= 0n) return { held: researchMoneyDecimal(0n), replay: false };
       await tx.query(
@@ -594,7 +743,7 @@ export class CreditWallet {
    * Take up to `amount` for one finished run, release its hold, and say what was
    * taken and from where — one operation under the wallet's lock.
    *
-   * Never more than is available: what the account holds minus what other runs
+   * Never more than a start may use (`#usable`): what the account holds minus what other runs
    * have frozen, counting only the lots that were valid when this run's hold was
    * placed (or now, for a run with none). The shortfall is returned, not owed:
    * the caller records it as absorbed by the platform. The balance never goes
@@ -602,8 +751,8 @@ export class CreditWallet {
    * nothing more.
    *
    * @param {{ payer: string, requestId: string, amount: string | number, holdRunId?: string | null, occurredAt?: string | null, client?: any }} request
-   * @returns {Promise<{ taken: string, shortfall: string, lots: LotDraw[], balance: string, receiptId: string | null, replay: boolean }>}
-   *   `balance` is what the charge left, the balance its own entry records
+   * @returns {Promise<{ taken: string, shortfall: string, lots: LotDraw[], balance: string, receiptId: string | null, at: string, replay: boolean }>}
+   *   `balance` is what the charge left, the balance its own entry records; `at` is when the wallet wrote it
    */
   async settle({ payer, requestId, amount, holdRunId = null, occurredAt = null, client = null }) {
     payerOf(payer);
@@ -614,15 +763,15 @@ export class CreditWallet {
     const stamp = typeof occurredAt === "string" && Number.isFinite(Date.parse(occurredAt)) ? new Date(occurredAt).toISOString() : null;
     await this.ready();
     return this.#within(client, async (/** @type {any} */ tx) => {
-      const at = this.now();
       // A wallet exists from its first sight, a charge's included: work that was
       // done is charged, and an account that never opened the page has the gift
       // it would have been granted when it did.
-      await this.#prepare(tx, payer, at);
-      const prior = (await tx.query("SELECT entry_id,payer,kind,credits::text AS credits,balance_after::text AS balance_after,receipt_id FROM evimed_credits.simulated_entries WHERE request_id=$1", [requestId])).rows[0];
+      const { at } = await this.#prepare(tx, payer);
+      const prior = (await tx.query("SELECT entry_id,payer,kind,credits::text AS credits,balance_after::text AS balance_after,receipt_id,created_at FROM evimed_credits.simulated_entries WHERE request_id=$1", [requestId])).rows[0];
       if (prior) {
         if (prior.payer !== payer || prior.kind !== "deduct") throw new SimulatedWalletRefusal("simulated_wallet_request_conflict", 409);
-        return { taken: String(prior.credits), shortfall: researchMoneyDecimal(0n), lots: await this.#draws(tx, prior.entry_id), balance: String(prior.balance_after), receiptId: String(prior.receipt_id), replay: true };
+        return { taken: String(prior.credits), shortfall: researchMoneyDecimal(0n), lots: await this.#draws(tx, prior.entry_id), balance: String(prior.balance_after),
+          receiptId: String(prior.receipt_id), at: new Date(prior.created_at).toISOString(), replay: true };
       }
       /** @type {Date | null} */
       let asOf = null;
@@ -637,49 +786,44 @@ export class CreditWallet {
         }
       }
       const validAt = asOf && asOf < at ? asOf : at;
-      const eligible = (await tx.query(
-        `SELECT lot_id, kind, source, expires_at, remaining::text AS remaining FROM evimed_credits.simulated_lots
-          WHERE payer=$1 AND remaining>0 AND (expires_at IS NULL OR expires_at > $2::timestamptz)
-          ORDER BY (kind='purchased'), expires_at ASC NULLS LAST, created_at ASC, lot_id ASC FOR UPDATE`,
-        [payer, validAt.toISOString()])).rows;
-      const held = unitsOf((await tx.query(
-        "SELECT coalesce(sum(amount),0)::text AS frozen FROM evimed_credits.simulated_holds WHERE payer=$1 AND status='open'", [payer])).rows[0].frozen);
-      const usable = eligible.reduce((/** @type {bigint} */ sum, /** @type {any} */ row) => sum + unitsOf(row.remaining), 0n);
-      const capacity = usable > held ? usable - held : 0n;
-      const take = requested < capacity ? requested : capacity;
+      const state = await this.#usable(tx, payer, validAt, { lock: true });
+      const take = requested < state.usable ? requested : state.usable;
       /** @type {LotDraw[]} */
       const draws = [];
-      let balance = unitsOf((await tx.query("SELECT balance::text AS balance FROM evimed_credits.simulated_wallets WHERE payer=$1", [payer])).rows[0].balance);
+      let balance = await this.#syncBalance(tx, payer);
       let receiptId = null;
       if (take > 0n) {
         let left = take;
         /** @type {Array<{ row: any, amount: bigint }>} */
         const plan = [];
-        for (const row of eligible) {
+        for (const row of state.eligible) {
           if (left === 0n) break;
           const have = unitsOf(row.remaining);
           const part = have < left ? have : left;
           plan.push({ row, amount: part });
           left -= part;
         }
-        balance -= take;
+        for (const { row, amount: part } of plan) {
+          await tx.query("UPDATE evimed_credits.simulated_lots SET remaining=remaining-$2 WHERE lot_id=$1", [row.lot_id, researchMoneyDecimal(part)]);
+        }
+        balance = await this.#syncBalance(tx, payer);
         receiptId = `sim_rcpt_${digest(requestId).slice(0, 24)}`;
-        await tx.query("UPDATE evimed_credits.simulated_wallets SET balance=$2 WHERE payer=$1", [payer, researchMoneyDecimal(balance)]);
         const entry = (await tx.query(
           `INSERT INTO evimed_credits.simulated_entries(payer,kind,request_id,credits,balance_after,receipt_id,occurred_at,created_at)
            VALUES($1,'deduct',$2,$3,$4,$5,$6::timestamptz,$7::timestamptz) RETURNING entry_id`,
           [payer, requestId, researchMoneyDecimal(take), researchMoneyDecimal(balance), receiptId, stamp, at.toISOString()])).rows[0];
         for (const { row, amount: part } of plan) {
-          await tx.query("UPDATE evimed_credits.simulated_lots SET remaining=remaining-$2 WHERE lot_id=$1", [row.lot_id, researchMoneyDecimal(part)]);
           await tx.query("INSERT INTO evimed_credits.simulated_draws(entry_id,lot_id,amount) VALUES($1,$2,$3)", [entry.entry_id, row.lot_id, researchMoneyDecimal(part)]);
           draws.push({ lotId: String(row.lot_id), kind: row.kind, source: row.source, expiresAt: row.expires_at == null ? null : new Date(row.expires_at).toISOString(), amount: researchMoneyDecimal(part) });
         }
+        await tx.query("UPDATE evimed_credits.simulated_wallets SET reconciled_through=$2::bigint WHERE payer=$1", [payer, entry.entry_id]);
       }
       // The balance this charge left: what its entry records and its statement line shows. A gift a hold kept alive
       // past its date goes right after, as a line of its own that records its own balance.
       const afterCharge = balance;
       await this.#expireDue(tx, payer, at);
-      return { taken: researchMoneyDecimal(take), shortfall: researchMoneyDecimal(requested - take), lots: draws, balance: researchMoneyDecimal(afterCharge), receiptId, replay: false };
+      return { taken: researchMoneyDecimal(take), shortfall: researchMoneyDecimal(requested - take), lots: draws, balance: researchMoneyDecimal(afterCharge),
+        receiptId, at: at.toISOString(), replay: false };
     });
   }
 
@@ -696,7 +840,8 @@ export class CreditWallet {
    * Add 灵豆 the account bought, once per `requestId`: a purchased lot, which
    * never expires.
    * @param {{ payer: string, amount: string | number, requestId: string, packageId?: string | null }} request
-   * @returns {Promise<{ order: ReturnType<typeof order>, balance: string, duplicate: boolean }>}
+   * @returns {Promise<{ order: ReturnType<typeof order>, balance: string, available: string, duplicate: boolean }>}
+   *   `balance` is everything the wallet holds, `available` what of it a start may use now: the number a page shows after a top-up
    */
   async credit({ payer, amount, requestId, packageId = null }) {
     payerOf(payer);
@@ -706,20 +851,20 @@ export class CreditWallet {
     const key = `topup:${digest(`${payer}\0${requestId}`).slice(0, 40)}`;
     await this.ready();
     return this.database.transaction(async (/** @type {any} */ tx) => {
-      const at = this.now();
-      await this.#prepare(tx, payer, at);
+      const { at } = await this.#prepare(tx, payer);
       const prior = (await tx.query("SELECT payer,kind,package_id,credits::text AS credits,receipt_id,created_at FROM evimed_credits.simulated_entries WHERE request_id=$1", [key])).rows[0];
-      const wallet = (await tx.query("SELECT balance::text AS balance FROM evimed_credits.simulated_wallets WHERE payer=$1", [payer])).rows[0];
       if (prior) {
         if (prior.payer !== payer || prior.kind !== "topup" || prior.package_id !== packageId || unitsOf(prior.credits) !== units) {
           throw new SimulatedWalletRefusal("simulated_wallet_request_conflict", 409);
         }
-        return { order: order(prior), balance: String(wallet.balance), duplicate: true };
+        const read = await this.#read(tx, payer, at);
+        return { order: order(prior), balance: read.balance, available: read.available, duplicate: true };
       }
       const added = await this.#addLot(tx, {
         payer, kind: "purchased", source: "topup", amount: units, requestId: key, at, entryKind: "topup", receiptPrefix: "sim_order_", packageId,
       });
-      return { order: order(added.entry), balance: researchMoneyDecimal(added.balance), duplicate: false };
+      const read = await this.#read(tx, payer, at);
+      return { order: order(added.entry), balance: read.balance, available: read.available, duplicate: false };
     });
   }
 
@@ -742,8 +887,7 @@ export class CreditWallet {
     await this.ready();
     const key = `grant:op:${digest(`${payer}\0${requestId}`).slice(0, 40)}`;
     return this.database.transaction(async (/** @type {any} */ tx) => {
-      const at = this.now();
-      await this.#prepare(tx, payer, at);
+      const { at } = await this.#prepare(tx, payer);
       const prior = (await tx.query("SELECT * FROM evimed_credits.simulated_lots WHERE request_id=$1", [key])).rows[0];
       if (prior) {
         if (prior.payer !== payer || prior.source !== source || unitsOf(prior.granted) !== units) throw new SimulatedWalletRefusal("simulated_wallet_request_conflict", 409);
@@ -769,45 +913,75 @@ export class CreditWallet {
    * time, each as its own statement line. The credits worker's sweep; every
    * operation on a wallet does the same for that wallet, so this is what makes a
    * dormant account's expiry appear without anyone opening the page.
+   *
+   * A wallet that fails — whatever is wrong with it — is skipped and counted, and the rest of the batch
+   * goes on: one bad wallet never starves the others every tick (review F10). Each wallet is
+   * reconciled with what the one-number code wrote before its lots are expired.
    * @param {{ limit?: number, payer?: string | null }} [options] `payer` sweeps one wallet only
-   * @returns {Promise<{ wallets: number }>}
+   * @returns {Promise<{ wallets: number, failed: number }>}
    */
   async sweepExpiry({ limit = 200, payer: only = null } = {}) {
     await this.ready();
     const bound = Math.max(1, Math.min(1_000, Math.floor(Number(limit) || 200)));
     const due = (await this.database.query(
-      `SELECT DISTINCT payer FROM (SELECT payer FROM evimed_credits.simulated_lots
-         WHERE kind='gifted' AND remaining>0 AND expires_at <= $1::timestamptz AND ($3::text IS NULL OR payer=$3)
-         ORDER BY expires_at LIMIT $2) due`,
+      `SELECT DISTINCT payer FROM (SELECT l.payer FROM evimed_credits.simulated_lots l
+         WHERE l.kind='gifted' AND l.remaining>0 AND l.expires_at <= $1::timestamptz AND ($3::text IS NULL OR l.payer=$3)
+           AND NOT EXISTS (SELECT 1 FROM evimed_credits.simulated_holds h WHERE h.payer=l.payer AND h.status='open' AND h.placed_at < l.expires_at)
+         ORDER BY l.expires_at LIMIT $2) due`,
       [this.now().toISOString(), bound, only])).rows;
+    let failed = 0;
     for (const { payer } of due) {
-      await this.database.transaction(async (/** @type {any} */ tx) => {
-        const at = this.now();
-        // Lock first, then expire what is due under the lock.
-        await tx.query("SELECT 1 FROM evimed_credits.simulated_wallets WHERE payer=$1 FOR UPDATE", [payer]);
-        await this.#expireDue(tx, payer, at);
-      });
+      try {
+        await this.database.transaction(async (/** @type {any} */ tx) => {
+          // Lock first; then bring the lots up to what the old code wrote, then expire what is due under the lock.
+          await tx.query("SELECT 1 FROM evimed_credits.simulated_wallets WHERE payer=$1 FOR UPDATE", [payer]);
+          const at = this.now();
+          await this.#reconcile(tx, payer, at);
+          await this.#expireDue(tx, payer, at);
+        });
+      } catch {
+        failed += 1;
+      }
     }
-    return { wallets: due.length };
+    return { wallets: due.length - failed, failed };
   }
 
   /**
-   * Gifted lots with something left that end within `days` days, with whose
-   * account they are, for the reminder sweep.
-   * @param {number} days
-   * @returns {Promise<Array<{ userId: string, payer: string, lotId: string, remaining: string, expiresAt: string, createdAt: string, source: string }>>}
+   * The gifted lots that are due a reminder now and have not had it: within 7 days of their end, or within 1,
+   * old enough to have had that mark, with something left, and no reminder written yet for that day count.
+   * The same rule as `expiryReminderDue`, decided in the database so the sweep reads only what needs work and
+   * a thousand lots that all end at one instant are read a batch at a time and never again.
+   * @param {{ limit?: number, skip?: readonly string[] }} [options] `skip` names lot ids to leave out (ones that failed lately)
+   * @returns {Promise<Array<{ userId: string, payer: string, lotId: string, remaining: string, expiresAt: string, createdAt: string, source: string, days: 7 | 1 }>>}
    */
-  async lotsEndingWithin(days) {
+  async lotsDueForReminder({ limit = 200, skip = [] } = {}) {
     await this.ready();
     const at = this.now();
     const rows = (await this.database.query(
-      `SELECT w.user_id, l.payer, l.lot_id, l.remaining::text AS remaining, l.expires_at, l.created_at, l.source
-         FROM evimed_credits.simulated_lots l JOIN evimed_credits.simulated_wallets w ON w.payer=l.payer
-        WHERE l.kind='gifted' AND l.remaining>0 AND l.expires_at > $1::timestamptz AND l.expires_at <= $2::timestamptz
-        ORDER BY l.expires_at, l.lot_id LIMIT 1000`,
-      [at.toISOString(), new Date(at.getTime() + days * 86_400_000).toISOString()])).rows;
+      `SELECT w.user_id, l.payer, l.lot_id, l.remaining::text AS remaining, l.expires_at, l.created_at, l.source, d.days
+         FROM evimed_credits.simulated_lots l
+         JOIN evimed_credits.simulated_wallets w ON w.payer=l.payer
+         CROSS JOIN LATERAL (SELECT CASE
+             WHEN $1::timestamptz >= l.expires_at - interval '1 day' AND l.created_at < l.expires_at - interval '1 day' THEN 1
+             WHEN $1::timestamptz >= l.expires_at - interval '7 days' AND l.created_at < l.expires_at - interval '7 days' THEN 7 END AS days) d
+        WHERE l.kind='gifted' AND l.remaining>0 AND l.expires_at > $1::timestamptz AND d.days IS NOT NULL
+          AND NOT EXISTS (SELECT 1 FROM evimed_credits.simulated_reminders r WHERE r.lot_id=l.lot_id AND r.days=d.days)
+          AND NOT (l.lot_id::text = ANY($3::text[]))
+        ORDER BY l.expires_at, l.lot_id LIMIT $2`,
+      [at.toISOString(), Math.max(1, Math.min(1_000, limit)), skip])).rows;
     return rows.map((/** @type {any} */ row) => ({ userId: row.user_id, payer: row.payer, lotId: String(row.lot_id), remaining: String(row.remaining),
-      expiresAt: new Date(row.expires_at).toISOString(), createdAt: new Date(row.created_at).toISOString(), source: row.source }));
+      expiresAt: new Date(row.expires_at).toISOString(), createdAt: new Date(row.created_at).toISOString(), source: row.source, days: /** @type {7 | 1} */ (Number(row.days)) }));
+  }
+
+  /**
+   * Write down that a lot's reminder for a day count has been sent. Once: a second call is a no-op.
+   * @param {string} lotId @param {number} days @returns {Promise<boolean>} whether this call wrote it
+   */
+  async markReminded(lotId, days) {
+    await this.ready();
+    const result = await this.database.query(
+      "INSERT INTO evimed_credits.simulated_reminders(lot_id,days) VALUES($1,$2) ON CONFLICT DO NOTHING", [lotId, days]);
+    return (result.rowCount ?? 0) > 0;
   }
 
   /**
