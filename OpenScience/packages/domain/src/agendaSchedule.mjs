@@ -42,8 +42,21 @@ function wall(format, instant) {
   const parts = Object.fromEntries(format.formatToParts(instant).map(part => [part.type, part.value]))
   return `${parts.year}-${parts.month}-${parts.day}T${parts.hour}:${parts.minute}`
 }
-/** @param {string} timeZone @param {string|Date} now */
+/**
+ * The calendar day (`YYYY-MM-DD`) an instant falls on in a zone: the one helper
+ * for a day a person reads or a boundary a person's schedule defines. `toISOString().slice(0, 10)`
+ * is the UTC day, which is the day before for the first eight hours of a day in China
+ * -- a 07:00 briefing dated yesterday. Not for machine keys, calendar arithmetic on a date
+ * that is already a date, or a provider's own UTC field: those stay as they are.
+ * @param {string} timeZone @param {string|Date} now
+ */
 export function agendaLocalDate(timeZone, now) { return wall(formatter(timeZone), new Date(now).getTime()).slice(0, 10) }
+/**
+ * The zone a day is read in when nothing narrower names one (the agenda's own,
+ * the frontier feed's, the GEO module's): the deployment's researchers are in China,
+ * which has had one offset since 1991.
+ */
+export const DISPLAY_TIME_ZONE = 'Asia/Shanghai'
 /** @param {AgendaSchedule} schedule @param {string} date @returns {AgendaOccurrence} */
 function occurrenceOn(schedule, date) {
   const target = `${date}T${schedule.time}`
