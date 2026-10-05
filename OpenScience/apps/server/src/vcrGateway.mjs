@@ -1228,6 +1228,11 @@ const WRITERS = {
     if (state !== "unknown" && !evidence.length) {
       return void item.bad("evidence", "判为满足或不满足必须带原句证据；判断不了就写 unknown。");
     }
+    // An `unknown` carries no quotation, so nothing else ties it to a person: without this an invented key became a
+    // candidate the next evaluation counted (production, 2026-10-05: a run's two probe keys made a roster of 240 read 242).
+    if (!(await studyHoldsSubject({ matchStore, documents, study, subjectKey: String(subjectKey), seen: extra }))) {
+      return void item.bad("subjectKey", `本研究里没有编号为「${String(subjectKey).slice(0, 60)}」的受试者：编号取自 vcr_read what:matching 的受试者清单或 what:subject_document，不要自拟。`);
+    }
     /** @type {any[]} */
     const anchored = [];
     for (const [at, entry] of evidence.entries()) {
@@ -1521,6 +1526,24 @@ async function loadPoolJob(store, study, jobId, parameter) {
  *   fact: { surface?: string, dateSurface?: string, value?: number }, field?: string }} input
  * @returns {Promise<{ document: { id: string, text: string, visibleAt: string | null }, span: { start: number, end: number, quote: string } } | null>}
  */
+/**
+ * Whether a subject key names someone this study has: an assessment or a fact in the ledger, or a document in the plane.
+ * A row of the subject table has an assessment once an evaluation ran, which is also the only way a run learns its key.
+ * `seen` is the request's own scratch, so a batch asks once per subject.
+ * @param {{ matchStore: any, documents: any, study: any, subjectKey: string, seen: Record<string, any> }} input
+ */
+async function studyHoldsSubject({ matchStore, documents, study, subjectKey, seen }) {
+  const known = (seen.heldSubjects ??= new Map());
+  if (known.has(subjectKey)) return known.get(subjectKey);
+  let held = typeof matchStore?.holdsSubject === "function" ? await matchStore.holdsSubject(study.id, subjectKey) : false;
+  if (!held && typeof documents?.subjectDocuments === "function") {
+    const listed = await documents.subjectDocuments(study, { subjectKey }).catch(() => null);
+    held = Boolean(listed?.available && listed.documents?.length);
+  }
+  known.set(subjectKey, held);
+  return held;
+}
+
 async function verifySourceSpan({ item, documents, study, subjectKey, documentId, span, fact, field = "documentId" }) {
   if (typeof documents?.read !== "function") {
     item.bad(field, "病历文档未接入本部署：事实无法在原文里核对，没有写入。", "vcr_write_refused");

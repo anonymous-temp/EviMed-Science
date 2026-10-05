@@ -58,6 +58,10 @@ const documents = {
     const found = DOCUMENTS.get(documentId);
     return found && found.subjectKey === subjectKey ? { id: documentId, text: found.text, visibleAt: found.visibleAt, subjectKey } : null;
   },
+  // The seam's own answer for one subject (`vcrDocumentsSeam.subjectDocuments`): that subject's documents, no text.
+  async subjectDocuments(_study, { subjectKey }) {
+    return { available: true, documents: [...DOCUMENTS].filter(([, entry]) => entry.subjectKey === subjectKey).map(([id, entry]) => ({ id, visibleAt: entry.visibleAt })) };
+  },
 };
 
 before(async () => {
@@ -905,4 +909,24 @@ test("an EU CTIS precedent is fetched through the same write, its planned enrolm
   const items = await vcr.evidenceStore.listEvidenceItems({ userId: USER, studyId: study.id, parameter: "enrollment_estimated" });
   assert.deepEqual(items.map((item) => [Number(item.value), item.enrollment_kind ?? item.enrollmentKind]).sort(), [[8, "estimated"], [8, "estimated"], [8, "estimated"]]);
   assert.ok(items.every((item) => item.historical_baseline === false || item.historicalBaseline === false), "a plan is never a baseline");
+});
+
+test("an answer names a subject the study has: an invented key is refused and never becomes a candidate", options, async () => {
+  // Production, 2026-10-05 (release 5): a matching run tried the write with two keys of its own, `unknown` and no evidence.
+  // Both were accepted, the next evaluation took every judged key as a candidate, and a roster of 240 read 242.
+  DOCUMENTS.set("doc-p3", { subjectKey: "P-003", text: "门诊随访记录。", visibleAt: "2026-09-03T00:00:00.000Z" });
+  const result = await write("language_judgment", [
+    { subjectKey: "P-999-not-a-subject", criterionKey: "consent", state: "unknown", evidence: [] },
+    // P-003 has no fact and no assessment, only a document in the plane: it is a subject of this study.
+    { subjectKey: "P-003", criterionKey: "consent", state: "unknown", evidence: [] },
+  ]);
+  assert.equal(result.ids.length, 1, JSON.stringify(result.issues));
+  assert.deepEqual(result.issues.map((issue) => [issue.index, issue.field]), [[0, "subjectKey"]]);
+  assert.match(result.issues[0].message, /没有编号为「P-999-not-a-subject」的受试者/);
+  const stored = await vcr.matchStore.latestLanguageJudgments({ studyId: study.id });
+  assert.equal(stored.has("P-999-not-a-subject"), false, "nothing was written for the invented key");
+  assert.equal(stored.get("P-003").consent.state, "unknown");
+  // The same key against the other study, which has none of these subjects.
+  assert.equal(await vcr.matchStore.holdsSubject(otherStudy.id, "P-001"), false);
+  assert.equal(await vcr.matchStore.holdsSubject(study.id, "P-001"), true, "a subject with a recorded fact is held");
 });

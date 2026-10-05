@@ -673,6 +673,18 @@ export class VcrMatchStore extends VcrStoreBase {
   }
 
   /** The subjects that have facts, with how many. @param {string} studyId */
+  /**
+   * Whether the study's ledger already holds this subject: an assessment (every row of the subject table has one once an
+   * evaluation ran) or a recorded fact (which is anchored in one of the subject's own documents).
+   * @param {string} studyId @param {string} subjectKey @returns {Promise<boolean>}
+   */
+  async holdsSubject(studyId, subjectKey) {
+    const rows = await this.rows(
+      `SELECT (EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.matching_assessments WHERE study_id = $1 AND subject_key = $2)
+            OR EXISTS (SELECT 1 FROM ${VCR_SCHEMA}.matching_facts WHERE study_id = $1 AND subject_key = $2)) AS held`, [studyId, subjectKey]);
+    return rows[0]?.held === true;
+  }
+
   async factSubjects(studyId) {
     const rows = await this.rows(
       `SELECT subject_key, count(*)::int AS facts FROM ${VCR_SCHEMA}.matching_facts WHERE study_id = $1 GROUP BY subject_key ORDER BY subject_key`, [studyId]);
