@@ -127,9 +127,11 @@ class PostgresBackupTests(unittest.TestCase):
             "EVIMED_POSTGRES_USER": "evimed",
         }
 
-    def fake_snapshot_session(self, commands):
+    def fake_snapshot_session(self, commands, references=None):
         identity = {"database": "evimed", "databaseOid": "16384", "systemIdentifier": "12345"}
         count = json.dumps({"schema": "public", "table": "memo", "rows": "2"})
+        # `None`: this database has no VCR schema, so the dump names no data-plane file.
+        named = references
 
         class Session:
             def __init__(self, _base, _role, database):
@@ -144,6 +146,10 @@ class PostgresBackupTests(unittest.TestCase):
                     return ["0001-0001-1"]
                 if sql == MODULE.COUNTS_SQL:
                     return [count]
+                if sql == MODULE.VCR_REFERENCES_PRESENT_SQL:
+                    return ["f" if named is None else "t"]
+                if sql == MODULE.VCR_REFERENCES_SQL:
+                    return [json.dumps(row) for row in named]
                 raise AssertionError(sql)
 
             def close(self):
@@ -188,6 +194,43 @@ class PostgresBackupTests(unittest.TestCase):
             self.assertNotIn("createdb", flattened)
             self.assertNotIn("dropdb", flattened)
             self.assertFalse(any("restoreVerified" in key for key in receipt))
+
+    def test_capture_member_records_the_data_plane_files_its_snapshot_names(self):
+        sha = "a" * 64
+        named = [{"location": f"studies/s1/sources/x/{sha}.csv", "sha256": sha},
+                 {"location": "studies/s1/.pseudonym-key", "sha256": None}]
+        with tempfile.TemporaryDirectory() as root:
+            output = Path(root).resolve() / "member"
+            output.mkdir()
+            environment = self.recovery_environment(root)
+            session, command, _identity = self.fake_snapshot_session([], references=named)
+            with patch.dict(os.environ, environment, clear=False), \
+                    patch.object(MODULE, "PsqlSession", session), patch.object(MODULE, "command", side_effect=command):
+                MODULE.capture_member(output)
+            receipt = json.loads((output / "postgres.dump.enc.capture.json").read_text())
+            self.assertEqual(receipt["fileReferences"], named)
+            # A deployment with no VCR schema names no file, and that is a list, not a missing key.
+            other = Path(root).resolve() / "plain"
+            other.mkdir()
+            session, command, _identity = self.fake_snapshot_session([])
+            with patch.dict(os.environ, environment, clear=False), \
+                    patch.object(MODULE, "PsqlSession", session), patch.object(MODULE, "command", side_effect=command):
+                MODULE.capture_member(other)
+            self.assertEqual(json.loads((other / "postgres.dump.enc.capture.json").read_text())["fileReferences"], [])
+
+    def test_capture_member_refuses_a_reference_that_could_leave_the_data_plane(self):
+        for bad in [{"location": "../escape", "sha256": None}, {"location": "/absolute", "sha256": None},
+                    {"location": "studies/a/../../b", "sha256": None}, {"location": "studies/a/f", "sha256": "xyz"}]:
+            with self.subTest(bad=bad), tempfile.TemporaryDirectory() as root:
+                output = Path(root).resolve() / "member"
+                output.mkdir()
+                session, command, _identity = self.fake_snapshot_session([], references=[bad])
+                with patch.dict(os.environ, self.recovery_environment(root), clear=False), \
+                        patch.object(MODULE, "PsqlSession", session), patch.object(MODULE, "command", side_effect=command):
+                    with self.assertRaises(MODULE.BackupError) as refused:
+                        MODULE.capture_member(output)
+                self.assertEqual(refused.exception.code, "postgres_references_invalid")
+                self.assertEqual(list(output.iterdir()), [])
 
     def test_restore_clone_creates_only_the_validated_absent_target_and_keeps_it_for_semantic_probes(self):
         with tempfile.TemporaryDirectory() as root:

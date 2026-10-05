@@ -75,6 +75,7 @@ import { SIMULATED_INCARNATION_SQL, SimulatedWalletRefusal, simulatedPayerId } f
 import { runUsageKeys, autopilotUsageScope } from "./runUsage.mjs";
 import { exactBillingPolicy, migrateEvimedCredits, researchBillingPolicy } from "./evimedCreditsPersistence.mjs";
 import { OPEN_DOMAIN_ANSWER_AGENT_ID } from "./specialistRouting.mjs";
+import { vcrRunUsageScope } from "./vcrUsageScope.mjs";
 
 /**
  * The waits between attempts, in milliseconds. Bounded on purpose: after the
@@ -484,7 +485,10 @@ export class EvimedCreditsService {
     const logical = successful ? autopilotUsageScope(run) : null;
     const runId = logical ? `research_${createHash('sha256').update(`${userId}\0${logical}`).digest('hex')}` : physicalId;
     await migrateEvimedCredits(this.database);
-    const ids = successful ? runUsageKeys({ ...run, id: physicalId }).map(id => productId(id, 'run')) : [physicalId];
+    // A 虚拟临研 module run also settles what its study's own model calls cost that no run asked for
+    // (`vcrUsageScope.mjs`): each request is attributed once, to whichever of the study's runs settles first.
+    const studyScope = successful ? vcrRunUsageScope(run) : null;
+    const ids = successful ? [...runUsageKeys({ ...run, id: physicalId }), ...(studyScope ? [studyScope] : [])].map(id => productId(id, 'run')) : [physicalId];
 
     // Failed platform work retains its costs as evidence but is waived. A
     // cancellation is not evidence of an earned stage, so it is waived too.
@@ -574,7 +578,10 @@ export class EvimedCreditsService {
       // What a run used: all of it for a run that completed (a bounded run's calls sit under its dispatch id, an
       // autopilot episode's under the logical task); only its own two ids for a stop, so a stopped attempt is never
       // charged for a sibling's spend; and only its own id where nothing is charged and the calls are kept as evidence.
-      const ids = decision.basis === 'completed' ? runUsageKeys({ ...run, id: physicalId }).map(id => productId(id, 'run'))
+      // A completed 虚拟临研 module run also settles what its study's own model calls cost that no run asked for
+      // (`vcrUsageScope.mjs`): each request is attributed once, to whichever of the study's runs settles first.
+      const studyScope = decision.basis === 'completed' ? vcrRunUsageScope(run) : null;
+      const ids = decision.basis === 'completed' ? [...runUsageKeys({ ...run, id: physicalId }), ...(studyScope ? [studyScope] : [])].map(id => productId(id, 'run'))
         : decision.basis === 'user_stop' ? [...new Set([physicalId, run.dispatchId].filter(id => typeof id === 'string' && id))].map(id => productId(id, 'run'))
           : [physicalId];
       const researcherOwned = isChargeableResearchRun(run);

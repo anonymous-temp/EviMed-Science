@@ -2545,7 +2545,17 @@ export class VcrDataPlane {
     // 0600 (the engine runs as another user), read only through `identityOf`.
     const identityFile = path.join(root, studyRelative(entry.studyId), "identity", `${snapshot.id}.csv`);
     await fs.mkdir(path.dirname(identityFile), { recursive: true, mode: 0o700 });
-    await fs.writeFile(identityFile, toCsv(["pseudonym", "source_id"], derived.identity), { mode: 0o600 });
+    // Replaced by rename, never truncated in place: the plane is archived while it
+    // is written (`scripts/ops/vcr-backup.mjs`), and a copy taken between a
+    // truncate and the write would restore a way back that is half a map.
+    const partialIdentity = `${identityFile}.${randomUUID()}.part`;
+    try {
+      await fs.writeFile(partialIdentity, toCsv(["pseudonym", "source_id"], derived.identity), { mode: 0o600 });
+      await fs.rename(partialIdentity, identityFile);
+    } catch (error) {
+      await fs.rm(partialIdentity, { force: true }).catch(() => {});
+      throw error;
+    }
 
     /** @type {any[]} */
     const registered = [];
@@ -3030,6 +3040,76 @@ export class VcrDataPlane {
     } finally { await opened.handle.close(); }
     if (sha256OfBytes(body) !== file.sha256) throw refuse(409, VCR_DATA_PLANE_CODES.fileChanged, "The document's bytes are not the ones that were uploaded.");
     return { id: file.id, name: file.name, text: body, subjectKey: file.detail?.subjectKey ?? null, visibleAt: file.detail?.visibleAt ?? null };
+  }
+
+  /**
+   * The newest snapshot of a study that derived a subject table, with that table's row.
+   * @param {string} studyId
+   */
+  async #latestSubjectTable(studyId) {
+    for (const snapshot of await this.store.listSnapshots({ studyId })) {
+      const table = (await this.store.listAnalysisTables({ snapshotId: snapshot.id, studyId })).find((/** @type {any} */ item) => item.shape === "subject");
+      if (table) return { snapshot, table };
+    }
+    return null;
+  }
+
+  /**
+   * Which subject table matching would read, and nothing of its content: the snapshot and the hash that name it, so a job's
+   * frozen inputs change when the table does. Metadata of the registry, read without judging a read of rows.
+   * @param {string} studyId
+   * @returns {Promise<{ snapshotId: string, sha256: string } | null>}
+   */
+  async subjectTableIdentity(studyId) {
+    const found = ID_PATTERN.test(String(studyId ?? "")) ? await this.#latestSubjectTable(studyId) : null;
+    return found ? { snapshotId: found.snapshot.id, sha256: found.table.sha256 } : null;
+  }
+
+  /**
+   * The study's subject table, as the control plane's matching reads it: the rows of the newest snapshot's subject table,
+   * after the same judgment every read of patient-level data gets — the principal's role and purpose, the source's grant,
+   * the seal on outcome columns, identifying columns left out — through `resolveSnapshotInputs`, which audits it.
+   * A column that judgment withholds is not in the answer, so a criterion that needs it is unknown rather than decided
+   * from a value the reader may not have. The bytes are verified against the hash the registry holds, parsed in memory and
+   * handed to the caller, which never writes a cell anywhere: nothing here reaches `evimed_vcr`, a run's workspace or a reply.
+   *
+   * @param {{ studyId: string, principal: string, purpose?: string | null }} entry
+   * @returns {Promise<{ available: true, snapshotId: string, sha256: string, header: string[], rows: string[][],
+   *     columns: { name: string, source: string, concept: string, unit: string | null, type: string | null }[], valueSource: string,
+   *     withheld: { shape?: string, reason: string, fields: string[] }[] }
+   *   | { available: false, reason: string, fields?: string[] }>}
+   */
+  async subjectTableForMatching(entry) {
+    this.root();
+    const studyId = String(entry.studyId ?? "");
+    const found = ID_PATTERN.test(studyId) ? await this.#latestSubjectTable(studyId) : null;
+    if (!found) return { available: false, reason: "no_subject_table" };
+    const resolved = await this.resolveSnapshotInputs({
+      studyId, snapshotId: found.snapshot.id, principal: String(entry.principal), purpose: entry.purpose ?? null, include: ["subject"], kind: "match_criteria",
+    });
+    const input = resolved.inputs.find((item) => item.shape === "subject");
+    if (!input) {
+      const held = resolved.withheld.find((item) => item.shape === "subject");
+      return { available: false, reason: held?.reason ?? "not_granted", ...(held?.fields?.length ? { fields: held.fields } : {}) };
+    }
+    const body = await fs.readFile(this.resolve(input.location), "utf8");
+    if (sha256OfBytes(body) !== input.hash) throw refuse(409, VCR_DATA_PLANE_CODES.fileChanged, "The subject table's bytes are not the ones the registry holds.");
+    const parsed = parseTable(body);
+    // What each column is: the field map's concept and unit, and where it has no unit, the dictionary's.
+    const fieldEntries = entriesOfRows(await this.store.listFieldMaps(found.snapshot.id), snapshotFreezeNotes(found.snapshot));
+    /** @type {Map<string, { unit?: string }>} */
+    const dictionary = new Map();
+    for (const file of await this.store.listSourceFilesForStudy(studyId)) {
+      if (file.role !== "dictionary") continue;
+      for (const item of Array.isArray(file.detail?.dictionary) ? file.detail.dictionary : []) dictionary.set(String(item.column ?? "").trim().toLowerCase(), item);
+    }
+    const columns = (found.table.derivedFrom?.columns ?? []).map((/** @type {any} */ mapped) => {
+      const described = fieldEntries.find((candidate) => candidate.column === mapped.source);
+      const unit = described?.unit || dictionary.get(String(mapped.source).trim().toLowerCase())?.unit || null;
+      return { name: String(mapped.name), source: String(mapped.source), concept: described?.concept ?? "", unit: unit ? String(unit) : null, type: described?.type ?? null };
+    });
+    return { available: true, snapshotId: found.snapshot.id, sha256: input.hash, header: parsed.header, rows: parsed.rows, columns, valueSource: input.valueSource,
+      withheld: resolved.withheld.map((item) => ({ ...(item.shape ? { shape: item.shape } : {}), reason: item.reason, fields: item.fields })) };
   }
 
   /**

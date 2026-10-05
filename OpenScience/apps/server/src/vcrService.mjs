@@ -1400,14 +1400,23 @@ export async function vcrReadiness({ config, vcr, database }) {
   if (config.vcrEngineReceiptKeyError) {
     throw readinessFailure("vcr_engine_receipt_key_unusable", { reason: String(config.vcrEngineReceiptKeyError) });
   }
+  // Composed is not answering (`vcrEngineProbe.mjs`): a stopped engine container read `wired` here until the
+  // two were told apart. `wired` stays for an engine nobody has asked yet, `answering` and `not_answering` are
+  // what the last contact (a job's, or a `/health` read) said. Not answering is a warning on a green check —
+  // an engine down makes the computations that need it wait, not the platform fail.
+  const composed = Boolean(vcr.engine?.configured?.());
+  const reading = composed ? vcr.engineProbe?.snapshot?.() ?? null : null;
+  const engine = !composed ? "missing" : reading?.state === "answering" ? "answering" : reading?.state === "not_answering" ? "not_answering" : "wired";
   const warnings = [
-    ...(vcr.engine?.configured?.() ? [] : ["vcr_engine_not_composed"]),
+    ...(composed ? [] : ["vcr_engine_not_composed"]),
+    ...(engine === "not_answering" ? ["vcr_engine_not_answering"] : []),
     ...(config.vcrDataPlaneDir ? [] : ["vcr_data_plane_not_configured"]),
     ...(vcr.service.engineMismatch?.length ? ["vcr_engine_catalogue_mismatch"] : []),
   ];
   return {
     enabled: true, status: "ok", audience: config.vcrAudience,
-    engine: vcr.engine?.configured?.() ? "wired" : "missing",
+    engine,
+    ...(engine === "not_answering" && reading?.checkedAt ? { engineCheckedAt: reading.checkedAt } : {}),
     ...(warnings.length ? { warning: warnings[0], warnings } : {}),
   };
 }

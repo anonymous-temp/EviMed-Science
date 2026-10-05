@@ -1293,6 +1293,38 @@ export function vcrGapsForRule(rule) {
   return table[rule] ? [table[rule]] : [];
 }
 
+/**
+ * How long a study's results must have stood still before an advisory review of
+ * them is queued, and how recent they must be to be reviewed at all.
+ *
+ * Hidden knowledge: a review is two paid calls of a minute or more each over the
+ * whole frozen study, and a study's results change in bursts — an assumption is
+ * edited, the light half recomputes at once and the heavy half queues behind it,
+ * and each time the queue drained a review of that moment was asked for. On
+ * 2026-10-04 one project held sixteen distinct snapshots reviewed this way, nearly
+ * all of them states a later one replaced a few minutes on. A review exists to
+ * give a second opinion on what the study concluded, so it is asked of the state
+ * the study settles into: results older than the quiet period, none newer than the
+ * last review, no work open. A study with no review at all is not reviewed from
+ * the day this shipped, only when it produces something (a day's freshness): an
+ * old study never costs two calls for being opened.
+ */
+export const VCR_REVIEW_QUIET_MS = 10 * 60_000;
+export const VCR_REVIEW_FRESH_MS = 24 * 3_600_000;
+
+/**
+ * Whether a study's results have settled and are not yet reviewed. Pure: the
+ * orchestrator reads the three times and decides here.
+ * @param {{ lastResultAt: unknown, lastReviewAt: unknown, now: Date, quietMs?: number, freshMs?: number }} input
+ */
+export function vcrReviewDue({ lastResultAt, lastReviewAt, now, quietMs = VCR_REVIEW_QUIET_MS, freshMs = VCR_REVIEW_FRESH_MS }) {
+  const result = lastResultAt ? new Date(/** @type {any} */ (lastResultAt)).getTime() : NaN;
+  if (!Number.isFinite(result)) return false;
+  const review = lastReviewAt ? new Date(/** @type {any} */ (lastReviewAt)).getTime() : -Infinity;
+  const at = now.getTime();
+  return result > review && at - result >= quietMs && at - result <= freshMs;
+}
+
 export class VcrOrchestrator {
   /**
    * @param {{ store: import("./vcrStore.mjs").VcrStore, jobs: import("./vcrJobs.mjs").VcrJobs, config?: Record<string, any>,
@@ -1331,6 +1363,8 @@ export class VcrOrchestrator {
     this.leaseSeconds = Math.max(60, Math.round(Number(config.vcrLeaseMs ?? 900_000) / 1000));
     /** @type {Map<string, Promise<unknown>>} one advance per study at a time, in this process */
     this.locks = new Map();
+    /** @type {Map<string, number>} when a settled-review request was last attempted for a study, so a review that cannot be queued is not rebuilt every tick */
+    this.reviewAttempts = new Map();
     this.counters = { ticks: 0, dispatched: 0, deferred: 0, dispatchFailed: 0, runsFinished: 0, jobsEnqueued: 0,
       jobsSkipped: 0, recomputes: 0, notices: 0, studyErrors: 0, verdicts: 0 };
     /** @type {string | null} */
@@ -1736,8 +1770,30 @@ export class VcrOrchestrator {
       study = await this.#observe(study, plan);
       await this.#nextRun(study, plan, result);
       await this.#notices(study);
+      await this.#reviewSettled(study);
       return result;
     });
+  }
+
+  /**
+   * Queue the advisory review of a study whose results have settled (`vcrReviewDue`). Pulled by the orchestrator's
+   * minute tick from the data itself, so it survives a restart and needs no mark: the review's own row is what
+   * says it was asked, and a review already asked for the same bytes is the same review (`studyReview.mjs`).
+   * @param {any} study
+   */
+  async #reviewSettled(study) {
+    if (!this.queueReviews) return;
+    try {
+      const times = await this.store.one(`SELECT
+        (SELECT max(created_at) FROM ${VCR_SCHEMA}.results WHERE study_id = $1) AS last_result,
+        (SELECT max(created_at) FROM ${VCR_SCHEMA}.reviews WHERE study_id = $1 AND reviewer_kind = 'ai') AS last_review`, [study.id]);
+      const now = this.now();
+      if (!vcrReviewDue({ lastResultAt: times?.last_result, lastReviewAt: times?.last_review, now })) return;
+      const tried = this.reviewAttempts.get(study.id) ?? 0;
+      if (now.getTime() - tried < VCR_REVIEW_QUIET_MS) return;
+      this.reviewAttempts.set(study.id, now.getTime());
+      await this.#queueReview(study.id, { reason: "results_settled" });
+    } catch (error) { this.report(codeOf(error)); }
   }
 
   // --- reading the steps from the data ---------------------------------------------------
@@ -2304,8 +2360,9 @@ export class VcrOrchestrator {
       }
       if (job.state === "succeeded" && result) await this.#registerForecasts(study, job, result);
     });
+    // No review here: the study's results are reviewed once they have stopped changing (`#reviewSettled`), not
+    // each time the queue drains, and the review of a package or a finished programme is queued by its run.
     await this.advance(job.studyId);
-    if (result) await this.#queueReview(String(job.studyId), { reason: "compute_finished" });
     return true;
   }
 

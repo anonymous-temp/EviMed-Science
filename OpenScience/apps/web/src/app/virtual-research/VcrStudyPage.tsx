@@ -44,7 +44,7 @@ import { ComparatorTab } from "@/components/vcr/tabs/ComparatorTab";
 import { TrialTab } from "@/components/vcr/tabs/TrialTab";
 import { MatchingTab } from "@/components/vcr/tabs/MatchingTab";
 import { DataTab } from "@/components/vcr/tabs/DataTab";
-import { jobStateLabel, numberText, stepLabel, stepStatusLabel } from "@/components/vcr/vcrText";
+import { jobStateLabel, jobWaitLabel, numberText, stepLabel, stepStatusLabel } from "@/components/vcr/vcrText";
 import { stepAllowanceWait } from "@/lib/allowanceWait";
 import { resolveVcrTab, VCR_HOME_PATH, VCR_RAIL_STEPS, VCR_STEP_TABS, VCR_TAB_ITEMS, vcrTabPath } from "@/components/vcr/vcrTabs";
 
@@ -358,6 +358,10 @@ function JobStrip({ studyId, study, onBudget, onChanged }: {
               </span>
               {job.state === "failed" && job.error?.message && (
                 <span className="w-full text-caption text-text-2">{job.error.message}</span>
+              )}
+              {/* One honest line, nothing to press: the engine is not answering and the job goes on by itself when it is back. */}
+              {job.waitingOn && (job.state === "running" || job.state === "queued") && (
+                <span data-vcr-job-wait={job.waitingOn} role="status" className="w-full text-caption text-text-2">{jobWaitLabel(job.waitingOn)}</span>
               )}
               {job.cancelable && mayCancel && (
                 <Button size="sm" variant="text" loading={canceling === job.id} disabled={canceling !== null} onClick={() => cancel(job)}>

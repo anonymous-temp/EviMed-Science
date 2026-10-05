@@ -95,6 +95,7 @@ export class AvailabilityService {
    *   registry: Promise<any> | any,
    *   store?: import("./availabilityStore.mjs").AvailabilityStore | null,
    *   engineProbe?: import("./availabilityEngineProbe.mjs").EngineHealthProbe | null,
+   *   vcrEngine?: (() => import("./vcrEngineProbe.mjs").VcrEngineReading | null) | null,
    *   connectorStatus?: ((userId: string) => Promise<any[]>) | null,
    *   methodValidation?: (() => Promise<{ status: string, reason?: string } | null>) | null,
    *   extensionViews?: ((user: any) => Promise<any[]>) | null,
@@ -102,11 +103,14 @@ export class AvailabilityService {
    *   now?: () => Date,
    * }} dependencies
    */
-  constructor({ config, registry, store = null, engineProbe = null, connectorStatus = null, methodValidation = null, extensionViews = null, skillSupply = null, now = () => new Date() }) {
+  constructor({ config, registry, store = null, engineProbe = null, vcrEngine = null, connectorStatus = null, methodValidation = null, extensionViews = null, skillSupply = null, now = () => new Date() }) {
     this.config = config;
     this.registry = registry;
     this.store = store;
     this.engineProbe = engineProbe;
+    // The statistics engine of 「虚拟临研」, read from the module's own probe (`vcrEngineProbe.mjs`) — the reading the
+    // job a page shows and readiness read too, so the three cannot say different things about the same engine.
+    this.vcrEngine = vcrEngine;
     this.connectorStatus = connectorStatus;
     this.methodValidation = methodValidation;
     this.extensionViews = extensionViews;
@@ -165,7 +169,10 @@ export class AvailabilityService {
     if (this.config.vcrEnabled && this.methodValidation) {
       try { validation = await this.methodValidation(); } catch { validation = null; }
     }
-    return { config, subject, evidence, engines, connectors, validation, declined: declinedTools(config, subject) };
+    /** @type {import("./vcrEngineProbe.mjs").VcrEngineReading | null} */
+    let vcrEngine = null;
+    try { vcrEngine = this.vcrEngine?.() ?? null; } catch { vcrEngine = null; }
+    return { config, subject, evidence, engines, connectors, validation, vcrEngine, declined: declinedTools(config, subject) };
   }
 
   /**
@@ -216,6 +223,16 @@ export class AvailabilityService {
       if (!spec.capabilities.includes(manifest.id) || spec.keyless) continue;
       // Where the account has its own credential, or the deployment holds one, the source is not missing.
       if (facts.connectors?.get(spec.id) === "none") reasons.push({ code: "data-source-not-configured", detail: spec.id, source: "connector-registry" });
+    }
+    // The statistics engine, for the capabilities that compute with it. A label, never a gate: the capability still
+    // dispatches and reports blocked through its own mechanism, and a computation submitted while the engine is down is
+    // accepted and continues by itself. `unknown` (nobody has asked yet) is left unknown, not called down.
+    if (module === "vcr" && moduleStatus === "on" && declared.includes("vcr_simulate") && facts.vcrEngine) {
+      if (facts.vcrEngine.state === "not_answering") {
+        reasons.push({ code: "vcr-engine-not-answering", source: "engine-health", facts: { engineState: "not_answering", checkedAt: facts.vcrEngine.checkedAt } });
+      } else if (facts.vcrEngine.state === "not_configured") {
+        reasons.push({ code: "vcr-engine-not-configured", source: "deployment-composition" });
+      }
     }
     if (module === "vcr" && facts.validation?.status === "unmeasured") {
       reasons.push({ code: "method-unmeasured", detail: facts.validation.reason ?? "unmeasured", source: "method-validation" });

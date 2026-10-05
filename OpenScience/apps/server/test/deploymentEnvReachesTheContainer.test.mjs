@@ -43,7 +43,6 @@ const hostSideOnly = {
   OPEN_SCIENCE_VCR_BACKUP_DIR: "scripts/ops/vcr-backup.mjs",
   OPEN_SCIENCE_VCR_BACKUP_ENABLED: "scripts/ops/vcr-backup.mjs",
   OPEN_SCIENCE_VCR_BACKUP_MAX_SETS: "scripts/ops/vcr-backup.mjs",
-  OPEN_SCIENCE_VCR_BACKUP_OPERATOR_URL: "scripts/ops/vcr-backup.mjs",
   OPEN_SCIENCE_VCR_JOBS_VOLUME: "scripts/ops/vcr-backup.mjs",
   OPEN_SCIENCE_PREFLIGHT_ALERT_DELIVERY: "scripts/ops/host-preflight.mjs",
   OPEN_SCIENCE_PREFLIGHT_MIN_FREE_BYTES: "scripts/ops/host-preflight.mjs",

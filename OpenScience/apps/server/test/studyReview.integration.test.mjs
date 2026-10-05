@@ -15,7 +15,9 @@ const config = { reviewEnabled: true, reviewModel: 'configured-reviewer', review
   reviewEditorTimeoutMs: 1000, reviewThinkingBudget: 100, reviewMaxOutputTokens: 1000 };
 const identity = { userId: 'alice', projectId: 'project' };
 const input = (role = 'clinical', suffix = '') => ({ subjectRef: { kind: 'vcr', studyId: `study${suffix}` }, role,
-  nodes: ['assumption:response@1', 'result:trial@1'], frozenInput: { report: 'Response probability is 0.25.', evidence: [], assumptions: [{ key: 'response', version: 1, value: 0.25 }] },
+  // Each suffix is its own bytes: the same bytes asked of the same reviewer are answered from the project's own earlier answer
+  // (`StudyReviews.#answeredBefore`), so a test that wants a model call, a refusal or a stale lease needs a snapshot of its own.
+  nodes: ['assumption:response@1', 'result:trial@1'], frozenInput: { report: `Response probability is 0.25.${suffix ? ` (${suffix})` : ''}`, evidence: [], assumptions: [{ key: 'response', version: 1, value: 0.25 }] },
   deterministic: { findings: [], references: { checked: 0 }, numbers: { checked: 1 } } });
 const answer = (value = { findings: [{ kind: 'none', location: '', evidence: '', fix: '' }], checklist: [], acceptance: [] }) => new Response(
   `data: ${JSON.stringify({ id: 'request-actual', model: 'actual-reviewer-2026', choices: [{ delta: { content: JSON.stringify(value) }, finish_reason: 'stop' }], usage: { prompt_tokens: 100, completion_tokens: 20 } })}\n\ndata: [DONE]\n\n`,
@@ -50,9 +52,20 @@ test('durable role reviews dedupe, use fresh context and preserve actual model a
   assert.ok(rows.every(row => row.model === 'actual-reviewer-2026' && row.usage.completionTokens === 20));
   assert.equal(calls.length, 2);
   for (const call of calls) { assert.deepEqual(call.messages.map(message => message.role), ['system', 'user']); assert.ok(!call.messages.some(message => message.role === 'assistant')); }
-  assert.notEqual(calls[0].messages[0].content, calls[1].messages[0].content);
+  // Both reviewers are told the same thing and shown the same snapshot first, so the second call finds all of it in the provider's prefix
+  // cache; only the closing line — which reviewer this is, and what to look at — differs, and neither is shown the other's answer.
+  assert.equal(calls[0].messages[0].content, calls[1].messages[0].content);
+  const [clinicalMessage, statisticalMessage] = calls.map(call => call.messages[1].content);
+  const [clinicalSnapshot, clinicalRole] = clinicalMessage.split('\n\n本次你的角色：');
+  const [statisticalSnapshot, statisticalRole] = statisticalMessage.split('\n\n本次你的角色：');
+  assert.ok(clinicalSnapshot.length > 100 && clinicalSnapshot === statisticalSnapshot, 'the same snapshot leads the user message for both roles');
+  assert.match(clinicalRole, /^临床审稿人/); assert.match(statisticalRole, /^统计方法审稿人/);
   assert.notEqual(rows[0].subject.role, rows[1].subject.role);
   assert.equal(rows[0].configuration.model, 'configured-reviewer');
+  // A closed schema is not an essay: the reviewer does not think, and is not given room to.
+  for (const call of calls) { assert.equal(call.enable_thinking, false); assert.ok(call.max_tokens <= 1000); }
+  assert.equal(rows[0].configuration.revision, 'study-review-v2');
+  assert.equal(rows[0].configuration.thinkingBudget, 0);
 });
 
 test('model failure and empty output stay visible with deterministic findings and no delivery gate', options, async () => {

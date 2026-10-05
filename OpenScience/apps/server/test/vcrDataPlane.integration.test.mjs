@@ -18,9 +18,10 @@ import { VCR_ACCESS_CODES, VcrAccess } from "../src/vcrAccess.mjs";
 import { VCR_DATA_PLANE_CODES, VcrDataPlane, parseTable, pseudonymOf, sha256OfBytes, snapshotView, studyPseudonymKey, tableView } from "../src/vcrDataPlane.mjs";
 import { VcrDataStore } from "../src/vcrDataStore.mjs";
 import { VcrMembers } from "../src/vcrMembers.mjs";
+import { vcrMatchingExecutor, vcrSubjectTableSeam } from "../src/vcrComposition.mjs";
 import { vcrId } from "../src/vcrStoreBase.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
-import { COHORT_SIZE, FIELD_MAP, cohortCsv, fingerprints, patientNo, streamOf, survivalOf, visitsCsv } from "./helpers/vcrIntakeData.mjs";
+import { COHORT_SIZE, FIELD_MAP, cohortCsv, dictionaryCsv, fingerprints, patientNo, streamOf, survivalOf, visitsCsv } from "./helpers/vcrIntakeData.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
 const options = { timeout: 60_000, skip: !databaseUrl && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured" };
@@ -486,4 +487,109 @@ test("AC-03 a column cannot claim a source its file is not: a synthetic file has
     return true;
   });
   assert.deepEqual(await store.listSnapshots({ studyId }), []);
+});
+
+// ---------------------------------------------------------------------------
+// Matching from the subject table: a cohort that arrived as one uploaded table
+// ---------------------------------------------------------------------------
+
+const MATCH_CRITERIA = [
+  { id: "crt_age", ordinal: 1, kind: "inclusion", criterionType: "demographic", requirement: { op: "compare", variable: "age", comparator: "gte", value: 60, unit: "year" } },
+  { id: "crt_sex", ordinal: 2, kind: "inclusion", criterionType: "demographic", requirement: { op: "compare", variable: "sex", comparator: "eq", value: "female" } },
+  { id: "crt_ecog", ordinal: 3, kind: "inclusion", criterionType: "performance_status", requirement: { op: "compare", variable: "performance_status", comparator: "lte", value: 1 } },
+  { id: "crt_hb", ordinal: 4, kind: "inclusion", criterionType: "lab", requirement: { op: "compare", variable: "hemoglobin", comparator: "gte", value: 100, unit: "g/L" } },
+];
+const matchStoreOver = (criteria) => ({
+  async listCriteria() { return criteria; }, async listFacts() { return []; }, async latestLanguageJudgments() { return new Map(); },
+});
+const runMatching = (principal, criteria = MATCH_CRITERIA) => {
+  const run = vcrMatchingExecutor({ matchStore: matchStoreOver(criteria), store: { async studyById() { return { id: STUDY_FOR_MATCH, userId: principal }; } },
+    subjectTable: vcrSubjectTableSeam({ dataPlane: plane }) });
+  return run({ job: { id: "job_m", studyId: STUDY_FOR_MATCH, scenarioHash: "e".repeat(64), seed: 1,
+    inputs: [{ kind: "evidence", id: "matching:asof:2026-10-05T00:00:00.000Z" }, { kind: "evidence", id: "matching:protocol:prt_1" }, { kind: "evidence", id: "matching:facts:0123456789abcdef" }],
+    scenario: { criteria: criteria.map((criterion) => ({ id: criterion.id, kind: criterion.kind, type: criterion.criterionType, state: "unknown" })) } }, onProgress: async () => {} });
+};
+/** @type {string} */ let STUDY_FOR_MATCH = "";
+
+test("a study whose subjects arrived as one cohort table is matched from the subject table: every row a candidate, judged for the owner, nothing written", options, async () => {
+  const studyId = await seedStudy();
+  STUDY_FOR_MATCH = studyId;
+  await seedSnapshot(studyId);
+  const before = (await q("SELECT count(*)::int AS n FROM evimed_vcr.matching_facts")).at(0).n;
+  const result = await runMatching(OWNER);
+  assert.equal(result.assessments.length, COHORT_SIZE, "one candidate per row of the subject table");
+  // Independently of the evaluator: the fixture's own rule for each person.
+  const expected = { age: { satisfied: 0, not_satisfied: 0 }, sex: { satisfied: 0, not_satisfied: 0 }, ecog: { satisfied: 0, not_satisfied: 0 } };
+  for (let n = 1; n <= COHORT_SIZE; n += 1) {
+    expected.age[41 + ((n * 3) % 30) >= 60 ? "satisfied" : "not_satisfied"] += 1;
+    expected.sex[n % 3 === 0 ? "satisfied" : "not_satisfied"] += 1;
+    expected.ecog[(n % 4) <= 1 ? "satisfied" : "not_satisfied"] += 1;
+  }
+  const tally = (id) => result.assessments.reduce((acc, assessment) => { const state = assessment.judgments.find((/** @type {any} */ judgment) => judgment.criterionId === id).state; acc[state] = (acc[state] ?? 0) + 1; return acc; }, /** @type {Record<string, number>} */ ({}));
+  assert.deepEqual(tally("crt_age"), { satisfied: expected.age.satisfied, not_satisfied: expected.age.not_satisfied });
+  assert.deepEqual(tally("crt_sex"), { satisfied: expected.sex.satisfied, not_satisfied: expected.sex.not_satisfied });
+  assert.deepEqual(tally("crt_ecog"), { satisfied: expected.ecog.satisfied, not_satisfied: expected.ecog.not_satisfied }, "ECOG is the column the field map called performance_status");
+  assert.deepEqual(tally("crt_hb"), { unknown: COHORT_SIZE }, "the table holds no haemoglobin: unknown for everyone, not 'not satisfied'");
+  assert.ok(result.assessments.every((/** @type {any} */ assessment) => /^P[0-9a-f]{16}$/.test(assessment.subjectKey) && assessment.source === "subject_table"), "the keys are the study's pseudonyms");
+  const note = result.diagnostics.subjectTable;
+  assert.deepEqual(note.variablesUnmapped, ["hemoglobin"]);
+  assert.deepEqual(note.variablesMapped.map((/** @type {any} */ item) => [item.variable, item.column]).sort(), [["age", "age"], ["performance_status", "ecog"], ["sex", "sex"]]);
+  // No cell of the cohort is in what was produced, and nothing patient-level reached the schema.
+  const text = JSON.stringify(result);
+  for (const value of fingerprints()) assert.equal(text.includes(value), false, `${value} is a cell of the partner's file`);
+  assert.equal((await q("SELECT count(*)::int AS n FROM evimed_vcr.matching_facts")).at(0).n, before, "no fact was written for any row");
+  assert.ok(result.assessments.every((/** @type {any} */ assessment) => JSON.stringify(assessment.judgments).includes("snapshot_cell")), "evidence says the cell it stands on, by column");
+  assert.equal(JSON.stringify(result.assessments).includes("\"quote\":\"age = "), false);
+  // It was read as every patient-level read is: audited, as this operation.
+  const audit = await q("SELECT action, outcome, actor FROM evimed_vcr.audit WHERE study_id=$1 AND detail::text LIKE '%match_criteria%' ORDER BY id", [studyId]);
+  assert.ok(audit.length >= 1, "the read is on the audit trail");
+});
+
+test("a member with no grant on the source cannot have its table matched, and the refusal is the result's, not a crash", options, async () => {
+  const studyId = await seedStudy();
+  STUDY_FOR_MATCH = studyId;
+  await seedSnapshot(studyId);
+  const result = await runMatching(PARTNER);
+  assert.equal(result.assessments.length, 0, "no candidates from a table the principal may not read");
+  assert.equal(result.diagnostics.subjectTable.available, false);
+  assert.match(String(result.diagnostics.subjectTable.reason), /^vcr_/, "named by its code");
+});
+
+test("a column the seal holds is not in what matching reads, so the criterion that needs it is unknown", options, async () => {
+  const studyId = await seedStudy(OWNER, "specified_analysis");
+  STUDY_FOR_MATCH = studyId;
+  const map = FIELD_MAP.map((entry) => (entry.column === "AGE" ? { ...entry, outcome: true } : entry));
+  const source = await plane.registerSource({ userId: OWNER, studyId, name: "合作方基线导出", ownerParty: "合作方医院", allowedUses: ["vcr"] });
+  for (const [name, body] of [["cohort.csv", cohortCsv()], ["visits.csv", visitsCsv()]]) await plane.storeUpload({ actor: OWNER, studyId, sourceId: source.id, name, stream: streamOf(body) });
+  const proposed = await plane.proposeFieldMap({ actor: OWNER, studyId, sourceId: source.id, columns: map });
+  await plane.confirmFieldMap({ actor: OWNER, studyId, sourceId: source.id, hash: proposed.hash });
+  await plane.freezeSnapshot({ userId: OWNER, studyId, sourceId: source.id });
+  const result = await runMatching(OWNER);
+  assert.equal(result.assessments.length, COHORT_SIZE);
+  assert.ok(result.assessments.every((/** @type {any} */ assessment) => assessment.judgments.find((/** @type {any} */ judgment) => judgment.criterionId === "crt_age").state === "unknown"),
+    "AGE is sealed: nobody is judged on it");
+  assert.ok(result.diagnostics.subjectTable.variablesUnmapped.includes("age"));
+  assert.equal(result.assessments.some((/** @type {any} */ assessment) => assessment.judgments.find((/** @type {any} */ judgment) => judgment.criterionId === "crt_sex").state !== "unknown"), true, "what is released still decides");
+});
+
+test("a unit the field map left out is the dictionary's, and a study with no subject table says so", options, async () => {
+  const studyId = await seedStudy();
+  const map = FIELD_MAP.map((entry) => (entry.column === "AGE" ? { ...entry, unit: undefined } : entry));
+  const source = await plane.registerSource({ userId: OWNER, studyId, name: "合作方基线导出", ownerParty: "合作方医院", allowedUses: ["vcr"] });
+  for (const [name, body, role] of [["cohort.csv", cohortCsv(), "data"], ["visits.csv", visitsCsv(), "data"], ["dictionary.csv", dictionaryCsv(), "dictionary"]]) {
+    await plane.storeUpload({ actor: OWNER, studyId, sourceId: source.id, name, role, stream: streamOf(body) });
+  }
+  const proposed = await plane.proposeFieldMap({ actor: OWNER, studyId, sourceId: source.id, columns: map });
+  await plane.confirmFieldMap({ actor: OWNER, studyId, sourceId: source.id, hash: proposed.hash });
+  await plane.freezeSnapshot({ userId: OWNER, studyId, sourceId: source.id });
+  const table = await plane.subjectTableForMatching({ studyId, principal: OWNER, purpose: "vcr" });
+  assert.equal(table.available, true);
+  assert.equal(table.columns.find((/** @type {any} */ column) => column.name === "age").unit, "岁", "the dictionary says what the map did not");
+  assert.equal(table.rows.length, COHORT_SIZE);
+  assert.equal(table.header[0], "USUBJID");
+  assert.deepEqual(await plane.subjectTableIdentity(studyId), { snapshotId: (await store.listSnapshots({ studyId }))[0].id,
+    sha256: (await store.listAnalysisTables({ studyId })).find((/** @type {any} */ item) => item.shape === "subject").sha256 });
+  const bare = await seedStudy();
+  assert.deepEqual(await plane.subjectTableForMatching({ studyId: bare, principal: OWNER, purpose: "vcr" }), { available: false, reason: "no_subject_table" });
+  assert.equal(await plane.subjectTableIdentity(bare), null);
 });

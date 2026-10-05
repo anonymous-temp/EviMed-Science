@@ -43,6 +43,7 @@ import {
   allowanceWaitingSentence, intendedUseCeiling, lineageNode, parseLineageNode, twinLabel, useWithin, vcrModelCardIssues, vcrModelInterfaceOf,
 } from "@evimed/domain";
 
+import { VCR_ENGINE_RETRYABLE_CODES } from "./vcrEngineClient.mjs";
 import { vcrExportHoldsDocument, vcrReportModel, vcrReportReviewRevision } from "./vcrRender.mjs";
 import { modelDocumentReaderSections, renderModelDocument } from "./vcrModelDocuments.mjs";
 import { vcrObjectNode } from "./vcrStore.mjs";
@@ -98,8 +99,31 @@ export const JOB_KIND_LABELS = Object.freeze(/** @type {Record<string, string>} 
 }));
 
 /**
+ * Whether a live job's last contact with the engine failed because the engine did
+ * not answer — the one wait a researcher can be told about and asked nothing for.
+ * Read from the job's own row, which is what any replica sees: a running job
+ * records the failed poll (`transportError`) or the submit whose reply never came
+ * (`submissionError`) and clears it the next time the engine answers; a job the
+ * queue put back for another try records the code as its error. Every other reason
+ * a job is slow (the budget, the work in front of it, a long simulation) is not
+ * this, and says nothing.
+ * @param {Record<string, any>} job
+ * @returns {boolean}
+ */
+export function jobWaitsOnEngine(job) {
+  const state = String(job.state);
+  if (state === "running") {
+    const checkpoint = object(job.checkpoint);
+    return [checkpoint.transportError, checkpoint.submissionError].some((code) => VCR_ENGINE_RETRYABLE_CODES.includes(String(code)));
+  }
+  return state === "queued" && VCR_ENGINE_RETRYABLE_CODES.includes(String(object(job.error).code));
+}
+
+/**
  * One job as a page shows it. A failed job carries its plain reason; the code
- * and the row id stay on the server.
+ * and the row id stay on the server. A job waiting on an engine that does not
+ * answer says so in one line (`waitingOn`) and asks for nothing: it continues by
+ * itself when the engine is back.
  * @param {Record<string, any>} job @param {Date} now
  */
 export function jobView(job, now) {
@@ -120,6 +144,8 @@ export function jobView(job, now) {
     error: error && (error.code || error.message) ? { code: text(error.code), message: text(error.message), partial: error.partial === true } : null,
     updatedAt: zhTime(job.updatedAt ?? job.createdAt, now),
     cancelable: ["queued", "running", "awaiting_budget"].includes(String(job.state)),
+    // Present only when there is something to say: a page that is told nothing shows nothing.
+    ...(jobWaitsOnEngine(job) ? { waitingOn: "engine" } : {}),
   };
 }
 

@@ -412,7 +412,12 @@ const mode = process.argv[2] ?? "run";
 // Run once as ExecStartPost of the existing host PostgreSQL timer. Its host
 // authority stays on the host; the regular container cycle is unchanged.
 const task = mode === "health" ? health() : mode === "run" ? run() : mode === "vcr" ?
-  runVcrBackupCycle(vcrBackupConfig(), { signal: stopController.signal }).then(result => log("backup.vcr_completed", { status: result.status })) : Promise.reject(new Error("Unknown backup scheduler mode."));
+  // A deferred set is not a failed unit: the PostgreSQL archive was written by the
+  // unit's first step and the next run takes the set again (`vcr-backup.mjs`).
+  runVcrBackupCycle(vcrBackupConfig(), { signal: stopController.signal }).then(result => log(
+    result.status === "deferred" ? "backup.vcr_deferred" : "backup.vcr_completed",
+    { status: result.status, ...(result.status === "deferred" ? { missing: result.missing, attempts: result.attempts } : {}) },
+  )) : Promise.reject(new Error("Unknown backup scheduler mode."));
 task.catch((error) => {
   log("backup.scheduler_failed", { error: operationalError(error instanceof Error ? error.message : error) }, true);
   process.exitCode = 1;

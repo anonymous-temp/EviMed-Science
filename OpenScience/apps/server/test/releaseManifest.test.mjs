@@ -188,6 +188,7 @@ test("release manifest generator records exact images, tools, skills, and source
         "scripts/ops/backup-scheduler.mjs",
         "scripts/ops/vcr-backup.mjs",
         "scripts/ops/vcr-backup-process.mjs",
+        "scripts/ops/vcr-backup-references.mjs",
         "scripts/ops/vcr-restore-drill.mjs",
         "scripts/ops/recovery-volume.py",
         "scripts/ops/postgres-backup.py",
