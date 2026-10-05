@@ -40,7 +40,8 @@ export function createEvolutionBuilder({dispatch,verification,evaluator,publishe
     stage='hidden-evaluation';
     const evaluation=await evaluator.evaluate(snapshot,{signal});
     // Return only pass/fail + opaque case identities to the research agent.
-    const feedback={passed:evaluation.ok===true,failedCaseIds:(evaluation.failedCaseIds??[]).map(String)};
+    // `issueCodes` here is a closed code such as candidate_generalisation_failed: which derived input failed stays with the evaluator.
+    const feedback={passed:evaluation.ok===true,failedCaseIds:(evaluation.failedCaseIds??[]).map(String),...(Array.isArray(evaluation.issueCodes)&&evaluation.issueCodes.length?{issueCodes:evaluation.issueCodes.map(code=>String(code).slice(0,120))}:{})};
     if(!evaluation.ok){
       if(evaluation.status!=='waiting_resource' && feedback.failedCaseIds.length) await recordFailure({cardId:card.id,code:'method_implementation',gapCode:'method-implementation',failedCaseIds:feedback.failedCaseIds});
       return{status:'repair',feedback};

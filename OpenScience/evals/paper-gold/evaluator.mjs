@@ -18,19 +18,7 @@ export function crossImplementationScore(actual, independent, tolerances = {}) {
   if (!independent.implementationId || independent.implementationId === actual.implementationId) throw new Error("Cross-implementation scoring requires independent implementations.");
   return Object.fromEntries(Object.entries(independent.numeric).map(([key, value]) => [key, numericScore(actual.numeric[key], { ...tolerances[key], value, interval: undefined })]));
 }
-export function simulationScore(samples, specification) {
-  if (!Array.isArray(samples) || samples.length < 2) throw new Error("Simulation requires at least two replicates.");
-  const n = samples.length;
-  const bias = samples.reduce((sum, row) => sum + row.estimate - specification.truth, 0) / n;
-  const variance = samples.reduce((sum, row) => sum + (row.estimate - specification.truth - bias) ** 2, 0) / (n - 1);
-  const coverage = samples.filter(row => row.lower <= specification.truth && row.upper >= specification.truth).length / n;
-  const falsePositive = samples.filter(row => row.p < specification.alpha).length / n;
-  const mcseCoverage = Math.sqrt(coverage * (1 - coverage) / n);
-  const mcseBias = Math.sqrt(variance / n);
-  const mcseFalsePositive = Math.sqrt(falsePositive * (1 - falsePositive) / n);
-  return { n, bias, coverage, falsePositive, mcseBias, mcseCoverage, mcseFalsePositive,
-    valid: Math.abs(bias) <= specification.maxBias + 1.96 * mcseBias && Math.abs(coverage - specification.coverage) <= specification.coverageTolerance + 1.96 * mcseCoverage && (specification.truth !== 0 || falsePositive <= specification.alpha + specification.falsePositiveTolerance + 1.96 * mcseFalsePositive) };
-}
+export { simulationScore, simulationRequiredReplicates, simulationSpecificationIssues, SIMULATION_LIMITS } from "./simulation.mjs";
 export function timeHoldout(caseRecord, modelReleasedAt, toolDevelopedAt) {
   const earliest = Math.min(...(caseRecord.firstPublicDates ?? []).map(Date.parse));
   return Number.isFinite(earliest) && earliest > Date.parse(modelReleasedAt) && earliest > Date.parse(toolDevelopedAt);
@@ -60,7 +48,7 @@ export async function freezeCycle(dataDir, cycleId, definition) {
   if (!/^[a-zA-Z0-9_-]+$/.test(cycleId)) throw new Error("Invalid cycle id.");
   const directory = path.join(dataDir, "paper-gold", "cycles", cycleId);
   await mkdir(directory, { recursive: true, mode: 0o700 });
-  const evaluatorSources = await Promise.all(["./evaluator.mjs", "./tolerance.mjs", "./run.mjs", "./benchmarks.mjs", "../../apps/server/src/paperGoldEvaluator.mjs", "../../apps/server/src/paperGoldCalibration.mjs", "../../apps/server/src/reviewModel.mjs", "../../apps/server/src/paperGoldVerification.mjs"].map(file => readFile(new URL(file, import.meta.url), "utf8")));
+  const evaluatorSources = await Promise.all(["./evaluator.mjs", "./tolerance.mjs", "./simulation.mjs", "./run.mjs", "./benchmarks.mjs", "../../apps/server/src/paperGoldEvaluator.mjs", "../../apps/server/src/paperGoldCalibration.mjs", "../../apps/server/src/reviewModel.mjs", "../../apps/server/src/paperGoldVerification.mjs"].map(file => readFile(new URL(file, import.meta.url), "utf8")));
   const evaluatorCodeHash = digest(evaluatorSources);
   const hash = digest({ definition, evaluatorCodeHash });
   const file = path.join(directory, "definition.json");

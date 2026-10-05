@@ -9,8 +9,11 @@ test("numeric tolerances, analytic/cross-implementation references and defensibl
   assert.equal(numericScore(3, { interval: [1, 2] }).valid, false);
   assert.equal(numericScore(NaN, { value: 1 }).valid, false);
   assert.equal(timeHoldout({ firstPublicDates: ["2024-01-01", "2023-01-01"] }, "2023-06-01", "2022-01-01"), false);
+  // A hundred identical outputs under a nominal coverage of 1 used to pass; simulation.test.mjs holds the criteria.
   const samples = Array.from({ length: 100 }, (_, i) => ({ estimate: 0, lower: -.1, upper: .1, p: i < 5 ? .01 : .5 }));
-  assert.equal(simulationScore(samples, { truth: 0, alpha: .05, coverage: 1, maxBias: .01, coverageTolerance: .01, falsePositiveTolerance: .01 }).valid, true);
+  const degenerate = simulationScore(samples, { truth: 0, alpha: .05, coverage: 1, maxBias: .01, coverageTolerance: .01, falsePositiveTolerance: .01 });
+  assert.equal(degenerate.valid, false);
+  for (const reason of ["specification_invalid", "insufficient_replicates", "degenerate_estimates"]) assert.ok(degenerate.reasons.includes(reason), reason);
 });
 test("frozen scorer cannot change in cycle", async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "gold-"));
