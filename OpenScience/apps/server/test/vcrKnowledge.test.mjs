@@ -136,10 +136,10 @@ const RULES_V1 = [{ name: "adult", rule: cmp("AGE", "gte", 18) }, { name: "fit",
 const RULES_V2 = [{ name: "adult", rule: cmp("AGE", "gte", 50) }, { name: "fit", rule: cmp("ECOG", "lte", 1) }];
 
 /** A knowledge package over memory, one curated pack shipped. */
-function compose({ populations = [], jobs = null, dataStore = null } = {}) {
+function compose({ populations = [], jobs = null, dataStore = null, now = () => new Date("2026-10-04T09:00:00Z") } = {}) {
   const store = memoryStore();
   const studyStore = studyStoreWith(populations);
-  const knowledge = new VcrKnowledge({ store: /** @type {any} */ (store), studyStore, dataStore, jobs, shipped: { demo_cancer: CURATED }, now: () => new Date("2026-10-04T09:00:00Z") });
+  const knowledge = new VcrKnowledge({ store: /** @type {any} */ (store), studyStore, dataStore, jobs, shipped: { demo_cancer: CURATED }, now });
   return { knowledge, store, studyStore, populations };
 }
 
@@ -149,6 +149,15 @@ const DRAFT = Object.freeze({
   terms: [{ id: "t1", labelZh: "某罕见病", kind: "disease", sources: ["paper"] }],
   endpoints: [{ id: "e1", labelZh: "症状评分变化", type: "continuous", definitionZh: "治疗后评分相对基线的变化。", standard: { name: "the scale the review names" }, sources: ["paper"] }],
   criteria: [{ id: "c1", kind: "inclusion", criterionType: "demographic", requirement: { op: "compare", variable: "age", comparator: "gte", value: 18, unit: "years" }, textZh: "年龄不小于 18 岁。", sources: ["paper"] }],
+});
+
+test("a draft is dated by the researcher's day, not the UTC day: at 23:30 UTC it is already tomorrow in China", async () => {
+  const { knowledge } = compose({ now: () => new Date("2026-10-04T23:30:00Z") });
+  const written = await knowledge.draftPack(STUDY_A, structuredClone(DRAFT), "u1");
+  assert.equal(written.ok, true);
+  assert.equal(written.pack.updated, "2026-10-05");
+  const morning = compose({ now: () => new Date("2026-10-04T15:59:00Z") });
+  assert.equal((await morning.knowledge.draftPack(STUDY_A, structuredClone(DRAFT), "u1")).pack.updated, "2026-10-04", "the day turns at local midnight, 16:00 UTC");
 });
 
 test("the catalogue lists the shipped packs and the account's own, and searches the names a pack lists", async () => {
