@@ -247,7 +247,8 @@ export class EvolutionMaintenance {
         // What the reader of this evidence needs beside it: how often a harmless tool reaches this verdict.
         falseAlarmAtBackgroundRate: harmTestOperatingCharacteristics(EVOLUTION_TOOL_HARM_TEST, EVOLUTION_TOOL_HARM_TEST.baseRate).harm, association: 'not-cause' },
       proposedAt: this.service.now().toISOString() });
-    await this.callbacks.proposeReview?.({ category: 'tool-harm', subjectId: reviewId, materialVersion: tool.payload.artifactDigest ?? 1, directional: true,
+    // `tool-retire` is the category the decision module already names for the operator (工具退役).
+    await this.callbacks.proposeReview?.({ category: 'tool-retire', subjectId: reviewId, materialVersion: tool.payload.artifactDigest ?? 1, directional: true,
       attemptedPaths: ['sequential-harm-test', 'distinct-account-evidence'], title: '复核被多位研究者纠正的科研工具',
       body: `${harm.runs} 位研究者首次使用该工具得到的结果中，有 ${harm.bad} 位作了纠正，高于平常的纠正水平。这是关联，不说明问题由工具造成。软退役后新研究不再使用它，历史结果和版本都保留，之后可以恢复。`,
       options: [{ id: 'retire', label: '软退役并保留历史', operation: 'maintenance-retire' }, { id: 'keep', label: '保留现有工具', operation: 'keep' }], recommended: 'retire', conservative: 'keep' });

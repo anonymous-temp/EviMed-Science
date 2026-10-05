@@ -109,7 +109,7 @@ test('one account cannot retire a tool for everyone; distinct accounts raise a d
   assert.equal(proposals.length, 1);
   const [proposal] = proposals;
   assert.deepEqual({ category: proposal.category, recommended: proposal.recommended, conservative: proposal.conservative, directional: proposal.directional, paths: proposal.attemptedPaths.length },
-    { category: 'tool-harm', recommended: 'retire', conservative: 'keep', directional: true, paths: 2 });
+    { category: 'tool-retire', recommended: 'retire', conservative: 'keep', directional: true, paths: 2 });
   assert.doesNotMatch(proposal.title + proposal.body, /one-account|account|llr|harm|digest/i, 'the card speaks to a reader, not in internal state');
   const review = await f.service.get(proposal.subjectId);
   assert.equal(review.payload.kind, 'sequential-harm');
