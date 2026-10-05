@@ -1723,7 +1723,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       workerId: randomId("frontier-weekly-") });
     const frontierNotifications = new FrontierNotifications({ database: productDatabase, jobs: productJobs,
       notifications: notificationService, weekly, config, workerId: randomId("frontier-notify-") });
-    const profiles = new FrontierProfiles({ database: productDatabase, researchMemory, editor, embedder, config, budget,
+    const profiles = new FrontierProfiles({ database: productDatabase, researchMemory, editor, embedder, config, budget, entityVocabulary,
       // 与我相关 reads a reader's own recent questions: their runs across
       // their projects, the platform's internal ones left out. Asked in the
       // background, a few readers a round, never on a request.
