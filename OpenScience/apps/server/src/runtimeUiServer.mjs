@@ -269,7 +269,7 @@ function assertNativeModelSelection(config, payload) {
  * counted on (`recordSteer`); `audit` reports a count that could not be written.
  * @param {{ config: Record<string, any>, store: any, runtimeManager: any, agentRegistry?: any, usageLedger?: any, balanceGate?:((project:any,payload:any)=>Promise<void>)|null, authorizePrompt?:(project:any,sessionId:string)=>Promise<void>, preparePrompt?:((project:any,request:any)=>Promise<any>)|null, recordPromptActor?:((user:any,project:any,request:any)=>Promise<any>)|null, bindResultRevision?:((user:any,project:any,request:any)=>Promise<any>)|null, authorizeMutation?:((operation:()=>Promise<any>)=>Promise<any>)|null,
  *   managedBrowser?: any, authorizeOpenSession?:((user:any,project:any,sessionId:string)=>Promise<void>)|null,
- *   agentRuns?: { recordSteeredInput: (project: any, sessionId: string, requestId: string) => Promise<any> } | null,
+ *   agentRuns?: { recordSteeredInput: (project: any, sessionId: string, requestId: string) => Promise<any>, noteStopRequest?: (project: any, target: { sessionId?: string | null, runId?: string | null }) => Promise<string | null> } | null,
  *   audit?: (event: string, detail: Record<string, any>) => Promise<void> }} deps
  * @returns {{ server: import('node:http').Server, releaseFrame: (frameId: string, userId: string) => Promise<number>, refreshFrameBinding: (renewed: any) => number, listen: (port?: number, host?: string) => Promise<any>, address: () => any, close: () => Promise<void> }}
  */
@@ -304,6 +304,29 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
       await audit("run.correction.observe", {
         userId: project.userId, projectId: project.id,
         code: typeof error?.code === "string" ? error.code : "run_correction_observe_failed",
+        detail: "runtime-ui",
+      }).catch(() => {});
+    }
+  }
+
+  /**
+   * A stop pressed in the kernel's own window (`session/cancel`) is the researcher's, and is noted on the run it
+   * stops before it reaches the kernel (review F4): the monitor reading the aborted turn would otherwise write a
+   * cancel nobody is named for, which is not charged. An observation, not a check: it never refuses, and one
+   * that could not be written is audited while the stop goes on.
+   * @param {any} project @param {any} payload the native `{ args: { request: { sessionId } } }`
+   */
+  async function recordStop(project, payload) {
+    if (!agentRuns?.noteStopRequest) return;
+    const args = payload?.args;
+    const sessionId = args?.request?.sessionId ?? args?.sessionId;
+    if (typeof sessionId !== "string" || !sessionId) return;
+    try {
+      await agentRuns.noteStopRequest(project, { sessionId });
+    } catch (error) {
+      await audit("run.stop.observe", {
+        userId: project.userId, projectId: project.id,
+        code: typeof error?.code === "string" ? error.code : "run_stop_observe_failed",
         detail: "runtime-ui",
       }).catch(() => {});
     }
@@ -609,6 +632,15 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
         throw new HttpError(400, "runtime_ui_prompt_invalid", "A native prompt RPC is required.");
       }
     }
+    if (method === "session/cancel" && req.method === "POST") {
+      // The stop is the researcher's own: read once so it can be noted on the run before it is forwarded, and handed
+      // on with the request as it was. A body this cannot read is the kernel's to refuse; nothing is noted for it.
+      const raw = await readBody(req, Math.min(Number(config.maxJsonBytes), 16384));
+      req.__openScienceProxyBody = raw;
+      let stop = null;
+      try { stop = JSON.parse(raw.toString("utf8")); } catch { /* the kernel refuses a body it cannot read */ }
+      if (stop?.type === "client-request" && stop.method === "session/cancel") await recordStop(project, stop.payload);
+    }
     if (method === "session/selectModel") {
       if (req.method !== "POST") { sendDenied(res, method); return; }
       const raw = await readBody(req, Math.min(Number(config.maxJsonBytes), 16384));
@@ -798,6 +830,8 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
             await recordNativeActor(currentActor.user, currentActor.project, payload);
             await prepareNativeContext(project, payload);
             await recordSteer(project, payload);
+          } else if (endpoint === "session/cancel") {
+            await recordStop(project, payload);
           }
         };
         await runtimeManager.proxyUpgrade(req, socket, head, project, frame.suffix, { revalidate, authorize, observe, prepare });

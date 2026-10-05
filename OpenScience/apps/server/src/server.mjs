@@ -2413,14 +2413,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         clearTimeout(timer);
       }
     },
-    onRuntimeStop: (project, status, errorCode) => {
+    onRuntimeStop: (project, status, errorCode, options) => {
       runtimeEventPump.detach(project);
       // Returned, not fired-and-forgotten here: `notifyRuntimeStop` already
       // wraps this call in its own `.catch()`, and returning the promise is
       // what keeps a rejection — a project whose ledger cannot be read,
       // oversized or corrupted — flowing through that existing handling
       // instead of becoming a second, unguarded unhandled rejection.
-      return agentRuns?.closeProject(project, status, errorCode);
+      return agentRuns?.closeProject(project, status, errorCode, options);
     },
     // The researcher's own stop, relayed through the runtime proxy.
     onSessionAbort: (project, sessionId) => agentRuns?.cancelSession(project, sessionId, { by: "user" }),
@@ -2572,6 +2572,29 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     estimateCredits: overrides.estimateRunCredits
       ?? (credits ? ({ capabilityId }) => credits.service.estimate(capabilityId) : null),
   });
+  /**
+   * The researcher's own stop of one run, in the one order every surface uses (review F4, F6): the intent is
+   * recorded first, so the run's monitor — which can read the aborted turn and write the terminal before this
+   * returns — cannot leave it unattributed; then the kernel's own session is stopped, so nothing goes on
+   * spending; then the ledger is told, as the researcher's. A kernel that is there and cannot be reached leaves
+   * the run running and says so (the error propagates): a ledger that says cancelled while the kernel keeps
+   * spending is worse than an error the page can retry.
+   * @param {any} project @param {any} run
+   * @returns {Promise<{ root: "canceled" | "runtime-not-running" | "session-not-found", canceled: any }>}
+   */
+  async function stopRunForUser(project, run) {
+    await agentRuns.noteStopRequest(project, { runId: run.id });
+    /** @type {"canceled" | "runtime-not-running" | "session-not-found"} */
+    let root = "canceled";
+    try {
+      if (!(await runtimeManager.cancelRuntimeSession(project, run.sessionId))) root = "runtime-not-running";
+    } catch (error) {
+      // A session the kernel no longer holds is not running either.
+      if (/** @type {any} */ (error)?.code !== "runtime_session_not_found") throw error;
+      root = "session-not-found";
+    }
+    return { root, canceled: await agentRuns.cancelRun(project, run.id, { by: "user" }) };
+  }
   agentRuns = new AgentRunStore(researchSessions, {
     agentRegistry,
     captureRuntimeEgressProof: (project, run) => config.evolutionEnabled === true && isEvolutionProject(project.id)
@@ -5257,8 +5280,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         if (body.deleted !== true) throw new HttpError(400, "invalid_payload", "deleted can only be set to true.");
         // A conversation still working is stopped first: a hidden run that
         // keeps spending is the one thing a reader could never find again.
+        // Stopped the way the stop button stops it — the kernel's own session first, then the ledger — and
+        // settled as the researcher's stop: the session must not go on spending, unseen and uncharged,
+        // behind a conversation that has been hidden (review F6).
         const current = (await agentRuns.list(ctx.project)).find((run) => run.id === runId);
-        if (current && current.status === "running") await agentRuns.cancelRun(ctx.project, runId, { by: "user" });
+        if (current && current.status === "running") await stopRunForUser(ctx.project, current);
         sendJson(res, 200, { data: await agentRuns.recordRunLabels(ctx.project, runId, { deleted: true }) });
         return;
       }
@@ -5607,16 +5633,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           sendJson(res, 200, { data: { run, cancellation: { root: "not-running", children: [] } } });
           return;
         }
-        let root = "canceled";
-        try {
-          if (!(await runtimeManager.cancelRuntimeSession(ctx.project, run.sessionId))) root = "runtime-not-running";
-        } catch (error) {
-          // A session the kernel no longer holds is not running either.
-          if (error?.code !== "runtime_session_not_found") throw error;
-          root = "session-not-found";
-        }
         const children = agentRuns.knownChildSessions(run).map((childSessionId) => ({ childSessionId, stop: "with-root" }));
-        const canceled = await agentRuns.cancelRun(ctx.project, runId, { by: "user" });
+        const { root, canceled } = await stopRunForUser(ctx.project, run);
         await audit(ctx, "agent_run.cancel", "completed", { target: runId });
         sendJson(res, 200, { data: { run: canceled, cancellation: { root, children } } });
         return;
@@ -5746,7 +5764,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             throw new HttpError(409, "account_busy", "Account has queued or running tasks.");
           }
         }
-        await Promise.all(projects.map((project) => runtimeManager.stop(project)));
+        // The account's own deletion of itself stops what was working in it: the researcher's stop.
+        await Promise.all(projects.map((project) => runtimeManager.stop(project, { by: "user" })));
         await managedBrowser.closeOwner(user.id);
         // The accounts an integration key of this one made for the people
         // behind it go first: a subject's memory has no owner once its
@@ -5893,7 +5912,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           if (await taskManager.hasActiveProject(project)) {
             throw new HttpError(409, "project_busy", "Project has queued or running tasks.");
           }
-          await runtimeManager.stop(project);
+          // The researcher deleting their own project stops what was working in it: their stop.
+          await runtimeManager.stop(project, { by: "user" });
           // Where the learning loop's lessons from this project go instead of
           // down with it (learningPreservation.mjs): the account's learning
           // project, made now if the account never learnt anything yet, and
