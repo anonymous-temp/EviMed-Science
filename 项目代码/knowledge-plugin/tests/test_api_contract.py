@@ -141,7 +141,7 @@ async def test_manifest(client):
     body = response.json()
     assert_schema(body, "Manifest")
     assert body["contract"]["version"] == SPEC["info"]["version"]
-    assert body["sources"]["total"] == 720 and body["sources"]["enabled"] >= 256
+    assert body["sources"]["total"] == 721 and body["sources"]["enabled"] >= 256
     assert body["capabilities"] == {"stream": True, "text": True, "refresh": True, "lookups": []}
     assert body["oldest_seq_available"] == 1
     assert "doi" in body["fields"]["entry"] and "journal" in body["fields"]["facts"]
@@ -154,13 +154,20 @@ async def test_sources_pages_and_filters(client):
     assert len(first["sources"]) == 500 and first["next_cursor"]
     second = (await client.get("/v1/sources", params={"cursor": first["next_cursor"]})).json()
     assert_schema(second, "SourcePage")
-    assert len(second["sources"]) == 220 and second["next_cursor"] is None
-    assert len({s["id"] for s in first["sources"] + second["sources"]}) == 720
+    assert len(second["sources"]) == 221 and second["next_cursor"] is None
+    assert len({s["id"] for s in first["sources"] + second["sources"]}) == 721
     tier = (await client.get("/v1/sources", params={"tier": "P0", "egress": "direct", "limit": 1000})).json()
     assert tier["sources"] and all(s["launch_tier"] == "P0" and s["egress"] == "direct" for s in tier["sources"])
     one = await client.get("/v1/sources/j-0028-4793")
     assert_schema(one.json(), "Source")
     assert one.json()["authority"] == 5 and one.json()["health"] == "new"
+    # Contract 1.3.0: the label is on the wire for every source, true for the platform's own and false for the rest.
+    assert one.json()["platform_produced"] is False
+    platform = await client.get("/v1/sources/evimed-evidence")
+    assert_schema(platform.json(), "Source")
+    assert platform.json()["platform_produced"] is True and platform.json()["owner_entity"] == "EviMed 证据中心"
+    everyone = first["sources"] + second["sources"]
+    assert [s["id"] for s in everyone if s["platform_produced"]] == ["evimed-evidence"]
     assert_error(await client.get("/v1/sources/nope"), 404, "not_found")
     assert_error(await client.get("/v1/sources", params={"lane": "news"}), 400, "invalid_params")
     assert_error(await client.get("/v1/sources", params={"limit": "1001"}), 400, "invalid_params")

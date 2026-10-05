@@ -44,7 +44,7 @@ import {
 } from "@evimed/domain";
 import { loadConfig } from "../../../apps/server/src/config.mjs";
 import { entryKeys } from "../../../apps/server/src/frontierPipeline.mjs";
-import { KnowledgePluginClient, contractCompatible, parseContractVersion, validateEntry }
+import { KnowledgePluginClient, contractCompatible, parseContractVersion, validateEntry, validateSource }
   from "../../../apps/server/src/knowledgePluginClient.mjs";
 import { ENTRY_PAGE, IDENTITY_LADDER, SOURCE_PAGE, identityInputs } from "./fixtures/record.mjs";
 
@@ -152,6 +152,29 @@ test("the fixtures were recorded off a live plugin speaking the pinned contract"
     assert.equal(Object.keys(entry.request.headers).some((header) => header.toLowerCase() === "authorization"), false,
       `${name} kept an Authorization header`);
     assert.ok(["none", "the deployment token", "a token the plugin never issued"].includes(entry.request.credential), name);
+  }
+});
+
+test("a contract minor is recorded again only where it changed, and provenance says so", async () => {
+  // 1.3.0 added `Source.platform_produced`: the manifest, the health answer and one source row were recorded again off a
+  // live plugin of that contract, and the stream's recordings are the 1.2.0 plugin's, still valid because a minor only adds.
+  const [partial] = provenance.partialRecordings ?? [];
+  assert.ok(partial, "provenance.json names the partial recording");
+  assert.equal(partial.contractVersion, pin.version);
+  assert.deepEqual(partial.fixtures.slice().sort(), ["health.json", "manifest.json", "source-platform-produced.json"]);
+  assert.ok(Number.isFinite(Date.parse(partial.recordedAt)) && String(partial.plugin?.build ?? "").length > 0);
+  for (const name of partial.fixtures) assert.ok(provenance.fixtures[name], `${name} is a listed recording`);
+  // The recorded source row, read the way the platform reads one: the attribute is on the wire and survives validation.
+  const recorded = await fixture("source-platform-produced.json");
+  assert.equal(recorded.id, "evimed-evidence");
+  assert.equal(recorded.platform_produced, true);
+  assert.equal(validateSource(recorded).source.platform_produced, true);
+  // Every source of the stream's recordings predates the field and reads false: absent is false, never a guess.
+  for (const name of ["sources-page-1.json", "sources-page-2.json"]) {
+    for (const row of (await fixture(name)).sources) {
+      assert.equal("platform_produced" in row, false, `${name} predates the field`);
+      assert.equal(validateSource(row).source.platform_produced, false);
+    }
   }
 });
 

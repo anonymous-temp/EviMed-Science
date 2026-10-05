@@ -451,7 +451,7 @@ def adapter_config(row: dict, access: str) -> dict:
 
 FIELD_ORDER = ("id", "name", "homepage", "lane", "source_type", "access", "egress", "authority", "safety_feed",
                "owner_entity", "launch_tier", "language", "region", "poll_floor_s", "poll_ceiling_s", "enabled",
-               "disabled_reason", "category", "config")
+               "disabled_reason", "category", "platform_produced", "config")
 
 
 def derive(row: dict) -> dict:
@@ -591,7 +591,9 @@ def finish(entry: dict, override: dict | None, accepted_relay: set[str]) -> dict
             problems = adapter_problems(entry)
             if problems:
                 entry["enabled"], entry["disabled_reason"] = False, ("adapter_config: " + problems[0])[:120]
-    return {key: entry.get(key) for key in FIELD_ORDER}
+    # ``platform_produced`` (contract 1.3.0) is written only where it is true: a row that is not the platform's own says
+    # nothing, and writing it everywhere would change every row's hash and so start every source's cursor again.
+    return {key: entry.get(key) for key in FIELD_ORDER if key != "platform_produced" or entry.get(key) is not None}
 
 
 def validate(registry: dict) -> list[str]:

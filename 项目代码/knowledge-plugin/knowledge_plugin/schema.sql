@@ -140,6 +140,9 @@ ALTER TABLE evimed_knowledge.sources ADD COLUMN IF NOT EXISTS registry_enabled b
 ALTER TABLE evimed_knowledge.sources ADD COLUMN IF NOT EXISTS operator_enabled boolean;
 ALTER TABLE evimed_knowledge.sources ADD COLUMN IF NOT EXISTS disabled_reason text;
 ALTER TABLE evimed_knowledge.sources ADD COLUMN IF NOT EXISTS category text;
+-- Contract 1.3.0 (flywheel F09, 2026-10-05): the source's content is produced by the platform that consumes the plugin.
+-- Only a label for the platform; polling, parsing and de-duplication treat it like any other source.
+ALTER TABLE evimed_knowledge.sources ADD COLUMN IF NOT EXISTS platform_produced boolean NOT NULL DEFAULT false;
 -- Claim order when several sources are due: 0 safety feeds and regulators, 1 journals and open
 -- APIs, 2 media and companies, 3 societies and conferences (plan 10.2.2 "优先级").
 ALTER TABLE evimed_knowledge.sources ADD COLUMN IF NOT EXISTS priority smallint NOT NULL DEFAULT 2;

@@ -16,10 +16,14 @@ import pytest
 
 from knowledge_plugin.adapters import REGISTRY, validate_config
 from knowledge_plugin.model import SourceConfig, SourceState
+from knowledge_plugin.registry import resolve_env_url
 
 REGISTRY_FILE = Path(__file__).resolve().parents[2] / "registry" / "sources.json"
 NOW = datetime(2026, 9, 22, 9, 0, tzinfo=timezone.utc)
-ROWS = json.loads(REGISTRY_FILE.read_text(encoding="utf-8"))["sources"]
+# A row that takes its address from the deployment (``config.url_env``) is planned as a deployment that has set it would
+# have it: the platform's own feed, the one source whose address a registry in a repository cannot name.
+DEPLOYMENT = {"EVIMED_EVIDENCE_FEED_URL": "https://www.evimed.test/evidence/feed.json"}
+ROWS = [resolve_env_url(row, DEPLOYMENT) for row in json.loads(REGISTRY_FILE.read_text(encoding="utf-8"))["sources"]]
 READABLE = [r for r in ROWS if r["access"] in REGISTRY]
 
 

@@ -4,7 +4,9 @@
 // zone's card are never; the two paths answer 404 by name while the public pages are off; a page is cached by the
 // zones' content version and answered 304 to its ETag; and no source text leaves.
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { createServer } from "node:http";
+import path from "node:path";
 import { after, before, beforeEach, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { EVIDENCE_FEED_VERSION, createEvidenceFeed, evidenceCardAddress, evidenceFeedAbout, evidenceFeedMetricFamilies, evidenceFeedRss } from "../src/evidenceFeed.mjs";
@@ -12,6 +14,7 @@ import { createEvidenceFeedRoutes } from "../src/evidenceFeedRoutes.mjs";
 import { EvidenceZoneService } from "../src/evidenceZoneService.mjs";
 import { migrateFrontier } from "../src/frontierPersistence.mjs";
 import { sendError } from "../src/security.mjs";
+import { PLUGIN_FIXTURE_DIR, pluginProvenance, recordEvidenceFeed } from "./helpers/evidenceFeedFixture.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL;
@@ -241,4 +244,18 @@ test("the card's address is fixed on the public URL, the study it is about is re
     { doi: [], pmid: ["42"], registryIds: ["NCT01234567"] });
   const rss = evidenceFeedRss({ generatedAt: "2026-10-05T08:00:00.000Z", items: [], next: "abc" }, { publicUrl: PUBLIC_URL, selfPath: "/evidence/feed.xml" });
   assert.match(rss, /<atom:link rel="next" type="application\/rss\+xml" href="https:\/\/www\.evimed\.test\/evidence\/feed\.xml\?cursor=abc"\/>/);
+});
+
+test("the knowledge-source plugin's recording of this feed is what the feed builds now, byte for byte", options, async (t) => {
+  // The plugin reads this feed like any publisher's and replays a recording of it in its tests. The recording is made by
+  // this code (helpers/evidenceFeedFixture.mjs), so a change to the feed's shape that is not recorded again fails here.
+  const recorded = await readFile(path.join(PLUGIN_FIXTURE_DIR, "01.json"), "utf8").catch(() => null);
+  if (recorded == null) { t.skip("outside the monorepo: the plugin's copy is not here to compare"); return; }
+  const now = await recordEvidenceFeed(db);
+  assert.equal(recorded, now.body, "re-record: OPEN_SCIENCE_TEST_POSTGRES_URL=… node apps/server/test/helpers/evidenceFeedFixture.mjs --write");
+  const provenance = JSON.parse(await readFile(path.join(PLUGIN_FIXTURE_DIR, "provenance.json"), "utf8"));
+  assert.deepEqual(provenance, pluginProvenance(now));
+  const items = JSON.parse(recorded).items;
+  assert.deepEqual(items.map((item) => [item.originality, item.primary]).sort(), [["brief", false], ["original_research", true], ["recalculation", true]]);
+  assert.deepEqual(items.find((item) => item.originality === "brief").about.registryIds, ["NCT00412984"], "an interpretation names the trial it is about");
 });

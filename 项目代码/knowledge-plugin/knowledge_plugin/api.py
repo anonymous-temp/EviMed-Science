@@ -1,4 +1,4 @@
-"""The HTTP face: ``contract/knowledge-plugin-openapi.yaml`` (v1.2.0), served exactly.
+"""The HTTP face: ``contract/knowledge-plugin-openapi.yaml`` (v1.3.0), served exactly.
 
 Rules the handlers keep:
 
@@ -212,6 +212,7 @@ class Source(ContractModel):
     authority: int = Field(ge=1, le=5)
     safety_feed: bool
     owner_entity: str
+    platform_produced: bool = False
     launch_tier: Literal["P0", "P1", "P2"]
     language: str | None = None
     region: str | None = None
@@ -294,7 +295,7 @@ def serialize_source(row: dict) -> dict:
     return Source(
         id=row["id"], name=row["name"], homepage=row["homepage"], lane=row["lane"], source_type=row["source_type"],
         access=row["access"], egress=row["egress"], authority=row["authority"], safety_feed=row["safety_feed"],
-        owner_entity=row["owner_entity"], launch_tier=row["launch_tier"], language=row["language"], region=row["region"],
+        owner_entity=row["owner_entity"], platform_produced=bool(row.get("platform_produced")), launch_tier=row["launch_tier"], language=row["language"], region=row["region"],
         cadence_s=row["poll_interval_s"], enabled=row["enabled"], retired_at=row["retired_at"],
         health=row["health"] if row["health"] in HEALTH_STATES else "degraded", last_ok_at=row["last_ok_at"],
         last_new_entry_at=row["last_new_entry_at"], consecutive_failures=row["consecutive_failures"],

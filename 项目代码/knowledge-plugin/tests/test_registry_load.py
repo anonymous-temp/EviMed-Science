@@ -13,7 +13,7 @@ import pytest
 import yaml
 
 from knowledge_plugin import model
-from knowledge_plugin.registry import RegistryError, load_registry, parse_registry, sync_registry, validate_row
+from knowledge_plugin.registry import FEED_URL_UNSET, RegistryError, load_registry, parse_registry, resolve_env_url, row_sha256, sync_registry, validate_row
 
 ROOT = Path(__file__).resolve().parent.parent
 REGISTRY = ROOT / "registry" / "sources.json"
@@ -32,8 +32,8 @@ def test_the_committed_registry_is_a_fresh_deterministic_build():
 
 
 def test_every_row_validates(document):
-    rows = load_registry(REGISTRY)
-    assert len(rows) == len(document["sources"]) == 720
+    rows = load_registry(REGISTRY, {})
+    assert len(rows) == len(document["sources"]) == 721
     assert sum(r.enabled for r in rows) >= 256
 
 
@@ -117,12 +117,80 @@ def test_the_plan_decisions_hold(document):
         assert by_id[sid]["enabled"] and by_id[sid]["launch_tier"] == "P1" and by_id[sid]["access"] == "html-list"
 
 
+FEED = "https://www.evimed.test/evidence/feed.json"
+
+
+def test_the_platforms_own_feed_is_one_ordinary_source_that_waits_for_its_address(document):
+    by_id = {s["id"]: s for s in document["sources"]}
+    row = by_id["evimed-evidence"]
+    # In the file it names the variable and is marked the platform's own; every other row says nothing of either.
+    assert row["platform_produced"] is True and row["config"]["url_env"] == "EVIMED_EVIDENCE_FEED_URL" and "url" not in row["config"]
+    assert row["access"] == "json-api" and row["config"]["family"] == "evimed-evidence"
+    assert [s["id"] for s in document["sources"] if "platform_produced" in s] == ["evimed-evidence"], "no row carries the label but its own"
+    assert row["authority"] == 3, "no boost: the middle of the scale, like a source nobody vouched for"
+    assert validate_row(row) == []
+
+    def loaded(environ):
+        (found,) = [r for r in load_registry(REGISTRY, environ) if r.source.id == "evimed-evidence"]
+        return found
+
+    # No address: loaded, disabled by name, nothing to poll.
+    for environ in ({}, {"EVIMED_EVIDENCE_FEED_URL": ""}, {"EVIMED_EVIDENCE_FEED_URL": "  "}, {"EVIMED_EVIDENCE_FEED_URL": "not a url"},
+                    {"EVIMED_EVIDENCE_FEED_URL": "ftp://www.evimed.test/feed.json"}):
+        waiting = loaded(environ)
+        assert waiting.enabled is False and waiting.disabled_reason == FEED_URL_UNSET, environ
+        assert waiting.source.platform_produced is True, "the label is the source's, address or none"
+    # An address: enabled, polled at that URL, and only that host.
+    reading = loaded({"EVIMED_EVIDENCE_FEED_URL": FEED})
+    assert reading.enabled is True and reading.disabled_reason is None
+    assert reading.source.config["url"] == FEED and reading.source.config["allowed_hosts"] == ["www.evimed.test"]
+    assert reading.source.platform_produced is True
+    # A moved address is a changed source: its hash moves, so its cursor starts again.
+    moved = loaded({"EVIMED_EVIDENCE_FEED_URL": "https://other.evimed.test/evidence/feed.json"})
+    assert moved.sha256 != reading.sha256
+    assert loaded({"EVIMED_EVIDENCE_FEED_URL": FEED}).sha256 == reading.sha256
+    # A row with no url_env is untouched, so no other source's hash moved.
+    plain = good_row(document)
+    assert resolve_env_url(plain, {}) is plain
+    assert row_sha256(plain) == [r for r in load_registry(REGISTRY, {}) if r.source.id == plain["id"]][0].sha256
+
+
+def test_the_platform_label_and_the_address_variable_are_validated(document):
+    row = copy.deepcopy(next(s for s in document["sources"] if s["id"] == "evimed-evidence"))
+    assert validate_row({**row, "platform_produced": "yes"}) and any("wrong type" in p for p in validate_row({**row, "platform_produced": "yes"}))
+    bad_name = copy.deepcopy(row)
+    bad_name["config"]["url_env"] = "lower case"
+    assert any("environment variable" in p for p in validate_row(bad_name))
+    unnamed = copy.deepcopy(row)
+    del unnamed["config"]["url_env"]
+    assert any("enabled without config.url" in p for p in validate_row(unnamed))
+
+
+@pytest.mark.db
+async def test_the_platform_label_and_the_wait_for_an_address_reach_the_table(pool):
+    from datetime import datetime, timezone
+    now = datetime(2026, 10, 5, tzinfo=timezone.utc)
+    async with pool.connection() as conn:
+        rows = [r for r in load_registry(REGISTRY, {}) if r.source.id in ("evimed-evidence", "fda-press-announcements")]
+        await sync_registry(conn, rows, now)
+        stored = {r["id"]: r for r in await (await conn.execute(
+            "SELECT id, platform_produced, enabled, disabled_reason, health FROM evimed_knowledge.sources")).fetchall()}
+        assert stored["evimed-evidence"] == {"id": "evimed-evidence", "platform_produced": True, "enabled": False,
+                                              "disabled_reason": FEED_URL_UNSET, "health": "disabled"}
+        assert stored["fda-press-announcements"]["platform_produced"] is False
+        # The address arrives (a restart with the variable set): the source is on and its cursor is its own to start.
+        rows = [r for r in load_registry(REGISTRY, {"EVIMED_EVIDENCE_FEED_URL": FEED}) if r.source.id == "evimed-evidence"]
+        await sync_registry(conn, rows, now)
+        reading = await (await conn.execute("SELECT enabled, disabled_reason, host, platform_produced FROM evimed_knowledge.sources WHERE id = 'evimed-evidence'")).fetchone()
+        assert reading == {"enabled": True, "disabled_reason": None, "host": "www.evimed.test", "platform_produced": True}
+
+
 @pytest.mark.db
 async def test_sync_inserts_every_row_and_retires_missing_ones(pool):
     """Every row goes through the real table and its CHECK constraints (egress, tier, authority,
     cadence bounds, health); then the operator switch and retirement rules hold."""
     from datetime import datetime, timezone
-    rows = load_registry(REGISTRY)
+    rows = load_registry(REGISTRY, {})
     async with pool.connection() as conn:
         counts = await sync_registry(conn, rows, datetime.now(timezone.utc))
         assert counts == {"rows": len(rows), "enabled": sum(r.enabled for r in rows), "retired": 0}

@@ -91,6 +91,9 @@ services:
       KNOWLEDGE_PLUGIN_BROWSER_CDP_URL: ${KNOWLEDGE_PLUGIN_BROWSER_CDP_URL:-http://frontier-browser:9222}
       # 0 serves the stream without crawling (a restore drill, a paused registry).
       KNOWLEDGE_PLUGIN_CRAWL: ${KNOWLEDGE_PLUGIN_CRAWL:-1}
+      # The platform's own evidence feed (flywheel F09), read as one more ordinary source: its public address, which
+      # the registry cannot name. Unset, the source `evimed-evidence` loads disabled and nothing is polled.
+      EVIMED_EVIDENCE_FEED_URL: ${EVIMED_EVIDENCE_FEED_URL:-}
     volumes:
       - type: bind
         source: ${OPEN_SCIENCE_KNOWLEDGE_PLUGIN_TOKEN_HOST_FILE:-/dev/null}

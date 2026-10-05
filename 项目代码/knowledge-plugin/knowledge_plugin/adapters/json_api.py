@@ -34,6 +34,17 @@ measured against each on 2026-09-21/22:
     ``messages[0]`` says ``cursor``/``count``/``total``; 100 records per call on 2026-09-22 (the
     30 of the probe notes is outdated), so the next cursor is ``cursor + count``. One entry per
     DOI (the newest version in the page); corresponding-author names are not kept.
+``evimed-evidence`` (flywheel F09, 2026-10-05)
+    The platform's own feed of what its evidence may offer the frontier, read like any other publisher's: a public
+    URL (``config.url_env`` names the environment variable the deployment sets it in; unset, the registry loads
+    the source disabled and nothing is polled), JSON in a fixed, versioned shape (``evimed-evidence-feed/1``),
+    newest first, a ``next`` cursor, an ETag. The source is ``platform_produced`` (contract 1.3.0). One entry per
+    card, keyed on the card's id; a card that changed comes back as a new revision of the same entry. **A card is
+    not the work it is about**: the entry carries no ``doi`` and no ``pmid`` (the platform would take the card
+    for a second sighting of the paper and fold it into the paper's item), and an interpretation card hands the
+    registry numbers of the study it is about to the frontier's event clustering through ``registry_ids``, so
+    it is found beside that study as one more report. A card that is first-hand itself (an original analysis, a
+    recalculation, original research) carries none, and forms its own event.
 ``federalregister``, ``arxiv``, ``medhelm``, ``prepare-registry``, ``star-rating``
     See the functions below. PREPARE records carry contact name, e-mail, phone, address and
     WeChat id and include unsubmitted drafts; only whitelisted fields leave, drafts are skipped.
@@ -678,6 +689,45 @@ def parse_star_rating(result: FetchResult, source: SourceConfig, now: datetime) 
     return ParseOutput(entries=entries, next=next_request)
 
 
+EVIMED_EVIDENCE_FEED_PREFIX = "evimed-evidence-feed/"
+EVIMED_EVIDENCE_FEED_MAJOR = "1"
+
+
+def parse_evimed_evidence(result: FetchResult, source: SourceConfig, now: datetime) -> ParseOutput:
+    if result.status != 200:
+        raise FetchError("http-error", f"evimed_evidence_http_{result.status}", status=result.status)
+    payload = load_json(result, "evimed_evidence")
+    version = payload.get("version") if isinstance(payload, dict) else None
+    items = payload.get("items") if isinstance(payload, dict) else None
+    if not isinstance(version, str) or not version.startswith(EVIMED_EVIDENCE_FEED_PREFIX) or not isinstance(items, list):
+        raise FetchError("parse-error", "evimed_evidence_unexpected_shape", status=result.status)
+    # A number this reader does not know is a shape it does not know: refused by name, not read hopefully.
+    if version[len(EVIMED_EVIDENCE_FEED_PREFIX):] != EVIMED_EVIDENCE_FEED_MAJOR:
+        raise FetchError("parse-error", "evimed_evidence_version_unsupported", status=result.status)
+    config = source.config or {}
+    hosts = config.get("allowed_hosts")
+    entries = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        card_id, title, link = str(item.get("id") or "").strip(), clean_markup(item.get("title")), str(item.get("url") or "").strip()
+        # The card's own address on the platform's host: anything else is not this feed's to hand on.
+        if not card_id or not title or not link.startswith(("http://", "https://")) or not host_allowed(link, hosts):
+            continue
+        when, precision = parse_date(item.get("publishedAt") or item.get("updatedAt"))
+        about = item.get("about") if isinstance(item.get("about"), dict) else {}
+        registered = [] if item.get("primary") is True else registry_ids(" ".join(str(r) for r in about.get("registryIds") or []))
+        entries.append(make_entry(
+            external_key=card_id, url=link, title=title, summary=clean_markup(item.get("summary")) or None,
+            published_at=when, precision=precision, language=guess_language(title, source.language or "zh"),
+            registry=registered,
+        ))
+    next_request = None
+    if isinstance(payload.get("next"), str) and payload["next"]:
+        next_request = RequestSpec(url=set_query_param(result.request.url, "cursor", payload["next"]), conditional=False, api=True)
+    return ParseOutput(entries=entries, next=next_request)
+
+
 def parse_arxiv(result: FetchResult, source: SourceConfig, now: datetime) -> ParseOutput:
     from .feed import parse_feed  # arXiv's API answers Atom; the feed reader knows its quirks
 
@@ -785,6 +835,7 @@ FAMILIES: dict[str, Callable[[FetchResult, SourceConfig, datetime], ParseOutput]
     "fda-advisory-calendar": parse_fda_advisory_calendar,
     "openalex": parse_openalex,
     "quotemedia-headlines": parse_quotemedia_headlines,
+    "evimed-evidence": parse_evimed_evidence,
 }
 
 # Rows the registry still labels ``generic`` are recognised by host (the three P0 ones).
@@ -832,6 +883,8 @@ class JsonApiAdapter:
             problems.append("ctgov trial_event must be registered | results-posted | status | updated")
         if family == "star-rating" and str(config.get("method") or "").upper() != "POST":
             problems.append("the STAR list API answers POST only (GET: code -20001)")
+        if family == "evimed-evidence" and not (config.get("url") or config.get("url_env")):
+            problems.append("evimed-evidence names its feed by config.url or by config.url_env (an environment variable)")
         return problems
 
     def plan(self, source: SourceConfig, state: SourceState, now: datetime) -> list[RequestSpec]:
@@ -856,7 +909,8 @@ class JsonApiAdapter:
         if method == "POST":
             body = json.dumps(config.get("body") or {"page": 1, "limit": 40}, ensure_ascii=False).encode("utf-8")
             headers = {"Content-Type": "application/json"}
-        return [RequestSpec(url=url, method=method, body=body, headers=headers, conditional=False, api=True)]
+        # The platform's own feed answers an ETag, and an unchanged page is a 304: the first request keeps its validators.
+        return [RequestSpec(url=url, method=method, body=body, headers=headers, conditional=family == "evimed-evidence", api=True)]
 
     def parse(self, result: FetchResult, source: SourceConfig, now: datetime) -> ParseOutput:
         family = family_of(source)
