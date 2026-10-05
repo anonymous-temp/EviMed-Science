@@ -3114,7 +3114,11 @@ export class DockerRuntimeProvider {
     const personal = personalSkillGeneration?.reference ? await verifyPersonalSkillGeneration(this.config, project, personalSkillGeneration.reference,
       personalSkillGeneration.identity.baseRuntimeImageDigest) : null;
     if (personal) await this.assertPersonalImage(personal.identity.baseRuntimeImageDigest);
-    if (platformSkillGeneration) await verifyPlatformSkillGeneration(this.config, platformSkillGeneration.reference);
+    // Verified once more at the last moment before it is mounted; an extension that fails here starts the runtime without it.
+    if (platformSkillGeneration) {
+      try { await verifyPlatformSkillGeneration(this.config, platformSkillGeneration.reference); }
+      catch { manager.platformSkillSupply?.noteFailure?.("platform_skill_generation_unverified"); platformSkillGeneration = null; }
+    }
     const plan = buildRuntimeLaunchPlan(this.config, project, port, { pluginConfig, platformSkillGeneration: platformSkillGeneration?.reference ?? null, personalSkillGeneration: personal?.reference ?? null,
       personalSkillImageId: personal?.identity.baseRuntimeImageDigest ?? null, extensionGeneration: extensionGeneration?.reference ?? null,
       extensionImageId: extensionGeneration?.identity.baseRuntimeImageDigest ?? null });
@@ -4092,7 +4096,7 @@ export class RuntimeManager {
     this.lastMountedCapsuleMethods.set(this.key(project), mountedMethods.capsule ?? []);
     // The provider's own preparation: a container's plan, directories and
     // orphan cleanup, or a cloud session with the project's files carried in.
-    const platformSkillGeneration = this.platformSkillOverrides.has(key)?this.platformSkillOverrides.get(key):(this.platformSkillSupply ? await this.platformSkillSupply.prepareForRuntime({...project,capabilityId:project.capabilityId??this.platformSkillScopes.get(key)}) : null);
+    const platformSkillGeneration = this.platformSkillOverrides.has(key)?this.platformSkillOverrides.get(key):(await this.selectPlatformSkills(project,this.platformSkillScopes.get(key))).generation;
     const plan = await this.provider.prepare(project, { port, pluginConfig, capsuleMethodsMounted, platformSkillGeneration, personalSkillGeneration, extensionGeneration });
 
     // Nothing is copied into a project any more: the image carries the skill
@@ -5703,7 +5707,9 @@ export class RuntimeManager {
       if(!this.platformSkillSupply||!this.runtimes.has(key))return{adopted:false};
       const refresh=async()=>{
         const runtime=this.runtimes.get(key);if(!runtime)return{adopted:false};
-        const wanted=await this.platformSkillSupply.prepareForRuntime({...project,capabilityId:project.capabilityId??capabilityId});
+        const {generation:wanted,degraded}=await this.selectPlatformSkills(project,capabilityId);
+        // A selection that failed is not a request to mount nothing: what the runtime has stays, and the next boundary asks again.
+        if(degraded)return{adopted:false};
         if((wanted?.reference?.generationHash??null)===(runtime.platformSkillGeneration?.reference?.generationHash??null))return{adopted:false};
         if(this.starts.has(key)||this.runtimeStops.has(key)||this.boundedRuntimeScope(project)||await this.idleVerdict(project)!=='idle')return{adopted:false,pending:true};
         if(this.pluginService&&await this.pluginService.hasPendingPrompts(project))return{adopted:false,pending:true};
@@ -5727,6 +5733,27 @@ export class RuntimeManager {
   }
 
   runtimePlatformSkills(project) { return this.runtimes.get(this.key(project))?.platformSkillGeneration?.pins ?? []; }
+
+  /**
+   * The platform skills a runtime for this project would mount. An optional extension failing never withholds
+   * unrelated research: the supply falls back to the last generation that verified, or to none, and says so
+   * (`degraded`); a supply that throws anyway is counted and treated the same. Every runtime start and every
+   * dispatch on a live runtime asks this, so a corrupt file under `<data>/.openscience/platform-skills/` used to
+   * fail them all.
+   * @param {Record<string, any>} project @param {string | null | undefined} capabilityId
+   * @returns {Promise<{ generation: any, degraded: boolean }>}
+   */
+  async selectPlatformSkills(project, capabilityId) {
+    const supply = this.platformSkillSupply;
+    if (!supply) return { generation: null, degraded: false };
+    const scoped = { ...project, capabilityId: project.capabilityId ?? capabilityId };
+    try {
+      return supply.selectForRuntime ? await supply.selectForRuntime(scoped) : { generation: await supply.prepareForRuntime(scoped), degraded: false };
+    } catch {
+      supply.noteFailure?.("platform_skill_selection_failed");
+      return { generation: null, degraded: true };
+    }
+  }
 
   runtimePersonalSkillGeneration(project) { return this.runtimes.get(this.key(project))?.personalSkillGeneration ?? null; }
   runtimePersonalSkillPins(project) {

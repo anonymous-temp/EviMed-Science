@@ -85,7 +85,7 @@ export function createEvolution({ config, store, documents, jobs, database, usag
   const evidenceRegistration = createEvolutionEvidenceRegistration({ service, integration, store, agentRuns, runtimeManager, sourceService, executionEvidence });
   service.callbacks.pollProspectiveTargets = () => evidenceRegistration.pollProspectiveTargets();
   const runs = createEvolutionRuns({ config, store, registry, runtimeManager, researchSessions, agentRuns, usageLedger, evaluationIsolation, service });
-  const supply = createPlatformSkillSupply(config);
+  const supply = createPlatformSkillSupply(config, { report });
   const candidateEvaluator = createEvolutionCandidateEvaluator({ config, controller, fetchImpl,
     withReviewLock: (id, operation) => service.withLock(`candidate-review:${id}`, operation),
     evaluateWorkflowSmoke: createEvolutionWorkflowSmoke({ service, runs, store }),
