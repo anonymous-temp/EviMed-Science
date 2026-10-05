@@ -493,7 +493,7 @@ test('research task billing preserves fractional evidence and deduplicates child
   assert.equal((await pendingService.settleRun({ ...run, runId: pendingId, dispatchId: null })).status, 'pending');
   const pendingStatement = (await service.statements(userId, { limit: 100 })).items.find(item => item.runId === pendingId);
   assert.equal(pendingStatement.amount, null);
-  assert.equal(pendingStatement.requestedAmount, 2);
+  assert.equal(pendingStatement.requestedAmount, '2.00000000');
   const missingPayerId = `run_${randomUUID()}`;
   await database.query(`INSERT INTO evimed_credits.settlements(run_id,user_id,memo,cost_cny,credits,credits_per_cny,status,attempts,next_attempt_at,owner_created_at)
     SELECT $1,id,'Unresolved old payer',2,2,1,'pending',1,$3::timestamptz,created_at FROM evimed_control.users WHERE id=$2`,

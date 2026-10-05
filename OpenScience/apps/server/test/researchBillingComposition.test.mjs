@@ -99,7 +99,7 @@ test("real app completion preserves account generation and charges the external 
   assert.equal(statementResponse.status, 200);
   const statement = (await statementResponse.json()).data.items.find(item => item.runId === created.id);
   assert.equal(statement.status, "settled");
-  assert.equal(statement.amount, 2);
+  assert.equal(statement.amount, '2.00000000');
   assert.equal(statement.actualCny, "5.75000000");
   assert.equal(statement.platformCostCny, "3.00000000");
 });

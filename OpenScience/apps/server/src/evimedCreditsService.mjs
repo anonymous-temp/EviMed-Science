@@ -164,6 +164,16 @@ export function chargeDecision(run) {
   return { charges: false, basis: "not_charged", reason: "not_delivered" };
 }
 
+/**
+ * A stored amount as the exact 8-decimal string a statement carries. An amount
+ * that is not one is drawn as nothing rather than guessed at.
+ * @param {unknown} value @returns {string}
+ */
+function exactAmount(value) {
+  const units = creditUnitsOrNull(typeof value === "number" ? String(value) : value);
+  return researchMoneyDecimal(units !== null && units > 0n ? units : 0n);
+}
+
 /** Whether a database error is one a settlement should simply be tried again after. @param {any} error */
 function transient(error) {
   return !(error instanceof HttpError) && !(error instanceof SimulatedWalletRefusal)
@@ -717,15 +727,15 @@ export class EvimedCreditsService {
         : evidence.kind === 'grant' ? `${label}赠送 · ${sourceLabel ?? '赠送'}`
           : evidence.kind === 'expire' ? `${label}赠送到期${sourceLabel ? ` · ${sourceLabel}` : ''}` : `${label}调整`;
       return { id: row.run_id, runId: null, title, at, status: 'settled', kind: evidence.kind,
-        amount: String(evidence.credits), requestedAmount: String(evidence.credits), waivedCny: '0.00000000',
-        balanceAfter: evidence.balanceAfter == null ? null : String(evidence.balanceAfter),
+        amount: exactAmount(evidence.credits), requestedAmount: exactAmount(evidence.credits), waivedCny: '0.00000000',
+        balanceAfter: evidence.balanceAfter == null ? null : exactAmount(evidence.balanceAfter),
         source, sourceLabel, expiresAt, note: typeof evidence.note === 'string' ? evidence.note : null, simulated: this.simulated };
     }
-    const taken = String(evidence.takenCredits ?? evidence.chargedCny ?? '0');
-    const absorbed = String(evidence.absorbedCredits ?? '0');
-    const requested = String(evidence.requestedCny ?? evidence.chargedCny ?? '0');
-    const absorbedUnits = researchMoneyUnits(absorbed.includes('.') ? absorbed : `${absorbed}.0`);
-    const takenUnits = researchMoneyUnits(taken.includes('.') ? taken : `${taken}.0`);
+    const taken = exactAmount(evidence.takenCredits ?? evidence.chargedCny);
+    const absorbed = exactAmount(evidence.absorbedCredits);
+    const requested = exactAmount(evidence.requestedCny ?? evidence.chargedCny);
+    const absorbedUnits = researchMoneyUnits(absorbed);
+    const takenUnits = researchMoneyUnits(taken);
     const status = absorbedUnits > 0n ? 'absorbed' : takenUnits === 0n ? 'waived'
       : row.status === 'pending' ? 'pending' : row.status === 'settled' ? 'settled' : 'failed';
     const paid = { gifted: 0n, purchased: 0n };
@@ -737,7 +747,7 @@ export class EvimedCreditsService {
       amount: ['failed', 'pending'].includes(status) ? null : taken, requestedAmount: requested,
       absorbed: absorbedUnits > 0n ? absorbed : null,
       paidBy: evidence.lots ? { gifted: researchMoneyDecimal(paid.gifted), purchased: researchMoneyDecimal(paid.purchased) } : null,
-      balanceAfter: evidence.balanceAfter == null ? null : String(evidence.balanceAfter),
+      balanceAfter: evidence.balanceAfter == null ? null : exactAmount(evidence.balanceAfter),
       notChargedCode: status === 'waived' ? code : null,
       notChargedReason: status === 'waived' && code ? (/** @type {Record<string, string>} */ (CREDIT_NOT_CHARGED_REASONS)[code] ?? null) : null,
       actualCny: evidence.actualCny, billableCny: evidence.billableCny,
@@ -813,8 +823,8 @@ export class EvimedCreditsService {
       calls: usage ? usage.calls : (Array.isArray(evidence.evidence) ? evidence.evidence.filter((/** @type {any} */ line) => line.billable).length : null),
       cacheHitTokens: usage?.cacheHitTokens ?? null, cacheMissTokens: usage?.cacheMissTokens ?? null, outputTokens: usage?.outputTokens ?? null,
       priceVersions: usage?.priceVersions ?? [], pricingVersion: evidence.pricingVersion ?? null, walletContract: evidence.walletContract ?? null,
-      amount: String(evidence.takenCredits ?? evidence.chargedCny ?? '0'), requestedAmount: String(evidence.requestedCny ?? evidence.chargedCny ?? '0'),
-      absorbed: String(evidence.absorbedCredits ?? '0'),
+      amount: exactAmount(evidence.takenCredits ?? evidence.chargedCny), requestedAmount: exactAmount(evidence.requestedCny ?? evidence.chargedCny),
+      absorbed: exactAmount(evidence.absorbedCredits),
       lots: Array.isArray(evidence.lots) ? evidence.lots.map((/** @type {any} */ lot) => ({ kind: lot.kind, source: lot.source, expiresAt: lot.expiresAt ?? null, amount: String(lot.amount) })) : [],
     } };
   }
