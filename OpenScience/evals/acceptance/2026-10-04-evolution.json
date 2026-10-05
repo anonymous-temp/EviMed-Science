@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "name": "EviMed Evolve implementation and acceptance",
-  "recordedAt": "2026-10-05T02:03:08.017449+00:00",
+  "recordedAt": "2026-10-05T02:54:14.424789+00:00",
   "plan": {
     "path": "docs/superpowers/plans/2026-10-04-research-evolution-engine.md",
     "sha256": "1d8edf91154349a6bc98b410bcd2ce8af575d244da78e0ea50f829ad2d7c6901"
@@ -17,12 +17,23 @@
       "resolvedDomainChecked": 210,
       "mismatches": [],
       "passed": true,
+      "sourceArtifactHash": "0f8e97db83207e227f6969359b2af01d134ec5d0bbd84352e388bb0d5b2a3f96",
+      "imageId": "sha256:36e63b0e4ce115712ae70e3d3c0059b0c14a730294101dd8f9d4039cef14967d",
+      "verifiedAt": "2026-10-05T02:48:57.511381+00:00",
+      "buildNoCache": true
+    },
+    "qualification": "The final image closure and resolved domain bytes were verified. Earlier research executions retain their earlier source identities. Final native-proof audit-reader wiring was exercised against the exact preserved historical run, without a new model call.",
+    "implementationCommit": "759f2502aa213492560449472f77856135c13c4d",
+    "previousControlImageVerification": {
+      "checked": 901,
+      "resolvedDomainChecked": 210,
+      "mismatches": [],
+      "passed": true,
       "sourceArtifactHash": "d83e41771bb347ebd2dee6c16a1f8df0ce79be051bfbc5422acc3eec8c81dcca",
       "imageId": "sha256:686ed467f57bff27c912235793a7a5fc53fc927da21a5f215ffc5786f16ad59a",
       "verifiedAt": "2026-10-05T01:56:16.491970+00:00",
       "buildNoCache": true
-    },
-    "qualification": "The verified control image closure contains 901 files. Historical executions predate this artifact and retain their own source identities; runtime image identity is separately retained by the acceptance deployment. Online acceptance exercises this control-plane overlay; it does not claim a new production frontend deployment or browser tour."
+    }
   },
   "status": {
     "implementation": "implemented",
@@ -121,22 +132,22 @@
         "todo": 0
       },
       "status": "passed",
-      "qualification": "This full regression preceded the final end-proof cleanup ordering, typed exclusion error, concurrent proof reuse, authoritative run binding and cutoff-compaction fixes; the focused checks below cover those changes and types/lint27 cover the final source."
+      "qualification": "The full server regression preceded the later end-proof cleanup, typed gateway exclusion, concurrent proof reuse, authoritative run binding, cutoff-compaction, quota deferral and audit-reader wiring changes. Focused regressions cover those changes; final types/lint29 and full domain29 passed. This is not a claim that full CI passed."
     },
     "lint_full": {
-      "file": "evolution-lint-final-27.log",
+      "file": "evolution-lint-final-29.log",
       "sha256": "9ac38cf898c8d55672f272260ef758550bc9fd24def609cfb72c02ba2af1f866",
       "bytes": 1602,
-      "kind": "lint",
-      "completed": true,
-      "qualification": "A retained existing LoginPage autofocus warning is not represented as warning-free lint."
+      "status": "passed",
+      "summary": {},
+      "qualification": "Exit 0; the pre-existing LoginPage autofocus warning remains."
     },
     "server_types_latest": {
-      "file": "evolution-types-final-27.log",
+      "file": "evolution-types-final-29.log",
       "sha256": "1400b373032ea304064a79f66cebff2f90ecbe621eb74ecb4d77ae7538641774",
       "bytes": 254,
-      "kind": "types",
-      "completed": true
+      "status": "passed",
+      "summary": {}
     },
     "mcp": {
       "path": "/tmp/evolution-mcp-final.log",
@@ -153,21 +164,18 @@
       "status": "passed"
     },
     "domain": {
-      "path": "/tmp/evolution-domain-final-4.log",
-      "exists": true,
-      "bytes": 84629,
-      "sha256": "d41902319950e49484d50693f97b1fc292f348922e91089d7b84ffd0dc71189a",
-      "modifiedAt": "2026-10-04T19:49:26.828997+00:00",
-      "summaryKind": "node-summary",
-      "observedSummary": {
-        "tests": 845,
-        "pass": 845,
+      "file": "evolution-domain-final-29.log",
+      "sha256": "6b18c3255026c65c10942c6b251773e79536f4917220dbd478a4bb26fb9174d8",
+      "bytes": 84778,
+      "status": "passed",
+      "summary": {
+        "tests": 846,
+        "pass": 846,
         "fail": 0,
         "cancelled": 0,
         "skipped": 0,
         "todo": 0
-      },
-      "status": "passed"
+      }
     },
     "evolution_ui": {
       "path": "/tmp/evolution-ui-final-23.log",
@@ -469,17 +477,73 @@
       "status": "passed"
     },
     "source_credentials_final": {
-      "file": "evolution-source-secrets-final-27.log",
-      "sha256": "64bd64bf2a901d1c0dfb170201a08d75aa66ca9c9ce7aa7cbfca68fa44e8a171",
-      "bytes": 68,
+      "file": "evolution-source-secrets-final-29.log",
+      "sha256": "d88665c49b010793591e4a9a1d157cb3444fdffa44d099226066c4d2d4674f7b",
+      "bytes": 206,
       "status": "passed",
-      "scope": "Exact isolated review checkout, including the acceptance report and progress entry."
+      "qualification": "Final source, progress and acceptance record scanned; no hard-coded credentials detected."
+    },
+    "quota_worker_and_adapter": {
+      "file": "evolution-quota-worker-adapter-tests.log",
+      "sha256": "b6110e9978a5c61309d181ef7179f9fdb45aae1ddd2e22f207b1a986b7c851d4",
+      "bytes": 4472,
+      "status": "passed",
+      "summary": {
+        "tests": 44,
+        "pass": 44,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    "quota_registry": {
+      "file": "evolution-quota-registry-tests.log",
+      "sha256": "17168424693920ca8ec53ecf379612affdf58d92ddb7e6b9fff376219e997916",
+      "bytes": 3441,
+      "status": "passed",
+      "summary": {
+        "tests": 38,
+        "pass": 38,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    "quota_evaluation_checkpoint": {
+      "file": "evolution-paper-administrative-tests.log",
+      "sha256": "b08f51efc716a5315ceb49e2cf6047a1a89d972645455b4b48daaa64d6d4a5ef",
+      "bytes": 1786,
+      "status": "passed",
+      "summary": {
+        "tests": 14,
+        "pass": 14,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
+    },
+    "scorer_native_evidence": {
+      "file": "evolution-scorer-native-proof-tests.log",
+      "sha256": "6b660187d510a148afa2a043b2613c32e33e081f43ffe48a52ba71fdbc79b102",
+      "bytes": 542,
+      "status": "passed",
+      "summary": {
+        "tests": 4,
+        "pass": 4,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 0,
+        "todo": 0
+      }
     }
   },
   "knownBaselineFailures": {
     "capability_audit": {
       "baseRevision": "492fa067aea2f0b52f9b661842065e192a94c119",
-      "meaning": "Same40measured vs54registry and missing sourceIdentity reproduced atbase. Not repaired or a passinggate.",
+      "meaning": "The same 40 measured tools versus 54 registry entries and missing source identity were reproduced on the base revision. This remains an unpassed audit.",
       "logs": {
         "evolution-base-capability-audit-final.log": {
           "path": "/tmp/evolution-base-capability-audit-final.log",
@@ -946,6 +1010,542 @@
       "cycleId": "acceptance-scoped-research-meta-v6",
       "freezeHash": "6f3a6706633f291e890720bdcd73469bef6e73c529870175a4bd0a8938db0d25",
       "evaluatorCodeHash": "03c4950663253fc8454feb7ed35529e26e4cba092308c820d9064e25654ef1f3",
+      "reportSha256": "aae3ac6e95f4fc8e300e8827286e6782ed0156b05872d28548220e0204f80d55",
+      "checkpointSha256": "8009ef1d275c7fe6d6182caeb297c9643547012496f0e0edef14debac8b88101",
+      "reportComplete": true,
+      "complete": true,
+      "reportUnits": 6,
+      "checkpointUnits": 6,
+      "completedUnits": 6,
+      "checkpointIsCompletionClaim": false,
+      "units": [
+        {
+          "caseId": "hackshaw-main-dl",
+          "variant": 0,
+          "replicate": 0,
+          "runId": "run_ecae0640db300848b04d6f3d9da9c18d",
+          "projectId": "eval-paper-3de045bccef38fe20f659661bf33cc7329f3e6f6",
+          "nativeEgressProofHash": null,
+          "assessmentReceiptHash": "7cdbe040ec8f6b7a5cbd91f53731e235153e6753212dce9b42bb1d408d188f8e",
+          "assessmentFileSha256": "7639cb2d44e9599e66edc22c2c76077669317786e6e9b81d89c8072b338bd6ae",
+          "model": "qwen3.8-max-0902",
+          "modelReported": true,
+          "requestId": "chatcmpl-88625eb4-869e-94e2-bf1b-8be47cd849d1",
+          "acceptedEvidenceIds": [
+            "hackshaw-main-dl",
+            "author-dataset-documentation"
+          ],
+          "returnedEvidenceIds": [
+            "hackshaw-main-dl",
+            "author-dataset-documentation"
+          ],
+          "returnedChecks": {
+            "question_aligned": true,
+            "method_supported": true,
+            "certainty_supported": true,
+            "writing_sources_bound": true
+          },
+          "reasons": {
+            "question_aligned": {
+              "preserved": true,
+              "characters": 321,
+              "sha256": "e834dcc56dd9e024f1e5630196a662f3ad7ace2eb0f914aef31245d9b9a9e304"
+            },
+            "method_supported": {
+              "preserved": true,
+              "characters": 495,
+              "sha256": "a2e151a78e9097e080eb7c2e31a31fb890f085f77ef82674e7976d519c83fc32"
+            },
+            "certainty_supported": {
+              "preserved": true,
+              "characters": 541,
+              "sha256": "22de6922edde51d39f09630f02e98e32ef9d9173461a61c4072b0d810afd2f91"
+            },
+            "writing_sources_bound": {
+              "preserved": true,
+              "characters": 707,
+              "sha256": "7038956c709da9c8ca7f0e5739bf06c65da7e8695797560d7ad6a5e6c22a1689"
+            }
+          },
+          "observedInputHash": "5347a7febbfb49519a22f2483aa55afe4df630a70094a0eec553c614cb076cba",
+          "reasoningStatus": "preserved",
+          "codeVerified": true,
+          "calculationValid": true,
+          "applicableValid": true,
+          "fullResearchValid": false,
+          "exposureTier": "unknown"
+        },
+        {
+          "caseId": "hackshaw-main-dl",
+          "variant": 0,
+          "replicate": 1,
+          "runId": "run_afa0a4674cd62a75f5405bb5a552d223",
+          "projectId": "eval-paper-72ba197634c9b9bfa25d5a5b2de2475fd9a47cc1",
+          "nativeEgressProofHash": "66e457e8739c5e18125578ffba38e15d3f2d16af170d71d53585a60fb8b5bb29",
+          "assessmentReceiptHash": "d11dc352b7a2ce5de5cb1279e8c2f946f60efe6b54f3c247eb887700941f3229",
+          "assessmentFileSha256": "9772336332221cabdd03b3e2b41b97e24fa282cb30f4d0cf8ad65c2f8d7a6ca9",
+          "model": "qwen3.8-max-0902",
+          "modelReported": true,
+          "requestId": "chatcmpl-f8684ca2-27d5-9dec-8205-5f55619b77bf",
+          "acceptedEvidenceIds": [
+            "hackshaw-main-dl",
+            "author-dataset-documentation"
+          ],
+          "returnedEvidenceIds": [
+            "hackshaw-main-dl",
+            "author-dataset-documentation"
+          ],
+          "returnedChecks": {
+            "question_aligned": true,
+            "method_supported": true,
+            "certainty_supported": true,
+            "writing_sources_bound": true
+          },
+          "reasons": {
+            "question_aligned": {
+              "preserved": true,
+              "characters": 512,
+              "sha256": "1df47a9513eb97b1683547833cb06be63dd95dbf524fad4b842650725cfedee0"
+            },
+            "method_supported": {
+              "preserved": true,
+              "characters": 740,
+              "sha256": "8b7592f47f710bd5c082dd7d1b711a107cc0f3635dc03a53a739e3a7d1102a04"
+            },
+            "certainty_supported": {
+              "preserved": true,
+              "characters": 559,
+              "sha256": "4427d5186192b6a4622a2355f199e938a0104334353d84a9197c37c84ac8ed70"
+            },
+            "writing_sources_bound": {
+              "preserved": true,
+              "characters": 650,
+              "sha256": "be2fef19d9d0e78cb7c0aa9b241b83a2fb678b4e46b4db29020f1562683a2d59"
+            }
+          },
+          "observedInputHash": "57e0eeb21a27b5a12b8f8e5a358ea0417c73d529a10b9f32fbc0afbeca4e9d57",
+          "reasoningStatus": "preserved",
+          "codeVerified": true,
+          "calculationValid": true,
+          "applicableValid": true,
+          "fullResearchValid": false,
+          "exposureTier": "cited"
+        },
+        {
+          "caseId": "hackshaw-main-dl",
+          "variant": 1,
+          "replicate": 0,
+          "runId": "run_d9cc23837d9cc21b8e3e50776e43717a",
+          "projectId": "eval-paper-f8ba08bce07bac2b6c3e4fbe6de268d2421f4bb7",
+          "nativeEgressProofHash": "d8e64428ef4e9404c1165e6ddd9178f41ccfe8939857c74e8db2baa157719829",
+          "assessmentReceiptHash": "4ded61ecce941ead0548968a5f7ff6ba36a1c8f54bf9892ef9caabfd3a5a789d",
+          "assessmentFileSha256": "1644ac9cd2ed3afc905be054252bb330adbc67c12b6820a5a5c8794784c47dd8",
+          "model": "qwen3.8-max-0902",
+          "modelReported": true,
+          "requestId": "chatcmpl-44dcd759-fc4a-95cd-8e2b-df8ffe1b3be6",
+          "acceptedEvidenceIds": [],
+          "returnedEvidenceIds": [],
+          "returnedChecks": {
+            "question_aligned": false,
+            "method_supported": false,
+            "certainty_supported": false,
+            "writing_sources_bound": false
+          },
+          "reasons": {
+            "question_aligned": {
+              "preserved": true,
+              "characters": 186,
+              "sha256": "9eca34004c4b7f5d38c4d066f8fbd610f5c7ad285450d7a80676e9d576d5cf6d"
+            },
+            "method_supported": {
+              "preserved": true,
+              "characters": 162,
+              "sha256": "748dab72a1a530b54d644440b0f8185f47a64c9beed2f569c0efdc3b92c6455b"
+            },
+            "certainty_supported": {
+              "preserved": true,
+              "characters": 149,
+              "sha256": "79c4670b648e7a9e962ce153f7e21ecbea72614f35f91fba07cde84f0b20de50"
+            },
+            "writing_sources_bound": {
+              "preserved": true,
+              "characters": 90,
+              "sha256": "1aff8f4735e3e2c184d2c61ffc7d5c2ea187270d95ccb98958f9288280ce2e15"
+            }
+          },
+          "observedInputHash": "68e31dd7a8b3641ee156b4a84a75a8628bdb9ad064b8c41f4015f25c809ac8e7",
+          "reasoningStatus": "preserved",
+          "codeVerified": false,
+          "calculationValid": false,
+          "applicableValid": false,
+          "fullResearchValid": false,
+          "exposureTier": "unexposed"
+        },
+        {
+          "caseId": "hackshaw-main-dl",
+          "variant": 1,
+          "replicate": 1,
+          "runId": "run_337b15a28eb121eb4ef998bdf453a4b4",
+          "projectId": "eval-paper-3ca0490feac860510b84ca86068e9144672fe2cb",
+          "nativeEgressProofHash": "4623a1efae423bca187e1cf73e8bccae12a2c098c3a14d754440bd5bca726fe5",
+          "assessmentReceiptHash": "1a7ab7c3d383531216bdb6a816cf96c15890c72415b757fb67536afea4b7e7a4",
+          "assessmentFileSha256": "4bdbc68b5b8bdef59880056e580b3a9ccf49473e9418daa0a66968d1988e95a2",
+          "model": "qwen3.8-max-0902",
+          "modelReported": true,
+          "requestId": "chatcmpl-457f16a4-005f-959d-a571-d49104c7f1d9",
+          "acceptedEvidenceIds": [],
+          "returnedEvidenceIds": [],
+          "returnedChecks": {
+            "question_aligned": false,
+            "method_supported": false,
+            "certainty_supported": false,
+            "writing_sources_bound": false
+          },
+          "reasons": {
+            "question_aligned": {
+              "preserved": true,
+              "characters": 156,
+              "sha256": "b384b981c9f8b350b6ebebb00daa8f21390df360f63b7c74574a1d55b018c3ff"
+            },
+            "method_supported": {
+              "preserved": true,
+              "characters": 176,
+              "sha256": "738703257fff10396501a90fdb5848b6e9e164589024ca271bd961e97d0bf547"
+            },
+            "certainty_supported": {
+              "preserved": true,
+              "characters": 148,
+              "sha256": "1438d14ac96e9cb018d0684947e8a278a903359cbc5e1db4e7d32974795115ea"
+            },
+            "writing_sources_bound": {
+              "preserved": true,
+              "characters": 124,
+              "sha256": "f98e4209f5bb1bf0b484054c26bbe340ff5700a98817773f2d5b08e57fb80bd8"
+            }
+          },
+          "observedInputHash": "762f564e06f6f8a1b5abfb1e112983db80b650e2a69bd3c0755280298a6473e0",
+          "reasoningStatus": "preserved",
+          "codeVerified": false,
+          "calculationValid": false,
+          "applicableValid": false,
+          "fullResearchValid": false,
+          "exposureTier": "unexposed"
+        },
+        {
+          "caseId": "hackshaw-main-dl",
+          "variant": 2,
+          "replicate": 0,
+          "runId": "run_01f7b1a4723d62ed567f843882a5a24a",
+          "projectId": "eval-paper-8886e92dce37c04b90ba1f5dc37aa0f71599dee8",
+          "nativeEgressProofHash": "57533994a235b6182ab157cfbc3fc885e041f753ab129d1129d155179416386a",
+          "assessmentReceiptHash": "e4888ee0a849ff545d371a4f8f4da89668759dbd6e46377c17bc3522b62297fa",
+          "assessmentFileSha256": "ceb3aaef333da9e4dea5e68f0786f0f5cf33ad222f2c6b65329f6f95a83816c3",
+          "model": "qwen3.8-max-0902",
+          "modelReported": true,
+          "requestId": "chatcmpl-5c573863-751b-9d1c-bd36-74bff4b3b889",
+          "acceptedEvidenceIds": [],
+          "returnedEvidenceIds": [],
+          "returnedChecks": {
+            "question_aligned": false,
+            "method_supported": false,
+            "certainty_supported": false,
+            "writing_sources_bound": false
+          },
+          "reasons": {
+            "question_aligned": {
+              "preserved": true,
+              "characters": 103,
+              "sha256": "c0b22f98a87f30cca62e5e1891f7ab0479286091ef000acfebf101f99ba3c349"
+            },
+            "method_supported": {
+              "preserved": true,
+              "characters": 75,
+              "sha256": "1072be642ac876857e068848cd79b3da47e4c4c006b2bd04f097b0b9637fba6f"
+            },
+            "certainty_supported": {
+              "preserved": true,
+              "characters": 103,
+              "sha256": "f17e379b12d1edfb6c1587ba51e0d6f81a9fd0512f51b8c5c00cba991da613d6"
+            },
+            "writing_sources_bound": {
+              "preserved": true,
+              "characters": 105,
+              "sha256": "8f48ad0558468dc857af3891bd6913ffa257e5ae124e1f6f75d02eb99d290c1c"
+            }
+          },
+          "observedInputHash": "9640e39f3001b16584b52d87256f3e3c79a5e9c332770297b522efeb59eabefd",
+          "reasoningStatus": "preserved",
+          "codeVerified": false,
+          "calculationValid": false,
+          "applicableValid": false,
+          "fullResearchValid": false,
+          "exposureTier": "unexposed"
+        },
+        {
+          "caseId": "hackshaw-main-dl",
+          "variant": 2,
+          "replicate": 1,
+          "runId": "run_2cd84f0eea63dafc61a56d43accdc1ef",
+          "projectId": "eval-paper-e6dd0c61cfb934dcc862f2945a730c4329525d8d",
+          "nativeEgressProofHash": "ccce58fe0d3ee4ef5a028b8dfdc8028001285b0b70b5c3502e9aa12d1a91b9a0",
+          "assessmentReceiptHash": "2f89dd72aee5e3ced4275c1279a1a9442a9e99ddf8a55800f834b37c59f6fb25",
+          "assessmentFileSha256": "aad462734539e694b90dcb1e0d81324619fa6a9110af89d21428e52c21a3037b",
+          "model": "qwen3.8-max-0902",
+          "modelReported": true,
+          "requestId": "chatcmpl-4395e1e8-2647-9fa1-aacb-31e1c2a486cd",
+          "acceptedEvidenceIds": [],
+          "returnedEvidenceIds": [],
+          "returnedChecks": {
+            "question_aligned": false,
+            "method_supported": false,
+            "certainty_supported": false,
+            "writing_sources_bound": false
+          },
+          "reasons": {
+            "question_aligned": {
+              "preserved": true,
+              "characters": 105,
+              "sha256": "9c6ae19046c816c6215e5ca36ca69de3d56993000015c5dca612f11494056775"
+            },
+            "method_supported": {
+              "preserved": true,
+              "characters": 70,
+              "sha256": "fc4b717b46d78e1493b636b40d4802f99ff6209ef4c4139c2697c08a21714c03"
+            },
+            "certainty_supported": {
+              "preserved": true,
+              "characters": 98,
+              "sha256": "88858e5258f9b67993ee33f3f0ac900394b9aee862d51d7304fb9d0982b8c60b"
+            },
+            "writing_sources_bound": {
+              "preserved": true,
+              "characters": 86,
+              "sha256": "374541e3ea423e1ee59840cd12bd0c8318d15613038d3526b2cd0f72be8aaed7"
+            }
+          },
+          "observedInputHash": "a69abcd6f19bbb030fabd9a67d53ff3d01d1964c6a3da80011642ed991b88cf3",
+          "reasoningStatus": "preserved",
+          "codeVerified": false,
+          "calculationValid": false,
+          "applicableValid": false,
+          "fullResearchValid": false,
+          "exposureTier": "unexposed"
+        }
+      ],
+      "scorerAuditEligibleFrozenCycles": [
+        {
+          "cycleId": "acceptance-scoped-research-meta-v6",
+          "units": 6
+        }
+      ],
+      "scorerAuditExecuted": true,
+      "noHiddenNumericValues": true,
+      "sourceArtifactHash": "d83e41771bb347ebd2dee6c16a1f8df0ce79be051bfbc5422acc3eec8c81dcca",
+      "qualification": "The frozen raw report contains six scored rows. Four are administrative QUOTA/402 refusals before assistant computation and cannot be interpreted as scientific model failures. Historical raw rows remain unchanged. Two actual scoped computations passed their applicable checks; the first has unknown exposure and the later one cited the target. None establishes complete research reproduction.",
+      "rawReportComplete": true,
+      "scientificCycleAccepted": false,
+      "administrativelyCensoredUnits": 4,
+      "actualScopedComputationUnits": 2,
+      "scorerAuditQualification": "Audit enumeration ran with three waiting findings and zero independent reassessments; no completed independent audit is claimed."
+    },
+    "toolUniverseLiveExclusion": {
+      "schemaVersion": 1,
+      "at": "2026-10-05T01:41:06.295185+00:00",
+      "userId": "evolution-acceptance",
+      "projectId": "eval-paper-3de045bccef38fe20f659661bf33cc7329f3e6f6",
+      "runId": "run_ecae0640db300848b04d6f3d9da9c18d",
+      "containerName": "open-science-evolution-acceptance-eval-paper-3de045bccef38fe20f659661bf33cc7329f3e6f6-fdef5f93a6",
+      "gateway": "tooluniverse",
+      "response": {
+        "httpStatus": 403,
+        "errorCode": "evaluation_source_excluded",
+        "responseSha256": "8755a1ed81293e3bf31c84e7a20db2977f6541269a35ba066c88bd860fde52e6"
+      },
+      "newBlockedEvents": 1,
+      "observedEventRunIds": [
+        "run_ecae0640db300848b04d6f3d9da9c18d"
+      ],
+      "paidModelCalls": 0,
+      "passed": true,
+      "receiptPath": "/tmp/evimed-evolution-acceptance-20261004/tooluniverse-probe-run_ecae0640db300848b04d6f3d9da9c18d.json",
+      "receiptSha256": "a00aa00fc7cce4fec44c625311aa225b34026dc4f560b997e0b20cfec2bf6ca6"
+    },
+    "finalResourceState": {
+      "at": "2026-10-05T02:53:09.161720+00:00",
+      "activeOwnedRuns": 0,
+      "reservedModelRequests": 0,
+      "uncertainModelRequests": 1,
+      "uncertainQualification": "A prior kernel request remains uncertain in the usage ledger; no settlement or cost was invented.",
+      "runningOwnedRuntimes": 0,
+      "webExited": true,
+      "postgresStopped": true,
+      "databaseOwnershipVerifiedBy": "Exact task name, image, dedicated volume/network and sole non-system database.",
+      "volumesAndControlEvidenceRetained": true,
+      "productionChanged": false,
+      "budgetRaisedOrReset": false,
+      "evolutionDailyBudgetCny": 50,
+      "costByPurpose": [
+        {
+          "purpose": "autopilot",
+          "status": "settled",
+          "calls": 3,
+          "cost_cny": 0.005036
+        },
+        {
+          "purpose": "evolution",
+          "status": "released",
+          "calls": 3,
+          "cost_cny": null
+        },
+        {
+          "purpose": "evolution",
+          "status": "settled",
+          "calls": 1834,
+          "cost_cny": 49.655395
+        },
+        {
+          "purpose": "kernel",
+          "status": "settled",
+          "calls": 664,
+          "cost_cny": 5.53425
+        },
+        {
+          "purpose": "kernel",
+          "status": "uncertain",
+          "calls": 1,
+          "cost_cny": null
+        },
+        {
+          "purpose": "routing",
+          "status": "settled",
+          "calls": 5,
+          "cost_cny": 0.014461
+        },
+        {
+          "purpose": "title",
+          "status": "settled",
+          "calls": 21,
+          "cost_cny": 0.006229
+        }
+      ],
+      "runtimeImageId": "sha256:c44be13ade89870a3dddcf1551e9d23b9fd4588aa30ca596e346ec65afe38698",
+      "runtimeImageTag": "evimed-evolution-acceptance:runtime-final-20261004"
+    },
+    "nativeEgressEngineeringProbe": {
+      "kind": "actual-native-egress-engineering-probe",
+      "probe": "ledger-v1",
+      "projectId": "eval-paper-proof-ledger-v1",
+      "scored": false,
+      "promotion": false,
+      "requestedIndependentModelCalls": 0,
+      "runId": "run_d42032fdb399645a1311d4f25b852a7f",
+      "runStatus": "succeeded",
+      "transcriptComplete": true,
+      "transcriptProjectionSha256": "88cf57679beec3a20e652931e55b8484452a41252401c1ed5303d58ce3289164",
+      "nativeCoverage": {
+        "nativeCoverageVerified": true,
+        "proofHash": "c4f8f0a51637d6e86fe2e83eb0d37dd940a876ca2d23cc1c603da7e3759e75af",
+        "startProofHash": "39ecadf991f08896e777f45a43ba7fccf9b5d3795a5493aec565d5dde999a086",
+        "endProofHash": "9b94736d6bee2eaf6f060ded04b8debdf6290239e1eeca3c2950c3ea65c746f9",
+        "reason": "observed_isolated_docker"
+      },
+      "traceCoverage": {
+        "complete": true,
+        "unobservedTools": [],
+        "basis": "durable_runtime_and_gateway_trace",
+        "nativeCoverageVerified": true,
+        "nativeCoverageProofHash": "c4f8f0a51637d6e86fe2e83eb0d37dd940a876ca2d23cc1c603da7e3759e75af"
+      },
+      "actualNativeToolCalls": 10,
+      "passed": true,
+      "at": "2026-10-05T01:58:20.660Z",
+      "receiptPath": "/data/docker/volumes/evimed-evolution-acceptance-control/_data/native-proof-ledger-v1.json",
+      "receiptSha256": "636fc7896b33e819ddc74ec9fe9a21fa3e03113821bf087fbb9dc817223b9d51",
+      "sourceArtifactHash": "d83e41771bb347ebd2dee6c16a1f8df0ce79be051bfbc5422acc3eec8c81dcca",
+      "actualModelLedger": [
+        {
+          "purpose": "evolution",
+          "model": "deepseek-flash",
+          "status": "settled",
+          "calls": 17,
+          "cost_cny": 0.131312
+        }
+      ]
+    },
+    "v6EgressQualification": {
+      "status": "historically-unknown",
+      "signedStartAndEndObserved": true,
+      "sameObservedFacts": true,
+      "acceptedProofHash": null,
+      "reason": "The original runtime verifier required tenant fields absent from real folded runs; the learning gauge also discarded the first prompt cutoff. Both were repaired prospectively with real-ledger tests. Historical v6 scoring and missing cutoff were not modified.",
+      "followUp": "A separate short native engineering probe tests the repaired production path; it is not a new scientific score."
+    },
+    "toolUniverseV5Failure": {
+      "runId": "run_416176d2a55a702479b1f50b6fad25c3",
+      "httpStatus": 502,
+      "errorCode": "tooluniverse_upstream_unavailable",
+      "sameRunBlockedEvents": 1,
+      "passed": false,
+      "receiptPath": "/tmp/evimed-evolution-acceptance-20261004/tooluniverse-probe-run_416176d2a55a702479b1f50b6fad25c3.json",
+      "receiptSha256": "0acd184d701973f3c52760ccb119d4bfbd32440b6f1a966a2d78734bf7b4ecce",
+      "reason": "Target was blocked before upstream access but the untyped exclusion error was incorrectly wrapped as upstream failure; the historical receipt is retained."
+    },
+    "initialResourceState": {
+      "at": "2026-10-05T02:02:20.239300+00:00",
+      "activeOwnedRuns": 0,
+      "reservedModelRequests": 0,
+      "runningOwnedRuntimes": 0,
+      "webExited": true,
+      "postgresStopped": true,
+      "databaseOwnershipVerifiedBy": "Exact task-specific name, volume, isolated network, image and sole non-system database; initial test PostgreSQL container has no labels.",
+      "volumesAndControlEvidenceRetained": true,
+      "productionChanged": false,
+      "budgetRaisedOrReset": false,
+      "evolutionDailyBudgetCny": 50,
+      "costByPurpose": [
+        {
+          "purpose": "autopilot",
+          "status": "settled",
+          "calls": 3,
+          "cost_cny": 0.005036
+        },
+        {
+          "purpose": "evolution",
+          "status": "released",
+          "calls": 3,
+          "cost_cny": null
+        },
+        {
+          "purpose": "evolution",
+          "status": "settled",
+          "calls": 1762,
+          "cost_cny": 45.207583
+        },
+        {
+          "purpose": "kernel",
+          "status": "settled",
+          "calls": 664,
+          "cost_cny": 5.53425
+        },
+        {
+          "purpose": "routing",
+          "status": "settled",
+          "calls": 5,
+          "cost_cny": 0.014461
+        },
+        {
+          "purpose": "title",
+          "status": "settled",
+          "calls": 20,
+          "cost_cny": 0.005785
+        }
+      ],
+      "runtimeImageId": "sha256:c44be13ade89870a3dddcf1551e9d23b9fd4588aa30ca596e346ec65afe38698"
+    },
+    "scopedMetaV6Initial": {
+      "cycleId": "acceptance-scoped-research-meta-v6",
+      "freezeHash": "6f3a6706633f291e890720bdcd73469bef6e73c529870175a4bd0a8938db0d25",
+      "evaluatorCodeHash": "03c4950663253fc8454feb7ed35529e26e4cba092308c820d9064e25654ef1f3",
       "reportSha256": "006ce1b463b0c36d07630fcb0c27d669cc542a9aa521959edec55c059b6f7aa9",
       "complete": false,
       "completedUnits": 1,
@@ -1008,138 +1608,245 @@
       "scorerAuditExecuted": false,
       "noHiddenNumericValues": true
     },
-    "toolUniverseLiveExclusion": {
-      "schemaVersion": 1,
-      "at": "2026-10-05T01:41:06.295185+00:00",
-      "userId": "evolution-acceptance",
-      "projectId": "eval-paper-3de045bccef38fe20f659661bf33cc7329f3e6f6",
-      "runId": "run_ecae0640db300848b04d6f3d9da9c18d",
-      "containerName": "open-science-evolution-acceptance-eval-paper-3de045bccef38fe20f659661bf33cc7329f3e6f6-fdef5f93a6",
-      "gateway": "tooluniverse",
-      "response": {
-        "httpStatus": 403,
-        "errorCode": "evaluation_source_excluded",
-        "responseSha256": "8755a1ed81293e3bf31c84e7a20db2977f6541269a35ba066c88bd860fde52e6"
-      },
-      "newBlockedEvents": 1,
-      "observedEventRunIds": [
-        "run_ecae0640db300848b04d6f3d9da9c18d"
-      ],
-      "paidModelCalls": 0,
-      "passed": true,
-      "receiptPath": "/tmp/evimed-evolution-acceptance-20261004/tooluniverse-probe-run_ecae0640db300848b04d6f3d9da9c18d.json",
-      "receiptSha256": "a00aa00fc7cce4fec44c625311aa225b34026dc4f560b997e0b20cfec2bf6ca6"
-    },
-    "finalResourceState": {
-      "at": "2026-10-05T02:02:20.239300+00:00",
-      "activeOwnedRuns": 0,
-      "reservedModelRequests": 0,
-      "runningOwnedRuntimes": 0,
-      "webExited": true,
-      "postgresStopped": true,
-      "databaseOwnershipVerifiedBy": "Exact task-specific name, volume, isolated network, image and sole non-system database; initial test PostgreSQL container has no labels.",
-      "volumesAndControlEvidenceRetained": true,
-      "productionChanged": false,
-      "budgetRaisedOrReset": false,
-      "evolutionDailyBudgetCny": 50,
-      "costByPurpose": [
+    "gatewayDisposition": {
+      "kind": "read-only-enabled-gateway-disposition",
+      "commit": "759f2502aa213492560449472f77856135c13c4d",
+      "fullEnabledGatewayIntegrationPassed": false,
+      "paidCalls": 0,
+      "remoteMutations": "Only authorized dedicated fixture users/projects/source/capture/capsule/session records in own evimed_test_evolution; no resource/config/model changes.",
+      "observedEnvironment": "Exact stopped evimed-evolution-acceptance-web selected presence/boolean env fields only; no secrets retained",
+      "matrix": [
         {
-          "purpose": "autopilot",
-          "status": "settled",
-          "calls": 3,
-          "cost_cny": 0.005036
+          "gateway": "public-source/web-read",
+          "enabled": true,
+          "actualEvidence": "Retained live9blocked events plus deliberate cited target (root confirmed).",
+          "responseFilteringComplete": false,
+          "missing": "Actual identity/response-bearing filtered cases for each public-source operation, not just blocked URL requests."
         },
         {
-          "purpose": "evolution",
-          "status": "released",
-          "calls": 3,
-          "cost_cny": null
+          "gateway": "web-search",
+          "enabled": false,
+          "basis": "Stopped own container: all local/edge URL presence false, Bailian flag unset; defaultfalse.",
+          "missing": "Actual configured search provider and nonempty mixed target/control response; 503 is not proof."
         },
         {
-          "purpose": "evolution",
-          "status": "settled",
-          "calls": 1762,
-          "cost_cny": 45.207583
+          "gateway": "tooluniverse",
+          "enabled": false,
+          "basis": "Stopped own container upstream URL absent; configdefaultempty.",
+          "actualEvidence": "Actual target request403 before upstream.",
+          "responseFilteringComplete": false,
+          "missing": "Configured isolated upstream+credential; actual nonempty JSON/text/XML response filtering beyond pre-request exclusion."
         },
         {
-          "purpose": "kernel",
-          "status": "settled",
-          "calls": 664,
-          "cost_cny": 5.53425
+          "gateway": "knowledge-base",
+          "enabled": true,
+          "basis": "Default kbSearchEnabled=true; acceptancePostgres/source ingestion enabled => real index instantiated.",
+          "actualEvidence": "Real PostgreSQL SourceService.loadCapture verifies actual stored source/capture bytes; real KnowledgeBaseIndex searches two stored hits; production HTTP gateway filters target and retains control, actual audit identifier event.",
+          "responseFilteringComplete": false,
+          "missing": "Full ingestion/parser pipeline and normal deployed small-library/default hybrid behavior not claimed; no vector/reranker proof.",
+          "persistedFixtureResponseFilteringPassed": true,
+          "receipt": "/tmp/evolution-persisted-kb-gateway-proof.json"
         },
         {
-          "purpose": "routing",
-          "status": "settled",
-          "calls": 5,
-          "cost_cny": 0.014461
+          "gateway": "frontier-knowledge-plugin",
+          "enabled": false,
+          "basis": "Acceptance config explicitlyfalse.",
+          "missing": "Isolated populated frontier service/knowledge-plugin and nonempty dated target/control result."
         },
         {
-          "purpose": "title",
-          "status": "settled",
-          "calls": 20,
-          "cost_cny": 0.005785
+          "gateway": "handbook",
+          "enabled": false,
+          "basis": "Acceptance learningEnabled=false; nativeHandbookContext only instantiated when learningService && learningEnabled; endpoint returns empty without it.",
+          "responseFilteringComplete": false,
+          "missing": "Actual attached or derived target-bearing handbook records and authenticated nonempty retrieval."
+        },
+        {
+          "gateway": "session-memory",
+          "enabled": true,
+          "basis": "ResearchMemoryStore.configured is Boolean(database), not memoryEnabled. Acceptance Postgres means sessions provider is injected; automatic memory extraction disabled does not disable this read route.",
+          "responseFilteringComplete": false,
+          "missing": "Actual runtime workload token issuance / ordinary runtime tool invocation not exercised; fixtures isolated under separate user/project.",
+          "actualEvidence": "Real PostgreSQL ProductDocuments/CapsuleService facts and ResearchMemoryStore trial-session bindings; production gateway removes target and retains control, actual audit identifier event.",
+          "persistedFixtureResponseFilteringPassed": true,
+          "receipt": "/tmp/evolution-persisted-capsule-gateway-proof.json"
+        },
+        {
+          "gateway": "capsule-memory",
+          "enabled": true,
+          "basis": "CapsuleService instantiated from productDocuments independently of memoryEnabled; recall gateway remains present. Memory substrate component disabled, capsule component requires actual stored capsules.",
+          "responseFilteringComplete": false,
+          "missing": "Actual runtime workload token issuance / ordinary runtime tool invocation not exercised; fixtures isolated under separate user/project.",
+          "actualEvidence": "Real PostgreSQL ProductDocuments/CapsuleService facts and ResearchMemoryStore trial-session bindings; production gateway removes target and retains control, actual audit identifier event.",
+          "persistedFixtureResponseFilteringPassed": true,
+          "receipt": "/tmp/evolution-persisted-capsule-gateway-proof.json"
         }
       ],
-      "runtimeImageId": "sha256:c44be13ade89870a3dddcf1551e9d23b9fd4588aa30ca596e346ec65afe38698"
-    },
-    "nativeEgressEngineeringProbe": {
-      "kind": "actual-native-egress-engineering-probe",
-      "probe": "ledger-v1",
-      "projectId": "eval-paper-proof-ledger-v1",
-      "scored": false,
-      "promotion": false,
-      "requestedIndependentModelCalls": 0,
-      "runId": "run_d42032fdb399645a1311d4f25b852a7f",
-      "runStatus": "succeeded",
-      "transcriptComplete": true,
-      "transcriptProjectionSha256": "88cf57679beec3a20e652931e55b8484452a41252401c1ed5303d58ce3289164",
-      "nativeCoverage": {
-        "nativeCoverageVerified": true,
-        "proofHash": "c4f8f0a51637d6e86fe2e83eb0d37dd940a876ca2d23cc1c603da7e3759e75af",
-        "startProofHash": "39ecadf991f08896e777f45a43ba7fccf9b5d3795a5493aec565d5dde999a086",
-        "endProofHash": "9b94736d6bee2eaf6f060ded04b8debdf6290239e1eeca3c2950c3ea65c746f9",
-        "reason": "observed_isolated_docker"
+      "localCacheBoundaryReceipt": "/tmp/evolution-cache-gateway-proof.json",
+      "localCacheProof": {
+        "kind": "preserved-public-record-http-middleware-boundary",
+        "gateway": "knowledge-base",
+        "sourceFile": "/home/coder/workspace/EviMedScience/.evimed-local/acceptance/aligned-calibration/primary/dat.baskerville2012.html",
+        "sourceSha256": "2405257cafebe30b7e11c06c88138698d25ada1edf2eadedb2a5fb173c491f11",
+        "status": 200,
+        "upstreamReads": 1,
+        "retainedRows": 1,
+        "excludedRows": 1,
+        "auditEventCount": 1,
+        "actualGatewayHandler": true,
+        "actualIsolationMiddleware": true,
+        "upstream": "local preserved author HTML supplied through index interface; not a live PostgreSQL/OpenViking integration proof",
+        "paidCalls": 0
       },
-      "traceCoverage": {
-        "complete": true,
-        "unobservedTools": [],
-        "basis": "durable_runtime_and_gateway_trace",
-        "nativeCoverageVerified": true,
-        "nativeCoverageProofHash": "c4f8f0a51637d6e86fe2e83eb0d37dd940a876ca2d23cc1c603da7e3759e75af"
-      },
-      "actualNativeToolCalls": 10,
-      "passed": true,
-      "at": "2026-10-05T01:58:20.660Z",
-      "receiptPath": "/data/docker/volumes/evimed-evolution-acceptance-control/_data/native-proof-ledger-v1.json",
-      "receiptSha256": "636fc7896b33e819ddc74ec9fe9a21fa3e03113821bf087fbb9dc817223b9d51",
-      "sourceArtifactHash": "d83e41771bb347ebd2dee6c16a1f8df0ce79be051bfbc5422acc3eec8c81dcca",
-      "actualModelLedger": [
-        {
-          "purpose": "evolution",
-          "model": "deepseek-flash",
-          "status": "settled",
-          "calls": 17,
-          "cost_cny": 0.131312
-        }
+      "limitations": [
+        "No new live gateway responses were requested.",
+        "Actual cache-backed boundary proof is not proof of remote index/upstream availability.",
+        "No numeric gold, hidden inputs, credentials, or raw source text retained here."
       ]
     },
-    "v6EgressQualification": {
-      "status": "historically-unknown",
-      "signedStartAndEndObserved": true,
-      "sameObservedFacts": true,
-      "acceptedProofHash": null,
-      "reason": "The original runtime verifier required tenant fields absent from real folded runs; the learning gauge also discarded the first prompt cutoff. Both were repaired prospectively with real-ledger tests. Historical v6 scoring and missing cutoff were not modified.",
-      "followUp": "A separate short native engineering probe tests the repaired production path; it is not a new scientific score."
+    "persistedKnowledgeBaseFiltering": {
+      "kind": "actual-postgres-fixture-production-kb-gateway-proof",
+      "userId": "gateway-persisted-proof-01b4bf2e4d11",
+      "projectId": "eval-paper-gateway-proof-01b4bf2e4d11",
+      "sourceSha256": "2405257cafebe30b7e11c06c88138698d25ada1edf2eadedb2a5fb173c491f11",
+      "sourceIds": [
+        "src_41d67cbd861ca6024d8a3489dfe18c6b",
+        "src_a756615d4a5989f705f54ef8605d6969"
+      ],
+      "actualProductDocuments": true,
+      "actualSourceServiceLoadCapture": true,
+      "actualKnowledgeBaseIndex": true,
+      "actualProductionHttpHandler": true,
+      "actualIsolationMiddleware": true,
+      "indexHitsBefore": 2,
+      "indexHitsAfter": 1,
+      "httpStatus": 200,
+      "filteredTarget": true,
+      "retainedControl": true,
+      "auditEvents": [
+        {
+          "gateway": "knowledge-base",
+          "tier": "blocked",
+          "reason": "identifier"
+        }
+      ],
+      "paidCalls": 0,
+      "limitations": [
+        "Public fixture source/capture records written through production ProductDocuments storage; not full ingestion/parser pipeline.",
+        "Real PostgreSQL keyword/trigram index, private test index forces searching smalllibrary; no embedding/reranker/model calls.",
+        "Control-only test credential provider; not runtime token issuance proof."
+      ]
     },
-    "toolUniverseV5Failure": {
-      "runId": "run_416176d2a55a702479b1f50b6fad25c3",
-      "httpStatus": 502,
-      "errorCode": "tooluniverse_upstream_unavailable",
-      "sameRunBlockedEvents": 1,
-      "passed": false,
-      "receiptPath": "/tmp/evimed-evolution-acceptance-20261004/tooluniverse-probe-run_416176d2a55a702479b1f50b6fad25c3.json",
-      "receiptSha256": "0acd184d701973f3c52760ccb119d4bfbd32440b6f1a966a2d78734bf7b4ecce",
-      "reason": "Target was blocked before upstream access but the untyped exclusion error was incorrectly wrapped as upstream failure; the historical receipt is retained."
+    "persistedCapsuleAndSessionFiltering": {
+      "kind": "actual-postgres-fixture-production-gateway-proof",
+      "userId": "gateway-persisted-proof-4146c71f3bcf",
+      "projectId": "eval-paper-gateway-proof-4146c71f3bcf",
+      "sourceSha256": "2405257cafebe30b7e11c06c88138698d25ada1edf2eadedb2a5fb173c491f11",
+      "gateways": [
+        "capsule-memory",
+        "session-memory"
+      ],
+      "httpStatus": 200,
+      "storedFacts": 4,
+      "storedTrialSessions": 2,
+      "actualProductDocuments": true,
+      "actualCapsuleService": true,
+      "actualResearchMemoryStore": true,
+      "actualProductionHttpHandler": true,
+      "actualIsolationMiddleware": true,
+      "filteredTarget": true,
+      "retainedControl": true,
+      "auditEvents": [
+        {
+          "gateway": "capsule-memory",
+          "tier": "blocked",
+          "reason": "identifier"
+        },
+        {
+          "gateway": "session-memory",
+          "tier": "blocked",
+          "reason": "identifier"
+        }
+      ],
+      "paidCalls": 0,
+      "limitations": [
+        "Control-only test credential provider; not runtime token issuance proof.",
+        "Public engineering fixture records, not full scientific ingestion or hidden gold.",
+        "Session scalar context rejected conservatively; control is a separate stored session."
+      ]
+    },
+    "quotaEvidenceReplay": {
+      "kind": "preserved-real-native-terminal-production-evidence-replay",
+      "sourceSpecimenSha256": "41c948d3ea7c96dd166860e00158929f1b819ad58d5bf83a916b2d4f1ccd44b6",
+      "preservedNativeSha256": "6fde43c26e196e93be6358aebe002f908fd18a5eed1181c36e1cb9978f9ed0be",
+      "actualNativeCode": "QUOTA",
+      "actualNativeStatus": 402,
+      "normalizedCode": "runtime_spend_limit_reached",
+      "decodedErrorCode": "runtime_spend_limit_reached",
+      "actualAgentRunStoreTerminal": "runtime_spend_limit_reached",
+      "evaluationDisposition": "paper_gold_administrative_deferred",
+      "scientificRows": 0,
+      "extractions": 0,
+      "assessments": 0,
+      "durableAdministrativeStops": 1,
+      "nextAttempt": 1,
+      "freshProjectAndDispatch": true,
+      "paidCalls": 0,
+      "newKernelCalls": 0,
+      "limitations": [
+        "Historical native projection replay, not new live kernel run.",
+        "Canonical ledger terminal was locally reconstructed from preserved native typed error.",
+        "No scientific success or rolling-day cause asserted."
+      ]
+    },
+    "scorerAuditAttempt": {
+      "exitCode": 0,
+      "results": [
+        {
+          "status": "complete",
+          "eligibleUnits": 6,
+          "sampled": 3,
+          "reviewed": 0,
+          "waiting": 3,
+          "discrepancies": 0,
+          "scope": "Production audit, maximum3 samples, no original scores or gold altered."
+        }
+      ],
+      "rawLogRetained": true,
+      "sourceArtifactHash": "4ac44047a34d3001a3607ffbd27fb8a7c2ca084a3284e4a150ce116a697e811e",
+      "imageId": "sha256:ddc7f9c3ff5fe7add7a4a2de61a9840a7f2229f45397741c6c421535ec507de9",
+      "qualification": "The batch scan completed, but all three samples waited for evidence/control proof and no independent model review occurred. Zero discrepancies with zero reviewed samples is not a passing scorer audit."
+    },
+    "scorerEvidenceReread": {
+      "exitCode": 0,
+      "results": [
+        {
+          "kind": "original-run-production-scorer-evidence-reread",
+          "projectId": "eval-paper-72ba197634c9b9bfa25d5a5b2de2475fd9a47cc1",
+          "runId": "run_afa0a4674cd62a75f5405bb5a552d223",
+          "completeDurableTranscript": true,
+          "traceCoverage": {
+            "complete": true,
+            "nativeCoverageVerified": true,
+            "nativeProofHash": "66e457e8739c5e18125578ffba38e15d3f2d16af170d71d53585a60fb8b5bb29",
+            "unobservedToolCount": 0
+          },
+          "artifactIssuesCount": 1,
+          "artifactIssueReasons": [
+            "producer_receipt_hash_unverified"
+          ],
+          "verifiedDeliveredCodePresent": true,
+          "verifiedDeliveredFileCount": 3,
+          "independentModelCalls": 0,
+          "newRuntimeRuns": 0,
+          "historicalAuditMutation": false,
+          "scored": false,
+          "safeProjectionSha256": "c1b8e72287eccb17b5ccea6bb4d8182bd9f23774ff668741f2a5e9cd9a4135ef"
+        }
+      ],
+      "rawLogRetained": true,
+      "sourceArtifactHash": "0f8e97db83207e227f6969359b2af01d134ec5d0bbd84352e388bb0d5b2a3f96",
+      "imageId": "sha256:36e63b0e4ce115712ae70e3d3c0059b0c14a730294101dd8f9d4039cef14967d",
+      "qualification": "Final wiring now verifies the original signed native proof. One producer receipt hash remains unverified; the previous audit record and scientific scores were not changed."
     }
   },
   "historicalImageDivergence": {
@@ -1186,7 +1893,10 @@
     "syntheticDataIsNotIndependentEvidence": true,
     "automatedAcceptanceIsNotGenuineResearcherUse": true,
     "hiddenAnswersNeverCommitted": true,
-    "scopedMetaCycleComplete": false
+    "scopedMetaCycleComplete": false,
+    "scopedMetaRawReportComplete": true,
+    "scopedMetaCycleQualification": "Raw six-unit report is complete, but four quota-censored units do not provide a complete interpretable scientific comparison.",
+    "independentScorerAuditAccepted": false
   },
   "deploymentRequirements": {
     "featureFlag": "OPEN_SCIENCE_EVOLUTION_ENABLED=false until operator activation",
@@ -1202,11 +1912,11 @@
     },
     {
       "kind": "immediately-actionable-integration",
-      "task": "Exercise target filtering at every enabled gateway with actual responses or preserved isolated cache records. Unconfigured services, empty results and 503 responses do not prove filtering."
+      "task": "Complete actual response filtering coverage for all required gateway operations. Real PostgreSQL-backed KB, capsule and session record filtering now has receipts; complete ingestion, vector retrieval, runtime-token issuance and unconfigured upstreams are not thereby proven."
     },
     {
       "kind": "immediately-actionable-evaluation",
-      "task": "Complete a frozen cycle and run its independent scorer audit. Preserve full stage rationales, exposure status and unsupported results; do not change frozen rules to improve a score."
+      "task": "Complete a scientifically interpretable new frozen cycle and independent scorer audit after quota capacity permits. Preserve v6 administrative censoring, missing artifact receipt proof and exposure findings; never replace missing evidence with a passing score."
     },
     {
       "kind": "requires-time-or-real-use",
@@ -1227,7 +1937,185 @@
       "runtimeMemoryLimit": "1536m",
       "controlMemoryLimit": "512m"
     },
-    "testFixturesDoNotCountAsIndependentEvidence": true
+    "testFixturesDoNotCountAsIndependentEvidence": true,
+    "nextScopedCycle": "acceptance-scoped-research-meta-v7",
+    "frozenCycleQualification": "Quota-deferral implementation changes the evaluator hash. New executions use v7; v6 definitions, results and audit records stay immutable."
   },
-  "secretsAndHiddenAssetsIncluded": false
+  "secretsAndHiddenAssetsIncluded": false,
+  "corpusDisposition": {
+    "schemaVersion": 1,
+    "scope": "Read-only corpus qualification; no source, original verdict, budget, or preserved input was changed.",
+    "criterion": {
+      "description": "The same 5–10 original publications per existing engine must support all three rulers: question, method, and complete research.",
+      "met": false
+    },
+    "distinctions": {
+      "referenceArithmetic": "Checks supplied numerical inputs; does not establish original study input/model equivalence.",
+      "scopedComponent": "A defined published component may be reproducible without reproducing the original complete study.",
+      "tutorial": "A clinical tutorial component is not evidence that a complete original clinical study was reproduced.",
+      "givenInput": "Author-provided or printed component inputs require source/version/model binding; their presence alone does not establish complete research.",
+      "questionOnly": "Question curation and unavailable-input responses do not establish method or complete research reproduction."
+    },
+    "questionPoolOverlapWithOriginalMethodPublications": {
+      "meta": 0,
+      "pharmacovigilance": 1,
+      "mr": 0,
+      "basis": "Paper evaluation agent independent corpus comparison; curated question pools must not replace the original method pool."
+    },
+    "tracks": {
+      "meta": {
+        "qualification": "Published main-component matches exist for BCG, Hackshaw and Baskerville; original main-analysis equivalence remains qualified.",
+        "gaps": [
+          "Bind the original Linde fixed-stratum/RevMan specification; the current engine specification is not equivalent.",
+          "Normand is a clinical tutorial component, not a complete original study.",
+          "Freeze a common qualified publication pool and bind actual same-version inputs and original model contracts before all three rulers."
+        ],
+        "completeResearchEstablished": false
+      },
+      "pharmacovigilance": {
+        "qualification": "Five distinct published aggregate ROR cases have independent semantic admission; they are not complete FAERS reconstruction.",
+        "gaps": [
+          "Bind the original quarter-level dataset version and cohort selection.",
+          "Bind original deduplication, drug/event coding and complete analysis contract.",
+          "Run the same five publications across all three rulers; aggregate arithmetic and source QA alone do not satisfy complete research."
+        ],
+        "originalMethodReceiptReportHash": "b5042c74627153b3d41d3799891ce71d06f5e7b70613c172eb21ca8dee5995c7",
+        "completeResearchEstablished": false
+      },
+      "mr": {
+        "qualification": "Six original author-publication arithmetic identities establish zero same-specification published reproductions. Two new distinct clinical IVW components pass independent deterministic parity and published-rounding checks, but semantic QA, admission and complete research are not established.",
+        "eligibleNewComponentPublicationIds": [
+          "10.3389/fnut.2022.837207",
+          "10.3389/fnut.2023.1108477"
+        ],
+        "gaps": [
+          "At least three additional distinct publications require original method/input equivalence; two directions from one publication count once.",
+          "RAPS, MRMix and MRcML original robust methods differ from an IVW harness; original multivariable MR differs from a univariable component.",
+          "Original strongest-instrument selection, filtering and LD binding remain unestablished for the calcium component; correlated IVW cases remain unsupported.",
+          "Other clinical candidates require paired exposure/outcome effects, exact allele harmonization/flips, palindromic filtering, LD exclusions, version identity and the original model/interval match.",
+          "Perform actual independent semantic QA and freeze a common publication pool before all three rulers."
+        ],
+        "completeResearchEstablished": false
+      }
+    },
+    "evidence": [
+      {
+        "path": ".evimed-local/acceptance/aligned-calibration/meta-qualification-supplement.json",
+        "sha256": "2695f3abaaf02a62fd6b9fa0006b2f933a138dec45f5bc02312c34fff8d274a4",
+        "kind": "qualification-or-definition-artifact"
+      },
+      {
+        "path": ".evimed-local/acceptance/aligned-calibration/mr-existing-report-qualification-v1.json",
+        "sha256": "f71d3bf33d5ad321c3b0832ca518d3c3d808e516e868767d370c1ffee9321ae4",
+        "kind": "qualification-or-definition-artifact"
+      },
+      {
+        "path": ".evimed-local/acceptance/aligned-calibration/mr-clinical/clinical-vitamin-d-af-ivw-fe-proof.json",
+        "sha256": "a1f60c37384816fb7d952d4ae46f06f2045905920c18dbeb6fd211633c108fb7",
+        "kind": "qualification-or-definition-artifact"
+      },
+      {
+        "path": ".evimed-local/acceptance/aligned-calibration/mr-clinical/clinical-vitamin-d-t2d-ivw-mre-proof.json",
+        "sha256": "4eae62a54d43eb9dcfecafa21b6bffd88f06af12512ecfabc983217146fcb085",
+        "kind": "qualification-or-definition-artifact"
+      },
+      {
+        "path": ".evimed-local/acceptance/aligned-calibration/mr-clinical/clinical-25ohd-to-hf-ivw-fe-proof.json",
+        "sha256": "290fd4d16a7f0e91f2d7eb774775643af8a5d825bc185637a35eaf71c0d942c7",
+        "kind": "qualification-or-definition-artifact"
+      },
+      {
+        "path": ".evimed-local/acceptance/aligned-calibration/mr-clinical/clinical-hf-to-25ohd-ivw-fe-proof.json",
+        "sha256": "0655dcc0af9327abbf9c36c1466ee68b53326f52ef86c258863a741d41b5da01",
+        "kind": "qualification-or-definition-artifact"
+      },
+      {
+        "path": ".evimed-local/acceptance/aligned-calibration/mr-clinical/vitamin-d-af-fixed-ivw-proof.json",
+        "sha256": "6598781ff4c458b7a8d71bde5ee020cfd0b77961e0c52c2a86a31745d57aaca2",
+        "kind": "qualification-or-definition-artifact"
+      },
+      {
+        "path": "OpenScience/evals/paper-gold/aligned-faers-manifest.json",
+        "sha256": "ca7442ee68914a703dfdc34a5a74453c5d33cdb62341f418a7970750265afbb5",
+        "kind": "qualification-or-definition-artifact"
+      },
+      {
+        "path": "OpenScience/evals/paper-gold/published-faers-method-manifest.json",
+        "sha256": "bac4abc5108c1df4a52cada65c196bb4b280578ea04fd8c20fc38dfd4f155e30",
+        "kind": "qualification-or-definition-artifact"
+      }
+    ],
+    "hiddenNumericalGoldIncluded": false,
+    "privateInputsIncluded": false,
+    "credentialsIncluded": false,
+    "overallPassed": false
+  },
+  "followupEngineeringChanges": [
+    "Observed native QUOTA/402 maps to the canonical spending-cap outcome.",
+    "Trusted administrative evaluation stops checkpoint and defer before extraction or paid assessment; resumed attempts get distinct projects and dispatches.",
+    "The worker defers administrative refusals without consuming scientific failure attempts or inventing a rolling-day cause.",
+    "The scorer evidence reader shares the exact-run native-proof verifier used by primary scoring."
+  ],
+  "followupEvidenceArtifacts": [
+    {
+      "file": "evolution-paper-v6-final-receipts.json",
+      "sha256": "b18b6a0778bc35c92fb34e22d5ee573876c1be7759a8ff18bc0a3a6b433f87eb",
+      "bytes": 12797
+    },
+    {
+      "file": "evolution-native-quota-specimen.json",
+      "sha256": "41c948d3ea7c96dd166860e00158929f1b819ad58d5bf83a916b2d4f1ccd44b6",
+      "bytes": 957
+    },
+    {
+      "file": "evolution-native-quota-replay.json",
+      "sha256": "498a189e5523dec4c8dbbdd16f5616b868bd78b84ff6c1e38ab705cad4bf8cf9",
+      "bytes": 995
+    },
+    {
+      "file": "evolution-enabled-gateway-disposition.json",
+      "sha256": "9e5c1e330fae248c7dc36d5a8cc154817ad3ef036819132ac375a42e39259971",
+      "bytes": 5630
+    },
+    {
+      "file": "evolution-persisted-kb-gateway-proof.json",
+      "sha256": "0433878c2bdc6250d28966feb87c8b4bd70ef65916ee0fc47898e34706241e2e",
+      "bytes": 1190
+    },
+    {
+      "file": "evolution-persisted-capsule-gateway-proof.json",
+      "sha256": "2d926b68f6bd4b7cc3b6b31f689d2ac0805a8f9adccda9cc459ae39cacd92ffd",
+      "bytes": 1153
+    },
+    {
+      "file": "evolution-corpus-disposition.json",
+      "sha256": "4dea434c7b7f2d45c77d7022b4076690877798a3f3a482744b65b4bf9638443e",
+      "bytes": 6913
+    },
+    {
+      "file": "evolution-scoped-unit-costs.json",
+      "sha256": "b2ea2db7bf8a93f6d633b05577cf5e11d57b67c59ce4bd8ca78e97f40855215b",
+      "bytes": 23525
+    },
+    {
+      "file": "evolution-scorer-audit-followup.json",
+      "sha256": "5faaf299c5fd54644b8ac539e4c72b6da3799078afab49818d62398be2eb3848",
+      "bytes": 420
+    },
+    {
+      "file": "evolution-scorer-reader-followup.json",
+      "sha256": "9729e26f08521b92fe9d2d108e8b59dddcdd8b3acfa5282e251e477369b7a74f",
+      "bytes": 974
+    },
+    {
+      "file": "evolution-scorer-image-verification.json",
+      "sha256": "7d7e7f0e64a1b2c22b333693013a196fdd6c13490bc41ef14342df7329f2abf7",
+      "bytes": 347
+    },
+    {
+      "file": "evolution-final-resource-state-followup.json",
+      "sha256": "24b0141fe73f51f62a1b299d406f8a385d7a77233dd016e797f58f7f00bb9ec4",
+      "bytes": 1306
+    }
+  ]
 }

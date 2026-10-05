@@ -11,13 +11,20 @@ import {readDeliveryReceipt} from "./agentRuns.mjs";
 import { readRunTranscript } from "./runTranscripts.mjs";
 import { createPaperGoldCalibration } from "./paperGoldCalibration.mjs";
 import { callReviewModel } from "./reviewModel.mjs";
-import { runCycle } from "../../../evals/paper-gold/run.mjs";
+import { runCycle, PaperGoldAdministrativeDeferral } from "../../../evals/paper-gold/run.mjs";
 import { numericScore } from "../../../evals/paper-gold/evaluator.mjs";
 import { freezeCycle, digest } from "../../../evals/paper-gold/evaluator.mjs";
 import { importExistingEngineReceipt } from "./existingEngineCalibration.mjs";
 import { deriveBenchmarkDefinition } from "../../../evals/paper-gold/benchmarks.mjs";
 import { verifyPaperGoldCode, bindPaperGoldReview, bindPaperGoldStageAssessment } from "./paperGoldVerification.mjs";
 
+/** Fresh isolated namespace only after a checkpointed administrative attempt. */
+export function paperGoldDispatchIdentity(cycleId,caseId,replicate,attempt=0){
+ if(!Number.isSafeInteger(attempt)||attempt<0)throw new Error("Invalid administrative dispatch attempt.");
+ const identity=`${cycleId}:${caseId}:${replicate}${attempt?`:administrative-retry:${attempt}`:""}`;
+ const hash=createHash("sha256").update(identity).digest("hex");
+ return {projectId:`eval-paper-${hash.slice(0,40)}`,dispatchId:`evolution_paper_${hash.slice(0,32)}`};
+}
 /** Immutable control-only provider assessment, without transport headers or credentials. @param {any} request */
 export async function preservePaperGoldAssessment({directory,binding,result}){
  const names=binding.checkNames??[];
@@ -190,18 +197,22 @@ export function createPaperGoldEvaluator({ config, usageLedger, store, agentRuns
           const references = Object.entries(gold.baselineNumeric ?? gold.numeric ?? {});
           return references.length > 0 && references.every(([key, reference]) => numericScore(answer.numeric?.[key], reference).valid);
         },
-        async dispatch({ caseRecord, replicate }) {
-          const unitProjectId = `eval-paper-${createHash("sha256").update(`${cycleId}:${caseRecord.id}:${replicate}`).digest("hex").slice(0, 40)}`;
+        async dispatch({ caseRecord, replicate, attempt = 0 }) {
+          const identity = paperGoldDispatchIdentity(cycleId,caseRecord.id,replicate,attempt);
+          const unitProjectId = identity.projectId;
           const project = await store.projectFor(user, unitProjectId, "Published-paper isolated evaluation");
           await evaluationIsolation.registerPending({ userId, projectId: unitProjectId }, caseRecord.policy);
-          const dispatched = await dispatch({ userId, projectId: unitProjectId, capabilityId: caseRecord.capabilityId, dispatchId: `evolution_paper_${createHash("sha256").update(`${cycleId}:${caseRecord.id}:${replicate}`).digest("hex").slice(0, 32)}`, brief: caseRecord.input, evaluationPolicy: caseRecord.policy, jobId });
+          const dispatched = await dispatch({ userId, projectId: unitProjectId, capabilityId: caseRecord.capabilityId, dispatchId: identity.dispatchId, brief: caseRecord.input, evaluationPolicy: caseRecord.policy, jobId });
           const id = dispatched.id ?? dispatched.run?.id;
           if (!id) throw new Error("Evaluation dispatch returned no run id.");
           const deadline = Date.now() + Math.max(60000, config.evolutionEvaluationTimeoutMs ?? 3600000);
           while (Date.now() < deadline) {
             signal?.throwIfAborted();
             const run = (await agentRuns.list(project)).find(row => row.id === id);
-            if (run && !["queued", "dispatching", "running"].includes(run.status)) return { project, run };
+            if (run && !["queued", "dispatching", "running"].includes(run.status)) {
+              if (run.status !== "succeeded" && run.errorCode === "runtime_spend_limit_reached") throw new PaperGoldAdministrativeDeferral(run, project.id);
+              return { project, run };
+            }
             await new Promise(resolve => setTimeout(resolve, 3000));
           }
           throw new Error("Evaluation run deadline exceeded.");

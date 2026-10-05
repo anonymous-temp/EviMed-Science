@@ -24,7 +24,8 @@ test('fresh independent semantic admission is resumable and positive scoped scor
  const evaluationDataDir=await fs.mkdtemp(path.join(os.tmpdir(),'scoped-gold-'));t.after(()=>fs.rm(evaluationDataDir,{recursive:true,force:true}));
  const f=fixture();let calls=0;const app={config:{reviewProvider:'dashscope',reviewModel:'qwen-test'},usageLedger:{},store:{userById:async()=>({id:'operator'}),projectFor:async()=>({})},evolution:{service:{owner:async()=>'operator',withLock:async(_key,op)=>op()}}};
  const args={app,evaluationDataDir,loadReference:async()=>f,review:async()=>{calls++;return {value:{passed:true,issues:[]},model:'qwen-test',modelReported:true};}};
- const prepared=await prepareScopedResearch(args);assert.equal(prepared.admitted,true);assert.equal(prepared.fullResearchEligible,false);
+ const historical=path.join(evaluationDataDir,'paper-gold/cycles/acceptance-scoped-research-meta-v6/definition.json');await fs.mkdir(path.dirname(historical),{recursive:true});await fs.writeFile(historical,'immutable historical v6 bytes');
+ const prepared=await prepareScopedResearch(args);assert.equal(prepared.cycleId,'acceptance-scoped-research-meta-v7');assert.equal(await fs.readFile(historical,'utf8'),'immutable historical v6 bytes');assert.equal(prepared.admitted,true);assert.equal(prepared.fullResearchEligible,false);
  const frozen=JSON.parse(await fs.readFile(path.join(evaluationDataDir,'paper-gold/cycles',prepared.cycleId,'definition.json'),'utf8'));
  const c=frozen.definition.cases[0];assert.equal(c.gold.deterministicVerification.entrypoint,'deliverables/paper-gold-analysis/analysis.py:analyze');assert.match(c.input,/producer receipt/);assert.match(c.input,/callable analysis.py itself/);assert.equal(c.rewrite.variants.length,3);assert.equal(frozen.definition.replicates,2);
  const unit={numeric:{point:0},exposureTier:'unexposed',checks:{question_aligned:true,method_supported:true,certainty_supported:true,writing_sources_bound:true}},gold={...c.gold,type:'research'};
@@ -40,7 +41,7 @@ test('failed independent semantic QA remains rejected and is never retried or pr
  const f=fixture();let calls=0;const app={config:{reviewProvider:'dashscope'},store:{userById:async()=>({id:'operator'}),projectFor:async()=>({})},evolution:{service:{owner:async()=>'operator',withLock:async(_key,op)=>op()}}};
  const args={app,evaluationDataDir,loadReference:async()=>f,review:async()=>{calls++;return {value:{passed:false,issues:['unsupported scope']},model:'qwen-test',modelReported:true};}};
  assert.equal((await prepareScopedResearch(args)).admitted,false);assert.equal((await prepareScopedResearch(args)).admitted,false);assert.equal(calls,1);
- await assert.rejects(fs.readFile(path.join(evaluationDataDir,'paper-gold/cycles/acceptance-scoped-research-meta-v6/definition.json')),/ENOENT/);
+ await assert.rejects(fs.readFile(path.join(evaluationDataDir,'paper-gold/cycles/acceptance-scoped-research-meta-v7/definition.json')),/ENOENT/);
 });
 
 test('detached semantic preparation closes its store after an unstarted HTTP listener',async()=>{

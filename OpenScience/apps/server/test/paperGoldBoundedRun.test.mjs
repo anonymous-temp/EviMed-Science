@@ -30,3 +30,44 @@ test('memorization baseline receives only declared outcome names and preserves t
  const progress=JSON.parse(await fs.readFile(path.join(dataDir,'paper-gold/cycles/baseline-fixture/progress.json'),'utf8'));
  assert.deepEqual(progress.baselines['private-paper'].answer,answer);assert.match(progress.baselines['private-paper'].answerHash,/^[a-f0-9]{64}$/);assert.equal(progress.baselines['private-paper'].memorized,true);
 });
+
+test('administrative quota preserves scored checkpoints, avoids assessment and resumes with a fresh attempt',async t=>{
+ const {PaperGoldAdministrativeDeferral}=await import('../../../evals/paper-gold/run.mjs');
+ const dataDir=await fs.mkdtemp(path.join(os.tmpdir(),'gold-administrative-'));t.after(()=>fs.rm(dataDir,{recursive:true,force:true}));
+ const definition={replicates:2,cases:[{id:'a',type:'question',policy:{aliases:[]},rewrite:{writer:'flash',qaExecutor:'qwen',qaPassed:true,question:'Produce a report.',variants:['Produce report A.','Produce report B.','Produce report C.']},gold:{numeric:{},inputAvailable:false,benchmarkScope:'question-only',stageChecks:{}}}]};
+ let quota=true,extractions=0,assessments=0,baseline=0;const attempts=[];
+ const adapter={noToolBaseline:async()=>{baseline++;return {};},baselineMemorized:()=>false,dispatch:async request=>{
+  attempts.push([request.replicate,request.attempt]);
+  if(request.replicate===1&&quota)throw new PaperGoldAdministrativeDeferral({id:'actual-quota',status:'failed',errorCode:'runtime_spend_limit_reached'},'eval-paper-test');
+  return {run:{id:`actual-${request.replicate}-${request.attempt}`}};
+ },extract:async()=>{extractions++;return {numeric:{},exposureTier:'unknown'};},assess:async unit=>{assessments++;return unit;}};
+ await assert.rejects(runCycle({dataDir,cycleId:'administrative',definition,adapter}),{code:'paper_gold_administrative_deferred'});
+ const file=path.join(dataDir,'paper-gold/cycles/administrative/progress.json');const prior=JSON.parse(await fs.readFile(file,'utf8'));
+ assert.equal(prior.rows.length,1);assert.equal(extractions,1);assert.equal(assessments,1);assert.equal(prior.dispatchAttempts['a:0:1'],1);
+ assert.equal(prior.administrativeStops[0].runId,'actual-quota');assert.equal(prior.administrativeStops[0].cause,'unknown');assert.ok(!('window' in prior.administrativeStops[0]));
+ quota=false;const resumed=await runCycle({dataDir,cycleId:'administrative',definition,adapter,maxNewUnits:1});
+ assert.deepEqual(attempts,[[0,0],[1,0],[1,1]]);assert.equal(baseline,1);assert.equal(resumed.units.length,2);assert.deepEqual(resumed.units[0],prior.rows[0]);assert.equal(resumed.complete,false);
+ assert.throws(()=>new PaperGoldAdministrativeDeferral({id:'scientific',status:'failed',errorCode:'runtime_session_error'},'eval-paper-test'));
+ assert.throws(()=>new PaperGoldAdministrativeDeferral({id:'active',status:'running',errorCode:'runtime_spend_limit_reached'},'eval-paper-test'));
+ for(const status of [undefined,'unknown','cancelled','succeeded'])assert.throws(()=>new PaperGoldAdministrativeDeferral({id:'malformed',status,errorCode:'runtime_spend_limit_reached'},'eval-paper-test'));
+ for(const id of [undefined,1,'',' '])assert.throws(()=>new PaperGoldAdministrativeDeferral({id,status:'failed',errorCode:'runtime_spend_limit_reached'},'eval-paper-test'));
+ for(const projectId of [undefined,1,'',' '])assert.throws(()=>new PaperGoldAdministrativeDeferral({id:'failed',status:'failed',errorCode:'runtime_spend_limit_reached'},projectId));
+});
+
+test('administrative retry uses a fresh project policy namespace and dispatch, stable within each attempt',async()=>{
+ const {paperGoldDispatchIdentity}=await import('../src/paperGoldEvaluator.mjs');
+ const original=paperGoldDispatchIdentity('cycle','case',0),retry=paperGoldDispatchIdentity('cycle','case',0,1);
+ assert.notEqual(original.projectId,retry.projectId);assert.notEqual(original.dispatchId,retry.dispatchId);
+ assert.deepEqual(retry,paperGoldDispatchIdentity('cycle','case',0,1));assert.deepEqual(original,paperGoldDispatchIdentity('cycle','case',0,0));
+ assert.throws(()=>paperGoldDispatchIdentity('cycle','case',0,-1));
+});
+
+test('ordinary scientific terminal failure is assessed once and is not an administrative retry',async t=>{
+ const dataDir=await fs.mkdtemp(path.join(os.tmpdir(),'gold-scientific-'));t.after(()=>fs.rm(dataDir,{recursive:true,force:true}));
+ const definition={replicates:2,cases:[{id:'a',type:'question',policy:{aliases:[]},rewrite:{writer:'flash',qaExecutor:'qwen',qaPassed:true,question:'Produce a report.',variants:['Produce report A.','Produce report B.','Produce report C.']},gold:{numeric:{},inputAvailable:false,benchmarkScope:'question-only',stageChecks:{}}}]};
+ let assessed=0;const calls=[];
+ const adapter={noToolBaseline:async()=>({}),baselineMemorized:()=>false,dispatch:async x=>{calls.push([x.replicate,x.attempt]);return {run:{id:`failed-${x.replicate}`,status:'failed',errorCode:'runtime_session_error'}};},extract:async()=>({numeric:{},exposureTier:'unknown',gaps:['model_capability']}),assess:async unit=>{assessed++;return unit;}};
+ const first=await runCycle({dataDir,cycleId:'scientific',definition,adapter,maxNewUnits:1});assert.equal(first.units.length,1);assert.equal(first.units[0].fullResearchReproductionValid,false);
+ await runCycle({dataDir,cycleId:'scientific',definition,adapter,maxNewUnits:1});assert.deepEqual(calls,[[0,0],[1,0]]);assert.equal(assessed,2);
+ const progress=JSON.parse(await fs.readFile(path.join(dataDir,'paper-gold/cycles/scientific/progress.json'),'utf8'));assert.deepEqual(progress.administrativeStops,[]);assert.deepEqual(progress.dispatchAttempts,{});
+});

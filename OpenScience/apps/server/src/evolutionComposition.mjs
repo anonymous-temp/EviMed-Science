@@ -327,7 +327,7 @@ export function createEvolution({ config, store, documents, jobs, database, usag
   };
   const frontier = config.frontierEnabled ? new EvolutionFrontierSignals({ database, service, integration }) : null;
   const scorerAudit = createEvolutionScorerAudit({service,config,controller,
-    readEvidence:createEvolutionScorerEvidence({service,store,agentRuns}),
+    readEvidence:createEvolutionScorerEvidence({service,store,agentRuns,runtimeManager}),
     review: async ({gold,observed,signal}) => {
       if(config.reviewProvider !== 'dashscope') throw new Error('Scorer audit requires independent Qwen review.');
       const result=await callReviewModel({config,usageLedger,fetchImpl},{userId:await service.owner(),projectId:EVOLUTION_PROJECT_ID,purpose:'evolution',limits,signal,

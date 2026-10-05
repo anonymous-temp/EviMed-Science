@@ -97,6 +97,7 @@ export function validateEvolutionDataRequirements(requirement) {
 
 /** Localized module errors for the shared client boundary. */
 export const EVOLUTION_ERROR_MESSAGES = Object.freeze({
+  'paper_gold_administrative_deferred': '评测因模型额度限制暂缓，现有进度已保留。',
   'evolution_action_unsupported': '这项研究工作暂时无法完成，请稍后重试。',
   'evolution_assessment_invalid': '这项研究工作暂时无法完成，请稍后重试。',
   'evolution_capability_missing': '这条研究记录已变化，请刷新后重试。',

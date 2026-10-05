@@ -26,7 +26,24 @@ test('production scorer evidence reads exact delivered Python as text and JSON a
   const changed=await read({producerProjectId:project.id,producerRunId:run.id});assert.ok(changed.artifactIssues.length);assert.equal(changed.deliveredText.some(row=>row.path==='code.py'),false);
   await fs.writeFile(transcriptPath(project,run.id),JSON.stringify(transcript)+'\n'+JSON.stringify({parts:[{type:'tool',tool:'mcp__evimed__meta_analysis',input:{action:'start'}}]})+'\n');
   assert.equal((await read({producerProjectId:project.id,producerRunId:run.id})).traceCoverage.complete,false);
+  await fs.writeFile(transcriptPath(project,run.id),JSON.stringify(transcript)+'\n'+JSON.stringify({parts:[{type:'tool',tool:'bash',status:'completed',output:'5'}]})+'\n');
+  const unit={producerProjectId:project.id,producerRunId:run.id};
+  assert.equal((await read(unit)).traceCoverage.complete,false);
+  let verificationCalls=0;
+  const dependencies={service:{owner:async()=>'operator'},store:{userById:async()=>({id:'operator'}),requireProject:async()=>project},agentRuns:{list:async()=>[run]},timeoutMs:10};
+  const proof={nativeCoverageVerified:true,proofHash:'a'.repeat(64),startProofHash:'b'.repeat(64),endProofHash:'c'.repeat(64)};
+  const verifiedReader=createEvolutionScorerEvidence({...dependencies,runtimeManager:{verifyRunEgressCoverage:async request=>{verificationCalls++;assert.equal(request.project,project);assert.equal(request.run,run);return proof;}}});
+  const covered=await verifiedReader(unit);assert.equal(covered.traceCoverage.complete,true);assert.equal(covered.nativeEgressProofHash,proof.proofHash);assert.deepEqual(covered.nativeCoverage,proof);assert.equal(verificationCalls,1);
+  for(const rejected of [{nativeCoverageVerified:false,reason:'identity_mismatch'}, {...proof,endProofHash:null}]){
+   const rejectedReader=createEvolutionScorerEvidence({...dependencies,runtimeManager:{verifyRunEgressCoverage:async()=>rejected}});
+   assert.equal((await rejectedReader(unit)).traceCoverage.complete,false);
+  }
+  assert.equal(await verifiedReader({...unit,producerRunId:'different-run'}),null);assert.equal(verificationCalls,1);
+  await fs.writeFile(transcriptPath(project,run.id),JSON.stringify({...transcript,completeness:'partial'})+'\n');
+  const partial=await verifiedReader(unit);assert.equal(partial.completeDurableTranscript,false);assert.equal(partial.nativeCoverage,null);assert.equal(verificationCalls,1);
+  await fs.writeFile(transcriptPath(project,run.id),JSON.stringify(transcript)+'\n'+JSON.stringify({parts:[{type:'tool',tool:'mcp__evimed__meta_analysis',input:{action:'start'}}]})+'\n');
+  assert.equal((await verifiedReader(unit)).traceCoverage.complete,false);
   const composition=await fs.readFile(new URL('../src/evolutionComposition.mjs',import.meta.url),'utf8');
-  assert.ok(composition.includes('readEvidence:createEvolutionScorerEvidence({service,store,agentRuns})'));
+  assert.ok(composition.includes('readEvidence:createEvolutionScorerEvidence({service,store,agentRuns,runtimeManager})'));
  }finally{await fs.rm(root,{recursive:true,force:true});}
 });

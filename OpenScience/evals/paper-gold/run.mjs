@@ -3,9 +3,22 @@ import path from "node:path";
 import { createHash, randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { freezeCycle, scoreUnit, reportReplicates, validateRewrite, screenRetractions, digest } from "./evaluator.mjs";
+/** Control-only administrative stop; not a scientific assessment or a day-window claim. */
+export class PaperGoldAdministrativeDeferral extends Error {
+  /** @param {any} run @param {string} projectId */
+  constructor(run, projectId) {
+    super("Paper evaluation waits for administrative spending capacity.");
+    if (typeof run?.id !== "string" || !run.id.trim() || typeof projectId !== "string" || !projectId.trim() || run.status !== "failed" || run.errorCode !== "runtime_spend_limit_reached") throw new Error("Not a trusted administrative terminal run.");
+    this.code = "paper_gold_administrative_deferred";
+    this.status = 402;
+    this.details = {runId:run.id,projectId,administrativeCode:run.errorCode,cause:"unknown"};
+  }
+}
 /** Runs through the existing session/dispatch API; policy registration precedes runtime start. */
-export async function platformDispatch({ base, headers, caseRecord, replicate, cycleId }) {
-  const projectId = `eval-paper-${createHash("sha256").update(`${cycleId}:${caseRecord.id}:${replicate}`).digest("hex").slice(0, 40)}`;
+export async function platformDispatch({ base, headers, caseRecord, replicate, cycleId, attempt = 0 }) {
+  if (!Number.isSafeInteger(attempt) || attempt < 0) throw new Error("Invalid administrative dispatch attempt.");
+  const identity = `${cycleId}:${caseRecord.id}:${replicate}${attempt ? `:administrative-retry:${attempt}` : ""}`;
+  const projectId = `eval-paper-${createHash("sha256").update(identity).digest("hex").slice(0, 40)}`;
   const request = async (route, body, scoped = true) => {
     const response = await fetch(`${base}${route}`, { method: body === undefined ? "GET" : "POST", headers: { ...headers, "Content-Type": "application/json", ...(scoped ? { "X-Open-Science-Project": projectId } : {}) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
     const value = /** @type {any} */ (await response.json());
@@ -16,12 +29,15 @@ export async function platformDispatch({ base, headers, caseRecord, replicate, c
   await request("/api/evolution/evaluation-policy", { projectId, policy: caseRecord.policy });
   await request("/api/commands/start_runtime", {});
   const session = await request("/api/runtime/sessions", {});
-  const run = await request("/api/agent-runs/dispatch", { sessionId: session.id, dispatchId: `evolution_paper_${createHash("sha256").update(`${cycleId}:${caseRecord.id}:${replicate}`).digest("hex").slice(0, 32)}`, text: caseRecord.input, automated: true, line: caseRecord.capabilityId });
+  const run = await request("/api/agent-runs/dispatch", { sessionId: session.id, dispatchId: `evolution_paper_${createHash("sha256").update(identity).digest("hex").slice(0, 32)}`, text: caseRecord.input, automated: true, line: caseRecord.capabilityId });
   const deadline = Date.now() + 3600000;
   while (Date.now() < deadline) {
     const listed = await request("/api/agent-runs?limit=200");
     const terminal = listed.find(row => row.id === run.id);
-    if (terminal && !["queued", "dispatching", "running"].includes(terminal.status)) return { projectId, run: terminal, transcript: await request(`/api/runtime/sessions/${encodeURIComponent(session.id)}/transcript`) };
+    if (terminal && !["queued", "dispatching", "running"].includes(terminal.status)) {
+      if (terminal.status !== "succeeded" && terminal.errorCode === "runtime_spend_limit_reached") throw new PaperGoldAdministrativeDeferral(terminal, projectId);
+      return { projectId, run: terminal, transcript: await request(`/api/runtime/sessions/${encodeURIComponent(session.id)}/transcript`) };
+    }
     await new Promise(resolve => setTimeout(resolve, 5000));
   }
   throw new Error("Evaluation run exceeded the harness deadline.");
@@ -38,6 +54,8 @@ export async function runCycle({ dataDir, cycleId, definition, adapter, signal =
     if (progress.evaluatorHash !== frozen.hash) throw new Error("Checkpoint evaluator hash changed.");
   } catch (error) { if (error.code !== "ENOENT") throw error; }
   const rows = progress.rows;
+  progress.dispatchAttempts ??= {};
+  progress.administrativeStops ??= [];
   const checkpoint = async () => {
     const temporary = `${progressFile}.${randomUUID()}.tmp`;
     await writeFile(temporary, JSON.stringify(progress), { mode: 0o600 });
@@ -64,7 +82,20 @@ export async function runCycle({ dataDir, cycleId, definition, adapter, signal =
       if (maxNewUnits !== null && newUnits >= maxNewUnits) break unitsLoop;
       const variantQuestion = testCase.rewrite.variants[variant];
       const input = testCase.type === "question" ? variantQuestion : String(testCase.input).replace(testCase.rewrite.question, variantQuestion);
-      const execution = await adapter.dispatch({ caseRecord: { id: testCase.id, policy: testCase.policy, capabilityId: testCase.capabilityId, input }, replicate: variant * Math.max(2, definition.replicates ?? 2) + replicate, variant, cycleId });
+      const attemptKey = `${testCase.id}:${variant}:${replicate}`;
+      const attempt = progress.dispatchAttempts[attemptKey] ?? 0;
+      if (!Number.isSafeInteger(attempt) || attempt < 0) throw new Error("Invalid administrative dispatch attempt checkpoint.");
+      let execution;
+      try {
+        execution = await adapter.dispatch({ caseRecord: { id: testCase.id, policy: testCase.policy, capabilityId: testCase.capabilityId, input }, replicate: variant * Math.max(2, definition.replicates ?? 2) + replicate, variant, cycleId, attempt });
+      } catch (error) {
+        if (error instanceof PaperGoldAdministrativeDeferral) {
+          progress.administrativeStops.push({caseId:testCase.id,variant,replicate,attempt,runId:error.details.runId,projectId:error.details.projectId,code:error.details.administrativeCode,cause:"unknown",at:new Date().toISOString()});
+          progress.dispatchAttempts[attemptKey] = attempt + 1;
+          await checkpoint();
+        }
+        throw error;
+      }
       const unit = await adapter.extract(execution);
       const assessed = adapter.assess ? await adapter.assess(unit, testCase.gold) : unit;
       const score = await scoreUnit({ ...assessed, id: testCase.id }, { ...testCase.gold, type: testCase.type }, { review: adapter.review, verifyCode: adapter.verifyCode });

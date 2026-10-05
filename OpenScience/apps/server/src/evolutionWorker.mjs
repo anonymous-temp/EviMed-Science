@@ -57,6 +57,11 @@ export class EvolutionWorker {
       } catch (error) {
         // A refused daily reservation did not buy a model call. Keep this job and its
         // completed checkpoints for the rolling budget window; it is not a method failure.
+        if (error?.code === 'paper_gold_administrative_deferred' && (error.status ?? error.statusCode) === 402) {
+          return await this.service.jobs.fail(job.userId, job.id, job.leaseToken,
+            { code: 'paper_gold_administrative_deferred', message: 'Evaluation waits after an observed administrative model refusal.' },
+            { retry: true, refundAttempt: true, delayMs: 3600000 });
+        }
         if (error?.code === 'usage_budget_exceeded' && (error.status ?? error.statusCode) === 402 && error.details?.window === 'day') {
           return this.service.jobs.fail(job.userId, job.id, job.leaseToken,
             { code: 'usage_budget_exceeded', message: 'Evolution work waits for available rolling daily budget.' },

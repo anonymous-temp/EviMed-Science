@@ -39,7 +39,7 @@ export function scopedVerificationDescriptor(proof){
  return {entrypoint:'deliverables/paper-gold-analysis/analysis.py:analyze',implementationId:'delivered-scoped-meta-analysis',sourceHash:proof.sourceHash,input:proof.input,inputHash:digest(proof.input),dependencyIds:[],independentQa:{passed:proof.numericComparisonPassed===true,executor:proof.independentReference.implementationId},independentImplementation:{...proof.independentReference,sourceHash:proof.sourceHash},tolerances:Object.fromEntries(Object.entries(proof.numeric).map(([key,row])=>[key,{absoluteTolerance:row.absoluteTolerance,relativeTolerance:0}]))};
 }
 /** Three variants/two replicates remain frozen; independent semantic QA is a separate metered control-only call. */
-export async function prepareScopedResearch({app,evaluationDataDir,cycleId='acceptance-scoped-research-meta-v6',reuseFromCycleId='acceptance-scoped-research-meta-v1',signal,review=callReviewModel,loadReference=loadScopedReference}){
+export async function prepareScopedResearch({app,evaluationDataDir,cycleId='acceptance-scoped-research-meta-v7',reuseFromCycleId='acceptance-scoped-research-meta-v1',signal,review=callReviewModel,loadReference=loadScopedReference}){
  if(!/^[a-z0-9_-]{1,100}$/.test(cycleId))throw new Error('Invalid scoped cycle.');
  return app.evolution.service.withLock(`scoped-research:${cycleId}`,async()=>{
   const {manifest,proof,author}=await loadReference(evaluationDataDir);
@@ -77,7 +77,7 @@ export async function prepareScopedResearch({app,evaluationDataDir,cycleId='acce
   return {cycleId,hash:frozen.hash,admitted:true,resumed:false,plannedDshRuns:6,fullResearchEligible:false};
  });
 }
-export async function runScopedResearch({app,evaluationDataDir,cycleId='acceptance-scoped-research-meta-v6',reuseFromCycleId='acceptance-scoped-research-meta-v1',maxNewUnits=null,signal}){
+export async function runScopedResearch({app,evaluationDataDir,cycleId='acceptance-scoped-research-meta-v7',reuseFromCycleId='acceptance-scoped-research-meta-v1',maxNewUnits=null,signal}){
  const prepared=await prepareScopedResearch({app,evaluationDataDir,cycleId,reuseFromCycleId,signal});
  if(!prepared.admitted)return prepared;
  return app.evolution.service.withLock(`scoped-research-run:${cycleId}`,async()=>{

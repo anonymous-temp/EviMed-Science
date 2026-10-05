@@ -19,6 +19,14 @@ test('daily reservation refusal defers the same checkpoint and refunds only its 
  assert.deepEqual(f.recorded[0][3],{code:'usage_budget_exceeded',message:'Evolution work waits for available rolling daily budget.'});
  assert.deepEqual(f.checkpoint,{completedSourceHash:'original',finishedStages:['extraction']});
 });
+test('typed observed paper evaluation administrative refusal defers without guessing a daily window or consuming scientific retries',async()=>{
+ const f=await execute(new HttpError(402,'paper_gold_administrative_deferred','Observed native quota, window unknown'));
+ assert.equal(f.result.status,'queued');assert.equal(f.waits.length,0);
+ assert.deepEqual(f.recorded[0][4],{retry:true,refundAttempt:true,delayMs:3600000});
+ assert.equal(f.recorded[0][3].code,'paper_gold_administrative_deferred');
+ const other=await execute(new HttpError(409,'paper_gold_administrative_deferred','Unknown or unverified failure'));
+ assert.equal(other.result.status,'failed');assert.equal(other.recorded[0][4].refundAttempt,undefined);
+});
 test('run cap, unknown window, failed DSH run and unrelated failures retain bounded failure handling',async()=>{
  for(const error of [new HttpError(402,'usage_budget_exceeded','Run cap',{window:'run'}),new HttpError(402,'usage_budget_exceeded','No window'),new HttpError(402,'usage_budget_exceeded','Week cap',{window:'week'}),new HttpError(409,'usage_budget_exceeded','The development run did not complete.',{window:'day'}),new HttpError(402,'model_gateway_upstream_error','Provider unavailable',{window:'day'}),new Error('Unknown')]){
   const f=await execute(error);assert.equal(f.result.status,'failed');assert.equal(f.waits.length,1);assert.equal(f.recorded[0][4].retry,false);assert.equal(f.recorded[0][4].refundAttempt,undefined);

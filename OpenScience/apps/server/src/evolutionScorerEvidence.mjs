@@ -1,8 +1,8 @@
 import {readDeliveryReceipt} from './agentRuns.mjs';
-import {readPaperGoldArtifacts,waitPaperGoldTranscript,paperGoldTraceCoverage} from './paperGoldEvaluator.mjs';
+import {readPaperGoldArtifacts,waitPaperGoldTranscript,paperGoldTraceCoverage,readPaperGoldNativeCoverage} from './paperGoldEvaluator.mjs';
 /** Production audit reader shares the evaluator's exact-run SHA/no-follow and sealing rules.
  * @param {any} dependencies */
-export function createEvolutionScorerEvidence({service,store,agentRuns,timeoutMs=60000}) {
+export function createEvolutionScorerEvidence({service,store,agentRuns,runtimeManager,timeoutMs=60000}) {
  return async(unit,options={})=>{
   const {signal}=/** @type {{signal?:AbortSignal}} */(options);
   const user=await store.userById(await service.owner());
@@ -13,6 +13,8 @@ export function createEvolutionScorerEvidence({service,store,agentRuns,timeoutMs
   const sealed=await waitPaperGoldTranscript({project,runId:run.id,signal,timeoutMs});
   const receipt=await readDeliveryReceipt(project,run).catch(()=>null);
   const artifacts=await readPaperGoldArtifacts({project,run,receipt});
-  return {transcript:sealed.transcript,completeDurableTranscript:sealed.complete,traceCoverage:paperGoldTraceCoverage(sealed.transcript),deliveredText:artifacts.deliveredText,numeric:artifacts.numeric,artifactIssues:artifacts.issues,recalledEvidenceIds:artifacts.recalledEvidenceIds};
+  const nativeCoverage=sealed.complete?await readPaperGoldNativeCoverage({runtimeManager,project,run,signal}):null;
+  const traceCoverage=paperGoldTraceCoverage(sealed.transcript,nativeCoverage);
+  return {nativeCoverage,nativeEgressProofHash:traceCoverage.nativeCoverageProofHash,transcript:sealed.transcript,completeDurableTranscript:sealed.complete,traceCoverage,deliveredText:artifacts.deliveredText,numeric:artifacts.numeric,artifactIssues:artifacts.issues,recalledEvidenceIds:artifacts.recalledEvidenceIds};
  };
 }

@@ -4,6 +4,8 @@ import test from "node:test";
 
 import {
   ALL_ERROR_CODES,
+  knownErrorCodeMessage,
+  errorCodeOutcome,
   CONTRACT_KINDS,
   CONTRACT_VALIDATOR_KINDS,
   DOMAIN_VERSION,
@@ -171,6 +173,7 @@ test("an unknown turn-end kind lands on a counted unknown code, never on success
   assert.deepEqual(turnEndErrorCode("max-tokens"), { errorCode: "runtime_session_error", subCode: "model_max_tokens" });
   assert.deepEqual(turnEndErrorCode("interrupted"), { errorCode: "runtime_stopped" });
   assert.deepEqual(turnEndErrorCode("error", "HTTP_402"), { errorCode: "runtime_spend_limit_reached" });
+  assert.deepEqual(turnEndErrorCode("error", "QUOTA"), { errorCode: "runtime_spend_limit_reached" });
   assert.deepEqual(turnEndErrorCode("error", "HTTP_502"), { errorCode: "runtime_session_error" });
   assert.deepEqual(turnEndErrorCode("blocked", "HTTP_402"), { errorCode: "runtime_session_error", subCode: "turn_blocked" });
   const unknown = turnEndErrorCode("teleported");
@@ -184,6 +187,13 @@ test("no evidence-source code is classified by omission", () => {
   assert.equal(classifyEvidenceSourceError("a_code_nobody_wrote"), "unknown");
   assert.ok(ALL_ERROR_CODES.length > 150);
   assert.equal(new Set(ALL_ERROR_CODES).size, ALL_ERROR_CODES.length, "duplicate error code");
+});
+
+test('observed evaluation administrative deferral has canonical safe copy and never counts as a scientific failure', () => {
+  const code='paper_gold_administrative_deferred';
+  assert.ok(ALL_ERROR_CODES.includes(code));
+  assert.equal(knownErrorCodeMessage(code),'评测因模型额度限制暂缓，现有进度已保留。');
+  assert.equal(errorCodeOutcome(code),'capped');
 });
 
 test("a plan without clarifications is rejected, and cycles are found", () => {

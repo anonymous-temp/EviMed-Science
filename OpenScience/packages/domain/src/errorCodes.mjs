@@ -765,6 +765,7 @@ export const TURN_END_ERROR_CODES = Object.freeze({
  */
 export const TURN_END_WIRE_ERROR_CODES = Object.freeze({
   HTTP_402: 'runtime_spend_limit_reached',
+  QUOTA: 'runtime_spend_limit_reached',
 })
 
 /** Sub-codes that qualify a kernel-boundary code without multiplying the codes. */
@@ -2227,6 +2228,7 @@ const ERROR_CODE_OUTCOMES = Object.freeze({
   project_limit_reached: 'capped',
   default_project_protected: 'capped',
   usage_budget_exceeded: 'capped',
+  paper_gold_administrative_deferred: 'capped',
   runtime_spend_limit_reached: 'capped',
   // The gate's own named defects, which carry no recognizable prefix.
   'declared-appraisal-must-execute': 'gated',
