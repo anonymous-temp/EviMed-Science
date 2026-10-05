@@ -464,7 +464,7 @@ export {
   traceNumber,
 } from './src/numericTraceability.mjs'
 
-// citedSources — 15 exports
+// citedSources — 16 exports
 export {
   EMPTY_SNAPSHOT_MESSAGE,
   EVIDENCE_SNAPSHOT_FILE,
@@ -477,6 +477,7 @@ export {
   citationUrlDefectsByLine,
   citedHttpUrls,
   normalizedUrl,
+  pmidOfUrl,
   unrecordedCitationMessage,
   unresolvableCitationHost,
   unretrievedCitationMessage,
@@ -922,6 +923,37 @@ export {
   methodSourceChanges,
   projectAffected,
 } from './src/knowledgeChange.mjs'
+// sourceChange — one durable fact per source identifier: the closed vocabulary of what was published about a work
+// after it was published, the pure rules that fold detectors' findings into one record, the status the result impact
+// path reads back out of it, and the five 时效 labels (plan 2026-10-05 §5.4, B5).
+export {
+  SOURCE_CHANGE_ASSERTERS,
+  SOURCE_CHANGE_ERROR_MESSAGES,
+  SOURCE_CHANGE_KINDS,
+  SOURCE_CHANGE_LABELS_ZH,
+  SOURCE_CHANGE_MAX_CHANGES,
+  SOURCE_CHANGE_NOTICE_KINDS,
+  SOURCE_CHANGE_OUTCOMES,
+  SOURCE_CHANGE_STATES,
+  SOURCE_CHANGE_WEIGHT,
+  SOURCE_CURRENCY_LABELS,
+  SOURCE_CURRENCY_LABELS_ZH,
+  canonicalSourceIdentifier,
+  changeFromFrontierLink,
+  changesFromCrossrefUpdates,
+  changesFromPublicationStatus,
+  currencyLabel,
+  doiOfSourceIdentifier,
+  emptySourceChangeRecord,
+  foldSourceChanges,
+  mergeSourceUpdateStatus,
+  normalizeSourceChange,
+  noticeIdentifierOf,
+  sourceChangeFact,
+  sourceIdentifierScheme,
+  sourceUpdateStatusOfFact,
+  sourceUpdatesOfChanges,
+} from './src/sourceChange.mjs'
 // sourceDocuments — 12 exports: what the knowledge base accepts, where each
 // format is read, where its pages begin, how a quotation's offset becomes a
 // page number, and what a personal-library document's state reads as.

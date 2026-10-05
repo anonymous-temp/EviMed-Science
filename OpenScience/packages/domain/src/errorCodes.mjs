@@ -2,6 +2,7 @@ import { EVOLUTION_ERROR_MESSAGES } from './evolution.mjs';
 import { AGENDA_MIN_EPISODE_BUDGET_CNY, MIN_RUN_BUDGET_CNY } from './agenda.mjs';
 import { RESULT_WORKBENCH_ERROR_MESSAGES } from "./resultErrors.mjs";
 import { DOCUMENT_EXPORT_ERROR_MESSAGES } from "./documentExport.mjs";
+import { SOURCE_CHANGE_ERROR_MESSAGES } from "./sourceChange.mjs";
 import { CONNECTOR_MISSING_CODES } from "./connectorCredentials.mjs";
 import { DATA_SEMANTICS_ERROR_CODES, DATA_SEMANTICS_ERROR_MESSAGE_ZH } from "./dataSemantics.mjs";
 import { GENE_EXPRESSION_ERROR_MESSAGE_ZH, GENE_EXPRESSION_LIMITATION_ERROR_CODES, GENE_EXPRESSION_LIMIT_MESSAGE_ZH, GENE_EXPRESSION_RUN_FIX_ERROR_CODES } from "./geneExpression.mjs";
@@ -1495,6 +1496,7 @@ export const ALL_ERROR_CODES = Object.freeze([...new Set([
   ...EXTENSION_ERROR_CODES,
   ...MANAGED_BROWSER_ERROR_CODES,
   ...Object.keys(DOCUMENT_EXPORT_ERROR_MESSAGES),
+  ...Object.keys(SOURCE_CHANGE_ERROR_MESSAGES),
   ...RUNTIME_ERROR_CODES,
   ...SOCKET_TOOL_ERROR_CODES,
   ...ANALYSIS_ERROR_CODES,
@@ -1594,6 +1596,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   document_review_conversion_incomplete: '复核后的文件转换尚未完成，原文件仍可下载。',
   document_review_conversion_failed: '复核后的文件转换未完成，原文件仍保留。',
   ...DOCUMENT_EXPORT_ERROR_MESSAGES,
+  ...SOURCE_CHANGE_ERROR_MESSAGES,
   ...RESULT_WORKBENCH_ERROR_MESSAGES,
   tooluniverse_upstream_unavailable: '补充科研数据源暂时无法访问，可继续使用其他文献和指南来源。',
   tooluniverse_unavailable: '补充科研数据源尚未配置，可继续使用其他文献和指南来源。',
@@ -2417,6 +2420,7 @@ export function errorCodeOutcome(code) {
   // project, a round, an order that is not there to act on, a worker not yet
   // composed — never a verdict on a run.
   if (Object.hasOwn(DOCUMENT_EXPORT_ERROR_MESSAGES, text)) return 'upstream'
+  if (Object.hasOwn(SOURCE_CHANGE_ERROR_MESSAGES, text)) return 'upstream'
   if (GEO_ROUTE_ERROR_CODES.includes(text)) return 'upstream'
   if (VCR_ROUTE_ERROR_CODES.includes(text) || VCR_GATEWAY_ERROR_CODES.includes(text)) return 'upstream'
   // The rest of the module's codes and the protocol's per-field issues are about
