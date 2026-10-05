@@ -17,7 +17,7 @@ import { AGENDA_DEFAULT_BUDGETS, canonicalJson } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 import { EVOLUTION_PROJECT_ID, isInternalProject } from "./internalProjects.mjs";
 import { createEvolutionService, evolutionKey } from "./evolutionService.mjs";
-import { createEvolutionDecisions, evolutionDecisionReviewProof } from "./evolutionDecisions.mjs";
+import { createEvolutionDecisions, evolutionDecisionReviewProof, evolutionExecutableOperation } from "./evolutionDecisions.mjs";
 import { createEvolutionMaintenance, evolutionRetrievalScore } from "./evolutionMaintenance.mjs";
 import { createEvolutionWorker } from "./evolutionWorker.mjs";
 import { persistExistingEngineEvaluation } from "./existingEngineCalibration.mjs";
@@ -184,7 +184,7 @@ export function createEvolution({ config, store, documents, jobs, database, usag
     execute: async action => {
       const id = `evolution-action-${evolutionKey(action.actionId)}`, prior = await service.get(id);
       if (prior?.payload.status === "complete") return prior.payload.result;
-      const selected = action.options.find(item => item.id === action.option), operation = selected.operation ?? action.option;
+      const selected = action.options.find(item => item.id === action.option), operation = evolutionExecutableOperation(action);
       let result;
       if(operation==='keep' && (await service.get(action.subjectId))?.payload.recordType==='evolution-maintenance-review') result=await maintenance.executeReview(action);
       else if (["wait", "defer", "keep"].includes(operation)) result = { state: "waiting" };

@@ -135,7 +135,10 @@ test('three cards daily, replay once, C overflow conservative, expiry refresh re
 
 test('expiry rejects same-family review and resource ask appears once in digest', async () => {
   const f = fixture(); const d = new EvolutionDecisions({ service: f.service, callbacks: { refresh: async () => ({ family: 'x' }), review: async () => ({ independent: true, family: 'x' }), execute: async () => ({}) } });
-  const card = await d.deliver(await d.propose(proposal('x'))); f.advance(86400001); await assert.rejects(d.expire(card.id), /cross-family/);
+  const card = await d.deliver(await d.propose(proposal('x'))); f.advance(86400001);
+  // A same-family review is never accepted; the card says so, is asked again, and meanwhile nothing was executed on its strength.
+  const waiting = await d.expire(card.id);
+  assert.equal(waiting.payload.status, 'pending'); assert.equal(waiting.payload.expiry.state, 'review-unavailable'); assert.equal(waiting.payload.expiry.code, 'evolution_review_invalid');
   await d.propose(proposal('resource', { resourceOnly: true })); await d.digest(); f.advance(86400000); const next = await d.digest(); assert.equal(next.payload.resources.length, 0);
 });
 
@@ -366,11 +369,13 @@ test('restoration failure compensates pin and retries; later harm retirement sta
 
 test('daily autonomous digest reports every category and retains at most three highlights',async()=>{
  const f=fixture();const decisions=new EvolutionDecisions({service:f.service,notifications:f.service.notifications,callbacks:{execute:async()=>({state:'complete'})}});
- for(let index=0;index<6;index++) await decisions.propose(proposal(`autonomous-${index}`,{category:`category-${index%4}`,directional:false,title:`Highlighted decision ${index}`}));
+ const categories=['implementation','tool-repair','tool-merge','tool-retire'];
+ for(let index=0;index<6;index++) await decisions.propose(proposal(`autonomous-${index}`,{category:categories[index%4],directional:false,title:`Highlighted decision ${index}`}));
  const manual=await decisions.propose(proposal('manual-decision',{category:'manual-only',title:'Manually selected item'}));
  await decisions.resolve(manual.id,{expectedRevision:manual.revision,option:'hold'});
  await decisions.digest();const body=f.notices.at(-1).body;
- for(let index=0;index<4;index++) assert.ok(body.includes(`category-${index}：${index<2?2:1} 项`));
+ for(const [index,label] of ['工具研发方向','工具修复','工具合并','工具退役'].entries()) assert.ok(body.includes(`${label}：${index<2?2:1} 项`));
+ for(const category of categories) assert.equal(body.includes(category),false,'an internal category identifier is not text for the operator');
  assert.equal((body.match(/Highlighted decision/g)??[]).length,3);
  assert.equal(body.includes('manual-only'),false);assert.equal(body.includes('Manually selected item'),false);
 });
