@@ -1,310 +1,918 @@
 {
-  "schemaVersion": 1,
-  "methodId": "faers-ror-published-data-v3",
+  "schemaVersion": 2,
+  "methodId": "faers-ror-published-data-v4",
   "track": "P",
   "engineId": "pharmacovigilance",
+  "executionKind": "actual-existing-engine",
   "benchmarkType": "method",
   "controlPlaneOnlyGold": true,
-  "referenceHash": "5ca261a146c900bb988e25be72e761522714e3c8868d629188f2a98e46a35683",
-  "status": "actual-existing-engine-method-ruler-scored-not-full-research",
+  "referenceHash": "24436debd821f9762e684c99d5bc7fa62443fbcf67943efda3414ae84e36234c",
+  "status": "method-ruler-scored-every-admitted-case-reported-not-full-research",
+  "measures": "The engine's own statistics function on the frozen inputs of every admitted case.",
+  "referenceKinds": [
+    "published"
+  ],
+  "admission": {
+    "rule": "A row of the exact preserved table with four integer counts and a printed ROR with both bounds. Excluded only when a cell is zero and the source computes uncorrected ratios.",
+    "engineOutputRead": false,
+    "fixedBeforeScoring": true
+  },
+  "rowsEntered": 65,
+  "cases": 65,
+  "excludedBeforeScoring": {
+    "count": 0,
+    "reasons": {}
+  },
   "distinctPublishedSources": 5,
+  "sources": [
+    {
+      "publicationId": "10.3390/medsci13040327",
+      "specification": "Published 2x2 counts with point ROR and 95% bounds in separate columns; uncorrected.",
+      "continuityCorrection": 0,
+      "rowsEntered": 14,
+      "admitted": 14,
+      "excludedBeforeScoring": 0
+    },
+    {
+      "publicationId": "10.3390/ijerph23081088",
+      "specification": "exp[ln(ROR) +/- 1.96 x sqrt(1/a + 1/b + 1/c + 1/d)]; \"Uncorrected estimates required nonzero cells.\"",
+      "continuityCorrection": 0,
+      "rowsEntered": 5,
+      "admitted": 5,
+      "excludedBeforeScoring": 0
+    },
+    {
+      "publicationId": "10.3390/ph19081181",
+      "specification": "\"For all 2 x 2 tables, a Haldane-Anscombe continuity correction of 0.5 was added to every cell to calculate the ROR, PRR, and 95% CI.\"",
+      "continuityCorrection": 0.5,
+      "rowsEntered": 8,
+      "admitted": 8,
+      "excludedBeforeScoring": 0
+    },
+    {
+      "publicationId": "10.3389/fphar.2025.1682276",
+      "specification": "ROR 95% CI = exp(ln(ROR) +/- 1.96 x sqrt(1/a + 1/b + 1/c + 1/d)); only the FAERS section of the table (the CVAR and JADER sections are other databases).",
+      "continuityCorrection": 0,
+      "rowsEntered": 12,
+      "admitted": 12,
+      "excludedBeforeScoring": 0
+    },
+    {
+      "publicationId": "10.1007/s00210-026-05748-1",
+      "specification": "Author aggregate table: primary comparator (C1) rows computed without the Haldane correction; Wald intervals.",
+      "continuityCorrection": 0,
+      "rowsEntered": 26,
+      "admitted": 26,
+      "excludedBeforeScoring": 0
+    }
+  ],
   "references": [
     {
-      "id": "faers-published-ror-1",
+      "id": "faers-c79aeffc79c7125153c5c462",
+      "kind": "published",
       "publicationId": "10.3390/medsci13040327",
       "sourceHash": "e9925955de025509b303af296d80edabe1e4f35bff49427ecbc9e1bceb9ffe34",
-      "independentImplementation": "R-normal-log-ror"
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": true,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "agree"
     },
     {
-      "id": "faers-published-ror-2",
+      "id": "faers-c017688cfcc4c1a46182ef0c",
+      "kind": "published",
       "publicationId": "10.3390/medsci13040327",
       "sourceHash": "e9925955de025509b303af296d80edabe1e4f35bff49427ecbc9e1bceb9ffe34",
-      "independentImplementation": "R-normal-log-ror"
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": true,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "agree"
     },
     {
-      "id": "faers-published-ror-3",
+      "id": "faers-8196bf62125f0876415e82d1",
+      "kind": "published",
       "publicationId": "10.3390/medsci13040327",
       "sourceHash": "e9925955de025509b303af296d80edabe1e4f35bff49427ecbc9e1bceb9ffe34",
-      "independentImplementation": "R-normal-log-ror"
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": true,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "agree"
     },
     {
-      "id": "faers-published-ror-4",
+      "id": "faers-76975b44417ed18969f6c3bd",
+      "kind": "published",
       "publicationId": "10.3390/medsci13040327",
       "sourceHash": "e9925955de025509b303af296d80edabe1e4f35bff49427ecbc9e1bceb9ffe34",
-      "independentImplementation": "R-normal-log-ror"
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": true,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "agree"
     },
     {
-      "id": "faers-published-ror-5",
+      "id": "faers-72cba5b6d0c6a5415f84b7f2",
+      "kind": "published",
       "publicationId": "10.3390/medsci13040327",
       "sourceHash": "e9925955de025509b303af296d80edabe1e4f35bff49427ecbc9e1bceb9ffe34",
-      "independentImplementation": "R-normal-log-ror"
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": true,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "agree"
     },
     {
-      "id": "faers-published-ror-6",
+      "id": "faers-6fdeb3e3abf0c55633c42d10",
+      "kind": "published",
       "publicationId": "10.3390/medsci13040327",
       "sourceHash": "e9925955de025509b303af296d80edabe1e4f35bff49427ecbc9e1bceb9ffe34",
-      "independentImplementation": "R-normal-log-ror"
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": true,
+        "waldExactQuantileReproducesPrinted": false
+      },
+      "outcome": "agree"
     },
     {
-      "id": "faers-published-ror-7",
+      "id": "faers-cccc7953f5d0a6f298b5260e",
+      "kind": "published",
       "publicationId": "10.3390/medsci13040327",
       "sourceHash": "e9925955de025509b303af296d80edabe1e4f35bff49427ecbc9e1bceb9ffe34",
-      "independentImplementation": "R-normal-log-ror"
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": true,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "agree"
     },
     {
-      "id": "faers-published-ror-9",
+      "id": "faers-d9b7339353163648f8f85275",
+      "kind": "published",
       "publicationId": "10.3390/medsci13040327",
       "sourceHash": "e9925955de025509b303af296d80edabe1e4f35bff49427ecbc9e1bceb9ffe34",
-      "independentImplementation": "R-normal-log-ror"
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": true,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "agree"
     },
     {
-      "id": "faers-published-ror-11",
+      "id": "faers-168db5ccee0f4a389373dfbf",
+      "kind": "published",
       "publicationId": "10.3390/medsci13040327",
       "sourceHash": "e9925955de025509b303af296d80edabe1e4f35bff49427ecbc9e1bceb9ffe34",
-      "independentImplementation": "R-normal-log-ror"
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": false,
+        "waldExactQuantileReproducesPrinted": false
+      },
+      "outcome": "disagree"
     },
     {
-      "id": "faers-published-ror-13",
+      "id": "faers-7eba6119720f4923770c933d",
+      "kind": "published",
       "publicationId": "10.3390/medsci13040327",
       "sourceHash": "e9925955de025509b303af296d80edabe1e4f35bff49427ecbc9e1bceb9ffe34",
-      "independentImplementation": "R-normal-log-ror"
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": true,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "agree"
     },
     {
-      "id": "faers-published-ror-14",
+      "id": "faers-011e6ef351c5bf5c9480d336",
+      "kind": "published",
       "publicationId": "10.3390/medsci13040327",
       "sourceHash": "e9925955de025509b303af296d80edabe1e4f35bff49427ecbc9e1bceb9ffe34",
-      "independentImplementation": "R-normal-log-ror"
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": false,
+        "waldExactQuantileReproducesPrinted": false
+      },
+      "outcome": "disagree"
+    },
+    {
+      "id": "faers-5e2f62b127131c8e75d32562",
+      "kind": "published",
+      "publicationId": "10.3390/medsci13040327",
+      "sourceHash": "e9925955de025509b303af296d80edabe1e4f35bff49427ecbc9e1bceb9ffe34",
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": true,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "agree"
+    },
+    {
+      "id": "faers-74e8e0460a465bef71e022ad",
+      "kind": "published",
+      "publicationId": "10.3390/medsci13040327",
+      "sourceHash": "e9925955de025509b303af296d80edabe1e4f35bff49427ecbc9e1bceb9ffe34",
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": true,
+        "waldExactQuantileReproducesPrinted": false
+      },
+      "outcome": "agree"
+    },
+    {
+      "id": "faers-686360e060bcdb8e4bdbe1b9",
+      "kind": "published",
+      "publicationId": "10.3390/medsci13040327",
+      "sourceHash": "e9925955de025509b303af296d80edabe1e4f35bff49427ecbc9e1bceb9ffe34",
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": false,
+        "waldExactQuantileReproducesPrinted": false
+      },
+      "outcome": "disagree"
     },
     {
       "id": "faers-ebbb034d22cba340348d09a9",
+      "kind": "published",
       "publicationId": "10.3390/ijerph23081088",
       "sourceHash": "df3403b92b498fb38ea587d18ae387ba58e36da6d7d2ea7e0a7420d5fdd91326",
-      "independentImplementation": "R-normal-log-ror"
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": true,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "agree"
     },
     {
       "id": "faers-0c52e76d879f42b6831188ed",
+      "kind": "published",
       "publicationId": "10.3390/ijerph23081088",
       "sourceHash": "df3403b92b498fb38ea587d18ae387ba58e36da6d7d2ea7e0a7420d5fdd91326",
-      "independentImplementation": "R-normal-log-ror"
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": true,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "agree"
     },
     {
       "id": "faers-b9dc3c94ee626e4fba48c1d8",
+      "kind": "published",
       "publicationId": "10.3390/ijerph23081088",
       "sourceHash": "df3403b92b498fb38ea587d18ae387ba58e36da6d7d2ea7e0a7420d5fdd91326",
-      "independentImplementation": "R-normal-log-ror"
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": true,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "agree"
     },
     {
       "id": "faers-e3e30188e95a2181801d9229",
+      "kind": "published",
       "publicationId": "10.3390/ijerph23081088",
       "sourceHash": "df3403b92b498fb38ea587d18ae387ba58e36da6d7d2ea7e0a7420d5fdd91326",
-      "independentImplementation": "R-normal-log-ror"
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": true,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "agree"
     },
     {
       "id": "faers-c4a14d1fa2aa813939bf7546",
+      "kind": "published",
       "publicationId": "10.3390/ijerph23081088",
       "sourceHash": "df3403b92b498fb38ea587d18ae387ba58e36da6d7d2ea7e0a7420d5fdd91326",
-      "independentImplementation": "R-normal-log-ror"
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": true,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "agree"
     },
     {
       "id": "faers-0754cfba2bcccf5fb1f9a44f",
+      "kind": "published",
       "publicationId": "10.3390/ph19081181",
       "sourceHash": "fa1bbae3c490b99be38cf7667295bf79e80483f806882e2c411947a06f7564f5",
-      "independentImplementation": "R-normal-log-ror"
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": true,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "agree"
     },
     {
       "id": "faers-fe9f87db9a40912ff32de995",
+      "kind": "published",
       "publicationId": "10.3390/ph19081181",
       "sourceHash": "fa1bbae3c490b99be38cf7667295bf79e80483f806882e2c411947a06f7564f5",
-      "independentImplementation": "R-normal-log-ror"
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": true,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "agree"
     },
     {
       "id": "faers-53c49f0393e80de06556019f",
+      "kind": "published",
       "publicationId": "10.3390/ph19081181",
       "sourceHash": "fa1bbae3c490b99be38cf7667295bf79e80483f806882e2c411947a06f7564f5",
-      "independentImplementation": "R-normal-log-ror"
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": true,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "agree"
     },
     {
       "id": "faers-484ea0a550fb3badaf84d411",
+      "kind": "published",
       "publicationId": "10.3390/ph19081181",
       "sourceHash": "fa1bbae3c490b99be38cf7667295bf79e80483f806882e2c411947a06f7564f5",
-      "independentImplementation": "R-normal-log-ror"
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": true,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "agree"
     },
     {
       "id": "faers-e54405136e74f94f5aff31bb",
+      "kind": "published",
       "publicationId": "10.3390/ph19081181",
       "sourceHash": "fa1bbae3c490b99be38cf7667295bf79e80483f806882e2c411947a06f7564f5",
-      "independentImplementation": "R-normal-log-ror"
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": true,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "agree"
     },
     {
       "id": "faers-410e8d55ea69ca1a6f64490c",
+      "kind": "published",
       "publicationId": "10.3390/ph19081181",
       "sourceHash": "fa1bbae3c490b99be38cf7667295bf79e80483f806882e2c411947a06f7564f5",
-      "independentImplementation": "R-normal-log-ror"
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": true,
+        "waldExactQuantileReproducesPrinted": false
+      },
+      "outcome": "agree"
     },
     {
       "id": "faers-261a3c2ab7f717f951cb1ec7",
+      "kind": "published",
       "publicationId": "10.3390/ph19081181",
       "sourceHash": "fa1bbae3c490b99be38cf7667295bf79e80483f806882e2c411947a06f7564f5",
-      "independentImplementation": "R-normal-log-ror"
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": true,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "agree"
     },
     {
       "id": "faers-06dd9fe20303e323cf6bb30d",
+      "kind": "published",
       "publicationId": "10.3390/ph19081181",
       "sourceHash": "fa1bbae3c490b99be38cf7667295bf79e80483f806882e2c411947a06f7564f5",
-      "independentImplementation": "R-normal-log-ror"
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": true,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "agree"
     },
     {
       "id": "faers-e78c4fe4e4a80e042e481c51",
+      "kind": "published",
       "publicationId": "10.3389/fphar.2025.1682276",
       "sourceHash": "b06aefd23133786eafd16ac41c1200f3fb2fd379817af6406c5e5540aae714e2",
-      "independentImplementation": "R-normal-log-ror"
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": true,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "agree"
     },
     {
       "id": "faers-37a37161b5cdb243f70ffe01",
+      "kind": "published",
       "publicationId": "10.3389/fphar.2025.1682276",
       "sourceHash": "b06aefd23133786eafd16ac41c1200f3fb2fd379817af6406c5e5540aae714e2",
-      "independentImplementation": "R-normal-log-ror"
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": true,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "agree"
     },
     {
       "id": "faers-4c0d36f29bdda733094b903e",
+      "kind": "published",
       "publicationId": "10.3389/fphar.2025.1682276",
       "sourceHash": "b06aefd23133786eafd16ac41c1200f3fb2fd379817af6406c5e5540aae714e2",
-      "independentImplementation": "R-normal-log-ror"
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": true,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "agree"
     },
     {
       "id": "faers-2c8e19a791f8ba7cec7503d5",
+      "kind": "published",
       "publicationId": "10.3389/fphar.2025.1682276",
       "sourceHash": "b06aefd23133786eafd16ac41c1200f3fb2fd379817af6406c5e5540aae714e2",
-      "independentImplementation": "R-normal-log-ror"
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": true,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "agree"
     },
     {
       "id": "faers-a9b13ebae0fc2a8ac1eb457c",
+      "kind": "published",
       "publicationId": "10.3389/fphar.2025.1682276",
       "sourceHash": "b06aefd23133786eafd16ac41c1200f3fb2fd379817af6406c5e5540aae714e2",
-      "independentImplementation": "R-normal-log-ror"
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": true,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "agree"
     },
     {
       "id": "faers-cb8fdcbbb13ca9bd3c3622e3",
+      "kind": "published",
       "publicationId": "10.3389/fphar.2025.1682276",
       "sourceHash": "b06aefd23133786eafd16ac41c1200f3fb2fd379817af6406c5e5540aae714e2",
-      "independentImplementation": "R-normal-log-ror"
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": true,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "agree"
     },
     {
       "id": "faers-e367fa2dee169e605d3b09d5",
+      "kind": "published",
       "publicationId": "10.3389/fphar.2025.1682276",
       "sourceHash": "b06aefd23133786eafd16ac41c1200f3fb2fd379817af6406c5e5540aae714e2",
-      "independentImplementation": "R-normal-log-ror"
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": true,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "agree"
+    },
+    {
+      "id": "faers-d408c0649cc0c19ea768ba99",
+      "kind": "published",
+      "publicationId": "10.3389/fphar.2025.1682276",
+      "sourceHash": "b06aefd23133786eafd16ac41c1200f3fb2fd379817af6406c5e5540aae714e2",
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": false,
+        "waldExactQuantileReproducesPrinted": false
+      },
+      "outcome": "disagree"
     },
     {
       "id": "faers-caca30c73c29860176e7cb27",
+      "kind": "published",
       "publicationId": "10.3389/fphar.2025.1682276",
       "sourceHash": "b06aefd23133786eafd16ac41c1200f3fb2fd379817af6406c5e5540aae714e2",
-      "independentImplementation": "R-normal-log-ror"
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": true,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "agree"
     },
     {
       "id": "faers-8a9fd91212d9377da7aec64b",
+      "kind": "published",
       "publicationId": "10.3389/fphar.2025.1682276",
       "sourceHash": "b06aefd23133786eafd16ac41c1200f3fb2fd379817af6406c5e5540aae714e2",
-      "independentImplementation": "R-normal-log-ror"
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": true,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "agree"
     },
     {
       "id": "faers-d2bf35bf7b78906e620f18b4",
+      "kind": "published",
       "publicationId": "10.3389/fphar.2025.1682276",
       "sourceHash": "b06aefd23133786eafd16ac41c1200f3fb2fd379817af6406c5e5540aae714e2",
-      "independentImplementation": "R-normal-log-ror"
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": true,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "agree"
     },
     {
       "id": "faers-25170d2be026e3e8a6a36228",
+      "kind": "published",
       "publicationId": "10.3389/fphar.2025.1682276",
       "sourceHash": "b06aefd23133786eafd16ac41c1200f3fb2fd379817af6406c5e5540aae714e2",
-      "independentImplementation": "R-normal-log-ror"
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": true,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "agree"
     },
     {
       "id": "faers-ace254e44b7b0bf34102ab77",
+      "kind": "published",
       "publicationId": "10.1007/s00210-026-05748-1",
       "sourceHash": "88f8848392e2c807d0472f12416851532e64d79cc5999131c5103d8085c8b2ca",
-      "independentImplementation": "R-normal-log-ror"
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": true,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "agree"
     },
     {
       "id": "faers-499bd79661d260bb7f9484f0",
+      "kind": "published",
       "publicationId": "10.1007/s00210-026-05748-1",
       "sourceHash": "88f8848392e2c807d0472f12416851532e64d79cc5999131c5103d8085c8b2ca",
-      "independentImplementation": "R-normal-log-ror"
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": true,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "agree"
     },
     {
       "id": "faers-81acd4df885c43860cf1ff99",
+      "kind": "published",
       "publicationId": "10.1007/s00210-026-05748-1",
       "sourceHash": "88f8848392e2c807d0472f12416851532e64d79cc5999131c5103d8085c8b2ca",
-      "independentImplementation": "R-normal-log-ror"
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": true,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "agree"
+    },
+    {
+      "id": "faers-35c55b797dd6f8254acef755",
+      "kind": "published",
+      "publicationId": "10.1007/s00210-026-05748-1",
+      "sourceHash": "88f8848392e2c807d0472f12416851532e64d79cc5999131c5103d8085c8b2ca",
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": false,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "disagree"
+    },
+    {
+      "id": "faers-755c6ceb94c312e3a64a34f3",
+      "kind": "published",
+      "publicationId": "10.1007/s00210-026-05748-1",
+      "sourceHash": "88f8848392e2c807d0472f12416851532e64d79cc5999131c5103d8085c8b2ca",
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": false,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "disagree"
     },
     {
       "id": "faers-c3ee3bd3b9d1af745dab5333",
+      "kind": "published",
       "publicationId": "10.1007/s00210-026-05748-1",
       "sourceHash": "88f8848392e2c807d0472f12416851532e64d79cc5999131c5103d8085c8b2ca",
-      "independentImplementation": "R-normal-log-ror"
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": true,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "agree"
+    },
+    {
+      "id": "faers-5569c0d122fc3d0d6fbac118",
+      "kind": "published",
+      "publicationId": "10.1007/s00210-026-05748-1",
+      "sourceHash": "88f8848392e2c807d0472f12416851532e64d79cc5999131c5103d8085c8b2ca",
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": false,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "disagree"
+    },
+    {
+      "id": "faers-67fdad71eee4dd5fd2d8705b",
+      "kind": "published",
+      "publicationId": "10.1007/s00210-026-05748-1",
+      "sourceHash": "88f8848392e2c807d0472f12416851532e64d79cc5999131c5103d8085c8b2ca",
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": false,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "disagree"
     },
     {
       "id": "faers-434ce63da186d622d9278f50",
+      "kind": "published",
       "publicationId": "10.1007/s00210-026-05748-1",
       "sourceHash": "88f8848392e2c807d0472f12416851532e64d79cc5999131c5103d8085c8b2ca",
-      "independentImplementation": "R-normal-log-ror"
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": true,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "agree"
+    },
+    {
+      "id": "faers-54051938e1d0ce8bed9db8ea",
+      "kind": "published",
+      "publicationId": "10.1007/s00210-026-05748-1",
+      "sourceHash": "88f8848392e2c807d0472f12416851532e64d79cc5999131c5103d8085c8b2ca",
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": false,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "disagree"
     },
     {
       "id": "faers-5e8e349fb027f9af064cf0c3",
+      "kind": "published",
       "publicationId": "10.1007/s00210-026-05748-1",
       "sourceHash": "88f8848392e2c807d0472f12416851532e64d79cc5999131c5103d8085c8b2ca",
-      "independentImplementation": "R-normal-log-ror"
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": true,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "agree"
     },
     {
       "id": "faers-d343c4e2f9bdc6ed91020686",
+      "kind": "published",
       "publicationId": "10.1007/s00210-026-05748-1",
       "sourceHash": "88f8848392e2c807d0472f12416851532e64d79cc5999131c5103d8085c8b2ca",
-      "independentImplementation": "R-normal-log-ror"
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": true,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "agree"
+    },
+    {
+      "id": "faers-4348fa43e73b3a3b881f40a5",
+      "kind": "published",
+      "publicationId": "10.1007/s00210-026-05748-1",
+      "sourceHash": "88f8848392e2c807d0472f12416851532e64d79cc5999131c5103d8085c8b2ca",
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": false,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "disagree"
     },
     {
       "id": "faers-006f49811ad649a79dd472ae",
+      "kind": "published",
       "publicationId": "10.1007/s00210-026-05748-1",
       "sourceHash": "88f8848392e2c807d0472f12416851532e64d79cc5999131c5103d8085c8b2ca",
-      "independentImplementation": "R-normal-log-ror"
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": true,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "agree"
+    },
+    {
+      "id": "faers-b16d5e2055679de4b92598b8",
+      "kind": "published",
+      "publicationId": "10.1007/s00210-026-05748-1",
+      "sourceHash": "88f8848392e2c807d0472f12416851532e64d79cc5999131c5103d8085c8b2ca",
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": false,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "disagree"
+    },
+    {
+      "id": "faers-fc1f5e4271fdafdc7fe91f72",
+      "kind": "published",
+      "publicationId": "10.1007/s00210-026-05748-1",
+      "sourceHash": "88f8848392e2c807d0472f12416851532e64d79cc5999131c5103d8085c8b2ca",
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": false,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "disagree"
     },
     {
       "id": "faers-4281ca59778e70524cd71e2d",
+      "kind": "published",
       "publicationId": "10.1007/s00210-026-05748-1",
       "sourceHash": "88f8848392e2c807d0472f12416851532e64d79cc5999131c5103d8085c8b2ca",
-      "independentImplementation": "R-normal-log-ror"
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": true,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "agree"
     },
     {
       "id": "faers-650fa43e927aa45a59be3441",
+      "kind": "published",
       "publicationId": "10.1007/s00210-026-05748-1",
       "sourceHash": "88f8848392e2c807d0472f12416851532e64d79cc5999131c5103d8085c8b2ca",
-      "independentImplementation": "R-normal-log-ror"
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": true,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "agree"
+    },
+    {
+      "id": "faers-ffa962a38056449e67848901",
+      "kind": "published",
+      "publicationId": "10.1007/s00210-026-05748-1",
+      "sourceHash": "88f8848392e2c807d0472f12416851532e64d79cc5999131c5103d8085c8b2ca",
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": false,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "disagree"
+    },
+    {
+      "id": "faers-ca4aaaf486c3a2519dd4a744",
+      "kind": "published",
+      "publicationId": "10.1007/s00210-026-05748-1",
+      "sourceHash": "88f8848392e2c807d0472f12416851532e64d79cc5999131c5103d8085c8b2ca",
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": false,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "disagree"
+    },
+    {
+      "id": "faers-edd56ed613c252999dc71273",
+      "kind": "published",
+      "publicationId": "10.1007/s00210-026-05748-1",
+      "sourceHash": "88f8848392e2c807d0472f12416851532e64d79cc5999131c5103d8085c8b2ca",
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": false,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "disagree"
+    },
+    {
+      "id": "faers-179eee3d064752ab60e9e2af",
+      "kind": "published",
+      "publicationId": "10.1007/s00210-026-05748-1",
+      "sourceHash": "88f8848392e2c807d0472f12416851532e64d79cc5999131c5103d8085c8b2ca",
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": false,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "disagree"
+    },
+    {
+      "id": "faers-de84aae8df82aa36b06d7fe4",
+      "kind": "published",
+      "publicationId": "10.1007/s00210-026-05748-1",
+      "sourceHash": "88f8848392e2c807d0472f12416851532e64d79cc5999131c5103d8085c8b2ca",
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": false,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "disagree"
+    },
+    {
+      "id": "faers-b28fbb8229c710d5686083fe",
+      "kind": "published",
+      "publicationId": "10.1007/s00210-026-05748-1",
+      "sourceHash": "88f8848392e2c807d0472f12416851532e64d79cc5999131c5103d8085c8b2ca",
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": false,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "disagree"
+    },
+    {
+      "id": "faers-7e7de9e9a8cc99da53e90b0d",
+      "kind": "published",
+      "publicationId": "10.1007/s00210-026-05748-1",
+      "sourceHash": "88f8848392e2c807d0472f12416851532e64d79cc5999131c5103d8085c8b2ca",
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": false,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "disagree"
     },
     {
       "id": "faers-cc54945e104cb1ef8d680ff5",
+      "kind": "published",
       "publicationId": "10.1007/s00210-026-05748-1",
       "sourceHash": "88f8848392e2c807d0472f12416851532e64d79cc5999131c5103d8085c8b2ca",
-      "independentImplementation": "R-normal-log-ror"
+      "independentImplementation": "python-normal-log-ror-z1.96",
+      "referenceConsistency": {
+        "wald196ReproducesPrinted": true,
+        "waldExactQuantileReproducesPrinted": true
+      },
+      "outcome": "agree"
     }
   ],
   "fullResearchReproductions": 0,
   "actualCalibrationReceipt": {
-    "ok": true,
-    "methodId": "faers-ror-published-data-v3",
+    "ok": false,
+    "methodId": "faers-ror-published-data-v4",
     "engineId": "pharmacovigilance",
+    "executionKind": "actual-existing-engine",
     "scored": true,
     "scope": "deterministic-method-only",
-    "methodCases": 92,
-    "passed": 92,
+    "cases": 65,
+    "agree": 46,
+    "disagree": 19,
+    "couldNotRun": 0,
+    "rows": 130,
+    "excludedBeforeScoring": 0,
+    "entered": 65,
+    "publishedSources": 5,
+    "sourcesFullyAgreeing": 2,
+    "bySource": {
+      "10.3390/medsci13040327": {
+        "cases": 14,
+        "agree": 11,
+        "disagree": 3,
+        "couldNotRun": 0
+      },
+      "10.3390/ijerph23081088": {
+        "cases": 5,
+        "agree": 5,
+        "disagree": 0,
+        "couldNotRun": 0
+      },
+      "10.3390/ph19081181": {
+        "cases": 8,
+        "agree": 8,
+        "disagree": 0,
+        "couldNotRun": 0
+      },
+      "10.3389/fphar.2025.1682276": {
+        "cases": 12,
+        "agree": 11,
+        "disagree": 1,
+        "couldNotRun": 0
+      },
+      "10.1007/s00210-026-05748-1": {
+        "cases": 26,
+        "agree": 11,
+        "disagree": 15,
+        "couldNotRun": 0
+      }
+    },
+    "disagreementDiagnoses": {
+      "reference_not_reproduced_by_textbook_formula_from_its_own_counts": 4,
+      "reference_follows_exact_normal_quantile": 15
+    },
+    "methodCases": 65,
+    "passed": 46,
     "unsupported": 0,
-    "passedPublishedSources": 5,
-    "sourceDefinitionHash": "5ca261a146c900bb988e25be72e761522714e3c8868d629188f2a98e46a35683",
-    "evaluationScorerHash": "f0e73bb4804a45ca8a61963103b7ffde04875b880e5ad3a34f3e007eade04721",
+    "passedPublishedSources": 2,
+    "scoredPublishedSources": 5,
+    "sourceDefinitionHash": "24436debd821f9762e684c99d5bc7fa62443fbcf67943efda3414ae84e36234c",
+    "evaluationScorerHash": "efb1b68665f99301394be86dcbb76264a61e324ec1fe78f93a3275b2ffc5c52d",
     "engineDigest": "70980cecb125c9e4bd2958b25f631ad66176d44c480f7731f46eb014a8f3ffe0",
     "runtimeDigest": "d63a9b31a9f96a3cca721cab263d4311e96a7442a71c00f4502825accfb70e76",
-    "scorerDigest": "42f18fee01d89d8a3d3c9e1f24df2377aad121ce490bbc84d84faa90e6cee697",
-    "reportHash": "b5042c74627153b3d41d3799891ce71d06f5e7b70613c172eb21ca8dee5995c7",
-    "scoredReportHash": "ecc61fbbfecedc51a73ed7505b158b5bd519de3d1d7c95907d2846ccbb1cd8e2",
-    "fullResearchReproductions": 0,
-    "executedAt": "2026-10-04T18:24:52.980027+00:00"
+    "scorerDigest": "6dbc7aa912f8324b00c54c9e1e0b3bca3166c8c8f4c5fb7741ab4a21f467e6b7",
+    "reportHash": "642863b7c94f0b3672404a069d6b5baee2e351d608b75d28c4070c9883d2da4a",
+    "scoredReportHash": "fc058fb04783c64386d9f3965333a52f2504402d7b50a33ad40e2170a8c4cc67",
+    "fullResearchReproductions": 0
   }
 }

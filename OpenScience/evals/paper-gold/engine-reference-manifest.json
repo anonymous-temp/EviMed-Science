@@ -4,7 +4,7 @@
     {
       "id": "meta-existing-published-anchors",
       "engine": "meta",
-      "sourcePath": "\u9879\u76ee\u4ee3\u7801/meta/validation/corpora/published_worked_examples.json",
+      "sourcePath": "项目代码/meta/validation/corpora/published_worked_examples.json",
       "sha256": "38235b2d2bac97fc11af1b1f1be054a899c803759dc48e833e7792e144f5a8fb",
       "readiness": "existing_engine_published_reference_cases",
       "qualification": "source-defined comparison limits preserved; FAERS version mismatches not exact reproduction"
@@ -12,7 +12,7 @@
     {
       "id": "pharmacovigilance-existing-published-anchors",
       "engine": "pharmacovigilance",
-      "sourcePath": "\u9879\u76ee\u4ee3\u7801/\u836f\u7269\u5b89\u5168\u5206\u6790agent/tests/data/faers_regression/v1/publication_anchors.json",
+      "sourcePath": "项目代码/药物安全分析agent/tests/data/faers_regression/v1/publication_anchors.json",
       "sha256": "182a2e0ed297c843e4cb7a8ed2731f3607b7f5d1e848361cb0c17ccca2da5124",
       "readiness": "existing_engine_published_reference_cases",
       "qualification": "source-defined comparison limits preserved; FAERS version mismatches not exact reproduction"
@@ -26,33 +26,45 @@
   "inventoryQualification": "Original repository test inventory collected before the control-plane published-input calibration preparation on 2026-10-04. Synthetic original MR fixtures remain synthetic; the later independent published-source corpus is recorded below.",
   "currentPublishedCalibration": {
     "meta": {
-      "methodId": "meta-reml-published-data-v2",
+      "methodId": "meta-reml-published-data-v3",
       "manifest": "published-meta-method-manifest.json",
-      "reportHash": "850fe79bf17b3cb38957471f276c571826df9d27b28739b4cf81108b23add40b",
-      "passedPublishedSources": 5,
-      "methodUnits": 10,
-      "passedUnits": 10,
-      "unsupportedUnits": 0,
+      "executionKind": "actual-existing-engine",
+      "reportHash": "b95a2863ec4063608861eb51f0c683a986c05de56db3763a3f34849d9bb9ff46",
+      "cases": 5,
+      "agree": 5,
+      "disagree": 0,
+      "couldNotRun": 0,
+      "excludedBeforeScoring": 0,
+      "publishedSources": 5,
+      "sourcesFullyAgreeing": 5,
       "fullResearchReproductions": 0
     },
     "pharmacovigilance": {
-      "methodId": "faers-ror-published-data-v3",
+      "methodId": "faers-ror-published-data-v4",
       "manifest": "published-faers-method-manifest.json",
-      "reportHash": "b5042c74627153b3d41d3799891ce71d06f5e7b70613c172eb21ca8dee5995c7",
-      "passedPublishedSources": 5,
-      "methodUnits": 92,
-      "passedUnits": 92,
-      "unsupportedUnits": 0,
+      "executionKind": "actual-existing-engine",
+      "reportHash": "642863b7c94f0b3672404a069d6b5baee2e351d608b75d28c4070c9883d2da4a",
+      "cases": 65,
+      "agree": 46,
+      "disagree": 19,
+      "couldNotRun": 0,
+      "excludedBeforeScoring": 0,
+      "publishedSources": 5,
+      "sourcesFullyAgreeing": 2,
       "fullResearchReproductions": 0
     },
     "mr": {
-      "methodId": "mr-ivw-published-data-v5",
+      "methodId": "mr-ivw-published-data-v6",
       "manifest": "published-mr-method-manifest.json",
-      "reportHash": "5939f2d5ef5771a691890da562c8c0832adae668543fd7c6137f91f57d262964",
-      "passedPublishedSources": 6,
-      "methodUnits": 22,
-      "passedUnits": 20,
-      "unsupportedUnits": 2,
+      "executionKind": "library-component",
+      "reportHash": "4a731c8e96a032f1d09406360b2f3a0ef2b37303fddf3c00d94098d4bfae742b",
+      "cases": 11,
+      "agree": 10,
+      "disagree": 0,
+      "couldNotRun": 1,
+      "excludedBeforeScoring": 0,
+      "publishedSources": 6,
+      "sourcesFullyAgreeing": 5,
       "fullResearchReproductions": 0
     }
   }

@@ -25,14 +25,15 @@ export function deriveBenchmarkDefinition(definition, methodDefinitions = []) {
   for (const method of methodDefinitions) {
     if (method.frozen !== true) throw new Error('Method references must already be frozen.');
     for (const reference of method.cases ?? []) {
-      if (reference.kind !== 'published' || reference.independentQa?.passed !== true || !reference.independentImplementation || !reference.sourceHash || !reference.input || !reference.numeric) continue;
+      // A reference is a number printed in the paper (`published`) or another implementation's output on its data (`other-implementation`); the case says which.
+      if (!['published', 'other-implementation'].includes(reference.kind) || reference.independentQa?.passed !== true || !reference.independentImplementation || !reference.sourceHash || !reference.input || !reference.numeric) continue;
       const question = `Prepare a numerical methods report applying ${method.methodId.replaceAll('-', ' ')} to the supplied published input specification. State assumptions and compute the specified analysis outputs.`;
       const variants = [question, `Produce a numerical methods report for ${method.methodId.replaceAll('-', ' ')} using the supplied inputs; explain assumptions and analysis outputs.`, `Analyze the supplied input specification with ${method.methodId.replaceAll('-', ' ')} and deliver a methods report with assumptions and numerical outputs.`];
       const engine = /^meta-reml-published-data/.test(method.methodId) ? { track: 'E', engineId: 'meta', capabilityId: 'meta-analysis' }
         : /^mr-ivw-published-data/.test(method.methodId) ? { track: 'P', engineId: 'mr', capabilityId: 'mendelian-randomization' }
           : (method.methodId === 'faers-ror-aggregate' || /^faers-ror-published-data/.test(method.methodId)) ? { track: 'P', engineId: 'pharmacovigilance', capabilityId: 'adr-analysis' } : { track: 'M', engineId: null, capabilityId: 'statistical-analysis' };
       const track = reference.track ?? method.track ?? engine.track;
-      cases.push({ id: `method-${reference.id}`, publicationId: reference.publicationId, sourceHash: reference.sourceHash, type: 'method', track: ({ meta: 'E', pharmacovigilance: 'P', mr: 'P' }[track] ?? track), group: 'calibration', engineId: engine.engineId, capabilityId: engine.capabilityId,
+      cases.push({ id: `method-${reference.id}`, publicationId: reference.publicationId, sourceHash: reference.sourceHash, referenceKind: reference.kind, type: 'method', track: ({ meta: 'E', pharmacovigilance: 'P', mr: 'P' }[track] ?? track), group: 'calibration', engineId: engine.engineId, capabilityId: engine.capabilityId,
         rewrite: { writer: 'deterministic-method-template-v1', qaExecutor: 'frozen-independent-reference-qa', qaPassed: true, question, variants },
         input: `${question}\nPublished analysis inputs: ${JSON.stringify(reference.input)}\nDeliver scripts/analysis.py with callable analyze(**arguments) accepting the supplied input object's keyword fields and returning a JSON-compatible object with these output fields: ${Object.keys(reference.numeric).join(', ')}. Also write its actual numeric JSON receipt.`,
         policy: { aliases: [...new Set([reference.publicationId,...(reference.aliases ?? [])])], titles: reference.title ? [reference.title] : [] },
@@ -42,7 +43,7 @@ export function deriveBenchmarkDefinition(definition, methodDefinitions = []) {
           deterministicVerification: { entrypoint: 'scripts/analysis.py:analyze', implementationId: 'runtime-method-analysis', input: reference.input,
             inputHash: digest(reference.input), sourceHash: reference.sourceHash, independentQa: reference.independentQa,
             independentImplementation: { ...reference.independentImplementation, sourceHash: reference.sourceHash },
-            tolerances: Object.fromEntries(Object.entries(reference.numeric).map(([key, value]) => [key, { absoluteTolerance: value.absoluteTolerance ?? 0, relativeTolerance: value.relativeTolerance ?? 0 }])) },
+            tolerances: Object.fromEntries(Object.entries(reference.numeric).map(([key, value]) => [key, { absoluteTolerance: value.absoluteTolerance ?? 0, relativeTolerance: value.relativeTolerance ?? 0, ...(value.printed ? { printed: value.printed } : {}), ...(value.toleranceReason ? { toleranceReason: value.toleranceReason } : {}) }])) },
           preservedEvidence: [{ id: reference.id, sourceHash: reference.sourceHash }], reachableEvidenceIds: [], unreachableEvidenceIds: [] } });
     }
   }
