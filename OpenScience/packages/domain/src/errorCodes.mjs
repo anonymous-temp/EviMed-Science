@@ -1491,6 +1491,27 @@ export const EVIDENCE_PLATFORM_ERROR_CODES = Object.freeze([
 ])
 
 /**
+ * What an evidence card's publication from a research result, and the continuation of research from a card, refuse
+ * with (evidence-flywheel plan §5.2, F05–F07, 2026-10-05): each names the one operation it stopped — a result that is
+ * not a clinical package, a zone that is not the caller's — and never a verdict on a run. Several sentences are
+ * written for the dialog that shows them, which lists the claims and the zones the reader can choose between.
+ */
+export const EVIDENCE_PUBLISH_ERROR_MESSAGES_ZH = Object.freeze({
+  evidence_result_request_invalid: '这次发布的内容不对，没有生成证据卡。请重新选择专区和结论后再试。',
+  evidence_result_not_clinical_package: '这个结果不是带证据矩阵的临床证据综述，不能直接发布为证据卡。',
+  evidence_result_matrix_unreadable: '这个结果的证据矩阵现在读不出来，没有生成证据卡。',
+  evidence_result_no_verified_claim: '这个结果里没有已核验的结论可以发布。可以勾选其他结论，它们在卡片上仍会标 ⚠。',
+  evidence_result_claim_unknown: '所选的结论不在这个结果里，没有生成证据卡。',
+  evidence_result_too_many_claims: '一张证据卡最多放 60 条结论，请少选一些。',
+  evidence_result_zone_required: '请选择一个自己的专区，或者新建一个。',
+  evidence_result_zone_not_owned: '研究结果只能发布到你自己的专区。',
+  evidence_result_zone_kind_refused: '研究结果只能发布到用户专区；官方专区和产品专区不接受这种发布。',
+  evidence_continue_unavailable: '这个部署没有开通知识库，不能从证据卡带着来源继续研究。',
+  evidence_continue_request_invalid: '这次继续研究的内容不对，没有建项目也没有存入来源。',
+  evidence_author_not_found: '没有这位作者公开的内容。',
+})
+
+/**
  * Every code this build knows, so a mapping test can prove a new code was
  * classified rather than silently inheriting a default.
  *
@@ -1536,6 +1557,7 @@ export const ALL_ERROR_CODES = Object.freeze([...new Set([
   ...EVIMED_CREDITS_ROUTE_ERROR_CODES,
   ...EVIDENCE_PLATFORM_ERROR_CODES,
   ...Object.keys(EVIDENCE_CARD_ERROR_MESSAGES_ZH),
+  ...Object.keys(EVIDENCE_PUBLISH_ERROR_MESSAGES_ZH),
 ])])
 
 /**
@@ -1589,6 +1611,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   // The evidence card's own refusals (`evidenceCard.mjs`): who may write where, a simulated value, a producer a card
   // must name. Each touches the one write it names.
   ...EVIDENCE_CARD_ERROR_MESSAGES_ZH,
+  ...EVIDENCE_PUBLISH_ERROR_MESSAGES_ZH,
   // Why a data-semantics check could not read a table. The check is reported as
   // not run; the other checks and the analysis go on.
   file_unreadable: '这个数据文件没能读取，对应的数据检查未执行；其他检查和分析不受影响。',
@@ -2444,6 +2467,7 @@ export function errorCodeOutcome(code) {
   if (Object.hasOwn(EVOLUTION_ERROR_MESSAGES, text)) return 'upstream'
   // An evidence card's refusals are about one write to one zone, never a verdict on a run.
   if (Object.hasOwn(EVIDENCE_CARD_ERROR_MESSAGES_ZH, text)) return 'upstream'
+  if (Object.hasOwn(EVIDENCE_PUBLISH_ERROR_MESSAGES_ZH, text)) return 'upstream'
   if (EXTENSION_ERROR_CODES.includes(text)) return 'upstream'
   if (text === 'managed_browser_busy') return 'capped'
   if (MANAGED_BROWSER_ERROR_CODES.includes(text)) return 'upstream'

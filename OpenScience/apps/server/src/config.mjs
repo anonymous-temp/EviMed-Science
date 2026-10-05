@@ -397,6 +397,26 @@ function evidenceSettings(overrides) {
 }
 
 /**
+ * The incentive hook of the co-creation loop (evidence-flywheel plan §5.2, F07, 2026-10-05): a card cited by other
+ * accounts' research a named number of times (`EVIDENCE_CITATION_MILESTONES`) may be thanked with a gifted lot of
+ * 灵豆. Interface only: the owner has not chosen an amount, so the switch is off, the amount is 0, and while either
+ * stands the hook neither reads nor writes anything. A value outside its range stops the start by its name.
+ *
+ * @param {Record<string, any>} overrides
+ */
+function evidenceCitationGiftSettings(overrides) {
+  const value = overrides.evidenceCitationGiftAmount ?? process.env.OPEN_SCIENCE_EVIDENCE_CITATION_GIFT_AMOUNT;
+  const amount = value == null || value === "" ? 0 : Number(value);
+  if (!Number.isFinite(amount) || amount < 0 || amount > 10_000) {
+    throw new Error(`OPEN_SCIENCE_EVIDENCE_CITATION_GIFT_AMOUNT must be a number from 0 to 10000, got ${JSON.stringify(value)}.`);
+  }
+  return {
+    evidenceCitationGiftEnabled: overrides.evidenceCitationGiftEnabled ?? boolEnv("OPEN_SCIENCE_EVIDENCE_CITATION_GIFT_ENABLED", false),
+    evidenceCitationGiftAmount: amount,
+  };
+}
+
+/**
  * 「循证 GEO」's settings (build spec 2026-09-25 §0, §5, §7), each checked at
  * load, and the media marketplace it places orders through.
  *
@@ -2363,6 +2383,7 @@ export function loadConfig(overrides = {}) {
     // --- frontier: 「前沿动态」 and the knowledge-source plugin (2026-09-22) ---
     ...frontierSettings(overrides),
     ...evidenceSettings(overrides),
+    ...evidenceCitationGiftSettings(overrides),
     // --- 循证 GEO and the media marketplace (2026-09-25) ---
     ...geoSettings(overrides),
     // --- 虚拟临研: the virtual clinical research module (2026-09-28) ---
