@@ -1,4 +1,4 @@
-import { validatePlatformSkillPackage } from './platformSkillPackage.mjs';
+import { validatePlatformSkillPackage, runtimeSkillText } from './platformSkillPackage.mjs';
 import { PLATFORM_SKILL_GENERATION_MAX_PINS, PLATFORM_SKILL_MAX_TOOLS } from './platformSkillLimits.mjs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
@@ -64,12 +64,13 @@ export function createPlatformSkillSupply(config,{listActive}={}){
       if(config.evolutionEnabled!==true||evaluation?.ok!==true||!['V0','V1','V2','V3','V4'].includes(evaluation.verificationLevel))throw invalid();
       const packageCheck=validatePlatformSkillPackage(candidate,{card});
       if(!packageCheck.ok)throw new HttpError(400,'extension_contract_invalid',packageCheck.issues.map(issue=>`${issue.field}: ${issue.message}`).join(' '));
-      const {files,skillBody,hasFrontmatter,id}=packageCheck;
+      const {files,skillBody,hasFrontmatter,description,body,id}=packageCheck;
       if(card?.toolKind==='workflow'&&evaluation.verificationLevel==='V0'&&evaluation.smokePassed!==true)throw invalid();
       if(card?.toolKind!=='workflow'&&evaluation.verificationLevel==='V0')throw invalid();
       const digest=`sha256:${sha(canonicalJson(files))}`,nativeName=`platform-${sha(id+'\0'+digest).slice(0,24)}`;
       // Discovery metadata is platform-owned; frozen candidate bytes remain untouched.
-      const runtimeSkill=hasFrontmatter?skillBody.replace(/^name:.*$/m,`name: ${nativeName}`):`---\nname: ${nativeName}\ndescription: ${JSON.stringify(String(candidate.title??card?.title??id).replace(/[\r\n]/g,' ').slice(0,500))}\n---\n\n${skillBody}`;
+      // Written whole by the platform from two checked fields (`runtimeSkillText`): the builder's front matter never reaches a tenant.
+      const runtimeSkill=runtimeSkillText({nativeName,description:hasFrontmatter?description:candidate.title??card?.title??id,body:hasFrontmatter?body:skillBody});
       const content={...files,'SKILL.md':runtimeSkill};
       if(candidate.publicationKind==='skill'){
         const scripts=Object.keys(files).filter(name=>/^scripts\/[A-Za-z0-9_-]+\.py$/.test(name));
