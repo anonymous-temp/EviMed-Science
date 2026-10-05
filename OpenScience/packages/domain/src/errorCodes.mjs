@@ -2425,6 +2425,12 @@ const ERROR_CODE_OUTCOMES = Object.freeze({
   platform_account_protected: 'upstream',
   platform_account_reserved: 'upstream',
   evidence_upkeep_no_allowance: 'capped',
+  // The platform's own programme (2026-10-05): a topic without a decision is a refusal of one card; its budget, its one slot and the
+  // weekly cap on original analyses are ceilings that free by themselves.
+  evidence_programme_decision_required: 'upstream',
+  evidence_programme_budget_spent: 'capped',
+  evidence_programme_slot_busy: 'capped',
+  evidence_programme_original_weekly_cap: 'capped',
 })
 
 /**

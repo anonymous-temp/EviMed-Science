@@ -5,7 +5,9 @@
 import assert from "node:assert/strict";
 import test, { after, before } from "node:test";
 import { isChargeableResearchRun, usagePurposeOfRun } from "@evimed/domain";
+import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { isInternalProjectOf } from "../src/internalProjects.mjs";
+import { PRODUCT_JOB_KINDS, PRODUCT_KINDS, migrateProductStore } from "../src/productPersistence.mjs";
 import { EVIDENCE_PROJECT_ID, PLATFORM_PUBLISHER_USER_ID, modelAnswer, programmeFixture } from "./helpers/evidenceProgrammeFixture.mjs";
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL;
@@ -27,7 +29,7 @@ test("with the switch off nothing ticks and no table is read", async () => {
   const dead = { query: async () => { throw new Error("a table was read"); }, transaction: async () => { throw new Error("a transaction was opened"); } };
   const { createEvidenceProgramme } = await import("../src/evidenceProgramme.mjs");
   const touched = [];
-  const watch = (name) => new Proxy({}, { get: (_target, key) => (...args) => { touched.push(`${name}.${String(key)}`); return Promise.reject(new Error("touched")); } });
+  const watch = (name) => new Proxy({}, { get: (_target, key) => () => { touched.push(`${name}.${String(key)}`); return Promise.reject(new Error("touched")); } });
   const off = createEvidenceProgramme({ config: { evidenceProgrammeEnabled: false }, database: dead, documents: watch("documents"), jobs: watch("jobs"), autopilot: watch("autopilot"),
     zones: watch("zones"), budget: watch("budget"), entityVocabulary: watch("vocabulary"), results: watch("results") });
   assert.equal(off.enabled, false);
@@ -42,7 +44,7 @@ test("with the switch off nothing ticks and no table is read", async () => {
   assert.deepEqual(touched, []);
 });
 
-test("the official zones exist: the three the plan adds are made once as the publisher, and the three an operator imported are recognised and left alone", async () => {
+test("the official zones exist: the three the plan adds are made once as the publisher, and the three an operator imported are recognised and left alone", options, async () => {
   // Nothing imported yet: the programme makes its three and never makes the operator's.
   const first = await fx.programme.ensureOfficialZones();
   const made = first.filter((zone) => zone.id);
@@ -68,7 +70,7 @@ test("the official zones exist: the three the plan adds are made once as the pub
   assert.equal((await fx.programme.ensureOfficialZones()).find((zone) => zone.key === "af-anticoagulation").writable, true, "re-owned, it is writable");
 });
 
-test("the selector counts an entity from five distinct readers and stores no reader", async () => {
+test("the selector counts an entity from five distinct readers and stores no reader", options, async () => {
   const phrase = (text, source = "question") => ({ text, source, memoryId: "", kind: "question" });
   const ids = [];
   for (let n = 0; n < 5; n += 1) ids.push(await fx.reader([phrase("apixaban 在房颤合并肾功能不全时怎么用")]));
@@ -89,7 +91,7 @@ test("the selector counts an entity from five distinct readers and stores no rea
   assert.ok(!/奥希替尼|房颤合并/.test(serialised), "no text a reader wrote is in what the selector reads");
 });
 
-test("the five signal classes are counts and ids: the feed, the readers, the follows, the stale cards, the observed errors", async () => {
+test("the five signal classes are counts and ids: the feed, the readers, the follows, the stale cards, the observed errors", options, async () => {
   const keys = ["disease:atrial fibrillation", "drug:apixaban"];
   const covered = await fx.feedItem({ title: "Trial A", doi: "10.1056/covered", entityKeys: keys, score: 70 });
   await fx.feedItem({ title: "Trial B", doi: "10.1056/new-one", entityKeys: keys, score: 91 });
@@ -120,7 +122,7 @@ test("the five signal classes are counts and ids: the feed, the readers, the fol
   fx.programme.useSignals({ staleOfficialCards: null, observedErrors: null });
 });
 
-test("the daily decision is one Flash call under purpose `evidence`, held to a closed schema, and recorded with its counts and its cost", async () => {
+test("the daily decision is one Flash call under purpose `evidence`, held to a closed schema, and recorded with its counts and its cost", options, async () => {
   const { programme } = fx;
   const result = await programme.runDay(day);
   assert.equal(result.state, "decided");
@@ -147,7 +149,7 @@ test("the daily decision is one Flash call under purpose `evidence`, held to a c
   assert.equal(fx.decisions.calls.length, callsBefore);
 });
 
-test("the chosen zone's agenda is ordinary proactive research in the internal project, capped by the programme's budget and never started by the calendar", async () => {
+test("the chosen zone's agenda is ordinary proactive research in the internal project, capped by the programme's budget and never started by the calendar", options, async () => {
   const recorded = await decisionOf();
   const [action] = recorded.actions;
   assert.equal(action.status, "scheduled");
@@ -173,7 +175,7 @@ test("the chosen zone's agenda is ordinary proactive research in the internal pr
   assert.equal(plannerCall.userId, PLATFORM_PUBLISHER_USER_ID);
 });
 
-test("a researcher's agenda keeps purpose `autopilot` through the same service", async () => {
+test("a researcher's agenda keeps purpose `autopilot` through the same service", options, async () => {
   const created = await fx.autopilot.create(fx.researcherId, { projectId: "default", title: "My question", prompt: "Look at apixaban", taskTypes: ["literature-sentinel"],
     schedule: { kind: "daily", timeZone: "UTC", time: "07:00" }, dailyBudgetCny: 20, weeklyBudgetCny: 80, maxEpisodeCny: 8 });
   const started = await fx.autopilot.start(fx.researcherId, created.id, { expectedRevision: created.revision });
@@ -197,7 +199,7 @@ test("a run of the platform's own agenda resolves to purpose `evidence` and is n
   assert.equal(usagePurposeOfRun({ effectiveRouteReason: "autopilot-verify" }), "kernel");
 });
 
-test("a model that cannot decide, or decides outside the closed schema, takes the recorded fallback: the zone with the most unmatched new evidence", async () => {
+test("a model that cannot decide, or decides outside the closed schema, takes the recorded fallback: the zone with the most unmatched new evidence", options, async () => {
   const cases = [
     ["a model failure", async () => { throw Object.assign(new Error("down"), { code: "model_gateway_upstream_unavailable" }); }, "model_gateway_upstream_unavailable"],
     ["a zone the programme does not know", chooses(["oncology", "evidence-update"]), "evidence_programme_decision_invalid"],
@@ -223,7 +225,7 @@ test("a model that cannot decide, or decides outside the closed schema, takes th
   }
 });
 
-test("a day with nothing new and a model that chooses nothing records no action", async () => {
+test("a day with nothing new and a model that chooses nothing records no action", options, async () => {
   const sub = await programmeFixture({ url, label: "nothing", callModel: async () => modelAnswer({ actions: [], reason: "没有变化" }) });
   try {
     const result = await sub.programme.runDay(day);
@@ -235,7 +237,7 @@ test("a day with nothing new and a model that chooses nothing records no action"
   } finally { await sub.close(); }
 });
 
-test("a spent day makes no decision and spends nothing; a day that is spent between decision and episode defers the episode by a recorded deferral", async () => {
+test("a spent day makes no decision and spends nothing; a day that is spent between decision and episode defers the episode by a recorded deferral", options, async () => {
   const spentDay = await programmeFixture({ url, label: "spent", callModel: chooses(["nsclc", "evidence-update"]) });
   try {
     await spentDay.spend(30);
@@ -267,7 +269,7 @@ test("a spent day makes no decision and spends nothing; a day that is spent betw
   } finally { await racing.close(); }
 });
 
-test("the programme works one thing at a time: a second zone waits for the first, and goes when it is over", async () => {
+test("the programme works one thing at a time: a second zone waits for the first, and goes when it is over", options, async () => {
   const two = await programmeFixture({ url, label: "slot", callModel: chooses(["nsclc", "evidence-update"], ["breast-cancer", "literature-sentinel"]) });
   try {
     const result = await two.programme.runDay(day);
@@ -287,7 +289,7 @@ test("the programme works one thing at a time: a second zone waits for the first
   } finally { await two.close(); }
 });
 
-test("an operator's zone is not choosable, and a zone that stops being the publisher's before its episode is deferred with its reason while the day goes on", async () => {
+test("an operator's zone is not choosable, and a zone that stops being the publisher's before its episode is deferred with its reason while the day goes on", options, async () => {
   const refused = await programmeFixture({ url, label: "foreign", callModel: chooses(["af-anticoagulation", "evidence-update"]) });
   try {
     await refused.importedZone("房颤抗凝", { owner: refused.operatorId, kind: "user" });
@@ -311,4 +313,30 @@ test("an operator's zone is not choosable, and a zone that stops being the publi
     const swept = await moved.programme.sweep();
     assert.equal(swept.applied, 0, "a final reason is not asked again");
   } finally { await moved.close(); }
+});
+
+test("the programme's document kind and job kind are added to a database that predates them, and the migration runs cleanly twice", options, async () => {
+  const sub = await programmeFixture({ url, label: "migrate", callModel: chooses(["nsclc", "evidence-update"]) });
+  try {
+    await migrateProductStore(sub.database);
+    // A release-5 database: both CHECK constraints as they were before the programme's kinds existed, with rows in them.
+    const without = (kinds, drop) => kinds.filter((kind) => kind !== drop).map((kind) => `'${kind}'`).join(",");
+    await sub.database.query(`ALTER TABLE evimed_product.documents DROP CONSTRAINT product_documents_kind_check;
+      ALTER TABLE evimed_product.documents ADD CONSTRAINT product_documents_kind_check CHECK (kind IN (${without(PRODUCT_KINDS, "programme-decision")}));
+      ALTER TABLE evimed_product.jobs DROP CONSTRAINT product_jobs_kind_check;
+      ALTER TABLE evimed_product.jobs ADD CONSTRAINT product_jobs_kind_check CHECK (kind IN (${without(PRODUCT_JOB_KINDS, "evidence-programme")}))`);
+    await assert.rejects(sub.database.query(`INSERT INTO evimed_product.documents(user_id, kind, id, payload) VALUES($1, 'programme-decision', 'x', '{}'::jsonb)`, [PLATFORM_PUBLISHER_USER_ID]),
+      (error) => error.code === "23514", "refused by the old constraint, before the migration");
+    for (let pass = 0; pass < 2; pass += 1) {
+      const fresh = new ControlPlaneDatabase({ databaseUrl: sub.databaseUrl, databasePoolMax: 2, databaseConnectionTimeoutMs: 2000 });
+      try { await migrateProductStore(fresh); } finally { await fresh.close(); }
+    }
+    const constraints = (await sub.database.query(`SELECT conname, pg_get_constraintdef(oid) AS def FROM pg_constraint WHERE conname IN ('product_documents_kind_check','product_jobs_kind_check')`)).rows;
+    assert.equal(constraints.length, 2);
+    assert.ok(constraints.find((row) => row.conname === "product_documents_kind_check").def.includes("programme-decision"));
+    assert.ok(constraints.find((row) => row.conname === "product_jobs_kind_check").def.includes("evidence-programme"));
+    // And a day can be decided, and its job enqueued, on the migrated tables.
+    assert.equal((await sub.programme.runDay(day)).state, "decided");
+    await sub.jobs.enqueue(PLATFORM_PUBLISHER_USER_ID, "evidence-programme", { day }, { idempotencyKey: `evidence-programme:${day}`, projectId: EVIDENCE_PROJECT_ID });
+  } finally { await sub.close(); }
 });

@@ -148,7 +148,7 @@ export async function programmeFixture({ url, label, config: over = {}, callMode
     await rm(dataDir, { recursive: true, force: true });
   }
 
-  return { store, database, documents, jobs, ledger, vocabulary, zones, autopilot, planner, plannerCalls, budget, programme, results, resultsByRun, rawByVersion,
+  return { databaseUrl: isolated.url, store, database, documents, jobs, ledger, vocabulary, zones, autopilot, planner, plannerCalls, budget, programme, results, resultsByRun, rawByVersion,
     config, clock, now, spend, reader, feedItem, importedZone, publisherUser, operatorId, researcherId, decisions, close };
 }
 

@@ -524,9 +524,10 @@ export function createEvidenceProgramme({ config, database, documents, jobs = nu
         { expectedRevision: created.revision, projectId: EVIDENCE_PROJECT_ID });
     } else {
       const payload = agenda.payload;
+      const prompt = agendaPrompt(definition);
       const same = JSON.stringify(payload.taskTypes) === JSON.stringify([taskType]) && payload.maxEpisodeCny === caps.maxEpisodeCny
-        && payload.dailyBudgetCny === caps.dailyBudgetCny && payload.weeklyBudgetCny === caps.weeklyBudgetCny;
-      if (!same) agenda = await autopilot.update(publisher, agenda.id, { expectedRevision: agenda.revision, taskTypes: [taskType], ...caps });
+        && payload.dailyBudgetCny === caps.dailyBudgetCny && payload.weeklyBudgetCny === caps.weeklyBudgetCny && payload.prompt === prompt;
+      if (!same) agenda = await autopilot.update(publisher, agenda.id, { expectedRevision: agenda.revision, taskTypes: [taskType], prompt, ...caps });
       if (payload.programme?.zoneId !== zoneId) {
         agenda = await documents.put(publisher, "agenda", agenda.id, { ...agenda.payload, programme: { zoneKey: definition.key, zoneId } },
           { expectedRevision: agenda.revision, projectId: EVIDENCE_PROJECT_ID });
