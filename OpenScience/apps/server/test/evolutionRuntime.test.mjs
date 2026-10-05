@@ -36,7 +36,7 @@ test('builder never promotes self tests and returns evaluator IDs without hidden
   let published=false,seen;
   const builder=createEvolutionBuilder({dispatch:async card=>{seen=card;return{id:'new-tool',publicationKind:'skill',files:{'SKILL.md':'candidate'}};},verification:{verify:async()=>({ok:true})},evaluator:{evaluate:async()=>({ok:false,failedCaseIds:['case-opaque'],expected:42,scoringRules:'hidden'})},publisher:{publish:async()=>{published=true;}}});
   const result=await builder.build({id:'card',hiddenCases:[42],holdoutCases:[{answer:42}],scoringRules:'secret',measurements:{reference:{expected:42}},sourcePapers:[{reportedResults:42}],arbitraryScoutingField:{answer:42}});
-  assert.equal(published,false);assert.deepEqual(seen,{id:'card'});assert.deepEqual(result.feedback,{passed:false,failedCaseIds:['case-opaque']});assert.equal(JSON.stringify(result).includes('42'),false);
+  assert.equal(published,false);assert.deepEqual(seen,{id:'card'});assert.equal(result.feedback.passed,false);assert.equal(result.feedback.failedCaseIds.length,1);assert.match(result.feedback.failedCaseIds[0],/^case-[a-f0-9]{16}$/);assert.notEqual(result.feedback.failedCaseIds[0],'case-opaque');assert.deepEqual(Object.keys(result.feedback),['passed','failedCaseIds']);assert.equal(JSON.stringify(result).includes('42'),false);
 });
 test('builder preserves faithful impossibility and stages engine review without publishing',async()=>{
   let failure,published=false;
