@@ -1950,7 +1950,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // What a project's datasets mean: one ledger document per dataset, read and written by the two data capabilities
   // through their tool's gateway and shown beside the dataset on the files page. No patient row is ever in it.
   const dataSemantics = productDocuments && config.dataSemanticsEnabled ? new DataSemanticsService({ documents: productDocuments,
-    onChanged: async event => { await evolution?.integration.datasetChanged(event); } }) : null;
+    // The consumer's failure is not the dataset write's: the record is already saved, and the integration reports its own.
+    onChanged: async event => { await evolution?.integration.datasetChanged(event).catch(() => {}); } }) : null;
   const dataSemanticsRoutes = createDataSemanticsRoutes({ store, service: dataSemantics, maxJsonBytes: config.maxJsonBytes });
   const resultProvenance = productDocuments && config.resultsEnabled ? new ResultProvenanceService({
     documents: productDocuments, config, maxSnapshotBytes: config.resultSnapshotMaxBytes,
@@ -4568,7 +4569,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       });
     };
     const gateway = pathname.startsWith(`${EVOLUTION_GATEWAY_PATH}/`)
-      ? (request, response) => evolution ? evolution.gateway(request, response) : sendError(response, new HttpError(404, "evolution_disabled", "Evolution is disabled."))
+      ? (request, response, onFailure) => evolution ? evolution.gateway(request, response, onFailure) : sendError(response, new HttpError(404, "evolution_disabled", "Evolution is disabled."))
       : pathname.startsWith(`${RESULT_GATEWAY_PATH}/`)
       ? resultGatewayHandler
       : pathname.startsWith(`${DATA_SEMANTICS_GATEWAY_PATH}/`)

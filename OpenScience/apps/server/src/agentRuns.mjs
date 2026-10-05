@@ -828,9 +828,6 @@ function normalizeMountedSkills(value) {
   return names.length > 0 ? [...new Set(names)].slice(0, 32) : undefined;
 }
 
-/** Exact observed personal revisions, without resources, instructions or
- * filesystem locations. Malformed observational metadata cannot break a run.
- * @param {any} value */
 /**
  * What a run records of the platform tools that were mounted for it: which generation and how many pins, never the
  * pins. A generation is content-addressed, so `generationId` names the exact manifest — every tool, revision and digest
@@ -862,6 +859,9 @@ function normalizePlatformSkillGeneration(value) {
   return { generationId, pinCount: pins.length }
 }
 
+/** Exact observed personal revisions, without resources, instructions or
+ * filesystem locations. Malformed observational metadata cannot break a run.
+ * @param {any} value */
 function normalizePersonalSkillGeneration(value) {
   if (!value || !/^[a-f0-9]{64}$/.test(value.generationId ?? "") || !Array.isArray(value.pins) || value.pins.length > 64) return undefined;
   const pins = [], seen = new Set();

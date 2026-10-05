@@ -126,24 +126,24 @@ export function createEvaluationIsolation({ dataDir, resolveRunId = identity => 
   return {
     counters,
     async register(runId, policy) {
-      if (!runId || !Array.isArray(policy.aliases) || !Array.isArray(policy.titles)) throw new Error("An evaluation policy needs run identity, aliases and titles.");
-      if (policy.cutoff && !Number.isFinite(Date.parse(policy.cutoff))) throw new Error("Invalid evaluation cutoff.");
+      if (!runId || !Array.isArray(policy.aliases) || !Array.isArray(policy.titles)) throw new HttpError(400, "evolution_evaluation_invalid", "An evaluation policy needs run identity, aliases and titles.");
+      if (policy.cutoff && !Number.isFinite(Date.parse(policy.cutoff))) throw new HttpError(400, "evolution_evaluation_invalid", "Invalid evaluation cutoff.");
       await mkdir(directory, { recursive: true, mode: 0o700 });
       try { await writeFile(file(runId), JSON.stringify(policy), { mode: 0o600, flag: "wx" }); }
       catch (error) {
         if (error.code !== "EEXIST") throw error;
         const existing = JSON.parse(await readFile(file(runId), "utf8"));
-        if (JSON.stringify(existing) !== JSON.stringify(policy)) throw new Error("Evaluation exclusion policy is immutable.");
+        if (JSON.stringify(existing) !== JSON.stringify(policy)) throw new HttpError(409, "evolution_evaluation_invalid", "Evaluation exclusion policy is immutable.");
       }
       policies.set(runId, structuredClone(policy));
     },
     async registerPending(identity, policy) {
-      if (!/^eval-paper-/.test(String(identity.projectId))) throw new Error("Evaluation policies require a dedicated internal project.");
+      if (!/^eval-paper-/.test(String(identity.projectId))) throw new HttpError(400, "evolution_evaluation_invalid", "Evaluation policies require a dedicated internal project.");
       const id = `pending:${identity.userId}:${identity.projectId}`;
       await this.register(id, policy);
       const scope = { id, policy: structuredClone(policy) };
       try { await writeFile(file(`scope:${identity.userId}\0${identity.projectId}`), JSON.stringify(scope), { mode: 0o600, flag: "wx" }); }
-      catch (error) { if (error.code !== "EEXIST") throw error; const existing = JSON.parse(await readFile(file(`scope:${identity.userId}\0${identity.projectId}`), "utf8")); if (JSON.stringify(existing) !== JSON.stringify(scope)) throw new Error("Evaluation project policy is immutable."); }
+      catch (error) { if (error.code !== "EEXIST") throw error; const existing = JSON.parse(await readFile(file(`scope:${identity.userId}\0${identity.projectId}`), "utf8")); if (JSON.stringify(existing) !== JSON.stringify(scope)) throw new HttpError(409, "evolution_evaluation_invalid", "Evaluation project policy is immutable."); }
       pending.set(`${identity.userId}\0${identity.projectId}`, scope);
       return id;
     },
@@ -151,11 +151,11 @@ export function createEvaluationIsolation({ dataDir, resolveRunId = identity => 
       const key = `${identity.userId}\0${identity.projectId}`;
       let entry = pending.get(key);
       if (!entry) { try { entry = JSON.parse(await readFile(file(`scope:${key}`), "utf8")); pending.set(key, entry); } catch (error) { if (error.code !== "ENOENT") throw error; } }
-      if (!entry) throw new Error("No protected policy was registered before dispatch.");
+      if (!entry) throw new HttpError(409, "evolution_evaluation_invalid", "No protected policy was registered before dispatch.");
       await this.register(runId, entry.policy);
       const binding = { runId, pendingId: entry.id, userId: identity.userId, projectId: identity.projectId };
       const bindingBytes = JSON.stringify(binding);
-      const persist = async name => { try { await writeFile(file(name), bindingBytes, { mode: 0o600, flag: "wx" }); } catch (error) { if (error.code !== "EEXIST") throw error; if (await readFile(file(name), "utf8") !== bindingBytes) throw new Error("Evaluation project run binding is immutable."); } };
+      const persist = async name => { try { await writeFile(file(name), bindingBytes, { mode: 0o600, flag: "wx" }); } catch (error) { if (error.code !== "EEXIST") throw error; if (await readFile(file(name), "utf8") !== bindingBytes) throw new HttpError(409, "evolution_evaluation_invalid", "Evaluation project run binding is immutable."); } };
       await persist(`binding:${key}`);
       await persist(`attribution:${runId}`);
       bindings.set(key, binding);
