@@ -1196,7 +1196,7 @@ export { frontierNoticeTarget, frontierNoticeHref } from './src/frontierPresenta
 
 export { validAgendaDate, validateAgendaSchedule, normalizeAgendaSchedule, agendaLocalDate, DISPLAY_TIME_ZONE, agendaDueOccurrence, agendaNextOccurrence } from "./src/agendaSchedule.mjs";
 
-// vcrVocabulary — 127 exports: 「虚拟临研」's closed vocabularies (nine value sources, three scientific
+// vcrVocabulary — 128 exports: 「虚拟临研」's closed vocabularies (nine value sources, three scientific
 // conclusions, review states, missing reasons, intended uses, model risk and
 // the study's seven steps and tabs)
 export {
@@ -1255,6 +1255,7 @@ export {
   VCR_JOB_KINDS,
   VCR_JOB_STATES,
   VCR_JOB_STATE_LABELS_ZH,
+  VCR_JOB_WAIT_LABELS_ZH,
   VCR_LINEAGE_NODE_KINDS,
   VCR_MAP_CONFLICT_BOUND,
   VCR_MEMBER_ROLES,

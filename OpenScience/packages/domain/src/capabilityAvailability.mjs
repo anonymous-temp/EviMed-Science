@@ -154,6 +154,10 @@ const REASONS = Object.freeze({
   // It can be asked, and something it needs is missing or just failed.
   'engine-not-ready': ['limited', (d, c) => `分析引擎（${verbOf(d)}）${c.engineState === 'unreachable' ? '现在连不上' : '现在没有就绪'}；提交后仍会受理，受阻时会如实说明。`],
   'data-source-not-configured': ['limited', (d) => `数据源「${connectorCredentialSpec(String(d ?? ''))?.title ?? '一个外部数据源'}」这个部署没有配置，使用时可以添加你自己的凭据；其余部分照常。`],
+  // 「虚拟临研」's statistics engine: composed and not answering, or not composed at all. Neither stops a study: the steps
+  // that do not compute stand, and a computation submitted now is accepted and continues by itself once the engine is back.
+  'vcr-engine-not-answering': ['limited', () => '统计计算引擎现在没有回应；提交的计算会被受理，引擎恢复后自动继续。'],
+  'vcr-engine-not-configured': ['limited', () => '这个部署没有接入统计计算引擎；需要计算的那一步暂不可用，其余步骤照常。'],
   'method-unmeasured': ['limited', () => '方法的数值验证还没有完成，结果按未验证的方法对待。'],
   'optional-tool-not-offered': ['limited', (d) => `「${verbOf(d)}」在这个部署上没有提供；其余部分照常。`],
   // A package carried here needs software, data or weights that this deployment's runtime does not have.

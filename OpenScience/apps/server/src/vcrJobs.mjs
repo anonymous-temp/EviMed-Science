@@ -439,6 +439,7 @@ export class VcrJobs {
    *   localExecutors?: Record<string, (input: { job: Record<string, any>, onProgress: (progress: { done: number, total: number }) => Promise<unknown> }) => Promise<any>>,
    *   notifier?: { budgetConfirm?: (study: any, job: any) => Promise<unknown> } | null,
    *   dataPlane?: { resolveEngineInputs: (input: Record<string, any>) => Promise<Array<Record<string, any>>> } | null,
+   *   engineObserver?: { observe: (answered: boolean, code?: string | null) => void } | null,
    *   now?: () => Date, report?: (code: string) => void }} dependencies
    *   `localExecutors` is keyed by method id (`matching.evaluate` is the
    *   matching package's); anything not named there goes to the engine.
@@ -446,7 +447,7 @@ export class VcrJobs {
    *   files an engine may open (`resolveEngineInputs`).
    */
   constructor({ store, config = {}, engine = null, localExecutors = {}, notifier = null, dataPlane = null,
-    now = () => new Date(), report = () => {} }) {
+    engineObserver = null, now = () => new Date(), report = () => {} }) {
     if (!store) throw new TypeError("The VCR job queue needs the VCR store.");
     this.store = store;
     this.config = config;
@@ -454,6 +455,9 @@ export class VcrJobs {
     this.localExecutors = localExecutors ?? {};
     this.notifier = notifier;
     this.dataPlane = dataPlane;
+    // Told every time the engine answers or does not, so readiness and the capability's label read what the queue saw
+    // (`vcrEngineProbe.mjs`). It never decides anything here.
+    this.engineObserver = engineObserver;
     /** @type {((request: {studyId:string,principal:string,scenario:Record<string,any>,inputs:any[],receiptId?:string}) => Promise<any>) | null} */
     this.curveVerifier = null;
     this.now = now;
@@ -991,6 +995,7 @@ export class VcrJobs {
     if (!engineJobId) return this.#submit(row, frozen, owner);
     try {
       const status = await this.engine.status(String(engineJobId));
+      await this.#engineAnswered(row, owner);
       if (status.progress) await this.progress(String(row.id), status.progress, owner, Number(row.attempts));
       if (["queued", "running", "canceling"].includes(status.state)) return { action: "waiting", state: status.state, progress: status.progress };
       let answer;
@@ -1132,7 +1137,8 @@ export class VcrJobs {
         } else throw error;
       }
       if (accepted.jobId !== String(row.id)) throw new VcrEngineError("vcr_engine_response_invalid", "引擎接收的作业身份与提交的身份不一致。");
-      const stored = await this.checkpoint(String(row.id), { submittedAt: this.now().toISOString() }, owner, Number(row.attempts));
+      this.engineObserver?.observe(true);
+      const stored = await this.checkpoint(String(row.id), { submittedAt: this.now().toISOString(), transportError: null, submissionError: null }, owner, Number(row.attempts));
       if (!stored) {
         const current = await this.#row(String(row.id));
         if (current?.state === "canceled" || current?.state === "failed") await this.engine.cancel(String(row.id)).catch(() => null);
@@ -1144,6 +1150,7 @@ export class VcrJobs {
     } catch (error) {
       // A lost response cannot prove that the engine refused this identity.
       // Poll it under the same lease and keep physical admission occupied.
+      if (/** @type {any} */ (error)?.retryable === true) this.engineObserver?.observe(false, codeOf(error));
       const stored = await this.checkpoint(String(row.id), { submissionError: codeOf(error) }, owner, Number(row.attempts));
       this.lastError = codeOf(error);
       this.report(this.lastError);
@@ -1219,12 +1226,27 @@ export class VcrJobs {
    * cancelled, or that another worker now holds, is not touched.
    * @param {any} row @param {unknown} error @param {string} owner
    */
+  /**
+   * The engine answered. A job that had recorded that it did not (`transportError`
+   * from a poll, `submissionError` from a submit whose reply was lost) is no longer
+   * waiting on it, so the mark is cleared in the same breath: a page that says "the
+   * engine is not answering" must stop saying it when the engine is back.
+   * @param {any} row @param {string} owner
+   */
+  async #engineAnswered(row, owner) {
+    this.engineObserver?.observe(true);
+    const checkpoint = object(row.checkpoint);
+    if (checkpoint.transportError == null && checkpoint.submissionError == null) return;
+    await this.checkpoint(String(row.id), { transportError: null, submissionError: null }, owner, Number(row.attempts));
+  }
+
   async #fail(row, error, owner) {
     const code = codeOf(error);
     const retryable = /** @type {any} */ (error)?.retryable === true;
     const attempts = Number(row.attempts ?? 0);
     this.lastError = code;
     this.report(code);
+    if (retryable) this.engineObserver?.observe(false, code);
     if (retryable && object(row.checkpoint).engineJobId) {
       const held = await this.checkpoint(String(row.id), { transportError: code }, owner, Number(row.attempts));
       return held ? { action: "waiting", state: "engine_unreachable", code } : { action: "skipped", state: "changed" };

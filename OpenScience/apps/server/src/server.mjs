@@ -2231,6 +2231,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     config, authStore: store, registry: agentRegistry, database: productDatabase, jobs: productJobs, documents: productDocuments,
     agentRuns: () => agentRuns, usageLedger, connectorCredentials, extensionService, skillSupply,
     methodValidation: () => loadMethodValidation({ file: config.vcrMethodValidationFile, engine: vcr?.engine }),
+    vcrEngine: () => vcr?.engineProbe?.snapshot() ?? null,
     mutation: maintenanceMutation,
     canRun: () => !maintenanceService || maintenanceService.claimingAllowed(),
     fetchImpl: overrides.availabilityFetch ?? globalThis.fetch,

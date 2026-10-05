@@ -292,6 +292,8 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   // written by the run instead.
   "vcr_engine_unconfigured",
   "vcr_engine_not_composed",
+  // Composed and configured, but not answering its `/health` (readiness's warning).
+  "vcr_engine_not_answering",
   "vcr_engine_unreachable",
   "vcr_engine_timeout",
   "vcr_engine_secret_missing",
@@ -1257,7 +1259,7 @@ export const VCR_WRITE_ISSUE_CODES = Object.freeze([
  * this list (`vcrErrorCodesRegistered.test.mjs`).
  */
 export const VCR_MODULE_ERROR_CODES = Object.freeze([
-  'vcr_backup_status_unavailable', 'vcr_backup_unhealthy',
+  'vcr_backup_status_unavailable', 'vcr_backup_unhealthy', 'vcr_backup_references_missing',
   'review_proof_stale', 'document_review_conversion_incomplete', 'document_review_conversion_failed',
   'vcr_evaluation_input_restricted', 'vcr_evaluation_input_changed', 'vcr_evaluation_input_unavailable',
   'vcr_evaluation_dataset_not_found', 'vcr_evaluation_request_invalid', 'vcr_evaluation_holdout_unavailable',
@@ -1558,6 +1560,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   extension_storage_capacity: '技能存储空间暂时不足，请整理技能文件后重试。',
   vcr_backup_status_unavailable: '恢复备份状态暂时无法核对。',
   vcr_backup_unhealthy: '恢复备份尚未通过检查。',
+  vcr_backup_references_missing: '这一轮恢复备份没有做成：数据库记录的部分文件在备份时被删除了，下一轮会重新备份；PostgreSQL 备份不受影响。',
   review_proof_stale: '复核对应的报告或数据版本已变更，原文件仍保留。',
   document_review_conversion_incomplete: '复核后的文件转换尚未完成，原文件仍可下载。',
   document_review_conversion_failed: '复核后的文件转换未完成，原文件仍保留。',
@@ -1652,6 +1655,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   // The engine channel and its jobs.
   vcr_engine_unconfigured: '本部署还没有配置计算引擎，需要计算的步骤暂不可用；其余步骤照常。',
   vcr_engine_not_composed: '本部署没有接入计算引擎，需要计算的步骤暂不可用；其余步骤照常。',
+  vcr_engine_not_answering: '计算引擎现在没有回应；排队和进行中的计算会在它恢复后自动继续，无需操作。',
   vcr_engine_unreachable: '连不上计算引擎；这一步暂不可用，研究的其余部分照常，引擎恢复后可以重新计算。',
   vcr_engine_timeout: '计算引擎这次没有及时应答；作业会自动重试。',
   vcr_engine_secret_missing: '计算引擎的口令没有配置，引擎按未配置处理；请联系管理员。',

@@ -225,6 +225,34 @@ describe("「运行」 and the second human stop", () => {
     expect(strip.textContent).not.toMatch(/¥|元/);
   });
 
+  // The 2026-10-05 observation: the engine container was stopped and a job kept reading 「进行中」 with nothing to say why.
+  it("says in one line, with nothing to press, that a running job waits on an engine that is not answering", async () => {
+    installVcrServer(network.productRequest, {
+      "GET /vcr/studies/std_1": () => {
+        const study = fixture("ev201/study.json");
+        study.jobs = study.jobs.map((job: { id: string }) => (job.id === "job_seed_16" ? { ...job, waitingOn: "engine" } : job));
+        return study;
+      },
+    });
+    draw();
+    await heading();
+    const strip = document.querySelector("[data-vcr-jobs]") as HTMLElement;
+    const running = strip.querySelector("[data-vcr-job='job_seed_16']") as HTMLElement;
+    const line = running.querySelector("[data-vcr-job-wait='engine']") as HTMLElement;
+    expect(line).toHaveTextContent("计算引擎暂时没有回应，它恢复后这项计算会自动继续，无需操作。");
+    // It is a sentence, not a control: the only button on the row is the cancel it already had.
+    expect(within(line).queryByRole("button")).toBeNull();
+    expect(running).toHaveTextContent("进行中");
+    // The job that waits on something else (the budget) is not told it waits on the engine.
+    expect(strip.querySelector("[data-vcr-job='job_seed_17'] [data-vcr-job-wait]")).toBeNull();
+  });
+
+  it("says nothing about the engine for a job the engine is working on", async () => {
+    draw();
+    await heading();
+    expect(document.querySelector("[data-vcr-job-wait]")).toBeNull();
+  });
+
   it("confirms one waiting job with exactly its id, then re-reads the study", async () => {
     draw();
     await heading();

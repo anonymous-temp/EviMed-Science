@@ -689,6 +689,16 @@ export const VCR_JOB_STATE_LABELS_ZH = Object.freeze({
   queued: '排队中', running: '进行中', succeeded: '已完成', failed: '未完成', canceled: '已取消', awaiting_budget: '待确认预算',
 })
 
+/**
+ * Why a job that is live is not moving, when the reason is not the researcher's to
+ * act on: the page says it in one line under the job and asks for nothing. Closed on
+ * purpose — a reason joins this table when the job's own row can state it (the queue
+ * records `engine` when the engine did not answer; `vcrJobs.mjs`, `jobView`).
+ */
+export const VCR_JOB_WAIT_LABELS_ZH = Object.freeze({
+  engine: '计算引擎暂时没有回应，它恢复后这项计算会自动继续，无需操作。',
+})
+
 /** The three places a human is required to stop (§10.1). Nothing else stops. */
 export const VCR_HUMAN_STOPS = frozen(['contact_patient', 'compute_over_budget', 'clinical_safety'])
 export const VCR_HUMAN_STOP_LABELS_ZH = Object.freeze({

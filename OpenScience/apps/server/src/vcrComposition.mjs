@@ -69,6 +69,7 @@ import { VcrAccess } from "./vcrAccess.mjs";
 import { VcrDataPlane } from "./vcrDataPlane.mjs";
 import { VcrDataStore } from "./vcrDataStore.mjs";
 import { createVcrEngineClient } from "./vcrEngineClient.mjs";
+import { createVcrEngineProbe } from "./vcrEngineProbe.mjs";
 import { createVcrEvidencePipeline } from "./vcrEvidence.mjs";
 import { createVcrCorrectionCases } from "./vcrCorrectionCases.mjs";
 import { createVcrCurveEvidence } from "./vcrCurveEvidence.mjs";
@@ -877,12 +878,14 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   // The engine runs on the output-hash check alone; the log says why results are unsigned, once, at composition.
   if (engine && engineStatus.receiptKeyError) report(`vcr_engine_receipt_key_unusable:${engineStatus.receiptKeyError}`);
   const removeEngineJob = createVcrEngineJobRemover({ config, fetchImpl, engine });
+  // One reading of whether the engine answers, for the job the page shows, readiness and the capability's label.
+  const engineProbe = createVcrEngineProbe({ engine });
 
   // Patient documents are read through the plane's own judged, audited reader;
   // with no plane there are none, and a fact a run wrote about a document is void.
   const documents = vcrDocumentsSeam({ dataPlane });
   const jobs = new VcrJobs({
-    store, config, engine, report, dataPlane,
+    store, config, engine, report, dataPlane, engineObserver: engineProbe,
     localExecutors: { "matching.evaluate": vcrMatchingExecutor({ matchStore, store, documents }) },
   });
   // The seal asks the plane to lift, per study, as of the instant the plan froze
@@ -938,7 +941,7 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   service.attach({ corrections, knowledge });
   composed = {
     store, dataStore, matchStore, evidenceStore, corrections, knowledge, knowledgeStore,
-    access, members, contact, dataPlane, dataPlaneSeam, documents, engine, engineStatus, removeEngineJob, jobs, seal, evidence, matching, registry, service,
+    access, members, contact, dataPlane, dataPlaneSeam, documents, engine, engineProbe, engineStatus, removeEngineJob, jobs, seal, evidence, matching, registry, service,
     intake: { counters: intakeCounters, extractor, importer, digitizer },
     // Composed later, beside the other modules' workers (server.mjs).
     notifier: null, orchestrator: null, worker: null, exporter: null, review: null,

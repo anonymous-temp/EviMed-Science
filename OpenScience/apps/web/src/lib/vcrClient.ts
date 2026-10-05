@@ -406,7 +406,12 @@ export interface VcrJob {
   error?: { code: string | null; message: string | null; partial?: boolean } | null;
   updatedAt?: string | null;
   cancelable?: boolean;
+  /** Why a live job is not moving when it is not the researcher's to act on: the engine did not answer, and the job continues by itself when it does. */
+  waitingOn?: VcrJobWait | null;
 }
+
+/** What a live job waits on that asks nothing of the reader (`VCR_JOB_WAIT_LABELS_ZH`). */
+export type VcrJobWait = "engine";
 
 /** The highest use this study's results may carry, and why (plan §8.2, §10.2). */
 export interface VcrCeiling {

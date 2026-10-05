@@ -17,6 +17,8 @@ import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { VcrStore } from "../src/vcrStore.mjs";
 import { VcrEngineError, vcrComputedOutputHash } from "../src/vcrEngineClient.mjs";
 import { VcrJobs, vcrScenarioHash } from "../src/vcrJobs.mjs";
+import { createVcrEngineProbe } from "../src/vcrEngineProbe.mjs";
+import { jobView } from "../src/vcrViews.mjs";
 import { VcrWorker, createVcrWorkerLoops, withVcrWorkerWarnings } from "../src/vcrWorker.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
@@ -1302,4 +1304,80 @@ test("C2-4 a stage carried over from before a change is marked old until its own
   assert.equal(value(result, "assurance").value, 0.776);
   assert.equal(result.diagnostics.notRerun, undefined, "a stage that ran again is no longer said to have been dropped");
   assert.equal(value(result, "power").stale, true, "and the simulation, again older than the change, is carried and marked");
+});
+
+// The 2026-10-05 live observation: the engine container was stopped, and a job kept reading "进行中" with nothing to
+// say why; it did continue within seconds of the restart. The job's own row is where "its last contact failed"
+// lives, so another replica's page says the same, and the same contact feeds the reading readiness and the
+// capability label share.
+test("a job whose engine stops says it waits on the engine, keeps going, and stops saying so the moment the engine answers", options, async () => {
+  const study = await makeStudy("engine-down");
+  const engine = engineDouble();
+  const probe = createVcrEngineProbe({ engine });
+  const jobs = new VcrJobs({ store, config, engine, engineObserver: probe });
+  await jobs.enqueue({ studyId: study.id, userId: study.userId, kind: "design_simulation", scenario });
+  const [claimed] = await jobs.claim();
+  assert.equal((await jobs.advance(claimed)).action, "submitted");
+  const view = async () => jobView(await store.job(study.id, claimed.id), new Date());
+  assert.equal((await view()).waitingOn, undefined, "a job the engine accepted says nothing");
+  assert.equal(probe.snapshot().state, "answering", "the queue's own contact is a reading");
+
+  // The container is stopped: every call fails the way a refused connection does.
+  const answer = engine.status;
+  engine.status = async () => { throw new VcrEngineError("vcr_engine_unreachable", "计算引擎连不上。"); };
+  const waiting = await jobs.advance(claimed);
+  assert.deepEqual({ action: waiting.action, state: waiting.state }, { action: "waiting", state: "engine_unreachable" });
+  const stalled = await view();
+  assert.equal(stalled.state, "running", "it is still the same job, running: nothing was lost and nothing asks the researcher to act");
+  assert.equal(stalled.waitingOn, "engine");
+  assert.equal(stalled.cancelable, true);
+  assert.equal(probe.snapshot().state, "not_answering");
+  assert.equal(probe.snapshot().code, "vcr_engine_unreachable");
+  // Repeated failures neither fail the job nor use its attempts.
+  await jobs.advance(claimed);
+  assert.equal((await store.job(study.id, claimed.id)).state, "running");
+
+  // The engine is back: the next poll finishes the job, and the mark is cleared in the same breath.
+  engine.status = answer;
+  const resumed = await jobs.advance(claimed);
+  assert.equal(resumed.state, "succeeded");
+  const finished = await store.job(study.id, claimed.id);
+  assert.equal(finished.checkpoint.transportError ?? null, null);
+  assert.equal((await view()).waitingOn, undefined);
+  assert.equal(probe.snapshot().state, "answering");
+});
+
+test("the engine answering again clears the wait even while the job is still running", options, async () => {
+  const study = await makeStudy("engine-blip");
+  const engine = engineDouble({ state: "running" });
+  const jobs = new VcrJobs({ store, config, engine });
+  await jobs.enqueue({ studyId: study.id, userId: study.userId, kind: "design_simulation", scenario });
+  const [claimed] = await jobs.claim();
+  await jobs.advance(claimed);
+  const answer = engine.status;
+  engine.status = async () => { throw new VcrEngineError("vcr_engine_timeout", "计算引擎在超时前没有回答。"); };
+  await jobs.advance(claimed);
+  assert.equal(jobView(await store.job(study.id, claimed.id), new Date()).waitingOn, "engine");
+  engine.status = answer;
+  assert.equal((await jobs.advance(claimed)).action, "waiting", "the engine says it is still running");
+  assert.equal(jobView(await store.job(study.id, claimed.id), new Date()).waitingOn, undefined, "it answered, so the job no longer waits on it");
+});
+
+test("a submit the unreachable engine never received is the same wait, and the next contact clears it", options, async () => {
+  const study = await makeStudy("submit-down");
+  const engine = engineDouble();
+  const submit = engine.submit;
+  engine.submit = async () => { throw new VcrEngineError("vcr_engine_unreachable", "计算引擎连不上。"); };
+  const jobs = new VcrJobs({ store, config, engine });
+  await jobs.enqueue({ studyId: study.id, userId: study.userId, kind: "design_simulation", scenario });
+  const [claimed] = await jobs.claim();
+  const first = await jobs.advance(claimed);
+  assert.equal(first.state, "submission_uncertain");
+  assert.equal(jobView(await store.job(study.id, claimed.id), new Date()).waitingOn, "engine");
+  engine.submit = submit;
+  // The engine does not know the job (it never arrived): the queue submits it again, and that clears the wait.
+  engine.status = async () => { throw new VcrEngineError("vcr_engine_not_found", "计算引擎不认识这个作业。", { status: 404 }); };
+  const retake = await jobs.advance(claimed);
+  assert.equal(retake.action, "resubmitted");
+  assert.equal(jobView(await store.job(study.id, claimed.id), new Date()).waitingOn, undefined);
 });

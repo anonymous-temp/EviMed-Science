@@ -30,7 +30,7 @@ const config = (overrides = {}) => ({
 });
 
 /** A service over a fake record store, and a way to put a delivered run into it through the real collector. */
-function build({ cfg = config(), health = {}, connectors = null, validation = null, extensionViews = null, withStore = true } = {}) {
+function build({ cfg = config(), health = {}, connectors = null, validation = null, extensionViews = null, withStore = true, vcrEngine = null } = {}) {
   const database = new FakeAvailabilityDatabase();
   const jobs = new FakeJobs(database);
   const store = withStore ? new AvailabilityStore(database) : null;
@@ -40,7 +40,7 @@ function build({ cfg = config(), health = {}, connectors = null, validation = nu
     return { ok: answer !== "degraded", json: async () => (answer === "degraded" ? { ready: false, serving: true } : { ready: true, serving: true, specialistSlots: { limit: 2, running: 1, waiting: 0 } }) };
   } });
   const service = new AvailabilityService({
-    config: cfg, registry, store, engineProbe: probe, connectorStatus: connectors, methodValidation: validation, extensionViews,
+    config: cfg, registry, store, engineProbe: probe, vcrEngine, connectorStatus: connectors, methodValidation: validation, extensionViews,
     now: () => new Date("2026-10-04T12:00:00.000Z"),
   });
   const deliver = async (capabilityId, version, id = "run_1", tools = []) => {
@@ -162,6 +162,35 @@ test("a method not yet measured limits the virtual-clinical-research capabilitie
   assert.equal(entry.reason.code, "method-unmeasured");
   const verified = build({ cfg: config({ vcrEnabled: true, vcrAudience: "all", vcrEngineConfigured: true }), validation: async () => ({ status: "verified" }) });
   assert.notEqual(stateOf(await verified.service.capabilities(alice), "vcr-analysis").reason.code, "method-unmeasured");
+});
+
+// The same reading the job a page shows and readiness read (`vcrEngineProbe.mjs`): a label that says the engine is
+// not answering while the page's job says it is working would be three tellings of one fact.
+test("the statistics engine not answering limits the capabilities that compute with it, and only says what is known", async () => {
+  const cfg = config({ vcrEnabled: true, vcrAudience: "all", vcrEngineConfigured: true });
+  const read = async (reading, id = "vcr-analysis") => stateOf(await build({ cfg, vcrEngine: () => reading }).service.capabilities(alice), id);
+
+  const down = await read({ state: "not_answering", code: "vcr_engine_unreachable", checkedAt: "2026-10-05T07:00:00.000Z" });
+  assert.equal(down.state, "limited");
+  assert.equal(down.reason.code, "vcr-engine-not-answering");
+  assert.equal(down.reason.source, "engine-health");
+  assert.match(down.text, /没有回应.*自动继续/);
+
+  const missing = await read({ state: "not_configured", code: null, checkedAt: null });
+  assert.equal(missing.state, "limited");
+  assert.equal(missing.reason.code, "vcr-engine-not-configured");
+
+  // Answering, nobody having asked yet, and no reader at all say nothing about the engine.
+  for (const reading of [{ state: "answering", code: null, checkedAt: "x" }, { state: "unknown", code: null, checkedAt: null }, null]) {
+    assert.notEqual((await read(reading)).reason.code, "vcr-engine-not-answering");
+    assert.notEqual((await read(reading)).reason.code, "vcr-engine-not-configured");
+  }
+  // A reader that throws is no reading, never a failed catalogue.
+  const broken = await stateOf(await build({ cfg, vcrEngine: () => { throw new Error("probe"); } }).service.capabilities(alice), "vcr-analysis");
+  assert.ok(broken.state);
+  // Only while the module is on: off stays off, whatever the engine says.
+  const off = stateOf(await build({ vcrEngine: () => ({ state: "not_answering", code: null, checkedAt: null }) }).service.capabilities(alice), "vcr-analysis");
+  assert.equal(off.reason.code, "module-off");
 });
 
 test("a capability only the source names is source-planned, and is never in the deployed catalogue", async () => {

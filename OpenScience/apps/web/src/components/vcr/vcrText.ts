@@ -29,6 +29,7 @@ import {
   VCR_INTENDED_USE_LABELS_ZH,
   VCR_INTERVAL_KIND_LABELS_ZH,
   VCR_JOB_STATE_LABELS_ZH,
+  VCR_JOB_WAIT_LABELS_ZH,
   VCR_MEMBER_ROLE_LABELS_ZH,
   VCR_MODEL_RISK_LABELS_ZH,
   VCR_MODEL_TIER_LABELS_ZH,
@@ -48,6 +49,7 @@ import type {
   VcrIntendedUse,
   VcrInterval,
   VcrJobState,
+  VcrJobWait,
   VcrMemberRole,
   VcrModelRisk,
   VcrModelTier,
@@ -74,6 +76,8 @@ export const intendedUseLabel = table<VcrIntendedUse>(VCR_INTENDED_USE_LABELS_ZH
 export const stepLabel = table<VcrStepKey>(VCR_STEP_LABELS_ZH);
 export const stepStatusLabel = table<VcrStepStatus>(VCR_STEP_STATUS_LABELS_ZH);
 export const jobStateLabel = table<VcrJobState>(VCR_JOB_STATE_LABELS_ZH);
+/** The one line under a live job that waits on something the reader has nothing to do about. */
+export const jobWaitLabel = table<VcrJobWait>(VCR_JOB_WAIT_LABELS_ZH);
 export const criterionStateLabel = table<VcrCriterionState>(VCR_CRITERION_STATE_LABELS_ZH);
 export const eligibilityLabel = table<VcrEligibility>(VCR_ELIGIBILITY_SUMMARY_LABELS_ZH);
 export const referralStateLabel = table<VcrReferralState>(VCR_REFERRAL_STATE_LABELS_ZH);
