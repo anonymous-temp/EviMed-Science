@@ -99,8 +99,8 @@ export const SOURCES = {
  */
 export const BASELINE_PROVENANCE = {
   dshVersion: "0.1.7-rc.2",
-  sha256: "a190f0f03b250070b436e80c77f59323d1565bb0d885587f40064cfaca679ff7",
-  recordedBy: "dsh@0.1.7-rc.2 --profile evimed-runtime --dump-config inside full AMD64 runtime image sha256:31779dd0b341bc9045068a454169d12d3a2417bf7d749df80806b13a14805439 on 2026-10-02",
+  sha256: "13aaf28d145bc5acf7e0194a517b6c51b2e39b7746e176148063c30d076288e6",
+  recordedBy: "dsh@0.1.7-rc.2 --profile evimed-runtime --dump-config inside full AMD64 runtime image sha256:31779dd0b341bc9045068a454169d12d3a2417bf7d749df80806b13a14805439 on 2026-10-02; re-recorded 2026-10-05 from the same kernel's dump in CI run 37291192706 (profile-seed), whose only difference was the platform-skills root the preset gained",
   // The complete recipe booted its seeded composition and an evimed-universal
   // session. A second read-only, network-isolated UID65534 boot passed after
   // import; image-owned profile sync then produced this byte-identical dump.

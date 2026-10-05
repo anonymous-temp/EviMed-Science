@@ -1421,6 +1421,9 @@
             - !!js >-
               process.env.EVIMED_PERSONAL_SKILLS_DIR ||
               '/opt/evimed/personal-skills'
+            - !!js >-
+              process.env.EVIMED_PLATFORM_SKILLS_DIR ||
+              '/opt/evimed/platform-skills'
       - id: tool-skill
         name: '@deepseek-ai/dsh-tool-skill'
       - id: tool-ask-user
