@@ -13,6 +13,19 @@ export const EVOLUTION_CATEGORY_LABELS = Object.freeze({
   implementation: '工具研发方向', 'tool-repair': '工具修复', 'tool-merge': '工具合并', 'tool-retire': '工具退役',
   resource: '研发线索等待资料', 'validation-resource': '工具等待验证资料', 'release-replay-resource': '工具回放等待资源', 'worker-resource': '进化任务等待资源',
 });
+/** Why a tool was retired, in words, for the researchers whose results used it; a reason this does not name reads as the general one. */
+const RETIREMENT_REASONS = Object.freeze({
+  'sequential-harm': '使用中连续出现需要纠正的结果', 'published-replay-regression': '用已发表算例复测时数值出现偏差', 'merge-direction-reversed': '已改为保留原有工具',
+  'monthly-direction-review': '月度复核决定停用', 'alias-quiet-period': '已有新版本替代', 'retirement-recovery': '已有新版本替代',
+});
+/**
+ * What a researcher is told when a tool their earlier results used is retired: the tool by its name and the reason in
+ * words, not its identifier and the code. @param {{name?: string, toolId: string, reason: string}} input
+ */
+export function evolutionRetirementNotice({ name, reason }) {
+  const label = /** @type {Record<string, string>} */ (RETIREMENT_REASONS)[reason] ?? '不再满足验证要求';
+  return { title: '科研工具已更新状态', body: `先前结果使用的“${clip(name ?? '科研工具', 60)}”已停用，原因：${label}。原始结果和工具版本保留，可重新检查。` };
+}
 /** The categories whose own goal sentence is a reader's sentence (the others carry codes) and is shown beside the wait. */
 const GOAL_SHOWN_CATEGORIES = Object.freeze(['resource', 'validation-resource']);
 /** @param {unknown} value @param {number} max */

@@ -17,7 +17,7 @@ import { AGENDA_DEFAULT_BUDGETS, canonicalJson } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 import { EVOLUTION_PROJECT_ID, isInternalProject } from "./internalProjects.mjs";
 import { createEvolutionService, evolutionKey } from "./evolutionService.mjs";
-import { createEvolutionDecisions, evolutionDecisionReviewProof, evolutionExecutableOperation } from "./evolutionDecisions.mjs";
+import { createEvolutionDecisions, evolutionDecisionReviewProof, evolutionExecutableOperation, evolutionRetirementNotice } from "./evolutionDecisions.mjs";
 import { createEvolutionMaintenance, evolutionRetrievalScore } from "./evolutionMaintenance.mjs";
 import { createEvolutionWorker } from "./evolutionWorker.mjs";
 import { persistExistingEngineEvaluation } from "./existingEngineCalibration.mjs";
@@ -210,7 +210,9 @@ export function createEvolution({ config, store, documents, jobs, database, usag
     notifyAffected: async ({ toolId, reason }) => {
       await supply.retire(toolId);
       const uses = await database.query("SELECT user_id,project_id,id,payload FROM evimed_product.documents WHERE kind='knowledge' AND deleted_at IS NULL AND payload->>'recordType'='evolution-use' AND payload->>'toolId'=$1", [toolId]);
-      for (const row of uses.rows) await notifications.create(row.user_id, { noticeType: "notify", title: "科研工具已更新状态", body: `先前结果使用的工具 ${toolId} 已停用（${reason}）。原始结果和工具版本保留，可重新检查。`, source: { type: "system", id: row.id }, projectId: row.project_id, idempotencyKey: `evolution-retired:${row.id}:${toolId}` });
+      const retired = await service.get(toolId);
+      const wording = evolutionRetirementNotice({ name: retired?.payload.name ?? retired?.payload.description, toolId, reason });
+      for (const row of uses.rows) await notifications.create(row.user_id, { noticeType: "notify", title: wording.title, body: wording.body, source: { type: "system", id: row.id }, projectId: row.project_id, idempotencyKey: `evolution-retired:${row.id}:${toolId}` });
     },
     replayCases: async ({ candidate, cases }) => {
       const parents = await Promise.all((candidate.lineage?.parents ?? []).map(id => service.get(id)));

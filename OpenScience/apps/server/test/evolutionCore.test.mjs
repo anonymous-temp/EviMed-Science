@@ -430,3 +430,11 @@ test('a failing wake after a measured self-check does not fail the check', async
   assert.equal(done.resumed,false);
   assert.equal((await f.service.get(wait.id,'alice')).payload.status,'waiting');
 });
+
+test('a retirement notice names the tool and the reason in words, never the identifier or the code', async () => {
+  const { evolutionRetirementNotice } = await import('../src/evolutionDecisions.mjs');
+  const notice = evolutionRetirementNotice({ name: '调查加权分析', toolId: 'tool-survey-0a1b2c', reason: 'sequential-harm' });
+  assert.match(notice.body, /“调查加权分析”已停用，原因：使用中连续出现需要纠正的结果/);
+  assert.doesNotMatch(notice.body, /tool-survey|sequential-harm/);
+  assert.match(evolutionRetirementNotice({ toolId: 'x', reason: 'an-unnamed-code' }).body, /“科研工具”已停用，原因：不再满足验证要求/);
+});
