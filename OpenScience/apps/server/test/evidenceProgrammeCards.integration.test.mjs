@@ -289,3 +289,19 @@ test("an original analysis replicated in a second independent dataset is a 「�
     assert.equal(fx.programme.status().counters.original.finding, 1);
   } finally { await fx.close(); }
 });
+
+test("the hook of a verification and the sweep meeting on one episode settle it once: one card, one revision, one answer", options, async () => {
+  const fx = await setup("cardtogether");
+  try {
+    const run = await episodeOf(fx, { day: "2026-10-05", zone: "nsclc", taskType: "evidence-update", sources: [SOURCE_A],
+      matrixClaims: [claim("CLM-001", SOURCE_A, QUOTE_A)], agendaClaims: [agendaClaim("CLM-001")] });
+    await verify(fx, run, { "CLM-001": "stands" });
+    const together = await Promise.all([fx.programme.settleEpisode(run.episodeId), fx.programme.onRunFinished(project, { id: run.runId }), fx.programme.sweep()]);
+    assert.equal(together[0].state, "published");
+    assert.equal(together[1].state, "published");
+    assert.equal(together[0].cardId, together[1].cardId);
+    const cards = await cardsOf(fx, "非小细胞肺癌");
+    assert.equal(cards.length, 1);
+    assert.equal(cards[0].revision, 1, "written once");
+  } finally { await fx.close(); }
+});

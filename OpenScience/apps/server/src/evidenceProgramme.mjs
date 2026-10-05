@@ -544,6 +544,15 @@ export function createEvidenceProgramme({ config, database, documents, jobs = nu
    */
   async function assertAdmitted(userId, agenda, { episodeId = null } = {}) {
     if (!owns(userId, agenda?.projectId)) return;
+    await checkAdmission({ episodeId });
+  }
+
+  /**
+   * The admission question itself. `count: false` is the pre-check `applyAction` makes before it touches an agenda, so that a refusal
+   * leaves the agenda alone and the admission that follows is counted once.
+   * @param {{ episodeId?: string | null, count?: boolean }} [options]
+   */
+  async function checkAdmission({ episodeId = null, count = true } = {}) {
     const asked = await budget.reserve(Math.min(PROGRAMME_EPISODE_ESTIMATE_CNY, episodeCap));
     if (!asked.granted) {
       counters.admissions.budget += 1;
@@ -554,7 +563,7 @@ export function createEvidenceProgramme({ config, database, documents, jobs = nu
       counters.admissions.slot += 1;
       throw new HttpError(409, "evidence_programme_slot_busy", "Another programme episode is still working.");
     }
-    counters.admissions.admitted += 1;
+    if (count) counters.admissions.admitted += 1;
   }
 
   /** @param {string | null} excludeEpisodeId @returns {Promise<number>} the programme episodes that hold the slot now */
@@ -581,6 +590,8 @@ export function createEvidenceProgramme({ config, database, documents, jobs = nu
       if (!definition || !state?.id) result = { status: "deferred", reason: "zone_unavailable" };
       else if (!state.writable) result = { status: "deferred", reason: "zone_not_publisher_owned" };
       else {
+        // Asked before the agenda is touched: a day or a slot that is not there leaves the zone's agenda exactly as it was.
+        await checkAdmission({ count: false });
         const agenda = await ensureAgenda(definition, state.id, action.taskType);
         const scheduled = await autopilot.runNow(publisher, agenda.id, { requestId: `programme-${day}-${action.zone}` });
         result = scheduled?.episode ? { status: "scheduled", agendaId: agenda.id, episodeId: scheduled.episode.id } : { status: "deferred", reason: "not_scheduled" };
@@ -688,8 +699,22 @@ export function createEvidenceProgramme({ config, database, documents, jobs = nu
    * @param {string} episodeId
    * @returns {Promise<{ state: string, cardId?: string, revision?: number, reason?: string }>}
    */
-  async function settleEpisode(episodeId) {
-    if (!enabled) return { state: "off" };
+  function settleEpisode(episodeId) {
+    if (!enabled) return Promise.resolve({ state: "off" });
+    // One settling of an episode at a time in this process: the hook of a verification and the sweep can meet, and two writers of
+    // one card would be a request conflict at best.
+    const running = settling.get(episodeId);
+    if (running) return running;
+    const started = settle(episodeId).finally(() => { settling.delete(episodeId); });
+    settling.set(episodeId, started);
+    return started;
+  }
+
+  /** @type {Map<string, Promise<{ state: string, cardId?: string, revision?: number, reason?: string }>>} */
+  const settling = new Map();
+
+  /** @param {string} episodeId @returns {Promise<{ state: string, cardId?: string, revision?: number, reason?: string }>} */
+  async function settle(episodeId) {
     const decision = await decisionOf(episodeId);
     if (!decision) return countOutcome("decision_required");
     const decisionId = decision.id;

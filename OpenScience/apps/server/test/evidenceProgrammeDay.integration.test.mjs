@@ -257,6 +257,7 @@ test("a spent day makes no decision and spends nothing; a day that is spent betw
     assert.equal(action.reason, "budget");
     assert.equal(action.code, "evidence_programme_budget_spent");
     assert.equal((await racing.database.query("SELECT count(*)::int AS n FROM evimed_product.documents WHERE kind='episode'")).rows[0].n, 0, "no episode was made");
+    assert.equal((await racing.database.query("SELECT count(*)::int AS n FROM evimed_product.documents WHERE kind='agenda'")).rows[0].n, 0, "and the zone's agenda was not touched for a day that could not pay for it");
     assert.equal(racing.programme.status().counters.admissions.budget, 1);
     assert.equal(racing.programme.status().counters.actions.budget, 1, "and the deferral has its own counter");
     // The budget comes back (a new day): the deferred action is applied by the sweep, and the episode exists.

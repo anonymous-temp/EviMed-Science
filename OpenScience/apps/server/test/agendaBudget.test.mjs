@@ -139,7 +139,9 @@ test("an agenda's daily and weekly caps are read only where they meet the agenda
   // envelope and the budget builder are all in the service and the builder, and the routes' body lists.
   assert.ok(found.length >= 10, `the walk found only ${found.length} mentions`);
   const files = [...new Set(found.map((item) => item.file))].sort();
-  assert.deepEqual(files, ["agendaBudget.mjs", "autopilotRoutes.mjs", "autopilotService.mjs"],
+  // `evidenceProgramme.mjs` (2026-10-05) is added on purpose: it WRITES the caps of the platform's own agendas from the programme's budget
+  // (`agendaCaps`, `ensureAgenda`) and compares them with nothing; the comparison stays `AutopilotService.assertAffordable`'s.
+  assert.deepEqual(files, ["agendaBudget.mjs", "autopilotRoutes.mjs", "autopilotService.mjs", "evidenceProgramme.mjs"],
     "a new reader of an agenda's caps is a new place to compare them with the wrong sum: add it to this walk on purpose");
   // And in none of them is a cap on the same line as a call that sums the account (the ledger's admission, a gateway limit).
   for (const { file, line, text } of found) {
@@ -155,7 +157,8 @@ test("an agenda's daily and weekly caps are read only where they meet the agenda
 test("the episode cap is an envelope for one episode, read where an episode is funded and nowhere that sums a window", () => {
   const found = mentions(/\bmaxEpisodeCny\b/);
   assert.ok(found.length >= 6, `the walk found only ${found.length} mentions`);
-  assert.deepEqual([...new Set(found.map((item) => item.file))].sort(), ["autopilotRoutes.mjs", "autopilotService.mjs"]);
+  // The programme sets its agendas' episode cap from `OPEN_SCIENCE_EVIDENCE_PROGRAMME_EPISODE_BUDGET_CNY` and reads it nowhere else.
+  assert.deepEqual([...new Set(found.map((item) => item.file))].sort(), ["autopilotRoutes.mjs", "autopilotService.mjs", "evidenceProgramme.mjs"]);
   for (const { file, line, text } of found) assert.doesNotMatch(text, /assertWithinLimits|\blimits\s*:|minimumPositive/, `${file}:${line}: ${text.trim()}`);
 });
 
