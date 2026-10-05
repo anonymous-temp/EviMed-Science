@@ -202,6 +202,7 @@ import { createConfiguredWebRenderer } from "./webRender.mjs";
 import { createWebReader, webReadMetricFamilies, webReadTransportFor, webReadUserAgent } from "./webRead.mjs";
 import { edgeFetch, edgeMetricFamilies, edgeProxyFromConfig, fetchWithEdge } from "./edgeProxy.mjs";
 import { pagesReadFromSessions } from "./webReadPages.mjs";
+import { createSourceChanges, sourceChangeMetricFamilies } from "./sourceChanges.mjs";
 import { createSourceUpdateLookup, sourceUpdateMetricFamilies } from "./sourceUpdates.mjs";
 import { OpenListClient } from "./openListClient.mjs";
 import { OpenListSourceConnector } from "./openListSourceConnector.mjs";
@@ -978,6 +979,15 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const maintenanceMutation = (operation) => maintenanceService ? maintenanceService.withMutation(operation) : operation();
   const productDocuments = productDatabase ? new ProductDocuments(productDatabase) : null;
   const productJobs = productDatabase ? new ProductJobs(productDatabase) : null;
+  // The one durable fact per source identifier (B5, plan 2026-10-05): the frontier feed, the evidence zone and the
+  // Crossref lookup write what they saw about a retraction, correction, concern or new version; the result impact path,
+  // the memory labels and the cards read it. It belongs to the platform publisher account — the platform's, never a
+  // tenant's — which the integration names here (an id, or a function that answers it; `overrides` is how a test does).
+  // With no account named there is no record, and every module behaves as it did before it existed.
+  const sourceChanges = productDocuments && overrides.sourceChangesOwnerUserId
+    ? createSourceChanges({ documents: productDocuments, ownerUserId: overrides.sourceChangesOwnerUserId,
+      report: code => { void securityAudit(config, "source.change", "failed", { code }).catch(() => {}); } })
+    : null;
   const independentProductWork = work => productDatabase ? productDatabase.withoutTransactionClient(work) : work();
   const pluginService = productDatabase ? new PluginService(productDatabase, { jobs: productJobs, maxTimeoutMs: config.publicSourceGatewayTimeoutMs }) : null;
   const pluginRoutes = createPluginRoutes({ store, service: pluginService, maxJsonBytes: config.maxJsonBytes });
@@ -1688,7 +1698,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     const ingest = new FrontierIngest({ database: productDatabase, plugin: client, vocabulary,
       dimension: config.kbEmbeddingDimension, pollMs: config.knowledgePluginPollMs });
     const editor = new FrontierEditor(config, { usageLedger, fetchImpl: overrides.frontierModelFetch ?? globalThis.fetch });
-    const pipeline = new FrontierPipeline({ database: productDatabase, editor, plugin: client, embedder, config,
+    const pipeline = new FrontierPipeline({ database: productDatabase, editor, plugin: client, embedder, config, sourceChanges,
       workerId: randomId("frontier-") });
     // One implementation of "today's spend": the pipeline's, which it gates on.
     const budget = typeof pipeline.budget === "function" ? () => pipeline.budget(new Date()) : null;
@@ -2006,10 +2016,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // What a changed source reaches besides result versions: the memories that name it and the learned methods linked to the
   // results that rest on it, each labelled (N15). And the one standing authorization a recheck may use: the running agenda
   // whose episode produced the result. A paused or not-started agenda is none, and nothing here asks for another approval.
-  const knowledgeChange = new KnowledgeChangeService({ memory: researchMemory, methods: learningService,
+  const knowledgeChange = new KnowledgeChangeService({ memory: researchMemory, methods: learningService, sourceChanges,
     report: code => { void securityAudit(config, "knowledge.change", "failed", { code }).catch(() => {}); } });
   const resultImpacts = resultProvenance ? new ResultImpactService({ documents: productDocuments, results: resultProvenance,
-    autopilot: autopilotService, notifications: notificationService, knowledge: knowledgeChange,
+    autopilot: autopilotService, notifications: notificationService, knowledge: knowledgeChange, sourceChanges,
     authorizeContinuation: autopilotService && config.sourceChangeRecheckLimit > 0 ? producingAgenda({ results: resultProvenance, autopilot: autopilotService }) : null,
     autoRecheckLimit: config.sourceChangeRecheckLimit,
     report: code => { void securityAudit(config, "result.impact", "failed", { code }).catch(() => {}); } }) : null;
@@ -3979,7 +3989,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // Unpaywall already gets for the same courtesy.
     mailto: config.publicSourceCredentials?.unpaywall ?? null,
     fetchImpl: overrides.sourceUpdatesFetch ?? globalThis.fetch,
+    // Every answer is written to the source-change record and read from it first.
+    changes: sourceChanges,
   });
+  sourceChanges?.useLookup(sourceUpdates);
   const resultSourceUpdatesRoutes = createResultSourceUpdatesRoutes({ store, results: resultProvenance,
     lookup: sourceUpdates, impacts: resultImpacts, maxJsonBytes: config.maxJsonBytes });
   const kbSearchGatewayHandler = createKbSearchGatewayHandler(config, runtimeManager, { index: kbIndex, evaluationIsolation });
@@ -4848,6 +4861,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           imMetrics: im.service ? () => im.service.metrics() : null,
           webReader,
           sourceUpdates,
+          sourceChanges,
           edgeProxy,
           frontier,
           review,
@@ -6732,6 +6746,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     memoryIndexWorker,
     sourceService,
     sourceWorker,
+    // The one source-change record and the modules that read it (B5), returned so the composition can be asserted.
+    sourceChanges,
+    sourceUpdates,
+    resultImpacts,
+    knowledgeChange,
     kbIndex,
     libraryService,
     sourceUnderstandingRuntime,
@@ -7660,7 +7679,7 @@ function addHistogramMetric(lines, name, help, series) {
   }
 }
 
-async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null }) {
+async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null }) {
   const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate, frontier, review, geo, vcr, credits);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
@@ -7818,6 +7837,7 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
   for (const family of webReadMetricFamilies(webReader?.stats())) addMetric(lines, family.name, family.help, family.type, family.series);
   for (const family of alertReceiver?.metricFamilies() ?? []) addMetric(lines, family.name, family.help, family.type, family.series);
   for (const family of sourceUpdateMetricFamilies(sourceUpdates?.stats())) addMetric(lines, family.name, family.help, family.type, family.series);
+  for (const family of sourceChangeMetricFamilies(sourceChanges?.stats())) addMetric(lines, family.name, family.help, family.type, family.series);
   for (const family of edgeMetricFamilies(edgeProxy)) addMetric(lines, family.name, family.help, family.type, family.series);
   addMetric(lines, "open_science_task_total", "Known task records in the current process.", "gauge", {
     value: taskStats.total,

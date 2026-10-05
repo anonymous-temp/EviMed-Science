@@ -107,7 +107,7 @@ function doiOfUrl(value) {
 }
 
 /** The PMID a link names, when it is a PubMed link. @param {string} value @returns {string} */
-function pmidOfUrl(value) {
+export function pmidOfUrl(value) {
   const url = parsed(value)
   if (!url) return ''
   const host = url.hostname.toLowerCase().replace(/^www\./, '')

@@ -41,6 +41,7 @@ export const UNEXPORTED_DOCUMENT_KINDS = Object.freeze({
   "method-trial": "an evaluation identity's time-limited instruction to mount named methods in one project's next launches, expired on read; it steers this deployment's runtime and means nothing outside it, and the methods it names are exported under method",
   "extension-generation": "which prepared package and skill generation a project's runtime was built from and which one is live; the platform derives it from the installations, defaults and skills that are themselves exported, and it is runtime authority an archive must never carry",
   "extension-proof": "qualification the platform measures for itself; an archive carrying one would offer a compatibility claim no import may accept, and no product code writes this kind today",
+  "source-change": "what was published about a work after it was published (a retraction, a correction, a new version), one record per source identifier, owned by the platform publisher account and never by a customer; it holds only public bibliographic facts and which tenant asked is never written to it, so there is nothing of the account's in it to carry",
   "extension-resource": "the platform's own operation records: public-document grants and accepted-actor bindings signed with a deployment secret, and the journals of skill copies and adoptions; the documents and skills they refer to are workspace files and skill records, which are exported",
 });
 

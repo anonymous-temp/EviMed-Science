@@ -76,6 +76,7 @@ import { FRONTIER_EDITOR_VERSION, FRONTIER_SCREEN_BATCH, FRONTIER_SCREEN_EXCERPT
 import { FrontierGlossary, FrontierGlossaryStore } from "./frontierGlossary.mjs";
 import { bumpFrontierVersion, migrateFrontier } from "./frontierPersistence.mjs";
 import { tsvectorLiteral } from "./kbChunker.mjs";
+import { recordFrontierNotices } from "./sourceChanges.mjs";
 
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -520,14 +521,16 @@ function orderedFlags(flags) {
 export class FrontierPipeline {
   /**
    * @param {{ database: any, editor: any, plugin: any, embedder?: any, glossary?: any, config?: Record<string, any>,
-   *           now?: () => Date, workerId?: string }} options
+   *           sourceChanges?: any, now?: () => Date, workerId?: string }} options
    *   `editor` a `FrontierEditor` (its `owner` is the operator's internal
    *   project, and the budget is read for it); `plugin` offers `text(entryId)`
    *   (`KnowledgePluginClient`); `embedder` a `KbEmbedder` or null; `glossary`
    *   a `FrontierGlossaryStore` (default: read from the database) or a
-   *   `FrontierGlossary`.
+   *   `FrontierGlossary`; `sourceChanges` the one record of source changes
+   *   (`sourceChanges.mjs`), which each retraction, correction, concern or
+   *   withdrawal notice is also written to (absent: nothing is).
    */
-  constructor({ database, editor, plugin, embedder = null, glossary = null, config = {}, now = () => new Date(), workerId = `frontier-${randomUUID()}` }) {
+  constructor({ database, editor, plugin, embedder = null, glossary = null, config = {}, sourceChanges = null, now = () => new Date(), workerId = `frontier-${randomUUID()}` }) {
     if (!database) throw new TypeError("The frontier pipeline needs a database.");
     if (typeof editor?.screen !== "function" || typeof editor?.edit !== "function") throw new TypeError("The frontier pipeline needs an editor.");
     if (typeof plugin?.text !== "function") throw new TypeError("The frontier pipeline needs the plugin client.");
@@ -535,6 +538,7 @@ export class FrontierPipeline {
     this.editor = editor;
     this.plugin = plugin;
     this.embedder = embedder;
+    this.sourceChanges = sourceChanges;
     this.config = config ?? {};
     this.now = now;
     this.workerId = String(workerId).slice(0, 120);
@@ -864,17 +868,21 @@ export class FrontierPipeline {
       .map((/** @type {any} */ update) => ({
         update: /** @type {Record<string, any>} */ (UPDATE_KINDS)[updateKey(update)],
         doi: doiOf(update?.doi),
+        date: typeof update?.date === "string" ? update.date : null,
       }))
       .filter((/** @type {any} */ target) => target.update && target.doi && target.update.kind !== "new-version");
     this.counters.notices += 1;
+    /** @type {Array<{ kind: string, noticeDoi: string | null, doi: string, date: string | null }>} */
+    const asserted = [];
     await this.database.transaction(async (/** @type {any} */ client) => {
       let changed = false;
-      for (const { update, doi } of noticeDoi ? targets : []) {
+      for (const { update, doi, date } of noticeDoi ? targets : []) {
         const target = await client.query("SELECT id, state, flags FROM evimed_frontier.items WHERE lower(doi) = $1 LIMIT 1 FOR UPDATE", [doi]);
         const item = target.rows[0] ?? null;
         await client.query(`INSERT INTO evimed_frontier.item_links (kind, from_doi, to_doi, to_item_id, asserted_by)
           VALUES ($1, $2, $3, $4, 'crossref') ON CONFLICT (kind, from_doi, to_doi) DO UPDATE SET to_item_id = coalesce(evimed_frontier.item_links.to_item_id, excluded.to_item_id)`,
         [update.kind, noticeDoi, doi, item?.id ?? null]);
+        asserted.push({ kind: update.kind, noticeDoi, doi, date });
         if (item && update.flag && !item.flags.includes(update.flag)) {
           await client.query("UPDATE evimed_frontier.items SET flags = $2, updated_at = clock_timestamp() WHERE id = $1",
             [item.id, orderedFlags([...item.flags, update.flag])]);
@@ -888,6 +896,8 @@ export class FrontierPipeline {
       // The kind is the entry's own state: a retraction notice is not recorded as a correction.
       await this.#finishEntry(entry, "dropped", `${noticeKind}-notice${noticeDoi && targets.length ? "" : "-unlinked"}`, { client });
     });
+    // The same relation as a source change, for every module that reads one (B5), once the relation is committed.
+    await recordFrontierNotices(this.sourceChanges, asserted);
   }
 
   /**
