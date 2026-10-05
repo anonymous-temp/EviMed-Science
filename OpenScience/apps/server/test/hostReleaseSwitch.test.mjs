@@ -412,6 +412,47 @@ test("runs in flight stop the switch before anything moves, unless it is told to
   }
 });
 
+// 2026-10-05: four switches at 05:00 were refused while the platform's own learning jobs ran. A switch reaps runtimes, so what
+// it must ask about is work a researcher started; a leased product job is re-claimed after the switch, and the platform's own
+// background projects are scratch (the live release says which with `interactive`; one that does not is asked about everything).
+test("background work does not hold a release, work a researcher started still does, and a release that cannot say is asked about everything", { skip }, async () => {
+  const { root } = await host();
+  try {
+    const stateFile = path.join(root, "docker-state.json");
+    const state = JSON.parse(await readFile(stateFile, "utf8"));
+    const switchWith = async (activity, args = ["--no-prune"]) => {
+      await writeFile(stateFile, JSON.stringify({ ...state, activity }));
+      return runSwitch(root, args);
+    };
+    const background = await switchWith("0 3 0 interactive");
+    assert.equal(background.code, 0, background.stdout + background.stderr);
+    assert.match(background.stdout, /3 product job\(s\) in flight: they are leased, and resume after the switch/);
+    assert.match(background.stdout, /=== current -> /);
+
+    const researcher = await switchWith("1 0 0 interactive");
+    assert.equal(researcher.code, 3, researcher.stdout + researcher.stderr);
+    assert.match(researcher.stdout, /REFUSED: 1 agent run\(s\), 0 product job\(s\), 0 busy runtime\(s\) in flight/);
+    const busy = await switchWith("0 0 2 interactive");
+    assert.equal(busy.code, 3);
+    assert.match(busy.stdout, /2 busy runtime\(s\)/);
+
+    // An older release prints three numbers, and a failed inspection says `all`: product jobs refuse as they always did.
+    for (const older of ["0 3 0", "0 3 0 all"]) {
+      const refused = await switchWith(older);
+      assert.equal(refused.code, 3, `${older}: ${refused.stdout}`);
+      assert.match(refused.stdout, /REFUSED: 0 agent run\(s\), 3 product job\(s\), 0 busy runtime\(s\) in flight/);
+    }
+    const idle = await switchWith("0 0 0 interactive");
+    assert.equal(idle.code, 0);
+    assert.match(idle.stdout, /nothing in flight/);
+    const forced = await switchWith("1 0 0 interactive", ["--no-prune", "--allow-active"]);
+    assert.equal(forced.code, 0, forced.stdout + forced.stderr);
+    assert.match(forced.stdout, /--allow-active: switching anyway/);
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
 test("an idle release switches, and an unreadable one warns rather than stops", { skip }, async () => {
   const { root } = await host();
   try {

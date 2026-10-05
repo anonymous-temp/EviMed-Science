@@ -4273,19 +4273,27 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         let busy = 0;
         let idle = 0;
         let unknown = Number(runtimeStats.starting) || 0;
+        // The platform's own background projects (learning, document understanding, evaluation cells) are scratch by
+        // the platform's own rule (`excludedFromBackup`: what they produce is kept in the product database and a run
+        // that is interrupted is retried), so they are counted apart: a release switch asks about work a researcher
+        // started (`interactive`), and a drained maintenance window still asks about everything.
+        let internalRuns = 0;
+        let internalBusy = 0;
         const observations = await Promise.all(projects.map(async (project) => {
+          const internal = isInternalProjectOf(config, project.userId, project.id);
           const running = (await agentRuns.list(project)).filter((run) => run.status === "running").length;
-          if (!runtimeManager.runtimeGeneration(project)) return { running, busy: 0, idle: 0, unknown: 0 };
+          if (!runtimeManager.runtimeGeneration(project)) return { running, busy: 0, idle: 0, unknown: 0, internal };
           try {
             const runtimeBusy = await runtimeManager.pluginRuntimeBusy(project);
-            return { running, busy: runtimeBusy ? 1 : 0, idle: runtimeBusy ? 0 : 1, unknown: 0 };
-          } catch { return { running, busy: 0, idle: 0, unknown: 1 }; }
+            return { running, busy: runtimeBusy ? 1 : 0, idle: runtimeBusy ? 0 : 1, unknown: 0, internal };
+          } catch { return { running, busy: 0, idle: 0, unknown: 1, internal }; }
         }));
         for (const observation of observations) {
           runningAgentRuns += observation.running;
           busy += observation.busy;
           idle += observation.idle;
           unknown += observation.unknown;
+          if (observation.internal) { internalRuns += observation.running; internalBusy += observation.busy; }
         }
         const classified = busy + idle + Math.max(0, unknown - (Number(runtimeStats.starting) || 0));
         unknown += Math.max(0, (Number(runtimeStats.running) || 0) - classified);
@@ -4316,6 +4324,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           heavyWorkJobs: await heavyWorkBlockerCount(productDatabase),
           runningAgentRuns,
           runtimes: { busy, idle, unknown },
+          interactive: { runningAgentRuns: runningAgentRuns - internalRuns, busyRuntimes: busy - internalBusy },
         };
       },
     });
@@ -4650,7 +4659,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           // release switch before it moves `current` (host-release-switch.sh).
           const withActivity = new URL(req.url ?? "/", "http://localhost").searchParams.get("activity") === "1";
           const status = await maintenanceService.status();
-          sendJson(res, 200, { data: withActivity ? { ...status, activity: await maintenanceService.activity() } : status });
+          sendJson(res, 200, { data: withActivity
+            ? { ...status, activity: await maintenanceService.activity(), interactive: await maintenanceService.interactiveActivity() } : status });
           return;
         }
         const body = assertObject(await readJson(req, config.maxJsonBytes), "maintenance request");
