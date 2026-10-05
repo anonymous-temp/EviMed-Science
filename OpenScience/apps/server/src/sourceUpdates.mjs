@@ -10,6 +10,11 @@
  * claims are verified for a reader rather than when the run cited them, so a
  * retraction published after the run still reaches the reader.
  *
+ * Every answer is also written to the source-change record (`sourceChanges.mjs`, plan 2026-10-05 B5) when the lookup is
+ * built with it, and read back from it first: what the frontier feed or the evidence zone already recorded about a work
+ * is served without asking Crossref, and a notice some detector recorded is never undone by a lookup that did not see it
+ * (it timed out, or Crossref's index lags the publisher). The in-memory cache stays as the accelerator in front.
+ *
  * Informational in every direction (principle 13): a lookup that fails,
  * times out or is switched off carries an explicit unavailable status and leaves
  * the quotation verification exactly as it was. A DOI Crossref does not know (DataCite,
@@ -18,7 +23,7 @@
  * @module sourceUpdates
  */
 
-import { doiOf, sourceUpdatesFromCrossref } from "@evimed/domain";
+import { changesFromCrossrefUpdates, doiOf, mergeSourceUpdateStatus, sourceUpdateStatusOfFact, sourceUpdatesFromCrossref } from "@evimed/domain";
 import { claimEvidenceSources } from "@evimed/domain/clinical-evidence";
 
 const CROSSREF_WORKS = "https://api.crossref.org/works";
@@ -79,27 +84,62 @@ async function boundedResponse(response, signal) {
 /**
  * `timeoutMs` covers the complete lookup, including all batches, attempts and bodies.
  * Retries are optional read-only GET retries; failed checks are never cached clean.
- * @param {{ fetchImpl?: typeof fetch, userAgent: string, timeoutMs?: number, now?: () => number, mailto?: string | null, maxAttempts?: number }} options
+ * `changes` is the source-change record (`createSourceChanges`): read before Crossref is asked, written with every answer.
+ * Absent, the lookup is what it was: Crossref and an in-memory cache.
+ * @param {{ fetchImpl?: typeof fetch, userAgent: string, timeoutMs?: number, now?: () => number, mailto?: string | null, maxAttempts?: number,
+ *   changes?: { getMany: (identifiers: unknown[]) => Promise<Map<string, any>>, recordMany: (identifier: unknown, entries: any[], options?: { outcome?: "answered" | "not_indexed" }) => Promise<any> } | null }} options
  */
-export function createSourceUpdateLookup({ fetchImpl = fetch, userAgent, timeoutMs = SOURCE_UPDATES_DEFAULT_TIMEOUT_MS, now = Date.now, mailto = null, maxAttempts = 1 }) {
+export function createSourceUpdateLookup({ fetchImpl = fetch, userAgent, timeoutMs = SOURCE_UPDATES_DEFAULT_TIMEOUT_MS, now = Date.now, mailto = null, maxAttempts = 1, changes = null }) {
   const contact = typeof mailto === "string" && /^[^@\s,&=?#]+@[^@\s,&=?#]+\.[^@\s,&=?#]+$/.test(mailto.trim()) ? mailto.trim() : null;
   /** @type {Map<string, { at: number, status: SourceUpdateStatus }>} */
   const cache = new Map();
   const counts = { checked: 0, cached: 0, unknown: 0, failed: 0 };
+  // Counted only when there is a record to count against, so a lookup without one reports what it always did.
+  const ledger = { stored: 0, storeFailed: 0 };
   const attempts = Math.min(2, Math.max(1, Math.floor(maxAttempts)));
 
-  /** @param {string} doi @param {SourceUpdateStatus} status */
-  const remember = (doi, status) => {
+  /** @param {string} doi @param {SourceUpdateStatus} status @param {number} [at] when the answer was true, not when it was remembered */
+  const remember = (doi, status, at = now()) => {
     cache.delete(doi);
-    cache.set(doi, { at: now(), status });
+    cache.set(doi, { at, status });
     while (cache.size > MAX_ENTRIES) cache.delete(cache.keys().next().value);
   };
 
-  /** @param {readonly string[]} dois @param {{ signal?: AbortSignal }} [options] */
-  async function lookupStatuses(dois, { signal: callerSignal } = {}) {
+  /**
+   * What is recorded of each DOI, one read: the facts by `doi:<doi>`. A store that cannot be read is no reason to skip
+   * Crossref, so it answers an empty map and the failure is counted.
+   * @param {string[]} dois @returns {Promise<Map<string, any>>}
+   */
+  async function recordedFor(dois) {
+    if (!changes || !dois.length) return new Map();
+    try { return await changes.getMany(dois.map(doi => `doi:${doi}`)); }
+    catch { ledger.storeFailed += 1; return new Map(); }
+  }
+
+  /**
+   * Write what Crossref answered and say what the record now holds: the same notices, and any another detector recorded.
+   * A write that fails costs the answer nothing.
+   * @param {string} doi @param {SourceUpdateStatus} status @param {"answered" | "not_indexed"} outcome
+   * @returns {Promise<SourceUpdateStatus>}
+   */
+  async function persist(doi, status, outcome) {
+    if (!changes) return status;
+    try {
+      const fact = await changes.recordMany(`doi:${doi}`, changesFromCrossrefUpdates(status.updates), { outcome });
+      return /** @type {SourceUpdateStatus} */ (mergeSourceUpdateStatus(status, sourceUpdateStatusOfFact(fact)));
+    } catch { ledger.storeFailed += 1; return status; }
+  }
+
+  /**
+   * `maxAgeMs` shortens how long an answer — remembered or recorded — may stand for this call; it never lengthens it.
+   * @param {readonly string[]} dois @param {{ signal?: AbortSignal, maxAgeMs?: number }} [options]
+   */
+  async function lookupStatuses(dois, { signal: callerSignal, maxAgeMs } = {}) {
+    const ttl = Number.isFinite(maxAgeMs) && Number(maxAgeMs) > 0 ? Math.min(TTL_MS, Number(maxAgeMs)) : TTL_MS;
     /** @type {Map<string, SourceUpdateStatus>} */
     const found = new Map();
-    const wanted = [];
+    /** @type {string[]} */
+    let wanted = [];
     const seen = new Set();
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(new DOMException("Source update deadline exceeded", "TimeoutError")), timeoutMs);
@@ -114,11 +154,28 @@ export function createSourceUpdateLookup({ fetchImpl = fetch, userAgent, timeout
           continue;
         }
         const hit = cache.get(doi);
-        if (hit && now() - hit.at < TTL_MS) {
+        if (hit && now() - hit.at < ttl) {
           counts.cached += 1;
           found.set(doi, structuredClone(hit.status));
         } else wanted.push(doi);
       }
+      // What the record already holds, read once for everything still to ask: a fresh answer stands, a stale one is the
+      // floor under whatever Crossref says now.
+      const recorded = await recordedFor(wanted);
+      /** @type {Map<string, ReturnType<typeof sourceUpdateStatusOfFact>>} */
+      const floors = new Map();
+      wanted = wanted.filter(doi => {
+        const fact = recorded.get(`doi:${doi}`);
+        if (!fact) return true;
+        const status = sourceUpdateStatusOfFact(fact);
+        floors.set(doi, status);
+        const answered = status.checkedAt && (status.state !== "unknown" || status.reason === "not_in_crossref");
+        if (!answered || now() - Date.parse(String(status.checkedAt)) >= ttl) return true;
+        ledger.stored += 1;
+        remember(doi, status, Date.parse(String(status.checkedAt)));
+        found.set(doi, structuredClone(status));
+        return false;
+      });
       for (let start = 0; start < wanted.length; start += BATCH) {
         const batch = wanted.slice(start, start + BATCH);
         const url = new URL(CROSSREF_WORKS);
@@ -160,7 +217,12 @@ export function createSourceUpdateLookup({ fetchImpl = fetch, userAgent, timeout
         const checkedAt = new Date(now()).toISOString();
         if (!items) {
           counts.failed += batch.length;
-          for (const doi of batch) found.set(doi, { state: "unavailable", checkedAt, reason, updates: [] });
+          for (const doi of batch) {
+            const unanswered = /** @type {SourceUpdateStatus} */ ({ state: "unavailable", checkedAt, reason, updates: [] });
+            // A notice on record is not undone by a lookup that could not be made, and its check time is the record's.
+            const merged = /** @type {SourceUpdateStatus} */ (mergeSourceUpdateStatus({ ...unanswered, checkedAt: null }, floors.get(doi)));
+            found.set(doi, merged.state === "changed" ? merged : unanswered);
+          }
           continue;
         }
         const answered = new Set();
@@ -168,12 +230,12 @@ export function createSourceUpdateLookup({ fetchImpl = fetch, userAgent, timeout
           const doi = doiOf(item?.DOI);
           if (!doi || !batch.includes(doi) || answered.has(doi)) continue;
           const updates = sourceUpdatesFromCrossref(item);
-          const status = { state: /** @type {"changed" | "no_update"} */ (updates.length ? "changed" : "no_update"), checkedAt, updates };
+          const status = await persist(doi, { state: /** @type {"changed" | "no_update"} */ (updates.length ? "changed" : "no_update"), checkedAt, updates }, "answered");
           remember(doi, status); found.set(doi, structuredClone(status)); answered.add(doi); counts.checked += 1;
         }
         for (const doi of batch) {
           if (answered.has(doi)) continue;
-          const status = { state: /** @type {const} */ ("unknown"), checkedAt, reason: "not_in_crossref", updates: [] };
+          const status = await persist(doi, { state: /** @type {const} */ ("unknown"), checkedAt, reason: "not_in_crossref", updates: [] }, "not_indexed");
           remember(doi, status); found.set(doi, structuredClone(status)); counts.unknown += 1;
         }
       }
@@ -194,7 +256,7 @@ export function createSourceUpdateLookup({ fetchImpl = fetch, userAgent, timeout
     Object.defineProperty(found, "statuses", { value: statuses });
     return found;
   }
-  return { lookup, lookupStatuses, stats: () => ({ ...counts, cachedDois: cache.size }) };
+  return { lookup, lookupStatuses, stats: () => ({ ...counts, ...(changes ? ledger : {}), cachedDois: cache.size }) };
 }
 
 /** The DOI line our own capture header carries (`open_access_full_text`). */
@@ -263,13 +325,17 @@ export function sourceUpdateMetricFamilies(stats) {
   if (!stats) return [];
   return [{
     name: "open_science_source_updates_total",
-    help: "Cited DOIs looked up for retraction and correction notices, by outcome (answered by Crossref, served from cache, unknown to Crossref, lookup failed).",
+    help: "Cited DOIs looked up for retraction and correction notices, by outcome (answered by Crossref, served from cache, unknown to Crossref, lookup failed, served from the source-change record, record unreadable or unwritable).",
     type: /** @type {const} */ ("counter"),
     series: [
       { value: stats.checked, labels: { outcome: "checked" } },
       { value: stats.cached, labels: { outcome: "cached" } },
       { value: stats.unknown, labels: { outcome: "unknown" } },
       { value: stats.failed, labels: { outcome: "failed" } },
+      ...("stored" in stats ? [
+        { value: Number(stats.stored), labels: { outcome: "stored" } },
+        { value: Number(stats.storeFailed), labels: { outcome: "store_failed" } },
+      ] : []),
     ],
   }];
 }

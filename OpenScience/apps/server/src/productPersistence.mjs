@@ -12,6 +12,10 @@ export const PRODUCT_KINDS = Object.freeze([
   "method-trial", "document-export", "result-version", "result-impact", "result-revision", "result-replay", ...EXTENSION_PRODUCT_KINDS,
   // What a project's datasets mean: one document per dataset, the recorded interpretation a repeat analysis starts from.
   "dataset-semantics",
+  // What was published about a work after it was published (a retraction, a correction, an expression of concern, a new
+  // version), one document per source identifier. Platform-level: owned by the platform publisher account, holding only
+  // public bibliographic facts and never which tenant asked (`sourceChanges.mjs`, plan 2026-10-05 B5).
+  "source-change",
 ]);
 // Frontier issues, reader notifications and operator rebuilds use the shared
 // durable ledger. Its per-entry queue — thousands of rows a day — lives in
@@ -297,6 +301,22 @@ BEGIN
   END IF;
 END $dataset_semantics_kind$;
 INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-10-04-dataset-semantics-kind-v1') ON CONFLICT DO NOTHING;
+DO $source_change_kind$
+BEGIN
+  -- Its own block, for the reason the method-trial block gives: the blocks before this one rebuild the
+  -- constraint only when it lacks *their* kind.
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint c WHERE c.conrelid='evimed_product.documents'::regclass
+      AND c.conname='product_documents_kind_check' AND position('''source-change''' in pg_get_constraintdef(c.oid)) > 0) THEN
+    ALTER TABLE evimed_product.documents DROP CONSTRAINT IF EXISTS product_documents_kind_check;
+    ALTER TABLE evimed_product.documents ADD CONSTRAINT product_documents_kind_check
+      CHECK (kind IN (${PRODUCT_KINDS.map(kind => `'${kind}'`).join(",")}));
+  END IF;
+END $source_change_kind$;
+-- The feed of source changes is read by position ('changedSince'): the last position of the one owner, and the
+-- records after a position, both from this index. A record that holds no change yet has no position and is not in it.
+CREATE INDEX IF NOT EXISTS product_source_change_seq_idx ON evimed_product.documents (user_id, ((payload->>'seq')::bigint))
+  WHERE kind='source-change' AND deleted_at IS NULL;
+INSERT INTO evimed_product.schema_migrations(name) VALUES ('2026-10-05-source-change-kind-v1') ON CONFLICT DO NOTHING;
 DO $availability_kind$
 BEGIN
   -- Its own block, for the reason the method-trial block gives: the blocks before
