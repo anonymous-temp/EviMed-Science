@@ -16,7 +16,7 @@
  * in another.
  */
 import { posix } from "node:path";
-import { standingVerdict } from "@evimed/domain";
+import { DISPLAY_TIME_ZONE, agendaLocalDate, standingVerdict } from "@evimed/domain";
 import { sourceStateOf } from "./sourceService.mjs";
 import { KNOWLEDGE_BASE_DIR, RUNTIME_KNOWLEDGE_DIR } from "./researchContext.mjs";
 
@@ -162,6 +162,25 @@ export async function loadAutopilotProgress(documents, input) {
     sources: sources.filter(Boolean).map(row => ({ ...row, ownerId: row.userId ?? input.userId })), moreAvailable: Boolean(episodes.nextCursor || digests.nextCursor) });
 }
 
+/**
+ * What a lead nobody settled is, for the researcher's page. A re-check that will
+ * never run reads as that -- never as "unchecked", which promises one -- and the
+ * two ways an agenda that stopped can leave a claim (never started, or cancelled
+ * with it) read as the one thing they are to the researcher: not re-checked, and why.
+ * @param {any} claim @param {string} check `claimCheck`'s reading
+ * @returns {{kind: "weakened" | "check_unavailable" | "not_rechecked" | "unchecked", reason?: string}}
+ */
+function leadKind(claim, check) {
+  if (check === "weakened") return { kind: "weakened" };
+  const verification = claim?.verification;
+  if (verification?.status === "unscheduled" && verification.reason) return { kind: "not_rechecked", reason: String(verification.reason) };
+  // The snapshot keeps a check's `reason`, not its `code`: a re-check cancelled with its agenda carries the agenda's.
+  if (verification?.status === "unavailable" && ["agenda_stopped", "agenda_paused"].includes(verification.reason)) {
+    return { kind: "not_rechecked", reason: String(verification.reason) };
+  }
+  return { kind: check === "check_unavailable" ? "check_unavailable" : "unchecked" };
+}
+
 /** How many entries of each list the researcher's page shows; the snapshot holds more. */
 const STATE_ITEMS_MAX = 6;
 
@@ -186,12 +205,13 @@ const STATE_ITEMS_MAX = 6;
  * @param {any} progress a snapshot from `buildAutopilotProgress`
  * @returns {{schemaVersion: 1, agendaId: string, asOf: string, truncated: boolean,
  *   found: Array<{statement: string, check: "reproduced" | "stands" | "refuted", sources: number, date: string}>,
- *   unresolved: Array<{kind: "unchecked" | "check_unavailable" | "weakened" | "question" | "not_run", text?: string, date?: string}>,
+ *   unresolved: Array<{kind: "unchecked" | "check_unavailable" | "not_rechecked" | "weakened" | "question" | "not_run", text?: string, date?: string, reason?: string}>,
  *   materials: Array<{sourceId: string, name: string, addedAt: string, state: string}>}}
  */
-export function projectResearchState(progress) {
+export function projectResearchState(progress, { timeZone = DISPLAY_TIME_ZONE } = {}) {
   /** @type {Array<{statement: string, check: "reproduced" | "stands" | "refuted", sources: number, date: string}>} */
   const found = [];
+  /** @type {Array<{kind: string, text: string, date: string, reason?: string}>} */
   const leads = [];
   const seen = new Set();
   let more = Boolean(progress?.truncated);
@@ -204,13 +224,18 @@ export function projectResearchState(progress) {
       // A claim an independent check weakened is not settled, whatever tier it reached.
       const settled = check === "refuted" ? "refuted" : check === "weakened" ? null : claim.tier === "reproduced" ? "reproduced" : check === "stands" ? "stands" : null;
       if (settled) found.push({ statement: key, check: settled, sources: (claim.sources ?? []).length, date: episode.date });
-      else leads.push({ kind: check === "weakened" ? "weakened" : check === "check_unavailable" ? "check_unavailable" : "unchecked", text: key, date: episode.date });
+      else leads.push({ ...leadKind(claim, check), text: key, date: episode.date });
     }
   }
   // The researcher's own open questions come first, then the gap in the work,
   // then the claims nobody has settled: the list is cut at a few entries, and
   // what the researcher asked is the last thing to drop.
-  const unresolved = (progress?.followUps ?? []).map((/** @type {any} */ item) => ({ kind: /** @type {const} */ ("question"), text: item.note, date: String(item.at ?? "").slice(0, 10) }));
+  // The day a question was asked is the researcher's own, in the agenda's zone like every other date here.
+  const askedOn = (/** @type {unknown} */ at) => {
+    const time = Date.parse(String(at ?? ""));
+    return Number.isFinite(time) ? agendaLocalDate(timeZone, new Date(time)) : "";
+  };
+  const unresolved = (progress?.followUps ?? []).map((/** @type {any} */ item) => ({ kind: /** @type {const} */ ("question"), text: item.note, date: askedOn(item.at) }));
   const latest = progress?.episodes?.[0];
   if (latest?.status === "failed") unresolved.push({ kind: "not_run", date: latest.date });
   unresolved.push(...leads);

@@ -41,7 +41,7 @@ async function fixture(t) {
   const service = makeService(documents);
   const agenda = await service.create(owner, { projectId: "owned", title: "Activity integration",
     topics: ["research updates"], taskTypes: ["literature-sentinel"], dailyBudgetCny: 2,
-    weeklyBudgetCny: 10, maxEpisodeCny: 1, scheduleHour: 1, timeZone: "UTC" });
+    weeklyBudgetCny: 10, maxEpisodeCny: 1.5, scheduleHour: 1, timeZone: "UTC" });
   const digest = await service.createDigest(owner, agenda.id, { date: "2026-09-06", episodeIds: ["episode-activity"], costCny: 0,
     claims: [{ id: "claim-one", statement: "A retained finding", type: "direct", tier: "unverified" }] });
   return { database, owner, other, documents, notifications, makeService, service, agenda, digest, setTime: (value) => { at = new Date(value); } };
