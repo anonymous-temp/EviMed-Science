@@ -181,10 +181,27 @@ test('existing durable feedback events settle only actual tenant tool use and re
   const input={trigger:'deliverable-adopted',subject:{type:'deliverable',id:'feedback-real-run:report.md'},projectId:'research',runId:'feedback-real-run'};
   const original=await feedback.record(researcher,input);await feedback.record(researcher,input);
   const events=(await service.list('event',researcher)).filter(row=>row.payload.sourceFeedbackId===original.event.id);assert.equal(events.length,1);
-  await integration.consume(events[0].payload);await integration.consume(events[0].payload);
-  const tool=await service.get('actual-feedback-tool');assert.equal(tool.payload.usage.runs,1);assert.equal(tool.payload.observations[0].outcome,'accepted');assert.equal(tool.payload.usage.executionSucceeded,1);
+  // What is recorded about the run lives in the run's own record, no longer in an array on the tool's (F16).
+  const observations=async()=>(await service.list('observation')).filter(row=>row.payload.toolId==='actual-feedback-tool');
+  const snapshot=async()=>({tool:await service.get('actual-feedback-tool'),observations:await observations()});
+  await integration.consume(events[0].payload);
+  const settled=await snapshot();
+  assert.equal(settled.tool.payload.usage.runs,1);assert.equal(settled.tool.payload.usage.executionSucceeded,1);assert.equal(settled.tool.payload.observations,undefined);
+  // The use is one record, counted once, with its outcome and the feedback that settled it.
+  assert.equal(settled.observations.length,1);
+  assert.deepEqual({runId:settled.observations[0].payload.runId,outcome:settled.observations[0].payload.outcome,invoked:settled.observations[0].payload.invoked,calls:settled.observations[0].payload.callIds,feedback:settled.observations[0].payload.feedbackEventId},
+    {runId:'feedback-real-run',outcome:'accepted',invoked:true,calls:['feedback-real-call'],feedback:original.event.id});
+  assert.equal((await maintenance.observationOf('actual-feedback-tool','feedback-real-run')).outcome,'accepted');
+  // One researcher's first judged run is one trial of the tool's harm test, kept without the researcher's identity.
+  assert.deepEqual(settled.tool.payload.usage.harm.trials.map(trial=>[trial.runId,trial.outcome]),[['feedback-real-run','accepted']]);
+  assert.doesNotMatch(JSON.stringify([settled.tool.payload,settled.observations[0].payload]),new RegExp(researcher));
+  // A replay of the same event changes nothing: not a counter, not a revision, not the run's record.
+  await integration.consume(events[0].payload);
+  assert.deepEqual(await snapshot(),settled);
   const entries=(await service.list('feedback',researcher)).filter(row=>row.payload.toolId==='actual-feedback-tool');assert.equal(entries.length,1);assert.equal(await service.get(entries[0].id,owner),null);
-  await consumer.observeFeedback({...original.event,id:'foreign-replay',userId:owner});assert.equal((await service.get('actual-feedback-tool')).payload.usage.runs,1);
+  // Nor does the same event replayed under another account, which never used the tool in that run.
+  assert.deepEqual(await consumer.observeFeedback({...original.event,id:'foreign-replay',userId:owner}),{observed:0});
+  assert.deepEqual(await snapshot(),settled);assert.equal((await service.get('actual-feedback-tool')).payload.usage.runs,1);
 });
 
  test('PostgreSQL immutable descriptor retries ignore JSONB key order but reject changed requirements', options, async () => {
