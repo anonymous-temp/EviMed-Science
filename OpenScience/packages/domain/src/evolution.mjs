@@ -1,5 +1,16 @@
-import { METHOD_HARM_TEST } from './constants.mjs'
+import { METHOD_SCIENTIFIC_HARM_TEST } from './constants.mjs'
 import { DATA_CHECK_FAMILIES } from './dataSemantics.mjs'
+
+/**
+ * The sequential test a published tool's real use is read with: the platform's existing harm test
+ * (`methodHarmTest`), on the scientific axis's numbers.
+ *
+ * Not `METHOD_HARM_TEST`'s. Every bad outcome the tool loop records is a researcher correcting a result
+ * the tool took part in, and `constants.mjs` says why that axis has its own background rate: a
+ * correction is ordinary work (25% against a harmful 60%), where a rejected delivery is rare (10%
+ * against 40%). Feeding corrections to the delivery-axis numbers let three of them retire a tool.
+ */
+export const EVOLUTION_TOOL_HARM_TEST = METHOD_SCIENTIFIC_HARM_TEST
 
 /** Closed vocabularies and pure policy for the platform's literature-driven learning loop. */
 export const EVOLUTION_TRACKS = Object.freeze(['E', 'P', 'M', 'U', 'X', 'T'])
@@ -28,7 +39,7 @@ export function evolutionAdaptiveClass(history) {
 export function evolutionValidationLevel(assessments, usage = {}) {
   const independent = assessments.filter((a) => a.independent === true && a.passed === true
     && (a.kind === 'simulation' ? a.exposed !== true : a.exposed === false && a.retracted === false))
-  if (independent.some((a) => a.kind === 'research' && Number(a.papers) >= 5)) return usage.harmState === 'clear' && Number(usage.runs) >= METHOD_HARM_TEST.minRuns ? 'V4' : 'V3'
+  if (independent.some((a) => a.kind === 'research' && Number(a.papers) >= 5)) return usage.harmState === 'clear' && Number(usage.runs) >= EVOLUTION_TOOL_HARM_TEST.minRuns ? 'V4' : 'V3'
   if (new Set(independent.filter((a) => a.kind === 'published-case').map((a) => a.caseId)).size >= 2 && independent.every((a) => a.crossImplementationPassed !== false)) return 'V2'
   if (independent.some((a) => a.kind === 'simulation' && a.preRegistered === true
     && (typeof a.monteCarloError === 'number' ? Number.isFinite(a.monteCarloError) && a.monteCarloError >= 0

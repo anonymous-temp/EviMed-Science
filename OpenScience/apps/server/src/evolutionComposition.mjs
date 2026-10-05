@@ -416,11 +416,11 @@ export function createEvolution({ config, store, documents, jobs, database, usag
     const id = `evolution-use-${evolutionKey([event.userId, event.projectId, event.runId, event.toolId, event.callId ?? event.runId])}`;
     const tool = await service.get(event.toolId);
     await service.save("use", id, { ...event, track: tool?.payload.track ?? null, ...scientific, supported: null, resultState: "pending", at: service.now().toISOString() }, null, event.userId);
-    if (scientific.researcherOwned === true) await maintenance.observe(event.toolId, { runId: event.runId, callId: event.callId, invoked: true, executionOk: event.result.ok, outcome: "pending" });
+    if (scientific.researcherOwned === true) await maintenance.observe(event.toolId, { runId: event.runId, userId: event.userId, callId: event.callId, invoked: true, executionOk: event.result.ok, outcome: "pending" });
   };
   const onRetrieval = async event => {
     if ((await scientificUseScope(event)).researcherOwned !== true) return;
-    await maintenance.observe(event.toolId, { runId: event.runId, retrievalId: event.retrievalId, retrieved: true, outcome: "pending" });
+    await maintenance.observe(event.toolId, { runId: event.runId, userId: event.userId, retrievalId: event.retrievalId, retrieved: true, outcome: "pending" });
   };
   const gateway = createEvolutionGatewayHandler({ config, authenticateWorkload: token => runtimeManager.assertActiveEviMedWorkloadToken(token), runtimeManager, controller, supply,
     resolveRun: async principal => { const user = await store.userById(principal.userId), project = await store.requireProject(user, principal.projectId);
@@ -451,7 +451,7 @@ export function createEvolution({ config, store, documents, jobs, database, usag
       completedAt: run.finishedAt ?? service.now().toISOString() }, row, project.userId);
     if (scientific.researcherOwned !== true) return;
     for (const toolId of new Set(uses.map(row => row.payload.toolId))) {
-      await maintenance.observe(toolId, { runId: run.id, outcome: "pending", at: run.finishedAt ?? service.now().toISOString() });
+      await maintenance.observe(toolId, { runId: run.id, userId: project.userId, outcome: "pending", at: run.finishedAt ?? service.now().toISOString() });
     }
   };
   return { service, decisions, maintenance, worker, integration, routes, gateway, supply, runs, paperGold, candidateEvaluator, frontier, finishRun, onExecution, onRetrieval,

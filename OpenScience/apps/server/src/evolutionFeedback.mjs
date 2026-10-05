@@ -24,11 +24,11 @@ export function createEvolutionFeedback({ service, maintenance }) {
         const id = `evolution-feedback-${evolutionKey([event.id, toolId])}`;
         const prior = await service.get(id, event.userId);
         if (prior?.payload.status === 'applied') continue;
-        const tool = await service.get(toolId);
-        const observation = tool?.payload.observations?.find(item => item.runId === event.runId && item.invoked === true);
-        if (!observation) continue;
+        const observation = await maintenance.observationOf(toolId, event.runId);
+        if (observation?.invoked !== true) continue;
         if (observation.feedbackOccurredAt && Date.parse(observation.feedbackOccurredAt) > Date.parse(event.occurredAt)) continue;
-        await maintenance.observe(toolId, { runId: event.runId, invoked: true, outcome, corrected,
+        // The account travels with the observation: retirement evidence counts distinct researchers, not runs.
+        await maintenance.observe(toolId, { runId: event.runId, userId: event.userId, invoked: true, outcome, corrected,
           feedbackEventId: event.id, feedbackOccurredAt: event.occurredAt, at: event.occurredAt, feedbackKind: event.trigger,
           causalBenefit: 'unproven' });
         await service.save('feedback', id, { projectId: event.projectId, runId: event.runId, toolId,
