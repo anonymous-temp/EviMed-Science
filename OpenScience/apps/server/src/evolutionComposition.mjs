@@ -16,6 +16,7 @@ import { createHash } from "node:crypto";
 import { AGENDA_DEFAULT_BUDGETS, canonicalJson } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 import { EVOLUTION_PROJECT_ID, isInternalProject } from "./internalProjects.mjs";
+import { createEvolutionToolAdmission } from "./evolutionToolAdmission.mjs";
 import { createEvolutionService, evolutionKey } from "./evolutionService.mjs";
 import { createEvolutionDecisions, evolutionDecisionReviewProof } from "./evolutionDecisions.mjs";
 import { createEvolutionMaintenance, evolutionRetrievalScore } from "./evolutionMaintenance.mjs";
@@ -423,16 +424,14 @@ export function createEvolution({ config, store, documents, jobs, database, usag
     if ((await scientificUseScope(event)).researcherOwned !== true) return;
     await maintenance.observe(event.toolId, { runId: event.runId, retrievalId: event.retrievalId, retrieved: true, outcome: "pending" });
   };
+  const toolAdmission = createEvolutionToolAdmission({ config, database, canRun, heavyWorkAdmission, isInternalProject, dailyCost });
   const gateway = createEvolutionGatewayHandler({ config, authenticateWorkload: token => runtimeManager.assertActiveEviMedWorkloadToken(token), runtimeManager, controller, supply,
     resolveRun: async principal => { const user = await store.userById(principal.userId), project = await store.requireProject(user, principal.projectId);
       const active = (await agentRuns.list(project)).filter(run => run.status === "running");
       if (active.length !== 1) return null;
       return { project, runId: active[0].id, capabilityId: active[0].effectiveAgentId ?? active[0].agentId }; },
-    admit: async (scope, work) => database.transaction(async client => {
-      if (!await canRun() || !await heavyWorkAdmission(client, "compute")) throw new HttpError(503, "evolution_temporarily_unavailable", "Execution waits for host capacity.");
-      if (isInternalProject(scope.project.id) && await dailyCost(client) >= config.evolutionDailyBudgetCny) throw new HttpError(402, "usage_budget_exceeded", "Evolution reached its own daily budget.");
-      return work();
-    }),
+    // Decided in a short transaction and bounded per project; neither the heavy-work lock nor a pooled connection is held while the tool runs.
+    admit: toolAdmission.admit,
     onExecution });
   const finishRun = async (project, run) => {
     const uses = (await service.list("use", project.userId)).filter(row => row.projectId === project.id && row.payload.runId === run.id);
@@ -455,6 +454,6 @@ export function createEvolution({ config, store, documents, jobs, database, usag
       await maintenance.observe(toolId, { runId: run.id, outcome: "pending", at: run.finishedAt ?? service.now().toISOString() });
     }
   };
-  return { service, decisions, maintenance, worker, integration, routes, gateway, supply, runs, paperGold, candidateEvaluator, frontier, finishRun, onExecution, onRetrieval,
+  return { service, decisions, maintenance, worker, integration, routes, gateway, toolAdmission, supply, runs, paperGold, candidateEvaluator, frontier, finishRun, onExecution, onRetrieval,
     observeFeedback: feedback.observeFeedback };
 }

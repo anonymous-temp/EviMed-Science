@@ -342,7 +342,8 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
   // Protected construction supplies descriptors and signed/current authority resolvers.
   // An absent composition never falls back to a development image or direct execution.
   const extensionTools = hooks.extensionTools ?? null;
-  const evolutionVerification = createEvolutionVerificationController(config, { tools: extensionTools ?? undefined, ...(hooks.evolutionVerification ?? {}) });
+  // Candidate execution gets an executor of its own, never the extension controller that serves tenants' document tools.
+  const evolutionVerification = createEvolutionVerificationController(config, { ...(hooks.evolutionVerification ?? {}) });
   const assessmentAuthority = hooks.extensionGenerationAssessmentAuthority ?? null;
   assertExtensionAssessmentAuthority(assessmentAuthority);
   const verifyGeneration = (project, reference) => verifyExtensionGeneration(config, project, reference, {assessmentAuthority});
@@ -936,7 +937,8 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
     async close() {
       let skillValidationFailure = null;
       let extensionFailure = null;
-      await evolutionVerification.close();
+      // Its own executor is closed here now; a failure to close it must not skip the others.
+      await evolutionVerification.close().catch(() => {});
       try { await extensionTools?.close(); } catch (error) { extensionFailure = error; }
       try { await skillValidation.close(); } catch (error) { skillValidationFailure = error; }
       await documents.close();

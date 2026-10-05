@@ -7,9 +7,13 @@ import {HttpError} from './security.mjs';
 
 const sha=value=>createHash('sha256').update(value).digest('hex');
 const refused=()=>new HttpError(400,'extension_contract_invalid','Invalid isolated verification input.');
+/** The longest program one execution can carry. It travels as a single `python3 -c <program>` argument, and Linux refuses
+ * one argv string over 131,072 bytes (`E2BIG`) — a failed `docker create`, which an executor counts as an uncertain
+ * attempt. The program is the caller's code plus a fixed preamble of a few KiB, so the bound sits well inside the OS limit. */
+export const EVOLUTION_EXECUTION_CODE_MAX_BYTES=100000;
 /** Candidate bytes only: no path, credential, image, workspace or socket selections. @param {any} body */
 export function verificationRequest(body){
-  if(!body||Object.keys(body).some(key=>!['files','code','input','dependencyIds'].includes(key))||typeof body.code!=='string'||Buffer.byteLength(body.code)>262144||!body.files||typeof body.files!=='object'||Array.isArray(body.files))throw refused();
+  if(!body||Object.keys(body).some(key=>!['files','code','input','dependencyIds'].includes(key))||typeof body.code!=='string'||Buffer.byteLength(body.code)>EVOLUTION_EXECUTION_CODE_MAX_BYTES||!body.files||typeof body.files!=='object'||Array.isArray(body.files))throw refused();
   let bytes=0;const files={};
   if(Object.keys(body.files).length>128)throw refused();
   for(const [name,value]of Object.entries(body.files)){
@@ -20,18 +24,36 @@ export function verificationRequest(body){
   if(body.dependencyIds!==undefined&&(!Array.isArray(body.dependencyIds)||body.dependencyIds.length>16))throw refused();
   return{files,code:body.code,input,dependencyIds:body.dependencyIds??[]};
 }
-/** Reuses the extension controller's durable physical reservations and cleanup proof.
- * Both operation families share the same root and one slot; uncertain cleanup remains occupied.
+/** Candidate execution runs on an executor of its own: the same durable physical reservations and cleanup proof as the
+ * extension tools, but a separate instance, state root, slot count and timeout (`evolutionExecutionMaxConcurrency`,
+ * `evolutionExecutionTimeoutMs`). It used to be handed the very controller that serves tenants' document tools, so
+ * every static check, self test and hidden-case replicate took one of its two slots and its fail-fast admission lock,
+ * and any failed or timed-out `docker create` of an attempt latched its sticky `blocked` flag — until the runtime
+ * controller was restarted, every tenant's document read and write answered 503. `hooks.tools` is for tests.
+ * Uncertain cleanup of its own attempts still holds its own slot.
  * @param {any} config @param {{tools?:any,imageId?:()=>Promise<string>}} [hooks] */
 export function createEvolutionVerificationController(config,hooks={}){
-  const tools=hooks.tools??new ExtensionToolController({admittedDescriptors:[],stateRoot:path.join(config.dataDir,'.openscience','extension-controller'),dataDir:config.dataDir,runtimeDataVolume:config.runtimeDataVolume,adapterRoot:config.dataDir,inputRoot:config.dataDir,dockerBin:config.runtimeContainerBin,maxConcurrent:1,timeoutMs:30000});
+  const tools=hooks.tools??new ExtensionToolController({admittedDescriptors:[],stateRoot:path.join(config.dataDir,'.openscience','evolution-controller'),dataDir:config.dataDir,runtimeDataVolume:config.runtimeDataVolume,adapterRoot:config.dataDir,inputRoot:config.dataDir,dockerBin:config.runtimeContainerBin,maxConcurrent:config.evolutionExecutionMaxConcurrency??1,timeoutMs:config.evolutionExecutionTimeoutMs??30000});
   const imageId=hooks.imageId??(async()=>String((await tools.command(['image','inspect','--format','{{.Id}}',config.runtimeContainerImage])).stdout).trim());
   const preparer=createEvolutionDependencyPreparer(config,{tools,imageId});
   return{
     prepareDependencies:(body,options={})=>preparer.prepare(body.requests,options),
     async execute(body,{signal=undefined}={}){
       if(config.evolutionEnabled!==true)throw new HttpError(503,'product_state_unavailable','Evolution verification is disabled.');
-      const request=verificationRequest(body);await tools.reconcileEvolutionAttempts?.();const image=await preparer.selectedImage(request.dependencyIds);if(!/^sha256:[a-f0-9]{64}$/.test(image))throw refused();
+      const request=verificationRequest(body);await tools.reconcileEvolutionAttempts?.();
+      /** @type {string} */
+      let image;
+      try{image=await preparer.selectedImage(request.dependencyIds);}
+      catch(error){
+        if(error?.code!=='ENOENT')throw error;
+        // The prepared set is keyed by the runtime image's identity, so every release that changes the image leaves
+        // each published tool with dependencies unprepared — and only the build path ever prepared. Prepare once here:
+        // the allowlist and exact digests already bound what can be fetched, and concurrent callers join one acquisition.
+        // An acquisition that cannot be done now is a named, retryable refusal, never a raw ENOENT.
+        try{await preparer.prepare(request.dependencyIds,{signal});image=await preparer.selectedImage(request.dependencyIds);}
+        catch(failure){throw failure instanceof HttpError?failure:new HttpError(503,'evolution_execution_unavailable','The tool\'s dependencies could not be prepared now; the call can be retried.');}
+      }
+      if(!/^sha256:[a-f0-9]{64}$/.test(image))throw refused();
       const descriptor={imageId:image,artifactDigest:`sha256:${sha(canonicalJson(request))}`};
       const dependencyFiles=await preparer.executionFiles(request.dependencyIds);
       const install=Object.keys(dependencyFiles).length ? String.raw`

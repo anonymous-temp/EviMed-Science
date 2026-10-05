@@ -135,6 +135,7 @@ export const EVOLUTION_ERROR_MESSAGES = Object.freeze({
   'evolution_setting_invalid': '循证进化的配置有误，该模块暂未启用，其他研究不受影响。',
   'evolution_temporarily_unavailable': '这项研究工作暂时无法完成，请稍后重试。',
   'evolution_tool_invalid': '这项研究工作暂时无法完成，请稍后重试。',
+  'evolution_tool_rate_limited': '这个项目调用平台工具过于频繁，请稍后重试。',
   'evolution_tool_missing': '这条研究记录已变化，请刷新后重试。',
   'evolution_version_immutable': '这条研究记录已变化，请刷新后重试。',
 })

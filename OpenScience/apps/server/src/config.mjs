@@ -2348,6 +2348,16 @@ export function loadConfig(overrides = {}) {
     evolutionSelfCheckMaxBytes: Number(overrides.evolutionSelfCheckMaxBytes ?? process.env.OPEN_SCIENCE_EVOLUTION_SELF_CHECK_MAX_BYTES ?? 4 * 1024 * 1024),
     evolutionSelfCheckMaxRows: Number(overrides.evolutionSelfCheckMaxRows ?? process.env.OPEN_SCIENCE_EVOLUTION_SELF_CHECK_MAX_ROWS ?? 10_000),
     evolutionSelfCheckSampleRows: Number(overrides.evolutionSelfCheckSampleRows ?? process.env.OPEN_SCIENCE_EVOLUTION_SELF_CHECK_SAMPLE_ROWS ?? 256),
+    // Candidate execution has its own controller instance, slots and timeout (`evolutionVerificationController.mjs`):
+    // static checks, self tests, hidden-case replicates and every tenant call of a published tool are one disposable
+    // container each, hundreds per build cycle, and they must never share a slot, an admission lock or the
+    // sticky `blocked` latch with the document tools tenants use (S2).
+    evolutionExecutionMaxConcurrency: Number(overrides.evolutionExecutionMaxConcurrency ?? process.env.OPEN_SCIENCE_EVOLUTION_EXECUTION_MAX_CONCURRENCY ?? 1),
+    evolutionExecutionTimeoutMs: Number(overrides.evolutionExecutionTimeoutMs ?? process.env.OPEN_SCIENCE_EVOLUTION_EXECUTION_TIMEOUT_MS ?? 30_000),
+    // What one tenant project may ask of a published tool through the gateway, so one run's loop cannot queue every
+    // other tenant behind it: calls in flight at once, and calls in a minute (S4).
+    evolutionToolMaxConcurrentPerProject: Number(overrides.evolutionToolMaxConcurrentPerProject ?? process.env.OPEN_SCIENCE_EVOLUTION_TOOL_MAX_CONCURRENT_PER_PROJECT ?? 2),
+    evolutionToolCallsPerMinute: Number(overrides.evolutionToolCallsPerMinute ?? process.env.OPEN_SCIENCE_EVOLUTION_TOOL_CALLS_PER_MINUTE ?? 60),
     evolutionDependencyAllowlist: dependencyAllowlist.value,
     // Why the module is off although it was switched on: the first thing wrong with its settings
     // (`{ code, key }`, never a value), or null. A module that is wrongly configured refuses to
