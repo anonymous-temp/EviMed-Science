@@ -291,7 +291,11 @@ export function createEvolutionCandidateEvaluator({ config, controller, fetchImp
             if (testCase.independentImplementation) valid = valid && Object.values(crossImplementationScore({ implementationId: candidate.id, numeric: values }, testCase.independentImplementation, testCase.numeric)).every(row => row.valid);
             reason = valid ? "within_reference_tolerance" : reason;
           } catch { reason = "candidate_execution_failed"; }
-          assessments.push({ caseId: testCase.id, kind: testCase.kind, independent: true, exposed: exposure.tier !== "unexposed", retracted: false, crossImplementationPassed: testCase.independentImplementation ? valid : null, replicate, passed: valid, reason });
+          // Whether the tool's own code started in the sandbox and then failed, as opposed to the sandbox not running it:
+          // the first is the tool's defect (a release replay reads it as a regression), the second is a resource.
+          const attempted = /** @type {any} */ (executionEvidence.findLast(row => row.caseId === testCase.id && row.replicate === replicate));
+          assessments.push({ caseId: testCase.id, kind: testCase.kind, independent: true, exposed: exposure.tier !== "unexposed", retracted: false, crossImplementationPassed: testCase.independentImplementation ? valid : null, replicate, passed: valid, reason,
+            ...(reason === "candidate_execution_failed" ? { candidateStarted: attempted?.executed === true && attempted.code === "candidate_execution_failed" } : {}) });
           passed = passed && valid;
         }
         if (!passed) failedCaseIds.add(testCase.id);

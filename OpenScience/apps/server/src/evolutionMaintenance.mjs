@@ -111,14 +111,26 @@ function foldHarmTrial(current, observation) {
   const read = methodHarmTest(/** @type {any} */ ({ observations: trials.map(trial => ({ runId: trial.runId, family: trial.runId, outcome: trial.outcome, invoked: true, at: trial.at })) }), EVOLUTION_TOOL_HARM_TEST);
   return { ...current, axis: 'researcher-correction', trials, state: read.state, runs: read.runs, bad: read.bad, llr: read.llr };
 }
-/** Execution/dependency exceptions are not evidence of a wrong scientific calculation. @param {any} result */
+/**
+ * What a failed replay of a released tool means.
+ *
+ * A sandbox that could not run the tool is a resource and says nothing about the tool. A tool whose own
+ * code started and then failed on every replicate of a hidden case is something else: it is broken for
+ * every researcher who calls it, and dependency and environment drift is exactly what the replay after
+ * each release exists to find (plan section 7.4). That used to be read as `resource` with "wait"
+ * recommended, so a released tool that crashed on every case stayed active.
+ * @param {any} result
+ */
 export function evolutionReplayDisposition(result) {
   if (result.ok === true) return 'passed';
   if (result.status === 'waiting_resource' || result.resourceCode) return 'resource';
-  const wrong = (result.assessments ?? []).some(row => row.independent === true && row.passed === false && row.exposed === false && row.retracted === false
-    && (row.reason === 'outside_reference_tolerance' || (row.kind === 'simulation' && row.preRegistered === true && row.monteCarloError
-      && Object.values(row.monteCarloError).every(Number.isFinite))));
-  return wrong ? 'method-regression' : 'resource';
+  const scored = (result.assessments ?? []).filter(row => row.independent === true && row.passed === false && row.exposed === false && row.retracted === false);
+  if (scored.some(row => row.reason === 'outside_reference_tolerance' || (row.kind === 'simulation' && row.preRegistered === true && row.monteCarloError
+    && Object.values(row.monteCarloError).every(Number.isFinite)))) return 'method-regression';
+  // Two independent executions of the same case, both started, both failed in the tool's own code.
+  const crashes = new Map();
+  for (const row of scored) if (row.reason === 'candidate_execution_failed' && row.candidateStarted === true) crashes.set(row.caseId, (crashes.get(row.caseId) ?? 0) + 1);
+  return [...crashes.values()].some(count => count >= 2) ? 'execution-regression' : 'resource';
 }
 
 /** Reference identities remain opaque; gold values never enter retrieval tasks. @param {any[]} tools */
@@ -284,15 +296,17 @@ export class EvolutionMaintenance {
     const unique = (tool.payload.holdoutCases ?? []).some(item => !tools.some(other => other.id !== tool.id && other.payload.status === 'active'
       && (other.payload.holdoutCases ?? []).some(reference => reference.id === item.id && reference.sha256 === item.sha256)));
     let current = await this.service.get(tool.id);
+    const crashed = disposition === 'execution-regression';
     if (current.payload.maintenanceState !== 'deprecating') current = await this.service.save('tool', tool.id, { ...current.payload, maintenanceState: 'deprecating',
-      regression: { releaseId, at: this.service.now().toISOString(), failedCaseIds: result.failedCaseIds, evaluatorHash: result.evaluatorHash, protectedCoverage: unique } }, current);
+      regression: { kind: disposition, releaseId, at: this.service.now().toISOString(), failedCaseIds: result.failedCaseIds, evaluatorHash: result.evaluatorHash, protectedCoverage: unique } }, current);
     if (!unique) await this.retire(current, 'published-replay-regression');
     const prior = await this.service.get(id);
-    const review = prior ?? await this.service.save('maintenance-review', id, { kind: 'release-regression', parentToolIds: [tool.id],
+    const review = prior ?? await this.service.save('maintenance-review', id, { kind: 'release-regression', regression: disposition, parentToolIds: [tool.id],
       status: 'pending', releaseId, protectedCoverage: unique, failedCaseIds: result.failedCaseIds });
     await this.callbacks.proposeReview?.({ category: 'tool-repair', subjectId: id, materialVersion: releaseId, directional: true,
-      attemptedPaths: ['independent-published-case-replay', 'alternate-reference-coverage-check'], title: '修复科研工具的回放偏差',
-      body: unique ? '实际独立算例发现数值偏差；此工具提供唯一算例覆盖，保留并标记待修复。新版本须通过全部原算例。' : '实际独立算例发现数值偏差，旧版本已软退役。可研发修复版本，并通过全部原算例后替换。',
+      attemptedPaths: ['independent-published-case-replay', 'alternate-reference-coverage-check'], title: crashed ? '修复发布后无法运行的科研工具' : '修复科研工具的回放偏差',
+      body: crashed ? (unique ? '发布后回放时，这个工具在独立算例上已无法运行；它提供唯一算例覆盖，保留并标记待修复。新版本须通过全部原算例。' : '发布后回放时，这个工具在独立算例上已无法运行，旧版本已软退役。可研发修复版本，并通过全部原算例后替换。')
+        : unique ? '实际独立算例发现数值偏差；此工具提供唯一算例覆盖，保留并标记待修复。新版本须通过全部原算例。' : '实际独立算例发现数值偏差，旧版本已软退役。可研发修复版本，并通过全部原算例后替换。',
       options: [{ id: 'repair', label: '研发修复版本', operation: 'maintenance-repair' }, { id: 'retire', label: unique ? '保留唯一覆盖并复核' : '保留退役状态', operation: 'maintenance-retire' }],
       recommended: 'repair', conservative: 'repair' });
     return { disposition, reviewId: review.id, protectedCoverage: unique };

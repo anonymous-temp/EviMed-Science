@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { EvolutionService } from '../src/evolutionService.mjs';
 import { EvolutionDecisions, evolutionEvaluationDigest, evolutionDecisionReviewProof } from '../src/evolutionDecisions.mjs';
 import { recordResearchPromotion } from '../src/evolutionResearchPromotion.mjs';
-import { EvolutionMaintenance, evolutionRetrievalBenchmark, evolutionRetrievalScore } from '../src/evolutionMaintenance.mjs';
+import { EvolutionMaintenance, evolutionRetrievalBenchmark, evolutionRetrievalScore, evolutionReplayDisposition } from '../src/evolutionMaintenance.mjs';
 import { EvolutionWorker } from '../src/evolutionWorker.mjs';
 
 function fixture() {
@@ -55,6 +55,12 @@ test('release replay dependency gaps do not retire; actual wrong numbers repair 
   assert.equal((await maintenance.releaseReplay(tool,{ok:false,status:'waiting_resource',resourceCode:'dependency_missing',failedCaseIds:[]},'release1')).disposition,'resource');
   assert.equal((await f.service.get(tool.id)).payload.status,'active');
   assert.equal((await maintenance.releaseReplay(tool,{ok:false,status:'repair',assessments:[{independent:true,passed:false,exposed:false,retracted:false,reason:'candidate_execution_failed'}]},'release2')).disposition,'resource');
+  // One started-and-failed execution, or two that never started, are still not a verdict on the tool.
+  const failedRun=(replicate,candidateStarted)=>({caseId:'case',replicate,independent:true,passed:false,exposed:false,retracted:false,reason:'candidate_execution_failed',candidateStarted});
+  assert.equal(evolutionReplayDisposition({ok:false,status:'repair',assessments:[failedRun(0,true),failedRun(1,false)]}),'resource');
+  assert.equal(evolutionReplayDisposition({ok:false,status:'repair',assessments:[failedRun(0,false),failedRun(1,false)]}),'resource');
+  assert.equal(evolutionReplayDisposition({ok:false,status:'waiting_resource',assessments:[failedRun(0,true),failedRun(1,true)]}),'resource');
+  assert.equal(evolutionReplayDisposition({ok:false,status:'repair',assessments:[failedRun(0,true),failedRun(1,true)]}),'execution-regression');
   const wrong={ok:false,status:'repair',failedCaseIds:['case'],evaluatorHash:'hash',assessments:[{caseId:'case',independent:true,passed:false,exposed:false,retracted:false,reason:'outside_reference_tolerance'}]};
   const review=await maintenance.releaseReplay(await f.service.get(tool.id),wrong,'release3');assert.equal(review.protectedCoverage,true);
   assert.equal((await f.service.get(tool.id)).payload.maintenanceState,'deprecating');assert.equal((await f.service.get(tool.id)).payload.status,'active');

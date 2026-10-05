@@ -260,3 +260,30 @@ test("a review whose executions did not happen stays queued and is completed lat
   assert.equal(completed.ok, true, JSON.stringify(completed.suddenPerfectReview));
   assert.equal(completed.suddenPerfectReview.passed, true);
 });
+
+test("a released tool that now crashes on every hidden case is a regression, not a resource to wait for", async t => {
+  const { EvolutionMaintenance, evolutionReplayDisposition } = await import("../src/evolutionMaintenance.mjs");
+  const { evolutionServiceFixture } = await import("./helpers/evolutionServiceFixture.mjs");
+  const cases = INPUTS.slice(0, 2).map((specification, index) => publishedCase(specification, index + 1));
+  const f = await fixture(t, { methodId: "decision-net-benefit", frozen: true, cases });
+  // The environment drifted under a tool that used to pass: its own code starts and raises on every call.
+  const crashing = await f.evaluate(candidateOf(`import statistics\ndef net_benefit(specification):\n    return statistics.fmean([])\n`, "drifted"));
+  assert.equal(crashing.ok, false);
+  assert.ok(crashing.assessments.every(row => row.reason === "candidate_execution_failed" && row.candidateStarted === true));
+  assert.equal(evolutionReplayDisposition(crashing), "execution-regression");
+  // The sandbox not running anything is still only a resource.
+  f.setUnavailable(() => true);
+  const unavailable = await f.evaluate(candidateOf(HONEST, "honest"));
+  assert.ok(unavailable.assessments.every(row => row.reason === "candidate_execution_failed" && row.candidateStarted === false));
+  assert.equal(evolutionReplayDisposition(unavailable), "resource");
+  // The regression goes down the path a wrong number does: marked, retired unless it is the only coverage, repair proposed.
+  const store = evolutionServiceFixture(), proposals = [], retired = [];
+  const maintenance = new EvolutionMaintenance({ service: store.service, callbacks: { proposeReview: async input => proposals.push(input), notifyAffected: async input => retired.push(input) } });
+  for (const id of ["drifted-tool", "sibling-tool"]) await store.service.registerTool({ id, track: "M", artifactDigest: id, holdoutCases: [{ id: "case-1", sha256: "hash" }] });
+  const outcome = await maintenance.releaseReplay(await store.service.get("drifted-tool"), crashing, "release-9");
+  assert.equal(outcome.disposition, "execution-regression");
+  const row = await store.service.get("drifted-tool");
+  assert.deepEqual({ status: row.payload.status, kind: row.payload.regression.kind, reason: row.payload.retirement.reason }, { status: "retired", kind: "execution-regression", reason: "published-replay-regression" });
+  assert.equal(proposals.at(-1).category, "tool-repair");
+  assert.match(proposals.at(-1).title, /无法运行/);
+});
