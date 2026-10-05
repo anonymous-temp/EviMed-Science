@@ -230,6 +230,13 @@ import { createEvidenceSourceReader } from "./evidenceSourceReader.mjs";
 import { EvidenceEditorial } from "./evidenceEditorial.mjs";
 import { EvidenceZoneService } from "./evidenceZoneService.mjs";
 import { createEvidenceZoneRoutes } from "./evidenceZoneRoutes.mjs";
+import { EvidenceCardFromResult } from "./evidenceCardFromResult.mjs";
+import { EvidenceAuthors } from "./evidenceAuthors.mjs";
+import { createCitationGift } from "./evidenceCitationGift.mjs";
+import { EvidenceContinuation } from "./evidenceContinuation.mjs";
+import { EvidenceOrigins } from "./evidenceOrigins.mjs";
+import { createEvidencePublishRoutes } from "./evidencePublishRoutes.mjs";
+import { evidencePublishMetricFamilies } from "./evidencePublishMetrics.mjs";
 import { FrontierWorker, ensureFrontierProject } from "./frontierWorker.mjs";
 // Its second wave: events and the hot list, the daily and its push, 与你相关,
 // the two reader actions, and the composer the worker ticks.
@@ -2638,8 +2645,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     }
     return { root, canceled: await agentRuns.cancelRun(project, run.id, { by: "user" }) };
   }
+  // The co-creation loop's pieces (composed after the run store, which asks the origins for the card a run began from).
+  /** @type {{ origins: EvidenceOrigins, publisher: EvidenceCardFromResult | null, continuation: EvidenceContinuation, authors: EvidenceAuthors } | null} */
+  let evidencePublish = null;
   agentRuns = new AgentRunStore(researchSessions, {
     agentRegistry,
+    // The evidence card a conversation was started from (「用这张卡继续研究」), recorded on its run and counted as a citation.
+    originCardOf: (project, session) => evidencePublish?.origins.originCardOf(project, session) ?? Promise.resolve(null),
+    onOriginCardRun: (project, run) => evidencePublish?.origins.runStarted(project, run),
     captureRuntimeEgressProof: (project, run) => config.evolutionEnabled === true && isEvolutionProject(project.id)
       ? runtimeManager.captureRunEgressProof({ project, runId: run.id, phase: 'start' }) : null,
     independentWork: independentProductWork,
@@ -3257,6 +3270,29 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       });
     },
   });
+  // The co-creation loop (evidence-flywheel plan §5.2, F05–F07): a result published as a card, research continued from a
+  // card, the author page. All of it is the frontier's, so with the frontier off none of it is composed, no route
+  // answers and no run asks which card it came from. The citation gift is the credits service's own grant entry
+  // point and is off (`evidenceCitationGiftEnabled`, `evidenceCitationGiftAmount`).
+  if (frontier && productDatabase) {
+    const origins = new EvidenceOrigins({ database: productDatabase,
+      cited: createCitationGift({ config, grant: credits ? (accountId, grant) => credits.service.operatorGrant(accountId, grant) : null,
+        report: (event, detail) => { void securityAudit(config, event, "completed", detail).catch(() => {}); } }),
+      report: (code) => process.stderr.write(`evidence origins: ${code}\n`) });
+    evidencePublish = {
+      origins,
+      publisher: resultProvenance ? new EvidenceCardFromResult({ database: productDatabase, results: resultProvenance, zones: frontier.evidenceZones,
+        runs: { list: (project) => agentRuns.list(project) } }) : null,
+      // The write is the frontier's 「存入知识库」: the same library object, the same project creation as 「新建项目」.
+      continuation: new EvidenceContinuation({ database: productDatabase, origins, library: frontier.actions.library,
+        createProject: (user, name) => createResearcherProject(user, { name }),
+        bindSession: (project, sessionId) => researchSessions.put(project, sessionId, { mode: "open-domain" }) }),
+      authors: new EvidenceAuthors({ database: productDatabase, platformPublisherUserId: PLATFORM_PUBLISHER_USER_ID }),
+    };
+  }
+  const evidencePublishRoutes = createEvidencePublishRoutes({ store, frontier: frontier?.service ?? null, config, maxJsonBytes: config.maxJsonBytes,
+    publisher: evidencePublish?.publisher ?? null, continuation: evidencePublish?.continuation ?? null, authors: evidencePublish?.authors ?? null,
+    audit: (event, status, details) => securityAudit(config, event, status, details) });
   const personalSkillGenerations = productDatabase ? new PersonalSkillGenerationService(productDatabase, {
     config, skillService: skillLibraryService, pluginService, jobs: productJobs,
     resolveUser: async project => {
@@ -4826,6 +4862,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (await library.routes(req, res)) return;
       if (await autopilotRoutes(req, res)) return;
       if (await evidenceZoneRoutes(req, res)) return;
+      if (await evidencePublishRoutes(req, res)) return;
       if (await frontierRoutes(req, res)) return;
       if (await researchHandoffRoutes(req, res)) return;
       if (await reviewRoutes(req, res)) return;
@@ -4902,6 +4939,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           evaluationIsolation,
           evidenceBudget,
           entityVocabulary,
+          evidencePublish,
         });
         return;
       }
@@ -7708,7 +7746,7 @@ function addHistogramMetric(lines, name, help, series) {
   }
 }
 
-async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, evidenceBudget = null, entityVocabulary = null }) {
+async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, evidenceBudget = null, entityVocabulary = null, evidencePublish = null }) {
   const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate, frontier, review, geo, vcr, credits);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
@@ -8107,6 +8145,9 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
   // The evidence card's guardrails (evidenceCardMetrics.mjs): cards without a producer (must be 0), writes refused by
   // origin, cards refused for a simulated value. Read from the zone service only while the frontier is composed.
   for (const family of evidenceCardMetricFamilies(frontier ? await frontier.evidenceZones.metrics().catch(() => null) : null)) addMetric(lines, family.name, family.help, family.type, family.series);
+  // The co-creation loop (evidencePublishMetrics.mjs): results published as cards, research continued from a card, the runs a
+  // card started, and the citation gift, which is off. Composed only with the frontier.
+  if (evidencePublish) for (const family of evidencePublishMetricFamilies({ citationGiftEnabled: config.evidenceCitationGiftEnabled === true && Number(config.evidenceCitationGiftAmount) > 0 })) addMetric(lines, family.name, family.help, family.type, family.series);
   // The entity vocabulary the frontier, the zones, agendas, products and studies share: the glossary's size and what
   // the taggings found (entityVocabulary.mjs `entityVocabularyMetricFamilies`).
   for (const family of entityVocabularyMetricFamilies(entityVocabulary?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);

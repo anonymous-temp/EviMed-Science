@@ -144,6 +144,8 @@ const dispatchFields = new Set([
   "effectiveProducts",
 ]);
 const dispatchStatuses = new Set(["dispatching", "accepted", "unknown", "rejected"]);
+/** An evidence card's id (`evidenceOrigins.mjs`), the one shape a run's `originCardId` may take. */
+const originCardIdPattern = /^ec_[A-Za-z0-9]{8,64}$/;
 const defaultMaxRuns = 1000;
 const defaultMaxBytes = 1024 * 1024;
 // How many gate issues one deliverable frame carries. The repair loop sends the
@@ -498,6 +500,8 @@ function foldEvents(events) {
         // The session this run's session was forked from (C3), so a branch
         // can be followed back to the conversation it came from.
         ...(typeof event.forkedFrom === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(event.forkedFrom) ? { forkedFrom: event.forkedFrom } : {}),
+        // The evidence card this conversation was started from (flywheel F06): read by shape, like the fields around it.
+        ...(typeof event.originCardId === "string" && originCardIdPattern.test(event.originCardId) ? { originCardId: event.originCardId } : {}),
         status: "running",
         createdAt: storedTimestamp(event.createdAt, "createdAt"),
         startedAt,
@@ -4019,6 +4023,13 @@ export class AgentRunStore {
     this.runtimePersonalSkills = options.runtimePersonalSkills ?? (() => null);
     this.runtimePlatformSkills = options.runtimePlatformSkills ?? (() => null);
     this.captureRuntimeEgressProof = options.captureRuntimeEgressProof ?? null;
+    // The evidence card a research session was started from (flywheel F06, `evidenceOrigins.mjs`): asked when a run is
+    // reserved, so both roads that start one — the dispatch route and an adopted native turn — record it the same way,
+    // and told once the run exists so the card's citations can be counted. Absent, no run carries one.
+    /** @type {((project: any, session: any) => Promise<string | null>) | null} */
+    this.originCardOf = typeof options.originCardOf === "function" ? options.originCardOf : null;
+    /** @type {((project: any, run: any) => Promise<unknown>) | null} */
+    this.onOriginCardRun = typeof options.onOriginCardRun === "function" ? options.onOriginCardRun : null;
     this.setRuntimePlatformSkillScope = options.setRuntimePlatformSkillScope ?? (() => {});
     this.onPlatformSkillExecution = options.onPlatformSkillExecution ?? (async () => {});
     this.onPlatformSkillRetrieval = options.onPlatformSkillRetrieval ?? (async () => {});
@@ -4574,6 +4585,8 @@ export class AgentRunStore {
       if (runs.has(id)) throw new HttpError(409, "agent_run_id_conflict", "Agent run id already exists.");
       const personalSkillGeneration = normalizePersonalSkillGeneration(await this.runtimePersonalSkills(project, { nativeTurn, startedAt }));
       const platformSkillGeneration = normalizePlatformSkillGeneration(await this.runtimePlatformSkills(project, { nativeTurn, startedAt }));
+      // A label that cannot be read leaves the run as it would have been (`evidenceOrigins.mjs`).
+      const originCardId = this.originCardOf ? await Promise.resolve().then(() => this.originCardOf?.(project, session)).catch(() => null) : null;
       const event = {
         event: "started",
         id,
@@ -4596,6 +4609,7 @@ export class AgentRunStore {
         ...(automated === true ? { automated: true } : {}),
         ...(normalizeRunEstimate(estimatedMinutes) ? { estimatedMinutes: normalizeRunEstimate(estimatedMinutes) } : {}),
         ...(typeof forkedFrom === "string" && /^[A-Za-z0-9_-]{1,128}$/.test(forkedFrom) ? { forkedFrom } : {}),
+        ...(typeof originCardId === "string" && originCardIdPattern.test(originCardId) ? { originCardId } : {}),
         createdAt: now,
         // Exact financial ownership comes from the trusted project, never prompt input.
         accountCreatedAt: project.accountCreatedAt == null ? null : storedTimestamp(project.accountCreatedAt, "accountCreatedAt"),
@@ -4614,6 +4628,12 @@ export class AgentRunStore {
       }
       const run = foldEvents([...events, event]).get(id);
       this.notifyState(project, run);
+      if (run.originCardId && this.onOriginCardRun) {
+        // Counted behind the run, never in front of it, and tracked like the label writes so a close waits for it.
+        const pending = Promise.resolve().then(() => this.onOriginCardRun?.(project, run)).then(() => {}, () => {});
+        this.backgroundLabels.add(pending);
+        void pending.finally(() => this.backgroundLabels.delete(pending));
+      }
       return { run, owner: true };
     });
   }
