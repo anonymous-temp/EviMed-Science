@@ -941,13 +941,22 @@ jobs:
           df -h /
 
       - name: Build hosted Web, agent runtime and deterministic replay images
+        env:
+          # The workflow's own token, for the one build that reaches the GitHub
+          # API (the Mendelian randomization engine's R packages): api.github.com
+          # allows 60 unauthenticated requests an hour per runner address and this
+          # build spent them on about every other run. It reaches the engine's
+          # Dockerfile as a BuildKit secret through the overlay below and is
+          # exported as GITHUB_PAT for the R install command alone: no build
+          # argument, no layer, no log.
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           # This is an ephemeral CI builder, never the serving host. Stop before
           # builds or exports exhaust the filesystem; no production volume exists here.
           test "$(df -B1 --output=avail / | tail -1)" -ge 21474836480
           docker buildx create --name evimed-ci --driver docker-container --driver-opt default-load=true --use
           export BUILDX_BUILDER=evimed-ci
-          extra_compose=(-f deploy/web/docker-compose.ingestion.yml -f deploy/web/docker-compose.result-replay.yml)
+          extra_compose=(-f deploy/web/docker-compose.ingestion.yml -f deploy/web/docker-compose.result-replay.yml -f ../.github/ci/docker-compose.build-secrets.yml)
           build_flags=()
           if [ "$EVIMED_FULL_RELEASE" = "true" ]; then
             build_flags=(--no-cache)

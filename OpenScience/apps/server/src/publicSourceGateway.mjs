@@ -623,7 +623,7 @@ function validatedWebReadRequest(value) {
  */
 const SMALL_DOWNLOAD_BYTES = 64 * 1024;
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-/** @type {Map<string, { params: Record<string, (value: unknown) => boolean>, url: (params: Record<string, any>) => URL, types: Map<string, string>, limit?: (config: any) => number }>} */
+/** @type {Map<string, { params: Record<string, (value: unknown) => boolean>, url: (params: Record<string, any>) => URL, types: Map<string, string>, limit?: (config: any) => number, denial?: { retries: number, backoffMs: number, edge: boolean } }>} */
 const downloadKinds = new Map([
   ["epmc-supplements", {
     params: { pmcid: (/** @type {unknown} */ value) => typeof value === "string" && /^PMC\d{3,12}$/.test(value) },
@@ -653,6 +653,15 @@ const downloadKinds = new Map([
 // platform's full record (its probe table, tens of MB). `limit` is the config key that bounds the bytes streamed: the
 // matrix and the annotation each have their own, and a body past it is cut on the wire, which the runtime reads as a
 // body that ended early.
+//
+// NCBI's file server answers some requests for a public file with 403 text/html and the next request for the same URL with the
+// file (measured 2026-10-05: 7 of 16 identical requests for GSE5583's matrix from one machine, whatever the User-Agent; the
+// production host saw it the same day). A refusal that comes and goes is not a statement about the item, so these kinds are
+// asked again before it is believed: twice more from here, then once through the Tokyo node (a different address) where the
+// deployment has one. `www.ncbi.nlm.nih.gov/geo/download/?acc=…&format=file&file=…_series_matrix.txt.gz` is not a second route
+// to the same bytes: it redirects to the same host's suppl/ directory (which holds no matrix) or answers a reCAPTCHA page.
+// The route that served the bytes is told to the runtime (`x-evimed-download-route`), which records it with the capture.
+const NCBI_FILE_SERVER_DENIAL = Object.freeze({ retries: 2, backoffMs: 500, edge: true });
 const geneExpressionSeries = /^GSE[1-9][0-9]{0,8}$/;
 const geneExpressionPlatform = /^GPL[1-9][0-9]{0,8}$/;
 const geneExpressionAcc = (/** @type {string} */ accession, /** @type {string} */ view) => {
@@ -673,18 +682,21 @@ downloadKinds.set("ncbi-gene-expression-series-matrix", {
   ),
   types: new Map([["application/x-gzip", "stream"], ["application/gzip", "stream"]]),
   limit: (/** @type {any} */ config) => Number(config.geneExpressionMaxMatrixBytes) || 0,
+  denial: NCBI_FILE_SERVER_DENIAL,
 });
 downloadKinds.set("ncbi-gene-expression-series-record", {
   params: { accession: (/** @type {unknown} */ value) => typeof value === "string" && geneExpressionSeries.test(value) },
   url: (/** @type {Record<string, any>} */ { accession }) => geneExpressionAcc(accession, "brief"),
   types: new Map([["geo/text", "stream"], ["text/plain", "stream"]]),
   limit: (/** @type {any} */ config) => Number(config.geneExpressionMaxAnnotationBytes) || 0,
+  denial: NCBI_FILE_SERVER_DENIAL,
 });
 downloadKinds.set("ncbi-gene-expression-platform-record", {
   params: { accession: (/** @type {unknown} */ value) => typeof value === "string" && geneExpressionPlatform.test(value) },
   url: (/** @type {Record<string, any>} */ { accession }) => geneExpressionAcc(accession, "full"),
   types: new Map([["geo/text", "stream"], ["text/plain", "stream"]]),
   limit: (/** @type {any} */ config) => Number(config.geneExpressionMaxAnnotationBytes) || 0,
+  denial: NCBI_FILE_SERVER_DENIAL,
 });
 
 /**
@@ -723,7 +735,7 @@ function validatedDownloadRequest(value) {
   if (!allowedHosts.has(url.hostname.toLowerCase())) {
     throw gatewayError(403, "public_source_gateway_url_forbidden", "The public-source URL is not an approved official endpoint.");
   }
-  return { mode: "download", kind: download.kind, types: kind.types, url, limit: kind.limit ?? null };
+  return { mode: "download", kind: download.kind, types: kind.types, url, limit: kind.limit ?? null, denial: kind.denial ?? null };
 }
 
 /**
@@ -1229,6 +1241,16 @@ async function sendParsedPdf(res, buffer, provenance, documentParser, resource =
   res.end(body);
 }
 
+/** A wait that ends early, with the signal's reason, when the request is abandoned or its deadline passes. @param {number} ms @param {AbortSignal} signal */
+function abortablePause(ms, signal) {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) { reject(signal.reason); return; }
+    const timer = setTimeout(() => { signal.removeEventListener("abort", onAbort); resolve(undefined); }, ms);
+    const onAbort = () => { clearTimeout(timer); reject(signal.reason); };
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
 /**
  * Write one chunk, waiting for the socket to drain; returns false when the
  * caller has gone, so the loop stops reading a body nobody is receiving.
@@ -1252,12 +1274,21 @@ async function relayChunk(res, chunk) {
  * by the caller; a body that outlives it, or passes the bound, ends the response
  * on the wire without its terminator (see `sendError`), which the runtime reads
  * as a body cut short.
- * @param {{ kind: string, types: Map<string, string>, url: URL }} request
- * @param {{ res: import("node:http").ServerResponse, fetchImpl: typeof fetch, signal: AbortSignal, maxBytes: number }} context
+ *
+ * A kind with a `denial` policy asks again when the source answers 403 (NCBI's file
+ * server refuses some requests for a public file and serves the next): twice more
+ * through `fetchImpl`, then once through `fallbackFetch` — the Tokyo node, another
+ * address — where the deployment has one. Nothing is relayed until a request
+ * is answered 2xx, so the bytes are exactly what that request served and every check
+ * the runtime makes on them is unchanged; the route that served them is told in
+ * `x-evimed-download-route` (`direct`, `direct-retry`, `edge`).
+ * @param {{ kind: string, types: Map<string, string>, url: URL, denial?: { retries: number, backoffMs: number, edge: boolean } | null }} request
+ * @param {{ res: import("node:http").ServerResponse, fetchImpl: typeof fetch, signal: AbortSignal, maxBytes: number,
+ *   fallbackFetch?: typeof fetch | null, pause?: (ms: number, signal: AbortSignal) => Promise<void> }} context
  */
-async function serveDownload(request, { res, fetchImpl, signal, maxBytes }) {
+async function serveDownload(request, { res, fetchImpl, signal, maxBytes, fallbackFetch = null, pause = abortablePause }) {
   /** The gene-expression kinds count what they serve and what they cut at their byte limit (geneExpressionMetrics.mjs). */
-  const counted = (/** @type {"served" | "over_limit"} */ outcome) => recordGeneExpressionDownload(request.kind, outcome);
+  const counted = (/** @type {"served" | "over_limit" | "served_after_retry" | "served_via_edge" | "denied"} */ outcome) => recordGeneExpressionDownload(request.kind, outcome);
   const tooLarge = () => {
     counted("over_limit");
     if (request.kind === "ncbi-gene-expression-series-matrix") recordGeneExpressionLimit("matrix_bytes");
@@ -1265,20 +1296,51 @@ async function serveDownload(request, { res, fetchImpl, signal, maxBytes }) {
     return gatewayError(502, "public_source_gateway_response_too_large", "The official public-source response exceeded the gateway limit.");
   };
   const timedOut = () => signal.reason?.name === "TimeoutError";
-  let upstream;
-  try {
-    upstream = await fetchImpl(request.url, {
-      headers: { accept: [...request.types.keys()].join(", "), "user-agent": "EviMed-Research/1.2 (server public-source gateway)" },
-      redirect: "error",
-      signal,
-    });
-  } catch (error) {
-    if (error instanceof PublicSourceGatewayError) throw error;
-    if (timedOut()) throw gatewayError(504, "public_source_gateway_timeout", "The official public source timed out.");
-    throw gatewayError(502, "public_source_gateway_upstream_unavailable", "The official public source is temporarily unavailable.");
+  const send = async (/** @type {typeof fetch} */ fetcher) => {
+    try {
+      return await fetcher(request.url, {
+        headers: { accept: [...request.types.keys()].join(", "), "user-agent": "EviMed-Research/1.2 (server public-source gateway)" },
+        redirect: "error",
+        signal,
+      });
+    } catch (error) {
+      if (error instanceof PublicSourceGatewayError) throw error;
+      if (timedOut()) throw gatewayError(504, "public_source_gateway_timeout", "The official public source timed out.");
+      throw gatewayError(502, "public_source_gateway_upstream_unavailable", "The official public source is temporarily unavailable.");
+    }
+  };
+  let upstream = await send(fetchImpl);
+  /** @type {"direct" | "direct-retry" | "edge"} */
+  let route = "direct";
+  const denial = request.denial ?? null;
+  if (denial && upstream.status === 403) {
+    for (let retry = 1; retry <= denial.retries && upstream.status === 403; retry += 1) {
+      await upstream.body?.cancel().catch(() => {});
+      try {
+        await pause(denial.backoffMs * retry, signal);
+      } catch (error) {
+        if (timedOut()) throw gatewayError(504, "public_source_gateway_timeout", "The official public source timed out.");
+        throw error;
+      }
+      upstream = await send(fetchImpl);
+      route = "direct-retry";
+    }
+    if (upstream.status === 403 && denial.edge && fallbackFetch) {
+      await upstream.body?.cancel().catch(() => {});
+      try {
+        upstream = await send(fallbackFetch);
+        route = "edge";
+      } catch (error) {
+        // The node itself failing is no better an answer than the 403 it was tried for: the source's refusal stands.
+        if (signal.aborted) throw error;
+        upstream = await send(fetchImpl);
+        route = "direct-retry";
+      }
+    }
   }
   if (!upstream.ok) {
     await upstream.body?.cancel().catch(() => {});
+    if (denial && upstream.status === 403) counted("denied");
     throw upstreamRefusal(upstream, request.url.hostname);
   }
   const contentType = String(upstream.headers.get("content-type") ?? "").split(";", 1)[0].trim().toLowerCase();
@@ -1298,7 +1360,7 @@ async function serveDownload(request, { res, fetchImpl, signal, maxBytes }) {
       }
       throw error;
     }
-    res.writeHead(200, { "content-type": contentType, "content-length": String(buffer.length), "cache-control": "no-store" });
+    res.writeHead(200, { "content-type": contentType, "content-length": String(buffer.length), "cache-control": "no-store", ...(denial ? { "x-evimed-download-route": route } : {}) });
     res.end(buffer);
     return;
   }
@@ -1311,6 +1373,8 @@ async function serveDownload(request, { res, fetchImpl, signal, maxBytes }) {
     "content-type": contentType,
     "cache-control": "no-store",
     "x-evimed-download-kind": request.kind,
+    // Which way the bytes came, for a kind that is asked again after a refusal (see above).
+    ...(denial ? { "x-evimed-download-route": route } : {}),
     // The source's own length, when it gives one, lets the runtime tell a body
     // that ended early from one that is whole.
     ...(Number.isFinite(declared) ? { "content-length": String(declared) } : {}),
@@ -1340,7 +1404,7 @@ async function serveDownload(request, { res, fetchImpl, signal, maxBytes }) {
   } finally {
     reader.releaseLock();
   }
-  counted("served");
+  counted(route === "edge" ? "served_via_edge" : route === "direct-retry" ? "served_after_retry" : "served");
   res.end();
 }
 
@@ -1354,11 +1418,15 @@ async function serveDownload(request, { res, fetchImpl, signal, maxBytes }) {
  * @param {{ fetchImpl?: typeof fetch, resolveImpl?: any, connectorCredentials?: any,
  *   webReader?: { read: (url: string, options: { signal?: AbortSignal, runtime?: { userId: string, projectId: string } }) => Promise<any> } | null,
  *   documentParser?: any, pdfTransport?: import("./webReadNetwork.mjs").WebTransport | null, capturePdf?: any, preparePdfCapture?: any,
- *   evaluationIsolation?: any, sourceIntake?: ((request: { identity: any, group: string, files: string[] }) => Promise<any>) | null }} [options]
+ *   evaluationIsolation?: any, sourceIntake?: ((request: { identity: any, group: string, files: string[] }) => Promise<any>) | null,
+ *   fallbackFetch?: typeof fetch | null, pause?: (ms: number, signal: AbortSignal) => Promise<void> }} [options]
+ * `fallbackFetch` is the other address a refused download may be asked through (the Tokyo node, `edgeFetch`); `pause` is the
+ * wait between asks, replaceable by a test.
  */
 export function createPublicSourceGatewayHandler(config, runtimeManager, {
   fetchImpl = fetch, resolveImpl = dnsLookup, connectorCredentials = null, webReader = null, documentParser = null,
   pdfTransport = null, capturePdf = null, preparePdfCapture = null, sourceIntake = null, evaluationIsolation = null,
+  fallbackFetch = null, pause = abortablePause,
 } = {}) {
   const openAccessTransport = pdfTransport ?? nodeWebTransport({ resolveImpl });
   return async function publicSourceGatewayHandler(req, res, onFailure) {
@@ -1436,11 +1504,11 @@ export function createPublicSourceGatewayHandler(config, runtimeManager, {
         // difference between a slow source answering and a timeout every time.
         clearTimeout(timeout);
         timeout = arm(Math.max(1_000, Number(config.publicSourceDownloadTimeoutMs) || 150_000));
-        const downloadRequest = /** @type {{ kind: string, types: Map<string, string>, url: URL, limit: ((config: any) => number) | null }} */ (request);
+        const downloadRequest = /** @type {{ kind: string, types: Map<string, string>, url: URL, limit: ((config: any) => number) | null, denial: { retries: number, backoffMs: number, edge: boolean } | null }} */ (request);
         // A kind with a limit of its own (the NCBI Gene Expression Omnibus files) streams up to that, and counts it.
         const ownLimit = downloadRequest.limit ? downloadRequest.limit(config) : 0;
         await serveDownload(downloadRequest, {
-          res, fetchImpl, signal: controller.signal,
+          res, fetchImpl, signal: controller.signal, fallbackFetch, pause,
           maxBytes: Math.max(1024, ownLimit || Number(config.publicSourceGatewayMaxResponseBytes) || 16 * 1024 * 1024),
         });
         return;

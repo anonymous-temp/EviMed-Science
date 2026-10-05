@@ -248,48 +248,108 @@ test("deleting an account takes every memory with it, counted for the audit", op
   assert.deepEqual(rows.rows[0], { records: 0, usage: 0, sessions: 0 });
 });
 
-// Which of the two halves of a deletion goes first is decidable, and only one
-// order is safe. The index holds no original data, so an index emptied for
-// memory that still exists costs a degraded recall until the next write or
-// rebuild, and the caller can simply try again. The other order answers 500
-// with the memory already destroyed: the researcher asked to delete a project,
-// was told it failed, still has the project, and has lost its memory for good.
-test("an index that cannot be reached fails the delete without destroying the memory first", options, async (t) => {
+// The index is derived and owns no record: every hit is re-read from PostgreSQL
+// and a copy whose row is gone is dropped there. So a slow index must not decide
+// whether a project can be deleted. Until 2026-10-05 the route asked the index to
+// forget the subtree first and answered 503 `memory_index_timeout` when it was slow
+// (live, right after the project's runs ended; the same request succeeded two
+// minutes later). The rows go, the withdrawal is owed in the same transaction, and
+// the index worker tells the index until it answers.
+function slowIndex() {
+  const asked = [];
   const index = {
     configured: true,
+    down: true,
+    asked,
     async status() { return { configured: true, connected: true, code: null }; },
     async find() { return []; },
     async write() { return { ok: true }; },
     async list() { return []; },
     async listAll() { return []; },
-    async remove() {
-      throw Object.assign(new Error("the index is unreachable"), { code: "memory_index_unavailable" });
+    async remove(userId, uri, opts) {
+      asked.push({ uri, recursive: opts?.recursive === true });
+      if (index.down) throw Object.assign(new Error("The memory index is unavailable."), { code: "memory_index_timeout", status: 503 });
+      return true;
     },
   };
-  const { app, base, headers, user } = await fixture(t, {
-    memoryIndexProvider: "openviking", openVikingClient: index,
-  });
-  const projectId = "project-index-unreachable";
+  return index;
+}
+
+test("deleting a project never waits on the index: the rows go, the withdrawal is owed and lands when the index answers", options, async (t) => {
+  const index = slowIndex();
+  const { app, base, headers, user } = await fixture(t, { memoryIndexProvider: "openviking", openVikingClient: index, operatorMetricsToken: "metrics-secret" });
+  const projectId = "project-index-slow";
   assert.equal((await fetch(`${base}/api/projects`, {
-    method: "POST", headers, body: JSON.stringify({ id: projectId, name: "Index unreachable" }),
+    method: "POST", headers, body: JSON.stringify({ id: projectId, name: "Index slow" }),
   })).status, 200);
-  await app.researchMemory.upsertRecord(user.id, {
-    scope: "project", scopeId: projectId, kind: "run_summary", key: "run.index-unreachable",
+  const written = await app.researchMemory.upsertRecord(user.id, {
+    scope: "project", scopeId: projectId, kind: "run_summary", key: "run.index-slow",
     value: "project run", summary: "project run", origin: "system", status: "active",
     confidence: 1, importance: 0.5, sensitive: false,
   });
 
-  const refused = await fetch(`${base}/api/projects/${projectId}`, {
+  const deleted = await fetch(`${base}/api/projects/${projectId}`, {
     method: "DELETE", headers, body: JSON.stringify({ confirm: projectId }),
   });
-  assert.notEqual(refused.status, 200, "an unreachable index must not report a deletion that did not happen");
+  assert.equal(deleted.status, 200, "a timing-out index is not a reason to refuse a deletion");
 
-  const exported = await app.researchMemory.exportUserMemory(user.id);
-  assert.deepEqual(exported.records.map((record) => record.key), ["run.index-unreachable"],
-    "the memory must survive a delete that failed; nothing was deleted, so nothing may be gone");
+  assert.deepEqual((await app.researchMemory.exportUserMemory(user.id)).records, [], "the authoritative rows are gone");
   assert.equal((await (await fetch(`${base}/api/projects`, { headers })).json()).data
-    .filter((/** @type {any} */ project) => project.id === projectId).length, 1,
-  "and so must the project, or the failure would have been half applied");
+    .filter((/** @type {any} */ project) => project.id === projectId).length, 0, "and so is the project");
+
+  // Nothing is recallable in between: a recall hit is re-read from PostgreSQL, and the row is gone.
+  const db = app.store.database;
+  const owed = await db.query("SELECT uri, attempts FROM evimed_memory.index_withdrawals WHERE user_id=$1", [user.id]);
+  assert.equal(owed.rowCount, 1, "the withdrawal of the subtree is owed");
+  assert.match(owed.rows[0].uri, /\/memories\/evimed\/project\//);
+  await assert.rejects(() => app.researchMemory.getRecord(user.id, written.id), (error) => error.code === "memory_not_found");
+
+  // The operator sees what the index still owes and for how long.
+  const metrics = await (await fetch(`${base}/api/ops/metrics`, { headers: { authorization: "Bearer metrics-secret" } })).text();
+  assert.match(metrics, /^open_science_memory_index_withdrawals_pending [1-9]\d*$/m);
+  assert.match(metrics, /^open_science_memory_index_withdrawals_oldest_seconds \d+$/m);
+  assert.match(metrics, /^open_science_memory_index_withdrawals_most_attempts \d+$/m);
+
+  // The index recovers; the worker's pass tells it, and the debt is gone.
+  index.down = false;
+  await db.query("UPDATE evimed_memory.index_withdrawals SET next_attempt_at=clock_timestamp()-interval '1 second' WHERE user_id=$1", [user.id]);
+  await app.memoryIndexWorker.drainWithdrawals();
+  assert.equal((await db.query("SELECT 1 FROM evimed_memory.index_withdrawals WHERE user_id=$1", [user.id])).rowCount, 0);
+  assert.ok(index.asked.some((call) => call.uri === owed.rows[0].uri && call.recursive));
+});
+
+test("resetting memory never waits on the index either, and the three research subtrees are owed to it", options, async (t) => {
+  const index = slowIndex();
+  const { app, base, headers, user } = await fixture(t, { memoryIndexProvider: "openviking", openVikingClient: index });
+  await app.researchMemory.upsertRecord(user.id, {
+    scope: "user", scopeId: "", kind: "preference", key: "tone",
+    value: "Tables, not prose.", summary: "", origin: "explicit", status: "active",
+    confidence: 1, importance: 0.5, sensitive: false,
+  });
+  const reset = await fetch(`${base}/api/memory/reset`, { method: "POST", headers, body: JSON.stringify({ confirm: "reset" }) });
+  assert.equal(reset.status, 200, await reset.text());
+  assert.deepEqual((await app.researchMemory.exportUserMemory(user.id)).records, []);
+  const owed = await app.store.database.query("SELECT uri FROM evimed_memory.index_withdrawals WHERE user_id=$1 ORDER BY uri", [user.id]);
+  assert.deepEqual(owed.rows.map((row) => row.uri.split("/memories/evimed/")[1]), ["project", "session", "user"]);
+});
+
+test("erasing an account never waits on the index: the account goes and its copies are owed, past the account's own end", options, async (t) => {
+  const index = slowIndex();
+  const { app, base, headers, user } = await fixture(t, { memoryIndexProvider: "openviking", openVikingClient: index });
+  await app.researchMemory.upsertRecord(user.id, {
+    scope: "user", scopeId: "", kind: "preference", key: "tone",
+    value: "Tables, not prose.", summary: "", origin: "explicit", status: "active",
+    confidence: 1, importance: 0.5, sensitive: false,
+  });
+  const deleted = await fetch(`${base}/api/account`, {
+    method: "DELETE", headers, body: JSON.stringify({ confirm: user.id, password: "test-only-memory-password" }),
+  });
+  assert.equal(deleted.status, 200, await deleted.text());
+  const db = app.store.database;
+  assert.equal((await db.query("SELECT 1 FROM evimed_control.users WHERE id=$1", [user.id])).rowCount, 0);
+  const owed = await db.query("SELECT uri FROM evimed_memory.index_withdrawals WHERE user_id=$1", [user.id]);
+  assert.ok(owed.rows.some((row) => row.uri.endsWith("/memories/evimed")), "everything of the account in the index is owed");
+  await db.query("DELETE FROM evimed_memory.index_withdrawals WHERE user_id=$1", [user.id]);
 });
 
 // The composition root is where the outbox is handed over, and a store built
@@ -334,39 +394,6 @@ test("a deployment on the term matcher writes the same memory and queues nothing
   const jobs = await app.store.database.query(`SELECT 1 FROM evimed_product.jobs
     WHERE user_id=$1 AND kind='memory-record-index'`, [user.id]);
   assert.equal(jobs.rowCount, 0, "a queue nothing claims must not be filled");
-});
-
-// The same rule as project deletion, on the path where it matters most: the
-// index holds no original data, so a deletion that fails must leave the memory
-// where it was rather than report a failure over an account it has emptied.
-test("an unreachable index fails an account deletion without emptying the account first", options, async (t) => {
-  const { app, base, headers, user } = await fixture(t, {
-    memoryIndexProvider: "openviking",
-    openVikingClient: {
-      configured: true,
-      async status() { return { configured: true, connected: true, code: null }; },
-      async find() { return []; },
-      async write() { return { ok: true }; },
-      async list() { return []; },
-      async listAll() { return []; },
-      async remove() {
-        throw Object.assign(new Error("the index is unreachable"), { code: "memory_index_unavailable" });
-      },
-    },
-  });
-  await app.researchMemory.upsertRecord(user.id, {
-    scope: "user", scopeId: "", kind: "preference", key: "tone",
-    value: "tables over prose", summary: "", origin: "explicit", status: "active",
-    confidence: 1, importance: 0.5, sensitive: false,
-  });
-
-  const refused = await fetch(`${base}/api/account`, {
-    method: "DELETE", headers, body: JSON.stringify({ confirm: user.id, password: "test-only-memory-password" }),
-  });
-  assert.notEqual(refused.status, 200);
-
-  const exported = await app.researchMemory.exportUserMemory(user.id);
-  assert.equal(exported.records.length, 1, "a deletion that failed must not have deleted anything");
 });
 
 test("one click undoes an automatic write: an edit goes back, a creation goes away and stays away from inference", options, async (t) => {

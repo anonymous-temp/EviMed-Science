@@ -132,6 +132,9 @@ const dispatchFields = new Set([
   "sessionId",
   "dispatchId",
   "automated",
+  // A person is waiting on this dispatch (an interactive route, a messaging channel): waking the
+  // runtime waits for a free slot instead of refusing. Read by `dispatch` itself, not recorded.
+  "waitForRoom",
   "estimatedMinutes",
   "question",
   "effectiveAgentId",
@@ -313,6 +316,7 @@ function normalizeDispatchInput(input) {
   const effectiveProducts = normalizeEffectiveProducts(input.effectiveProducts, { strict: true });
   if (effectiveProducts && input.effectiveAgentId == null) throw invalid("Effective products need the specialist they belong to.");
   if (input.automated != null && typeof input.automated !== "boolean") throw invalid("automated must be a boolean.");
+  if (input.waitForRoom != null && typeof input.waitForRoom !== "boolean") throw invalid("waitForRoom must be a boolean.");
   const estimatedMinutes = input.estimatedMinutes == null ? null : normalizeRunEstimate(input.estimatedMinutes);
   if (input.estimatedMinutes != null && !estimatedMinutes) throw invalid("estimatedMinutes must be { min, max } minutes.");
   return {
@@ -4450,10 +4454,16 @@ export class AgentRunStore {
     return record;
   }
 
-  async captureBaseline(project, sessionId) {
+  /**
+   * @param {Record<string, any>} project @param {string} sessionId
+   * @param {{ waitForRoom?: boolean }} [options] `waitForRoom`: a person is waiting on this
+   *   dispatch, so waking the runtime stands in line for a free slot instead of refusing
+   *   (`RuntimeManager.startWhenRoom`). A worker's dispatch leaves it off and defers.
+   */
+  async captureBaseline(project, sessionId, { waitForRoom = false } = {}) {
     let history;
     try {
-      history = await this.readSessionHistory(project, sessionId, { wake: true });
+      history = await this.readSessionHistory(project, sessionId, { wake: true, ...(waitForRoom ? { waitForRoom: true } : {}) });
     } catch (error) {
       if (error instanceof HttpError) throw error;
       throw new HttpError(502, "runtime_history_unavailable", "Runtime session history is unavailable.");
@@ -4639,7 +4649,7 @@ export class AgentRunStore {
     const session = await this.researchSessions.get(project, sessionId);
     if (!session) throw new HttpError(404, "research_session_not_found", "Research session not found.");
     await this.reconcileSession(project, sessionId);
-    const baselineCursor = await this.captureBaseline(project, sessionId);
+    const baselineCursor = await this.captureBaseline(project, sessionId, { waitForRoom: input.waitForRoom === true });
     const selected = session.mode === "specialist"
       ? {
           effectiveAgentId: session.agentId,

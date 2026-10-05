@@ -295,6 +295,51 @@ class FetchTests(unittest.TestCase):
         door, error = self.fetch(http_error(400, {"code": "public_source_gateway_upstream_error", "message": "x"}), FakeResponse(b"{}"))
         self.assertEqual((error.reason, len(door.calls)), ("request_rejected", 1))
 
+    def test_a_refusal_says_which_side_refused(self):
+        # 2026-10-05, production: a source's 4xx (DailyMed's 406) and the gateway's own validation both reached the
+        # runtime as HTTP 400 and were worded "DailyMed rejected the request as invalid (HTTP 400)".
+        # The gateway relays every source 4xx but 404 and 429 as its own 400 with the source's status in the envelope.
+        source = {"code": "public_source_gateway_upstream_error", "message": "The official public source returned HTTP 406.", "upstreamStatus": 406}
+        door, error = self.fetch(http_error(400, source), FakeResponse(b"{}"))
+        self.assertEqual((error.state, error.reason, error.retryable, len(door.calls)), ("unavailable", "request_rejected", False, 1))
+        self.assertIn("itself rejected this request (HTTP 406)", str(error))
+        self.assertNotIn("invalid", str(error))
+        self.assertIn("HTTP 406", error.next_actions()[0])
+        self.assertIn("rather than saying the record is missing", error.next_actions()[0])
+
+        # The gateway's own refusal: the source was never asked, and the words say so.
+        own = {"code": "public_source_gateway_accept_invalid", "message": "The public-source accepted content types are invalid."}
+        door, error = self.fetch(http_error(400, own), FakeResponse(b"{}"))
+        self.assertEqual((error.state, error.reason, error.retryable, len(door.calls)), ("unavailable", "gateway_refused", False, 1))
+        self.assertIn("EviMed's own gateway refused this request before it reached", str(error))
+        self.assertIn("public_source_gateway_accept_invalid", str(error))
+        self.assertIn("was not asked", str(error))
+        self.assertNotIn("rejected the request", str(error))
+        self.assertIn("fault on the EviMed side", error.next_actions()[0])
+
+        # A policy refusal of the gateway is the deployment's too, still a denial and no source's.
+        door, error = self.fetch(http_error(403, {"code": "public_source_api_path_forbidden", "message": "The API path is not approved on this host."}), FakeResponse(b"{}"))
+        self.assertEqual((error.state, error.reason), ("denied", "policy"))
+        self.assertIn("EviMed's own gateway refused", str(error))
+        self.assertIn("never saw it", error.next_actions()[0])
+
+        # With nothing to say who refused, the words say that and nothing more.
+        door, error = self.fetch(http_error(400, {"code": "public_source_gateway_upstream_error", "message": "x"}), FakeResponse(b"{}"))
+        self.assertIn("nothing says whether the source or EviMed's gateway refused", str(error))
+
+    def test_a_source_that_refuses_by_address_is_not_called_an_item_it_will_not_serve(self):
+        # The gateway's 400 for a source's 403, with the status the source answered (recorded 2026-10-05: NCBI's file
+        # server answers 403 text/html to the production host for a public file).
+        refused = {"code": "public_source_gateway_upstream_denied", "message": "The official public source refused this request (HTTP 403).", "upstreamStatus": 403}
+        door, error = self.fetch(http_error(400, refused), FakeResponse(b"{}"))
+        self.assertEqual((error.state, error.reason, error.retryable), ("denied", "refused_by_source", False))
+        self.assertIn("(HTTP 403)", str(error), "the source's status, not the gateway's 400")
+        self.assertNotIn("HTTP 400", str(error))
+        actions = " ".join(error.next_actions())
+        self.assertNotIn("unauthenticated", actions)
+        self.assertIn("refusal of this server's address", actions)
+        self.assertIn("a later call may be served", actions)
+
     def test_a_verification_page_with_status_200_is_a_refusal_never_a_file(self):
         # Recorded 2026-10-04: pmc.ncbi.nlm.nih.gov/articles/instance/<id>/bin/<file>
         # answers a reCAPTCHA page, HTTP 200, text/html, to a plain client.

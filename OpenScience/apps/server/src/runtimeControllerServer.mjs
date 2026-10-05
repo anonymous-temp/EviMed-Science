@@ -430,38 +430,18 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
     for (const [containerName, owner] of runtimeOwners) {
       inventory.set(containerName, owner);
     }
-    if(config.evolutionEnabled===true&&isEvolutionProject(project.id)&&inventory.size>=limits.maxGlobal-1){
-      throw controllerFailure(429,'runtime_limit_exceeded','Evolution waits to preserve the final research runtime slot.',{retryAfterSeconds:60});
-    }
-    if (inventory.size >= limits.maxGlobal) {
-      throw controllerFailure(
-        429,
-        "runtime_limit_exceeded",
-        `Too many running runtimes for the server; limit is ${limits.maxGlobal}.`,
-        { retryAfterSeconds: 5 },
-      );
-    }
-    // Background work holds at most its share of the deployment, the same
-    // number the control plane computes (`backgroundRuntimeLimit`).
-    if (isBackground(project.userId, project.id)) {
-      const background = [...inventory.values()].filter((owner) => isBackground(owner.userId, owner.projectId)).length;
-      const maxBackground = backgroundRuntimeLimit(limits.maxGlobal, limits.maxPerUser);
-      if (maxBackground != null && background >= maxBackground) {
-        throw controllerFailure(
-          429,
-          "runtime_limit_exceeded",
-          `Background work is holding its share of runtimes (${maxBackground}); it waits so researchers keep theirs.`,
-          { retryAfterSeconds: 60 },
-        );
-      }
-    }
+    const background = isBackground(project.userId, project.id);
+    // The researcher's own ceiling first, as the control plane asks it
+    // (`RuntimeManager.enforceRuntimeCapacity`): a start held by it must not be
+    // told to wait for a slot it could not take once one was free.
+    //
     // The platform's own background projects (learning, document
     // understanding, the paired evaluation) never take one of a researcher's
     // slots — the control plane has not counted them since 2026-09-21, and
     // this count disagreeing refused every upload's understanding run for an
     // account whose learning and evaluation were running (reproduced live).
-    // The global ceiling above still counts every container.
-    const userCount = isBackground(project.userId, project.id) ? 0 : [...inventory.values()]
+    // The global ceiling below still counts every container.
+    const userCount = background ? 0 : [...inventory.values()]
       .filter((owner) => owner.userId === project.userId && !isBackground(owner.userId, owner.projectId)).length;
     if (userCount >= limits.maxPerUser) {
       throw controllerFailure(
@@ -470,6 +450,33 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
         `Too many running runtimes for this user; limit is ${limits.maxPerUser}.`,
         { retryAfterSeconds: 5 },
       );
+    }
+    if(config.evolutionEnabled===true&&isEvolutionProject(project.id)&&inventory.size>=limits.maxGlobal-1){
+      throw controllerFailure(429,'runtime_capacity_full','Evolution waits to preserve the final research runtime slot.',{retryAfterSeconds:60});
+    }
+    if (inventory.size >= limits.maxGlobal) {
+      // Every slot of the host is taken: a place in line for the caller
+      // (`RUNTIME_ROOM_WAIT_CODES`), unlike the researcher's own ceiling above.
+      throw controllerFailure(
+        429,
+        "runtime_capacity_full",
+        `Every runtime slot of the server is taken; limit is ${limits.maxGlobal}.`,
+        { retryAfterSeconds: 5 },
+      );
+    }
+    // Background work holds at most its share of the deployment, the same
+    // number the control plane computes (`backgroundRuntimeLimit`).
+    if (background) {
+      const held = [...inventory.values()].filter((owner) => isBackground(owner.userId, owner.projectId)).length;
+      const maxBackground = backgroundRuntimeLimit(limits.maxGlobal, limits.maxPerUser);
+      if (maxBackground != null && held >= maxBackground) {
+        throw controllerFailure(
+          429,
+          "runtime_capacity_full",
+          `Background work is holding its share of runtimes (${maxBackground}); it waits so researchers keep theirs.`,
+          { retryAfterSeconds: 60 },
+        );
+      }
     }
     runtimeOwners.set(runtimeContainerName(project), { userId: project.userId, projectId: project.id });
   }

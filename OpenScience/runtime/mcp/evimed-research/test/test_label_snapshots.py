@@ -8,13 +8,16 @@ the test; the 514 KB document itself is not stored.
 """
 
 import importlib.util
+import io
 import json
 import os
 import pathlib
 import sys
 import tempfile
 import unittest
+import urllib.error
 import urllib.parse
+from email.message import Message
 from unittest import mock
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -56,6 +59,10 @@ class DailyMed:
                 return wire.ok("dailymed__history_unknown_setid.json")
             return wire.ok(self.history)
         if parts.path.endswith("%s.xml" % SETID):
+            # DailyMed's own behaviour, recorded 2026-10-05: an Accept of XML types alone is a 406 (which the gateway
+            # relays as its own 400); one that also names application/json is served the document.
+            if "application/json" not in accepted:
+                raise wire.through_gateway("dailymed__spl_current_xml_accept_406.json")
             return wire.derived(self.current_xml, "application/xml")
         if parts.path.endswith(".xml"):
             raise wire.through_gateway("dailymed__spl_unknown_setid.txt")
@@ -249,6 +256,48 @@ class ReadTests(Workspace):
         self.assertFalse(again["data"]["thisVersionIsNew"])
         self.assertNotIn("comparison", again["data"])
         self.assertNotIn("retrievedAt", (self.workspace / first["data"]["labelPath"]).read_text(encoding="utf-8"))
+
+    def test_reading_the_current_label_asks_for_the_document_in_a_way_dailymed_serves(self):
+        # Production, 2026-10-05: {"setid": ..., "compareVersion": N} with no version reads the CURRENT label, whose
+        # document endpoint answered 406 to Accept: application/xml and so failed "(HTTP 400)"; an explicit older
+        # version came from the zip and worked. The same read, with an older version to compare with.
+        result = self.call({"setid": SETID, "compareVersion": 1})
+        self.assertEqual(result["status"], "success")
+        self.assertEqual((result["data"]["version"], result["data"]["isCurrent"]), (2, True))
+        self.assertEqual(result["data"]["comparison"]["againstVersion"], 1)
+        self.assertTrue(any(call.endswith("%s.xml" % SETID) for call in self.world.calls))
+
+    def test_a_document_the_source_answers_406_to_is_the_sources_refusal_and_says_so(self):
+        # The tool as it used to ask, replayed: DailyMed's recorded 406 relayed through the gateway as its 400.
+        class AsksForXmlOnly(DailyMed):
+            def __call__(self, url, accepted, **options):
+                if urllib.parse.urlsplit(url).path.endswith("%s.xml" % SETID):
+                    self.calls.append(url)
+                    raise wire.through_gateway("dailymed__spl_current_xml_accept_406.json")
+                return super().__call__(url, accepted, **options)
+
+        self.assertEqual(wire.through_gateway("dailymed__spl_current_xml_accept_406.json").code, 400)
+        with self.assertRaises(source_outcome.SourceError) as raised:
+            self.call({"setid": SETID}, AsksForXmlOnly())
+        error = raised.exception
+        self.assertEqual((error.state, error.reason, error.code), ("unavailable", "request_rejected", "source_unavailable"))
+        self.assertIn("DailyMed itself rejected this request (HTTP 406)", str(error))
+        self.assertNotIn("invalid", str(error))
+        self.assertIn("rather than saying the record is missing", " ".join(error.next_actions()))
+
+    def test_a_request_the_gateway_refused_is_not_reported_as_the_sources(self):
+        envelope = {"error": {"code": "public_source_gateway_field_invalid", "message": "A download request names a known kind and exactly its identifiers."}}
+        headers = Message()
+        headers["Content-Type"] = "application/json"
+        refused = urllib.error.HTTPError("https://gateway.invalid/", 400, "error", headers, io.BytesIO(json.dumps(envelope).encode()))
+        # The history is the first thing asked; the gateway's refusal of it is the deployment's.
+        with self.assertRaises(source_outcome.SourceError) as raised:
+            self.call({"setid": SETID, "version": 1}, DailyMed(failing=[refused]))
+        error = raised.exception
+        self.assertEqual((error.state, error.reason), ("unavailable", "gateway_refused"))
+        self.assertIn("EviMed's own gateway refused this request before it reached DailyMed", str(error))
+        self.assertNotIn("DailyMed rejected", str(error))
+        self.assertIn("fault on the EviMed side", " ".join(error.next_actions()))
 
     def test_a_version_that_was_never_published_is_named_with_the_ones_that_were(self):
         # Recorded: the Tagrisso history has no version 34.

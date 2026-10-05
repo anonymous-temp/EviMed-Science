@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { AUTOPILOT_BUDGET_ERROR_CODES, BALANCE_REFUSAL_CODES } from "@evimed/domain";
+import { AUTOPILOT_BUDGET_ERROR_CODES, BALANCE_REFUSAL_CODES, RUNTIME_ROOM_REFUSAL_CODES } from "@evimed/domain";
 import { autopilotAttemptDispatchId } from "./autopilotService.mjs";
 import { HttpError } from "./security.mjs";
 
@@ -176,9 +176,9 @@ export class AutopilotWorker {
     } catch (error) {
       const code = typeof error?.code === "string" ? error.code : "autopilot_dispatch_failed";
       this.lastError = code;
-      if (job.payload?.action !== "cancel" && !dispatched && !verificationDispatched && (BALANCE_REFUSAL_CODES.includes(code) || ["autopilot_dispatch_pending", "runtime_cleanup_required", "runtime_busy", "runtime_limit_exceeded"].includes(code))) {
+      if (job.payload?.action !== "cancel" && !dispatched && !verificationDispatched && (BALANCE_REFUSAL_CODES.includes(code) || ["autopilot_dispatch_pending", "runtime_cleanup_required", "runtime_busy", ...RUNTIME_ROOM_REFUSAL_CODES].includes(code))) {
         await holdsLease();
-        const unstartedResource = code === "runtime_busy" || code === "runtime_limit_exceeded";
+        const unstartedResource = code === "runtime_busy" || RUNTIME_ROOM_REFUSAL_CODES.includes(code);
         const retry = unstartedResource || job.attempts < Number(job.maxAttempts ?? 3);
         const delayMs = code === "autopilot_dispatch_pending" ? Math.min(300_000, 30_000 * Math.max(1, job.attempts))
           : code === "runtime_busy" ? this.busyDelayMs : AUTOPILOT_RESOURCE_BACKOFF_MS[Math.min(Math.max(0, job.attempts - 1), AUTOPILOT_RESOURCE_BACKOFF_MS.length - 1)];

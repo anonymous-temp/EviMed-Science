@@ -443,8 +443,18 @@ def _history(set_id, deadline):
     return versions or None
 
 
+# What the document endpoint is asked for. DailyMed answers 406 ("Could not satisfy the request Accept header.") to an
+# Accept of application/xml alone and serves the same XML with 200 to one that also names application/json (or to
+# */*, which the gateway does not admit): recorded 2026-10-05, `wire/dailymed__spl_current_xml_accept_406.json`. The
+# list is also what the gateway holds the answer's type to, so it names both and the answer is still checked to be XML.
+CURRENT_XML_ACCEPT = ("application/xml", "application/json")
+
+
 def _current_xml(set_id, deadline):
-    response = transport.fetch("%s/spls/%s.xml" % (API_BASE, set_id), ("application/xml",), deadline=deadline, scope=SCOPE, max_bytes=MAX_XML_BYTES, accept_statuses=(404,))
+    response = transport.fetch("%s/spls/%s.xml" % (API_BASE, set_id), CURRENT_XML_ACCEPT, deadline=deadline, scope=SCOPE, max_bytes=MAX_XML_BYTES, accept_statuses=(404,))
+    if response.status != 404 and response.content_type != "application/xml":
+        raise source_outcome.unavailable("DailyMed answered the label document with %s, not XML." % (response.content_type or "no content type"),
+            scope=SCOPE, reason="unexpected_content_type", retryable=False)
     return None if response.status == 404 else response.body
 
 

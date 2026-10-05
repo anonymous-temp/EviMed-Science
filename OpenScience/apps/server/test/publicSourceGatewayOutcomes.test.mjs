@@ -288,6 +288,27 @@ test("the download kinds the gateway serves are the ones the runtime's transport
   assert.deepEqual(named, [...PUBLIC_SOURCE_DOWNLOAD_KINDS].sort());
 });
 
+test("every request the gateway refuses itself is one the runtime's transport words as the deployment's, never the source's", () => {
+  // 2026-10-05: a gateway refusal and a source's 4xx both reached the runtime as HTTP 400 and were worded
+  // "the source rejected the request as invalid", which sent a model to blame a source that never saw the request.
+  const here = fileURLToPath(new URL(".", import.meta.url));
+  const python = fs.readFileSync(path.resolve(here, "../../../runtime/mcp/evimed-research/source_transport.py"), "utf8");
+  const listed = (name) => {
+    const block = python.match(new RegExp(`^${name} = frozenset\\(\\{([^}]*)\\}\\)`, "m"));
+    assert.ok(block, `${name} is declared in source_transport.py`);
+    return [...block[1].matchAll(/"([a-z_]+)"/g)].map((match) => match[1]);
+  };
+  const named = [...listed("GATEWAY_INVALID_REQUEST_CODES"), ...listed("GATEWAY_FORBIDDEN_REQUEST_CODES")].sort();
+  const gateway = fs.readFileSync(path.resolve(here, "../src/publicSourceGateway.mjs"), "utf8");
+  // The 4xx codes the gateway raises about the request it was handed. The web-read mode's own codes belong to that
+  // mode, a credential nobody configured is read through `_not_configured_from_failure`, and 404 is an answer.
+  const raised = [...new Set([...gateway.matchAll(/gatewayError\(\s*(4\d\d),\s*"([a-z_0-9]+)"/g)]
+    .filter((match) => match[1] !== "404" && !match[2].startsWith("web_read_"))
+    .map((match) => match[2]))].sort();
+  assert.deepEqual(raised.filter((code) => !named.includes(code)), [], "a gateway refusal the transport would word as the source's");
+  assert.deepEqual(named.filter((code) => !raised.includes(code)), [], "a code the transport lists that the gateway no longer raises");
+});
+
 // ---------------------------------------------------------------- the hand-off to source intake
 
 test("a hand-off to source intake is taken for the project the runtime's token names, whatever the request says", async (t) => {

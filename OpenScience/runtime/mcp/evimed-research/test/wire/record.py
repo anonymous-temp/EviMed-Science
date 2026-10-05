@@ -7,7 +7,8 @@
 
 Every `origin: live` entry of `manifest.json` is asked again at its `request` URL, directly (an
 upstream's own 4xx/5xx body is what a fixture needs, and the gateway turns those into its own
-envelope), with the runtime's User-Agent, one request a second, no redirects, no retries. The body,
+envelope), with the runtime's User-Agent, the entry's own `accept` (default `*/*`), one request a
+second, no redirects, no retries. The body,
 status, content type, byte count, sha256 and the response's own Date header replace the entry's.
 
 It writes nothing it is not told to. A response whose status differs from the recorded one is
@@ -56,8 +57,10 @@ def request_url(entry):
     return base + ("?" + "&".join(parts) if parts else "")
 
 
-def fetch(url):
-    request = urllib.request.Request(url, headers={"user-agent": USER_AGENT, "accept": "*/*"})
+def fetch(url, accept="*/*"):
+    """One plain request. `accept` is the entry's own header: DailyMed's document endpoint answers 406 to an Accept of
+    application/xml alone and 200 to */*, so a recording made with the wrong one records a different answer."""
+    request = urllib.request.Request(url, headers={"user-agent": USER_AGENT, "accept": accept})
     try:
         with OPENER.open(request, timeout=60) as response:
             return response.status, response.headers, response.read(MAX_BYTES + 1)
@@ -84,7 +87,7 @@ def main():
             print("would %s -> %s" % (url, entry["file"]))
             continue
         time.sleep(1.0)
-        status, headers, body = fetch(url)
+        status, headers, body = fetch(url, entry.get("accept", "*/*"))
         if len(body) > MAX_BYTES:
             print("FAIL  %s: more than %d bytes" % (entry["file"], MAX_BYTES))
             continue

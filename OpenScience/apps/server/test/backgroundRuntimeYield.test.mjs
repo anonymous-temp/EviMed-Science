@@ -141,11 +141,11 @@ test("a researcher's runtime is never retired for background work: the backgroun
   const manager = managerOn({ root: f.root, stops });
   await manager.start(f.paper);
   manager.beginProxy(f.paper);
-  await assert.rejects(() => manager.start(f.learning), (error) => error.status === 429 && error.code === "runtime_limit_exceeded");
+  await assert.rejects(() => manager.start(f.learning), (error) => error.status === 429 && error.code === "runtime_capacity_full");
   manager.endProxy(f.paper);
   // Not even an idle one, and not even past the idle age: that rule is for another researcher's start.
   manager.activityFor(manager.key(f.paper)).lastUseAt = Date.now() - 6 * 3_600_000;
-  await assert.rejects(() => manager.start(f.sources), (error) => error.code === "runtime_limit_exceeded");
+  await assert.rejects(() => manager.start(f.sources), (error) => error.code === "runtime_capacity_full");
   assert.deepEqual(stops, []);
   assert.equal(manager.runtimes.has(manager.key(f.paper)), true);
   await manager.closeAll();
@@ -170,7 +170,7 @@ test("a speculative start retires nothing", async (t) => {
   const stops = [];
   const manager = managerOn({ root: f.root, stops });
   await manager.start(f.learning);
-  await assert.rejects(() => manager.start(f.paper, { speculative: true }), (error) => error.code === "runtime_limit_exceeded");
+  await assert.rejects(() => manager.start(f.paper, { speculative: true }), (error) => error.code === "runtime_capacity_full");
   assert.deepEqual(stops, [], "a pointer over a project in the sidebar is a guess, not a researcher's start");
   assert.equal(manager.runtimes.has(manager.key(f.learning)), true);
   await manager.closeAll();
@@ -208,7 +208,7 @@ test("a background start that never settles does not hold the researcher past th
   void manager.start(f.learning).catch(() => {});
   for (let i = 0; i < 50 && !manager.starts.has(manager.key(f.learning)); i++) await sleep(1);
   const began = Date.now();
-  await assert.rejects(() => manager.start(f.paper), (error) => error.code === "runtime_limit_exceeded");
+  await assert.rejects(() => manager.start(f.paper), (error) => error.code === "runtime_capacity_full");
   assert.ok(Date.now() - began < 2_000, "the wait is bounded, and the refusal is the old one");
   manager.starts.clear();
 });

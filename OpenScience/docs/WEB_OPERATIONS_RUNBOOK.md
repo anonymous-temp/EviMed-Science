@@ -860,6 +860,58 @@ that leaves its runtime up (the stream acceptance, the conversation walk) still
 holds a researcher's slot; stop it with `stop_runtime` under that project's
 header.
 
+### When every runtime slot is taken
+
+A start that finds all of the host's slots taken answers 429
+`runtime_capacity_full` (since 2026-10-05); the researcher's own ceiling stays
+`runtime_limit_exceeded`. The slot counts are the host's limit and are not
+raised for this. The shell says 「所有研究环境都在使用中，空出后会自动开始。」 and
+asks again by itself (every 5 to 15 seconds, never faster than `Retry-After`); a
+run's dispatch waits for a slot for `OPEN_SCIENCE_RUNTIME_START_WAIT_MS` (3
+minutes) before it is refused; the workers defer without spending an attempt.
+`open_science_runtime_start_waits_total{audience,outcome}`,
+`open_science_runtime_start_wait_seconds_total`,
+`open_science_runtime_start_wait_seconds_max` and
+`open_science_runtime_start_waiting` say how often people waited, how long and
+how many are waiting now; a mean wait that grows (seconds_total over waits) or a
+`gave_up` that is not zero is the host being too small.
+
+### NCBI's file server refuses a public GEO file
+
+`gene_expression_series` reads the series matrix from `ftp.ncbi.nlm.nih.gov`,
+which answers some requests for a public file with 403 text/html and the next
+identical request with the file (2026-10-05: 7 of 16 requests from one machine in
+one ten-minute window, any User-Agent, then 70 in a row served). The gateway no
+longer believes the first refusal: the three GEO download kinds are asked again
+twice from this host (after 0.5 s and 1 s) and then once through the Tokyo node
+(`OPEN_SCIENCE_EDGE_PROXY_URL`; the node is used for this whatever
+`OPEN_SCIENCE_EDGE_PROXY_HOSTS` lists), and the answer carries
+`x-evimed-download-route` (`direct`, `direct-retry`, `edge`), which the tool
+reports as `data.downloadRoutes`. Counted on
+`open_science_gene_expression_downloads_total{outcome}`: `served_after_retry`,
+`served_via_edge`, and `denied` when every route refused. The
+`geo/download/?acc=…&format=file&file=…_series_matrix.txt.gz` page is not a second
+route to the matrix: it redirects to the file server's `suppl/` directory (no
+matrix there) or answers a reCAPTCHA page.
+
+### Deleting a project, resetting memory or erasing an account while the memory index is slow
+
+The recall index (OpenViking) owns no record: every hit is re-read from PostgreSQL
+and a copy whose row is gone is dropped there. So none of these actions waits on
+it any more (until 2026-10-05 a project deletion answered 503
+`memory_index_timeout` when the index was slow). The authoritative rows go, and
+the withdrawal of the deleted subtrees is a row of its own in
+`evimed_memory.index_withdrawals`, written in the same transaction (it has no
+foreign key to the account, so an erased account's debt outlives it). The index
+worker asks the index at once and again every thirty seconds at most, with a
+backoff of thirty seconds doubling to an hour, until it answers.
+`open_science_memory_index_withdrawals_pending`, `..._oldest_seconds` and
+`..._most_attempts` say what the index still owes; a count that does not fall
+means the index is down, and deleted data's copies outlive their rows until it is
+back (recall never serves them). Deleting or archiving one memory record and
+deleting a source never called the index: they queue one record job in their own
+transaction, which the worker retries.
+
 ### Specialist job slots on a small host
 
 The six engines (MR, bibliometric, research-topic, peer-review, drug-safety

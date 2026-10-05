@@ -157,6 +157,7 @@ import { RunMetrics, runCapabilityLabel } from "./runMetrics.mjs";
 import { relationalIntegrity } from "./relationalIntegrity.mjs";
 import { MemoryIndexing } from "./memoryIndexing.mjs";
 import { MemoryIndexWorker } from "./memoryIndexWorker.mjs";
+import { MemoryIndexWithdrawals } from "./memoryIndexWithdrawals.mjs";
 import { MaintenanceService } from "./maintenanceService.mjs";
 import { CapsuleService } from "./capsuleService.mjs";
 import { CapsuleIdentityStore } from "./capsuleIdentityStore.mjs";
@@ -199,7 +200,7 @@ import { removeSourceCopies, sourceAttemptId, sourceReadCopyDirectory } from "./
 import { DocumentParserClient } from "./documentParserClient.mjs";
 import { createConfiguredWebRenderer } from "./webRender.mjs";
 import { createWebReader, webReadMetricFamilies, webReadTransportFor, webReadUserAgent } from "./webRead.mjs";
-import { edgeMetricFamilies, edgeProxyFromConfig, fetchWithEdge } from "./edgeProxy.mjs";
+import { edgeFetch, edgeMetricFamilies, edgeProxyFromConfig, fetchWithEdge } from "./edgeProxy.mjs";
 import { pagesReadFromSessions } from "./webReadPages.mjs";
 import { createSourceUpdateLookup, sourceUpdateMetricFamilies } from "./sourceUpdates.mjs";
 import { OpenListClient } from "./openListClient.mjs";
@@ -1121,9 +1122,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // that the writer and the reader cannot disagree about which provider is on.
   const memoryIndexActive = selectedMemoryIndexProvider(config) === "openviking"
     && Boolean(openVikingClient.configured) && Boolean(productDatabase && productJobs);
+  // What a deletion owes the index as whole subtrees, kept in the deleting
+  // transaction and drained by the index worker (`memoryIndexWithdrawals.mjs`):
+  // deleting a project, resetting memory or erasing an account never waits on
+  // the index answering. Exists exactly when the index does.
+  const memoryWithdrawals = memoryIndexActive ? new MemoryIndexWithdrawals({ database: productDatabase, openViking: openVikingClient }) : null;
   const researchMemory = overrides.researchMemory
     ?? new ResearchMemoryStore(config, {
-      database: productDatabase, jobs: memoryIndexActive ? productJobs : null,
+      database: productDatabase, jobs: memoryIndexActive ? productJobs : null, withdrawals: memoryWithdrawals,
     });
   // One reranker for both recall paths. It orders candidates that have already
   // been hydrated from the authoritative store, because the index's own
@@ -1145,7 +1151,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // OpenViking the research recall uses, so it exists exactly when that
   // provider is selected and reachable — never as a second thing to configure.
   const memoryIndexing = productDatabase && productJobs && memorySubstrate.active
-    ? new MemoryIndexing({ database: productDatabase, openViking: openVikingClient, jobs: productJobs, rerank: memoryRerank }) : null;
+    ? new MemoryIndexing({ database: productDatabase, openViking: openVikingClient, jobs: productJobs, withdrawals: memoryWithdrawals, rerank: memoryRerank }) : null;
   // Composed whenever there is a queue, not only when there is an index. The
   // database trigger that enqueues `memory-index` jobs fires on every capsule
   // and fact write — a Postgres trigger cannot read this config — so a
@@ -1153,7 +1159,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // indexing the worker drains them and records why (M5, 2026-09-16).
   const memoryIndexWorker = productJobs
     ? new MemoryIndexWorker({ jobs: productJobs, indexing: memoryIndexing,
-      substrate: memoryIndexing ? memorySubstrate : null,
+      substrate: memoryIndexing ? memorySubstrate : null, withdrawals: memoryIndexing ? memoryWithdrawals : null,
       pollMs: config.memoryIndexPollMs, leaseMs: config.memoryIndexLeaseMs,
       reconcileMs: config.memoryIndexReconcileMs }) : null;
   // What the researcher did, and the one producer that reads it back. Both
@@ -1407,7 +1413,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       userId: user.id, username: user.id, detail: JSON.stringify(details),
     }) });
   const memoryRoutes = createMemoryRoutes({
-    config, researchMemory, memorySubstrate, feedbackEvents, store, context, audit, recordFeedback, decodeRouteComponent,
+    config, researchMemory, memorySubstrate, memoryIndexWorker, feedbackEvents, store, context, audit, recordFeedback, decodeRouteComponent,
   });
   const agentApiKeys = productDatabase ? new AgentApiKeyStore(productDatabase) : null;
   /** The accounts an integration key of `ownerId` made for the people behind
@@ -2588,7 +2594,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       0,
       Math.ceil(Number(config.agentRunMonitorStallMs) / AGENT_RUN_MONITOR_INTERVAL_MS) || 0,
     ),
-    readSessionHistory: (project, sessionId, options) => runtimeManager.sessionMessages(project, sessionId, options),
+    // A read that must wake the runtime for a dispatch a person is waiting on
+    // (`waitForRoom`), before the run is reserved: with every slot taken it stands
+    // in line (`startWhenRoom`) rather than refusing them. A worker's dispatch does
+    // not ask, and its refusal is its own deferral.
+    readSessionHistory: async (project, sessionId, options) => {
+      if (options?.wake === true && options?.waitForRoom === true) await runtimeManager.startWhenRoom(project);
+      return runtimeManager.sessionMessages(project, sessionId, options);
+    },
     readSessionStatus: (project, sessionId, options) => runtimeManager.sessionStatus(project, sessionId, options),
     readChildSessionActivity: (project, parentSessionId, childSessionIds, options) =>
       runtimeManager.childSessionActivity(project, parentSessionId, childSessionIds, options),
@@ -3866,6 +3879,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const publicSourceGatewayHandler = createPublicSourceGatewayHandler(config, runtimeManager, {
     evaluationIsolation,
     fetchImpl: gatewayFetch,
+    // The other address for a download a file server refused (publicSourceGateway.mjs `denial`): the node, whatever hosts
+    // it is routed for by default.
+    fallbackFetch: edgeProxy ? /** @type {typeof fetch} */ ((input, init) => edgeFetch(edgeProxy, /** @type {any} */ (input), /** @type {any} */ (init))) : null,
     // An open-access PDF sits on whichever publisher Unpaywall names, so it
     // is fetched like a web page: over the pinned transport.
     pdfTransport: webTransport,
@@ -4462,6 +4478,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     const dispatch = () => agentRuns.dispatch(project, {
       sessionId,
       dispatchId,
+      waitForRoom: true,
       ...(route.estimatedMinutes ? { estimatedMinutes: route.estimatedMinutes } : {}),
       question: text,
       effectiveAgentId: route.effectiveAgentId ?? null,
@@ -4496,7 +4513,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           ...(prepared.memories.length > 0 ? { recalledMemories: prepared.memories } : {}),
         });
       }
-      await runtimeManager.start(project);
+      // A dispatch that finds every slot taken waits for one (`startWhenRoom`):
+      // the run is reserved and the person is waiting on this answer, so a place in
+      // line is the right shape and a refusal is the wrong one.
+      await runtimeManager.startWhenRoom(project);
       return runtimeManager.dispatchPrompt(project, session.sessionId, {
         recordPromptActor: request => recordExtensionPromptActor(user, project, request),
         text: promptText,
@@ -5433,6 +5453,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         const dispatch = () => agentRuns.dispatch(ctx.project, {
           sessionId: body.sessionId,
           dispatchId: body.dispatchId,
+          // A person is waiting on this answer: with every runtime slot taken it waits for one.
+          waitForRoom: true,
           ...(automated ? { automated: true } : {}),
           ...(estimate ? { estimatedMinutes: estimate } : {}),
           question: text,
@@ -5504,7 +5526,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
               ...(prepared.memories.length > 0 ? { recalledMemories: prepared.memories } : {}),
             });
           }
-          await runtimeManager.start(ctx.project);
+          await runtimeManager.startWhenRoom(ctx.project);
           return runtimeManager.dispatchPrompt(ctx.project, session.sessionId, {
             recordPromptActor: request => recordExtensionPromptActor(ctx.user, ctx.project, request),
             text: promptText,
@@ -5756,14 +5778,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         // Completeness no longer depends on it: the memory tables reference the
         // account with ON DELETE CASCADE, so `store.deleteUser` below removes
         // whatever a failed purge would have left.
-        // The derived copies go first. Either order can fail halfway; only this
-        // one fails harmlessly. An index emptied for an account whose rows are
-        // still there costs a degraded recall until the next rebuild, and the
-        // caller can simply try again. The other order destroys the memory and
-        // then answers 500, leaving an account that still exists and a
-        // researcher whose memory is gone because a component that holds no
-        // original data was unreachable for a moment.
-        await memorySubstrate.forgetUser(user.id);
+        // The derived copies are owed to the index inside the deletion's own
+        // transaction (`memoryIndexing.prepareAccountDeletion`, below) and asked
+        // for after it commits: the index holds no original data, every hit is
+        // re-read from PostgreSQL, and an account whose erasure waited on the
+        // index answering would fail on its first slow day. Without a ledger to
+        // hand them to, one attempt, never waited on.
+        await memoryWithdrawals?.migrate();
+        if (!memoryWithdrawals) void memorySubstrate.forgetUser(user.id).catch(() => false);
         // Counted, not deleted. The memory tables reference the account with ON
         // DELETE CASCADE, so `store.deleteUser` below removes them inside the
         // transaction that can still fail — where deleting them here would mean
@@ -5805,6 +5827,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         await removeVcrArtifacts({ dataPlaneDir: config.vcrDataPlaneDir, artifacts: vcrArtifacts, engineRemove: vcr?.removeEngineJob ?? null,
           report: (code) => process.stderr.write(`vcr deletion cleanup: ${code}\n`) });
         taskManager.purgeUser(user);
+        void memoryIndexWorker?.drainWithdrawals();
         clearSessionCookie(res, config.sessionCookieName);
         if (capsuleTransferService) await capsuleTransferService.finishAccountDeletion(user.id);
         await securityAudit(config, "account.delete", "completed", { userId: user.id, memoryPurge, memoryIndexPurge, subjectsDeleted });
@@ -5904,23 +5927,21 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           const lessonRuns = learningProject ? await agentRuns.list(project).catch(() => []) : [];
           /** @type {{moved: number, preserved: string[]}} */
           let lessons = { moved: 0, preserved: [] };
-          // Derived copies go first, and go with the record they were derived
-          // from. Awaited and not swallowed: an index that still answers with a
-          // deleted project's memories is a copy of deleted data, so a failure
-          // here fails the delete rather than reporting a deletion that did not
-          // happen. Before the rows rather than after, so that failure leaves
-          // the project and its memory both intact and the request retryable —
-          // the reverse order answers 500 with the memory already destroyed.
-          await memorySubstrate.forgetProject(user.id, project.id);
+          // The recall index holds derived copies and owns no record: every hit is
+          // re-read from PostgreSQL before it is used, so a copy whose row is gone
+          // is dropped there. The index is therefore never waited on here. The
+          // rows go, and the subtree's withdrawal is owed to the index in the
+          // same transaction (`memoryIndexWithdrawals.mjs`), asked for after the
+          // commit and again by the index worker until it answers. Until
+          // 2026-10-05 this asked the index first and failed the deletion when
+          // it timed out (live: 503 `memory_index_timeout`, and the same request
+          // succeeded two minutes later).
           if (researchMemory.configured) await researchMemory.deleteProjectMemory(user.id, project.id);
-          // Again, now that the rows are gone. Between the removal above and
-          // the delete, a queued index job for one of those records still finds
-          // its row and republishes the copy; a second pass removes what that
-          // window let back in. Not awaited for the request's verdict: the
-          // deletion the researcher asked for has happened by this line, and a
-          // derived copy that survives holds no original data and goes with the
-          // next rebuild, so failing here would report a deletion that did.
-          await memorySubstrate.forgetProject(user.id, project.id).catch(() => false);
+          // With no ledger to hand the withdrawal to (a test's store, a deployment
+          // whose index is not composed) there is nothing durable to keep: one
+          // attempt, never waited on.
+          else if (!memoryWithdrawals) void memorySubstrate.forgetProject(user.id, project.id).catch(() => false);
+          void memoryIndexWorker?.drainWithdrawals();
           // What the project's documents and runs put in the account's own
           // capsule — 「来自资料」 above all — is account-level and outlived
           // every project deletion until 2026-09-24 (62 such memories were
@@ -7634,6 +7655,19 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
       value: memoryIndex.worker?.lastError ? 0 : 1,
       labels: { provider: String(memoryIndex.provider ?? "builtin"), code: String(memoryIndex.worker?.lastError ?? "ok") },
     });
+  // What deletions still owe the index (`memoryIndexWithdrawals.mjs`): a project, a
+  // reset or an account erased while the index was slow. Recall never reads them (every
+  // hit is re-read from PostgreSQL), so this is how long deleted data's copies outlive it.
+  const withdrawals = await memoryIndexWorker?.withdrawals?.pending?.().catch(() => null);
+  if (withdrawals) {
+    addMetric(lines, "open_science_memory_index_withdrawals_pending",
+      "Deleted subtrees the recall index has not yet been told to forget; each is asked again by the index worker until it answers.",
+      "gauge", { value: withdrawals.pending });
+    addMetric(lines, "open_science_memory_index_withdrawals_oldest_seconds",
+      "How long the oldest owed withdrawal has waited.", "gauge", { value: Math.round(withdrawals.oldestSeconds) });
+    addMetric(lines, "open_science_memory_index_withdrawals_most_attempts",
+      "The most times one owed withdrawal has been tried and refused.", "gauge", { value: withdrawals.mostAttempts });
+  }
   addMetric(lines, "open_science_memory_recall_degraded",
     "Whether a recall last had to fall back to the term matcher because the index could not answer.",
     "gauge", {
@@ -7853,6 +7887,43 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
     "Background runtimes retired because a researcher's start found the deployment at its ceiling.",
     "counter",
     { value: runtimeStats.background?.yielded ?? 0 },
+  );
+  // Starts that found every slot taken (2026-10-05): how often a person waited
+  // for a research environment and for how long — the number that says the host
+  // is too small. A wait begins at the first refusal and ends at the project's
+  // next start, or is given up on when nobody asked again for ten minutes.
+  const roomWaits = runtimeStats.roomWaits ?? {};
+  const roomAudiences = ["researcher", "background"];
+  addMetric(
+    lines,
+    "open_science_runtime_start_waits_total",
+    "Runtime starts that found every slot taken, by whose they were and how the wait ended: started, or given up on.",
+    "counter",
+    roomAudiences.flatMap((audience) => [
+      { value: Number(roomWaits[audience]?.started) || 0, labels: { audience, outcome: "started" } },
+      { value: Number(roomWaits[audience]?.gaveUp) || 0, labels: { audience, outcome: "gave_up" } },
+    ]),
+  );
+  addMetric(
+    lines,
+    "open_science_runtime_start_wait_seconds_total",
+    "Seconds spent waiting for a runtime slot, summed over the waits that ended; divide by the waits for the mean.",
+    "counter",
+    roomAudiences.map((audience) => ({ value: Number(roomWaits[audience]?.seconds) || 0, labels: { audience } })),
+  );
+  addMetric(
+    lines,
+    "open_science_runtime_start_wait_seconds_max",
+    "The longest wait for a runtime slot that ended since this process started.",
+    "gauge",
+    roomAudiences.map((audience) => ({ value: Number(roomWaits[audience]?.maxSeconds) || 0, labels: { audience } })),
+  );
+  addMetric(
+    lines,
+    "open_science_runtime_start_waiting",
+    "Projects waiting for a runtime slot right now: refused for want of room and asked again in the last two minutes.",
+    "gauge",
+    roomAudiences.map((audience) => ({ value: Number(roomWaits[audience]?.waiting) || 0, labels: { audience } })),
   );
   addMetric(
     lines,

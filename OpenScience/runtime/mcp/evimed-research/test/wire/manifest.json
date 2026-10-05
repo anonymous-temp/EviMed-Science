@@ -112,6 +112,18 @@
    "note": "Two versions: 2 (Nov 17, 2025) and 1 (Oct 17, 2024)."
   },
   {
+   "file": "dailymed__spl_current_xml_accept_406.json",
+   "request": "GET https://dailymed.nlm.nih.gov/dailymed/services/v2/spls/06906744-49a5-4bab-8539-af2d235df9e8.xml",
+   "accept": "application/xml",
+   "status": 406,
+   "contentType": "application/json",
+   "origin": "live",
+   "recordedAt": "2026-10-05T07:15:47Z",
+   "bytes": 57,
+   "sha256": "a5d55bea935e8c7176837edb49d58892bb4356c604fe8028bfa71c96ad81edd3",
+   "note": "DailyMed's document endpoint answers 406 with this body to an Accept of application/xml alone (also text/xml, application/zip); an Accept that includes application/json, or */*, is served the XML with 200. The gateway relays any upstream 4xx other than 404 and 429 as its own HTTP 400 with the source's status in the envelope, so the runtime sees this as a 400. Recorded with that exact header (`accept`)."
+  },
+  {
    "file": "dailymed__spl_unknown_setid.txt",
    "request": "GET https://dailymed.nlm.nih.gov/dailymed/services/v2/spls/00000000-0000-0000-0000-000000000000.xml",
    "status": 404,
@@ -359,6 +371,18 @@
    "bytes": 762,
    "sha256": "7e61edd9d7e5f0cad7af3368e6a24ca30fa29b5c65ecc1a13ffdd27074eb85fc",
    "note": "30153985 exists in PubMed and is not in PMC: the converter says 'Identifier not found in PMC', which is not 'no such PMID'. 99999999 exists nowhere and gets the same words."
+  },
+  {
+   "file": "ncbi_geo__series_matrix_403.html",
+   "request": "GET https://ftp.ncbi.nlm.nih.gov/geo/series/GSE5nnn/GSE5583/matrix/GSE5583_series_matrix.txt.gz",
+   "accept": "application/x-gzip, application/gzip",
+   "status": 403,
+   "contentType": "text/html; charset=iso-8859-1",
+   "origin": "constructed",
+   "recordedAt": "2026-10-05T07:25:00Z",
+   "bytes": 199,
+   "sha256": "5b13fb5957b84ef7bb9d0b6cd509c947ff6a37d67efdac2b896ddd3b908aad10",
+   "note": "CONSTRUCTED: the status (403), content type (text/html; charset=iso-8859-1) and size class are what NCBI's file server answered on 2026-10-05 07:25Z to a plain request for this public matrix (Apache); the body is Apache's stock 403 page written here, because the refusal is intermittent and was not on hand to record when the fixture was made (70+ identical requests minutes later were all served). The same URL answered 200 on the next request: 7 of 16 identical requests from one machine in that window, whatever the User-Agent. The gateway asks again before it believes the refusal (publicSourceGateway.mjs `denial`). `record.py` will replace this with a live recording whenever the refusal is on hand (it reports `moved` if the answer is 200)."
   },
   {
    "file": "pubmed__esearch_no_match.json",

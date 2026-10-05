@@ -1604,6 +1604,15 @@ export function loadConfig(overrides = {}) {
     runtimeIdleYieldAfterMs: Number(
       overrides.runtimeIdleYieldAfterMs ?? process.env.OPEN_SCIENCE_RUNTIME_IDLE_YIELD_AFTER_MS ?? 30 * 60_000,
     ),
+    // How long a run's dispatch waits for a runtime slot when every one of the
+    // deployment's is taken (`RuntimeManager.startWhenRoom`), before it is
+    // refused as `runtime_capacity_full`. The slots are the host's limit and
+    // are not raised for this: a start is a place in line. Three minutes is
+    // past the idle yield a quiet runtime gives way after and inside the five
+    // minutes a browser keeps an unanswered request; zero is no wait.
+    runtimeStartWaitMs: Number(
+      overrides.runtimeStartWaitMs ?? process.env.OPEN_SCIENCE_RUNTIME_START_WAIT_MS ?? 180_000,
+    ),
     // How long a researcher's start waits for a background runtime that is
     // still coming up or going down before it retires the ones that are up
     // (`RuntimeManager.yieldBackgroundRuntimes`): a runtime start is seconds.

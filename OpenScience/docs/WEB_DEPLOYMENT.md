@@ -221,7 +221,11 @@ For a stricter readiness assessment of the current Web adaptation, see
   `OPEN_SCIENCE_MAX_RUNNING_RUNTIMES_PER_USER`, counting both attached runtimes
   and in-flight starts. The Controller additionally counts matching Docker
   containers left by an earlier Controller process; exceeding either limit
-  returns `runtime_limit_exceeded` with `Retry-After`. Runtime proxy requests
+  returns 429 with `Retry-After`: `runtime_limit_exceeded` for the researcher's
+  own ceiling (a refusal with its own sentence) and `runtime_capacity_full`
+  when every slot of the host is taken (a place in line: the shell asks again
+  by itself, a run's dispatch waits up to `OPEN_SCIENCE_RUNTIME_START_WAIT_MS`,
+  workers defer). Runtime proxy requests
   and SSE streams are also capped by
   `OPEN_SCIENCE_MAX_RUNTIME_PROXY_CONNECTIONS` and
   `OPEN_SCIENCE_MAX_RUNTIME_PROXY_CONNECTIONS_PER_PROJECT`; exceeding either

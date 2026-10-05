@@ -261,7 +261,7 @@ describe("native frame identity and readiness", () => {
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("研究连接暂时无法恢复，请重试"));
     mocks.start.mockRejectedValueOnce(new WebApiError("Too many running runtimes for this user; limit is 2.", { status: 429, code: "runtime_limit_exceeded" }));
     await userEvent.click(screen.getByRole("button", { name: "重新连接" }));
-    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("同时进行的研究已达上限，先结束一个再试。"));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("你同时进行的研究已达上限，先结束一个再试。"));
     expect(container.querySelector("iframe")).toBeNull();
     expect(screen.getByRole("button", { name: "重试" })).toBeInTheDocument();
   });
@@ -382,6 +382,104 @@ describe("native frame identity and readiness", () => {
       await waitFor(() => expect(mocks.start).toHaveBeenCalled());
       await waitFor(() => expect(container.querySelector("iframe")).not.toBeNull());
       expect(screen.queryByRole("alert")).toBeNull();
+    });
+  });
+
+  describe("a conversation opened while every research environment of the deployment is taken", () => {
+    // 2026-10-05, live acceptance: the host's four slots (shared with other
+    // products) were taken and the researcher was shown a refusal. A full house is
+    // a place in line: one plain line, asked again by itself with a backoff that
+    // honours the control plane's `Retry-After`, started when a slot frees. The
+    // researcher's own ceiling (`runtime_limit_exceeded`) stays an honest refusal.
+    const FULL = "所有研究环境都在使用中，空出后会自动开始。";
+    const full = (retryAfterSeconds: number | null = 5) => new WebApiError("Every runtime slot of the server is taken; limit is 4.", { status: 429, code: "runtime_capacity_full", retryAfterSeconds });
+
+    it("says one plain line, no alert and no retry button, and starts by itself once a slot frees", async () => {
+      vi.useFakeTimers();
+      mocks.start.mockRejectedValueOnce(full());
+      mocks.start.mockRejectedValueOnce(full());
+      mocks.start.mockResolvedValue(undefined);
+      const { container } = mount(null, "/app/chat/session-a");
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      expect(screen.getByText(FULL)).toBeInTheDocument();
+      expect(screen.queryByRole("alert")).toBeNull();
+      expect(screen.queryByRole("button", { name: "重试" })).toBeNull();
+      expect(mocks.start).toHaveBeenCalledTimes(1);
+      // Asked again at the control plane's pace (five seconds), then a little slower.
+      await act(async () => { await vi.advanceTimersByTimeAsync(4_900); });
+      expect(mocks.start).toHaveBeenCalledTimes(1);
+      await act(async () => { await vi.advanceTimersByTimeAsync(200); });
+      expect(mocks.start).toHaveBeenCalledTimes(2);
+      expect(screen.getByText(FULL)).toBeInTheDocument();
+      await act(async () => { await vi.advanceTimersByTimeAsync(7_700); });
+      expect(mocks.start).toHaveBeenCalledTimes(2);
+      const bindings = mocks.create.mock.calls.length;
+      await act(async () => { await vi.advanceTimersByTimeAsync(400); });
+      // The third ask finds room: the conversation opens again, against a runtime that is up.
+      expect(mocks.start.mock.calls.length).toBeGreaterThanOrEqual(3);
+      expect(mocks.create.mock.calls.length).toBeGreaterThan(bindings);
+      expect(screen.queryByText(FULL)).toBeNull();
+      expect(screen.queryByRole("alert")).toBeNull();
+      const frame = container.querySelector("iframe")!;
+      const post = vi.spyOn(frame.contentWindow!, "postMessage");
+      emit(frame, { type: "evimed.runtime-ui.ready" });
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      emit(frame, { type: "evimed.runtime-ui.ack", seq: 2, requestId: post.mock.calls[0][0].requestId, ok: true, sessionId: "session-a" });
+      expect(screen.queryByRole("status")).toBeNull();
+    });
+
+    it("waits past the opening's own deadline: nothing has stalled while it stands in line", async () => {
+      vi.useFakeTimers();
+      const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+      mocks.start.mockRejectedValue(full(15));
+      mocks.status.mockResolvedValue({ running: false, provider: "docker", startStage: null, startError: null });
+      mount(null, "/app/chat/session-a");
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(300_000); });
+      expect(screen.getByText(FULL)).toBeInTheDocument();
+      expect(screen.queryByRole("alert")).toBeNull();
+      expect(warn).not.toHaveBeenCalled();
+      // Never faster than the hint, and not unbounded: one ask per fifteen seconds at most.
+      expect(mocks.start.mock.calls.length).toBeLessThanOrEqual(1 + 300 / 15);
+      expect(mocks.start.mock.calls.length).toBeGreaterThan(10);
+    });
+
+    it("takes the frame document's own notice as the same wait, with one timer", async () => {
+      vi.useFakeTimers();
+      mocks.start.mockResolvedValue(undefined);
+      const { container } = mount(null, "/app/chat/session-a");
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      emit(container.querySelector("iframe")!, { type: "evimed.runtime-ui.notice", code: "runtime_capacity_full", title: "对话暂时打不开", detail: FULL });
+      emit(container.querySelector("iframe")!, { type: "evimed.runtime-ui.notice", code: "runtime_capacity_full", title: "对话暂时打不开", detail: FULL });
+      expect(screen.getByText(FULL)).toBeInTheDocument();
+      expect(screen.queryByRole("alert")).toBeNull();
+      const asked = mocks.start.mock.calls.length;
+      await act(async () => { await vi.advanceTimersByTimeAsync(5_100); });
+      // One ask, which found room, and the opening's own start again against the runtime that is up.
+      expect(mocks.start.mock.calls.length).toBe(asked + 2);
+    });
+
+    it("stops asking when the reader leaves, and does not ask for a hidden conversation", async () => {
+      vi.useFakeTimers();
+      mocks.start.mockRejectedValue(full());
+      const { unmount } = mount(null, "/app/chat/session-a");
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      const asked = mocks.start.mock.calls.length;
+      unmount();
+      await act(async () => { await vi.advanceTimersByTimeAsync(60_000); });
+      expect(mocks.start.mock.calls.length).toBe(asked);
+    });
+
+    it("turns to an honest refusal when a later ask meets the researcher's own ceiling or another refusal", async () => {
+      vi.useFakeTimers();
+      mocks.start.mockRejectedValueOnce(full());
+      mocks.start.mockRejectedValue(new WebApiError("Too many running runtimes for this user; limit is 2.", { status: 429, code: "runtime_limit_exceeded" }));
+      mount(null, "/app/chat/session-a");
+      await act(async () => { await vi.advanceTimersByTimeAsync(0); });
+      expect(screen.getByText(FULL)).toBeInTheDocument();
+      await act(async () => { await vi.advanceTimersByTimeAsync(5_100); });
+      expect(screen.getByRole("alert")).toHaveTextContent("你同时进行的研究已达上限，先结束一个再试。");
+      expect(screen.queryByText(FULL)).toBeNull();
     });
   });
 
@@ -1040,7 +1138,7 @@ describe("opening a task", () => {
     mocks.start.mockRejectedValue(new WebApiError("Too many running runtimes for this user; limit is 2.", { status: 429, code: "runtime_limit_exceeded" }));
     mount(null, "/app/chat/session-a");
     const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent("同时进行的研究已达上限，先结束一个再试。");
+    expect(alert).toHaveTextContent("你同时进行的研究已达上限，先结束一个再试。");
     expect(alert).not.toHaveTextContent(/冷启动|90 秒/);
     // A concurrency ceiling: no quota page lifts it, so none is offered, and
     // the run ledger it used to point at is gone. Freeing a slot is done in

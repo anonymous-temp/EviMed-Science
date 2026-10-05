@@ -36,8 +36,8 @@ export function memoryIndexFailurePolicy(code, attempts) {
  * all while the capsule half had one.
  */
 export class MemoryIndexWorker {
-  /** @param {{jobs:any,indexing:any,substrate?:any,pollMs?:number,leaseMs?:number,reconcileMs?:number}} dependencies */
-  constructor({ jobs, indexing, substrate = null, pollMs = 1000, leaseMs = 300_000, reconcileMs = 300_000 }) {
+  /** @param {{jobs:any,indexing:any,substrate?:any,withdrawals?:any,pollMs?:number,leaseMs?:number,reconcileMs?:number}} dependencies */
+  constructor({ jobs, indexing, substrate = null, withdrawals = null, pollMs = 1000, leaseMs = 300_000, reconcileMs = 300_000 }) {
     /** @type {[string,number,number][]} */
     const intervals = [["poll", pollMs, 100], ["lease", leaseMs, 1000], ["reconcile", reconcileMs, 1000]];
     for (const [name, value, minimum] of intervals) {
@@ -48,6 +48,13 @@ export class MemoryIndexWorker {
     this.jobs = jobs;
     this.indexing = indexing;
     this.substrate = substrate;
+    // What deletions owe the index as whole subtrees (`MemoryIndexWithdrawals`):
+    // drained here, because this worker is what the index's other writes already
+    // wait on, and a deletion that could not tell the index must not depend on
+    // anybody remembering to.
+    this.withdrawals = withdrawals;
+    this.withdrawalTimer = null;
+    this.draining_withdrawals = null;
     this.pollMs = pollMs;
     this.leaseMs = leaseMs;
     this.reconcileMs = reconcileMs;
@@ -93,8 +100,30 @@ export class MemoryIndexWorker {
     }
     this.reconcileTimer = setInterval(() => { void this.reconcile(); }, this.reconcileMs);
     this.reconcileTimer.unref();
+    // Quicker than the reconcile: a withdrawal waits on a backoff of thirty
+    // seconds at the least, so asking more often than that finds nothing due.
+    if (this.withdrawals) {
+      this.withdrawalTimer = setInterval(() => { void this.drainWithdrawals(); }, Math.min(this.reconcileMs, 30_000));
+      this.withdrawalTimer.unref();
+    }
     if (!this.draining) void this.tick().catch(() => {});
     void this.reconcile();
+  }
+
+  /**
+   * One pass over what deletions owe the index. Never rejects and never waits
+   * on anyone: it is also called, unawaited, right after a deletion commits, to
+   * tell the index at once when it can be told, and a failure is a row that
+   * stays due.
+   */
+  async drainWithdrawals() {
+    if (!this.withdrawals) return null;
+    if (this.draining_withdrawals) return this.draining_withdrawals;
+    this.draining_withdrawals = this.withdrawals.drain().catch((error) => {
+      this.lastError = typeof error?.code === "string" ? error.code : "memory_index_withdrawal_failed";
+      return null;
+    }).finally(() => { this.draining_withdrawals = null; });
+    return this.draining_withdrawals;
   }
 
   /** Close every queued job this deployment will never index. Bounded, because
@@ -161,6 +190,7 @@ export class MemoryIndexWorker {
     this.reconciling = Promise.all([
       this.draining ? this.drainQueue() : this.indexing.reconcile(),
       this.substrate ? this.substrate.reconcileRecords() : null,
+      this.drainWithdrawals(),
     ]).catch((error) => {
       this.lastError = typeof error?.code === "string" ? error.code : "memory_index_reconcile_failed";
       return null;
@@ -175,8 +205,10 @@ export class MemoryIndexWorker {
   async close() {
     if (this.timer) clearInterval(this.timer);
     if (this.reconcileTimer) clearInterval(this.reconcileTimer);
+    if (this.withdrawalTimer) clearInterval(this.withdrawalTimer);
     this.timer = null;
     this.reconcileTimer = null;
-    await Promise.all([this.running, this.reconciling].filter(Boolean));
+    this.withdrawalTimer = null;
+    await Promise.all([this.running, this.reconciling, this.draining_withdrawals].filter(Boolean));
   }
 }
