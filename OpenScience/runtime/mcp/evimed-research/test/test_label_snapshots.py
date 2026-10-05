@@ -41,9 +41,11 @@ class DailyMed:
     def __init__(self, current_xml=V2, history="dailymed__history_walmart_saline.json", zip_bytes=V1_ZIP, failing=None):
         self.current_xml, self.history, self.zip_bytes, self.failing = current_xml, history, zip_bytes, failing
         self.calls = []
+        self.timeouts = {}
 
     def __call__(self, url, accepted, **options):
         self.calls.append(url)
+        self.timeouts[url] = options.get("timeout_seconds")
         if self.failing:
             raise self.failing.pop(0)
         parts = urllib.parse.urlsplit(url)
@@ -266,6 +268,17 @@ class ReadTests(Workspace):
         self.assertEqual((result["data"]["version"], result["data"]["isCurrent"]), (2, True))
         self.assertEqual(result["data"]["comparison"]["againstVersion"], 1)
         self.assertTrue(any(call.endswith("%s.xml" % SETID) for call in self.world.calls))
+
+    def test_a_label_document_may_take_longer_than_one_ordinary_read(self):
+        # Production, 2026-10-05: the current Tagrisso document answered in 4.5 s and then in 31 s within a minute, and the
+        # release-5 tool probe was cut at the transport's 20 s. A document read may wait up to a minute; the tool's own
+        # budget still bounds the call.
+        self.call({"setid": SETID, "compareVersion": 1})
+        document = [url for url in self.world.calls if url.endswith("%s.xml" % SETID)]
+        zip_reads = [url for url in self.world.calls if "getFile.cfm" in url]
+        self.assertTrue(document and zip_reads)
+        for url in document + zip_reads:
+            self.assertGreaterEqual(self.world.timeouts[url], 45, url)
 
     def test_a_document_the_source_answers_406_to_is_the_sources_refusal_and_says_so(self):
         # The tool as it used to ask, replayed: DailyMed's recorded 406 relayed through the gateway as its 400.
