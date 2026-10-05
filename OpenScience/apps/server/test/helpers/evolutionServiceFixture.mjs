@@ -13,7 +13,7 @@ export function evolutionServiceFixture({ maxRecordBytes = 256 * 1024 } = {}) {
     async put(owner, kind, id, payload, { expectedRevision, projectId }) {
       const key = `${owner}:${kind}:${id}`; const old = rows.get(key);
       if ((old?.revision ?? 0) !== expectedRevision) throw Object.assign(new Error('CAS conflict'), { code: 'product_revision_conflict' });
-      if (Buffer.byteLength(JSON.stringify(payload)) > maxRecordBytes) throw Object.assign(new Error('Record too large'), { code: 'product_record_too_large', status: 413 });
+      if (Buffer.byteLength(JSON.stringify(payload)) > maxRecordBytes) throw Object.assign(new Error('A product record exceeds 256 KiB.'), { code: 'product_document_too_large', status: 413 });
       const row = { id, payload: structuredClone(payload), projectId, revision: expectedRevision + 1, createdAt: old?.createdAt ?? time.toISOString(), updatedAt: time.toISOString() }; rows.set(key, row); return structuredClone(row);
     },
   };
