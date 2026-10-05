@@ -1491,6 +1491,27 @@ export const EVIDENCE_PLATFORM_ERROR_CODES = Object.freeze([
 ])
 
 /**
+ * Codes the platform's own evidence programme answers with (evidence-flywheel plan §5.1, F01/F02, 2026-10-05).
+ * Each touches the one operation it names and never a researcher's conversation:
+ *
+ * - `evidence_programme_decision_required`: a card the programme would write has no recorded topic decision behind it.
+ *   An original analysis may only answer a topic the selector chose (the anti-paper-mill rule), and a card with no
+ *   decision to trace its topic to is not written.
+ * - `evidence_programme_budget_spent`: the day's programme budget cannot pay for another episode. At scheduling it is a
+ *   recorded deferral on the day's decision; at dispatch the episode waits for budget (the autopilot worker's resource
+ *   wait) and is not failed.
+ * - `evidence_programme_slot_busy`: another programme episode is still working and the programme holds one slot (default),
+ *   so this one waits its turn; recorded like the budget's deferral and never a failure.
+ * - `evidence_programme_original_weekly_cap`: a third original analysis in a rolling week. Deferred, not dropped.
+ */
+export const EVIDENCE_PROGRAMME_ERROR_CODES = Object.freeze([
+  'evidence_programme_decision_required',
+  'evidence_programme_budget_spent',
+  'evidence_programme_slot_busy',
+  'evidence_programme_original_weekly_cap',
+])
+
+/**
  * Every code this build knows, so a mapping test can prove a new code was
  * classified rather than silently inheriting a default.
  *
@@ -1535,6 +1556,7 @@ export const ALL_ERROR_CODES = Object.freeze([...new Set([
   ...VCR_ENGINE_ISSUE_CODES,
   ...EVIMED_CREDITS_ROUTE_ERROR_CODES,
   ...EVIDENCE_PLATFORM_ERROR_CODES,
+  ...EVIDENCE_PROGRAMME_ERROR_CODES,
   ...Object.keys(EVIDENCE_CARD_ERROR_MESSAGES_ZH),
 ])])
 
@@ -1953,6 +1975,11 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   platform_account_protected: '这是平台出版方账号，不能删除或导出。',
   platform_account_reserved: '这个账号名或显示名留给平台出版方，请换一个。',
   evidence_upkeep_no_allowance: '科研额度不足，这个专区的 AI 更新先放着，充值后会自动继续；平台不会替你付这笔费用。',
+  // The platform's own evidence programme (2026-10-05): what an operator reads on a day's topic decision.
+  evidence_programme_decision_required: '这张卡没有对应的选题记录，没有写入：平台只为选题器当天选定的题目发布结论。',
+  evidence_programme_budget_spent: '证据中心今天的预算已经用完，这次研究顺延到预算恢复后再做。',
+  evidence_programme_slot_busy: '证据中心正在做另一项研究，这次排在它后面，不会丢。',
+  evidence_programme_original_weekly_cap: '平台每周最多发布两张原创分析卡，这张顺延到下一周。',
   usage_metering_unavailable: '计量暂时不可用，本次用量稍后补记。',
   illegal_state_transition: '状态变更不合法，已拒绝。',
 

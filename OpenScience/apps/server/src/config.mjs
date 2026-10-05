@@ -387,10 +387,36 @@ function evidenceSettings(overrides) {
   if (!Number.isSafeInteger(concurrency) || concurrency < 1 || concurrency > 4) {
     throw new Error(`OPEN_SCIENCE_EVIDENCE_PROGRAMME_MAX_CONCURRENCY must be a whole number from 1 to 4, got ${JSON.stringify(concurrencyValue)}.`);
   }
+  /**
+   * The programme's own limits (F01/F02, 2026-10-05), each with a floor or ceiling that keeps its rule true.
+   * @param {string} key @param {string} name @param {number} fallback @param {number} min @param {number} max
+   */
+  const whole = (key, name, fallback, min, max) => {
+    const raw = read(key, name, fallback);
+    const number = Number(raw);
+    if (!Number.isSafeInteger(number) || number < min || number > max) {
+      throw new Error(`${name} must be a whole number from ${min} to ${max}, got ${JSON.stringify(raw)}.`);
+    }
+    return number;
+  };
+  const episodeValue = read("evidenceProgrammeEpisodeBudgetCny", "OPEN_SCIENCE_EVIDENCE_PROGRAMME_EPISODE_BUDGET_CNY", 10);
+  const episodeBudget = Number(episodeValue);
+  if (!Number.isFinite(episodeBudget) || episodeBudget < 2 || episodeBudget > 1000) {
+    throw new Error(`OPEN_SCIENCE_EVIDENCE_PROGRAMME_EPISODE_BUDGET_CNY must be a number from 2 to 1000, got ${JSON.stringify(episodeValue)}.`);
+  }
   return {
     evidenceProgrammeEnabled: overrides.evidenceProgrammeEnabled ?? boolEnv("OPEN_SCIENCE_EVIDENCE_PROGRAMME_ENABLED", false),
     evidenceProgrammeDailyBudgetCny: budget,
     evidenceProgrammeMaxConcurrency: concurrency,
+    // What one programme episode, with the independent checks of its claims, may spend: the agenda's per-episode cap.
+    evidenceProgrammeEpisodeBudgetCny: Math.round(episodeBudget * 100) / 100,
+    // How many distinct readers must have an entity in their 「与你相关」 profile before the topic selector sees it at all.
+    // The floor is the privacy rule (plan §13.13): a lever may raise it, never lower it, so one reader is never a signal.
+    evidenceProgrammeMinDemandUsers: whole("evidenceProgrammeMinDemandUsers", "OPEN_SCIENCE_EVIDENCE_PROGRAMME_MIN_DEMAND_USERS", 5, 5, 10_000),
+    // The most original-analysis cards the platform publishes in a rolling week (0 publishes none); the next waits.
+    evidenceProgrammeOriginalPerWeek: whole("evidenceProgrammeOriginalPerWeek", "OPEN_SCIENCE_EVIDENCE_PROGRAMME_ORIGINAL_ANALYSES_PER_WEEK", 2, 0, 14),
+    // An official card whose sources were last checked longer ago than this is stale, a topic signal of its own.
+    evidenceProgrammeStaleCardDays: whole("evidenceProgrammeStaleCardDays", "OPEN_SCIENCE_EVIDENCE_PROGRAMME_STALE_CARD_DAYS", 30, 1, 365),
     evidencePublicWebEnabled: overrides.evidencePublicWebEnabled ?? boolEnv("OPEN_SCIENCE_EVIDENCE_PUBLIC_WEB_ENABLED", false),
     evidencePublicIndexable: overrides.evidencePublicIndexable ?? boolEnv("OPEN_SCIENCE_EVIDENCE_PUBLIC_INDEXABLE", false),
   };

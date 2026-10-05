@@ -158,6 +158,7 @@ export {
   EXTENSION_ERROR_CODES,
   EVIMED_CREDITS_ROUTE_ERROR_CODES,
   EVIDENCE_PLATFORM_ERROR_CODES,
+  EVIDENCE_PROGRAMME_ERROR_CODES,
   GEO_ROUTE_ERROR_CODES,
   MANAGED_BROWSER_ERROR_CODES,
   VCR_GATEWAY_ERROR_CODES,
@@ -882,7 +883,7 @@ export {
   summarizeGateNotices,
 } from './src/gateIssueText.mjs'
 
-// usagePurpose — 10 exports: what a metered model request was for (X1)
+// usagePurpose — 14 exports: what a metered model request was for (X1)
 export {
   USAGE_PURPOSES,
   USAGE_PURPOSE_LABELS_ZH,
@@ -894,6 +895,10 @@ export {
   LEARNING_AGENT_IDS,
   PLATFORM_ROUTE_PURPOSES,
   LEARNING_EVALUATION_DISPATCH_PREFIX,
+  EVIDENCE_PROGRAMME_ROUTE_REASON_PREFIX,
+  EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON,
+  evidenceProgrammeRouteReason,
+  isEvidenceProgrammeRouteReason,
 } from './src/usagePurpose.mjs'
 // platformAccount — the platform's own publishing account: its id, name and auth type (evidence-flywheel B2, 2026-10-05)
 export {

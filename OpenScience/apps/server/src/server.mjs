@@ -71,6 +71,7 @@ import { postgresBackupReadiness } from "./postgresBackupReadiness.mjs";
 import { vcrBackupReadiness } from "./vcrBackupReadiness.mjs";
 import { LEARNING_PROJECT_ID, ensureEvidenceProject, isEvolutionProject, isInternalProjectOf, isReservedProjectId } from "./internalProjects.mjs";
 import { createEvidenceBudget, evidenceBudgetMetricFamilies } from "./evidenceBudget.mjs";
+import { createEvidenceProgramme, evidenceProgrammeMetricFamilies } from "./evidenceProgramme.mjs";
 import { evidenceCardMetricFamilies } from "./evidenceCardMetrics.mjs";
 import { assertNotPlatformAccount } from "./platformAccount.mjs";
 import { completeEvolutionRuntime } from './evolutionRuntimeCompletion.mjs';
@@ -96,7 +97,7 @@ import { LearningMetrics, learningLedgerCounts, learningMetricFamilies, learning
 import { archivedLessonRun, ensureLearningProject, preserveProjectLessons, resolveLessonSourceRun } from "./learningPreservation.mjs";
 import { learnedMethodFamilyForRuntime, methodFamily } from "./learnedMethodMount.mjs";
 import { persistExecutedToolEdges, persistGoldenTraces } from "./toolExecutionEdges.mjs";
-import { PLATFORM_PUBLISHER_USER_ID, CONNECTOR_CREDENTIAL_IDS, MIN_PASSWORD_LENGTH, accountMonthStart, autopilotEpisodeCapability, deliverableIdOfPath, geoMetricDefinition, isChargeableResearchRun, isResearcherOwnedWork, meetsPasswordMinimum, mountedMethodDigest, usagePurposeOfRun } from "@evimed/domain";
+import { PLATFORM_PUBLISHER_USER_ID, CONNECTOR_CREDENTIAL_IDS, EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON, MIN_PASSWORD_LENGTH, accountMonthStart, autopilotEpisodeCapability, deliverableIdOfPath, evidenceProgrammeRouteReason, geoMetricDefinition, isChargeableResearchRun, isResearcherOwnedWork, meetsPasswordMinimum, mountedMethodDigest, usagePurposeOfRun } from "@evimed/domain";
 import { ResearchSessionStore } from "./researchSessions.mjs";
 import { prepareResearchContext } from "./researchContext.mjs";
 import {
@@ -2046,6 +2047,18 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     authorizeContinuation: autopilotService && config.sourceChangeRecheckLimit > 0 ? producingAgenda({ results: resultProvenance, autopilot: autopilotService }) : null,
     autoRecheckLimit: config.sourceChangeRecheckLimit,
     report: code => { void securityAudit(config, "result.impact", "failed", { code }).catch(() => {}); } }) : null;
+  // The platform's own evidence programme (evidenceProgramme.mjs, plan §5.1 F01/F02/F04): a daily topic decision, agendas the publisher
+  // account runs in its internal evidence project, and the cards their verified conclusions earn. Composed only with its switch on and
+  // the frontier (which it reads and whose zones it writes) and the autopilot (which runs its agendas) beside it; off, it is nothing.
+  // The agendas' own planner, budget and slot are the programme's through `autopilotService.programme`.
+  const evidenceProgramme = config.evidenceProgrammeEnabled && frontier && autopilotService && productDatabase && productDocuments && productJobs ? createEvidenceProgramme({
+    config, database: productDatabase, documents: productDocuments, jobs: productJobs, autopilot: autopilotService, zones: frontier.evidenceZones,
+    budget: evidenceBudget, entityVocabulary, results: resultProvenance, usageLedger,
+    ensureProject: () => ensureEvidenceProject(store),
+    canRun: () => !maintenanceService || maintenanceService.claimingAllowed(),
+    report: code => process.stderr.write(`${code}\n`),
+  }) : null;
+  if (autopilotService && evidenceProgramme) autopilotService.programme = evidenceProgramme;
   // The numerical chain: which calculation a printed number came from, and the platform writing a report's numbers itself.
   const resultLineage = resultProvenance ? new ResultLineageService({ results: resultProvenance, replays: resultReplays, config,
     mirror: (project, full, bytes) => runtimeManager.mirrorWorkspaceUpload(project, full, bytes),
@@ -2917,6 +2930,15 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             : event === "autopilot.runtime.release" ? "runtime_stop_failed" : "autopilot_completion_failed",
         }),
       }, project, run);
+      // The platform's own evidence programme: a finished episode, or a recorded independent check of one of its claims, is the
+      // moment a card may be earned (evidenceProgramme.mjs `settleEpisode`, which waits for what is not in yet). Nothing for any run
+      // that is not the programme's, and a failure here never touches the run.
+      if (evidenceProgramme?.owns(project.userId, project.id)) {
+        await evidenceProgramme.onRunFinished(project, run, { verifiedEpisodeId }).catch((/** @type {any} */ error) => securityAudit(config, "evidence.programme.settle", "failed", {
+          userId: project.userId, projectId: project.id, runId: run.id,
+          code: typeof error?.code === "string" ? error.code : "evidence_programme_settle_failed",
+        }));
+      }
       // A 虚拟临研 run (dispatch id `vcr-…`): its bounded runtime is let go,
       // then the orchestrator folds it into the study's steps — the same order
       // a GEO run takes below. Released whether or not the orchestrator is
@@ -3598,7 +3620,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       const registry = await agentRegistry;
       const selected = registry.get(OPEN_DOMAIN_ANSWER_AGENT_ID);
       if (!selected) throw new HttpError(503, "autopilot_capability_unavailable", "Autopilot capability is unavailable.");
-      await checkAutopilotBalance(verification, user, selected);
+      // A verification of the platform's own claim is the platform's money too (purpose `evidence`), and the programme's budget
+      // does not gate it: its share was held back from the episode's own cap when the episode was made.
+      const programmeOwned = Boolean(evidenceProgramme?.owns(user.id, project.id));
+      if (!programmeOwned) await checkAutopilotBalance(verification, user, selected);
       await reclaimUnsentAutopilotRuntime({ service: autopilotService, runtimeManager }, project, verification, previous.unsent);
       if (previous.unsent) await discardVerificationScratch(project, previous.unsent.dispatchId).catch(error => securityAudit(config, "autopilot.verification.scratch", "failed", {
         userId: project.userId, projectId: project.id, runId: previous.unsent.id,
@@ -3640,7 +3665,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           effectiveRuntimeAgent: selected.runtimeAgent,
           // Binding fixes capability identity while preserving this verified
           // control-plane dispatch reason.
-          effectiveRouteReason: VERIFICATION_ROUTE_REASON,
+          effectiveRouteReason: programmeOwned ? EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON : VERIFICATION_ROUTE_REASON,
         }, async (binding, dispatchedRun) => {
           await assertAutopilotDispatchAllowed(verification, user);
           await autopilotService.recordVerificationDispatched(user.id, verification.episodeId, {
@@ -3708,13 +3733,17 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         // task's own spend, then the account's. What is left of the task's caps
         // bounds this run below.
         const allowance = await autopilotService.assertAffordable(user.id, agenda);
+        // The platform's own agenda (the evidence programme's) is held by the programme's day and its one slot as well, and is
+        // nobody's to pay: no wallet is asked, and the run's spend is booked as `evidence` (its route reason).
+        const programmeOwned = Boolean(evidenceProgramme?.owns(user.id, project.id));
+        if (programmeOwned) await evidenceProgramme.assertAdmitted(user.id, agenda, { episodeId: episode.episodeId });
         const registry = await agentRegistry;
         // One table in the domain, held against every capability's declared
         // task types by a test: GEO monitoring used to ride `signal-monitoring`
         // here and ran adverse-event analysis instead.
         const selected = registry.get(autopilotEpisodeCapability(episode.taskType) ?? "");
         if (!selected) throw new HttpError(503, "autopilot_capability_unavailable", "Autopilot capability is unavailable.");
-        await checkAutopilotBalance(episode, user, selected);
+        if (!programmeOwned) await checkAutopilotBalance(episode, user, selected);
         await reclaimUnsentAutopilotRuntime({ service: autopilotService, runtimeManager }, project, episode, previous.unsent);
         // Signed into the bounded runtime and every model request it makes: the
         // account's day and week (the gateway sums everything the account spent,
@@ -3743,7 +3772,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             effectiveAgentId: selected.id,
             effectiveAgentVersion: selected.version,
             effectiveRuntimeAgent: selected.runtimeAgent,
-            effectiveRouteReason: `autopilot:${episode.taskType}`,
+            effectiveRouteReason: programmeOwned ? evidenceProgrammeRouteReason(episode.taskType) : `autopilot:${episode.taskType}`,
             ...(runEstimate(selected) ? { estimatedMinutes: runEstimate(selected) } : {}),
           }, async (binding, dispatchedRun, repairText = null) => {
             // Record the attempt before checking the lease: a refusal now has
@@ -4419,6 +4448,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           learningWorker?.status?.().running,
           evolution?.worker.status().running,
           frontier?.worker.status().running,
+          evidenceProgramme?.worker?.status().running,
           review?.worker.status().running,
           geo?.worker?.status?.().running,
           vcr?.worker?.status?.().running,
@@ -4901,6 +4931,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           evolution,
           evaluationIsolation,
           evidenceBudget,
+          evidenceProgramme,
           entityVocabulary,
         });
         return;
@@ -6657,7 +6688,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       process.stderr.write("managed browser pause: cleanup remains unconfirmed\n");
     });
     for (const worker of [pluginApplyWorker, personalSkillWorker, hostedExtensions?.preparation, hostedExtensions?.worker, memoryIndexWorker, sourceWorker, autopilotWorker, learningWorker, im.worker, kbIndex, frontier?.worker, review?.worker,
-      geo?.worker, vcr?.worker, evolution?.worker, credits?.worker, documentExportWorker, resultReplayWorker, availability.worker]) {
+      geo?.worker, vcr?.worker, evolution?.worker, credits?.worker, documentExportWorker, resultReplayWorker, availability.worker, evidenceProgramme?.worker]) {
       if (worker?.timer) clearInterval(worker.timer);
       if (worker) worker.timer = null;
     }
@@ -6699,6 +6730,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       evolution?.worker.start();
       im.worker?.start();
       frontier?.worker.start();
+      evidenceProgramme?.worker?.start();
       review?.worker.start();
       geo?.worker?.start?.();
       vcr?.worker?.start?.();
@@ -6785,6 +6817,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     sourceUnderstandingRuntime,
     autopilotService,
     autopilotWorker,
+    evidenceProgramme,
     usageLedger,
     notificationService,
     // Returned so the composition root can be asserted at the composition root.
@@ -6906,6 +6939,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       await evolution?.worker.close();
       await im.worker?.close();
       await frontier?.worker.close();
+      await evidenceProgramme?.worker?.close();
       await review?.worker.close();
       await geo?.worker?.close?.();
       await vcr?.worker?.close?.();
@@ -7708,7 +7742,7 @@ function addHistogramMetric(lines, name, help, series) {
   }
 }
 
-async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, evidenceBudget = null, entityVocabulary = null }) {
+async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, evidenceBudget = null, evidenceProgramme = null, entityVocabulary = null }) {
   const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate, frontier, review, geo, vcr, credits);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
@@ -8104,6 +8138,8 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
   // for the zone upkeep this process ran. No reading is taken while the programme is off.
   const evidenceReading = evidenceBudget?.enabled ? await evidenceBudget.budget().catch(() => null) : null;
   for (const family of evidenceBudgetMetricFamilies(config, evidenceBudget, evidenceReading, frontier?.evidenceEditorial?.status().counters ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
+  // What the programme decided and wrote: decisions by who chose, signals read (counts only), actions and cards by outcome, claims left out by why.
+  for (const family of evidenceProgrammeMetricFamilies(evidenceProgramme)) addMetric(lines, family.name, family.help, family.type, family.series);
   // The evidence card's guardrails (evidenceCardMetrics.mjs): cards without a producer (must be 0), writes refused by
   // origin, cards refused for a simulated value. Read from the zone service only while the frontier is composed.
   for (const family of evidenceCardMetricFamilies(frontier ? await frontier.evidenceZones.metrics().catch(() => null) : null)) addMetric(lines, family.name, family.help, family.type, family.series);
