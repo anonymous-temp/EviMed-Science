@@ -56,8 +56,8 @@ const ROUNDING_SLACK = 1e-9;
  */
 export function printedNumber(token) {
   if (typeof token !== 'string') return null;
-  const text = token.trim().replace(/[−‒–]/g, '-').replace(/(?<=\d)[,  ](?=\d{3}(?:\D|$))/g, '');
-  const match = /^([+-]?)(?:(\d+)(?:\.(\d+))?|\.(\d+))(?:\s*(?:[eE]|[×x*]\s*10\s*\^?\s*)([+-]?\d+))?\s*(%)?$/.exec(text);
+  const text = token.trim().replace(/[\u2212\u2012\u2013]/g, '-').replace(/(?<=\d)[,\u2009\u202f](?=\d{3}(?:\D|$))/g, '');
+  const match = /^([+-]?)(?:(\d+)(?:\.(\d+))?|\.(\d+))(?:\s*(?:[eE]|[\u00d7x*]\s*10\s*\^?\s*)([+-]?\d+))?\s*(%)?$/.exec(text);
   if (!match) return null;
   const fraction = match[3] ?? match[4] ?? '';
   const exponent = Number(match[5] ?? 0) - (match[6] ? 2 : 0);
@@ -192,6 +192,9 @@ export function curatedCaseNumeric(numeric, options = {}) {
   return discriminating ? { ok: true, numeric: result } : { ok: false, code: 'case_accepts_trivial_answer' };
 }
 
+/** One number as text prints it, with thousands separators, an exponent in either notation and a percent sign. */
+const NUMBER_TOKEN = /(?<![\d.])[+-]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?:\s*(?:[eE]|[\u00d7x*]\s*10\s*\^?\s*)[+-]?\d+)?\s*%?/g;
+
 /**
  * Find the printed token of a number inside the quotation that bonds it to its source.
  *
@@ -203,9 +206,8 @@ export function curatedCaseNumeric(numeric, options = {}) {
  */
 export function printedTokenIn(quote, value) {
   if (typeof quote !== 'string' || !Number.isFinite(value)) return null;
-  const normalized = quote.replace(/[−‒–]/g, '-');
-  const pattern = /(?<![\d.])[+-]?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?:\s*(?:[eE]|[×x*]\s*10\s*\^?\s*)[+-]?\d+)?\s*%?/g;
-  for (const match of normalized.matchAll(pattern)) {
+  const normalized = quote.replace(/[\u2212\u2012\u2013]/g, '-');
+  for (const match of normalized.matchAll(new RegExp(NUMBER_TOKEN.source, 'g'))) {
     const token = match[0].trim();
     // "1.30.2" is a version or a section number, not the number 1.30.
     if (/^\.\d/.test(normalized.slice(match.index + match[0].length))) continue;
@@ -219,4 +221,24 @@ export function printedTokenIn(quote, value) {
     }
   }
   return null;
+}
+
+/**
+ * A text with every printed occurrence of the given numbers replaced by "[withheld]".
+ *
+ * For a reader who must see a paper's methods and must not see its answers: the reviewer that writes the
+ * independent reference implementation. Token by token, with the same reading of a printed number as the
+ * bond above, on either scale of a percentage and with either sign.
+ * @param {string} text @param {number[]} values
+ */
+export function withholdNumbers(text, values) {
+  const wanted = values.filter(Number.isFinite);
+  if (typeof text !== 'string' || !wanted.length) return text;
+  const same = (printed, value) => Math.abs(Math.abs(printed) - Math.abs(value)) <= Math.abs(value) * 1e-12 + Number.MIN_VALUE;
+  return text.replace(/[\u2212\u2012\u2013]/g, '-').replace(new RegExp(NUMBER_TOKEN.source, 'g'), token => {
+    const printed = printedNumber(token.trim()) ?? printedNumber(token.trim().replace(/^[+-]/, ''));
+    if (!printed) return token;
+    // The token pattern takes the blank before an optional percent sign with it; give the blank back.
+    return wanted.some(value => same(printed.value, value) || (printed.percent && same(printed.value * 100, value))) ? `[withheld]${/\s*$/.exec(token)[0]}` : token;
+  });
 }

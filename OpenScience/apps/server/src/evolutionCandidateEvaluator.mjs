@@ -11,7 +11,7 @@ import { reviewSuddenPerfect } from "./candidateSuddenPerfectReview.mjs";
 /** Every numeric constant of the candidate's Python, read with Python's own parser in the disposable
  * container. The values are compared with the hidden references in the control plane, where the
  * references are; the container never sees one. */
-const CANDIDATE_LITERALS = String.raw`
+export const PYTHON_NUMERIC_LITERALS = String.raw`
 import ast,json,pathlib
 found={}
 for file in pathlib.Path('/candidate').rglob('*.py'):
@@ -28,7 +28,7 @@ print(json.dumps({'literals':found}))
 `;
 /** A reference value is worth looking for as a literal only when it is specific: three or more
  * significant digits, and not a small whole number every program contains. @param {number} value */
-const specificValue = value => Number.isFinite(value) && !(Number.isInteger(value) && Math.abs(value) < 1000) && String(Math.abs(value)).replace(/e.*$/i, "").replace(/^0\.0*|\./g, "").replace(/0+$/, "").length >= 3;
+export const specificValue = value => Number.isFinite(value) && !(Number.isInteger(value) && Math.abs(value) < 1000) && String(Math.abs(value)).replace(/e.*$/i, "").replace(/^0\.0*|\./g, "").replace(/0+$/, "").length >= 3;
 
 /** Gold is admitted by the operator into the control-plane directory, never by the candidate.
  * Each definition binds method ID, publication identity, inputs, immutable reference numbers,
@@ -141,7 +141,7 @@ export function createEvolutionCandidateEvaluator({ config, controller, fetchImp
     if (!wanted.size || !Object.keys(candidate.files ?? {}).some(name => /\.py$/i.test(name))) return [];
     let literals;
     try {
-      const result = await controller.execVerify({ files: candidate.files, dependencyIds: [], code: CANDIDATE_LITERALS, input: {} }, { signal });
+      const result = await controller.execVerify({ files: candidate.files, dependencyIds: [], code: PYTHON_NUMERIC_LITERALS, input: {} }, { signal });
       literals = result.ok === true ? JSON.parse(String(result.output ?? "").trim().split("\n").at(-1)).literals : null;
     } catch { literals = null; }
     if (!literals) return [{ code: "reference_literal_scan_unavailable" }];

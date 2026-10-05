@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { callModelForControlPlane } from "./modelGateway.mjs";
 import { callReviewModel } from "./reviewModel.mjs";
 import { validateRewrite, freezeCycle, digest } from "../../../evals/paper-gold/evaluator.mjs";
+import { curatedCaseNumeric, printedTokenIn, TOLERANCE_QUANTITIES } from "../../../evals/paper-gold/tolerance.mjs";
 const hash = value => createHash("sha256").update(value).digest("hex");
 /** Deterministic XML text derivative; original bytes remain authoritative. @param {string} xml */
 export function calibrationTextView(xml) {
@@ -12,9 +13,45 @@ export function calibrationTextView(xml) {
     .replace(/&(lt|gt|quot|apos|amp);/g, (_, name) => ({ lt: "<", gt: ">", quot: '"', apos: "'", amp: "&" }[name]))
     .replace(/[ \t\r]+/g, " ").replace(/ *\n */g, "\n").replace(/\n{3,}/g, "\n\n").trim();
 }
-/** Exact quote bond with numeric lexical equivalence, including exponent notation. @param {string} source @param {any} row */
+const MONTHS = ["january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december"];
+/**
+ * A literature-search cut-off as a date the exclusion policy can compare with, or the reason it cannot be one.
+ *
+ * The cut-off used to be whatever string the extracting model returned, handed to `Date.parse`:
+ * "December 13th, 2018" is NaN there and made its case undispatchable, "March 2025" became 1 March and
+ * "2021" became 1 January, so the period the authors searched through was excluded. Now the string has to
+ * be a verbatim substring of the source (its bond), it is read with a closed grammar of date forms, and a
+ * month or a year is taken to its last instant: a search "through March 2025" includes March.
+ * Day/month/year orders that cannot be told apart ("03/04/2021") are refused, not guessed.
+ * @param {string} source @param {unknown} cutoff
+ * @returns {{ok:boolean,iso?:string,printed?:string,precision?:"day"|"month"|"year",reason?:string}} `ok:false` carries the `reason`
+ */
+export function calibrationSearchCutoff(source, cutoff) {
+  if (typeof cutoff !== "string" || !cutoff.trim()) return { ok: false, reason: "search_cutoff_absent" };
+  if (!source.includes(cutoff)) return { ok: false, reason: "search_cutoff_unbonded" };
+  const text = cutoff.trim().replace(/\s+/g, " ");
+  const month = name => { const key = name.toLowerCase().replace(/\.$/, ""); const index = MONTHS.findIndex(full => full === key || (key.length >= 3 && key.length <= 4 && full.startsWith(key.slice(0, 3)) && (key.length === 3 || full.startsWith(key)))); return index < 0 ? null : index + 1; };
+  let parts = null, match;
+  if ((match = /^(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})$/.exec(text))) parts = [Number(match[1]), Number(match[2]), Number(match[3])];
+  else if ((match = /^(\d{4})-(\d{2})$/.exec(text))) parts = [Number(match[1]), Number(match[2]), null];
+  else if ((match = /^(\d{4})$/.exec(text))) parts = [Number(match[1]), null, null];
+  else if ((match = /^(\d{4})\u5e74(?:(\d{1,2})\u6708(?:(\d{1,2})\u65e5)?)?$/.exec(text))) parts = [Number(match[1]), match[2] ? Number(match[2]) : null, match[3] ? Number(match[3]) : null];
+  else if ((match = /^([A-Za-z]{3,9}\.?) (\d{1,2})(?:st|nd|rd|th)?,? (\d{4})$/.exec(text))) parts = [Number(match[3]), month(match[1]), Number(match[2])];
+  else if ((match = /^(\d{1,2})(?:st|nd|rd|th)?(?: of)? ([A-Za-z]{3,9}\.?),? (\d{4})$/.exec(text))) parts = [Number(match[3]), month(match[2]), Number(match[1])];
+  else if ((match = /^([A-Za-z]{3,9}\.?),? (\d{4})$/.exec(text))) parts = [Number(match[2]), month(match[1]), null];
+  if (!parts) return { ok: false, reason: "search_cutoff_unreadable" };
+  const [year, monthNumber, day] = parts;
+  if (year < 1950 || year > 2100 || monthNumber === null && /[A-Za-z]/.test(text) || (monthNumber !== null && (monthNumber < 1 || monthNumber > 12))) return { ok: false, reason: "search_cutoff_unreadable" };
+  // The last instant of the stated period, in UTC.
+  const end = day !== null ? new Date(Date.UTC(year, monthNumber - 1, day, 23, 59, 59, 999)) : monthNumber !== null ? new Date(Date.UTC(year, monthNumber, 0, 23, 59, 59, 999)) : new Date(Date.UTC(year, 11, 31, 23, 59, 59, 999));
+  if (day !== null && (end.getUTCMonth() !== monthNumber - 1 || end.getUTCDate() !== day)) return { ok: false, reason: "search_cutoff_unreadable" };
+  return { ok: true, iso: end.toISOString(), printed: cutoff, precision: day !== null ? "day" : monthNumber !== null ? "month" : "year" };
+}
+/** Exact quote bond with numeric lexical equivalence, including exponent notation. A tolerance is not part of
+ * the bond: it is derived in code from the printed number (`tolerance.mjs`), never taken from the draft.
+ * @param {string} source @param {any} row */
 export function calibrationNumericBond(source, row) {
-  if (typeof row.quote !== "string" || !source.includes(row.quote) || !Number.isFinite(row.value) || !Number.isFinite(row.absoluteTolerance) || row.absoluteTolerance < 0) return false;
+  if (typeof row.quote !== "string" || !source.includes(row.quote) || !Number.isFinite(row.value)) return false;
   return [...row.quote.matchAll(/(?:[-+]|\u2212[ \t]*)?\d+(?:,\d{3})*(?:\.\d+)?(?:[eE](?:[-+]|\u2212[ \t]*)?\d+)?/g)]
     .some(match => Number(match[0].replaceAll("\u2212", "-").replace(/[ \t]/g, "").replaceAll(",", "")) === row.value);
 }
@@ -29,7 +66,7 @@ export function calibrationDraftContractIssues(draft) {
   if (!Array.isArray(draft?.variants) || draft.variants.length !== 3 || new Set(draft.variants).size !== 3) issues.push("Return exactly THREE distinct variant strings, with no fourth variant; each must preserve the same full PICO and neutral report intent.");
   for (const [key, reference] of Object.entries(draft?.numeric ?? {})) {
     const row = /** @type {any} */ (reference);
-    if (!/^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*$/.test(key) || !Number.isFinite(row?.value) || !Number.isFinite(row?.absoluteTolerance) || row.absoluteTolerance < 0 || typeof row.quote !== "string") issues.push(`Numeric output path ${key} requires one finite scalar value, nonnegative scalar tolerance, and exact string quote; never nested objects or placeholders.`);
+    if (!/^[A-Za-z_]\w*(?:\.[A-Za-z_]\w*)*$/.test(key) || !Number.isFinite(row?.value) || typeof row.quote !== "string") issues.push(`Numeric output path ${key} requires one finite scalar value and an exact string quote; never nested objects or placeholders.`);
   }
   return issues;
 }
@@ -110,7 +147,7 @@ export function createPaperGoldCalibration({ config, usageLedger, fetchImpl = fe
         const extraction = cache?.extraction ?? await callModelForControlPlane({ config, usageLedger, fetchImpl }, {
           userId, projectId, purpose: "evolution", signal, limits: { daily: config.evolutionDailyBudgetCny, weekly: 0 },
           body: { model: "deepseek-flash", thinking: { type: "disabled" }, response_format: { type: "json_object" }, max_tokens: 8192, messages: [
-            { role: "system", content: 'Curate a published-paper research reproduction benchmark from this preserved deterministic primary text view. Return JSON {question,variants:[3 distinct neutral questions],numeric:{receipt_path:{value,absoluteTolerance,quote}},inputAvailable:boolean,inputLimitations:[string],methodSpecification:string,cutoff:string|null,reachableEvidenceIds:[eligible included-study DOI/PMID/PMCID],unreachableEvidenceIds:[IDs],dataVersion:string|null}. Preserve population, intervention/exposure and outcome; remove direction, author, journal and target identifiers. Include explicit report intent. Select only 1 to 3 central published analysis estimates; copy exact contiguous text-view substrings as quotes, with unchanged whitespace. Each numeric map entry MUST be one flat named output path (for example analysis.ror), with a finite JSON number value, a finite nonnegative JSON number absoluteTolerance, and a string quote. Never nest drug objects, use placeholder strings, nulls, arrays, or object-valued estimates. If no justified scalar is available return numeric:{}; do not manufacture one. Preserve the quoted numeric scale and units, including percentages, without implicit conversion. Numeric values must occur verbatim in exact source quotes and refer to named outcomes in the methods; never invent values or data. Numeric paths should match the deterministic analysis receipt the evaluator can compare. Mark inputAvailable false when exact same-version inputs are absent, and explicitly include a withheld-input request variant whose correct answer is inability to reproduce. Do not equate preserved full text with accessible study-level data. Identify literature search cutoff from the actual methods or null. No self-reported scores.' },
+            { role: "system", content: 'Curate a published-paper research reproduction benchmark from this preserved deterministic primary text view. Return JSON {question,variants:[3 distinct neutral questions],numeric:{receipt_path:{value,quote,quantity}},inputAvailable:boolean,inputLimitations:[string],methodSpecification:string,cutoff:string|null,reachableEvidenceIds:[eligible included-study DOI/PMID/PMCID],unreachableEvidenceIds:[IDs],dataVersion:string|null}. Preserve population, intervention/exposure and outcome; remove direction, author, journal and target identifiers. Include explicit report intent. Select only 1 to 3 central published analysis estimates; copy exact contiguous text-view substrings as quotes, with unchanged whitespace. Each numeric map entry MUST be one flat named output path (for example analysis.ror), with a finite JSON number value, a string quote, and quantity as one of ratio, difference, probability, p-value, count, other. Do not supply tolerances: they are derived from the printed precision. Never nest drug objects, use placeholder strings, nulls, arrays, or object-valued estimates. If no justified scalar is available return numeric:{}; do not manufacture one. Preserve the quoted numeric scale and units, including percentages, without implicit conversion. Numeric values must occur verbatim in exact source quotes and refer to named outcomes in the methods; never invent values or data. Numeric paths should match the deterministic analysis receipt the evaluator can compare. Mark inputAvailable false when exact same-version inputs are absent, and explicitly include a withheld-input request variant whose correct answer is inability to reproduce. Do not equate preserved full text with accessible study-level data. For cutoff give the literature-search end date exactly as the methods print it (an exact substring holding only the date, such as "December 13th, 2018" or "March 2025"), or null when no search date is stated. No self-reported scores.' },
             { role: "user", content: repairDraft ? JSON.stringify({ source, targetedRepair: repairDraft, instruction: "Repair only the identified failures. Retain the same paper and PICO. Preserve named interventions/exposures; hide article identifiers, authors and title. Select exact contiguous source substrings for 1-3 numeric quotes. Do not alter an estimate or its outcome to obtain a pass. If unavailable, explicitly say so." }) : source },
           ] },
         });
@@ -159,14 +196,22 @@ export function createPaperGoldCalibration({ config, usageLedger, fetchImpl = fe
               stageChecks: { question: ["question_aligned"], method: ["method_supported"], certainty: ["certainty_supported"], writing: ["writing_sources_bound"] } } });
           return true;
         };
-        const numeric = {};
+        const bonded = {};
         let numericBondValid = true;
         for (const [key, reference] of Object.entries(draft.numeric ?? {})) {
           const row = /** @type {any} */ (reference);
-          if (!calibrationNumericBond(source, row)) { numericBondValid = false; break; }
-          numeric[key] = { value: row.value, absoluteTolerance: row.absoluteTolerance, quote: row.quote };
+          const printed = calibrationNumericBond(source, row) ? printedTokenIn(row.quote, row.value) : null;
+          if (!printed) { numericBondValid = false; break; }
+          bonded[key] = { value: row.value, printed, quote: row.quote, ...(TOLERANCE_QUANTITIES.includes(row.quantity) ? { quantity: row.quantity } : {}) };
         }
-        if (!numericBondValid || !Object.keys(numeric).length) { cache.failure = "primary_numeric_quotation_bond_failed"; await writeFile(responseFile, JSON.stringify(cache), { mode: 0o600 }); if (!await admitQuestion(cache.failure)) unavailable.push({ id: record.id, reason: cache.failure }); continue; }
+        // The tolerance of every number is the printed precision, by rule; and a case none of whose numbers can tell
+        // a real answer from the trivial one is not a numeric reference.
+        const curated = numericBondValid && Object.keys(bonded).length ? curatedCaseNumeric(bonded) : null;
+        const numeric = curated?.ok ? curated.numeric : {};
+        if (!curated?.ok) { cache.failure = curated?.code === "case_accepts_trivial_answer" ? "primary_numeric_cannot_discriminate_trivial_answer" : "primary_numeric_quotation_bond_failed"; await writeFile(responseFile, JSON.stringify(cache), { mode: 0o600 }); if (!await admitQuestion(cache.failure)) unavailable.push({ id: record.id, reason: cache.failure }); continue; }
+        // A stated search cut-off that cannot be bonded and read is not replaced by a guess or silently dropped.
+        const searchCutoff = draft.cutoff == null ? null : calibrationSearchCutoff(source, draft.cutoff);
+        if (searchCutoff && !searchCutoff.ok) { cache.failure = searchCutoff.reason; await writeFile(responseFile, JSON.stringify(cache), { mode: 0o600 }); if (!await admitQuestion(cache.failure)) unavailable.push({ id: record.id, reason: cache.failure }); continue; }
         if (qa.value.passed !== true) { cache.failure = "independent_primary_qa_failed"; await writeFile(responseFile, JSON.stringify(cache), { mode: 0o600 }); if (!await admitQuestion(cache.failure)) unavailable.push({ id: record.id, reason: cache.failure, issues: qa.value.issues }); continue; }
         try { validateRewrite(rewrite, { identifiers: aliases }); }
         catch { cache.failure = "neutral_rewrite_validation_failed"; await writeFile(responseFile, JSON.stringify(cache), { mode: 0o600 }); unavailable.push({ id: record.id, reason: cache.failure }); continue; }
@@ -187,7 +232,8 @@ export function createPaperGoldCalibration({ config, usageLedger, fetchImpl = fe
         const type = "research";
         cases.push({ id: record.id, publicationId: record.doi ?? record.pmcid ?? record.pmid ?? null, engineId: record.track, sourceHash: hash(source), track: record.track, type, capabilityId: { meta: "meta-analysis", pharmacovigilance: "adr-analysis", mr: "mendelian-randomization" }[record.track], rewrite,
           input: `${draft.question}\nMethod specification: ${draft.methodSpecification}\n${draft.inputAvailable ? "Reproduce the stated methods using verified same-version inputs." : "The exact same-version analysis inputs are withheld. State what cannot be reproduced; do not manufacture inputs or claim exact reproduction."}`,
-          policy: { aliases, titles: [preserved.record.title], ...(draft.cutoff ? { cutoff: draft.cutoff } : {}) }, dois: record.doi ? [record.doi] : [],
+          policy: { aliases, titles: [preserved.record.title], ...(searchCutoff ? { cutoff: searchCutoff.iso } : {}) }, dois: record.doi ? [record.doi] : [],
+          ...(searchCutoff ? { searchCutoff: { printed: searchCutoff.printed, iso: searchCutoff.iso, precision: searchCutoff.precision } } : {}),
           gold: { numeric: draft.inputAvailable === true ? numeric : {}, baselineNumeric: numeric, ...(draft.inputAvailable === true ? {} : { applicableStages: ["question", "method", "certainty", "writing"] }), inputAvailable: draft.inputAvailable === true, inputAvailabilityBasis: draft.inputAvailabilityBasis, inputLimitations: draft.inputLimitations, dataVersion: draft.dataVersion, sourceHash: hash(source), preservedEvidence: [{ id: record.id, sourceHash: hash(source), numericQuotes: Object.values(numeric).map(row => row.quote) }], reachableEvidenceIds: reachable, unreachableEvidenceIds: [...new Set(unreachable)], stageChecks: { question: ["question_aligned"], method: ["method_supported"], recall: ["reachable_sources_recalled"], extraction: ["input_data_preserved"], calculation: ["deterministic_receipts"], certainty: ["certainty_supported"], writing: ["writing_sources_bound"] } },
         });
       }
