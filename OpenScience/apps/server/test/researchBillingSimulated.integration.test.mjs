@@ -335,3 +335,34 @@ test("a wallet goes with its account, a financial row stays marked and redacted,
   assert.deepEqual((await f.get("/api/account/allowance/statements", again)).body.data.items.map((item) => item.kind), ["grant"]);
   assert.notEqual(await f.payerOf(owner.user.id), payer, "the same name is a different payer");
 });
+
+test("a charge the one-number wallet took before the lots says the balance it left, read from its deduct entry", options, async (t) => {
+  // Live check of 2026-10-05: an account's 28 charges from before the lots read 「余额 —」, because the old
+  // wallet wrote the balance on its deduct entry and never in the charge's evidence.
+  const database = new ControlPlaneDatabase({ databaseUrl, databasePoolMax: 4, databaseConnectionTimeoutMs: 3_000 });
+  const userId = `sim_legacy_${randomUUID().replaceAll("-", "")}`;
+  t.after(async () => {
+    await database.query("DELETE FROM evimed_credits.research_tasks WHERE user_id=$1", [userId]).catch(() => {});
+    await database.query("DELETE FROM evimed_credits.simulated_wallets WHERE user_id=$1", [userId]).catch(() => {});
+    await database.query("DELETE FROM evimed_control.users WHERE id=$1", [userId]).catch(() => {});
+    await database.close();
+  });
+  await database.migrate();
+  await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Legacy statement','development')", [userId]);
+  await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,'default','Default',1048576)", [userId]);
+  const wallet = new SimulatedWallet({ database, startCredits: 100 });
+  const service = new EvimedCreditsService({ config: { evimedCreditsEnabled: true, evimedCreditsSimulated: true, evimedCreditsPerCny: 1, researchBillingEnabled: true },
+    database, client: null, simulator: wallet });
+  assert.equal(await service.ensureReady(), null);
+  await service.balanceFor(userId);
+  const payer = await simulatedPayerOf(database, userId);
+  const runId = `run_${randomUUID()}`;
+  await database.query(`INSERT INTO evimed_credits.research_tasks(run_id,user_id,title,evidence,created_at,status,settled_at,owner_created_at,wallet)
+    SELECT $1,id,'深度研究 · before the lots',$3::jsonb,clock_timestamp(),'settled',clock_timestamp(),created_at,'simulated' FROM evimed_control.users WHERE id=$2`,
+  [runId, userId, JSON.stringify({ pricingVersion: "research-allowance-v1-20261003", walletContract: "legacy-integer-floor", actualCny: "3.41000000",
+    billableCny: "3.41000000", eligibleCny: "3.41000000", chargedCny: "3.00000000", creditsAmount: "3.00000000", waivedCny: "0.41000000", platformCostCny: "0.00000000", evidence: [] })]);
+  await database.query("INSERT INTO evimed_credits.simulated_entries(payer,kind,request_id,credits,balance_after,receipt_id) VALUES($1,'deduct',$2,3,97,'sim_rcpt_fixture')", [payer, runId]);
+  const line = (await service.statements(userId)).items.find((item) => item.runId === runId);
+  assert.ok(line, "the old charge is on the statement");
+  assert.equal(line.balanceAfter, "97.00000000");
+});

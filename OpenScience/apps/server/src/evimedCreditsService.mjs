@@ -813,12 +813,18 @@ export class EvimedCreditsService {
     if (this.simulated) await this.simulator?.ready();
     const deduct = this.simulated ? "LEFT JOIN evimed_credits.simulated_entries d ON d.request_id=t.run_id AND d.kind='deduct'" : "";
     const sortKey = this.simulated ? "coalesce('e'||lpad(d.entry_id::text,20,'0'),'r'||t.run_id)" : "'r'||t.run_id";
+    // A charge the one-number wallet took before the lots (research-allowance-v1) wrote its balance on the
+    // deduct entry, not in its evidence: read from there, so a statement of that history says what the balance
+    // was after each of its lines too (live check of 2026-10-05: 28 such lines read 「余额 —」).
+    const evidence = this.simulated
+      ? "CASE WHEN d.entry_id IS NOT NULL AND (t.evidence->>'balanceAfter') IS NULL THEN t.evidence || jsonb_build_object('balanceAfter',d.balance_after::text) ELSE t.evidence END"
+      : "t.evidence";
     // One order for every kind of line: when it was written, and then the wallet's own entry sequence — which
     // is monotonic under the wallet's lock — and never the spelling of an id. A charge takes the sequence of its
     // deduct entry; a line with no entry (a run that was not charged) sorts by its own id after them.
     const result = await this.database.query(`SELECT t.*
       FROM (
-        SELECT t.run_id,t.user_id,t.title,t.evidence,t.created_at,t.status,
+        SELECT t.run_id,t.user_id,t.title,${evidence} AS evidence,t.created_at,t.status,
           ${sortKey} AS sort_key
         FROM evimed_credits.research_tasks t
           JOIN evimed_control.users u ON u.id=t.user_id AND u.created_at=t.owner_created_at

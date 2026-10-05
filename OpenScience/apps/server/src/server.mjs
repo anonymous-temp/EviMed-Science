@@ -2373,8 +2373,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // timeout the capture is abandoned and the run records `history_unavailable`
     // exactly as it did before — the failure mode is the old behaviour, never a
     // stuck stop.
-    onRuntimeStopping: async (project) => {
+    onRuntimeStopping: async (project, { by = null } = {}) => {
       if (!agentRuns) return;
+      // First, before any pre-read: whatever the container's exit is read as, a stop the user asked for is theirs.
+      await agentRuns.noteRuntimeStop(project, { by });
       let running = [];
       try {
         // Every run still going, and the bounded run this runtime was reserved

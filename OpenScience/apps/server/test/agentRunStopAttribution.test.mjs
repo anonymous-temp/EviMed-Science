@@ -106,3 +106,36 @@ test("closeProject names who asked: the user's own runtime stop is theirs, and t
     assert.equal((await finished(f, failed.id)).canceledBy, undefined, "a run that failed was not stopped by anyone");
   } finally { await f.close(); }
 });
+
+test("a runtime the user stopped ends the run it held as the user's stop, even when the container's exit is read first", async () => {
+  // Live check of 2026-10-05: `stop_runtime` while a run was working — the monitor read the gone container
+  // (no transcript, no package) before the stop's own cancel and wrote `failed / runtime_stopped`, which is
+  // waived. The user's stop is noted on the run before the container goes.
+  let alive = true;
+  const f = await fixture({
+    readSessionHistory: async () => {
+      if (alive) return [];
+      const error = new Error("gone");
+      /** @type {any} */ (error).code = "runtime_not_running";
+      throw error;
+    },
+  });
+  try {
+    const run = await f.start();
+    await f.store.noteRuntimeStop(f.project, { by: "user" });
+    alive = false;
+    await f.store.reconcileSession(f.project, f.binding.sessionId).catch(() => {});
+    const ended = await finished(f, run.id);
+    assert.deepEqual([ended.status, ended.errorCode, ended.canceledBy], ["canceled", "runtime_canceled", "user"]);
+
+    // The platform's stop is not noted (its own cancel names it), and a container that dies by itself is a failure.
+    alive = true;
+    const second = await f.start();
+    await f.store.noteRuntimeStop(f.project, { by: "platform" });
+    await f.store.noteRuntimeStop(f.project, { by: null });
+    alive = false;
+    await f.store.reconcileSession(f.project, f.binding.sessionId).catch(() => {});
+    const failed = await finished(f, second.id);
+    assert.deepEqual([failed.status, failed.errorCode, failed.canceledBy], ["failed", "runtime_stopped", undefined]);
+  } finally { await f.close(); }
+});

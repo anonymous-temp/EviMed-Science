@@ -3412,7 +3412,7 @@ export class RuntimeManager {
     this.clearWorkloadTimer = clearWorkloadTimer;
     /** @type {(project: any, status: any, errorCode?: string, options?: { by?: 'user' | 'platform' | null }) => any} */
     this.onRuntimeStop = onRuntimeStop;
-    /** @type {(project: Record<string, any>) => Promise<void>} */
+    /** @type {(project: Record<string, any>, options?: { by?: 'user' | 'platform' | null }) => Promise<void>} */
     this.onRuntimeStopping = onRuntimeStopping;
     /** @type {(project: any, sessionId: any) => any} */
     this.onSessionAbort = onSessionAbort;
@@ -5251,11 +5251,12 @@ export class RuntimeManager {
    * wait on it indefinitely. Failure is isolated: a stop that cannot pre-read
    * still has to stop.
    * @param {Record<string, any>} project
+   * @param {'user' | 'platform' | null} [by] who asked for the stop (`stop`'s `by`)
    * @returns {Promise<void>}
    */
-  async notifyRuntimeStopping(project) {
+  async notifyRuntimeStopping(project, by = null) {
     try {
-      await this.onRuntimeStopping(project);
+      await this.onRuntimeStopping(project, { by });
     } catch {
       /* isolated: evimed_runtime_stopping_notify_failures_total */
     }
@@ -6070,7 +6071,7 @@ export class RuntimeManager {
         return false;
       }
       if (current() !== requested || (guard && !guard())) return false;
-      await this.notifyRuntimeStopping(project);
+      await this.notifyRuntimeStopping(project, by);
       // A token write must settle before its files can belong to a replacement.
       await requested.workloadWritePending?.catch(() => {});
       if (current() !== requested || (guard && !guard())

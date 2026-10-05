@@ -4087,6 +4087,8 @@ export class AgentRunStore {
     // never turn a platform cancel, a long time after, into the user's. runId -> when it was asked.
     /** @type {Map<string, number>} */
     this.stopRequests = new Map();
+    /** Runs whose runtime the user stopped (`noteRuntimeStop`): run id -> when. */
+    this.runtimeStopRequests = new Map();
     this.stopRequestWindowMs = options.stopRequestWindowMs ?? 5 * 60_000;
     this.onRunFinished = options.onRunFinished ?? (async () => {});
     this.onRunFinishedError = options.onRunFinishedError ?? (async () => {});
@@ -5205,7 +5207,19 @@ export class AgentRunStore {
         });
       }
       // Nothing on disk and no finished answer on record: the turn had not
-      // finished, and the runtime stopping is the truthful reason.
+      // finished. When the user stopped the runtime it ran in, that stop is
+      // what ended it (`noteRuntimeStop`); otherwise the runtime stopping is
+      // the truthful reason.
+      const stoppedAt = this.runtimeStopRequests.get(run.id);
+      if (stoppedAt !== undefined && this.now().getTime() - stoppedAt <= this.stopRequestWindowMs) {
+        return this.finishInternal(project, run.id, {
+          status: "canceled",
+          errorCode: "runtime_canceled",
+          artifacts: [],
+          canceledBy: "user",
+          qualityNotices: labels.slice(0, 20),
+        });
+      }
       return this.finishInternal(project, run.id, {
         status: "failed",
         errorCode: "runtime_stopped",
@@ -5410,6 +5424,7 @@ export class AgentRunStore {
     // was recorded for this run a moment ago. What names itself (the platform shutting a runtime) stays as named.
     const askedAt = this.stopRequests.get(runId);
     this.stopRequests.delete(runId);
+    this.runtimeStopRequests.delete(runId);
     if (normalized.status === "canceled" && !("canceledBy" in normalized) && askedAt !== undefined
       && this.now().getTime() - askedAt <= this.stopRequestWindowMs) {
       /** @type {any} */ (normalized).canceledBy = "user";
@@ -5553,6 +5568,26 @@ export class AgentRunStore {
       return run.id;
     } catch {
       return null;
+    }
+  }
+
+  /**
+   * A runtime stop the user asked for (stop or restart of their own runtime, deleting the project or the
+   * account), noted on every run it holds before the container goes. The container's exit is read by
+   * whichever path sees it first, and the monitor's — no transcript, no package, `runtime_stopped` — used
+   * to win over the stop's own cancel, so a run the user stopped this way read as a failure the platform
+   * absorbs (live check of 2026-10-05: `stop_runtime` with three calls settled, recorded `failed`,
+   * waived). A stop the platform asked for is not noted: its own cancel names it, and a container that
+   * dies by itself is still a failure.
+   * @param {any} project @param {{ by?: 'user' | 'platform' | null }} [options]
+   */
+  async noteRuntimeStop(project, { by = null } = {}) {
+    if (by !== "user") return;
+    try {
+      const at = this.now().getTime();
+      for (const run of (await this.list(project)).filter((item) => item.status === "running")) this.runtimeStopRequests.set(run.id, at);
+    } catch {
+      // A note that cannot be written leaves the verdict the gone container gives.
     }
   }
 
