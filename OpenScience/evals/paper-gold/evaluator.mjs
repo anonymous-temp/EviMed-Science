@@ -1,15 +1,18 @@
 import { createHash } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
+import { boundedHalfWidth } from "./tolerance.mjs";
 export const STAGES = Object.freeze(["question", "method", "recall", "extraction", "calculation", "certainty", "writing"]);
 export const GAPS = Object.freeze(["connector", "extraction", "method_missing", "implementation", "routing", "skill_instruction", "writing", "model_capability", "outside_product"]);
 export const BENCHMARKS = Object.freeze(["method", "research", "question"]);
 export const digest = value => createHash("sha256").update(JSON.stringify(value)).digest("hex");
+/** A reference's stated tolerance is honoured only up to the bound `tolerance.mjs` derives from how the
+ *  number was printed; `toleranceClamped` says a frozen definition asked for more than that. */
 export function numericScore(actual, reference) {
   if (!Number.isFinite(actual)) return { valid: false, reason: "missing_numeric_result" };
   const interval = reference.interval ?? [reference.value, reference.value];
-  const tolerance = Math.max(reference.absoluteTolerance ?? 0, Math.abs(reference.value ?? 0) * (reference.relativeTolerance ?? 0));
-  return { valid: actual >= interval[0] - tolerance && actual <= interval[1] + tolerance, distance: actual < interval[0] ? interval[0] - actual : actual > interval[1] ? actual - interval[1] : 0 };
+  const { halfWidth: tolerance, clamped } = boundedHalfWidth(reference);
+  return { valid: actual >= interval[0] - tolerance && actual <= interval[1] + tolerance, distance: actual < interval[0] ? interval[0] - actual : actual > interval[1] ? actual - interval[1] : 0, ...(clamped ? { toleranceClamped: true } : {}) };
 }
 export function crossImplementationScore(actual, independent, tolerances = {}) {
   if (!independent.implementationId || independent.implementationId === actual.implementationId) throw new Error("Cross-implementation scoring requires independent implementations.");
@@ -57,7 +60,7 @@ export async function freezeCycle(dataDir, cycleId, definition) {
   if (!/^[a-zA-Z0-9_-]+$/.test(cycleId)) throw new Error("Invalid cycle id.");
   const directory = path.join(dataDir, "paper-gold", "cycles", cycleId);
   await mkdir(directory, { recursive: true, mode: 0o700 });
-  const evaluatorSources = await Promise.all(["./evaluator.mjs", "./run.mjs", "./benchmarks.mjs", "../../apps/server/src/paperGoldEvaluator.mjs", "../../apps/server/src/paperGoldCalibration.mjs", "../../apps/server/src/reviewModel.mjs", "../../apps/server/src/paperGoldVerification.mjs"].map(file => readFile(new URL(file, import.meta.url), "utf8")));
+  const evaluatorSources = await Promise.all(["./evaluator.mjs", "./tolerance.mjs", "./run.mjs", "./benchmarks.mjs", "../../apps/server/src/paperGoldEvaluator.mjs", "../../apps/server/src/paperGoldCalibration.mjs", "../../apps/server/src/reviewModel.mjs", "../../apps/server/src/paperGoldVerification.mjs"].map(file => readFile(new URL(file, import.meta.url), "utf8")));
   const evaluatorCodeHash = digest(evaluatorSources);
   const hash = digest({ definition, evaluatorCodeHash });
   const file = path.join(directory, "definition.json");
