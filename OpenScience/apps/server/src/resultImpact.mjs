@@ -1,6 +1,7 @@
 /** Advisory changes against immutable result inputs. A source lookup never edits a result. */
 import { createHash } from "node:crypto";
-import { AFFECTED_CLASSES, SOURCE_REPLACED_KIND, affectedClass, affectedCounts, doiOf, projectAffected } from "@evimed/domain";
+import { AFFECTED_CLASSES, SOURCE_REPLACED_KIND, affectedClass, affectedCounts, doiOf, doiOfSourceIdentifier, mergeSourceUpdateStatus, projectAffected,
+  sourceUpdateStatusOfFact } from "@evimed/domain";
 import { claimEvidenceSources } from "@evimed/domain/clinical-evidence";
 import { HttpError } from "./security.mjs";
 
@@ -152,15 +153,19 @@ const byId = (left, right) => String(left.versionId ?? left.recordId ?? left.id)
 export class ResultImpactService {
   /**
    * `knowledge` is the memories and learned methods that rest on a changed source (`knowledgeChange.mjs`); absent, the
-   * record says those lookups were not made. `authorizeContinuation(ownerId, impact)` answers which agenda the researcher
+   * record says those lookups were not made. `sourceChanges` is the one record of what was published about a work after
+   * it was published (`sourceChanges.mjs`, B5): every check is read together with it, so a retraction some other detector
+   * recorded is not lost to a lookup that did not see it, and `reconcileSince` takes what was recorded since a position
+   * of its feed without asking anyone; absent, a check is exactly what the caller found. `authorizeContinuation(ownerId, impact)` answers which agenda the researcher
    * already authorized for this result, if any (the running agenda whose episode produced it); at most
    * `autoRecheckLimit` impacts of one check are continued that way, and the rest wait for the researcher's own choice.
-   * @param {{documents:any,results:any,autopilot?:any,notifications?:any,knowledge?:any,authorizeContinuation?:(userId:string,impact:any)=>Promise<string|null>,
+   * @param {{documents:any,results:any,autopilot?:any,notifications?:any,knowledge?:any,sourceChanges?:any,authorizeContinuation?:(userId:string,impact:any)=>Promise<string|null>,
    *   autoRecheckLimit?:number,report?:(code:string)=>void,now?:()=>Date}} dependencies
    */
-  constructor({ documents, results, autopilot = null, notifications = null, knowledge = null, authorizeContinuation = null, autoRecheckLimit = 3,
+  constructor({ documents, results, autopilot = null, notifications = null, knowledge = null, sourceChanges = null, authorizeContinuation = null, autoRecheckLimit = 3,
     report = () => {}, now = () => new Date() }) {
     this.documents = documents; this.results = results; this.autopilot = autopilot; this.notifications = notifications; this.knowledge = knowledge;
+    this.sourceChanges = sourceChanges;
     this.authorizeContinuation = authorizeContinuation; this.autoRecheckLimit = autoRecheckLimit; this.report = report; this.now = now;
   }
 
@@ -219,6 +224,50 @@ export class ResultImpactService {
   }
 
   /**
+   * A check, together with what the source-change record holds about the work: a notice some detector recorded is not
+   * undone by a check that did not see it (a lookup that failed, an index that lags), and its notices are added to the
+   * ones the check named. A record that holds none, or one that cannot be read, leaves the check as it was.
+   * @param {{ id: string, doi?: string }} ref @param {any} checked @returns {Promise<any>}
+   */
+  async #withRecorded(ref, checked) {
+    const doi = doiOf(ref.doi) ?? doiOf(ref.id);
+    if (!this.sourceChanges || !doi) return checked;
+    try {
+      const fact = await this.sourceChanges.get(`doi:${doi}`);
+      return statusProjection(mergeSourceUpdateStatus(checked, sourceUpdateStatusOfFact(fact)));
+    } catch (error) {
+      this.report(typeof error?.code === "string" ? error.code : "result_impact_source_change_failed");
+      return checked;
+    }
+  }
+
+  /**
+   * What was recorded about published works since a position of the source-change feed, reconciled against this project:
+   * the versions that cite a work whose record holds a change, the memories linked to it, the methods learnt from those
+   * versions, each impact and inbox notice exactly as a check would have made them — and no request to Crossref or any
+   * other source. The project's results are read once for the whole page, not once per work. Keep the `cursor` of the
+   * answer and give it back to catch up from there; `hasMore` says the feed held more than `limit` records.
+   * @param {string} userId @param {{ projectId: string, since?: number|string|null, limit?: number }} input
+   * @returns {Promise<{ items: any[], cursor: number, hasMore: boolean, scanned: number, unavailable?: boolean }>}
+   */
+  async reconcileSince(userId, { projectId, since = 0, limit = 50 }) {
+    await this.results.scope(userId, projectId);
+    if (!this.sourceChanges) return { items: [], cursor: Number(since) || 0, hasMore: false, scanned: 0, unavailable: true };
+    const page = await this.sourceChanges.changedSince(since, limit);
+    const scan = await this.#scanResults(userId, projectId);
+    /** @type {Map<string, any>} */
+    const items = new Map();
+    for (const fact of page.items) {
+      const doi = doiOfSourceIdentifier(fact.identifier);
+      const status = sourceUpdateStatusOfFact(fact);
+      if (!doi || status.state !== "changed") continue;
+      const reply = await this.reconcileSourceUpdate(userId, { projectId, source: { id: doi, doi }, status }, { scan });
+      for (const row of reply.items) items.set(row.id, row);
+    }
+    return { items: [...items.values()], cursor: page.cursor, hasMore: page.hasMore, scanned: scan.length };
+  }
+
+  /**
    * The knowledge base received new bytes for a file it already held (a new content-addressed document beside the old
    * one): the work that rests on the old document is affected the way work that rests on a corrected paper is. The old
    * document is named by its id and by the digest of its exact bytes, which is how a result that read the file recorded
@@ -234,29 +283,51 @@ export class ResultImpactService {
   }
 
   /**
+   * Visit every result row a listing yields, page by page, refusing a pagination that does not advance.
+   * @param {(cursor: string|null) => Promise<{items: any[], nextCursor?: string|null}>} list @param {(result: any, row: any) => void} visit
+   */
+  async #pages(list, visit) {
+    let cursor = null;
+    const cursors = new Set();
+    do {
+      const page = await list(cursor);
+      for (const resultRow of page.items) visit(resultRow.payload ?? resultRow, resultRow);
+      cursor = page.nextCursor ?? null;
+      if (cursor && cursors.has(cursor)) throw new HttpError(503, "result_impact_pagination_invalid", "Result pagination did not advance.");
+      if (cursor) cursors.add(cursor);
+    } while (cursor);
+  }
+
+  /**
+   * Every version of the project with the identities it recorded, read once: what `reconcileSince` checks many sources
+   * against instead of scanning the project again for each.
+   * @returns {Promise<Array<{id: string, inputs: any[]}>>}
+   */
+  async #scanResults(userId, projectId) {
+    const scan = [];
+    await this.#pages(cursor => this.results.list(userId, { projectId, limit: 100, cursor }),
+      (result, row) => scan.push({ id: result.versionId ?? result.id ?? row.id, inputs: result.inputs ?? [] }));
+    return scan;
+  }
+
+  /**
    * The versions that name the source: every version of the project whose recorded inputs do (a scan of all of them, so
-   * a DOI written in another form still meets its work), or — for a knowledge-base document, which is named by exact
-   * identifiers — the versions that contain exactly those identifiers.
+   * a DOI written in another form still meets its work, or the scan the caller already made), or — for a knowledge-base
+   * document, which is named by exact identifiers — the versions that contain exactly those identifiers.
    * @returns {Promise<{ ids: string[], scanned: number }>}
    */
-  async #naming(userId, projectId, ref, exact) {
+  async #naming(userId, projectId, ref, exact, scan = null) {
     const ids = new Set();
     let scanned = 0;
-    const pages = async (list) => {
-      let cursor = null;
-      const cursors = new Set();
-      do {
-        const page = await list(cursor);
-        for (const resultRow of page.items) {
-          const result = resultRow.payload ?? resultRow;
-          scanned += 1;
-          if ((result.inputs ?? []).some(input => matches(input, ref))) ids.add(result.versionId ?? result.id ?? resultRow.id);
-        }
-        cursor = page.nextCursor ?? null;
-        if (cursor && cursors.has(cursor)) throw new HttpError(503, "result_impact_pagination_invalid", "Result pagination did not advance.");
-        if (cursor) cursors.add(cursor);
-      } while (cursor);
-    };
+    if (scan && !exact) {
+      for (const result of scan) { scanned += 1; if (result.inputs.some(input => matches(input, ref))) ids.add(result.id); }
+      return { ids: [...ids], scanned };
+    }
+    /** @param {(cursor: string|null) => Promise<any>} list */
+    const pages = list => this.#pages(list, (result, resultRow) => {
+      scanned += 1;
+      if ((result.inputs ?? []).some(input => matches(input, ref))) ids.add(result.versionId ?? result.id ?? resultRow.id);
+    });
     if (!exact) await pages(cursor => this.results.list(userId, { projectId, limit: 100, cursor }));
     else {
       for (const filter of [{ inputs: [{ id: ref.id }] }, ...(ref.contentDigest ? [{ inputs: [{ digest: ref.contentDigest }] }] : [])]) {
@@ -297,17 +368,17 @@ export class ResultImpactService {
    * rests on it is affected too, and so are the memories that name it and the learned methods linked to those versions:
    * each is found by its recorded link, labelled with the source's new state and listed on the impact. Work that rests
    * on nothing the source touches gets no row and is not asked to run again.
-   * @param {string} userId @param {{projectId:string, source:any, status:any}} input @param {{exact?:boolean}} [options]
+   * @param {string} userId @param {{projectId:string, source:any, status:any}} input @param {{exact?:boolean, scan?:Array<{id:string,inputs:any[]}>|null}} [options]
    */
-  async reconcileSourceUpdate(userId, { projectId, source, status }, { exact = false } = {}) {
+  async reconcileSourceUpdate(userId, { projectId, source, status }, { exact = false, scan = null } = {}) {
     const project = await this.results.scope(userId, projectId);
     const ownerId = project.userId;
     const ref = sourceReference(source);
-    const checked = statusProjection(status);
+    const checked = await this.#withRecorded(ref, statusProjection(status));
     // Memories rest on the source whether or not a result of this project does; the label is about the source.
     const memories = this.knowledge ? await this.knowledge.memories(ownerId, projectId, ref, checked) : { unknown: "unavailable" };
     if (checked.state === "no_update") return { items: [], scanned: 0 };
-    const { ids, scanned } = await this.#naming(userId, projectId, ref, exact);
+    const { ids, scanned } = await this.#naming(userId, projectId, ref, exact, scan);
     const changeKey = hash([ref, checked.state, checked.reason ?? null, checked.updates]);
     /** @type {Map<string, any>} */
     const calculations = new Map();
