@@ -1,6 +1,8 @@
 import { HttpError, readJson, sendJson } from "./security.mjs";
 import { CAPSULE_TRANSFER_MAX_BYTES } from "./capsuleTransferService.mjs";
 import { DOCUMENT_MEMORY_LAYER } from "./derivedMemory.mjs";
+import { recordShareTrial } from "./capsuleShareMetrics.mjs";
+import { productId } from "./productPersistence.mjs";
 
 /** @param {any} req @param {number} limit @param {string[]} allowed */
 async function bodyOf(req, limit, allowed) {
@@ -21,10 +23,18 @@ function pageOptions(url) {
  * Every action on a pack — export, revoke, import (or an upgrade in place),
  * enable, disable, a trial — writes an audit row (build spec §12; 2026-09-26
  * audit, M-6: none of them did). Counts and ids only, never an entry's text.
+ *
+ * Sharing inside the platform (plan §7, 2026-10-05) is five more families of route, all behind the same sign-in: a delivery to
+ * named accounts and what became of it (`/:id/deliveries`), the recipient's side of one (`/deliveries/:id`), a share link and its
+ * redemption (`/:id/links`, `/shared/:token`), a take-down (`/:id/exports/:snapshotId/takedown`, and the operator's
+ * `/takedowns`), and the method pack in the Agent Skills format (`/:id/methods/export`). Another account's capsule, snapshot,
+ * delivery or link is never readable through any of them: each reads by the signed-in account's own id.
  * @param {{ store: any, service: any, transferService?: any, maxJsonBytes: number,
  *   trials?: { mark: (userId: string, projectId: string, sessionId: string, capsuleId: string) => Promise<unknown> } | null,
+ *   sharing?: import('./capsuleSharing.mjs').CapsuleSharing | null, links?: import('./capsuleShareLinks.mjs').CapsuleShareLinks | null,
+ *   subscriptions?: import('./evidenceZoneSubscription.mjs').EvidenceZoneSubscriptions | null, isOperator?: (user: any) => boolean,
  *   audit?: (user: any, action: string, details: Record<string, unknown>) => Promise<void> }} dependencies */
-export function createCapsuleRoutes({ store, service, transferService = null, maxJsonBytes, trials = null, audit = async () => {} }) {
+export function createCapsuleRoutes({ store, service, transferService = null, maxJsonBytes, trials = null, sharing = null, links = null, subscriptions = null, isOperator = () => false, audit = async () => {} }) {
   /** @param {any} req @param {any} res @returns {Promise<boolean>} */
   return async (req, res) => {
     const url = new URL(req.url ?? "/", "http://evimed.local");
@@ -66,6 +76,128 @@ export function createCapsuleRoutes({ store, service, transferService = null, ma
     if (parts.length === 1 && parts[0] === "active" && method === "GET") {
       return reply(await service.active(user.id, await project(url.searchParams.get("projectId"))));
     }
+    // ------------------------------------------------------------------ sharing inside the platform
+    const shares = () => {
+      if (!sharing || !transferService) throw new HttpError(503, "product_state_unavailable", "Capsule sharing is temporarily unavailable.");
+      return { sharing, transferService, links };
+    };
+    const shareContext = async () => ({ accountCreatedAt: user.accountCreatedAt, projectId: await current() });
+    // A project's subscription to an evidence zone, a reference capsule of that one project (F18). Off, it is not a route: the
+    // module's own "not enabled" answer, and nothing read.
+    if (parts[0] === "subscriptions" && parts.length === 1) {
+      if (!subscriptions || !subscriptions.enabled) throw new HttpError(404, "evidence_zone_subscription_not_enabled", "Evidence-zone subscription is not enabled.");
+      if (method === "GET") {
+        const projectId = await project(url.searchParams.get("projectId"));
+        if (!projectId) throw new HttpError(400, "capsule_payload_invalid", "A subscription belongs to a project.");
+        const zoneId = url.searchParams.get("zoneId");
+        return reply(zoneId ? await subscriptions.status(user.id, projectId, zoneId) : await subscriptions.list(user.id, projectId));
+      }
+      if (method === "POST" || method === "DELETE") {
+        const body = await bodyOf(req, maxJsonBytes, ["projectId", "zoneId"]);
+        const projectId = await project(typeof body.projectId === "string" ? body.projectId : null);
+        if (!projectId || typeof body.zoneId !== "string") throw new HttpError(400, "capsule_payload_invalid", "Name a project and a zone.");
+        if (method === "POST") {
+          const made = await subscriptions.subscribe(user.id, projectId, body.zoneId);
+          await audit(user, "capsule.zone.subscribe", { projectId, zoneId: body.zoneId });
+          return reply(made, 201);
+        }
+        const removed = await subscriptions.unsubscribe(user.id, projectId, body.zoneId);
+        await audit(user, "capsule.zone.unsubscribe", { projectId, zoneId: body.zoneId });
+        return reply(removed);
+      }
+      throw new HttpError(404, "not_found", "Capsule route not found.");
+    }
+    // The recipient's side of a delivery: pending ones, one opened (its preview), taken in, turned down.
+    if (parts[0] === "deliveries") {
+      const { sharing: sharedWith } = shares();
+      if (parts.length === 1 && method === "GET") return reply(await sharedWith.pending(user.id));
+      if (parts.length === 2 && method === "GET") return reply(await sharedWith.open(user.id, parts[1], await shareContext()));
+      if (parts.length === 3 && parts[2] === "import" && method === "POST") {
+        const body = await bodyOf(req, maxJsonBytes, ["expectedDigest", "title"]);
+        const imported = await sharedWith.import(user.id, parts[1], body, await shareContext());
+        await audit(user, imported.payload?.transfer?.upgradedAt ? "capsule.pack.upgrade" : "capsule.pack.import",
+          { capsuleId: imported.id, snapshotId: imported.payload?.transfer?.snapshotId ?? null, issuerTrust: imported.payload?.transfer?.issuerTrust ?? null, channel: "delivery" });
+        return reply(imported, 201);
+      }
+      if (parts.length === 3 && parts[2] === "decline" && method === "POST") {
+        await bodyOf(req, maxJsonBytes, []);
+        const declined = await sharedWith.decline(user.id, parts[1]);
+        await audit(user, "capsule.share.decline", { deliveryId: parts[1] });
+        return reply(declined);
+      }
+      throw new HttpError(404, "not_found", "Capsule route not found.");
+    }
+    // A share link, redeemed by a signed-in account: its preview, and the import. The token is in the path of this request and
+    // in no log line; the audit names the action and the capsule that came out of it.
+    if (parts[0] === "shared" && parts.length >= 2) {
+      const { sharing: sharedWith } = shares();
+      if (parts.length === 2 && method === "GET") return reply(await sharedWith.openLink(user.id, parts[1], await shareContext()));
+      if (parts.length === 3 && parts[2] === "import" && method === "POST") {
+        const body = await bodyOf(req, maxJsonBytes, ["expectedDigest", "title"]);
+        const imported = await sharedWith.importLink(user.id, parts[1], body, await shareContext());
+        await audit(user, imported.payload?.transfer?.upgradedAt ? "capsule.pack.upgrade" : "capsule.pack.import",
+          { capsuleId: imported.id, snapshotId: imported.payload?.transfer?.snapshotId ?? null, issuerTrust: imported.payload?.transfer?.issuerTrust ?? null, channel: "link" });
+        return reply(imported, 201);
+      }
+      throw new HttpError(404, "not_found", "Capsule route not found.");
+    }
+    // The operator takes down everything one author shared: their snapshots, every recipient's copy, every link.
+    if (parts[0] === "takedowns" && parts.length === 1 && method === "POST") {
+      const { sharing: sharedWith } = shares();
+      if (!isOperator(user)) throw new HttpError(403, "capsule_share_operator_required", "Only an operator may take down an author's shares.");
+      const body = await bodyOf(req, maxJsonBytes, ["authorId", "reason"]);
+      const result = await sharedWith.takeDown({ authorId: productId(body.authorId, "author"), by: "operator", reason: typeof body.reason === "string" ? body.reason : "" });
+      await audit(user, "capsule.share.takedown", { by: "operator", authorId: body.authorId, ...result });
+      return reply(result);
+    }
+    if (parts.length >= 2 && ["deliveries", "links"].includes(parts[1]) && parts.length <= 3) {
+      const { sharing: sharedWith, links: ownLinks } = shares();
+      if (parts[1] === "deliveries" && parts.length === 2) {
+        if (method === "POST") {
+          const body = await bodyOf(req, 16 * 1024, ["recipients", "scopes", "card"]);
+          const result = await sharedWith.deliver(user.id, parts[0], body, await shareContext());
+          await audit(user, "capsule.share.deliver", { capsuleId: parts[0], delivered: result.delivered, notDelivered: result.notDelivered, snapshotId: result.snapshot?.id ?? null });
+          return reply(result, 201);
+        }
+        if (method === "GET") { await transferService.assertOwnCapsule(user.id, parts[0]); return reply(await sharedWith.sent(user.id, { capsuleId: parts[0] })); }
+      }
+      if (parts[1] === "links" && ownLinks) {
+        if (parts.length === 2 && method === "POST") {
+          const body = await bodyOf(req, 16 * 1024, ["scopes", "card", "ttlDays", "maxUses"]);
+          const made = await sharedWith.createLink(user.id, parts[0], body, await shareContext());
+          await audit(user, "capsule.share.link.create", { capsuleId: parts[0], linkId: made.link.id, snapshotId: made.snapshot?.id ?? null });
+          return reply(made, 201);
+        }
+        if (parts.length === 2 && method === "GET") { await transferService.assertOwnCapsule(user.id, parts[0]); return reply(await ownLinks.list(user.id, { capsuleId: parts[0] })); }
+        if (parts.length === 3 && method === "DELETE") {
+          await transferService.assertOwnCapsule(user.id, parts[0]);
+          const revoked = await ownLinks.revoke(user.id, parts[2]);
+          await audit(user, "capsule.share.link.revoke", { capsuleId: parts[0], linkId: parts[2] });
+          return reply(revoked);
+        }
+      }
+      throw new HttpError(404, "not_found", "Capsule route not found.");
+    }
+    // The approved learned methods as an Agent Skills pack: a zip, text only.
+    if (parts.length === 3 && parts[1] === "methods" && parts[2] === "export" && method === "GET") {
+      if (!transferService) throw new HttpError(503, "product_state_unavailable", "Capsule transfer is temporarily unavailable.");
+      if (url.searchParams.get("format") !== "agent-skills") throw new HttpError(400, "capsule_payload_invalid", "Unsupported method pack format.");
+      const pack = await transferService.methodPack(user.id, parts[0]);
+      await audit(user, "capsule.methods.export", { capsuleId: parts[0], methods: pack.count, scripts: pack.scripts, format: "agent-skills" });
+      res.writeHead(200, { "content-type": "application/zip", "cache-control": "no-store", "x-content-type-options": "nosniff",
+        "content-disposition": `attachment; filename="${pack.filename}"` });
+      res.end(Buffer.from(pack.zip));
+      return true;
+    }
+    // The author's take-down of one snapshot: revoked, every recipient's copy disabled, and each told why.
+    if (parts.length === 4 && parts[1] === "exports" && parts[3] === "takedown" && method === "POST") {
+      const { sharing: sharedWith, transferService: transfers } = shares();
+      const body = await bodyOf(req, 4096, ["reason"]);
+      await transfers.snapshot(user.id, parts[0], parts[2]);
+      const result = await sharedWith.takeDown({ authorId: user.id, snapshotId: parts[2], by: "author", reason: typeof body.reason === "string" ? body.reason : "" });
+      await audit(user, "capsule.share.takedown", { by: "author", capsuleId: parts[0], snapshotId: parts[2], ...result });
+      return reply(result);
+    }
     if ((parts[0] === "transfers" && parts.length === 2) || parts[1] === "exports") {
       if (!transferService) throw new HttpError(503, "product_state_unavailable", "Capsule transfer is temporarily unavailable.");
       const accountContext = { accountCreatedAt: user.accountCreatedAt, projectId: await current() };
@@ -104,6 +236,8 @@ export function createCapsuleRoutes({ store, service, transferService = null, ma
         if (method === "DELETE") {
           const body = await bodyOf(req, 4096, ["expectedRevision"]);
           const revoked = await transferService.revoke(user.id, parts[0], parts[2], body.expectedRevision);
+          // A delivery or a link of the snapshot ends with it, and the recipients who had not taken it in are told it was withdrawn.
+          if (sharing) await sharing.afterRevoke(user.id, parts[2]).catch(() => null);
           await audit(user, "capsule.pack.revoke", { capsuleId: parts[0], snapshotId: parts[2] });
           return reply(revoked);
         }
@@ -159,8 +293,9 @@ export function createCapsuleRoutes({ store, service, transferService = null, ma
       if (typeof body.sessionId !== "string" || !/^[A-Za-z0-9_-]{1,160}$/.test(body.sessionId)) {
         throw new HttpError(400, "capsule_payload_invalid", "Invalid session id.");
       }
-      await service.prepareTrial(user.id, capsuleId, { projectId });
+      const pack = await service.prepareTrial(user.id, capsuleId, { projectId });
       await trials.mark(user.id, projectId, body.sessionId, capsuleId);
+      recordShareTrial(String(pack?.payload?.transfer?.channel ?? "file"));
       await audit(user, "capsule.pack.trial", { capsuleId, projectId, sessionId: body.sessionId });
       return reply({ capsuleId, sessionId: body.sessionId });
     }

@@ -23,6 +23,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { NEVER_SHARED_LAYERS } from "@evimed/domain";
+import { sharedFrom } from "./capsuleShareLabel.mjs";
 import { MAX_MOUNTED_LEARNED_METHODS, selectLearnedMethods } from "./learnedMethodMount.mjs";
 import { assertNoSymlinkPath, safeId, writeFileAtomicNoFollow } from "./security.mjs";
 
@@ -169,7 +170,10 @@ export function capsuleMethodDirectoryName(entryId) {
  * file. The body is the user's own text, unedited — a method rewritten on its
  * way to the run is not the method the user approved.
  *
- * @param {{ directoryName: string, factKind: string, content: string }} method
+ * A method that came from a share says so in its description (「来自 李主任 的分享」, plan §7): the run reads where it came from
+ * wherever it reads the method. The label is the file's metadata, not its body, and not part of the digest.
+ *
+ * @param {{ directoryName: string, factKind: string, content: string, sharedLabel?: string }} method
  * @returns {string}
  */
 export function renderCapsuleMethod(method) {
@@ -177,7 +181,7 @@ export function renderCapsuleMethod(method) {
   return [
     "---",
     `name: method-${method.directoryName}`,
-    `description: 用户记忆胶囊中的工作方式（${method.factKind}），作为背景参考，不替代证据，也不改变交付要求。`,
+    `description: 用户记忆胶囊中的工作方式（${method.factKind}）${method.sharedLabel ? `，${method.sharedLabel}` : ""}，作为背景参考，不替代证据，也不改变交付要求。`,
     "whenToUse: 当这条方法适用于当前任务时参考它。",
     `source_kind: ${method.factKind}`,
     `source_digest: ${digest}`,
@@ -353,13 +357,18 @@ export async function selectCapsuleMethods(capsules, { userId, projectId, maxByt
       throw error;
     }
     const received = await receivedCapsule(capsules, userId, selection);
+    const record = received && typeof capsules?.get === "function" ? await capsules.get(userId, String(selection.capsuleId)).catch(() => null) : null;
+    // A pack the author or the operator took down mounts nothing, whatever list still names it.
+    if (record?.payload?.takenDown) continue;
     for (const entry of entries) {
+      const origin = record ? sharedFrom(record, entry.payload) : null;
       const method = {
         id: String(entry.id),
         directoryName: capsuleMethodDirectoryName(entry.id),
         capsuleId: String(selection.capsuleId),
         factKind: String(entry.payload.factKind),
         content: String(entry.payload.content),
+        ...(origin ? { sharedLabel: origin.label } : {}),
       };
       const document = renderCapsuleMethod(method);
       candidates.push({

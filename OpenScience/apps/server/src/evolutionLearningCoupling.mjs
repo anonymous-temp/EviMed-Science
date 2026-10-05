@@ -1,9 +1,12 @@
+import { guestMarkedRuns } from './capsuleShareTrust.mjs';
 /**
  * What the learning loop hands to 循证进化: a closed gap code and an event identity, read from a researcher's
  * capability handbook and never written back to it. A handbook is the researcher's own document; the platform
  * does not add revisions to it or its own fields (the tools a capability has are the platform's catalogue,
  * which a run reads through the native skill mount for that capability).
  * No personal method or source prose is copied to the platform.
+ * A run that drew on a received pack no other account had yet vouched for (`capsuleShareTrust.mjs`, plan §7, 2026-10-05) is left out
+ * of the count: shared text from a new author must not be able to make the platform believe it lacks a method.
  * @param {{service:any,database:any}} dependencies
  */
 export function createEvolutionLearningCoupling({service,database}) {
@@ -11,7 +14,9 @@ export function createEvolutionLearningCoupling({service,database}) {
   return {
     async scan() {
       for(const book of await handbooks()) {
-        const runs=new Set((book.payload.observations??[]).filter(row=>row.used===true && row.gapCodes?.includes('method-missing')).map(row=>row.runId).filter(Boolean));
+        const seen=(book.payload.observations??[]).filter(row=>row.used===true && row.gapCodes?.includes('method-missing')).map(row=>row.runId).filter(Boolean);
+        const guest=await guestMarkedRuns(database,book.user_id,[...new Set(seen)]);
+        const runs=new Set(seen.filter(runId=>!guest.has(runId)));
         if(runs.size>=2) await service.ingestEvent({id:`handbook-gap:${book.user_id}:${book.id}:${book.payload.contentDigest}`,type:'handbook-gap',userId:book.user_id,track:'M',gapCode:'method-missing',code:'method-missing'});
       }
     },
