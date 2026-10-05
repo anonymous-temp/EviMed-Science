@@ -49,10 +49,10 @@ function scriptedService({ pages = [{ items: [pageItem()], nextCursor: null, mod
   };
 }
 
-async function withGateway(t, { config = {}, service = scriptedService(), budgetMs, report } = {}) {
+async function withGateway(t, { config = {}, service = scriptedService(), budgetMs, report, cards, evaluationIsolation } = {}) {
   const failures = [];
   const handler = createFrontierGatewayHandler({ frontierEnabled: true, ...config }, runtimeManager,
-    { service, ...(budgetMs ? { budgetMs } : {}), ...(report ? { report } : {}) });
+    { service, ...(budgetMs ? { budgetMs } : {}), ...(report ? { report } : {}), ...(cards ? { cards } : {}), ...(evaluationIsolation ? { evaluationIsolation } : {}) });
   const server = createServer((req, res) => { void handler(req, res, (failure) => failures.push(failure)); });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   t.after(() => new Promise((resolve) => server.close(resolve)));
@@ -246,4 +246,72 @@ test("the runtime learns the route only when the module is on, at the model gate
   assert.equal(frontierGatewayProviderUrl({ frontierEnabled: true, modelGatewayInternalUrl: "http://user:fake@host/internal/model/v1" }), "");
   assert.equal(frontierGatewayProviderUrl({ frontierEnabled: true, modelGatewayInternalUrl: "not a url" }), "");
   assert.equal(frontierGatewayProviderUrl({ frontierEnabled: true, modelGatewayInternalUrl: "file:///etc/passwd" }), "");
+});
+
+/** An evidence-card search that answers from a script and records what it was asked. */
+function scriptedCards({ cards = [], more = false, fail = null } = {}) {
+  const calls = [];
+  return {
+    calls,
+    async search(user, request) {
+      calls.push({ user, request });
+      if (fail) throw fail;
+      return { cards, more };
+    },
+  };
+}
+const cardEntry = (overrides = {}) => ({ kind: "card", id: "ec_a", title: "A card", primarySources: [{ title: "Trial", url: "https://example.org/trial" }], ...overrides });
+
+test("a keyword query also searches the evidence cards, beside the items and as many as the limit allows up to five", async (t) => {
+  const cards = scriptedCards({ cards: [cardEntry()], more: true });
+  const { call, service } = await withGateway(t, { cards });
+  const answer = await call({ q: "  GLP-1   心衰 ", limit: 3 });
+  assert.equal(answer.status, 200);
+  assert.deepEqual(cards.calls, [{ user: { id: "user-1" }, request: { q: "GLP-1 心衰", limit: 3 } }], "the runtime's token names the account and the question is the page's own");
+  assert.deepEqual(answer.body.data.cards, [cardEntry()]);
+  assert.equal(answer.body.data.cardsMore, true);
+  assert.equal(answer.body.data.items.length, 1, "the items are what they were");
+  assert.equal(service.calls.length > 0, true);
+  await call({ q: "x", limit: 20 });
+  assert.equal(cards.calls[1].request.limit, 5, "an index entry is a pointer, not a reading list");
+});
+
+test("without a query, or narrowed to a lane or a specialty, nothing asks the cards", async (t) => {
+  const cards = scriptedCards({ cards: [cardEntry()] });
+  const { call } = await withGateway(t, { cards });
+  for (const body of [{}, { lane: "safety" }, { q: "x", lane: "safety" }, { q: "x", specialty: "cardiology" }]) {
+    const answer = await call(body);
+    assert.equal(answer.status, 200, JSON.stringify(body));
+    assert.deepEqual(answer.body.data.cards, [], JSON.stringify(body));
+  }
+  assert.equal(cards.calls.length, 0);
+});
+
+test("a card search that fails leaves the items as they were and says the cards could not be read", async (t) => {
+  const reported = [];
+  const cards = scriptedCards({ fail: Object.assign(new Error("connection to 10.0.0.5 refused"), { code: "ECONNREFUSED" }) });
+  const { call } = await withGateway(t, { cards, report: (code) => reported.push(code) });
+  const answer = await call({ q: "GLP-1" });
+  assert.equal(answer.status, 200);
+  assert.equal(answer.body.data.items.length, 1);
+  assert.deepEqual(answer.body.data.cards, []);
+  assert.equal(answer.body.data.cardsUnavailable, true, "not reading as `no card matched`");
+  assert.deepEqual(reported, ["ECONNREFUSED"]);
+  assert.doesNotMatch(JSON.stringify(answer.body), /10\.0\.0\.5/);
+});
+
+test("where no cards are composed the answer is the tool's old answer, key for key", async (t) => {
+  const { call } = await withGateway(t);
+  const { body } = await call({ q: "GLP-1" });
+  for (const key of ["cards", "cardsMore", "cardsUnavailable"]) assert.equal(key in body.data, false, key);
+});
+
+test("an evaluation run, frozen at a date, is not shown cards written since", async (t) => {
+  const cards = scriptedCards({ cards: [cardEntry()] });
+  const evaluationIsolation = { async isEvaluation() { return true; }, async filter(_identity, _gateway, value) { return value; } };
+  const { call } = await withGateway(t, { cards, evaluationIsolation });
+  const answer = await call({ q: "GLP-1" });
+  assert.equal(answer.status, 200);
+  assert.equal("cards" in answer.body.data, false);
+  assert.equal(cards.calls.length, 0);
 });

@@ -229,6 +229,7 @@ import { createFrontierRoutes, frontierRoutePattern } from "./frontierRoutes.mjs
 import { createEvidenceSourceReader } from "./evidenceSourceReader.mjs";
 import { EvidenceEditorial } from "./evidenceEditorial.mjs";
 import { EvidenceZoneService } from "./evidenceZoneService.mjs";
+import { createEvidenceCardSearch } from "./evidenceCardSearch.mjs";
 import { createEvidenceZoneRoutes } from "./evidenceZoneRoutes.mjs";
 import { FrontierWorker, ensureFrontierProject } from "./frontierWorker.mjs";
 // Its second wave: events and the hot list, the daily and its push, 与你相关,
@@ -4026,6 +4027,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const frontierGatewayHandler = createFrontierGatewayHandler(config, runtimeManager, {
     evaluationIsolation,
     service: frontier?.service ?? null,
+    // Published evidence cards ride beside the items, as an index only (flywheel F12).
+    cards: frontier ? createEvidenceCardSearch({ database: productDatabase, entityVocabulary, sourceChanges }) : null,
     report: (code) => process.stderr.write(`frontier search: ${code}\n`),
   });
   // `geo_read` / `geo_write` / `social_posts_search`: the GEO project the
