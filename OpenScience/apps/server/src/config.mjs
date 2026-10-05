@@ -397,6 +397,49 @@ function evidenceSettings(overrides) {
 }
 
 /**
+ * Sharing memory inside the platform (evidence-flywheel plan §7, F17-F19, 2026-10-05), each lever checked at load with
+ * the discipline of the frontier's: passed value-less by compose, and a value outside its range stops the process at
+ * start with the variable's name.
+ *
+ * - A share link lives `OPEN_SCIENCE_CAPSULE_SHARE_LINK_TTL_DAYS` days (30) and is used at most
+ *   `OPEN_SCIENCE_CAPSULE_SHARE_LINK_MAX_USES` times (20): both are the default and the ceiling an owner may ask for, because
+ *   a link that never ends is a pack nobody can take back without remembering it exists.
+ * - A new author's share does not feed platform learning until `OPEN_SCIENCE_CAPSULE_SHARE_CORROBORATION_MIN_ACCOUNTS` other
+ *   accounts (3) have imported it and kept it enabled for `OPEN_SCIENCE_CAPSULE_SHARE_CORROBORATION_KEPT_DAYS` days (14)
+ *   without disabling it. Both are the write-side defence of plan §7: nothing is filtered at reading time.
+ * - An account may deliver to others at most `OPEN_SCIENCE_CAPSULE_SHARE_DELIVERIES_PER_DAY` times in a day (50): a limit that
+ *   protects other people's inboxes, not an opinion about what is shared.
+ * - Subscribing a project to an evidence zone follows the frontier by default (`OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_ENABLED`):
+ *   with the frontier off there is no zone to read. A project holds at most
+ *   `OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_MAX_PER_PROJECT` subscriptions (5) and a recall carries at most
+ *   `OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_MAX_ITEMS` cards of them (6).
+ *
+ * @param {Record<string, any>} overrides
+ * @param {boolean} frontierEnabled
+ */
+function memorySharingSettings(overrides, frontierEnabled) {
+  /** @param {string} key @param {string} name @param {number} fallback @param {number} min @param {number} max */
+  const integer = (key, name, fallback, min, max) => {
+    const raw = overrides[key] !== undefined ? overrides[key] : (process.env[name] == null || process.env[name] === "" ? fallback : process.env[name]);
+    const number = Number(raw);
+    if (!Number.isSafeInteger(number) || number < min || number > max) {
+      throw new Error(`${name} must be a whole number from ${min} to ${max}, got ${JSON.stringify(raw)}.`);
+    }
+    return number;
+  };
+  return {
+    capsuleShareLinkTtlDays: integer("capsuleShareLinkTtlDays", "OPEN_SCIENCE_CAPSULE_SHARE_LINK_TTL_DAYS", 30, 1, 365),
+    capsuleShareLinkMaxUses: integer("capsuleShareLinkMaxUses", "OPEN_SCIENCE_CAPSULE_SHARE_LINK_MAX_USES", 20, 1, 1000),
+    capsuleShareCorroborationMinAccounts: integer("capsuleShareCorroborationMinAccounts", "OPEN_SCIENCE_CAPSULE_SHARE_CORROBORATION_MIN_ACCOUNTS", 3, 1, 100),
+    capsuleShareCorroborationKeptDays: integer("capsuleShareCorroborationKeptDays", "OPEN_SCIENCE_CAPSULE_SHARE_CORROBORATION_KEPT_DAYS", 14, 1, 365),
+    capsuleShareDeliveriesPerDay: integer("capsuleShareDeliveriesPerDay", "OPEN_SCIENCE_CAPSULE_SHARE_DELIVERIES_PER_DAY", 50, 1, 1000),
+    evidenceZoneSubscriptionEnabled: overrides.evidenceZoneSubscriptionEnabled ?? boolEnv("OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_ENABLED", frontierEnabled),
+    evidenceZoneSubscriptionMaxPerProject: integer("evidenceZoneSubscriptionMaxPerProject", "OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_MAX_PER_PROJECT", 5, 1, 20),
+    evidenceZoneSubscriptionMaxItems: integer("evidenceZoneSubscriptionMaxItems", "OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_MAX_ITEMS", 6, 1, 30),
+  };
+}
+
+/**
  * 「循证 GEO」's settings (build spec 2026-09-25 §0, §5, §7), each checked at
  * load, and the media marketplace it places orders through.
  *
@@ -2363,6 +2406,8 @@ export function loadConfig(overrides = {}) {
     // --- frontier: 「前沿动态」 and the knowledge-source plugin (2026-09-22) ---
     ...frontierSettings(overrides),
     ...evidenceSettings(overrides),
+    // --- sharing memory inside the platform (evidence-flywheel F17-F19, 2026-10-05) ---
+    ...memorySharingSettings(overrides, overrides.frontierEnabled ?? boolEnv("OPEN_SCIENCE_FRONTIER_ENABLED", false)),
     // --- 循证 GEO and the media marketplace (2026-09-25) ---
     ...geoSettings(overrides),
     // --- 虚拟临研: the virtual clinical research module (2026-09-28) ---
