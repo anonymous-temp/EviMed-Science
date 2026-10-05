@@ -3434,6 +3434,9 @@ export class RuntimeManager {
      *  read when that start makes room (`makeRoomFor`), so an opening that
      *  finds a warm-up's start under way still counts as one. */
     this.openingStarts = new Set();
+    /** Pending starts a run's dispatch is waiting on (`startWhenRoom`), by project key: the only starts another
+     *  researcher's long-idle runtime gives way to while a parked tab still holds it (`makeRoomFor`). */
+    this.dispatchStarts = new Set();
     /** Pending starts only a speculative warm-up has asked for, by project
      *  key: `makeRoomFor` retires nothing for them. Any other caller that
      *  joins takes its key out. */
@@ -3880,7 +3883,7 @@ export class RuntimeManager {
 
   /**
    * @param {Record<string, any>} project
-   * @param {{ opening?: boolean, speculative?: boolean, boundedScope?: any }} [options] `opening`: the researcher is
+   * @param {{ opening?: boolean, speculative?: boolean, dispatch?: boolean, boundedScope?: any }} [options] `opening`: the researcher is
    *   opening a conversation in this project (the shell's own start of its
    *   frame) rather than a request of a surface that is already open — see
    *   `makeRoomFor`. It shapes only a start this call begins; one already
@@ -3893,6 +3896,7 @@ export class RuntimeManager {
    *   one project's group in the sidebar stopped the warm runtime of another,
    *   and the click into that other one was refused (429) and not usable in
    *   60 s. A caller that is not speculative joining the start lifts it.
+   *   `dispatch`: a run is about to be sent here (`startWhenRoom` says so); see `makeRoomFor`.
    */
   async start(project, options = {}) {
     const key = this.key(project);
@@ -3910,8 +3914,8 @@ export class RuntimeManager {
     return this.pluginService ? this.pluginService.withAdmission(project, () => this.startAdmitted(project, options)) : this.startAdmitted(project, options);
   }
 
-  /** @param {Record<string, any>} project @param {{ opening?: boolean, speculative?: boolean, boundedScope?: any }} [options] */
-  async startAdmitted(project, { opening = false, speculative = false, boundedScope = null } = {}) {
+  /** @param {Record<string, any>} project @param {{ opening?: boolean, speculative?: boolean, dispatch?: boolean, boundedScope?: any }} [options] */
+  async startAdmitted(project, { opening = false, speculative = false, dispatch = false, boundedScope = null } = {}) {
     const key = this.key(project);
     if (this.runtimeStops.has(key) || this.runtimeQuotaStops.has(key)) throw new HttpError(409, "runtime_busy", "The runtime is stopping; retry shortly.");
     if (this.failedRuntimeStops.has(key)) throw new HttpError(503, "runtime_cleanup_required", "The previous runtime needs cleanup.");
@@ -3938,6 +3942,7 @@ export class RuntimeManager {
       return existing;
     }
     if (opening) this.openingStarts.add(key);
+    if (dispatch) this.dispatchStarts.add(key);
     const pending = this.starts.get(key);
     if (pending) {
       if (!speculative) this.speculativeStarts.delete(key);
@@ -3952,7 +3957,7 @@ export class RuntimeManager {
       // instead of beginning a second container. Its own entry in `starts` is
       // not counted against the ceilings it checks.
       await this.enforceProjectQuota(project);
-      await this.makeRoomFor(project, { opening: this.openingStarts.has(key), speculative: this.speculativeStarts.has(key) });
+      await this.makeRoomFor(project, { opening: this.openingStarts.has(key), speculative: this.speculativeStarts.has(key), dispatch: this.dispatchStarts.has(key) });
       this.enforceRuntimeCapacity(project, { starting: true });
       const modelGatewayScope = this.pendingModelGatewayScopes.get(key) ?? null;
       if (this.config.runtimeMode === "kernel") {
@@ -4052,6 +4057,7 @@ export class RuntimeManager {
       this.starts.delete(key);
       this.startProgress.delete(key);
       this.openingStarts.delete(key);
+      this.dispatchStarts.delete(key);
       this.speculativeStarts.delete(key);
     }
   }
@@ -5465,7 +5471,7 @@ export class RuntimeManager {
     const began = now();
     for (let attempt = 0; ; attempt += 1) {
       try {
-        return await this.start(project, options);
+        return await this.start(project, { ...options, dispatch: true });
       } catch (error) {
         const left = began + budget - now();
         if (error?.code !== ROOM_FULL_CODE || left <= 0) throw error;
@@ -5491,9 +5497,10 @@ export class RuntimeManager {
    * a deployment at its global ceiling is also asked of other researchers'
    * runtimes, but only those idle past `runtimeIdleYieldAfterMs` — the
    * thirty minutes the idle reaper used to wait anyway — least recently used
-   * first. A warm runtime is a convenience to its owner, never a reason
-   * another researcher cannot start. When nothing qualifies the ceiling
-   * refuses exactly as before.
+   * first; for a run's `dispatch`, those a parked tab still holds after
+   * those no tab does. A warm runtime is a convenience to its owner, never a
+   * reason another researcher's run cannot start. When nothing qualifies the
+   * ceiling refuses exactly as before.
    *
    * An `opening` — the researcher opening a conversation in this project —
    * may also take their own idle runtime that a tab still holds open; see
@@ -5506,9 +5513,9 @@ export class RuntimeManager {
    * held it for ten minutes while a researcher's start was refused
    * (2026-10-04). Never the other way round.
    * @param {Record<string, any>} project
-   * @param {{ opening?: boolean, speculative?: boolean }} [options]
+   * @param {{ opening?: boolean, speculative?: boolean, dispatch?: boolean }} [options]
    */
-  async makeRoomFor(project, { opening = false, speculative = false } = {}) {
+  async makeRoomFor(project, { opening = false, speculative = false, dispatch = false } = {}) {
     // Background work waits for room; it never takes a researcher's idle
     // runtime to make some. The capacity check refuses it and its job defers.
     if (this.isBackgroundProject(project.userId, project.id)) return;
@@ -5582,6 +5589,20 @@ export class RuntimeManager {
         if (!globalFull()) break;
         await yieldIfIdle(entry, false);
         if (!full()) return;
+      }
+      // Then, for a run's dispatch only, those a parked tab still holds. An open connection is not use
+      // (`noteRuntimeUse`): the tab's one socket was counted when it opened, and past the yield age nobody has asked
+      // that runtime for anything since. Release 5, live (2026-10-05): two researchers' tabs left open held two of the
+      // deployment's four slots for two hours while a dispatch waited out its whole allowance and was refused. Not for
+      // any other start: an opening has sent nothing yet, and the parked frame's own reconnect must not take a slot
+      // back from the next parked tab, or the tabs would retire each other in turn.
+      if (dispatch) {
+        for (const entry of others) {
+          if (!globalFull()) break;
+          if (!connected(entry[0])) continue;
+          await yieldIfIdle(entry, true);
+          if (!full()) return;
+        }
       }
     }
     if (!opening) return;

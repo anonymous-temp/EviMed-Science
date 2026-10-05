@@ -1986,6 +1986,52 @@ test("a full deployment takes another researcher's runtime only once it has idle
   }
 });
 
+test("a parked tab does not keep another researcher's long-idle runtime from a run's dispatch that needs the slot", async () => {
+  // Release 5, live (2026-10-05): two tabs left open held two of four slots for two hours, the other two were working,
+  // and a dispatch waited its whole allowance and was refused. An open connection is not use: past the yield age the
+  // runtime gives way to a run being sent. A fresher one and a working one stay; so does it for every other start — an
+  // opening, a plain start (a parked frame reconnecting, or the tabs would retire each other in turn), a pointer's guess.
+  const cases = [
+    [45, false, { dispatch: true }, true],
+    [10, false, { dispatch: true }, false], [45, true, { dispatch: true }, false],
+    [45, false, { opening: true }, false], [45, false, {}, false], [45, false, { speculative: true }, false],
+  ];
+  for (const [idleMinutes, busy, options, yields] of cases) {
+    const manager = new RuntimeManager({
+      runtimeMode: "kernel",
+      runtimeSandboxMode: "docker",
+      maxRunningRuntimes: 1,
+      maxRunningRuntimesPerUser: 1,
+      runtimeIdleYieldAfterMs: 30 * 60_000,
+      runtimeStartWaitMs: 0,
+    }, { hasRunningRuns: async () => false });
+    manager.startKernel = async (currentProject) => ({ ...fakeRuntime(`${currentProject.userId}-${currentProject.id}`, currentProject.workspaceDir), project: currentProject });
+    manager.runtimeBusy = async () => busy;
+    const stopped = [];
+    manager.stopIdleRuntime = async (stopping, stop) => {
+      stopped.push({ user: stopping.userId, id: stopping.id, event: stop?.event, evenIfConnected: stop?.evenIfConnected });
+      manager.runtimes.delete(manager.key(stopping));
+    };
+    const bobProject = { ...project, userId: "bob", id: "paper9", workspaceDir: "/srv/open-science/users/bob/projects/paper9/workspace" };
+    await manager.start(project);
+    const parked = manager.activityFor(manager.key(project));
+    parked.activeProxies = 1;
+    parked.lastUseAt = Date.now() - idleMinutes * 60_000;
+    // A dispatch comes through `startWhenRoom`, which is what says so.
+    const begin = () => (options.dispatch ? manager.startWhenRoom(bobProject) : manager.start(bobProject, options));
+    const label = `idle ${idleMinutes} min, busy ${busy}, ${JSON.stringify(options)}`;
+    if (yields) {
+      const started = await begin();
+      assert.equal(started.url, "http://127.0.0.1/bob-paper9", label);
+      assert.deepEqual(stopped, [{ user: "alice", id: "paper1", event: "yielded", evenIfConnected: true }], label);
+    } else {
+      await assert.rejects(begin, (err) => err.code === "runtime_capacity_full", label);
+      assert.deepEqual(stopped, [], `${label}: the parked runtime stays`);
+    }
+    await manager.closeAll();
+  }
+});
+
 test("another researcher's idle runtime never pays for this researcher's own ceiling", async () => {
   const manager = new RuntimeManager({
     runtimeMode: "kernel",
