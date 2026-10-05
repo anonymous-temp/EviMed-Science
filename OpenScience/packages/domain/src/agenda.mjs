@@ -331,18 +331,22 @@ export const AGENDA_DEFAULT_BUDGETS = Object.freeze({ maxEpisodeCny: 100, dailyB
 /**
  * The smallest budget one run can be given, in CNY.
  *
- * A limit on a run compares reservations, not spend. Measured on production
- * (2026-10-05): every kernel request reserves about ¥1.03 before it is sent —
- * the whole output budget it may ask for (65,536 tokens at ¥8 per million,
- * ¥0.52) plus its prompt at the cache-miss rate (¥2 per million) — and settles
- * at the real count afterwards, usually ¥0.003 to ¥0.04. A call is admitted
- * while the run's settled spend plus that reservation fits under the limit, so
- * a run limited to ¥1.11 was refused on its fourth second, and ¥1.2 is the
- * least that admits the first call with room for about eight more. It is a fact
- * about the gateway's reservation, which is deliberately not changed
- * (`estimateModelReservation`), so it is written here once and every budget
+ * A limit on a run compares reservations, not spend. Before a call is sent the
+ * model gateway holds the price of the most it could cost: its output ceiling
+ * (65,536 tokens — ¥0.52 by day at ¥8 per million, half that at the night
+ * rate) plus the prompt at the cache-miss rate (¥2 per million: ¥0.15 for the
+ * median prompt of 73 thousand tokens, ¥0.61 for the 99th percentile of 305
+ * thousand, production 2026-10-05), and settles at the real count afterwards,
+ * usually ¥0.003 to ¥0.04. A call is admitted while the run's settled spend
+ * plus that hold fits under the limit, so ¥1.2 admits a first call with any
+ * prompt the platform has sent and leaves room for the calls after it. It is a
+ * fact about the gateway's reservation (`estimateModelReservation`, and the
+ * ceiling the gateway forwards a call with), written here once; every budget
  * that becomes a run's limit is held to it: the episode cap an agenda accepts,
  * each verification's share of it, and what is left of an agenda's own window.
+ * Until 2026-10-05 the hold followed the 256,000 tokens the kernel names on
+ * every request — ¥2.05 by day — and a run limited to ¥2.25 ended on its
+ * second call.
  */
 export const MIN_RUN_BUDGET_CNY = 1.2
 

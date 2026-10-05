@@ -145,6 +145,36 @@ test("the kernel's Messages request reaches DeepSeek's Messages API under the de
   assert.equal(events[1].input.providerRequestId, "msg_provider_1");
 });
 
+test("a call is sent with no more than the deployment's output ceiling, and what is held is the price of that", async (t) => {
+  /** @param {any} body */
+  const sent = async (body) => {
+    /** @type {any[]} */
+    const events = [];
+    /** @type {any} */
+    let seen = null;
+    const response = await call(t, (req, res, upstreamBody) => {
+      seen = upstreamBody;
+      res.writeHead(200, { "content-type": "text/event-stream" });
+      res.end(messagesStream("answer"));
+    }, events, { body });
+    assert.equal(response.status, 200);
+    await response.text();
+    return { seen, reserve: events.find((event) => event.type === "reserve").input };
+  };
+  // The kernel asks for 256,000 tokens on every request; the test deployment's ceiling is 4,096.
+  const asked = await sent(kernelRequest());
+  assert.equal(asked.seen.max_tokens, 4096, "the provider is sent the ceiling, so the reservation is a true ceiling of the call's cost");
+  // A caller that asks for less is sent what it asked for, and held for less.
+  const modest = await sent(kernelRequest({ max_tokens: 512 }));
+  assert.equal(modest.seen.max_tokens, 512);
+  // A caller that names no limit gets the ceiling, as before.
+  const { max_tokens: _unnamed, ...unnamed } = kernelRequest();
+  assert.equal((await sent(unnamed)).seen.max_tokens, 4096);
+  assert.ok(asked.reserve.estimatedCost > modest.reserve.estimatedCost, "a smaller limit is a smaller hold");
+  assert.equal(asked.reserve.estimatedCost, (await sent(kernelRequest({ max_tokens: 4096 }))).reserve.estimatedCost,
+    "256,000 asked and 4,096 asked are the same call once the ceiling is applied, and are held the same");
+});
+
 test("the prompt counts are read from message_start even when a long answer pushed it out of the tail", async (t) => {
   /** @type {any[]} */
   const events = [];
