@@ -954,6 +954,7 @@ function clientAddress(req, config) {
 export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = createHostedExtensionIntegration, runtimeManagerFactory = (config, hooks) => new RuntimeManager(config, hooks)} = {}) {
   if(typeof extensionIntegrationFactory !== "function" || typeof runtimeManagerFactory !== "function") throw new TypeError("Invalid server constructor factory.");
   const config = loadConfig(overrides);
+  if (config.evolutionRefusal) process.stderr.write(`evolution: ${config.evolutionRefusal.code} (${config.evolutionRefusal.key}); the module stays off and the platform starts\n`);
   const managedBrowser = overrides.managedBrowserService ?? createManagedBrowserService(config);
   const agentRegistry = loadAgentRegistry({ packageDirs: config.agentPackageDirs, capabilityDirs: config.capabilityDirs });
   const store = createStore(config, { databasePool: overrides.databasePool });

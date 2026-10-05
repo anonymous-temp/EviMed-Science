@@ -57,7 +57,8 @@ export function createEvolution({ config, store, documents, jobs, database, usag
   researchSessions, agentRuns, evaluationIsolation, sourceService, autopilot, dataSemantics, controller, canRun, report = () => {}, fetchImpl = fetch }) {
   if (!config.evolutionEnabled || !database || !documents || !jobs || !usageLedger) return null;
   const settingsIssues = validateEvolutionConfiguration(config);
-  if (settingsIssues.length) throw new HttpError(503, "evolution_setting_invalid", `Invalid evolution setting: ${settingsIssues[0].key}.`);
+  // A module whose settings are wrong stays off with the reason reported; it never stops the platform (`loadConfig` refuses first).
+  if (settingsIssues.length) { report(settingsIssues[0].code); return null; }
   const ensureOwner = async () => {
     const owner = config.operatorUsers[0], user = owner && await store.userById(owner);
     if (!user) throw new HttpError(503, "evolution_owner_missing", "Evolution requires a configured platform operator.");
