@@ -44,8 +44,9 @@ export function createEvaluationIsolation({ dataDir, resolveRunId = identity => 
   const pending = new Map();
   const bindings = new Map();
   /** What the lookups could not do, by what the request was allowed to be. `refused` is a request an
-   * evaluation run was refused for an unreadable policy; the other two never cost a request. */
-  const counters = { runLookupFailed: 0, platformLookupFailed: 0, refused: 0 };
+   * evaluation run was refused for an unreadable policy; the other two never cost a request. `recalled` is not a
+   * lookup: development runs whose model named the protected reference from its own memory (`auditTranscript`). */
+  const counters = { runLookupFailed: 0, platformLookupFailed: 0, refused: 0, recalled: 0 };
   const file = runId => path.join(directory, `${createHash("sha256").update(String(runId)).digest("hex")}.json`);
   /** One stored JSON by name: null when it was never written, an error for anything else. */
   const stored = async name => {
@@ -94,8 +95,8 @@ export function createEvaluationIsolation({ dataDir, resolveRunId = identity => 
     }
     return { runId, policy: policies.get(runId) };
   };
-  const record = async (runId, gateway, tier, reason) => {
-    const event = { at: new Date().toISOString(), runId, gateway, tier, reason };
+  const record = async (runId, gateway, tier, reason, detail = {}) => {
+    const event = { at: new Date().toISOString(), runId, gateway, tier, reason, ...detail };
     events.set(runId, [...(events.get(runId) ?? []), event]);
     await appendFile(`${file(runId)}.jsonl`, `${JSON.stringify(event)}\n`, { mode: 0o600 });
     report(event);
@@ -230,6 +231,33 @@ export function createEvaluationIsolation({ dataDir, resolveRunId = identity => 
       if (reason) await record(context.runId, gateway, cited ? "cited" : "exposed", reason);
       return Boolean(reason);
     },
+    /**
+     * A development run's transcript, heard in two voices (`transcriptVoices`, evolutionExposureChain.mjs).
+     *
+     * `served` is everything the run was handed or got back — its brief, injected context, tool calls and their results.
+     * A target matched there is an exposure, as it always was. `own` is the model's own reasoning and reply text. A
+     * target matched only there, in a run for which no source event served or matched the target (no `blocked`,
+     * `exposed` or `cited` event), is `recalled`: the model named a paper it knows from training. The platform did not
+     * serve it and no isolation can remove it, so it is recorded with the step it was said at and counted, and it is
+     * not an exposure (ruling of 2026-10-05). A mention beside a matched source event keeps the classification it had.
+     * What controls for recall is not this audit but the temporal holdout — papers published after the model's cutoff
+     * (evolutionTimeHoldout.mjs). Matching is the policy's own: identifiers and registered titles, never open language.
+     * @param {any} identity @param {string} gateway @param {{ served: any, own: { step: any, text: string }[] }} voices
+     * @returns {Promise<{ tier: "unexposed" } | { tier: "exposed", reason: string } | { tier: "recalled", reason: string, step: any }>}
+     */
+    async auditTranscript(identity, gateway, { served, own }) {
+      const context = await policyFor(identity); if (!context) return { tier: "unexposed" };
+      const handed = matched(context.policy, served);
+      if (handed) { await record(context.runId, gateway, "exposed", handed); return { tier: "exposed", reason: handed }; }
+      let mention = null;
+      for (const part of own ?? []) { const reason = matched(context.policy, part.text); if (reason) { mention = { reason, step: part.step ?? null }; break; } }
+      if (!mention) return { tier: "unexposed" };
+      const logged = (await this.audit(context.runId)).events;
+      if (logged.some(event => ["blocked", "exposed", "cited"].includes(event.tier))) { await record(context.runId, gateway, "exposed", mention.reason); return { tier: "exposed", reason: mention.reason }; }
+      // The same run is audited again for each later candidate of its branch; the finding is one.
+      if (!logged.some(event => event.tier === "recalled" && event.gateway === gateway)) { await record(context.runId, gateway, "recalled", mention.reason, { step: mention.step }); counters.recalled += 1; }
+      return { tier: "recalled", ...mention };
+    },
     async audit(runId) {
       let rows;
       try { rows = (await readFile(`${file(runId)}.jsonl`, "utf8")).trim().split("\n").filter(Boolean).map(line => JSON.parse(line)); } catch (error) { if (error.code !== "ENOENT") throw error; rows = []; }
@@ -240,7 +268,8 @@ export function createEvaluationIsolation({ dataDir, resolveRunId = identity => 
         try { pendingRows = (await readFile(`${file(attribution.pendingId)}.jsonl`, "utf8")).trim().split("\n").filter(Boolean).map(line => JSON.parse(line)); } catch (error) { if (error.code !== "ENOENT") throw error; }
         rows = [...pendingRows.map(event => ({ ...event, attributedRunId: runId, attribution: { pendingId: attribution.pendingId, userId: attribution.userId, projectId: attribution.projectId } })), ...rows];
       }
-      return { runId, events: rows, tier: rows.some(row => row.tier === "cited") ? "cited" : rows.some(row => row.tier === "exposed") ? "exposed_uncited" : "unexposed" };
+      // `recalled` ranks under every exposure and is not one: see `auditTranscript`.
+      return { runId, events: rows, tier: rows.some(row => row.tier === "cited") ? "cited" : rows.some(row => row.tier === "exposed") ? "exposed_uncited" : rows.some(row => row.tier === "recalled") ? "recalled" : "unexposed" };
     },
   };
 }

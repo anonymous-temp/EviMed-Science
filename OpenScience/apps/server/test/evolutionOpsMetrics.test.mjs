@@ -60,6 +60,14 @@ test("every limit's counter reaches the scrape under a closed set of outcomes", 
     assert.equal(sample(families, "open_science_evolution_platform_skill_events_total", { event: "failed" }), 1);
     assert.equal(sample(families, "open_science_evolution_isolation_lookup_total", { outcome: "run_lookup_failed" }), 1);
     assert.equal(sample(families, "open_science_evolution_isolation_lookup_total", { outcome: "platform_lookup_failed" }), 0, "the store is readable here; the unreadable case is the isolation module's own test");
+    // A development run whose model names the protected reference from memory is counted on a family of its own, once
+    // however often the run is audited (a layer of its own here, so the lookup counts above stay what they were).
+    assert.equal(sample(families, "open_science_evolution_reference_recalled_total"), 0);
+    const recalling = createEvaluationIsolation({ dataDir });
+    await recalling.register("run_recall", { aliases: ["10.1136/bmj.i6"], titles: [] });
+    for (let audits = 0; audits < 2; audits++) await recalling.auditTranscript({ userId: "op", projectId: "eval-paper-build-x", runId: "run_recall" }, "builder-transcript",
+      { served: { messages: [] }, own: [{ step: { message: 3, part: 0, voice: "reasoning" }, text: "from memory: doi:10.1136/bmj.i6" }] });
+    assert.equal(sample(evolutionOpsMetricFamilies(true, await evolutionOpsSnapshot({ evolution: {}, evaluationIsolation: recalling })), "open_science_evolution_reference_recalled_total"), 1);
     assert.equal(sample(families, "open_science_evolution_events_total", { outcome: "published" }), 5);
     assert.equal(sample(families, "open_science_evolution_executor_reachable"), 1);
     assert.equal(sample(families, "open_science_evolution_executor_total", { outcome: "unavailable" }), 2);
@@ -135,5 +143,6 @@ test("a running module's scrape reads the executor from the controller's admissi
     assert.match(text, /^open_science_evolution_tool_admission_total\{outcome="admitted"\} 0$/m);
     assert.match(text, /^open_science_evolution_platform_skill_events_total\{event="failed"\} 0$/m);
     assert.match(text, /^open_science_evolution_isolation_lookup_total\{outcome="refused"\} 0$/m);
+    assert.match(text, /^open_science_evolution_reference_recalled_total 0$/m);
   } finally { await app.close(); await rm(dataDir, { recursive: true, force: true }); }
 });
