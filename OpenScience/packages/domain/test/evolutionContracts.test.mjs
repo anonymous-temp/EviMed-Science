@@ -16,7 +16,7 @@ test('development contracts validate real JSON structure without a research deli
 
 test('candidate file references share safe relative artifact rules with inline UTF-8 resources',()=>{
   const base={id:'candidate',track:'E',publicationKind:'skill'};
-  const findings=value=>runGate({contractKind:'evolution-tool-candidate',files:new Map([['tool-candidate.json',JSON.stringify({...base,...value})]])}).issues;
+  const findings=(/** @type {Record<string, unknown>} */ value)=>runGate({contractKind:'evolution-tool-candidate',files:new Map([['tool-candidate.json',JSON.stringify({...base,...value})]])}).issues;
   assert.equal(findings({filePaths:{'scripts/tool.py':'deliverables/tool.py'}}).length,0);
   assert.equal(findings({files:{'SKILL.md':'Text'},filePaths:{'scripts/tool.py':'deliverables/tool.py'}}).length,0);
   for(const value of [{filePaths:{'scripts/tool.py':'../tool.py'}},{filePaths:{'../tool.py':'tool.py'}},{filePaths:{'tool.py':'/tmp/tool.py'}},{filePaths:{'tool.py':2}},{files:{'tool.py':'code'},filePaths:{'tool.py':'other.py'}},{files:{'tool.py':'\ud800'}},{}])assert.ok(findings(value).length);

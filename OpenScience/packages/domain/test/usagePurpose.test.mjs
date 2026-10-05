@@ -66,7 +66,7 @@ test('the learning loop\'s own runs are metered as learning, so its caps can cou
   assert.equal(usagePurposeOfRun({ effectiveAgentId: 'method-relations' }), 'learning')
   assert.equal(usagePurposeOfRun({ effectiveAgentId: 'clinical-evidence-synthesis', effectiveRouteReason: 'platform-learning' }), 'learning',
     'a paired-evaluation cell is the loop measuring itself, and its dispatcher says so')
-  assert.equal(usagePurposeOfRun({ effectiveAgentId: 'clinical-evidence-synthesis', dispatchId: 'web-abc' }), 'kernel')
+  assert.equal(usagePurposeOfRun(/** @type {any} */ ({ effectiveAgentId: 'clinical-evidence-synthesis', dispatchId: 'web-abc' })), 'kernel')
   assert.ok(USAGE_PURPOSES.includes('learning'))
   assert.equal(USAGE_PURPOSE_LABELS_ZH.learning, '学习做法')
 })
@@ -97,10 +97,10 @@ test('whether a run is charged follows its purpose, never what its caller said a
   // harness's traffic out of lessons; it must not be a way to research for free.
   const researcher = { effectiveAgentId: 'open-domain-answer', effectiveRouteReason: 'unrouted:open-domain' }
   assert.equal(isResearcherOwnedWork({ ...researcher, automated: true }), false, 'a harness teaches nothing')
-  assert.equal(isChargeableResearchRun({ ...researcher, automated: true }), true, 'but it is still charged')
+  assert.equal(isChargeableResearchRun(/** @type {any} */ ({ ...researcher, automated: true })), true, 'but it is still charged')
   assert.equal(isChargeableResearchRun(researcher), true)
   for (const reason of ['geo:content', 'autopilot:literature-sentinel', 'vcr:analysis']) {
-    assert.equal(isChargeableResearchRun({ automated: true, effectiveRouteReason: reason, effectiveAgentId: 'geo-insight' }), true, reason)
+    assert.equal(isChargeableResearchRun(/** @type {any} */ ({ automated: true, effectiveRouteReason: reason, effectiveAgentId: 'geo-insight' })), true, reason)
   }
   for (const run of [
     { effectiveAgentId: 'source-understanding' }, { effectiveAgentId: 'method-distillation' }, { effectiveAgentId: 'method-relations' },
