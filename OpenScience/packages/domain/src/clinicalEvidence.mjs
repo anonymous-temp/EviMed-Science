@@ -2032,10 +2032,13 @@ function normalizedExtractionPassage(value) {
     .replace(/\s+([.,;:!?。！？])/gu, "$1");
 }
 
-/** @param {string} haystack @param {readonly string[]} segments @param {(segment: string) => string} project @returns {boolean} */
-function segmentsPresentInOrder(haystack, segments, project) {
+/**
+ * @param {string} haystack @param {readonly string[]} segments @param {(segment: string) => string} project
+ * @param {{ spans?: number[][] }} [memo] where the haystack's numeric spans are kept for the next quote checked against it
+ * @returns {boolean} */
+function segmentsPresentInOrder(haystack, segments, project, memo = {}) {
   if (!haystack) return false;
-  const numericSpans = [...haystack.matchAll(passageNumberToken)].map((match) => [match.index, match.index + match[0].length]);
+  const numericSpans = memo.spans ??= [...haystack.matchAll(passageNumberToken)].map((match) => [match.index, match.index + match[0].length]);
   let from = 0;
   for (const segment of segments) {
     const needle = project(segment);
@@ -2182,12 +2185,43 @@ export function quoteIsPresent(artifact, quote) {
   const source = String(artifact ?? "");
   const segments = String(quote ?? "").split(quoteElision).map((part) => part.trim()).filter(Boolean);
   if (!source || !segments.length) return false;
+  const memo = documentMemo(source);
   // The artifact as preserved, then with inline citation markers taken out.
-  for (const text of [source, source.replace(inlineReferenceMarker, "")]) {
-    if (segmentsPresentInOrder(normalizedPassage(text), segments, normalizedPassage)) return true;
-    if (segmentsPresentInOrder(normalizedExtractionPassage(text), segments, normalizedExtractionPassage)) return true;
+  for (const [form, text] of [["preserved", source], ["unmarked", memo.unmarked ??= source.replace(inlineReferenceMarker, "")]]) {
+    const plain = memo[`${form}:plain`] ??= {};
+    plain.text ??= normalizedPassage(text);
+    if (segmentsPresentInOrder(plain.text, segments, normalizedPassage, plain)) return true;
+    const extraction = memo[`${form}:extraction`] ??= {};
+    extraction.text ??= normalizedExtractionPassage(text);
+    if (segmentsPresentInOrder(extraction.text, segments, normalizedExtractionPassage, extraction)) return true;
   }
   return false;
+}
+
+// Reading a document is the costly part of checking a quote against it —
+// megabytes of text normalised and scanned for numbers, twice over — and a claim
+// set checks many quotes against the same few documents: sixty claims on one
+// 2 MB full text were fourteen seconds of one thread. The last few large
+// documents keep what was read from them; a small one is cheaper to read again
+// than to keep. Nothing here changes an answer: the same text is the same text.
+const DOCUMENT_MEMO_MIN_CHARS = 50_000;
+const DOCUMENT_MEMO_SIZE = 3;
+/** @type {Map<string, Record<string, any>>} */
+const documentMemos = new Map();
+/** @param {string} source @returns {Record<string, any>} */
+function documentMemo(source) {
+  if (source.length < DOCUMENT_MEMO_MIN_CHARS) return {};
+  let memo = documentMemos.get(source);
+  if (!memo) {
+    memo = {};
+    documentMemos.set(source, memo);
+    if (documentMemos.size > DOCUMENT_MEMO_SIZE) documentMemos.delete(/** @type {string} */ (documentMemos.keys().next().value));
+  } else {
+    // Recently used last, so the oldest is the one that goes.
+    documentMemos.delete(source);
+    documentMemos.set(source, memo);
+  }
+  return memo;
 }
 
 // A verdict about a quote needs the text the quote is supposed to be in.
