@@ -24,12 +24,19 @@ test("trusted numeric evaluator calls published callable twice per independent h
     assert.ok(record.calls.every(call => !call.code.includes("absoluteTolerance") && !Object.hasOwn(call.input ?? {}, "numeric")));
     assert.doesNotMatch(JSON.stringify(result), /absoluteTolerance|outputPath|"value"/);
     const unknown = createEvolutionCandidateEvaluator({ config: { dataDir, evaluationDataDir: dataDir }, controller });
-    assert.equal((await unknown.evaluate(candidate, { card: { methodId: "method" } })).ok, false);
+    const unknownResult = await unknown.evaluate(candidate, { card: { methodId: "method" } });
+    assert.equal(unknownResult.ok, false);
+    // A candidate that passed every case and check and waits only on its development chain's exposure says so.
+    assert.deepEqual([unknownResult.status, unknownResult.resourceCode], ["waiting_resource", "development_chain_exposure_unknown"]);
     const exposed = createEvolutionCandidateEvaluator({ config: { dataDir, evaluationDataDir: dataDir }, auditCandidateExposure: async () => ({ tier: "exposed_uncited" }), controller });
     const exposedResult = await exposed.evaluate(candidate, { card: { methodId: "method" } });
     assert.equal(exposedResult.ok, false);
     assert.equal(exposedResult.verificationLevel, "V0");
     assert.equal(exposedResult.exposureTier, "exposed_uncited");
+    assert.deepEqual([exposedResult.status, exposedResult.resourceCode], ["waiting_resource", "development_chain_exposed"]);
+    assert.ok(exposedResult.assessments.every(row => row.passed === true) && exposedResult.failedCaseIds.length === 0, "the wait is the chain's exposure, not a failed case");
+    // The passing evaluation names no resource, and a failed case is a repair, never this wait.
+    assert.equal(result.resourceCode, undefined);
     const unavailable = await evaluator.evaluate(candidate, { card: { methodId: "unknown" } });
     assert.equal(unavailable.status, "waiting_resource");
   } finally { await rm(dataDir, { recursive: true, force: true }); }

@@ -81,7 +81,9 @@ export function createEvaluationIsolation({ dataDir, resolveRunId = identity => 
     }
     const binding = bindings.get(projectKey);
     if (binding) {
-      if (runId && runId !== binding.runId) throw new Error("Evaluation project is bound to another run.");
+      // One run, two names: the ledger's id, and the dispatch id its bounded runtime's gateway token carries
+      // (`reserveBoundedRuntimeSession({ runId: dispatchId })`). Any third id is another run.
+      if (runId && runId !== binding.runId && runId !== binding.dispatchId) throw new Error("Evaluation project is bound to another run.");
       runId = binding.runId;
     }
     if (!runId) return pending.has(projectKey) ? { runId: pending.get(projectKey).id, policy: pending.get(projectKey).policy } : null;
@@ -147,13 +149,17 @@ export function createEvaluationIsolation({ dataDir, resolveRunId = identity => 
       pending.set(`${identity.userId}\0${identity.projectId}`, scope);
       return id;
     },
-    async bindRun(identity, runId) {
+    /** Binds the project's one evaluation run. `dispatchId` is the name the run's own bounded runtime asks under
+     * (its gateway token's `runId`); without it, only requests that name the ledger id or none are the bound run's.
+     * @param {any} identity @param {string} runId @param {{ dispatchId?: string | null }} [names] */
+    async bindRun(identity, runId, { dispatchId = null } = {}) {
+      if (dispatchId !== null && (typeof dispatchId !== "string" || !dispatchId)) throw new HttpError(400, "evolution_evaluation_invalid", "An evaluation run's dispatch id must be a non-empty string.");
       const key = `${identity.userId}\0${identity.projectId}`;
       let entry = pending.get(key);
       if (!entry) { try { entry = JSON.parse(await readFile(file(`scope:${key}`), "utf8")); pending.set(key, entry); } catch (error) { if (error.code !== "ENOENT") throw error; } }
       if (!entry) throw new HttpError(409, "evolution_evaluation_invalid", "No protected policy was registered before dispatch.");
       await this.register(runId, entry.policy);
-      const binding = { runId, pendingId: entry.id, userId: identity.userId, projectId: identity.projectId };
+      const binding = { runId, pendingId: entry.id, userId: identity.userId, projectId: identity.projectId, ...(dispatchId ? { dispatchId } : {}) };
       const bindingBytes = JSON.stringify(binding);
       const persist = async name => { try { await writeFile(file(name), bindingBytes, { mode: 0o600, flag: "wx" }); } catch (error) { if (error.code !== "EEXIST") throw error; if (await readFile(file(name), "utf8") !== bindingBytes) throw new HttpError(409, "evolution_evaluation_invalid", "Evaluation project run binding is immutable."); } };
       await persist(`binding:${key}`);

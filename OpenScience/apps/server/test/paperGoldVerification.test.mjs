@@ -89,3 +89,40 @@ test('opaque evidence IDs cannot justify exempting incorrect published numbers',
  const bound=bindPaperGoldReview({result:response,config:{reviewProvider:'dashscope'},unit,gold,verification:{verified:true,proof:{proofHash:hash}}});
  assert.equal(bound.codeVerified,false);assert.equal(bound.verificationFailure,'primary_evidence_uninspectable');
 });
+
+// Live scoped cycle, 2026-10-05: a delivered random-effects meta-analysis replayed twice within the independent
+// reference's tolerance and was then refused `behavioural_replay_failed`. Its function returned the 37 study rows
+// (with their weights) beside the six pooled statistics; reordering the studies left all six where they were and
+// moved 372 row leaves, and the meta ruler's permutation held every numeric leaf still.
+test('a meta-analysis that also reports its study rows is verified: a reordering holds the pooled statistics still, not the rows', async () => {
+  const { methodRulerRelations, relationIssues } = await import('../../../evals/paper-gold/behavioural.mjs');
+  const studies = [{ yi: 0.21, vi: 0.04 }, { yi: 0.47, vi: 0.09 }, { yi: -0.05, vi: 0.02 }, { yi: 0.33, vi: 0.06 }, { yi: 0.9, vi: 0.05 }];
+  // DerSimonian–Laird, written once here as the independent reference.
+  const dl = rows => { const w = rows.map(r => 1 / r.vi), sw = w.reduce((a, b) => a + b, 0), fixed = rows.reduce((a, r, i) => a + w[i] * r.yi, 0) / sw;
+    const q = rows.reduce((a, r, i) => a + w[i] * (r.yi - fixed) ** 2, 0), c = sw - w.reduce((a, b) => a + b * b, 0) / sw, tau = Math.max(0, (q - (rows.length - 1)) / c);
+    const ws = rows.map(r => 1 / (r.vi + tau)), sws = ws.reduce((a, b) => a + b, 0), pooled = rows.reduce((a, r, i) => a + ws[i] * r.yi, 0) / sws, se = Math.sqrt(1 / sws);
+    return { pooled_log: pooled, ci_lower_log: pooled - 1.959963984540054 * se, ci_upper_log: pooled + 1.959963984540054 * se, tau_squared: tau, q_statistic: q, n_studies: rows.length }; };
+  const reference = dl(studies); assert.ok(reference.tau_squared > 0, 'the fixture has heterogeneity, so every statistic is exercised');
+  const input = { studies }, relations = methodRulerRelations('meta-reml');
+  assert.ok(relations.every(relation => relationIssues(relation).length === 0));
+  const gold = { type: 'research', sourceHash: hash, numeric: Object.fromEntries(Object.entries(reference).map(([key, value]) => [key, { value, absoluteTolerance: 1e-9 }])),
+    deterministicVerification: { entrypoint: 'deliverables/paper-gold-analysis/analysis.py:analyze', implementationId: 'delivered', input, inputHash: digest(input), sourceHash: hash, relations,
+      independentQa: { passed: true, executor: 'independent' }, independentImplementation: { implementationId: 'independent', sourceHash: hash, numeric: reference },
+      tolerances: Object.fromEntries(Object.keys(reference).map(key => [key, { absoluteTolerance: 1e-9 }])) } };
+  const pooled = 'w=[1/s["vi"] for s in studies]; sw=sum(w); fixed=sum(a*s["yi"] for a,s in zip(w,studies))/sw\n    q=sum(a*(s["yi"]-fixed)**2 for a,s in zip(w,studies)); c=sw-sum(a*a for a in w)/sw; tau=max(0.0,(q-(len(studies)-1))/c)\n    ws=[1/(s["vi"]+tau) for s in studies]; sws=sum(ws); est=sum(a*s["yi"] for a,s in zip(ws,studies))/sws; se=(1/sws)**0.5\n';
+  const summary = '"pooled_log":est,"ci_lower_log":est-1.959963984540054*se,"ci_upper_log":est+1.959963984540054*se,"tau_squared":tau,"q_statistic":q,"n_studies":len(studies)';
+  const delivered = text => ({ numeric: reference, assessmentEvidence: { deliveredText: [{ path: 'deliverables/paper-gold-analysis/analysis.py', text }] } });
+  const controller = { execVerify: pythonExecVerify({}) };
+  // The shape the live unit delivered: the pooled statistics, the rows in the order given, and which study weighs most.
+  const withRows = await verifyPaperGoldCode({ unit: delivered(`def analyze(studies, **_):\n    ${pooled}    return {${summary},"max_weight_study":ws.index(max(ws)),"per_study":[{"yi":s["yi"],"vi":s["vi"],"random_weight":a} for a,s in zip(ws,studies)]}\n`), gold, controller });
+  assert.equal(withRows.verified, true, withRows.reason); assert.equal(withRows.proof.behaviouralChecks, 2);
+  // What the relations are for is unchanged. A function that recites the numbers it was shown fails the scaling...
+  const recited = await verifyPaperGoldCode({ unit: delivered(`def analyze(**_):\n    return ${JSON.stringify(reference)}\n`), gold, controller });
+  assert.deepEqual(recited, { verified: false, reason: 'behavioural_replay_failed' });
+  // ...and one whose pooled statistics depend on the order of the studies fails the reordering: it replays the given
+  // order exactly, scales as it should, and gives another answer for the same studies in another order.
+  // (a position-weighted mean over the plain mean: unchanged by the scaling, changed by any reordering).
+  const position = rows => rows.reduce((a, r, i) => a + (i + 1) * r.yi, 0) / rows.reduce((a, r) => a + r.yi, 0);
+  const ordered = await verifyPaperGoldCode({ unit: delivered(`def analyze(studies, **_):\n    ${pooled}    position=sum((i+1)*s["yi"] for i,s in enumerate(studies))/sum(s["yi"] for s in studies)\n    est=est if abs(position-${JSON.stringify(position(studies))})<1e-9 else est*1.5\n    return {${summary}}\n`), gold, controller });
+  assert.deepEqual(ordered, { verified: false, reason: 'behavioural_replay_failed' });
+});

@@ -171,3 +171,38 @@ test("with the module off the layer is not composed at all, so no gateway has it
     } finally { await app.close(); await rm(dataDir, { recursive: true, force: true }); }
   }
 });
+
+// Live acceptance of 2026-10-05 (release 90e0869f2): every gateway request of a bound evaluation run was refused 503
+// `evaluation_policy_unreadable`, so the blocked isolation control recorded no exclusion event and a builder could
+// read no source. The run's bounded runtime authenticates with a token whose `runId` is the dispatch id
+// (`reserveBoundedRuntimeSession({ runId: dispatchId })`), while the project is bound to the run ledger's id; the
+// "bound to another run" rule compared the two id spaces. One run, two names: both are the bound run, and any third
+// id is still another run.
+test("a bound evaluation run is known by its ledger id and by the dispatch id its bounded runtime's token carries", async () => {
+  const dataDir = await mkdtemp(path.join(os.tmpdir(), "evaluation-"));
+  try {
+    const failures = [];
+    // As server.mjs composes it: the token's run id when it has one, else the run attributed from the ledger.
+    const attributed = { value: null };
+    const isolation = createEvaluationIsolation({ dataDir, resolveRunId: identity => identity.runId ?? attributed.value, reportFailure: code => failures.push(code) });
+    const project = { userId: "operator", projectId: "eval-paper-isolation-live-blocked" };
+    await isolation.registerPending(project, { aliases: policy.aliases, titles: policy.titles });
+    await isolation.bindRun(project, "run_ledger", { dispatchId: "evolution_isolation_live_blocked" });
+    const bounded = { ...project, runId: "evolution_isolation_live_blocked" };
+    await assert.rejects(isolation.assertRequest(bounded, "public-source", { url: "https://doi.org/10.1234/target" }), { status: 403, code: "evaluation_source_excluded" });
+    assert.deepEqual(await isolation.filter(bounded, "web-search", results), { results: [{ title: "Unrelated" }] });
+    // A workload-token request carries no run id; the ledger attributes it to the same run.
+    attributed.value = "run_ledger";
+    await assert.rejects(isolation.assertRequest(project, "tooluniverse", "PMID:123"), { status: 403, code: "evaluation_source_excluded" });
+    const audit = await isolation.audit("run_ledger");
+    assert.deepEqual(audit.events.map(event => [event.runId, event.tier]), [["run_ledger", "blocked"], ["run_ledger", "blocked"], ["run_ledger", "blocked"]]);
+    assert.deepEqual(failures, []);
+    // Any other run id in this project is still another run: refused by name, never served unfiltered.
+    await assert.rejects(isolation.assertRequest({ ...project, runId: "evolution_other" }, "public-source", { url: "https://example.org" }), { status: 503, code: "evaluation_policy_unreadable" });
+    // The binding is immutable in both names, and survives a restart.
+    await isolation.bindRun(project, "run_ledger", { dispatchId: "evolution_isolation_live_blocked" });
+    await assert.rejects(isolation.bindRun(project, "run_ledger", { dispatchId: "evolution_other" }), /immutable/);
+    const restarted = createEvaluationIsolation({ dataDir, resolveRunId: identity => identity.runId ?? null });
+    await assert.rejects(restarted.assertRequest(bounded, "web-read", "https://pmc.ncbi.nlm.nih.gov/articles/PMC123/"), { status: 403, code: "evaluation_source_excluded" });
+  } finally { await rm(dataDir, { recursive: true, force: true }); }
+});
