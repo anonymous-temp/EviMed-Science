@@ -458,9 +458,9 @@ function continuationBindingKey(value) {
 /** Persistent proactive-research policy and decision ledger. Episodes remain
  * ordinary ProductJobs and are dispatched through the ordinary AgentRun path. */
 export class AutopilotService {
-  /** @param {{documents:any,jobs:any,usage?:any,accountCaps?:()=>Record<string,any>,notifications?:any,capsules?:any,planner?:{decide:(input:any)=>Promise<any>}|null,evolution?:any,authorizeContinuation?:((userId:string,projectId:string,binding:any)=>Promise<void>)|null,now?:()=>Date,id?:(prefix:string)=>string}} dependencies */
+  /** @param {{documents:any,jobs:any,usage?:any,accountCaps?:()=>Record<string,any>,notifications?:any,capsules?:any,planner?:{decide:(input:any)=>Promise<any>}|null,evolution?:any,entityVocabulary?:{tag:(input:{texts:string[]})=>Promise<string[]|null>}|null,authorizeContinuation?:((userId:string,projectId:string,binding:any)=>Promise<void>)|null,now?:()=>Date,id?:(prefix:string)=>string}} dependencies */
   constructor({ documents, jobs, usage = null, accountCaps = () => ({}), notifications = null, capsules = null, planner = null,
-    evolution = null, authorizeContinuation = null, now = () => new Date(), id = (prefix) => `${prefix}${randomUUID()}` }) {
+    evolution = null, entityVocabulary = null, authorizeContinuation = null, now = () => new Date(), id = (prefix) => `${prefix}${randomUUID()}` }) {
     if (!documents || !jobs) throw new TypeError("AutopilotService requires product documents and jobs.");
     this.documents = documents;
     this.jobs = jobs;
@@ -472,6 +472,8 @@ export class AutopilotService {
     /** The one model decision before each episode; without it the date rotation chooses (`chooseNextAction`). */
     this.planner = planner;
     this.evolution = evolution;
+    /** The shared entity vocabulary (`entityVocabulary.mjs`): an agenda is tagged with it, and without it carries no keys. */
+    this.entityVocabulary = entityVocabulary;
     this.now = now;
     this.id = id;
     this.authorizeContinuation = authorizeContinuation;
@@ -553,7 +555,51 @@ export class AutopilotService {
       createdAt: now,
       updatedAt: now,
     };
+    await this.#tag(payload);
     return this.documents.put(userId, "agenda", this.id("agenda-"), payload, { expectedRevision: 0, projectId });
+  }
+
+  /**
+   * Put the agenda's entity keys (what its title, topics and prompt are about:
+   * `entityVocabulary.mjs`) on the payload. Where the vocabulary cannot tag —
+   * absent, the frontier off, the glossary empty — the payload carries none,
+   * so `backfillEntityKeys` finds it once it can.
+   * @param {Record<string, any>} payload
+   */
+  async #tag(payload) {
+    const keys = await this.entityVocabulary?.tag({ texts: [payload.title, ...(payload.topics ?? []), payload.prompt] });
+    if (keys) payload.entityKeys = keys;
+    else delete payload.entityKeys;
+  }
+
+  /**
+   * Tag the agendas that carry no entity keys yet, `limit` at a time, each
+   * through its owner's own document: the row is read and written under the
+   * user id it belongs to, a stale revision leaves it for the next pass, and
+   * `userId` narrows a pass to one account. Archived agendas are left alone.
+   * @param {any} database the product database
+   * @param {{ userId?: string | null, limit?: number }} [options]
+   * @returns {Promise<{ tagged: number, scanned: number }>}
+   */
+  async backfillEntityKeys(database, { userId = null, limit = 100 } = {}) {
+    if (!this.entityVocabulary) return { tagged: 0, scanned: 0 };
+    const rows = (await database.query(`SELECT user_id, id FROM evimed_product.documents
+      WHERE kind = 'agenda' AND deleted_at IS NULL AND NOT (payload ? 'entityKeys') AND payload->>'archivedAt' IS NULL
+        AND ($1::text IS NULL OR user_id = $1::text)
+      ORDER BY user_id, id LIMIT $2`, [userId, Math.max(1, Math.min(500, Math.trunc(limit) || 100))])).rows;
+    let tagged = 0;
+    for (const row of rows) {
+      const agenda = await this.documents.get(row.user_id, "agenda", row.id);
+      if (!agenda || agenda.payload.archivedAt || Array.isArray(agenda.payload.entityKeys)) continue;
+      const payload = { ...agenda.payload };
+      await this.#tag(payload);
+      if (!payload.entityKeys) return { tagged, scanned: rows.length };
+      try {
+        await this.documents.put(row.user_id, "agenda", row.id, payload, { expectedRevision: agenda.revision, projectId: agenda.projectId });
+        tagged += 1;
+      } catch (error) { if (!isConflict(error)) throw error; }
+    }
+    return { tagged, scanned: rows.length };
   }
 
   /** @param {string} userId @param {string} agendaId */
@@ -584,6 +630,7 @@ export class AutopilotService {
     const next = active ? due ?? agendaNextOccurrence(schedule, last, this.now()) : null;
     return { ...agenda, payload: { ...agenda.payload, schedule, scheduleVersion: agenda.payload.scheduleVersion ?? 1,
       prompt: agenda.payload.prompt ?? (agenda.payload.topics ?? []).join("\n"), nextRunAt: next?.scheduledAt ?? null,
+      entityKeys: Array.isArray(agenda.payload.entityKeys) ? agenda.payload.entityKeys : [],
       scheduleState: agenda.payload.archivedAt ? "archived" : !active ? "paused" : next ? "scheduled" : "completed" } };
   }
 
@@ -638,6 +685,7 @@ export class AutopilotService {
       payload.pauseReason = "Waiting for the researcher to start proactive research.";
     }
     payload.updatedAt = this.now().toISOString();
+    if (input.title !== undefined || input.prompt !== undefined) await this.#tag(payload);
     return this.documents.put(userId, "agenda", agenda.id, payload, { expectedRevision: agenda.revision, projectId: agenda.projectId });
   }
 

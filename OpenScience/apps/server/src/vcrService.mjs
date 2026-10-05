@@ -662,7 +662,7 @@ export class VcrService {
     const ceiling = useCeilingOf({ study, results, reviews, stale, current });
     return {
       id: study.id, projectId: study.projectId, name: study.name, question: study.question,
-      dataTier: study.dataTier, intendedUse: study.intendedUse, status: study.status,
+      dataTier: study.dataTier, intendedUse: study.intendedUse, status: study.status, entityKeys: study.entityKeys ?? [],
       steps: study.steps, progress: this.#progress(study), tabs: [...VCR_TABS],
       definition,
       counts: vcrCountBand(object(headline?.counts)),

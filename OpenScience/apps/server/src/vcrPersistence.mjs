@@ -133,6 +133,10 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.studies (
   UNIQUE (user_id, project_id)
 );
 CREATE INDEX IF NOT EXISTS vcr_studies_user_idx ON evimed_vcr.studies (user_id, updated_at DESC) WHERE deleted_at IS NULL;
+-- What the study is about, by the shared entity vocabulary (entityVocabulary.mjs).
+-- NULL means not tagged yet — the vocabulary could not tag when the study was
+-- written — and a pass over those rows tags them.
+ALTER TABLE evimed_vcr.studies ADD COLUMN IF NOT EXISTS entity_keys text[];
 
 -- Study members and their roles (plan §11.1 conclusion 4): project-level only,
 -- deliberately not an organization model.

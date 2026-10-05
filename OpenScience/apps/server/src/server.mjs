@@ -71,6 +71,7 @@ import { postgresBackupReadiness } from "./postgresBackupReadiness.mjs";
 import { vcrBackupReadiness } from "./vcrBackupReadiness.mjs";
 import { LEARNING_PROJECT_ID, ensureEvidenceProject, isEvolutionProject, isInternalProjectOf, isReservedProjectId } from "./internalProjects.mjs";
 import { createEvidenceBudget, evidenceBudgetMetricFamilies } from "./evidenceBudget.mjs";
+import { evidenceCardMetricFamilies } from "./evidenceCardMetrics.mjs";
 import { assertNotPlatformAccount } from "./platformAccount.mjs";
 import { completeEvolutionRuntime } from './evolutionRuntimeCompletion.mjs';
 import { evolutionRunGap } from './evolutionIntegration.mjs';
@@ -95,7 +96,7 @@ import { LearningMetrics, learningLedgerCounts, learningMetricFamilies, learning
 import { archivedLessonRun, ensureLearningProject, preserveProjectLessons, resolveLessonSourceRun } from "./learningPreservation.mjs";
 import { learnedMethodFamilyForRuntime, methodFamily } from "./learnedMethodMount.mjs";
 import { persistExecutedToolEdges, persistGoldenTraces } from "./toolExecutionEdges.mjs";
-import { CONNECTOR_CREDENTIAL_IDS, MIN_PASSWORD_LENGTH, accountMonthStart, autopilotEpisodeCapability, deliverableIdOfPath, geoMetricDefinition, isChargeableResearchRun, isResearcherOwnedWork, meetsPasswordMinimum, mountedMethodDigest, usagePurposeOfRun } from "@evimed/domain";
+import { PLATFORM_PUBLISHER_USER_ID, CONNECTOR_CREDENTIAL_IDS, MIN_PASSWORD_LENGTH, accountMonthStart, autopilotEpisodeCapability, deliverableIdOfPath, geoMetricDefinition, isChargeableResearchRun, isResearcherOwnedWork, meetsPasswordMinimum, mountedMethodDigest, usagePurposeOfRun } from "@evimed/domain";
 import { ResearchSessionStore } from "./researchSessions.mjs";
 import { prepareResearchContext } from "./researchContext.mjs";
 import {
@@ -232,6 +233,7 @@ import { createEvidenceZoneRoutes } from "./evidenceZoneRoutes.mjs";
 import { FrontierWorker, ensureFrontierProject } from "./frontierWorker.mjs";
 // Its second wave: events and the hot list, the daily and its push, 与你相关,
 // the two reader actions, and the composer the worker ticks.
+import { createEntityVocabulary, entityVocabularyMetricFamilies } from "./entityVocabulary.mjs";
 import { FrontierEvents } from "./frontierEvents.mjs";
 import { FrontierDaily } from "./frontierDaily.mjs";
 import { FrontierWeekly } from "./frontierWeekly.mjs";
@@ -984,10 +986,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // The one durable fact per source identifier (B5, plan 2026-10-05): the frontier feed, the evidence zone and the
   // Crossref lookup write what they saw about a retraction, correction, concern or new version; the result impact path,
   // the memory labels and the cards read it. It belongs to the platform publisher account — the platform's, never a
-  // tenant's — which the integration names here (an id, or a function that answers it; `overrides` is how a test does).
-  // With no account named there is no record, and every module behaves as it did before it existed.
-  const sourceChanges = productDocuments && overrides.sourceChangesOwnerUserId
-    ? createSourceChanges({ documents: productDocuments, ownerUserId: overrides.sourceChangesOwnerUserId,
+  // tenant's — which the control plane's own migration creates (`PLATFORM_PUBLISHER_USER_ID`); `overrides` is how a
+  // test names another. Without the product ledger there is no record, and every module behaves as it did before.
+  const sourceChanges = productDocuments
+    ? createSourceChanges({ documents: productDocuments, ownerUserId: overrides.sourceChangesOwnerUserId ?? PLATFORM_PUBLISHER_USER_ID,
       report: code => { void securityAudit(config, "source.change", "failed", { code }).catch(() => {}); } })
     : null;
   const independentProductWork = work => productDatabase ? productDatabase.withoutTransactionClient(work) : work();
@@ -1660,9 +1662,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const library = createLibrary({ config, store, documents: productDocuments, sources: sourceService, capsules: capsuleService,
     kbIndex, report: (code) => process.stderr.write(`personal library: ${code}\n`) });
   libraryService = library.service;
+  // The one entity vocabulary (entityVocabulary.mjs, plan §4.2): the frontier's glossary and entity keys, read by
+  // the pipeline, the evidence zones, autopilot agendas, GEO products and VCR studies. It follows the frontier
+  // module: off, every answer is empty and no table is read.
+  const entityVocabulary = createEntityVocabulary({ database: productDatabase, enabled: Boolean(config.frontierEnabled && productDatabase),
+    report: (code) => process.stderr.write(`${code}\n`) });
   const autopilotPlanner = new AutopilotPlanner(config, { usageLedger });
   const autopilotService = productDocuments && productJobs ? new AutopilotService({
-    documents: productDocuments, jobs: productJobs, usage: usageLedger, notifications: notificationService,
+    documents: productDocuments, jobs: productJobs, usage: usageLedger, notifications: notificationService, entityVocabulary,
     // The account's own spending caps, which cover everything the researcher spends;
     // an agenda's daily and weekly caps count only the agenda's own (agendaBudget.mjs).
     accountCaps: () => ({ userDailySpendLimit: config.userDailySpendLimit, userWeeklySpendLimit: config.userWeeklySpendLimit }),
@@ -1701,7 +1708,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       dimension: config.kbEmbeddingDimension, pollMs: config.knowledgePluginPollMs });
     const editor = new FrontierEditor(config, { usageLedger, fetchImpl: overrides.frontierModelFetch ?? globalThis.fetch });
     const pipeline = new FrontierPipeline({ database: productDatabase, editor, plugin: client, embedder, config, sourceChanges,
-      workerId: randomId("frontier-") });
+      glossary: entityVocabulary.glossaryStore, workerId: randomId("frontier-") });
     // One implementation of "today's spend": the pipeline's, which it gates on.
     const budget = typeof pipeline.budget === "function" ? () => pipeline.budget(new Date()) : null;
     // The second wave (build spec D): events and the hot list, the daily and
@@ -1741,7 +1748,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     const composer = new FrontierComposer({ events, daily, weekly, profiles, notifications: frontierNotifications,
       canRun: () => !maintenanceService || maintenanceService.claimingAllowed(),
       report: (loop, code) => process.stderr.write(`frontier ${loop}: ${code}\n`) });
-    const evidenceZones = new EvidenceZoneService({database:productDatabase});
+    // Official zones belong to the platform publisher; a zone and its cards are tagged with the shared entity keys.
+    const evidenceZones = new EvidenceZoneService({database:productDatabase,entityKeysFor:entityVocabulary.entityKeysFor,platformPublisherUserId:PLATFORM_PUBLISHER_USER_ID});
     // An official zone keeps running on the feed's budget; every other zone's upkeep is booked to its owner, in the
     // owner's own `evimed-evidence` project, and charged through the allowance composed below (`useBilling`).
     const evidenceEditorial = new EvidenceEditorial({database:productDatabase,service:evidenceZones,editor,budget,
@@ -1840,7 +1848,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
    *   importDelivery: ReturnType<typeof createGeoDeliveryImport> } | null} */
   let geo = null;
   if (config.geoEnabled && productDatabase) {
-    const geoStore = new GeoStore({ database: productDatabase });
+    const geoStore = new GeoStore({ database: productDatabase, entityVocabulary });
     const social = createSocialCrawlClient({ baseUrl: config.geoSocialUrl, timeoutMs: config.geoSocialTimeoutMs,
       fetchImpl: overrides.geoSocialFetch ?? globalThis.fetch });
     geo = {
@@ -1887,7 +1895,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // A record document to text and a figure to curve points run in the runtime
     // controller's disposable container, like a document export does.
     intakeController,
+    entityVocabulary,
   });
+  // Rows made while the vocabulary could not tag (the frontier off, the glossary not yet seeded) are tagged once it
+  // can: a bounded pass per module after each glossary load, each row through its own owner (entityVocabulary.mjs).
+  if (autopilotService && productDatabase) entityVocabulary.registerBackfill("autopilot", ({ limit }) => autopilotService.backfillEntityKeys(productDatabase, { limit }));
+  if (geo) entityVocabulary.registerBackfill("geo", ({ limit }) => geo.store.backfillEntityKeys({ limit }));
+  if (vcr) entityVocabulary.registerBackfill("vcr", ({ limit }) => vcr.store.backfillEntityKeys({ limit }));
 
   /**
    * The newest run of a GEO project's control-plane project that holds the
@@ -4887,6 +4901,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           evolution,
           evaluationIsolation,
           evidenceBudget,
+          entityVocabulary,
         });
         return;
       }
@@ -7693,7 +7708,7 @@ function addHistogramMetric(lines, name, help, series) {
   }
 }
 
-async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, evidenceBudget = null }) {
+async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, evidenceBudget = null, entityVocabulary = null }) {
   const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate, frontier, review, geo, vcr, credits);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
@@ -8089,6 +8104,12 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
   // for the zone upkeep this process ran. No reading is taken while the programme is off.
   const evidenceReading = evidenceBudget?.enabled ? await evidenceBudget.budget().catch(() => null) : null;
   for (const family of evidenceBudgetMetricFamilies(config, evidenceBudget, evidenceReading, frontier?.evidenceEditorial?.status().counters ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
+  // The evidence card's guardrails (evidenceCardMetrics.mjs): cards without a producer (must be 0), writes refused by
+  // origin, cards refused for a simulated value. Read from the zone service only while the frontier is composed.
+  for (const family of evidenceCardMetricFamilies(frontier ? await frontier.evidenceZones.metrics().catch(() => null) : null)) addMetric(lines, family.name, family.help, family.type, family.series);
+  // The entity vocabulary the frontier, the zones, agendas, products and studies share: the glossary's size and what
+  // the taggings found (entityVocabulary.mjs `entityVocabularyMetricFamilies`).
+  for (const family of entityVocabularyMetricFamilies(entityVocabulary?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
   // 循证 GEO: `open_science_geo_enabled 0` when off (geoService.mjs `geoMetricFamilies`).
   const geoSnapshot = geo ? await geoMetricsSnapshot(geo) : null;
   for (const family of geoMetricFamilies(Boolean(geo), geoSnapshot)) addMetric(lines, family.name, family.help, family.type, family.series);

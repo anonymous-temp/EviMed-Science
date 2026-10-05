@@ -101,6 +101,8 @@ export function geoProjectFromRow(row) {
     budget: row.budget && typeof row.budget === "object" ? row.budget : null,
     status: String(row.status),
     steps: normalizedSteps(row.steps),
+    // What the product is about, by the shared entity vocabulary (`entityVocabulary.mjs`); none until it could be tagged.
+    entityKeys: Array.isArray(row.entity_keys) ? row.entity_keys.map(String) : [],
     createdAt: iso(row.created_at),
     updatedAt: iso(row.updated_at),
     deletedAt: iso(row.deleted_at),
@@ -264,7 +266,7 @@ export function geoOwnedLinkKey(url) {
 }
 
 const PROJECT_COLUMNS = `id, user_id, project_id, product, competitors, coverage_days, engines, tier, budget, status, steps,
-  created_at, updated_at, deleted_at`;
+  entity_keys, created_at, updated_at, deleted_at`;
 
 /** The tables whose rows go with a project or an account; the money tables are not among them. */
 const OWNED_TABLES = Object.freeze(["facts", "snapshots", "probe_jobs", "rounds", "metrics", "errors", "questions", "question_groups", "schedule_marks",
@@ -366,13 +368,51 @@ export function mergedExpectations(previous, given) {
 /** Whitespace-folded text, for deciding whether a claim changed. @param {unknown} value */
 const folded = (value) => String(value ?? "").replace(/\s+/g, " ").trim();
 
+/**
+ * The texts a product is tagged from: its brand, its generic name and its indication.
+ * @param {Record<string, any> | null | undefined} product
+ */
+const productTexts = (product) => [product?.brandName, product?.genericName, product?.indication].filter((value) => typeof value === "string" && value.trim());
+
 export class GeoStore {
-  /** @param {{ database: any, statementTimeoutMs?: number }} options */
-  constructor({ database, statementTimeoutMs = STATEMENT_TIMEOUT_MS }) {
+  /**
+   * @param {{ database: any, statementTimeoutMs?: number, entityVocabulary?: { tag: (input: { texts: string[] }) => Promise<string[] | null> } | null }} options
+   *   `entityVocabulary` tags a product; without it, or while it cannot tag, a project has no keys.
+   */
+  constructor({ database, statementTimeoutMs = STATEMENT_TIMEOUT_MS, entityVocabulary = null }) {
     if (!database) throw new TypeError("The GEO store needs the product database.");
     if (!Number.isSafeInteger(statementTimeoutMs) || statementTimeoutMs < 1) throw new TypeError("The statement timeout is a positive whole number of ms.");
     this.database = database;
     this.statementTimeoutMs = statementTimeoutMs;
+    this.entityVocabulary = entityVocabulary;
+  }
+
+  /** The entity keys of a product, or null where there is no vocabulary or it cannot tag. @param {Record<string, any>} product */
+  async #entityKeys(product) {
+    return (await this.entityVocabulary?.tag({ texts: productTexts(product) })) ?? null;
+  }
+
+  /**
+   * Tag the projects that carry no entity keys yet, `limit` at a time, from the
+   * product each holds; `userId` narrows a pass to one account's projects. A
+   * project whose product changed meanwhile is tagged by that change, not here.
+   * @param {{ userId?: string | null, limit?: number }} [options]
+   * @returns {Promise<{ tagged: number }>}
+   */
+  async backfillEntityKeys({ userId = null, limit = 100 } = {}) {
+    if (!this.entityVocabulary) return { tagged: 0 };
+    const rows = (await this.query(`SELECT id, user_id, product FROM evimed_geo.projects
+      WHERE entity_keys IS NULL AND deleted_at IS NULL AND ($1::text IS NULL OR user_id = $1::text) ORDER BY id LIMIT $2`,
+    [userId, Math.max(1, Math.min(500, Math.trunc(limit) || 100))])).rows;
+    let tagged = 0;
+    for (const row of rows) {
+      const keys = await this.#entityKeys(row.product ?? {});
+      if (!keys) break;
+      const result = await this.query(`UPDATE evimed_geo.projects SET entity_keys = $3::text[]
+        WHERE id = $1 AND user_id = $2 AND entity_keys IS NULL AND deleted_at IS NULL`, [row.id, row.user_id, keys]);
+      tagged += result.rowCount ?? 0;
+    }
+    return { tagged };
   }
 
   ready() { return migrateGeo(this.database); }
@@ -405,9 +445,9 @@ export class GeoStore {
    */
   async createProject({ userId, projectId, engines, coverageDays, product = {} }) {
     const id = randomId("geo_");
-    const result = await this.query(`INSERT INTO evimed_geo.projects (id, user_id, project_id, product, engines, coverage_days)
-      VALUES ($1, $2, $3, $4::jsonb, $5::text[], $6) RETURNING ${PROJECT_COLUMNS}`,
-    [id, userId, projectId, JSON.stringify(product), [...engines], coverageDays]);
+    const result = await this.query(`INSERT INTO evimed_geo.projects (id, user_id, project_id, product, engines, coverage_days, entity_keys)
+      VALUES ($1, $2, $3, $4::jsonb, $5::text[], $6, $7::text[]) RETURNING ${PROJECT_COLUMNS}`,
+    [id, userId, projectId, JSON.stringify(product), [...engines], coverageDays, await this.#entityKeys(product)]);
     return geoProjectFromRow(result.rows[0]);
   }
 
@@ -451,7 +491,11 @@ export class GeoStore {
     if (patch.engines !== undefined) put("engines", [...patch.engines], "::text[]");
     if (patch.tier !== undefined) put("tier", patch.tier);
     if (patch.status !== undefined) put("status", patch.status);
-    if (patch.product !== undefined) put("product", JSON.stringify(patch.product), "::jsonb");
+    if (patch.product !== undefined) {
+      put("product", JSON.stringify(patch.product), "::jsonb");
+      // The keys describe the product they were made from: a changed product has new ones, or none until they can be made.
+      put("entity_keys", await this.#entityKeys(patch.product), "::text[]");
+    }
     if (patch.competitors !== undefined) put("competitors", JSON.stringify(patch.competitors), "::jsonb");
     if (patch.budget !== undefined) put("budget", patch.budget == null ? null : JSON.stringify(patch.budget), "::jsonb");
     if (!sets.length) return this.getProject(userId, id);

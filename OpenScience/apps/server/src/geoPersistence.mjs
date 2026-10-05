@@ -591,6 +591,11 @@ CREATE TABLE IF NOT EXISTS evimed_geo.schedule_marks (
 );
 CREATE INDEX IF NOT EXISTS geo_schedule_marks_open_idx ON evimed_geo.schedule_marks (geo_project_id, kind, state)
   WHERE state IN ('pending', 'claimed', 'running');
+-- What a project's product is about, by the shared entity vocabulary
+-- (entityVocabulary.mjs). NULL means not tagged yet — the vocabulary could not
+-- tag when the product was written — and a pass over those rows tags them.
+ALTER TABLE evimed_geo.projects ADD COLUMN IF NOT EXISTS entity_keys text[];
+
 -- A claim's source as a reader names it (「玛仕度肽注射液说明书（国家药监局 2025）」);
 -- source_ref stays the machine reference the quote is checked against.
 ALTER TABLE evimed_geo.claims ADD COLUMN IF NOT EXISTS source_label text;
