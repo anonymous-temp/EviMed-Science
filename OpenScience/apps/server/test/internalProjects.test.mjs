@@ -58,7 +58,7 @@ test("background work holds at most all but one researcher's share of the runtim
   const manager = new RuntimeManager({ maxRunningRuntimesPerUser: 2, maxRunningRuntimes: 4 });
   manager.runtimes.set(`u1:${LEARNING_PROJECT_ID}`, {});
   manager.runtimes.set(`u2:methodeval-${"ab".repeat(12)}`, {});
-  assert.throws(() => manager.enforceRuntimeCapacity({ userId: "u3", id: SOURCES_PROJECT_ID }), { code: "runtime_limit_exceeded" },
+  assert.throws(() => manager.enforceRuntimeCapacity({ userId: "u3", id: SOURCES_PROJECT_ID }), { code: "runtime_capacity_full" },
     "a third background runtime waits");
   assert.doesNotThrow(() => manager.enforceRuntimeCapacity({ userId: "u3", id: "paper1" }), "a researcher still opens a project");
 });

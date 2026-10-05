@@ -966,7 +966,7 @@ test("runtime controller never counts the platform's background projects against
     await client.startRuntime(evaluation, 49156, "pw_abcdefghijklmnopqrstuvwxyz");
     await assert.rejects(
       client.startRuntime(busy, 49157, "pw_abcdefghijklmnopqrstuvwxyz"),
-      (error) => error?.status === 429 && error?.code === "runtime_limit_exceeded",
+      (error) => error?.status === 429 && error?.code === "runtime_capacity_full",
       "a fourth background runtime waits, whoever it belongs to",
     );
     await client.startRuntime(paper, 49154, "pw_abcdefghijklmnopqrstuvwxyz");
@@ -1021,7 +1021,7 @@ test("runtime controller counts Docker-discovered runtimes left by an earlier co
     });
     await assert.rejects(
       client.startRuntime(project, 49152, "pw_abcdefghijklmnopqrstuvwxyz"),
-      (error) => error?.status === 429 && error?.code === "runtime_limit_exceeded",
+      (error) => error?.status === 429 && error?.code === "runtime_capacity_full",
     );
   } finally {
     await controller.close().catch(() => {});
@@ -1484,14 +1484,14 @@ test('evolution admission measures the whole host and reserves its final researc
   await assert.rejects(()=>client.request('POST','/v1/runtime/evolution-admission',{command:'docker ps'}),error=>error.status===400);
   for(const id of ['evimed-evolution','eval-paper-one','evolution-eval-one']){
     const target=id===project.id?project:await projectTree(dataDir,'alice',id);
-    await assert.rejects(()=>client.startRuntime(target,49152,'pw_abcdefghijklmnopqrstuvwxyz'),error=>error.code==='runtime_limit_exceeded'&&error.retryAfterSeconds===60);
+    await assert.rejects(()=>client.startRuntime(target,49152,'pw_abcdefghijklmnopqrstuvwxyz'),error=>error.code==='runtime_capacity_full'&&error.retryAfterSeconds===60);
   }
   await rm(path.join(process.env.FAKE_DOCKER_STATE,'external-2.json'));
   assert.equal((await client.evolutionAdmissionAvailable()).available,true);
   controller.config.evolutionEnabled=false;
   const disabled=await client.evolutionAdmissionAvailable();assert.equal(disabled.reservedResearchSlots,0);assert.equal(disabled.availableSlots,2);
   const manager=new RuntimeManager({...config,evolutionEnabled:true});manager.runtimeCount=()=>3;manager.runtimeCountForUser=()=>0;manager.backgroundRuntimeCount=()=>0;
-  assert.throws(()=>manager.enforceRuntimeCapacity(project),error=>error.code==='runtime_limit_exceeded');
+  assert.throws(()=>manager.enforceRuntimeCapacity(project),error=>error.code==='runtime_capacity_full');
   assert.doesNotThrow(()=>manager.enforceRuntimeCapacity({...project,id:'research'}));
   assert.doesNotThrow(()=>manager.enforceRuntimeCapacity({...project,id:'evimed-sources'}));
   manager.config.evolutionEnabled=false;assert.doesNotThrow(()=>manager.enforceRuntimeCapacity(project));

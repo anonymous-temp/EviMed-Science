@@ -132,11 +132,11 @@ test("a start under way reports which moment it is in, and a refused one says wh
   // The one slot is taken by another account: the refusal is the slot cap, and
   // the status the shell polls says so rather than leaving a clock to guess.
   const other = await tempProject(root, "bob", "paper2");
-  await assert.rejects(() => manager.start(other), (error) => error.status === 429 && error.code === "runtime_limit_exceeded");
+  await assert.rejects(() => manager.start(other), (error) => error.status === 429 && error.code === "runtime_capacity_full");
   const refused = await manager.status(other);
   assert.equal(refused.running, false);
   assert.equal(refused.startStage, null);
-  assert.equal(refused.startError?.code, "runtime_limit_exceeded");
+  assert.equal(refused.startError?.code, "runtime_capacity_full");
   assert.equal(refused.startError?.status, 429);
 
   // Freed, the next start is the newer answer and the refusal is gone.

@@ -1391,8 +1391,16 @@ test("a notice page says what stopped the conversation in the shell's own words,
   const capped = await fetch(`${f.base}/`, { headers: { cookie: f.cookie } });
   assert.equal(capped.status, 429);
   const cappedPage = await capped.text();
-  assert.ok(cappedPage.includes("同时进行的研究已达上限，先结束一个再试。"), cappedPage);
+  assert.ok(cappedPage.includes("你同时进行的研究已达上限，先结束一个再试。"), cappedPage);
   assert.ok(cappedPage.includes('"runtime_limit_exceeded"'), "the shell is told the code");
+  // The deployment's full house is a different sentence and a different code: the shell waits it out by itself.
+  f.manager.proxy = async () => { throw new HttpError(429, "runtime_capacity_full", "Every runtime slot of the server is taken; limit is 4.", { retryAfterSeconds: 5 }); };
+  const full = await fetch(`${f.base}/`, { headers: { cookie: f.cookie } });
+  assert.equal(full.status, 429);
+  const fullPage = await full.text();
+  assert.ok(fullPage.includes("所有研究环境都在使用中，空出后会自动开始。"), fullPage);
+  assert.ok(fullPage.includes('"runtime_capacity_full"'), "the shell is told the code");
+  assert.ok(!fullPage.includes("limit is 4"), "and never the English reason");
   f.config.runtimeUiProxyEnabled = false;
   const off = await fetch(`${f.base}/`, { headers: { cookie: f.cookie } });
   assert.equal(off.status, 404);

@@ -1693,7 +1693,7 @@ test("RuntimeManager enforces global runtime capacity including in-flight starts
     () => manager.start(projectB),
     (err) => {
       assert.equal(err.status, 429);
-      assert.equal(err.code, "runtime_limit_exceeded");
+      assert.equal(err.code, "runtime_capacity_full");
       assert.match(err.message, /server/);
       return true;
     },
@@ -1816,7 +1816,7 @@ test("opening a project takes the researcher's own idle runtime a hidden tab sti
   await manager.start(bobProject);
   manager.beginProxy(bobProject);
   manager.activityFor(manager.key(bobProject)).lastUseAt = Date.now() - 5 * 60 * 60_000;
-  await assert.rejects(() => manager.start(project, { opening: true }), (err) => err.code === "runtime_limit_exceeded");
+  await assert.rejects(() => manager.start(project, { opening: true }), (err) => err.code === "runtime_capacity_full");
   assert.deepEqual(stopped, []);
   manager.endProxy(bobProject);
   await manager.closeAll();
@@ -1979,7 +1979,7 @@ test("a full deployment takes another researcher's runtime only once it has idle
       assert.equal(started.url, "http://127.0.0.1/bob-paper9");
       assert.deepEqual(stopped, [{ user: "alice", id: "paper1", event: "yielded" }]);
     } else {
-      await assert.rejects(() => manager.start(bobProject), (err) => err.code === "runtime_limit_exceeded");
+      await assert.rejects(() => manager.start(bobProject), (err) => err.code === "runtime_capacity_full");
       assert.deepEqual(stopped, [], "a runtime used ten minutes ago keeps its owner's warm start");
     }
     await manager.closeAll();

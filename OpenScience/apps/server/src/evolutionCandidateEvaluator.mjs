@@ -29,7 +29,7 @@ export function createEvolutionCandidateEvaluator({ config, controller, fetchImp
     const parsed=JSON.parse(output.trim().split("\n").at(-1));
     evidence.push({caseId,replicate,executed:true,ok:true,outputDigest:`sha256:${createHash("sha256").update(output).digest("hex")}`});
     return parsed;
-    }catch(error){evidence.push({caseId,replicate,executed,outputDigest,ok:false,code:["extension_contract_invalid","runtime_limit_exceeded","product_state_unavailable","usage_budget_exceeded","runtime_controller_timeout"].includes(error?.code)?error.code:"candidate_execution_failed"});throw error;}
+    }catch(error){evidence.push({caseId,replicate,executed,outputDigest,ok:false,code:["extension_contract_invalid","runtime_limit_exceeded","runtime_capacity_full","product_state_unavailable","usage_budget_exceeded","runtime_controller_timeout"].includes(error?.code)?error.code:"candidate_execution_failed"});throw error;}
   };
   const exclusionPolicyFor = async (definition, methodId) => {
     const publicationIds = (definition.cases ?? []).filter(row => row.kind === "published").map(row => row.publicationId);

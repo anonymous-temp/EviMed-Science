@@ -853,6 +853,22 @@ that leaves its runtime up (the stream acceptance, the conversation walk) still
 holds a researcher's slot; stop it with `stop_runtime` under that project's
 header.
 
+### When every runtime slot is taken
+
+A start that finds all of the host's slots taken answers 429
+`runtime_capacity_full` (since 2026-10-05); the researcher's own ceiling stays
+`runtime_limit_exceeded`. The slot counts are the host's limit and are not
+raised for this. The shell says 「所有研究环境都在使用中，空出后会自动开始。」 and
+asks again by itself (every 5 to 15 seconds, never faster than `Retry-After`); a
+run's dispatch waits for a slot for `OPEN_SCIENCE_RUNTIME_START_WAIT_MS` (3
+minutes) before it is refused; the workers defer without spending an attempt.
+`open_science_runtime_start_waits_total{audience,outcome}`,
+`open_science_runtime_start_wait_seconds_total`,
+`open_science_runtime_start_wait_seconds_max` and
+`open_science_runtime_start_waiting` say how often people waited, how long and
+how many are waiting now; a mean wait that grows (seconds_total over waits) or a
+`gave_up` that is not zero is the host being too small.
+
 ### Specialist job slots on a small host
 
 The six engines (MR, bibliometric, research-topic, peer-review, drug-safety

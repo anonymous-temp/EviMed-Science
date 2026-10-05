@@ -174,7 +174,10 @@ function escapeHtml(value) {
  * @param {string} code
  */
 function noticeDetail(code) {
-  if (code === "runtime_limit_exceeded") return "同时进行的研究已达上限，先结束一个再试。";
+  // The deployment's full house is waited out by the shell and the researcher's
+  // own ceiling is theirs to lift; the words say which (`RuntimeUiFrame`).
+  if (code === "runtime_capacity_full") return "所有研究环境都在使用中，空出后会自动开始。";
+  if (code === "runtime_limit_exceeded") return "你同时进行的研究已达上限，先结束一个再试。";
   return errorCodeMessage(code);
 }
 

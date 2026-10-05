@@ -146,6 +146,8 @@ const operatorLevers = {
   // the web API's runtime manager keeps and reaps them.
   OPEN_SCIENCE_RUNTIME_IDLE_TIMEOUT_MS: ["open-science-web"],
   OPEN_SCIENCE_RUNTIME_IDLE_YIELD_AFTER_MS: ["open-science-web"],
+  // How long a run's dispatch waits for a free runtime slot (2026-10-05).
+  OPEN_SCIENCE_RUNTIME_START_WAIT_MS: ["open-science-web"],
   // The frame layer's per-body off switches: the control every body is
   // measured against has to be reachable from .env.
   OPEN_SCIENCE_RUNTIME_UI_FRAME_OFF: ["open-science-web"],

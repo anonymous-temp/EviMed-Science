@@ -5,7 +5,7 @@ import path from "node:path";
 import test from "node:test";
 import { gunzipSync } from "node:zlib";
 import { createWebApiApp } from "../src/server.mjs";
-import { hashPassword } from "../src/security.mjs";
+import { HttpError, hashPassword } from "../src/security.mjs";
 import { dshProductionReleaseConfig, productionReleaseConfig, releaseManifestFixture } from "./releaseFixture.mjs";
 
 const productionReadinessReady = {
@@ -603,6 +603,12 @@ test("operator metrics endpoint requires a bearer token and exposes only low-car
       assert.match(body, /^open_science_runtime_background_limit 4$/m);
       assert.match(body, /^open_science_runtime_background_yielded_total 0$/m);
       assert.match(body, /^open_science_runtime_background_yield_failures_total 0$/m);
+      // How often people waited for a free research environment, and for how long (2026-10-05).
+      assert.match(body, /^open_science_runtime_start_waits_total\{audience="researcher",outcome="started"\} 0$/m);
+      assert.match(body, /^open_science_runtime_start_waits_total\{audience="researcher",outcome="gave_up"\} 0$/m);
+      assert.match(body, /^open_science_runtime_start_wait_seconds_total\{audience="researcher"\} 0$/m);
+      assert.match(body, /^open_science_runtime_start_wait_seconds_max\{audience="researcher"\} 0$/m);
+      assert.match(body, /^open_science_runtime_start_waiting\{audience="background"\} 0$/m);
       assert.match(body, /^open_science_runtime_proxy_active \d+$/m);
       assert.match(body, /^open_science_runtime_proxy_limit\{scope="global"\} 64$/m);
       assert.match(body, /^open_science_runtime_proxy_limit\{scope="project"\} 8$/m);
@@ -5719,6 +5725,49 @@ test("workspace changes stop the running hosted runtime so it restarts on the ne
       (err) => err?.code === "ENOENT",
     );
   });
+});
+
+test("a run dispatched while every runtime slot is taken waits for one instead of failing; past its allowance it is refused as a full house", async () => {
+  // 2026-10-05, live acceptance: all of the host's slots were taken and the dispatch answered 429 and left a
+  // failed run behind. The slots are the host's limit; the dispatch stands in line for a bounded time.
+  await withApp(async ({ app, base }) => {
+    const realStart = app.runtimeManager.start.bind(app.runtimeManager);
+    const full = () => new HttpError(429, "runtime_capacity_full", "Every runtime slot of the server is taken; limit is 4.", { retryAfterSeconds: 0.02 });
+    let refusals = 0;
+    app.runtimeManager.start = async (project, options) => {
+      if (refusals < 2) { refusals += 1; throw full(); }
+      return realStart(project, options);
+    };
+    const bind = async (sessionId) => {
+      const bound = await fetch(`${base}/api/research-sessions/${sessionId}`, {
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ mode: "open-domain" }),
+      });
+      assert.equal(bound.status, 200);
+    };
+    const dispatch = (sessionId, dispatchId) => fetch(`${base}/api/agent-runs/dispatch`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ sessionId, dispatchId, text: "write artifact" }),
+    });
+    await bind("ses-wait");
+    const waited = await dispatch("ses-wait", "wait-1");
+    assert.ok([200, 202].includes(waited.status), `dispatch returned ${waited.status} ${await waited.clone().text()}`);
+    assert.equal(refusals, 2, "two refusals were waited out");
+    const user = await app.store.devUser();
+    const project = await app.store.defaultProject(user);
+    const runs = await app.agentRuns.list(project);
+    assert.equal(runs.length, 1);
+    assert.notEqual(runs[0].status, "failed", "the run the person asked for is the one that started");
+
+    // Past its allowance the refusal is the full house, with a time to ask again, and no run is left behind: it was
+    // refused before one was reserved.
+    app.config.runtimeStartWaitMs = 0;
+    app.runtimeManager.start = async () => { throw full(); };
+    await bind("ses-full");
+    const refused = await dispatch("ses-full", "wait-2");
+    assert.equal(refused.status, 429);
+    assert.equal((await refused.json()).code, "runtime_capacity_full");
+    assert.ok(Number(refused.headers.get("retry-after")) >= 1);
+    assert.equal((await app.agentRuns.list(project)).some((run) => run.dispatchId === "wait-2"), false);
+  }, { runtimeStartWaitMs: 5_000 });
 });
 
 test("runtime idle timeout stops inactive project runtimes", async () => {

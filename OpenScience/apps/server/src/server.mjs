@@ -2591,7 +2591,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       0,
       Math.ceil(Number(config.agentRunMonitorStallMs) / AGENT_RUN_MONITOR_INTERVAL_MS) || 0,
     ),
-    readSessionHistory: (project, sessionId, options) => runtimeManager.sessionMessages(project, sessionId, options),
+    // A read that must wake the runtime for a dispatch a person is waiting on
+    // (`waitForRoom`), before the run is reserved: with every slot taken it stands
+    // in line (`startWhenRoom`) rather than refusing them. A worker's dispatch does
+    // not ask, and its refusal is its own deferral.
+    readSessionHistory: async (project, sessionId, options) => {
+      if (options?.wake === true && options?.waitForRoom === true) await runtimeManager.startWhenRoom(project);
+      return runtimeManager.sessionMessages(project, sessionId, options);
+    },
     readSessionStatus: (project, sessionId, options) => runtimeManager.sessionStatus(project, sessionId, options),
     readChildSessionActivity: (project, parentSessionId, childSessionIds, options) =>
       runtimeManager.childSessionActivity(project, parentSessionId, childSessionIds, options),
@@ -4438,6 +4445,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     const dispatch = () => agentRuns.dispatch(project, {
       sessionId,
       dispatchId,
+      waitForRoom: true,
       ...(route.estimatedMinutes ? { estimatedMinutes: route.estimatedMinutes } : {}),
       question: text,
       effectiveAgentId: route.effectiveAgentId ?? null,
@@ -4472,7 +4480,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           ...(prepared.memories.length > 0 ? { recalledMemories: prepared.memories } : {}),
         });
       }
-      await runtimeManager.start(project);
+      // A dispatch that finds every slot taken waits for one (`startWhenRoom`):
+      // the run is reserved and the person is waiting on this answer, so a place in
+      // line is the right shape and a refusal is the wrong one.
+      await runtimeManager.startWhenRoom(project);
       return runtimeManager.dispatchPrompt(project, session.sessionId, {
         recordPromptActor: request => recordExtensionPromptActor(user, project, request),
         text: promptText,
@@ -5409,6 +5420,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         const dispatch = () => agentRuns.dispatch(ctx.project, {
           sessionId: body.sessionId,
           dispatchId: body.dispatchId,
+          // A person is waiting on this answer: with every runtime slot taken it waits for one.
+          waitForRoom: true,
           ...(automated ? { automated: true } : {}),
           ...(estimate ? { estimatedMinutes: estimate } : {}),
           question: text,
@@ -5480,7 +5493,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
               ...(prepared.memories.length > 0 ? { recalledMemories: prepared.memories } : {}),
             });
           }
-          await runtimeManager.start(ctx.project);
+          await runtimeManager.startWhenRoom(ctx.project);
           const requestedToolContext = evolution ? renderEvolutionToolContext(text, runtimeManager.runtimePlatformSkills(ctx.project), dispatchedRun.effectiveAgentId ?? dispatchedRun.agentId ?? null) : '';
           return runtimeManager.dispatchPrompt(ctx.project, session.sessionId, {
             recordPromptActor: request => recordExtensionPromptActor(ctx.user, ctx.project, request),
@@ -7830,6 +7843,43 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
     "Background runtimes retired because a researcher's start found the deployment at its ceiling.",
     "counter",
     { value: runtimeStats.background?.yielded ?? 0 },
+  );
+  // Starts that found every slot taken (2026-10-05): how often a person waited
+  // for a research environment and for how long — the number that says the host
+  // is too small. A wait begins at the first refusal and ends at the project's
+  // next start, or is given up on when nobody asked again for ten minutes.
+  const roomWaits = runtimeStats.roomWaits ?? {};
+  const roomAudiences = ["researcher", "background"];
+  addMetric(
+    lines,
+    "open_science_runtime_start_waits_total",
+    "Runtime starts that found every slot taken, by whose they were and how the wait ended: started, or given up on.",
+    "counter",
+    roomAudiences.flatMap((audience) => [
+      { value: Number(roomWaits[audience]?.started) || 0, labels: { audience, outcome: "started" } },
+      { value: Number(roomWaits[audience]?.gaveUp) || 0, labels: { audience, outcome: "gave_up" } },
+    ]),
+  );
+  addMetric(
+    lines,
+    "open_science_runtime_start_wait_seconds_total",
+    "Seconds spent waiting for a runtime slot, summed over the waits that ended; divide by the waits for the mean.",
+    "counter",
+    roomAudiences.map((audience) => ({ value: Number(roomWaits[audience]?.seconds) || 0, labels: { audience } })),
+  );
+  addMetric(
+    lines,
+    "open_science_runtime_start_wait_seconds_max",
+    "The longest wait for a runtime slot that ended since this process started.",
+    "gauge",
+    roomAudiences.map((audience) => ({ value: Number(roomWaits[audience]?.maxSeconds) || 0, labels: { audience } })),
+  );
+  addMetric(
+    lines,
+    "open_science_runtime_start_waiting",
+    "Projects waiting for a runtime slot right now: refused for want of room and asked again in the last two minutes.",
+    "gauge",
+    roomAudiences.map((audience) => ({ value: Number(roomWaits[audience]?.waiting) || 0, labels: { audience } })),
   );
   addMetric(
     lines,

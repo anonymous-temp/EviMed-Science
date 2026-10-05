@@ -997,6 +997,21 @@ export const RUN_VERDICT_ERROR_CODES = Object.freeze([
 ])
 
 /**
+ * The two ways a runtime start meets a ceiling, and what each asks of the
+ * caller (2026-10-05). The deployment's slots are shared with other products
+ * on a small host, so a start that finds every one of them taken is a place in
+ * line: `runtime_capacity_full` is waited out — by the shell with a backoff, by
+ * a run's dispatch for a bounded time, by every worker as a deferral. The
+ * per-user ceiling (`runtime_limit_exceeded`) is the researcher's own doing —
+ * their other conversations are what hold the room — and stays an honest
+ * refusal with its own sentence. Both are 429.
+ */
+export const RUNTIME_ROOM_WAIT_CODES = Object.freeze(['runtime_capacity_full'])
+
+/** Every refusal of a runtime start for want of room, whoever's it is: the codes a worker defers on without spending an attempt. */
+export const RUNTIME_ROOM_REFUSAL_CODES = Object.freeze([...RUNTIME_ROOM_WAIT_CODES, 'runtime_limit_exceeded'])
+
+/**
  * Codes a person meets outside a run's verdict: a refusal before anything
  * starts, and the autopilot verification episode's own outcomes.
  *
@@ -1011,7 +1026,11 @@ export const CONTROL_PLANE_ERROR_CODES = Object.freeze([
   'runtime_reserved_for_autopilot',
   'runtime_busy',
   'runtime_cleanup_required',
+  // 2026-10-05: the per-user ceiling — the researcher's own doing, refused as
+  // such — and the deployment's own: every research environment taken, which
+  // is a place in line and not a failure (`RUNTIME_ROOM_WAIT_CODES`).
   'runtime_limit_exceeded',
+  'runtime_capacity_full',
   // 2026-10-04: a start or a prompt that met a plugin apply on its project
   // after the control plane's own wait ran out — the first conversation after a
   // release, while the runtime is restarted and verified.
@@ -2003,7 +2022,8 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
     + '等这一轮结束后即可继续，或在“主动研究”里先暂停它。',
   runtime_busy: '这个项目的运行时正被另一次任务占用，稍后会自动重试。',
   runtime_cleanup_required: '上一次任务的运行环境尚未关闭，清理完成后可继续研究。',
-  runtime_limit_exceeded: '运行时的并发或用量上限已到，这次请求没有被受理。稍后重试。',
+  runtime_limit_exceeded: '你同时进行的研究已达上限，这次没有开始。先结束一个再试。',
+  runtime_capacity_full: '所有研究环境都在使用中，这次没有开始。空出来之后再试，或先结束一个正在进行的研究。',
   plugin_apply_in_progress: '正在为这个项目准备运行环境，通常半分钟内完成。完成后再试一次即可。',
   agent_run_active: '这个研究会话已经有一次运行在进行中。等它结束，或先取消它，再发起新的。',
   agent_run_limit_reached: '这个项目同时进行的研究运行已达上限。等其中一次结束后再发起。',
@@ -2279,6 +2299,7 @@ const ERROR_CODE_OUTCOMES = Object.freeze({
   runtime_busy: 'capped',
   runtime_cleanup_required: 'capped',
   runtime_limit_exceeded: 'capped',
+  runtime_capacity_full: 'capped',
   plugin_apply_in_progress: 'capped',
   agent_run_active: 'capped',
   agent_run_limit_reached: 'capped',

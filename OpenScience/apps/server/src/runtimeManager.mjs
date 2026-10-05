@@ -282,6 +282,17 @@ export function requestRuntime(runtime, target, { method = "GET", headers = {}, 
   });
 }
 
+/** A start refused because every slot of the deployment is taken: a wait, not a failure (`RUNTIME_ROOM_WAIT_CODES`). */
+const ROOM_FULL_CODE = "runtime_capacity_full";
+/** What a refusal for want of room tells its caller to wait before asking again. */
+const ROOM_RETRY_AFTER_SECONDS = 5;
+/** A wait that grows is never asked about less often than this. */
+const ROOM_RETRY_CEILING_MS = 15_000;
+/** A wait nobody has asked about for this long was given up on: the shell asks at least every fifteen seconds, and the slowest worker every five minutes. */
+const ROOM_WAIT_GIVE_UP_MS = 10 * 60_000;
+/** A wait asked about this recently is one somebody is still in (`open_science_runtime_start_waiting`). */
+const ROOM_WAIT_ACTIVE_MS = 2 * 60_000;
+
 function positiveLimit(value) {
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : null;
 }
@@ -3434,6 +3445,17 @@ export class RuntimeManager {
      *  deployment at its ceiling (`makeRoomFor`): how many, and the last time
      *  (`open_science_runtime_background_yielded_total`). */
     this.backgroundYields = { total: 0, failed: 0, lastAt: /** @type {string | null} */ (null) };
+    /** Projects whose start found every slot taken and has not started since,
+     *  by project key (`noteRoomRefusal`): when it began, when it last asked
+     *  and whose it is. */
+    this.roomWaits = /** @type {Map<string, { since: number, lastAt: number, audience: "researcher" | "background" }>} */ (new Map());
+    /** The waits that ended, by whose they were: how many started and how many
+     *  were given up on, the seconds they spent and the longest one
+     *  (`open_science_runtime_start_*`). */
+    this.roomWaitStats = {
+      researcher: { started: 0, gaveUp: 0, seconds: 0, maxSeconds: 0 },
+      background: { started: 0, gaveUp: 0, seconds: 0, maxSeconds: 0 },
+    };
     /** Workload tokens this process refused, by what the check was doing when it did
      *  (`noteWorkloadTokenRefusal`). */
     this.workloadTokenRefusals = { token: 0, runtime: 0, superseded: 0, unreadable: 0 };
@@ -4000,6 +4022,7 @@ export class RuntimeManager {
     try {
       const runtime = await started;
       this.startFailures.delete(key);
+      this.noteRoomFound(project);
       try {
         this.onRuntimeStart(project, runtime);
       } catch {
@@ -4017,7 +4040,7 @@ export class RuntimeManager {
       // what happened instead.
       // A guess refused for want of room is no answer to anyone waiting: the
       // frame that opens this project next makes its own room.
-      if (!(this.speculativeStarts.has(key) && error?.code === "runtime_limit_exceeded")) {
+      if (!(this.speculativeStarts.has(key) && (error?.code === ROOM_FULL_CODE || error?.code === "runtime_limit_exceeded"))) {
         this.startFailures.set(key, {
           code: typeof error?.code === "string" ? error.code : "runtime_start_failed",
           status: Number.isSafeInteger(error?.status) ? error.status : 502,
@@ -5253,6 +5276,18 @@ export class RuntimeManager {
     return runtime.stopNotification;
   }
 
+  /** Who is waiting for room now, and every wait that ended, for `/api/ops/metrics`. */
+  roomWaitsSnapshot() {
+    const now = Date.now();
+    this.settleRoomWaits(now);
+    const waiting = { researcher: 0, background: 0 };
+    for (const wait of this.roomWaits.values()) if (now - wait.lastAt < ROOM_WAIT_ACTIVE_MS) waiting[wait.audience] += 1;
+    return {
+      researcher: { ...this.roomWaitStats.researcher, waiting: waiting.researcher },
+      background: { ...this.roomWaitStats.background, waiting: waiting.background },
+    };
+  }
+
   statsAll() {
     const proxy = {
       active: this.activeProxyCount(),
@@ -5284,6 +5319,7 @@ export class RuntimeManager {
         yieldFailures: this.backgroundYields.failed,
         lastYieldedAt: this.backgroundYields.lastAt,
       },
+      roomWaits: this.roomWaitsSnapshot(),
       methodMounts: { ...this.methodMounts, maxPromptBytes: positiveLimit(this.config.mountedMethodPromptBytes) },
       unverifiedReleaseLaunches: [...this.unverifiedReleaseLaunches].map(([code, launches]) => ({ code, launches })),
     };
@@ -5307,6 +5343,18 @@ export class RuntimeManager {
   }
 
   /**
+   * Whether this start may take a slot, else why not.
+   *
+   * Two refusals, because they ask different things of the person (2026-10-05):
+   * `runtime_limit_exceeded` is the researcher's own ceiling — their other
+   * conversations hold the room, so waiting would not help and the sentence
+   * says what does — and `runtime_capacity_full` is the deployment's: every
+   * slot of a host shared with other products is taken, which is a place in
+   * line (the shell retries by itself, a run's dispatch waits, a worker
+   * defers). The researcher's own ceiling is asked first for exactly that
+   * reason: a start held by it would otherwise be told to wait for a slot it
+   * could not take once one was free.
+   *
    * @param {Record<string, any>} project
    * @param {{ starting?: boolean }} [options] `starting`: this project's own
    *   start is already registered in `starts` and is not one of the others
@@ -5314,29 +5362,113 @@ export class RuntimeManager {
   enforceRuntimeCapacity(project, { starting = false } = {}) {
     const own = starting && this.starts.has(this.key(project)) ? 1 : 0;
     const maxGlobal = positiveLimit(this.config.maxRunningRuntimes);
-    if(this.config.evolutionEnabled===true&&isEvolutionProject(project.id)&&maxGlobal!=null&&this.runtimeCount()-own>=maxGlobal-1){
-      throw new HttpError(429,'runtime_limit_exceeded','Evolution waits to preserve the final research runtime slot.',{retryAfterSeconds:60});
-    }
-    if (maxGlobal != null && this.runtimeCount() - own >= maxGlobal) {
-      throw new HttpError(429, "runtime_limit_exceeded", `Too many running runtimes for the server; limit is ${maxGlobal}.`, {
-        retryAfterSeconds: 5,
-      });
-    }
     const maxPerUser = positiveLimit(this.config.maxRunningRuntimesPerUser);
-    // Background work holds at most its share of the deployment, so a
-    // researcher opening a project always finds room (`backgroundRuntimeLimit`).
-    const maxBackground = this.isBackgroundProject(project.userId, project.id) ? backgroundRuntimeLimit(maxGlobal, maxPerUser) : null;
-    if (maxBackground != null && this.backgroundRuntimeCount() - own >= maxBackground) {
-      throw new HttpError(429, "runtime_limit_exceeded", `Background work is holding its share of runtimes (${maxBackground}); it waits so researchers keep theirs.`, {
-        retryAfterSeconds: 60,
-      });
-    }
+    const background = this.isBackgroundProject(project.userId, project.id);
     // A background project is never one of the researcher's slots
     // (`runtimeCountForUser`), so it is not held to their ceiling either.
-    if (maxPerUser != null && !this.isBackgroundProject(project.userId, project.id) && this.runtimeCountForUser(project.userId) - own >= maxPerUser) {
+    if (maxPerUser != null && !background && this.runtimeCountForUser(project.userId) - own >= maxPerUser) {
       throw new HttpError(429, "runtime_limit_exceeded", `Too many running runtimes for this user; limit is ${maxPerUser}.`, {
         retryAfterSeconds: 5,
       });
+    }
+    if(this.config.evolutionEnabled===true&&isEvolutionProject(project.id)&&maxGlobal!=null&&this.runtimeCount()-own>=maxGlobal-1){
+      throw this.roomFull(project,'Evolution waits to preserve the final research runtime slot.',60);
+    }
+    if (maxGlobal != null && this.runtimeCount() - own >= maxGlobal) {
+      throw this.roomFull(project, `Every runtime slot of the server is taken; limit is ${maxGlobal}.`, ROOM_RETRY_AFTER_SECONDS);
+    }
+    // Background work holds at most its share of the deployment, so a
+    // researcher opening a project always finds room (`backgroundRuntimeLimit`).
+    const maxBackground = background ? backgroundRuntimeLimit(maxGlobal, maxPerUser) : null;
+    if (maxBackground != null && this.backgroundRuntimeCount() - own >= maxBackground) {
+      throw this.roomFull(project, `Background work is holding its share of runtimes (${maxBackground}); it waits so researchers keep theirs.`, 60);
+    }
+  }
+
+  /**
+   * The refusal of a start that found no room, and the first line of its wait
+   * on the operator's books (`noteRoomRefusal`).
+   * @param {Record<string, any>} project @param {string} message @param {number} retryAfterSeconds
+   */
+  roomFull(project, message, retryAfterSeconds) {
+    this.noteRoomRefusal(project);
+    return new HttpError(429, ROOM_FULL_CODE, message, { retryAfterSeconds });
+  }
+
+  /**
+   * A start that found no room, noted as the beginning of a wait. The shell
+   * asks again on its own, a dispatch waits in `startWhenRoom`, a worker defers
+   * — all of them arrive here again for the same project, which is what makes
+   * the wait observable without anyone telling this class they are waiting: it
+   * began at the first refusal and ends at the project's next start
+   * (`noteRoomFound`), or is given up on when nobody asked again
+   * (`settleRoomWaits`). A warm-up that guessed at a project is no wait.
+   * @param {Record<string, any>} project
+   */
+  noteRoomRefusal(project) {
+    const key = this.key(project);
+    if (this.speculativeStarts.has(key)) return;
+    const now = Date.now();
+    this.settleRoomWaits(now);
+    const wait = this.roomWaits.get(key);
+    if (wait) wait.lastAt = now;
+    else this.roomWaits.set(key, { since: now, lastAt: now, audience: this.isBackgroundProject(project.userId, project.id) ? "background" : "researcher" });
+  }
+
+  /** A project's runtime came up: whatever wait it had is over. @param {Record<string, any>} project */
+  noteRoomFound(project) {
+    const key = this.key(project);
+    const wait = this.roomWaits.get(key);
+    if (!wait) return;
+    this.roomWaits.delete(key);
+    this.recordRoomWait(wait, "started", Date.now() - wait.since);
+  }
+
+  /** Waits nobody has asked about for `ROOM_WAIT_GIVE_UP_MS` ended without a start: the person left. @param {number} now */
+  settleRoomWaits(now) {
+    for (const [key, wait] of this.roomWaits) {
+      if (now - wait.lastAt < ROOM_WAIT_GIVE_UP_MS) continue;
+      this.roomWaits.delete(key);
+      this.recordRoomWait(wait, "gave_up", wait.lastAt - wait.since);
+    }
+  }
+
+  /** @param {{ audience: "researcher" | "background" }} wait @param {"started" | "gave_up"} outcome @param {number} ms */
+  recordRoomWait(wait, outcome, ms) {
+    const seconds = Math.max(0, ms) / 1000;
+    const stats = this.roomWaitStats[wait.audience];
+    if (outcome === "started") stats.started += 1;
+    else stats.gaveUp += 1;
+    stats.seconds += seconds;
+    stats.maxSeconds = Math.max(stats.maxSeconds, seconds);
+  }
+
+  /**
+   * `start`, waiting for room when the deployment is full.
+   *
+   * For a caller that has someone waiting on the answer and cannot ask again
+   * itself — a run's dispatch, which has already reserved the run. Retries only
+   * `runtime_capacity_full`, at the refusal's own `retryAfterSeconds` widening
+   * to fifteen seconds, for at most `runtimeStartWaitMs`; every other refusal,
+   * and the researcher's own ceiling, is the caller's at once. Outside
+   * `start`, so no database admission connection is held while it sleeps.
+   *
+   * @param {Record<string, any>} project @param {Record<string, any>} [options] as for `start`
+   * @param {{ sleep?: (ms: number) => Promise<void>, now?: () => number }} [hooks] a test's clock
+   */
+  async startWhenRoom(project, options = {}, { sleep: pause = sleep, now = Date.now } = {}) {
+    const maxWaitMs = Number(this.config.runtimeStartWaitMs);
+    const budget = Number.isFinite(maxWaitMs) && maxWaitMs > 0 ? maxWaitMs : 0;
+    const began = now();
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        return await this.start(project, options);
+      } catch (error) {
+        const left = began + budget - now();
+        if (error?.code !== ROOM_FULL_CODE || left <= 0) throw error;
+        const hint = Number.isFinite(error.retryAfterSeconds) ? error.retryAfterSeconds * 1000 : ROOM_RETRY_AFTER_SECONDS * 1000;
+        await pause(Math.min(left, Math.min(ROOM_RETRY_CEILING_MS, hint * (1 + attempt * 0.5))));
+      }
     }
   }
 

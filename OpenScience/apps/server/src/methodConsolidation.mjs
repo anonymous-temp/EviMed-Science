@@ -40,6 +40,7 @@ import { createHash } from "node:crypto";
 import {
   METHOD_RELATIONS_ACTIONS,
   METHOD_RELATION_TYPES,
+  RUNTIME_ROOM_REFUSAL_CODES,
   cleanMethodDisplay,
   parseSkillFrontmatter,
   preservedSectionsIntact,
@@ -67,7 +68,7 @@ export const CONSOLIDATE_ACTIONS = Object.freeze(["sleep", "integrate", "evaluat
 export const DEFERRED_LEARNING_ERRORS = new Map([
   ["learning_paused", 60_000],
   ["runtime_busy", 60_000],
-  ["runtime_limit_exceeded", 120_000],
+  ...RUNTIME_ROOM_REFUSAL_CODES.map((code) => /** @type {[string, number]} */ ([code, 120_000])),
   ["runtime_proxy_limit_exceeded", 120_000],
   // A researcher's start took the runtime back mid-step (`RuntimeManager.
   // makeRoomFor`). The step starts again under the next attempt id once there is
