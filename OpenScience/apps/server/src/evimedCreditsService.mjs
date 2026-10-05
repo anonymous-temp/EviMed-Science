@@ -616,8 +616,7 @@ export class EvimedCreditsService {
           logicalTaskId: logical, policyActivatedAt: new Date(policy.activated_at).toISOString() };
         const requested = researchMoneyUnits(evidence.creditsAmount);
         if (requested > 10_000_000n * 100_000_000n) throw new RangeError('Invalid task credit amount.');
-        const at = this.now();
-        /** @type {{ taken: string, shortfall: string, lots: any[], balance: string | null, receiptId: string | null }} */
+        /** @type {{ taken: string, shortfall: string, lots: any[], balance: string | null, receiptId: string | null, at?: string }} */
         let outcome = { taken: researchMoneyDecimal(0n), shortfall: researchMoneyDecimal(0n), lots: [], balance: null, receiptId: null };
         if (requested > 0n) {
           if (!payer) throw new EvimedCreditsError('evimed_credits_account_unlinked', 'This account has no wallet to charge.', { final: true });
@@ -627,6 +626,10 @@ export class EvimedCreditsService {
           // Nothing to take, but the run is over: its hold goes with it.
           await this.simulator.release({ runId: physicalId, client });
         }
+        // The charge's line is stamped with the instant its deduct entry was written, under the wallet's lock, so it
+        // reads after the expiry and the monthly gift the same operation wrote before it (review F9). A line with
+        // no entry (nothing was taken) is stamped now.
+        const at = outcome.at ? new Date(outcome.at) : this.now();
         // The reason a run that was charged nothing was charged nothing: why it was not charged at all, or that
         // there was nothing billable to charge.
         const notChargedReason = decision.reason ?? (requested === 0n ? 'no_usage' : null);
@@ -788,30 +791,40 @@ export class EvimedCreditsService {
         UNION ALL
         SELECT e.request_id,w.user_id,''::text,
           jsonb_build_object('kind',e.kind,'credits',e.credits::text,'balanceAfter',e.balance_after::text,
-            'source',l.source,'expiresAt',l.expires_at,'note',l.note),e.created_at,'settled'::text
+            'source',l.source,'expiresAt',l.expires_at,'note',l.note),e.created_at,'settled'::text,
+          'e'||lpad(e.entry_id::text,20,'0')
         FROM evimed_credits.simulated_entries e
           JOIN evimed_credits.simulated_wallets w ON w.payer=e.payer
           JOIN evimed_control.users u ON u.id=w.user_id AND u.created_at=w.owner_created_at
           LEFT JOIN evimed_credits.simulated_lots l ON l.lot_id=e.lot_id
         WHERE w.user_id=$1 AND e.kind IN ('grant','topup','expire','adjust')` : "";
+    // One order for every kind of line: when it was written, and then the wallet's own entry sequence — which
+    // is monotonic under the wallet's lock — and never the spelling of an id. A charge takes the sequence of its
+    // deduct entry; a line with no entry (a run that was not charged) sorts by its own id after them.
     const result = await this.database.query(`SELECT t.*
       FROM (
-        SELECT t.run_id,t.user_id,t.title,t.evidence,t.created_at,t.status FROM evimed_credits.research_tasks t
-          JOIN evimed_control.users u ON u.id=t.user_id AND u.created_at=t.owner_created_at WHERE t.user_id=$1 AND t.wallet=$5
+        SELECT t.run_id,t.user_id,t.title,t.evidence,t.created_at,t.status,
+          coalesce('e'||lpad(d.entry_id::text,20,'0'),'r'||t.run_id) AS sort_key
+        FROM evimed_credits.research_tasks t
+          JOIN evimed_control.users u ON u.id=t.user_id AND u.created_at=t.owner_created_at
+          LEFT JOIN evimed_credits.simulated_entries d ON d.request_id=t.run_id AND d.kind='deduct'
+        WHERE t.user_id=$1 AND t.wallet=$5
         UNION ALL
         SELECT s.run_id,s.user_id,s.memo,jsonb_build_object(
           'actualCny',s.cost_cny::text,'billableCny',(s.credits/s.credits_per_cny)::numeric(20,8)::text,
           'chargedCny',(s.credits/s.credits_per_cny)::numeric(20,8)::text,'waivedCny','0.00000000',
-          'pricingVersion','legacy','walletContract','legacy-integer'),s.created_at,s.status
+          'takenCredits',(s.credits/s.credits_per_cny)::numeric(20,8)::text,'absorbedCredits',s.absorbed::text,
+          'requestedCny',coalesce(s.requested,s.credits/s.credits_per_cny)::numeric(20,8)::text,
+          'pricingVersion','legacy','walletContract','legacy-integer'),s.created_at,s.status,'r'||s.run_id
         FROM evimed_credits.settlements s JOIN evimed_control.users u ON u.id=s.user_id AND u.created_at=s.owner_created_at WHERE s.user_id=$1 AND s.wallet=$5
           AND NOT EXISTS(SELECT 1 FROM evimed_credits.research_tasks t WHERE t.run_id=s.run_id)${credits}
       ) t
-      WHERE t.user_id=$1 AND ($2::timestamptz IS NULL OR (t.created_at,t.run_id)<($2::timestamptz,$3::text))
-      ORDER BY t.created_at DESC,t.run_id DESC LIMIT $4`, [productId(userId,'user'),position?.[0] ?? null,position?.[1] ?? null,bound+1,this.walletKind]);
+      WHERE t.user_id=$1 AND ($2::timestamptz IS NULL OR (t.created_at,t.sort_key)<($2::timestamptz,$3::text))
+      ORDER BY t.created_at DESC,t.sort_key DESC LIMIT $4`, [productId(userId,'user'),position?.[0] ?? null,position?.[1] ?? null,bound+1,this.walletKind]);
     const rows = result.rows.slice(0,bound);
     const items = rows.map((/** @type {any} */ row) => this.#statementItem(row));
     const last = rows.at(-1);
-    const nextCursor = result.rows.length > bound && last ? Buffer.from(JSON.stringify([new Date(last.created_at).toISOString(),last.run_id])).toString('base64url') : null;
+    const nextCursor = result.rows.length > bound && last ? Buffer.from(JSON.stringify([new Date(last.created_at).toISOString(),last.sort_key])).toString('base64url') : null;
     return { items, nextCursor };
   }
 

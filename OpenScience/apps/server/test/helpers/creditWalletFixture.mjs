@@ -24,11 +24,16 @@ export function freshPayer(label = "wallet") {
   return simulatedPayerId(`${label}_${randomUUID().replaceAll("-", "").slice(0, 12)}`, INCARNATION);
 }
 
-/** A clock a test moves. @param {string} start */
-export function clock(start) {
+/**
+ * A clock a test moves. With `tick` it also moves itself: every reading is `tick` milliseconds after the
+ * last, the way a real clock is between two statements — which is what makes an instant read before a lock
+ * differ from one read after it.
+ * @param {string} start @param {number} [tick]
+ */
+export function clock(start, tick = 0) {
   const state = { at: new Date(start) };
   return {
-    now: () => new Date(state.at),
+    now: () => { const value = new Date(state.at); state.at = new Date(state.at.getTime() + tick); return value; },
     set(/** @type {string} */ value) { state.at = new Date(value); },
     advance(/** @type {number} */ ms) { state.at = new Date(state.at.getTime() + ms); },
   };

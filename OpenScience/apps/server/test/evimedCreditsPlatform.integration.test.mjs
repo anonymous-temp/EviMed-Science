@@ -60,15 +60,15 @@ after(async () => {
 
 /**
  * One account with a wallet and a billing service on a clock of its own.
- * @param {{ startCredits?: number, signupGiftDays?: number, monthlyGift?: string | number, serviceConfig?: Record<string, any> }} [settings]
+ * @param {{ startCredits?: number, signupGiftDays?: number, monthlyGift?: string | number, serviceConfig?: Record<string, any>, tick?: number }} [settings]
  */
-async function world({ startCredits = 200, signupGiftDays = 30, monthlyGift = 0, serviceConfig = {} } = {}) {
+async function world({ startCredits = 200, signupGiftDays = 30, monthlyGift = 0, serviceConfig = {}, tick = 0 } = {}) {
   const userId = `platform_${randomUUID().replaceAll("-", "").slice(0, 16)}`;
   const projectId = "platform-project";
   accounts.push(userId);
   await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Platform test','development')", [userId]);
   await database.query("INSERT INTO evimed_control.projects(user_id,id,name,quota_bytes) VALUES($1,$2,'Platform',1048576)", [userId, projectId]);
-  const time = clock(new Date().toISOString());
+  const time = clock(new Date().toISOString(), tick);
   const wallet = new SimulatedWallet({ database, startCredits, signupGiftDays, monthlyGift, now: time.now });
   const reported = /** @type {string[]} */ ([]);
   const service = new EvimedCreditsService({
@@ -412,6 +412,36 @@ test("the statement holds every kind of line, newest first, with a balance that 
   // Another account sees none of it.
   const other = await world();
   assert.equal((await other.service.statements(other.userId)).items.some((line) => seen.includes(line.id)), false);
+  await auditWallet(database, w.payer);
+});
+
+test("when a charge triggers an expiry and a monthly gift, the lines read in the order they happened and the newest line's balance is the wallet's (review F9)", options, async () => {
+  // A clock that ticks, as a real one does between two statements: the stamp the service takes before it asks
+  // the wallet is earlier than the one the wallet takes under its lock.
+  const w = await world({ startCredits: 0, monthlyGift: 5, tick: 5 });
+  await w.service.operatorGrant(w.userId, { requestId: `request_${randomUUID().slice(0, 12)}`, source: "campaign", amount: "3", days: 10 });
+  // 35 days on: the 3 has lapsed and this month's 5 is due — both are written by the charge's own preparation of the wallet.
+  w.time.advance(35 * DAY);
+  const charged = await w.finish({}, { costs: [2] });
+  assert.equal(charged.result.credits, "2.00000000");
+  const lines = (await w.service.statements(w.userId)).items;
+  assert.deepEqual(lines.map((line) => [line.kind, line.amount, line.balanceAfter]), [
+    ["charge", "2.00000000", "3.00000000"],
+    ["grant", "5.00000000", "5.00000000"],
+    ["expire", "3.00000000", "0.00000000"],
+    ["grant", "3.00000000", "3.00000000"],
+  ], "newest first: the charge, then the gift and the expiry that came before it");
+  assert.equal(lines[0].balanceAfter, (await w.balance()).balance, "the newest line's balance is what the wallet holds");
+  // The same under paging: every line once, in the same order, one per page.
+  const paged = [];
+  let cursor = null;
+  for (let page = 0; page < 6; page += 1) {
+    const read = await w.service.statements(w.userId, { limit: 1, cursor });
+    paged.push(...read.items.map((line) => line.kind));
+    cursor = read.nextCursor;
+    if (!cursor) break;
+  }
+  assert.deepEqual(paged, ["charge", "grant", "expire", "grant"]);
   await auditWallet(database, w.payer);
 });
 
