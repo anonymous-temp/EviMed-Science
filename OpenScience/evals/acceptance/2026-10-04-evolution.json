@@ -832,28 +832,96 @@
     "existingEngineMethodArithmetic": [
       {
         "engine": "meta",
-        "definitionId": "meta-reml-published-data-v2",
-        "passed": 10,
-        "cases": 10,
-        "reportHash": "850fe79bf17b3cb38957471f276c571826df9d27b28739b4cf81108b23add40b",
-        "qualification": "Author arithmetic; original model/source binding qualified, not full research."
+        "definitionId": "meta-reml-published-data-v3",
+        "executionKind": "actual-existing-engine",
+        "referenceKinds": [
+          "other-implementation"
+        ],
+        "rowsEntered": 5,
+        "cases": 5,
+        "agree": 5,
+        "disagree": 0,
+        "couldNotRun": 0,
+        "excludedBeforeScoring": 0,
+        "publishedSources": 5,
+        "sourcesFullyAgreeing": 5,
+        "reportHash": "08e5384deee3b33ea10b5c48ceb242930199c0e316b511fb077d1c86788c4f89",
+        "qualification": "Engine REML against metafor on five public datasets; another implementation, not the papers' printed results, and not full research.",
+        "correction": {
+          "date": "2026-10-05",
+          "previouslyRecorded": {
+            "definitionId": "meta-reml-published-data-v2",
+            "passed": 10,
+            "cases": 10,
+            "reportHash": "850fe79bf17b3cb38957471f276c571826df9d27b28739b4cf81108b23add40b"
+          },
+          "whatChanged": "The recorded 10/10 counted each of five cases twice (two replicates of a deterministic function). The definition also dropped any dataset on which the engine differed from metafor before scoring; it no longer reads the engine, and all five datasets are admitted on source integrity. The reference is metafor on the dataset (another implementation), not a number printed in the paper.",
+          "environment": "Re-run offline on the development machine from the regenerated frozen definitions; no model call and no network call."
+        }
       },
       {
         "engine": "pharmacovigilance",
-        "definitionId": "faers-ror-published-data-v3",
-        "passed": 92,
-        "cases": 92,
-        "reportHash": "b5042c74627153b3d41d3799891ce71d06f5e7b70613c172eb21ca8dee5995c7",
-        "qualification": "Five published aggregate ROR bounds pass; not whole FAERS data reconstruction or seven-stage research."
+        "definitionId": "faers-ror-published-data-v4",
+        "executionKind": "actual-existing-engine",
+        "referenceKinds": [
+          "published"
+        ],
+        "rowsEntered": 65,
+        "cases": 65,
+        "agree": 46,
+        "disagree": 19,
+        "couldNotRun": 0,
+        "excludedBeforeScoring": 0,
+        "publishedSources": 5,
+        "sourcesFullyAgreeing": 2,
+        "disagreementDiagnoses": {
+          "reference_not_reproduced_by_textbook_formula_from_its_own_counts": 4,
+          "reference_follows_exact_normal_quantile": 15
+        },
+        "adjudication": "unadjudicated",
+        "reportHash": "d8185af0ffc6193845250cf002b40c01e187e01c4380935b6f2575d027ee7f7d",
+        "qualification": "Engine ROR against the printed ROR and bounds of 65 published table rows from five sources; disagreements reported and unadjudicated. Not whole FAERS data reconstruction or seven-stage research.",
+        "correction": {
+          "date": "2026-10-05",
+          "previouslyRecorded": {
+            "definitionId": "faers-ror-published-data-v3",
+            "passed": 92,
+            "cases": 92,
+            "reportHash": "b5042c74627153b3d41d3799891ce71d06f5e7b70613c172eb21ca8dee5995c7"
+          },
+          "whatChanged": "The recorded 92/92 counted 46 cases twice, and those 46 were what remained after 19 of 65 usable published table rows had been removed because the textbook formula did not reproduce their printed numbers; the engine was also asserted equal to that formula before a row was admitted. Every row is now a case and stays in the denominator. Of the 19 disagreements, 15 are rows of one source whose printed bounds follow the exact normal quantile (the engine uses 1.96), and 4 are rows whose printed numbers the textbook formula does not reproduce from their own printed counts. None is adjudicated.",
+          "environment": "Re-run offline on the development machine from the regenerated frozen definitions; no model call and no network call."
+        }
       },
       {
-        "engine": "mr",
-        "definitionId": "mr-ivw-published-data-v5",
-        "passed": 20,
-        "cases": 22,
-        "unsupported": 2,
-        "reportHash": "5939f2d5ef5771a691890da562c8c0832adae668543fd7c6137f91f57d262964",
-        "qualification": "Six author publication identities establish arithmetic; original same-spec published proof zero, not five clinical original-study replications."
+        "engine": "mr (TwoSampleMR library component; the MR engine is not executed)",
+        "definitionId": "mr-ivw-published-data-v6",
+        "executionKind": "library-component",
+        "referenceKinds": [
+          "other-implementation"
+        ],
+        "rowsEntered": 11,
+        "cases": 11,
+        "agree": 10,
+        "disagree": 0,
+        "couldNotRun": 1,
+        "excludedBeforeScoring": 0,
+        "publishedSources": 6,
+        "sourcesFullyAgreeing": 5,
+        "reportHash": "32b4c71a83db386df5dd3d5d0f047f2cf3d090f7acb43e0b012c2b8ac100a131",
+        "qualification": "TwoSampleMR library functions against the authors' IVW implementation on eleven published per-variant examples; the platform MR engine is not executed. Original same-spec published proof zero, not five clinical original-study replications.",
+        "correction": {
+          "date": "2026-10-05",
+          "previouslyRecorded": {
+            "definitionId": "mr-ivw-published-data-v5",
+            "passed": 20,
+            "cases": 22,
+            "unsupported": 2,
+            "reportHash": "5939f2d5ef5771a691890da562c8c0832adae668543fd7c6137f91f57d262964"
+          },
+          "whatChanged": "The recorded 20/22 counted 11 cases twice and named the row for the MR engine. It runs two functions of the TwoSampleMR library; the platform MR engine pipeline (instrument selection, harmonisation, allele flips) is not executed, so the row is renamed and says nothing about the engine. P-values carried an absolute tolerance of 1e-10 (any p below 1e-10 passed for four cases); they are now compared relatively at 1e-6. The reference is the authors' R implementation on the published inputs (another implementation), not a number printed in a paper.",
+          "environment": "Re-run offline on the development machine from the regenerated frozen definitions; no model call and no network call."
+        }
       }
     ],
     "engineHealthInbox": {
@@ -863,6 +931,24 @@
       "bodyHash": "0447a299bacbd10412ae46d622b7aec5b32aa125aa5f930637982f4f1c2c20b0",
       "artifactSha256": "7c2c14571f9857070d8e0041fd23ea14d9f383b058877f5243ea3516e545959b",
       "methodCases": {
+        "meta": {
+          "agree": 5,
+          "cases": 5
+        },
+        "pharmacovigilance": {
+          "agree": 46,
+          "cases": 65
+        },
+        "mr": {
+          "agree": 10,
+          "cases": 11
+        }
+      },
+      "noDigestMutation": true,
+      "actual0800DeliveryMeasured": false,
+      "paidCalls": 0,
+      "fullResearchClaimed": false,
+      "methodCasesAsDelivered": {
         "meta": {
           "valid": 10,
           "total": 10
@@ -876,10 +962,10 @@
           "total": 22
         }
       },
-      "noDigestMutation": true,
-      "actual0800DeliveryMeasured": false,
-      "paidCalls": 0,
-      "fullResearchClaimed": false
+      "methodCasesCorrection": {
+        "date": "2026-10-05",
+        "note": "methodCasesAsDelivered is what the fixture notification of 2026-10-05T00:02Z displayed: replicate rows (each case twice) of the definitions from which disagreeing rows had been removed. methodCases holds the real cases of the regenerated definitions. The digest now counts one unit per case; the fixture was not re-delivered, so its notification and body hash above are of the earlier text."
+      }
     },
     "historicalScopedMetaV3": {
       "cycleId": "acceptance-scoped-research-meta-v3",
@@ -1979,8 +2065,13 @@
           "Bind original deduplication, drug/event coding and complete analysis contract.",
           "Run the same five publications across all three rulers; aggregate arithmetic and source QA alone do not satisfy complete research."
         ],
-        "originalMethodReceiptReportHash": "b5042c74627153b3d41d3799891ce71d06f5e7b70613c172eb21ca8dee5995c7",
-        "completeResearchEstablished": false
+        "originalMethodReceiptReportHash": "d8185af0ffc6193845250cf002b40c01e187e01c4380935b6f2575d027ee7f7d",
+        "completeResearchEstablished": false,
+        "originalMethodReceiptCorrection": {
+          "date": "2026-10-05",
+          "previousReportHash": "b5042c74627153b3d41d3799891ce71d06f5e7b70613c172eb21ca8dee5995c7",
+          "note": "The earlier receipt scored a definition from which disagreeing rows had been removed."
+        }
       },
       "mr": {
         "qualification": "Six original author-publication arithmetic identities establish zero same-specification published reproductions. Two new distinct clinical IVW components pass independent deterministic parity and published-rounding checks, but semantic QA, admission and complete research are not established.",
@@ -2041,8 +2132,12 @@
       },
       {
         "path": "OpenScience/evals/paper-gold/published-faers-method-manifest.json",
-        "sha256": "bac4abc5108c1df4a52cada65c196bb4b280578ea04fd8c20fc38dfd4f155e30",
-        "kind": "qualification-or-definition-artifact"
+        "sha256": "101126698564ce0ec3dc862e3fa71188db79c2eb02bddb5d07d5eb6c69d43493",
+        "kind": "qualification-or-definition-artifact",
+        "correction": {
+          "date": "2026-10-05",
+          "note": "Manifest regenerated from faers-ror-published-data-v4 (every usable row admitted and reported); the previous hash bac4abc5108c1df4a52cada65c196bb4b280578ea04fd8c20fc38dfd4f155e30 was of the v3 manifest."
+        }
       }
     ],
     "hiddenNumericalGoldIncluded": false,
@@ -2116,6 +2211,15 @@
       "file": "evolution-final-resource-state-followup.json",
       "sha256": "24b0141fe73f51f62a1b299d406f8a385d7a77233dd016e797f58f7f00bb9ec4",
       "bytes": 1306
+    }
+  ],
+  "corrections": [
+    {
+      "date": "2026-10-05",
+      "scope": "existing-engine method ruler (liveEvidence.existingEngineMethodArithmetic, liveEvidence.engineHealthInbox.methodCases, corpusDisposition)",
+      "what": "Recorded 10/10, 92/92 and 20/22 replaced by real case counts with agree, disagree and could-not-run: meta 5 cases, 5 agree; pharmacovigilance 65 cases, 46 agree, 19 disagree; MR arithmetic (TwoSampleMR library component) 11 cases, 10 agree, 1 could not run.",
+      "why": "A read-only scientific review found that the definitions were filtered until the engine agreed with every remaining case, that each case was counted twice, that the MR row did not run the MR engine, and that MR p-values carried an absolute tolerance that accepted any small p. The preparers no longer read any engine output, every admitted case stays in the denominator, and tolerance is a code rule.",
+      "status": "A correction of recorded numbers. Nothing is marked accepted by it."
     }
   ]
 }

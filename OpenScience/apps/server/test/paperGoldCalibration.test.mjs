@@ -78,3 +78,24 @@ test('a model availability claim or public data URL cannot supply verified analy
  const scored=await scoreUnit({exposureTier:'unexposed',checks:{q:true,m:true,c:true,w:true}}, {...constrained,type:'research',numeric:{},applicableStages:['question','method','certainty','writing'],stageChecks:{question:['q'],method:['m'],certainty:['c'],writing:['w']}});
  assert.equal(scored.applicableStagesValid,true);assert.equal(scored.allStagesValid,false);assert.equal(scored.fullResearchReproductionValid,false);
 });
+
+test('a search cut-off is bonded to the source and read to the end of its stated period', async () => {
+  const { calibrationSearchCutoff } = await import('../src/paperGoldCalibration.mjs');
+  const source = 'We searched PubMed and Embase from inception to December 13th, 2018. An update ran through March 2025; trials registered in 2021 were screened. Dates such as 03/04/2021, 13 December 2018, Dec. 13, 2018, 2018-12-13, 2018年12月13日, Sept 2019, February 30, 2020 and about 2018 appear.';
+  // The frozen calibration case that could never be dispatched: Date.parse gives NaN for the printed form.
+  assert.ok(Number.isNaN(Date.parse('December 13th, 2018')));
+  assert.deepEqual(calibrationSearchCutoff(source, 'December 13th, 2018'), { ok: true, iso: '2018-12-13T23:59:59.999Z', printed: 'December 13th, 2018', precision: 'day' });
+  // A month and a year are the period the authors searched through, not its first day.
+  assert.equal(calibrationSearchCutoff(source, 'March 2025').iso, '2025-03-31T23:59:59.999Z');
+  assert.ok(Date.parse(calibrationSearchCutoff(source, 'March 2025').iso) > Date.parse('March 2025'));
+  assert.deepEqual({ iso: calibrationSearchCutoff(source, '2021').iso, precision: calibrationSearchCutoff(source, '2021').precision }, { iso: '2021-12-31T23:59:59.999Z', precision: 'year' });
+  for (const printed of ['13 December 2018', 'Dec. 13, 2018', '2018-12-13', '2018年12月13日']) assert.equal(calibrationSearchCutoff(source, printed).iso, '2018-12-13T23:59:59.999Z', printed);
+  assert.equal(calibrationSearchCutoff(source, 'Sept 2019').iso, '2019-09-30T23:59:59.999Z');
+  // Not guessed: an order that cannot be told apart, a date that does not exist, words that are not a date.
+  for (const printed of ['03/04/2021', 'February 30, 2020', 'about 2018']) assert.deepEqual(calibrationSearchCutoff(source, printed), { ok: false, reason: 'search_cutoff_unreadable' }, printed);
+  // Not taken on the model's word: a date the source does not print.
+  assert.deepEqual(calibrationSearchCutoff(source, 'January 5, 2019'), { ok: false, reason: 'search_cutoff_unbonded' });
+  assert.deepEqual(calibrationSearchCutoff(source, null), { ok: false, reason: 'search_cutoff_absent' });
+  // What the exclusion policy does with it: every normalised cut-off is a date it can compare with.
+  for (const printed of ['December 13th, 2018', 'March 2025', '2021']) assert.ok(Number.isFinite(Date.parse(calibrationSearchCutoff(source, printed).iso)));
+});

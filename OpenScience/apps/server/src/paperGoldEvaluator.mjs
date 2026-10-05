@@ -117,6 +117,14 @@ export async function readPaperGoldArtifacts({project,run,receipt}){
  }
  return {deliveredText,auditText,numeric,recalledEvidenceIds,issues};
 }
+/** Whether a no-tool answer shows the paper may be remembered. The model is told to omit what it is unsure
+ * of, so requiring every field to match could almost never flag anything: one published number given from
+ * memory, within its printed precision, is the signal. A flagged case goes to the development set, which is
+ * the cautious side to err on. @param {any} answer @param {any} gold */
+export function paperGoldBaselineMemorized(answer, gold) {
+  const references = Object.entries(gold.baselineNumeric ?? gold.numeric ?? {});
+  return references.some(([key, reference]) => numericScore(answer?.numeric?.[key], reference).valid);
+}
 /** Metered production evaluator. Hidden definition is never passed to dispatch. @param {any} deps */
 export function createPaperGoldEvaluator({ config, usageLedger, store, agentRuns, evaluationIsolation, dispatch, controller, runtimeManager, fetchImpl = fetch }) {
   const dataDir = config.evaluationDataDir || path.join(config.dataDir, "evaluation-control");
@@ -193,10 +201,7 @@ export function createPaperGoldEvaluator({ config, usageLedger, store, agentRuns
           try { parsed = JSON.parse(answerText); } catch { parsed = { numeric: {}, parseStatus: "invalid_json" }; }
           return { ...parsed, baselineReceipt: { answerText, model: answer.model ?? null, providerRequestId: answer.id ?? null, usage: answer.usage ?? null, responseHash: digest(answer), numericFields } };
         },
-        baselineMemorized(answer, gold) {
-          const references = Object.entries(gold.baselineNumeric ?? gold.numeric ?? {});
-          return references.length > 0 && references.every(([key, reference]) => numericScore(answer.numeric?.[key], reference).valid);
-        },
+        baselineMemorized: paperGoldBaselineMemorized,
         async dispatch({ caseRecord, replicate, attempt = 0 }) {
           const identity = paperGoldDispatchIdentity(cycleId,caseRecord.id,replicate,attempt);
           const unitProjectId = identity.projectId;

@@ -43,10 +43,15 @@ test('reviewer without actual independent model proof is not admitted',async()=>
 
 test('aligned callable verification binds original counts/correction and requires actual delivered output',async()=>{
  const {record}=fixture();const descriptor=alignedVerificationDescriptor(record),gold={numeric:record.numericGold,sourceHash:record.sourceHash,deterministicVerification:descriptor};
- const unit={numeric:record.independentNumericReference.numeric,assessmentEvidence:{deliveredText:[{path:'deliverables/paper-gold-analysis/analysis.py',text:'def analyze(a,b,c,d,continuityCorrection=0): return {}'}]}};
- let calls=0;const controller={execVerify:async request=>{calls++;assert.deepEqual(request.input,{a:12,b:88,c:6,d:94,continuityCorrection:0});return {ok:true,joined:true,executionStarted:true,output:JSON.stringify(record.independentNumericReference.numeric)};}};
- assert.equal((await verifyPaperGoldCode({controller,unit,gold})).verified,true);assert.equal(calls,2);
- const changed=structuredClone(gold);changed.deterministicVerification.input.a=13;assert.equal((await verifyPaperGoldCode({controller,unit,gold:changed})).verified,false);assert.equal(calls,2);
+ const analysis='import math\ndef analyze(a,b,c,d,continuityCorrection=0):\n    a,b,c,d=[x+continuityCorrection for x in (a,b,c,d)]\n    ror=a*d/(b*c); se=math.sqrt(1/a+1/b+1/c+1/d)\n    return {"ROR":ror,"lower":math.exp(math.log(ror)-1.96*se),"upper":math.exp(math.log(ror)+1.96*se)}\n';
+ const unit={numeric:record.independentNumericReference.numeric,assessmentEvidence:{deliveredText:[{path:'deliverables/paper-gold-analysis/analysis.py',text:analysis}]}};
+ const {pythonExecVerify}=await import('./helpers/pythonExecVerify.mjs');const seen={calls:[]},controller={execVerify:pythonExecVerify(seen)};
+ assert.equal((await verifyPaperGoldCode({controller,unit,gold})).verified,true);
+ assert.deepEqual(seen.calls.map(call=>call.input),[{a:12,b:88,c:6,d:94,continuityCorrection:0},{a:12,b:88,c:6,d:94,continuityCorrection:0},{a:6,b:94,c:12,d:88,continuityCorrection:0}]);
+ // The numbers the run was shown, returned as they are, used to replay identically and count as verified code.
+ const recited=structuredClone(unit);recited.assessmentEvidence.deliveredText[0].text=`def analyze(a,b,c,d,continuityCorrection=0):\n    return ${JSON.stringify(record.independentNumericReference.numeric)}\n`;
+ assert.deepEqual(await verifyPaperGoldCode({controller,unit:recited,gold}),{verified:false,reason:'behavioural_replay_failed'});
+ const calls=seen.calls.length;const changed=structuredClone(gold);changed.deterministicVerification.input.a=13;assert.equal((await verifyPaperGoldCode({controller,unit,gold:changed})).verified,false);assert.equal(seen.calls.length,calls);
  const missing=structuredClone(unit);missing.assessmentEvidence.deliveredText=[];assert.equal((await verifyPaperGoldCode({controller,unit:missing,gold})).verified,false);
 });
 test('prior scoped semantic QA reuse is bound to exact preserved source/input/question identity',()=>{

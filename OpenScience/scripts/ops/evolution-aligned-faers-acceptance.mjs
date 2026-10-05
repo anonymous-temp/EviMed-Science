@@ -4,6 +4,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {spawnSync} from 'node:child_process';
 import {freezeCycle,digest} from '../../evals/paper-gold/evaluator.mjs';
+import {methodRulerRelations} from '../../evals/paper-gold/behavioural.mjs';
 import {callReviewModel} from '../../apps/server/src/reviewModel.mjs';
 import {createWebApiApp} from '../../apps/server/src/server.mjs';
 import {loadConfig} from '../../apps/server/src/config.mjs';
@@ -24,7 +25,8 @@ export function validateAlignedProposal(record,descriptor,source){
 /** Frozen descriptor binds actual supplied counts to the independent author/R numeric reference. */
 export function alignedVerificationDescriptor(record){
  const input={...record.input.counts,continuityCorrection:record.input.continuityCorrection};
- return {entrypoint:'deliverables/paper-gold-analysis/analysis.py:analyze',implementationId:'delivered-faers-analysis',input,inputHash:digest(input),sourceHash:record.sourceHash,dependencyIds:[],independentQa:record.existingNumericQa,independentImplementation:{...record.independentNumericReference,sourceHash:record.sourceHash},tolerances:Object.fromEntries(Object.keys(record.numericGold).map(key=>[key,{absoluteTolerance:1e-8,relativeTolerance:0}]))};
+ // The counts are given to the run, so replaying on them alone verifies nothing a constant could not: the replay also swaps the exposure groups, which inverts a ROR.
+ return {entrypoint:'deliverables/paper-gold-analysis/analysis.py:analyze',implementationId:'delivered-faers-analysis',input,inputHash:digest(input),sourceHash:record.sourceHash,dependencyIds:[],relations:methodRulerRelations('faers-ror'),independentQa:record.existingNumericQa,independentImplementation:{...record.independentNumericReference,sourceHash:record.sourceHash},tolerances:Object.fromEntries(Object.keys(record.numericGold).map(key=>[key,{absoluteTolerance:1e-8,relativeTolerance:0}]))};
 }
 export async function loadAlignedSources(evaluationDataDir){
  const manifest=JSON.parse(await fs.readFile(new URL('../../evals/paper-gold/aligned-faers-manifest.json',import.meta.url),'utf8'));

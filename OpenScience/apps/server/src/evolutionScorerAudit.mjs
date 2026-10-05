@@ -12,7 +12,18 @@ export function scorerAuditVerdict(gold,reviewed,exposureTier) {
  const valid=stage=>reviewed.stages?.[stage]?.observed===true && reviewed.stages?.[stage]?.valid===true;
  return {auditedRuler:gold.type,applicableStageIDs,allStagesValid:gold.inputAvailable!==false && applicableStageIDs.every(valid),fullResearchReproductionValid:gold.type==='research' && gold.inputAvailable!==false && ['unexposed','exposed_uncited','exposed-unreferenced','cited'].includes(exposureTier??'unknown') && STAGES.every(valid)};
 }
-/** Control-only sampling: original verdicts and gold are never rewritten. @param {any} dependencies */
+const modelFamily=model=>/^qwen/i.test(model??'')?'qwen':/^deepseek/i.test(model??'')?'deepseek':'unknown';
+/**
+ * Control-only sampling: original verdicts and gold are never rewritten.
+ *
+ * What a finding may be called. The stage verdicts of a unit are a model's, and this audit asks a model
+ * to read the same evidence again. When the second reader is of the same family as the first (today
+ * both are the review model), agreement between them is not independent confirmation, so such a finding
+ * is recorded as `same-family-reread` with `independentOfAssessor: false`, and only a reader of another
+ * family is `reviewed`. The parts that are code (numbers re-scored against the frozen gold, the isolated
+ * replay of delivered code) are independent of every model and are reported as such. The record states
+ * the discrepancy rate it found; no threshold is applied to it, because none has been measured yet.
+ * @param {any} dependencies */
 export function createEvolutionScorerAudit({service,config,readEvidence,review,controller}) {
   return { /** @param {{day:string,signal?:AbortSignal}} input */
     async run({day,signal}) {
@@ -55,12 +66,18 @@ export function createEvolutionScorerAudit({service,config,readEvidence,review,c
         const verdict=scorerAuditVerdict(sample.gold,reviewed,sample.unit.exposureTier);
         const references=Object.entries(sample.gold.numeric??{});
         const deterministic=evidence.numeric && references.length ? references.every(([key,reference])=>numericScore(evidence.numeric[key],reference).valid) : null;
-        findings.push({...identity,status:'reviewed',evidenceHash:hash(evidence),reviewModel:reviewed.model,reviewEvidenceIds:reviewed.evidenceIds,
+        const assessorFamily=modelFamily(sample.unit.assessmentModel),auditorFamily=modelFamily(reviewed.model);
+        const independentOfAssessor=assessorFamily!=='unknown' && auditorFamily!=='unknown' && assessorFamily!==auditorFamily;
+        findings.push({...identity,status:independentOfAssessor?'reviewed':'same-family-reread',independentOfAssessor,assessorModel:sample.unit.assessmentModel??null,evidenceHash:hash(evidence),reviewModel:reviewed.model,reviewEvidenceIds:reviewed.evidenceIds,
           controlProofHash:computationProof?.proof?.proofHash??null,auditedRuler:verdict.auditedRuler,applicableStageIDs:verdict.applicableStageIDs,reassessedFullResearchReproductionValid:verdict.fullResearchReproductionValid,reassessedAllStagesValid:verdict.allStagesValid,deterministicNumericPassed:deterministic,
           discrepancy:verdict.allStagesValid!==sample.unit.allStagesValid || (deterministic!==null && deterministic!==Object.values(sample.unit.numeric??{}).every((/** @type {any} */ item)=>item.valid===true)) || false});
         checkpoint=await service.save('scorer-audit',id,{day,status:'running',findings:[...findings]},checkpoint);
       }
-      return service.save('scorer-audit',id,{day,status:'complete',observedAt:service.now().toISOString(),eligibleUnits:candidates.length,sampled:findings.length,findings,discrepancies:findings.filter(row=>row.discrepancy).length,scope:'Independent scorer audit only; no gold, original verdict, or promotion changes.'},checkpoint);
+      const compared=findings.filter(row=>typeof row.discrepancy==='boolean');
+      return service.save('scorer-audit',id,{day,status:'complete',observedAt:service.now().toISOString(),eligibleUnits:candidates.length,sampled:findings.length,findings,discrepancies:findings.filter(row=>row.discrepancy).length,
+        reviewed:findings.filter(row=>row.status==='reviewed').length,sameFamilyRereads:findings.filter(row=>row.status==='same-family-reread').length,
+        discrepancyRate:compared.length?compared.filter(row=>row.discrepancy).length/compared.length:null,discrepancyThreshold:null,
+        scope:'Scorer audit only; no gold, original verdict, or promotion changes. A same-family reread is not an independent review; numeric re-scoring and code replay are code.'},checkpoint);
     }
   };
 }

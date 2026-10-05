@@ -1,7 +1,14 @@
 import {verifyCodeSkill} from './codeSkillVerification.mjs';
 
 /** Executed only in the disposable controller container. AST checks inspect executable constructs;
- * scientific claims and skill prose do not participate in this decision. */
+ * scientific claims and skill prose do not participate in this decision.
+ *
+ * What is not here: a rule for hard-coded answers. The one that was (`candidate_expected_value_embedded`)
+ * looked at the names of assignment targets, and a name cannot decide whether code computes or recites:
+ * a lookup table of answers passed it and an honest `expected_value_treat` was refused. That question is
+ * answered where the answers are, by behaviour: `evolutionCandidateEvaluator.mjs` runs the candidate on
+ * inputs it derives from the hidden cases (`evals/paper-gold/behavioural.mjs`), and reports a hidden value
+ * found as a literal in the source as a notice. */
 export const EVOLUTION_STATIC_CHECK = String.raw`
 import ast,json,pathlib
 issues=[]
@@ -53,7 +60,6 @@ for file in pathlib.Path('/candidate').rglob('*.py'):
             for target in targets:
                 value=ast.unparse(target)
                 if any(x in value for x in ['__eq__','__builtins__','assertEqual','assert_allclose','pytest','unittest']): issue('candidate_test_override',name)
-                if not name.startswith('tests/') and any(x in value.lower() for x in ['expected_result','expected_value','gold_answer','gold_result','holdout_answer']): issue('candidate_expected_value_embedded',name)
         if isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef)) and node.name=='__eq__':
             if any(isinstance(n,ast.Return) and isinstance(n.value,ast.Constant) and n.value.value is True for n in ast.walk(node)): issue('candidate_constant_equality',name)
         if name.startswith('tests/') and isinstance(node,ast.ExceptHandler) and (node.type is None or any(isinstance(n,ast.Name) and n.id in {'AssertionError','Exception','BaseException'} for n in ast.walk(node.type))): issue('candidate_exception_swallowed',name)

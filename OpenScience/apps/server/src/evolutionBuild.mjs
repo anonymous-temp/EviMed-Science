@@ -39,8 +39,11 @@ export function createEvolutionBuilder({dispatch,verification,evaluator,publishe
     }
     stage='hidden-evaluation';
     const evaluation=await evaluator.evaluate(snapshot,{signal});
-    // Return only pass/fail + opaque case identities to the research agent.
-    const feedback={passed:evaluation.ok===true,failedCaseIds:(evaluation.failedCaseIds??[]).map(String)};
+    // Return only pass/fail and opaque case identities to the research agent. Opaque is made here, not assumed: a hidden
+    // case's own id can name its publication ("darth-time-dependent", "marker-net-benefit"), which is what the gateway
+    // exclusion exists to hide. The token is stable for one frozen definition, so repeated failures can still be told apart.
+    // `issueCodes` here is a closed code such as candidate_generalisation_failed: which derived input failed stays with the evaluator.
+    const feedback={passed:evaluation.ok===true,failedCaseIds:(evaluation.failedCaseIds??[]).map(id=>`case-${sha(`${evaluation.evaluatorHash??''}:${String(id)}`).slice(0,16)}`),...(Array.isArray(evaluation.issueCodes)&&evaluation.issueCodes.length?{issueCodes:evaluation.issueCodes.map(code=>String(code).slice(0,120))}:{})};
     if(!evaluation.ok){
       if(evaluation.status!=='waiting_resource' && feedback.failedCaseIds.length) await recordFailure({cardId:card.id,code:'method_implementation',gapCode:'method-implementation',failedCaseIds:feedback.failedCaseIds});
       return{status:'repair',feedback};

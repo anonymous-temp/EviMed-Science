@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { EvolutionService } from '../src/evolutionService.mjs';
 import { EvolutionDecisions, evolutionEvaluationDigest, evolutionDecisionReviewProof } from '../src/evolutionDecisions.mjs';
 import { recordResearchPromotion } from '../src/evolutionResearchPromotion.mjs';
-import { EvolutionMaintenance, evolutionRetrievalBenchmark, evolutionRetrievalScore } from '../src/evolutionMaintenance.mjs';
+import { EvolutionMaintenance, evolutionRetrievalBenchmark, evolutionRetrievalScore, evolutionReplayDisposition } from '../src/evolutionMaintenance.mjs';
 import { EvolutionWorker } from '../src/evolutionWorker.mjs';
 
 function fixture() {
@@ -55,6 +55,12 @@ test('release replay dependency gaps do not retire; actual wrong numbers repair 
   assert.equal((await maintenance.releaseReplay(tool,{ok:false,status:'waiting_resource',resourceCode:'dependency_missing',failedCaseIds:[]},'release1')).disposition,'resource');
   assert.equal((await f.service.get(tool.id)).payload.status,'active');
   assert.equal((await maintenance.releaseReplay(tool,{ok:false,status:'repair',assessments:[{independent:true,passed:false,exposed:false,retracted:false,reason:'candidate_execution_failed'}]},'release2')).disposition,'resource');
+  // One started-and-failed execution, or two that never started, are still not a verdict on the tool.
+  const failedRun=(replicate,candidateStarted)=>({caseId:'case',replicate,independent:true,passed:false,exposed:false,retracted:false,reason:'candidate_execution_failed',candidateStarted});
+  assert.equal(evolutionReplayDisposition({ok:false,status:'repair',assessments:[failedRun(0,true),failedRun(1,false)]}),'resource');
+  assert.equal(evolutionReplayDisposition({ok:false,status:'repair',assessments:[failedRun(0,false),failedRun(1,false)]}),'resource');
+  assert.equal(evolutionReplayDisposition({ok:false,status:'waiting_resource',assessments:[failedRun(0,true),failedRun(1,true)]}),'resource');
+  assert.equal(evolutionReplayDisposition({ok:false,status:'repair',assessments:[failedRun(0,true),failedRun(1,true)]}),'execution-regression');
   const wrong={ok:false,status:'repair',failedCaseIds:['case'],evaluatorHash:'hash',assessments:[{caseId:'case',independent:true,passed:false,exposed:false,retracted:false,reason:'outside_reference_tolerance'}]};
   const review=await maintenance.releaseReplay(await f.service.get(tool.id),wrong,'release3');assert.equal(review.protectedCoverage,true);
   assert.equal((await f.service.get(tool.id)).payload.maintenanceState,'deprecating');assert.equal((await f.service.get(tool.id)).payload.status,'active');
@@ -101,6 +107,36 @@ test('five independent reproduced papers require actual pinned calls and cannot 
   assert.equal((await recordResearchPromotion(input)).validationLevel, 'V3');
   assert.equal((await recordResearchPromotion(input)).papers, 5);
   assert.equal((await f.service.list('research-proof')).length, 5);
+});
+
+test('V3 counts the papers a tool failed beside the ones it reproduced', async () => {
+  const { reproductionRateLowerBound } = await import('../src/evolutionResearchPromotion.mjs');
+  // Five of five is the least that qualifies; a failure among six does not; it takes seven of eight.
+  assert.ok(Math.abs(reproductionRateLowerBound(5, 5) - 0.05 ** (1 / 5)) < 1e-9);
+  assert.ok(reproductionRateLowerBound(5, 6) < 0.5 && reproductionRateLowerBound(6, 7) < 0.5 && reproductionRateLowerBound(7, 8) >= 0.5 && reproductionRateLowerBound(5, 100) < 0.03);
+  const f = fixture(); await f.service.registerTool({ id: 'research-tool', track: 'E', artifactDigest: 'pin' });
+  const cycle = async (papers, valid) => {
+    const units = [];
+    for (const paper of papers) for (let replicate = 0; replicate < 2; replicate++) {
+      const run = `run-${paper}-${replicate}-${valid}`;
+      units.push({ type: 'research', group: 'holdout', caseId: `case-${paper}`, variant: 0, publishedPaperId: `10.1234/paper${paper}`, producerRunId: run, producerProjectId: 'eval', goldSourceHash: 'a'.repeat(64), fullResearchReproductionValid: valid,
+        ...(valid ? { codeVerified: true, verificationProof: { kind: 'isolated-independent-replay', replicates: 2, proofHash: 'f'.repeat(64), sourceHash: 'a'.repeat(64) } } : { codeVerified: false }), independent: true, retracted: false, exposureTier: 'unexposed' });
+      await f.service.save('use', run, { projectId: 'eval', runId: run, toolId: 'research-tool', digest: 'pin', result: { ok: true } }, null, 'operator');
+    }
+    return recordResearchPromotion({ service: f.service, userId: 'operator', toolId: 'research-tool', artifactDigest: 'pin', report: { units }, canonicalize: async id => ({ verified: true, canonicalId: String(id) }) });
+  };
+  // Twenty papers the tool did not reproduce used to leave no trace at all.
+  const failures = await cycle(Array.from({ length: 20 }, (_, index) => `f${index}`), false);
+  assert.deepEqual({ papers: failures.papers, attempted: failures.attempted, failed: failures.failed, status: failures.status }, { papers: 0, attempted: 20, failed: 20, status: 'waiting' });
+  // Then five it did: five passes ever was V3. It is 5 of 25 now, and it is not.
+  const five = await cycle([1, 2, 3, 4, 5], true);
+  assert.deepEqual({ papers: five.papers, attempted: five.attempted, failed: five.failed, status: five.status, level: five.validationLevel }, { papers: 5, attempted: 25, failed: 20, status: 'waiting', level: 'V0' });
+  assert.ok(five.reproductionRateLowerBound < 0.1);
+  // Trying a failed paper again cannot turn its first measured outcome into a pass.
+  const retried = await cycle(['f0', 'f1', 'f2'], true);
+  assert.deepEqual({ papers: retried.papers, failed: retried.failed }, { papers: 5, failed: 20 });
+  const tool = await f.service.get('research-tool'), assessment = tool.payload.assessments.find(row => row.kind === 'research');
+  assert.deepEqual({ papers: assessment.papers, passed: assessment.passed, failures: assessment.failureIds.length }, { papers: 5, passed: false, failures: 20 });
 });
 
 test('shared leads discard researcher prose and tenant events retain owner/project', async () => {
@@ -153,10 +189,15 @@ test('waiters require matching project and idempotent registration', async () =>
 });
 
 test('actual sequential harm retires with retained version; merge needs every source case', async () => {
-  const f = fixture(); const m = new EvolutionMaintenance({ service: f.service });
+  const f = fixture(), proposals = []; const m = new EvolutionMaintenance({ service: f.service, callbacks: { proposeReview: async input => proposals.push(input) } });
   await f.service.registerTool({ id: 't', track: 'M', artifactDigest: 'd', holdoutCases: [{ id: 'a', sha256: 'hash' }] });
+  // Runs with no account behind them are counted and are not retirement evidence (evolutionHarmTest.test.mjs holds the procedure).
   for (let i = 0; i < 3; i++) await m.observe('t', { runId: `r${i}`, invoked: true, outcome: 'rejected' });
-  assert.equal((await f.service.get('t')).payload.status, 'retired');
+  assert.equal((await f.service.get('t')).payload.status, 'active'); assert.equal((await f.service.get('t')).payload.usage.runs, 3);
+  for (let i = 0; i < 4; i++) { f.advance(1); await m.observe('t', { runId: `account-run-${i}`, userId: `researcher-${i}`, invoked: true, outcome: 'rejected' }); }
+  assert.equal((await f.service.get('t')).payload.status, 'active'); assert.equal(proposals.length, 1);
+  await m.executeReview({ subjectId: proposals[0].subjectId, option: 'retire', actionId: 'retire-action' });
+  assert.equal((await f.service.get('t')).payload.status, 'retired'); assert.equal((await f.service.get('t')).payload.retirement.reason, 'sequential-harm');
   await assert.rejects(m.merge(['t'], { id: 'new', track: 'M' }), /every parent case/);
 });
 
@@ -240,10 +281,10 @@ test('per-call execution failures remain distinct from accepted run feedback', a
   const adopted={id:'adopted',userId:'alice',projectId:'research',runId:'feedback-run',trigger:'deliverable-adopted',occurredAt:'2026-10-04T01:00:00Z'};
   await feedback.observeFeedback(adopted);await feedback.observeFeedback(adopted);
   let tool=await f.service.get('feedback-tool');assert.equal(tool.payload.usage.executionSucceeded,1);assert.equal(tool.payload.usage.executionFailed,1);assert.equal(tool.payload.usage.succeeded,1);assert.equal(tool.payload.usage.runs,1);
-  await maintenance.observe('feedback-tool',{runId:'feedback-run',invoked:true,outcome:'pending'});assert.equal((await f.service.get('feedback-tool')).payload.observations[0].outcome,'accepted');
-  await feedback.observeFeedback({...adopted,id:'restyled',trigger:'result-corrected',detail:{kind:'presentation'}});assert.equal((await f.service.get('feedback-tool')).payload.observations[0].outcome,'accepted');
+  await maintenance.observe('feedback-tool',{runId:'feedback-run',invoked:true,outcome:'pending'});assert.equal((await maintenance.observationOf('feedback-tool','feedback-run')).outcome,'accepted');
+  await feedback.observeFeedback({...adopted,id:'restyled',trigger:'result-corrected',detail:{kind:'presentation'}});assert.equal((await maintenance.observationOf('feedback-tool','feedback-run')).outcome,'accepted');
   await feedback.observeFeedback({...adopted,id:'changed-analysis',occurredAt:'2026-10-04T02:00:00Z',trigger:'result-corrected',detail:{kind:'analytic'}});
-  tool=await f.service.get('feedback-tool');assert.equal(tool.payload.usage.corrected,1);assert.equal(tool.payload.usage.succeeded,0);assert.equal(tool.payload.observations[0].outcome,'rejected');
+  tool=await f.service.get('feedback-tool');assert.equal(tool.payload.usage.corrected,1);assert.equal(tool.payload.usage.succeeded,0);assert.equal((await maintenance.observationOf('feedback-tool','feedback-run')).outcome,'rejected');assert.equal(tool.payload.observations,undefined);
   assert.equal((await feedback.observeFeedback({...adopted,id:'foreign',projectId:'other'})).observed,0);
 });
 
@@ -258,15 +299,17 @@ test('staged V2 tools cannot be discovered or wake agendas until activation', as
   await f.service.resolveWaiters({type:'tool-ready',toolId:'staged-tool'});assert.equal(woke,1);assert.equal((await f.service.availableTools()).length,1);
 });
 
-test('completed clear epochs cannot hide later actual feedback harm', async () => {
-  const f=fixture(),maintenance=new EvolutionMaintenance({service:f.service});
+test('a concluded harm test is not restarted: later corrections are counted and do not retire', async () => {
+  // This case used to assert the opposite ("completed clear epochs cannot hide later harm"): a fresh test
+  // after every concluded one. That restart is what retired a harmless tool 33% of the time by 100 runs.
+  const f=fixture(),proposals=[],maintenance=new EvolutionMaintenance({service:f.service,callbacks:{proposeReview:async input=>proposals.push(input)}});
   await f.service.registerTool({id:'epoch-tool',track:'M',artifactDigest:'epochs'});
-  for(let index=0;index<40;index++){f.advance(1);await maintenance.observe('epoch-tool',{runId:`clear-${index}`,callId:`call-${index}`,executionOk:true,invoked:true,outcome:'accepted',feedbackEventId:`adopt-${index}`});}
-  let tool=await f.service.get('epoch-tool');assert.equal(tool.payload.usage.harmState,'clear');assert.ok(tool.payload.usage.harmEpochs.length>1);
-  for(let index=0;index<3;index++){f.advance(1);await maintenance.observe('epoch-tool',{runId:`later-${index}`,callId:`later-call-${index}`,executionOk:false,invoked:true,outcome:'pending'});}
-  assert.notEqual((await f.service.get('epoch-tool')).payload.status,'retired');
-  for(let index=0;index<3;index++)await maintenance.observe('epoch-tool',{runId:`later-${index}`,invoked:true,outcome:'rejected',feedbackEventId:`returned-${index}`});
-  tool=await f.service.get('epoch-tool');assert.equal(tool.payload.status,'retired');assert.ok(tool.payload.usage.harmEpochs.some(epoch=>epoch.state==='harm'));assert.equal(tool.payload.usage.runs,43);
+  for(let index=0;index<40;index++){f.advance(1);await maintenance.observe('epoch-tool',{runId:`clear-${index}`,userId:`researcher-${index}`,callId:`call-${index}`,executionOk:true,invoked:true,outcome:'accepted',feedbackEventId:`adopt-${index}`});}
+  let tool=await f.service.get('epoch-tool');assert.equal(tool.payload.usage.harmState,'clear');assert.equal(tool.payload.usage.harmEpochs,undefined);assert.equal(tool.payload.usage.harm.trials.length,3);
+  for(let index=0;index<6;index++){f.advance(1);await maintenance.observe('epoch-tool',{runId:`later-${index}`,userId:`late-researcher-${index}`,callId:`later-call-${index}`,executionOk:false,invoked:true,outcome:'pending'});}
+  for(let index=0;index<6;index++)await maintenance.observe('epoch-tool',{runId:`later-${index}`,userId:`late-researcher-${index}`,invoked:true,outcome:'rejected',corrected:true,feedbackEventId:`returned-${index}`});
+  tool=await f.service.get('epoch-tool');assert.equal(tool.payload.status,'active');assert.equal(tool.payload.usage.harmState,'clear');assert.equal(proposals.length,0);
+  assert.equal(tool.payload.usage.runs,46);assert.equal(tool.payload.usage.corrected,6);
 });
 
 test('worker resource failures are bounded, deduplicated and stop automatic daily scout spending', async () => {
@@ -351,9 +394,9 @@ test('decision review requires actual provider-reported independent model identi
  assert.equal(evolutionDecisionReviewProof({reviewProvider:'dashscope'},{model:'qwen3',modelReported:true}).independent,true);
 });
 
-test('restoration failure compensates pin and retries; later harm retirement starts a new epoch',async()=>{
- const {service}=fixture();let fail=true,activated=0,deactivated=0;
- const maintenance=new EvolutionMaintenance({service,callbacks:{restorePin:async()=>{activated++;if(fail)throw Error('activation interrupted');},retirePin:async()=>{deactivated++;},notifyAffected:async()=>{}}});
+test('restoration failure compensates pin and retries; a later harm retirement is reversible only by its own review',async()=>{
+ const {service}=fixture();let fail=true,activated=0,deactivated=0;const proposals=[];
+ const maintenance=new EvolutionMaintenance({service,callbacks:{restorePin:async()=>{activated++;if(fail)throw Error('activation interrupted');},retirePin:async()=>{deactivated++;},notifyAffected:async()=>{},proposeReview:async input=>proposals.push(input)}});
  await service.registerTool({id:'epoch-tool',track:'M',artifactDigest:'epoch-pin'});
  await maintenance.retire(await service.get('epoch-tool'),'monthly-direction-review');
  const review=await service.save('maintenance-review','epoch-review',{kind:'retirement',parentToolIds:['epoch-tool']});
@@ -361,10 +404,14 @@ test('restoration failure compensates pin and retries; later harm retirement sta
  await assert.rejects(maintenance.executeReview(action),/interrupted/);assert.equal(deactivated,1);
  assert.equal((await service.get(review.id)).payload.restoration.state,'pending');
  fail=false;await maintenance.executeReview(action);assert.equal(activated,2);
- for(let index=0;index<3;index++) await maintenance.observe('epoch-tool',{runId:`actual-harm-${index}`,invoked:true,callId:`actual-call-${index}`,outcome:'rejected',feedbackEventId:`actual-feedback-${index}`});
+ for(let index=0;index<4;index++) await maintenance.observe('epoch-tool',{runId:`actual-harm-${index}`,userId:`researcher-${index}`,invoked:true,callId:`actual-call-${index}`,outcome:'rejected',feedbackEventId:`actual-feedback-${index}`,at:`2026-10-05T00:00:0${index}.000Z`});
+ assert.equal(proposals.length,1);await maintenance.executeReview({subjectId:proposals[0].subjectId,option:'retire',actionId:'harm-retire'});
  const row=await service.get('epoch-tool');assert.equal(row.payload.retirement.reason,'sequential-harm');
  assert.equal(row.payload.retirementHistory[0].reason,'monthly-direction-review');
+ // The monthly review that once restored this tool cannot undo a retirement it did not decide.
  await assert.rejects(maintenance.executeReview({...action,actionId:'wrong-restore'}),error=>error.code==='evolution_evaluation_invalid');
+ assert.equal((await maintenance.executeReview({id:'harm-decision',subjectId:proposals[0].subjectId,option:'keep',actionId:'harm-keep'})).state,'restored');
+ assert.equal((await service.get('epoch-tool')).payload.status,'active');
 });
 
 test('daily autonomous digest reports every category and retains at most three highlights',async()=>{

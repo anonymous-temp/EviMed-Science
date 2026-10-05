@@ -1708,6 +1708,9 @@ export {
   summarizeSemantics,
 } from './src/dataSemantics.mjs'
 
+// evolution — the sequential test a published tool's real use is read with (the rest of the module's vocabulary is exported at the end of this file)
+export { EVOLUTION_TOOL_HARM_TEST } from './src/evolution.mjs'
+
 // geneExpression — NCBI Gene Expression Omnibus series to differential expression (plan 2026-10-02 §11.3 N17): the
 // accessions, the six limits, the tool's refusals and the advisory findings over its package. Not 「循证 GEO」.
 export {

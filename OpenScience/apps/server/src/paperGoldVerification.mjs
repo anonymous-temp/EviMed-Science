@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { numericScore, digest } from "../../../evals/paper-gold/evaluator.mjs";
+import { applyRelation, relationIssues, seededRandom } from "../../../evals/paper-gold/behavioural.mjs";
 const hex = value => typeof value === "string" && /^[a-f0-9]{64}$/.test(value);
 const flatten = (node, prefix = "", result = {}) => {
   if (!node || typeof node !== "object") return result;
@@ -10,7 +11,15 @@ const flatten = (node, prefix = "", result = {}) => {
   }
   return result;
 };
-/** Descriptor and independent reference must come from the frozen control-plane gold, never a runtime artifact or LLM.
+/**
+ * Replay the code a run delivered, in isolation, and decide whether it computes its result.
+ *
+ * The descriptor and the independent reference come from the frozen control-plane gold, never from a
+ * runtime artifact or a model. Replaying on the descriptor's input alone is not enough: that input was
+ * disclosed to the run, so `def analyze(**kw): return {...constants...}` replays identically. The replay
+ * therefore also runs the descriptor's metamorphic relations (`behavioural.mjs`) on transformed inputs
+ * the run never saw, and at least one of them has to be a relation a function that ignores its input
+ * cannot satisfy. A descriptor without such a relation cannot verify code: `behavioural_replay_unavailable`.
  * @param {any} request */
 export async function verifyPaperGoldCode({ controller, unit, gold, signal }) {
   const reject = reason => ({ verified: false, reason });
@@ -36,18 +45,34 @@ export async function verifyPaperGoldCode({ controller, unit, gold, signal }) {
   if (!compare(unit.numeric)) return reject("reported_result_disagrees_with_independent_implementation");
   const code = `import json,runpy,sys\nnamespace=runpy.run_path(${JSON.stringify(`/candidate/${match[1]}`)},run_name='independent_replay')\nresult=namespace[${JSON.stringify(match[2])}](**json.load(sys.stdin))\nprint(json.dumps(result,allow_nan=False))\n`;
   const outputHashes = [];
+  let baseOutput = null, behaviouralChecks = 0;
   try {
     for (let replicate = 0; replicate < 2; replicate++) {
       signal?.throwIfAborted();
       const result = await controller.execVerify({ files, code, input: spec.input, dependencyIds: spec.dependencyIds ?? [] }, { signal });
       if (result.ok !== true || result.joined !== true || result.executionStarted !== true) return reject("isolated_replay_incomplete");
       const output = String(result.output ?? result.stdout ?? "");
-      const numeric = flatten(JSON.parse(output.trim().split("\n").at(-1)));
+      baseOutput = JSON.parse(output.trim().split("\n").at(-1));
+      const numeric = flatten(baseOutput);
       if (!compare(numeric) || references.some(([key]) => !numericScore(numeric[key], { ...spec.tolerances[key], value: unit.numeric[key], interval: undefined }).valid)) return reject("isolated_replay_disagrees");
       outputHashes.push(createHash("sha256").update(output).digest("hex"));
     }
+    // Inputs the run never saw. A relation only counts when the unchanged output would break it, so a constant cannot pass.
+    const relations = (Array.isArray(spec.relations) ? spec.relations : []).filter(relation => relationIssues(relation).length === 0)
+      .map((relation, index) => applyRelation(relation, spec.input, seededRandom(`${spec.inputHash}:${digest(files)}:${index}`))).filter(Boolean);
+    const discriminating = relations.filter(relation => { try { return relation.check(baseOutput, baseOutput) === false; } catch { return false; } });
+    if (!discriminating.length) return reject("behavioural_replay_unavailable");
+    for (const relation of relations) {
+      signal?.throwIfAborted();
+      const result = await controller.execVerify({ files, code, input: relation.input, dependencyIds: spec.dependencyIds ?? [] }, { signal });
+      if (result.joined !== true || result.executionStarted !== true) return reject("isolated_replay_incomplete");
+      let held = false;
+      try { held = result.ok === true && relation.check(baseOutput, JSON.parse(String(result.output ?? result.stdout ?? "").trim().split("\n").at(-1))); } catch { held = false; }
+      if (!held) return reject("behavioural_replay_failed");
+      behaviouralChecks++;
+    }
   } catch (error) { signal?.throwIfAborted(); return reject("isolated_replay_failed"); }
-  const proof = { kind: "isolated-independent-replay", replicates: 2, sourceHash: gold.sourceHash, inputHash: spec.inputHash,
+  const proof = { kind: "isolated-independent-replay", replicates: 2, behaviouralChecks, sourceHash: gold.sourceHash, inputHash: spec.inputHash,
     codeHash: digest(Object.fromEntries(Object.entries(files).sort(([a], [b]) => a.localeCompare(b)))), referenceHash: digest(independent), outputHashes };
   return { verified: true, proof: { ...proof, proofHash: digest(proof) } };
 }

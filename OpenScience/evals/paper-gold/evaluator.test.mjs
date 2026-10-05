@@ -9,8 +9,11 @@ test("numeric tolerances, analytic/cross-implementation references and defensibl
   assert.equal(numericScore(3, { interval: [1, 2] }).valid, false);
   assert.equal(numericScore(NaN, { value: 1 }).valid, false);
   assert.equal(timeHoldout({ firstPublicDates: ["2024-01-01", "2023-01-01"] }, "2023-06-01", "2022-01-01"), false);
+  // A hundred identical outputs under a nominal coverage of 1 used to pass; simulation.test.mjs holds the criteria.
   const samples = Array.from({ length: 100 }, (_, i) => ({ estimate: 0, lower: -.1, upper: .1, p: i < 5 ? .01 : .5 }));
-  assert.equal(simulationScore(samples, { truth: 0, alpha: .05, coverage: 1, maxBias: .01, coverageTolerance: .01, falsePositiveTolerance: .01 }).valid, true);
+  const degenerate = simulationScore(samples, { truth: 0, alpha: .05, coverage: 1, maxBias: .01, coverageTolerance: .01, falsePositiveTolerance: .01 });
+  assert.equal(degenerate.valid, false);
+  for (const reason of ["specification_invalid", "insufficient_replicates", "degenerate_estimates"]) assert.ok(degenerate.reasons.includes(reason), reason);
 });
 test("frozen scorer cannot change in cycle", async () => {
   const dir = await mkdtemp(path.join(os.tmpdir(), "gold-"));
@@ -85,4 +88,17 @@ test("question-only success leaves uncovered science stages unknown and cannot e
   assert.equal(result.fullResearchReproductionValid, false);
   assert.equal(result.benchmarkScope, "question-only");
   for (const stage of ["recall", "extraction", "calculation"]) assert.deepEqual(result.stages[stage], { valid: false, observed: false });
+});
+
+test("a withheld-input unit that reports the paper's number anyway is not valid, whatever a model said of its stages", async () => {
+  const gold = { type: "research", inputAvailable: false, benchmarkScope: "research-input-unavailable", numeric: {}, baselineNumeric: { "analysis.ror": { value: 2.31, printed: "2.31", absoluteTolerance: 0.005 } },
+    applicableStages: ["question", "method", "certainty", "writing"], stageChecks: { question: ["q"], method: ["m"], certainty: ["c"], writing: ["w"] } };
+  const checks = { q: true, m: true, c: true, w: true };
+  const honest = await scoreUnit({ id: "honest", exposureTier: "unexposed", checks, numeric: { "notes.count": 3 } }, gold);
+  assert.equal(honest.applicableStagesValid, true); assert.deepEqual(honest.numbersReportedWithoutInputs, []);
+  const invented = await scoreUnit({ id: "invented", exposureTier: "unexposed", checks, numeric: { "analysis.ror": 2.3 } }, gold);
+  assert.deepEqual(invented.numbersReportedWithoutInputs, ["analysis.ror"]);
+  assert.equal(invented.applicableStagesValid, false); assert.equal(invented.allStagesValid, false);
+  // With its inputs available the same receipt is simply scored.
+  assert.deepEqual((await scoreUnit({ id: "given", checks, numeric: { "analysis.ror": 2.3 } }, { ...gold, inputAvailable: true })).numbersReportedWithoutInputs, []);
 });

@@ -5,7 +5,30 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { createEvolutionCasePreparation } from "./evolutionCasePreparation.mjs";
 import { numericScore, simulationScore, crossImplementationScore, screenRetractions } from "../../../evals/paper-gold/evaluator.mjs";
+import { behaviourPlan, deriveBehaviouralInputs, freshCaseAgrees, referenceOutputsDiffer, BEHAVIOUR_LIMITS } from "../../../evals/paper-gold/behavioural.mjs";
 import { reviewSuddenPerfect } from "./candidateSuddenPerfectReview.mjs";
+
+/** Every numeric constant of the candidate's Python, read with Python's own parser in the disposable
+ * container. The values are compared with the hidden references in the control plane, where the
+ * references are; the container never sees one. */
+export const PYTHON_NUMERIC_LITERALS = String.raw`
+import ast,json,pathlib
+found={}
+for file in pathlib.Path('/candidate').rglob('*.py'):
+    name=str(file.relative_to('/candidate'))
+    try: tree=ast.parse(file.read_text(encoding="utf-8-sig"),filename=name)
+    except SyntaxError: continue
+    values=set()
+    for node in ast.walk(tree):
+        if isinstance(node,ast.Constant) and isinstance(node.value,(int,float)) and not isinstance(node.value,bool):
+            value=float(node.value)
+            if value==value and abs(value)!=float('inf'): values.add(value)
+    found[name]=sorted(values)[:20000]
+print(json.dumps({'literals':found}))
+`;
+/** A reference value is worth looking for as a literal only when it is specific: three or more
+ * significant digits, and not a small whole number every program contains. @param {number} value */
+export const specificValue = value => Number.isFinite(value) && !(Number.isInteger(value) && Math.abs(value) < 1000) && String(Math.abs(value)).replace(/e.*$/i, "").replace(/^0\.0*|\./g, "").replace(/0+$/, "").length >= 3;
 
 /** Gold is admitted by the operator into the control-plane directory, never by the candidate.
  * Each definition binds method ID, publication identity, inputs, immutable reference numbers,
@@ -14,7 +37,7 @@ import { reviewSuddenPerfect } from "./candidateSuddenPerfectReview.mjs";
 export function createEvolutionCandidateEvaluator({ config, controller, fetchImpl = fetch, auditCandidateExposure = null, curateReferences = null, evaluateWorkflowSmoke = null, withReviewLock = null }) {
   const dataDir = config.evaluationDataDir || path.join(config.dataDir, "evaluation-control");
   const directory = path.join(dataDir, "paper-gold", "candidate-cases");
-  const reviewToken = Symbol("sudden-perfect-independent-review");
+  const reviewToken = Symbol("sudden-perfect-held-out-review");
   const callCandidate = async (candidate, input, signal, evidence = [], caseId = null, replicate = null) => {
     let outputDigest=null,executed=null;
     try {
@@ -30,6 +53,99 @@ export function createEvolutionCandidateEvaluator({ config, controller, fetchImp
     evidence.push({caseId,replicate,executed:true,ok:true,outputDigest:`sha256:${createHash("sha256").update(output).digest("hex")}`});
     return parsed;
     }catch(error){evidence.push({caseId,replicate,executed,outputDigest,ok:false,code:["extension_contract_invalid","runtime_limit_exceeded","product_state_unavailable","usage_budget_exceeded","runtime_controller_timeout"].includes(error?.code)?error.code:"candidate_execution_failed"});throw error;}
+  };
+  /** Run the published callable on several inputs in one disposable execution. A raise or a non-finite
+   * result on one input is that input's failure, not the batch's; `keys` keeps only those fields of each result.
+   * @returns {Promise<{ok:boolean,output?:any}[]>} */
+  const callCandidateBatch = async (candidate, inputs, signal, evidence, caseId, purpose, keys = null) => {
+    const match = /^(scripts\/[A-Za-z0-9_-]+\.py):([A-Za-z_][A-Za-z0-9_]*)$/.exec(candidate.entrypoint ?? "");
+    if (!match || !Object.hasOwn(candidate.files ?? {}, match[1])) throw new Error("Candidate has no admitted published callable.");
+    const code = `import runpy,json,sys\nnamespace=runpy.run_path(${JSON.stringify(`/candidate/${match[1]}`)},run_name='published_callable')\nfunction=namespace[${JSON.stringify(match[2])}]\nkeys=${keys ? JSON.stringify(keys) : "None"}\nresults=[]\nfor arguments in json.load(sys.stdin)['batch']:\n try:\n  output=function(**arguments)\n  if keys is not None: output={key:output.get(key) for key in keys}\n  results.append({'ok':True,'output':json.loads(json.dumps(output,allow_nan=False))})\n except Exception:\n  results.append({'ok':False})\nprint(json.dumps({'batch':results}))\n`;
+    const rows = [];
+    // The controller admits 1 MiB of input and returns the last 64 KiB of output.
+    for (let start = 0; start < inputs.length;) {
+      let end = start, bytes = 0;
+      while (end < inputs.length && end - start < (keys ? 250 : 6)) { const size = Buffer.byteLength(JSON.stringify(inputs[end])); if (end > start && bytes + size > 700 * 1024) break; bytes += size; end++; }
+      let outputDigest = null, executed = null;
+      try {
+        const result = await controller.execVerify({ files: candidate.files, dependencyIds: candidate.dependencies ?? [], code, input: { batch: inputs.slice(start, end) } }, { signal });
+        executed = result.executionStarted === true ? true : null;
+        const output = String(result.output ?? result.stdout ?? "");
+        outputDigest = `sha256:${createHash("sha256").update(output).digest("hex")}`;
+        if (result.ok !== true || result.joined !== true) throw new Error("Candidate execution did not complete successfully.");
+        const parsed = JSON.parse(output.trim().split("\n").at(-1)).batch;
+        if (!Array.isArray(parsed) || parsed.length !== end - start) throw new Error("Candidate batch execution returned an incomplete result.");
+        evidence.push({ caseId, replicate: null, purpose, executed: true, ok: true, outputDigest });
+        rows.push(...parsed);
+      } catch (error) { evidence.push({ caseId, replicate: null, purpose, executed, outputDigest, ok: false, code: "candidate_execution_failed" }); throw error; }
+      start = end;
+    }
+    return rows;
+  };
+  /** The reference's numbers on one input, or null when the reference refuses the input. @param {any} plan @param {any} input @param {AbortSignal} [signal] */
+  const runReference = async (plan, input, signal) => {
+    let numeric;
+    if (plan.reference.kind === "evaluator") { try { numeric = plan.reference.run(input); } catch { return null; } }
+    else {
+      const executed = await controller.execVerify({ files: {}, code: plan.reference.code, input }, { signal });
+      if (executed.joined !== true) throw new Error("Reference execution did not complete.");
+      if (executed.ok !== true) return null;
+      try { numeric = JSON.parse(String(executed.output ?? "").trim().split("\n").at(-1)).numeric; } catch { return null; }
+    }
+    const values = Object.values(numeric ?? {});
+    return values.length > 0 && values.every(Number.isFinite) ? numeric : null;
+  };
+  /**
+   * The behavioural checks of `behavioural.mjs` for the hidden cases a candidate has just reproduced.
+   * `passed` needs every executed check to pass and every case to have had at least one; `unavailable`
+   * means nothing could be derived for this method, which is never read as a pass.
+   */
+  const behaviouralChecks = async ({ candidate, cases, plan, seed, signal, evidence, purpose, known = new Set() }) => {
+    const summary = { status: "unavailable", referenceImplementation: plan.reference?.implementationId ?? null, relationChecks: 0, relationFailures: 0, freshCases: 0, freshFailures: 0, casesWithoutChecks: 0, cases: [] };
+    if (!plan.relations.length && !plan.reference) return { ...summary, casesWithoutChecks: cases.length };
+    for (const testCase of cases) {
+      const derived = deriveBehaviouralInputs(plan, testCase.input, createHash("sha256").update(`${seed}:${testCase.id}`).digest("hex"));
+      const fresh = [];
+      let referenceState = plan.reference ? "agrees" : "none";
+      if (plan.reference) {
+        const base = await runReference(plan, testCase.input, signal);
+        // A reference that does not reproduce the published numbers of this very case cannot referee fresh ones.
+        const shared = Object.entries(testCase.numeric ?? {}).filter(([key]) => Object.hasOwn(base ?? {}, key));
+        if (!base || !shared.length || !shared.every(([key, reference]) => numericScore(base[key], reference).valid)) referenceState = "disagrees-with-published";
+        else for (const item of derived.fresh) {
+          if (fresh.length >= BEHAVIOUR_LIMITS.freshPerCase) break;
+          // A perturbation that lands on another hidden case's input is not a case the candidate was never scored on.
+          if (known.has(canonicalJson(item.input))) continue;
+          const reference = await runReference(plan, item.input, signal);
+          if (reference && referenceOutputsDiffer(reference, base)) fresh.push({ ...item, reference });
+        }
+      }
+      const row = { caseId: testCase.id, reference: referenceState, relationChecks: derived.relations.length, relationFailures: 0, freshCases: fresh.length, freshFailures: 0 };
+      if (derived.relations.length + fresh.length > 0) {
+        const outputs = await callCandidateBatch(candidate, [testCase.input, ...derived.relations.map(item => item.input), ...fresh.map(item => item.input)], signal, evidence, testCase.id, purpose);
+        const base = outputs[0];
+        derived.relations.forEach((relation, index) => { const output = outputs[1 + index]; let held = false; try { held = base.ok && output.ok && relation.check(base.output, output.output); } catch { held = false; } if (!held) row.relationFailures++; });
+        fresh.forEach((item, index) => { const output = outputs[1 + derived.relations.length + index]; if (!(output.ok && freshCaseAgrees(output.output, item.reference, key => testCase.numeric?.[key]?.outputPath ?? key))) row.freshFailures++; });
+      } else summary.casesWithoutChecks++;
+      summary.cases.push(row);
+      for (const key of ["relationChecks", "relationFailures", "freshCases", "freshFailures"]) summary[key] += row[key];
+    }
+    summary.status = summary.relationFailures + summary.freshFailures > 0 ? "failed" : summary.casesWithoutChecks === 0 && cases.length > 0 ? "passed" : "unavailable";
+    return summary;
+  };
+  /** A decidable static fact, kept as a notice: a hidden expected value appearing as a literal in the
+   * candidate's source. A value match, not a name match, and never the verdict: the behavioural checks are. */
+  const referenceLiteralNotices = async (candidate, cases, signal) => {
+    const wanted = new Set();
+    for (const testCase of cases) for (const value of [...Object.values(testCase.numeric ?? {}).map(reference => reference?.value), ...Object.values(testCase.independentImplementation?.numeric ?? {})]) if (specificValue(value)) { wanted.add(value); wanted.add(-value); }
+    if (!wanted.size || !Object.keys(candidate.files ?? {}).some(name => /\.py$/i.test(name))) return [];
+    let literals;
+    try {
+      const result = await controller.execVerify({ files: candidate.files, dependencyIds: [], code: PYTHON_NUMERIC_LITERALS, input: {} }, { signal });
+      literals = result.ok === true ? JSON.parse(String(result.output ?? "").trim().split("\n").at(-1)).literals : null;
+    } catch { literals = null; }
+    if (!literals) return [{ code: "reference_literal_scan_unavailable" }];
+    return Object.entries(literals).map(([file, values]) => ({ code: "candidate_source_contains_reference_value", path: file, count: values.filter(value => wanted.has(value)).length })).filter(row => row.count > 0);
   };
   const exclusionPolicyFor = async (definition, methodId) => {
     const publicationIds = (definition.cases ?? []).filter(row => row.kind === "published").map(row => row.publicationId);
@@ -82,11 +198,14 @@ export function createEvolutionCandidateEvaluator({ config, controller, fetchImp
     /** Return no expected numbers or hidden inputs to a development run. @param {any} candidate @param {any} [options] @param {symbol} [token] */
     evaluate: async function evaluateCandidate(candidate, { card = {}, signal = undefined } = {}, token = undefined) {
       const startedAt=new Date().toISOString(),executionEvidence=[],runIds=new Set();
-      const evaluatorCodeHash = createHash("sha256").update(canonicalJson(await Promise.all(["./evolutionCandidateEvaluator.mjs", "./candidateSuddenPerfectReview.mjs", "../../../evals/paper-gold/evaluator.mjs"].map(file => readFile(new URL(file, import.meta.url), "utf8"))))).digest("hex");
+      const evaluatorCodeHash = createHash("sha256").update(canonicalJson(await Promise.all(["./evolutionCandidateEvaluator.mjs", "./candidateSuddenPerfectReview.mjs", "../../../evals/paper-gold/evaluator.mjs", "../../../evals/paper-gold/behavioural.mjs", "../../../evals/paper-gold/tolerance.mjs", "../../../evals/paper-gold/simulation.mjs"].map(file => readFile(new URL(file, import.meta.url), "utf8"))))).digest("hex");
       let frozenSourceDigest = null;
       const finish=async result=>{
         const receipt={schemaVersion:1,candidateId:candidate.id??null,methodId:card.methodId??card.id??candidate.methodId??candidate.id,sourceArtifactDigest:`sha256:${createHash("sha256").update(canonicalJson(candidate.files??{})).digest("hex")}`,evaluatorHash:result.evaluatorHash??null,startedAt,measuredAt:new Date().toISOString(),runIds:[...runIds],developmentRunIds:candidate.lineage?.developmentRuns??[],ok:result.ok===true,status:result.status,resourceCode:result.resourceCode??null,assessments:(result.assessments??[]).map(item=>({caseId:item.caseId,kind:item.kind??null,replicate:item.replicate??null,passed:item.passed===true,reason:item.reason??(item.passed?"within_reference_tolerance":"outside_reference_tolerance")})),executionEvidence};
-        Object.assign(receipt, { evaluatorCodeHash, frozenSourceDigest, executionContractDigest: createHash("sha256").update(canonicalJson({ entrypoint: candidate.entrypoint ?? null, dependencies: candidate.dependencies ?? [], toolKind: card.toolKind ?? candidate.toolKind ?? "calculation", executionTools: candidate.executionTools ?? [] })).digest("hex"), exposureTier: result.exposureTier ?? "unknown", purpose: token === reviewToken ? "sudden-perfect-independent-review" : "candidate-validation" });
+        Object.assign(receipt, { evaluatorCodeHash, frozenSourceDigest, executionContractDigest: createHash("sha256").update(canonicalJson({ entrypoint: candidate.entrypoint ?? null, dependencies: candidate.dependencies ?? [], toolKind: card.toolKind ?? candidate.toolKind ?? "calculation", executionTools: candidate.executionTools ?? [] })).digest("hex"), exposureTier: result.exposureTier ?? "unknown", purpose: token === reviewToken ? "sudden-perfect-held-out-review" : "candidate-validation",
+          // Counts and closed codes only: which derived input failed, and by how much, stays in this process.
+          behaviour: result.behaviour ? { status: result.behaviour.status, referenceImplementation: result.behaviour.referenceImplementation, relationChecks: result.behaviour.relationChecks, relationFailures: result.behaviour.relationFailures, freshCases: result.behaviour.freshCases, freshFailures: result.behaviour.freshFailures, casesWithoutChecks: result.behaviour.casesWithoutChecks } : null,
+          heldOut: result.heldOut ?? null, notices: result.notices ?? [] });
         const identity=createHash("sha256").update(canonicalJson(receipt)).digest("hex");
         await mkdir(dataDir,{recursive:true,mode:0o700});
         await writeFileExclusiveNoFollow(dataDir,path.join(dataDir,"paper-gold","candidate-evaluations",identity+".json"),canonicalJson(receipt)+"\n",{mode:0o444}).catch(error=>{if(error.code!=="EEXIST")throw error;});
@@ -94,8 +213,9 @@ export function createEvolutionCandidateEvaluator({ config, controller, fetchImp
         if (token === reviewToken || result.ok !== true) return completed;
         const review = await reviewSuddenPerfect({ dataDir, currentReceiptHash: identity, signal, withReviewLock,
           replay: () => evaluateCandidate(candidate, { card, signal }, reviewToken) });
+        // A review that could not be done is not a review that passed: the candidate waits for held-out material.
         if (review.triggered && review.passed !== true) return { ...completed, ok: false, verificationLevel: "V0",
-          status: review.status === "pending" ? "waiting_resource" : "repair", resourceCode: "sudden_perfect_review_not_passed", suddenPerfectReview: review };
+          status: review.status === "repair" ? "repair" : "waiting_resource", resourceCode: review.status === "not-performed" ? "sudden_perfect_review_not_performed" : "sudden_perfect_review_not_passed", suddenPerfectReview: review };
         return { ...completed, suddenPerfectReview: review };
       };
       const methodId = card.methodId ?? card.id ?? candidate.methodId ?? candidate.id;
@@ -125,20 +245,26 @@ export function createEvolutionCandidateEvaluator({ config, controller, fetchImp
       const assessments = [];
       const published = new Set();
       const failedCaseIds = new Set();
-      let simulationPassed = false;
+      const simulationScores = [];
       let workflowResourcePending = false;
+      const reviewing = token === reviewToken;
       for (const testCase of definition.cases ?? []) {
+        // A reserved case is held out of every ordinary evaluation, so no repair round ever learns whether
+        // the candidate passes it; the sudden-perfect review is the only reader, and reads nothing else.
+        if (reviewing ? testCase.reserve !== true : testCase.reserve === true) continue;
         if (testCase.hidden !== true || testCase.independentQa?.passed !== true || !testCase.sourceHash || (testCase.kind === "published" && (!testCase.publicationId || !testCase.numeric))) {
           assessments.push({ caseId: testCase.id, passed: false, reason: "reference_not_admitted" }); failedCaseIds.add(testCase.id); continue;
         }
         if (scriptFreeWorkflow && testCase.kind !== "workflow-smoke") { failedCaseIds.add(testCase.id); continue; }
         if (testCase.kind === "simulation") {
           if (!Number.isFinite(Date.parse(testCase.preregistered?.at)) || !Array.isArray(testCase.inputs) || testCase.preregistered?.hash !== createHash("sha256").update(JSON.stringify({ inputs: testCase.inputs, specification: testCase.specification })).digest("hex")) { failedCaseIds.add(testCase.id); continue; }
-          const results = [];
-          for (const input of testCase.inputs) results.push(await callCandidate(candidate, input, signal, executionEvidence, testCase.id, results.length));
-          const score = simulationScore(results, testCase.specification);
-          simulationPassed = score.valid;
-          assessments.push({ caseId: testCase.id, kind: "simulation", independent: true, exposed: false, retracted: false, preRegistered: true, passed: score.valid, replicates: score.n, monteCarloError: { bias: score.mcseBias, coverage: score.mcseCoverage, falsePositive: score.mcseFalsePositive } });
+          // One row per preregistered dataset, whatever the tool did with it: a raise, a missing field and a
+          // non-finite number are failed outputs that `simulationScore` keeps in every denominator.
+          const outputs = await callCandidateBatch(candidate, testCase.inputs, signal, executionEvidence, testCase.id, "simulation", ["estimate", "lower", "upper", "p"]);
+          const score = simulationScore(outputs.map(row => row.ok && row.output ? row.output : {}), testCase.specification);
+          simulationScores.push(score);
+          assessments.push({ caseId: testCase.id, kind: "simulation", independent: true, exposed: false, retracted: false, preRegistered: true, passed: score.valid, replicates: score.n, failedOutputs: score.failures, reasons: score.reasons,
+            monteCarloError: { bias: score.mcseBias, coverage: score.mcseCoverage, falsePositive: score.mcseFalsePositive } });
           if (!score.valid) failedCaseIds.add(testCase.id);
           continue;
         }
@@ -165,7 +291,11 @@ export function createEvolutionCandidateEvaluator({ config, controller, fetchImp
             if (testCase.independentImplementation) valid = valid && Object.values(crossImplementationScore({ implementationId: candidate.id, numeric: values }, testCase.independentImplementation, testCase.numeric)).every(row => row.valid);
             reason = valid ? "within_reference_tolerance" : reason;
           } catch { reason = "candidate_execution_failed"; }
-          assessments.push({ caseId: testCase.id, kind: testCase.kind, independent: true, exposed: exposure.tier !== "unexposed", retracted: false, crossImplementationPassed: testCase.independentImplementation ? valid : null, replicate, passed: valid, reason });
+          // Whether the tool's own code started in the sandbox and then failed, as opposed to the sandbox not running it:
+          // the first is the tool's defect (a release replay reads it as a regression), the second is a resource.
+          const attempted = /** @type {any} */ (executionEvidence.findLast(row => row.caseId === testCase.id && row.replicate === replicate));
+          assessments.push({ caseId: testCase.id, kind: testCase.kind, independent: true, exposed: exposure.tier !== "unexposed", retracted: false, crossImplementationPassed: testCase.independentImplementation ? valid : null, replicate, passed: valid, reason,
+            ...(reason === "candidate_execution_failed" ? { candidateStarted: attempted?.executed === true && attempted.code === "candidate_execution_failed" } : {}) });
           passed = passed && valid;
         }
         if (!passed) failedCaseIds.add(testCase.id);
@@ -173,9 +303,38 @@ export function createEvolutionCandidateEvaluator({ config, controller, fetchImp
       }
       const kind = card.toolKind ?? candidate.toolKind ?? "calculation";
       const workflowSmoke = kind === "workflow" && assessments.some(row => row.kind === "workflow-smoke" && row.passed) && !failedCaseIds.size;
-      const verificationLevel = published.size >= 2 && !failedCaseIds.size && exposure.tier === "unexposed" ? "V2" : simulationPassed && !failedCaseIds.size ? "V1" : "V0";
+      // Reproducing the hidden numbers is necessary and not sufficient: a table of them does it too. The
+      // behavioural checks run on inputs derived here and now, seeded by the frozen definition (which the
+      // builder never sees), this candidate's bytes and the purpose, so no two candidates and no two
+      // purposes meet the same derived inputs.
+      const admittedPublished = (definition.cases ?? []).filter(row => row.kind === "published" && row.hidden === true && row.independentQa?.passed === true && row.sourceHash && row.publicationId && row.numeric && row.input && typeof row.input === "object");
+      const behaviourCases = reviewing ? admittedPublished : admittedPublished.filter(row => row.reserve !== true);
+      let behaviour = null, notices = [];
+      if (!scriptFreeWorkflow && behaviourCases.length && !failedCaseIds.size && (reviewing || published.size > 0)) {
+        const seed = createHash("sha256").update(canonicalJson([evaluatorHash, candidate.files ?? {}, reviewing ? "sudden-perfect-review" : "candidate-validation"])).digest("hex");
+        const plan = behaviourPlan({ methodId, methodFamily: card.methodFamily ?? candidate.methodFamily ?? null, definition });
+        try { behaviour = await behaviouralChecks({ candidate, cases: behaviourCases, plan, seed, signal, evidence: executionEvidence, purpose: "behavioural", known: new Set((definition.cases ?? []).filter(row => row.input).map(row => canonicalJson(row.input))) }); }
+        catch (error) { signal?.throwIfAborted(); behaviour = { status: "unavailable", reason: "behavioural_execution_unavailable", referenceImplementation: plan.reference?.implementationId ?? null, relationChecks: 0, relationFailures: 0, freshCases: 0, freshFailures: 0, casesWithoutChecks: behaviourCases.length, cases: [] }; }
+        if (!reviewing) notices = await referenceLiteralNotices(candidate, admittedPublished, signal);
+      }
+      if (reviewing) {
+        // What the review adds to the evaluation it reviews: reserved cases no repair round has run, and
+        // derived inputs drawn under another seed. With neither, the review module records that it could not be done.
+        const reserved = new Set(assessments.filter(row => row.kind === "published").map(row => row.caseId));
+        const heldOut = { reservedCases: reserved.size, reservedFailures: [...reserved].filter(id => failedCaseIds.has(id)).length, freshCases: behaviour?.freshCases ?? 0, relationChecks: behaviour?.relationChecks ?? 0 };
+        const reviewed = !failedCaseIds.size && behaviour?.status === "passed";
+        return finish({ ok: reviewed, verificationLevel: "V0", smokePassed: false, status: reviewed ? "verified" : failedCaseIds.size || behaviour?.status === "failed" ? "repair" : "waiting_resource", failedCaseIds: [...failedCaseIds], assessments, evaluatorHash, publishedReferenceCount: published.size, exposureTier: exposure.tier, behaviour, heldOut });
+      }
+      // A simulation establishes V1 only when every scenario passes and at least one of them could tell
+      // the method from an estimator that always answers the null.
+      const simulationPassed = simulationScores.length > 0 && simulationScores.every(score => score.valid) && simulationScores.some(score => score.discriminatesTrivial);
+      const verificationLevel = published.size >= 2 && !failedCaseIds.size && exposure.tier === "unexposed" && behaviour?.status === "passed" ? "V2" : simulationPassed && !failedCaseIds.size ? "V1" : "V0";
       const ok = kind === "workflow" ? workflowSmoke : verificationLevel === "V2" || (definition.noPublishedExamples === true && verificationLevel === "V1");
-      return finish({ ok, verificationLevel, smokePassed: workflowSmoke, status: ok ? "verified" : workflowResourcePending ? "waiting_resource" : failedCaseIds.size ? "repair" : "waiting_resource", failedCaseIds: [...failedCaseIds], assessments, evaluatorHash, publishedReferenceCount: published.size, exposureTier: exposure.tier });
+      const generalisationFailed = behaviour?.status === "failed";
+      const resourceCode = ok || failedCaseIds.size || generalisationFailed ? undefined : behaviour?.status === "unavailable" ? "behavioural_checks_unavailable"
+        : simulationScores.length > 0 && simulationScores.every(score => score.valid) && !simulationPassed ? "simulation_cannot_discriminate_trivial_estimator" : undefined;
+      return finish({ ok, verificationLevel, smokePassed: workflowSmoke, status: ok ? "verified" : workflowResourcePending ? "waiting_resource" : failedCaseIds.size || generalisationFailed ? "repair" : "waiting_resource", failedCaseIds: [...failedCaseIds], assessments, evaluatorHash, publishedReferenceCount: published.size, exposureTier: exposure.tier,
+        behaviour, notices, ...(resourceCode ? { resourceCode } : {}), ...(generalisationFailed ? { issueCodes: ["candidate_generalisation_failed"] } : {}) });
       }catch(error){await finish({ok:false,status:"error",assessments:executionEvidence.map(item=>({caseId:item.caseId,replicate:item.replicate,passed:false,reason:"candidate_execution_failed"}))});throw error;}
     },
   };

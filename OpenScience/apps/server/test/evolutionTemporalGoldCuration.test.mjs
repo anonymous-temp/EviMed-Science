@@ -123,3 +123,12 @@ test('weekly production consumer prepares absent gold, validates frozen rewrite,
  assert.equal(saved.find(args=>args[0]==='evaluation')[2].units[0].actualPinnedToolAttribution,true);
  assert.equal(saved.find(args=>args[0]==='observation')[2].status,'scored');
 });
+test('prospective gold carries a tolerance derived from the printed number, whatever the writer supplied', async t => {
+  // The writer asks for +/- 2 around a registry estimate printed as 2.5: that would accept 0.6 and 4.4.
+  const f = await fixture(t, { proposal: { numeric: { effect: { value: 2.5, absoluteTolerance: 2, quote: '"estimate":2.5', quantity: 'difference' } } } });
+  const result = await f.curator.prepareProspective({ registration: f.registration });
+  assert.equal(result.ok, true);
+  const gold = JSON.parse(await readFile(result.goldPath, 'utf8'));
+  assert.deepEqual({ printed: gold.numeric.effect.printed, basis: gold.numeric.effect.toleranceBasis, quantity: gold.numeric.effect.quantity }, { printed: '2.5', basis: 'printed-precision', quantity: 'difference' });
+  assert.ok(Math.abs(gold.numeric.effect.absoluteTolerance - 0.05) < 1e-9);
+});
