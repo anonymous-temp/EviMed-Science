@@ -5,6 +5,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 import { UNCAPPED_CNY } from "../src/boundedRunBudget.mjs";
+import { MIN_RUN_BUDGET_CNY } from "@evimed/domain";
 import { AGENDA_WINDOW_MS, FUNDABLE_CNY, agendaAllowance, agendaBudget, budgetFreesAt, taskBudgetRefusal } from "../src/agendaBudget.mjs";
 import { agendaRunIds, verificationIdFor } from "../src/autopilotService.mjs";
 import { openCostWindows } from "../src/usageLedger.mjs";
@@ -43,16 +44,21 @@ test("what is left of the task's own caps, in the window that binds, named weekl
   assert.deepEqual(agendaAllowance(own, { day: 0, week: 0 }), {
     day: { limit: 3, spent: 0, remaining: 3 }, week: { limit: 6, spent: 0, remaining: 6 }, remainingCny: 3, spentWindow: null });
   // ¥16 spent by the account on other research is not in these numbers: only the task's own are asked.
-  assert.equal(agendaAllowance(own, { day: 2.6, week: 2.6 }).remainingCny, 0.4);
-  assert.equal(agendaAllowance(own, { day: 0.5, week: 5.9 }).remainingCny, 0.1, "the week binds when it is tighter");
-  assert.equal(agendaAllowance(own, { day: 0.5, week: 5.9 }).spentWindow, null);
+  assert.equal(agendaAllowance(own, { day: 1.6, week: 1.6 }).remainingCny, 1.4);
+  assert.equal(agendaAllowance(own, { day: 0.5, week: 4.6 }).remainingCny, 1.4, "the week binds when it is tighter");
+  assert.equal(agendaAllowance(own, { day: 0.5, week: 4.6 }).spentWindow, null);
   assert.equal(agendaAllowance(own, { day: 3, week: 3 }).spentWindow, "day");
   assert.equal(agendaAllowance(own, { day: 1, week: 6 }).spentWindow, "week");
   assert.equal(agendaAllowance(own, { day: 3, week: 6 }).spentWindow, "week", "both spent: the one that frees later, or the day's wait ends in a second refusal");
-  // Less than a cent left funds nothing: the refusal comes before a run with no room to make a call.
-  assert.equal(agendaAllowance(own, { day: 2.995, week: 2.995 }).spentWindow, "day");
-  assert.equal(agendaAllowance(own, { day: 2.99, week: 2.99 }).spentWindow, null);
-  assert.equal(agendaAllowance(own, { day: 2.99, week: 2.99 }).remainingCny, FUNDABLE_CNY, "rounded down to the cent, never up");
+  // Less than a run needs funds nothing: a model call reserves about ¥1 before it is sent, so a run given
+  // ¥0.40 or ¥1.10 is refused on its first call. The refusal comes before a run with no room to make one.
+  assert.equal(FUNDABLE_CNY, MIN_RUN_BUDGET_CNY);
+  assert.equal(agendaAllowance(own, { day: 2.6, week: 2.6 }).spentWindow, "day", "¥0.40 left is not a budget");
+  assert.equal(agendaAllowance(own, { day: 1.85, week: 1.85 }).spentWindow, "day", "¥1.15 left is not a budget either");
+  assert.equal(agendaAllowance(own, { day: 1.8, week: 1.8 }).spentWindow, null, "¥1.20 is exactly what one run needs");
+  assert.equal(agendaAllowance(own, { day: 1.81, week: 1.81 }).spentWindow, "day");
+  assert.equal(agendaAllowance(own, { day: 1.8, week: 1.8 }).remainingCny, FUNDABLE_CNY, "rounded down to the cent, never up");
+  assert.equal(agendaAllowance(own, { day: 1.79, week: 1.79 }).remainingCny, 1.21);
   assert.equal(agendaAllowance(own, { day: 9, week: 9 }).remainingCny, 0, "an overdrawn window has nothing left, not less than nothing");
   // A cap of zero is no cap.
   assert.deepEqual(agendaAllowance({ dailyLimit: 0, weeklyLimit: 0 }, { day: 99, week: 99 }).spentWindow, null);
@@ -69,9 +75,14 @@ test("a spent window frees when enough of its oldest spend has aged out, never b
   // Spend that already left the window is not waited for.
   const aged = [{ at: "2026-10-03T06:00:00.000Z", cost: 5 }, ...timeline];
   assert.equal(budgetFreesAt({ timeline: aged, spent: 3, limit: 3, windowMs: AGENDA_WINDOW_MS.day, now }), freed);
-  // It takes both entries when one is not enough: ¥2.99 spent of ¥3 leaves a cent — fundable; ¥3 held by two halves needs the first only.
+  // It takes both entries when one is not enough: ¥1.9 spent of ¥3 leaves ¥1.10 — less than a run needs — so the
+  // spend that frees a fundable ¥1.20 is waited for; ¥3 held by two halves needs the first only.
+  const barely = [{ at: "2026-10-04T06:00:00.000Z", cost: 0.2 }, { at: "2026-10-04T07:00:00.000Z", cost: 1.7 }];
+  assert.equal(budgetFreesAt({ timeline: barely, spent: 1.9, limit: 3, windowMs: AGENDA_WINDOW_MS.day, now }), Date.parse("2026-10-05T06:00:00Z") + minute,
+    "the first entry leaving leaves ¥1.30 of room, which is already a run: no wait for the second");
   const halves = [{ at: "2026-10-04T06:00:00.000Z", cost: 0.5 }, { at: "2026-10-04T07:00:00.000Z", cost: 2.5 }];
-  assert.equal(budgetFreesAt({ timeline: halves, spent: 3, limit: 3, windowMs: AGENDA_WINDOW_MS.day, now }), Date.parse("2026-10-05T06:00:00Z") + minute);
+  assert.equal(budgetFreesAt({ timeline: halves, spent: 3, limit: 3, windowMs: AGENDA_WINDOW_MS.day, now }), Date.parse("2026-10-05T07:00:00Z") + minute,
+    "¥0.50 leaving is not enough room for a run; it takes the ¥2.50 as well");
   // Nothing in the timeline gets it there: unknown, not invented.
   assert.equal(budgetFreesAt({ timeline: [], spent: 3, limit: 3, windowMs: AGENDA_WINDOW_MS.day, now }), null);
   assert.equal(budgetFreesAt({ timeline: [{ at: "garbage", cost: 3 }], spent: 3, limit: 3, windowMs: AGENDA_WINDOW_MS.day, now }), null);
@@ -146,6 +157,23 @@ test("the episode cap is an envelope for one episode, read where an episode is f
   assert.ok(found.length >= 6, `the walk found only ${found.length} mentions`);
   assert.deepEqual([...new Set(found.map((item) => item.file))].sort(), ["autopilotRoutes.mjs", "autopilotService.mjs"]);
   for (const { file, line, text } of found) assert.doesNotMatch(text, /assertWithinLimits|\blimits\s*:|minimumPositive/, `${file}:${line}: ${text.trim()}`);
+});
+
+test("the floors are read where a budget becomes a run's limit, and the server restates neither number", () => {
+  // `MIN_RUN_BUDGET_CNY` is what a run needs and `AGENDA_MIN_EPISODE_BUDGET_CNY` what an episode cap is held to; both are the
+  // domain's. A third reader is a third place a budget can be given to a run that cannot make its first call.
+  const floor = mentions(/\bAGENDA_MIN_EPISODE_BUDGET_CNY\b/);
+  assert.ok(floor.length >= 6, `the walk found only ${floor.length} mentions`);
+  assert.deepEqual([...new Set(floor.map((item) => item.file))].sort(), ["autopilotService.mjs"],
+    "the cap is held to the floor where it is set (create, update), started and scheduled, and nowhere that sums a window");
+  const run = mentions(/\bMIN_RUN_BUDGET_CNY\b/);
+  assert.deepEqual([...new Set(run.map((item) => item.file))].sort(), ["agendaBudget.mjs", "autopilotService.mjs"],
+    "what is left of a window (`FUNDABLE_CNY`), each re-check's share and a halved episode");
+  // Nobody writes the numbers again: no ¥1.2 / 120 cents, no 0.25 share, in the server's budget code.
+  for (const file of ["agendaBudget.mjs", "autopilotService.mjs"]) {
+    const code = readFileSync(path.join(SRC, file), "utf8").split("\n").filter((text) => !/^\s*(\/\/|\*|\/\*)/.test(text)).join("\n");
+    assert.doesNotMatch(code, /\b1\.2\b|VERIFICATION_BUDGET_SHARE\s*=|\b0\.25\b/, `${file} restates a number the domain owns`);
+  }
 });
 
 test("no dispatch path asks the account's ledger a question about an agenda's caps", () => {

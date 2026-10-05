@@ -344,6 +344,28 @@ describe("scheduled tasks", () => {
     expect(mocks.getResearchState).toHaveBeenCalledWith(agenda.id);
     expect(panel).not.toHaveTextContent("运行记录");
   });
+  it("says in one line each why a conclusion was not re-checked, and that a stopped task's re-checks will not be made", async () => {
+    mocks.getResearchState.mockResolvedValue(state({
+      unresolved: [{ kind: "not_rechecked", reason: "agenda_stopped", text: "停止时尚未开始" }, { kind: "not_rechecked", reason: "agenda_stopped", text: "停止时已被取消" },
+        { kind: "not_rechecked", reason: "verification_budget_unavailable", text: "单次上限太小" }, { kind: "not_rechecked", reason: "verification_cap", text: "超出条数" },
+        { kind: "not_rechecked", reason: "agenda_paused", text: "暂停时没做" }, { kind: "unchecked", text: "还在排队" }] }));
+    render(); const panel = await detail();
+    const open = await within(panel).findByRole("region", { name: "尚未解决" });
+    expect(open).toHaveTextContent("任务已停止，未做独立复核：停止时尚未开始"); expect(open).toHaveTextContent("任务已停止，未做独立复核：停止时已被取消");
+    expect(open).toHaveTextContent("单次上限不够再支付一次复核，未安排独立复核：单次上限太小"); expect(open).toHaveTextContent("超出每次研究复核的条数，未安排独立复核：超出条数");
+    expect(open).toHaveTextContent("任务已暂停，未做独立复核：暂停时没做");
+    expect(open).toHaveTextContent("尚未独立复核：还在排队");
+    expect(open).not.toHaveTextContent("尚未独立复核：停止时"); expect(open).not.toHaveTextContent("复核未能进行");
+    for (const code of ["agenda_stopped", "verification_canceled_by_stop", "queued"]) expect(open).not.toHaveTextContent(code);
+  });
+  it("says why a task whose cap cannot fund a run was paused, in the sentence the edit form gives, and says nothing of it once the pause is lifted", async () => {
+    const tooSmall = { ...agenda, payload: { ...agenda.payload, enabled: false, status: "paused", scheduleState: "paused", nextRunAt: null, maxEpisodeCny: 0.5,
+      pauseReason: "x", pauseCode: "autopilot_episode_budget_too_small" } };
+    mocks.listAgendas.mockResolvedValue({ items: [tooSmall] }); mocks.getAgenda.mockResolvedValue(tooSmall);
+    render(); const panel = await detail();
+    expect(panel).toHaveTextContent(/已暂停：“单次上限”不能低于 ¥\d+\.\d{2}/); expect(panel).toHaveTextContent("在“编辑任务”里调高单次上限即可");
+    expect(panel).not.toHaveTextContent("autopilot_episode_budget_too_small");
+  });
   it("shows no findings section for a question that has found nothing, and still offers to add material", async () => {
     render(); const panel = await detail();
     await within(panel).findByRole("region", { name: "补充材料" });

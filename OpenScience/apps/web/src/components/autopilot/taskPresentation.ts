@@ -1,3 +1,4 @@
+import { knownErrorCodeMessage, type VERIFICATION_UNSCHEDULED_REASONS } from "@evimed/domain";
 import type { AgendaRecord, AgendaSchedule, ResearchState } from "@/lib/autopilotClient";
 export const WEEKDAYS = ["周一", "周二", "周三", "周四", "周五", "周六", "周日"];
 export const TASK_TYPES = [
@@ -34,6 +35,9 @@ export function pauseNotes(agenda: AgendaRecord): string[] {
   const notes: string[] = [];
   const stop = agenda.payload.plannerStop;
   if (stop && !activeAgenda(agenda)) notes.push(`${stop.kind === "needs_input" ? "需要你补充：" : "已暂停："}${stop.reason}`);
+  // A pause the server put on a task whose cap cannot fund a run: the registry's sentence, the one the edit form's refusal reads.
+  const cause = !activeAgenda(agenda) && !stop && agenda.payload.pauseCode ? knownErrorCodeMessage(agenda.payload.pauseCode) : null;
+  if (cause) notes.push(`已暂停：${cause}`);
   const paused = Object.entries(agenda.payload.taskTypeState ?? {}).filter(([, state]) => state.pausedAt).map(([type]) => TASK_TYPES.find(([value]) => value === type)?.[1] ?? type);
   if (paused.length > 0) notes.push(`${paused.join("、")}连续未能运行，已暂停；编辑任务类型或重新启用任务可恢复。`);
   return notes;
@@ -50,12 +54,19 @@ export function needsMaterial(agenda: AgendaRecord): boolean {
   return resumableByReply(agenda) && agenda.payload.plannerStop?.kind === "needs_input";
 }
 export const FOUND_PREFIX: Record<ResearchState["found"][number]["check"], string> = { reproduced: "已复现：", stands: "独立复核后仍成立：", refuted: "已被推翻：" };
-const UNRESOLVED_PREFIX: Record<Exclude<ResearchState["unresolved"][number]["kind"], "not_run">, string> = {
+const UNRESOLVED_PREFIX: Record<Exclude<ResearchState["unresolved"][number]["kind"], "not_run" | "not_rechecked">, string> = {
   unchecked: "尚未独立复核：", check_unavailable: "复核未能进行：", weakened: "被复核削弱：", question: "你的问题：",
+};
+/** Why no independent check will be made, one line each. An agenda that stopped leaves a re-check either unstarted or cancelled with it; both read the same. */
+const NOT_RECHECKED: Record<typeof VERIFICATION_UNSCHEDULED_REASONS[number], string> = {
+  agenda_stopped: "任务已停止，未做独立复核：", agenda_paused: "任务已暂停，未做独立复核：",
+  verification_cap: "超出每次研究复核的条数，未安排独立复核：", verification_budget_unavailable: "单次上限不够再支付一次复核，未安排独立复核：",
 };
 export function unresolvedText(item: ResearchState["unresolved"][number]): string {
   // A run that did not run says nothing about the question, and the line says so.
-  return item.kind === "not_run" ? "最近一次研究没有完成，结果未知。" : `${UNRESOLVED_PREFIX[item.kind]}${item.text ?? ""}`;
+  if (item.kind === "not_run") return "最近一次研究没有完成，结果未知。";
+  if (item.kind === "not_rechecked") return `${NOT_RECHECKED[item.reason as keyof typeof NOT_RECHECKED] ?? "未做独立复核："}${item.text ?? ""}`;
+  return `${UNRESOLVED_PREFIX[item.kind]}${item.text ?? ""}`;
 }
 /** What a researcher is told about an added document; a usable one needs no word. */
 export const MATERIAL_STATE: Record<ResearchState["materials"][number]["state"], string> = { ready: "", reading: "正在读取", attention: "需要处理", unavailable: "无法使用" };
