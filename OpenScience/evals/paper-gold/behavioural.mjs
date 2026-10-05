@@ -85,9 +85,9 @@ export function numericLeaves(node, prefix = []) {
   return Object.entries(node).flatMap(([key, child]) => numericLeaves(child, [...prefix, key]));
 }
 
-/** @param {number} actual @param {number} expected */
-export function behaviourallyEqual(actual, expected) {
-  return isNumber(actual) && isNumber(expected) && Math.abs(actual - expected) <= BEHAVIOUR_LIMITS.absoluteTolerance + BEHAVIOUR_LIMITS.relativeTolerance * Math.abs(expected);
+/** @param {number} actual @param {number} expected @param {number} [relative] */
+export function behaviourallyEqual(actual, expected, relative = BEHAVIOUR_LIMITS.relativeTolerance) {
+  return isNumber(actual) && isNumber(expected) && Math.abs(actual - expected) <= BEHAVIOUR_LIMITS.absoluteTolerance + relative * Math.abs(expected);
 }
 
 /** A relation is data from a closed vocabulary; anything else is refused before it can be applied. @param {any} relation */
@@ -96,7 +96,10 @@ export function relationIssues(relation) {
   const patterns = value => Array.isArray(value) && value.length > 0 && value.every(item => typeof item === "string");
   const outputs = (value, allowed) => value && typeof value === "object" && Object.keys(value).length > 0 && Object.values(value).every(allowed);
   if (!relation || !RELATION_KINDS.includes(relation.kind)) return ["relation_kind_unknown"];
-  if (relation.kind === "scale" && !(patterns(relation.inputs) && outputs(relation.outputs, isNumber))) issues.push("relation_scale_invalid");
+  // `inputs` is a list of paths scaled by the factor, or a map of path to the power of the factor it is scaled by.
+  if (relation.kind === "scale" && !((patterns(relation.inputs) || outputs(relation.inputs, isNumber)) && outputs(relation.outputs, isNumber))) issues.push("relation_scale_invalid");
+  // An iterative estimator satisfies a relation to its convergence, not to rounding error; a relation may say so, within a bound.
+  if (relation.relativeTolerance !== undefined && !(isNumber(relation.relativeTolerance) && relation.relativeTolerance > 0 && relation.relativeTolerance <= 1e-3)) issues.push("relation_tolerance_invalid");
   if (relation.kind === "duplicate" && !(patterns(relation.arrays) && outputs(relation.outputs, isNumber))) issues.push("relation_duplicate_invalid");
   if (relation.kind === "permute" && !(Array.isArray(relation.arrays) && relation.arrays.length > 0 && relation.arrays.every(item => typeof item?.path === "string" && Array.isArray(item.axes) && item.axes.every(axis => axis === 0 || axis === 1)))) issues.push("relation_permute_invalid");
   if (relation.kind === "relabel" && !(typeof relation.input === "string" && typeof relation.output === "string")) issues.push("relation_relabel_invalid");
@@ -111,19 +114,20 @@ export function relationIssues(relation) {
  */
 export function applyRelation(relation, input, random) {
   if (relationIssues(relation).length) return null;
-  const transformed = clone(input);
+  const transformed = clone(input), relative = relation.relativeTolerance ?? BEHAVIOUR_LIMITS.relativeTolerance;
   /** @param {Record<string, number>} outputs @param {number} factor */
   const powerCheck = (outputs, factor) => (base, output) => {
     let checked = 0;
     for (const [pattern, power] of Object.entries(outputs)) for (const path of expandPath(base, pattern)) {
-      for (const [leaf, value] of numericLeaves(read(base, path), path)) { checked++; if (!behaviourallyEqual(read(output, leaf), value * factor ** power)) return false; }
+      for (const [leaf, value] of numericLeaves(read(base, path), path)) { checked++; if (!behaviourallyEqual(read(output, leaf), value * factor ** power, relative)) return false; }
     }
     return checked > 0;
   };
   if (relation.kind === "scale") {
     const factor = relation.factor === "integer" ? random.integer(2, 7) : significant(random.next() < 0.5 ? random.between(1.7, 4.3) : 1 / random.between(1.7, 4.3), 4);
     let scaled = 0;
-    for (const pattern of relation.inputs) for (const path of expandPath(transformed, pattern)) for (const [leaf, value] of numericLeaves(read(transformed, path), path)) { write(transformed, leaf, value * factor); if (value !== 0) scaled++; }
+    const powers = Array.isArray(relation.inputs) ? Object.fromEntries(relation.inputs.map(pattern => [pattern, 1])) : relation.inputs;
+    for (const [pattern, power] of Object.entries(powers)) for (const path of expandPath(transformed, pattern)) for (const [leaf, value] of numericLeaves(read(transformed, path), path)) { write(transformed, leaf, value * factor ** power); if (value !== 0) scaled++; }
     return scaled ? { input: transformed, check: powerCheck(relation.outputs, factor) } : null;
   }
   if (relation.kind === "duplicate") {
@@ -142,7 +146,7 @@ export function applyRelation(relation, input, random) {
       if (item.axes.includes(1)) { if (next.some(row => !Array.isArray(row) || row.length !== order.length)) return null; next = next.map(row => order.map(index => row[index])); }
       write(transformed, path, next); permuted++;
     }
-    return permuted ? { input: transformed, check: (base, output) => { const leaves = numericLeaves(base); return leaves.length > 0 && leaves.every(([leaf, value]) => behaviourallyEqual(read(output, leaf), value)); } } : null;
+    return permuted ? { input: transformed, check: (base, output) => { const leaves = numericLeaves(base); return leaves.length > 0 && leaves.every(([leaf, value]) => behaviourallyEqual(read(output, leaf), value, relative)); } } : null;
   }
   if (relation.kind === "relabel") {
     const [path] = expandPath(transformed, relation.input);
@@ -168,10 +172,29 @@ export function applyRelation(relation, input, random) {
     let checked = 0;
     for (const [pattern, transform] of Object.entries(relation.outputs)) for (const path of expandPath(base, pattern)) for (const [leaf, value] of numericLeaves(read(base, path), path)) {
       const expected = transform === "negate" ? -value : transform === "reciprocal" ? 1 / value : transform === "complement" ? 1 - value : value;
-      checked++; if (!behaviourallyEqual(read(output, leaf), expected)) return false;
+      checked++; if (!behaviourallyEqual(read(output, leaf), expected, relative)) return false;
     }
     return checked > 0;
   } };
+}
+
+/**
+ * Relations of the three method families the existing engines are measured on, for the code replay of
+ * the paper rulers (`paperGoldVerification.mjs`). Each family has at least one relation a function that
+ * ignores its input cannot satisfy: swapping the exposure groups inverts a reporting odds ratio; scaling
+ * the effects by k and their variances by k squared scales a pooled estimate and its bounds by k and
+ * tau-squared by k squared while Q and the study count stay put; scaling the outcome associations and
+ * their standard errors by k scales an IVW estimate, its standard error and its bounds by k and leaves
+ * the p-value where it was.
+ * @param {string} methodId
+ */
+export function methodRulerRelations(methodId) {
+  if (/^faers-ror/.test(methodId)) return [{ kind: "swap", pairs: [["a", "c"], ["b", "d"]], outputs: { ROR: "reciprocal" } }];
+  if (/^meta-reml/.test(methodId)) return [
+    { kind: "scale", relativeTolerance: 1e-4, inputs: { "studies.*.yi": 1, "studies.*.vi": 2 }, outputs: { pooled_log: 1, ci_lower_log: 1, ci_upper_log: 1, tau_squared: 2, q_statistic: 0, n_studies: 0 } },
+    { kind: "permute", relativeTolerance: 1e-4, arrays: [{ path: "studies", axes: [0] }] }];
+  if (/^mr-ivw/.test(methodId)) return [{ kind: "scale", inputs: { by: 1, byse: 1 }, outputs: { estimate: 1, standardError: 1, lower: 1, upper: 1, pValue: 0 } }];
+  return [];
 }
 
 /**

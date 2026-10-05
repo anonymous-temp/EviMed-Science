@@ -20,7 +20,7 @@ test('one-unit pilot preserves six-unit freeze and resumes without repeating dis
 test('memorization baseline receives only declared outcome names and preserves the actual answer proof in control checkpoint',async t=>{
  const dataDir=await fs.mkdtemp(path.join(os.tmpdir(),'gold-baseline-'));t.after(()=>fs.rm(dataDir,{recursive:true,force:true}));
  const gold={numeric:{'analysis.effect':{value:987.654321,absoluteTolerance:0,quote:'hidden-primary-quote'}}};
- const definition={replicates:2,cases:[{id:'private-paper',type:'method',policy:{aliases:['private-id']},rewrite:{writer:'flash',qaExecutor:'qwen',qaPassed:true,question:'Estimate a population association.',variants:['Estimate association A.','Estimate association B.','Estimate association C.']},gold}]};
+ const definition={replicates:2,cases:[{id:'private-paper',type:'research',policy:{aliases:['private-id']},rewrite:{writer:'flash',qaExecutor:'qwen',qaPassed:true,question:'Estimate a population association.',variants:['Estimate association A.','Estimate association B.','Estimate association C.']},gold}]};
  let seen;
  const answer={numeric:{'analysis.effect':987.654321},baselineReceipt:{model:'observed-test-model',providerRequestId:'observed-request'}};
  const report=await runCycle({dataDir,cycleId:'baseline-fixture',definition,adapter:{noToolBaseline:async request=>{seen=request;return answer;},baselineMemorized:(result,reference)=>result.numeric['analysis.effect']===reference.numeric['analysis.effect'].value,dispatch:async()=>{throw new Error('Memorized paper must never dispatch');}}});
@@ -103,4 +103,21 @@ test('each unit records the purpose the server\'s own rule gives its run, and th
  const report=await runCycle({dataDir,cycleId:'spend',definition,adapter});
  assert.deepEqual(report.units.map(unit=>unit.spendPurpose),['evolution','evolution','evolution','evolution','kernel','kernel']);
  assert.deepEqual(report.spend,{byPurpose:{evolution:4,kernel:2},outsideEvolutionBudget:2});
+});
+
+test('the memorisation baseline is not asked of a method case, and one recalled number is enough to flag a paper',async t=>{
+ const {paperGoldBaselineMemorized:rule}=await import('../src/paperGoldEvaluator.mjs');
+ const dataDir=await fs.mkdtemp(path.join(os.tmpdir(),'gold-baseline-scope-'));t.after(()=>fs.rm(dataDir,{recursive:true,force:true}));
+ const rewrite={writer:'flash',qaExecutor:'qwen',qaPassed:true,question:'Apply the method to the supplied inputs.',variants:['Apply the method A.','Apply the method B.','Apply the method C.']};
+ // A method case hands the run its inputs: asking a model to guess its answer without them could never match and was recorded as "not memorised".
+ const definition={replicates:2,cases:[{id:'method-case',type:'method',policy:{aliases:[]},rewrite,gold:{numeric:{effect:{value:2,absoluteTolerance:0}},stageChecks:{method:['method']}}}]};
+ let asked=0;
+ const report=await runCycle({dataDir,cycleId:'method-baseline',definition,adapter:{noToolBaseline:async()=>{asked++;return {numeric:{effect:2}};},baselineMemorized:()=>true,dispatch:async request=>({run:{id:`run-${request.replicate}`}}),extract:async()=>({numeric:{effect:2},checks:{method:true}})}});
+ assert.equal(asked,0);assert.equal(report.units.length,6);
+ const progress=JSON.parse(await fs.readFile(path.join(dataDir,'paper-gold/cycles/method-baseline/progress.json'),'utf8'));
+ assert.deepEqual({memorized:progress.baselines['method-case'].memorized,applicable:progress.baselines['method-case'].applicable,reason:progress.baselines['method-case'].reason},{memorized:null,applicable:false,reason:'inputs_disclosed_method_case'});
+ // The production rule: the model is told to omit what it is unsure of, so "every field matches" almost never fired.
+ const gold={baselineNumeric:{'analysis.hr':{value:0.72,printed:'0.72',absoluteTolerance:0.005},'analysis.lower':{value:0.61,printed:'0.61',absoluteTolerance:0.005},'analysis.upper':{value:0.85,printed:'0.85',absoluteTolerance:0.005}}};
+ assert.equal(rule({numeric:{'analysis.hr':0.72}},gold),true,'the primary estimate recalled alone');
+ assert.equal(rule({numeric:{'analysis.hr':0.9,'analysis.upper':0.3}},gold),false);assert.equal(rule({numeric:{}},gold),false);assert.equal(rule({},{numeric:{}}),false);
 });

@@ -93,6 +93,10 @@ export async function runCycle({ dataDir, cycleId, definition, adapter, signal =
     validateRewrite(testCase.rewrite, { identifiers: testCase.policy.aliases });
     const screens = await screenRetractions(testCase.dois ?? [], adapter.fetchImpl);
     if (screens.some(row => !row.admissible)) { rows.push({ id: testCase.id, excluded: "retraction_screen", screens }); await checkpoint(); continue; }
+    // A method case hands the run its inputs; a no-tool guess at it measures arithmetic, not memory. The baseline
+    // used to be asked the template question without the inputs, could never match, and was recorded as "not
+    // memorised". It is recorded as what it is: not applicable.
+    if (testCase.type === "method" && !Object.hasOwn(progress.baselines, testCase.id)) { progress.baselines[testCase.id] = { memorized: null, applicable: false, reason: "inputs_disclosed_method_case", recordedAt: new Date().toISOString() }; await checkpoint(); }
     if (!Object.hasOwn(progress.baselines, testCase.id)) {
       const numericFields = Object.keys(testCase.gold.baselineNumeric ?? testCase.gold.numeric ?? {});
       const baseline = await adapter.noToolBaseline({ prompt: testCase.rewrite.question, numericFields, tools: [], toolChoice: "none" });

@@ -2,11 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { digest, scoreUnit } from '../../../evals/paper-gold/evaluator.mjs';
 import { verifyPaperGoldCode, bindPaperGoldReview, bindPaperGoldStageAssessment } from '../src/paperGoldVerification.mjs';
+import { pythonExecVerify } from './helpers/pythonExecVerify.mjs';
 const hash = 'a'.repeat(64);
 function fixture() {
   const input = { values: [1, 2] };
   const gold = { type: 'method', sourceHash: hash, numeric: { total: { value: 4, absoluteTolerance: 0 } }, preservedEvidence: [{ id: 'primary', sourceHash: hash, numericQuotes:['Synthetic published worked example: values 1 and 2; stated total 4.'] }],
     stageChecks: { method: ['method_supported'] }, deterministicVerification: { entrypoint: 'scripts/analysis.py:analyze', implementationId: 'platform', input, inputHash: digest(input), sourceHash: hash,
+      // A sum scales with its terms: the relation the replay runs on an input the run never saw.
+      relations: [{ kind: 'scale', inputs: ['values'], outputs: { total: 1 } }],
       independentQa: { passed: true, executor: 'independent-base-R' }, independentImplementation: { implementationId: 'base-R', sourceHash: hash, numeric: { total: 3 } }, tolerances: { total: { absoluteTolerance: 0 } } } };
   const unit = { numeric: { total: 3 }, checks: { method_supported: true }, modelFamily: 'deepseek', assessmentEvidence: { deliveredText: [{ path: 'scripts/analysis.py', text: 'def analyze(values):\n    return {"total": sum(values)}\n' }] } };
   return { gold, unit };
@@ -14,12 +17,19 @@ function fixture() {
 const response = { model: 'qwen3.5-plus', modelReported: true, value: { verdict: 'paper_error', evidenceIds: ['primary'], reason: 'Independent arithmetic and published number disagree.' } };
 
 test('actual isolated replay against independent reference can validate code without forcing incorrect paper agreement', async () => {
-  const { unit, gold } = fixture(); let calls = 0;
-  const verification = await verifyPaperGoldCode({ unit, gold, controller: { execVerify: async request => {
-    calls++; assert.deepEqual(request.input, { values: [1, 2] }); assert.match(request.code, /runpy.run_path/);
-    return { ok: true, joined: true, executionStarted: true, output: '{"total":3}' };
-  } } });
-  assert.equal(calls, 2); assert.equal(verification.verified, true);
+  const { unit, gold } = fixture(); const record = { calls: [] }, controller = { execVerify: pythonExecVerify(record) };
+  const verification = await verifyPaperGoldCode({ unit, gold, controller });
+  assert.equal(verification.verified, true, verification.reason);
+  assert.deepEqual(record.calls.slice(0, 2).map(call => call.input), [{ values: [1, 2] }, { values: [1, 2] }]); assert.match(record.calls[0].code, /runpy.run_path/);
+  assert.equal(record.calls.length, 3); assert.notDeepEqual(record.calls[2].input, { values: [1, 2] }); assert.equal(verification.proof.behaviouralChecks, 1);
+  // The disclosed input alone used to be the whole replay: code that returns the number it was shown replayed identically.
+  const constant = structuredClone(unit); constant.assessmentEvidence.deliveredText[0].text = 'def analyze(**arguments):\n    return {"total": 3}\n';
+  assert.deepEqual(await verifyPaperGoldCode({ unit: constant, gold, controller }), { verified: false, reason: 'behavioural_replay_failed' });
+  // A descriptor with no relation, or only one a constant satisfies, cannot verify code at all.
+  const bare = structuredClone(gold); delete bare.deterministicVerification.relations;
+  assert.deepEqual(await verifyPaperGoldCode({ unit, gold: bare, controller }), { verified: false, reason: 'behavioural_replay_unavailable' });
+  const invariantOnly = structuredClone(gold); invariantOnly.deterministicVerification.relations = [{ kind: 'permute', arrays: [{ path: 'values', axes: [0] }] }];
+  assert.deepEqual(await verifyPaperGoldCode({ unit, gold: invariantOnly, controller }), { verified: false, reason: 'behavioural_replay_unavailable' });
   const verdict = bindPaperGoldReview({ result: response, config: { reviewProvider: 'dashscope' }, unit, gold, verification });
   const scored = await scoreUnit(unit, gold, { verifyCode: async()=>verification, review: async context => {
     assert.equal(context.gold, gold); assert.equal(context.unit, unit); return verdict;

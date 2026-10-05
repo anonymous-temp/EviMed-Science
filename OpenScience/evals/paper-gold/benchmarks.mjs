@@ -1,4 +1,5 @@
 import { digest } from './evaluator.mjs';
+import { methodRulerRelations } from './behavioural.mjs';
 /** Derive the three executable rulers from admitted control-plane evidence without more model calls.
  * Method inputs are intentionally disclosed; reference outputs stay in the evaluator.
  * @param {any} definition @param {any[]} [methodDefinitions]
@@ -40,7 +41,9 @@ export function deriveBenchmarkDefinition(definition, methodDefinitions = []) {
         dois: /^10\.\d{4,9}\//.test(reference.publicationId) ? [reference.publicationId] : [],
         gold: { numeric: reference.numeric, inputAvailable: true, applicableStages: ['method','calculation'], stageChecks: { method: ['method_supported'] },
           sourceHash: reference.sourceHash, independentImplementation: reference.independentImplementation,
-          deterministicVerification: { entrypoint: 'scripts/analysis.py:analyze', implementationId: 'runtime-method-analysis', input: reference.input,
+          // The input is disclosed to the run, so replaying the delivered code on it proves nothing a constant could
+          // not: the replay also runs these relations on inputs the run never saw (paperGoldVerification.mjs).
+          deterministicVerification: { entrypoint: 'scripts/analysis.py:analyze', implementationId: 'runtime-method-analysis', input: reference.input, relations: methodRulerRelations(method.methodId),
             inputHash: digest(reference.input), sourceHash: reference.sourceHash, independentQa: reference.independentQa,
             independentImplementation: { ...reference.independentImplementation, sourceHash: reference.sourceHash },
             tolerances: Object.fromEntries(Object.entries(reference.numeric).map(([key, value]) => [key, { absoluteTolerance: value.absoluteTolerance ?? 0, relativeTolerance: value.relativeTolerance ?? 0, ...(value.printed ? { printed: value.printed } : {}), ...(value.toleranceReason ? { toleranceReason: value.toleranceReason } : {}) }])) },
