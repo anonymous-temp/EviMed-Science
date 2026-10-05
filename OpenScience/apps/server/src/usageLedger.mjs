@@ -27,8 +27,13 @@ const openCostWindowValues = new Set(Object.values(openCostWindows));
  *  caps, the feed would spend their research allowance, and their research
  *  would starve the feed. 「循证 GEO」's rows (`geo`) are the same: the
  *  platform parsing and judging measured answers on its own schedule, held by
- *  the module's own daily budget. Bound as a query parameter, never spliced. */
-export const UNCAPPED_USAGE_PURPOSES = Object.freeze(["engine", "frontier", "geo", "vcr", "evolution"]);
+ *  the module's own daily budget. So are the evidence programme's (`evidence`,
+ *  2026-10-05): the publisher account's own research, held by its own daily
+ *  budget (`evidenceBudget.mjs`). `evidence-upkeep` is deliberately NOT here:
+ *  it is an account's own zone kept current, booked to that account, counted
+ *  against its caps and charged to it. Bound as a query parameter, never
+ *  spliced. */
+export const UNCAPPED_USAGE_PURPOSES = Object.freeze(["engine", "frontier", "geo", "vcr", "evolution", "evidence"]);
 const placeholderPattern = /^\$[1-9][0-9]*$/;
 
 /**
@@ -763,6 +768,35 @@ export class UsageLedger {
         costCny: Number(row?.cost ?? 0),
       };
     });
+  }
+
+  /**
+   * What one purpose has cost one project since `since`: settled cost, plus what is still reserved or uncertain
+   * at the bound its client recorded — the rule the account caps use (`OPEN_COST_VALUE`), so a burst of lost
+   * calls priced at the reservation ceiling cannot spend a day's budget on money nobody was charged. The sum a
+   * module's own daily budget gates on (`evidenceBudget.mjs`, the frontier pipeline's `budget()`).
+   * `until`, when given, closes the window (exclusive): a day's budget read at an injected instant — a test's, a replay's —
+   * must not count rows written after that day. Absent, the window is open-ended, as the frontier pipeline's is.
+   * @param {{ userId: string, projectId: string, purpose: string, since: Date, until?: Date | null }} input
+   * @returns {Promise<number>} CNY, to 4 decimals
+   */
+  async purposeSpend({ userId, projectId, purpose, since, until = null }) {
+    if (!isUsagePurpose(purpose)) throw new HttpError(400, "usage_payload_invalid", "Invalid usage purpose.");
+    const at = instant(since, "spend window start");
+    const end = until == null ? null : instant(until, "spend window end");
+    await migrateUsageLedger(this.database);
+    // Read through to_jsonb so a database whose usage migration has not yet added `estimated_cost` still answers,
+    // at the reservation.
+    const result = await this.database.query(`SELECT coalesce(sum(CASE
+        WHEN m.status='settled' THEN coalesce(m.actual_cost, 0)
+        WHEN m.status='reserved' THEN m.reserved_cost
+        WHEN m.status='uncertain' THEN LEAST(m.reserved_cost, coalesce((to_jsonb(m)->>'estimated_cost')::numeric, m.reserved_cost))
+        ELSE 0 END), 0) AS spent
+      FROM evimed_usage.model_requests m
+      WHERE m.user_id=$1 AND m.project_id=$2 AND m.purpose=$3 AND m.created_at >= $4::timestamptz
+        AND ($5::timestamptz IS NULL OR m.created_at < $5::timestamptz)`,
+    [productId(userId, "user"), productId(projectId, "project"), purpose, at, end]);
+    return Math.round(Number(result.rows[0]?.spent ?? 0) * 10_000) / 10_000;
   }
 
   /** Refuse a new interactive entry point that is already at its configured limit. */

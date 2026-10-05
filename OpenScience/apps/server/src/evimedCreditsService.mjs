@@ -113,11 +113,13 @@ const finite = (value) => {
  * therefore scrubbed rather than trusted: control characters and runs of
  * whitespace collapse, and a subject that is only an identifier is dropped in
  * favour of the line alone.
- * @param {{ capabilityId?: string | null, subject?: string | null, effectiveAgentId?:string|null, automated?:boolean, startedAt?:string|null, finishedAt?:string|null, accountCreatedAt?:string|null }} run
+ * `statementLine` names the line for work that is not a capability's run — the upkeep of an account's own
+ * evidence zone, billed to it (`evidenceEditorial.mjs`) — so that it never reads as 「深度研究」.
+ * @param {{ capabilityId?: string | null, subject?: string | null, statementLine?: string | null, effectiveAgentId?:string|null, automated?:boolean, startedAt?:string|null, finishedAt?:string|null, accountCreatedAt?:string|null }} run
  * @returns {string}
  */
-export function settlementMemo({ capabilityId = null, subject = null } = {}) {
-  const line = capabilityTitle(capabilityId) ?? DEFAULT_LINE;
+export function settlementMemo({ capabilityId = null, subject = null, statementLine = null } = {}) {
+  const line = (typeof statementLine === "string" && statementLine.trim() ? statementLine.trim() : null) ?? capabilityTitle(capabilityId) ?? DEFAULT_LINE;
   // eslint-disable-next-line no-control-regex -- a title can arrive with a stray control character
   const cleaned = String(subject ?? "").replace(/[\u0000-\u001f\u007f]+/g, " ").replace(/\s+/g, " ").trim();
   const named = /^[A-Za-z0-9_.:-]+$/.test(cleaned) ? "" : cleaned;

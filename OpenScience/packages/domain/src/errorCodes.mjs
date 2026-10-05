@@ -1476,6 +1476,20 @@ export const EVIMED_CREDITS_ROUTE_ERROR_CODES = Object.freeze([
 ])
 
 /**
+ * Codes the platform publisher account and the upkeep of an evidence zone answer with
+ * (evidence-flywheel plan §3.3, B2, B6). `platform_account_protected` is a deletion or an export of
+ * the publisher account refused by name; `platform_account_reserved` is a registration or a
+ * display name that would pass for it; `evidence_upkeep_no_allowance` is the reason an upkeep job of
+ * an account's own zone was set aside — the account has no allowance to pay for it, and the
+ * platform never pays in its place — which the owner reads on the zone's update settings.
+ */
+export const EVIDENCE_PLATFORM_ERROR_CODES = Object.freeze([
+  'platform_account_protected',
+  'platform_account_reserved',
+  'evidence_upkeep_no_allowance',
+])
+
+/**
  * Every code this build knows, so a mapping test can prove a new code was
  * classified rather than silently inheriting a default.
  *
@@ -1519,6 +1533,7 @@ export const ALL_ERROR_CODES = Object.freeze([...new Set([
   ...VCR_PROTOCOL_ISSUE_CODES,
   ...VCR_ENGINE_ISSUE_CODES,
   ...EVIMED_CREDITS_ROUTE_ERROR_CODES,
+  ...EVIDENCE_PLATFORM_ERROR_CODES,
 ])])
 
 /**
@@ -1929,6 +1944,10 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   credit_grant_conflict: '这个请求编号已经用于另一笔不同的赠送，没有重复入账。换一个请求编号再试。',
   credit_grant_account_not_found: '没有找到这个账户，这笔赠送没有入账。',
   credit_statement_not_found: '没有找到这一条流水。',
+  // The platform's publishing account and the upkeep of an account's own zone (2026-10-05).
+  platform_account_protected: '这是平台出版方账号，不能删除或导出。',
+  platform_account_reserved: '这个账号名或显示名留给平台出版方，请换一个。',
+  evidence_upkeep_no_allowance: '科研额度不足，这个专区的 AI 更新先放着，充值后会自动继续；平台不会替你付这笔费用。',
   usage_metering_unavailable: '计量暂时不可用，本次用量稍后补记。',
   illegal_state_transition: '状态变更不合法，已拒绝。',
 
@@ -2369,6 +2388,11 @@ const ERROR_CODE_OUTCOMES = Object.freeze({
   credit_grant_conflict: 'upstream',
   credit_grant_account_not_found: 'upstream',
   credit_statement_not_found: 'upstream',
+  // A refusal of one operation on the publisher account, and a name it keeps for itself: about the
+  // account, never a verdict on work. The upkeep that waits for an allowance is a ceiling.
+  platform_account_protected: 'upstream',
+  platform_account_reserved: 'upstream',
+  evidence_upkeep_no_allowance: 'capped',
 })
 
 /**

@@ -104,9 +104,10 @@ END $default_project_name$;
 -- 2026-09-27: 'subject' is the account an integration key makes for one person
 -- behind an institution (agentApiKeys.mjs, subjectAccount) — no password, no
 -- identity provider, reached only through that institution's key.
+-- 2026-10-05: 'platform' is the one account that belongs to no person (below).
 ALTER TABLE ${schema}.users DROP CONSTRAINT IF EXISTS users_auth_type_check;
 ALTER TABLE ${schema}.users ADD CONSTRAINT users_auth_type_check
-  CHECK (auth_type IN ('local', 'oidc', 'development', 'evimed', 'subject'));
+  CHECK (auth_type IN ('local', 'oidc', 'development', 'evimed', 'subject', 'platform'));
 
 INSERT INTO ${schema}.schema_migrations(version) VALUES (3)
 ON CONFLICT (version) DO NOTHING;
@@ -126,6 +127,48 @@ ALTER TABLE ${schema}.users ADD CONSTRAINT users_evimed_user_id_check
   CHECK (evimed_user_id IS NULL OR (auth_type = 'evimed' AND char_length(evimed_user_id) BETWEEN 1 AND 128));
 
 INSERT INTO ${schema}.schema_migrations(version) VALUES (4)
+ON CONFLICT (version) DO NOTHING;
+
+-- 2026-10-05 (evidence-flywheel plan §3.3, B2). The platform's own publishing
+-- account, 「EviMed 证据中心」: the owner of every official evidence zone and of
+-- the platform programme's internal project. Until now the official zones were
+-- owned by whichever operator the importer named, and the zone and card tables
+-- reference the account with ON DELETE CASCADE, so deleting that person deleted
+-- the platform's published evidence with them.
+--
+-- It cannot sign in or be reached by any credential: no password, no identity
+-- provider, an auth type of its own that every sign-in path refuses
+-- (store.mjs), and two constraints that keep the rule where code cannot forget
+-- it — only this id may have that type, and this id may have no other type, so
+-- a registration, an OIDC subject or an integration key that arrived at the same
+-- id is refused by the database. The id and the name are the domain's
+-- (@evimed/domain platformAccount.mjs), written here once because this SQL runs
+-- before any code can; the test that holds them together is
+-- platformPublisherAccount.integration.test.mjs.
+--
+-- Idempotent, and safe on a database that already holds release data: a row
+-- already there with this id and any other type is a person who registered it
+-- first, and that is named rather than overwritten — the migration stops with
+-- platform_account_id_taken and the deployment says why it is not ready.
+DO $platform_account$
+BEGIN
+  IF EXISTS (SELECT 1 FROM ${schema}.users WHERE lower(id) = 'evimed-evidence-center' AND auth_type <> 'platform') THEN
+    RAISE EXCEPTION 'platform_account_id_taken: an account already holds the platform publisher id'
+      USING ERRCODE = '23514';
+  END IF;
+END $platform_account$;
+ALTER TABLE ${schema}.users DROP CONSTRAINT IF EXISTS users_platform_account_check;
+ALTER TABLE ${schema}.users ADD CONSTRAINT users_platform_account_check
+  CHECK (CASE WHEN auth_type = 'platform'
+    THEN id = 'evimed-evidence-center' AND password_hash IS NULL
+    ELSE lower(id) <> 'evimed-evidence-center' END);
+INSERT INTO ${schema}.users(id, name, password_hash, auth_type)
+VALUES ('evimed-evidence-center', 'EviMed 证据中心', NULL, 'platform')
+ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, updated_at = now()
+  WHERE ${schema}.users.auth_type = 'platform' AND ${schema}.users.name <> EXCLUDED.name;
+DELETE FROM ${schema}.deleted_users WHERE id = 'evimed-evidence-center';
+
+INSERT INTO ${schema}.schema_migrations(version) VALUES (5)
 ON CONFLICT (version) DO NOTHING;
 `;
 
@@ -353,8 +396,9 @@ export class ControlPlaneDatabase {
 
 export const CONTROL_PLANE_SCHEMA = schema;
 /** The migration version this build writes last, and the one readiness
- *  requires: 4 since an `evimed` account keeps EviMed's own user id for the
+ *  requires: 5 since the platform publisher account exists (2026-10-05);
+ *  4 since an `evimed` account keeps EviMed's own user id for the
  *  credits client (2026-09-28); 3 was the `evimed` account kind (2026-09-26);
  *  2 was the project archive column and the default-name migration
  *  (2026-09-18). */
-export const CONTROL_PLANE_SCHEMA_VERSION = 4;
+export const CONTROL_PLANE_SCHEMA_VERSION = 5;

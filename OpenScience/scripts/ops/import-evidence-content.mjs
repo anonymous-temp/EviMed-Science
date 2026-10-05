@@ -4,6 +4,7 @@ import { randomBytes, createHash } from 'node:crypto';
 import { readFile, realpath } from 'node:fs/promises';
 import { resolve, relative, isAbsolute } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { PLATFORM_ACCOUNT_AUTH_TYPE, PLATFORM_PUBLISHER_USER_ID } from '@evimed/domain';
 import { loadConfig } from '../../apps/server/src/config.mjs';
 import { createStore } from '../../apps/server/src/store.mjs';
 import { EvidenceZoneService, evidenceSourceUrl } from '../../apps/server/src/evidenceZoneService.mjs';
@@ -87,27 +88,88 @@ export async function prepareEvidenceImport({ seedFile = resolve(contentDirector
   return { zones, cards, review, sourceCount: retained.size };
 }
 
-/** Preflight every existing row before actor creation or content mutation. */
-export async function applyEvidenceImport(prepared, { store, ownerId, expectedRevisions = {}, enableUpdates = false }) {
+/** The columns the platform's official marking adds (`evidence_zones.kind`) exist in this build's database. */
+const hasKindColumn = async db => (await db.query("SELECT 1 FROM information_schema.columns WHERE table_schema='evimed_frontier' AND table_name='evidence_zones' AND column_name='kind'")).rowCount > 0;
+
+/**
+ * Where an earlier import put a seed row: the id its owner and request identity derive (`stableId`). The zone and
+ * card ids derive from the owner that created them, so rows an operator account created keep that account's
+ * derivation after they are moved to the publisher (their ids are in people's links and follows and are never
+ * rewritten); a later import must still find them, which the operator that created them names in `fromOwners`.
+ * @param {string} prefix @param {string} requestId @param {string[]} owners publisher first
+ */
+const candidateIds = (prefix, requestId, owners) => [...new Set(owners.map(owner => stableId(prefix, owner, requestId)))];
+
+/**
+ * Move the official zones an earlier import created under an operator account to the platform publisher account
+ * (evidence-flywheel plan §3.3, B2), and mark them `kind = 'official'`. The zones and cards reference their owner
+ * with ON DELETE CASCADE, so until this ran, deleting that operator deleted the platform's published evidence.
+ *
+ * Moves the owner column of each seed zone's row (found by the id its earlier owner derived) and of all its cards,
+ * and nothing else: cards, revisions, automation, follows, comments, reviews and feedback are keyed by the rows'
+ * own ids and stay exactly as they were. Ids are not rewritten, so every link and follow keeps working. One
+ * transaction; idempotent (a zone already owned by the publisher is left, and only its marking is made good); callable
+ * from a migration helper because it needs a database and the seed's request identities, nothing else.
+ *
+ * @param {any} database a `ControlPlaneDatabase`
+ * @param {{ zoneRequestIds: string[], fromOwners: string[], publisherId?: string }} input
+ * @returns {Promise<{ zonesMoved: number, cardsMoved: number, zonesMarked: number, zonesFound: number }>}
+ */
+export async function reownImportedZones(database, { zoneRequestIds, fromOwners, publisherId = PLATFORM_PUBLISHER_USER_ID }) {
+  check(Array.isArray(zoneRequestIds) && zoneRequestIds.length && Array.isArray(fromOwners) && fromOwners.length, 'Re-owning needs the seed zones and the account that imported them.');
+  await database.migrate();
+  const publisher = (await database.query('SELECT id,auth_type FROM evimed_control.users WHERE id=$1', [publisherId])).rows[0];
+  check(publisher?.auth_type === PLATFORM_ACCOUNT_AUTH_TYPE, 'The platform publisher account does not exist; start the control plane once so its migration runs.');
+  const service = new EvidenceZoneService({ database }); await service.ready();
+  const ids = [...new Set(zoneRequestIds.flatMap(requestId => candidateIds('ez', request(requestId), fromOwners)))];
+  const kind = await hasKindColumn(database);
+  return database.transaction(async client => {
+    const found = (await client.query('SELECT id,user_id FROM evimed_frontier.evidence_zones WHERE id=ANY($1::text[]) ORDER BY id FOR UPDATE', [ids])).rows;
+    const toMove = found.filter(zone => zone.user_id !== publisherId).map(zone => zone.id);
+    const zones = toMove.length ? (await client.query('UPDATE evimed_frontier.evidence_zones SET user_id=$2 WHERE id=ANY($1::text[])', [toMove, publisherId])).rowCount : 0;
+    const cards = toMove.length ? (await client.query('UPDATE evimed_frontier.evidence_cards SET user_id=$2 WHERE zone_id=ANY($1::text[]) AND user_id<>$2', [toMove, publisherId])).rowCount : 0;
+    const marked = kind && found.length ? (await client.query("UPDATE evimed_frontier.evidence_zones SET kind='official' WHERE id=ANY($1::text[]) AND kind IS DISTINCT FROM 'official'", [found.map(zone => zone.id)])).rowCount : 0;
+    // Readers' lists are cached against this version.
+    if (toMove.length || marked) await service.bump(client);
+    return { zonesFound: found.length, zonesMoved: zones, cardsMoved: cards, zonesMarked: marked };
+  });
+}
+
+/**
+ * Preflight every existing row before actor creation or content mutation. The content is imported as the platform
+ * publisher account (`PLATFORM_PUBLISHER_USER_ID`), whatever account ran the script; the zones it imports are the platform's
+ * official zones (`kind = 'official'`). `fromOwners` are the operator accounts an earlier import ran as, whose zones
+ * `reownImportedZones` moved (or this run moves first) and whose ids a later import still has to find.
+ */
+export async function applyEvidenceImport(prepared, { store, expectedRevisions = {}, enableUpdates = false, fromOwners = [], legacyHints = [] }) {
   check(prepared.review, '--apply requires an independent --review-file.');
-  check(store.stateStoreKind === 'postgres' && ownerId, 'Apply requires PostgreSQL and an existing owner.');
+  check(store.stateStoreKind === 'postgres', 'Apply requires PostgreSQL.');
   const db = store.database;
   await db.migrate();
-  const owner = (await db.query('SELECT id,name FROM evimed_control.users WHERE id=$1', [ownerId])).rows[0];
-  check(owner, 'Existing owner was not found.');
+  const owner = (await db.query('SELECT id,name,auth_type FROM evimed_control.users WHERE id=$1', [PLATFORM_PUBLISHER_USER_ID])).rows[0];
+  check(owner?.auth_type === PLATFORM_ACCOUNT_AUTH_TYPE, 'The platform publisher account does not exist; start the control plane once so its migration runs.');
   const service = new EvidenceZoneService({ database: db }); await service.ready();
+  const owners = [owner.id, ...fromOwners.filter(id => id !== owner.id)];
   const operations = [];
   for (const zone of prepared.zones) {
-    const id = stableId('ez', owner.id, zone.payload.requestId);
-    const current = (await db.query('SELECT * FROM evimed_frontier.evidence_zones WHERE id=$1', [id])).rows[0];
+    // Found under any id a seed owner derived, owned by the publisher: a zone moved from an operator keeps its id.
+    const found = (await db.query('SELECT * FROM evimed_frontier.evidence_zones WHERE id=ANY($1::text[]) AND user_id=$2 ORDER BY (id=$3) DESC,id', [candidateIds('ez', zone.payload.requestId, owners), owner.id, stableId('ez', owner.id, zone.payload.requestId)])).rows;
+    const id = found[0]?.id ?? stableId('ez', owner.id, zone.payload.requestId);
+    const current = found[0];
+    // A zone an earlier import created and nobody has moved yet would be imported a second time, beside it.
+    const unmoved = (await db.query('SELECT user_id FROM evimed_frontier.evidence_zones WHERE id=ANY($1::text[]) AND user_id<>$2', [candidateIds('ez', zone.payload.requestId, [...new Set([...fromOwners, ...legacyHints])]), owner.id])).rows[0];
+    check(!unmoved, `Zone ${zone.key} is still owned by ${unmoved?.user_id}; run with --reown-from ${unmoved?.user_id} to move it to the platform publisher account first.`);
+    // A zone of this title that is the publisher's but is nobody's seed identity would be imported a second time, beside it.
+    if (!current) check(!(await db.query('SELECT 1 FROM evimed_frontier.evidence_zones WHERE user_id=$1 AND title=$2', [owner.id, zone.payload.title])).rowCount, `Zone ${zone.key} exists under another identity; pass --reown-from with the account that imported it.`);
     const same = current && ['title', 'description', 'background', 'state'].every(key => current[key] === zone.payload[key]);
     if (current && !same) check(expectedRevisions.zones?.[zone.key] === current.revision, `Zone ${zone.key} changed; provide its expected revision.`);
     operations.push({ type: 'zone', item: zone, id, current, same });
   }
   for (const card of prepared.cards) {
     const zone = operations.find(op => op.type === 'zone' && op.item.key === card.zoneKey);
-    const id = stableId('ec', owner.id, card.payload.requestId);
-    const current = (await db.query('SELECT * FROM evimed_frontier.evidence_cards WHERE id=$1', [id])).rows[0];
+    const known = (await db.query('SELECT * FROM evimed_frontier.evidence_cards WHERE id=ANY($1::text[]) ORDER BY (id=$2) DESC,id', [candidateIds('ec', card.payload.requestId, owners), stableId('ec', owner.id, card.payload.requestId)])).rows;
+    const id = known[0]?.id ?? stableId('ec', owner.id, card.payload.requestId);
+    const current = known[0];
     check(!current || current.zone_id === zone.id, 'Card identity belongs to a different zone.');
     const same = current && evidenceContentHash(current) === card.contentHash && current.editorial?.status === 'ai-reviewed' && current.editorial.contentHash === card.contentHash;
     if (current && !same) check(expectedRevisions.cards?.[card.key] === current.revision, `Card ${card.key} changed; provide its expected revision.`);
@@ -135,6 +197,14 @@ export async function applyEvidenceImport(prepared, { store, ownerId, expectedRe
       result[operation.current ? 'cardsUpdated' : 'cardsCreated']++;
     }
   }
+  // The zones this import maintains are the platform's own. Where the build has no marking yet (`evidence_zones.kind`)
+  // nothing is lost: the publisher's ownership already makes a zone official (`isOfficialZone`), and the marking is made
+  // good the next time the script runs.
+  if (await hasKindColumn(db)) {
+    const marked = await db.query("UPDATE evimed_frontier.evidence_zones SET kind='official' WHERE id=ANY($1::text[]) AND user_id=$2 AND kind IS DISTINCT FROM 'official'", [operations.filter(op => op.type === 'zone').map(op => op.id), owner.id]);
+    result.zonesMarked = marked.rowCount;
+    if (marked.rowCount) await service.bump(db);
+  } else result.zonesMarked = 0;
   if (enableUpdates) {
     const editorial = new EvidenceEditorial({ database: db, service, editor: { available: false }, readSource: null });
     for (const operation of operations.filter(op => op.type === 'zone')) {
@@ -150,7 +220,7 @@ export async function applyEvidenceImport(prepared, { store, ownerId, expectedRe
 }
 
 export async function main(argv = process.argv.slice(2)) {
-  const flags = new Set(['--apply', '--enable-updates']), values = new Set(['--owner', '--source-dir', '--review-file', '--seed-file', '--manifest-file', '--expected-revisions']);
+  const flags = new Set(['--apply', '--enable-updates']), values = new Set(['--owner', '--source-dir', '--review-file', '--seed-file', '--manifest-file', '--expected-revisions', '--reown-from']);
   const args = {};
   for (let index = 0; index < argv.length; index++) {
     const key = argv[index];
@@ -159,15 +229,25 @@ export async function main(argv = process.argv.slice(2)) {
     args[key] = flags.has(key) ? true : argv[++index];
     check(args[key] && (flags.has(key) || !String(args[key]).startsWith('--')), 'Missing import option value.');
   }
+  // The import runs as the platform's publishing account, never as a person: the zones it makes belong to no one whose
+  // deletion could take them away (plan §3.3). The old flag is accepted so a recorded command line still runs.
+  if (args['--owner']) console.error(`Notice: --owner is ignored. The import runs as the platform publisher account (${PLATFORM_PUBLISHER_USER_ID}); use --reown-from <account> to move zones an earlier import created under that account.`);
+  const fromOwners = args['--reown-from'] ? String(args['--reown-from']).split(',').map(id => id.trim()).filter(Boolean) : [];
+  check(!args['--reown-from'] || fromOwners.length, 'Missing --reown-from account.');
   const prepared = await prepareEvidenceImport({ seedFile: args['--seed-file'], manifestFile: args['--manifest-file'], sourceDirectory: args['--source-dir'], reviewFile: args['--review-file'] });
-  const plan = { dryRun: !args['--apply'], zoneCount: prepared.zones.length, cardCount: prepared.cards.length, sourceCount: prepared.sourceCount, independentReviewValidated: Boolean(prepared.review), cards: prepared.cards.map(card => ({ key: card.key, contentHash: card.contentHash })) };
+  const plan = { dryRun: !args['--apply'], publisher: PLATFORM_PUBLISHER_USER_ID, reownFrom: fromOwners, zoneCount: prepared.zones.length, cardCount: prepared.cards.length, sourceCount: prepared.sourceCount, independentReviewValidated: Boolean(prepared.review), cards: prepared.cards.map(card => ({ key: card.key, contentHash: card.contentHash })) };
   if (!args['--apply']) { console.log(JSON.stringify(plan, null, 2)); return plan; }
-  check(args['--owner'] && args['--review-file'], '--apply requires --owner and --review-file.');
+  check(args['--review-file'] || fromOwners.length, '--apply requires --review-file (to import) or --reown-from (to move the zones an earlier import created).');
   const expectedRevisions = args['--expected-revisions'] ? await json(args['--expected-revisions']) : {};
   const config = loadConfig(); check(config.stateStore === 'postgres', 'Apply requires the deployed PostgreSQL store.');
   const store = createStore(config);
-  try { const result = await applyEvidenceImport(prepared, { store, ownerId: args['--owner'], expectedRevisions, enableUpdates: Boolean(args['--enable-updates']) }); console.log(JSON.stringify(result, null, 2)); return result; }
-  finally { await store.close(); }
+  try {
+    // Moving first, so the import below finds the earlier zones under their old ids instead of making them a second time.
+    const reowned = fromOwners.length ? await reownImportedZones(store.database, { zoneRequestIds: prepared.zones.map(zone => zone.payload.requestId), fromOwners }) : null;
+    const imported = args['--review-file'] ? await applyEvidenceImport(prepared, { store, expectedRevisions, enableUpdates: Boolean(args['--enable-updates']), fromOwners, legacyHints: config.operatorUsers ?? [] }) : null;
+    const result = { ...(imported ?? {}), ...(reowned ? { reowned } : {}) };
+    console.log(JSON.stringify(result, null, 2)); return result;
+  } finally { await store.close(); }
 }
 if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
   main().catch(error => { console.error(error.code === 'ERR_ASSERTION' ? error.message : error.code ?? 'Evidence import failed.'); process.exitCode = 1; });

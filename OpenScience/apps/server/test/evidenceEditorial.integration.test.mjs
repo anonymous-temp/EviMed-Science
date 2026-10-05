@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { before, after, beforeEach, test } from "node:test";
+import { PLATFORM_PUBLISHER_USER_ID } from "@evimed/domain";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { EvidenceZoneService } from "../src/evidenceZoneService.mjs";
 import { EvidenceEditorial } from "../src/evidenceEditorial.mjs";
@@ -23,7 +24,9 @@ let isolated,
   document,
   authorCalls,
   reviewCalls;
-const user = { id: "editorial-owner" };
+// The zones these tests keep current are the platform's own: the publisher account's (evidence-flywheel B6, 2026-10-05). An account's
+// own zone is billed to its owner and does not touch the frontier budget these cases are about (`evidenceUpkeepBilling.integration.test.mjs`).
+const user = { id: PLATFORM_PUBLISHER_USER_ID };
 const identity = { kind: "ai", name: "Test AI editor", model: "test-model" };
 before(async () => {
   if (!url) return;
@@ -34,10 +37,6 @@ before(async () => {
     databaseConnectionTimeoutMs: 2000,
   });
   await migrateFrontier(db, { dimension: 1024 });
-  await db.query(
-    "INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'Editorial Owner','development')",
-    [user.id],
-  );
   service = new EvidenceZoneService({ database: db });
   await service.ready();
 });

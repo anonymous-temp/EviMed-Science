@@ -6,6 +6,7 @@ import { parseAsOf } from "./memoryValidity.mjs";
 import { HttpError, readJson, sendJson } from "./security.mjs";
 import { assertAgentSubject } from "./agentApiKeys.mjs";
 import { agentMemoryOpenApi } from "./agentMemoryOpenApi.mjs";
+import { isPlatformAccount } from "./platformAccount.mjs";
 
 /**
  * The memory API an agent that is not ours calls.
@@ -129,7 +130,8 @@ export function createAgentMemoryRoutes({
     const token = /^Bearer ([^\s]+)$/.exec(String(req.headers.authorization ?? ""))?.[1];
     const identity = await apiKeys.resolve(token);
     const keyAccount = await store.userById(identity.userId);
-    if (!keyAccount) throw new HttpError(401, "agent_key_invalid", "The API key is not valid.");
+    // A key that resolves to the platform's publishing account is no key: nothing speaks for that account.
+    if (!keyAccount || isPlatformAccount(keyAccount)) throw new HttpError(401, "agent_key_invalid", "The API key is not valid.");
 
     const now = Date.now();
     for (const [key, window] of windows) if (window.until <= now) windows.delete(key);

@@ -124,7 +124,10 @@ export function allowanceWaitingSentence(stepName, waiting) {
 }
 
 export const RESEARCH_MONEY_SCALE = 100_000_000n;
-export const RESEARCH_BILLABLE_PURPOSES = Object.freeze(['kernel', 'engine', 'review', 'web-search']);
+// `evidence-upkeep` (2026-10-05): what an account's own evidence zone costs to keep current is the
+// account's, so its model calls are billed like a run's. The platform's own `evidence` and `frontier`
+// are not in the list: they are overhead the platform carries.
+export const RESEARCH_BILLABLE_PURPOSES = Object.freeze(['kernel', 'engine', 'review', 'web-search', 'evidence-upkeep']);
 
 /** Parse exact nonnegative decimal money; never silently round input.
  * @param {string | number} value @returns {bigint} */
