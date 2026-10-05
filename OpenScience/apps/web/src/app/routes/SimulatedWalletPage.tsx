@@ -6,13 +6,13 @@ import {
   fetchWebSimulatedOrders, topUpWebSimulatedWallet, webErrorMessage,
   type WebResearchAllowance, type WebSimulatedOrders, type WebSimulatedTopUp,
 } from "@/lib/apiClient";
-import { formatCny, formatDateTime } from "@/lib/format";
+import { formatDateTime } from "@/lib/format";
 import { useResearchBilling } from "@/lib/useResearchBilling";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
 import { RunsSkeleton } from "@/components/cards/Skeletons";
 import { PageShell } from "@/components/layout/PageShell";
-import { AllowanceAmount, SimulatedDataLine, SimulatedMark } from "@/components/settings/SimulatedAllowance";
+import { AllowanceAmount, SimulatedDataLine, SimulatedMark, allowanceText } from "@/components/settings/SimulatedAllowance";
 import { Button, buttonClasses } from "@/components/ui/Button";
 import { List, ListRow } from "@/components/ui/ListRow";
 import { Panel, PanelRow } from "@/components/ui/Panel";
@@ -168,7 +168,7 @@ function Recharge({ allowance, toppedUp, onToppedUp }: {
       {toppedUp && (
         <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-2 text-ui text-text">
           <SimulatedMark />
-          <span>{toppedUp.duplicate ? "这笔模拟充值此前已经入账，没有重复入账。" : `模拟充值 ${formatCny(toppedUp.order.amount)} 已入账。`}</span>
+          <span>{toppedUp.duplicate ? "这笔模拟充值此前已经入账，没有重复入账。" : `模拟充值 ${allowanceText(toppedUp.order.amount, "nearest")} 已入账。`}</span>
           <Link to={SIMULATED_WALLET_PAGES.orders} className={buttonClasses({ variant: "secondary", size: "sm" })}>查看模拟订单</Link>
         </div>
       )}
@@ -238,7 +238,7 @@ function Orders() {
                     <SimulatedMark />
                     <div className="min-w-20 text-right text-ui">
                       <span className="block text-text-2">已入账</span>
-                      <span className="tabular-nums">{formatCny(order.amount) || "暂不可用"}</span>
+                      <span className="tabular-nums">{allowanceText(order.amount, "nearest") || "暂不可用"}</span>
                     </div>
                   </>
                 )}

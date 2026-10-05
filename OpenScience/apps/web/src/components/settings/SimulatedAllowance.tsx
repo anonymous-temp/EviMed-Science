@@ -1,9 +1,8 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router";
-import { SIMULATED_WALLET_LABEL } from "@evimed/domain";
-import type { WebResearchAllowance } from "@/lib/apiClient";
+import { SIMULATED_WALLET_LABEL, formatCredits } from "@evimed/domain";
+import type { WebAmount, WebResearchAllowance } from "@/lib/apiClient";
 import { cn } from "@/lib/cn";
-import { formatCny } from "@/lib/format";
 import { allowanceSimulated } from "@/lib/useResearchBilling";
 import { buttonClasses } from "@/components/ui/Button";
 import { Tag } from "@/components/ui/Tag";
@@ -37,13 +36,31 @@ export function SimulatedDataLine({ className }: { className?: string }) {
  * One amount of an allowance, for the value side of a row. Marked when the
  * wallet behind it is simulated; an amount that is not there is said so —
  * never drawn as zero — and has nothing to mark.
+ *
+ * Drawn by the domain's one display rule (`formatCredits`: two decimals, a small
+ * amount with its first two significant digits and never as 0.00). What is held is
+ * drawn rounded down, so a page never shows more than the account has; pass
+ * `rounding="nearest"` for a charge.
  */
-export function AllowanceAmount({ value, simulated, className }: { value: number | null | undefined; simulated: boolean; className?: string }) {
-  const text = formatCny(value);
+export function AllowanceAmount({ value, simulated, className, rounding = "down", sign = "" }: {
+  value: WebAmount | null | undefined;
+  simulated: boolean;
+  className?: string;
+  rounding?: "down" | "nearest";
+  /** "+" for credits going in, "−" for credits going out. */
+  sign?: "" | "+" | "−";
+}) {
+  const text = allowanceText(value, rounding);
   return <>
     {simulated && text && <SimulatedMark />}
-    <span className={cn("tabular-nums", className)}>{text || "暂不可用"}</span>
+    <span className={cn("tabular-nums", className)}>{text ? `${sign}${text}` : "暂不可用"}</span>
   </>;
+}
+
+/** An amount as the allowance pages draw it (¥12.30), or '' for a value that is not one. */
+export function allowanceText(value: WebAmount | null | undefined, rounding: "down" | "nearest" = "down"): string {
+  const text = value === null || value === undefined || (typeof value === "number" && value < 0) ? "" : formatCredits(value, { rounding });
+  return text ? `¥${text}` : "";
 }
 
 /**
@@ -82,8 +99,16 @@ export function CommerceLink({ href, className, children }: { href: string; clas
 export function simulatedAllowanceLevel(allowance: WebResearchAllowance | null): "low" | "exhausted" | null {
   if (!allowance || !allowanceSimulated(allowance)) return null;
   const { available, lowThreshold } = allowance;
-  if (typeof available !== "number" || typeof lowThreshold !== "number" || available > lowThreshold) return null;
-  return available <= 0 ? "exhausted" : "low";
+  if (available === null || available === undefined) return null;
+  // Where low begins is the control plane's to say — in exact units (`low`), or by the threshold an older one names. With
+  // neither there is nothing to measure against, and nobody is told their allowance is running out on a guess.
+  const low = typeof allowance.low === "boolean" ? allowance.low
+    : typeof lowThreshold === "number" && typeof available === "number" ? available <= lowThreshold : null;
+  if (low === null) return null;
+  // Nothing left is a fact of the amount itself: 0.00 is only ever drawn for a true zero (`formatCredits`).
+  const none = formatCredits(available) === "0.00";
+  if (!low && !none) return null;
+  return none ? "exhausted" : "low";
 }
 
 /**
@@ -104,7 +129,7 @@ export function SimulatedAllowanceNotice({ allowance, className }: { allowance: 
     >
       <SimulatedMark />
       <span className="min-w-0 flex-1 break-words">
-        {level === "exhausted" ? "科研额度已用完，模拟充值后可以继续研究。" : `科研额度即将用完，还剩 ${formatCny(allowance.available)}。`}
+        {level === "exhausted" ? "科研额度已用完，模拟充值后可以继续研究。" : `科研额度即将用完，还剩 ${allowanceText(allowance.available)}。`}
       </span>
       {recharge && <CommerceLink href={recharge} className={buttonClasses({ variant: "secondary", size: "sm" })}>去模拟充值</CommerceLink>}
     </div>

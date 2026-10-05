@@ -132,6 +132,14 @@ describe("用量 on a deployment without research billing", () => {
     expect(screen.queryByText(/token/)).not.toBeInTheDocument();
   });
 
+  it("names the month in Asia/Shanghai: a month that began at 16:00Z the evening before is the new month", async () => {
+    // The server opens the month at 00:00 on its first day in Shanghai, which is 16:00Z on the last day of the one before.
+    mocks.usage.mockResolvedValue({ ...summary, since: "2026-10-31T16:00:00.000Z", calls: 0, cost: 0, byModel: [], uncertainCalls: 0 });
+    open();
+    expect(await screen.findByText("11 月 · 还没有模型调用")).toBeInTheDocument();
+    expect(screen.queryByText("10 月 · 还没有模型调用")).not.toBeInTheDocument();
+  });
+
   it("says one sentence when the month has no spend", async () => {
     const user = userEvent.setup();
     mocks.usage.mockResolvedValue({ ...summary, calls: 0, cost: 0, byModel: [], uncertainCalls: 0 });
@@ -192,8 +200,8 @@ describe("科研额度 on a deployment that bills research", () => {
     expect(screen.getByText("本月待结算")).toBeInTheDocument();
     expect(screen.getByText("¥1.23")).toBeInTheDocument();
     const rows = within(await screen.findByRole("list", { name: "研究消费记录" })).getAllByRole("listitem");
-    expect(within(rows[0]).getByText("不足 ¥0.01")).toBeInTheDocument();
-    expect(within(rows[1]).getByText("待结算")).toBeInTheDocument();
+    expect(within(rows[0]).getByText("¥0.004")).toBeInTheDocument(); // a charge under a cent is drawn with its first significant digits, never as nothing
+    expect(within(rows[1]).getByText("结算中")).toBeInTheDocument();
     expect(screen.queryByText("¥99.00")).not.toBeInTheDocument(); expect(mocks.usage).not.toHaveBeenCalled();
   });
 

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, Gauge } from "lucide-react";
+import { agendaLocalDate } from "@evimed/domain";
 import {
   describeWebUsageBudget,
   fetchWebAccountUsage,
@@ -64,7 +65,8 @@ export function MonthlyUsage() {
 
   if (detail) return <UsageDetail usage={usage} operator={operator} onBack={() => setDetail(false)} />;
 
-  const month = usage ? new Date(usage.since).getUTCMonth() + 1 : null;
+  // The month is the Asia/Shanghai month (`since` is its first instant), the one every date on these pages is read in.
+  const month = usage ? Number(agendaLocalDate("Asia/Shanghai", usage.since).slice(5, 7)) : null;
   return (
     <div className="space-y-8">
       {budgetRefusal && <p role="status" className="text-ui text-warn-strong">{describeWebUsageBudget(budgetRefusal)}</p>}
