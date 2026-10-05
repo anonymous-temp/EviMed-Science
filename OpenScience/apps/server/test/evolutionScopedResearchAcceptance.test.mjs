@@ -28,6 +28,12 @@ test('fresh independent semantic admission is resumable and positive scoped scor
  const prepared=await prepareScopedResearch(args);assert.equal(prepared.cycleId,'acceptance-scoped-research-meta-v7');assert.equal(await fs.readFile(historical,'utf8'),'immutable historical v6 bytes');assert.equal(prepared.admitted,true);assert.equal(prepared.fullResearchEligible,false);
  const frozen=JSON.parse(await fs.readFile(path.join(evaluationDataDir,'paper-gold/cycles',prepared.cycleId,'definition.json'),'utf8'));
  const c=frozen.definition.cases[0];assert.equal(c.gold.deterministicVerification.entrypoint,'deliverables/paper-gold-analysis/analysis.py:analyze');assert.match(c.input,/producer receipt/);assert.match(c.input,/callable analysis.py itself/);assert.equal(c.rewrite.variants.length,3);assert.equal(frozen.definition.replicates,2);
+ // What the isolated replay reads is frozen with the case and asked for in so many words (live cycle, 2026-10-05: the script froze
+ // no relation, so nothing could verify code; and one unit's callable returned the receipt's fields one level down, where the replay does not look).
+ const {relationIssues}=await import('../../../evals/paper-gold/behavioural.mjs');const relations=c.gold.deterministicVerification.relations;
+ assert.ok(relations.some(row=>row.kind==='scale')&&relations.every(row=>relationIssues(row).length===0));
+ assert.deepEqual(relations.find(row=>row.kind==='permute').outputs,Object.keys(relations.find(row=>row.kind==='scale').outputs));
+ assert.match(c.input,/analyze must return a JSON object that carries those output fields at its top level \(it may carry more\), compute them from its arguments, and write no file\./);
  const unit={numeric:{point:0},exposureTier:'unexposed',checks:{question_aligned:true,method_supported:true,certainty_supported:true,writing_sources_bound:true}},gold={...c.gold,type:'research'};
  const missingProof=await scoreUnit(unit,gold);assert.equal(missingProof.applicableStagesValid,false);assert.equal(missingProof.fullResearchReproductionValid,false);
  let verifications=0;
