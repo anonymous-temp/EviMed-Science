@@ -101,7 +101,9 @@ export function relationIssues(relation) {
   // An iterative estimator satisfies a relation to its convergence, not to rounding error; a relation may say so, within a bound.
   if (relation.relativeTolerance !== undefined && !(isNumber(relation.relativeTolerance) && relation.relativeTolerance > 0 && relation.relativeTolerance <= 1e-3)) issues.push("relation_tolerance_invalid");
   if (relation.kind === "duplicate" && !(patterns(relation.arrays) && outputs(relation.outputs, isNumber))) issues.push("relation_duplicate_invalid");
-  if (relation.kind === "permute" && !(Array.isArray(relation.arrays) && relation.arrays.length > 0 && relation.arrays.every(item => typeof item?.path === "string" && Array.isArray(item.axes) && item.axes.every(axis => axis === 0 || axis === 1)))) issues.push("relation_permute_invalid");
+  // `outputs`, when a permutation names them, are the only leaves it holds still (see `applyRelation`).
+  if (relation.kind === "permute" && !(Array.isArray(relation.arrays) && relation.arrays.length > 0 && relation.arrays.every(item => typeof item?.path === "string" && Array.isArray(item.axes) && item.axes.every(axis => axis === 0 || axis === 1))
+    && (relation.outputs === undefined || patterns(relation.outputs)))) issues.push("relation_permute_invalid");
   if (relation.kind === "relabel" && !(typeof relation.input === "string" && typeof relation.output === "string")) issues.push("relation_relabel_invalid");
   if (relation.kind === "swap" && !(Array.isArray(relation.pairs) && relation.pairs.length > 0 && relation.pairs.every(pair => Array.isArray(pair) && pair.length === 2 && pair.every(item => typeof item === "string")) && outputs(relation.outputs, value => OUTPUT_TRANSFORMS.includes(value)))) issues.push("relation_swap_invalid");
   return issues;
@@ -146,7 +148,15 @@ export function applyRelation(relation, input, random) {
       if (item.axes.includes(1)) { if (next.some(row => !Array.isArray(row) || row.length !== order.length)) return null; next = next.map(row => order.map(index => row[index])); }
       write(transformed, path, next); permuted++;
     }
-    return permuted ? { input: transformed, check: (base, output) => { const leaves = numericLeaves(base); return leaves.length > 0 && leaves.every(([leaf, value]) => behaviourallyEqual(read(output, leaf), value, relative)); } } : null;
+    // What a reordering must leave where it was: the outputs the relation names, or every numeric leaf when it names none.
+    // "Every leaf" is right for a result made only of summaries and wrong for one that also reports its rows in the order
+    // it was given them — per-study weights move with the studies by definition. A delivered meta-analysis that returned
+    // its 37 study rows beside the six pooled statistics failed here with all six unchanged (live cycle, 2026-10-05).
+    const named = Array.isArray(relation.outputs) ? relation.outputs : null;
+    return permuted ? { input: transformed, check: (base, output) => {
+      const leaves = named ? named.flatMap(pattern => expandPath(base, pattern).flatMap(path => numericLeaves(read(base, path), path))) : numericLeaves(base);
+      return leaves.length > 0 && leaves.every(([leaf, value]) => behaviourallyEqual(read(output, leaf), value, relative));
+    } } : null;
   }
   if (relation.kind === "relabel") {
     const [path] = expandPath(transformed, relation.input);
@@ -192,7 +202,7 @@ export function methodRulerRelations(methodId) {
   if (/^faers-ror/.test(methodId)) return [{ kind: "swap", pairs: [["a", "c"], ["b", "d"]], outputs: { ROR: "reciprocal" } }];
   if (/^meta-reml/.test(methodId)) return [
     { kind: "scale", relativeTolerance: 1e-4, inputs: { "studies.*.yi": 1, "studies.*.vi": 2 }, outputs: { pooled_log: 1, ci_lower_log: 1, ci_upper_log: 1, tau_squared: 2, q_statistic: 0, n_studies: 0 } },
-    { kind: "permute", relativeTolerance: 1e-4, arrays: [{ path: "studies", axes: [0] }] }];
+    { kind: "permute", relativeTolerance: 1e-4, arrays: [{ path: "studies", axes: [0] }], outputs: ["pooled_log", "ci_lower_log", "ci_upper_log", "tau_squared", "q_statistic", "n_studies"] }];
   if (/^mr-ivw/.test(methodId)) return [{ kind: "scale", inputs: { by: 1, byse: 1 }, outputs: { estimate: 1, standardError: 1, lower: 1, upper: 1, pValue: 0 } }];
   return [];
 }

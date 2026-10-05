@@ -43,6 +43,20 @@ export function evolutionExecutableOperation(action) {
   if (!EVOLUTION_EXECUTABLE_OPERATIONS.includes(operation)) throw new HttpError(400, 'evolution_action_unsupported', 'This action requires a separately authorized implementation.');
   return operation;
 }
+/**
+ * The record of a candidate that passed nothing more it can pass and waits on validation: one per branch of its dossier.
+ *
+ * A decision is identified by (category, subject, materialVersion). Proposed for the dossier alone, the wait of a second
+ * branch was answered with the first branch's record — already executed, by the very `rescout` that opened the second
+ * branch — so nothing was pending and the operator had no card to answer (live acceptance, 2026-10-05: two waits on one
+ * dossier, one decision). The first branch keeps version 1, which is the id already stored. A resource wait is class D:
+ * never delivered, never executed by expiry, so one per branch re-arms nothing by itself.
+ * @param {{ dossierId: string, decisionActionId?: string | null, goal: string }} wait
+ */
+export function evolutionValidationWait({ dossierId, decisionActionId = null, goal }) {
+  return { category: 'validation-resource', subjectId: dossierId, materialVersion: decisionActionId ?? 1, resourceOnly: true,
+    title: '工具等待独立验证资料', body: goal, options: [{ id: 'wait', label: '等待验证资料' }, { id: 'rescout', label: '重查公开实例' }], recommended: 'wait', conservative: 'wait' };
+}
 /** A configured model name is not a provider receipt. @param {any} config @param {any} result */
 export function evolutionDecisionReviewProof(config,result) {
  const family=/^qwen/i.test(result.model??'')?'qwen':'unknown';

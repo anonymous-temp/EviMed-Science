@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { completedOutputs, sourceToolResult, isTargetBody, captureFullTextBody } from '../../../scripts/ops/evolution-isolation-acceptance.mjs';
+import { completedOutputs, sourceToolResult, isTargetBody, captureFullTextBody, toolErrorCodes } from '../../../scripts/ops/evolution-isolation-acceptance.mjs';
 
 test('live probe parses actual MCP status and both socket envelopes', () => {
   const data = { text: 'PRISMA systematic reviews '.repeat(100) };
@@ -52,4 +52,16 @@ test('full-text capture binds actual managed bytes to tool hash and rejects modi
   assert.equal(await captureFullTextBody({ workspaceDir: workspace }, { data: { ...result.data, contentLevel: 'abstract' } }), null);
   await fs.writeFile(path.join(workspace, 'fulltext.md'), text + 'changed');
   await assert.rejects(captureFullTextBody({ workspaceDir: workspace }, result), /bytes changed/);
+});
+
+test('a blocked control that got no exclusion event says what its source tools were told instead', () => {
+  // The shapes of the 2026-10-05 blocked control's transcript: a gateway refusal by name, an upstream error, a success.
+  const refused = 'Error: {"status":"error","summary":"The public-source gateway is temporarily unavailable.","error":{"code":"evaluation_policy_unreadable","retryable":true}}';
+  const transcript = { messages: [{ role: 'assistant', parts: [
+    { type: 'tool', tool: 'mcp__evimed__web_read', status: 'completed', output: refused },
+    { type: 'tool', tool: 'mcp__evimed__web_read', status: 'completed', output: refused },
+    { type: 'tool', tool: 'mcp__evimed__open_access_full_text', status: 'completed', output: 'Error: {"status":"error","summary":"Europe PMC answered with an error (HTTP 503)."}' },
+    { type: 'tool', tool: 'mcp__evimed__web_search', status: 'completed', output: JSON.stringify({ status: 'ok', data: { hits: [] } }) },
+  ] }] };
+  assert.deepEqual(toolErrorCodes(completedOutputs(transcript)), { evaluation_policy_unreadable: 2, uncoded: 1 });
 });

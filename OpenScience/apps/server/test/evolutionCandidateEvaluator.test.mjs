@@ -24,12 +24,33 @@ test("trusted numeric evaluator calls published callable twice per independent h
     assert.ok(record.calls.every(call => !call.code.includes("absoluteTolerance") && !Object.hasOwn(call.input ?? {}, "numeric")));
     assert.doesNotMatch(JSON.stringify(result), /absoluteTolerance|outputPath|"value"/);
     const unknown = createEvolutionCandidateEvaluator({ config: { dataDir, evaluationDataDir: dataDir }, controller });
-    assert.equal((await unknown.evaluate(candidate, { card: { methodId: "method" } })).ok, false);
+    const unknownResult = await unknown.evaluate(candidate, { card: { methodId: "method" } });
+    assert.equal(unknownResult.ok, false);
+    // A candidate that passed every case and check and waits only on its development chain's exposure says so.
+    assert.deepEqual([unknownResult.status, unknownResult.resourceCode], ["waiting_resource", "development_chain_exposure_unknown"]);
     const exposed = createEvolutionCandidateEvaluator({ config: { dataDir, evaluationDataDir: dataDir }, auditCandidateExposure: async () => ({ tier: "exposed_uncited" }), controller });
     const exposedResult = await exposed.evaluate(candidate, { card: { methodId: "method" } });
     assert.equal(exposedResult.ok, false);
     assert.equal(exposedResult.verificationLevel, "V0");
     assert.equal(exposedResult.exposureTier, "exposed_uncited");
+    assert.deepEqual([exposedResult.status, exposedResult.resourceCode], ["waiting_resource", "development_chain_exposed"]);
+    assert.ok(exposedResult.assessments.every(row => row.passed === true) && exposedResult.failedCaseIds.length === 0, "the wait is the chain's exposure, not a failed case");
+    // The passing evaluation names no resource, and a failed case is a repair, never this wait.
+    assert.equal(result.resourceCode, undefined);
+    // Ruling of 2026-10-05: a chain whose only finding is a reference the model named from memory is not exposed.
+    // It reaches the same level as a clean one, and the result says where the reference was named.
+    const step = { message: 20, part: 0, voice: "reasoning" };
+    const recalling = createEvolutionCandidateEvaluator({ config: { dataDir, evaluationDataDir: dataDir }, auditCandidateExposure: async () => ({ tier: "unexposed", recalled: [{ runId: "run-a", step }] }), controller });
+    const recalledResult = await recalling.evaluate(candidate, { card: { methodId: "method" } });
+    assert.deepEqual([recalledResult.ok, recalledResult.verificationLevel, recalledResult.status, recalledResult.exposureTier, recalledResult.resourceCode], [true, "V2", "verified", "unexposed", undefined]);
+    assert.ok(recalledResult.assessments.every(row => row.passed === true && row.exposed === false));
+    assert.deepEqual(recalledResult.referenceRecall, [{ runId: "run-a", step }]);
+    assert.deepEqual(recalledResult.notices.filter(row => row.code === "reference_named_from_memory"), [{ code: "reference_named_from_memory", runId: "run-a", step, message: "The builder named the reference paper from memory, at message 20 (reasoning)." }]);
+    assert.equal(result.referenceRecall, undefined, "a chain with no recall carries no label");
+    // A served exposure elsewhere in the chain still makes the candidate wait, recall or not.
+    const both = createEvolutionCandidateEvaluator({ config: { dataDir, evaluationDataDir: dataDir }, auditCandidateExposure: async () => ({ tier: "exposed_uncited", recalled: [{ runId: "run-a", step }] }), controller });
+    const bothResult = await both.evaluate(candidate, { card: { methodId: "method" } });
+    assert.deepEqual([bothResult.ok, bothResult.status, bothResult.resourceCode], [false, "waiting_resource", "development_chain_exposed"]);
     const unavailable = await evaluator.evaluate(candidate, { card: { methodId: "unknown" } });
     assert.equal(unavailable.status, "waiting_resource");
   } finally { await rm(dataDir, { recursive: true, force: true }); }
