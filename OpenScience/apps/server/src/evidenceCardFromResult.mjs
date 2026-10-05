@@ -34,10 +34,13 @@ import {
   EVIDENCE_AI_STEPS,
   EVIDENCE_CLAIM_LIMIT,
   doiOf,
+  evidenceCardClaims,
   evidencePublicExcerpt,
-  evidenceStructuredContent,
+  evidenceValueSourceIssues,
 } from "@evimed/domain";
 import { claimEvidenceSources, claimVerification } from "@evimed/domain/clinical-evidence";
+import { evidenceContract, evidenceStructuredContent } from "./evidenceCardContent.mjs";
+import { recordEvidenceSimulatedRefused } from "./evidenceCardMetrics.mjs";
 import { evidenceSourceUrl } from "./evidenceZoneService.mjs";
 import { recordResultCard } from "./evidencePublishMetrics.mjs";
 import { HttpError, assertObject } from "./security.mjs";
@@ -222,6 +225,15 @@ export class EvidenceCardFromResult {
     const references = await this.#sourceReferences(user.id, project, matrixVersion);
     const run = await this.#runOf(project, version.producer?.runId);
     const built = await this.#build({ user, version, matrix, references, run, claimIds: input.claimIds, review });
+
+    // What the zone service would refuse is refused here, before a new zone is made for a card that cannot be saved: a
+    // simulated value never enters a card (plan §4.3 rule 3), and the claims are checked as the card will hold them.
+    const [simulated] = evidenceValueSourceIssues({ claims: built.card.claims, content: built.card.content });
+    if (simulated) {
+      recordEvidenceSimulatedRefused(simulated.valueSource);
+      throw refusal(400, simulated.code, simulated.message);
+    }
+    evidenceContract(evidenceCardClaims)(built.card.claims, built.card.sources.length);
 
     const targetZone = zone ?? (await this.zones.save(user, {
       title: /** @type {{ title: string }} */ (input.newZone).title, description: "", background: "",

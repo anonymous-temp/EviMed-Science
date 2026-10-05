@@ -46,7 +46,7 @@ async function zoneOf(user, title, { published = true } = {}) {
   const { zone } = await zones.save(user, { title, description: "", background: "" });
   return published ? (await zones.save(user, { expectedRevision: zone.revision, state: "published" }, zone.id)).zone : zone;
 }
-async function card(user, zone, title, { published = true, claims = [] } = /** @type {any} */ ({})) {
+async function card(user, zone, title, { published = true } = /** @type {any} */ ({})) {
   const made = (await zones.save(user, cardFields(title), zone.id, null, true)).evidence;
   if (!published) return made;
   return (await zones.save(user, { expectedRevision: made.revision, state: "published" }, zone.id, made.id)).evidence;

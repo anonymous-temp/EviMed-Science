@@ -4,6 +4,7 @@
 import assert from "node:assert/strict";
 import { after, before, beforeEach, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
+import { evidenceCardMetricFamilies } from "../src/evidenceCardMetrics.mjs";
 import { EvidenceCardFromResult, readResultCardRequest, resultOriginality } from "../src/evidenceCardFromResult.mjs";
 import { EvidenceZoneService } from "../src/evidenceZoneService.mjs";
 import { evidencePublishMetricFamilies, resetEvidencePublishMetrics } from "../src/evidencePublishMetrics.mjs";
@@ -299,4 +300,14 @@ test("the request is read field by field and the originality is a closed map", (
   assert.equal(resultOriginality("statistical-analysis"), "original_research");
   assert.equal(resultOriginality("something-new"), "synthesis", "what the map does not list is the humbler label");
   assert.equal(resultOriginality(undefined), "synthesis");
+});
+
+test("a card that cannot be saved leaves no new zone behind", options, async (t) => {
+  const f = await clinicalResultFixture(t, { matrixExtra: { comparisons: [{ title: "Stroke", outcome: "Stroke", timeframe: "2 years", denominator: 100,
+    control: { label: "Usual care", events: 12 }, intervention: { label: "Drug", events: 7 }, outcomeRole: "benefit", valueSource: "assumed", claimIds: ["CLM-001"] }] } });
+  const { report } = await f.deliver();
+  await assert.rejects(publisherFor(f).publish(alice, report.versionId, { projectId: "p", newZone: { title: "Would be orphaned" } }), refused("evidence_value_source_refused", 400));
+  assert.equal((await db.query("SELECT count(*)::integer AS n FROM evimed_frontier.evidence_zones")).rows[0].n, 0, "no zone was made for it");
+  const family = evidenceCardMetricFamilies({ cardsWithoutProducer: 0 }).find((entry) => entry.name === "open_science_evidence_cards_refused_simulated_total");
+  assert.equal(family.series.find((entry) => entry.labels.value_source === "assumed").value >= 1, true, "and the refusal is counted where the zone service counts it");
 });
