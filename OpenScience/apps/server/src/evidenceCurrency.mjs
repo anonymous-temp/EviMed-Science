@@ -17,9 +17,10 @@
  * Hidden knowledge:
  *
  * - **Matching is by keys, and a shared entity is not yet evidence.** An entity match counts only when the item carries at
- *   least two of the card's entity keys (one, when the card has one), and an item that is a source the card already cites,
- *   or the frontier item the card was made from, is the card's own source and not news. What an identifier match means is
- *   stored: `same_work` (the item names a study the card cites — a correction, a new report of it) against `new_evidence`.
+ *   least two of the card's entity keys (one, when the card has one), and the frontier item the card was made from is its own
+ *   source and not news. What an identifier match means is stored: `same_work` (the item names a study the card cites — a
+ *   correction, a new report of it) against `new_evidence`; only items newer than the platform's last look are considered, so
+ *   the item a cited study entered the feed as, long before, is not raised.
  *   Whether a new item changes the card's answer is the editor's judgement (`evidenceTarget`), never a rule here.
  * - **The label is recomputed from what is known, never stepped.** `currencyLabel` is given the source changes, whether
  *   items are pending, and whether the card was retired; so a source change that is later withdrawn, or an item the editor
@@ -366,7 +367,6 @@ export function createEvidenceUpkeep({
     const study = identifierKeys({ doi: row.lineage?.verifiedStudy?.doi, pmid: row.lineage?.verifiedStudy?.pmid, registryIds: row.lineage?.verifiedStudy?.registryId ? [row.lineage.verifiedStudy.registryId] : [] });
     const identifiers = [...new Set([...keys.identifierKeys, ...study])];
     if (!keys.entityKeys.length && !identifiers.length) return [];
-    const cited = new Set(identifiers.filter((key) => key.startsWith("doi:") || key.startsWith("pmid:")));
     const matches = await match({ entityKeys: keys.entityKeys, identifierKeys: identifiers, since: row.last_checked_at ?? row.created_at, limit: L.matchLimit });
     const need = Math.min(L.entityMatchMin, keys.entityKeys.length);
     /** @type {PendingItem[]} */
@@ -374,8 +374,6 @@ export function createEvidenceUpkeep({
     for (const item of matches) {
       if (handled.has(item.publicId) || (row.pending_item_ids ?? []).includes(item.publicId)) continue;
       if (item.publicId === row.source_item_id) continue;
-      const own = identifierKeys({ doi: item.doi, pmid: item.pmid });
-      if (own.some((key) => cited.has(key))) continue;
       if (item.matchedBy === "entity" && (item.matchedEntityKeys?.length ?? 0) < need) continue;
       fresh.push({ itemId: item.publicId, kind: item.matchedBy === "identifier" ? "same_work" : "new_evidence", title: item.titleZh ?? item.titleRaw ?? null, source: item.sourceName ?? null });
     }
@@ -637,8 +635,9 @@ export function createEvidenceUpkeep({
     const after = outcome === "revised" ? (await database.query("SELECT title,summary,content,claims FROM evimed_frontier.evidence_cards WHERE id=$1", [cardId])).rows[0] : null;
     await database.transaction(async (/** @type {any} */ client) => {
       await client.query(
-        `UPDATE evimed_frontier.evidence_cards SET currency=$2,pending_item_ids=$3,currency_detail=$4::jsonb,last_checked_at=$5,no_change_checks=0,no_change_since=NULL WHERE id=$1`,
-        [cardId, label, pending.map((/** @type {PendingItem} */ item) => item.itemId), JSON.stringify({ ...detail, pending, handled }), now()],
+        `UPDATE evimed_frontier.evidence_cards SET currency=$2,pending_item_ids=$3,currency_detail=$4::jsonb,last_checked_at=$5,
+           no_change_checks=CASE WHEN $6 THEN no_change_checks+1 ELSE 0 END,no_change_since=CASE WHEN $6 THEN coalesce(no_change_since,$5) ELSE NULL END WHERE id=$1`,
+        [cardId, label, pending.map((/** @type {PendingItem} */ item) => item.itemId), JSON.stringify({ ...detail, pending, handled }), now(), outcome === "not_relevant" || outcome === "unchanged"],
       );
       if (outcome === "revised") {
         const changed = before && after ? evidenceConclusionChanged(before, after) : false;
@@ -651,9 +650,10 @@ export function createEvidenceUpkeep({
     if (outcome === "revised") {
       counters.followUpsDone += 1;
       if (notifyZoneFollowers) await notifyZoneFollowers({ zoneId: row.zone_id, cardId, revision: row.revision, kind: "updated" }).catch((error) => failed("followers", error));
-    } else if (outcome === "not_relevant") {
+    } else if (outcome === "not_relevant" || outcome === "unchanged") {
+      // The editor looked and the card stands: a quiet check, in the log's words and in the retirement rule's count.
       counters.notRelevant += 1;
-      await afterQuietCheck({ ...row, currency: label, last_checked_at: now() }, cardUpkeepRoute(row));
+      await afterQuietCheck({ ...row, currency: label, last_checked_at: now(), no_change_checks: row.no_change_checks + 1, no_change_since: row.no_change_since ?? now() }, cardUpkeepRoute(row));
     }
   }
 
