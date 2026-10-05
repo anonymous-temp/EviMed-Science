@@ -112,6 +112,18 @@
    "note": "Two versions: 2 (Nov 17, 2025) and 1 (Oct 17, 2024)."
   },
   {
+   "file": "dailymed__spl_current_xml_accept_406.json",
+   "request": "GET https://dailymed.nlm.nih.gov/dailymed/services/v2/spls/06906744-49a5-4bab-8539-af2d235df9e8.xml",
+   "accept": "application/xml",
+   "status": 406,
+   "contentType": "application/json",
+   "origin": "live",
+   "recordedAt": "2026-10-05T07:15:47Z",
+   "bytes": 57,
+   "sha256": "a5d55bea935e8c7176837edb49d58892bb4356c604fe8028bfa71c96ad81edd3",
+   "note": "DailyMed's document endpoint answers 406 with this body to an Accept of application/xml alone (also text/xml, application/zip); an Accept that includes application/json, or */*, is served the XML with 200. The gateway relays any upstream 4xx other than 404 and 429 as its own HTTP 400 with the source's status in the envelope, so the runtime sees this as a 400. Recorded with that exact header (`accept`)."
+  },
+  {
    "file": "dailymed__spl_unknown_setid.txt",
    "request": "GET https://dailymed.nlm.nih.gov/dailymed/services/v2/spls/00000000-0000-0000-0000-000000000000.xml",
    "status": 404,

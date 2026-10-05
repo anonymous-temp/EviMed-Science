@@ -233,11 +233,55 @@ class NotFound(Exception):
     """The source answered 404: it holds no such record. An answer, not a failure."""
 
 
+# What the gateway itself refuses, about the request it was handed, before any source is asked (`gatewayError(...)` in
+# apps/server/src/publicSourceGateway.mjs; a test holds this list to the codes raised there). Until 2026-10-05 these were
+# worded as the source's own refusal ("DailyMed rejected the request as invalid (HTTP 400)"), which sent a model to blame
+# a source that never saw the request. `_INVALID` are requests the deployment cannot make at all (a fault on the EviMed
+# side, never the source's); `_FORBIDDEN` are ones its policy does not allow (the allow-lists, a credential profile).
+GATEWAY_INVALID_REQUEST_CODES = frozenset({
+    "public_source_gateway_field_invalid", "public_source_gateway_body_invalid", "public_source_gateway_url_invalid",
+    "public_source_gateway_method_invalid", "public_source_gateway_accept_invalid", "public_source_gateway_credential_profile_invalid",
+    "public_source_gateway_credential_parameter_forbidden", "public_source_gateway_variables_invalid",
+    "public_source_gateway_evimed_request_invalid", "public_source_gateway_doi_invalid", "public_source_gateway_content_type_invalid",
+    "public_source_gateway_body_too_large", "public_source_gateway_token_invalid",
+})
+GATEWAY_FORBIDDEN_REQUEST_CODES = frozenset({
+    "public_source_gateway_url_forbidden", "public_source_api_path_forbidden", "public_source_api_request_forbidden",
+    "public_source_gateway_credential_profile_forbidden", "public_source_gateway_credential_profile_required",
+    "public_source_gateway_graphql_forbidden", "public_source_pdf_host_forbidden",
+    "evaluation_source_excluded", "evaluation_opaque_source_excluded",
+})
+
+
+def _gateway_refused(code, envelope, *, scope, forbidden):
+    """The gateway's own refusal, said as the deployment's and not as the source's."""
+    source = scope or "the source"
+    detail = envelope.get("message") if isinstance(envelope.get("message"), str) else ""
+    message = "EviMed's own gateway refused this request before it reached %s (%s%s); %s was not asked." % (
+        source, code, (": %s" % detail.rstrip(".")) if detail else "", source)
+    if forbidden:
+        return source_outcome.denied(
+            message, scope=scope, reason="policy", retryable=False,
+            how="This deployment's policy does not allow that request, so %s never saw it. Do not retry the same call and do not describe it as %s refusing: say the lookup is not available from this deployment and go on with other sources." % (source, source),
+        )
+    return source_outcome.unavailable(
+        message, scope=scope, reason="gateway_refused", retryable=False,
+        how="The request this tool built is not one the gateway accepts, which is a fault on the EviMed side and says nothing about %s or about whether the record exists. Do not retry the same call: report that the lookup could not be made from here, and go on with other sources or ask the researcher to supply the document." % source,
+    )
+
+
 def classify_http_error(error, *, scope):
     """An HTTP error from the gateway (or a source directly) as the exception it means.
 
     Returns a `SourceError`, a `public_sources.SourceNotConfigured`, a
     `NotFound`, or a `Truncated` (the gateway's own size limit). Never raises.
+
+    Says which side refused. The gateway answers a request it refused itself
+    with a code of its own (`GATEWAY_INVALID_REQUEST_CODES` and
+    `GATEWAY_FORBIDDEN_REQUEST_CODES`) and one a source refused with the
+    status that source answered (`upstreamStatus`, in its envelope) under an
+    HTTP status of its own — every source 4xx but 404 and 429 reaches this side
+    as 400 — so the status of this response says nothing about who refused.
     """
     status = getattr(error, "code", None)
     envelope = _envelope(error)
@@ -248,21 +292,38 @@ def classify_http_error(error, *, scope):
     retry_after = parse_retry_after(error.headers.get("Retry-After") if getattr(error, "headers", None) is not None else None)
     if retry_after is None and isinstance(envelope.get("retryAfterSeconds"), (int, float)):
         retry_after = min(max(int(envelope["retryAfterSeconds"]), 0), MAX_RETRY_AFTER_SECONDS)
+    upstream_status = envelope.get("upstreamStatus") if isinstance(envelope.get("upstreamStatus"), int) and not isinstance(envelope.get("upstreamStatus"), bool) else None
+    if code in GATEWAY_INVALID_REQUEST_CODES:
+        return _gateway_refused(code, envelope, scope=scope, forbidden=False)
+    if code in GATEWAY_FORBIDDEN_REQUEST_CODES:
+        return _gateway_refused(code, envelope, scope=scope, forbidden=True)
     if status == 404:
         return NotFound()
     if code == "public_source_gateway_response_too_large":
         return Truncated(0, 0, reason="gateway_size_limit")
     mapped = source_outcome.state_of(code)
+    # The status the source itself answered, where the gateway said it; else the one this response carries.
+    shown = upstream_status if upstream_status is not None else status
     if status in (401, 403) or mapped == "denied":
         reason = "policy" if mapped == "denied" and code != "public_source_gateway_upstream_denied" else "refused_by_source"
-        return source_outcome.denied("%s refused this request (HTTP %s)." % (scope or "The source", status), scope=scope, reason=reason, retryable=False)
+        return source_outcome.denied(
+            "%s refused this request (HTTP %s)." % (scope or "The source", shown), scope=scope, reason=reason, retryable=False,
+            how=("%s answered HTTP %s to this deployment's request. For a public record that can be a refusal of this server's address rather than a statement about the item, so a later call may be served; do not report the item as unavailable or missing on this one answer. If it stays refused, say that it could not be fetched from here and ask the researcher to supply the file." % (scope or "The source", shown))
+            if reason == "refused_by_source" else None,
+        )
     if status in (408, 504) or mapped == "timeout":
         return source_outcome.timed_out("%s did not answer in time." % (scope or "The source"), scope=scope, reason="source_did_not_answer", retryable=True)
     if status == 429 or code == "public_source_gateway_rate_limited":
         return source_outcome.unavailable("%s is rate limiting this caller." % (scope or "The source"), scope=scope, reason="rate_limited", retryable=True, retry_after=retry_after)
+    if status == 400 and upstream_status is not None:
+        return source_outcome.unavailable(
+            "%s itself rejected this request (HTTP %s); the gateway passed it on unchanged." % (scope or "The source", upstream_status), scope=scope, reason="request_rejected", retryable=False,
+            how="The source refused the request as the tool sent it (HTTP %s), so asking again the same way will not change that. Report the refusal with that status rather than saying the record is missing, and go on with other sources." % upstream_status,
+        )
     if status == 400:
-        return source_outcome.unavailable("%s rejected the request as invalid (HTTP 400)." % (scope or "The source"), scope=scope, reason="request_rejected", retryable=False)
-    return source_outcome.unavailable("%s answered with an error (HTTP %s)." % (scope or "The source", status), scope=scope,
+        return source_outcome.unavailable(
+            "%s answered with HTTP 400 and nothing says whether the source or EviMed's gateway refused the request." % (scope or "The source"), scope=scope, reason="request_rejected", retryable=False)
+    return source_outcome.unavailable("%s answered with an error (HTTP %s)." % (scope or "The source", shown), scope=scope,
         reason="upstream_error", retryable=True, retry_after=retry_after,
     )
 
