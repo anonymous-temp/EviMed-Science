@@ -120,6 +120,12 @@ export const VCR_ROUTE_ERROR_CODES = Object.freeze([
   // Platform knowledge packs (flywheel F26): the switch is off, the pack is not yet marked curated.
   "vcr_platform_packs_not_enabled",
   "vcr_pack_not_curated",
+  // Filing a prediction (flywheel F25): no registry composed, a number in the request, no engine result behind the scenario.
+  "vcr_predictions_not_enabled",
+  "vcr_prediction_number_refused",
+  "vcr_prediction_scenario_not_found",
+  "vcr_prediction_not_from_engine",
+  "vcr_prediction_unreadable",
 ]);
 
 /**
@@ -154,6 +160,7 @@ export const VCR_ROUTE_ABILITIES = Object.freeze({
   "GET /studies/:id/export/:export": ["read"],
   "GET /studies/:id/publications": ["read"],
   "POST /studies/:id/publications": ["manage_study"],
+  "POST /studies/:id/predictions": ["manage_study"],
   "DELETE /studies/:id/publications/:publication": ["manage_study"],
   "GET /studies/:id/members": ["read"],
   "POST /studies/:id/members": ["manage_members"],
@@ -207,7 +214,7 @@ export function vcrRoutePattern(pathname) {
   if (parts[0] !== "studies") return "/api/vcr/:route";
   if (parts.length === 1) return "/api/vcr/studies";
   if (parts.length === 2) return "/api/vcr/studies/:id";
-  const known = [...VCR_TABS, "run", "jobs", "budget", "assumptions", "model-assessments", "reviews", "curve-extractions", "correction-cases", "decisions", "export", "publications", "members", "referrals", "pack", "definitions"];
+  const known = [...VCR_TABS, "run", "jobs", "budget", "assumptions", "model-assessments", "reviews", "curve-extractions", "correction-cases", "decisions", "export", "publications", "predictions", "members", "referrals", "pack", "definitions"];
   const section = known.includes(parts[2]) ? parts[2] : ":route";
   if (parts[2] === "data" && parts.length > 3) {
     // The intake routes: `data/<kind>[/:item[/<action>[/confirm]]]`, every id folded.
@@ -328,7 +335,7 @@ function wholeNumber(value, field, max) {
  *     latestSessionId?: (user: any, projectId: string) => Promise<string | null>,
  *     remove?: (user: any, projectId: string) => Promise<unknown> } | null,
  *   orchestrator?: any, jobs?: any, exporter?: any, members?: any, matching?: any, assessments?: any, dataPlane?: any,
- *   evidence?: any, evidenceStore?: any, corrections?: any, knowledge?: any, publications?: any }} dependencies
+ *   evidence?: any, evidenceStore?: any, corrections?: any, knowledge?: any, publications?: any, predictions?: any }} dependencies
  *   `store` is the platform's, for the session and the CSRF check only;
  *   `vcrStore` is the module's own (defaults to the service's).
  */
@@ -368,6 +375,8 @@ export function createVcrRoutes(dependencies) {
       get knowledge() { return dependencies.knowledge ?? service.packages?.knowledge ?? null; },
       // The public 「模拟研究」 column's publish and withdraw (`vcrPublications.mjs`); null while the switch is off.
       get publications() { return dependencies.publications ?? null; },
+      // Filing a prediction with the registry (`vcrPredictions.mjs`); null while no registry is composed.
+      get predictions() { return dependencies.predictions ?? null; },
     };
     /** The module's own store: roles, assumptions, reviews, decisions, exports, members. */
     const data = () => {
@@ -1047,6 +1056,19 @@ export function createVcrRoutes(dependencies) {
         return reply(withdrawn);
       }
       throw new HttpError(404, "not_found", "虚拟临研 route not found.");
+    }
+
+    // --- 登记预测: a trial scenario's prediction of a registered trial's primary endpoint, filed with the registry ---------
+    if (section === "predictions") {
+      if (!hooks.predictions) throw new HttpError(404, "vcr_predictions_not_enabled", "Prediction filing is not enabled.");
+      if (parts.length !== 3 || method !== "POST") throw new HttpError(404, "not_found", "虚拟临研 route not found.");
+      // The body is read by the module, which refuses a number by name; only its size is held here.
+      const body = await readJson(req, maxJsonBytes);
+      if (!body || typeof body !== "object" || Array.isArray(body)) throw new HttpError(400, "vcr_payload_invalid", "The request is a JSON object.");
+      const { study } = await authorize(id, "manage_study");
+      const filed = await audited("vcr.prediction.file", (result) => ({ code: id, detail: result.filed ? "filed" : "existing" }), { code: id },
+        () => hooks.predictions.file(study, user, body));
+      return reply(filed, filed.filed ? 201 : 200);
     }
 
     // --- export -----------------------------------------------------------------------

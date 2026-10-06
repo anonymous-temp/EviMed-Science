@@ -1927,6 +1927,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     entityVocabulary,
     sourceChanges,
     officialZoneForKeys: productDatabase ? createOfficialZoneLookup({ database: productDatabase }) : null,
+    // The learning package's prediction registry (flywheel F25) is given here when it exists; without one the filing route is absent.
+    predictionRegistry: overrides.vcrPredictionRegistry ?? null,
   });
   // Rows made while the vocabulary could not tag (the frontier off, the glossary not yet seeded) are tagged once it
   // can: a bounded pass per module after each glossary load, each row through its own owner (entityVocabulary.mjs).
@@ -2201,6 +2203,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     get jobs() { return vcr?.jobs ?? null; },
     get exporter() { return vcr?.exporter ?? null; },
     get publications() { return vcr?.publications ?? null; },
+    get predictions() { return vcr?.predictions ?? null; },
     get members() { return vcr?.members ?? null; },
     // The referral ledger's acts, the first human stop among them
     // (`vcrContact.mjs`) — not the store, which has no `contactReferral`.

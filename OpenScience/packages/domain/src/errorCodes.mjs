@@ -1218,6 +1218,11 @@ export const VCR_ROUTE_ERROR_CODES = Object.freeze([
   'vcr_publication_patient_data',
   'vcr_platform_packs_not_enabled',
   'vcr_pack_not_curated',
+  'vcr_predictions_not_enabled',
+  'vcr_prediction_number_refused',
+  'vcr_prediction_scenario_not_found',
+  'vcr_prediction_not_from_engine',
+  'vcr_prediction_unreadable',
 ])
 
 export const VCR_GATEWAY_ERROR_CODES = Object.freeze([
@@ -1709,6 +1714,11 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_publication_not_ready: '这份报告还没有写完，写完后再发布到模拟研究。',
   vcr_publication_patient_data: '这份报告的文字里出现了本研究受试者的编号，不能公开；去掉后再发布。',
   vcr_platform_packs_not_enabled: '这个部署没有开通平台知识包。',
+  vcr_predictions_not_enabled: '这个部署没有开通预测登记。',
+  vcr_prediction_number_refused: '预测的数不由请求给出：它只从引擎结果的指定位置读取。',
+  vcr_prediction_scenario_not_found: '这项研究里没有这个试验情景。',
+  vcr_prediction_not_from_engine: '这个情景还没有引擎算出的、可估计的结果；有了再登记预测。',
+  vcr_prediction_unreadable: '结果里这个位置没有“估计值加区间”或“成功概率”：换一个指标，例如 measure(power) 或带区间的效应估计。',
   vcr_pack_not_curated: '只有研究负责人已经标为「已整理」的知识包，才能申请成为平台知识包；先在研究页上确认整理。',
   vcr_path_invalid: '这个地址不是虚拟临研的页面；从研究列表重新进入。',
   vcr_payload_invalid: '提交的内容格式不对，没有保存；刷新页面后重新填写。',

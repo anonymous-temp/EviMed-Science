@@ -88,6 +88,7 @@ import { createVcrSeal } from "./vcrSeal.mjs";
 import { VcrService } from "./vcrService.mjs";
 import { createVcrPublications, createVcrPublicSimulations } from "./vcrPublications.mjs";
 import { createVcrFrontierEvents } from "./vcrFrontierEvents.mjs";
+import { createVcrPredictions } from "./vcrPredictions.mjs";
 import { VcrStore } from "./vcrStore.mjs";
 import { createChictrAdapter, createTrialRegistryClient } from "./trialRegistryClient.mjs";
 import { createVcrImporter } from "./vcrImport.mjs";
@@ -903,9 +904,10 @@ export function createVcrEngineJobRemover({ config, fetchImpl, engine = null }) 
  *   entityVocabulary?: { tag: (input: { texts: string[] }) => Promise<string[] | null>, frontierItemsMatching?: (query: any) => Promise<any[]> } | null,
  *   sourceChanges?: { getMany?: (identifiers: unknown[]) => Promise<Map<string, any>> } | null,
  *   officialZoneForKeys?: ((keys: string[]) => Promise<string | null>) | null,
+ *   predictionRegistry?: { register: (prediction: Record<string, any>) => Promise<any> } | null,
  * }} input
  */
-export function composeVcr({ config, productDatabase, projectStore = null, audit = async () => {}, fetchImpl, report = () => {}, connectorCredentials = null, intakeController = null, entityVocabulary = null, sourceChanges = null, officialZoneForKeys = null }) {
+export function composeVcr({ config, productDatabase, projectStore = null, audit = async () => {}, fetchImpl, report = () => {}, connectorCredentials = null, intakeController = null, entityVocabulary = null, sourceChanges = null, officialZoneForKeys = null, predictionRegistry = null }) {
   if (!config?.vcrEnabled || !productDatabase) return null;
 
   // The shared entity vocabulary tags a study with what it is about (`entityVocabulary.mjs`).
@@ -1021,8 +1023,10 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
       levers: { studiesPerTick: config.vcrFrontierEventsStudiesPerTick, windowDays: config.vcrFrontierEventsWindowDays },
     }) : null;
   if (frontierEvents) service.attach({ frontierEvents });
+  // Filing a prediction with the learning package's registry (flywheel F25): absent without one.
+  const predictions = createVcrPredictions({ store, registry: predictionRegistry });
   composed = {
-    publications, simulations, frontierEvents,
+    publications, simulations, frontierEvents, predictions,
     store, dataStore, matchStore, evidenceStore, corrections, knowledge, knowledgeStore,
     access, members, contact, dataPlane, dataPlaneSeam, documents, engine, engineProbe, engineStatus, removeEngineJob, jobs, seal, evidence, matching, registry, service,
     intake: { counters: intakeCounters, extractor, importer, digitizer },
@@ -1124,6 +1128,7 @@ export async function vcrMetricsSnapshot(vcr) {
     intake: vcr.intake ? { counters: { ...vcr.intake.counters } } : null,
     evidence: vcr.evidence?.counters ? { ...vcr.evidence.counters } : null,
     publications: vcr.publications ? { ...vcr.publications.counters, reads: Number(vcr.simulations?.counters?.reads ?? 0) } : null,
+    predictions: vcr.predictions ? { ...vcr.predictions.counters } : null,
     frontierEvents: vcr.frontierEvents ? { ...vcr.frontierEvents.counters } : null,
     platformPacks: vcr.knowledge?.platform?.enabled
       ? Object.fromEntries(Object.entries(vcr.knowledge.counters).filter(([kind]) => kind.startsWith("platform"))) : null,
@@ -1172,6 +1177,10 @@ export function vcrMetricFamilies(enabled, snapshot) {
     add("card_candidates_total", "Evidence items a run wrote as candidates it found through an evidence card (flywheel F23): written, and the ones that passed the quote and number check.", "counter",
       [{ labels: { outcome: "written" }, value: Number(snapshot.evidence.cardCandidates ?? 0) },
         { labels: { outcome: "verified" }, value: Number(snapshot.evidence.cardCandidatesVerified ?? 0) }]);
+  }
+  if (snapshot.predictions) {
+    add("predictions_total", "Predictions of a registered trial's primary endpoint filed with the registry from a study's trial scenario (flywheel F25): filed, asked again, refused, and filings the registry did not take.", "counter",
+      Object.entries(snapshot.predictions).map(([outcome, value]) => ({ labels: { outcome }, value: Number(value) })));
   }
   if (snapshot.platformPacks) {
     add("platform_packs_total", "What the platform knowledge packs did since this process started (flywheel F26): packs that passed the re-check and were copied, requests that failed it, authors who took their name off, and platform packs labelled 来源有变更.", "counter",

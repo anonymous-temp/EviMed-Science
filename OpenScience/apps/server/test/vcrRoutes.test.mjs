@@ -416,6 +416,7 @@ const REQUESTS = {
   "GET /studies/:id/export/:export": ["GET", "/api/vcr/studies/std_1/export/exp_1", undefined],
   "GET /studies/:id/publications": ["GET", "/api/vcr/studies/std_1/publications", undefined],
   "POST /studies/:id/publications": ["POST", "/api/vcr/studies/std_1/publications", { exportId: "exp_1", title: "EV-201 模拟", summary: "" }],
+  "POST /studies/:id/predictions": ["POST", "/api/vcr/studies/std_1/predictions", { scenarioId: "scn_1", registryId: "NCT02296125", endpoint: "PFS", resultPath: "measure(power)" }],
   "DELETE /studies/:id/publications/:publication": ["DELETE", "/api/vcr/studies/std_1/publications/sim_1", undefined],
   "GET /studies/:id/members": ["GET", "/api/vcr/studies/std_1/members", undefined],
   "POST /studies/:id/members": ["POST", "/api/vcr/studies/std_1/members", { userId: "newcomer", role: "viewer" }],
@@ -453,6 +454,7 @@ function composedHooks() {
     jobs: { enqueue: ok, get: async () => ({ id: "job_1" }), listForStudy: async () => [], budgetOf: async () => ({}), cancel: ok, confirmBudget: ok },
     exporter: { requestExport: ok },
     // The public 「模拟研究」 column: the lead's publish and withdraw.
+    predictions: { file: async () => ({ filed: true, existing: false }) },
     publications: { forStudy: async () => [], publish: async () => ({ id: "sim_1", exportKind: "simulation_report", existing: false }), withdraw: async () => ({ id: "sim_1" }) },
     // The disease packs and the definition library: each answers the shape the real one does.
     knowledge: {
@@ -706,7 +708,8 @@ test("every code these routes emit is one this module declares", async () => {
   // nobody raises is dropped, not left as decoration.
   const fromElsewhere = ["vcr_study_not_found", "vcr_study_paused", "vcr_tab_not_found", "vcr_referral_not_found", "vcr_model_exists", "vcr_export_not_found",
     "vcr_pack_not_found", "vcr_pack_invalid", "vcr_definition_not_found", "vcr_definition_invalid",
-    "vcr_publication_not_found", "vcr_publication_not_ready", "vcr_publication_patient_data", "vcr_pack_not_curated"];
+    "vcr_publication_not_found", "vcr_publication_not_ready", "vcr_publication_patient_data", "vcr_pack_not_curated",
+    "vcr_prediction_number_refused", "vcr_prediction_scenario_not_found", "vcr_prediction_not_from_engine", "vcr_prediction_unreadable"];
   for (const code of fromElsewhere) assert.ok(VCR_ROUTE_ERROR_CODES.includes(code), code);
   const neverEmitted = VCR_ROUTE_ERROR_CODES.filter((code) => !literals.has(code) && !fromElsewhere.includes(code));
   assert.deepEqual(neverEmitted, [], `declared but never emitted: ${neverEmitted.join(", ")}`);
@@ -956,4 +959,20 @@ test("a platform pack is asked for by the study's lead alone, and the author tak
   await assert.rejects(off.routes(request("DELETE", "/api/vcr/packs/pkg_1/platform"), response()), { status: 404, code: "vcr_platform_packs_not_enabled" });
   assert.equal(off.calls.some((call) => call[0] === "vcr.rolesOf"), false);
   void calls;
+});
+
+test("a prediction is filed by the study's lead alone, with no number in the body; with no registry composed the route is a named 404", async () => {
+  const body = { scenarioId: "scn_1", registryId: "NCT02296125", endpoint: "PFS", resultPath: "measure(power)" };
+  const { routes, as } = fixture({ overrides: composedHooks() });
+  as(OWNER);
+  const filed = response();
+  await routes(request("POST", "/api/vcr/studies/std_1/predictions", body), filed);
+  assert.equal(filed.status, 201);
+  const member = fixture({ roles: { stat: ["statistical_reviewer"] }, overrides: composedHooks() });
+  member.as("stat");
+  await assert.rejects(member.routes(request("POST", "/api/vcr/studies/std_1/predictions", body), response()), { status: 403, code: "vcr_forbidden" });
+  const none = fixture({ overrides: { ...composedHooks(), predictions: null } });
+  none.as(OWNER);
+  await assert.rejects(none.routes(request("POST", "/api/vcr/studies/std_1/predictions", body), response()), { status: 404, code: "vcr_predictions_not_enabled" });
+  assert.equal(none.calls.some((call) => call[0] === "vcr.rolesOf"), false);
 });
