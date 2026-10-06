@@ -1005,7 +1005,9 @@ test("the worker's four loops drive the queue, tell the orchestrator what finish
   const rechecked = [];
   const matching = { async recheckDue() { rechecked.push("due"); return { studies: 0, enqueued: 0 }; } };
   const loops = createVcrWorkerLoops({ jobs, orchestrator, store, matching });
-  assert.deepEqual(Object.keys(loops).sort(), ["jobs", "orchestrator", "recheck", "recompute"]);
+  // The two optional loops (frontier events, platform pack sources) are keys with no function while their modules are off.
+  assert.deepEqual(Object.keys(loops).sort(), ["frontierEvents", "jobs", "orchestrator", "packSources", "recheck", "recompute"]);
+  assert.deepEqual([loops.frontierEvents, loops.packSources], [null, null]);
 
   const { job } = await jobs.enqueue({ studyId: study.id, userId: study.userId, kind: "design_simulation", scenario, idempotencyKey: `vcr:${study.id}:worker` });
 

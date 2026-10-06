@@ -1366,7 +1366,7 @@ export class VcrOrchestrator {
     /** @type {Map<string, number>} when a settled-review request was last attempted for a study, so a review that cannot be queued is not rebuilt every tick */
     this.reviewAttempts = new Map();
     this.counters = { ticks: 0, dispatched: 0, deferred: 0, dispatchFailed: 0, runsFinished: 0, jobsEnqueued: 0,
-      jobsSkipped: 0, recomputes: 0, notices: 0, studyErrors: 0, verdicts: 0 };
+      jobsSkipped: 0, recomputes: 0, notices: 0, studyErrors: 0, verdicts: 0, evidenceRefreshes: 0 };
     /** @type {string | null} */
     this.lastDeferral = null;
     /** @type {string | null} */
@@ -1630,6 +1630,43 @@ export class VcrOrchestrator {
       { detail: { purpose: "export", kind, exportId: row.id, requestedBy: String(user.id) } });
     const result = await this.advance(study.id);
     return { export: row, ...this.#answerShape(result) };
+  }
+
+  /**
+   * Ask for a run that takes new evidence into a study's assumption cards (flywheel F24, 2026-10-06). The consumer of the frontier
+   * feed calls this once it has labelled the cards; this only records the request, as a pending run mark named by `token` (the same
+   * news asked twice is one request), and the next pass dispatches it by the rules of any programme run (`#pendingEvidenceRefresh`).
+   * A study that is not active asks for nothing.
+   * @param {string} studyId @param {{ token: string, keys: readonly string[], items?: readonly unknown[], brief: string }} request
+   * @returns {Promise<{ requested: boolean, reason?: string, key?: string }>}
+   */
+  async requestEvidenceRefresh(studyId, { token, keys, items = [], brief }) {
+    const study = await this.store.studyById(studyId);
+    if (!study || study.status !== "active") return { requested: false, reason: "study_not_active" };
+    if (!/^[A-Za-z0-9_-]{6,64}$/.test(String(token))) throw new TypeError("requestEvidenceRefresh: the token is a short word.");
+    const key = `run:evidence-refresh:${token}`;
+    const claimed = await this.#claim(study, key, "run", "pending", { detail: { purpose: "evidence_refresh", keys: [...keys], items: [...items], brief: String(brief) } });
+    if (!claimed) return { requested: false, reason: "already_requested", key };
+    this.counters.evidenceRefreshes += 1;
+    return { requested: true, key };
+  }
+
+  /**
+   * The evidence-refresh run this runtime is out for right now, or null: the mark the study's one run slot holds (claimed and not
+   * stale, or running) when the run was dispatched for new evidence. What the runtime's gateway binds an assumption write to — the
+   * dispatch names the purpose, and nothing a run types does. `runtimeRunId` is the dispatch the calling runtime is reserved for,
+   * when the gateway knows one; a runtime reserved for another dispatch is not this run.
+   * @param {string} studyId @param {{ runtimeRunId?: string | null }} [caller]
+   * @returns {Promise<{ key: string, dispatchId: string | null, runId: string | null } | null>}
+   */
+  async evidenceRefreshRun(studyId, { runtimeRunId = null } = {}) {
+    const mark = await this.store.one(`SELECT key, dispatch_id, run_id, detail FROM ${VCR_SCHEMA}.schedule_marks
+      WHERE study_id = $1 AND kind = 'run'
+        AND (state = 'running' OR (state = 'claimed' AND updated_at > now() - make_interval(mins => $2)))
+      ORDER BY updated_at DESC LIMIT 1`, [studyId, VCR_RUN_RULES.staleClaimMinutes]);
+    if (!mark || object(mark.detail).purpose !== "evidence_refresh") return null;
+    if (runtimeRunId && mark.dispatch_id && String(mark.dispatch_id) !== String(runtimeRunId)) return null;
+    return { key: String(mark.key), dispatchId: mark.dispatch_id == null ? null : String(mark.dispatch_id), runId: mark.run_id == null ? null : String(mark.run_id) };
   }
 
   /**
@@ -2523,6 +2560,7 @@ export class VcrOrchestrator {
     const candidates = [
       () => this.#pendingReviewRepair(study),
       () => this.#pendingExport(study),
+      () => this.#pendingEvidenceRefresh(study),
       () => this.#stepRun(study, plan, "definition"),
       () => this.#stepRun(study, plan, "evidence"),
       () => this.#analysisRun(study, plan),
@@ -2583,6 +2621,25 @@ export class VcrOrchestrator {
       key: String(mark.key), purpose: "export", capabilityId: "vcr-package", reason: `vcr:export-${detail.kind ?? "study_package"}`,
       brief: await this.#brief(study, String(mark.key), [], { kind: detail.kind, exportId: detail.exportId }),
       steps: [], detail: { kind: detail.kind, exportId: detail.exportId },
+    };
+  }
+
+  /**
+   * The run the frontier consumer asked for to take new evidence into a study's cards (flywheel F24): an `evidence` run with a brief
+   * naming the cards and the news. It is dispatched exactly as every other run of the study is — the study active, the one run slot
+   * free, the key within its attempts, and the allowance and the bounded budget `dispatchRun` asks of any programme run — and when
+   * any of those says no the key stays pending and nothing else happens.
+   * @param {any} study @returns {Promise<VcrRunSpec | null>}
+   */
+  async #pendingEvidenceRefresh(study) {
+    const mark = await this.store.one(`SELECT * FROM ${VCR_SCHEMA}.schedule_marks WHERE study_id = $1 AND kind = 'run'
+      AND starts_with(key, 'run:evidence-refresh:') AND state = 'pending' ORDER BY created_at LIMIT 1`, [study.id]);
+    if (!mark || !this.#allowed(mark)) return null;
+    const detail = object(mark.detail);
+    return {
+      key: String(mark.key), purpose: "evidence_refresh", capabilityId: /** @type {Record<string, string>} */ (VCR_STEP_CAPABILITIES).evidence,
+      reason: "vcr:evidence-refresh", brief: String(detail.brief ?? ""), steps: [],
+      detail: { keys: list(detail.keys), items: list(detail.items) },
     };
   }
 
@@ -2765,6 +2822,9 @@ export class VcrOrchestrator {
     if (!moved) return;
     this.counters.runsFinished += 1;
     const detail = object(mark.detail);
+    // A run for new evidence has no step to read and nothing to review: what it wrote is on the cards (`ai_set`), and the frontier
+    // consumer sees the versions arrive and closes the labels.
+    if (detail.purpose === "evidence_refresh") return;
     if (detail.purpose === "export" && detail.exportId) {
       const existing = await this.store.exportRow(study.id, String(detail.exportId));
       // The report's snapshot owns its cover; completion cannot relabel old

@@ -74,7 +74,7 @@ before(async () => {
     dataDir, port: 0, runtimeMode: "mock", devAuth: false, authMode: "local", bootstrapUser: "", bootstrapPassword: "",
     stateStore: "postgres", requireSharedStateStore: true, databaseUrl: isolated.url, operatorMetricsToken: "test-only-metrics-token",
     rateLimitMaxRequests: 100_000, authRateLimitMaxRequests: 1_000,
-    vcrEnabled: true, vcrAudience: "all", vcrPollMs: 3_600_000, vcrDataPlaneDir: plane,
+    vcrEnabled: true, vcrAudience: "all", vcrPollMs: 3_600_000, vcrDataPlaneDir: plane, vcrPublicSimulationsEnabled: true, vcrPlatformPacksEnabled: true, vcrPredictionRegistry: { register: async () => ({ id: "prd_test" }) },
     // The two things that leave the process. The engine is a fake that answers
     // its health and accepts a job's deletion; a run is recorded, not started.
     vcrEngineUrl: ENGINE, vcrEngineToken: "t".repeat(40), vcrEngineReceiptKey: "r".repeat(40),
@@ -194,6 +194,11 @@ function requests(target, ids) {
     "POST /studies/:id/decisions": async () => ["POST", `${S}/decisions`, { question: "选哪个设计", chosen: { design: "B" }, rationale: "功效更高" }],
     "POST /studies/:id/export": async () => ["POST", `${S}/export`, { kind: "study_package" }],
     "GET /studies/:id/export/:export": async () => ["GET", `${S}/export/${ids.exportId}`, undefined],
+    // 模拟研究: the lead alone. A study package is not a report the column takes, so the lead's request is answered 400 by name.
+    "GET /studies/:id/publications": async () => ["GET", `${S}/publications`, undefined],
+    "POST /studies/:id/predictions": async () => ["POST", `${S}/predictions`, { scenarioId: "scn_none", registryId: "NCT02296125", endpoint: "PFS", resultPath: "measure(power)" }],
+    "POST /studies/:id/publications": async () => ["POST", `${S}/publications`, { exportId: ids.exportId, title: "矩阵研究", summary: "" }],
+    "DELETE /studies/:id/publications/:publication": async () => ["DELETE", `${S}/publications/sim_none`, undefined],
     "GET /studies/:id/curve-extractions": async () => ["GET", `${S}/curve-extractions`, undefined],
     "POST /studies/:id/curve-extractions": async () => ["POST", `${S}/curve-extractions`, { imageArtifactId: 'missing', points: {} }],
     "POST /studies/:id/correction-cases": async () => ["POST", `${S}/correction-cases`, {}],
@@ -212,6 +217,7 @@ function requests(target, ids) {
     // The study's pack and the library's definitions: allowed roles reach the package, which answers 404 for what the account does not have.
     "POST /studies/:id/pack": async () => ["POST", `${S}/pack`, { use: "no_such_pack" }],
     "POST /studies/:id/pack/promote": async () => ["POST", `${S}/pack/promote`, {}],
+    "POST /studies/:id/pack/platform": async () => ["POST", `${S}/pack/platform`, {}],
     "POST /studies/:id/definitions": async () => ["POST", `${S}/definitions`, { populationId: "pop_none", name: "无此人群", text: "没有这个人群" }],
     "POST /studies/:id/definitions/:definition/use": async () => ["POST", `${S}/definitions/dfn_none/use`, {}],
     "POST /studies/:id/definitions/:definition/compare": async () => ["POST", `${S}/definitions/dfn_none/compare`, { versionA: 1, versionB: 2 }],

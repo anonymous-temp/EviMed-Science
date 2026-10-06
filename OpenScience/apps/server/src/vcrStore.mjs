@@ -182,6 +182,7 @@ function assumptionFromRow(row) {
     valueSource: String(row.value_source ?? "assumed"), poolingMethod: text(row.pooling_method), pooling: object(row.pooling),
     evidenceIds: list(row.evidence_ids).map(String), applicability: object(row.applicability),
     reviewState: String(row.review_state ?? "ai_set"), note: String(row.note ?? ""), createdAt: iso(row.created_at),
+    afterFreeze: row.after_freeze === true,
   };
 }
 
@@ -650,24 +651,25 @@ export class VcrStore extends VcrStoreBase {
       // `distribution: {}` says 「none」 in as many words.
       let distribution = input.distribution;
       if (distribution === undefined && version > 1) {
+        // The card the study has: a version written after the freeze is beside it, not what an edit starts from.
         const previous = (await client.query(`SELECT point_value, distribution FROM ${VCR_SCHEMA}.assumptions
-          WHERE study_id = $1 AND key = $2 AND version = $3`, [input.studyId, String(input.key), version - 1])).rows[0];
+          WHERE study_id = $1 AND key = $2 AND NOT after_freeze ORDER BY version DESC LIMIT 1`, [input.studyId, String(input.key)])).rows[0];
         const sameValue = input.pointValue === undefined || input.pointValue === null
           ? previous?.point_value == null : Number(previous?.point_value) === Number(input.pointValue);
         distribution = previous && sameValue ? object(previous.distribution) : {};
       }
       const row = (await client.query(`INSERT INTO ${VCR_SCHEMA}.assumptions
         (id, study_id, user_id, key, version, name, endpoint, unit, point_value, distribution, sensitivity, source_kind,
-         value_source, pooling_method, pooling, evidence_ids, applicability, review_state, note)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12, $13, $14, $15::jsonb, $16::text[], $17::jsonb, $18, $19)
+         value_source, pooling_method, pooling, evidence_ids, applicability, review_state, note, after_freeze)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, $12, $13, $14, $15::jsonb, $16::text[], $17::jsonb, $18, $19, $20)
         RETURNING *`,
       [vcrId("assumption"), input.studyId, String(input.userId), String(input.key), version, String(input.name ?? input.key),
         input.endpoint ?? null, input.unit ?? null, input.pointValue ?? null, JSON.stringify(distribution ?? {}),
         JSON.stringify(input.sensitivity ?? {}), String(input.sourceKind ?? "expert_set"), String(input.valueSource ?? "assumed"),
         input.poolingMethod ?? null, JSON.stringify(input.pooling ?? {}), list(input.evidenceIds).map(String),
-        JSON.stringify(input.applicability ?? {}), input.reviewState ?? "ai_set", String(input.note ?? "")])).rows[0];
+        JSON.stringify(input.applicability ?? {}), input.reviewState ?? "ai_set", String(input.note ?? ""), input.afterFreeze === true])).rows[0];
       await this.audit({ client, studyId: input.studyId, userId: String(input.userId), action: "vcr.assumption.save",
-        object: String(row.id), detail: { key: String(input.key), version } });
+        object: String(row.id), detail: { key: String(input.key), version, ...(input.afterFreeze === true ? { afterFreeze: true } : {}) } });
       return assumptionFromRow(row);
     });
   }
@@ -681,11 +683,11 @@ export class VcrStore extends VcrStoreBase {
    */
   async assumptions(studyId) {
     const [rows, reviews] = await Promise.all([this.rows(`SELECT DISTINCT ON (key) * FROM ${VCR_SCHEMA}.assumptions
-      WHERE study_id = $1 ORDER BY key, version DESC`, [studyId]), this.reviews(studyId)]);
+      WHERE study_id = $1 AND NOT after_freeze ORDER BY key, version DESC`, [studyId]), this.reviews(studyId)]);
     return rows.map((row) => this.#assumptionWithReview(assumptionFromRow(row), reviews));
   }
 
-  /** Every version of one key, newest first. @param {string} studyId @param {string} key */
+  /** Every version of one key, newest first — the ones written after the plan froze included, each marked. @param {string} studyId @param {string} key */
   async assumptionVersions(studyId, key) {
     const [rows, reviews] = await Promise.all([this.rows(`SELECT * FROM ${VCR_SCHEMA}.assumptions WHERE study_id = $1 AND key = $2
       ORDER BY version DESC LIMIT 100`, [studyId, String(key)]), this.reviews(studyId)]);

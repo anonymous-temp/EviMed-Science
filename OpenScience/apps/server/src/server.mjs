@@ -300,6 +300,7 @@ import { VCR_GATEWAY_PATH, createVcrGatewayHandler, vcrGatewayRoutePattern } fro
 import { VcrOrchestrator, vcrRunId } from "./vcrOrchestrator.mjs";
 import { VcrWorker, createVcrWorkerLoops, withVcrWorkerWarnings } from "./vcrWorker.mjs";
 import { createVcrNotifier } from "./vcrNotify.mjs";
+import { createOfficialZoneLookup } from "./vcrZoneLink.mjs";
 import { seedVcrCatalogue, vcrAudienceAllows, vcrReadiness } from "./vcrService.mjs";
 import { deleteVcrProjectRows, deleteVcrUserRows, removeVcrArtifacts } from "./vcrStoreBase.mjs";
 import { GeoMeasureStore } from "./geoMeasureStore.mjs";
@@ -1835,10 +1836,22 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // only where the feed is (the frontier's zones, a database) and with the same switch; off, the router answers `false` before it does
   // anything and the request is whatever an unknown path is. The per-address limiter is the server's own, keyed apart from the API's.
   const evidencePublicOn = Boolean(frontier && productDatabase && config.evidencePublicWebEnabled);
+  // The 「模拟研究」 column reads what 虚拟临研's study leads published (vcrPublications.mjs). That module is composed further down, so the
+  // reader is found when a page is asked for; the module answers one page as a list and the pages read `{ items, next }`. With the
+  // module or its publication switch off there is no reader and the column says it is empty.
+  /** @type {{ current: { list: (query: { limit?: number, before?: string | null }) => Promise<any[]>, get: (id: string) => Promise<any> } | null }} */
+  const vcrSimulations = { current: null };
+  const evidenceSimulations = {
+    list: async (/** @type {{ limit?: number, before?: string | null }} */ { limit = 20, before = null } = {}) => {
+      const items = vcrSimulations.current ? await vcrSimulations.current.list({ limit, before }) : [];
+      return { items, next: items.length >= limit ? items[items.length - 1].id : null };
+    },
+    get: async (/** @type {string} */ id) => (vcrSimulations.current ? vcrSimulations.current.get(id) : null),
+  };
   const evidenceTopicRequests = evidencePublicOn ? createEvidenceTopicRequests({ database: productDatabase, config }) : null;
   const evidencePublicRoutes = createEvidencePublicRoutes({
     config: evidencePublicOn ? config : { ...config, evidencePublicWebEnabled: false }, database: evidencePublicOn ? productDatabase : null,
-    simulations: overrides.evidenceSimulations ?? null, requests: evidenceTopicRequests,
+    simulations: overrides.evidenceSimulations ?? evidenceSimulations, requests: evidenceTopicRequests,
     limiter: (req) => rateLimiter.check(`evidence-public:${clientAddress(req, config)}`, { max: config.evidencePublicRatePerMinute, windowMs: 60_000, code: "evidence_public_rate_limited", label: "evidence page requests" }),
     report: (code) => process.stderr.write(`${code}\n`),
   });
@@ -1962,7 +1975,17 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // controller's disposable container, like a document export does.
     intakeController,
     entityVocabulary,
+    sourceChanges,
+    officialZoneForKeys: productDatabase ? createOfficialZoneLookup({ database: productDatabase }) : null,
+    // The learning package's prediction registry (flywheel F25) is given here when it exists; without one the filing route is absent.
+    // The prediction registry is composed with the evolution module, after this: the filing route asks for it when a prediction is filed.
+    // Given only where its two switches say it will exist, so that off the filing route stays absent as the module rules.
+    predictionRegistry: overrides.vcrPredictionRegistry ?? (config.predictionRegistryEnabled && config.evolutionEnabled ? { register: async (/** @type {Record<string, any>} */ prediction) => {
+      if (!predictionRegistry) throw Object.assign(new Error("The prediction registry is not enabled."), { status: 404, code: "prediction_registry_disabled" });
+      return predictionRegistry.register(prediction);
+    } } : null),
   });
+  vcrSimulations.current = vcr?.simulations ?? null;
   // Rows made while the vocabulary could not tag (the frontier off, the glossary not yet seeded) are tagged once it
   // can: a bounded pass per module after each glossary load, each row through its own owner (entityVocabulary.mjs).
   if (autopilotService && productDatabase) entityVocabulary.registerBackfill("autopilot", ({ limit }) => autopilotService.backfillEntityKeys(productDatabase, { limit }));
@@ -2245,6 +2268,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     get orchestrator() { return vcr?.orchestrator ?? null; },
     get jobs() { return vcr?.jobs ?? null; },
     get exporter() { return vcr?.exporter ?? null; },
+    get publications() { return vcr?.publications ?? null; },
+    get predictions() { return vcr?.predictions ?? null; },
     get members() { return vcr?.members ?? null; },
     // The referral ledger's acts, the first human stop among them
     // (`vcrContact.mjs`) — not the store, which has no `contactReferral`.
@@ -4354,7 +4379,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       report: (/** @type {string} */ loop, /** @type {string} */ code) => process.stderr.write(`vcr ${loop}: ${code}\n`),
       // `matching` is the deferral recheck loop: a washout that ends is re-judged on
       // its own day, not when someone next opens the study.
-      loops: createVcrWorkerLoops({ jobs: vcr.jobs, orchestrator, store: vcr.store, matching: vcr.matching }),
+      loops: createVcrWorkerLoops({ jobs: vcr.jobs, orchestrator, store: vcr.store, matching: vcr.matching, frontierEvents: vcr.frontierEvents, knowledge: vcr.knowledge }),
     });
     // The catalogue the 模型与方法 page reads: three reference simulators and
     // the engine's own method list, seeded once, idempotently.

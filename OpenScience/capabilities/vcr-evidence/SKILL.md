@@ -41,6 +41,12 @@ metadata:
 `mcp__evimed__literature_search` 与 `mcp__evimed__open_access_full_text` 找已发表的对照组数据，`mcp__evimed__guideline_search` 看终点口径，
 `mcp__evimed__kb_search` 看这个项目自己的知识库。
 
+`mcp__evimed__frontier_search` 也会回平台已发表的证据卡（`kind: "card"`）。卡里的比较、数字和引文只是**线索**：
+它告诉你哪几个试验值得看，不能替你填证据条目。顺着卡列出的 `primarySources` 去读原始来源（登记记录、论文、说明书），
+证据条目照旧从原始来源里抽，引文和位置逐字照写；卡不是任何一条证据条目的来源，写不写它都不会让一个数通过核对。
+一条证据条目是照着某张卡找到的，就在条目上写 `candidateFrom: { "cardId": "<卡的编号>" }`，只记来路，平台不据此信任它；
+条目的出处里不要写卡的页面地址，那样的条目会被拒绝。
+
 相似度**只用来排候选**。终点定义不同、人群不同、年代差很远的研究，不会因为「看起来像」
 就可以合并——合并前逐项检查，见第 4 步。
 

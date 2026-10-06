@@ -62,7 +62,7 @@ import {
   VCR_FOLLOWUP_KINDS, VCR_INTENDED_USES, VCR_JOB_KINDS, VCR_MODEL_DOCUMENT_SECTIONS, VCR_MODEL_DOCUMENT_SECTION_LABELS_ZH, VCR_MODEL_RISKS,
   VCR_MODEL_DOCUMENT_KINDS, VCR_POPULATION_KINDS, VCR_RATINGS, VCR_RUN_SCENARIO_FIELDS, VCR_SCENARIO_SCHEMAS,
   VCR_STEPS, VCR_SYNTHETIC_USES, VCR_TRIAL_DESIGNS, canonicalScenarioJson, findExpressionFields, validateRequirement, vcrAssessmentIssues,
-  vcrModelDocumentTakesProse,
+  isPlatformCardAddress, platformCardCitations, vcrModelDocumentTakesProse,
 } from "@evimed/domain";
 
 import { HttpError } from "./security.mjs";
@@ -361,6 +361,23 @@ const OWNED_TABLES = Object.freeze({
 
 /** A protocol variable, a subject's pseudonym and the like: one token of plain characters. */
 const TOKEN = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,79}$/;
+/**
+ * The card an evidence item says it was found through (`candidateFrom`, flywheel F23): its id and, optionally, the claim's. Two
+ * short tokens and nothing else — a note, a quotation or a number here would be one more place a card's wording reaches a study.
+ * @param {InstanceType<typeof Item>} item @returns {{ cardId: string, claimId?: string } | undefined}
+ */
+function candidateOf(item) {
+  const from = item.obj("candidateFrom", { bytes: 512 });
+  if (!from) return undefined;
+  const extra = Object.keys(from).filter((key) => key !== "cardId" && key !== "claimId");
+  if (extra.length) return void item.bad("candidateFrom", `candidateFrom 只写 cardId（和可选的 claimId），不写 ${extra[0]}。`);
+  const cardId = typeof from.cardId === "string" ? from.cardId.trim() : "";
+  const claimId = from.claimId == null ? "" : typeof from.claimId === "string" ? from.claimId.trim() : null;
+  if (!TOKEN.test(cardId)) return void item.bad("candidateFrom.cardId", "cardId 是证据卡的编号：一个短标识。");
+  if (claimId === null || (claimId && !TOKEN.test(claimId))) return void item.bad("candidateFrom.claimId", "claimId 是这张卡上一条结论的编号：一个短标识。");
+  return { cardId, ...(claimId ? { claimId } : {}) };
+}
+
 /** An ISO date or instant. */
 const ISO = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})?)?$/;
 
@@ -582,7 +599,7 @@ function distributionOf(item, field, value) {
  * runtime is reserved for, when it is a bounded one (`runtimeRunId`).
  * @typedef {{ store: any, service: any, orchestrator: any, study: any, evidence?: any, evidenceStore?: any, matchStore?: any,
  *   matching?: any, seal?: any, dataPlane?: any, documents?: any, report?: (code: string) => void,
- *   caller?: { runtimeRunId?: string | null } | null, knowledge?: any }} WriteDeps
+ *   caller?: { runtimeRunId?: string | null } | null, knowledge?: any, afterFreeze?: boolean }} WriteDeps
  */
 
 /** The criterion fields a protocol write takes. */
@@ -677,6 +694,11 @@ const WRITERS = {
 
   async assumption(item, deps, extra) {
     const { store, study, evidence, evidenceStore } = deps;
+    // A version the evidence-refresh run writes for a study whose analysis plan has frozen (flywheel F24): kept beside the frozen
+    // version, never the study's current one, and starting no recomputation.
+    const afterFreeze = deps.afterFreeze === true;
+    /** @param {{ key: string, version: number }} saved */
+    const noteChange = (saved) => { if (!afterFreeze) extra.changed.push(`assumption:${saved.key}@${saved.version}`); };
     if (!item.only(["key", "name", "endpoint", "unit", "pointValue", "distribution", "sensitivity", "sourceKind", "valueSource",
       "evidenceIds", "applicability", "note", "parameter", "fromPooling", "expertFrom"])) return null;
     const key = item.str("key", { max: 64, required: true });
@@ -719,14 +741,14 @@ const WRITERS = {
       }
       const saved = await evidence.saveAssumptionFromPooling({
         userId: study.userId, studyId: study.id, key, name, parameter: poolParameter, endpoint: endpoint ?? "", unit: unit ?? "",
-        results, evidenceIdsByCalibre, applicability, note,
+        results, evidenceIdsByCalibre, applicability, note, afterFreeze,
       });
       if (!saved.assumption) {
         return void item.bad("fromPooling", saved.reason === "no_pool_succeeded"
           ? "这些合并作业没有一个成功，没有可写的卡：先读作业状态。" : `没有写出假设卡（${saved.reason}）。`);
       }
-      extra.changed.push(`assumption:${saved.assumption.key}@${saved.assumption.version}`);
-      extra.results.push({ index: item.index, status: saved.status, calibre: saved.card?.pooling?.calibre ?? null,
+      noteChange(saved.assumption);
+      extra.results.push({ index: item.index, status: saved.status, calibre: saved.card?.pooling?.calibre ?? null, ...(afterFreeze ? { afterFreeze: true } : {}),
         ...(saved.status === "expert_set" ? { note: "合并结果没有预测区间（少于三项研究），已写成加宽后的专家设定·待补证。" } : {}) });
       return saved.assumption.id;
     }
@@ -759,8 +781,8 @@ const WRITERS = {
         return void item.bad("expertFrom", "expertFrom 写 { evidenceId } 或 { jobId }，再加 reason。");
       }
       const saved = await evidence.saveExpertSet({ userId: study.userId, studyId: study.id, key, name, parameter: parameter ?? "", unit: unit ?? "",
-        nearest, reason, applicability });
-      extra.changed.push(`assumption:${saved.assumption.key}@${saved.assumption.version}`);
+        nearest, reason, applicability, afterFreeze });
+      noteChange(saved.assumption);
       return saved.assumption.id;
     }
 
@@ -792,9 +814,9 @@ const WRITERS = {
         key, name, endpoint, unit, pointValue: Number(row.value),
         distribution: { family: "point", params: { point: Number(row.value) }, range },
         sensitivity: { range, calibres: [] }, sourceKind: "external_evidence", valueSource: "extracted", poolingMethod: "single_study",
-        pooling: { k: 1, note: "单项研究直接取值，没有预测区间" }, evidenceIds: cited, applicability, reviewState: "ai_set", note,
+        pooling: { k: 1, note: "单项研究直接取值，没有预测区间" }, evidenceIds: cited, applicability, reviewState: "ai_set", note, afterFreeze,
       } });
-      extra.changed.push(`assumption:${saved.key}@${saved.version}`);
+      noteChange(saved);
       return saved.id;
     }
 
@@ -810,10 +832,10 @@ const WRITERS = {
     const sensitivity = item.obj("sensitivity", { bytes: 8 * 1024 }) ?? {};
     if (!item.ok) return null;
     const card = { key, name, endpoint, unit, pointValue: pointValue ?? null, distribution, sensitivity, sourceKind, valueSource,
-      poolingMethod: null, pooling: {}, evidenceIds: [], applicability, reviewState: "ai_set", note };
+      poolingMethod: null, pooling: {}, evidenceIds: [], applicability, reviewState: "ai_set", note, afterFreeze };
     const saved = evidenceStore ? await evidenceStore.saveAssumption({ userId: study.userId, studyId: study.id, card })
       : await store.saveAssumption({ studyId: study.id, userId: study.userId, ...card });
-    extra.changed.push(`assumption:${saved.key}@${saved.version}`);
+    noteChange(saved);
     return saved.id;
   },
 
@@ -846,9 +868,10 @@ const WRITERS = {
     return extracted.precedent?.id ?? null;
   },
 
-  async evidence_item(item, { evidence, study }, extra) {
+  async evidence_item(item, { evidence, study, service }, extra) {
     if (!item.only(["registry", "registryId", "parameter", "arm", "armRole", "value", "valueText", "unit", "ciLow", "ciHigh", "sampleSize",
-      "events", "valueSource", "quote", "locator", "endpointKey", "enrollmentKind", "historicalBaseline", "line", "biomarker", "outcome", "note"])) return null;
+      "events", "valueSource", "quote", "locator", "endpointKey", "enrollmentKind", "historicalBaseline", "line", "biomarker", "outcome", "note",
+      "source", "candidateFrom"])) return null;
     const registry = item.choice("registry", ["clinicaltrials.gov", "chictr", "ctis"], { fallback: "clinicaltrials.gov" });
     const registryId = item.token("registryId", /^[A-Za-z0-9][A-Za-z0-9-]{2,63}$/, "这条数所在的登记记录的登记号", { required: true });
     const parameter = item.str("parameter", { max: 120, required: true });
@@ -871,11 +894,23 @@ const WRITERS = {
     if (item.row.historicalBaseline != null && typeof item.row.historicalBaseline !== "boolean") item.bad("historicalBaseline", "historicalBaseline 是 true 或 false。");
     const line = item.str("line", { max: 40 });
     const biomarker = item.str("biomarker", { max: 80 });
+    // Where the run says it read the quotation. An evidence item stands on a registry record the study holds, so the field is a
+    // statement, never a lookup — but a platform card's page is an index of other people's sources, and an item that names one as
+    // its source is refused whole (flywheel F23, 2026-10-06): the card may point at a primary source, it is never one.
+    const source = item.str("source", { max: 500 });
+    // A root-relative link (`/evidence/c/…`) is not an address to `isPlatformCardAddress`, and a run may write either.
+    const publicUrl = service?.config?.publicUrl;
+    if (source && (isPlatformCardAddress(source, { publicUrl }) || platformCardCitations(source, { publicUrl }).length)) {
+      item.bad("source", "出处不能是证据卡的页面：证据卡只是线索。读它列出的原始来源，在条目里写那份来源和逐字的引文。", "vcr_evidence_source_is_card");
+    }
+    // Which card led the run to this value. Stored and shown, never trusted: nothing about the item's verdict reads it.
+    const candidateFrom = item.row.candidateFrom == null ? undefined : candidateOf(item);
     if (!item.ok) return null;
     if (!evidence?.addEvidenceItem) return void item.bad("registryId", "证据参数化未接入本部署。", "vcr_write_refused");
     const written = await evidence.addEvidenceItem({ userId: study.userId, studyId: study.id, item: {
       registry, registryId, parameter, arm, armRole, value, valueText, unit, ciLow, ciHigh, sampleSize, events, valueSource, quote, locator,
       endpointKey, enrollmentKind, historicalBaseline: item.row.historicalBaseline === true, line, biomarker, outcome: item.row.outcome, note: item.row.note,
+      ...(source ? { source } : {}), ...(candidateFrom ? { candidateFrom } : {}),
     } });
     if (written.status !== "ok") return void item.bad(written.code === "vcr_precedent_not_in_study" ? "registryId" : "quote", written.message ?? "没有写入。",
       written.code === "vcr_precedent_not_in_study" ? "vcr_write_value_invalid" : "vcr_evidence_unverified");
@@ -1429,6 +1464,13 @@ export async function vcrRuntimeWrite({ store, service, orchestrator, study, wha
   }
   /** @type {WriteDeps} */
   const deps = { store, service, orchestrator, study, evidence, evidenceStore, matchStore, matching, seal, dataPlane, documents, report, caller, knowledge };
+  // The run the platform sent to take new evidence into a study's cards (flywheel F24) writes its versions beside the frozen one when
+  // the study's analysis plan has frozen: the dispatch names the run, and a card a run types never decides it. Any other writer — the
+  // researcher's own conversation, an ordinary programme step — writes exactly as before, which for a frozen study is a new freeze.
+  if (what === "assumption" && typeof orchestrator?.evidenceRefreshRun === "function") {
+    const refresh = await orchestrator.evidenceRefreshRun(study.id, { runtimeRunId: caller?.runtimeRunId ?? null }).catch(() => null);
+    if (refresh && (await seal?.sealState?.(study.id).catch(() => null))?.planFrozenAt) deps.afterFreeze = true;
+  }
 
   if (what === "protocol" || what === "criteria") {
     try {

@@ -9,6 +9,7 @@ import {
   saveVcrAssumption,
   signVcrReview,
   type VcrAssumption,
+  type VcrPrecedentCandidate,
   type VcrReviewKind,
   type VcrStudy,
 } from "@/lib/vcrClient";
@@ -171,6 +172,7 @@ export function DataTab({ studyId, study, onStudyChanged }: { studyId: string; s
                     </span>
                     <span className="mt-1 flex flex-wrap items-center gap-1.5">
                       <SourceTag source={assumption.value.source} />
+                      {assumption.newEvidence && <Tag tone="accent">{assumption.newEvidence.label}</Tag>}
                       {assumption.summary && <span className="min-w-0 truncate text-caption text-text-3">{assumption.summary}</span>}
                       <span className="flex-1" />
                       <ReviewChip state={assumption.value.review} />
@@ -197,6 +199,8 @@ export function DataTab({ studyId, study, onStudyChanged }: { studyId: string; s
         </VcrSection>
       )}
 
+      {data.precedentCandidates && data.precedentCandidates.length > 0 && <PrecedentCandidates rows={data.precedentCandidates} />}
+
       {intakePanel}
 
       {data.decisions && data.decisions.length > 0 && (
@@ -212,6 +216,33 @@ export function DataTab({ studyId, study, onStudyChanged }: { studyId: string; s
         </VcrSection>
       )}
     </div>
+  );
+}
+
+const CANDIDATE_EVENT_LABELS: Readonly<Record<VcrPrecedentCandidate["event"], string>> = Object.freeze({
+  registration: "试验注册", results: "结果发布", label_change: "说明书变更",
+});
+
+/**
+ * 候选先例: trial events the frontier feed reported for what the study is about. Each is marked a candidate and says so in a sentence,
+ * because a candidate is a pointer — a precedent is a registry record the evidence step fetched and checked against its own text.
+ */
+function PrecedentCandidates({ rows }: { rows: readonly VcrPrecedentCandidate[] }) {
+  return (
+    <VcrSection title="候选先例" meta={`${rows.length} 项`}>
+      <p className="mb-2 text-caption text-text-3">前沿动态里出现的、与本研究对象有关的试验事件，只是线索，不是先例：证据步骤取回登记记录并逐项核对之后，才会进入试验先例。</p>
+      <ul className="divide-y divide-faint">
+        {rows.map((row) => (
+          <li key={row.id} data-vcr-precedent-candidate={row.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-2">
+            <Tag>候选</Tag>
+            <span className="min-w-0 flex-1 text-ui text-text">{row.title}</span>
+            <span className="shrink-0 text-caption text-text-3">
+              {[CANDIDATE_EVENT_LABELS[row.event], row.registryId ?? (row.doi ? `DOI ${row.doi}` : null)].filter(Boolean).join(" · ")}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </VcrSection>
   );
 }
 
@@ -250,6 +281,7 @@ function AssumptionDetail({ studyId, study, assumption, onChanged }: {
           {assumption.sourceType && <Tag>{assumption.sourceType}</Tag>}
           <ReviewChip state={assumption.value.review} by={review?.by} at={review?.at} />
           {assumption.isKey && <Tag>关键假设</Tag>}
+          {assumption.newEvidence && <Tag tone="accent">{assumption.newEvidence.label}</Tag>}
           {assumption.version != null && <span className="text-caption tabular-nums text-text-3">{`版本 ${assumption.version}`}</span>}
           <span className="flex-1" />
           {mode === "read" && mayEdit && <Button size="sm" variant="secondary" onClick={() => setMode("edit")}>改这张卡</Button>}
@@ -277,6 +309,8 @@ function AssumptionDetail({ studyId, study, assumption, onChanged }: {
       )}
 
       {facts.length > 0 && <VcrFacts rows={facts} className="mt-3" />}
+
+      {assumption.newEvidence && <NewEvidence news={assumption.newEvidence} version={assumption.version ?? null} />}
 
       {detail?.forest && detail.forest.length > 0 && (
         <div className="mt-4">
@@ -340,6 +374,36 @@ function AssumptionDetail({ studyId, study, assumption, onChanged }: {
         </VcrSection>
       )}
     </Card>
+  );
+}
+
+const NEWS_CAUSE_LABELS: Readonly<Record<NonNullable<VcrAssumption["newEvidence"]>["open"][number]["cause"], string>> = Object.freeze({
+  new_results: "新的结果", source_retracted: "来源已撤稿", source_corrected: "来源已更正", source_new_version: "来源有新版本",
+});
+
+/**
+ * 有新证据: what bears on the card's sources, and where the new version is. Said in words and never decided here: the platform asks
+ * for the version, the engine pools it, and a study whose analysis plan has frozen keeps the version it froze with.
+ */
+function NewEvidence({ news, version }: { news: NonNullable<VcrAssumption["newEvidence"]>; version: number | null }) {
+  return (
+    <div data-vcr-new-evidence="" role="status" className="mt-4 rounded-card border border-border bg-surface-1 p-3">
+      <p className="text-ui font-medium text-text">{news.label}</p>
+      {news.open.length > 0 && (
+        <ul className="mt-1.5 flex flex-col gap-1">
+          {news.open.map((entry) => (
+            <li key={entry.id} className="flex flex-wrap items-baseline gap-x-2 text-caption text-text-2">
+              <Tag>{NEWS_CAUSE_LABELS[entry.cause]}</Tag>
+              <span className="min-w-0">{entry.title || entry.identifier}</span>
+              <span className="tabular-nums text-text-3">{entry.identifier}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      {news.afterFreezeVersion != null && (
+        <p className="mt-1.5 text-caption text-text-3">{`分析计划已经冻结：新版本 v${news.afterFreezeVersion} 放在冻结的${version != null ? ` v${version} ` : "版本"}旁边，研究仍按冻结的版本计算。`}</p>
+      )}
+    </div>
   );
 }
 

@@ -8,12 +8,14 @@ import {
   getVcrLibraryDetail,
   getVcrPacks,
   promoteVcrPack,
+  requestVcrPlatformPack,
   saveVcrDefinition,
   reuseVcrDefinition,
   type VcrComparison,
   type VcrKnowledge,
   type VcrLibraryEntry,
   type VcrPackSummary,
+  type VcrPlatformPackAnswer,
   type VcrPackSource,
 } from "@/lib/vcrClient";
 import { webErrorMessage } from "@/lib/apiClient";
@@ -144,10 +146,67 @@ function PackRow({ studyId, pack, onChanged }: { studyId: string; pack: VcrPackS
         <span className="text-caption text-text-3">{counts}</span>
         {pack.canPromote && <Button size="sm" variant="secondary" loading={busy} onClick={promote}>复核后标为已整理</Button>}
       </p>
+      {pack.platform && <PlatformAttribution platform={pack.platform} />}
+      {pack.platformRequest && <PlatformRequest studyId={studyId} request={pack.platformRequest} onChanged={onChanged} />}
       {pack.sources.length > 0 && (
         <Disclosure summary={`来源 ${pack.sources.length}`} summaryClassName="text-caption">
           <SourceList sources={pack.sources} />
         </Disclosure>
+      )}
+    </div>
+  );
+}
+
+/** A platform pack says whose work it is, by the name they allow, from which of their versions, and when a source has changed — and nothing is rewritten. */
+function PlatformAttribution({ platform }: { platform: NonNullable<VcrPackSummary["platform"]> }) {
+  return (
+    <p data-vcr-platform-pack={platform.state} className="flex flex-wrap items-center gap-2 text-caption text-text-3">
+      <Tag tone="accent">平台知识包</Tag>
+      <span>{platform.author.name ? `${platform.author.name} 整理 · 取自其 v${platform.author.sourceVersion}` : `取自一位已撤回署名的作者的 v${platform.author.sourceVersion}`}</span>
+      {platform.state === "retired" && <Tag>已撤回，不再提供给新研究</Tag>}
+      {platform.sourceChanged && <Tag>来源有变更</Tag>}
+    </p>
+  );
+}
+
+/**
+ * 申请成为平台知识包: offered to the lead once the pack is marked curated. The code re-checks the pack; a pack that passes becomes the
+ * platform's own version under the author's name, one that fails stays this account's and the page names what failed.
+ */
+function PlatformRequest({ studyId, request, onChanged }: { studyId: string; request: NonNullable<VcrPackSummary["platformRequest"]>; onChanged: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [answer, setAnswer] = useState<VcrPlatformPackAnswer | null>(null);
+  const holding = useRef(false);
+  const ask = () => {
+    if (holding.current) return;
+    holding.current = true;
+    setBusy(true);
+    void requestVcrPlatformPack(studyId)
+      .then((result) => {
+        setAnswer(result);
+        if (result.state === "passed") { toast.success("复核通过，已成为平台知识包。"); onChanged(); }
+      })
+      .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "暂时无法申请，请稍后重试。" })))
+      .finally(() => { holding.current = false; setBusy(false); });
+  };
+  const failing = answer ? (answer.state === "failed" ? answer.failing : []) : (request.recheck?.state === "failed" ? request.recheck.failing : []);
+  if (!request.canRequest && request.requested) return <p data-vcr-platform-request="done" className="text-caption text-text-3">这份知识包已经是平台知识包。</p>;
+  if (!request.canRequest && failing.length === 0) return null;
+  return (
+    <div data-vcr-platform-request="" className="flex flex-col gap-2">
+      {request.canRequest && (
+        <p className="flex flex-wrap items-center gap-2">
+          <Button size="sm" variant="secondary" loading={busy} onClick={ask}>申请成为平台知识包</Button>
+          <span className="text-caption text-text-3">平台会重新核对结构、授权和来源；通过后所有账号都能选用，并署上你的名字。</span>
+        </p>
+      )}
+      {failing.length > 0 && (
+        <div role="status" data-vcr-platform-failing="" className="rounded-card border border-border bg-surface-1 p-3">
+          <p className="text-ui font-medium text-text">复核没有通过，知识包仍是你账号里的：</p>
+          <ul className="mt-1.5 flex flex-col gap-1 text-caption text-text-2">
+            {failing.map((entry) => <li key={`${entry.section ?? ""}-${entry.id}-${entry.code}`}>{`${entry.section ? `${entry.section} · ` : ""}${entry.id}：${entry.detail}`}</li>)}
+          </ul>
+        </div>
       )}
     </div>
   );

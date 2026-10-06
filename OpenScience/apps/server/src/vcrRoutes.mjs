@@ -67,6 +67,7 @@ import { HttpError, readJson, sendJson } from "./security.mjs";
 import { fileView, importAttemptAuditDetail, importAuditDetail, snapshotView, sourceView, tableView, uploadAttemptAuditDetail, uploadAuditDetail } from "./vcrDataPlane.mjs";
 import { abilitiesOfRoles } from "./vcrMembers.mjs";
 import { isSiteScopedRole } from "./vcrRecruit.mjs";
+import { VCR_PUBLICATION_KINDS, VCR_PUBLICATION_LIMITS } from "./vcrPublications.mjs";
 
 /**
  * Every code these routes answer with — or that a module behind them answers
@@ -110,6 +111,21 @@ export const VCR_ROUTE_ERROR_CODES = Object.freeze([
   "vcr_definition_not_found",
   "vcr_definition_invalid",
   "vcr_model_assessment_not_found",
+  // 「模拟研究」 (flywheel 2026-10-06): the column is off, the publication is not the study's, the report is not written yet, the
+  // words of the report name a subject of the study.
+  "vcr_publications_not_enabled",
+  "vcr_publication_not_found",
+  "vcr_publication_not_ready",
+  "vcr_publication_patient_data",
+  // Platform knowledge packs (flywheel F26): the switch is off, the pack is not yet marked curated.
+  "vcr_platform_packs_not_enabled",
+  "vcr_pack_not_curated",
+  // Filing a prediction (flywheel F25): no registry composed, a number in the request, no engine result behind the scenario.
+  "vcr_predictions_not_enabled",
+  "vcr_prediction_number_refused",
+  "vcr_prediction_scenario_not_found",
+  "vcr_prediction_not_from_engine",
+  "vcr_prediction_unreadable",
 ]);
 
 /**
@@ -142,6 +158,10 @@ export const VCR_ROUTE_ABILITIES = Object.freeze({
   "POST /studies/:id/decisions": ["write"],
   "POST /studies/:id/export": ["export"],
   "GET /studies/:id/export/:export": ["read"],
+  "GET /studies/:id/publications": ["read"],
+  "POST /studies/:id/publications": ["manage_study"],
+  "POST /studies/:id/predictions": ["manage_study"],
+  "DELETE /studies/:id/publications/:publication": ["manage_study"],
   "GET /studies/:id/members": ["read"],
   "POST /studies/:id/members": ["manage_members"],
   "DELETE /studies/:id/members/:user": ["manage_members"],
@@ -153,6 +173,7 @@ export const VCR_ROUTE_ABILITIES = Object.freeze({
   "POST /models (with a study)": ["write"],
   "POST /studies/:id/pack": ["write"],
   "POST /studies/:id/pack/promote": ["manage_study"],
+  "POST /studies/:id/pack/platform": ["manage_study"],
   "POST /studies/:id/definitions": ["write"],
   "POST /studies/:id/definitions/:definition/use": ["write"],
   "POST /studies/:id/definitions/:definition/compare": ["run"],
@@ -193,7 +214,7 @@ export function vcrRoutePattern(pathname) {
   if (parts[0] !== "studies") return "/api/vcr/:route";
   if (parts.length === 1) return "/api/vcr/studies";
   if (parts.length === 2) return "/api/vcr/studies/:id";
-  const known = [...VCR_TABS, "run", "jobs", "budget", "assumptions", "model-assessments", "reviews", "curve-extractions", "correction-cases", "decisions", "export", "members", "referrals", "pack", "definitions"];
+  const known = [...VCR_TABS, "run", "jobs", "budget", "assumptions", "model-assessments", "reviews", "curve-extractions", "correction-cases", "decisions", "export", "publications", "predictions", "members", "referrals", "pack", "definitions"];
   const section = known.includes(parts[2]) ? parts[2] : ":route";
   if (parts[2] === "data" && parts.length > 3) {
     // The intake routes: `data/<kind>[/:item[/<action>[/confirm]]]`, every id folded.
@@ -314,7 +335,7 @@ function wholeNumber(value, field, max) {
  *     latestSessionId?: (user: any, projectId: string) => Promise<string | null>,
  *     remove?: (user: any, projectId: string) => Promise<unknown> } | null,
  *   orchestrator?: any, jobs?: any, exporter?: any, members?: any, matching?: any, assessments?: any, dataPlane?: any,
- *   evidence?: any, evidenceStore?: any, corrections?: any, knowledge?: any }} dependencies
+ *   evidence?: any, evidenceStore?: any, corrections?: any, knowledge?: any, publications?: any, predictions?: any }} dependencies
  *   `store` is the platform's, for the session and the CSRF check only;
  *   `vcrStore` is the module's own (defaults to the service's).
  */
@@ -352,6 +373,10 @@ export function createVcrRoutes(dependencies) {
       get evidenceStore() { return dependencies.evidenceStore ?? service.packages?.evidenceStore ?? null; },
       // The disease packs and the definition library.
       get knowledge() { return dependencies.knowledge ?? service.packages?.knowledge ?? null; },
+      // The public 「模拟研究」 column's publish and withdraw (`vcrPublications.mjs`); null while the switch is off.
+      get publications() { return dependencies.publications ?? null; },
+      // Filing a prediction with the registry (`vcrPredictions.mjs`); null while no registry is composed.
+      get predictions() { return dependencies.predictions ?? null; },
     };
     /** The module's own store: roles, assumptions, reviews, decisions, exports, members. */
     const data = () => {
@@ -484,6 +509,13 @@ export function createVcrRoutes(dependencies) {
       throw new HttpError(404, "not_found", "虚拟临研 route not found.");
     }
     // The packs the account can use, and its library of population definitions: the account's, so no study is named.
+    // The author takes their name off a platform pack: the account's own act, so no study is named.
+    if (parts[0] === "packs" && parts.length === 3 && parts[2] === "platform" && method === "DELETE") {
+      await bodyOf(req, maxJsonBytes, []);
+      if (!config.vcrPlatformPacksEnabled || !hooks.knowledge) throw new HttpError(404, "vcr_platform_packs_not_enabled", "平台知识包 is not enabled.");
+      return reply(await audited("vcr.pack.platform_withdraw", (result) => ({ code: String(result.id) }), { code: parts[1] },
+        () => hooks.knowledge.withdrawPlatformPack(String(user.id), parts[1])));
+    }
     if (parts[0] === "packs" || parts[0] === "definitions") {
       if (method !== "GET" || parts.length > 2) throw new HttpError(404, "not_found", "虚拟临研 route not found.");
       const knowledge = hooks.knowledge;
@@ -545,7 +577,10 @@ export function createVcrRoutes(dependencies) {
         if (roles.some((role) => roleHolds(role, "manage_study"))) abilities.add("manage_study");
         // What this caller may do, from the roles it holds now: the page reads
         // it to show only the actions that will not be refused.
-        return reply({ ...view, sessionId, roles, abilities: [...abilities].sort() });
+        // What this deployment offers on the page besides the module's own: each is a switch the page reads to show or hide one action.
+        const features = { simulations: Boolean(config.vcrPublicSimulationsEnabled && hooks.publications), predictions: Boolean(hooks.predictions),
+          platformPacks: Boolean(config.vcrPlatformPacksEnabled && hooks.knowledge) };
+        return reply({ ...view, sessionId, roles, abilities: [...abilities].sort(), features });
       }
       if (method === "PATCH") {
         const body = await bodyOf(req, maxJsonBytes, ["name", "question", "action", "dataTier", "intendedUse", "status"]);
@@ -606,6 +641,15 @@ export function createVcrRoutes(dependencies) {
         if (!hooks.knowledge) throw UNAVAILABLE();
         return reply(await audited("vcr.pack.promote", () => ({ code: id, detail: "curated" }), { code: id },
           () => hooks.knowledge.promotePack(study, String(user.id))));
+      }
+      // 申请成为平台知识包: the study's lead alone; the re-check is the answer, passed or failed with the failing entries named.
+      if (parts.length === 4 && parts[3] === "platform" && method === "POST") {
+        await bodyOf(req, maxJsonBytes, []);
+        if (!config.vcrPlatformPacksEnabled || !hooks.knowledge) throw new HttpError(404, "vcr_platform_packs_not_enabled", "平台知识包 is not enabled.");
+        const { study } = await authorize(id, "manage_study");
+        const result = await audited("vcr.pack.platform_request", (outcome) => ({ code: id, detail: String(outcome.state) }), { code: id },
+          () => hooks.knowledge.requestPlatformPromotion(study, String(user.id)));
+        return reply(result, result.state === "passed" && !result.existing ? 201 : 200);
       }
       throw new HttpError(404, "not_found", "虚拟临研 route not found.");
     }
@@ -986,6 +1030,50 @@ export function createVcrRoutes(dependencies) {
       return reply(saved, 201);
     }
 
+    // --- 模拟研究: the lead publishes one of the study's reports to the public column --------------------
+    if (section === "publications") {
+      // Off is invisible: the module's own not-enabled answer, before the study is even looked up.
+      if (!config.vcrPublicSimulationsEnabled || !hooks.publications) throw new HttpError(404, "vcr_publications_not_enabled", "模拟研究 is not enabled.");
+      if (parts.length === 3 && method === "GET") {
+        const { study } = await authorize(id, "read");
+        return reply({ publications: await hooks.publications.forStudy(study.id) });
+      }
+      if (parts.length === 3 && method === "POST") {
+        const body = await bodyOf(req, maxJsonBytes, ["exportId", "title", "summary"]);
+        if (typeof body.exportId !== "string" || !ID.test(body.exportId)) throw new HttpError(400, "vcr_payload_invalid", "exportId is the id of one of the study's reports.");
+        const title = typeof body.title === "string" ? body.title.replace(/\s+/g, " ").trim() : "";
+        const summary = typeof body.summary === "string" ? body.summary.replace(/[ \t]+/g, " ").trim() : "";
+        if (!title || [...title].length > VCR_PUBLICATION_LIMITS.title) throw new HttpError(400, "vcr_payload_invalid", `title is one line of 1 to ${VCR_PUBLICATION_LIMITS.title} characters.`);
+        if ([...summary].length > VCR_PUBLICATION_LIMITS.summary) throw new HttpError(400, "vcr_payload_invalid", `summary is at most ${VCR_PUBLICATION_LIMITS.summary} characters.`);
+        // The study's lead alone: publishing is the one act that makes a study's numbers public.
+        const { study } = await authorize(id, "manage_study");
+        const published = await audited("vcr.simulation.publish", (result) => ({ code: String(result.id), detail: String(result.exportKind) }),
+          { code: id, detail: body.exportId }, () => hooks.publications.publish(user, study, { exportId: body.exportId, title, summary }));
+        return reply(published, published.existing ? 200 : 201);
+      }
+      if (parts.length === 4 && method === "DELETE") {
+        await bodyOf(req, maxJsonBytes, []);
+        const { study } = await authorize(id, "manage_study");
+        const withdrawn = await audited("vcr.simulation.withdraw", (result) => ({ code: String(result.id) }), { code: id, detail: parts[3] },
+          () => hooks.publications.withdraw(user, study, parts[3]));
+        return reply(withdrawn);
+      }
+      throw new HttpError(404, "not_found", "虚拟临研 route not found.");
+    }
+
+    // --- 登记预测: a trial scenario's prediction of a registered trial's primary endpoint, filed with the registry ---------
+    if (section === "predictions") {
+      if (!hooks.predictions) throw new HttpError(404, "vcr_predictions_not_enabled", "Prediction filing is not enabled.");
+      if (parts.length !== 3 || method !== "POST") throw new HttpError(404, "not_found", "虚拟临研 route not found.");
+      // The body is read by the module, which refuses a number by name; only its size is held here.
+      const body = await readJson(req, maxJsonBytes);
+      if (!body || typeof body !== "object" || Array.isArray(body)) throw new HttpError(400, "vcr_payload_invalid", "The request is a JSON object.");
+      const { study } = await authorize(id, "manage_study");
+      const filed = await audited("vcr.prediction.file", (result) => ({ code: id, detail: result.filed ? "filed" : "existing" }), { code: id },
+        () => hooks.predictions.file(study, user, body));
+      return reply(filed, filed.filed ? 201 : 200);
+    }
+
     // --- export -----------------------------------------------------------------------
     if (section === "export") {
       if (parts.length === 3 && method === "POST") {
@@ -1001,10 +1089,14 @@ export function createVcrRoutes(dependencies) {
         return reply(result, 201);
       }
       if (parts.length === 4 && method === "GET") {
-        await authorize(id, "read");
+        const { study, roles } = await authorize(id, "read");
         // The reader page, not the stored row: the presenter shapes it the way
         // `VcrPackageReader` reads it (title, meta, sections, the run and file).
-        return reply(await service.exportView(user, id, parts[3]));
+        const view = await service.exportView(user, id, parts[3]);
+        // 发布到模拟研究: said only where the column is on and the report is one it takes; the lead alone is offered the act.
+        if (!config.vcrPublicSimulationsEnabled || !hooks.publications || !VCR_PUBLICATION_KINDS.includes(String(view?.kind))) return reply(view);
+        const live = (await hooks.publications.forStudy(study.id)).find((/** @type {any} */ entry) => entry.exportId === parts[3]) ?? null;
+        return reply({ ...view, publication: { canPublish: roles.some((role) => roleHolds(role, "manage_study")), live: live ? { id: live.id, publishedAt: live.publishedAt } : null } });
       }
       throw new HttpError(404, "not_found", "虚拟临研 route not found.");
     }

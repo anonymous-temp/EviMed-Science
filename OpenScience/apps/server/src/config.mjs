@@ -753,6 +753,22 @@ function vcrSettings(overrides) {
     vcrAudience: audience,
     // Accounts that see the module under `operators` without being operators.
     vcrPreviewUsers: overrides.vcrPreviewUsers ?? listEnv("OPEN_SCIENCE_VCR_PREVIEW_USERS"),
+    // The public 「模拟研究」 column (flywheel plan §5.6, 2026-10-06): a study lead may publish a report there and the public pages
+    // package reads it. Off, the publication routes answer 404 `vcr_publications_not_enabled` and no table is read. Counter:
+    // `open_science_vcr_publications_total`.
+    vcrPublicSimulationsEnabled: overrides.vcrPublicSimulationsEnabled ?? boolEnv("OPEN_SCIENCE_VCR_PUBLIC_SIMULATIONS_ENABLED", false),
+    // The frontier feed's trial events for a study's subject (flywheel F24, 2026-10-06): precedent candidates, 「有新证据」 on a card
+    // and the request for a new version, ticked by the module's worker. Off, no consumer is composed and nothing is read. Each tick
+    // looks at this many studies, the one looked at longest ago first (a resource limit: every study is one query set), and reads
+    // the feed this many days back (an item enters the feed with its own publication date, so a window, not a cursor). Counters:
+    // `open_science_vcr_frontier_events_total`.
+    // Platform knowledge packs (flywheel F26, 2026-10-06): a pack the study lead curated may be re-checked and offered as the platform's
+    // own immutable version, read by every account beside the shipped packs. Off, the request routes answer 404
+    // `vcr_platform_packs_not_enabled`, no platform row is read and the source watch does not run. Counter: `open_science_vcr_platform_packs_total`.
+    vcrPlatformPacksEnabled: overrides.vcrPlatformPacksEnabled ?? boolEnv("OPEN_SCIENCE_VCR_PLATFORM_PACKS_ENABLED", false),
+    vcrFrontierEventsEnabled: overrides.vcrFrontierEventsEnabled ?? boolEnv("OPEN_SCIENCE_VCR_FRONTIER_EVENTS_ENABLED", false),
+    vcrFrontierEventsStudiesPerTick: integer("vcrFrontierEventsStudiesPerTick", "OPEN_SCIENCE_VCR_FRONTIER_EVENTS_STUDIES_PER_TICK", 10, 1, 200),
+    vcrFrontierEventsWindowDays: integer("vcrFrontierEventsWindowDays", "OPEN_SCIENCE_VCR_FRONTIER_EVENTS_WINDOW_DAYS", 30, 1, 365),
     vcrPollMs: integer("vcrPollMs", "OPEN_SCIENCE_VCR_POLL_MS", 5_000, 1_000, 3_600_000),
     vcrLeaseMs: integer("vcrLeaseMs", "OPEN_SCIENCE_VCR_LEASE_MS", 900_000, 60_000, 86_400_000),
     // The deterministic engine. Unset = not composed; the steps that need it say so.

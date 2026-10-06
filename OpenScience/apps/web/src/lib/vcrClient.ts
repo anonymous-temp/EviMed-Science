@@ -327,6 +327,8 @@ export interface VcrDeliverable {
   runId?: string | null;
   path?: string | null;
   state?: "queued" | "running" | "ready" | "failed";
+  /** 发布到模拟研究: present only where the column is on and this report is one it takes; the lead alone may publish. */
+  publication?: { canPublish: boolean; live: { id: string; publishedAt: string } | null } | null;
   /**
    * The package as a document, when the control plane renders one for reading
    * in place (plan §8.3). Without it the reader shows the cover alone and
@@ -458,6 +460,8 @@ export interface VcrStudy {
   overview: VcrOverview;
   /** The disease pack the study works from and the library definitions it used; null where the module cannot say. */
   knowledge?: VcrKnowledge | null;
+  /** What this deployment offers on the page besides the module's own: each hides one action when it is off. */
+  features?: { simulations: boolean; predictions: boolean; platformPacks: boolean };
   updatedAt?: string | null;
   createdAt?: string | null;
 }
@@ -954,6 +958,8 @@ export interface VcrAssumption {
       weight?: number | null; highlighted?: boolean; pooled?: boolean;
       /** The prediction interval's whisker under the diamond. */
       prediction?: boolean;
+      /** The evidence card a run says led it to this value (flywheel F23): provenance, never the value's source. */
+      candidateFrom?: { cardId: string; claimId?: string };
     }>;
     forestNote?: string | null;
     /** The distribution the simulation draws from. */
@@ -963,8 +969,30 @@ export interface VcrAssumption {
     quoteLink?: string | null;
     /** 「被这些结果使用」. */
     usedBy?: Array<{ id: string; label: string; note?: string | null; tab?: VcrTabKey | null }>;
-    versions?: Array<{ version: number; at?: string | null; text: string; note?: string | null }>;
+    /** `afterFreeze`: written after the study's analysis plan froze — beside the frozen version, never the one the study works from (F24). */
+    versions?: Array<{ version: number; at?: string | null; text: string; note?: string | null; afterFreeze?: boolean }>;
   } | null;
+  /** 「有新证据」: the frontier feed or a source change bears on the card's sources (flywheel F24). */
+  newEvidence?: {
+    label: string;
+    open: Array<{ id: string; cause: "new_results" | "source_retracted" | "source_corrected" | "source_new_version"; identifier: string; itemId: string | null; title: string; at: string | null }>;
+    /** The version written after the freeze that took the news in, when the plan has frozen. */
+    afterFreezeVersion: number | null;
+  } | null;
+}
+
+/** A trial event the feed reported for the study's subject: a pointer, never a precedent (flywheel F24). */
+export interface VcrPrecedentCandidate {
+  id: string;
+  candidate: true;
+  event: "registration" | "results" | "label_change";
+  frontierItemId: string;
+  registry: string | null;
+  registryId: string | null;
+  doi: string | null;
+  pmid: string | null;
+  title: string;
+  noticedAt: string | null;
 }
 
 /** One precedent trial (plan §6.4): planned and actual apart, the raw text beside the normalised value. */
@@ -1003,6 +1031,8 @@ export interface VcrDataTab {
   precedents: VcrPrecedent[];
   precedentSources?: string | null;
   precedentNote?: string | null;
+  /** Trial events the feed reported for this study's subject, marked as candidates (flywheel F24). */
+  precedentCandidates?: VcrPrecedentCandidate[];
   /** Data snapshots and their quality, at T1 and above. */
   snapshots: Array<{ id: string; label: string; at?: string | null; rows?: number | null; quality?: Array<{ label: string; value: string; passed?: boolean }> }>;
   decisions?: Array<{ id: string; at: string | null; text: string }>;
@@ -1069,6 +1099,20 @@ export interface VcrPackSummary {
   boundAt?: string | null;
   /** A draft the reader may promote (the lead, or an operator). */
   canPromote?: boolean;
+  /** A platform pack (flywheel F26): who made it by the name they allow, from which of their versions, and whether a source has changed since. */
+  platform?: {
+    version: number;
+    author: { name: string; at: string | null; sourceVersion: number };
+    zoneId: string | null;
+    state: "live" | "retired";
+    sourceChanged: { at: string | null; sources: Array<{ sourceId: string; identifier: string; kind: string }> } | null;
+  } | null;
+  /** The lead's request to make the account's curated pack a platform pack, and what the re-check said. */
+  platformRequest?: {
+    canRequest: boolean;
+    requested: boolean;
+    recheck: { state: "passed" | "failed"; failing: Array<{ section: string | null; id: string; code: string; detail: string }>; checked: Record<string, number>; at: string | null } | null;
+  } | null;
 }
 
 /** A library definition a study used, with the pack entries it rests on. */
@@ -1550,6 +1594,7 @@ export function readVcrData(raw: unknown): VcrDataTab {
       } as VcrAssumption["detail"] : null,
     })),
     precedents: arr(value.precedents) as unknown as VcrPrecedent[],
+    precedentCandidates: arr(value.precedentCandidates) as unknown as VcrPrecedentCandidate[],
     snapshots: arr(value.snapshots).map((snapshot) => ({ ...(snapshot as unknown as VcrDataTab["snapshots"][number]), quality: arr(snapshot.quality) as unknown as NonNullable<VcrDataTab["snapshots"][number]["quality"]> })),
     decisions: arr(value.decisions) as unknown as VcrDataTab["decisions"],
     evidenceNote: text(value.evidenceNote),
@@ -1596,6 +1641,8 @@ export function readVcrPackSummary(raw: unknown): VcrPackSummary {
     counts: Object.fromEntries(Object.entries(obj(value.counts)).filter((entry): entry is [string, number] => typeof entry[1] === "number")),
     sources: arr(value.sources).map(readPackSource),
     reviewedBy: text(value.reviewedBy), reviewedAt: text(value.reviewedAt), boundAt: text(value.boundAt), canPromote: value.canPromote === true,
+    ...(value.platform && typeof value.platform === "object" ? { platform: value.platform as VcrPackSummary["platform"] } : {}),
+    ...(value.platformRequest && typeof value.platformRequest === "object" ? { platformRequest: value.platformRequest as VcrPackSummary["platformRequest"] } : {}),
   };
 }
 
@@ -1800,6 +1847,39 @@ export function bindVcrPack(studyId: string, packId: string) {
 /** A reviewed draft becomes curated (the lead, or an operator). */
 export function promoteVcrPack(studyId: string) {
   return productRequest<unknown>(`${study(studyId)}/pack/promote`, "POST", {});
+}
+
+/** The result of asking for a curated pack to become a platform pack: the re-check's verdict and, when it failed, the entries that did. */
+export interface VcrPlatformPackAnswer {
+  state: "passed" | "failed";
+  existing: boolean;
+  failing: Array<{ section: string | null; id: string; code: string; detail: string }>;
+}
+
+/** 申请成为平台知识包 (the study's lead): the code re-checks the pack; a pack that passes is copied as the platform's, one that fails stays the account's. */
+export async function requestVcrPlatformPack(studyId: string): Promise<VcrPlatformPackAnswer> {
+  const value = obj(await productRequest<unknown>(`${study(studyId)}/pack/platform`, "POST", {}));
+  return {
+    state: value.state === "passed" ? "passed" : "failed", existing: value.existing === true,
+    failing: arr(value.failing).map((entry) => ({ section: text(entry.section), id: text(entry.id) ?? "", code: text(entry.code) ?? "", detail: text(entry.detail) ?? "" })),
+  };
+}
+
+/** 发布到模拟研究 (the study's lead): the public form of one report. The server reads every number from the report; the page sends words only. */
+export function publishVcrSimulation(studyId: string, body: { exportId: string; title: string; summary: string }) {
+  return productRequest<unknown>(`${study(studyId)}/publications`, "POST", { exportId: body.exportId, title: body.title, summary: body.summary });
+}
+
+/** Take a report out of 模拟研究. */
+export function withdrawVcrSimulation(studyId: string, publicationId: string) {
+  return productRequest<unknown>(`${study(studyId)}/publications/${id(publicationId)}`, "DELETE");
+}
+
+/** 登记预测: file one trial scenario's prediction of a registered trial's primary endpoint. The number is read from the engine result at `resultPath`; the page types none. */
+export function fileVcrPrediction(studyId: string, body: { scenarioId: string; registryId: string; endpoint: string; resultPath: string }) {
+  return productRequest<unknown>(`${study(studyId)}/predictions`, "POST", {
+    scenarioId: body.scenarioId, registryId: body.registryId, endpoint: body.endpoint, resultPath: body.resultPath,
+  });
 }
 
 /** The account's library of population definitions. */

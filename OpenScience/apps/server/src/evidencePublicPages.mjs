@@ -427,25 +427,38 @@ export function simulationsPage({ reader, items, next }) {
     description: "EviMed 的“模拟研究”栏目：虚拟临研的模拟结果。模拟的结果不是证据。",
     body: html`<h1>模拟研究</h1>
 <p class="notice warn">${SIMULATION_BANNER}</p>
-${!reader || !items.length ? html`<p class="muted">这个栏目现在没有公开的模拟研究。</p>` : html`<ul class="list">${items.map((item) => html`<li><h3>${pathLink(`/evidence/simulations/${encodeURIComponent(item.id)}`, item.title)}</h3>${item.summary ? html`<p>${clip(item.summary, 200)}</p>` : ""}${item.createdAt ? html`<p class="meta">${timeTag(item.createdAt)}</p>` : ""}</li>`)}</ul>${pager(next, "/evidence/simulations")}`}`,
+${!reader || !items.length ? html`<p class="muted">这个栏目现在没有公开的模拟研究。</p>` : html`<ul class="list">${items.map((item) => html`<li><h3>${pathLink(`/evidence/simulations/${encodeURIComponent(item.id)}`, item.title)}</h3>${item.summary ? html`<p>${clip(item.summary, 200)}</p>` : ""}${item.publishedAt ?? item.createdAt ? html`<p class="meta">${item.producer?.name ? html`${item.producer.name} · ` : ""}${timeTag(item.publishedAt ?? item.createdAt)}</p>` : ""}</li>`)}</ul>${pager(next, "/evidence/simulations")}`}`,
   };
 }
 
-/** @param {any} record */
+/**
+ * One published simulation. The record is what 虚拟临研 stored when its study lead published a report (`vcrPublications.mjs`):
+ * sections, each with its text and its numbers, every number carrying the value-source label it had in the study; the
+ * intended use and the limitations from the report's cover; the engine receipts. A flat `numbers` list is read too.
+ * @param {any} record
+ */
 export function simulationPage(record) {
+  const rows = (/** @type {any[]} */ values) => html`<div class="table-wrap"><table>
+<thead><tr><th>项目</th><th class="num">数值</th><th>数值来源</th></tr></thead>
+<tbody>${values.map((/** @type {any} */ entry) => html`<tr><td>${entry.label}</td><td class="num">${entry.value}${entry.unit ? ` ${entry.unit}` : ""}</td><td>${/** @type {any} */ (VCR_VALUE_SOURCE_LABELS_ZH)[entry.valueSource] ?? "来源未标注"}</td></tr>`)}</tbody></table></div>`;
   const numbers = Array.isArray(record.numbers) ? record.numbers : [];
+  const sections = Array.isArray(record.sections) ? record.sections : [];
+  const limitations = Array.isArray(record.limitations) ? record.limitations.map(String).filter(Boolean) : record.limitations ? [String(record.limitations)] : [];
+  const receipts = Array.isArray(record.receipts) ? record.receipts : [];
+  const published = record.publishedAt ?? record.createdAt ?? null;
   return {
     title: `${record.title} · 模拟研究 · ${EVIDENCE_SITE_NAME}`,
     description: clip(record.summary || `${record.title}：一项模拟研究。模拟的结果不是证据。`),
     body: html`<p class="notice warn">${SIMULATION_BANNER}</p>
 <h1>${record.title}</h1>
-${record.createdAt ? html`<p class="meta">${timeTag(record.createdAt)}</p>` : ""}
+${published || record.producer?.name ? html`<p class="meta">${record.producer?.name ? html`${record.producer.name} · ` : ""}${published ? timeTag(published) : ""}</p>` : ""}
 ${record.summary ? html`<p class="lede">${record.summary}</p>` : ""}
-${numbers.length ? html`<h2>数字和它们的来源</h2><div class="table-wrap"><table>
-<thead><tr><th>项目</th><th class="num">数值</th><th>数值来源</th></tr></thead>
-<tbody>${numbers.map((/** @type {any} */ entry) => html`<tr><td>${entry.label}</td><td class="num">${entry.value}${entry.unit ? ` ${entry.unit}` : ""}</td><td>${/** @type {any} */ (VCR_VALUE_SOURCE_LABELS_ZH)[entry.valueSource] ?? "来源未标注"}</td></tr>`)}</tbody></table></div>` : ""}
+${record.intendedUse ? html`<h2>用途</h2><p>${record.intendedUse}</p>` : ""}
+${sections.map((/** @type {any} */ section) => html`${section.heading ? html`<h2>${section.heading}</h2>` : ""}${section.text ? html`<p>${section.text}</p>` : ""}${Array.isArray(section.values) && section.values.length ? rows(section.values) : ""}`)}
+${numbers.length ? html`<h2>数字和它们的来源</h2>${rows(numbers)}` : ""}
 ${Array.isArray(record.assumptions) && record.assumptions.length ? html`<h2>假设</h2><ul>${record.assumptions.map((/** @type {string} */ item) => html`<li>${item}</li>`)}</ul>` : ""}
-${record.limitations ? html`<h2>局限</h2><p>${record.limitations}</p>` : ""}
+${limitations.length ? html`<h2>局限</h2><ul>${limitations.map((/** @type {string} */ item) => html`<li>${item}</li>`)}</ul>` : ""}
+${receipts.length ? html`<h2>计算回执</h2><p class="muted">这些数字由统计引擎计算，回执编号：${receipts.map((/** @type {any} */ receipt) => String(typeof receipt === "string" ? receipt : receipt?.id ?? "")).filter(Boolean).join("、")}</p>` : ""}
 <p>${pathLink("/evidence/simulations", "返回模拟研究")}</p>`,
   };
 }

@@ -280,10 +280,10 @@ test("a runtime reserved for another dispatch is not the export's run; the resea
   assert.equal((await orchestrator.exportDispatch("std_1", {}))?.exportId, "exp_9");
 });
 
-test("there are exactly five notices, and they are the domain's five", () => {
+test("there are exactly six notices, and they are the domain's six: the five of the plan and the new-evidence notice of the flywheel (F24)", () => {
   assert.equal(VCR_NOTICE_KINDS, VCR_NOTIFICATION_KINDS);
   assert.deepEqual([...VCR_NOTICE_KINDS],
-    ["package_ready", "not_estimable", "budget_confirm", "new_candidates", "accrual_off_forecast"]);
+    ["package_ready", "not_estimable", "budget_confirm", "new_candidates", "accrual_off_forecast", "new_evidence"]);
 });
 
 test("a notice opens the page it is about", () => {

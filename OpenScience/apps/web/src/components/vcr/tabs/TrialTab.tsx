@@ -16,6 +16,7 @@ import { VcrCountsBand } from "../VcrCounts";
 import { VcrSeriesLegend, VcrTrajectoryChart } from "../VcrCharts";
 import { VcrMilestoneTimeline, VcrTradeoffScatter } from "../VcrDiagrams";
 import { ReviewChip } from "../VcrMarks";
+import { VcrFilePrediction } from "../VcrFilePrediction";
 import { VcrNumber } from "../VcrNumber";
 import { PartialResultNote, Stale, VcrStepFailed, VcrStepPending, VcrTabSkeleton } from "../VcrStates";
 import { useVcrLoad, VcrHeadline, VcrSection, VcrTabError } from "../vcrTabKit";
@@ -197,6 +198,7 @@ export function TrialTab({ studyId, study }: { studyId: string; study: VcrStudy 
           )
           : <span />}
         <div className="flex flex-col gap-4">
+          {study.features?.predictions && study.abilities.includes("manage_study") && <VcrFilePrediction studyId={studyId} designs={data.designs} />}
           {data.forecasts.length > 0 && <ForecastRegistry forecasts={data.forecasts} />}
           {data.runRecord.length > 0 && (
             <Card title="本次运行">
