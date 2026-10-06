@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
+import { declineDelivery, importDelivery, listPendingDeliveries, openDelivery, type PendingDelivery } from "@/lib/capsuleShareClient";
 import { CAPSULE_ENTRY_TYPES, CAPSULE_SCAN_REASONS, fromSender } from "@/lib/capsuleText";
 import {
   announceMemoryChanged, disableCapsule, enableReceivedCapsule, fetchReceivedCapsules, startCapsuleTrial, type ReceivedCapsule,
@@ -10,6 +11,7 @@ import { useProjectStore } from "@/lib/projects";
 import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 import { toast } from "@/lib/toast";
 import { LoadError } from "@/components/cards/LoadError";
+import { Button } from "@/components/ui/Button";
 import { Disclosure } from "@/components/ui/Disclosure";
 import { List, ListRow } from "@/components/ui/ListRow";
 import { Menu } from "@/components/ui/Menu";
@@ -34,6 +36,84 @@ function contents(pack: ReceivedCapsule) {
 }
 
 /**
+ * 「待收下的分享」: the deliveries named to this account that it has not answered yet (flywheel F17). A delivery reaches the recipient as an
+ * inbox notice, but a recipient who did not come through the inbox had no way to find it, so the shelf lists them: the row opens the page
+ * that previews the pack (the card its author signed, every entry, what the automatic scan would drop) and tries it, 「收下」 writes a copy that
+ * is not in force — the same import the page does, of exactly the pack that was previewed — and 「不需要」 turns it down. Silent when there is
+ * none; the sender is shown by display name only.
+ */
+function PendingDeliveries() {
+  const { data, failed, reload } = useCapsuleData(listPendingDeliveries);
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const act = async (delivery: PendingDelivery, operation: () => Promise<void>) => {
+    setBusy(delivery.id);
+    try {
+      await operation();
+      announceMemoryChanged();
+      reload();
+    } catch (error) {
+      toast.error(`没有完成：${productErrorMessage(error)}`);
+    } finally {
+      setBusy(null);
+    }
+  };
+  const take = (delivery: PendingDelivery) => act(delivery, async () => {
+    // What is taken is what was opened: the digest of the preview the server reads on the recipient's behalf.
+    const opened = await openDelivery(delivery.id);
+    if (!opened.preview?.canImport) throw new Error("这份分享现在不能收下。");
+    const title = delivery.card?.title ?? opened.preview.card?.title ?? "收到的分享";
+    await importDelivery(delivery.id, { expectedDigest: opened.preview.archiveSha256, title });
+    toast.success(`已收下“${title}”。它还没有生效：在下面的“收到的胶囊”里先试用一次，或直接启用。`);
+  });
+  const turnDown = (delivery: PendingDelivery) => act(delivery, async () => {
+    await declineDelivery(delivery.id);
+    toast.success("已拒收这份分享");
+  });
+
+  if (failed && data === null) return <LoadError message="暂时读不到待收下的分享。" onRetry={reload} />;
+  if (data === null || data.length === 0) return null;
+  return (
+    <section aria-labelledby="pending-deliveries">
+      <h3 id="pending-deliveries" className="text-ui font-semibold text-text">待收下的分享</h3>
+      <List label="待收下的分享" className="mt-2">
+        {data.map((delivery) => (
+          <ListRow
+            key={delivery.id}
+            title={delivery.card?.title || `${delivery.sender.name} 的分享`}
+            to={`/app/memory/delivered/${encodeURIComponent(delivery.id)}`}
+            meta={<p>{[
+              delivery.card?.author ? fromSender(delivery.card.author) : fromSender(delivery.sender.name),
+              delivery.card?.summary,
+              formatDay(delivery.createdAt),
+              "点开预览，再决定要不要收下",
+            ].filter(Boolean).join(" · ")}</p>}
+            actions={(
+              <>
+                <Button variant="secondary" size="sm" disabled={busy !== null} loading={busy === delivery.id} aria-label={`收下“${delivery.card?.title || delivery.sender.name}”`}
+                  onClick={() => void take(delivery)}>收下</Button>
+                <Button variant="text" size="sm" disabled={busy !== null} aria-label={`不需要“${delivery.card?.title || delivery.sender.name}”`}
+                  onClick={() => void turnDown(delivery)}>不需要</Button>
+              </>
+            )}
+          />
+        ))}
+      </List>
+    </section>
+  );
+}
+
+/** The shelf: what is waiting to be taken in, then what was taken in. Each says nothing while it has nothing to say. */
+export function ReceivedShelf() {
+  return (
+    <>
+      <PendingDeliveries />
+      <ReceivedPacks />
+    </>
+  );
+}
+
+/**
  * 「收到的胶囊」, inside 分享与导入: what other people shared, trusted as a
  * whole pack — no entry to approve one by one. A row is the pack, what it
  * brings, and a switch that puts it in force account-wide as a reference
@@ -47,7 +127,7 @@ function contents(pack: ReceivedCapsule) {
  * received, that a signature checked out, and how far the scan got are the
  * back office's.
  */
-export function ReceivedShelf() {
+function ReceivedPacks() {
   const navigate = useNavigate();
   const { data, failed, reload } = useCapsuleData(fetchReceivedCapsules);
   const [busy, setBusy] = useState<string | null>(null);

@@ -308,7 +308,12 @@ const migrationSources = [
   "evidenceZonePersistence.mjs",
   "usagePersistence.mjs",
   "researchMemoryPersistence.mjs",
+  // The share schema (`evimed_share`) is two accounts' relation, so its tables name the account by `owner_id` or `recipient_id`, not `user_id`.
+  "capsuleShareLinks.mjs",
 ];
+
+/** The columns that make a table one account's: the owner's, a recipient's, or the plain `user_id`. */
+const ACCOUNT_COLUMN = /^\s*(?:user_id|owner_id|recipient_id)\s/m;
 
 /** Every table the migrations create, mapped to whether it is account-scoped.
  * Read as source text because that is what a migration is here: one template
@@ -324,7 +329,7 @@ function migratedTables() {
     for (const [, table, body] of text.matchAll(
       /CREATE TABLE IF NOT EXISTS\s+([\w.]+)\s*\(([\s\S]*?)\n\);/g,
     )) {
-      tables.set(table, /^\s*user_id\s/m.test(body));
+      tables.set(table, ACCOUNT_COLUMN.test(body));
     }
   }
   return tables;
@@ -363,13 +368,16 @@ test("the exported table list is derived from the queries, joins included", () =
     "evimed_frontier.evidence_card_revisions",
     "evimed_frontier.evidence_topic_request_votes",
     "evimed_frontier.evidence_topic_requests",
+    "evimed_share.links",
+    "evimed_share.link_uses",
+    "evimed_share.deliveries",
   ]) {
     assert.ok(
       exported.includes(table),
       `${table} is not read by any export query`,
     );
   }
-  assert.equal(exported.length, 19, `the export reads ${exported.join(", ")}`);
+  assert.equal(exported.length, 23, `the export reads ${exported.join(", ")}`);
 });
 
 test("every account-scoped table is either exported or declared unexported with a reason", () => {
@@ -387,9 +395,14 @@ test("every account-scoped table is either exported or declared unexported with 
     "evimed_usage.model_requests",
     "evimed_frontier.evidence_zones",
     "evimed_frontier.evidence_cards",
+    "evimed_share.links",
+    "evimed_share.link_uses",
+    "evimed_share.deliveries",
   ]) {
     assert.ok(tables.has(anchor), `${anchor} was never seen by the scan`);
   }
+  for (const table of ["evimed_share.links", "evimed_share.link_uses", "evimed_share.deliveries"])
+    assert.equal(tables.get(table), true, `${table} names an account (owner_id, recipient_id or user_id), so it is account-scoped`);
   assert.equal(
     tables.get("evimed_product.documents"),
     true,

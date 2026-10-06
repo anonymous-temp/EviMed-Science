@@ -9,6 +9,7 @@ import { ProductDocuments } from "../src/productStore.mjs";
 import { NotificationService } from "../src/notificationService.mjs";
 import { migrateUsageLedger } from "../src/usagePersistence.mjs";
 import { withAccountExportSnapshot } from "../src/accountExport.mjs";
+import { migrateCapsuleShare } from "../src/capsuleShareLinks.mjs";
 import { ResultProvenanceService } from "../src/resultProvenanceService.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
@@ -105,6 +106,43 @@ test("account export includes the owner's PostgreSQL customer state and revision
   const serialized = [...entries.values()].map(value => value.toString()).join("\n");
   for (const forbidden of [f.other, "other original fact", "excluded-operator-provider-secret", "excluded-provider-request-id", "excluded-job-credential", "excluded-lease", "excluded-worker", f.cookie, f.csrf,
     "password_hash", "passwordHash", "csrf_token", "request_fingerprint", "lease_token", "worker_id"]) assert.equal(serialized.includes(forbidden), false, forbidden);
+});
+
+// What an account shared and was shared with (flywheel F17) is the account's own record, and the export once left the whole `evimed_share` schema out.
+// The archive carries the links the account made and opened and the deliveries it sent and received, and of a received delivery only what the
+// recipient is shown: who sent it by display name, the pack's title and hash, what became of it. Not a credential, not a pack, not an account id.
+test("account export carries the shares the account made, opened, sent and received, without credentials, packs or another account's ids", options, async t => {
+  const f = await fixture(t);
+  const db = f.app.store.database;
+  await migrateCapsuleShare(db);
+  const hash = char => char.repeat(64);
+  const link = (id, owner, secretTag, capsule) => db.query(`INSERT INTO evimed_share.links(id,token_hash,owner_id,capsule_id,snapshot_id,manifest_sha256,archive_sha256,archive_secret,max_uses,uses,expires_at)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,5,2,now()+interval '1 day')`, [id, hash(secretTag), owner, capsule, `${capsule}-snapshot`, hash("b"), hash("c"), `excluded-${id}-secret`]);
+  await link("lnk_made", f.owner, "9", "capsule-one");
+  await link("lnk_theirs", f.other, "8", "capsule-sender-private");
+  await db.query("INSERT INTO evimed_share.link_uses(link_id,user_id,imported_at) VALUES('lnk_made',$1,now()),('lnk_theirs',$2,NULL)", [f.other, f.owner]);
+  // The sender's snapshot, whose card the recipient is shown; its entries are the pack and must not travel.
+  await f.documents.put(f.other, "preferences", "snap-sender-private", { card: { title: "李主任的工作方式", author: "other" }, entries: [{ content: "excluded-pack-entry-text" }] }, { expectedRevision: 0 });
+  const delivery = (id, owner, recipient, snapshot, capsule, state) => db.query(`INSERT INTO evimed_share.deliveries(id,snapshot_id,owner_id,recipient_id,capsule_id,manifest_sha256,archive_sha256,state,opened_at)
+    VALUES ($1,$2,$3,$4,$5,$6,$7,$8,CASE WHEN $8='delivered' THEN NULL ELSE now() END)`, [id, snapshot, owner, recipient, capsule, hash("e"), hash("f"), state]);
+  await delivery("dlv_sent", f.owner, f.other, "snap-own", "capsule-one", "imported");
+  await delivery("dlv_got", f.other, f.owner, "snap-sender-private", "capsule-sender-private", "opened");
+  const response = await fetch(`${f.base}/api/account/export`, { headers: { cookie: f.cookie } });
+  assert.equal(response.status, 200);
+  const raw = tarEntries(Buffer.from(await response.arrayBuffer())).get("account/customer-state.json").toString();
+  const state = JSON.parse(raw);
+  assert.deepEqual(state.shareLinks.map(row => [row.id, row.capsuleId, row.maxUses, row.uses, row.importedCount, row.revokedAt]), [["lnk_made", "capsule-one", 5, 2, 1, null]]);
+  assert.equal(state.shareLinks[0].archiveSha256, hash("c"));
+  assert.deepEqual(state.shareLinkUses.map(row => [row.linkId, row.importedAt]), [["lnk_theirs", null]], "the link this account opened, and nothing of the accounts that opened its own");
+  assert.deepEqual(state.shareDeliveriesSent.map(row => [row.id, row.state, row.recipientName, row.capsuleId]), [["dlv_sent", "imported", "other", "capsule-one"]]);
+  assert.deepEqual(state.shareDeliveriesReceived.map(row => [row.id, row.state, row.senderName, row.packTitle, row.packSha256]), [["dlv_got", "opened", "other", "李主任的工作方式", hash("f")]]);
+  assert.deepEqual(Object.keys(state.shareDeliveriesReceived[0]).sort(), ["closedAt", "createdAt", "id", "importedAt", "openedAt", "packSha256", "packTitle", "senderName", "state"],
+    "a received delivery carries what its recipient is shown, not the sender's own capsule or snapshot ids");
+  for (const forbidden of [f.other, hash("9"), hash("8"), "excluded-lnk_made-secret", "excluded-lnk_theirs-secret", "archive_secret", "token_hash", "capsule-sender-private", "snap-sender-private", "excluded-pack-entry-text"])
+    assert.equal(raw.includes(forbidden), false, forbidden);
+  // An account with nothing shared says so with empty lists, not a missing key.
+  const quiet = await withAccountExportSnapshot(db, { ...(await f.app.store.userById(f.other)), id: f.other }, f.app.config, async snapshot => JSON.parse(snapshot.data.toString()), {});
+  assert.ok(Array.isArray(quiet.shareLinks) && Array.isArray(quiet.shareLinkUses) && Array.isArray(quiet.shareDeliveriesSent) && Array.isArray(quiet.shareDeliveriesReceived));
 });
 
 // The refusal of 2026-10-03, at the level it happened. Result capture is on by
