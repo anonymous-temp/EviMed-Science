@@ -1,0 +1,167 @@
+{
+  "schemaVersion": 1,
+  "harness": "geo-judge-cards",
+  "note": "Cases for the judge that holds a measured AI answer to the verified claims of a project's product-zone cards (geoJudge.mjs, flywheel F21, 2026-10-06). Data only: nothing here calls a model. Each case gives the claims the judge is shown (every one with the card, card claim and revision it came from), the answer, and what a correct judgement must contain and must not contain; a run of the judge is graded by `verifyJudgement`'s own re-verification (the sentence is in the answer, the evidence is in the claim, a number judged correct is the claim's) and by these expectations read by a person. Every case came from a way an answer can look right and be wrong.",
+  "cases": [
+    {
+      "id": "judge-001-dose-by-card-revision",
+      "why": "The label's starting dose is 2.5 mg once a week and the card was corrected at revision 3 to say it rises to 5 mg after four weeks. An engine answers from an old page: once a week, 2.5 mg, no increase. Judged against revision 2 that is correct; against revision 3 it drops a condition. The verdict has to name revision 3, and the revision has to come from the claim, not from the model.",
+      "claims": [
+        {
+          "alias": "C1",
+          "cardId": "ec_AbCd1234Ef",
+          "cardClaimId": "dose",
+          "cardRevision": 3,
+          "label": true,
+          "statement": "成人推荐起始剂量为每周一次 2.5 mg，4 周后增至 5 mg",
+          "quote": "成人推荐起始剂量为每周一次 2.5 mg，4 周后增至 5 mg。"
+        }
+      ],
+      "question": "信尔美怎么用？",
+      "answer": "信尔美每周皮下注射一次，每次 2.5 mg，一直用这个剂量即可。",
+      "mustContain": [
+        {
+          "statement": "信尔美每周皮下注射一次，每次 2.5 mg",
+          "topic": "dosage",
+          "verdict": "wrong",
+          "errorType": "dropped_condition",
+          "cardRevision": 3
+        }
+      ],
+      "mustNot": [
+        "a verdict that carries a card revision other than 3",
+        "verdict correct for the sentence that says the dose never changes"
+      ]
+    },
+    {
+      "id": "judge-002-omitted-safety-and-off-label",
+      "why": "An answer to a teenager's mother is fluent, mentions the product by name, and gets the dose right. It says nothing of the contraindication the label puts first and says the product can be used for adolescents' weight loss, which no label claim supports. The statements are correct; the two checks beside them are what the case is about.",
+      "claims": [
+        {
+          "alias": "C1",
+          "cardId": "ec_AbCd1234Ef",
+          "cardClaimId": "dose",
+          "cardRevision": 3,
+          "label": true,
+          "statement": "起始剂量为每周一次 2.5 mg",
+          "quote": "成人推荐起始剂量为每周一次 2.5 mg，4 周后增至 5 mg。"
+        },
+        {
+          "alias": "C2",
+          "cardId": "ec_AbCd1234Ef",
+          "cardClaimId": "contra",
+          "cardRevision": 3,
+          "label": true,
+          "statement": "对本品过敏者禁用",
+          "quote": "对本品活性成分或辅料过敏者禁用。"
+        },
+        {
+          "alias": "C3",
+          "cardId": "ec_Trial56789",
+          "cardClaimId": "weight",
+          "cardRevision": 1,
+          "label": false,
+          "statement": "成人第 48 周体重下降 14.1%",
+          "quote": "participants lost 14.1% of body weight at week 48"
+        }
+      ],
+      "question": "我 15 岁的女儿太胖了，信尔美能给她用吗？",
+      "answer": "信尔美起始剂量为每周一次 2.5 mg。它也可以用于青少年减重，坚持用药体重会明显下降。",
+      "mustContain": [
+        {
+          "statement": "信尔美起始剂量为每周一次 2.5 mg",
+          "topic": "dosage",
+          "verdict": "correct",
+          "cardRevision": 3
+        },
+        {
+          "check": "offLabel",
+          "sentence": "它也可以用于青少年减重"
+        },
+        {
+          "check": "omittedSafety",
+          "claim": "C2"
+        }
+      ],
+      "mustNot": [
+        "C3 as omitted safety information: a trial claim is not the label's",
+        "a topic outside indication, dosage, contraindication, adverse_reaction, other"
+      ]
+    },
+    {
+      "id": "judge-003-cited-link-says-otherwise",
+      "why": "An engine cites a patient forum for a dosing sentence and the page is a different product's. The sentence matches the label, so the statement is correct; the link is what is wrong. The check needs the page's text: the quotation that shows what the page says must be in the page, or the verdict is dropped to unclear.",
+      "claims": [
+        {
+          "alias": "C1",
+          "cardId": "ec_AbCd1234Ef",
+          "cardClaimId": "dose",
+          "cardRevision": 3,
+          "label": true,
+          "statement": "起始剂量为每周一次 2.5 mg",
+          "quote": "成人推荐起始剂量为每周一次 2.5 mg，4 周后增至 5 mg。"
+        }
+      ],
+      "links": [
+        {
+          "id": "L1",
+          "url": "https://example.org/forum/thread-1",
+          "title": "某病友论坛"
+        }
+      ],
+      "question": "信尔美起始剂量是多少？",
+      "answer": "信尔美起始剂量为每周一次 2.5 mg（来源：某病友论坛）。",
+      "page": {
+        "url": "https://example.org/forum/thread-1",
+        "text": "我用的是另一个品牌，每天一次 0.25 mg，医生说要慢慢加量。"
+      },
+      "mustContain": [
+        {
+          "statement": "信尔美起始剂量为每周一次 2.5 mg",
+          "topic": "dosage",
+          "verdict": "correct",
+          "cardRevision": 3
+        },
+        {
+          "check": "citation",
+          "link": "L1",
+          "exists": true,
+          "supports": "no",
+          "evidenceInPage": true
+        }
+      ],
+      "mustNot": [
+        "supports yes or no with a quotation that is not in the page",
+        "a citation check on a link the answer does not cite"
+      ]
+    },
+    {
+      "id": "judge-004-no-cards-yet",
+      "why": "A project made before the evidence chain has claims and no cards. It must still be judged, against its claim table, with no card revision on any verdict; nothing about the missing cards is a reason to leave the answer unjudged.",
+      "claims": [
+        {
+          "alias": "C1",
+          "cardId": null,
+          "cardClaimId": null,
+          "cardRevision": null,
+          "label": true,
+          "statement": "每周一次皮下注射",
+          "quote": "本品每周一次皮下注射给药"
+        }
+      ],
+      "question": "信尔美多久打一次？",
+      "answer": "信尔美每周打一次。",
+      "mustContain": [
+        {
+          "statement": "信尔美每周打一次",
+          "topic": "dosage",
+          "verdict": "correct",
+          "cardRevision": null
+        }
+      ],
+      "mustNot": [
+        "leaving the answer unjudged because the project has no cards"
+      ]
+    }
+  ]
+}

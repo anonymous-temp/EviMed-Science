@@ -9,7 +9,7 @@
 # articles themselves. Hidden from 科研工具 by `display.listed: false`: the GEO
 # module's orchestrator dispatches it in batches.
 id: geo-content
-version: 2.0.3
+version: 2.1.0
 title: GEO Content
 category: Content Production
 description: Step 6 of an evidence-based GEO project — layered articles (deep analysis, evidence card, popular
@@ -40,6 +40,7 @@ tools:
 - mcp__evimed__web_read
 - mcp__evimed__web_search
 - mcp__evimed__kb_search
+- mcp__evimed__frontier_search
 - mcp__evimed__geo_visibility_probe
 produces:
 - contractKind: geo-content-pack

@@ -281,7 +281,7 @@ const PLAIN_ROW = "m.variant IS NULL AND m.rival IS NULL AND m.group_id IS NULL"
 export class GeoService {
   /**
    * @param {{ store: import("./geoStore.mjs").GeoStore, config: Record<string, any>, social?: any, now?: () => Date,
-   *   metricName?: ((metricId: string) => string | null) | null, cards?: { staleReferences?: Function } | null }} options
+   *   metricName?: ((metricId: string) => string | null) | null, cards?: { staleReferences?: Function, list?: Function } | null }} options
    *   `metricName` names a metric id for 「更多指标」; the metrics package can
    *   hand in its catalogue's names, and without it the domain's labels answer
    *   for the ids the platform reads and every other id is its own name.
@@ -1334,6 +1334,13 @@ export class GeoService {
         return { sets: view.sets, version: view.version, groups: groups.items, total: groups.total, more: groups.more };
       }
       case "journey": return this.journeyOf(project);
+      // The product zone's evidence cards, which the lower layers cite (flywheel F21): each claim with its id, quotation, ✓/⚠ and the
+      // reference to write after a sentence that stands on it. A deployment without evidence zones, or a project with no cards yet, has none.
+      case "cards": {
+        const view = this.cards?.list ? await this.cards.list(project) : { zoneId: null, cards: [] };
+        const cards = page(view.cards);
+        return { zoneId: view.zoneId, cards: cards.items, total: cards.total, more: cards.more };
+      }
       case "diagnosis": {
         const view = await this.diagnosisOf(project, filter.round ?? null);
         return { ...view, errors: view.errors.slice(0, limit), more: view.more.slice(0, limit) };

@@ -299,14 +299,14 @@ export const GEO_OWNED_LINK_STATUSES = frozen(['active', 'retired'])
 
 /** The runtime tools' words (`geo_read` / `geo_write`, spec §4). */
 export const GEO_READ_WHATS = frozen(['project', 'claims', 'questions', 'journey', 'diagnosis', 'metrics', 'snapshots', 'errors', 'sources',
-  'strategy', 'targets', 'articles', 'orders', 'owned_links', 'monitoring'])
+  'strategy', 'targets', 'articles', 'orders', 'owned_links', 'monitoring', 'cards'])
 export const GEO_WRITE_WHATS = frozen(['product', 'claims', 'questions', 'lock_questions', 'journey', 'strategy', 'sources', 'targets',
   'articles', 'placement_plan', 'owned_links', 'step'])
 /** How a read or a write narrates in the conversation (`narration.mjs`). */
 export const GEO_READ_WHAT_LABELS_ZH = Object.freeze({
   project: '项目概况', claims: '结论库', questions: '问题地图', journey: '旅程', diagnosis: '诊断', metrics: '指标', snapshots: '回答快照',
   errors: '讲错记录', sources: '信源', strategy: '信源布局', targets: '三档目标', articles: '稿件', orders: '投放订单', owned_links: '自有发布',
-  monitoring: '监测',
+  monitoring: '监测', cards: '证据卡片',
 })
 export const GEO_WRITE_WHAT_LABELS_ZH = Object.freeze({
   product: '产品身份', claims: '结论库', questions: '问题地图', lock_questions: '锁定测量问句', journey: '旅程', strategy: '信源分析',

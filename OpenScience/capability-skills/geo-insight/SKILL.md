@@ -43,6 +43,14 @@ If the `skill` tool cannot find a `geo-*` skill, this deployment does not carry
 the method pack. Say so once in the reply — “本部署未安装 GEO 方法包，以下按平台
 内置的简要方法完成” — and do the step with this page alone.
 
+## Evidence that is new
+
+`frontier_search` shows what the medical feed has recently said about the
+product, its comparators and the disease. Look before you finalize the library:
+a retraction, a correction or a new trial of what a claim rests on is a reason to
+re-read the source, not to trust the label alone. What it returns is a pointer to
+a source, never a claim: quote the source itself.
+
 ## Tools, not clients
 
 The pack's standalone clients map to platform tools; the runtime never knows a
@@ -139,6 +147,16 @@ Inside this deliverable's `deliverables/<id>/` directory:
   quote is in), `evidenceLevel`, `population`, `inLabel`, `elements` (the
   T/CAPT 026 evidence elements), `verifiedAt`, `validUntil`. A full library
   usually holds 30–50 claims.
+  Each claim also says where it belongs on the patient journey: `journeyStage`
+  (the stage's name, as your journey names it) and `clinicalQuestion` (the key
+  clinical question it answers, one plain sentence); where the claim is a
+  difference from a comparator, `comparisonType`: `head_to_head`,
+  `anchored_indirect` (through a common comparator) or `unanchored_reference`
+  (for reference only). The platform writes the claims whose quotation it finds
+  in `artifactPath` into the project's product zone as evidence cards, one card
+  per key clinical question — the clinical layer the popular text will cite. A
+  claim whose quotation is not in that file stays in the project and is not
+  published, so `artifactPath` has to be right.
 - `question-map.json` — `{ minimal, groups: [...], assumptions }`. Each group:
   `groupKey`, `pool` (`P1`–`P4`), `name`, `typicalQuestion`, `journeyStage`,
   `audience` (`patient|physician`), `bridge`, `weight`, `isControl`, `signal`

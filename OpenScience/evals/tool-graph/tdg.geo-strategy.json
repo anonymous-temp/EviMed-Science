@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "geo-strategy",
-  "version": "sha256:0ee3f1306723f8b180df43da3967dcfc4e3c8ccddc43a75122cdf0ff53888b31",
+  "version": "sha256:0f83b0254a7ab097f5f7cdc0b6030b6c16848a896008f412cb7090a2da59f66d",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 25,
@@ -491,7 +491,7 @@
     {
       "name": "mcp__evimed__geo_read",
       "source": "mcp",
-      "description": "Read this 循证传播 project's data: product and claims, question map, journey, diagnosis, metrics, answer snapshots, errors, sources, strategy, targets, articles, orders, owned links or monitoring. Every number is a cell with numerator, denominator and status; absent or insufficient is not zero.",
+      "description": "Read this 循证传播 project's data: product and claims, question map, journey, diagnosis, metrics, answer snapshots, errors, sources, strategy, targets, articles, orders, owned links, monitoring or cards (evidence cards: claims with id, quotation, ✓/⚠ and the reference to cite). Every number is a cell with numerator, denominator and status; absent or insufficient is not zero.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -512,7 +512,8 @@
               "articles",
               "orders",
               "owned_links",
-              "monitoring"
+              "monitoring",
+              "cards"
             ]
           },
           "filter": {

@@ -8,7 +8,7 @@
 # own tool list by `display.listed: false` — `visibility: internal` would make
 # that binding answer 403.
 id: geo-insight
-version: 1.0.6
+version: 1.1.0
 title: GEO Insight
 category: Content Production
 description: Steps 1–3 of an evidence-based GEO project for one medicine — verified identity and label, a claim
@@ -40,6 +40,7 @@ tools:
 - mcp__evimed__web_read
 - mcp__evimed__term_normalize
 - mcp__evimed__kb_search
+- mcp__evimed__frontier_search
 - mcp__evimed__geo_visibility_probe
 produces:
 - contractKind: geo-insight-pack

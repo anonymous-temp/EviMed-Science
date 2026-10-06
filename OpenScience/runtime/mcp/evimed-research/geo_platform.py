@@ -45,7 +45,7 @@ import public_sources
 # and holds these copies equal to the domain's.
 READ_WHATS = (
     "project", "claims", "questions", "journey", "diagnosis", "metrics", "snapshots", "errors", "sources",
-    "strategy", "targets", "articles", "orders", "owned_links", "monitoring",
+    "strategy", "targets", "articles", "orders", "owned_links", "monitoring", "cards",
 )
 WRITE_WHATS = (
     "product", "claims", "questions", "lock_questions", "journey", "strategy", "sources", "targets",
@@ -82,7 +82,8 @@ def tool_definitions():
             "name": "geo_read",
             "description": (
                 "Read this 循证传播 project's data: product and claims, question map, journey, diagnosis, metrics, "
-                "answer snapshots, errors, sources, strategy, targets, articles, orders, owned links or monitoring. "
+                "answer snapshots, errors, sources, strategy, targets, articles, orders, owned links, monitoring or cards "
+                "(evidence cards: claims with id, quotation, ✓/⚠ and the reference to cite). "
                 "Every number is a cell with numerator, denominator and status; absent or insufficient is not zero."
             ),
             "inputSchema": {

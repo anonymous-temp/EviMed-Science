@@ -38,7 +38,7 @@
 
 import { createHash } from "node:crypto";
 import {
-  evidenceCardPublicView, geoCardLayerMarkdown, geoCardPlan, geoCardProducer, geoDisclosurePerson, geoReferenceGraph, geoStaleReferences,
+  evidenceCardPublicView, geoCardLayerMarkdown, geoCardPlan, geoCardProducer, geoClaimReferenceMarker, geoDisclosurePerson, geoReferenceGraph, geoStaleReferences,
   parseGeoClaimReferences, verifyEvidenceCardClaims,
 } from "@evimed/domain";
 import { clinicalSafetyRuleHits } from "@evimed/domain/clinical-evidence";
@@ -287,6 +287,8 @@ export class GeoCards {
             const geo = keyOf.get(`${row.id}\0${claim.claimId}`);
             return {
               claimId: String(claim.claimId),
+              // What to write after a sentence that stands on this claim: made here, so a run never types a card or claim id.
+              reference: geoClaimReferenceMarker({ cardId: String(row.id), claimId: String(claim.claimId), revision: Number(row.revision) }),
               claimKey: geo?.claimKey ?? null,
               statement: String(claim.claim),
               quote: claim.supportQuote ?? null,
