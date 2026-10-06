@@ -568,6 +568,20 @@ services:
       OPEN_SCIENCE_EVIDENCE_CHALLENGES_PER_DAY:
       OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_CHECKS:
       OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_DAYS:
+      # The flywheel's own figures (2026-10-06): the operator route and the scrape's families. Off by default.
+      OPEN_SCIENCE_EVIDENCE_FLYWHEEL_METRICS_ENABLED:
+      # The community column of an official zone (2026-10-06): the switch (off) and the most cards one column lists.
+      OPEN_SCIENCE_EVIDENCE_COMMUNITY_CARDS_ENABLED:
+      OPEN_SCIENCE_EVIDENCE_COMMUNITY_MAX_CARDS:
+      # What becomes of a published card goes back into learning (2026-10-06): the switch (off) and the change-log entries one pass reads.
+      OPEN_SCIENCE_LEARNING_EVIDENCE_OUTCOMES_ENABLED:
+      OPEN_SCIENCE_LEARNING_EVIDENCE_OUTCOMES_BATCH:
+      # The platform's own modules hand 循证进化 what they could not do as research leads (2026-10-06): the switch (off) and the new leads taken in a day.
+      OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_ENABLED:
+      OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_PER_DAY:
+      # A general lesson of an account's handbook may become a platform skill after an independent re-check (2026-10-06): the switch (off) and the candidates re-checked in a day.
+      OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_ENABLED:
+      OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PER_DAY:
       # Sharing memory inside the platform (evidence-flywheel plan 2026-10-05, F17-F19):
       # how long a share link lives and how often it may be used, how many other
       # accounts must keep a new author's pack before it counts for platform

@@ -3,9 +3,12 @@ import { createHash, randomUUID } from 'node:crypto';
 import { canonicalJson, EVOLUTION_TRACKS, EVOLUTION_TOOL_STATES, EVOLUTION_DATA_LEVELS, EVOLUTION_GAP_CODES, EVOLUTION_LEAD_SOURCES, evolutionMethodFields, evolutionValidationLevel, evolutionToolVisible, evolutionDataMatch, validateEvolutionDataRequirements } from '@evimed/domain';
 import { HttpError } from './security.mjs';
 import { EVOLUTION_PROJECT_ID } from './internalProjects.mjs';
+import { MODULE_LEAD_SOURCES, moduleLeadPayload } from './evolutionLeadSources.mjs';
 
 /** @param {any} value */
 export function evolutionKey(value) { return createHash('sha256').update(JSON.stringify(value)).digest('hex').slice(0, 32); }
+/** The record id of a lead: its content, so the same lead from anywhere is one. @param {any} payload */
+export function evolutionLeadId(payload) { return `evolution-lead-${evolutionKey(payload)}`; }
 /** Public paper identities only; candidate URLs and private provenance never cross this projection. @param {any} papers */
 export function evolutionPublicPapers(papers) {
   const result = new Map();
@@ -62,13 +65,16 @@ export class EvolutionService {
     return this.jobs.enqueue(await this.owner(), `evolution-${action}`, payload, { idempotencyKey: `evolution:${key}`, projectId: EVOLUTION_PROJECT_ID,
       maxAttempts: Math.max(1, Math.min(10, this.config.evolutionMaxJobAttempts ?? 3)), runAfter });
   }
+  /** The record id a lead with this payload has. @param {any} payload */
+  leadId(payload) { return evolutionLeadId(payload); }
   /** Only closed operational codes cross the researcher's tenant boundary. @param {any} input */
   async addLead(input) {
     if (!EVOLUTION_TRACKS.includes(input.track) || !EVOLUTION_LEAD_SOURCES.includes(input.source) || !EVOLUTION_GAP_CODES.includes(input.gapCode)) throw new HttpError(400, 'evolution_lead_invalid', 'Unknown evolution lead vocabulary.');
     const privateSource = ['runtime-failure', 'autopilot', 'dataset', 'handbook'].includes(input.source);
-    const payload = privateSource ? { track: input.track, source: input.source, gapCode: input.gapCode, code: EVOLUTION_GAP_CODES.includes(input.code) ? input.code : input.gapCode }
+    // The platform's own modules (flywheel F20): a closed code and closed entity keys, chosen from lists `evolutionLeadSources.mjs` owns.
+    const payload = MODULE_LEAD_SOURCES.includes(input.source) ? moduleLeadPayload(input) : privateSource ? { track: input.track, source: input.source, gapCode: input.gapCode, code: EVOLUTION_GAP_CODES.includes(input.code) ? input.code : input.gapCode }
       : { track: input.track, source: input.source, gapCode: input.gapCode, method: input.method, papers: input.papers ?? [], features: input.features ?? {}, origin: input.origin ?? 'literature' };
-    const id = `evolution-lead-${evolutionKey(payload)}`;
+    const id = evolutionLeadId(payload);
     const prior = await this.get(id);
     if (prior) { if (prior.payload.status === 'queued') await this.enqueue('scout', { leadId: id }, id); return prior; }
     const saved = await this.save('lead', id, { ...payload, createdAt: this.now().toISOString(), status: 'queued' });

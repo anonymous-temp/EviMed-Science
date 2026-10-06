@@ -88,6 +88,8 @@ export class EvolutionIntegration {
       return this.service.callbacks.adjudicationOpportunity?.({evaluationId:evaluation.id,proofHash:event.proofHash,verdict:review.verdict,publicPaperId:/^(?:10\.\d{4,9}\/[^\s]{1,180}|PMID:\d+|PMC\d+)$/i.test(unit?.publishedPaperId??'') ? unit.publishedPaperId : null});
     } else if (event.type === "handbook-gap-scan") {
       return this.service.callbacks.scanHandbookGaps?.();
+    } else if (event.type === "lead-source-scan") {
+      return this.service.callbacks.scanLeadSources?.();
     } else if (event.type === "source-facts-scan") {
       return this.observeSourceFacts();
     } else if (event.type === "autopilot-gap") {

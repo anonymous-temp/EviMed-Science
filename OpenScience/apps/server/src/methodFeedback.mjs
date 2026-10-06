@@ -235,6 +235,27 @@ export class MethodFeedbackService {
   }
 
   /**
+   * What became of a conclusion the run produced AFTER it was published as an evidence card (flywheel F15, 2026-10-06): the card was corrected after a
+   * reader's challenge, its producer corrected it, or it was withdrawn. The signal is the same one a researcher's own correction of the result is
+   * (`evidence_corrected`) and is about the same immutable result version, so a version corrected both ways reads as one outcome, not two; the entry's
+   * event names the closed class and the change-log entry it came from, which is what makes it traceable and replays idempotent. It is evidence for the
+   * sequential test and nothing more — whatever that test proposes is the lifecycle's, exactly as for a private correction.
+   * @param {any} project @param {{ runId: string, result: { versionId: string, digest: string }, at: string, logEntryId: string, outcomeClass: string }} outcome
+   * @returns {Promise<{ recorded: any[], unresolved: any[], skipped: string | null, capabilityId: string | null }>}
+   */
+  async fromEvidenceOutcome(project, { runId, result, at, logEntryId, outcomeClass }) {
+    const run = await this.#run(project, runId);
+    if (!run) return { recorded: [], unresolved: [], skipped: "run_unavailable", capabilityId: null };
+    const capabilityId = typeof (run.effectiveAgentId ?? run.agentId) === "string" ? String(run.effectiveAgentId ?? run.agentId) : null;
+    if (!await this.#learnable(project, run)) return { recorded: [], unresolved: [], skipped: "not_learnable", capabilityId };
+    const joined = await this.#record(project, run, {
+      signal: "evidence_corrected", at, result, kind: "evidence",
+      event: { id: `evidence-outcome:${outcomeClass}:${logEntryId}` },
+    });
+    return { ...joined, capabilityId };
+  }
+
+  /**
    * A recalculation of a result the run produced, carried to the methods the run read: when it ran on what the original
    * ran on, whether its numbers agreed; with what the engine's own diagnostics said about the data. A replay on another
    * engine, or one whose numbers were not compared, is not recorded (`feedbackSignalFromReplay` says why).

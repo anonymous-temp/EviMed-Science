@@ -69,9 +69,14 @@ import path from "node:path";
 import { createGzip } from "node:zlib";
 import { postgresBackupReadiness } from "./postgresBackupReadiness.mjs";
 import { vcrBackupReadiness } from "./vcrBackupReadiness.mjs";
-import { EVIDENCE_PROJECT_ID, LEARNING_PROJECT_ID, ensureEvidenceProject, isEvolutionProject, isInternalProjectOf, isReservedProjectId } from "./internalProjects.mjs";
+import { EVIDENCE_PROJECT_ID, EVOLUTION_PROJECT_ID, LEARNING_PROJECT_ID, ensureEvidenceProject, isEvolutionProject, isInternalProjectOf, isReservedProjectId } from "./internalProjects.mjs";
 import { createEvidenceBudget, evidenceBudgetMetricFamilies } from "./evidenceBudget.mjs";
-import { createEvidenceProgramme, evidenceProgrammeMetricFamilies } from "./evidenceProgramme.mjs";
+import { PROGRAMME_DECISION_KIND, createEvidenceProgramme, evidenceProgrammeMetricFamilies } from "./evidenceProgramme.mjs";
+import { HANDBOOK_LESSON_CLASSES, createPlatformHandbooks, handbookJudgeMessages, platformHandbookMetricFamilies, projectFactsReader } from "./learningPlatformHandbooks.mjs";
+import { establishedAuthors } from "./evidenceVerifiedCards.mjs";
+import { callReviewModel } from "./reviewModel.mjs";
+import { guestMarkedRuns } from "./capsuleShareTrust.mjs";
+import { createEvolutionLeadSources, evolutionLeadSourceMetricFamilies, programmeLeadReader } from "./evolutionLeadSources.mjs";
 import { createCalculationReceiptReader } from "./evidenceCalculationReceipts.mjs";
 import { createEvidenceRecalculation, createOfficialZoneMatcher, evidenceRecalculationMetricFamilies } from "./evidenceRecalculation.mjs";
 import { createPredictionRegistry, predictionRegistryMetricFamilies } from "./predictionRegistry.mjs";
@@ -240,6 +245,10 @@ import { EvidenceEditorial } from "./evidenceEditorial.mjs";
 import { EvidenceZoneService } from "./evidenceZoneService.mjs";
 import { createEvidenceCardSearch } from "./evidenceCardSearch.mjs";
 import { createEvidenceFeed, evidenceFeedMetricFamilies } from "./evidenceFeed.mjs";
+import { createEvidenceFlywheelMetrics } from "./evidenceFlywheelMetrics.mjs";
+import { createGeoCardCitationReader } from "./geoCardCitations.mjs";
+import { createEvidenceOutcomes, evidenceOutcomeMetricFamilies } from "./evidenceIncidents.mjs";
+import { createEvidenceCommunity, createEvidenceCommunityRoutes, evidenceCommunityMetricFamilies } from "./evidenceCommunity.mjs";
 import { createEvidenceFeedRoutes } from "./evidenceFeedRoutes.mjs";
 import { createEvidencePublicRoutes, evidencePublicMetricFamilies } from "./evidencePublicRoutes.mjs";
 import { createEvidenceTopicRequestRoutes, createEvidenceTopicRequests } from "./evidencePublicRequests.mjs";
@@ -278,7 +287,7 @@ import { GeoStore, deleteGeoProjectRows, deleteGeoUserRows, removeGeoScreenshotF
 import { createGeoDeliveryImport } from "./geoDeliveryImport.mjs";
 import { GeoCards } from "./geoCards.mjs";
 import { GeoMembers } from "./geoMembers.mjs";
-import { createGeoQuestionBank } from "./geoQuestionBank.mjs";
+import { createGeoQuestionBank, questionBankSummary } from "./geoQuestionBank.mjs";
 import { geoArticleGateOf } from "./geoWrites.mjs";
 import { GEO_DEFAULT_PROJECT_NAME, GeoService, geoAudienceAllows, geoMetricFamilies, geoMetricsSnapshot, geoReadiness } from "./geoService.mjs";
 import { createGeoRoutes, geoRoutePattern } from "./geoRoutes.mjs";
@@ -644,6 +653,7 @@ function routePattern(pathname) {
   if (pathname === "/api/connectors") return pathname;
   if (pathname.startsWith("/api/connectors/")) return "/api/connectors/:connector";
   if (pathname === "/api/ops/metrics") return pathname;
+  if (pathname === "/api/ops/evidence-flywheel") return pathname;
   if (pathname === ALERT_RECEIVER_PATH) return pathname;
   if (pathname === "/api/ops/usage/by-purpose") return pathname;
   if (pathname === "/api/availability" || pathname === "/api/ops/availability") return pathname;
@@ -1028,6 +1038,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   let evidenceRecalculation = null;
   /** @type {ReturnType<typeof createPredictionRegistry> | null} */
   let predictionRegistry = null;
+  /** @type {ReturnType<typeof createEvidenceFlywheelMetrics> | null} */
+  let evidenceFlywheel = null;
+  /** @type {ReturnType<typeof createEvidenceOutcomes> | null} */
+  let evidenceOutcomes = null;
+  /** @type {ReturnType<typeof createEvolutionLeadSources> | null} */
+  let evolutionLeadSources = null;
+  /** @type {ReturnType<typeof createPlatformHandbooks> | null} */
+  let platformHandbooks = null;
   const maintenanceMutation = (operation) => maintenanceService ? maintenanceService.withMutation(operation) : operation();
   const productDocuments = productDatabase ? new ProductDocuments(productDatabase) : null;
   const productJobs = productDatabase ? new ProductJobs(productDatabase) : null;
@@ -1840,6 +1858,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const evidenceBudget = createEvidenceBudget({ usageLedger, config });
   const frontierRoutes = createFrontierRoutes({ store, service: frontier?.service ?? null, config, maxJsonBytes: config.maxJsonBytes,
     audit: (event, status, details) => securityAudit(config, event, status, details) });
+  // The community column of an official zone (evidenceCommunity.mjs, flywheel F07): other users' public cards on the zone's subjects. Composed with its
+  // switch and the frontier; off, the route answers 404 by name and no table is read.
+  const evidenceCommunity = config.evidenceCommunityCardsEnabled && frontier && productDatabase
+    ? createEvidenceCommunity({ database: productDatabase, maxCards: config.evidenceCommunityMaxCards, platformPublisherUserId: PLATFORM_PUBLISHER_USER_ID }) : null;
+  const evidenceCommunityRoutes = createEvidenceCommunityRoutes({ store, service: frontier?.evidenceZones ?? null, frontier: frontier?.service ?? null, config, community: evidenceCommunity });
   const evidenceZoneRoutes = createEvidenceZoneRoutes({store,service:frontier?.evidenceZones??null,editorial:frontier?.evidenceEditorial??null,
     frontier:frontier?.service??null,config,maxJsonBytes:config.maxJsonBytes});
   // What the platform's own evidence offers the frontier (flywheel F09): a public feed the knowledge-source plugin reads like
@@ -3615,6 +3638,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       resolveSourceRun: (userId, projectId, runId) => resolveLessonSourceRun(store, agentRuns, userId, projectId, runId),
       enabled: async (userId, projectId) => config.learningEnabled
         && !(await memoryPausedFor(researchMemory, userId, projectId)).learning,
+      // A lesson that became an account's handbook may be general enough for the platform's (learningPlatformHandbooks.mjs, flywheel F16); told, never asked.
+      onApplied: (applied) => platformHandbooks?.consider(applied),
     }));
     const consolidation = new MethodConsolidation({
       handbookConsolidation: { run: async (input) => (await handbookConsolidation).run(input) },
@@ -3698,6 +3723,18 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       },
       routinePeriodDays: config.transcriptRetentionDays,
     });
+    // What becomes of a published card goes back into learning (evidenceIncidents.mjs, flywheel F15): composed with its switch, the frontier whose change log it reads
+    // and this loop, whose housekeeping tick drives it. The incidents belong to the platform's evidence project; the observation goes to the researcher's own methods.
+    if (config.learningEvidenceOutcomesEnabled && frontier && productDatabase && productDocuments) {
+      evidenceOutcomes = createEvidenceOutcomes({
+        database: productDatabase, documents: productDocuments, ensureOwner: () => ensureEvidenceProject(store), methodFeedback,
+        resolveProject: async (userId, projectId) => {
+          const user = await store.userById(userId);
+          return user ? store.requireProject(user, projectId) : null;
+        },
+        batch: config.learningEvidenceOutcomesBatch, report: (code) => process.stderr.write(`${code}\n`),
+      });
+    }
     learningWorker = new LearningWorker({
       jobs: productJobs, distillation, consolidation,
       enabled: config.learningEnabled,
@@ -3712,6 +3749,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           const user = await store.userById(userId);
           return user ? store.requireProject(user, projectId) : null;
         } });
+        await evidenceOutcomes?.tick();
+        await platformHandbooks?.tick();
       },
       resolveProject: async (job) => {
         const user = await store.userById(job.userId);
@@ -4667,6 +4706,44 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       evidenceRecalculation = recalculation;
       evolution.service.callbacks.recalculationProof = (/** @type {any} */ proof) => recalculation.onProofRecorded(proof);
     }
+    // General lessons become platform handbooks (learningPlatformHandbooks.mjs, flywheel F16): composed with its switch, the evolution module (whose supply and
+    // records it uses and whose budget its two model calls spend) and the learning loop that notices the lesson. Off, `onApplied` finds nothing and no tick runs.
+    if (config.learningPlatformHandbooksEnabled && config.learningEnabled && productDatabase && productDocuments) {
+      const handbooksFetch = overrides.frontierModelFetch ?? globalThis.fetch;
+      const handbookLimits = { daily: config.evolutionDailyBudgetCny, weekly: 0 };
+      const evolutionService = evolution.service;
+      platformHandbooks = createPlatformHandbooks({
+        service: evolutionService, supply: evolution.supply, perDay: config.learningPlatformHandbooksPerDay, report: code => process.stderr.write(`${code}\n`),
+        facts: projectFactsReader({ store, documents: productDocuments }),
+        judge: async ({ text, capabilityId }) => {
+          const response = await callModelForControlPlane({ config, usageLedger, fetchImpl: handbooksFetch }, { userId: await evolutionService.owner(), projectId: EVOLUTION_PROJECT_ID,
+            purpose: "evolution", limits: handbookLimits, signal: AbortSignal.timeout(60_000),
+            body: { model: "deepseek-flash", thinking: { type: "disabled" }, response_format: { type: "json_object" }, max_tokens: 200, messages: handbookJudgeMessages({ text, capabilityId }) } });
+          return JSON.parse(response.choices?.[0]?.message?.content ?? "{}");
+        },
+        // Another family, or none: with the DeepSeek review provider there is no independent reviewer and a candidate stays a candidate.
+        review: config.reviewProvider === "dashscope" ? async ({ text, capabilityId }) => {
+          const result = await callReviewModel({ config, usageLedger, fetchImpl: handbooksFetch }, { userId: await evolutionService.owner(), projectId: EVOLUTION_PROJECT_ID, purpose: "evolution",
+            limits: handbookLimits, signal: AbortSignal.timeout(120_000), schemaName: "platform_handbook_review", maxTokens: 400,
+            schema: { type: "object", properties: { general: { type: "boolean" }, class: { type: "string", enum: [...HANDBOOK_LESSON_CLASSES] } }, required: ["general", "class"], additionalProperties: false },
+            messages: handbookJudgeMessages({ text, capabilityId }) });
+          return { ...result.value, independent: result.modelReported === true && /^qwen/i.test(result.model) };
+        } : null,
+        established: (userIds) => establishedAuthors(productDatabase, userIds),
+        recentGuestRun: async (userId, runId) => (runId ? (await guestMarkedRuns(productDatabase, userId, [runId])).has(runId) : false),
+      });
+    }
+    // What the platform's own modules could not do goes to the evolution module as leads (evolutionLeadSources.mjs, flywheel F20): the evidence programme is read by
+    // the worker's daily scan; 循证传播 and 虚拟临研 get an `offer` where their modules are composed. Off, nothing is composed and the worker ingests no scan event.
+    if (config.evolutionModuleLeadsEnabled) {
+      evolutionLeadSources = createEvolutionLeadSources({
+        service: evolution.service, perDay: config.evolutionModuleLeadsPerDay, report: code => process.stderr.write(`${code}\n`),
+        programme: evidenceProgramme && productDocuments ? programmeLeadReader({ documents: productDocuments, publisherId: PLATFORM_PUBLISHER_USER_ID, decisionKind: PROGRAMME_DECISION_KIND, entityVocabulary }) : null,
+        communication: Boolean(geo), virtualStudy: Boolean(vcr),
+      });
+      const sources = evolutionLeadSources;
+      evolution.service.callbacks.scanLeadSources = () => sources.scan();
+    }
     // The prediction registry (flywheel F25) rides the evolution module's prospective records: the module's publication match tells it of each
     // paper the feed publishes, and a virtual study or an agenda files through `predictionRegistry.register`. Off, nothing here exists.
     if (config.predictionRegistryEnabled) {
@@ -4675,6 +4752,25 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       predictionRegistry = registry;
       evolution.service.callbacks.predictionPublication = (/** @type {any} */ input) => registry.onPublication(input);
     }
+  }
+  // The flywheel's own figures (evidenceFlywheelMetrics.mjs, plan §11): composed with their switch and the frontier whose tables they read; off, no
+  // route, no family and no table read. The readers of the signals other packages add (a study's card reference, a question bank's citations) are
+  // passed here when those modules exist; until then the figure says so instead of reading 0.
+  if (config.evidenceFlywheelMetricsEnabled && frontier && productDatabase) {
+    evidenceFlywheel = createEvidenceFlywheelMetrics({
+      database: productDatabase, platformPublisherUserId: PLATFORM_PUBLISHER_USER_ID,
+      citationReaders: { communication: geo ? createGeoCardCitationReader({ database: productDatabase }) : null },
+      predictionCalibration: predictionRegistry ? () => predictionRegistry?.predictionCalibration() : null,
+      evolutionTools: evolution ? async () => (await evolution?.service.tools() ?? []).map((/** @type {any} */ row) => row.payload) : null,
+      // The platform's question bank (循证传播, F22): this month's rounds and the share of the assistants' cited answers that cited an EviMed page.
+      assistantCoverage: geo && config.geoQuestionBankEnabled ? async () => {
+        const summary = await questionBankSummary(productDatabase, { publicUrl: config.publicUrl });
+        if (!summary.available) return { rounds: null, citedShare: null };
+        const rounds = Object.values(/** @type {any} */ (summary).coverage ?? {}).reduce((sum, /** @type {any} */ entry) => sum + (Number(entry?.rounds) || 0), 0);
+        return { rounds: rounds || null, citedShare: summary.overall?.eviMedCitedShare ?? null };
+      } : null,
+      report: code => process.stderr.write(`${code}\n`),
+    });
   }
   const reviewGatewayHandler = createReviewGatewayHandler({
     runtimeManager, service: review?.service ?? null, config,
@@ -5153,6 +5249,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (await autopilotRoutes(req, res)) return;
       if (await evidenceTopicRequestRoutes(req, res)) return;
       if (await evidenceUpkeepRoutes(req, res)) return;
+      if (await evidenceCommunityRoutes(req, res)) return;
       if (await evidenceZoneRoutes(req, res)) return;
       if (await evidencePublishRoutes(req, res)) return;
       if (await frontierRoutes(req, res)) return;
@@ -5238,7 +5335,24 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           evidenceUpkeep,
           evidenceFeed,
           evidencePublic: evidencePublicRoutes,
+          evidenceFlywheel,
+          evidenceCommunity,
+          evidenceOutcomes,
+          evolutionLeadSources,
+          platformHandbooks,
         });
+        return;
+      }
+
+      // The evidence flywheel's figures (evidenceFlywheelMetrics.mjs): the north star, the five asset groups and the guardrails, from the tables that
+      // already exist. Behind the scrape token like the usage report; off, the route answers by name once the token has been checked.
+      if (pathname === "/api/ops/evidence-flywheel" && req.method === "GET") {
+        assertOperatorMetricsAccess(req, config);
+        if (!evidenceFlywheel) throw new HttpError(404, "evidence_flywheel_not_enabled", "The evidence flywheel's figures are not enabled.");
+        const url = new URL(req.url ?? "/", apiBaseFromRequest(req, config));
+        const asked = url.searchParams.get("weeks");
+        res.setHeader("Cache-Control", "no-store");
+        sendJson(res, 200, { data: await evidenceFlywheel.snapshot(asked === null ? {} : { weeks: /^\d+$/.test(asked) ? Number(asked) : Number.NaN }) });
         return;
       }
 
@@ -8056,7 +8170,7 @@ function addHistogramMetric(lines, name, help, series) {
   }
 }
 
-async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, evidenceBudget = null, entityVocabulary = null, evidencePublish = null, evidenceUpkeep = null, evidenceProgramme = null, evidenceFeed = null, evidencePublic = null, evidenceRecalculation = null, predictionRegistry = null }) {
+async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, evidenceBudget = null, entityVocabulary = null, evidencePublish = null, evidenceUpkeep = null, evidenceProgramme = null, evidenceFeed = null, evidencePublic = null, evidenceRecalculation = null, predictionRegistry = null, evidenceFlywheel = null, evidenceCommunity = null, evidenceOutcomes = null, evolutionLeadSources = null, platformHandbooks = null }) {
   const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate, frontier, review, geo, vcr, credits);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
@@ -8478,6 +8592,13 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
   for (const family of evidenceFeedMetricFamilies(evidenceFeed?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
   // The public evidence pages, their read-only API and the topic requests (evidencePublicRoutes.mjs): nothing is exported where they are off.
   for (const family of evidencePublicMetricFamilies(evidencePublic?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
+  // The evidence flywheel's figures (evidenceFlywheelMetrics.mjs): exported only with the switch on; a figure with no input has no series.
+  addMetric(lines, "open_science_evidence_flywheel_enabled", "Whether the evidence flywheel's figures are switched on (OPEN_SCIENCE_EVIDENCE_FLYWHEEL_METRICS_ENABLED).", "gauge", [{ value: config.evidenceFlywheelMetricsEnabled ? 1 : 0 }]);
+  for (const family of platformHandbookMetricFamilies(platformHandbooks?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
+  for (const family of evolutionLeadSourceMetricFamilies(evolutionLeadSources?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
+  for (const family of evidenceOutcomeMetricFamilies(evidenceOutcomes?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
+  for (const family of evidenceCommunityMetricFamilies(evidenceCommunity)) addMetric(lines, family.name, family.help, family.type, family.series);
+  if (evidenceFlywheel) for (const family of await evidenceFlywheel.metricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
   // The entity vocabulary the frontier, the zones, agendas, products and studies share: the glossary's size and what
   // the taggings found (entityVocabulary.mjs `entityVocabularyMetricFamilies`).
   for (const family of entityVocabularyMetricFamilies(entityVocabulary?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);

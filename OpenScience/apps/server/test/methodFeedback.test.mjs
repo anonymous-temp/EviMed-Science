@@ -11,7 +11,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import test from "node:test";
 
-import { METHOD_SKILL_SCHEMA, mountedMethodDigest, parseSkillFrontmatter } from "@evimed/domain";
+import { METHOD_SKILL_SCHEMA, mountedMethodDigest, parseSkillFrontmatter, scientificOutcomes } from "@evimed/domain";
 import { learnedMethodId, LearningService, methodScopeOf } from "../src/learningService.mjs";
 import { MethodFeedbackService } from "../src/methodFeedback.mjs";
 import { productDocumentsDouble } from "./helpers/productDocumentsDouble.mjs";
@@ -378,4 +378,36 @@ test("rolling back to a digest the method never held, or to the one it holds, is
   for (const targetDigest of [`sha256:${hex("7")}`, current.payload.contentDigest]) {
     await assert.rejects(f.learning.rollback(USER, method.id, { expectedRevision: current.revision, targetDigest }), (error) => error.code === "method_revision_unavailable");
   }
+});
+
+test("a published card's correction is carried, as the same evidence_corrected signal, to the methods the producing run read, once per log entry and as one outcome per result version", async () => {
+  const f = fixture();
+  const method = await f.method();
+  f.run({ invoked: [method] });
+  const outcome = { runId: "run-1", result: { versionId: version(1), digest: hex("a") }, at: "2026-10-06T08:00:00.000Z", logEntryId: "41", outcomeClass: "claim_amended" };
+  const joined = await f.service.fromEvidenceOutcome(PROJECT, outcome);
+  assert.deepEqual([joined.recorded.map((item) => item.added), joined.skipped, joined.capabilityId], [[true], null, "meta-analysis"]);
+  const [entry] = (await f.scientific()).entries;
+  assert.deepEqual([entry.signal, entry.kind, entry.event.id, entry.result.versionId, entry.digest, entry.at], ["evidence_corrected", "evidence", "evidence-outcome:claim_amended:41", version(1), method.payload.contentDigest, outcome.at]);
+  // The same log entry again adds nothing; another entry of the same version is another entry but the same single outcome.
+  assert.deepEqual((await f.service.fromEvidenceOutcome(PROJECT, outcome)).recorded.map((item) => item.added), [false]);
+  await f.service.fromEvidenceOutcome(PROJECT, { ...outcome, logEntryId: "42", outcomeClass: "card_withdrawn" });
+  await f.service.fromCorrection(PROJECT, f.correction());
+  const entries = (await f.scientific()).entries;
+  assert.equal(entries.length, 3);
+  assert.deepEqual(scientificOutcomes(await f.scientific(), method.payload.contentDigest).map((item) => [item.versionId, item.polarity]), [[version(1), "against"]], "a version found wrong three ways is one result");
+});
+
+test("a card's outcome with nothing to join is a labelled skip: no run in the ledger, the researcher's learning off, the platform's own project", async () => {
+  const f = fixture();
+  const method = await f.method();
+  f.run({ invoked: [method] });
+  const outcome = { runId: "run-1", result: { versionId: version(1), digest: hex("a") }, at: "2026-10-06T08:00:00.000Z", logEntryId: "41", outcomeClass: "claim_withdrawn" };
+  assert.equal((await f.service.fromEvidenceOutcome(PROJECT, { ...outcome, runId: "gone" })).skipped, "run_unavailable");
+  f.state.learning = true;
+  const off = await f.service.fromEvidenceOutcome(PROJECT, outcome);
+  assert.deepEqual([off.skipped, off.capabilityId], ["not_learnable", "meta-analysis"]);
+  f.state.learning = false;
+  assert.equal((await f.service.fromEvidenceOutcome({ id: "evimed-evidence", userId: USER }, outcome)).skipped, "not_learnable");
+  assert.equal((await f.learning.getMethod(USER, method.id)).payload.scientific, undefined);
 });

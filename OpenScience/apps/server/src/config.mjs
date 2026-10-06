@@ -490,6 +490,54 @@ function evidenceUpkeepSettings(overrides) {
 }
 
 /**
+ * What the evidence flywheel's learning loop and its figures switch on (evidence-flywheel plan §5.2, §5.5, §11, 2026-10-06), each off by default
+ * and each doing nothing at all while off — no table read, no timer, and a route that answers 404 by the module's own "not enabled" code.
+ *
+ * - `OPEN_SCIENCE_EVIDENCE_FLYWHEEL_METRICS_ENABLED` (off): the operator's `GET /api/ops/evidence-flywheel` and the `open_science_evidence_flywheel_*`
+ *   families. It reads existing tables only; it is a switch because a scrape that verifies cards is database work an operator chooses to ask for.
+ * - `OPEN_SCIENCE_EVIDENCE_COMMUNITY_CARDS_ENABLED` (off): the community column of an official zone, `GET /api/frontier/zones/:id/community`, which lists
+ *   other users' public cards on the zone's subjects (established authors only). `OPEN_SCIENCE_EVIDENCE_COMMUNITY_MAX_CARDS` (20, at most 50) bounds one
+ *   column; a longer list is a resource cost, not an opinion about the cards.
+ * - `OPEN_SCIENCE_LEARNING_EVIDENCE_OUTCOMES_ENABLED` (off): what becomes of a published card — a correction, a withdrawal — goes back into learning: an incident
+ *   document for the eval corpus and an observation on the methods of the run that produced it. Ticked by the learning worker's housekeeping timer, so it
+ *   needs the learning loop on; off, no table is read and no timer exists. `OPEN_SCIENCE_LEARNING_EVIDENCE_OUTCOMES_BATCH` (25, at most 200) is the
+ *   change-log entries one pass reads: a bound on the database's work, not on how soon an outcome is noticed.
+ * - `OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_ENABLED` (off): the platform's own modules (the evidence programme, 循证传播, 虚拟临研) hand 循证进化 what they could
+ *   not do as research leads; needs the evolution module on. `OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_PER_DAY` (5, at most 50) bounds the new leads of these
+ *   sources taken in a day, because each lead is a scouting run on the module's own budget.
+ * - `OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_ENABLED` (off): a lesson an account's handbook learned that holds no project fact may go to the platform's skill supply as a
+ *   text-only entry, after an independent re-check; needs the evolution module and the learning loop on. `OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PER_DAY` (3, at most 30)
+ *   bounds the candidates re-checked and activated in a day, each a model call of the evolution module's own budget.
+ *
+ * @param {Record<string, any>} overrides
+ */
+function evidenceFlywheelSettings(overrides) {
+  const handbooksRaw = overrides.learningPlatformHandbooksPerDay !== undefined ? overrides.learningPlatformHandbooksPerDay : process.env.OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PER_DAY;
+  const handbooksPerDay = handbooksRaw == null || handbooksRaw === "" ? 3 : Number(handbooksRaw);
+  if (!Number.isSafeInteger(handbooksPerDay) || handbooksPerDay < 1 || handbooksPerDay > 30) throw new Error(`OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PER_DAY must be a whole number from 1 to 30, got ${JSON.stringify(handbooksRaw)}.`);
+  const perDayRaw = overrides.evolutionModuleLeadsPerDay !== undefined ? overrides.evolutionModuleLeadsPerDay : process.env.OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_PER_DAY;
+  const moduleLeadsPerDay = perDayRaw == null || perDayRaw === "" ? 5 : Number(perDayRaw);
+  if (!Number.isSafeInteger(moduleLeadsPerDay) || moduleLeadsPerDay < 1 || moduleLeadsPerDay > 50) throw new Error(`OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_PER_DAY must be a whole number from 1 to 50, got ${JSON.stringify(perDayRaw)}.`);
+  const batchRaw = overrides.learningEvidenceOutcomesBatch !== undefined ? overrides.learningEvidenceOutcomesBatch : process.env.OPEN_SCIENCE_LEARNING_EVIDENCE_OUTCOMES_BATCH;
+  const outcomesBatch = batchRaw == null || batchRaw === "" ? 25 : Number(batchRaw);
+  if (!Number.isSafeInteger(outcomesBatch) || outcomesBatch < 1 || outcomesBatch > 200) throw new Error(`OPEN_SCIENCE_LEARNING_EVIDENCE_OUTCOMES_BATCH must be a whole number from 1 to 200, got ${JSON.stringify(batchRaw)}.`);
+  const raw = overrides.evidenceCommunityMaxCards !== undefined ? overrides.evidenceCommunityMaxCards : process.env.OPEN_SCIENCE_EVIDENCE_COMMUNITY_MAX_CARDS;
+  const maxCards = raw == null || raw === "" ? 20 : Number(raw);
+  if (!Number.isSafeInteger(maxCards) || maxCards < 1 || maxCards > 50) throw new Error(`OPEN_SCIENCE_EVIDENCE_COMMUNITY_MAX_CARDS must be a whole number from 1 to 50, got ${JSON.stringify(raw)}.`);
+  return {
+    evidenceFlywheelMetricsEnabled: overrides.evidenceFlywheelMetricsEnabled ?? boolEnv("OPEN_SCIENCE_EVIDENCE_FLYWHEEL_METRICS_ENABLED", false),
+    evidenceCommunityCardsEnabled: overrides.evidenceCommunityCardsEnabled ?? boolEnv("OPEN_SCIENCE_EVIDENCE_COMMUNITY_CARDS_ENABLED", false),
+    evidenceCommunityMaxCards: maxCards,
+    learningEvidenceOutcomesEnabled: overrides.learningEvidenceOutcomesEnabled ?? boolEnv("OPEN_SCIENCE_LEARNING_EVIDENCE_OUTCOMES_ENABLED", false),
+    learningEvidenceOutcomesBatch: outcomesBatch,
+    evolutionModuleLeadsEnabled: overrides.evolutionModuleLeadsEnabled ?? boolEnv("OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_ENABLED", false),
+    evolutionModuleLeadsPerDay: moduleLeadsPerDay,
+    learningPlatformHandbooksEnabled: overrides.learningPlatformHandbooksEnabled ?? boolEnv("OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_ENABLED", false),
+    learningPlatformHandbooksPerDay: handbooksPerDay,
+  };
+}
+
+/**
  * Sharing memory inside the platform (evidence-flywheel plan §7, F17-F19, 2026-10-05), each lever checked at load with
  * the discipline of the frontier's: passed value-less by compose, and a value outside its range stops the process at
  * start with the variable's name.
@@ -2526,6 +2574,7 @@ export function loadConfig(overrides = {}) {
     ...evidenceSettings(overrides),
     ...evidenceCitationGiftSettings(overrides),
     ...evidenceUpkeepSettings(overrides),
+    ...evidenceFlywheelSettings(overrides),
     // --- sharing memory inside the platform (evidence-flywheel F17-F19, 2026-10-05) ---
     ...memorySharingSettings(overrides, overrides.frontierEnabled ?? boolEnv("OPEN_SCIENCE_FRONTIER_ENABLED", false)),
     // --- 循证传播 and the media marketplace (2026-09-25) ---

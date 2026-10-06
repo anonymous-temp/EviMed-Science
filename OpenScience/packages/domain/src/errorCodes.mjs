@@ -1583,6 +1583,17 @@ export const EVIDENCE_PUBLIC_ERROR_CODES = Object.freeze([
 ])
 
 /**
+ * What the flywheel's operator figures and the community column of an official zone answer with when their switch is off or
+ * what they were asked for is not there (evidence-flywheel plan §5.2, §11, 2026-10-06). Each is about the module, never a
+ * verdict on a run.
+ */
+export const EVIDENCE_FLYWHEEL_ERROR_CODES = Object.freeze([
+  'evidence_flywheel_not_enabled',
+  'evidence_community_not_enabled',
+  'evidence_community_not_found',
+])
+
+/**
  * Codes sharing memory inside the platform answers with (evidence-flywheel plan §7, F17-F19,
  * 2026-10-05): a pack that carries anything but text, a share that is not this account's to
  * make, a link or delivery that can no longer be used, a pack the author or the operator took
@@ -1655,6 +1666,7 @@ export const ALL_ERROR_CODES = Object.freeze([...new Set([
   ...EVIDENCE_PROGRAMME_ERROR_CODES,
   ...EVIDENCE_PUBLIC_ERROR_CODES,
   ...CAPSULE_SHARE_ERROR_CODES,
+  ...EVIDENCE_FLYWHEEL_ERROR_CODES,
   ...Object.keys(EVIDENCE_CARD_ERROR_MESSAGES_ZH),
   ...Object.keys(EVIDENCE_PUBLISH_ERROR_MESSAGES_ZH),
   ...Object.keys(EVIDENCE_UPKEEP_ERROR_MESSAGES_ZH),
@@ -2315,6 +2327,9 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   evidence_zone_subscription_not_enabled: '证据专区订阅这个部署没有开放。',
   evidence_zone_subscription_not_found: '这个证据专区不存在，或还没有发布。',
   evidence_zone_subscription_limit: '这个项目订阅的证据专区已经够多了，先取消不用的再订阅。',
+  evidence_flywheel_not_enabled: '这个部署没有开启证据飞轮的运营指标。',
+  evidence_community_not_enabled: '这个部署没有开放官方专区的社区卡片。',
+  evidence_community_not_found: '这个官方专区不存在，或还没有发布。',
   method_no_earlier_version: '这个做法没有更早的版本。',
   method_revision_unavailable: '要回到的版本已不存在，刷新后再试。',
 
@@ -2638,6 +2653,8 @@ export function errorCodeOutcome(code) {
   if (capsuleTransferErrorCodes.includes(text)) return 'upstream'
   // Sharing memory inside the platform refuses one share, link or subscription, never a run.
   if (CAPSULE_SHARE_ERROR_CODES.includes(text)) return 'upstream'
+  // The flywheel's figures and the community column refuse about the module, never about a run.
+  if (EVIDENCE_FLYWHEEL_ERROR_CODES.includes(text)) return 'upstream'
   // Optional extension refusals affect that operation, not research delivery.
   if (Object.hasOwn(EVOLUTION_ERROR_MESSAGES, text)) return 'upstream'
   // An evidence card's refusals are about one write to one zone, never a verdict on a run.
