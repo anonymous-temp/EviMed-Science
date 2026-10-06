@@ -176,6 +176,10 @@ export interface ReceivedCapsule {
   card?: CapsuleCard | null;
   /** When a newer snapshot last replaced it in place. */
   upgradedAt?: string | null;
+  /** Who shared it and how it reached this account (never the account itself): 「来自 李主任 的分享」. */
+  sharedFrom?: { label: string; authorName: string | null; channel: string | null } | null;
+  /** Taken down by its author or the operator: out of force everywhere, and never put back. */
+  takenDown?: { by: "author" | "operator"; at: string; reason: string | null } | null;
 }
 
 export function fetchReceivedCapsules() {

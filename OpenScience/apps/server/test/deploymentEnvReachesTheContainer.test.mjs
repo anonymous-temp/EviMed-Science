@@ -233,6 +233,17 @@ const operatorLevers = {
   OPEN_SCIENCE_EVIDENCE_CHALLENGES_PER_DAY: ["open-science-web"],
   OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_CHECKS: ["open-science-web"],
   OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_DAYS: ["open-science-web"],
+  // Sharing memory inside the platform (evidence-flywheel F17-F19, 2026-10-05): a lever that does not arrive leaves share links
+  // living and used by the defaults while the operator believes they shortened them, or a new author's pack counted as
+  // corroborated by a threshold the operator never set.
+  OPEN_SCIENCE_CAPSULE_SHARE_LINK_TTL_DAYS: ["open-science-web"],
+  OPEN_SCIENCE_CAPSULE_SHARE_LINK_MAX_USES: ["open-science-web"],
+  OPEN_SCIENCE_CAPSULE_SHARE_CORROBORATION_MIN_ACCOUNTS: ["open-science-web"],
+  OPEN_SCIENCE_CAPSULE_SHARE_CORROBORATION_KEPT_DAYS: ["open-science-web"],
+  OPEN_SCIENCE_CAPSULE_SHARE_DELIVERIES_PER_DAY: ["open-science-web"],
+  OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_ENABLED: ["open-science-web"],
+  OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_MAX_PER_PROJECT: ["open-science-web"],
+  OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_MAX_ITEMS: ["open-science-web"],
   OPEN_SCIENCE_KNOWLEDGE_PLUGIN_URL: ["open-science-web"],
   OPEN_SCIENCE_KNOWLEDGE_PLUGIN_TOKEN_FILE: ["open-science-web"],
   OPEN_SCIENCE_KNOWLEDGE_PLUGIN_POLL_MS: ["open-science-web"],

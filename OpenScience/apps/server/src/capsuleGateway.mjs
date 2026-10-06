@@ -26,12 +26,16 @@ export const CAPSULE_GATEWAY_PATH = "/internal/capsules/v1";
  *
  * 无痕 and 「本次不用」 were read here until 2026-09-20 and are gone with the bar
  * that was their only control.
+ * `subscriptions` is the project's evidence-zone subscriptions (`evidenceZoneSubscription.mjs`, flywheel F18): one more provider of a
+ * recall, read for this project alone, appended after what the capsules and memory returned, never counted in the run's recalled
+ * memories (a zone's card is reference context, not a memory) and never read in a conversation that is trying someone's pack.
  * @param {{ runtimeManager: any, store: any, service: any, memorySubstrate?: any, evaluationIsolation?: any, handbooks?: any,
+ *   subscriptions?: { recall: (userId: string, projectId: string, query: string) => Promise<any[]> } | null,
  *   sessions?: { running: (user: any, project: any) => Promise<{ id: string, sessionId: string }[]>,
  *     state: (userId: string, projectId: string, sessionId: string) => Promise<{ trialCapsuleId?: string | null }>,
  *     notes?: (userId: string, projectId: string, sessionId: string) => Promise<string[]>,
  *     recordRecall: (project: any, runId: string, items: any[]) => Promise<unknown> } | null }} dependencies */
-export function createCapsuleGatewayHandler({ runtimeManager, store, service, memorySubstrate = null, sessions = null, handbooks = null, evaluationIsolation = null }) {
+export function createCapsuleGatewayHandler({ runtimeManager, store, service, memorySubstrate = null, sessions = null, handbooks = null, evaluationIsolation = null, subscriptions = null }) {
   const windows = new Map();
   /** @param {any} req @param {any} res @param {(failure:any)=>void} [onFailure] */
   return async (req, res, onFailure) => {
@@ -119,7 +123,13 @@ export function createCapsuleGatewayHandler({ runtimeManager, store, service, me
         if (sessions && running.length === 1) {
           await sessions.recordRecall(project, running[0].id, recalled.items).catch(() => null);
         }
-        sendJson(res, 200, evaluationIsolation ? await evaluationIsolation.filter(identity, "capsule-memory", recalled) : recalled);
+        // Reference context of the evidence zones this project follows. A failure to read costs the recall this part only.
+        // An evaluation run is frozen at a date and kept from what the platform has written since: no zone card reaches it.
+        const reference = subscriptions && body.scope !== "conversation" && typeof body.query === "string" && !(await evaluationIsolation?.isEvaluation(identity))
+          ? await subscriptions.recall(currentUser.id, identity.projectId, body.query).catch(() => []) : [];
+        const answer = reference.length
+          ? { ...recalled, items: [...recalled.items, ...reference], sources: { ...recalled.sources, zone: reference.length } } : recalled;
+        sendJson(res, 200, evaluationIsolation ? await evaluationIsolation.filter(identity, "capsule-memory", answer) : answer);
       } else if (writesNothing) {
         // A conversation trying someone else's capsule leaves nothing behind.
         sendJson(res, 200, {

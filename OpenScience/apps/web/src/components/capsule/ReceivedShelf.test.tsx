@@ -136,4 +136,12 @@ describe("收到的胶囊: trusted whole, one switch each way", () => {
     expect(screen.queryByRole("heading", { name: "收到的胶囊" })).toBeNull();
     expect(screen.queryByRole("list")).toBeNull();
   });
+
+  it("a pack its author or the operator took down says so, and cannot be switched on or tried", async () => {
+    client.fetchReceivedCapsules.mockResolvedValue([{ ...structuredClone(pack), takenDown: { by: "operator", at: "2026-10-05T00:00:00Z", reason: "平台复核后下架" } }]);
+    shelf();
+    expect(await screen.findByText("已被平台下架并停用：平台复核后下架")).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "启用“李主任的工作方式”" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "更多" })).not.toBeInTheDocument();
+  });
 });

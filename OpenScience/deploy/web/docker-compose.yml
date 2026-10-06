@@ -562,6 +562,20 @@ services:
       OPEN_SCIENCE_EVIDENCE_CHALLENGES_PER_DAY:
       OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_CHECKS:
       OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_DAYS:
+      # Sharing memory inside the platform (evidence-flywheel plan 2026-10-05, F17-F19):
+      # how long a share link lives and how often it may be used, how many other
+      # accounts must keep a new author's pack before it counts for platform
+      # learning and for how long, the daily ceiling on deliveries to other
+      # accounts, and the evidence-zone subscription (on with the frontier).
+      # Value-less: unset keeps config.mjs's defaults.
+      OPEN_SCIENCE_CAPSULE_SHARE_LINK_TTL_DAYS:
+      OPEN_SCIENCE_CAPSULE_SHARE_LINK_MAX_USES:
+      OPEN_SCIENCE_CAPSULE_SHARE_CORROBORATION_MIN_ACCOUNTS:
+      OPEN_SCIENCE_CAPSULE_SHARE_CORROBORATION_KEPT_DAYS:
+      OPEN_SCIENCE_CAPSULE_SHARE_DELIVERIES_PER_DAY:
+      OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_ENABLED:
+      OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_MAX_PER_PROJECT:
+      OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_MAX_ITEMS:
       # 「循证 GEO」 (geoService.mjs) and the media marketplace it places orders
       # through. Value-less: unset keeps config.mjs's defaults — the module off,
       # open to operators once on, no social channel, no marketplace. The

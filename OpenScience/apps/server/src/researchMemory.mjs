@@ -343,11 +343,15 @@ export function validateRecordInput(input) {
 
 /** The one form of an identifier a source link is recorded and compared in. A
  *  knowledge-base document is its `src_` id; a published work is its DOI,
- *  lower-cased with no resolver prefix. Anything else names nothing we can find
- *  again, so it is no link at all. */
+ *  lower-cased with no resolver prefix; an evidence card is its `ec_` id and a
+ *  frontier item its public id. Anything else names nothing we can find again, so
+ *  it is no link at all. */
 const SOURCE_ID_FORMAT = Object.freeze({
   knowledge_source: /^src_[a-f0-9]{32}$/,
   doi: /^10\.\d{4,9}\/\S{1,250}$/,
+  // An evidence card (`ec_` and the hex of its identity) and a frontier item (its public id), flywheel F19.
+  evidence_card: /^ec_[a-f0-9]{32}$/,
+  frontier_item: /^[a-z0-9]{12,32}$/,
 });
 
 /**
@@ -1622,6 +1626,21 @@ export class ResearchMemoryStore {
         stateAt: recorded.stateAt, linkedAt: recorded.linkedAt,
       };
     });
+  }
+
+  /**
+   * The evidence cards and frontier items memories name, one row per link, with the state each holds — what
+   * `KnowledgeChangeService.sweepEvidenceLinks` looks the current state up for (flywheel F19). Links not yet moved first, so a
+   * bounded pass reaches the ones nobody has looked at before it revisits the ones it has.
+   * @param {{ userId?: string | null, limit?: number }} [options]
+   * @returns {Promise<{ userId: string, type: string, id: string, state: string }[]>}
+   */
+  async linkedEvidenceSources({ userId = null, limit = 500 } = {}) {
+    const result = await this.#query(`SELECT user_id, source_type, source_id, state FROM evimed_memory.record_sources
+      WHERE source_type IN ('evidence_card','frontier_item') AND ($1::text IS NULL OR user_id=$1)
+      ORDER BY state_at NULLS FIRST, user_id, record_id LIMIT $2`,
+    [userId == null ? null : assertUserId(userId), Math.max(1, Math.min(5000, Number(limit) || 500))]);
+    return result.rows.map((/** @type {any} */ row) => ({ userId: String(row.user_id), type: String(row.source_type), id: String(row.source_id), state: String(row.state) }));
   }
 
   /**

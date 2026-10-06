@@ -241,6 +241,12 @@ function actionHref(item: InboxItem, action: InboxAction): string | null {
   // Only the ledger knows which conversation that is, so this stays the run's
   // own address and `RunRedirect` resolves it (router.tsx).
   if (item.source.type === "run") return `/app/runs?run=${encodeURIComponent(item.source.id)}`;
+  // A share (flywheel F17): a delivery opens the preview-and-try page; its withdrawal and a take-down open the memory page, where the
+  // pack's shelf says what happened.
+  if (item.source.type === "share") {
+    const delivery = /^delivery\/([A-Za-z0-9_-]{1,80})$/.exec(item.source.id);
+    return delivery ? `/app/memory/delivered/${delivery[1]}` : "/app/memory";
+  }
   // A memory's confirm, correct and delete controls are on its own page.
   if (item.source.type === "memory") return `/app/memory?record=${encodeURIComponent(item.source.id)}`;
   // A 循证 GEO notice names the page it is about: `<geoId>/<tab>[/<item>]`.

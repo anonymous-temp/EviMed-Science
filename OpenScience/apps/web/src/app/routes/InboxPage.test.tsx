@@ -358,3 +358,28 @@ it("holds back the sentences an old run notice quoted for the agent, except for 
   open();
   expect(await screen.findByText(/另有 1 条技术原文（仅运维账号可见）/)).toBeInTheDocument();
 });
+
+// A share notice (flywheel F17): a delivery opens the page that previews it, tries it and takes it in; its withdrawal and a take-down
+// open the memory page; and an id that is not a delivery's address opens nothing it should not.
+it("opens a share where it lives: a delivery on its own page, a withdrawal or take-down on the memory page", async () => {
+  const notice = (id: string, title: string, sourceId: string): api.InboxItem => ({
+    ...review, id, noticeType: "notify", title, body: "2 条做法", severity: "info",
+    source: { type: "share", id: sourceId }, actions: [{ id: "open", label: "查看并试用", style: "primary" }], readAt: at(1),
+  });
+  vi.mocked(api.listInbox).mockResolvedValue({
+    items: [
+      notice("delivery", "李主任 向你分享了一套工作方式", "delivery/dlv_abc123"),
+      notice("withdrawn", "李主任撤回了发给你的一份分享", "withdrawn/dlv_abc123"),
+      notice("takedown", "「李主任的工作方式」已被作者下架并停用", "takedown/cap_1"),
+      notice("climb", "一条想跳出去的通知", "delivery/../../admin"),
+    ],
+    nextCursor: null,
+  });
+  open();
+  expect(await screen.findByRole("link", { name: "李主任 向你分享了一套工作方式" })).toHaveAttribute("href", "/app/memory/delivered/dlv_abc123");
+  expect(screen.getByRole("link", { name: "李主任撤回了发给你的一份分享" })).toHaveAttribute("href", "/app/memory");
+  expect(screen.getByRole("link", { name: "「李主任的工作方式」已被作者下架并停用" })).toHaveAttribute("href", "/app/memory");
+  expect(screen.getByRole("link", { name: "一条想跳出去的通知" })).toHaveAttribute("href", "/app/memory");
+  await userEvent.click(screen.getByRole("link", { name: "李主任 向你分享了一套工作方式" }));
+  expect(screen.getByTestId("where")).toHaveTextContent("/app/memory/delivered/dlv_abc123");
+});

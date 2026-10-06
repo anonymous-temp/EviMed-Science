@@ -1549,6 +1549,31 @@ export const EVIDENCE_PUBLIC_ERROR_CODES = Object.freeze([
 ])
 
 /**
+ * Codes sharing memory inside the platform answers with (evidence-flywheel plan §7, F17-F19,
+ * 2026-10-05): a pack that carries anything but text, a share that is not this account's to
+ * make, a link or delivery that can no longer be used, a pack the author or the operator took
+ * down, and the evidence-zone subscription. Each refuses the one operation it names, never a
+ * run. A recipient who cannot be reached is deliberately NOT a code: an unknown name and a
+ * refusing one answer alike, so a name cannot be probed.
+ */
+export const CAPSULE_SHARE_ERROR_CODES = Object.freeze([
+  'capsule_share_not_text_only',
+  'capsule_share_not_own',
+  'capsule_share_not_found',
+  'capsule_share_link_expired',
+  'capsule_share_link_revoked',
+  'capsule_share_link_exhausted',
+  'capsule_share_delivery_closed',
+  'capsule_share_links_limit',
+  'capsule_share_rate_limited',
+  'capsule_share_operator_required',
+  'capsule_pack_taken_down',
+  'evidence_zone_subscription_not_enabled',
+  'evidence_zone_subscription_not_found',
+  'evidence_zone_subscription_limit',
+])
+
+/**
  * Every code this build knows, so a mapping test can prove a new code was
  * classified rather than silently inheriting a default.
  *
@@ -1595,6 +1620,7 @@ export const ALL_ERROR_CODES = Object.freeze([...new Set([
   ...EVIDENCE_PLATFORM_ERROR_CODES,
   ...EVIDENCE_PROGRAMME_ERROR_CODES,
   ...EVIDENCE_PUBLIC_ERROR_CODES,
+  ...CAPSULE_SHARE_ERROR_CODES,
   ...Object.keys(EVIDENCE_CARD_ERROR_MESSAGES_ZH),
   ...Object.keys(EVIDENCE_PUBLISH_ERROR_MESSAGES_ZH),
   ...Object.keys(EVIDENCE_UPKEEP_ERROR_MESSAGES_ZH),
@@ -2210,6 +2236,22 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   capsule_export_empty: '还没有可以分享的内容：学到做法，或在对话里说明你的工作方式之后，就可以分享了。',
   capsule_recipient_unknown: '要分享给的账号不在这个平台上，请核对账号名。',
   capsule_password_required: '这个胶囊需要发送者设定的口令才能打开。',
+  // Sharing inside the platform (`capsuleTransferService.mjs`, `capsuleShareLinks.mjs`): text only, the author's own
+  // pack, and what the recipient hears when a share can no longer be used.
+  capsule_share_not_text_only: '这个胶囊里含有文字以外的内容，平台不接收：用户之间只分享纯文字的方法，不分享脚本、附件或工具。',
+  capsule_share_not_own: '只能分享你自己的胶囊；收到的胶囊不能再转发。',
+  capsule_share_not_found: '这个分享不存在，或已经不能用了。',
+  capsule_share_link_expired: '这个分享链接已过期，请向分享的人要一个新的。',
+  capsule_share_link_revoked: '这个分享链接已被分享的人撤回。',
+  capsule_share_link_exhausted: '这个分享链接的使用次数已用完，请向分享的人要一个新的。',
+  capsule_share_delivery_closed: '这份分享已经处理过，或已被撤回。',
+  capsule_share_links_limit: '有效的分享链接太多了，先撤回不用的再新建。',
+  capsule_share_rate_limited: '今天发出的分享已经够多了，明天再试。',
+  capsule_share_operator_required: '只有平台管理员可以下架一位作者的全部分享。',
+  capsule_pack_taken_down: '这个胶囊已被下架，不能再启用或试用。',
+  evidence_zone_subscription_not_enabled: '证据专区订阅这个部署没有开放。',
+  evidence_zone_subscription_not_found: '这个证据专区不存在，或还没有发布。',
+  evidence_zone_subscription_limit: '这个项目订阅的证据专区已经够多了，先取消不用的再订阅。',
   method_no_earlier_version: '这个做法没有更早的版本。',
   method_revision_unavailable: '要回到的版本已不存在，刷新后再试。',
 
@@ -2523,6 +2565,8 @@ export function errorCodeOutcome(code) {
   // nothing to share yet, an account that is not here, a missing password —
   // never as a verdict on a run.
   if (capsuleTransferErrorCodes.includes(text)) return 'upstream'
+  // Sharing memory inside the platform refuses one share, link or subscription, never a run.
+  if (CAPSULE_SHARE_ERROR_CODES.includes(text)) return 'upstream'
   // Optional extension refusals affect that operation, not research delivery.
   if (Object.hasOwn(EVOLUTION_ERROR_MESSAGES, text)) return 'upstream'
   // An evidence card's refusals are about one write to one zone, never a verdict on a run.

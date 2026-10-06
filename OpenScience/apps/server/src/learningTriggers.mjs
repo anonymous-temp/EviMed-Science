@@ -45,6 +45,12 @@
  * evidence is the platform's own reviewer is kept for the capability handbook
  * and never becomes the researcher's method (`lessonSignal`).
  *
+ * A run that drew on someone else's pack that no other account has yet vouched for — a share by a new author, before enough
+ * accounts have kept it enabled (`capsuleShareTrust.mjs`, plan §7, 2026-10-05) — still learns for its own account: its lessons
+ * are queued as any run's are, marked `guestInfluence`. What it must not do is reach the platform, and the one channel from
+ * learning to the platform is the handbook-gap scan (`evolutionLearningCoupling.mjs`), which leaves such a run out. The mark is
+ * written here, once, when the run finishes.
+ *
  * What this module still refuses is work that is not the researcher's: an
  * automated run (an evaluation cell, a probe, an audit or acceptance harness —
  * `automated`, set by the dispatch body or the `x-evimed-automated` header),
@@ -217,11 +223,12 @@ function inRunAttempts(projection) {
  *
  * @param {{ run: any, runs: readonly any[], project?: { id?: string | null, userId?: string | null, archivedAt?: string | null } | null,
  *   ledgers?: readonly ProjectLedger[] | null, periodMs?: number, projection?: any, memoryResult?: any,
- *   internalAgent?: (agentId: string) => boolean }} input
+ *   internalAgent?: (agentId: string) => boolean, guestInfluence?: boolean }} input
+ *   `guestInfluence`: the run drew on a received pack no other account has vouched for; each lesson says so.
  * @returns {{ trigger: string, idempotencyKey: string, payload: Record<string, any> }[]}
  */
 export function learningTriggersFor({ run, runs, project = null, ledgers = null, periodMs = routinePeriodMs(ROUTINE_PERIOD_DAYS),
-  projection = null, memoryResult = null, internalAgent = () => false }) {
+  projection = null, memoryResult = null, internalAgent = () => false, guestInfluence = false }) {
   if (!run || !["succeeded", "failed"].includes(run.status)) return [];
   // Work the platform did on its own behalf is not the researcher's operation:
   // an evaluation cell and the loop's own
@@ -255,7 +262,9 @@ export function learningTriggersFor({ run, runs, project = null, ledgers = null,
       },
     });
   }
-  if (run.status !== "succeeded" || (run.artifacts?.length ?? 0) === 0) return lessons;
+  /** @param {typeof lessons} list */
+  const marked = (list) => (guestInfluence ? list.map((lesson) => ({ ...lesson, payload: { ...lesson.payload, guestInfluence: { uncorroborated: true } } })) : list);
+  if (run.status !== "succeeded" || (run.artifacts?.length ?? 0) === 0) return marked(lessons);
 
   const attempts = inRunAttempts(projection);
   const serverRounds = (run.repairRounds?.content ?? 0) + (run.repairRounds?.structural ?? 0);
@@ -301,7 +310,7 @@ export function learningTriggersFor({ run, runs, project = null, ledgers = null,
       });
     }
   }
-  return lessons;
+  return marked(lessons);
 }
 
 /**
@@ -318,10 +327,10 @@ export function learningTriggersFor({ run, runs, project = null, ledgers = null,
  * successor as adopted: the event says it is not.
  *
  * @param {{ run: any, runs: readonly any[], project?: { id?: string | null } | null, event: any,
- *   internalAgent?: (agentId: string) => boolean }} input
+ *   internalAgent?: (agentId: string) => boolean, guestInfluence?: boolean }} input
  * @returns {{ trigger: string, idempotencyKey: string, payload: Record<string, any> } | null}
  */
-export function correctionLessonFor({ run, runs, project = null, event, internalAgent = () => false }) {
+export function correctionLessonFor({ run, runs, project = null, event, internalAgent = () => false, guestInfluence = false }) {
   if (!run || !event?.id || event.trigger !== "result-corrected") return null;
   if (!["succeeded", "failed"].includes(run.status) || !researcherRun(run)) return null;
   if (project && isInternalProject(project.id)) return null;
@@ -332,7 +341,8 @@ export function correctionLessonFor({ run, runs, project = null, event, internal
   return {
     trigger: "correction",
     idempotencyKey: `distill:${run.id}:correction:${event.id}`,
-    payload: { runId: run.id, trigger: "correction", dispatchKey: event.id, feedbackEventIds: [event.id], feedback: [event] },
+    payload: { runId: run.id, trigger: "correction", dispatchKey: event.id, feedbackEventIds: [event.id], feedback: [event],
+      ...(guestInfluence ? { guestInfluence: { uncorroborated: true } } : {}) },
   };
 }
 
@@ -346,10 +356,12 @@ export class LearningTriggers {
    * @param {{ jobs: any, agentRuns: any, memory?: any, internalAgent?: (agentId: string) => boolean | Promise<boolean>,
    *   sessionState?: ((userId: string, projectId: string, sessionId: string) => Promise<{ trialCapsuleId?: string | null } | null>) | null,
    *   audit?: (event: string, detail: Record<string, any>) => Promise<void>,
-   *   projects?: ((userId: string) => Promise<readonly any[]>) | null, routinePeriodDays?: number }} dependencies
+   *   projects?: ((userId: string) => Promise<readonly any[]>) | null, routinePeriodDays?: number,
+   *   guestInfluence?: { assess: (userId: string, run: any) => Promise<{ guest: any[], uncorroborated: string[] }>,
+   *     mark: (project: any, run: any, assessment: any) => Promise<unknown>, count?: (assessment: any) => void } | null }} dependencies
    */
   constructor({ jobs, agentRuns, memory = null, internalAgent = async () => false, sessionState = null, audit = async () => {},
-    projects = null, routinePeriodDays = ROUTINE_PERIOD_DAYS }) {
+    projects = null, routinePeriodDays = ROUTINE_PERIOD_DAYS, guestInfluence = null }) {
     if (!jobs || !agentRuns) throw new TypeError("Learning triggers need the job queue and the run ledger.");
     this.jobs = jobs;
     this.agentRuns = agentRuns;
@@ -359,6 +371,30 @@ export class LearningTriggers {
     this.audit = audit;
     this.projects = projects;
     this.periodMs = routinePeriodMs(routinePeriodDays);
+    this.guestInfluence = guestInfluence;
+  }
+
+  /**
+   * Whether a finished run drew on a received pack that is not yet corroborated, and — if so — the mark that keeps it out of
+   * platform-level consumers. A pack with no verified author or fewer than the required keeping accounts is uncorroborated, so
+   * the safe answer is the default; a failure to read at all is audited and leaves the lesson as it was, because a lesson that
+   * never queued would be the account losing its own learning to a defence that is not about it.
+   * @param {any} project @param {any} run
+   * @returns {Promise<boolean>} whether the run's lessons carry `guestInfluence`
+   */
+  async #guestInfluenced(project, run) {
+    if (!this.guestInfluence) return false;
+    try {
+      const assessment = await this.guestInfluence.assess(project.userId, run);
+      this.guestInfluence.count?.(assessment);
+      if (assessment.uncorroborated.length === 0) return false;
+      await this.guestInfluence.mark(project, run, assessment);
+      return true;
+    } catch (error) {
+      await this.audit("learning.guest.assess", { userId: project.userId, projectId: project.id, runId: run.id,
+        code: typeof error?.code === "string" ? error.code : "learning_guest_unreadable", detail: "guest capsule" }).catch(() => {});
+      return false;
+    }
   }
 
   /**
@@ -427,8 +463,9 @@ export class LearningTriggers {
         return [];
       });
     }
+    const guestInfluence = await this.#guestInfluenced(project, run);
     const lessons = learningTriggersFor({
-      run, runs, project, ledgers, periodMs: this.periodMs, projection, memoryResult, internalAgent: () => internal,
+      run, runs, project, ledgers, periodMs: this.periodMs, projection, memoryResult, internalAgent: () => internal, guestInfluence,
     });
     const queued = [];
     for (const lesson of lessons) {
@@ -446,7 +483,7 @@ export class LearningTriggers {
         }).catch(() => {});
       }
     }
-    return { queued, skipped: null };
+    return { queued, skipped: null, ...(guestInfluence ? { guestInfluence: "uncorroborated" } : {}) };
   }
 
   /**
@@ -469,7 +506,8 @@ export class LearningTriggers {
     }
     const agentId = String(run.effectiveAgentId ?? "");
     const internal = agentId ? await Promise.resolve(this.internalAgent(agentId)).catch(() => false) : false;
-    const lesson = correctionLessonFor({ run, runs, project, event, internalAgent: () => internal });
+    const guestInfluence = await this.#guestInfluenced(project, run);
+    const lesson = correctionLessonFor({ run, runs, project, event, internalAgent: () => internal, guestInfluence });
     if (!lesson) return { queued: [], skipped: "not_eligible" };
     try {
       await this.jobs.enqueue(project.userId, "distill", lesson.payload, { idempotencyKey: lesson.idempotencyKey, projectId: project.id });
