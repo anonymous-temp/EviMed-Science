@@ -2163,7 +2163,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     const judge = createChallengeJudge({ config, usageLedger, fetchImpl: overrides.frontierModelFetch ?? globalThis.fetch, callModel: callModelForControlPlane,
       parseJson: parseModelJson, billing: () => ensureEvidenceProject(store) });
     const challenges = createEvidenceChallenges({ database: productDatabase, service: zones, changeLog, notifications: notificationService, judge, budget: evidenceBudget,
-      levers: { challengesPerDay: config.evidenceChallengesPerDay }, notifyZoneFollowers, report: (code) => process.stderr.write(`${code}\n`) });
+      levers: { challengesPerDay: config.evidenceChallengesPerDay }, notifyZoneFollowers, report: (code) => process.stderr.write(`${code}\n`),
+      // A calculated claim is checked against its receipt: the reader the composition gives the zone service below (read when a challenge is, not now).
+      receiptsFor: (card) => zones.receiptsFor(card) });
     zones.onCardSaved = async (event) => { await upkeep.onCardRevision(event); await challenges.onCardRevision(event); };
     frontier.evidenceEditorial.useUpkeep({ sourceChanges, upkeep, challenges });
     evidenceUpkeep = { changeLog, upkeep, challenges, figures: createEvidenceFigures({ database: productDatabase }) };

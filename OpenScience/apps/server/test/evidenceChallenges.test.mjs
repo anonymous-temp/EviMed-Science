@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  applyJudgementToClaims, claimCarries, createChallengeJudge, normalizeJudgement, passageIsInSource, publicViewWithout,
+  applyJudgementToClaims, calculationFacts, claimCarries, createChallengeJudge, evidenceChallengeMetricFamilies, normalizeJudgement, passageIsInSource, publicViewWithout,
 } from "../src/evidenceChallenges.mjs";
 
 const TEXT = "In this randomized trial, 7 of 100 adults on the drug had a stroke. Major bleeding occurred in 3 of 100 on the drug.";
@@ -111,4 +111,63 @@ test("the default judge refuses without a provider, and an answer the model did 
   const cut = createChallengeJudge({ config: { deepseekProviderEnabled: true, deepseekApiKey: "k" }, usageLedger: null, parseJson: JSON.parse, billing,
     callModel: async () => ({ choices: [{ finish_reason: "length", message: { content: '{"outcome":"uphold"' } }] }) });
   await assert.rejects(cut({ scope: "s", payload: {} }), { code: "evidence_judgement_incomplete" });
+});
+
+const RECEIPT = {
+  receiptId: `rv_${"d".repeat(64)}`, engine: "drug_safety_analysis", method: "faers.signals@1.1.0", inputs: [{ datasetId: "faers-snapshot", hash: "b".repeat(64) }, { identifier: "src_abc" }],
+  values: [{ key: "values[0].table.b", value: 9000 }, { key: "values[0].ror.value", value: 2.4012, unit: "ratio" }, { key: "values[0].table.a", value: 1234 }],
+};
+const calculatedClaim = {
+  claimId: "CALC-1", claimType: "calculated", claim: "报告比值比（ROR）为 2.40。",
+  calculation: { engine: RECEIPT.engine, method: RECEIPT.method, receiptId: RECEIPT.receiptId, inputs: RECEIPT.inputs, valuePath: "values[0].ror.value", machineValue: 2.4012, format: "f2" },
+};
+
+test("a receipt's facts are text with the claim's own stated values first, and a passage is found in that text by the comparison the ✓ uses", () => {
+  const facts = calculationFacts(RECEIPT, calculatedClaim);
+  const lines = facts.split("\n");
+  assert.deepEqual(lines.slice(0, 5), [`Calculation receipt ${RECEIPT.receiptId}`, "engine: drug_safety_analysis", "method: faers.signals@1.1.0", `inputs: faers-snapshot (sha256 ${"b".repeat(64)}); src_abc`, "values:"]);
+  assert.equal(lines[5], "values[0].ror.value = 2.4012 ratio", "the value the claim states comes first");
+  assert.deepEqual(lines.slice(6).sort(), ["values[0].table.a = 1234", "values[0].table.b = 9000"]);
+  assert.equal(passageIsInSource([{ title: "calculation receipt", excerpt: facts }], 1, "values[0].ror.value = 2.4012 ratio"), true);
+  assert.equal(passageIsInSource([{ title: "calculation receipt", excerpt: facts }], 1, "values[0].ror.value = 2.5012 ratio"), false);
+});
+
+test("a calculated claim is judged on the receipt's facts, and an amended wording must still bind to the receipt or the answer is dropped", () => {
+  const sourcesOf = [{ title: "calculation receipt", excerpt: calculationFacts(RECEIPT, calculatedClaim) }];
+  const passage = "values[0].ror.value = 2.4012 ratio";
+  const judgedCalc = (/** @type {any} */ raw) => normalizeJudgement(raw, { claim: calculatedClaim, sources: sourcesOf, deterministic: "verified", receipt: RECEIPT });
+  const upheld = judgedCalc({ outcome: "uphold", reason: "回执支持。", sourceIndex: 1, passage });
+  assert.deepEqual([upheld.ok, /** @type {any} */ (upheld).outcome, /** @type {any} */ (upheld).repairsQuote], [true, "uphold", false]);
+  assert.deepEqual(judgedCalc({ outcome: "uphold", reason: "回执支持。", sourceIndex: 1, passage: "values[0].ror.value = 9.9 ratio" }), { ok: false, code: "evidence_judgement_passage_not_in_source" });
+  const amended = judgedCalc({ outcome: "amend", reason: "表述过强。", sourceIndex: 1, passage, amendedClaim: "报告比值比（ROR）为 2.40，仅提示关联。" });
+  assert.equal(amended.ok, true);
+  assert.deepEqual(judgedCalc({ outcome: "amend", reason: "表述过强。", sourceIndex: 1, passage, amendedClaim: "报告比值比（ROR）为 2.5，提示信号较强。" }), { ok: false, code: "evidence_judgement_calculation_unverified" },
+    "a number the receipt does not hold is not a wording change");
+  assert.deepEqual(judgedCalc({ outcome: "amend", reason: "表述过强。", sourceIndex: 1, passage, amendedClaim: "报告比值比（ROR）为 2.40，样本 300 例。" }), { ok: false, code: "evidence_judgement_calculation_unverified" },
+    "an extra number nobody computed is not either");
+  assert.deepEqual(normalizeJudgement({ outcome: "amend", reason: "x。", sourceIndex: 1, passage, amendedClaim: "报告比值比（ROR）为 2.40，仅提示关联。" }, { claim: calculatedClaim, sources: sourcesOf, deterministic: "verified", receipt: null }),
+    { ok: false, code: "evidence_judgement_calculation_unverified" }, "with no receipt to bind to, an amendment is never written");
+});
+
+test("an amendment of a calculated claim changes its wording and nothing of its calculation basis", () => {
+  const { claims } = applyJudgementToClaims([calculatedClaim], "CALC-1", { outcome: "amend", amendedClaim: "报告比值比（ROR）为 2.40，仅提示关联。", sourceIndex: 1, passage: "values[0].ror.value = 2.4012 ratio" });
+  assert.equal(claims[0].claim, "报告比值比（ROR）为 2.40，仅提示关联。");
+  assert.deepEqual(claims[0].calculation, calculatedClaim.calculation);
+  assert.equal(Object.hasOwn(claims[0], "supportQuote"), false, "a receipt's line is not a quotation bond");
+  assert.equal(claimCarries(claims[0], { amendedClaim: "报告比值比（ROR）为 2.40，仅提示关联。", sourceIndex: 1, passage: "values[0].ror.value = 2.4012 ratio" }), true);
+  assert.equal(claimCarries(calculatedClaim, { amendedClaim: "报告比值比（ROR）为 2.40，仅提示关联。" }), false);
+});
+
+test("the default judge is told that a calculated claim's number is already code's", async () => {
+  /** @type {any} */ let sent = null;
+  const judge = createChallengeJudge({ config: { deepseekProviderEnabled: true, deepseekApiKey: "k" }, usageLedger: null, callModel: async (/** @type {any} */ _deps, /** @type {any} */ call) => { sent = call; return { choices: [{ finish_reason: "stop", message: { content: "{}" } }] }; },
+    parseJson: (/** @type {string} */ text) => JSON.parse(text), billing: async () => ({ userId: "u", projectId: "p" }) });
+  await judge({ scope: "evch_x", payload: {} });
+  assert.match(sent.body.messages[0].content, /calculated states a number the platform's own engine computed[\s\S]*never recompute it/);
+});
+
+test("a calculated claim withdrawn by the code's own finding is counted apart from a model's outcomes", () => {
+  const stats = { filed: 0, rateLimited: 0, duplicates: 0, producerNotified: 0, closed: 0, dropped: 1, deferred: 2, unreadable: 3, exhausted: 4, calculationFailed: 5, outcome: { uphold: 6, amend: 7, withdraw: 8 } };
+  const rechecks = evidenceChallengeMetricFamilies(/** @type {any} */ (stats)).find((family) => family.name === "open_science_evidence_challenge_rechecks_total");
+  assert.deepEqual(rechecks?.series.find((entry) => entry.labels.result === "calculation_unverified"), { labels: { result: "calculation_unverified" }, value: 5 });
 });

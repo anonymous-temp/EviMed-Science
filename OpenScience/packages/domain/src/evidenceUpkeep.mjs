@@ -151,7 +151,8 @@ const count = (value) => (Number.isSafeInteger(value) && /** @type {number} */ (
  *
  * `facts` may carry: `sourceChangeKinds` (`SOURCE_CHANGE_KINDS` of the notices), `sourceCount`, `itemCount`,
  * `sameWork` (the new items name a study the card already cites), `claimId`, `outcome` (a challenge's), `cardWithdrawn`,
- * `revisionBefore`/`revisionAfter`, `retiredBy` (`producer` | `inactivity`), `lastCheckedAt`, `reviewed` (the producer
+ * `calculated` (the challenged claim states a platform calculation, which is checked against its receipt and not against a source),
+ * `lostCalculationBasis` (the card was taken back because its last calculated claim was withdrawn), `revisionBefore`/`revisionAfter`, `retiredBy` (`producer` | `inactivity`), `lastCheckedAt`, `reviewed` (the producer
  * judged the new evidence and changed nothing).
  *
  * @param {{ category: string, trigger: string, facts?: Record<string, any> }} entry
@@ -168,9 +169,13 @@ export function evidenceChangeSummaryZh({ category, trigger, facts = {} }) {
       return `${facts.retiredBy === 'producer' ? '出品方说明这张卡不再更新' : '连续多次核对都没有出现与本卡对得上的新研究，也没有读者关注，本卡转为不再更新'}${checked ? `，最后核对日期 ${checked}` : ''}。`
     }
     if (trigger === 'challenge') {
-      if (category === 'withdrawal') return `读者对${claim}提出质疑；复核认定原文不能支持，已撤回该条结论${facts.cardWithdrawn ? '，本卡因没有保留任何结论而一并撤回' : ''}${revisions(facts)}。`
-      if (category === 'correction') return `读者对${claim}提出质疑；复核后修正了该条结论的表述和所依据的原文句子${revisions(facts)}。`
-      return `读者对${claim}提出质疑；复核后维持原结论，所依据的原文句子已重新核对。`
+      if (category === 'withdrawal') {
+        const ground = facts.calculated ? '它的计算依据对不上平台保存的回执' : '原文不能支持'
+        const card = facts.cardWithdrawn ? (facts.lostCalculationBasis ? '，本卡的结论里已没有一条带计算依据，一手分析无法成立，本卡一并撤回' : '，本卡因没有保留任何结论而一并撤回') : ''
+        return `读者对${claim}提出质疑；复核认定${ground}，已撤回该条结论${card}${revisions(facts)}。`
+      }
+      if (category === 'correction') return `读者对${claim}提出质疑；复核后修正了该条结论的表述${facts.calculated ? '，数字仍与平台保存的回执一致' : '和所依据的原文句子'}${revisions(facts)}。`
+      return `读者对${claim}提出质疑；复核后维持原结论，${facts.calculated ? '数字已按平台保存的回执重新核对' : '所依据的原文句子已重新核对'}。`
     }
     if (trigger === 'source_change') {
       const sources = count(facts.sourceCount)
