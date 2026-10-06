@@ -27,9 +27,10 @@ const TEXTS = {
  * @param {import("node:test").TestContext} t
  * @param {{ userId?: string, projectId?: string, runId?: string, claims?: string[], matrixExtra?: Record<string, any>, reportBody?: string, reportTitle?: string }} [options]
  *   `claims`: which of the fixture's claims the matrix holds (default all five). `unaddressed`: the sources (`A`, `B`, `R`) that are the
- *   researcher's own documents — cited with no public address and no DOI, only the preserved text.
+ *   researcher's own documents — cited with no public address and no DOI, only the preserved text. `oversize`: the sources whose preserved
+ *   text is padded past what a card keeps whole. `CLM-006` (a second quotation of trial A) is in the matrix only when `claims` names it.
  */
-export async function clinicalResultFixture(t, { userId = "alice", projectId = "p", runId = "run_one", claims = ["CLM-001", "CLM-002", "CLM-003", "CLM-004", "CLM-005"], matrixExtra = {}, reportBody = "Observed fewer strokes [1].\n", reportTitle = "Does the drug prevent stroke?", unaddressed = /** @type {string[]} */ ([]) } = {}) {
+export async function clinicalResultFixture(t, { userId = "alice", projectId = "p", runId = "run_one", claims = ["CLM-001", "CLM-002", "CLM-003", "CLM-004", "CLM-005"], matrixExtra = {}, reportBody = "Observed fewer strokes [1].\n", reportTitle = "Does the drug prevent stroke?", unaddressed = /** @type {string[]} */ ([]), oversize = /** @type {string[]} */ ([]) } = {}) {
   const root = await mkdtemp("/tmp/evimed-result-card-");
   t.after(() => rm(root, { recursive: true, force: true }));
   const project = { userId, id: projectId, rootDir: root, baseDir: root, workspaceDir: path.join(root, "workspace"), metaDir: path.join(root, "meta") };
@@ -48,14 +49,15 @@ export async function clinicalResultFixture(t, { userId = "alice", projectId = "
 
   const sources = {};
   for (const key of ["A", "B", "R"]) {
-    const manifest = { "fulltext.md": sha(TEXTS[key]) };
+    const text = oversize.includes(key) ? `${TEXTS[key]}\n${"padding ".repeat(270_000)}\n` : TEXTS[key];
+    const manifest = { "fulltext.md": sha(text) };
     const version = sha(JSON.stringify(manifest));
     const artifactPath = `.evimed-sources/trial-${key}/${version}/fulltext.md`;
     const directory = path.join(project.workspaceDir, path.dirname(artifactPath));
     await mkdir(directory, { recursive: true });
-    await writeFile(path.join(project.workspaceDir, artifactPath), TEXTS[key]);
+    await writeFile(path.join(project.workspaceDir, artifactPath), text);
     await writeFile(path.join(directory, "capture.json"), JSON.stringify({ schemaVersion: 1, version, artifacts: manifest }));
-    sources[key] = { artifactPath, doi: `10.9999/trial-${key.toLowerCase()}`, digest: sha(TEXTS[key]) };
+    sources[key] = { artifactPath, doi: `10.9999/trial-${key.toLowerCase()}`, digest: sha(text) };
   }
   const bond = (key, quote, extra = {}) => ({
     ...(unaddressed.includes(key)
@@ -73,6 +75,7 @@ export async function clinicalResultFixture(t, { userId = "alice", projectId = "
     { claimId: "CLM-004", claimType: "synthesized", claim: "Both trials point the same way on the balance of stroke and bleeding.", confidence: "moderate",
       supportingSources: [bond("A", QUOTES.A), bond("B", QUOTES.B)] },
     { claimId: "CLM-005", claimType: "direct", claim: "The registry holds a private enrolment figure.", ...bond("R", QUOTES.R) },
+    { claimId: "CLM-006", claimType: "direct", claim: "Trial A was open-label.", ...bond("A", "The trial was open-label.") },
   ];
   const matrix = { questionPico: { population: "Adults at risk of stroke", intervention: "The drug", comparator: "Usual care", outcome: "Stroke" },
     claims: all.filter((claim) => claims.includes(claim.claimId)), ...matrixExtra };

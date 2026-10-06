@@ -427,7 +427,8 @@ export class EvidenceCardFromResult {
         ...(kept ? { documentText: kept } : {}),
       });
       indexOf.set(key, sources.length);
-      if (preserved && !url) unaddressed.set(sources.length, preserved);
+      // The text the card does not keep: a source with no public address, or one too large to keep whole.
+      if (preserved && (!url || !kept)) unaddressed.set(sources.length, preserved);
       return sources.length;
     };
     /** Whether the bond's source is one this account may no longer read. @param {any} bond */
@@ -507,9 +508,10 @@ export class EvidenceCardFromResult {
     // Every selected claim fell out: nothing is left to publish.
     if (!claims.length) throw refused("evidence_result_no_verified_claim");
 
-    // A source with no public address is the researcher's own document (an upload, a private record): the card keeps none of its text
-    // (`EvidenceZoneService` drops it) and shows only the passages its claims quote, found verbatim in the text the platform read
-    // and carried as the excerpt beside the read receipt — which is what keeps those claims ✓ without keeping the document.
+    // A source with no public address is the researcher's own document (an upload, a private record), and one too large is not kept whole:
+    // the card keeps none of the text (`EvidenceZoneService` drops the first) and shows only the passages its claims quote, found verbatim
+    // in the text the platform read and carried as the excerpt beside the read receipt — which is what keeps those claims ✓ without
+    // keeping the document.
     for (const [index, preserved] of unaddressed) {
       /** @type {string[]} */
       const found = [];

@@ -84,6 +84,18 @@ test("a result card from a researcher's own document keeps its claims ✓ by the
   assert.ok(other.documentText, "a source with a public address is kept as before");
 });
 
+test("a source too large to keep whole carries the passages its claims quote, so each of them stays ✓ without the document", options, async (t) => {
+  const f = await clinicalResultFixture(t, { oversize: ["A"], claims: ["CLM-001", "CLM-006"] });
+  const { report } = await f.deliver();
+  const zone = await ownZone();
+  const answer = await new EvidenceCardFromResult({ database: db, results: f.results, zones, runs: { list: async () => [f.run] } })
+    .publish(alice, report.versionId, { projectId: "p", zoneId: zone.id, claimIds: ["CLM-001", "CLM-006"] });
+  const row = await rawCard(answer.evidence.id);
+  assert.equal(row.sources[0].documentText, undefined, "past what a card keeps whole");
+  assert.ok(row.sources[0].excerpt.includes(QUOTES.A) && row.sources[0].excerpt.includes("The trial was open-label."), "both passages are the excerpt");
+  assert.deepEqual(answer.evidence.claims.map((/** @type {any} */ claim) => [claim.claimId, claim.verification.mark]), [["CLM-001", "✓"], ["CLM-006", "✓"]]);
+});
+
 test("the programme keeps no whole text of a source with no public address either, only the passages its claims stand on", () => {
   const text = `Intro. ${QUOTES.A} ${PRIVATE_SECRET}`;
   const claim = (/** @type {string} */ id, /** @type {string | undefined} */ sourceUrl) => ({ claimId: id, claimType: "direct", claim: "c", artifactPath: "p/a.md", supportQuote: QUOTES.A, ...(sourceUrl ? { sourceUrl } : {}), sourceTitle: "Doc", accessLevel: "full_text" });
