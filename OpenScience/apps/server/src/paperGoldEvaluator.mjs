@@ -99,15 +99,25 @@ export function paperGoldSourceResponses(transcript){
  }
  return {responses,complete:unknownTools.length===0,unknownTools};
 }
-/** Only unchanged files in this exact run's validated receipt can produce scores/code proof. @param {any} request */
+/**
+ * Only unchanged files in this exact run's validated receipt can produce scores/code proof.
+ *
+ * Two different things were one list until 2026-10-06. `issues` is a file the scoring needs and cannot trust: a file
+ * the receipt pins whose bytes differ from the pin, a receipt-pinned JSON that does not parse, a file that cannot be
+ * opened inside the workspace. `unverified` is a delivered file the receipt never pinned (a report, a scratch script):
+ * scoring never reads it, its text is not handed to any assessor or reviewer (it goes to `auditText`, the citation
+ * scan, only), and it is listed here by path so that nothing about it is hidden. On release 6 five of six runs
+ * delivered such a file and every one of them made its unit unauditable.
+ * @param {any} request */
 export async function readPaperGoldArtifacts({project,run,receipt}){
- const deliveredText=[],auditText=[],numeric={},recalledEvidenceIds=[],issues=[],pins=new Map();
+ const deliveredText=[],auditText=[],numeric={},recalledEvidenceIds=[],issues=[],unverified=[],pins=new Map();
  if(receipt?.runId===run.id)for(const entry of receipt.entries??[])for(const file of entry.files??[])if(typeof file.path==="string"&&/^[a-f0-9]{64}$/.test(file.sha256??""))pins.set(file.path,file.sha256);
  for(const artifact of (run.artifacts??[]).filter(row=>/\.(?:json|md|txt|csv|py)$/.test(row.path??row))){
   const relative=artifact.path??artifact;let opened;
   try{normalizeWorkspaceRelativePath(relative,"evaluation artifact");opened=await openScopedFileNoFollow(project.workspaceDir,path.resolve(project.workspaceDir,relative));
    if(!opened.stat.isFile()||opened.stat.size>16*1024*1024)throw new Error("Artifact bounds failed.");
    const bytes=await opened.handle.readFile(),text=bytes.toString("utf8");auditText.push(text);
+   if(!pins.has(relative)){unverified.push({path:relative,reason:"not_pinned_by_producer_receipt"});continue;}
    if(pins.get(relative)!==createHash("sha256").update(bytes).digest("hex")){issues.push({path:relative,reason:"producer_receipt_hash_unverified"});continue;}
    deliveredText.push({path:relative,text});if(!relative.endsWith(".json"))continue;
    let value;try{value=JSON.parse(text);}catch{issues.push({path:relative,reason:"numeric_receipt_unreadable"});continue;}
@@ -115,7 +125,7 @@ export async function readPaperGoldArtifacts({project,run,receipt}){
    for(const source of value.preservedSources??[])if(source.id&&source.sha256)recalledEvidenceIds.push(source.id);
   }catch{issues.push({path:String(relative),reason:"artifact_unavailable_or_outside_scope"});}finally{await opened?.handle.close().catch(()=>{});}
  }
- return {deliveredText,auditText,numeric,recalledEvidenceIds,issues};
+ return {deliveredText,auditText,numeric,recalledEvidenceIds,issues,unverified};
 }
 /** Whether a no-tool answer shows the paper may be remembered. The model is told to omit what it is unsure
  * of, so requiring every field to match could almost never flag anything: one published number given from
@@ -231,7 +241,7 @@ export function createPaperGoldEvaluator({ config, usageLedger, store, agentRuns
           for(const response of sourceTrace.responses)await evaluationIsolation.auditExposure({userId,projectId:project.id,runId:run.id},"transcript-source-response",response);
           const nativeCoverage=sealed.complete?await readPaperGoldNativeCoverage({runtimeManager,project,run,signal}):null;
           const audit=await evaluationIsolation.audit(run.id),traceCoverage=paperGoldTraceCoverage(sealed.transcript,nativeCoverage);
-          return {id:run.id,projectId:project.id,numeric:artifacts.numeric,checks:{},recalledEvidenceIds:artifacts.recalledEvidenceIds,modelFamily:"deepseek",nativeEgressProofHash:traceCoverage.nativeCoverageProofHash,exposureTier:paperGoldExposureTier({audit,durableComplete:sealed.complete,traceCoverage,sourceTrace}),gaps:[...(run.status==="succeeded"?[]:["model_capability"]),...(artifacts.issues.length?["extraction"]:[])],assessmentEvidence:{deliveredText:artifacts.deliveredText,artifactIssues:artifacts.issues,transcript:sealed.transcript,runStatus:run.status,completeDurableTranscript:sealed.complete,traceCoverage,nativeCoverage,sourceTraceCoverage:{complete:sourceTrace.complete,unknownTools:sourceTrace.unknownTools}}};
+          return {id:run.id,projectId:project.id,numeric:artifacts.numeric,checks:{},recalledEvidenceIds:artifacts.recalledEvidenceIds,modelFamily:"deepseek",nativeEgressProofHash:traceCoverage.nativeCoverageProofHash,exposureTier:paperGoldExposureTier({audit,durableComplete:sealed.complete,traceCoverage,sourceTrace}),gaps:[...(run.status==="succeeded"?[]:["model_capability"]),...(artifacts.issues.length?["extraction"]:[])],assessmentEvidence:{deliveredText:artifacts.deliveredText,artifactIssues:artifacts.issues,unverifiedArtifacts:artifacts.unverified,transcript:sealed.transcript,runStatus:run.status,completeDurableTranscript:sealed.complete,traceCoverage,nativeCoverage,sourceTraceCoverage:{complete:sourceTrace.complete,unknownTools:sourceTrace.unknownTools}}};
         },
         async assess(unit, gold) {
           if (!Object.values(gold.stageChecks ?? {}).some(checks => checks.length)) return unit;

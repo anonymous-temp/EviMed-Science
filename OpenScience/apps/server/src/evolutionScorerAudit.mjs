@@ -5,6 +5,8 @@ import {createHash} from 'node:crypto';
 import {canonicalJson} from '@evimed/domain';
 import {numericScore, digest, STAGES} from '../../../evals/paper-gold/evaluator.mjs';
 const hash = value => createHash('sha256').update(canonicalJson(value)).digest('hex');
+/** A unit the audit could not read yet: named by what it waits for, never silently dropped. @param {any} identity @param {string} status @param {string} reason @param {Record<string, any>} [detail] */
+const waiting = (identity,status,reason,detail={}) => ({...identity,status,reason,discrepancy:null,...detail});
 /** Scope follows the frozen ruler, never the current reviewer prompt. @param {any} gold @param {any} reviewed @param {string} [exposureTier] */
 export function scorerAuditVerdict(gold,reviewed,exposureTier) {
  const applicableStageIDs=gold.applicableStages ?? (gold.type==='method'?['method','calculation']:STAGES);
@@ -51,13 +53,19 @@ export function createEvolutionScorerAudit({service,config,readEvidence,review,c
         if(findings.some(row=>row.cycleId===sample.cycleId && row.producerRunId===sample.unit.producerRunId && row.caseId===sample.unit.caseId)) continue;
         const evidence=await readEvidence(sample.unit,{signal});
         const identity={cycleId:sample.cycleId,caseId:sample.unit.caseId,producerRunId:sample.unit.producerRunId,producerProjectId:sample.unit.producerProjectId,frozenHash:sample.frozenHash,reportHash:sample.reportHash,originalVerdictHash:hash(sample.unit),sourceHash:sample.gold.sourceHash??null};
-        if(!evidence?.transcript || evidence.transcript.header?.completeness!=='complete' || evidence.completeDurableTranscript===false || evidence.traceCoverage?.complete===false) {findings.push({...identity,status:'waiting-evidence',discrepancy:null});continue;}
-        if(evidence.artifactIssues?.length) {findings.push({...identity,status:'waiting-control-proof',discrepancy:null});continue;}
+        const waitingReason=!evidence?.transcript?'run_evidence_unavailable':evidence.transcript.header?.completeness!=='complete' || evidence.completeDurableTranscript===false?'transcript_incomplete':evidence.traceCoverage?.complete===false?'trace_coverage_incomplete':null;
+        if(waitingReason) {findings.push(waiting(identity,'waiting-evidence',waitingReason));continue;}
+        // A delivered file the producer's receipt never pinned is not something the scoring read: it is listed, never read
+        // into the evidence, and does not stop the audit. A file the receipt pins and the scoring needs but cannot trust does.
+        const unverifiedArtifacts=(evidence.unverifiedArtifacts??[]).map(({path:file,reason})=>({path:file,reason}));
+        if(evidence.artifactIssues?.length) {findings.push(waiting(identity,'waiting-control-proof','artifact_unverified',{artifactIssues:evidence.artifactIssues.map(({path:file,reason})=>({path:file,reason})),unverifiedArtifacts}));continue;}
         let computationProof=null;
         if(Object.keys(sample.gold.numeric??{}).length) {
-          if(!sample.gold.deterministicVerification || !sample.unit.verificationProof?.codeHash) {findings.push({...identity,status:'waiting-control-proof',discrepancy:null});continue;}
+          if(!sample.gold.deterministicVerification) {findings.push(waiting(identity,'waiting-control-proof','gold_has_no_verification_descriptor',{unverifiedArtifacts}));continue;}
+          if(!sample.unit.verificationProof?.codeHash) {findings.push(waiting(identity,'waiting-control-proof','original_unit_has_no_code_proof',{unverifiedArtifacts}));continue;}
           computationProof=await verifyPaperGoldCode({controller,unit:{numeric:evidence.numeric,assessmentEvidence:{deliveredText:evidence.deliveredText}},gold:sample.gold,signal});
-          if(computationProof.verified!==true || computationProof.proof?.codeHash!==sample.unit.verificationProof.codeHash) {findings.push({...identity,status:'waiting-control-proof',discrepancy:null});continue;}
+          if(computationProof.verified!==true) {findings.push(waiting(identity,'waiting-control-proof',`replay_${computationProof.reason??'not_verified'}`,{unverifiedArtifacts}));continue;}
+          if(computationProof.proof?.codeHash!==sample.unit.verificationProof.codeHash) {findings.push(waiting(identity,'waiting-control-proof','replayed_code_differs_from_scored_code',{unverifiedArtifacts}));continue;}
         }
         const reviewed=await review({gold:sample.gold,observed:evidence,signal});
         const allowedEvidence=new Set([sample.gold.sourceHash,...(sample.gold.reachableEvidenceIds??[]),...(sample.gold.evidenceIds??[])].filter(value=>typeof value==='string'));
@@ -68,14 +76,21 @@ export function createEvolutionScorerAudit({service,config,readEvidence,review,c
         const deterministic=evidence.numeric && references.length ? references.every(([key,reference])=>numericScore(evidence.numeric[key],reference).valid) : null;
         const assessorFamily=modelFamily(sample.unit.assessmentModel),auditorFamily=modelFamily(reviewed.model);
         const independentOfAssessor=assessorFamily!=='unknown' && auditorFamily!=='unknown' && assessorFamily!==auditorFamily;
-        findings.push({...identity,status:independentOfAssessor?'reviewed':'same-family-reread',independentOfAssessor,assessorModel:sample.unit.assessmentModel??null,evidenceHash:hash(evidence),reviewModel:reviewed.model,reviewEvidenceIds:reviewed.evidenceIds,
+        findings.push({...identity,status:independentOfAssessor?'reviewed':'same-family-reread',independentOfAssessor,unverifiedArtifacts,assessorModel:sample.unit.assessmentModel??null,evidenceHash:hash(evidence),reviewModel:reviewed.model,reviewEvidenceIds:reviewed.evidenceIds,
           controlProofHash:computationProof?.proof?.proofHash??null,auditedRuler:verdict.auditedRuler,applicableStageIDs:verdict.applicableStageIDs,reassessedFullResearchReproductionValid:verdict.fullResearchReproductionValid,reassessedAllStagesValid:verdict.allStagesValid,deterministicNumericPassed:deterministic,
           discrepancy:verdict.allStagesValid!==sample.unit.allStagesValid || (deterministic!==null && deterministic!==Object.values(sample.unit.numeric??{}).every((/** @type {any} */ item)=>item.valid===true)) || false});
         checkpoint=await service.save('scorer-audit',id,{day,status:'running',findings:[...findings]},checkpoint);
       }
       const compared=findings.filter(row=>typeof row.discrepancy==='boolean');
+      const reviewed=findings.filter(row=>row.status==='reviewed').length,sameFamilyRereads=findings.filter(row=>row.status==='same-family-reread').length;
+      const unaudited=findings.filter(row=>row.status!=='reviewed' && row.status!=='same-family-reread');
+      const waitingByReason={};for(const row of unaudited)waitingByReason[row.reason??row.status]=(waitingByReason[row.reason??row.status]??0)+1;
+      // `status:'complete'` says the job ran to its end, not that it audited anything. Release 5 and 6 each ended `complete` with
+      // three of three samples waiting, and the acceptance stage printed passed:true for it. The result now says how many units
+      // got a model's second reading, and `passed` is true only when every sampled unit got an independent one.
+      const outcome=!findings.length?'no-sample':!reviewed&&!sameFamilyRereads?'nothing-audited':reviewed===findings.length?'audited':'partial';
       return service.save('scorer-audit',id,{day,status:'complete',observedAt:service.now().toISOString(),eligibleUnits:candidates.length,sampled:findings.length,findings,discrepancies:findings.filter(row=>row.discrepancy).length,
-        reviewed:findings.filter(row=>row.status==='reviewed').length,sameFamilyRereads:findings.filter(row=>row.status==='same-family-reread').length,
+        reviewed,sameFamilyRereads,auditedUnits:reviewed+sameFamilyRereads,waitingUnits:unaudited.length,waitingByReason,unitsWithUnverifiedArtifacts:findings.filter(row=>row.unverifiedArtifacts?.length).length,outcome,passed:outcome==='audited',
         discrepancyRate:compared.length?compared.filter(row=>row.discrepancy).length/compared.length:null,discrepancyThreshold:null,
         scope:'Scorer audit only; no gold, original verdict, or promotion changes. A same-family reread is not an independent review; numeric re-scoring and code replay are code.'},checkpoint);
     }
