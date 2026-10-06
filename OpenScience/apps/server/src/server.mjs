@@ -69,9 +69,10 @@ import path from "node:path";
 import { createGzip } from "node:zlib";
 import { postgresBackupReadiness } from "./postgresBackupReadiness.mjs";
 import { vcrBackupReadiness } from "./vcrBackupReadiness.mjs";
-import { LEARNING_PROJECT_ID, ensureEvidenceProject, isEvolutionProject, isInternalProjectOf, isReservedProjectId } from "./internalProjects.mjs";
+import { EVIDENCE_PROJECT_ID, LEARNING_PROJECT_ID, ensureEvidenceProject, isEvolutionProject, isInternalProjectOf, isReservedProjectId } from "./internalProjects.mjs";
 import { createEvidenceBudget, evidenceBudgetMetricFamilies } from "./evidenceBudget.mjs";
 import { createEvidenceProgramme, evidenceProgrammeMetricFamilies } from "./evidenceProgramme.mjs";
+import { createCalculationReceiptReader } from "./evidenceCalculationReceipts.mjs";
 import { evidenceCardMetricFamilies } from "./evidenceCardMetrics.mjs";
 import { assertNotPlatformAccount } from "./platformAccount.mjs";
 import { completeEvolutionRuntime } from './evolutionRuntimeCompletion.mjs';
@@ -2107,6 +2108,15 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   }
   const evidenceUpkeepRoutes = createEvidenceUpkeepRoutes({ store, service: frontier?.evidenceZones ?? null, frontier: frontier?.service ?? null, config,
     challenges: evidenceUpkeep?.challenges ?? null, upkeep: evidenceUpkeep?.upkeep ?? null, changeLog: evidenceUpkeep?.changeLog ?? null, maxJsonBytes: config.maxJsonBytes });
+  // The engine receipts a first-hand card's calculated claims are read back from (evidenceCalculationReceipts.mjs): the platform's own
+  // internal evidence project and never another account's, and the evolution module's recalculation receipts. Reading is lazy, so
+  // the evolution module composed further down is found when a card is read; with it off a recalculation receipt reads as unavailable.
+  if (frontier && resultProvenance) {
+    frontier.evidenceZones.calculationReceipts = createCalculationReceiptReader({
+      results: resultProvenance, scopes: [{ userId: PLATFORM_PUBLISHER_USER_ID, projectId: EVIDENCE_PROJECT_ID }],
+      evolution: { get: (/** @type {string} */ id) => (evolution?.service ? evolution.service.get(id) : Promise.resolve(null)) },
+    });
+  }
   // The platform's own evidence programme (evidenceProgramme.mjs, plan §5.1 F01/F02/F04): a daily topic decision, agendas the publisher
   // account runs in its internal evidence project, and the cards their verified conclusions earn. Composed only with its switch on and
   // the frontier (which it reads and whose zones it writes) and the autopilot (which runs its agendas) beside it; off, it is nothing.
