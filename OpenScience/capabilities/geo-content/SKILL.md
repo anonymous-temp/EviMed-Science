@@ -56,7 +56,7 @@ published, and reads each one against the card revision it names). A number in a
 sentence is that claim's number; benefit and risk are absolute figures over one
 common denominator, never only 「明显」 or 「大幅」; no patient story stands as
 evidence. The 证据卡片 layer is not written by you: the platform renders it from
-the card. `frontier_search` shows what has been said about the product lately; a
+the card. `mcp__evimed__frontier_search` shows what has been said about the product lately; a
 retraction or correction of a source is a reason to read it again before you cite.
 
 ## What goes into a batch

@@ -45,7 +45,7 @@ the method pack. Say so once in the reply — “本部署未安装 GEO 方法�
 
 ## Evidence that is new
 
-`frontier_search` shows what the medical feed has recently said about the
+`mcp__evimed__frontier_search` shows what the medical feed has recently said about the
 product, its comparators and the disease. Look before you finalize the library:
 a retraction, a correction or a new trial of what a claim rests on is a reason to
 re-read the source, not to trust the label alone. What it returns is a pointer to
