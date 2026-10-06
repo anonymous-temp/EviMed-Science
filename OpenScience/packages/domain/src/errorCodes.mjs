@@ -1543,12 +1543,16 @@ export const EVIDENCE_PUBLISH_ERROR_MESSAGES_ZH = Object.freeze({
  * - `evidence_programme_slot_busy`: another programme episode is still working and the programme holds one slot (default),
  *   so this one waits its turn; recorded like the budget's deferral and never a failure.
  * - `evidence_programme_original_weekly_cap`: a third original analysis in a rolling week. Deferred, not dropped.
+ * - `evidence_programme_operator_required` and `evidence_programme_not_enabled`: the operator's page of the programme and its
+ *   run-today button (2026-10-06), refused to anyone who is not an operator and answered by name where the switch is off.
  */
 export const EVIDENCE_PROGRAMME_ERROR_CODES = Object.freeze([
   'evidence_programme_decision_required',
   'evidence_programme_budget_spent',
   'evidence_programme_slot_busy',
   'evidence_programme_original_weekly_cap',
+  'evidence_programme_operator_required',
+  'evidence_programme_not_enabled',
 ])
 
 /**
@@ -2083,6 +2087,8 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   evidence_programme_budget_spent: '证据中心今天的预算已经用完，这次研究顺延到预算恢复后再做。',
   evidence_programme_slot_busy: '证据中心正在做另一项研究，这次排在它后面，不会丢。',
   evidence_programme_original_weekly_cap: '平台每周最多发布两张原创分析卡，这张顺延到下一周。',
+  evidence_programme_operator_required: '证据中心的运行情况只有运营账号可以查看和手动运行。',
+  evidence_programme_not_enabled: '这个部署没有开启证据中心的每日选题。',
   evidence_public_not_enabled: '这个部署没有开放证据专区的公开页面和订阅源。',
   evidence_feed_cursor_invalid: '订阅源的翻页游标已经失效，请从第一页重新读取。',
   evidence_feed_query_invalid: '订阅源的参数不对：每页条数要在 1 到 200 之间。',
@@ -2560,6 +2566,8 @@ const ERROR_CODE_OUTCOMES = Object.freeze({
   evidence_programme_budget_spent: 'capped',
   evidence_programme_slot_busy: 'capped',
   evidence_programme_original_weekly_cap: 'capped',
+  evidence_programme_operator_required: 'upstream',
+  evidence_programme_not_enabled: 'upstream',
   // The public evidence pages are off in this deployment: about the module, never a verdict on work.
   evidence_public_not_enabled: 'upstream',
   evidence_feed_cursor_invalid: 'upstream',
