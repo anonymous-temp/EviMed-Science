@@ -5,7 +5,6 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { after, before, test } from "node:test";
-import { strFromU8, unzipSync } from "fflate";
 import { CapsuleIdentityStore } from "../src/capsuleIdentityStore.mjs";
 import { packCapsule } from "../src/capsuleContainer.mjs";
 import { CapsuleService } from "../src/capsuleService.mjs";
