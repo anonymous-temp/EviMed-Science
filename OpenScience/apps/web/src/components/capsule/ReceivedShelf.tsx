@@ -106,6 +106,9 @@ export function ReceivedShelf() {
                 <>
                   {/* Who sent it and what it says it holds, from the card its
                       sender signed; the counts when a pack carries no card. */}
+                  {pack.takenDown && <p className="text-danger-strong">
+                    {pack.takenDown.by === "operator" ? "已被平台下架并停用" : "已被作者下架并停用"}{pack.takenDown.reason ? `：${pack.takenDown.reason}` : ""}
+                  </p>}
                   <p>{[
                     pack.card?.author ? fromSender(pack.card.author) : null,
                     pack.card?.summary || contents(pack),
@@ -135,11 +138,11 @@ export function ReceivedShelf() {
                 <Switch
                   label={`启用“${pack.title}”`}
                   checked={pack.enabled}
-                  disabled={busy !== null}
+                  disabled={busy !== null || Boolean(pack.takenDown)}
                   onChange={(next) => void (next ? enable(pack) : disable(pack))}
                 />
               )}
-              menu={<Menu label="更多" items={[
+              menu={pack.takenDown ? undefined : <Menu label="更多" items={[
                 { label: "试用一次", disabled: busy !== null, onSelect: () => void trial(pack) },
                 ...(project && !pack.enabled
                   ? [{ label: `只在“${project.name}”启用`, disabled: busy !== null, onSelect: () => void enableHere(pack, project) }]

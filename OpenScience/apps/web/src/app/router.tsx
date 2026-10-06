@@ -26,6 +26,7 @@ const AutopilotPage = lazy(() => import("./routes/AutopilotPage").then((m) => ({
 const CapabilitiesPage = lazy(() => import("./routes/CapabilitiesPage").then((m) => ({ default: m.CapabilitiesPage })));
 const InboxPage = lazy(() => import("./routes/InboxPage").then((m) => ({ default: m.InboxPage })));
 const MemoryHubPage = lazy(() => import("./routes/MemoryHubPage").then((m) => ({ default: m.MemoryHubPage })));
+const SharedCapsulePage = lazy(() => import("./routes/SharedCapsulePage").then((m) => ({ default: m.SharedCapsulePage })));
 const AccountPage = lazy(() => import("./routes/AccountPage").then((m) => ({ default: m.AccountPage })));
 const SimulatedWalletPage = lazy(() => import("./routes/SimulatedWalletPage").then((m) => ({ default: m.SimulatedWalletPage })));
 const RunFilePage = lazy(() => import("./routes/RunFilePage").then((m) => ({ default: m.RunFilePage })));
@@ -111,6 +112,9 @@ export const routes: RouteObject[] = [
         { path: "files", element: <KnowledgePage /> },
         { path: "autopilot", element: <AutopilotPage /> },
         { path: "memory", element: <MemoryHubPage /> },
+        // A share link and a delivery from the inbox (flywheel F17): the same preview, trial and import a file has, with no file.
+        { path: "memory/shared/:token", element: <SharedCapsulePage /> },
+        { path: "memory/delivered/:deliveryId", element: <SharedCapsulePage /> },
         { path: "inbox", element: <InboxPage /> },
         { path: "capabilities", element: <CapabilitiesPage /> },
         { path: "account", element: <AccountPage /> },
