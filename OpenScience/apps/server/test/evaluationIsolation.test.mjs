@@ -274,3 +274,42 @@ test("what the run was handed or got back still exposes it, a cited deliverable 
     assert.equal(isolation.counters.recalled, 0);
   } finally { await rm(dataDir, { recursive: true, force: true }); }
 });
+
+// Release 6 (2026-10-06): the filter removed the protected paper's ESummary record and left its PMID in the id list; the MCP search tool
+// then built a stub item from the bare id (title and description were the PMID) and the evaluator's audit read that as exposure.
+const scoped = { aliases: ["10.1136/bmj.315.7114.980", "PMID:9365295", "PMC2127653"], titles: ["The accumulated evidence on lung cancer and environmental tobacco smoke."] };
+test("a protected PMID or PMC number is removed wherever a response carries it as a bare id, and the other ids of the same list stay", async () => {
+  const dataDir = await mkdtemp(path.join(os.tmpdir(), "evaluation-"));
+  try {
+    const isolation = createEvaluationIsolation({ dataDir });
+    await isolation.register("run", scoped);
+    const identity = { runId: "run" };
+    // ESearch: the id list.
+    assert.deepEqual(await isolation.filter(identity, "public-source", { header: { type: "esearch" }, esearchresult: { count: "2", retmax: "20", idlist: ["30158069", "9365295"] } }),
+      { header: { type: "esearch" }, esearchresult: { count: "2", retmax: "20", idlist: ["30158069"] } });
+    // ESummary: the uid list and the record keyed by the id, whether or not the record names the paper itself.
+    assert.deepEqual(await isolation.filter(identity, "public-source", { result: { uids: ["30158069", "9365295"], "30158069": { uid: "30158069", title: "Another paper" }, "9365295": { title: "Untitled PubMed record" } } }),
+      { result: { uids: ["30158069"], "30158069": { uid: "30158069", title: "Another paper" } } });
+    // ELink: a link set into PMC carries bare PMC numbers; the protected paper's PMC number leaves it.
+    assert.deepEqual(await isolation.filter(identity, "public-source", { linksets: [{ dbfrom: "pubmed", ids: ["9365295"], linksetdbs: [{ dbto: "pmc", linkname: "pubmed_pmc", links: ["2127653", "3000001"] }] }, { dbfrom: "pubmed", ids: ["30158069"], linksetdbs: [{ dbto: "pubmed", linkname: "pubmed_pubmed", links: ["9365295", 9365295, 30158070] }] }] }),
+      { linksets: [{ dbfrom: "pubmed", ids: [], linksetdbs: [{ dbto: "pmc", linkname: "pubmed_pmc", links: ["3000001"] }] }, { dbfrom: "pubmed", ids: ["30158069"], linksetdbs: [{ dbto: "pubmed", linkname: "pubmed_pubmed", links: [30158070] }] }] });
+    // A list written as one string, and an id list inside a JSON text of an MCP content part.
+    assert.deepEqual(await isolation.filter(identity, "public-source", { ids: "30158069,9365295,30158070" }), { ids: "30158069,30158070" });
+    const wrapped = await isolation.filter(identity, "public-source", { content: [{ type: "text", text: JSON.stringify({ esearchresult: { idlist: ["9365295", "30158069"] } }) }] });
+    assert.deepEqual(JSON.parse(wrapped.content[0].text), { esearchresult: { idlist: ["30158069"] } });
+    const events = (await isolation.audit("run")).events;
+    assert.ok(events.length >= 6 && events.every(event => event.tier === "blocked" && event.reason === "identifier" && event.gateway === "public-source"));
+  } finally { await rm(dataDir, { recursive: true, force: true }); }
+});
+test("a number that only contains a protected id, or is not a list entry, is not a protected id", async () => {
+  const dataDir = await mkdtemp(path.join(os.tmpdir(), "evaluation-"));
+  try {
+    const isolation = createEvaluationIsolation({ dataDir });
+    await isolation.register("run", scoped);
+    const value = { esearchresult: { count: "9365295", idlist: ["19365295", "93652951", "93652", "30158069"] } };
+    assert.deepEqual(await isolation.filter({ runId: "run" }, "public-source", value), value);
+    // And no other project's result is touched: the filter answers only for an evaluation.
+    const tenantList = { esearchresult: { idlist: ["9365295", "30158069"] } };
+    assert.deepEqual(await isolation.filter({ userId: "researcher", projectId: "my-study" }, "public-source", tenantList), tenantList);
+  } finally { await rm(dataDir, { recursive: true, force: true }); }
+});

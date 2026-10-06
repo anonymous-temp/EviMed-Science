@@ -116,6 +116,20 @@ export function createEvaluationIsolation({ dataDir, resolveRunId = identity => 
     })) return "title";
     return null;
   };
+  /**
+   * The bare numeric ids a policy protects: its PMIDs and the number of a PMCID. A PubMed or PMC response carries a paper as a
+   * bare id wherever it lists papers (`esearchresult.idlist`, `result.uids`, the `links` of a link set, an id keyed result), and a
+   * bare id has no `pmid`/`id` beside it for `matched` to read. It is compared whole, never as a substring of a longer number.
+   * @param {any} policy
+   */
+  const bareIdsOf = policy => {
+    const ids = new Set();
+    for (const alias of policy.aliases ?? []) {
+      const digits = /^(?:pmid:?\s*|pmc)?(\d+)$/i.exec(String(alias).trim())?.[1];
+      if (digits) ids.add(digits);
+    }
+    return ids;
+  };
   const cutoffReason = (policy, value) => {
     if (!policy.cutoff || !value || typeof value !== "object") return null;
     const date = value.published ?? value.publication_date ?? value.publicationDate ?? value.pubdate ?? value.date ?? value.published_at ?? value.year ?? value.pubYear ?? value.firstPublicationDate;
@@ -196,15 +210,28 @@ export function createEvaluationIsolation({ dataDir, resolveRunId = identity => 
     },
     async filter(identity, gateway, value) {
       const context = await policyFor(identity); if (!context) return value;
-      const walk = async node => {
-        if (Array.isArray(node)) return (await Promise.all(node.map(walk))).filter(item => item !== undefined);
+      const bare = bareIdsOf(context.policy);
+      const isBare = item => typeof item === "string" ? /^\s*\d+\s*$/.test(item) && bare.has(item.trim()) : Number.isSafeInteger(item) && bare.has(String(item));
+      /** `listed` marks an array element: an id list holds its papers as bare ids, so a bare id there is a paper. */
+      const walk = async (node, listed = false) => {
+        if (Array.isArray(node)) return (await Promise.all(node.map(item => walk(item, true)))).filter(item => item !== undefined);
+        if (listed && isBare(node)) { await record(context.runId, gateway, "blocked", "identifier"); return undefined; }
+        // A list written as one string ("30158069,9365295"): the protected ids leave it, the others stay.
+        if (typeof node === "string" && bare.size && /^\s*\d+(?:\s*[,;\s]\s*\d+)+\s*$/.test(node)) {
+          const tokens = node.trim().split(/\s*[,;\s]\s*/), kept = tokens.filter(token => !bare.has(token));
+          if (kept.length < tokens.length) { await record(context.runId, gateway, "blocked", "identifier"); return kept.length ? kept.join(",") : undefined; }
+        }
         if (node && typeof node === "object") {
           // Match scalar metadata at this level, so one excluded row does not remove its siblings.
           const scalar = Object.fromEntries(Object.entries(node).filter(([, item]) => item === null || typeof item !== "object"));
           const reason = matched(context.policy, scalar) ?? cutoffReason(context.policy, node);
           if (reason) { await record(context.runId, gateway, "blocked", reason); return undefined; }
           const result = {};
-          for (const [key, item] of Object.entries(node)) { const filtered = await walk(item); if (filtered !== undefined) result[key] = filtered; }
+          for (const [key, item] of Object.entries(node)) {
+            // A result keyed by id ("result": { "9365295": {...} }) names the paper in the key even when the record does not.
+            if (bare.has(key)) { await record(context.runId, gateway, "blocked", "identifier"); continue; }
+            const filtered = await walk(item); if (filtered !== undefined) result[key] = filtered;
+          }
           return result;
         }
         if (typeof node === "string" && (node.trimStart().startsWith("{") || node.trimStart().startsWith("["))) {
