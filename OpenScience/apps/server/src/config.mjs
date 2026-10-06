@@ -498,10 +498,17 @@ function evidenceUpkeepSettings(overrides) {
  * - `OPEN_SCIENCE_EVIDENCE_COMMUNITY_CARDS_ENABLED` (off): the community column of an official zone, `GET /api/frontier/zones/:id/community`, which lists
  *   other users' public cards on the zone's subjects (established authors only). `OPEN_SCIENCE_EVIDENCE_COMMUNITY_MAX_CARDS` (20, at most 50) bounds one
  *   column; a longer list is a resource cost, not an opinion about the cards.
+ * - `OPEN_SCIENCE_LEARNING_EVIDENCE_OUTCOMES_ENABLED` (off): what becomes of a published card — a correction, a withdrawal — goes back into learning: an incident
+ *   document for the eval corpus and an observation on the methods of the run that produced it. Ticked by the learning worker's housekeeping timer, so it
+ *   needs the learning loop on; off, no table is read and no timer exists. `OPEN_SCIENCE_LEARNING_EVIDENCE_OUTCOMES_BATCH` (25, at most 200) is the
+ *   change-log entries one pass reads: a bound on the database's work, not on how soon an outcome is noticed.
  *
  * @param {Record<string, any>} overrides
  */
 function evidenceFlywheelSettings(overrides) {
+  const batchRaw = overrides.learningEvidenceOutcomesBatch !== undefined ? overrides.learningEvidenceOutcomesBatch : process.env.OPEN_SCIENCE_LEARNING_EVIDENCE_OUTCOMES_BATCH;
+  const outcomesBatch = batchRaw == null || batchRaw === "" ? 25 : Number(batchRaw);
+  if (!Number.isSafeInteger(outcomesBatch) || outcomesBatch < 1 || outcomesBatch > 200) throw new Error(`OPEN_SCIENCE_LEARNING_EVIDENCE_OUTCOMES_BATCH must be a whole number from 1 to 200, got ${JSON.stringify(batchRaw)}.`);
   const raw = overrides.evidenceCommunityMaxCards !== undefined ? overrides.evidenceCommunityMaxCards : process.env.OPEN_SCIENCE_EVIDENCE_COMMUNITY_MAX_CARDS;
   const maxCards = raw == null || raw === "" ? 20 : Number(raw);
   if (!Number.isSafeInteger(maxCards) || maxCards < 1 || maxCards > 50) throw new Error(`OPEN_SCIENCE_EVIDENCE_COMMUNITY_MAX_CARDS must be a whole number from 1 to 50, got ${JSON.stringify(raw)}.`);
@@ -509,6 +516,8 @@ function evidenceFlywheelSettings(overrides) {
     evidenceFlywheelMetricsEnabled: overrides.evidenceFlywheelMetricsEnabled ?? boolEnv("OPEN_SCIENCE_EVIDENCE_FLYWHEEL_METRICS_ENABLED", false),
     evidenceCommunityCardsEnabled: overrides.evidenceCommunityCardsEnabled ?? boolEnv("OPEN_SCIENCE_EVIDENCE_COMMUNITY_CARDS_ENABLED", false),
     evidenceCommunityMaxCards: maxCards,
+    learningEvidenceOutcomesEnabled: overrides.learningEvidenceOutcomesEnabled ?? boolEnv("OPEN_SCIENCE_LEARNING_EVIDENCE_OUTCOMES_ENABLED", false),
+    learningEvidenceOutcomesBatch: outcomesBatch,
   };
 }
 

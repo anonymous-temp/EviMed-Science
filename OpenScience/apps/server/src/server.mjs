@@ -241,6 +241,7 @@ import { EvidenceZoneService } from "./evidenceZoneService.mjs";
 import { createEvidenceCardSearch } from "./evidenceCardSearch.mjs";
 import { createEvidenceFeed, evidenceFeedMetricFamilies } from "./evidenceFeed.mjs";
 import { createEvidenceFlywheelMetrics } from "./evidenceFlywheelMetrics.mjs";
+import { createEvidenceOutcomes, evidenceOutcomeMetricFamilies } from "./evidenceIncidents.mjs";
 import { createEvidenceCommunity, createEvidenceCommunityRoutes, evidenceCommunityMetricFamilies } from "./evidenceCommunity.mjs";
 import { createEvidenceFeedRoutes } from "./evidenceFeedRoutes.mjs";
 import { createEvidencePublicRoutes, evidencePublicMetricFamilies } from "./evidencePublicRoutes.mjs";
@@ -1018,6 +1019,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   let predictionRegistry = null;
   /** @type {ReturnType<typeof createEvidenceFlywheelMetrics> | null} */
   let evidenceFlywheel = null;
+  /** @type {ReturnType<typeof createEvidenceOutcomes> | null} */
+  let evidenceOutcomes = null;
   const maintenanceMutation = (operation) => maintenanceService ? maintenanceService.withMutation(operation) : operation();
   const productDocuments = productDatabase ? new ProductDocuments(productDatabase) : null;
   const productJobs = productDatabase ? new ProductJobs(productDatabase) : null;
@@ -3605,6 +3608,18 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       },
       routinePeriodDays: config.transcriptRetentionDays,
     });
+    // What becomes of a published card goes back into learning (evidenceIncidents.mjs, flywheel F15): composed with its switch, the frontier whose change log it reads
+    // and this loop, whose housekeeping tick drives it. The incidents belong to the platform's evidence project; the observation goes to the researcher's own methods.
+    if (config.learningEvidenceOutcomesEnabled && frontier && productDatabase && productDocuments) {
+      evidenceOutcomes = createEvidenceOutcomes({
+        database: productDatabase, documents: productDocuments, ensureOwner: () => ensureEvidenceProject(store), methodFeedback,
+        resolveProject: async (userId, projectId) => {
+          const user = await store.userById(userId);
+          return user ? store.requireProject(user, projectId) : null;
+        },
+        batch: config.learningEvidenceOutcomesBatch, report: (code) => process.stderr.write(`${code}\n`),
+      });
+    }
     learningWorker = new LearningWorker({
       jobs: productJobs, distillation, consolidation,
       enabled: config.learningEnabled,
@@ -3619,6 +3634,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           const user = await store.userById(userId);
           return user ? store.requireProject(user, projectId) : null;
         } });
+        await evidenceOutcomes?.tick();
       },
       resolveProject: async (job) => {
         const user = await store.userById(job.userId);
@@ -5138,6 +5154,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           evidencePublic: evidencePublicRoutes,
           evidenceFlywheel,
           evidenceCommunity,
+          evidenceOutcomes,
         });
         return;
       }
@@ -7968,7 +7985,7 @@ function addHistogramMetric(lines, name, help, series) {
   }
 }
 
-async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, evidenceBudget = null, entityVocabulary = null, evidencePublish = null, evidenceUpkeep = null, evidenceProgramme = null, evidenceFeed = null, evidencePublic = null, evidenceRecalculation = null, predictionRegistry = null, evidenceFlywheel = null, evidenceCommunity = null }) {
+async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, evidenceBudget = null, entityVocabulary = null, evidencePublish = null, evidenceUpkeep = null, evidenceProgramme = null, evidenceFeed = null, evidencePublic = null, evidenceRecalculation = null, predictionRegistry = null, evidenceFlywheel = null, evidenceCommunity = null, evidenceOutcomes = null }) {
   const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate, frontier, review, geo, vcr, credits);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
@@ -8392,6 +8409,7 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
   for (const family of evidencePublicMetricFamilies(evidencePublic?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
   // The evidence flywheel's figures (evidenceFlywheelMetrics.mjs): exported only with the switch on; a figure with no input has no series.
   addMetric(lines, "open_science_evidence_flywheel_enabled", "Whether the evidence flywheel's figures are switched on (OPEN_SCIENCE_EVIDENCE_FLYWHEEL_METRICS_ENABLED).", "gauge", [{ value: config.evidenceFlywheelMetricsEnabled ? 1 : 0 }]);
+  for (const family of evidenceOutcomeMetricFamilies(evidenceOutcomes?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
   for (const family of evidenceCommunityMetricFamilies(evidenceCommunity)) addMetric(lines, family.name, family.help, family.type, family.series);
   if (evidenceFlywheel) for (const family of await evidenceFlywheel.metricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
   // The entity vocabulary the frontier, the zones, agendas, products and studies share: the glossary's size and what

@@ -242,6 +242,8 @@ const operatorLevers = {
   OPEN_SCIENCE_EVIDENCE_FLYWHEEL_METRICS_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_EVIDENCE_COMMUNITY_CARDS_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_EVIDENCE_COMMUNITY_MAX_CARDS: ["open-science-web"],
+  OPEN_SCIENCE_LEARNING_EVIDENCE_OUTCOMES_ENABLED: ["open-science-web"],
+  OPEN_SCIENCE_LEARNING_EVIDENCE_OUTCOMES_BATCH: ["open-science-web"],
   // Sharing memory inside the platform (evidence-flywheel F17-F19, 2026-10-05): a lever that does not arrive leaves share links
   // living and used by the defaults while the operator believes they shortened them, or a new author's pack counted as
   // corroborated by a threshold the operator never set.

@@ -573,6 +573,9 @@ services:
       # The community column of an official zone (2026-10-06): the switch (off) and the most cards one column lists.
       OPEN_SCIENCE_EVIDENCE_COMMUNITY_CARDS_ENABLED:
       OPEN_SCIENCE_EVIDENCE_COMMUNITY_MAX_CARDS:
+      # What becomes of a published card goes back into learning (2026-10-06): the switch (off) and the change-log entries one pass reads.
+      OPEN_SCIENCE_LEARNING_EVIDENCE_OUTCOMES_ENABLED:
+      OPEN_SCIENCE_LEARNING_EVIDENCE_OUTCOMES_BATCH:
       # Sharing memory inside the platform (evidence-flywheel plan 2026-10-05, F17-F19):
       # how long a share link lives and how often it may be used, how many other
       # accounts must keep a new author's pack before it counts for platform
