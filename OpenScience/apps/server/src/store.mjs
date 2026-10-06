@@ -4,6 +4,7 @@ import fs from "node:fs/promises";
 import { MIN_PASSWORD_LENGTH, meetsPasswordMinimum } from "@evimed/domain";
 import { ControlPlaneDatabase, CONTROL_PLANE_SCHEMA, CONTROL_PLANE_SCHEMA_VERSION } from "./controlPlaneDatabase.mjs";
 import { DEVICE_REQUEST } from "./channels/deviceTokens.mjs";
+import { assertClientProject } from "./internalProjects.mjs";
 import { externalDisplayName, isPlatformAccount, isReservedAccountIdentity, platformAccountProtected, platformAccountReserved } from "./platformAccount.mjs";
 import {
   assertNoSymlinkPath,
@@ -614,6 +615,7 @@ export class InMemoryStore {
     const projectId = Array.isArray(headerProject)
       ? headerProject[0]
       : headerProject || url.searchParams.get("projectId") || "default";
+    assertClientProject(projectId);
     return this.requireProject(user, projectId);
   }
 

@@ -69,7 +69,7 @@ import path from "node:path";
 import { createGzip } from "node:zlib";
 import { postgresBackupReadiness } from "./postgresBackupReadiness.mjs";
 import { vcrBackupReadiness } from "./vcrBackupReadiness.mjs";
-import { LEARNING_PROJECT_ID, ensureEvidenceProject, isEvolutionProject, isInternalProjectOf, isReservedProjectId } from "./internalProjects.mjs";
+import { LEARNING_PROJECT_ID, assertClientProject, ensureEvidenceProject, isEvolutionProject, isInternalProjectOf, isReservedProjectId } from "./internalProjects.mjs";
 import { createEvidenceBudget, evidenceBudgetMetricFamilies } from "./evidenceBudget.mjs";
 import { createEvidenceProgramme, evidenceProgrammeMetricFamilies } from "./evidenceProgramme.mjs";
 import { evidenceCardMetricFamilies } from "./evidenceCardMetrics.mjs";
@@ -5298,6 +5298,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         const body = assertObject(await readJson(req, config.maxJsonBytes), "runtime UI frame");
         if (Object.keys(body).some((key) => key !== "projectId")) throw new HttpError(400, "runtime_ui_frame_payload_invalid", "Only projectId is accepted.");
         const projectId = assertString(body.projectId, "projectId", { max: 128 });
+        assertClientProject(projectId);
         const project = await store.requireProject(user, projectId);
         const frame = issueRuntimeUiFrame({ config, req, user, session, project });
         // A turn typed into this window reaches the kernel without a dispatch,

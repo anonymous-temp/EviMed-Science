@@ -1,3 +1,4 @@
+import { assertClientProject } from "./internalProjects.mjs";
 import { HttpError, readJson, sendJson } from "./security.mjs";
 
 async function bodyOf(req, limit, allowed) {
@@ -22,7 +23,7 @@ export function createAutopilotRoutes({ store, service, maxJsonBytes }) {
     catch { throw new HttpError(400, "autopilot_path_invalid", "Invalid proactive research path."); }
     const method = req.method ?? "GET";
     const reply = (value, status = 200) => { sendJson(res, status, { data: value }); return true; };
-    const requireProject = async (projectId) => { await store.requireProject(user, projectId); return projectId; };
+    const requireProject = async (projectId) => { assertClientProject(projectId); await store.requireProject(user, projectId); return projectId; };
 
     if (parts[0] === "agendas" && parts.length === 1) {
       if (method === "GET") {
