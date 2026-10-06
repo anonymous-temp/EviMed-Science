@@ -11,7 +11,9 @@
 //
 // Hidden knowledge: the seed is three cards that cover what the plugin must read — an interpretation of a trial (it
 // names the trial's registry number and DOI), a recalculation (first-hand, about a published study) and a
-// researcher's original research — and nothing else, so that the fixture stays small enough to read.
+// researcher's original research — and nothing else in the feed, so that the fixture stays small enough to read. (The
+// researcher's three standing cards sit in a zone that is not open to the internet, which is what gives their author the
+// standing the feed asks of a researcher.)
 
 import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -62,8 +64,19 @@ export async function recordEvidenceFeed(database) {
   const { zone } = await zones.save(alice, { requestId: "feed-fixture-user", title: "我的真实世界研究", description: "d", background: "b" });
   const live = (await zones.save(alice, { expectedRevision: zone.revision, state: "published" }, zone.id)).zone;
   const open = (await zones.setVisibility(alice, live.id, { visibility: "internet", expectedRevision: live.revision })).zone;
+  // A researcher's card is in the feed only when it was published from a research result and its author is established:
+  // three published cards with a quotation the platform verified each, here in a zone that is not open to the internet.
+  const standing = (await zones.save(alice, { requestId: "feed-fixture-standing", title: "已核验的卡片", description: "d", background: "b" })).zone;
+  await zones.save(alice, { expectedRevision: standing.revision, state: "published" }, standing.id);
+  for (const name of ["a", "b", "c"]) {
+    await zones.saveEditorial(alice, card(`feed-fixture-standing-${name}`, `已核验的卡片 ${name}`, "试验中卒中事件少于对照。", {
+      sources: sources("https://example.org/registry/af-stroke", "Stroke registry"),
+      claims: [{ claimId: "CLM-1", claimType: "direct", claim: "卒中事件少于对照。", sourceIndexes: [1], supportQuote: "7 of 100 adults on the drug had a stroke" }],
+    }), standing.id, null, true, "result");
+  }
   const research = (await zones.saveEditorial(alice, card("feed-fixture-research", "单中心房颤患者的抗凝出血事件", "单中心 1,200 例患者中，抗凝相关出血低于预期。", {
     originality: "original_research", sources: sources("https://example.org/registry/af-bleeding", "Single-centre AF anticoagulation registry"),
+    lineage: { resultVersionId: `rv_${"7".repeat(64)}` },
   }), open.id, null, true, "result")).evidence;
   for (const [id, at] of [[brief.id, TIMES.brief], [recalculation.id, TIMES.recalculation], [research.id, TIMES.research]]) {
     await database.query("UPDATE evimed_frontier.evidence_cards SET created_at=$2, updated_at=$2 WHERE id=$1", [id, at]);

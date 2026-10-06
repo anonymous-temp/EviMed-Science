@@ -7,12 +7,15 @@
 //
 // Hidden knowledge:
 //
-// - **What may enter.** The cards of official zones, and the cards of user zones that are the researcher's original
-//   research in a zone the researcher opened to the internet. Never a product zone's card (a company's or a doctor's
-//   own evidence about its own product is not news the frontier carries, plan §5.6), never a user zone that is still
-//   platform-only, and never a card that is not published in a published zone. Interpretations of other people's
-//   studies (briefs, syntheses) come from official zones only: a researcher's reading of someone else's paper is not
-//   the researcher's research.
+// - **What may enter.** The cards of official zones, and the cards of user zones that are the researcher's own research
+//   in a zone the researcher opened to the internet — and "their own research" is what the platform can show, never
+//   what the author says of the card (2026-10-06): the card was published from a research result (its lineage carries
+//   `resultVersionId`, a key only the platform's writers can set), and its author is established
+//   (`evidenceAuthorIsEstablished`: three published, unwithdrawn cards with a verified claim each). Never a product zone's
+//   card (a company's or a doctor's own evidence about its own product is not news the frontier carries, plan §5.6),
+//   never a user zone that is still platform-only, never a withdrawn card, and never a card that is not published in a
+//   published zone. The card's `originality` is the author's to edit and decides nothing here; it is carried through as
+//   what the card says of itself.
 // - **What a card says about the study it is about.** `about` carries the DOI, PMID and registry numbers of the work
 //   a card verified or cites, so the plugin can hand registry numbers to the frontier's clustering and a reader's
 //   event for that trial finds the card as one more report. The card's identity in the feed is its own address, never
@@ -30,6 +33,7 @@
 import { createHash } from "node:crypto";
 import { evidenceCardIdentifiers, evidenceOriginalityIsPrimary } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
+import { evidenceAuthorIsEstablished } from "./evidenceAuthorStanding.mjs";
 import { migrateEvidenceZones } from "./evidenceZonePersistence.mjs";
 
 /** The shape of the JSON feed; a non-additive change is a new number. */
@@ -43,6 +47,8 @@ const SUMMARY_CHARS = 600;
 /** Sources named per item, and entity keys carried per item. */
 const SOURCES_PER_ITEM = 12;
 const KEYS_PER_ITEM = 40;
+/** A page looks at no more than this many batches of candidate cards before it answers (a researcher's card of an author who is not established is skipped, and skipping costs a read). */
+const MAX_SCAN_BATCHES = 8;
 
 /** @param {unknown} value */
 const text = (value) => (typeof value === "string" && value.trim() ? value.trim() : null);
@@ -188,23 +194,45 @@ export function createEvidenceFeed({ database, config = {}, now = () => new Date
       const cached = cache.get(key);
       if (cached) { counters.cacheHits += 1; return { etag, version, page: cached.page }; }
       try {
-        const rows = (await database.query(`SELECT c.id, c.zone_id, c.title, c.summary, c.revision, c.created_at, c.updated_at, c.content, c.producer,
-            c.originality, c.lineage, c.entity_keys, z.title AS zone_title, z.kind AS zone_kind,
-            (SELECT coalesce(jsonb_agg(jsonb_build_object('title', s->>'title', 'url', s->>'url')), '[]'::jsonb) FROM jsonb_array_elements(c.sources) s) AS sources_view,
-            (SELECT least(min(r.recorded_at), c.updated_at) FROM evimed_frontier.evidence_card_revisions r WHERE r.card_id = c.id AND r.snapshot->>'state' = 'published') AS published_at,
-            to_char(c.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_key
-          FROM evimed_frontier.evidence_cards c JOIN evimed_frontier.evidence_zones z ON z.id = c.zone_id
-          WHERE c.state = 'published' AND z.state = 'published' AND c.withdrawn IS NULL
-            AND (z.kind = 'official' OR (z.kind = 'user' AND z.visibility = 'internet' AND c.originality = 'original_research'))
-            AND ($1::timestamptz IS NULL OR (c.updated_at, c.id) < ($1::timestamptz, $2::text))
-          ORDER BY c.updated_at DESC, c.id DESC LIMIT $3`, [after?.updatedKey ?? null, after?.id ?? null, size + 1])).rows ?? [];
-        const kept = rows.slice(0, size);
-        const last = kept.at(-1);
+        /** @type {any[]} */
+        const admitted = [];
+        /** Whether each researcher met on this page is established: asked once, whatever number of their cards are scanned. @type {Map<string, boolean>} */
+        const standing = new Map();
+        let from = after;
+        let scanned = /** @type {any} */ (null);
+        let exhausted = false;
+        for (let batch = 0; batch < MAX_SCAN_BATCHES && admitted.length <= size; batch += 1) {
+          const rows = (await database.query(`SELECT c.id, c.zone_id, c.user_id, c.title, c.summary, c.revision, c.created_at, c.updated_at, c.content, c.producer,
+              c.originality, c.lineage, c.entity_keys, z.title AS zone_title, z.kind AS zone_kind,
+              (SELECT coalesce(jsonb_agg(jsonb_build_object('title', s->>'title', 'url', s->>'url')), '[]'::jsonb) FROM jsonb_array_elements(c.sources) s) AS sources_view,
+              (SELECT least(min(r.recorded_at), c.updated_at) FROM evimed_frontier.evidence_card_revisions r WHERE r.card_id = c.id AND r.snapshot->>'state' = 'published') AS published_at,
+              to_char(c.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_key
+            FROM evimed_frontier.evidence_cards c JOIN evimed_frontier.evidence_zones z ON z.id = c.zone_id
+            WHERE c.state = 'published' AND z.state = 'published' AND c.withdrawn IS NULL
+              AND (z.kind = 'official' OR (z.kind = 'user' AND z.visibility = 'internet' AND c.lineage->>'resultVersionId' IS NOT NULL))
+              AND ($1::timestamptz IS NULL OR (c.updated_at, c.id) < ($1::timestamptz, $2::text))
+            ORDER BY c.updated_at DESC, c.id DESC LIMIT $3`, [from?.updatedKey ?? null, from?.id ?? null, size + 1])).rows ?? [];
+          for (const row of rows) {
+            scanned = row;
+            if (row.zone_kind !== "official") {
+              if (!standing.has(row.user_id)) standing.set(row.user_id, await evidenceAuthorIsEstablished(database, row.user_id));
+              if (!standing.get(row.user_id)) continue;
+            }
+            admitted.push(row);
+            if (admitted.length > size) break;
+          }
+          if (rows.length <= size) { exhausted = true; break; }
+          from = { updatedKey: rows[rows.length - 1].updated_key, id: rows[rows.length - 1].id };
+        }
+        const kept = admitted.slice(0, size);
+        // Another admitted card waits behind this page: continue after the last one it shows. Failing that, a page cut short
+        // by the scan's bound continues after the last card it looked at, so the next page is the rest and nothing is skipped.
+        const resume = admitted.length > size ? kept.at(-1) : !exhausted ? scanned : null;
         const page = {
           version: EVIDENCE_FEED_VERSION,
           generatedAt: now().toISOString(),
           items: kept.map((row) => feedItem(row, config.publicUrl)),
-          next: rows.length > size && last ? Buffer.from(JSON.stringify({ u: last.updated_key, i: last.id })).toString("base64url") : null,
+          next: resume ? Buffer.from(JSON.stringify({ u: resume.updated_key, i: resume.id })).toString("base64url") : null,
         };
         if (cache.size >= CACHE_PAGES) cache.delete(/** @type {string} */ (cache.keys().next().value));
         cache.set(key, { page });
