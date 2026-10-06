@@ -10,6 +10,7 @@ import { after, before, beforeEach, test } from "node:test";
 import { PLATFORM_PUBLISHER_USER_ID } from "@evimed/domain";
 import { FLYWHEEL_MAX_WEEKS, createEvidenceFlywheelMetrics, flywheelWeekOf } from "../src/evidenceFlywheelMetrics.mjs";
 import { EvidenceOrigins } from "../src/evidenceOrigins.mjs";
+import { createGeoCardCitationReader } from "../src/geoCardCitations.mjs";
 import { EvidenceZoneService } from "../src/evidenceZoneService.mjs";
 import { migrateFrontier } from "../src/frontierPersistence.mjs";
 import { createStore } from "../src/store.mjs";
@@ -132,10 +133,18 @@ test("a signal another package adds is read once its columns exist, and its fail
   await db.query("INSERT INTO evimed_geo.articles(card_id,created_at) VALUES($1,$2)", [entry.id, "2026-09-01T00:00:00Z"]);
   let failures = 0;
   const view = await metrics({
-    citationReaders: { vcr: async () => ({ cards: [entry.id] }), assistant: async () => { failures += 1; throw new Error("down"); } },
+    citationReaders: { communication: createGeoCardCitationReader({ database: db }), vcr: async () => ({ cards: [entry.id] }), assistant: async () => { failures += 1; throw new Error("down"); } },
   }).snapshot({ weeks: 1 });
   const star = view.northStar[0];
   assert.equal(star.ways.communication.value, 2, "the article's card and the card its text references, inside the week only");
+  // The same reader over a deployment whose articles have neither column says why there is no answer, and the figure is null, not 0.
+  await db.query("ALTER TABLE evimed_geo.articles DROP COLUMN card_id");
+  await db.query("ALTER TABLE evimed_geo.articles DROP COLUMN claim_refs");
+  const none = await createGeoCardCitationReader({ database: db })({ from: new Date("2026-10-04T16:00:00Z"), to: new Date("2026-10-11T16:00:00Z") });
+  assert.equal(none.cards, null);
+  assert.match(/** @type {any} */ (none).reason, /no card_id or claim_refs/);
+  await db.query("ALTER TABLE evimed_geo.articles ADD COLUMN card_id text");
+  await db.query("ALTER TABLE evimed_geo.articles ADD COLUMN claim_refs jsonb NOT NULL DEFAULT '[]'");
   assert.equal(star.ways.vcr.value, 1);
   assert.equal(star.ways.assistant.value, null);
   assert.match(star.ways.assistant.reason, /failed/);

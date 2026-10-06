@@ -27,6 +27,7 @@
 import { VCR_ENGINE_METHOD_IDS, autopilotEpisodeCapability } from "@evimed/domain";
 import { ENTITY_TEXT_KINDS, keyKind, splitKeys } from "@evimed/domain/entity-keys";
 import { HttpError } from "./security.mjs";
+import { EVIDENCE_PROJECT_ID } from "./internalProjects.mjs";
 import { ORIGINAL_ANALYSIS_ENGINES, programmeZoneByKey } from "./evidenceProgrammeData.mjs";
 
 /** The lead sources of this module, which the domain's `EVOLUTION_LEAD_SOURCES` lists and a test holds equal. */
@@ -68,6 +69,22 @@ export function moduleLeadPayload(input) {
   }
   const endpoint = typeof input.endpoint === "string" && LEAD_ENDPOINTS.includes(input.endpoint) ? input.endpoint : null;
   return { track: "M", source: /** @type {string} */ (input.source), gapCode: rule.gapCode, code: input.code, entityKeys: leadEntityKeys(input.entityKeys), ...(endpoint ? { endpoint } : {}) };
+}
+
+/**
+ * The evidence programme's recent decisions, as the platform publisher keeps them in its evidence project (a product document of kind `programme-decision`, one a
+ * day), newest first, and the subject keys of an official zone from the glossary its topic terms are tagged with. Here and not in the composition because the
+ * composition reads no document pages itself.
+ * @param {{ documents: any, publisherId: string, decisionKind: string, entityVocabulary: any }} options
+ */
+export function programmeLeadReader({ documents, publisherId, decisionKind, entityVocabulary }) {
+  return {
+    decisions: async () => {
+      const page = await documents.list(publisherId, decisionKind, { limit: PROGRAMME_DECISIONS_READ, projectId: EVIDENCE_PROJECT_ID });
+      return page.items.map((/** @type {any} */ row) => row.payload);
+    },
+    keysForZone: async (/** @type {string} */ zoneKey) => leadEntityKeys(await entityVocabulary.keysForText({ texts: [...(programmeZoneByKey(zoneKey)?.topic.terms ?? [])] })),
+  };
 }
 
 /**

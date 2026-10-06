@@ -72,12 +72,11 @@ import { vcrBackupReadiness } from "./vcrBackupReadiness.mjs";
 import { EVIDENCE_PROJECT_ID, EVOLUTION_PROJECT_ID, LEARNING_PROJECT_ID, ensureEvidenceProject, isEvolutionProject, isInternalProjectOf, isReservedProjectId } from "./internalProjects.mjs";
 import { createEvidenceBudget, evidenceBudgetMetricFamilies } from "./evidenceBudget.mjs";
 import { PROGRAMME_DECISION_KIND, createEvidenceProgramme, evidenceProgrammeMetricFamilies } from "./evidenceProgramme.mjs";
-import { HANDBOOK_LESSON_CLASSES, createPlatformHandbooks, handbookJudgeMessages, platformHandbookMetricFamilies } from "./learningPlatformHandbooks.mjs";
+import { HANDBOOK_LESSON_CLASSES, createPlatformHandbooks, handbookJudgeMessages, platformHandbookMetricFamilies, projectFactsReader } from "./learningPlatformHandbooks.mjs";
 import { establishedAuthors } from "./evidenceVerifiedCards.mjs";
 import { callReviewModel } from "./reviewModel.mjs";
 import { guestMarkedRuns } from "./capsuleShareTrust.mjs";
-import { createEvolutionLeadSources, evolutionLeadSourceMetricFamilies, leadEntityKeys } from "./evolutionLeadSources.mjs";
-import { programmeZoneByKey } from "./evidenceProgrammeData.mjs";
+import { createEvolutionLeadSources, evolutionLeadSourceMetricFamilies, programmeLeadReader } from "./evolutionLeadSources.mjs";
 import { createCalculationReceiptReader } from "./evidenceCalculationReceipts.mjs";
 import { createEvidenceRecalculation, createOfficialZoneMatcher, evidenceRecalculationMetricFamilies } from "./evidenceRecalculation.mjs";
 import { createPredictionRegistry, predictionRegistryMetricFamilies } from "./predictionRegistry.mjs";
@@ -247,6 +246,7 @@ import { EvidenceZoneService } from "./evidenceZoneService.mjs";
 import { createEvidenceCardSearch } from "./evidenceCardSearch.mjs";
 import { createEvidenceFeed, evidenceFeedMetricFamilies } from "./evidenceFeed.mjs";
 import { createEvidenceFlywheelMetrics } from "./evidenceFlywheelMetrics.mjs";
+import { createGeoCardCitationReader } from "./geoCardCitations.mjs";
 import { createEvidenceOutcomes, evidenceOutcomeMetricFamilies } from "./evidenceIncidents.mjs";
 import { createEvidenceCommunity, createEvidenceCommunityRoutes, evidenceCommunityMetricFamilies } from "./evidenceCommunity.mjs";
 import { createEvidenceFeedRoutes } from "./evidenceFeedRoutes.mjs";
@@ -4590,27 +4590,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       const evolutionService = evolution.service;
       platformHandbooks = createPlatformHandbooks({
         service: evolutionService, supply: evolution.supply, perDay: config.learningPlatformHandbooksPerDay, report: code => process.stderr.write(`${code}\n`),
-        facts: async (userId, projectId) => {
-          /** @type {Set<string>} */ const names = new Set();
-          /** @type {Set<string>} */ const identifiers = new Set();
-          const user = await store.userById(userId);
-          const project = user && projectId ? await store.requireProject(user, projectId).catch(() => null) : null;
-          if (project?.name) names.add(String(project.name));
-          if (projectId) {
-            for (const row of (await productDocuments.list(userId, "source", { projectId, limit: 100 })).items) {
-              for (const file of Array.isArray(row.payload.paths) ? row.payload.paths : []) { names.add(String(file)); names.add(path.basename(String(file))); }
-              if (typeof row.payload.metadata?.title === "string") names.add(row.payload.metadata.title);
-              for (const key of ["doi", "pmid"]) if (typeof row.payload.metadata?.[key] === "string") identifiers.add(row.payload.metadata[key]);
-            }
-            for (const row of (await productDocuments.list(userId, "dataset-semantics", { projectId, limit: 50 })).items) {
-              for (const binding of Array.isArray(row.payload.bindings) ? row.payload.bindings : []) {
-                names.add(String(binding.table ?? "")); names.add(path.basename(String(binding.path ?? "")));
-                for (const column of Array.isArray(binding.columns) ? binding.columns : []) names.add(String(column.name ?? ""));
-              }
-            }
-          }
-          return { names: [...names].filter(Boolean), identifiers: [...identifiers], numbers: [] };
-        },
+        facts: projectFactsReader({ store, documents: productDocuments }),
         judge: async ({ text, capabilityId }) => {
           const response = await callModelForControlPlane({ config, usageLedger, fetchImpl: handbooksFetch }, { userId: await evolutionService.owner(), projectId: EVOLUTION_PROJECT_ID,
             purpose: "evolution", limits: handbookLimits, signal: AbortSignal.timeout(60_000),
@@ -4634,10 +4614,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     if (config.evolutionModuleLeadsEnabled) {
       evolutionLeadSources = createEvolutionLeadSources({
         service: evolution.service, perDay: config.evolutionModuleLeadsPerDay, report: code => process.stderr.write(`${code}\n`),
-        programme: evidenceProgramme && productDocuments ? {
-          decisions: async () => (await productDocuments.list(PLATFORM_PUBLISHER_USER_ID, PROGRAMME_DECISION_KIND, { limit: 14, projectId: EVIDENCE_PROJECT_ID })).items.map((/** @type {any} */ row) => row.payload),
-          keysForZone: async (/** @type {string} */ zoneKey) => leadEntityKeys(await entityVocabulary.keysForText({ texts: [...(programmeZoneByKey(zoneKey)?.topic.terms ?? [])] })),
-        } : null,
+        programme: evidenceProgramme && productDocuments ? programmeLeadReader({ documents: productDocuments, publisherId: PLATFORM_PUBLISHER_USER_ID, decisionKind: PROGRAMME_DECISION_KIND, entityVocabulary }) : null,
         communication: Boolean(geo), virtualStudy: Boolean(vcr),
       });
       const sources = evolutionLeadSources;
@@ -4658,6 +4635,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   if (config.evidenceFlywheelMetricsEnabled && frontier && productDatabase) {
     evidenceFlywheel = createEvidenceFlywheelMetrics({
       database: productDatabase, platformPublisherUserId: PLATFORM_PUBLISHER_USER_ID,
+      citationReaders: { communication: geo ? createGeoCardCitationReader({ database: productDatabase }) : null },
       predictionCalibration: predictionRegistry ? () => predictionRegistry?.predictionCalibration() : null,
       evolutionTools: evolution ? async () => (await evolution?.service.tools() ?? []).map((/** @type {any} */ row) => row.payload) : null,
       report: code => process.stderr.write(`${code}\n`),

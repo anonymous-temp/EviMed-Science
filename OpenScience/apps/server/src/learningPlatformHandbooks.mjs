@@ -31,6 +31,7 @@
  * @module learningPlatformHandbooks
  */
 import { createHash } from "node:crypto";
+import path from "node:path";
 
 /** What a lesson is about, as the judge names it: the corroboration is of the same capability and the same class. */
 export const HANDBOOK_LESSON_CLASSES = Object.freeze([
@@ -85,6 +86,36 @@ export function handbookFieldChecks(handbook, facts = {}) {
   });
   if (known.some((entry) => seen.has(entry) || (entry.includes(" ") && whole.toLowerCase().includes(entry)))) failed.push("project_fact");
   return { ok: failed.length === 0, failed, text };
+}
+
+/**
+ * What an account's project holds that a general lesson must not repeat, read bounded from the records the platform keeps: the project's name, the knowledge-base
+ * sources' file names, titles and identifiers, and the datasets' table, file and column names. Numbers are not collected: a data number is refused by its format.
+ * @param {{ store: any, documents: any }} options
+ * @returns {(userId: string, projectId: string | null) => Promise<{ names: string[], identifiers: string[], numbers: string[] }>}
+ */
+export function projectFactsReader({ store, documents }) {
+  return async (userId, projectId) => {
+    /** @type {Set<string>} */ const names = new Set();
+    /** @type {Set<string>} */ const identifiers = new Set();
+    const user = await store.userById(userId);
+    const project = user && projectId ? await store.requireProject(user, projectId).catch(() => null) : null;
+    if (project?.name) names.add(String(project.name));
+    if (projectId) {
+      for (const row of (await documents.list(userId, "source", { projectId, limit: 100 })).items) {
+        for (const file of Array.isArray(row.payload.paths) ? row.payload.paths : []) { names.add(String(file)); names.add(path.basename(String(file))); }
+        if (typeof row.payload.metadata?.title === "string") names.add(row.payload.metadata.title);
+        for (const key of ["doi", "pmid"]) if (typeof row.payload.metadata?.[key] === "string") identifiers.add(row.payload.metadata[key]);
+      }
+      for (const row of (await documents.list(userId, "dataset-semantics", { projectId, limit: 50 })).items) {
+        for (const binding of Array.isArray(row.payload.bindings) ? row.payload.bindings : []) {
+          names.add(String(binding.table ?? "")); names.add(path.basename(String(binding.path ?? "")));
+          for (const column of Array.isArray(binding.columns) ? binding.columns : []) names.add(String(column.name ?? ""));
+        }
+      }
+    }
+    return { names: [...names].filter(Boolean), identifiers: [...identifiers], numbers: [] };
+  };
 }
 
 /** The SKILL.md body a candidate becomes: the lesson and nothing about where it came from. @param {{ name: string, description: string, body: string }} text */

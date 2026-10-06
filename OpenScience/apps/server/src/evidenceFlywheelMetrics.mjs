@@ -12,6 +12,8 @@
  *   — read, cited by another account's research, cited by a 循证传播 article, cited by a 虚拟临研 study, cited by an AI assistant — and a card
  *   named by three signals counts once. The ways are reported beside it so a change in the star can be traced to the signal that moved.
  *   Card count, page views and words generated are deliberately not outcomes and appear nowhere here.
+ * - **Signals other modules own are read through readers they provide**, never by this module reaching into their tables (`geoFirewall.test.mjs` forbids it for the
+ *   communication module): `citationReaders.communication` is `geoCardCitations.mjs`, composed beside the module; the study and question-bank readers come with theirs.
  * - **"Read" is a page opening, today.** The public pages record one counter per card and day (`evidence_page_reads`); no table records that
  *   a reader reached the end of a card, so the signal says `basis: "page_open"` and no more. The brief's "read to the end" becomes real the
  *   day a table says so.
@@ -96,7 +98,7 @@ async function columnExists(database, schema, table, column) {
 
 /**
  * @param {{ database: any, platformPublisherUserId?: string | null, now?: () => Date,
- *   citationReaders?: { vcr?: CitationReader | null, assistant?: CitationReader | null } | null,
+ *   citationReaders?: { communication?: CitationReader | null, vcr?: CitationReader | null, assistant?: CitationReader | null } | null,
  *   predictionCalibration?: (() => Promise<any>) | null,
  *   evolutionTools?: (() => Promise<{ id?: string, status?: string, validationLevel?: string }[]>) | null,
  *   assistantCoverage?: (() => Promise<{ rounds: number | null, citedShare: number | null } | null>) | null,
@@ -130,20 +132,8 @@ export function createEvidenceFlywheelMetrics({ database, platformPublisherUserI
        WHERE r.started_at>=$1 AND r.started_at<$2 AND r.user_id<>c.user_id`, [week.from, week.to])).rows;
     ways.research = { cards: new Set(runs.map((/** @type {any} */ row) => String(row.card_id))) };
 
-    // 循证传播: an article made from a card, or one whose text carries a reference to a card claim, once the module records either.
-    const communication = await (async () => {
-      const direct = await columnExists(database, "evimed_geo", "articles", "card_id");
-      const referenced = await columnExists(database, "evimed_geo", "articles", "claim_refs");
-      if (!direct && !referenced) return null;
-      const found = new Set();
-      if (direct) for (const row of (await database.query("SELECT DISTINCT card_id FROM evimed_geo.articles WHERE card_id IS NOT NULL AND created_at>=$1 AND created_at<$2", [week.from, week.to])).rows) found.add(String(row.card_id));
-      if (referenced) for (const row of (await database.query(
-        "SELECT DISTINCT ref->>'cardId' AS card_id FROM evimed_geo.articles a, jsonb_array_elements(a.claim_refs) ref WHERE a.created_at>=$1 AND a.created_at<$2 AND ref->>'cardId' IS NOT NULL", [week.from, week.to])).rows) found.add(String(row.card_id));
-      return found;
-    })();
-    ways.communication = communication ? { cards: communication } : { cards: null, reason: "The communication module records no card reference in this deployment (no card_id or claim_refs on its articles)." };
-
     for (const [way, reader, why] of /** @type {[string, CitationReader | null | undefined, string][]} */ ([
+      ["communication", citationReaders?.communication, "The communication module's card references are not read in this deployment."],
       ["vcr", citationReaders?.vcr, "The virtual-clinical-research module records no card reference a count could read."],
       ["assistant", citationReaders?.assistant, "No question bank's citation rows exist in this deployment."],
     ])) {
