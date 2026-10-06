@@ -3,6 +3,8 @@ import { EVIDENCE_ZONE_KINDS, EVIDENCE_ZONE_KIND_LABELS_ZH } from "@evimed/domai
 import { Link, useNavigate, useSearchParams } from "react-router";
 import { useEvidenceScope } from "@/components/frontier/useEvidenceScope";
 import { ZoneEditor } from "@/components/frontier/EvidenceEditors";
+import { TopicRequests } from "@/components/frontier/TopicRequests";
+import { useEvidenceFeatures } from "@/components/frontier/useEvidenceFeatures";
 import { FilterChips } from "@/components/ui/FilterChips";
 import { PageShell } from "@/components/layout/PageShell";
 import { FrontierNavigation } from "@/components/frontier/FrontierNavigation";
@@ -48,6 +50,7 @@ export function EvidenceZonesPage() {
   const [refresh, setRefresh] = useState(0);
   const capture = useEvidenceScope(`${query}:${scope}:${refresh}`);
   const [busy, setBusy] = useState<string | null>(null);
+  const features = useEvidenceFeatures();
   useEffect(() => {
     let active = true;
     setLoading(true);
@@ -258,6 +261,13 @@ export function EvidenceZonesPage() {
             加载更多
           </Button>
         </div>
+      )}
+      {features.publicPages && !fromItem && (
+        <TopicRequests
+          zones={items
+            .filter((zone) => zone.kind === "official" && zone.state === "published")
+            .map((zone) => ({ id: zone.id, title: zone.title }))}
+        />
       )}
     </PageShell>
   );

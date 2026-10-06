@@ -252,7 +252,9 @@ import { createEvidenceOutcomes, evidenceOutcomeMetricFamilies } from "./evidenc
 import { createEvidenceCommunity, createEvidenceCommunityRoutes, evidenceCommunityMetricFamilies } from "./evidenceCommunity.mjs";
 import { createEvidenceFeedRoutes } from "./evidenceFeedRoutes.mjs";
 import { createEvidencePublicRoutes, evidencePublicMetricFamilies } from "./evidencePublicRoutes.mjs";
-import { createEvidenceTopicRequestRoutes, createEvidenceTopicRequests } from "./evidencePublicRequests.mjs";
+import { EVIDENCE_TOPIC_REQUEST_LIST_MAX, createEvidenceTopicRequestRoutes, createEvidenceTopicRequests, topicRequestCounts } from "./evidencePublicRequests.mjs";
+import { pageReads } from "./evidencePublicReads.mjs";
+import { createEvidenceProgrammeRoutes } from "./evidenceProgrammeRoutes.mjs";
 import { platformContentCitedMetricFamilies } from "./evidenceCitationMetrics.mjs";
 import { createEvidenceZoneRoutes } from "./evidenceZoneRoutes.mjs";
 import { EvidenceCardFromResult } from "./evidenceCardFromResult.mjs";
@@ -2268,7 +2270,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     const judge = createChallengeJudge({ config, usageLedger, fetchImpl: overrides.frontierModelFetch ?? globalThis.fetch, callModel: callModelForControlPlane,
       parseJson: parseModelJson, billing: () => ensureEvidenceProject(store) });
     const challenges = createEvidenceChallenges({ database: productDatabase, service: zones, changeLog, notifications: notificationService, judge, budget: evidenceBudget,
-      levers: { challengesPerDay: config.evidenceChallengesPerDay }, notifyZoneFollowers, report: (code) => process.stderr.write(`${code}\n`) });
+      levers: { challengesPerDay: config.evidenceChallengesPerDay }, notifyZoneFollowers, report: (code) => process.stderr.write(`${code}\n`),
+      // A calculated claim is checked against its receipt: the reader the composition gives the zone service below (read when a challenge is, not now).
+      receiptsFor: (card) => zones.receiptsFor(card) });
     zones.onCardSaved = async (event) => { await upkeep.onCardRevision(event); await challenges.onCardRevision(event); };
     frontier.evidenceEditorial.useUpkeep({ sourceChanges, upkeep, challenges });
     evidenceUpkeep = { changeLog, upkeep, challenges, figures: createEvidenceFigures({ database: productDatabase }) };
@@ -2303,6 +2307,17 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     const upkeep = evidenceUpkeep.upkeep;
     evidenceProgramme.useSignals({ staleOfficialCards: async () => (await upkeep.staleOfficialCards({ limit: 50 })).map((card) => ({ zoneId: card.zoneId, cardId: card.cardId, reason: card.currency })) });
   }
+  // Two more of the selector's signals are the public pages' own: how often a zone's pages were read and which topics readers asked for
+  // (evidencePublicReads.mjs, evidencePublicRequests.mjs). Both tables exist only where the pages are on; without them the selector is told
+  // the signal is not recorded rather than that it is zero.
+  if (evidenceProgramme && evidencePublicOn) {
+    evidenceProgramme.useSignals({
+      pageReads: (query) => pageReads(productDatabase, query),
+      topicRequests: () => topicRequestCounts(productDatabase, { limit: EVIDENCE_TOPIC_REQUEST_LIST_MAX }),
+    });
+  }
+  // The operator's page of the programme and the button that runs today's decision now (evidenceProgrammeRoutes.mjs).
+  const evidenceProgrammeRoutes = createEvidenceProgrammeRoutes({ store, programme: evidenceProgramme, config, maxJsonBytes: config.maxJsonBytes });
   // The numerical chain: which calculation a printed number came from, and the platform writing a report's numbers itself.
   const resultLineage = resultProvenance ? new ResultLineageService({ results: resultProvenance, replays: resultReplays, config,
     mirror: (project, full, bytes) => runtimeManager.mirrorWorkspaceUpload(project, full, bytes),
@@ -5263,6 +5278,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (await library.routes(req, res)) return;
       if (await autopilotRoutes(req, res)) return;
       if (await evidenceTopicRequestRoutes(req, res)) return;
+      if (await evidenceProgrammeRoutes(req, res)) return;
       if (await evidenceUpkeepRoutes(req, res)) return;
       if (await evidenceCommunityRoutes(req, res)) return;
       if (await evidenceZoneRoutes(req, res)) return;

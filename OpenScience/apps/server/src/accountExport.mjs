@@ -8,6 +8,7 @@ import { migrateUsageLedger } from "./usagePersistence.mjs";
 import { projectSourceDerivedRecord, projectSourceManifestRecord } from "./sourceService.mjs";
 import { EXTENSION_CUSTOMER_KINDS, exportExtensionAccountRow, exportPersonalSkillResources } from "./extensionAccountExport.mjs";
 import { migrateEvidenceZones } from "./evidenceZonePersistence.mjs";
+import { migrateCapsuleShare } from "./capsuleShareLinks.mjs";
 
 const MAX_ROWS = 50000;
 const MAX_BYTES = 64 * 1024 * 1024;
@@ -63,6 +64,23 @@ const queries = [
   ["evidenceChallenges", "SELECT * FROM evimed_frontier.evidence_challenges WHERE user_id=$1 ORDER BY id"],
   // The public topic requests the account filed or seconded (flywheel F08): the title it asked for and when. The request itself belongs to no one.
   ["evidenceTopicRequestVotes", "SELECT v.request_id,r.title,v.created_at FROM evimed_frontier.evidence_topic_request_votes v JOIN evimed_frontier.evidence_topic_requests r ON r.id=v.request_id WHERE v.user_id=$1 ORDER BY v.created_at,v.request_id"],
+  // What the account shared and was shared with (`evimed_share`, flywheel F17): the links it made, the links it opened, the deliveries it sent and
+  // the ones it received. Never the credential of a link (`token_hash`, `archive_secret`), never another account's id, and never a pack: a received
+  // delivery carries who sent it by display name, the pack's title and its hash, and what became of it. The sender's capsule and snapshot ids are the
+  // sender's own and are not here; neither are the accounts that opened a link, only how many imported it.
+  ["shareLinks", `SELECT l.id,l.capsule_id AS "capsuleId",l.snapshot_id AS "snapshotId",l.manifest_sha256 AS "manifestSha256",l.archive_sha256 AS "archiveSha256",
+    l.max_uses AS "maxUses",l.uses,(SELECT count(*)::integer FROM evimed_share.link_uses u WHERE u.link_id=l.id AND u.imported_at IS NOT NULL) AS "importedCount",
+    l.expires_at AS "expiresAt",l.revoked_at AS "revokedAt",l.created_at AS "createdAt"
+    FROM evimed_share.links l WHERE l.owner_id=$1 ORDER BY l.created_at,l.id`],
+  ["shareLinkUses", `SELECT link_id AS "linkId",first_used_at AS "firstUsedAt",imported_at AS "importedAt"
+    FROM evimed_share.link_uses WHERE user_id=$1 ORDER BY first_used_at,link_id`],
+  ["shareDeliveriesSent", `SELECT d.id,d.capsule_id AS "capsuleId",d.snapshot_id AS "snapshotId",d.archive_sha256 AS "archiveSha256",d.state,u.name AS "recipientName",
+    d.created_at AS "createdAt",d.opened_at AS "openedAt",d.imported_at AS "importedAt",d.closed_at AS "closedAt"
+    FROM evimed_share.deliveries d JOIN evimed_control.users u ON u.id=d.recipient_id WHERE d.owner_id=$1 ORDER BY d.created_at,d.id`],
+  ["shareDeliveriesReceived", `SELECT d.id,d.state,u.name AS "senderName",
+    (SELECT s.payload->'card'->>'title' FROM evimed_product.documents s WHERE s.user_id=d.owner_id AND s.kind='preferences' AND s.id=d.snapshot_id) AS "packTitle",
+    d.archive_sha256 AS "packSha256",d.created_at AS "createdAt",d.opened_at AS "openedAt",d.imported_at AS "importedAt",d.closed_at AS "closedAt"
+    FROM evimed_share.deliveries d JOIN evimed_control.users u ON u.id=d.owner_id WHERE d.recipient_id=$1 ORDER BY d.created_at,d.id`],
   ["projects", `SELECT id,name,created_at AS "createdAt",updated_at AS "updatedAt"
     FROM evimed_control.projects WHERE user_id=$1 ORDER BY id`],
   ["researchSessions", `SELECT project_id AS "projectId",session_id AS "sessionId",mode,agent_id AS "agentId",
@@ -362,6 +380,7 @@ export async function withAccountExportSnapshot(database, user, config, operatio
   await migrateNotifications(database);
   await migrateUsageLedger(database);
   await migrateEvidenceZones(database);
+  await migrateCapsuleShare(database);
   return database.transaction(async client => {
     await client.query("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ");
     await client.query("SET LOCAL statement_timeout = '15s'");
@@ -433,6 +452,7 @@ export async function withAccountExportSnapshot(database, user, config, operatio
       priceLists: exportedPriceLists(tables.usage), feedbackEvents: tables.feedbackEvents, omissions,
       evidenceCardRevisions:tables.evidenceCardRevisions,evidenceAutomation:tables.evidenceAutomation,evidenceZones:tables.evidenceZones,evidenceCards:tables.evidenceCards,evidenceZoneFollows:tables.evidenceZoneFollows,
       evidenceComments:tables.evidenceComments,evidenceReviews:tables.evidenceReviews,evidenceZoneFeedback:tables.evidenceZoneFeedback,evidenceChallenges:tables.evidenceChallenges,evidenceTopicRequestVotes:tables.evidenceTopicRequestVotes,
+      shareLinks:tables.shareLinks,shareLinkUses:tables.shareLinkUses,shareDeliveriesSent:tables.shareDeliveriesSent,shareDeliveriesReceived:tables.shareDeliveriesReceived,
     };
     const skillResources = await exportPersonalSkillResources({ artifacts: limits.skillArtifacts, user,
       rows: [...tables.documents, ...tables.revisions], maxBytes: Math.min(32 * 1024 * 1024, maxBytes) });

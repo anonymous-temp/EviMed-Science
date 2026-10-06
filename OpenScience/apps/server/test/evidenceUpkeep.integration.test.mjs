@@ -4,7 +4,7 @@
 // the verbatim check, the inbox, the source-change record, the zone service, the editor — is the real one.
 import assert from "node:assert/strict";
 import { after, before, beforeEach, test } from "node:test";
-import { PLATFORM_PUBLISHER_USER_ID, evidenceUpkeepRoute } from "@evimed/domain";
+import { PLATFORM_PUBLISHER_USER_ID, evidenceUpkeepRoute, verifyEvidenceCardClaims } from "@evimed/domain";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { createEvidenceChangeLog } from "../src/evidenceChangeLog.mjs";
 import { createEvidenceChallenges } from "../src/evidenceChallenges.mjs";
@@ -65,11 +65,11 @@ beforeEach(async () => {
 });
 
 /** The loops and the editor over the real service, with the model and the network as doubles. */
-function build({ resultImpacts = null, knowledgeChange = null, judge = null, budget = null, readSource = async () => ({ text: SOURCE_TEXT, receipt: { sha256: evidenceHash(SOURCE_TEXT) } }), editor = null, followers = /** @type {any[]} */ ([]), levers = {}, withUpkeep = true } = {}) {
+function build({ receiptsFor = null, resultImpacts = null, knowledgeChange = null, judge = null, budget = null, readSource = async () => ({ text: SOURCE_TEXT, receipt: { sha256: evidenceHash(SOURCE_TEXT) } }), editor = null, followers = /** @type {any[]} */ ([]), levers = {}, withUpkeep = true } = {}) {
   const log = createEvidenceChangeLog({ database: db });
   const upkeep = createEvidenceUpkeep({ database: db, changeLog: log, sourceChanges, notifications, resultImpacts, knowledgeChange, levers: { intervalHours: 24, batch: 200, ...levers }, now,
     notifyZoneFollowers: async (/** @type {any} */ event) => { followers.push(event); } });
-  const challenges = createEvidenceChallenges({ database: db, service, changeLog: log, notifications, judge, budget, levers, now,
+  const challenges = createEvidenceChallenges({ database: db, service, changeLog: log, notifications, judge, budget, levers, now, receiptsFor,
     notifyZoneFollowers: async (/** @type {any} */ event) => { followers.push(event); } });
   service.onCardSaved = async (/** @type {any} */ event) => { await upkeep.onCardRevision(event); await challenges.onCardRevision(event); };
   const worker = new EvidenceEditorial({ database: db, service, editor: editor ?? { available: true, model: "test-model", evidenceTarget: async () => null, evidenceCard: async () => ({}), evidenceReview: async () => ({ findings: [] }) },
@@ -531,6 +531,200 @@ test("an upheld claim whose quotation is not in the source cannot stand as writt
   const [entry] = (await changeLog.list({ cardId: card.id })).items;
   assert.equal(entry.category, "correction", "an uphold of a claim with no quotation in the source becomes an amendment");
   assert.equal((await service.detail(bob, card.zoneId, card.id)).evidence.claims[0].verification.mark, "✓");
+});
+
+// ── A challenge on a claim the platform calculated: its check is its receipt, not a quotation ─────────────────────────────────────────────────────────────
+
+const RECEIPT_ID = `rv_${"c".repeat(64)}`;
+const RECEIPT = {
+  receiptId: RECEIPT_ID, engine: "drug_safety_analysis", method: "faers.signals@1.1.0", inputs: [{ datasetId: "faers-snapshot", hash: "b".repeat(64) }],
+  values: [{ key: "values[0].ror.value", value: 2.4012, unit: "ratio" }, { key: "values[0].table.a", value: 1234 }],
+};
+const CALCULATED = {
+  claimId: "CALC-1", claimType: "calculated", claim: "报告比值比（ROR）为 2.40。",
+  calculation: { engine: "drug_safety_analysis", method: "faers.signals@1.1.0", receiptId: RECEIPT_ID, inputs: RECEIPT.inputs, valuePath: "values[0].ror.value", machineValue: 2.4012, format: "f2" },
+};
+const QUOTED = { claimId: "CLM-1", claimType: "direct", claim: "Stroke fell with the drug.", sourceIndexes: [1], supportQuote: "7 of 100 adults on the drug had a stroke" };
+const CALCULATED_COUNT = {
+  claimId: "CALC-2", claimType: "calculated", claim: "同时报告了该药物与该不良事件的病例报告有 1,234 份。",
+  calculation: { engine: "drug_safety_analysis", method: "faers.signals@1.1.0", receiptId: RECEIPT_ID, inputs: RECEIPT.inputs, valuePath: "values[0].table.a", machineValue: 1234, format: "thousands" },
+};
+/** A reader of their own: each of these tests files challenges, and one account's day is rate-limited. */
+async function newReader() {
+  const reader = { id: unique("up_calc_reader") };
+  await db.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,$1,'development')", [reader.id]);
+  return reader;
+}
+/** The receipts the composition's reader holds: tests move what is in it. @type {Map<string, any>} */
+const receiptStore = new Map();
+const readReceipts = async () => receiptStore;
+/** An official card of the programme whose first claim is the platform's own calculation. */
+async function calculatedCard(claims = [CALCULATED, QUOTED], extra = {}) {
+  receiptStore.clear();
+  receiptStore.set(RECEIPT_ID, RECEIPT);
+  const zone = await zoneOf(PUBLISHER, { kind: "official" });
+  return cardOf(zone, PUBLISHER, { origin: "programme", entityKeys: [], url: unique("https://example.org/calc-"), claims, extra: { originality: "original_analysis", ...extra } });
+}
+const claimMarks = async (/** @type {string} */ cardId) => {
+  const row = await cardRow(cardId);
+  return Object.fromEntries(verifyEvidenceCardClaims({ claims: row.claims, sources: row.sources }, { receipts: receiptStore }).claims.map((claim) => [claim.claimId, claim.status]));
+};
+
+test("a calculated claim whose receipt verifies is judged on the receipt's facts: the number is code's, only what it is said to mean is the model's", options, async () => {
+  const calls = /** @type {any[]} */ ([]);
+  const answers = /** @type {any[]} */ ([
+    () => ({ outcome: "uphold", sourceIndex: 1, passage: "values[0].ror.value = 2.4012 ratio and more", reason: "编造的回执内容" }),
+    () => ({ outcome: "uphold", sourceIndex: 1, passage: "values[0].ror.value = 2.4012 ratio", reason: "回执支持这个数字，也支持这样的表述。" }),
+  ]);
+  const judge = async (/** @type {any} */ input) => { calls.push(input); return answers[calls.length - 1](); };
+  const { challenges, changeLog: log } = build({ judge, receiptsFor: readReceipts });
+  const card = await calculatedCard();
+  const reader = await newReader();
+  const filed = await challenges.submit(reader, card.id, { claimId: "CALC-1", reason: "这个比值比的含义被说得太满了" });
+  assert.deepEqual(JSON.parse(JSON.stringify((await rows("SELECT check_result FROM evimed_frontier.evidence_challenges WHERE id=$1", [filed.challenge.id]))[0].check_result)).status, "verified", "the receipt check is what was recorded at filing");
+  assert.equal(await challenges.recheckTick(), "open", "a passage the receipt does not hold is dropped, not softened");
+  assert.equal((await rows("SELECT last_error FROM evimed_frontier.evidence_challenges WHERE id=$1", [filed.challenge.id]))[0].last_error, "evidence_judgement_passage_not_in_source");
+  const [first] = calls;
+  assert.equal(first.payload.calculationCheck, "verified", "the model is told what code found");
+  assert.equal(first.payload.verbatimCheck, undefined, "there is no quotation to check");
+  assert.deepEqual(first.payload.claim.calculation, { engine: "drug_safety_analysis", method: "faers.signals@1.1.0", valuePath: "values[0].ror.value", machineValue: 2.4012, format: "f2" });
+  assert.equal(first.payload.sources.length, 1);
+  assert.match(first.payload.sources[0].text, /method: faers\.signals@1\.1\.0/);
+  assert.match(first.payload.sources[0].text, /values\[0\]\.ror\.value = 2\.4012 ratio/, "the receipt's facts are the supplied text");
+  await db.query("UPDATE evimed_frontier.evidence_challenges SET available_at=clock_timestamp() WHERE id=$1", [filed.challenge.id]);
+  assert.equal(await challenges.recheckTick(), "resolved");
+  const mine = (await challenges.listFor(reader, card.id)).items[0];
+  assert.deepEqual([mine.state, mine.outcome], ["resolved", "uphold"]);
+  assert.equal((await cardRow(card.id)).revision, card.revision, "an upheld claim writes no revision");
+  const [entry] = (await log.list({ cardId: card.id })).items;
+  assert.equal(entry.category, "searched_no_change");
+  assert.match(entry.summary, /数字已按平台保存的回执重新核对/);
+  assert.doesNotMatch(entry.summary, /原文句子/, "there was no source sentence");
+});
+
+test("a receipt that no longer verifies upholds the challenge without a model call: the claim is withdrawn on the code's own finding", options, async () => {
+  let judged = 0;
+  const { challenges, changeLog: log } = build({ judge: async () => { judged += 1; return { outcome: "uphold", reason: "never asked" }; }, receiptsFor: readReceipts });
+  const card = await calculatedCard([CALCULATED, CALCULATED_COUNT, QUOTED]);
+  const reader = await newReader();
+  receiptStore.set(RECEIPT_ID, { ...RECEIPT, values: RECEIPT.values.map((entry) => (entry.key.endsWith("ror.value") ? { ...entry, value: 3.1 } : entry)) });
+  const filed = await challenges.submit(reader, card.id, { claimId: "CALC-1", reason: "这个数字和引擎的结果对不上" });
+  assert.equal(await challenges.recheckTick(), "resolved");
+  assert.equal(judged, 0, "a machine value is not a matter for a model");
+  const mine = (await challenges.listFor(reader, card.id)).items[0];
+  assert.deepEqual([mine.state, mine.outcome], ["resolved", "withdraw"]);
+  assert.match(mine.explanation ?? "", /回执里的数值与结论记录的机器值不一致/, "the reason is the check's own, in the registry's words");
+  const after = await cardRow(card.id);
+  assert.deepEqual(after.claims.map((/** @type {any} */ claim) => claim.claimId), ["CALC-2", "CLM-1"], "only that claim is removed");
+  assert.equal(after.revision, card.revision + 1);
+  assert.equal(after.withdrawn, null, "another calculation still stands, so the card does");
+  const [entry] = (await log.list({ cardId: card.id })).items;
+  assert.equal(entry.category, "withdrawal");
+  assert.match(entry.summary, /CALC-1.*计算依据对不上平台保存的回执，已撤回该条结论/);
+  assert.doesNotMatch(entry.summary, /原文不能支持/);
+  assert.equal((await rows("SELECT count(*)::int AS n FROM evimed_frontier.evidence_challenges WHERE id=$1 AND outcome='withdraw'", [filed.challenge.id]))[0].n, 1);
+  assert.equal(challenges.stats().calculationFailed, 1);
+});
+
+test("a model that withdraws a calculated claim whose receipt verifies is held to a passage of the receipt, and the log does not call the number untraceable", options, async () => {
+  const facts = "values[0].table.a = 1234";
+  const answers = /** @type {any[]} */ ([
+    () => ({ outcome: "withdraw", reason: "回执没有这个解释。" }),
+    () => ({ outcome: "withdraw", sourceIndex: 1, passage: facts, reason: "回执只给出报告数，没有任何发生率的信息。" }),
+  ]);
+  let asked = 0;
+  const { challenges, changeLog: log } = build({ judge: async () => answers[asked++](), receiptsFor: readReceipts });
+  const card = await calculatedCard([CALCULATED, { ...CALCULATED_COUNT, claim: "同时报告了该药物与该不良事件的病例报告有 1,234 份，说明该事件很常见。" }, QUOTED]);
+  const reader = await newReader();
+  const filed = await challenges.submit(reader, card.id, { claimId: "CALC-2", reason: "报告数不能说明常见" });
+  assert.equal(await challenges.recheckTick(), "open", "with the number verified, a withdrawal needs a passage of the receipt");
+  assert.equal((await rows("SELECT last_error FROM evimed_frontier.evidence_challenges WHERE id=$1", [filed.challenge.id]))[0].last_error, "evidence_judgement_passage_required");
+  await db.query("UPDATE evimed_frontier.evidence_challenges SET available_at=clock_timestamp() WHERE id=$1", [filed.challenge.id]);
+  assert.equal(await challenges.recheckTick(), "resolved");
+  assert.deepEqual((await cardRow(card.id)).claims.map((/** @type {any} */ claim) => claim.claimId), ["CALC-1", "CLM-1"]);
+  const [entry] = (await log.list({ cardId: card.id })).items;
+  assert.match(entry.summary, /CALC-2.*回执只能支持数字本身，不能支持这条结论的表述，已撤回该条结论/);
+  assert.doesNotMatch(entry.summary, /对不上平台保存的回执/);
+  assert.equal(challenges.stats().calculationFailed, 0, "this was the model's judgement, not the code's finding");
+});
+
+test("the last calculated claim of an official first-hand card withdrawn takes the card back whole, since what is left cannot be saved or stand as first-hand work", options, async () => {
+  const { challenges, changeLog: log, followers } = build({ judge: async () => ({}), receiptsFor: readReceipts });
+  const reader = await newReader();
+  const card = await calculatedCard();
+  receiptStore.set(RECEIPT_ID, { ...RECEIPT, method: "faers.signals@9.9.9" });
+  await challenges.submit(reader, card.id, { claimId: "CALC-1", reason: "方法版本对不上" });
+  assert.equal(await challenges.recheckTick(), "resolved");
+  const after = await cardRow(card.id);
+  assert.ok(after.withdrawn?.reason, "the card is taken back, with the reason");
+  assert.equal(after.currency, "no_longer_updated");
+  assert.equal(after.revision, card.revision, "the claims are not rewritten: the zone service would refuse a first-hand card with no calculation");
+  const [entry] = (await log.list({ cardId: card.id })).items;
+  assert.match(entry.summary, /已没有一条带计算依据，一手分析无法成立，本卡一并撤回/);
+  assert.deepEqual(followers.map((event) => event.kind), ["withdrawn"]);
+  await assert.rejects(challenges.submit(await newReader(), card.id, { claimId: "CLM-1", reason: "再质疑一次吧" }), { code: "evidence_card_withdrawn" });
+});
+
+test("a calculated claim whose receipt cannot be read is neither judged nor withdrawn: the challenge waits, with or without a reader wired", options, async () => {
+  let judged = 0;
+  const judge = async () => { judged += 1; return {}; };
+  const reader = await newReader();
+  const card = await calculatedCard();
+  receiptStore.clear();
+  const wired = build({ judge, receiptsFor: readReceipts });
+  const filed = await wired.challenges.submit(reader, card.id, { claimId: "CALC-1", reason: "回执在哪里" });
+  assert.equal(await wired.challenges.recheckTick(), "open");
+  const waiting = (await rows("SELECT state,attempts,last_error FROM evimed_frontier.evidence_challenges WHERE id=$1", [filed.challenge.id]))[0];
+  assert.deepEqual([waiting.state, waiting.last_error], ["open", "evidence_challenge_receipt_unavailable"]);
+  await db.query("UPDATE evimed_frontier.evidence_challenges SET available_at=clock_timestamp() WHERE id=$1", [filed.challenge.id]);
+  const unwired = build({ judge, receiptsFor: null });
+  assert.equal(await unwired.challenges.recheckTick(), "open", "a deployment with no receipt reader never decides what it cannot check");
+  const broken = build({ judge, receiptsFor: async () => { throw new Error("results store down"); } });
+  await db.query("UPDATE evimed_frontier.evidence_challenges SET available_at=clock_timestamp() WHERE id=$1", [filed.challenge.id]);
+  assert.equal(await broken.challenges.recheckTick(), "open", "a reader that fails is no finding either");
+  assert.equal(judged, 0);
+  assert.equal((await cardRow(card.id)).revision, card.revision);
+  assert.equal(await broken.challenges.stats().calculationFailed, 0);
+});
+
+test("an amendment of a calculated claim's wording is held to the receipt again: a number nobody computed is dropped, the same number reworded is written", options, async () => {
+  const facts = "values[0].ror.value = 2.4012 ratio";
+  const answers = /** @type {any[]} */ ([
+    () => ({ outcome: "amend", sourceIndex: 1, passage: facts, amendedClaim: "报告比值比（ROR）为 2.50，提示信号较强。", reason: "表述过强。" }),
+    () => ({ outcome: "amend", sourceIndex: 1, passage: facts, amendedClaim: "报告比值比（ROR）为 2.40，仅提示统计学关联，不说明因果。", reason: "原表述容易被读成因果。" }),
+  ]);
+  let asked = 0;
+  const { challenges, changeLog: log } = build({ judge: async () => answers[asked++](), receiptsFor: readReceipts });
+  const reader = await newReader();
+  const card = await calculatedCard();
+  const filed = await challenges.submit(reader, card.id, { claimId: "CALC-1", reason: "比值比不能说明因果" });
+  assert.equal(await challenges.recheckTick(), "open");
+  assert.equal((await rows("SELECT last_error FROM evimed_frontier.evidence_challenges WHERE id=$1", [filed.challenge.id]))[0].last_error, "evidence_judgement_calculation_unverified");
+  assert.equal((await cardRow(card.id)).revision, card.revision, "nothing was written for a wording the receipt does not bear");
+  await db.query("UPDATE evimed_frontier.evidence_challenges SET available_at=clock_timestamp() WHERE id=$1", [filed.challenge.id]);
+  assert.equal(await challenges.recheckTick(), "resolved");
+  const after = await cardRow(card.id);
+  assert.equal(after.claims[0].claim, "报告比值比（ROR）为 2.40，仅提示统计学关联，不说明因果。");
+  assert.deepEqual(after.claims[0].calculation, CALCULATED.calculation, "the calculation basis is untouched");
+  assert.deepEqual(await claimMarks(card.id), { "CALC-1": "verified", "CLM-1": "verified" }, "and the amended claim still verifies against its receipt");
+  const [entry] = (await log.list({ cardId: card.id })).items;
+  assert.equal(entry.category, "correction");
+  assert.match(entry.summary, /修正了该条结论的表述，数字仍与平台保存的回执一致/);
+});
+
+test("a producer is told of a challenge to a calculated claim in the receipt's words, not a quotation's", options, async () => {
+  const zone = await zoneOf(alice);
+  const { challenges } = build({ judge: async () => ({}), receiptsFor: readReceipts });
+  receiptStore.clear();
+  receiptStore.set(RECEIPT_ID, { ...RECEIPT, engine: "meta_analysis" });
+  const reader = await newReader();
+  const card = await cardOf(zone, alice, { entityKeys: [], url: unique("https://example.org/own-calc-"), claims: [CALCULATED, QUOTED], extra: { originality: "original_research" } });
+  const filed = await challenges.submit(reader, card.id, { claimId: "CALC-1", reason: "引擎对不上" });
+  assert.deepEqual([filed.challenge.state, filed.challenge.route], ["notified", "producer_notice"]);
+  const [notice] = await noticesAbout(alice.id, card, /^有读者质疑了你卡片里的一条结论$/);
+  assert.match(notice.body, /平台的回执核对结果：这条结论的计算依据没能通过平台的回执核对：回执记录的引擎与结论写的不一致/);
+  assert.doesNotMatch(notice.body, /逐字核对|引文/);
+  assert.equal((await cardRow(card.id)).revision, card.revision, "the platform changes nothing of a person's card");
 });
 
 /** A usage ledger double that books by run scope, and answers `purposeSpend` the way the real one filters: by account, project, purpose, window and run prefix. */

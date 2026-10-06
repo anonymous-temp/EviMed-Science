@@ -23,7 +23,7 @@
 
 import { createHash, randomUUID } from "node:crypto";
 import path from "node:path";
-import { frontierNoticeHref, frontierNoticeTarget, RUN_ACTIVITY_PHASE_LABELS_ZH, capabilityTitle, errorCodeMessage } from "@evimed/domain";
+import { frontierNoticeHref, frontierNoticeTarget, shareNoticeHref, RUN_ACTIVITY_PHASE_LABELS_ZH, capabilityTitle, errorCodeMessage } from "@evimed/domain";
 import { HttpError, openScopedFileNoFollow, resolveScopedPath } from "./security.mjs";
 import { readRunTranscript } from "./runTranscripts.mjs";
 import { notificationSwitches, runFinishedNotice } from "./notificationService.mjs";
@@ -125,6 +125,9 @@ export function noticeLink(config, item) {
   if (frontierHref) return appLink(config, frontierHref);
   if (source?.type === "digest") return appLink(config, `/app/autopilot?digest=${encodeURIComponent(source.id)}`);
   if (source?.type === "memory") return appLink(config, `/app/memory?record=${encodeURIComponent(source.id)}`);
+  // A share (flywheel F17): the page the in-app notice opens, so a message on Feishu lands where the inbox row does and not on the bare inbox.
+  const sharePath = shareNoticeHref(source);
+  if (sharePath) return appLink(config, sharePath);
   const geoPath = source?.type === "geo" ? geoNoticeHref(source.id) : null;
   if (geoPath) return appLink(config, geoPath);
   const vcrPath = source?.type === "vcr" ? vcrNoticeHref(source.id) : null;

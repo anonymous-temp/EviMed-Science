@@ -129,14 +129,16 @@ test("the timer is the worker's own and the maintenance pause clears it", async 
 test("every outcome of the programme has a metric family: decisions, signals, actions, cards, excluded claims, admissions", () => {
   assert.deepEqual(evidenceProgrammeMetricFamilies(null), []);
   assert.deepEqual(evidenceProgrammeMetricFamilies({ enabled: false }), [], "a programme that is off exports nothing");
-  const counters = { decisions: { model: 2, fallback: 1, none: 0 }, signals: { frontier: 6, demand: 1 }, demandEntities: 3, actions: { scheduled: 2, budget: 1 },
+  const counters = { decisions: { model: 2, fallback: 1, none: 0 }, signals: { frontier: 6, demand: 1, reads: 2, requests: 2 }, signalFailures: { reads: 1, requests: 0 }, demandEntities: 3, actions: { scheduled: 2, budget: 1 },
     cards: { published: 1, pending_verification: 4 }, claimsExcluded: { refuted: 2 }, claimsPublished: 5, original: { signal: 1, deferred: 1 }, admissions: { admitted: 2, budget: 1, slot: 0 }, hookFailures: 0 };
   const families = evidenceProgrammeMetricFamilies(/** @type {any} */ ({ enabled: true, status: () => ({ counters }) }));
   const byName = Object.fromEntries(families.map((family) => [family.name, family]));
-  for (const name of ["decisions_total", "signals_total", "demand_entities_total", "actions_total", "cards_total", "claims_excluded_total", "claims_published_total", "original_analyses_total", "admissions_total", "hook_failures_total"]) {
+  for (const name of ["decisions_total", "signals_total", "signal_failures_total", "demand_entities_total", "actions_total", "cards_total", "claims_excluded_total", "claims_published_total", "original_analyses_total", "admissions_total", "hook_failures_total"]) {
     assert.ok(byName[`open_science_evidence_programme_${name}`], name);
   }
   assert.deepEqual(byName.open_science_evidence_programme_decisions_total.series, [{ labels: { source: "model" }, value: 2 }, { labels: { source: "fallback" }, value: 1 }, { labels: { source: "none" }, value: 0 }]);
   assert.deepEqual(byName.open_science_evidence_programme_cards_total.series.find((entry) => entry.labels.outcome === "pending_verification"), { labels: { outcome: "pending_verification" }, value: 4 });
   assert.equal(byName.open_science_evidence_programme_claims_published_total.series[0].value, 5);
+  assert.deepEqual(byName.open_science_evidence_programme_signal_failures_total.series, [{ labels: { class: "reads" }, value: 1 }, { labels: { class: "requests" }, value: 0 }], "a page signal that could not be read is counted by class");
+  assert.deepEqual(byName.open_science_evidence_programme_signals_total.series.filter((entry) => ["reads", "requests"].includes(entry.labels.class)).map((entry) => entry.value), [2, 2]);
 });

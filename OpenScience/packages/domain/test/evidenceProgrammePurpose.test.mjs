@@ -30,7 +30,8 @@ test("a researcher's autopilot run, and any look-alike, is unchanged: the kernel
 });
 
 test("the programme's error codes are registered with a Chinese sentence", () => {
-  assert.deepEqual([...EVIDENCE_PROGRAMME_ERROR_CODES], ["evidence_programme_decision_required", "evidence_programme_budget_spent", "evidence_programme_slot_busy", "evidence_programme_original_weekly_cap"]);
+  assert.deepEqual([...EVIDENCE_PROGRAMME_ERROR_CODES], ["evidence_programme_decision_required", "evidence_programme_budget_spent", "evidence_programme_slot_busy", "evidence_programme_original_weekly_cap",
+    "evidence_programme_operator_required", "evidence_programme_not_enabled"]);
   for (const code of EVIDENCE_PROGRAMME_ERROR_CODES) {
     assert.ok(ALL_ERROR_CODES.includes(code), `${code} is a known code`);
     assert.match(/** @type {Record<string, string>} */ (ERROR_CODE_MESSAGES)[code], /[一-鿿]/, code);
