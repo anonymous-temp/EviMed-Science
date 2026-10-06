@@ -80,6 +80,7 @@ export const EVIDENCE_CARD_ERROR_MESSAGES_ZH = Object.freeze({
   evidence_write_origin_refused: '这个专区不接受这种来源的写入：官方专区只由平台写，产品专区只由出品方本人或其循证传播项目写，用户专区只由所有者及其研究结果写。',
   evidence_value_source_refused: '证据卡里不能出现“预测”“假设”“合成”的数值；“插补”“重建”的数值只能出现在写明方法的推算类结论里。这张卡没有保存。',
   evidence_producer_required: '这个专区里的证据卡必须写明出品方，以及出品方和所涉产品的关系。',
+  evidence_producer_name_reserved: '“EviMed 证据中心”是平台自己的署名，只有平台的发布账号可以使用，请换一个出品方名称。',
   evidence_producer_mismatch: '这个出品方类型不能在这类专区里署名：平台只在官方专区，企业和医生在产品专区，研究者在用户专区。',
   evidence_journey_stage_required: '产品专区里的证据卡必须标明它所在的患者旅程阶段。',
   evidence_disclosure_required: '产品专区的证据卡，以及企业和医生出品的证据卡，必须披露作者和审核人。',
@@ -435,6 +436,30 @@ export function evidenceProducer(value) {
   if (value.products != null && !stringList(value.products, 200, 20)) throw invalid('producer products')
   const products = [...new Set((value.products ?? []).map((/** @type {string} */ name) => name.trim()))]
   return { kind: value.kind, name: value.name.trim(), relation: value.relation, ...(products.length ? { products } : {}) }
+}
+
+/**
+ * Whether a producer's name would pass for the platform's, 「EviMed 证据中心」: compared the way a reader compares — compatibility-normalized
+ * (NFKC), case-folded, whitespace and invisible format characters (zero-width spaces and joiners) removed. A reader of a card sees the
+ * producer's name and trusts it as what it says, so the platform's name is the platform's alone (2026-10-06 review).
+ * @param {unknown} name @returns {boolean}
+ */
+export function evidenceProducerNameIsPlatform(name) {
+  if (typeof name !== 'string') return false
+  const fold = (/** @type {string} */ value) => value.normalize('NFKC').toLowerCase().replace(/[\s\p{Cf}]+/gu, '')
+  return fold(name) === fold(EVIDENCE_PLATFORM_PRODUCER_NAME)
+}
+
+/**
+ * Refuses a producer that carries the platform's name when the writer is not the platform publisher: `evidence_producer_name_reserved`,
+ * which touches this write and nothing else. The platform's own writers (the import, the model's upkeep, the programme) are the publisher
+ * and sign as it.
+ * @param {{ producer: { name?: string } | null | undefined, actorIsPlatformPublisher: boolean }} input
+ */
+export function assertEvidenceProducerName({ producer, actorIsPlatformPublisher }) {
+  if (!actorIsPlatformPublisher && evidenceProducerNameIsPlatform(producer?.name)) {
+    throw new EvidenceCardError(400, 'evidence_producer_name_reserved', 'That producer name is the platform\'s own and is signed only by the platform\'s publishing account.')
+  }
 }
 
 /**

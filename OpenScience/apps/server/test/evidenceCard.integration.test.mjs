@@ -344,6 +344,28 @@ test("a session may link a card only to a card of its own (previous) or a publis
   assert.deepEqual(stamped.lineage, { previousCardId: own.id, originCardId: bobs.id });
 });
 
+test("the platform's own producer name is refused for any writer that is not the publisher: typed, spelled differently, or the account's own default", options, async () => {
+  const zone = await makeZone();
+  for (const name of ["EviMed 证据中心", "evimed 证据中心", "ＥｖｉＭｅｄ证据中心", "EviMed\u200b证据中心"]) {
+    await assert.rejects(saveCard(zone, { requestId: `reserved-${name.length}-${name.charCodeAt(0)}`, producer: { kind: "user", name, relation: "none" } }), { code: "evidence_producer_name_reserved", status: 400 }, JSON.stringify(name));
+  }
+  // The default producer is the owner's display name: an account that came to be named so (before the registration check, or by an
+  // identity provider) cannot sign a card with it either.
+  await db.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES('namesake','EviMed 证据中心','development') ON CONFLICT DO NOTHING");
+  const namesake = await makeZone({ id: "namesake" });
+  await assert.rejects(saveCard(namesake, { requestId: "reserved-default" }, { id: "namesake" }), { code: "evidence_producer_name_reserved" });
+  assert.equal(metric("open_science_evidence_cards_without_producer"), 0, "a refused card left nothing behind");
+  // Other names, including one that merely contains it, are the writer's own.
+  assert.equal((await saveCard(zone, { requestId: "reserved-ok", producer: { kind: "user", name: "EviMed 证据中心 研究组", relation: "none" } })).producer.name, "EviMed 证据中心 研究组");
+  // The platform's own writers sign as it: the publisher in an official zone, by its default and by name.
+  const official = await officialZone();
+  assert.equal((await service.saveEditorial(publisher, { ...cardInput, requestId: "reserved-platform" }, official.id, null, true, "programme")).evidence.producer.name, "EviMed 证据中心");
+  assert.equal((await service.saveEditorial(publisher, { ...cardInput, requestId: "reserved-platform-2", producer: { kind: "platform", name: "evimed 证据中心", relation: "none" } }, official.id, null, true, "import")).evidence.producer.kind, "platform");
+  // A card that already carries the producer is not asked again when its other fields are edited.
+  const kept = await service.saveEditorial(publisher, { ...cardInput, requestId: "reserved-keep" }, official.id, null, true, "programme");
+  assert.equal((await service.saveEditorial(publisher, { expectedRevision: kept.evidence.revision, summary: "Edited" }, official.id, kept.evidence.id, false, "model")).evidence.summary, "Edited");
+});
+
 test("entity keys are filled by the injected resolver from the card's words and identifiers, and a resolver that fails leaves the card as written", options, async () => {
   const zone = await makeZone();
   resolver.answer = ["drug:warfarin", "disease:atrial fibrillation"];

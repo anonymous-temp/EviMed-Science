@@ -6,6 +6,7 @@ import {
   EVIDENCE_ZONE_KINDS,
   EVIDENCE_ZONE_VISIBILITY,
   assertEvidenceCardForZone,
+  assertEvidenceProducerName,
   evidenceCardClaims,
   evidenceCardClinicalView,
   evidenceCardIdentifiers,
@@ -229,6 +230,10 @@ export class EvidenceZoneService {
     }
     try {
       assertEvidenceCardForZone({ zoneKind: parent.kind, producer, journeyStage, disclosure, producerChanged });
+      // The platform's name is signed only by the platform's publisher, whether the writer typed it or the default (the owner's own
+      // display name) came to be it; a card that already carries a producer is not asked again. The writer is the zone's owner (checked
+      // before this runs), so the zone's owner is the actor.
+      if (producerChanged) assertEvidenceProducerName({ producer, actorIsPlatformPublisher: this.actorIsPlatformPublisher({ id: parent.user_id }, parent) });
     } catch (failure) {
       throw asHttpError(failure);
     }

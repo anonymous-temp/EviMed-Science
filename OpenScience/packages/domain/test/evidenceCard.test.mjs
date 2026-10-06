@@ -30,6 +30,8 @@ import {
   evidenceMergeEntityKeys,
   evidenceOriginalityIsPrimary,
   evidenceProducer,
+  evidenceProducerNameIsPlatform,
+  assertEvidenceProducerName,
   evidencePublicViewContent,
   evidenceRankingComparator,
   evidenceStructuredContent,
@@ -198,6 +200,19 @@ test("lineage ids are validated by shape and entity keys are bounded", () => {
   assert.throws(() => evidenceEntityKeys(["bad\nkey"]), refusedWith("evidence_invalid"));
   assert.equal(evidenceMergeEntityKeys(["a:1"], ["a:1", "b:2"]).length, 2);
   assert.equal(evidenceMergeEntityKeys(["a:1"], Array.from({ length: 80 }, (_, index) => `b:${index}`)).length, 40);
+});
+
+test("the platform's producer name is the platform's alone, however it is spelled", () => {
+  for (const name of ["EviMed 证据中心", "evimed证据中心", " EVIMED  证据中心 ", "ＥｖｉＭｅｄ 证据中心", "EviMed\u200b 证据\u200d中心", "Evi\u00adMed 证据中心"]) {
+    assert.equal(evidenceProducerNameIsPlatform(name), true, JSON.stringify(name));
+    assert.throws(() => assertEvidenceProducerName({ producer: { name }, actorIsPlatformPublisher: false }), refusedWith("evidence_producer_name_reserved"), JSON.stringify(name));
+    assert.doesNotThrow(() => assertEvidenceProducerName({ producer: { name }, actorIsPlatformPublisher: true }), "the publisher signs as itself");
+  }
+  for (const name of ["EviMed", "证据中心", "EviMed 证据中心 研究组", "Acme Pharma", "", null, undefined, 7]) {
+    assert.equal(evidenceProducerNameIsPlatform(name), false, JSON.stringify(name));
+    assert.doesNotThrow(() => assertEvidenceProducerName({ producer: { name: /** @type {any} */ (name) }, actorIsPlatformPublisher: false }));
+  }
+  assert.doesNotThrow(() => assertEvidenceProducerName({ producer: null, actorIsPlatformPublisher: false }));
 });
 
 test("claims keep the run's three types, refer to the card's sources by index and name their working", () => {
@@ -443,6 +458,6 @@ test("identifiers are read from closed formats in a card's sources and verified 
 });
 
 test("every code the card raises has a Chinese sentence in the registry", () => {
-  assert.equal(EVIDENCE_CARD_ERROR_CODES.length, 9);
+  assert.equal(EVIDENCE_CARD_ERROR_CODES.length, 10);
   for (const code of EVIDENCE_CARD_ERROR_CODES) assert.match(knownErrorCodeMessage(code) ?? "", /[一-鿿]/, code);
 });

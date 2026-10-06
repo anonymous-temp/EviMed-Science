@@ -1878,6 +1878,8 @@ export {
   evidencePublicExcerpt,
   evidenceStructuredContent,
   evidenceProducer,
+  evidenceProducerNameIsPlatform,
+  assertEvidenceProducerName,
   evidenceDefaultProducer,
   evidenceOriginality,
   EVIDENCE_PLATFORM_LINEAGE_KEYS,
