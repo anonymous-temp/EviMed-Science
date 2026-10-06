@@ -713,6 +713,19 @@ export function withdrawGeoArticle(geoId: string, articleId: string) {
   return productRequest<unknown>(`${project(geoId)}/articles/${id(articleId)}/withdraw`, "POST", {});
 }
 
+/** An article as it leaves the platform: the claim references taken off, its author named, the relation to the product said and the AI label. */
+export interface GeoArticleText {
+  articleId: string;
+  layer: GeoArticleLayer | null;
+  aiGenerated: boolean;
+  markdown: string;
+}
+
+/** The text of an article — for a card-layer article, the card's public view rendered now, since it has no file of its own. */
+export function getGeoArticleText(geoId: string, articleId: string) {
+  return productRequest<GeoArticleText>(`${project(geoId)}/articles/${id(articleId)}/text`);
+}
+
 /** “放行”: the safety stop, after a person has looked at the article. */
 export function releaseGeoArticle(geoId: string, articleId: string) {
   return productRequest<unknown>(`${project(geoId)}/articles/${id(articleId)}/release`, "POST", {});
