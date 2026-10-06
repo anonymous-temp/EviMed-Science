@@ -624,6 +624,28 @@ test("a receipt that no longer verifies upholds the challenge without a model ca
   assert.equal(challenges.stats().calculationFailed, 1);
 });
 
+test("a model that withdraws a calculated claim whose receipt verifies is held to a passage of the receipt, and the log does not call the number untraceable", options, async () => {
+  const facts = "values[0].table.a = 1234";
+  const answers = /** @type {any[]} */ ([
+    () => ({ outcome: "withdraw", reason: "回执没有这个解释。" }),
+    () => ({ outcome: "withdraw", sourceIndex: 1, passage: facts, reason: "回执只给出报告数，没有任何发生率的信息。" }),
+  ]);
+  let asked = 0;
+  const { challenges, changeLog: log } = build({ judge: async () => answers[asked++](), receiptsFor: readReceipts });
+  const card = await calculatedCard([CALCULATED, { ...CALCULATED_COUNT, claim: "同时报告了该药物与该不良事件的病例报告有 1,234 份，说明该事件很常见。" }, QUOTED]);
+  const reader = await newReader();
+  const filed = await challenges.submit(reader, card.id, { claimId: "CALC-2", reason: "报告数不能说明常见" });
+  assert.equal(await challenges.recheckTick(), "open", "with the number verified, a withdrawal needs a passage of the receipt");
+  assert.equal((await rows("SELECT last_error FROM evimed_frontier.evidence_challenges WHERE id=$1", [filed.challenge.id]))[0].last_error, "evidence_judgement_passage_required");
+  await db.query("UPDATE evimed_frontier.evidence_challenges SET available_at=clock_timestamp() WHERE id=$1", [filed.challenge.id]);
+  assert.equal(await challenges.recheckTick(), "resolved");
+  assert.deepEqual((await cardRow(card.id)).claims.map((/** @type {any} */ claim) => claim.claimId), ["CALC-1", "CLM-1"]);
+  const [entry] = (await log.list({ cardId: card.id })).items;
+  assert.match(entry.summary, /CALC-2.*回执只能支持数字本身，不能支持这条结论的表述，已撤回该条结论/);
+  assert.doesNotMatch(entry.summary, /对不上平台保存的回执/);
+  assert.equal(challenges.stats().calculationFailed, 0, "this was the model's judgement, not the code's finding");
+});
+
 test("the last calculated claim of an official first-hand card withdrawn takes the card back whole, since what is left cannot be saved or stand as first-hand work", options, async () => {
   const { challenges, changeLog: log, followers } = build({ judge: async () => ({}), receiptsFor: readReceipts });
   const reader = await newReader();

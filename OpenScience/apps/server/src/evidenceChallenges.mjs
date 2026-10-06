@@ -555,7 +555,7 @@ export function createEvidenceChallenges({
     await database.transaction(async (/** @type {any} */ client) => {
       const entry = await changeLog.append({
         zoneId: card.zone_id, cardId: card.id, category: cardWithdrawn ? "withdrawal" : category, trigger: "challenge", revisionBefore, revisionAfter,
-        facts: { claimId: claim.claimId, outcome: judgement.outcome, cardWithdrawn, ...(claim.claimType === "calculated" ? { calculated: true } : {}), ...(lostBasis ? { lostCalculationBasis: true } : {}) }, refs: { challengeId: row.id, claimId: claim.claimId, outcome: judgement.outcome },
+        facts: { claimId: claim.claimId, outcome: judgement.outcome, cardWithdrawn, ...(claim.claimType === "calculated" ? { calculated: true, receiptVerified: check?.status === "verified" } : {}), ...(lostBasis ? { lostCalculationBasis: true } : {}) }, refs: { challengeId: row.id, claimId: claim.claimId, outcome: judgement.outcome },
       }, { client });
       await client.query(
         `UPDATE evimed_frontier.evidence_challenges SET state='resolved',outcome=$2,judgement=$3::jsonb,check_result=$4::jsonb,change_log_id=$5,resolved_at=clock_timestamp(),

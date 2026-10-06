@@ -151,7 +151,8 @@ const count = (value) => (Number.isSafeInteger(value) && /** @type {number} */ (
  *
  * `facts` may carry: `sourceChangeKinds` (`SOURCE_CHANGE_KINDS` of the notices), `sourceCount`, `itemCount`,
  * `sameWork` (the new items name a study the card already cites), `claimId`, `outcome` (a challenge's), `cardWithdrawn`,
- * `calculated` (the challenged claim states a platform calculation, which is checked against its receipt and not against a source),
+ * `calculated` (the challenged claim states a platform calculation, which is checked against its receipt and not against a source) and
+ * `receiptVerified` (the receipt did bear its number, so only what the number was said to mean was judged),
  * `lostCalculationBasis` (the card was taken back because its last calculated claim was withdrawn), `revisionBefore`/`revisionAfter`, `retiredBy` (`producer` | `inactivity`), `lastCheckedAt`, `reviewed` (the producer
  * judged the new evidence and changed nothing).
  *
@@ -170,7 +171,8 @@ export function evidenceChangeSummaryZh({ category, trigger, facts = {} }) {
     }
     if (trigger === 'challenge') {
       if (category === 'withdrawal') {
-        const ground = facts.calculated ? '它的计算依据对不上平台保存的回执' : '原文不能支持'
+        const ground = !facts.calculated ? '原文不能支持'
+          : facts.receiptVerified ? '回执只能支持数字本身，不能支持这条结论的表述' : '它的计算依据对不上平台保存的回执'
         const card = facts.cardWithdrawn ? (facts.lostCalculationBasis ? '，本卡的结论里已没有一条带计算依据，一手分析无法成立，本卡一并撤回' : '，本卡因没有保留任何结论而一并撤回') : ''
         return `读者对${claim}提出质疑；复核认定${ground}，已撤回该条结论${card}${revisions(facts)}。`
       }

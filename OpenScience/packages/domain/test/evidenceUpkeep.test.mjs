@@ -66,6 +66,7 @@ test("an entry's sentence is made from facts and says what happened in plain Chi
   // A calculated claim is checked against its receipt, never a source: its entries do not say "原文".
   const calculated = { claimId: "CALC-1", calculated: true };
   assert.match(said({ category: "withdrawal", trigger: "challenge", facts: calculated }), /CALC-1.*计算依据对不上平台保存的回执，已撤回该条结论。$/);
+  assert.match(said({ category: "withdrawal", trigger: "challenge", facts: { ...calculated, receiptVerified: true } }), /回执只能支持数字本身，不能支持这条结论的表述，已撤回该条结论。$/, "a number the receipt bears is not called untraceable");
   assert.match(said({ category: "withdrawal", trigger: "challenge", facts: { ...calculated, cardWithdrawn: true, lostCalculationBasis: true } }), /已没有一条带计算依据，一手分析无法成立，本卡一并撤回/);
   assert.match(said({ category: "correction", trigger: "challenge", facts: calculated }), /修正了该条结论的表述，数字仍与平台保存的回执一致/);
   assert.match(said({ category: "searched_no_change", trigger: "challenge", facts: calculated }), /维持原结论，数字已按平台保存的回执重新核对/);
