@@ -74,12 +74,16 @@ function matches(header, etag) {
  *   limiter?: ((req: any) => void) | null,
  *   now?: () => Date,
  *   metrics?: ReturnType<typeof createEvidencePublicMetrics>,
+ *   questionBank?: ((query: { month: string }) => Promise<any>) | null,
+ *   predictionCalibration?: (() => Promise<any>) | null,
  *   report?: (code: string) => void,
  * }} options
  *   `simulations` is the 「模拟研究」 column's reader (another package publishes into it); absent, the column says it is empty.
- *   `limiter` throws a 429 `HttpError` when an address is over its minute; absent, none. `metrics` is for a test's figures.
+ *   `limiter` throws a 429 `HttpError` when an address is over its minute; absent, none. `metrics` is for a test's figures. `questionBank` and
+ *   `predictionCalibration` are the readers of the monthly page's two optional sections (the question bank's month, the prediction registry's
+ *   calibration), composed only where those modules are; absent, the section is not rendered.
  */
-export function createEvidencePublicRoutes({ config, database, simulations = null, requests = null, limiter = null, now = () => new Date(), metrics, report = () => {} }) {
+export function createEvidencePublicRoutes({ config, database, simulations = null, requests = null, limiter = null, now = () => new Date(), metrics, questionBank = null, predictionCalibration = null, report = () => {} }) {
   const enabled = config.evidencePublicWebEnabled === true && Boolean(database);
   const counters = {
     pages: 0, api: 0, assets: 0, sitemap: 0, notFound: 0, withdrawn: 0, rateLimited: 0, notModified: 0, errors: 0,
@@ -87,7 +91,7 @@ export function createEvidencePublicRoutes({ config, database, simulations = nul
   };
   const reads = enabled ? createEvidencePublicReads({ database, now }) : null;
   const indexing = reads ? createEvidencePublicIndexing({ config, reads }) : null;
-  const figures = enabled ? (metrics ?? createEvidencePublicMetrics({ database, now })) : null;
+  const figures = enabled ? (metrics ?? createEvidencePublicMetrics({ database, now, questionBank, predictionCalibration, report })) : null;
   const api = reads && figures ? createEvidencePublicApi({ reads, metrics: figures, config }) : null;
 
   /** @param {any} res @param {number} status @param {Record<string, string>} headers @param {string | Buffer} body @param {boolean} head */
@@ -136,7 +140,9 @@ export function createEvidencePublicRoutes({ config, database, simulations = nul
     }
     if (section === "metrics" && parts.length === 1) {
       const months = await /** @type {NonNullable<typeof figures>} */ (figures).months();
-      return sendPage(res, head, 200, metricsPage({ months }), { path: evidencePublicPath("/metrics"), noindex: await noindexFor({ kind: "site" }), active: "metrics" });
+      const questionBankMonth = await figures?.questionBank?.() ?? null;
+      const calibration = await figures?.predictionCalibration?.() ?? null;
+      return sendPage(res, head, 200, metricsPage({ months, questionBank: questionBankMonth, calibration }), { path: evidencePublicPath("/metrics"), noindex: await noindexFor({ kind: "site" }), active: "metrics" });
     }
     if (section === "requests" && parts.length === 1) {
       const list = requests ? await requests.list({ limit: 50 }) : { items: [] };
@@ -343,6 +349,7 @@ export function evidencePublicMetricFamilies(stats) {
     ]),
     counter("open_science_evidence_public_monthly_figures_total", "Builds of the monthly figures page, and requests answered from the ten-minute cache.", [
       { labels: { outcome: "computed" }, value: stats.metrics.computed }, { labels: { outcome: "cache_hit" }, value: stats.metrics.cacheHits }, { labels: { outcome: "failed" }, value: stats.metrics.failures },
+      { labels: { outcome: "section_failed" }, value: stats.metrics.sectionFailures ?? 0 },
     ]),
     ...(stats.requests ? [counter("open_science_evidence_topic_requests_total", "Topic requests: filed, seconded, repeated by the same account, and refused by the daily limit or as invalid.", [
       { labels: { outcome: "filed" }, value: stats.requests.filed }, { labels: { outcome: "seconded" }, value: stats.requests.seconded }, { labels: { outcome: "already_seconded" }, value: stats.requests.alreadySeconded },

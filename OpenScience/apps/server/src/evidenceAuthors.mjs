@@ -11,6 +11,9 @@
  * - **The only citation signal that exists is runs started.** 「由这位作者的卡片发起的研究」 counts research runs another
  *   account started from one of the author's cards (`EvidenceOrigins`): not runs read, trusted or cited in a paper, and
  *   not the author's own. It is named for what it is.
+ * - **Who signed, as the author's cards say.** A doctor's or a company's cards carry the people they name (a disclosure's authors and reviewers, each with the
+ *   hospital and department as an affiliation and the title and specialty as a title) and a producer record; the page shows them, once each, and shows
+ *   nothing for an account whose cards name nobody and whose producer is the account itself.
  * - **No ranking.** Nothing here orders authors, scores them or compares one with another; the page is one author's
  *   own record, the most recently updated first.
  * - **The change log is another package's.** When a reader of an author's recent corrections and updates is given, the
@@ -35,6 +38,27 @@ export { EVIDENCE_AUTHOR_HANDLE };
 export const EVIDENCE_AUTHOR_PAGE_LIMITS = Object.freeze({ zones: 50, cards: 30, changes: 10 });
 /** The most related cards one card lists. */
 export const EVIDENCE_RELATED_CARD_LIMIT = 20;
+
+/** The most people one author page lists. */
+const PEOPLE_LIMIT = 20;
+/** @param {unknown} value */
+const text = (value) => (typeof value === "string" && value.trim() ? value.trim() : null);
+
+/**
+ * The people an author's cards name — the authors and reviewers of each card's disclosure — each once by name, as the producer wrote them.
+ * @param {{ disclosure?: any }[]} cards
+ * @returns {{ name: string, affiliation: string | null, title: string | null }[]}
+ */
+export function disclosedPeople(cards) {
+  /** @type {Map<string, { name: string, affiliation: string | null, title: string | null }>} */
+  const people = new Map();
+  for (const card of cards) {
+    for (const person of [...(card.disclosure?.authors ?? []), ...(card.disclosure?.reviewers ?? [])]) {
+      if (person?.name && !people.has(person.name)) people.set(person.name, { name: String(person.name), affiliation: text(person.affiliation), title: text(person.title) });
+    }
+  }
+  return [...people.values()].slice(0, PEOPLE_LIMIT);
+}
 
 const notFound = () => new HttpError(404, "evidence_author_not_found", "No evidence published by this author.");
 
@@ -89,7 +113,7 @@ export class EvidenceAuthors {
     )).rows;
     if (!zones.length) throw notFound();
     const cards = (await this.database.query(
-      `SELECT c.id,c.zone_id,c.title,c.summary,c.producer,c.originality,c.updated_at,jsonb_array_length(c.claims) AS claim_count,u.name AS creator
+      `SELECT c.id,c.zone_id,c.title,c.summary,c.producer,c.disclosure,c.originality,c.updated_at,jsonb_array_length(c.claims) AS claim_count,u.name AS creator
          FROM evimed_frontier.evidence_cards c JOIN evimed_frontier.evidence_zones z ON z.id=c.zone_id JOIN evimed_control.users u ON u.id=c.user_id
         WHERE z.user_id=$1 AND z.state='published' AND c.state='published' AND c.withdrawn IS NULL AND c.user_id=$1
         ORDER BY c.updated_at DESC, c.id LIMIT $2`,
@@ -111,8 +135,13 @@ export class EvidenceAuthors {
     if (this.changeLog) {
       try { changes = await this.changeLog.recentForAuthor(authorId, { limit: EVIDENCE_AUTHOR_PAGE_LIMITS.changes }); } catch { changes = null; }
     }
+    const people = disclosedPeople(cards);
+    // An account that signs as itself has no producer record worth a line: only a doctor's or a company's.
+    const producer = cards.map((/** @type {any} */ card) => card.producer).find((/** @type {any} */ entry) => entry && ["doctor", "enterprise"].includes(entry.kind)) ?? null;
     return {
       author: { id: authorHandle, name: String(author.name), platform: this.platformPublisherUserId != null && author.id === this.platformPublisherUserId },
+      ...(producer ? { producer: { kind: String(producer.kind), name: String(producer.name ?? ""), relation: String(producer.relation ?? "none"), products: Array.isArray(producer.products) ? producer.products.map(String).slice(0, 20) : [] } } : {}),
+      ...(people.length ? { people } : {}),
       zones: zones.map((/** @type {any} */ zone) => ({
         id: String(zone.id), title: String(zone.title), description: String(zone.description ?? ""), kind: zone.kind, visibility: zone.visibility,
         evidenceCount: zone.evidence_count, follows: zone.follows, updatedAt: zone.updated_at,

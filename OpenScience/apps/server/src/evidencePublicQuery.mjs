@@ -46,6 +46,7 @@ import {
 import { HttpError } from "./security.mjs";
 import { migrateEvidenceZones } from "./evidenceZonePersistence.mjs";
 import { evidenceAuthorIsEstablished } from "./evidenceAuthorStanding.mjs";
+import { disclosedPeople } from "./evidenceAuthors.mjs";
 import { EVIDENCE_AUTHOR_HANDLE, accountOfHandle, authorHandlesFor, migrateAuthorHandles } from "./evidenceAuthorHandles.mjs";
 import { evidenceCurrencyView, EVIDENCE_ZONE_CURRENCY_SQL } from "./evidenceCurrency.mjs";
 import { EVIDENCE_CHANGE_LOG_MAX_PAGE, readEvidenceChangeLog } from "./evidenceChangeLog.mjs";
@@ -511,19 +512,12 @@ export function createEvidencePublicReads({ database, now = () => new Date() }) 
       const changes = (await database.query(
         `SELECT l.id, l.zone_id, l.card_id, l.category, l.trigger, l.summary_zh, l.occurred_at, c.title AS card_title FROM evimed_frontier.evidence_change_log l
            LEFT JOIN evimed_frontier.evidence_cards c ON c.id = l.card_id WHERE l.zone_id = ANY($1::text[]) ORDER BY l.id DESC LIMIT 10`, [zones.map((zone) => zone.id)])).rows;
-      // The people a producer's cards name, as they wrote them: a doctor's hospital and title, an enterprise's authors and reviewers.
-      /** @type {Map<string, { name: string, affiliation: string | null, title: string | null }>} */
-      const people = new Map();
-      for (const row of cards) {
-        for (const person of [...(row.disclosure?.authors ?? []), ...(row.disclosure?.reviewers ?? [])]) {
-          if (person?.name && !people.has(person.name)) people.set(person.name, { name: String(person.name), affiliation: text(person.affiliation), title: text(person.title) });
-        }
-      }
       const producer = cards.find((row) => row.producer)?.producer ?? null;
       return {
         author: { id: authorHandle, name: author.name },
         producer: producerView(producer),
-        people: [...people.values()].slice(0, 20),
+        // The people a producer's cards name, as they wrote them: a doctor's hospital and title, an enterprise's authors and reviewers.
+        people: disclosedPeople(cards),
         zones: zones.map((zone) => ({
           id: String(zone.id), title: String(zone.title), description: String(zone.description ?? ""), kind: String(zone.kind), kindLabel: labels(EVIDENCE_ZONE_KIND_LABELS_ZH, zone.kind),
           cards: zone.card_count, follows: zone.follows, updatedAt: iso(zone.updated_at),

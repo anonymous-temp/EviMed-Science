@@ -38,6 +38,22 @@ describe("an author's page", () => {
     expect(screen.getByText("最近的变更")).toBeInTheDocument();
     expect(screen.getByText(/更正了一处数字/)).toBeInTheDocument();
   });
+  it("shows a doctor's or a company's producer and the people their cards name, with affiliation and title, and nothing for an account that set none", async () => {
+    client.fetchEvidenceAuthor.mockResolvedValue({
+      ...author,
+      producer: { kind: "enterprise", name: "Acme Pharma", relation: "own_product", products: ["Drug A"] },
+      people: [{ name: "李医生", affiliation: "协和医院 心内科", title: "主任医师 · 心血管" }, { name: "王药师", affiliation: null, title: "药师" }],
+    });
+    const shown = mount();
+    expect(await screen.findByText(/出品方：企业 Acme Pharma/)).toHaveTextContent("Drug A");
+    expect(screen.getByText("卡片里署名的作者和审核人：李医生，协和医院 心内科，主任医师 · 心血管；王药师，药师")).toBeInTheDocument();
+    shown.unmount();
+    client.fetchEvidenceAuthor.mockResolvedValue(author);
+    mount();
+    await screen.findByRole("heading", { name: "李研究" });
+    expect(screen.queryByText(/出品方/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/署名的作者和审核人/)).not.toBeInTheDocument();
+  });
   it("says an author with nothing published has no page, by the server's own code", async () => {
     client.fetchEvidenceAuthor.mockRejectedValue(new WebApiError("none", { status: 404, code: "evidence_author_not_found" }));
     mount();

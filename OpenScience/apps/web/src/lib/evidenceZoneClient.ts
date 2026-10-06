@@ -642,6 +642,10 @@ export const fetchEvidenceCardLinks = (cardId: string) =>
 export interface EvidenceAuthorPage {
   /** `id` is the author's public handle, never the account id. */
   author: { id: string; name: string; platform: boolean };
+  /** A doctor's or a company's producer record, from the author's cards; absent for an account that signs as itself. */
+  producer?: { kind: "doctor" | "enterprise"; name: string; relation: string; products: string[] };
+  /** The people the author's cards name (a disclosure's authors and reviewers), each once; absent when no card names anyone. */
+  people?: Array<{ name: string; affiliation: string | null; title: string | null }>;
   zones: Array<{ id: string; title: string; description: string; kind: EvidenceZoneKind; visibility: EvidenceZoneVisibility; evidenceCount: number; follows: number; updatedAt: string }>;
   cards: Array<EvidenceCardRef & { summary: string; originality: EvidenceOriginality | null; claimCount: number; updatedAt: string }>;
   totals: { cards: number; followers: number; runsFromCards: number };

@@ -13,6 +13,7 @@ import {
   EVIDENCE_AI_STEP_LABELS_ZH,
   EVIDENCE_CHANGE_CATEGORY_LABELS_ZH,
   EVIDENCE_CHANGE_TRIGGER_LABELS_ZH,
+  GEO_ENGINE_LABELS_ZH,
   SOURCE_CURRENCY_LABELS_ZH,
   VCR_VALUE_SOURCE_LABELS_ZH,
 } from "@evimed/domain";
@@ -394,10 +395,57 @@ function hoursText(hours) {
   return hours >= 48 ? `${Math.round((hours / 24) * 10) / 10} 天` : `${hours} 小时`;
 }
 
+/** A share as a percentage with one decimal; null is not a number and is never written as 0. @param {number | null} share @param {string} [empty] */
+const percentText = (share, empty = "没有可判定的陈述") => (share === null || share === undefined ? empty : `${Math.round(share * 1000) / 10}%`);
+
 /**
- * @param {{ months: { month: string, data: boolean, figures: any }[] }} model
+ * The medication-question bank's month: how right the AI assistants are on a fixed set of common medication questions, per class, and how often an
+ * answer that cited anything cited an EviMed page. Counts and rates the platform's code computed from the answers; a class with nothing decided says so.
+ * @param {any} bank the metrics module's `questionBank()`
  */
-export function metricsPage({ months }) {
+function questionBankSection(bank) {
+  const engines = Object.entries(bank.coverage ?? {});
+  const asked = engines.filter(([, mark]) => /** @type {any} */ (mark).state === "done").map(([engine]) => /** @type {any} */ (GEO_ENGINE_LABELS_ZH)[engine] ?? engine);
+  const missing = engines.filter(([, mark]) => /** @type {any} */ (mark).state !== "done").map(([engine]) => /** @type {any} */ (GEO_ENGINE_LABELS_ZH)[engine] ?? engine);
+  const row = (/** @type {string} */ label, /** @type {any} */ entry) => html`<tr><td>${label}</td><td class="num">${entry.answers}</td><td class="num">${entry.decided}</td><td class="num">${entry.correct}</td><td class="num">${percentText(entry.rate)}</td></tr>`;
+  const cited = bank.overall.cited
+    ? html`<p>在引用了网页的回答里，有 <strong>${percentText(bank.overall.eviMedCitedShare)}</strong> 引用了 EviMed 的页面（${bank.overall.cited} 条中的 ${bank.overall.citedEviMed} 条）。</p>`
+    : html`<p class="muted">这个月的回答里没有引用网页的，所以没有可计算的引用占比。</p>`;
+  return html`<h2>AI 助手回答常见用药问题：${bank.month}</h2>
+<p class="muted">平台用一组固定的常见用药问题，每月问一遍各个 AI 助手，再对照官方证据卡里的结论，判断助手的每条陈述是对是错。正确率只算能判定对错的陈述；一类问题里没有可判定的陈述时，写明没有，不写 0。</p>
+<div class="table-wrap"><table>
+<thead><tr><th>问题类别</th><th class="num">回答数</th><th class="num">可判定的陈述</th><th class="num">其中正确</th><th class="num">正确率</th></tr></thead>
+<tbody>${bank.classes.map((/** @type {any} */ entry) => row(entry.label, entry))}${row("合计", bank.overall)}</tbody></table></div>
+${cited}
+${asked.length || missing.length ? html`<p class="muted">${asked.length ? `本月问到的助手：${asked.join("、")}。` : ""}${missing.length ? `本月还没有问到：${missing.join("、")}，上面的数字不包含它们。` : ""}</p>` : ""}`;
+}
+
+/**
+ * The prediction registry's calibration: predictions registered before a trial's result was public, scored against it. Before enough are scored the
+ * page says how many there are and when the overall calibration will be published; it does not draw a curve from a few points.
+ * @param {any} calibration the metrics module's `predictionCalibration()`
+ */
+function calibrationSection(calibration) {
+  if (!calibration.available) {
+    return html`<h2>预测的校准</h2>
+<p class="muted">平台在试验结果公开之前登记预测，结果公开后按登记时间在先的预测评分。</p>
+<p>已评分 ${calibration.scored} 条，满 ${calibration.minScored} 条后公开整体校准。</p>`;
+  }
+  const { probability, estimate } = calibration;
+  return html`<h2>预测的校准</h2>
+<p class="muted">平台在试验结果公开之前登记预测，结果公开后按登记时间在先的预测评分。共评分 ${calibration.scored} 条。</p>
+${probability.bins.length ? html`<div class="table-wrap"><table>
+<thead><tr><th>预测的成功概率</th><th class="num">条数</th><th class="num">平均预测概率</th><th class="num">实际达成的比例</th></tr></thead>
+<tbody>${probability.bins.map((/** @type {any} */ bin) => html`<tr><td>${Math.round(bin.from * 100)}%–${Math.round(bin.to * 100)}%</td><td class="num">${bin.n}</td><td class="num">${percentText(bin.meanPredicted, "—")}</td><td class="num">${percentText(bin.observedRate, "—")}</td></tr>`)}</tbody></table></div>` : html`<p class="muted">已评分的预测里没有给出成功概率的。</p>`}
+${probability.brierMean === null ? "" : html`<p>概率预测的 Brier 分数平均为 ${Math.round(probability.brierMean * 1000) / 1000}（${probability.n} 条；越小越好）。</p>`}
+${estimate.n ? html`<p>估计值的平均绝对误差为 ${estimate.meanAbsoluteError === null ? "无法计算" : Math.round(estimate.meanAbsoluteError * 1000) / 1000}（${estimate.n} 条）${estimate.coverage.rate === null ? "" : `；公布的值落在预测区间内的占 ${percentText(estimate.coverage.rate, "—")}（${estimate.coverage.n} 条）`}。</p>` : ""}`;
+}
+
+/**
+ * @param {{ months: { month: string, data: boolean, figures: any }[], questionBank?: any, calibration?: any }} model
+ *   `questionBank` and `calibration` are the optional sections the deployment composed; absent, they are not on the page.
+ */
+export function metricsPage({ months, questionBank = null, calibration = null }) {
   return {
     title: `按月公开的数 · ${EVIDENCE_SITE_NAME}`,
     description: "EviMed 证据中心每月公开的三个数：核验通过率、纠错的中位时效、质疑数及其结果。",
@@ -415,7 +463,9 @@ ${months.length ? html`<div class="table-wrap"><table>
 <td>${figures.verification.passRate === null ? "这个月没有已列出的结论" : html`${Math.round(figures.verification.passRate * 1000) / 10}%<br><span class="muted">${figures.verification.verified} / ${figures.verification.claims} 条结论，${figures.verification.cards} 张卡</span>`}</td>
 <td>${hoursText(figures.corrections.medianLatencyHours)}<br><span class="muted">${figures.corrections.entries} 条更正或撤回记录</span></td>
 <td>${figures.challenges.filed ? html`提出 ${figures.challenges.filed}：维持 ${figures.challenges.upheld}，修正 ${figures.challenges.amended}，撤回 ${figures.challenges.withdrawn}，处理中 ${figures.challenges.open}${figures.challenges.upheldShare === null ? "" : html`<br><span class="muted">已判定的里维持的占 ${Math.round(figures.challenges.upheldShare * 1000) / 10}%</span>`}` : "这个月没有质疑"}</td>
-</tr>` : html`<tr><td>${month}</td><td colspan="3" class="muted">这个月没有数据。</td></tr>`)}</tbody></table></div>` : html`<p class="muted">还没有可以公开的数据。</p>`}`,
+</tr>` : html`<tr><td>${month}</td><td colspan="3" class="muted">这个月没有数据。</td></tr>`)}</tbody></table></div>` : html`<p class="muted">还没有可以公开的数据。</p>`}
+${questionBank ? questionBankSection(questionBank) : ""}
+${calibration ? calibrationSection(calibration) : ""}`,
   };
 }
 

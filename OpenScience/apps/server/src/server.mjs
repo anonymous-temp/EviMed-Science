@@ -1897,10 +1897,17 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     },
     get: async (/** @type {string} */ id) => (vcrSimulations.current ? vcrSimulations.current.get(id) : null),
   };
+  // The monthly page's two optional sections are found the same way (evidencePublicMetrics.mjs): the question bank's month where 循证传播 and its
+  // question-bank lever are composed, and the prediction registry's calibration where its switches are. Neither exists yet here; each is set where
+  // its module is made, and until then (or without it) the section answers nothing and is not rendered.
+  /** @type {{ questionBank: ((query: { month: string }) => Promise<any>) | null, predictionCalibration: (() => Promise<any>) | null }} */
+  const evidenceMetricSections = { questionBank: null, predictionCalibration: null };
   const evidenceTopicRequests = evidencePublicOn ? createEvidenceTopicRequests({ database: productDatabase, config }) : null;
   const evidencePublicRoutes = createEvidencePublicRoutes({
     config: evidencePublicOn ? config : { ...config, evidencePublicWebEnabled: false }, database: evidencePublicOn ? productDatabase : null,
     simulations: overrides.evidenceSimulations ?? evidenceSimulations, requests: evidenceTopicRequests,
+    questionBank: overrides.evidenceQuestionBank ?? (async (query) => evidenceMetricSections.questionBank?.(query) ?? null),
+    predictionCalibration: overrides.evidencePredictionCalibration ?? (async () => evidenceMetricSections.predictionCalibration?.() ?? null),
     limiter: (req) => rateLimiter.check(`evidence-public:${clientAddress(req, config)}`, { max: config.evidencePublicRatePerMinute, windowMs: 60_000, code: "evidence_public_rate_limited", label: "evidence page requests" }),
     report: (code) => process.stderr.write(`${code}\n`),
   });
@@ -4449,6 +4456,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       geoParts.questionBank = createGeoQuestionBank({ store: geoParts.store, measureDeps, database: productDatabase, config, entityVocabulary,
         report: (code) => process.stderr.write(`geo question bank: ${code}\n`) });
       if (evidenceProgramme) evidenceProgramme.useSignals({ observedErrors: () => geoParts.questionBank.observedErrors() });
+      // The monthly figures page shows the bank's latest month under its three figures (evidencePublicMetrics.mjs).
+      evidenceMetricSections.questionBank = (query) => geoParts.questionBank.summary(query);
     }
     orchestrator = new GeoOrchestrator({
       store: geoParts.store, config, notifier,
@@ -4784,6 +4793,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       const registry = createPredictionRegistry({ config, evolution: evolution.service, isOperator: (/** @type {{ id: string }} */ user) => config.operatorUsers.includes(user.id),
         report: code => process.stderr.write(`${code}\n`) });
       predictionRegistry = registry;
+      evidenceMetricSections.predictionCalibration = () => registry.predictionCalibration();
       evolution.service.callbacks.predictionPublication = (/** @type {any} */ input) => registry.onPublication(input);
     }
   }

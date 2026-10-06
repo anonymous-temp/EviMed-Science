@@ -11,8 +11,15 @@
 //   a challenge) to the current one, newest first, at most twelve; a month inside that range with no claims, no corrections and no
 //   challenges is `data: false` and the page writes “没有数据”, never 0.
 // - **Months are Asia/Shanghai calendar months**, the platform's own day.
+// - **Two more sections, each from a reader somebody else composes.** The medication-question bank's month (per-class accuracy and the share
+//   of cited answers that cited an EviMed page: `questionBankSummary`, composed only where 循证传播 and its question-bank lever are on) and the
+//   prediction registry's calibration (`predictionCalibration`, composed only with its switches) are handed in as functions. A reader that is
+//   absent, answers nothing or fails leaves its section out and the three figures as they were; a calibration that is not yet available says how
+//   many predictions are scored and that the overall calibration is published from `PREDICTION_CALIBRATION_MIN_SCORED`. They are remembered for ten
+//   minutes like the figures.
 
 import { monthlyEvidenceFigures } from "./evidenceFigures.mjs";
+import { PREDICTION_CALIBRATION_MIN_SCORED } from "./predictionRegistry.mjs";
 import { migrateEvidenceZones } from "./evidenceZonePersistence.mjs";
 
 const MONTHS = 12;
@@ -31,12 +38,46 @@ function shiftMonth(month, delta) {
   return `${Math.floor(total / 12)}-${String((total % 12) + 1).padStart(2, "0")}`;
 }
 
+/** @param {any} entry one row of the bank's summary, reduced to the numbers a reader is shown */
+const bankRow = (entry) => ({
+  answers: Number(entry?.answers ?? 0), judged: Number(entry?.judged ?? 0), decided: Number(entry?.decided ?? 0), correct: Number(entry?.correct ?? 0), wrong: Number(entry?.wrong ?? 0),
+  rate: typeof entry?.rate === "number" ? entry.rate : null, cited: Number(entry?.cited ?? 0), citedEviMed: Number(entry?.citedEviMed ?? 0),
+  eviMedCitedShare: typeof entry?.eviMedCitedShare === "number" ? entry.eviMedCitedShare : null,
+});
+
+/** The bank's month as the public page and API carry it: classes and the whole, with which assistants were asked. @param {any} summary */
+function publicBank(summary) {
+  return {
+    month: String(summary.month), bankVersion: summary.bankVersion ?? null,
+    classes: (Array.isArray(summary.classes) ? summary.classes : []).map((/** @type {any} */ entry) => ({ class: String(entry.class), label: String(entry.label ?? entry.class), ...bankRow(entry) })),
+    overall: bankRow(summary.overall),
+    coverage: Object.fromEntries(Object.entries(summary.coverage ?? {}).map(([engine, mark]) => [engine, { state: String(/** @type {any} */ (mark)?.state ?? "") }])),
+  };
+}
+
+/** The calibration as the public page and API carry it, with the number it waits for. @param {any} value */
+function publicCalibration(value) {
+  const base = { scored: Number(value?.scored ?? 0), minScored: PREDICTION_CALIBRATION_MIN_SCORED };
+  if (value?.available !== true) return { available: false, ...base };
+  const number = (/** @type {unknown} */ entry) => (typeof entry === "number" && Number.isFinite(entry) ? entry : null);
+  return {
+    available: true, ...base,
+    probability: {
+      n: Number(value.probability?.n ?? 0), brierMean: number(value.probability?.brierMean),
+      bins: (Array.isArray(value.probability?.bins) ? value.probability.bins : []).map((/** @type {any} */ bin) => ({ from: Number(bin.from), to: Number(bin.to), n: Number(bin.n), meanPredicted: number(bin.meanPredicted), observedRate: number(bin.observedRate) })),
+    },
+    estimate: { n: Number(value.estimate?.n ?? 0), meanAbsoluteError: number(value.estimate?.meanAbsoluteError), coverage: { n: Number(value.estimate?.coverage?.n ?? 0), rate: number(value.estimate?.coverage?.rate) } },
+  };
+}
+
 /**
- * @param {{ database: any, now?: () => Date, ttlMs?: number, figures?: (query: { month: string }) => Promise<any> }} options
- *   `figures` is the month's computation; the default is the domain's own, over the database.
+ * @param {{ database: any, now?: () => Date, ttlMs?: number, figures?: (query: { month: string }) => Promise<any>,
+ *   questionBank?: ((query: { month: string }) => Promise<any>) | null, predictionCalibration?: (() => Promise<any>) | null, report?: (code: string) => void }} options
+ *   `figures` is the month's computation; the default is the domain's own, over the database. `questionBank` and `predictionCalibration` are the
+ *   readers of the two optional sections; absent, the section is not there. `report` hears a section whose reader failed.
  */
-export function createEvidencePublicMetrics({ database, now = () => new Date(), ttlMs = DEFAULT_TTL_MS, figures = (query) => monthlyEvidenceFigures(database, query) }) {
-  const counters = { computed: 0, cacheHits: 0, failures: 0 };
+export function createEvidencePublicMetrics({ database, now = () => new Date(), ttlMs = DEFAULT_TTL_MS, figures = (query) => monthlyEvidenceFigures(database, query), questionBank = null, predictionCalibration = null, report = () => {} }) {
+  const counters = { computed: 0, cacheHits: 0, failures: 0, sectionFailures: 0 };
   /** @type {{ at: number, value: any[] } | null} */
   let cached = null;
   /** @type {Promise<any[]> | null} */
@@ -64,6 +105,42 @@ export function createEvidencePublicMetrics({ database, now = () => new Date(), 
     return months;
   }
 
+  /**
+   * An optional section: its reader's answer remembered for the ttl and shared by every request that arrives while it is being read. A reader
+   * that is absent, answers nothing or throws is a section that is not there; the failure is counted and nothing else on the page moves.
+   * @param {(() => Promise<any>) | null} read
+   */
+  function section(read) {
+    /** @type {{ at: number, value: any } | null} */
+    let kept = null;
+    /** @type {Promise<any> | null} */
+    let reading = null;
+    return async () => {
+      if (!read) return null;
+      if (kept && now().getTime() - kept.at < ttlMs) return kept.value;
+      if (!reading) {
+        reading = read().catch(() => { counters.sectionFailures += 1; report("evidence_public_section_failed"); return null; })
+          .then((value) => { kept = { at: now().getTime(), value }; return value; })
+          .finally(() => { reading = null; });
+      }
+      return reading;
+    };
+  }
+
+  // The bank's month is the current one, or the one before while the current has no answers yet.
+  const bank = section(questionBank ? async () => {
+    const current = evidencePublicMonth(now());
+    for (const month of [current, shiftMonth(current, -1)]) {
+      const summary = await questionBank({ month });
+      if (summary?.available === true && Number(summary.overall?.answers) > 0) return publicBank(summary);
+    }
+    return null;
+  } : null);
+  const calibration = section(predictionCalibration ? async () => {
+    const value = await predictionCalibration();
+    return value ? publicCalibration(value) : null;
+  } : null);
+
   return {
     /** The last twelve months, newest first, each with its figures or `data: false`. */
     async months() {
@@ -75,6 +152,10 @@ export function createEvidencePublicMetrics({ database, now = () => new Date(), 
       }
       return building;
     },
+    /** The question bank's latest month, or null where there is none to show. */
+    questionBank: bank,
+    /** The prediction registry's calibration (or how many predictions are scored so far), or null where the registry is not composed. */
+    predictionCalibration: calibration,
     stats: () => ({ ...counters }),
   };
 }
