@@ -831,6 +831,8 @@ export class GeoOrchestrator {
       const result = { dispatched: null, deferred: null, enqueued: [] };
       let project = await this.#project(geoId);
       if (!project) return result;
+      // A project the platform keeps for itself (the question bank) is measured and judged and nothing more: no step, no export, no schedule.
+      if (project.internal) return result;
       await this.#foldRuns(project);
       project = (await this.#project(geoId)) ?? project;
       if (project.status !== "active") return { ...result, paused: true };
@@ -1489,7 +1491,7 @@ export class GeoOrchestrator {
   async tick() {
     this.counters.ticks += 1;
     this.lastTickAt = this.now().toISOString();
-    const rows = (await this.store.query(`SELECT id, status FROM evimed_geo.projects WHERE deleted_at IS NULL AND status IN ('active', 'paused')
+    const rows = (await this.store.query(`SELECT id, status FROM evimed_geo.projects WHERE deleted_at IS NULL AND status IN ('active', 'paused') AND NOT internal
       ORDER BY updated_at LIMIT $1`, [GEO_RUN_RULES.projectsPerTick])).rows;
     let advanced = 0;
     for (const row of rows) {
@@ -1508,7 +1510,7 @@ export class GeoOrchestrator {
   /** The re-measurement schedules of every active project. */
   async tickSchedules() {
     this.counters.scheduleTicks += 1;
-    const rows = (await this.store.query(`SELECT * FROM evimed_geo.projects WHERE deleted_at IS NULL AND status = 'active'
+    const rows = (await this.store.query(`SELECT * FROM evimed_geo.projects WHERE deleted_at IS NULL AND status = 'active' AND NOT internal
       ORDER BY created_at LIMIT $1`, [GEO_RUN_RULES.projectsPerTick])).rows;
     const counts = { projects: rows.length, weekly: 0, sentinel: 0, postPublication: 0, skipped: 0 };
     for (const row of rows) {

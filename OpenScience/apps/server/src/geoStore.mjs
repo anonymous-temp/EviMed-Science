@@ -106,6 +106,8 @@ export function geoProjectFromRow(row) {
     // Who speaks for the product (enterprise or doctor, the relation, a doctor's affiliation) and the one product zone its cards are in.
     producer: row.producer && typeof row.producer === "object" && !Array.isArray(row.producer) ? row.producer : null,
     productZoneId: text(row.product_zone_id),
+    // A project the platform keeps for itself: measured and judged, never advanced by the orchestrator.
+    internal: row.internal === true,
     createdAt: iso(row.created_at),
     updatedAt: iso(row.updated_at),
     deletedAt: iso(row.deleted_at),
@@ -286,7 +288,7 @@ export function geoOwnedLinkKey(url) {
 }
 
 const PROJECT_COLUMNS = `id, user_id, project_id, product, competitors, coverage_days, engines, tier, budget, status, steps,
-  entity_keys, producer, product_zone_id, created_at, updated_at, deleted_at`;
+  entity_keys, producer, product_zone_id, internal, created_at, updated_at, deleted_at`;
 
 /** The tables whose rows go with a project or an account; the money tables are not among them. */
 const OWNED_TABLES = Object.freeze(["facts", "snapshots", "probe_jobs", "rounds", "metrics", "errors", "questions", "question_groups", "schedule_marks",
@@ -461,13 +463,13 @@ export class GeoStore {
   // --- projects ---------------------------------------------------------------
 
   /**
-   * @param {{ userId: string, projectId: string, engines: readonly string[], coverageDays: number, product?: Record<string, any> }} input
+   * @param {{ userId: string, projectId: string, engines: readonly string[], coverageDays: number, product?: Record<string, any>, internal?: boolean }} input
    */
-  async createProject({ userId, projectId, engines, coverageDays, product = {} }) {
+  async createProject({ userId, projectId, engines, coverageDays, product = {}, internal = false }) {
     const id = randomId("geo_");
-    const result = await this.query(`INSERT INTO evimed_geo.projects (id, user_id, project_id, product, engines, coverage_days, entity_keys)
-      VALUES ($1, $2, $3, $4::jsonb, $5::text[], $6, $7::text[]) RETURNING ${PROJECT_COLUMNS}`,
-    [id, userId, projectId, JSON.stringify(product), [...engines], coverageDays, await this.#entityKeys(product)]);
+    const result = await this.query(`INSERT INTO evimed_geo.projects (id, user_id, project_id, product, engines, coverage_days, entity_keys, internal)
+      VALUES ($1, $2, $3, $4::jsonb, $5::text[], $6, $7::text[], $8) RETURNING ${PROJECT_COLUMNS}`,
+    [id, userId, projectId, JSON.stringify(product), [...engines], coverageDays, await this.#entityKeys(product), internal === true]);
     return geoProjectFromRow(result.rows[0]);
   }
 

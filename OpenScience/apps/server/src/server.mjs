@@ -264,6 +264,7 @@ import { GeoStore, deleteGeoProjectRows, deleteGeoUserRows, removeGeoScreenshotF
 import { createGeoDeliveryImport } from "./geoDeliveryImport.mjs";
 import { GeoCards } from "./geoCards.mjs";
 import { GeoMembers } from "./geoMembers.mjs";
+import { createGeoQuestionBank } from "./geoQuestionBank.mjs";
 import { geoArticleGateOf } from "./geoWrites.mjs";
 import { GEO_DEFAULT_PROJECT_NAME, GeoService, geoAudienceAllows, geoMetricFamilies, geoMetricsSnapshot, geoReadiness } from "./geoService.mjs";
 import { createGeoRoutes, geoRoutePattern } from "./geoRoutes.mjs";
@@ -1873,7 +1874,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
    *   market: any, exporter: any, renameProject: (userId: string, projectId: string, name: string) => Promise<unknown>,
    *   articleGate: (project: any, ref: { runId: string | null, deliverableId: string | null, path: string }) => Promise<string>,
    *   articleRunId: (project: any, deliverableId: string) => Promise<string | null>,
-   *   cards: GeoCards, members: GeoMembers, refreshCards: (geoProject: any, controlProject: any) => ReturnType<GeoCards["refresh"]>, measureState?: any,
+   *   cards: GeoCards, members: GeoMembers, refreshCards: (geoProject: any, controlProject: any) => ReturnType<GeoCards["refresh"]>, measureState?: any, questionBank?: ReturnType<typeof createGeoQuestionBank>,
    *   importDelivery: ReturnType<typeof createGeoDeliveryImport> } | null} */
   let geo = null;
   if (config.geoEnabled && productDatabase) {
@@ -4270,6 +4271,13 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       } : null,
     };
     geoParts.measureState = measureDeps.state;
+    // The platform's own medication-question bank (flywheel F22): composed only with its lever on, beside the module. It is the module's
+    // own daily loop (below) and the topic selector's observed errors; with the lever off there is nothing of it.
+    if (config.geoQuestionBankEnabled) {
+      geoParts.questionBank = createGeoQuestionBank({ store: geoParts.store, measureDeps, database: productDatabase, config, entityVocabulary,
+        report: (code) => process.stderr.write(`geo question bank: ${code}\n`) });
+      if (evidenceProgramme) evidenceProgramme.useSignals({ observedErrors: () => geoParts.questionBank.observedErrors() });
+    }
     orchestrator = new GeoOrchestrator({
       store: geoParts.store, config, notifier,
       dispatchRun: overrides.geoDispatchRun ?? dispatchGeoRun,
@@ -4325,6 +4333,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         parse: () => tickGeoParse(measureDeps),
         metrics: () => tickGeoMetrics(measureDeps),
         errors: () => tickGeoErrors(measureDeps),
+        ...(geoParts.questionBank ? { questionBank: () => geoParts.questionBank.tick() } : {}),
         orchestrator: () => running.tick(),
         schedules: () => running.tickSchedules(),
         catalogue: () => tickGeoCatalogue(marketDeps),

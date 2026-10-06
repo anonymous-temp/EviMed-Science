@@ -648,6 +648,11 @@ CREATE TABLE IF NOT EXISTS evimed_geo.members (
 );
 CREATE INDEX IF NOT EXISTS geo_members_user_idx ON evimed_geo.members (user_id);
 
+-- A project the platform keeps for itself (the medication-question bank of flywheel F22, held by the platform publisher): measured
+-- by the probe and judged like any other, and never advanced by the orchestrator — no step is dispatched for it, no weekly report
+-- exported, no schedule run.
+ALTER TABLE evimed_geo.projects ADD COLUMN IF NOT EXISTS internal boolean NOT NULL DEFAULT false;
+
 ALTER TABLE evimed_geo.projects ADD COLUMN IF NOT EXISTS producer jsonb;
 ALTER TABLE evimed_geo.projects ADD COLUMN IF NOT EXISTS product_zone_id text;
 CREATE UNIQUE INDEX IF NOT EXISTS geo_projects_product_zone_key ON evimed_geo.projects (product_zone_id) WHERE product_zone_id IS NOT NULL;

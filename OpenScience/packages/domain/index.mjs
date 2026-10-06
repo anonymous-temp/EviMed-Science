@@ -1884,6 +1884,18 @@ export {
   normalizeGeoProducerSettings,
 } from './src/geoEvidenceChain.mjs'
 
+// geoQuestionBank — the platform's own medication-question bank (flywheel F22): about sixty neutral questions by drug class, the month
+// they are measured in, and the per-class accuracy and the share of answers citing an EviMed page, computed from the judged answers
+export {
+  GEO_QUESTION_BANK,
+  GEO_QUESTION_BANK_CLASSES,
+  GEO_QUESTION_BANK_CLASS_LABELS_ZH,
+  GEO_QUESTION_BANK_VERSION,
+  geoQuestionBankClassOf,
+  geoQuestionBankMonth,
+  summarizeQuestionBank,
+} from './src/geoQuestionBank.mjs'
+
 // evidenceCard — 63 exports: the evidence card, the platform's single evidence unit (flywheel plan 2026-10-05 §4): its contract
 // (producer, originality, lineage, entity keys, journey stage, disclosure, claims, the public view's content), the two
 // views of one card, the three rules (who may write where, no paid ranking input, no simulated value) and the error
