@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { after, before, beforeEach, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
+import { withAccountExportSnapshot } from "../src/accountExport.mjs";
 import { createEvidenceChangeLog } from "../src/evidenceChangeLog.mjs";
 import { EVIDENCE_ZONE_SQL, migrateEvidenceZones } from "../src/evidenceZonePersistence.mjs";
 import { EvidenceZoneService } from "../src/evidenceZoneService.mjs";
@@ -725,4 +726,19 @@ test("the migration is idempotent on a database that already holds earlier evide
   // The topic-request key is the folded title, so two spellings of one title cannot both be rows.
   await db.query("INSERT INTO evimed_frontier.evidence_topic_requests(id,title,title_key) VALUES('tr_a','One title','one title')");
   await assert.rejects(db.query("INSERT INTO evimed_frontier.evidence_topic_requests(id,title,title_key) VALUES('tr_b','one TITLE','one title')"), { code: "23505" });
+});
+
+test("an account's export carries the topic requests it filed or seconded, and no one else's", options, async () => {
+  const requests = createEvidenceTopicRequests({ database: db, config: { evidenceTopicRequestsPerDay: 5 } });
+  await requests.file(alice, { title: "Apixaban after a bleed" });
+  const popular = await requests.file(bob, { title: "SGLT2 inhibitors in heart failure" });
+  await requests.second(alice, popular.request.id);
+  const archive = async (user) => {
+    const created = (await db.query("SELECT created_at::text AS value FROM evimed_control.users WHERE id=$1", [user.id])).rows[0].value;
+    return withAccountExportSnapshot(db, { ...user, accountCreatedAt: created }, {}, async (snapshot) => JSON.parse(snapshot.data.toString()));
+  };
+  const mine = await archive(alice);
+  assert.deepEqual(mine.evidenceTopicRequestVotes.map((vote) => vote.title).sort(), ["Apixaban after a bleed", "SGLT2 inhibitors in heart failure"]);
+  assert.deepEqual((await archive(bob)).evidenceTopicRequestVotes.map((vote) => vote.title), ["SGLT2 inhibitors in heart failure"]);
+  assert.deepEqual((await archive(carol)).evidenceTopicRequestVotes, []);
 });

@@ -61,6 +61,8 @@ const queries = [
   ["evidenceReviews", "SELECT * FROM evimed_frontier.evidence_reviews WHERE user_id=$1 ORDER BY card_id"],
   ["evidenceZoneFeedback", "SELECT * FROM evimed_frontier.evidence_zone_feedback WHERE user_id=$1 ORDER BY id"],
   ["evidenceChallenges", "SELECT * FROM evimed_frontier.evidence_challenges WHERE user_id=$1 ORDER BY id"],
+  // The public topic requests the account filed or seconded (flywheel F08): the title it asked for and when. The request itself belongs to no one.
+  ["evidenceTopicRequestVotes", "SELECT v.request_id,r.title,v.created_at FROM evimed_frontier.evidence_topic_request_votes v JOIN evimed_frontier.evidence_topic_requests r ON r.id=v.request_id WHERE v.user_id=$1 ORDER BY v.created_at,v.request_id"],
   ["projects", `SELECT id,name,created_at AS "createdAt",updated_at AS "updatedAt"
     FROM evimed_control.projects WHERE user_id=$1 ORDER BY id`],
   ["researchSessions", `SELECT project_id AS "projectId",session_id AS "sessionId",mode,agent_id AS "agentId",
@@ -430,7 +432,7 @@ export async function withAccountExportSnapshot(database, user, config, operatio
       inbox: { notifications: tables.notifications, preferences: tables.notificationPreferences[0] ?? null }, usage: tables.usage,
       priceLists: exportedPriceLists(tables.usage), feedbackEvents: tables.feedbackEvents, omissions,
       evidenceCardRevisions:tables.evidenceCardRevisions,evidenceAutomation:tables.evidenceAutomation,evidenceZones:tables.evidenceZones,evidenceCards:tables.evidenceCards,evidenceZoneFollows:tables.evidenceZoneFollows,
-      evidenceComments:tables.evidenceComments,evidenceReviews:tables.evidenceReviews,evidenceZoneFeedback:tables.evidenceZoneFeedback,evidenceChallenges:tables.evidenceChallenges,
+      evidenceComments:tables.evidenceComments,evidenceReviews:tables.evidenceReviews,evidenceZoneFeedback:tables.evidenceZoneFeedback,evidenceChallenges:tables.evidenceChallenges,evidenceTopicRequestVotes:tables.evidenceTopicRequestVotes,
     };
     const skillResources = await exportPersonalSkillResources({ artifacts: limits.skillArtifacts, user,
       rows: [...tables.documents, ...tables.revisions], maxBytes: Math.min(32 * 1024 * 1024, maxBytes) });
