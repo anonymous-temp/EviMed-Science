@@ -351,6 +351,12 @@ class FakePool extends EventEmitter {
       const row = this.geoProjects.get(values[0]);
       return row && row.user_id === values[1] && !row.deleted_at ? { rows: [row], rowCount: 1 } : { rows: [], rowCount: 0 };
     }
+    // The project as an account may reach it (`GeoStore.getProjectAccess`): the owner's own row, with no member roles. The double has no
+    // members table, so an account that is not the owner reads the project as nonexistent, as the real query does for a stranger.
+    if (/^SELECT .*coalesce\(\(SELECT array_agg\(m\.role .* FROM evimed_geo\.projects\s+WHERE id = \$1 AND deleted_at IS NULL AND \(user_id = \$2 OR EXISTS/s.test(sql)) {
+      const row = this.geoProjects.get(values[0]);
+      return row && row.user_id === values[1] && !row.deleted_at ? { rows: [{ ...row, member_roles: [] }], rowCount: 1 } : { rows: [], rowCount: 0 };
+    }
     if (/^SELECT 1 FROM evimed_control\.projects WHERE user_id = \$1 AND id = \$2 FOR UPDATE/.test(sql)) {
       return values[0] === USER_ID && values[1] === PROJECT_ID ? { rows: [{ "?column?": 1 }], rowCount: 1 } : { rows: [], rowCount: 0 };
     }
@@ -1760,14 +1766,14 @@ test("循证传播 is composed when on, its slot's worker runs with the recurrin
   const base = `http://127.0.0.1:${app.server.address().port}`;
   assert.ok(app.geo, "an enabled module with a product database is composed");
   assert.equal(app.geoService, app.geo.service);
-  assert.deepEqual(Object.keys(app.geo).sort(), ["articleGate", "articleRunId", "exporter", "importDelivery", "market", "orchestrator", "renameProject", "service", "social", "store", "worker"]);
+  assert.deepEqual(Object.keys(app.geo).sort(), ["articleGate", "articleRunId", "cards", "exporter", "importDelivery", "market", "measureState", "members", "orchestrator", "refreshCards", "renameProject", "service", "social", "store", "worker"]);
   // Every slot is filled: the worker with all twelve loops wired (measurement,
   // orchestration, market), the orchestrator, the exporter and the market's
   // user and operator hooks.
   const status = app.geo.worker.status();
   assert.deepEqual(status.missing, [], "every loop has its function");
   assert.deepEqual(Object.keys(status.loops), ["probe", "parse", "metrics", "errors", "orchestrator", "schedules", "catalogue", "orders", "poll",
-    "verify", "reconcile", "topups"]);
+    "verify", "reconcile", "topups", "questionBank"], "the question bank's loop is in the table and is not wired while its lever is off");
   assert.equal(typeof app.geo.orchestrator.runStep, "function");
   assert.equal(typeof app.geo.exporter.export, "function");
   for (const hook of ["setBudget", "cancelOrder", "confirmTopup", "resolveUnknownOrder", "markOrderLost", "clearStop", "balance", "configured"]) {
