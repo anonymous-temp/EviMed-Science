@@ -81,10 +81,11 @@ test(
     const first = open();
     const capabilities = await migrateFrontier(first, { dimension: 1024 });
     const created = await inventory(first);
-    // 22 feed tables and thirteen native evidence/editorial tables, plus the optional vector table.
+    // 22 feed tables and sixteen native evidence/editorial tables (the last three the public pages' reads and topic requests,
+    // 2026-10-06), plus the optional vector table.
     assert.equal(
       created.tables.length,
-      capabilities.vector ? 36 : 35,
+      capabilities.vector ? 39 : 38,
       created.tables.join(),
     );
     for (const table of [

@@ -357,8 +357,10 @@ test("the migrations run on a database that already holds these tables, twice in
   await migrateGeo(database);
   await new VcrStore({ database }).ready();
   await migrateVcr(database);
-  const columns = (await database.query(`SELECT table_schema, column_name, data_type, is_nullable FROM information_schema.columns
-    WHERE column_name = 'entity_keys' AND table_schema IN ('evimed_geo', 'evimed_vcr') ORDER BY 1`)).rows;
+  // The tagged rows of each module: a GEO project and a VCR study (other tables of those schemas may carry keys of their own, such as
+  // 虚拟临研's platform knowledge packs, and are not this migration's).
+  const columns = (await database.query(`SELECT table_schema, table_name, data_type, is_nullable FROM information_schema.columns
+    WHERE column_name = 'entity_keys' AND (table_schema, table_name) IN (('evimed_geo', 'projects'), ('evimed_vcr', 'studies')) ORDER BY 1`)).rows;
   assert.deepEqual(columns.map((row) => [row.table_schema, row.data_type, row.is_nullable]), [["evimed_geo", "ARRAY", "YES"], ["evimed_vcr", "ARRAY", "YES"]]);
   const index = (await database.query("SELECT indexdef FROM pg_indexes WHERE indexname = 'frontier_items_registry_ids_idx'")).rows[0];
   assert.match(index.indexdef, /gin \(registry_ids\)/);
