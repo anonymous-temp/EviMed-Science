@@ -58,7 +58,7 @@
  */
 
 import {
-  GEO_ARMS, GEO_ARTICLE_GATES, GEO_ARTICLE_LAYERS, GEO_ARTICLE_SAFETY, GEO_ARTICLE_STATUSES, GEO_AUDIENCES, GEO_CELL_STATUSES,
+  GEO_ARMS, GEO_ARTICLE_GATES, GEO_ARTICLE_LAYERS, GEO_ARTICLE_REFERENCE_STATUSES, GEO_ARTICLE_SAFETY, GEO_ARTICLE_STATUSES, GEO_PLACEMENT_LABELS, GEO_AUDIENCES, GEO_CELL_STATUSES,
   GEO_CLAIM_SOURCE_KINDS, GEO_CLAIM_STATUSES, GEO_DATA_TYPES, GEO_ERROR_ACTIONS, GEO_ERROR_STATUSES, GEO_ERROR_TYPES,
   GEO_FAILURE_MODES, GEO_GROUP_SIGNALS, GEO_LEDGER_KINDS, GEO_MEDIA_TYPES, GEO_METRIC_ROW_SCOPES, GEO_ORDER_STATES,
   GEO_OWNED_LINK_PLATFORMS, GEO_OWNED_LINK_STATUSES, GEO_POOLS,
@@ -617,6 +617,19 @@ CREATE INDEX IF NOT EXISTS geo_claims_card_idx ON evimed_geo.claims (card_id) WH
 
 -- Who speaks (producer: enterprise or doctor, the relation to the product, a doctor's hospital, department and specialty) and
 -- the project's one product zone in the evidence zones. The zone id is unique: a zone belongs to one project.
+-- The lower layers cite the cards (F21). claim_refs holds the references the platform read in the article's text (card id, card claim
+-- id, card revision) and ref_status what it found; ref_checked_sha the hash of the text it read, so an unchanged text is not read
+-- again. A card-layer article made from a card has card_id and card_revision and no path: its text is the card's public view,
+-- rendered when it is read. placement_label is 广告 or 商业合作 on an article that was paid for. A release-5 article has none of
+-- them and reads as unchecked.
+ALTER TABLE evimed_geo.articles ADD COLUMN IF NOT EXISTS claim_refs jsonb NOT NULL DEFAULT '[]'::jsonb;
+ALTER TABLE evimed_geo.articles ADD COLUMN IF NOT EXISTS ref_status text NOT NULL DEFAULT 'unchecked' CHECK (ref_status IN ${inList(GEO_ARTICLE_REFERENCE_STATUSES)});
+ALTER TABLE evimed_geo.articles ADD COLUMN IF NOT EXISTS ref_checked_sha text;
+ALTER TABLE evimed_geo.articles ADD COLUMN IF NOT EXISTS card_id text;
+ALTER TABLE evimed_geo.articles ADD COLUMN IF NOT EXISTS card_revision integer;
+ALTER TABLE evimed_geo.articles ADD COLUMN IF NOT EXISTS placement_label text CHECK (placement_label IN ${inList(GEO_PLACEMENT_LABELS)});
+CREATE UNIQUE INDEX IF NOT EXISTS geo_articles_card_key ON evimed_geo.articles (geo_project_id, card_id) WHERE card_id IS NOT NULL AND path IS NULL;
+
 ALTER TABLE evimed_geo.projects ADD COLUMN IF NOT EXISTS producer jsonb;
 ALTER TABLE evimed_geo.projects ADD COLUMN IF NOT EXISTS product_zone_id text;
 CREATE UNIQUE INDEX IF NOT EXISTS geo_projects_product_zone_key ON evimed_geo.projects (product_zone_id) WHERE product_zone_id IS NOT NULL;

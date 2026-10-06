@@ -218,6 +218,14 @@ export function geoArticleFromRow(row) {
     contentSha256: text(row.content_sha256),
     protectedSha256: text(row.protected_sha256),
     status: String(row.status),
+    // The claim references the platform read in the text (card, card claim, card revision), what it found, and the hash of the text
+    // it read; the card a card-layer article is made from; and the label a paid placement carries.
+    claimRefs: Array.isArray(row.claim_refs) ? row.claim_refs : [],
+    refStatus: text(row.ref_status) ?? "unchecked",
+    refCheckedSha: text(row.ref_checked_sha),
+    cardId: text(row.card_id),
+    cardRevision: row.card_revision == null ? null : Number(row.card_revision),
+    placementLabel: text(row.placement_label),
     createdAt: iso(row.created_at),
     updatedAt: iso(row.updated_at),
   };
@@ -989,6 +997,51 @@ export class GeoStore {
         ids.push(String(result.rows[0].id));
       }
       return ids;
+    });
+  }
+
+  /**
+   * Record what the platform read in an article's claim references: the references, the status, and the hash of the text it read.
+   * @param {string} geoId @param {string} articleId
+   * @param {{ refs: Array<{ cardId: string, claimId: string, revision: number }>, status: string, sha256: string | null }} result
+   */
+  async setArticleReferences(geoId, articleId, { refs, status, sha256 }) {
+    const result = await this.query(`UPDATE evimed_geo.articles SET claim_refs = $3::jsonb, ref_status = $4, ref_checked_sha = $5
+      WHERE geo_project_id = $1 AND id = $2`, [geoId, articleId, JSON.stringify(refs), status, sha256]);
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  /**
+   * The card-layer article of a card (made from the card, with no file of its own), written once per card and brought to the
+   * card's current revision and text. An article that was placed or withdrawn keeps its status; a draft or publishable one goes
+   * to the status its gate and safety give.
+   * @param {string} userId @param {string} geoId
+   * @param {{ cardId: string, cardRevision: number, title: string, claimIds: string[], contentSha256: string, safety: string }} card
+   * @returns {Promise<{ id: string, created: boolean }>}
+   */
+  async upsertCardArticle(userId, geoId, card) {
+    return this.transaction(async (client) => {
+      const status = geoArticlePublishable({ gate: "passed", safety: card.safety }) ? "publishable" : "draft";
+      const found = (await client.query(`SELECT id, safety, status, content_sha256 FROM evimed_geo.articles WHERE geo_project_id = $1 AND card_id = $2 AND path IS NULL FOR UPDATE`,
+        [geoId, card.cardId])).rows[0];
+      if (found) {
+        // A safety stop a person has not released stays. A person's release stands for the text they looked at: while the rendering is
+        // the same text the release holds, and a rendering that changed is looked at again.
+        const sameText = String(found.content_sha256 ?? "") === card.contentSha256;
+        const safety = found.safety === "open" ? "open" : found.safety === "released" && sameText ? "released" : card.safety;
+        const next = geoArticlePublishable({ gate: "passed", safety }) ? "publishable" : "draft";
+        await client.query(`UPDATE evimed_geo.articles SET title = $3, claim_ids = $4::text[], card_revision = $5, content_sha256 = $6, safety = $7,
+            gate = 'passed', ref_status = 'resolved', ref_checked_sha = $6,
+            status = CASE WHEN status IN ('draft', 'publishable') THEN $8 ELSE status END, updated_at = now()
+          WHERE id = $1 AND geo_project_id = $2`, [found.id, geoId, card.title, card.claimIds, card.cardRevision, card.contentSha256, safety, next]);
+        return { id: String(found.id), created: false };
+      }
+      const id = randomId("gart_");
+      await client.query(`INSERT INTO evimed_geo.articles (id, user_id, geo_project_id, layer, title, claim_ids, gate, safety, content_sha256, status,
+          card_id, card_revision, ref_status, ref_checked_sha, created_at, updated_at)
+        VALUES ($1, $2, $3, 'card', $4, $5::text[], 'passed', $6, $7, $8, $9, $10, 'resolved', $7, clock_timestamp(), clock_timestamp())`,
+      [id, userId, geoId, card.title, card.claimIds, card.safety, card.contentSha256, status, card.cardId, card.cardRevision]);
+      return { id, created: true };
     });
   }
 

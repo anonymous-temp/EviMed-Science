@@ -299,6 +299,21 @@ describe("内容", () => {
     expect(store.select).toHaveBeenCalledWith("prj_geo_1", expect.any(Function));
   });
 
+  it("says in the article's own line what the evidence chain found: a cited conclusion since updated, a reference that does not resolve, a paid label", async () => {
+    client.getGeoArticles.mockResolvedValue({
+      articles: [
+        { ...articlesFilled.articles[0], title: "被引更新的稿件", staleReferences: [{ cardId: "ec_1", claimId: "dose", revision: 1, category: "correction", summary: "修正", occurredAt: "2026-10-07T00:00:00Z" }], placementLabel: "commercial_cooperation", placements: 1 },
+        { ...articlesFilled.articles[0], id: "art_9", title: "对不上的稿件", referenceStatus: "unresolved", placements: 0 },
+        { ...articlesFilled.articles[0], id: "art_8", title: "平常的稿件", referenceStatus: "resolved", staleReferences: [], placementLabel: null, placements: 0 },
+      ],
+    });
+    renderTab(<ContentTab {...props()} />);
+    expect(await screen.findByText("科普稿件 · 投放 1 家 · 商业合作 · 被引结论已更新")).toBeInTheDocument();
+    expect(screen.getByText("科普稿件 · 引用的结论对不上")).toBeInTheDocument();
+    // A notice is a line of text, not a stop: the article still opens and withdraws as before.
+    expect(screen.getAllByRole("button", { name: "打开" })).toHaveLength(3);
+  });
+
   it("withdraws after asking, and a withdrawn article has no 撤回", async () => {
     client.getGeoArticles.mockResolvedValue(articlesFilled);
     client.withdrawGeoArticle.mockResolvedValue({});

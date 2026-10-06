@@ -172,6 +172,18 @@ export const GEO_ARTICLE_GATES = frozen(['passed', 'unverified', 'failed'])
 /** `open` is the safety stop: an unresolved clinical-safety finding; `released` is a person having looked (「放行」). */
 export const GEO_ARTICLE_SAFETY = frozen(['clear', 'open', 'released'])
 export const GEO_ARTICLE_STATUSES = frozen(['draft', 'publishable', 'placed', 'published', 'withdrawn'])
+/**
+ * What the platform found when it read the claim references of an article (flywheel F21): `unchecked` before it was read, `none`
+ * when the text cites no card claim, `resolved` when every cited claim exists in the card revision it cites, `unresolved` when
+ * one does not. A label on the article; nothing here withholds it.
+ */
+export const GEO_ARTICLE_REFERENCE_STATUSES = frozen(['unchecked', 'none', 'resolved', 'unresolved'])
+/**
+ * The label a paid placement carries on the article's record and in the text sent (the advertising rules ask paid content to say
+ * so): 「广告」 or 「商业合作」. A placement through the market is `commercial_cooperation` until its owner says otherwise.
+ */
+export const GEO_PLACEMENT_LABELS = frozen(['advertisement', 'commercial_cooperation'])
+export const GEO_PLACEMENT_LABELS_ZH = Object.freeze({ advertisement: '广告', commercial_cooperation: '商业合作' })
 
 /** Media marketplace. */
 export const GEO_MEDIA_TYPES = frozen(['website', 'wemedia'])
@@ -285,6 +297,8 @@ export const GEO_VOCABULARIES = Object.freeze({
   articleGate: GEO_ARTICLE_GATES,
   articleSafety: GEO_ARTICLE_SAFETY,
   articleStatus: GEO_ARTICLE_STATUSES,
+  articleReferenceStatus: GEO_ARTICLE_REFERENCE_STATUSES,
+  placementLabel: GEO_PLACEMENT_LABELS,
   mediaType: GEO_MEDIA_TYPES,
   orderState: GEO_ORDER_STATES,
   ledgerKind: GEO_LEDGER_KINDS,

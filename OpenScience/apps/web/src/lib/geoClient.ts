@@ -400,6 +400,15 @@ export interface GeoArticle {
   claimCount: number;
   placements: number;
   cited: boolean;
+  /** The card a card-layer article is made from (it has no file of its own), and the revision it was made from. */
+  cardId?: string | null;
+  cardRevision?: number | null;
+  /** What the platform found reading the article's claim references against the cards. */
+  referenceStatus?: "unchecked" | "none" | "resolved" | "unresolved";
+  /** The references a card's change log says were corrected, updated in their conclusion or withdrawn since the article cited them. */
+  staleReferences?: { cardId: string; claimId: string; revision: number; category: string; summary: string; occurredAt: string }[];
+  /** 广告 or 商业合作, on an article that was paid for. */
+  placementLabel?: "advertisement" | "commercial_cooperation" | null;
 }
 export interface GeoArticles {
   articles: GeoArticle[];

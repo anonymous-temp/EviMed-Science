@@ -137,7 +137,8 @@ function money(value, field) {
  *     latestSessionId?: (user: any, projectId: string) => Promise<string | null> } | null,
  *   orchestrator?: { runStep?: (user: any, project: any, step: string) => Promise<{ sessionId: string, runId?: string | null }> } | null,
  *   exporter?: { export?: (user: any, project: any, kind: string) => Promise<{ sessionId: string, runId: string | null }> } | null,
- *   cards?: { list?: (project: any) => Promise<any>, refresh?: (user: any, project: any) => Promise<any> } | null,
+ *   cards?: { list?: (project: any) => Promise<any>, refresh?: (user: any, project: any) => Promise<any>,
+ *     articleReferences?: (project: any, articleId: string) => Promise<any> } | null,
  *   market?: { setBudget?: (user: any, project: any, budget: { totalCny: number, dailyCny: number }) => Promise<any>,
  *     cancelOrder?: (user: any, project: any, orderId: string) => Promise<any>, confirmTopup?: (user: any, topupId: string) => Promise<any>,
  *     resolveUnknownOrder?: (user: any, orderId: string, input: { created: boolean, vendorOrderNid?: string }) => Promise<any>,
@@ -340,6 +341,13 @@ export function createGeoRoutes(dependencies) {
     if (parts.length === 3 && method === "POST" && tab === "tier") {
       const body = await bodyOf(req, maxJsonBytes, ["tier"]);
       return reply(await service.setTier(user, id, tier(body.tier)));
+    }
+    // What the platform reads in an article's claim references: each against the card revision it cites, and the ones a card's change
+    // log says have moved since. A card-layer article is read as the card renders it now.
+    if (parts.length === 5 && method === "GET" && tab === "articles" && parts[4] === "references") {
+      const project = await service.requireProject(user, id);
+      if (!hooks.cards?.articleReferences) throw UNAVAILABLE();
+      return reply(await hooks.cards.articleReferences(project, parts[3]));
     }
     if (parts.length === 5 && method === "POST" && tab === "articles" && parts[4] === "withdraw") {
       await bodyOf(req, maxJsonBytes, []);

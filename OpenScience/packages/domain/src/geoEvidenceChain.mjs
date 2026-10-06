@@ -426,7 +426,8 @@ export function geoCardPlan({ claims, producer, authors, reviewers, entityKeys =
     let labelText = ''
     for (const claim of inLabel) {
       const entry = cardClaims[group.claims.indexOf(claim)]
-      const next = labelText ? `${labelText}；${entry.claim}` : entry.claim
+      // Statements are joined as they are written: after a full stop nothing is added, otherwise a semicolon.
+      const next = labelText ? `${labelText}${/[。！？.!?]$/.test(labelText) ? '' : '；'}${entry.claim}` : entry.claim
       if ([...next].length > EVIDENCE_PUBLIC_PANEL_LIMITS.labelSays) break
       labelText = next
       labelClaims.push(entry.claimId)
@@ -465,4 +466,285 @@ export function geoCardPlan({ claims, producer, authors, reviewers, entityKeys =
     })
   }
   return { cards, held }
+}
+
+// ---------------------------------------------------------------------------
+// The lower layers cite the cards (flywheel F21)
+// ---------------------------------------------------------------------------
+
+/**
+ * The layers whose sentences cite a card claim: the popular text, the question-and-answer and the correction. The deep
+ * analysis is the clinical layer's own prose, and the card layer is rendered from the card (`geoCardLayerMarkdown`), so neither
+ * has a sentence of its own to cite.
+ */
+export const GEO_CITING_LAYERS = frozen(['popular', 'qa', 'correction'])
+
+/**
+ * A claim reference, written after the sentence it supports: the card, the card's own claim id and the card revision the
+ * claim was read in. It is a format and nothing else — the platform strips it before a word of the article is published.
+ */
+const REFERENCE_SOURCE = String.raw`\[\[ref:(ec_[A-Za-z0-9]{8,64})\/([A-Za-z0-9][A-Za-z0-9._-]{0,59})@([1-9]\d{0,5})\]\]`
+/** Any marker that opens with the reference prefix, valid or not: a malformed one is reported, not guessed at. */
+const ANY_MARKER = /\[\[ref:[^\]\n]*\]\]/g
+
+/**
+ * The marker for one reference.
+ * @param {{ cardId: string, claimId: string, revision: number }} reference
+ */
+export function geoClaimReferenceMarker({ cardId, claimId, revision }) {
+  return `[[ref:${cardId}/${claimId}@${revision}]]`
+}
+
+/**
+ * Every well-formed claim reference of a text, in the order written.
+ * @param {string} source
+ * @returns {{ cardId: string, claimId: string, revision: number, index: number }[]}
+ */
+export function parseGeoClaimReferences(source) {
+  const found = []
+  for (const match of String(source ?? '').matchAll(new RegExp(REFERENCE_SOURCE, 'g'))) {
+    found.push({ cardId: match[1], claimId: match[2], revision: Number(match[3]), index: match.index ?? 0 })
+  }
+  return found
+}
+
+/**
+ * The text as it is published: the markers gone, and the space a marker left at the end of a line with them. Everything else is
+ * byte for byte what was written, so the protected spans a placement checks (numbers, names, quotations) are not touched.
+ * @param {string} source
+ */
+export function stripGeoClaimReferences(source) {
+  return String(source ?? '').replace(new RegExp(REFERENCE_SOURCE, 'g'), '').replace(/[ \t]+(?=\n|$)/g, '')
+}
+
+/** @param {string} value */
+const sentenceTerminator = (value) => /[。！？；!?;\n]/.test(value)
+
+/**
+ * The sentences of a text, each with the markers that follow or sit in it. A sentence ends at 。！？；!?; or a line end, or at a
+ * full stop followed by a space; a marker written after the closing punctuation belongs to the sentence before it. This is a
+ * format split, not a reading: what a sentence says is never looked at here.
+ * @param {string} body
+ * @returns {{ text: string, references: { cardId: string, claimId: string, revision: number }[] }[]}
+ */
+export function geoSentences(body) {
+  const source = String(body ?? '')
+  /** @type {{ text: string, references: any[] }[]} */
+  const out = []
+  let buffer = ''
+  const flush = () => {
+    const bare = stripGeoClaimReferences(buffer)
+    if (/[\p{L}\p{N}]/u.test(bare)) out.push({ text: bare.trim(), references: parseGeoClaimReferences(buffer).map(({ cardId, claimId, revision }) => ({ cardId, claimId, revision })) })
+    buffer = ''
+  }
+  /** Take a marker at `at`, if there is one. @param {number} at */
+  const marker = (at) => {
+    if (!source.startsWith('[[ref:', at)) return 0
+    const end = source.indexOf(']]', at)
+    return end > at && !source.slice(at, end).includes('\n') ? end + 2 - at : 0
+  }
+  let position = 0
+  while (position < source.length) {
+    const taken = marker(position)
+    if (taken) { buffer += source.slice(position, position + taken); position += taken; continue }
+    const character = source[position]
+    buffer += character
+    position += 1
+    const stops = sentenceTerminator(character) || (character === '.' && (position >= source.length || /\s/.test(source[position])))
+    if (!stops) continue
+    for (;;) {
+      const next = marker(position)
+      if (next) { buffer += source.slice(position, position + next); position += next; continue }
+      if (position < source.length && /[”’」』）)\]]/.test(source[position])) { buffer += source[position]; position += 1; continue }
+      break
+    }
+    flush()
+  }
+  flush()
+  return out
+}
+
+/**
+ * The numbers a sentence states, by value. Dates, addresses and a list's own numbering are not numbers a claim has to support.
+ * @param {string} sentence @returns {number[]}
+ */
+export function geoNumberTokens(sentence) {
+  const cleaned = String(sentence ?? '').normalize('NFKC')
+    .replace(/https?:\/\/\S+/gi, ' ')
+    .replace(/\d{4}\s*年(?:\s*\d{1,2}\s*月)?(?:\s*\d{1,2}\s*[日号])?/g, ' ')
+    .replace(/\d{4}-\d{1,2}(?:-\d{1,2})?/g, ' ')
+    .replace(/^\s*(?:#{1,6}\s+|[-*+]\s+|\d{1,3}[.)、]\s+|[（(]\d{1,3}[）)]\s*)/, '')
+  return [...cleaned.matchAll(/\d+(?:,\d{3})*(?:\.\d+)?/g)].map((match) => Number(match[0].replace(/,/g, ''))).filter(Number.isFinite)
+}
+
+/** What a reference's card claim says, for resolving it. @typedef {{ claim: string, supportQuote?: string | null, applicability?: string | null, mark?: string | null }} GeoResolvedClaim */
+/**
+ * What the cards say about one reference: `null` when the card is not one of the project's; otherwise the card's current
+ * revision, whether it was taken back, and the claims of the cited revision — `null` when that revision is unknown.
+ * @typedef {{ currentRevision: number, withdrawn?: boolean, claims: Record<string, GeoResolvedClaim> | null } | null} GeoCardLookup
+ */
+
+/**
+ * The reference graph of one article: every sentence's claim must exist in the card revision it cites ("a lower layer never says
+ * what the upper layer does not"), a number in a cited sentence must be a number of the claims it cites, and a sentence that
+ * states a number with no reference is named. Everything is a label — `ok` is the one yes or no about whether every
+ * reference resolves — and a text of no reference at all in a citing layer is `references: 0`, not a verdict.
+ *
+ * @param {{ text: string, layer: string, resolve: (reference: { cardId: string, claimId: string, revision: number }) => GeoCardLookup }} input
+ * @returns {{ ok: boolean, counts: { sentences: number, referencedSentences: number, references: number, unresolved: number, unverified: number,
+ *   numberUnsupported: number, numberedWithoutReference: number, malformed: number },
+ *   references: { cardId: string, claimId: string, revision: number, status: string, mark: string | null }[],
+ *   issues: { code: string, severity: 'advisory', message: string, sentence?: string, cardId?: string, claimId?: string, revision?: number }[] }}
+ */
+export function geoReferenceGraph({ text: body, layer, resolve }) {
+  const source = String(body ?? '')
+  const citing = GEO_CITING_LAYERS.includes(/** @type {any} */ (layer))
+  /** @type {ReturnType<typeof geoReferenceGraph>['issues']} */
+  const issues = []
+  const wellFormed = new Set(parseGeoClaimReferences(source).map((reference) => source.slice(reference.index, reference.index + geoClaimReferenceMarker(reference).length)))
+  const malformed = (source.match(ANY_MARKER) ?? []).filter((marker) => !wellFormed.has(marker))
+  for (const marker of malformed.slice(0, 5)) issues.push({ code: 'claim_reference_malformed', severity: 'advisory', message: `${marker} is not a claim reference: write [[ref:<cardId>/<claimId>@<revision>]].` })
+  const sentences = geoSentences(source)
+  /** @type {Map<string, ReturnType<typeof geoReferenceGraph>['references'][number]>} */
+  const resolved = new Map()
+  let referencedSentences = 0
+  let unverified = 0
+  let numberUnsupported = 0
+  let numberedWithoutReference = 0
+  for (const sentence of sentences) {
+    const numbers = geoNumberTokens(sentence.text)
+    if (!sentence.references.length) {
+      if (citing && numbers.length) {
+        numberedWithoutReference += 1
+        if (numberedWithoutReference <= 5) issues.push({ code: 'numbered_sentence_without_reference', severity: 'advisory', sentence: clip(sentence.text, 80), message: `"${clip(sentence.text, 80)}" states a number and cites no card claim.` })
+      }
+      continue
+    }
+    referencedSentences += 1
+    /** @type {Set<number>} */
+    const supported = new Set()
+    for (const reference of sentence.references) {
+      const key = `${reference.cardId}/${reference.claimId}@${reference.revision}`
+      let entry = resolved.get(key)
+      if (!entry) {
+        const lookup = resolve(reference)
+        let status = 'ok'
+        /** @type {GeoResolvedClaim | null} */
+        let claim = null
+        if (!lookup) status = 'card_not_found'
+        else if (!lookup.claims) status = 'revision_not_found'
+        else if (!Object.hasOwn(lookup.claims, reference.claimId)) status = 'claim_not_in_revision'
+        else { claim = lookup.claims[reference.claimId]; if (lookup.withdrawn) status = 'card_withdrawn' }
+        entry = { ...reference, status, mark: claim?.mark ?? null }
+        resolved.set(key, entry)
+        if (status !== 'ok' && status !== 'card_withdrawn') {
+          issues.push({ code: 'claim_reference_unresolved', severity: 'advisory', ...reference, message: `${key}: ${/** @type {Record<string, string>} */ ({
+            card_not_found: 'the card is not one of this project\'s',
+            revision_not_found: 'the card has no such revision',
+            claim_not_in_revision: 'that revision of the card has no such claim',
+          })[status]}.` })
+        } else if (claim && claim.mark && claim.mark !== '✓') {
+          unverified += 1
+          issues.push({ code: 'claim_reference_unverified', severity: 'advisory', ...reference, message: `${key}: the card marks this claim ⚠ in that revision.` })
+        }
+        if (claim) for (const figure of geoNumberTokens(`${claim.claim} ${claim.supportQuote ?? ''} ${claim.applicability ?? ''}`)) supported.add(figure)
+      } else if (entry.status === 'ok' || entry.status === 'card_withdrawn') {
+        const lookup = resolve(reference)
+        const claim = lookup?.claims?.[reference.claimId]
+        if (claim) for (const figure of geoNumberTokens(`${claim.claim} ${claim.supportQuote ?? ''} ${claim.applicability ?? ''}`)) supported.add(figure)
+      }
+    }
+    const loose = numbers.filter((figure) => !supported.has(figure))
+    const everyResolved = sentence.references.every((reference) => ['ok', 'card_withdrawn'].includes(resolved.get(`${reference.cardId}/${reference.claimId}@${reference.revision}`)?.status ?? ''))
+    // A number can only be traced to a claim that was found; an unresolved reference has said what is wrong already.
+    if (everyResolved && loose.length) {
+      numberUnsupported += 1
+      issues.push({ code: 'sentence_number_not_in_claim', severity: 'advisory', sentence: clip(sentence.text, 80),
+        message: `"${clip(sentence.text, 80)}" states ${[...new Set(loose)].join(', ')}, which the claim it cites does not.` })
+    }
+  }
+  const references = [...resolved.values()]
+  const unresolved = references.filter((reference) => !['ok', 'card_withdrawn'].includes(reference.status)).length
+  return {
+    ok: unresolved === 0 && malformed.length === 0,
+    counts: { sentences: sentences.length, referencedSentences, references: references.length, unresolved, unverified, numberUnsupported, numberedWithoutReference, malformed: malformed.length },
+    references,
+    issues,
+  }
+}
+
+/** The change-log categories after which a card's earlier revision no longer says what it said. */
+export const GEO_STALE_CHANGE_CATEGORIES = frozen(['correction', 'withdrawal', 'new_evidence_conclusion_changed'])
+
+/**
+ * The references an article makes that the card's change log has since corrected, updated in its conclusion or withdrawn: the
+ * log entry that came after the cited revision (a withdrawal at any revision), and, when it names a claim, that claim. The
+ * article is flagged 「被引结论已更新」 on its project's page — a notice for the researcher, never a block — because a number or
+ * a conclusion that was since corrected is the thing the 《广告引证内容执法指南》 asks content to follow.
+ *
+ * @param {readonly { cardId: string, claimId: string, revision: number }[]} references
+ * @param {readonly { cardId: string, category: string, revisionAfter: number | null, occurredAt: string, summary: string, refs?: { claimId?: string } }[]} entries
+ * @returns {{ cardId: string, claimId: string, revision: number, category: string, occurredAt: string, summary: string }[]}
+ */
+export function geoStaleReferences(references, entries) {
+  /** @type {Map<string, { cardId: string, claimId: string, revision: number, category: string, occurredAt: string, summary: string }>} */
+  const stale = new Map()
+  for (const reference of references) {
+    for (const entry of entries) {
+      if (entry.cardId !== reference.cardId || !GEO_STALE_CHANGE_CATEGORIES.includes(/** @type {any} */ (entry.category))) continue
+      if (entry.category !== 'withdrawal' && !(entry.revisionAfter == null || entry.revisionAfter > reference.revision)) continue
+      if (entry.refs?.claimId && entry.refs.claimId !== reference.claimId) continue
+      const key = `${reference.cardId}/${reference.claimId}@${reference.revision}`
+      const known = stale.get(key)
+      if (!known || known.occurredAt < entry.occurredAt) stale.set(key, { ...reference, category: entry.category, occurredAt: entry.occurredAt, summary: entry.summary })
+    }
+  }
+  return [...stale.values()]
+}
+
+// ---------------------------------------------------------------------------
+// The card layer is the card
+// ---------------------------------------------------------------------------
+
+/** @param {unknown} value */
+const day = (value) => (typeof value === 'string' && Number.isFinite(Date.parse(value)) ? value.slice(0, 10) : null)
+
+/**
+ * The 证据卡片 article of a card: the public view's panels as written, the fact box computed from the card's comparisons, the
+ * sources with the date they were checked — in Markdown, from `evidenceCardPublicView` and nothing else. The card layer used to
+ * be stored text of its own beside the claims; it is the card's second view, so a correction of the card is a correction of it.
+ *
+ * With `withReferences` each panel line carries the claim references of the claims it stands on, for the check that reads
+ * them; without it, the text is what is published.
+ *
+ * @param {{ view: { kind: string, header: any, panels: any[], factBox: any }, card: { id: string, revision: number }, withReferences?: boolean }} input
+ * @returns {string}
+ */
+export function geoCardLayerMarkdown({ view, card, withReferences = false }) {
+  const cite = (/** @type {string[] | undefined} */ ids) => (withReferences ? (ids ?? []).map((claimId) => geoClaimReferenceMarker({ cardId: card.id, claimId, revision: card.revision })).join('') : '')
+  const lines = [`# ${view.header?.title ?? ''}`.trimEnd()]
+  const producer = view.header?.producer
+  if (producer?.name) lines.push('', `出品方：${producer.name}`)
+  for (const panel of view.panels ?? []) {
+    if (panel.status !== 'written') continue
+    if (panel.key === 'commonMisunderstandings') {
+      lines.push('', `## ${panel.label}`)
+      for (const item of panel.items ?? []) lines.push('', `- 误解：${item.misunderstanding}`, `  更正：${item.correction}${cite(item.claimIds)}`)
+    } else if (panel.key === 'sourcesAndCheckDate') {
+      lines.push('', `## ${panel.label}`)
+      for (const source of panel.sources ?? []) lines.push(`- ${source.title}${source.url ? `（${source.url}）` : ''}`)
+      const checked = day(panel.checkedAt)
+      if (checked) lines.push('', `核对日期：${checked}`)
+    } else {
+      lines.push('', `## ${panel.label}`, '', `${panel.text}${cite(panel.claimIds)}`)
+    }
+  }
+  const box = view.factBox
+  if (box?.status === 'available') {
+    lines.push('', `## 每 ${box.per} 人中的情况`, '', '| 结局 | 对照 | 干预 | 差异 |', '| --- | --- | --- | --- |')
+    for (const row of [...box.benefits.map((/** @type {any} */ entry) => ({ ...entry, role: '获益' })), ...box.harms.map((/** @type {any} */ entry) => ({ ...entry, role: '不良反应' }))]) {
+      lines.push(`| ${row.role}：${row.outcome}（${row.timeframe}） | ${row.control.per1000} | ${row.intervention.per1000} | ${row.difference} |`)
+    }
+  }
+  return `${lines.join('\n')}\n`
 }

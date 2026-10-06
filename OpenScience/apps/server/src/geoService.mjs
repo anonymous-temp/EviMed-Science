@@ -281,16 +281,19 @@ const PLAIN_ROW = "m.variant IS NULL AND m.rival IS NULL AND m.group_id IS NULL"
 export class GeoService {
   /**
    * @param {{ store: import("./geoStore.mjs").GeoStore, config: Record<string, any>, social?: any, now?: () => Date,
-   *   metricName?: ((metricId: string) => string | null) | null }} options
+   *   metricName?: ((metricId: string) => string | null) | null, cards?: { staleReferences?: Function } | null }} options
    *   `metricName` names a metric id for 「更多指标」; the metrics package can
    *   hand in its catalogue's names, and without it the domain's labels answer
    *   for the ids the platform reads and every other id is its own name.
+   *   `cards` (geoCards.mjs) says which articles cite a claim the cards have since
+   *   corrected; without it no article is flagged.
    */
-  constructor({ store, config, social = null, now = () => new Date(), metricName = null }) {
+  constructor({ store, config, social = null, now = () => new Date(), metricName = null, cards = null }) {
     if (!store || !config) throw new TypeError("The GEO service needs its store and the config.");
     this.store = store;
     this.config = config;
     this.social = social;
+    this.cards = cards;
     this.now = now;
     this.timeZone = String(config.geoTimeZone || "Asia/Shanghai");
     /** @param {string} metricId */
@@ -1084,12 +1087,21 @@ export class GeoService {
     const questions = new Map(groups.rows.map((/** @type {any} */ row) => [String(row.id), text(row.typical_question)]));
     const counts = new Map(placements.rows.map((/** @type {any} */ row) => [String(row.article_id), Number(row.n)]));
     const citedIds = new Set(cited.map((row) => row.articleId));
+    // The articles that cite a claim of a card revision since corrected or withdrawn: a notice on the page (「被引结论已更新」),
+    // read from the zone's change log. A log that cannot be read flags nothing and withholds nothing.
+    const stale = await this.cards?.staleReferences?.(project, articles).catch(() => null) ?? new Map();
     return {
       articles: articles.map((article) => ({
         id: article.id, layer: article.layer, title: article.title, groupId: article.groupId,
         question: article.groupId ? questions.get(article.groupId) ?? null : null, status: article.status, gate: article.gate,
         safety: article.safety, path: article.path, runId: article.runId, claimCount: article.claimIds.length,
         placements: counts.get(article.id) ?? 0, cited: citedIds.has(article.id),
+        // The evidence chain: the card a card-layer article is made from, whether the claim references the platform read in the
+        // text resolve, the references a card's change log says moved since, and the label a paid placement carries.
+        cardId: article.cardId, cardRevision: article.cardRevision, referenceStatus: article.refStatus, referenceCount: article.claimRefs.length,
+        staleReferences: (stale.get(article.id) ?? []).map((/** @type {any} */ entry) => ({ cardId: entry.cardId, claimId: entry.claimId, revision: entry.revision,
+          category: entry.category, summary: entry.summary, occurredAt: entry.occurredAt })),
+        placementLabel: article.placementLabel,
       })),
     };
   }
@@ -1506,7 +1518,8 @@ export function geoMetricFamilies(enabled, snapshot) {
   // The evidence chain (flywheel F21): the product zone's cards made from the claim table, and what was held back or refused.
   if (snapshot.cards) {
     add("cards_total", "Product-zone card writes since this process started, by what happened.", "counter",
-      ["zonesMade", "cardsCreated", "cardsUpdated", "cardsUnchanged", "claimsCarded", "claimsHeld", "refused"].map((event) => ({ labels: { event }, value: Number(/** @type {any} */ (snapshot.cards)[event] ?? 0) })));
+      ["zonesMade", "cardsCreated", "cardsUpdated", "cardsUnchanged", "claimsCarded", "claimsHeld", "refused", "referencesChecked", "referencesUnresolved",
+        "articlesFlagged"].map((event) => ({ labels: { event }, value: Number(/** @type {any} */ (snapshot.cards)[event] ?? 0) })));
   }
   const social = snapshot.social;
   if (social?.counters) {

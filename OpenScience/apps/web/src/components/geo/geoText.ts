@@ -266,6 +266,15 @@ export const GEO_ARTICLE_STATUS_WORDS: Readonly<Record<GeoArticleStatus, string>
 /** The one article state that is a safety stop, said in its own words. */
 export const GEO_ARTICLE_SAFETY_OPEN = "安全待复核";
 
+/**
+ * What the evidence chain says about an article beside its layer and question (flywheel F21): a notice, never a stop. A cited card
+ * that was corrected or taken back since the article cited it (「被引结论已更新」), a reference to a card claim that is not there, and
+ * the label a paid placement carries.
+ */
+export const GEO_ARTICLE_STALE_NOTE = "被引结论已更新";
+export const GEO_ARTICLE_UNRESOLVED_NOTE = "引用的结论对不上";
+export const GEO_PLACEMENT_LABEL_WORDS: Readonly<Record<string, string>> = Object.freeze({ advertisement: "广告", commercial_cooperation: "商业合作" });
+
 export const GEO_ORDER_STATE_WORDS: Readonly<Record<GeoOrderState, string>> = Object.freeze({
   planned: "待下单",
   reserved: "正在下单",

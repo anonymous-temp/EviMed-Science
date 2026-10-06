@@ -970,6 +970,17 @@ function clientAddress(req, config) {
  *  defaults name, which rejects every other property a caller passes.
  *  @param {any} overrides
  */
+/**
+ * A file of a project's workspace by its path relative to it, read without following links; null when it cannot be read.
+ * What 「循证传播」 reads a claim's preserved source and an article's text with.
+ * @param {{ workspaceDir: string }} controlProject
+ */
+function geoSourceReaderOf(controlProject) {
+  return async (/** @type {string} */ relative) => {
+    try { return String(await readFileNoFollow(controlProject.workspaceDir, resolveScopedPath(controlProject.workspaceDir, relative), "utf8")); } catch { return null; }
+  };
+}
+
 export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = createHostedExtensionIntegration, runtimeManagerFactory = (config, hooks) => new RuntimeManager(config, hooks)} = {}) {
   if(typeof extensionIntegrationFactory !== "function" || typeof runtimeManagerFactory !== "function") throw new TypeError("Invalid server constructor factory.");
   const config = loadConfig(overrides);
@@ -1875,14 +1886,12 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       zones: frontier?.evidenceZones ?? new EvidenceZoneService({ database: productDatabase, entityKeysFor: entityVocabulary.entityKeysFor, platformPublisherUserId: PLATFORM_PUBLISHER_USER_ID }),
       ownerName: async (userId) => (await store.userById(userId))?.name ?? null,
     });
-    /** A claim's preserved source file from its project's workspace, read without following links. @param {any} controlProject */
-    const geoSourceReader = (controlProject) => async (/** @type {{ artifactPath: string | null }} */ claim) => {
-      if (!claim.artifactPath) return null;
-      try { return String(await readFileNoFollow(controlProject.workspaceDir, resolveScopedPath(controlProject.workspaceDir, claim.artifactPath), "utf8")); } catch { return null; }
-    };
+    /** A claim's preserved source file from its project's workspace. @param {any} controlProject */
+    const geoSourceReader = (controlProject) => async (/** @type {{ artifactPath: string | null }} */ claim) =>
+      (claim.artifactPath ? geoSourceReaderOf(controlProject)(claim.artifactPath) : null);
     geo = {
       store: geoStore,
-      service: new GeoService({ store: geoStore, config, social, metricName: (id) => geoMetricDefinition(id)?.name ?? null }),
+      service: new GeoService({ store: geoStore, config, social, cards: geoCards, metricName: (id) => geoMetricDefinition(id)?.name ?? null }),
       social,
       worker: null,
       orchestrator: null,
@@ -1892,6 +1901,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       refreshCards: (geoProject, controlProject) => geoCards.refresh(geoProject, { readSource: geoSourceReader(controlProject) }),
       importDelivery: createGeoDeliveryImport({ store: geoStore, report: (code) => process.stderr.write(`geo import: ${code}\n`),
         refreshCards: (geoProject, controlProject) => geo?.refreshCards(geoProject, controlProject) ?? Promise.resolve(null),
+        checkReferences: (geoProject, article, text) => geoCards.checkArticle(geoProject, article, text),
         articleGate: (project, ref) => geo?.articleGate(project, ref) ?? Promise.resolve("unverified"),
         articleRunId: (project, deliverableId) => geo?.articleRunId(project, deliverableId) ?? Promise.resolve(null) }),
       // A project made before its brand was known is named by the brand once
@@ -1978,6 +1988,22 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       const parts = geo;
       return parts ? {
         list: (/** @type {any} */ project) => parts.cards.list(project),
+        // An article's references against the cards: a card-layer article as the card renders now, a stored one as its file reads.
+        articleReferences: async (/** @type {any} */ project, /** @type {string} */ articleId) => {
+          const article = await parts.store.getArticle(project.id, articleId);
+          if (!article) throw new HttpError(404, "geo_article_not_found", "Article not found.");
+          let text = null;
+          if (article.cardId) text = (await parts.cards.cardLayerText(project, article))?.markdown ?? null;
+          else if (article.path) {
+            const owner = await store.userById(project.userId);
+            const control = owner ? await store.requireProject(owner, project.projectId) : null;
+            if (control) text = await geoSourceReaderOf(control)(article.path);
+          }
+          if (text == null) throw new HttpError(404, "geo_article_text_unavailable", "The article's text is not available.");
+          const checked = await parts.cards.checkText(project, { text, layer: String(article.layer ?? "") });
+          const stale = await parts.cards.staleReferences(project, [{ id: article.id, claimRefs: checked.references }]);
+          return { articleId: article.id, status: checked.status, ...checked.graph, staleReferences: stale.get(article.id) ?? [] };
+        },
         refresh: async (/** @type {any} */ _user, /** @type {any} */ project) => {
           const owner = await store.userById(project.userId);
           if (!owner) throw new HttpError(404, "geo_project_not_found", "GEO project not found.");

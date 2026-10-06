@@ -19,7 +19,7 @@ import { FilterChips, type FilterOption } from "@/components/ui/FilterChips";
 import { List, ListRow } from "@/components/ui/ListRow";
 import { Menu } from "@/components/ui/Menu";
 import { Tag } from "@/components/ui/Tag";
-import { GEO_ARTICLE_SAFETY_OPEN, GEO_ARTICLE_STATUS_WORDS, GEO_LAYER_NAMES, layerName } from "../geoText";
+import { GEO_ARTICLE_SAFETY_OPEN, GEO_ARTICLE_STALE_NOTE, GEO_ARTICLE_STATUS_WORDS, GEO_ARTICLE_UNRESOLVED_NOTE, GEO_LAYER_NAMES, GEO_PLACEMENT_LABEL_WORDS, layerName } from "../geoText";
 import { FilterRow, StepPending, TabError, TabSkeleton, useGeoLoad } from "./geoTabKit";
 
 type LayerFilter = "all" | GeoArticleLayer;
@@ -144,6 +144,9 @@ function articleMeta(article: GeoArticle): string {
     layerName(article.layer) === "—" ? null : layerName(article.layer),
     article.title && article.question && article.question !== article.title ? article.question : null,
     article.placements > 0 ? `投放 ${article.placements} 家` : null,
+    article.placementLabel ? GEO_PLACEMENT_LABEL_WORDS[article.placementLabel] ?? null : null,
+    (article.staleReferences?.length ?? 0) > 0 ? GEO_ARTICLE_STALE_NOTE : null,
+    article.referenceStatus === "unresolved" ? GEO_ARTICLE_UNRESOLVED_NOTE : null,
   ].filter(Boolean).join(" · ");
 }
 

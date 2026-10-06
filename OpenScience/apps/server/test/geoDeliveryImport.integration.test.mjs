@@ -210,3 +210,38 @@ test("the imported claims are offered to the card writer once, and a refusal the
   assert.ok(reports.includes("geo_card_reviewer_required"));
   assert.equal((await store.listClaims(created.id)).length, 2);
 });
+
+test("a finished run's citing articles are read for their claim references once per text, and the other layers are not read", options, async () => {
+  const created = await store.createProject({ userId: USER, projectId: `refs-${run}`, engines: ["deepseek"], coverageDays: 90 });
+  const popular = "deliverables/geo-content/articles/p.md";
+  const deep = "deliverables/geo-content/articles/d.md";
+  await store.registerArticles(USER, created.id, [
+    { path: popular, layer: "popular", title: "科普", groupId: null, claimIds: [], gate: "passed", safety: "clear", contentSha256: "a".repeat(64), deliverableId: "geo-content" },
+    { path: deep, layer: "deep", title: "深度", groupId: null, claimIds: [], gate: "passed", safety: "clear", contentSha256: "b".repeat(64), deliverableId: "geo-content" },
+  ]);
+  const text = "起始剂量为每周一次 2.5 mg。[[ref:ec_AbCd1234Ef/dose@1]]\n";
+  const read = /** @type {string[]} */ ([]);
+  const checked = /** @type {Array<{ article: string, text: string }>} */ ([]);
+  const importDelivery = createGeoDeliveryImport({ store, listInsightFolders: async () => [], listDeliverableFolders: async () => [],
+    readFile: async (_root, file) => { read.push(file); return text; },
+    checkReferences: async (geoProject, article, body) => {
+      checked.push({ article: article.layer, text: body });
+      await store.setArticleReferences(geoProject.id, article.id, { refs: [{ cardId: "ec_AbCd1234Ef", claimId: "dose", revision: 1 }], status: "resolved",
+        sha256: createHash("sha256").update(body).digest("hex") });
+    } });
+  const project = { id: `refs-${run}`, userId: USER, workspaceDir: "/the-workspace" };
+  await importDelivery(project, { id: "run_refs_1", status: "succeeded", deliverables: [] });
+  assert.deepEqual(checked.map((entry) => entry.article), ["popular"], "the deep analysis is the clinical layer's own prose and cites nothing sentence by sentence");
+  assert.equal((await store.listArticles(created.id)).find((row) => row.path === popular)?.refStatus, "resolved");
+  // Another finished run, the same text: not checked again. A changed text is.
+  await importDelivery(project, { id: "run_refs_2", status: "succeeded", deliverables: [] });
+  assert.equal(checked.length, 1);
+  const changed = createGeoDeliveryImport({ store, listInsightFolders: async () => [], listDeliverableFolders: async () => [],
+    readFile: async () => `${text}另一句。`, checkReferences: async (_geo, article, body) => { checked.push({ article: article.layer, text: body }); } });
+  await changed(project, { id: "run_refs_3", status: "succeeded", deliverables: [] });
+  assert.equal(checked.length, 2);
+  // A text that cannot be read is left unchecked, not failed.
+  const unreadable = createGeoDeliveryImport({ store, report: () => {}, listInsightFolders: async () => [], listDeliverableFolders: async () => [],
+    readFile: async () => { throw Object.assign(new Error("gone"), { code: "ENOENT" }); }, checkReferences: async () => { throw new Error("must not be reached"); } });
+  assert.ok(await unreadable(project, { id: "run_refs_4", status: "succeeded", deliverables: [] }));
+});

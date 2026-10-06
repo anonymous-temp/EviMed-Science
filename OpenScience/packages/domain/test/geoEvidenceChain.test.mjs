@@ -15,13 +15,21 @@ import {
   isFeedEligibleCard,
   isFeedEligibleZone,
   geoCardClaimId,
+  geoCardLayerMarkdown,
   geoCardPlan,
   geoCardProducer,
   geoClaimJourneyStage,
+  geoClaimReferenceMarker,
   geoComparisonEvidenceType,
   geoDisclosurePerson,
+  geoNumberTokens,
   geoProducerSettingsIssues,
+  geoReferenceGraph,
+  geoSentences,
   geoSourceUrl,
+  geoStaleReferences,
+  parseGeoClaimReferences,
+  stripGeoClaimReferences,
   normalizeGeoProducerSettings,
   verifyEvidenceCardClaims,
 } from '../index.mjs'
@@ -95,7 +103,7 @@ test('the public view says what the label says from the in-label claims, joined 
   const { cards } = geoCardPlan({ claims: [claim({ claimKey: 'a-dose' }), claim({ claimKey: 'b-contra', statement: '对本品活性成分或辅料过敏者禁用。', quote: '对本品活性成分或辅料过敏者禁用' })], producer, authors, reviewers, now: NOW })
   assert.equal(cards.length, 1)
   const { labelSays } = cards[0].payload.publicView
-  assert.equal(labelSays.text, '成人推荐起始剂量为每周一次 2.5 mg。；对本品活性成分或辅料过敏者禁用。')
+  assert.equal(labelSays.text, '成人推荐起始剂量为每周一次 2.5 mg。对本品活性成分或辅料过敏者禁用。')
   assert.deepEqual(labelSays.claimIds, ['a-dose', 'b-contra'])
   assert.deepEqual(cards[0].journeyStage, { key: 'label', label: '说明书与基本信息' })
 })
@@ -185,4 +193,136 @@ test('product-zone content never enters the frontier feed: the guard the feed re
   assert.equal(isFeedEligibleCard({ kind: 'user' }, { originality: 'synthesis' }), false)
   assert.equal(isFeedEligibleCard({ kind: 'user' }, { originality: 'original_research' }), true)
   assert.equal(isFeedEligibleCard({ kind: 'official' }, { originality: 'brief' }), true)
+})
+
+// ---------------------------------------------------------------------------------------------------------------------------
+// The lower layers cite the cards
+
+const CARD = 'ec_AbCd1234Ef'
+/** The cards the graph resolves against: this card at revisions 1 (an old claim text) and 2 (the current one). */
+const CARDS = {
+  [CARD]: {
+    currentRevision: 2,
+    withdrawn: false,
+    revisions: {
+      1: { dose: { claim: '成人推荐起始剂量为每周一次 2.5 mg。', supportQuote: '成人推荐起始剂量为每周一次 2.5 mg', mark: '✓' } },
+      2: {
+        dose: { claim: '成人推荐起始剂量为每周一次 2.5 mg，4 周后增至 5 mg。', supportQuote: '2.5 mg，4 周后增至 5 mg', mark: '✓' },
+        weight: { claim: '第 48 周体重下降 14.1%。', supportQuote: 'lost 14.1% of body weight at week 48', applicability: '比较证据类型：头对头比较', mark: '✓' },
+        shaky: { claim: '另一个结论，样本量 1,200 人。', supportQuote: '1,200', mark: '⚠' },
+      },
+    },
+  },
+}
+/** @param {{ cardId: string, revision: number }} reference */
+const resolve = (reference) => {
+  const card = /** @type {any} */ (CARDS)[reference.cardId]
+  if (!card) return null
+  return { currentRevision: card.currentRevision, withdrawn: card.withdrawn, claims: card.revisions[reference.revision] ?? null }
+}
+const ref = (/** @type {string} */ claimId, revision = 2, cardId = CARD) => geoClaimReferenceMarker({ cardId, claimId, revision })
+
+test('a reference is a marker after the sentence; stripping it leaves the published text byte for byte', () => {
+  const text = `起始剂量为每周一次 2.5 mg。${ref('dose')}\n\n4 周后增至 5 mg${ref('dose')}。 \n没有引用的一句。`
+  assert.deepEqual(parseGeoClaimReferences(text).map(({ cardId, claimId, revision }) => [cardId, claimId, revision]), [[CARD, 'dose', 2], [CARD, 'dose', 2]])
+  assert.equal(stripGeoClaimReferences(text), '起始剂量为每周一次 2.5 mg。\n\n4 周后增至 5 mg。\n没有引用的一句。')
+  assert.equal(stripGeoClaimReferences('无引用的文字 14.1%。 \n'), '无引用的文字 14.1%。\n')
+  assert.deepEqual(parseGeoClaimReferences('[[ref:notacard/x@1]] [[ref:ec_AbCd1234Ef/x@0]] [[ref:ec_AbCd1234Ef/x@1]]').length, 1, 'a marker of the wrong shape is not a reference')
+})
+
+test('sentences end at closing punctuation or a line, a marker after the full stop belongs to the sentence before, a decimal point is not a full stop', () => {
+  const sentences = geoSentences(`每周一次 2.5 mg。${ref('dose')}下一句 14.1% 的人体重下降${ref('weight')}。\n- 列表项 3 个。\n结尾没有标点`)
+  assert.deepEqual(sentences.map((entry) => entry.text), ['每周一次 2.5 mg。', '下一句 14.1% 的人体重下降。', '- 列表项 3 个。', '结尾没有标点'])
+  assert.deepEqual(sentences.map((entry) => entry.references.map((/** @type {any} */ reference) => reference.claimId)), [['dose'], ['weight'], [], []])
+})
+
+test('numbers are read as values; a date, an address and a list number are not numbers a claim must support', () => {
+  assert.deepEqual(geoNumberTokens('1. 每周 2.50 mg，共 1,200 人，14.1%'), [2.5, 1200, 14.1])
+  assert.deepEqual(geoNumberTokens('说明书 2025 年 9 月 28 日版见 https://example.org/a/12345 与 2025-09-28'), [])
+  assert.deepEqual(geoNumberTokens('## 第 3 步'), [3])
+})
+
+test('every cited claim must exist in the card revision it cites: the one rule over the reference graph', () => {
+  const clean = geoReferenceGraph({ layer: 'popular', resolve,
+    text: `成人起始剂量为每周一次 2.5 mg，4 周后增至 5 mg。${ref('dose')}\n第 48 周体重下降 14.1%。${ref('weight')}\n` })
+  assert.equal(clean.ok, true)
+  assert.deepEqual(clean.issues, [])
+  assert.deepEqual(clean.counts, { sentences: 2, referencedSentences: 2, references: 2, unresolved: 0, unverified: 0, numberUnsupported: 0, numberedWithoutReference: 0, malformed: 0 })
+  const bad = geoReferenceGraph({ layer: 'popular', resolve, text: [
+    `这句话引了一个不存在的结论。${ref('nope')}`,
+    `这句话引了一个不存在的版本。${ref('dose', 9)}`,
+    `这句话引了别人的卡片。${ref('dose', 2, 'ec_OtherCard99')}`,
+    `这句话引了旧版本里的结论。${ref('weight', 1)}`,
+  ].join('\n') })
+  assert.equal(bad.ok, false)
+  assert.deepEqual(bad.references.map((entry) => entry.status), ['claim_not_in_revision', 'revision_not_found', 'card_not_found', 'claim_not_in_revision'])
+  assert.equal(bad.counts.unresolved, 4)
+  assert.deepEqual([...new Set(bad.issues.map((issue) => issue.code))], ['claim_reference_unresolved'])
+  for (const issue of bad.issues) assert.equal(issue.severity, 'advisory', 'a label, never a block')
+})
+
+test('a number in a cited sentence must be one of the claim it cites, and a numbered sentence with no reference is named', () => {
+  const result = geoReferenceGraph({ layer: 'qa', resolve, text: [
+    `第 48 周体重下降 18.5%。${ref('weight')}`,
+    `4 周后增至 5 mg，每周一次。${ref('dose')}`,
+    `吃药后有 3 成的人会恶心。`,
+    `这是一句没有数字的话。`,
+  ].join('\n') })
+  assert.deepEqual(result.issues.map((issue) => issue.code), ['sentence_number_not_in_claim', 'numbered_sentence_without_reference'])
+  assert.match(result.issues[0].message, /18\.5/)
+  assert.equal(result.counts.numberUnsupported, 1)
+  assert.equal(result.counts.numberedWithoutReference, 1)
+  // The deep analysis is the clinical layer's own prose: it is not asked to cite sentence by sentence.
+  assert.deepEqual(geoReferenceGraph({ layer: 'deep', resolve, text: '共 1,200 人入组。' }).issues, [])
+})
+
+test('a claim the card marks unverified, and a malformed marker, are named; a withdrawn card is resolved and left to the staleness notice', () => {
+  const unverified = geoReferenceGraph({ layer: 'popular', resolve, text: `样本量 1,200 人。${ref('shaky')}` })
+  assert.deepEqual(unverified.issues.map((issue) => issue.code), ['claim_reference_unverified'])
+  assert.equal(unverified.counts.unverified, 1)
+  const malformed = geoReferenceGraph({ layer: 'popular', resolve, text: '一句话。[[ref:ec_AbCd1234Ef/dose]]' })
+  assert.equal(malformed.ok, false)
+  assert.equal(malformed.counts.malformed, 1)
+  const withdrawn = geoReferenceGraph({ layer: 'popular', text: `每周一次。${ref('dose')}`, resolve: (reference) => ({ ...(/** @type {any} */ (resolve(reference))), withdrawn: true }) })
+  assert.equal(withdrawn.ok, true)
+  assert.equal(withdrawn.references[0].status, 'card_withdrawn')
+})
+
+test('an article that cites a revision since corrected, updated in its conclusion or withdrawn is flagged; an older entry or another claim is not', () => {
+  const references = [{ cardId: CARD, claimId: 'dose', revision: 1 }, { cardId: CARD, claimId: 'weight', revision: 2 }]
+  const entries = [
+    { cardId: CARD, category: 'correction', revisionAfter: 2, occurredAt: '2026-10-07T00:00:00Z', summary: '修正了该条结论', refs: { claimId: 'dose' } },
+    { cardId: CARD, category: 'new_evidence_conclusion_unchanged', revisionAfter: 3, occurredAt: '2026-10-08T00:00:00Z', summary: '结论未变' },
+    { cardId: CARD, category: 'correction', revisionAfter: 2, occurredAt: '2026-10-07T00:00:00Z', summary: '修正', refs: { claimId: 'other' } },
+    { cardId: 'ec_Elsewhere1', category: 'withdrawal', revisionAfter: null, occurredAt: '2026-10-09T00:00:00Z', summary: '撤回' },
+  ]
+  assert.deepEqual(geoStaleReferences(references, entries).map((entry) => [entry.claimId, entry.revision, entry.category]), [['dose', 1, 'correction']],
+    'weight@2 is current; the unchanged-conclusion entry and the other card are not corrections of what was cited')
+  // A withdrawal is stale whatever revision was cited.
+  assert.equal(geoStaleReferences([{ cardId: CARD, claimId: 'weight', revision: 5 }], [{ cardId: CARD, category: 'withdrawal', revisionAfter: null, occurredAt: '2026-10-09T00:00:00Z', summary: '撤回' }]).length, 1)
+  assert.deepEqual(geoStaleReferences(references, []), [])
+})
+
+test('the card layer is the card: its public view in Markdown, the fact box computed from events and one denominator', () => {
+  const view = {
+    kind: 'public',
+    header: { title: '用药后体重能降多少？', producer: { name: '某某制药有限公司' } },
+    panels: [
+      { key: 'oneLineAnswer', label: '一句话回答', status: 'written', text: '第 48 周体重平均下降 14.1%。', claimIds: ['weight'] },
+      { key: 'whatItIs', label: '这是什么', status: 'missing', text: null, claimIds: [] },
+      { key: 'sourcesAndCheckDate', label: '来源和核对日期', status: 'written', sources: [{ title: '关键试验', url: 'https://doi.org/10.1056/x' }], checkedAt: '2026-10-06T08:00:00.000Z' },
+    ],
+    factBox: { status: 'available', per: 1000, unit: 'people',
+      benefits: [{ outcome: '体重下降 5% 以上', timeframe: '48 周', control: { per1000: 180 }, intervention: { per1000: 870 }, difference: 690 }], harms: [], excluded: [] },
+  }
+  const published = geoCardLayerMarkdown({ view, card: { id: CARD, revision: 2 } })
+  assert.match(published, /^# 用药后体重能降多少？\n/)
+  assert.match(published, /## 一句话回答\n\n第 48 周体重平均下降 14\.1%。\n/)
+  assert.doesNotMatch(published, /这是什么/, 'a panel the author left empty is not shown as a heading with nothing under it')
+  assert.match(published, /\| 获益：体重下降 5% 以上（48 周） \| 180 \| 870 \| 690 \|/)
+  assert.match(published, /核对日期：2026-10-06/)
+  const cited = geoCardLayerMarkdown({ view, card: { id: CARD, revision: 2 }, withReferences: true })
+  assert.ok(cited.includes(ref('weight')))
+  assert.equal(stripGeoClaimReferences(cited), published, 'with the markers stripped, the cited text is the published text')
+  assert.deepEqual(geoReferenceGraph({ layer: 'card', resolve, text: cited }).issues, [])
 })

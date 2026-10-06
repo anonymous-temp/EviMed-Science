@@ -21,6 +21,14 @@
  *   owner publishes it.
  * - **Idempotent by content.** The plan is a pure function of the claims, so a card already as planned is left alone: no new
  *   revision, no new notice. A card that was taken back (`withdrawn`) is not written again.
+ * - **The lower layers cite the cards.** `checkText` reads the claim references of an article's text and resolves each against
+ *   the card revision it names — the project's own cards, or a published card of an official zone — by the domain's one rule
+ *   (`geoReferenceGraph`); `staleReferences` asks the zone's change log whether a cited card was corrected, updated in its
+ *   conclusion or withdrawn since. Both only label: the article is shown "被引结论已更新", never withheld.
+ * - **The card layer is the card.** For each card with a written public view the project holds one article of the card layer,
+ *   made from the card and carrying no text of its own: its text is `geoCardLayerMarkdown` over `evidenceCardPublicView`, read
+ *   when it is wanted, and the row records only the hash of that rendering and the card revision it was made from, so a
+ *   corrected card is a changed article. The pharmacists' safety rules run over the rendering, as over any article.
  * - **A refusal is for one operation.** No producer, or no named reviewer, refuses the card write with a named code and
  *   nothing else: the claims, the run and every other page of the project are untouched. One card the zone service refuses
  *   is reported and the others are written.
@@ -29,7 +37,12 @@
  */
 
 import { createHash } from "node:crypto";
-import { geoCardPlan, geoCardProducer, geoDisclosurePerson, verifyEvidenceCardClaims } from "@evimed/domain";
+import {
+  evidenceCardPublicView, geoCardLayerMarkdown, geoCardPlan, geoCardProducer, geoDisclosurePerson, geoReferenceGraph, geoStaleReferences,
+  parseGeoClaimReferences, verifyEvidenceCardClaims,
+} from "@evimed/domain";
+import { clinicalSafetyRuleHits } from "@evimed/domain/clinical-evidence";
+import { readEvidenceChangeLog } from "./evidenceChangeLog.mjs";
 import { HttpError } from "./security.mjs";
 
 /** The longest preserved source text a card keeps (the zone service's own bound). */
@@ -91,7 +104,8 @@ export class GeoCards {
     this.ownerName = ownerName;
     this.now = now;
     this.report = report;
-    this.counters = { zonesMade: 0, cardsCreated: 0, cardsUpdated: 0, cardsUnchanged: 0, claimsHeld: 0, claimsCarded: 0, refused: 0 };
+    this.counters = { zonesMade: 0, cardsCreated: 0, cardsUpdated: 0, cardsUnchanged: 0, claimsHeld: 0, claimsCarded: 0, refused: 0,
+      referencesChecked: 0, referencesUnresolved: 0, articlesFlagged: 0 };
   }
 
   /** The zone service, or the named refusal. */
@@ -149,7 +163,7 @@ export class GeoCards {
    * @param {{ readSource: (claim: { artifactPath: string | null, claimKey: string }) => Promise<string | null>, actor?: { id: string, name?: string } }} options
    *   `readSource` reads a claim's preserved source file from the project's workspace; it answers null for a file it cannot read.
    * @returns {Promise<{ zoneId: string, cards: Array<{ cardId: string, revision: number, journeyStage: { key: string, label: string },
-   *   title: string, change: "created" | "updated" | "unchanged", claims: number }>,
+   *   title: string, change: "created" | "updated" | "unchanged", claims: number, articleId: string | null }>,
    *   held: Array<{ claimKey: string, claimId: string, reason: string, message: string }>,
    *   failed: Array<{ title: string, code: string }>, skipped: Array<{ title: string, reason: string }> }>}
    */
@@ -183,7 +197,7 @@ export class GeoCards {
     const zones = this.#zones();
     const owner = { id: project.userId };
     const cardOf = new Map(claims.map((claim) => [claim.id, claim.cardId]));
-    /** @type {Array<{ cardId: string, revision: number, journeyStage: any, title: string, change: "created" | "updated" | "unchanged", claims: number }>} */
+    /** @type {Array<{ cardId: string, revision: number, journeyStage: any, title: string, change: "created" | "updated" | "unchanged", claims: number, articleId: string | null }>} */
     const cards = [];
     /** @type {Array<{ title: string, code: string }>} */
     const failed = [];
@@ -211,7 +225,10 @@ export class GeoCards {
         else this.counters.cardsUnchanged += 1;
         const marks = card.map.map((entry) => ({ id: entry.claimId, cardId: /** @type {string} */ (cardId), cardClaimId: entry.cardClaimId, cardRevision: revision }));
         this.counters.claimsCarded += await this.store.markClaimsCarded(project.id, marks);
-        cards.push({ cardId: /** @type {string} */ (cardId), revision, journeyStage: card.journeyStage, title: card.payload.title, change, claims: card.map.length });
+        // The project as it is now: the zone it was just given is where the card is read back from.
+        const article = await this.#syncCardArticle({ ...project, productZoneId: zone.id }, /** @type {string} */ (cardId), card.map.map((entry) => entry.claimId));
+        cards.push({ cardId: /** @type {string} */ (cardId), revision, journeyStage: card.journeyStage, title: card.payload.title, change, claims: card.map.length,
+          articleId: article?.id ?? null });
       } catch (error) {
         const code = typeof (/** @type {any} */ (error))?.code === "string" ? /** @type {any} */ (error).code : "geo_card_write_failed";
         failed.push({ title: card.payload.title, code });
@@ -281,6 +298,140 @@ export class GeoCards {
         };
       }),
     };
+  }
+
+  /**
+   * The card as a reader of the page sees it, with the sources it carries: the current row, or the snapshot of an earlier revision.
+   * The project's own cards and the published cards of an official zone can be cited; no other account's card can.
+   * @param {{ id: string, userId: string, productZoneId?: string | null }} project @param {string} cardId @param {number | null} revision
+   */
+  async #cardAt(project, cardId, revision) {
+    const row = (await this.database.query(`SELECT c.id, c.revision, c.title, c.claims, c.sources, c.journey_stage, c.producer, c.disclosure, c.public_view,
+        c.content, c.originality, c.withdrawn
+      FROM evimed_frontier.evidence_cards c JOIN evimed_frontier.evidence_zones z ON z.id = c.zone_id
+      WHERE c.id = $1 AND ((c.zone_id = $2 AND c.user_id = $3) OR (z.kind = 'official' AND z.state = 'published' AND c.state = 'published'))`,
+    [cardId, project.productZoneId ?? "", project.userId])).rows[0];
+    if (!row) return null;
+    let at = row;
+    if (revision != null && Number(row.revision) !== revision) {
+      const snapshot = (await this.database.query("SELECT snapshot FROM evimed_frontier.evidence_card_revisions WHERE card_id = $1 AND revision = $2", [cardId, revision])).rows[0]?.snapshot;
+      at = snapshot ?? null;
+    }
+    return { current: row, at };
+  }
+
+  /**
+   * What the cards say about each reference of a text, as the domain's `geoReferenceGraph` reads it.
+   * @param {any} project @param {{ cardId: string, claimId: string, revision: number }[]} references
+   * @returns {Promise<(reference: { cardId: string, claimId: string, revision: number }) => any>}
+   */
+  async #resolver(project, references) {
+    /** @type {Map<string, any>} */
+    const lookups = new Map();
+    for (const { cardId, revision } of references) {
+      const key = `${cardId}@${revision}`;
+      if (lookups.has(key)) continue;
+      const found = await this.#cardAt(project, cardId, revision);
+      if (!found) { lookups.set(key, null); continue; }
+      const claims = found.at?.claims;
+      if (!Array.isArray(claims)) { lookups.set(key, { currentRevision: Number(found.current.revision), withdrawn: Boolean(found.current.withdrawn), claims: null }); continue; }
+      const verdict = verifyEvidenceCardClaims({ claims, sources: found.at.sources ?? [] });
+      const marks = new Map(verdict.claims.map((entry) => [entry.claimId, entry.mark]));
+      lookups.set(key, {
+        currentRevision: Number(found.current.revision),
+        withdrawn: Boolean(found.current.withdrawn),
+        claims: Object.fromEntries(claims.map((/** @type {any} */ claim) => [String(claim.claimId),
+          { claim: String(claim.claim), supportQuote: claim.supportQuote ?? null, applicability: claim.applicability ?? null, mark: marks.get(claim.claimId) ?? "⚠" }])),
+      });
+    }
+    return (reference) => lookups.get(`${reference.cardId}@${reference.revision}`) ?? null;
+  }
+
+  /**
+   * The reference graph of a text against the cards of a project (`geoReferenceGraph`), and the status an article carries for it:
+   * `none` when it cites nothing, `resolved` when every reference resolves, `unresolved` when one does not.
+   * @param {any} project @param {{ text: string, layer: string }} input
+   */
+  async checkText(project, { text, layer }) {
+    const references = parseGeoClaimReferences(text);
+    const resolve = await this.#resolver(project, references);
+    const graph = geoReferenceGraph({ text, layer, resolve });
+    this.counters.referencesChecked += 1;
+    if (!graph.ok) this.counters.referencesUnresolved += 1;
+    const status = !references.length && !graph.counts.malformed ? "none" : graph.ok ? "resolved" : "unresolved";
+    return { status, graph, references: [...new Set(references.map(({ cardId, claimId, revision }) => `${cardId}\0${claimId}\0${revision}`))]
+      .map((key) => { const [cardId, claimId, revision] = key.split("\0"); return { cardId, claimId, revision: Number(revision) }; }) };
+  }
+
+  /**
+   * Read an article's references and record the finding on the article: the references, the status, and the hash of the text read.
+   * @param {any} project @param {{ id: string, layer: string | null }} article @param {string} text
+   */
+  async checkArticle(project, article, text) {
+    const result = await this.checkText(project, { text, layer: String(article.layer ?? "") });
+    await this.store.setArticleReferences(project.id, article.id, { refs: result.references, status: result.status, sha256: sha256(text) });
+    return result;
+  }
+
+  /**
+   * The articles that cite a claim of a card revision since corrected, updated in its conclusion or withdrawn, by the zone's own
+   * change log (`readEvidenceChangeLog`): article id to the references that moved. A notice for the project's page.
+   * @param {any} project @param {Array<{ id: string, claimRefs?: Array<{ cardId: string, claimId: string, revision: number }> }>} articles
+   * @returns {Promise<Map<string, Array<{ cardId: string, claimId: string, revision: number, category: string, occurredAt: string, summary: string }>>>}
+   */
+  async staleReferences(project, articles) {
+    /** @type {Map<string, any[]>} */
+    const out = new Map();
+    const cardIds = [...new Set(articles.flatMap((article) => (article.claimRefs ?? []).map((reference) => reference.cardId)))].slice(0, 40);
+    if (!cardIds.length) return out;
+    /** @type {any[]} */
+    const entries = [];
+    for (const cardId of cardIds) {
+      try { entries.push(...(await readEvidenceChangeLog(this.database, { cardId, limit: 100 })).items); } catch { /* a log that cannot be read leaves the article unflagged, not blocked */ }
+    }
+    for (const article of articles) {
+      const stale = geoStaleReferences(article.claimRefs ?? [], entries.map((entry) => ({ cardId: entry.cardId, category: entry.category, revisionAfter: entry.revisionAfter,
+        occurredAt: entry.occurredAt, summary: entry.summary, refs: entry.refs })));
+      if (stale.length) out.set(article.id, stale);
+    }
+    this.counters.articlesFlagged += out.size;
+    return out;
+  }
+
+  /**
+   * The text of a card-layer article: the card's public view in Markdown, rendered now from the card's current revision.
+   * @param {any} project @param {{ cardId: string | null }} article @returns {Promise<{ markdown: string, revision: number, title: string } | null>}
+   */
+  async cardLayerText(project, article) {
+    if (!article.cardId) return null;
+    const found = await this.#cardAt(project, article.cardId, null);
+    if (!found || found.current.withdrawn) return null;
+    return this.#render(found.current);
+  }
+
+  /** @param {any} row */
+  #render(row) {
+    const card = { title: row.title, producer: row.producer, originality: row.originality, journeyStage: row.journey_stage, disclosure: row.disclosure,
+      claims: row.claims ?? [], sources: row.sources ?? [], content: row.content, publicView: row.public_view };
+    const view = evidenceCardPublicView(card);
+    const markdown = geoCardLayerMarkdown({ view: /** @type {any} */ (view), card: { id: String(row.id), revision: Number(row.revision) } });
+    return { markdown, revision: Number(row.revision), title: String(row.title), written: view.panels.some((/** @type {any} */ panel) => panel.status === "written" && panel.key !== "sourcesAndCheckDate") };
+  }
+
+  /**
+   * The card-layer article of a card, brought to the card's current text. A card whose public view has nothing written has none:
+   * a heading and a producer are not an article. The pharmacists' safety rules decide whether it waits for a person.
+   * @param {any} project @param {string} cardId @param {string[]} claimIds
+   */
+  async #syncCardArticle(project, cardId, claimIds) {
+    const found = await this.#cardAt(project, cardId, null);
+    if (!found) return null;
+    const rendered = this.#render(found.current);
+    if (!rendered.written) return null;
+    const hits = clinicalSafetyRuleHits({ reportText: rendered.markdown, practical: rendered.markdown });
+    return this.store.upsertCardArticle(project.userId, project.id, {
+      cardId, cardRevision: rendered.revision, title: rendered.title, claimIds, contentSha256: sha256(rendered.markdown), safety: hits.length ? "open" : "clear",
+    });
   }
 
   /** What the operator metrics read. */
