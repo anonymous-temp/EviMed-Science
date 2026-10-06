@@ -652,6 +652,10 @@ export class EvidenceEditorial {
       );
     const user = { id: zone.user_id };
     const upkeep = this.startUpkeep(zone, job);
+    // An account's own zone is paid for by its owner, so whether they can pay comes before anything that costs a network read (2026-10-06
+    // review: the source was read first and the allowance asked at the model step, so an owner with no allowance had every source of the
+    // zone re-read each time the job was set aside and came back). Official zones are the platform's and are not asked.
+    if (!upkeep.official) await this.requireAllowance(upkeep);
     const roleAccounts = (
       await this.database.query(
         "SELECT id,name,auth_type FROM evimed_control.users WHERE id=ANY($1::text[])",

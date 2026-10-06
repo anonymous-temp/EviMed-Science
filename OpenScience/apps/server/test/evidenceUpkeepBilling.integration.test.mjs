@@ -191,6 +191,28 @@ test("an official zone keeps running on the platform's frontier budget exactly a
   assert.equal(model.calls.length, 6, "an exhausted frontier budget makes an official zone wait");
 });
 
+test("an owner with no allowance causes no source read at all: the allowance is asked before anything is read, every time the job comes back", options, async () => {
+  const owner = await account("broke-reads", 0);
+  const zone = await zoneWithWork(owner.id);
+  /** @type {string[]} */
+  const reads = [];
+  const editorial = worker({ credits: owner.credits, deferralMs: 1, readSource: async (/** @type {string} */ address) => { reads.push(address); return { text: DOCUMENT, coverage: "abstract", receipt: { sha256: evidenceHash(DOCUMENT) } }; } });
+  for (let round = 0; round < 3; round += 1) {
+    await db.query("UPDATE evimed_frontier.evidence_editorial_jobs SET available_at=clock_timestamp()");
+    await editorial.tick();
+  }
+  assert.deepEqual(reads, [], "no source was read for an owner who cannot pay");
+  assert.deepEqual(model.calls, []);
+  const job = await jobOf(zone.id);
+  assert.deepEqual([job.state, job.last_error, job.attempts], ["pending", "evidence_upkeep_no_allowance", 0]);
+  assert.ok(editorial.counters.deferredNoAllowance >= 1);
+  // The control: an official zone is the platform's and reads as it always did, with no allowance asked.
+  await db.query("UPDATE evimed_frontier.evidence_editorial_jobs SET available_at=clock_timestamp()+interval '1 day' WHERE zone_id=$1", [zone.id]);
+  await zoneWithWork(PLATFORM_PUBLISHER_USER_ID, { kind: "official", title: "Kidney official reads" });
+  await editorial.tick();
+  assert.ok(reads.length > 0, "the platform's own zone is read");
+});
+
 test("an owner with no allowance has the job set aside by name; nothing runs, nothing is booked, and the platform pays nothing", options, async () => {
   const owner = await account("broke", 0);
   const zone = await zoneWithWork(owner.id);
