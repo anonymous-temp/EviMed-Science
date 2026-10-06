@@ -144,7 +144,7 @@ test("the overall calibration is exported only from thirty scored predictions, a
     const met = Number(registration.registryId.slice(-4)) % 2 === 0;
     return { ok: true, value: met ? 0.7 : 1.2, met, quote: met ? "the hazard ratio was 0.70" : "the hazard ratio was 1.20", metQuote: null };
   });
-  let needed = PREDICTION_CALIBRATION_MIN_SCORED - before;
+  const needed = PREDICTION_CALIBRATION_MIN_SCORED - before;
   const filed = [];
   for (let index = 0; index < needed - 1; index += 1) filed.push(filing({ probability: ((index % 10) + 0.5) / 10, estimate: 0.9, interval: [0.5, 1.0] }));
   for (const input of filed) await registry.register(input);
