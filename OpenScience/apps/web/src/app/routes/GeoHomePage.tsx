@@ -81,7 +81,7 @@ export function GeoHomePage() {
     >
       {feature === "loading" || listing.kind === "loading" ? <GeoListSkeleton />
         : listing.kind === "error" ? <LoadError message={listing.message} onRetry={() => setReloads((value) => value + 1)} />
-          : listing.projects.length === 0 ? <EmptyState icon={Radar} title="还没有 循证传播项目" />
+          : listing.projects.length === 0 ? <EmptyState icon={Radar} title="还没有循证传播项目" />
             : <ProjectList projects={listing.projects} />}
     </PageShell>
   );

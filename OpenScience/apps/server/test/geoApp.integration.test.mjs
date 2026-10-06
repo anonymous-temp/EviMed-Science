@@ -97,7 +97,7 @@ test("a new GEO project is a real control-plane project, bound as far as this bu
 test("a project made before its brand is known is named by the brand the run writes; a chosen name is kept", options, async () => {
   const created = await call("preview", "POST", "/api/geo/projects", {});
   const { id, projectId } = created.body.data;
-  assert.deepEqual((await rows("SELECT name FROM evimed_control.projects WHERE user_id = $1 AND id = $2", [accounts.preview, projectId]))[0], { name: "新 循证传播项目" });
+  assert.deepEqual((await rows("SELECT name FROM evimed_control.projects WHERE user_id = $1 AND id = $2", [accounts.preview, projectId]))[0], { name: "新循证传播项目" });
   const geo = context.app.geo;
   const project = await geo.store.getProject(accounts.preview, id);
   const written = await geoRuntimeWrite({ store: geo.store, project, what: "product", body: { data: { brandName: "玛仕度肽" } }, renameProject: geo.renameProject });

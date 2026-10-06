@@ -96,7 +96,7 @@ describe("循证传播 home", () => {
   it("says there is nothing yet when there is no project, with the one button in the header", async () => {
     client.listGeoProjects.mockResolvedValue([]);
     renderHome();
-    expect(await screen.findByText("还没有 循证传播项目")).toBeInTheDocument();
+    expect(await screen.findByText("还没有循证传播项目")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "新建项目" })).toHaveLength(1);
   });
 

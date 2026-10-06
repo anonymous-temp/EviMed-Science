@@ -1834,6 +1834,30 @@ export {
 
 export { EVOLUTION_ERROR_MESSAGES, EVOLUTION_TRACKS, EVOLUTION_DATA_LEVELS, EVOLUTION_VALIDATION_LEVELS, EVOLUTION_DECISION_CLASSES, EVOLUTION_GAP_CODES, EVOLUTION_LEAD_SOURCES, EVOLUTION_ORIGINS, EVOLUTION_BUILD_FORMS, EVOLUTION_CASE_GROUPS, EVOLUTION_TOOL_STATES, EVOLUTION_JOB_KINDS, EVOLUTION_EXECUTABLE_OPERATIONS, EVOLUTION_ONE_WAY_OPERATIONS, evolutionDecisionClass, evolutionAdaptiveClass, evolutionValidationLevel, evolutionToolVisible, evolutionMethodFields, evolutionDataMatch, validateEvolutionDataRequirements } from './src/evolution.mjs'
 
+// geoEvidenceChain — 「循证传播」 as one evidence chain (flywheel F21, F28, 2026-10-06): the product zone's cards made from a
+// project's verified claims, the closed vocabulary of how a difference is known, the producer settings and the disclosure's
+// people, and the claim-reference grammar the lower layers cite the cards by
+export {
+  EVIDENCE_FEED_ZONE_KINDS,
+  GEO_CARD_HELD_REASONS_ZH,
+  GEO_COMPARISON_EVIDENCE_TYPES,
+  GEO_COMPARISON_EVIDENCE_TYPE_LABELS_ZH,
+  GEO_DEFAULT_PRODUCER_RELATION,
+  GEO_PRODUCER_KINDS,
+  GEO_PRODUCER_KIND_LABELS_ZH,
+  geoCardClaimId,
+  geoCardPlan,
+  geoCardProducer,
+  geoClaimJourneyStage,
+  geoComparisonEvidenceType,
+  geoDisclosurePerson,
+  geoProducerSettingsIssues,
+  geoSourceUrl,
+  isFeedEligibleCard,
+  isFeedEligibleZone,
+  normalizeGeoProducerSettings,
+} from './src/geoEvidenceChain.mjs'
+
 // evidenceCard — 63 exports: the evidence card, the platform's single evidence unit (flywheel plan 2026-10-05 §4): its contract
 // (producer, originality, lineage, entity keys, journey stage, disclosure, claims, the public view's content), the two
 // views of one card, the three rules (who may write where, no paid ranking input, no simulated value) and the error

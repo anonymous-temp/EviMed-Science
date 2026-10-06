@@ -62,6 +62,7 @@ import {
   GEO_CLAIM_SOURCE_KINDS, GEO_CLAIM_STATUSES, GEO_DATA_TYPES, GEO_ERROR_ACTIONS, GEO_ERROR_STATUSES, GEO_ERROR_TYPES,
   GEO_FAILURE_MODES, GEO_GROUP_SIGNALS, GEO_LEDGER_KINDS, GEO_MEDIA_TYPES, GEO_METRIC_ROW_SCOPES, GEO_ORDER_STATES,
   GEO_OWNED_LINK_PLATFORMS, GEO_OWNED_LINK_STATUSES, GEO_POOLS,
+  GEO_COMPARISON_EVIDENCE_TYPES,
   GEO_PROBE_JOB_STATUSES, GEO_PROJECT_STATUSES, GEO_QUESTION_KINDS, GEO_RECONCILIATION_STATUSES, GEO_ROUND_KINDS,
   GEO_ROUND_STATUSES, GEO_SEVERITIES, GEO_SNAPSHOT_STATUSES, GEO_SOURCE_LAYERS, GEO_TIERS, GEO_TOPUP_STATUSES,
 } from "@evimed/domain";
@@ -599,6 +600,26 @@ ALTER TABLE evimed_geo.projects ADD COLUMN IF NOT EXISTS entity_keys text[];
 -- A claim's source as a reader names it (「玛仕度肽注射液说明书（国家药监局 2025）」);
 -- source_ref stays the machine reference the quote is checked against.
 ALTER TABLE evimed_geo.claims ADD COLUMN IF NOT EXISTS source_label text;
+
+-- One evidence chain (flywheel F21, 2026-10-06): the claim table stays the project's working index, and the claims a card
+-- ruler verifies are also written into the product zone's cards. journey_stage and clinical_question say which card a claim
+-- belongs to, comparison_type how a difference is known (closed words in the domain), artifact_path the preserved source
+-- file its quotation is in, and card_id, card_claim_id and card_revision the card claim it became. A release-5 row has none
+-- of them and reads as a claim not yet written into a card.
+ALTER TABLE evimed_geo.claims ADD COLUMN IF NOT EXISTS journey_stage jsonb;
+ALTER TABLE evimed_geo.claims ADD COLUMN IF NOT EXISTS clinical_question text;
+ALTER TABLE evimed_geo.claims ADD COLUMN IF NOT EXISTS comparison_type text CHECK (comparison_type IN ${inList(GEO_COMPARISON_EVIDENCE_TYPES)});
+ALTER TABLE evimed_geo.claims ADD COLUMN IF NOT EXISTS artifact_path text;
+ALTER TABLE evimed_geo.claims ADD COLUMN IF NOT EXISTS card_id text;
+ALTER TABLE evimed_geo.claims ADD COLUMN IF NOT EXISTS card_claim_id text;
+ALTER TABLE evimed_geo.claims ADD COLUMN IF NOT EXISTS card_revision integer;
+CREATE INDEX IF NOT EXISTS geo_claims_card_idx ON evimed_geo.claims (card_id) WHERE card_id IS NOT NULL;
+
+-- Who speaks (producer: enterprise or doctor, the relation to the product, a doctor's hospital, department and specialty) and
+-- the project's one product zone in the evidence zones. The zone id is unique: a zone belongs to one project.
+ALTER TABLE evimed_geo.projects ADD COLUMN IF NOT EXISTS producer jsonb;
+ALTER TABLE evimed_geo.projects ADD COLUMN IF NOT EXISTS product_zone_id text;
+CREATE UNIQUE INDEX IF NOT EXISTS geo_projects_product_zone_key ON evimed_geo.projects (product_zone_id) WHERE product_zone_id IS NOT NULL;
 
 -- Links the brand published itself (gap E6). \`url_key\` is \`canonicalGeoUrl(url)\`,
 -- what an engine's citation is matched by; \`article_id\` names the project's

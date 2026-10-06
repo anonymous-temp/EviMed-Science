@@ -1441,6 +1441,11 @@ export const GEO_ROUTE_ERROR_CODES = Object.freeze([
   'geo_unavailable',
   // A paused project runs nothing: 「让 AI 做」 and 导出 wait until it is resumed.
   'geo_project_paused',
+  // One evidence chain (flywheel F21): the producer settings, and the product-zone cards made from the claims.
+  'geo_producer_invalid',
+  'geo_card_producer_required',
+  'geo_card_reviewer_required',
+  'geo_cards_unavailable',
 ])
 
 /**
@@ -1671,6 +1676,10 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   tooluniverse_busy: '补充科研数据源正忙，请稍后再试或继续使用其他来源。',
   tooluniverse_rate_limited: '补充科研数据源请求过于频繁，请稍后再试。',
   geo_project_paused: '这个项目已暂停，继续之后再让 AI 做。',
+  geo_producer_invalid: '出品方设置不对：类型选“企业”或“医生”，医生要写姓名，与产品的关系只能选列出的几种。',
+  geo_card_producer_required: '先在项目里写明由谁出品（企业或医生），才能生成产品专区的证据卡；结论库里的结论都还在。',
+  geo_card_reviewer_required: '产品专区的证据卡要写明作者和审核医生。先在项目成员里加一位医学审核，再生成；结论库里的结论都还在。',
+  geo_cards_unavailable: '这个部署没有开通证据专区，结论暂时不能生成证据卡；结论库里的结论都还在。',
   // 「虚拟临研」's page refusals. Every one of these is permanent for the request
   // that caused it — retrying the same thing gets the same answer — so none of
   // them says 「稍后再试」, which is what the family sentence for an unknown

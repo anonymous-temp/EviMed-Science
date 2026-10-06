@@ -66,7 +66,7 @@ export const GEO_ANSWER_TEXT_LIMIT = 4_000;
 export const GEO_READ_MAX_ITEMS = 50;
 
 /** The name a new GEO project's control-plane project gets when no brand is given yet. */
-export const GEO_DEFAULT_PROJECT_NAME = "新 循证传播项目";
+export const GEO_DEFAULT_PROJECT_NAME = "新循证传播项目";
 
 const DIAGNOSIS_ROUND_KINDS = Object.freeze(["baseline", "weekly", "single_step"]);
 /** A rival's mention rate: the owner's M-16, over the same pools as our headline M-01S. */
@@ -1464,12 +1464,13 @@ export async function geoReadiness({ config, geo, database }) {
 
 /**
  * Everything the metrics endpoint shows about the module, read once per scrape.
- * @param {{ service: GeoService, social?: any, worker?: any }} geo
+ * @param {{ service: GeoService, social?: any, worker?: any, cards?: any }} geo
  */
 export async function geoMetricsSnapshot(geo) {
   let tables = null;
   try { tables = await geo.service.metricsSnapshot(); } catch { tables = null; }
-  return { tables, service: { ...geo.service.counters }, social: geo.social?.status?.() ?? null, worker: geo.worker?.status?.() ?? null };
+  return { tables, service: { ...geo.service.counters }, social: geo.social?.status?.() ?? null, worker: geo.worker?.status?.() ?? null,
+    cards: geo.cards?.metrics?.() ?? null };
 }
 
 /**
@@ -1502,6 +1503,11 @@ export function geoMetricFamilies(enabled, snapshot) {
   const service = snapshot.service ?? {};
   add("service_total", "What the service did since this process started.", "counter",
     ["projectsCreated", "reads", "writes", "writeIssues", "notFound"].map((kind) => ({ labels: { kind }, value: Number(/** @type {any} */ (service)[kind] ?? 0) })));
+  // The evidence chain (flywheel F21): the product zone's cards made from the claim table, and what was held back or refused.
+  if (snapshot.cards) {
+    add("cards_total", "Product-zone card writes since this process started, by what happened.", "counter",
+      ["zonesMade", "cardsCreated", "cardsUpdated", "cardsUnchanged", "claimsCarded", "claimsHeld", "refused"].map((event) => ({ labels: { event }, value: Number(/** @type {any} */ (snapshot.cards)[event] ?? 0) })));
+  }
   const social = snapshot.social;
   if (social?.counters) {
     add("social_requests_total", "Social-channel requests by outcome.", "counter",

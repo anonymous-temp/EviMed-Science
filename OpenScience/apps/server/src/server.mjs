@@ -262,6 +262,7 @@ import { FrontierComposer } from "./frontierComposer.mjs";
 // `geo` object (`geo.worker`, `geo.orchestrator`, `geo.market`, `geo.exporter`).
 import { GeoStore, deleteGeoProjectRows, deleteGeoUserRows, removeGeoScreenshotFiles } from "./geoStore.mjs";
 import { createGeoDeliveryImport } from "./geoDeliveryImport.mjs";
+import { GeoCards } from "./geoCards.mjs";
 import { geoArticleGateOf } from "./geoWrites.mjs";
 import { GEO_DEFAULT_PROJECT_NAME, GeoService, geoAudienceAllows, geoMetricFamilies, geoMetricsSnapshot, geoReadiness } from "./geoService.mjs";
 import { createGeoRoutes, geoRoutePattern } from "./geoRoutes.mjs";
@@ -1860,12 +1861,25 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
    *   market: any, exporter: any, renameProject: (userId: string, projectId: string, name: string) => Promise<unknown>,
    *   articleGate: (project: any, ref: { runId: string | null, deliverableId: string | null, path: string }) => Promise<string>,
    *   articleRunId: (project: any, deliverableId: string) => Promise<string | null>,
+   *   cards: GeoCards, refreshCards: (geoProject: any, controlProject: any) => ReturnType<GeoCards["refresh"]>,
    *   importDelivery: ReturnType<typeof createGeoDeliveryImport> } | null} */
   let geo = null;
   if (config.geoEnabled && productDatabase) {
     const geoStore = new GeoStore({ database: productDatabase, entityVocabulary });
     const social = createSocialCrawlClient({ baseUrl: config.geoSocialUrl, timeoutMs: config.geoSocialTimeoutMs,
       fetchImpl: overrides.geoSocialFetch ?? globalThis.fetch });
+    // The project's product zone and its cards (geoCards.mjs): the evidence zones the frontier composes, or one of its own where
+    // the frontier is off — the zone service needs nothing of the feed.
+    const geoCards = new GeoCards({
+      store: geoStore, database: productDatabase, report: (code) => process.stderr.write(`geo cards: ${code}\n`),
+      zones: frontier?.evidenceZones ?? new EvidenceZoneService({ database: productDatabase, entityKeysFor: entityVocabulary.entityKeysFor, platformPublisherUserId: PLATFORM_PUBLISHER_USER_ID }),
+      ownerName: async (userId) => (await store.userById(userId))?.name ?? null,
+    });
+    /** A claim's preserved source file from its project's workspace, read without following links. @param {any} controlProject */
+    const geoSourceReader = (controlProject) => async (/** @type {{ artifactPath: string | null }} */ claim) => {
+      if (!claim.artifactPath) return null;
+      try { return String(await readFileNoFollow(controlProject.workspaceDir, resolveScopedPath(controlProject.workspaceDir, claim.artifactPath), "utf8")); } catch { return null; }
+    };
     geo = {
       store: geoStore,
       service: new GeoService({ store: geoStore, config, social, metricName: (id) => geoMetricDefinition(id)?.name ?? null }),
@@ -1874,7 +1888,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       orchestrator: null,
       market: null,
       exporter: null,
+      cards: geoCards,
+      refreshCards: (geoProject, controlProject) => geoCards.refresh(geoProject, { readSource: geoSourceReader(controlProject) }),
       importDelivery: createGeoDeliveryImport({ store: geoStore, report: (code) => process.stderr.write(`geo import: ${code}\n`),
+        refreshCards: (geoProject, controlProject) => geo?.refreshCards(geoProject, controlProject) ?? Promise.resolve(null),
         articleGate: (project, ref) => geo?.articleGate(project, ref) ?? Promise.resolve("unverified"),
         articleRunId: (project, deliverableId) => geo?.articleRunId(project, deliverableId) ?? Promise.resolve(null) }),
       // A project made before its brand was known is named by the brand once
@@ -1956,6 +1973,18 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     get orchestrator() { return geo?.orchestrator ?? null; },
     get market() { return geo?.market ?? null; },
     get exporter() { return geo?.exporter ?? null; },
+    // The cards of the project's product zone: read as the project, written as its owner (the zone is the owner's).
+    get cards() {
+      const parts = geo;
+      return parts ? {
+        list: (/** @type {any} */ project) => parts.cards.list(project),
+        refresh: async (/** @type {any} */ _user, /** @type {any} */ project) => {
+          const owner = await store.userById(project.userId);
+          if (!owner) throw new HttpError(404, "geo_project_not_found", "GEO project not found.");
+          return parts.refreshCards(project, await store.requireProject(owner, project.projectId));
+        },
+      } : null;
+    },
   });
   const documentController = overrides.documentExportController ?? new RuntimeControllerClient(config);
   const vcrDocumentAdapter = vcr ? createVcrDocumentAdapter({ vcr, store }) : null;

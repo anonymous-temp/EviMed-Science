@@ -188,3 +188,25 @@ test("the first production run's competitor labels become registered rivals", op
   assert.deepEqual(saved?.competitors.map((/** @type {any} */ entry) => [entry.brandName, entry.aliases]), [["诺和盈", ["Wegovy"]], ["穆峰达", ["MOUNJARO"]]]);
   assert.ok(reports.includes("competitors imported 2 of 2"));
 });
+
+test("the imported claims are offered to the card writer once, and a refusal there is one reported code that ends nothing", options, async () => {
+  const created = await store.createProject({ userId: USER, projectId: `cards-${run}`, engines: ["deepseek"], coverageDays: 90 });
+  const seen = /** @type {Array<{ geo: string, workspace: string }>} */ ([]);
+  const reports = /** @type {string[]} */ ([]);
+  let answer = /** @type {() => Promise<any>} */ (async () => ({ cards: [{}, {}], held: [{}], failed: [] }));
+  const importDelivery = createGeoDeliveryImport({ store, report: (code) => reports.push(code),
+    readFile: async () => JSON.stringify({ claims: [claim(1), claim(2)] }), listInsightFolders: async () => ["geo-insight"],
+    refreshCards: async (geoProject, controlProject) => { seen.push({ geo: geoProject.id, workspace: controlProject.workspaceDir }); return answer(); } });
+  const project = { id: `cards-${run}`, userId: USER, workspaceDir: "/the-workspace" };
+  const result = await importDelivery(project, { id: "run_a", status: "succeeded", deliverables: [] });
+  assert.deepEqual(result, { imported: 2, issues: 0, located: 0, gated: 0, carded: 2 });
+  assert.deepEqual(seen, [{ geo: created.id, workspace: "/the-workspace" }], "the card writer is given the GEO project and the workspace the sources are in");
+  assert.ok(reports.some((line) => line.startsWith("cards written 2, claims held 1")));
+  // The next run: the card writer refuses by name; the claims were imported all the same.
+  answer = async () => { throw Object.assign(new Error("no reviewer"), { code: "geo_card_reviewer_required" }); };
+  const next = await importDelivery(project, { id: "run_b", status: "succeeded", deliverables: [] });
+  assert.equal(next?.imported, 2);
+  assert.equal(next?.carded, 0);
+  assert.ok(reports.includes("geo_card_reviewer_required"));
+  assert.equal((await store.listClaims(created.id)).length, 2);
+});

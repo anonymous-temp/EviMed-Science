@@ -103,6 +103,9 @@ export function geoProjectFromRow(row) {
     steps: normalizedSteps(row.steps),
     // What the product is about, by the shared entity vocabulary (`entityVocabulary.mjs`); none until it could be tagged.
     entityKeys: Array.isArray(row.entity_keys) ? row.entity_keys.map(String) : [],
+    // Who speaks for the product (enterprise or doctor, the relation, a doctor's affiliation) and the one product zone its cards are in.
+    producer: row.producer && typeof row.producer === "object" && !Array.isArray(row.producer) ? row.producer : null,
+    productZoneId: text(row.product_zone_id),
     createdAt: iso(row.created_at),
     updatedAt: iso(row.updated_at),
     deletedAt: iso(row.deleted_at),
@@ -128,6 +131,15 @@ export function claimFromRow(row) {
     validUntil: iso(row.valid_until),
     status: String(row.status),
     runId: text(row.run_id),
+    // The claim's place in the evidence chain: where on the patient journey it stands, the clinical question it answers, how a
+    // difference is known, the preserved source file its quotation is in, and the card claim it became (all null before a card).
+    journeyStage: row.journey_stage && typeof row.journey_stage === "object" ? row.journey_stage : null,
+    clinicalQuestion: text(row.clinical_question),
+    comparisonType: text(row.comparison_type),
+    artifactPath: text(row.artifact_path),
+    cardId: text(row.card_id),
+    cardClaimId: text(row.card_claim_id),
+    cardRevision: row.card_revision == null ? null : Number(row.card_revision),
     createdAt: iso(row.created_at),
     updatedAt: iso(row.updated_at),
   };
@@ -266,7 +278,7 @@ export function geoOwnedLinkKey(url) {
 }
 
 const PROJECT_COLUMNS = `id, user_id, project_id, product, competitors, coverage_days, engines, tier, budget, status, steps,
-  entity_keys, created_at, updated_at, deleted_at`;
+  entity_keys, producer, product_zone_id, created_at, updated_at, deleted_at`;
 
 /** The tables whose rows go with a project or an account; the money tables are not among them. */
 const OWNED_TABLES = Object.freeze(["facts", "snapshots", "probe_jobs", "rounds", "metrics", "errors", "questions", "question_groups", "schedule_marks",
@@ -476,7 +488,7 @@ export class GeoStore {
    * Change a project's settings; only the keys present move.
    * @param {string} userId @param {string} id
    * @param {{ coverageDays?: number, engines?: readonly string[], tier?: string, status?: string, product?: Record<string, any>,
-   *   competitors?: any[], budget?: Record<string, any> | null }} patch
+   *   competitors?: any[], budget?: Record<string, any> | null, producer?: Record<string, any> | null }} patch
    */
   async updateProject(userId, id, patch) {
     /** @type {string[]} */
@@ -498,6 +510,7 @@ export class GeoStore {
     }
     if (patch.competitors !== undefined) put("competitors", JSON.stringify(patch.competitors), "::jsonb");
     if (patch.budget !== undefined) put("budget", patch.budget == null ? null : JSON.stringify(patch.budget), "::jsonb");
+    if (patch.producer !== undefined) put("producer", patch.producer == null ? null : JSON.stringify(patch.producer), "::jsonb");
     if (!sets.length) return this.getProject(userId, id);
     const result = await this.query(`UPDATE evimed_geo.projects SET ${sets.join(", ")}, updated_at = now()
       WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL RETURNING ${PROJECT_COLUMNS}`, values);
@@ -550,10 +563,15 @@ export class GeoStore {
    * Write validated claims by key: a new key is version 1; a changed
    * statement, quote or source is the next version; otherwise the claim's
    * bookkeeping is updated in place.
+   *
+   * A claim may also carry where it stands on the patient journey, the clinical question it answers, how a difference is known
+   * (`comparisonType`) and the preserved source file its quotation is in; those are kept when a later write omits them, and a new
+   * version keeps the card its predecessor was written into (the group's card is still the one to refresh).
    * @param {string} userId @param {string} geoId
    * @param {Array<{ claimKey: string, statement: string, quote: string, sourceRef: string, sourceLabel?: string | null, sourceKind?: string | null,
    *   evidenceLevel?: string | null, population?: string | null, inLabel?: boolean | null, elements?: Record<string, any>,
-   *   verifiedAt?: string | null, validUntil?: string | null, status?: string, runId?: string | null }>} items
+   *   verifiedAt?: string | null, validUntil?: string | null, status?: string, runId?: string | null,
+   *   journeyStage?: Record<string, any> | null, clinicalQuestion?: string | null, comparisonType?: string | null, artifactPath?: string | null }>} items
    * @returns {Promise<Array<{ id: string, claimKey: string, version: number, change: 'created' | 'versioned' | 'updated' }>>}
    */
   async upsertClaims(userId, geoId, items) {
@@ -565,13 +583,16 @@ export class GeoStore {
           ORDER BY version DESC LIMIT 1 FOR UPDATE`, [geoId, item.claimKey])).rows[0];
         const values = [item.sourceKind ?? null, item.evidenceLevel ?? null, item.population ?? null, item.inLabel ?? null,
           JSON.stringify(item.elements ?? {}), item.verifiedAt ?? null, item.validUntil ?? null, item.status ?? "active", item.runId ?? null,
-          item.sourceLabel ?? null];
+          item.sourceLabel ?? null, item.journeyStage == null ? null : JSON.stringify(item.journeyStage), item.clinicalQuestion ?? null,
+          item.comparisonType ?? null, item.artifactPath ?? null];
         const same = latest && folded(latest.statement) === folded(item.statement) && folded(latest.quote) === folded(item.quote)
           && folded(latest.source_ref) === folded(item.sourceRef);
         if (same) {
           await client.query(`UPDATE evimed_geo.claims SET source_kind = $2, evidence_level = $3, population = $4, in_label = $5,
             elements = $6::jsonb, verified_at = $7, valid_until = $8, status = $9, run_id = coalesce($10, run_id),
-            source_label = coalesce($11, source_label), updated_at = now()
+            source_label = coalesce($11, source_label), journey_stage = coalesce($12::jsonb, journey_stage),
+            clinical_question = coalesce($13, clinical_question), comparison_type = coalesce($14, comparison_type),
+            artifact_path = coalesce($15, artifact_path), updated_at = now()
             WHERE id = $1`, [latest.id, ...values]);
           written.push({ id: String(latest.id), claimKey: item.claimKey, version: Number(latest.version), change: "updated" });
           continue;
@@ -581,13 +602,61 @@ export class GeoStore {
         // clock_timestamp, not the transaction's now(): a write of thirty
         // claims lists them in the order they were written.
         await client.query(`INSERT INTO evimed_geo.claims (id, user_id, geo_project_id, claim_key, version, statement, quote, source_ref,
-            source_kind, evidence_level, population, in_label, elements, verified_at, valid_until, status, run_id, source_label, created_at, updated_at)
-          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14, $15, $16, $17, $18, clock_timestamp(), clock_timestamp())`,
-        [id, userId, geoId, item.claimKey, version, item.statement, item.quote, item.sourceRef, ...values]);
+            source_kind, evidence_level, population, in_label, elements, verified_at, valid_until, status, run_id, source_label,
+            journey_stage, clinical_question, comparison_type, artifact_path, card_id, card_claim_id, created_at, updated_at)
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, $14, $15, $16, $17, $18, $19::jsonb, $20, $21, $22, $23, $24,
+            clock_timestamp(), clock_timestamp())`,
+        [id, userId, geoId, item.claimKey, version, item.statement, item.quote, item.sourceRef, ...values.slice(0, 10),
+          // A new version without a stage, a question or a source file of its own keeps its predecessor's.
+          values[10] ?? (latest?.journey_stage == null ? null : JSON.stringify(latest.journey_stage)), values[11] ?? latest?.clinical_question ?? null,
+          values[12] ?? latest?.comparison_type ?? null, values[13] ?? latest?.artifact_path ?? null,
+          latest?.card_id ?? null, latest?.card_claim_id ?? null]);
         written.push({ id, claimKey: item.claimKey, version, change: latest ? "versioned" : "created" });
       }
       return written;
     });
+  }
+
+  /**
+   * Record that claims were written into a card: the card, the card's own claim id and the revision it stands in.
+   * @param {string} geoId @param {Array<{ id: string, cardId: string, cardClaimId: string, cardRevision: number }>} marks
+   * @returns {Promise<number>}
+   */
+  async markClaimsCarded(geoId, marks) {
+    if (!marks.length) return 0;
+    return this.transaction(async (client) => {
+      let changed = 0;
+      for (const mark of marks) {
+        const result = await client.query(`UPDATE evimed_geo.claims SET card_id = $3, card_claim_id = $4, card_revision = $5
+          WHERE id = $1 AND geo_project_id = $2`, [mark.id, geoId, mark.cardId, mark.cardClaimId, mark.cardRevision]);
+        changed += result.rowCount ?? 0;
+      }
+      return changed;
+    });
+  }
+
+  /**
+   * Forget the card a claim was written into (the ruler no longer verifies it, or the claim was retired): its card id, its card
+   * claim id and the revision. The claim itself is untouched.
+   * @param {string} geoId @param {string[]} claimIds
+   */
+  async clearClaimCards(geoId, claimIds) {
+    if (!claimIds.length) return 0;
+    const result = await this.query(`UPDATE evimed_geo.claims SET card_id = NULL, card_claim_id = NULL, card_revision = NULL
+      WHERE geo_project_id = $1 AND id = ANY($2::text[]) AND card_id IS NOT NULL`, [geoId, claimIds]);
+    return result.rowCount ?? 0;
+  }
+
+  /**
+   * Record the project's product zone. A project has one: the call changes nothing when it already holds this zone, and
+   * answers false when it holds another (or the project is gone).
+   * @param {string} userId @param {string} id @param {string} zoneId
+   */
+  async setProductZoneId(userId, id, zoneId) {
+    const result = await this.query(`UPDATE evimed_geo.projects SET product_zone_id = $3
+      WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL AND (product_zone_id IS NULL OR product_zone_id = $3)
+      RETURNING product_zone_id`, [id, userId, zoneId]);
+    return (result.rowCount ?? 0) > 0;
   }
 
   // --- the question map ---------------------------------------------------------

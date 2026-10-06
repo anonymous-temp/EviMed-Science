@@ -74,8 +74,8 @@ const MCP_NARRATION = Object.freeze({
   dataset_semantics: (args) => (args?.action === 'check' ? '检查数据（漂移、重复、关联、分母、时间泄漏）'
     : args?.action === 'write' ? '记录数据含义' : args?.action === 'transform' ? '记录数据变换' : '读取已记录的数据含义'),
   // 「循证传播」's platform tools: what was read or written, in the page's words.
-  geo_read: (args) => `读取 循证传播项目：${geoWhat(GEO_READ_WHAT_LABELS_ZH, args?.what)}`,
-  geo_write: (args) => `写入 循证传播项目：${geoWhat(GEO_WRITE_WHAT_LABELS_ZH, args?.what)}`,
+  geo_read: (args) => `读取循证传播项目：${geoWhat(GEO_READ_WHAT_LABELS_ZH, args?.what)}`,
+  geo_write: (args) => `写入循证传播项目：${geoWhat(GEO_WRITE_WHAT_LABELS_ZH, args?.what)}`,
   social_posts_search: (args, result) => withCount(`采集社媒真实问法：「${excerpt(args?.query)}」`, result?.data?.posts ?? null),
 })
 

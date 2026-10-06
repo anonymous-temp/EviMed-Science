@@ -2,7 +2,7 @@ import { createReadStream } from "node:fs";
 import { stat } from "node:fs/promises";
 import {
   GEO_COVERAGE_DAYS_MAX, GEO_COVERAGE_DAYS_MIN, GEO_ENGINES, GEO_EXPORT_KINDS, GEO_ORDER_CANCELLABLE_STATES, GEO_PROJECT_STATUSES, GEO_STEPS,
-  GEO_TIERS,
+  GEO_TIERS, geoProducerSettingsIssues, normalizeGeoProducerSettings,
 } from "@evimed/domain";
 import { HttpError, readJson, sendJson } from "./security.mjs";
 
@@ -60,7 +60,7 @@ export function geoRoutePattern(pathname) {
   if (parts.length === 1) return "/api/geo/projects";
   if (parts.length === 2) return "/api/geo/projects/:id";
   const tab = ["evidence", "journey", "questions", "diagnosis", "answers", "screenshots", "sources", "tier", "articles", "distribution", "budget",
-    "orders", "monitoring", "run", "export"].includes(parts[2]) ? parts[2] : ":route";
+    "orders", "monitoring", "run", "export", "cards"].includes(parts[2]) ? parts[2] : ":route";
   if (parts.length === 3) return `/api/geo/projects/:id/${tab}`;
   if (parts.length === 4) return `/api/geo/projects/:id/${tab}/:item`;
   return `/api/geo/projects/:id/${tab}/:item/:action`;
@@ -98,6 +98,17 @@ function tier(value) {
   return value;
 }
 
+/**
+ * The producer settings of a project (who speaks for the product): the domain's own check, so the route and a card agree.
+ * @param {unknown} value
+ */
+function producerSettings(value) {
+  if (value === null) return null;
+  const issues = geoProducerSettingsIssues(value);
+  if (issues.length) throw new HttpError(400, "geo_producer_invalid", `The producer settings are not valid: ${issues.join("; ")}.`);
+  return normalizeGeoProducerSettings(value);
+}
+
 /** @param {unknown} value */
 function brandName(value) {
   if (value == null) return null;
@@ -126,6 +137,7 @@ function money(value, field) {
  *     latestSessionId?: (user: any, projectId: string) => Promise<string | null> } | null,
  *   orchestrator?: { runStep?: (user: any, project: any, step: string) => Promise<{ sessionId: string, runId?: string | null }> } | null,
  *   exporter?: { export?: (user: any, project: any, kind: string) => Promise<{ sessionId: string, runId: string | null }> } | null,
+ *   cards?: { list?: (project: any) => Promise<any>, refresh?: (user: any, project: any) => Promise<any> } | null,
  *   market?: { setBudget?: (user: any, project: any, budget: { totalCny: number, dailyCny: number }) => Promise<any>,
  *     cancelOrder?: (user: any, project: any, orderId: string) => Promise<any>, confirmTopup?: (user: any, topupId: string) => Promise<any>,
  *     resolveUnknownOrder?: (user: any, orderId: string, input: { created: boolean, vendorOrderNid?: string }) => Promise<any>,
@@ -155,6 +167,7 @@ export function createGeoRoutes(dependencies) {
     const hooks = {
       get orchestrator() { return dependencies.orchestrator ?? null; },
       get exporter() { return dependencies.exporter ?? null; },
+      get cards() { return dependencies.cards ?? null; },
       get market() { return dependencies.market ?? null; },
     };
 
@@ -247,7 +260,7 @@ export function createGeoRoutes(dependencies) {
         return reply({ ...view, sessionId });
       }
       if (method === "PATCH") {
-        const body = await bodyOf(req, maxJsonBytes, ["coverageDays", "engines", "tier", "status"]);
+        const body = await bodyOf(req, maxJsonBytes, ["coverageDays", "engines", "tier", "status", "producer"]);
         /** @type {Record<string, any>} */
         const patch = {};
         if (body.coverageDays !== undefined) patch.coverageDays = coverageDays(body.coverageDays);
@@ -257,6 +270,7 @@ export function createGeoRoutes(dependencies) {
           if (!GEO_PROJECT_STATUSES.includes(body.status)) throw new HttpError(400, "geo_status_invalid", `status must be one of: ${GEO_PROJECT_STATUSES.join(", ")}.`);
           patch.status = body.status;
         }
+        if (body.producer !== undefined) patch.producer = producerSettings(body.producer);
         return reply(await service.updateProject(user, id, patch));
       }
       if (method === "DELETE") {
@@ -288,6 +302,21 @@ export function createGeoRoutes(dependencies) {
         return reply(await service.distribution(user, id, configured === undefined ? {} : { marketConfigured: configured }));
       }
       if (tab === "monitoring") return reply(await service.monitoring(user, id));
+      // The project's product zone and its cards: each claim with its quotation, its ✓/⚠ and the card revision it stands in.
+      if (tab === "cards") {
+        const project = await service.requireProject(user, id);
+        if (!hooks.cards?.list) throw UNAVAILABLE();
+        return reply(await hooks.cards.list(project));
+      }
+    }
+    // Write the verified claims of the project into its product zone as cards; the answer says what was written and what was held.
+    if (parts.length === 4 && method === "POST" && tab === "cards" && parts[3] === "refresh") {
+      await bodyOf(req, maxJsonBytes, []);
+      const project = await service.requireProject(user, id);
+      if (!hooks.cards?.refresh) throw UNAVAILABLE();
+      const result = await hooks.cards.refresh(user, project);
+      await audit("geo.cards.refresh", "completed", { userId: user.id, code: id, detail: `${result.cards?.length ?? 0}` });
+      return reply(result);
     }
     if (parts.length === 4 && method === "GET" && tab === "answers") return reply(await service.answer(user, id, parts[3]));
     if (parts.length === 4 && method === "GET" && tab === "screenshots") {
