@@ -34,6 +34,12 @@ import { frontierBudgetState, frontierDayWindow } from "./frontierPipeline.mjs";
  *   programme that cannot read what it has spent has no way to know it stayed inside 30 yuan, so it
  *   refuses (`unmeasured`) rather than guess.
  *
+ * - **The challenges have a day of their own** (2026-10-06 review). Judging a reader's challenge on a platform card is a model call on
+ *   the platform's money, and with no bound but each reader's ten a day it had none in aggregate; it also needed the programme's concurrency
+ *   slot and its switch, so with the programme off every such challenge waited forever. `reserveChallenge` asks for neither: it asks
+ *   whether the deployment-wide ceiling on judging (`OPEN_SCIENCE_EVIDENCE_CHALLENGE_DAILY_BUDGET_CNY`, 5) still has room — counted from the
+ *   ledger's `evch_` run scopes, which is all the judges book — and, only when the programme is on, whether its own day does too.
+ *
  * The honest cost of a deep synthesis is about 7 yuan (measured 2026-10-04), so the default day buys
  * about four. Build to delete: this is scaffolding for a programme the platform runs on an account of
  * its own; it goes when the account caps and the research allowance can carry an internal account's
@@ -44,6 +50,14 @@ import { frontierBudgetState, frontierDayWindow } from "./frontierPipeline.mjs";
 
 /** The reasons `reserve()` refuses, closed so the counter's label set is. */
 export const EVIDENCE_BUDGET_REFUSALS = Object.freeze(["off", "unmeasured", "exhausted", "estimate_exceeds_remaining"]);
+
+/**
+ * What a judgement of a reader's challenge is booked under: its run scope (`evch_<challenge>_<attempt>`), under the same purpose
+ * `evidence` and the same account as the programme. The prefix is how the challenges' day is told from the programme's own in the ledger.
+ */
+export const EVIDENCE_CHALLENGE_RUN_PREFIX = "evch_";
+/** The reasons `reserveChallenge()` refuses: the challenges' own ceiling, or the programme's day when the programme is on and has spent it. */
+export const EVIDENCE_CHALLENGE_BUDGET_REFUSALS = Object.freeze(["unmeasured", "exhausted", "estimate_exceeds_remaining", "programme_day"]);
 
 /** @typedef {{ enabled: boolean, spentCny: number, budgetCny: number, remainingCny: number | null, state: "off" | "ok" | "throttled" | "exhausted" | "unavailable", measured: boolean }} EvidenceBudgetReading */
 
@@ -63,6 +77,12 @@ export function createEvidenceBudget({ usageLedger = null, config, now = () => n
     reads: 0, readFailures: 0, granted: 0,
     refused: Object.fromEntries(EVIDENCE_BUDGET_REFUSALS.map((reason) => [reason, 0])),
     slotsGranted: 0, slotsRefused: 0,
+  };
+  const challengeBudgetCny = Number.isFinite(Number(config?.evidenceChallengeDailyBudgetCny)) && Number(config.evidenceChallengeDailyBudgetCny) >= 0
+    ? Number(config.evidenceChallengeDailyBudgetCny) : 5;
+  const challenge = {
+    reads: 0, readFailures: 0, granted: 0,
+    refused: Object.fromEntries(EVIDENCE_CHALLENGE_BUDGET_REFUSALS.map((reason) => [reason, 0])),
   };
   let slotsInUse = 0;
   /** @type {(EvidenceBudgetReading & { measuredAt: string }) | null} */
@@ -125,6 +145,51 @@ export function createEvidenceBudget({ usageLedger = null, config, now = () => n
   }
 
   /**
+   * Today's spend on judging readers' challenges against its own ceiling. Independent of the programme's switch: a reading is taken
+   * whenever someone asks, and the ceiling 0 is no ceiling (nothing is read).
+   * @param {Date} [at] @returns {Promise<{ spentCny: number, budgetCny: number, remainingCny: number | null, state: "ok" | "throttled" | "exhausted" | "unavailable", measured: boolean }>}
+   */
+  async function challengeBudget(at = now()) {
+    if (!(challengeBudgetCny > 0)) return { spentCny: 0, budgetCny: challengeBudgetCny, remainingCny: null, state: "ok", measured: true };
+    let spentCny = 0;
+    let measured = false;
+    if (usageLedger && typeof usageLedger.purposeSpend === "function") {
+      try {
+        const window = frontierDayWindow(at, timeZone);
+        spentCny = await usageLedger.purposeSpend({ ...owner, purpose: "evidence", runIdPrefix: EVIDENCE_CHALLENGE_RUN_PREFIX, since: window.start, until: window.end });
+        measured = true;
+        challenge.reads += 1;
+      } catch {
+        challenge.readFailures += 1;
+      }
+    }
+    return {
+      spentCny, budgetCny: challengeBudgetCny, remainingCny: Math.max(0, Math.round((challengeBudgetCny - spentCny) * 10_000) / 10_000),
+      state: measured ? frontierBudgetState(spentCny, challengeBudgetCny) : "unavailable", measured,
+    };
+  }
+
+  /**
+   * Whether the day can still afford one judgement of a challenge, estimated at `estimateCny`: the challenges' own ceiling, and the
+   * programme's day too when the programme is on (its spend and this one are the same purpose). A question, like `reserve`: nothing is
+   * held, and no slot is taken — judging is one call at a time by the editor's own tick.
+   * @param {number} estimateCny @param {Date} [at]
+   * @returns {Promise<{ granted: boolean, reason: "ok" | (typeof EVIDENCE_CHALLENGE_BUDGET_REFUSALS)[number], remainingCny: number | null }>}
+   */
+  async function reserveChallenge(estimateCny, at = now()) {
+    const reading = await challengeBudget(at);
+    /** @param {(typeof EVIDENCE_CHALLENGE_BUDGET_REFUSALS)[number]} reason */
+    const refuse = (reason) => { challenge.refused[reason] += 1; return { granted: false, reason, remainingCny: reading.remainingCny }; };
+    if (!reading.measured) return refuse("unmeasured");
+    if (reading.state === "exhausted") return refuse("exhausted");
+    const estimate = Number(estimateCny);
+    if (Number.isFinite(estimate) && estimate > 0 && reading.remainingCny !== null && estimate > reading.remainingCny) return refuse("estimate_exceeds_remaining");
+    if (enabled && !(await reserve(estimateCny, at)).granted) return refuse("programme_day");
+    challenge.granted += 1;
+    return { granted: true, reason: "ok", remainingCny: reading.remainingCny };
+  }
+
+  /**
    * One of the programme's concurrent work slots (default 1). A programme that is off has none.
    * @returns {{ release: () => void } | null} null when none is free
    */
@@ -137,8 +202,8 @@ export function createEvidenceBudget({ usageLedger = null, config, now = () => n
   }
 
   return {
-    enabled, owner, budgetCny, maxConcurrency, budget, remainingCny, reserve, tryAcquireSlot,
-    status: () => ({ enabled, budgetCny, maxConcurrency, slotsInUse, last: last ? { ...last } : null, counters: structuredClone(counters) }),
+    enabled, owner, budgetCny, maxConcurrency, budget, remainingCny, reserve, tryAcquireSlot, challengeBudget, reserveChallenge, challengeBudgetCny,
+    status: () => ({ enabled, budgetCny, maxConcurrency, slotsInUse, last: last ? { ...last } : null, counters: structuredClone(counters), challenge: structuredClone(challenge) }),
   };
 }
 
@@ -150,9 +215,11 @@ export function createEvidenceBudget({ usageLedger = null, config, now = () => n
  * @param {EvidenceBudgetReading | null} [reading] today's reading, taken by the scrape
  * @param {Record<string, number> | null} [upkeep] the zone editor's counters (`EvidenceEditorial.status().counters`):
  *   who paid for the upkeep jobs it ran, and which it set aside
+ * @param {{ spentCny: number, budgetCny: number } | null} [challengeReading] today's spend on judging challenges, taken by the scrape;
+ *   null where the upkeep is off, and then none of its series is exported
  * @returns {{ name: string, help: string, type: "gauge" | "counter", series: { value: number, labels?: Record<string, string> }[] }[]}
  */
-export function evidenceBudgetMetricFamilies(config, budget, reading = null, upkeep = null) {
+export function evidenceBudgetMetricFamilies(config, budget, reading = null, upkeep = null, challengeReading = null) {
   /** @type {{ name: string, help: string, type: "gauge" | "counter", series: { value: number, labels?: Record<string, string> }[] }[]} */
   const families = [
     { name: "open_science_evidence_programme_enabled", type: "gauge", help: "Whether the platform's evidence programme is switched on (OPEN_SCIENCE_EVIDENCE_PROGRAMME_ENABLED).", series: [{ value: config?.evidenceProgrammeEnabled === true ? 1 : 0 }] },
@@ -173,6 +240,20 @@ export function evidenceBudgetMetricFamilies(config, budget, reading = null, upk
       help: "Research-allowance settlements of owner-billed upkeep, by outcome: charged to the owner, recorded and waived (the job delivered nothing), or failed (the scope's calls stay in the usage ledger, unsettled).",
       series: [{ labels: { outcome: "charged" }, value: Number(upkeep.charged) || 0 }, { labels: { outcome: "waived" }, value: Number(upkeep.waived) || 0 },
         { labels: { outcome: "failed" }, value: Number(upkeep.chargeFailed) || 0 }],
+    });
+  }
+  if (budget && challengeReading) {
+    const refused = budget.status().challenge.refused;
+    families.push({
+      name: "open_science_evidence_challenge_budget_spent_cny", type: "gauge",
+      help: "Today's spend on judging readers' challenges, across every reader (the ceiling below counts the same ledger rows).", series: [{ value: Number(challengeReading.spentCny) || 0 }],
+    }, {
+      name: "open_science_evidence_challenge_budget_limit_cny", type: "gauge",
+      help: "The day's ceiling on judging readers' challenges (OPEN_SCIENCE_EVIDENCE_CHALLENGE_DAILY_BUDGET_CNY; 0 = none).", series: [{ value: Number(challengeReading.budgetCny) || 0 }],
+    }, {
+      name: "open_science_evidence_challenge_budget_refusals_total", type: "counter",
+      help: "Judgements of a challenge the day's ceiling refused, by reason: the ledger could not be read, the day is spent, one judgement would not fit, or the programme's own day is spent.",
+      series: EVIDENCE_CHALLENGE_BUDGET_REFUSALS.map((reason) => ({ labels: { reason }, value: refused[reason] ?? 0 })),
     });
   }
   if (!budget || !budget.enabled) return families;

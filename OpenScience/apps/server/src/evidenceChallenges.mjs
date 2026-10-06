@@ -6,7 +6,7 @@
  *
  * - a **platform card**: a leased re-check runs. The verbatim check of the claim against the sources the card preserved is code
  *   (`verifyEvidenceCardClaims`, the comparison the reader's ✓/⚠ uses); whether the cited passage supports the claim as worded is one
- *   model judgement (`deepseek-flash`, purpose `evidence`, inside the evidence programme's budget) with a closed answer —
+ *   model judgement (`deepseek-flash`, purpose `evidence`, inside the challenges' own daily ceiling, `OPEN_SCIENCE_EVIDENCE_CHALLENGE_DAILY_BUDGET_CNY`) with a closed answer —
  *   `uphold`, `amend` or `withdraw` — and the passage it relies on, which code finds again in the source. An answer that is not in the
  *   closed set, or whose passage is not in the source, is dropped: the challenge stays open for the next tick and is never softened
  *   into an outcome. `amend` writes a new revision that changes only that claim; `withdraw` removes it (and takes the card back if no
@@ -33,6 +33,7 @@ import {
   EVIDENCE_CHALLENGE_OUTCOMES, EVIDENCE_CHALLENGE_OUTCOME_LABELS_ZH, EVIDENCE_CHALLENGE_REASON_LIMITS, evidenceChallengeRoute, verifyEvidenceCardClaims,
 } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
+import { EVIDENCE_CHALLENGE_RUN_PREFIX } from "./evidenceBudget.mjs";
 import { migrateEvidenceZones } from "./evidenceZonePersistence.mjs";
 import { EVIDENCE_UPKEEP_DEFAULTS, evidenceCurrencyView, officialZoneRow } from "./evidenceCurrency.mjs";
 
@@ -42,7 +43,7 @@ export const EVIDENCE_CHALLENGE_LIMITS = Object.freeze({
   maxAttempts: 5,
   /** The back-off between attempts, by attempt number (ms). The last holds for every attempt after it. */
   backoffMs: Object.freeze([60_000, 600_000, 3_600_000, 21_600_000, 86_400_000]),
-  /** How long a re-check holds its lease, and how long it waits when the budget or the programme's slot is not free. */
+  /** How long a re-check holds its lease, and how long it waits when the day's judging budget is spent. */
   leaseMs: 300_000, deferMs: 900_000,
   /** What the model is shown of each cited source, and the longest passage or reason it may answer with. */
   sourceChars: 12_000, passageMin: 8, passageMax: 800, reasonMax: 400, claimMax: 1500,
@@ -244,7 +245,8 @@ export function createChallengeJudge({ config, usageLedger, fetchImpl = globalTh
  *   notifyZoneFollowers?: ((event: { zoneId: string, cardId: string, revision: number, kind: 'updated' | 'corrected' | 'withdrawn' }) => Promise<any>) | null,
  * }} options
  *   `judge` is the one model judgement (`createChallengeJudge`); absent, a platform card's challenge stays open. `budget` is the evidence
- *   programme's (`createEvidenceBudget`): asked before each judgement, and its concurrency slot taken for it.
+ *   budget object (`createEvidenceBudget`): `reserveChallenge` is asked before each judgement — the challenges' own day, and the programme's
+ *   too when it is on; no slot and no switch of the programme is needed.
  */
 export function createEvidenceChallenges({
   database, service, changeLog, notifications = null, judge = null, budget = null, levers = {}, now = () => new Date(), workerId = randomUUID(),
@@ -253,7 +255,7 @@ export function createEvidenceChallenges({
   const L = EVIDENCE_CHALLENGE_LIMITS;
   const perDay = Number.isSafeInteger(levers.challengesPerDay) ? /** @type {number} */ (levers.challengesPerDay) : EVIDENCE_UPKEEP_DEFAULTS.challengesPerDay;
   const counters = {
-    filed: 0, rateLimited: 0, duplicates: 0, producerNotified: 0, rechecked: 0, dropped: 0, deferred: 0, unreadable: 0, exhausted: 0,
+    filed: 0, rateLimited: 0, duplicates: 0, producerNotified: 0, rechecked: 0, dropped: 0, deferred: 0, unreadable: 0, exhausted: 0, judged: 0, waiting: 0,
     outcome: /** @type {Record<string, number>} */ ({ uphold: 0, amend: 0, withdraw: 0 }), closed: 0, noticeFailures: 0,
   };
   const failed = (/** @type {string} */ what, /** @type {unknown} */ error) => { try { report(`evidence challenge ${what}: ${codeOf(error)}`); } catch { /* advice */ } };
@@ -327,6 +329,8 @@ export function createEvidenceChallenges({
   function challengeView(row) {
     return {
       id: row.id, cardId: row.card_id, claimId: row.claim_id, state: row.state, route: row.route, outcome: row.outcome ?? null,
+      // Received and queued: the platform's day for judging is spent and the challenge is asked again after the wait.
+      waiting: row.state === "open" && row.route === "platform_recheck" && /^evidence_budget_/.test(String(row.last_error ?? "")),
       outcomeLabel: row.outcome ? /** @type {any} */ (EVIDENCE_CHALLENGE_OUTCOME_LABELS_ZH)[row.outcome] : null,
       reason: row.reason, createdAt: iso(row.created_at), resolvedAt: iso(row.resolved_at),
       explanation: row.judgement?.reason ?? null, changeLogId: row.change_log_id == null ? null : String(row.change_log_id),
@@ -383,25 +387,25 @@ export function createEvidenceChallenges({
       }
       let judgement = row.judgement && typeof row.judgement === "object" ? row.judgement : null;
       if (!judgement) {
-        const slot = budget ? budget.tryAcquireSlot() : { release: () => {} };
-        if (!slot) { counters.deferred += 1; await giveBackAttempt(row, "evidence_budget_wait"); return "open"; }
-        try {
-          if (budget) {
-            const admitted = await budget.reserve(L.estimateCny);
-            if (!admitted.granted) { counters.deferred += 1; await giveBackAttempt(row, `evidence_budget_${admitted.reason}`); return "open"; }
-          }
-          const answered = await judge({ scope: `evch_${row.id}_${row.attempts}`, payload: judgementInput(card, claim, check, row) });
-          const normalized = normalizeJudgement(answered, { claim, sources: card.sources ?? [], deterministic: check?.status ?? "no_quote" });
-          if (normalized.ok === false) {
-            counters.dropped += 1;
-            if (row.attempts >= L.maxAttempts) counters.exhausted += 1;
-            await leaveOpen(row, normalized.code, backoff(row.attempts));
-            return "open";
-          }
-          judgement = normalized;
-          await database.query("UPDATE evimed_frontier.evidence_challenges SET judgement=$2::jsonb,check_result=$3::jsonb WHERE id=$1 AND lease_owner=$4",
-            [row.id, JSON.stringify(judgement), JSON.stringify(check), workerId]);
-        } finally { slot.release(); }
+        // The challenges' own day, not the programme's slot: with the programme off its switch and its one slot used to leave every
+        // challenge on a platform card waiting for good (2026-10-06 review). A challenge that cannot be afforded today waits in the
+        // reader's view as queued, is not an attempt at the judgement, and is asked again after the wait.
+        if (budget) {
+          const admitted = await budget.reserveChallenge(L.estimateCny);
+          if (!admitted.granted) { counters.deferred += 1; counters.waiting += 1; await giveBackAttempt(row, `evidence_budget_${admitted.reason}`); return "open"; }
+        }
+        const answered = await judge({ scope: `${EVIDENCE_CHALLENGE_RUN_PREFIX}${row.id}_${row.attempts}`, payload: judgementInput(card, claim, check, row) });
+        counters.judged += 1;
+        const normalized = normalizeJudgement(answered, { claim, sources: card.sources ?? [], deterministic: check?.status ?? "no_quote" });
+        if (normalized.ok === false) {
+          counters.dropped += 1;
+          if (row.attempts >= L.maxAttempts) counters.exhausted += 1;
+          await leaveOpen(row, normalized.code, backoff(row.attempts));
+          return "open";
+        }
+        judgement = normalized;
+        await database.query("UPDATE evimed_frontier.evidence_challenges SET judgement=$2::jsonb,check_result=$3::jsonb WHERE id=$1 AND lease_owner=$4",
+          [row.id, JSON.stringify(judgement), JSON.stringify(check), workerId]);
       }
       counters.rechecked += 1;
       const written = await writeOutcome(card, claim, row, judgement, check);
@@ -420,7 +424,7 @@ export function createEvidenceChallenges({
   /** @param {number} attempts */
   const backoff = (attempts) => L.backoffMs[Math.min(Math.max(attempts, 1), L.backoffMs.length) - 1];
 
-  /** A wait for the budget or the programme's slot is not an attempt at the judgement. @param {any} row @param {string} code */
+  /** A wait for the day's judging budget is not an attempt at the judgement. @param {any} row @param {string} code */
   async function giveBackAttempt(row, code) {
     await database.query(
       `UPDATE evimed_frontier.evidence_challenges SET attempts=greatest(0,attempts-1),lease_owner=NULL,lease_until=NULL,last_error=$2,available_at=clock_timestamp()+$3*interval '1 millisecond' WHERE id=$1 AND lease_owner=$4`,
@@ -531,10 +535,13 @@ export function evidenceChallengeMetricFamilies(stats) {
       series: [["filed", stats.filed], ["rate_limited", stats.rateLimited], ["duplicate", stats.duplicates], ["producer_notified", stats.producerNotified], ["closed", stats.closed]]
         .map(([what, value]) => ({ labels: { what: String(what) }, value: Number(value) })) },
     { name: "open_science_evidence_challenge_rechecks_total", type: /** @type {const} */ ("counter"),
-      help: "Re-checks of challenges to a platform card, by outcome (uphold, amend, withdraw) and by what left one open: an answer code dropped, a wait for the evidence budget, a source the card did not preserve, attempts used up.",
+      help: "Re-checks of challenges to a platform card, by outcome (uphold, amend, withdraw) and by what left one open: an answer code dropped, a wait for the day's judging budget, a source the card did not preserve, attempts used up.",
       series: [...EVIDENCE_CHALLENGE_OUTCOMES.map((outcome) => ({ labels: { result: outcome }, value: stats.outcome[outcome] ?? 0 })),
         ...[["dropped", stats.dropped], ["deferred", stats.deferred], ["source_unavailable", stats.unreadable], ["attempts_exhausted", stats.exhausted]]
           .map(([result, value]) => ({ labels: { result: String(result) }, value: Number(value) }))] },
+    { name: "open_science_evidence_challenge_judging_total", type: /** @type {const} */ ("counter"),
+      help: "The judging of challenges on platform cards: model judgements made (judged) and challenges left waiting for the day's judging ceiling (waiting). Challenges refused to a reader are counted above, by what.",
+      series: [["judged", stats.judged], ["waiting", stats.waiting]].map(([result, value]) => ({ labels: { result: String(result) }, value: Number(value) })) },
   ];
 }
 

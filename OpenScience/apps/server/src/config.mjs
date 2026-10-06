@@ -456,6 +456,9 @@ function evidenceCitationGiftSettings(overrides) {
  * - `OPEN_SCIENCE_EVIDENCE_CHALLENGES_PER_DAY` (10): the challenges one reader may file in a day; each one on a platform card costs a model call.
  * - `OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_CHECKS` (6) and `OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_DAYS` (180): the exit rule of §2.5 for an AI-kept card —
  *   this many consecutive checks without a matching new study, over at least this many days, and nobody following its zone or writing on it.
+ * - `OPEN_SCIENCE_EVIDENCE_CHALLENGE_DAILY_BUDGET_CNY` (5): the most the platform's judging of readers' challenges may spend in a day, across every
+ *   reader (`evidenceBudget.mjs`, counted from the usage ledger by the judgements' own run scopes). Beyond it a challenge waits, and the reader is told
+ *   so (「已收到，排队复核」); 0 is no ceiling. It is the challenges' own day: judging works with the upkeep on, whether the evidence programme is on or off.
  * - `OPEN_SCIENCE_EVIDENCE_VERIFY_READS_PER_DAY` (60): the sources the platform reads for one account in a rolling day when the account asks it to
  *   verify a card's sources (`evidenceSourceVerification.mjs`). Not part of the upkeep: that request is the frontier's and works with the upkeep off.
  *
@@ -469,6 +472,13 @@ function evidenceUpkeepSettings(overrides) {
     if (!Number.isSafeInteger(value) || value < min || value > max) throw new Error(`${name} must be a whole number from ${min} to ${max}, got ${JSON.stringify(raw)}.`);
     return value;
   };
+  /** @param {string} key @param {string} name @param {number} fallback @param {number} min @param {number} max */
+  const cny = (key, name, fallback, min, max) => {
+    const raw = overrides[key] !== undefined ? overrides[key] : process.env[name];
+    const value = raw == null || raw === "" ? fallback : Number(raw);
+    if (!Number.isFinite(value) || value < min || value > max) throw new Error(`${name} must be a number from ${min} to ${max}, got ${JSON.stringify(raw)}.`);
+    return Math.round(value * 100) / 100;
+  };
   return {
     evidenceUpkeepEnabled: overrides.evidenceUpkeepEnabled ?? boolEnv("OPEN_SCIENCE_EVIDENCE_UPKEEP_ENABLED", false),
     evidenceUpkeepBatch: whole("evidenceUpkeepBatch", "OPEN_SCIENCE_EVIDENCE_UPKEEP_BATCH", 20, 1, 200),
@@ -477,6 +487,7 @@ function evidenceUpkeepSettings(overrides) {
     evidenceRetireAfterChecks: whole("evidenceRetireAfterChecks", "OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_CHECKS", 6, 2, 1000),
     evidenceRetireAfterDays: whole("evidenceRetireAfterDays", "OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_DAYS", 180, 7, 3650),
     evidenceVerifyReadsPerDay: whole("evidenceVerifyReadsPerDay", "OPEN_SCIENCE_EVIDENCE_VERIFY_READS_PER_DAY", 60, 1, 1000),
+    evidenceChallengeDailyBudgetCny: cny("evidenceChallengeDailyBudgetCny", "OPEN_SCIENCE_EVIDENCE_CHALLENGE_DAILY_BUDGET_CNY", 5, 0, 1000),
   };
 }
 

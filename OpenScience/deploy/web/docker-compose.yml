@@ -564,6 +564,8 @@ services:
       OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_DAYS:
       # What the platform reads for one account that asks it to verify a card's sources, per rolling day.
       OPEN_SCIENCE_EVIDENCE_VERIFY_READS_PER_DAY:
+      # The most the judging of readers' challenges may spend in a day.
+      OPEN_SCIENCE_EVIDENCE_CHALLENGE_DAILY_BUDGET_CNY:
       # Sharing memory inside the platform (evidence-flywheel plan 2026-10-05, F17-F19):
       # how long a share link lives and how often it may be used, how many other
       # accounts must keep a new author's pack before it counts for platform

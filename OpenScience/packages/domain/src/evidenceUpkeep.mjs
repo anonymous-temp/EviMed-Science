@@ -68,6 +68,8 @@ export const EVIDENCE_CHALLENGE_STATES = frozen(['open', 'notified', 'resolved',
 /** What the re-check of a platform card may conclude: the claim stands, its wording is amended, or it is withdrawn. */
 export const EVIDENCE_CHALLENGE_OUTCOMES = frozen(['uphold', 'amend', 'withdraw'])
 export const EVIDENCE_CHALLENGE_OUTCOME_LABELS_ZH = Object.freeze({ uphold: '维持', amend: '修正', withdraw: '撤回' })
+/** What a reader sees while the platform's day for judging challenges is spent and theirs waits its turn (`waiting` on the challenge). */
+export const EVIDENCE_CHALLENGE_WAITING_LABEL_ZH = '已收到，排队复核'
 /** Who re-checks a challenge: the platform for its own cards, the producer for everyone else's. */
 export const EVIDENCE_CHALLENGE_ROUTES = frozen(['platform_recheck', 'producer_notice'])
 /** What a reader may write with a challenge. */

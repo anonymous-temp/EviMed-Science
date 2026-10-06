@@ -22,6 +22,8 @@ export interface EvidenceChallengeView {
   reason: string;
   createdAt: string;
   resolvedAt: string | null;
+  /** The platform's day for judging challenges is spent: the challenge is received and queued (`EVIDENCE_CHALLENGE_WAITING_LABEL_ZH`). */
+  waiting?: boolean;
   /** The sentence the re-check gave for its outcome. */
   explanation: string | null;
   changeLogId: string | null;

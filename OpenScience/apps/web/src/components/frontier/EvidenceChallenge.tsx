@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { EVIDENCE_CHALLENGE_WAITING_LABEL_ZH } from "@evimed/domain";
 import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Input";
 import { Tag } from "@/components/ui/Tag";
@@ -16,6 +17,7 @@ function standing(challenge: EvidenceChallengeView): string {
     return `复核结果：${challenge.outcomeLabel ?? (challenge.outcome ? EVIDENCE_OUTCOME_LABELS[challenge.outcome] : "已处理")}`;
   if (challenge.state === "closed") return "出品方已修改这张卡，这条质疑已关闭。";
   if (challenge.state === "notified") return "已通知出品方。平台不会替出品方修改内容；出品方修改后这条质疑会自动关闭。";
+  if (challenge.waiting) return `${EVIDENCE_CHALLENGE_WAITING_LABEL_ZH}。轮到后结果会写进变更记录，也会通知你。`;
   return "已提交，正在复核。结果会写进变更记录，也会通知你。";
 }
 

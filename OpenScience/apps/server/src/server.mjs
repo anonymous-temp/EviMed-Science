@@ -8283,7 +8283,9 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
   // The platform's evidence programme (evidenceBudget.mjs): its switches, today's spend against its budget and its slots, and who paid
   // for the zone upkeep this process ran. No reading is taken while the programme is off.
   const evidenceReading = evidenceBudget?.enabled ? await evidenceBudget.budget().catch(() => null) : null;
-  for (const family of evidenceBudgetMetricFamilies(config, evidenceBudget, evidenceReading, frontier?.evidenceEditorial?.status().counters ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
+  // The challenges' own day (their judging ceiling) is read only where the upkeep is composed, programme on or off.
+  const challengeReading = evidenceBudget && evidenceUpkeep ? await evidenceBudget.challengeBudget().catch(() => null) : null;
+  for (const family of evidenceBudgetMetricFamilies(config, evidenceBudget, evidenceReading, frontier?.evidenceEditorial?.status().counters ?? null, challengeReading)) addMetric(lines, family.name, family.help, family.type, family.series);
   // What the programme decided and wrote: decisions by who chose, signals read (counts only), actions and cards by outcome, claims left out by why.
   for (const family of evidenceProgrammeMetricFamilies(evidenceProgramme)) addMetric(lines, family.name, family.help, family.type, family.series);
   // Sharing memory inside the platform (capsuleShareMetrics.mjs): shares, imports, trials, declines, take-downs, what the write-side
