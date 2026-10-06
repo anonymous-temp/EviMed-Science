@@ -238,6 +238,8 @@ const operatorLevers = {
   OPEN_SCIENCE_EVIDENCE_CHALLENGES_PER_DAY: ["open-science-web"],
   OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_CHECKS: ["open-science-web"],
   OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_DAYS: ["open-science-web"],
+  // The flywheel's own figures (2026-10-06): a switch that does not arrive leaves the operator route answering 404 while the operator believes it is on.
+  OPEN_SCIENCE_EVIDENCE_FLYWHEEL_METRICS_ENABLED: ["open-science-web"],
   // Sharing memory inside the platform (evidence-flywheel F17-F19, 2026-10-05): a lever that does not arrive leaves share links
   // living and used by the defaults while the operator believes they shortened them, or a new author's pack counted as
   // corroborated by a threshold the operator never set.

@@ -240,6 +240,7 @@ import { EvidenceEditorial } from "./evidenceEditorial.mjs";
 import { EvidenceZoneService } from "./evidenceZoneService.mjs";
 import { createEvidenceCardSearch } from "./evidenceCardSearch.mjs";
 import { createEvidenceFeed, evidenceFeedMetricFamilies } from "./evidenceFeed.mjs";
+import { createEvidenceFlywheelMetrics } from "./evidenceFlywheelMetrics.mjs";
 import { createEvidenceFeedRoutes } from "./evidenceFeedRoutes.mjs";
 import { createEvidencePublicRoutes, evidencePublicMetricFamilies } from "./evidencePublicRoutes.mjs";
 import { createEvidenceTopicRequestRoutes, createEvidenceTopicRequests } from "./evidencePublicRequests.mjs";
@@ -640,6 +641,7 @@ function routePattern(pathname) {
   if (pathname === "/api/connectors") return pathname;
   if (pathname.startsWith("/api/connectors/")) return "/api/connectors/:connector";
   if (pathname === "/api/ops/metrics") return pathname;
+  if (pathname === "/api/ops/evidence-flywheel") return pathname;
   if (pathname === ALERT_RECEIVER_PATH) return pathname;
   if (pathname === "/api/ops/usage/by-purpose") return pathname;
   if (pathname === "/api/availability" || pathname === "/api/ops/availability") return pathname;
@@ -1013,6 +1015,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   let evidenceRecalculation = null;
   /** @type {ReturnType<typeof createPredictionRegistry> | null} */
   let predictionRegistry = null;
+  /** @type {ReturnType<typeof createEvidenceFlywheelMetrics> | null} */
+  let evidenceFlywheel = null;
   const maintenanceMutation = (operation) => maintenanceService ? maintenanceService.withMutation(operation) : operation();
   const productDocuments = productDatabase ? new ProductDocuments(productDatabase) : null;
   const productJobs = productDatabase ? new ProductJobs(productDatabase) : null;
@@ -4552,6 +4556,17 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       evolution.service.callbacks.predictionPublication = (/** @type {any} */ input) => registry.onPublication(input);
     }
   }
+  // The flywheel's own figures (evidenceFlywheelMetrics.mjs, plan §11): composed with their switch and the frontier whose tables they read; off, no
+  // route, no family and no table read. The readers of the signals other packages add (a study's card reference, a question bank's citations) are
+  // passed here when those modules exist; until then the figure says so instead of reading 0.
+  if (config.evidenceFlywheelMetricsEnabled && frontier && productDatabase) {
+    evidenceFlywheel = createEvidenceFlywheelMetrics({
+      database: productDatabase, platformPublisherUserId: PLATFORM_PUBLISHER_USER_ID,
+      predictionCalibration: predictionRegistry ? () => predictionRegistry?.predictionCalibration() : null,
+      evolutionTools: evolution ? async () => (await evolution?.service.tools() ?? []).map((/** @type {any} */ row) => row.payload) : null,
+      report: code => process.stderr.write(`${code}\n`),
+    });
+  }
   const reviewGatewayHandler = createReviewGatewayHandler({
     runtimeManager, service: review?.service ?? null, config,
     report: (code) => process.stderr.write(`review gateway: ${code}\n`),
@@ -5114,7 +5129,20 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           evidenceUpkeep,
           evidenceFeed,
           evidencePublic: evidencePublicRoutes,
+          evidenceFlywheel,
         });
+        return;
+      }
+
+      // The evidence flywheel's figures (evidenceFlywheelMetrics.mjs): the north star, the five asset groups and the guardrails, from the tables that
+      // already exist. Behind the scrape token like the usage report; off, the route answers by name once the token has been checked.
+      if (pathname === "/api/ops/evidence-flywheel" && req.method === "GET") {
+        assertOperatorMetricsAccess(req, config);
+        if (!evidenceFlywheel) throw new HttpError(404, "evidence_flywheel_not_enabled", "The evidence flywheel's figures are not enabled.");
+        const url = new URL(req.url ?? "/", apiBaseFromRequest(req, config));
+        const asked = url.searchParams.get("weeks");
+        res.setHeader("Cache-Control", "no-store");
+        sendJson(res, 200, { data: await evidenceFlywheel.snapshot(asked === null ? {} : { weeks: /^\d+$/.test(asked) ? Number(asked) : Number.NaN }) });
         return;
       }
 
@@ -7932,7 +7960,7 @@ function addHistogramMetric(lines, name, help, series) {
   }
 }
 
-async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, evidenceBudget = null, entityVocabulary = null, evidencePublish = null, evidenceUpkeep = null, evidenceProgramme = null, evidenceFeed = null, evidencePublic = null, evidenceRecalculation = null, predictionRegistry = null }) {
+async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, evidenceBudget = null, entityVocabulary = null, evidencePublish = null, evidenceUpkeep = null, evidenceProgramme = null, evidenceFeed = null, evidencePublic = null, evidenceRecalculation = null, predictionRegistry = null, evidenceFlywheel = null }) {
   const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate, frontier, review, geo, vcr, credits);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
@@ -8354,6 +8382,9 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
   for (const family of evidenceFeedMetricFamilies(evidenceFeed?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
   // The public evidence pages, their read-only API and the topic requests (evidencePublicRoutes.mjs): nothing is exported where they are off.
   for (const family of evidencePublicMetricFamilies(evidencePublic?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
+  // The evidence flywheel's figures (evidenceFlywheelMetrics.mjs): exported only with the switch on; a figure with no input has no series.
+  addMetric(lines, "open_science_evidence_flywheel_enabled", "Whether the evidence flywheel's figures are switched on (OPEN_SCIENCE_EVIDENCE_FLYWHEEL_METRICS_ENABLED).", "gauge", [{ value: config.evidenceFlywheelMetricsEnabled ? 1 : 0 }]);
+  if (evidenceFlywheel) for (const family of await evidenceFlywheel.metricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
   // The entity vocabulary the frontier, the zones, agendas, products and studies share: the glossary's size and what
   // the taggings found (entityVocabulary.mjs `entityVocabularyMetricFamilies`).
   for (const family of entityVocabularyMetricFamilies(entityVocabulary?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
