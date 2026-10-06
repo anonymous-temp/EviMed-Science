@@ -65,7 +65,7 @@ export class EvidenceAuthors {
     if (!author) throw notFound();
     const zones = (await this.database.query(
       `SELECT z.id,z.title,z.description,z.kind,z.visibility,z.updated_at,
-         (SELECT count(*)::integer FROM evimed_frontier.evidence_cards c WHERE c.zone_id=z.id AND c.state='published') AS evidence_count,
+         (SELECT count(*)::integer FROM evimed_frontier.evidence_cards c WHERE c.zone_id=z.id AND c.state='published' AND c.withdrawn IS NULL) AS evidence_count,
          (SELECT count(*)::integer FROM evimed_frontier.evidence_zone_follows f WHERE f.zone_id=z.id) AS follows
        FROM evimed_frontier.evidence_zones z WHERE z.user_id=$1 AND z.state='published' ORDER BY z.updated_at DESC, z.id LIMIT $2`,
       [authorId, EVIDENCE_AUTHOR_PAGE_LIMITS.zones],
@@ -74,7 +74,7 @@ export class EvidenceAuthors {
     const cards = (await this.database.query(
       `SELECT c.id,c.zone_id,c.title,c.summary,c.producer,c.originality,c.updated_at,jsonb_array_length(c.claims) AS claim_count,u.name AS creator
          FROM evimed_frontier.evidence_cards c JOIN evimed_frontier.evidence_zones z ON z.id=c.zone_id JOIN evimed_control.users u ON u.id=c.user_id
-        WHERE z.user_id=$1 AND z.state='published' AND c.state='published' AND c.user_id=$1
+        WHERE z.user_id=$1 AND z.state='published' AND c.state='published' AND c.withdrawn IS NULL AND c.user_id=$1
         ORDER BY c.updated_at DESC, c.id LIMIT $2`,
       [authorId, EVIDENCE_AUTHOR_PAGE_LIMITS.cards],
     )).rows;
@@ -84,9 +84,9 @@ export class EvidenceAuthors {
            WHERE z.user_id=$1 AND z.state='published') AS followers,
          (SELECT count(*)::integer FROM evimed_frontier.evidence_card_runs r JOIN evimed_frontier.evidence_cards c ON c.id=r.card_id
            JOIN evimed_frontier.evidence_zones z ON z.id=c.zone_id
-           WHERE c.user_id=$1 AND z.user_id=$1 AND z.state='published' AND c.state='published' AND r.user_id<>$1) AS runs_from_cards,
+           WHERE c.user_id=$1 AND z.user_id=$1 AND z.state='published' AND c.state='published' AND c.withdrawn IS NULL AND r.user_id<>$1) AS runs_from_cards,
          (SELECT count(*)::integer FROM evimed_frontier.evidence_cards c JOIN evimed_frontier.evidence_zones z ON z.id=c.zone_id
-           WHERE c.user_id=$1 AND z.user_id=$1 AND z.state='published' AND c.state='published') AS cards`,
+           WHERE c.user_id=$1 AND z.user_id=$1 AND z.state='published' AND c.state='published' AND c.withdrawn IS NULL) AS cards`,
       [authorId],
     )).rows[0];
     /** @type {unknown[] | null} */
@@ -139,7 +139,7 @@ export class EvidenceAuthors {
       `SELECT c.id,c.zone_id,c.title,c.producer,u.name AS creator,
               CASE WHEN c.lineage->>'previousCardId'=$1 THEN 'next_version' ELSE 'research_from_card' END AS relation
          FROM evimed_frontier.evidence_cards c JOIN evimed_frontier.evidence_zones z ON z.id=c.zone_id JOIN evimed_control.users u ON u.id=c.user_id
-        WHERE c.state='published' AND z.state='published' AND c.id<>$1 AND (c.lineage->>'originCardId'=$1 OR c.lineage->>'previousCardId'=$1)
+        WHERE c.state='published' AND z.state='published' AND c.withdrawn IS NULL AND c.id<>$1 AND (c.lineage->>'originCardId'=$1 OR c.lineage->>'previousCardId'=$1)
         ORDER BY c.updated_at DESC, c.id LIMIT $2`,
       [cardId, EVIDENCE_RELATED_CARD_LIMIT],
     )).rows;

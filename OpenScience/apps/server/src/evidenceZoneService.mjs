@@ -998,7 +998,7 @@ export class EvidenceZoneService {
         const total = Number(
           (
             await client.query(
-              "SELECT count(*) AS n FROM evimed_frontier.evidence_cards WHERE zone_id=$1 AND state='published'",
+              "SELECT count(*) AS n FROM evimed_frontier.evidence_cards WHERE zone_id=$1 AND state='published' AND withdrawn IS NULL",
               [zoneId],
             )
           ).rows[0].n,
@@ -1007,7 +1007,7 @@ export class EvidenceZoneService {
           ? [card]
           : (
               await client.query(
-                "SELECT * FROM evimed_frontier.evidence_cards WHERE zone_id=$1 AND state='published' ORDER BY updated_at DESC,id LIMIT 10",
+                "SELECT * FROM evimed_frontier.evidence_cards WHERE zone_id=$1 AND state='published' AND withdrawn IS NULL ORDER BY updated_at DESC,id LIMIT 10",
                 [zoneId],
               )
             ).rows;

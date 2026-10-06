@@ -194,7 +194,7 @@ export function createEvidenceFeed({ database, config = {}, now = () => new Date
             (SELECT least(min(r.recorded_at), c.updated_at) FROM evimed_frontier.evidence_card_revisions r WHERE r.card_id = c.id AND r.snapshot->>'state' = 'published') AS published_at,
             to_char(c.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_key
           FROM evimed_frontier.evidence_cards c JOIN evimed_frontier.evidence_zones z ON z.id = c.zone_id
-          WHERE c.state = 'published' AND z.state = 'published'
+          WHERE c.state = 'published' AND z.state = 'published' AND c.withdrawn IS NULL
             AND (z.kind = 'official' OR (z.kind = 'user' AND z.visibility = 'internet' AND c.originality = 'original_research'))
             AND ($1::timestamptz IS NULL OR (c.updated_at, c.id) < ($1::timestamptz, $2::text))
           ORDER BY c.updated_at DESC, c.id DESC LIMIT $3`, [after?.updatedKey ?? null, after?.id ?? null, size + 1])).rows ?? [];

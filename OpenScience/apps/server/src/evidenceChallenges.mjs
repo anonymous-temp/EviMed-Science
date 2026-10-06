@@ -491,6 +491,8 @@ export function createEvidenceChallenges({
         await client.query(
           `UPDATE evimed_frontier.evidence_cards SET withdrawn=$2::jsonb,retired_at=coalesce(retired_at,clock_timestamp()),currency='no_longer_updated' WHERE id=$1`,
           [card.id, JSON.stringify({ at: now().toISOString(), reason: judgement.reason, changeLogId: entry.id })]);
+        // The feed's pages are keyed by the zones' content version, and a withdrawal is a content change that no card save announces.
+        await client.query("UPDATE evimed_frontier.evidence_zone_meta SET version=version+1 WHERE singleton");
       }
     });
     const label = /** @type {any} */ (EVIDENCE_CHALLENGE_OUTCOME_LABELS_ZH)[judgement.outcome];

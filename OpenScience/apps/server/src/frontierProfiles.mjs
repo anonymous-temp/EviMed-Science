@@ -591,7 +591,7 @@ export class FrontierProfiles {
       for (const zone of zones) records.push(await vocabulary.keysForText({ texts: [String(zone.title ?? ""), String(zone.description ?? "")] }));
       if (zones.length) {
         const cards = (await this.database.query(`SELECT c.entity_keys FROM evimed_frontier.evidence_cards c
-          WHERE c.zone_id = ANY($1::text[]) AND c.state = 'published' ORDER BY c.updated_at DESC LIMIT ${FRONTIER_PROFILE_ENTITY_LIMITS.zoneCards}`,
+          WHERE c.zone_id = ANY($1::text[]) AND c.state = 'published' AND c.withdrawn IS NULL ORDER BY c.updated_at DESC LIMIT ${FRONTIER_PROFILE_ENTITY_LIMITS.zoneCards}`,
         [zones.map((zone) => String(zone.id))])).rows ?? [];
         for (const card of cards) records.push(Array.isArray(card.entity_keys) ? card.entity_keys.map(String) : []);
       }

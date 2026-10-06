@@ -160,7 +160,7 @@ export class EvidenceZoneSubscriptions {
   async #readableZone(zoneId) {
     if (!ZONE_ID.test(zoneId)) return null;
     await migrateEvidenceZones(this.database);
-    const row = (await this.database.query(`SELECT z.id,z.title,z.kind,(SELECT count(*) FROM evimed_frontier.evidence_cards c WHERE c.zone_id=z.id AND c.state='published')::integer AS cards
+    const row = (await this.database.query(`SELECT z.id,z.title,z.kind,(SELECT count(*) FROM evimed_frontier.evidence_cards c WHERE c.zone_id=z.id AND c.state='published' AND c.withdrawn IS NULL)::integer AS cards
       FROM evimed_frontier.evidence_zones z WHERE z.id=$1 AND z.state='published'`, [zoneId])).rows[0];
     return row ? { id: String(row.id), title: String(row.title), kind: String(row.kind), cards: Number(row.cards) } : null;
   }
@@ -229,7 +229,7 @@ export class EvidenceZoneSubscriptions {
     const valid = ids.filter((id) => ZONE_ID.test(id));
     if (!valid.length) return new Map();
     await migrateEvidenceZones(this.database);
-    const rows = (await this.database.query(`SELECT z.id,z.title,z.kind,z.state,(SELECT count(*) FROM evimed_frontier.evidence_cards c WHERE c.zone_id=z.id AND c.state='published')::integer AS cards
+    const rows = (await this.database.query(`SELECT z.id,z.title,z.kind,z.state,(SELECT count(*) FROM evimed_frontier.evidence_cards c WHERE c.zone_id=z.id AND c.state='published' AND c.withdrawn IS NULL)::integer AS cards
       FROM evimed_frontier.evidence_zones z WHERE z.id=ANY($1::text[])`, [valid])).rows;
     return new Map(rows.map((/** @type {any} */ row) => [String(row.id), { id: String(row.id), title: String(row.title), kind: String(row.kind), cards: Number(row.cards), state: String(row.state) }]));
   }
