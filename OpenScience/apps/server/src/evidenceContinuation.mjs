@@ -90,6 +90,20 @@ export function evidenceContinuationDraft({ card, files }) {
   return parts.join("\n\n");
 }
 
+/**
+ * The name of a project research continues in from a card: 「继续研究：」 and as much of the card's title as fits the 40 characters a
+ * project name may have (`projectDisplayName`). Release 7 put 40 characters of title after the prefix and every continuation of a card
+ * with a longer title was refused (2026-10-06, live acceptance).
+ * @param {unknown} title
+ */
+export function continuationProjectName(title) {
+  const prefix = "继续研究：";
+  const room = 40 - [...prefix].length;
+  const words = [...String(title ?? "").replace(/\s+/g, " ").trim()];
+  const kept = words.length > room ? `${words.slice(0, room - 1).join("").trimEnd()}…` : words.join("");
+  return `${prefix}${kept || "证据卡"}`;
+}
+
 export class EvidenceContinuation {
   /**
    * @param {{ database: any, origins: import("./evidenceOrigins.mjs").EvidenceOrigins,
@@ -149,7 +163,7 @@ export class EvidenceContinuation {
     const card = await this.#card(user, cardId);
     // The platform's own background projects are nobody's library.
     if (input.projectId && isInternalProject(input.projectId)) throw new HttpError(404, "project_not_found", "Project not found.");
-    const project = await this.library.project(user, input.projectId ?? (await this.createProject(user, `继续研究：${String(card.title).replace(/\s+/g, " ").trim().slice(0, 40)}`)).id);
+    const project = await this.library.project(user, input.projectId ?? (await this.createProject(user, continuationProjectName(card.title))).id);
 
     // The conversation is bound before any file is written, so the card is remembered whatever happens to a file.
     const sessionId = `card-${randomBytes(12).toString("hex")}`;

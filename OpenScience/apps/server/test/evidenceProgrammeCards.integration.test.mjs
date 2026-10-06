@@ -53,8 +53,14 @@ async function foldEpisode(fx, { action, matrixClaims, sources, agendaClaims, ma
       fx.rawByVersion.set(sourceVersion, { bytes: Buffer.from(source.text), digest: sha256(source.text), capturedAt: "2026-10-05T00:30:00.000Z" });
       return { kind: "source", id: source.path, path: source.path, digest: sha256(source.text), versionId: sourceVersion, availability: "captured", index };
     });
-    fx.resultsByRun.set(runId, [{ path: "deliverables/d1/clinical-evidence-matrix.json", versionId, digest: sha256(JSON.stringify(matrixDoc)), machineValues,
-      review: { status: "available", matrixText: JSON.stringify(matrixDoc), verification, matrixVersionId: versionId, matrixDigest: sha256(JSON.stringify(matrixDoc)) }, inputs }]);
+    // As the delivery capture records it: the matrix version carries the source links, and the gate's verdict sits on the report
+    // that stands on it, naming the matrix version (resultDeliveryCapture.mjs).
+    const review = { status: "available", matrixText: JSON.stringify(matrixDoc), verification, matrixVersionId: versionId, matrixDigest: sha256(JSON.stringify(matrixDoc)) };
+    fx.resultsByRun.set(runId, [
+      { path: "deliverables/d1/clinical-evidence-matrix.json", versionId, digest: sha256(JSON.stringify(matrixDoc)), machineValues, inputs },
+      { path: "deliverables/d1/clinical-evidence-report.md", versionId: `rv_${sha256(`report-${counter}`)}`, digest: sha256(`report-${counter}`), review,
+        inputs: [...inputs, { kind: "artifact", path: "deliverables/d1/clinical-evidence-matrix.json", versionId, availability: "captured" }] },
+    ]);
   } else fx.resultsByRun.set(runId, []);
   await fx.autopilot.completeRun(PUBLISHER, {
     projectId: EVIDENCE_PROJECT_ID, runId, episodeId, sessionId: `ses_card_${counter}`, status: "succeeded", artifacts: ["deliverables/d1/clinical-evidence-report.md"],

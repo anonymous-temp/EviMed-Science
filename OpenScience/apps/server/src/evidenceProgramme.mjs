@@ -956,11 +956,17 @@ export function createEvidenceProgramme({ config, database, documents, jobs = nu
     if (!results || !episode.payload.runId) return null;
     const listed = await results.list(publisher, { projectId: EVIDENCE_PROJECT_ID, runId: episode.payload.runId, limit: 100 });
     const versions = listed.items ?? [];
-    const version = versions.find((/** @type {any} */ item) => /(?:^|\/)clinical-evidence-matrix\.json$/.test(String(item.path)) && item.review?.status === "available" && item.review.matrixText);
+    // The gate's verdict is recorded on the files the matrix stands behind (the report and its siblings, `resultDeliveryCapture.mjs`),
+    // naming the matrix's own version; the matrix version carries the source links. Release 7's programme looked for the verdict on the
+    // matrix version itself, found none on any real episode, and wrote no card (2026-10-06, live: no_evidence_matrix six times).
+    const reviewed = versions.find((/** @type {any} */ item) => item.review?.status === "available" && item.review.matrixText);
+    if (!reviewed) return null;
+    const version = versions.find((/** @type {any} */ item) => item.versionId === reviewed.review.matrixVersionId
+      && /(?:^|\/)clinical-evidence-matrix\.json$/.test(String(item.path)));
     if (!version) return null;
     let matrix;
-    try { matrix = JSON.parse(version.review.matrixText); } catch { return null; }
-    return { matrix, verification: version.review.verification, version, versions, machineValues: versions.flatMap((/** @type {any} */ item) => item.machineValues ?? []) };
+    try { matrix = JSON.parse(reviewed.review.matrixText); } catch { return null; }
+    return { matrix, verification: reviewed.review.verification, version, versions, machineValues: versions.flatMap((/** @type {any} */ item) => item.machineValues ?? []) };
   }
 
   /**

@@ -9,7 +9,8 @@ import { AgentRunStore } from "../src/agentRuns.mjs";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { EvidenceAuthors } from "../src/evidenceAuthors.mjs";
 import { EvidenceCardFromResult } from "../src/evidenceCardFromResult.mjs";
-import { EVIDENCE_LIBRARY_FOLDER, EvidenceContinuation, evidenceContinuationDraft, evidenceLibrarySlug } from "../src/evidenceContinuation.mjs";
+import { EVIDENCE_LIBRARY_FOLDER, EvidenceContinuation, continuationProjectName, evidenceContinuationDraft, evidenceLibrarySlug } from "../src/evidenceContinuation.mjs";
+import { projectDisplayName } from "../src/store.mjs";
 import { EvidenceOrigins } from "../src/evidenceOrigins.mjs";
 import { evidencePublishMetricFamilies, resetEvidencePublishMetrics } from "../src/evidencePublishMetrics.mjs";
 import { EvidenceZoneService } from "../src/evidenceZoneService.mjs";
@@ -153,6 +154,16 @@ test("a source that cannot be written is told with its code, and the others and 
   assert.deepEqual(answer.library.saved.map((file) => file.index), [2]);
   assert.equal(log.saved.length, 1);
   assert.equal(await origins.originCardOf({ userId: "bob", id: "continue-1" }, { sessionId: answer.sessionId }), card.id);
+});
+
+test("the new project's name fits a project name whatever the card's title (release 7 refused every title past 35 characters)", () => {
+  const long = "心衰住院患者的CKM重叠：回顾性队列中的调整后关联与人群边界，以及更多在一张证据卡标题里写得很长的说明";
+  for (const title of [long, "短标题", "", "   ", "a".repeat(200)]) {
+    const name = continuationProjectName(title);
+    assert.equal(projectDisplayName(name), name, `${JSON.stringify(title)} gives a name a project may have`);
+    assert.ok(name.startsWith("继续研究："));
+  }
+  assert.ok(continuationProjectName(long).endsWith("…"), "a cut title says so");
 });
 
 test("the file name is stable for a source and the draft names only what was saved", () => {

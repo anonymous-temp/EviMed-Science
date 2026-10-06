@@ -67,6 +67,8 @@ test("a clinical result becomes a draft with only its verified claims, hashed so
   // The verified ones: the unverified quotation and the analyst's estimate are not in by default.
   assert.deepEqual(names(card.claims), ["CLM-001", "CLM-004", "CLM-005"]);
   assert.deepEqual(answer.omitted, []);
+  // Its one-line headline is the first verified claim, in the claim's own words (release 7 published cards with no summary).
+  assert.equal(card.summary, card.claims[0].claim);
   // The card's own marks, computed against the preserved text it carries, agree with the run's: all three ✓.
   assert.deepEqual(card.claims.map((claim) => claim.verification.mark), ["✓", "✓", "✓"]);
   assert.deepEqual(card.claimVerification, { total: 3, verified: 3, quote_not_found: 0, source_unavailable: 0, no_quote: 0, derived: 0 });

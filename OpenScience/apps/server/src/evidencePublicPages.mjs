@@ -235,8 +235,11 @@ const personText = (person) => [person.name, person.affiliation, person.title].f
 function disclosureSection(card) {
   const disclosure = card.disclosure ?? {};
   const steps = (disclosure.aiSteps ?? []).map((/** @type {string} */ step) => /** @type {any} */ (EVIDENCE_AI_STEP_LABELS_ZH)[step] ?? step);
-  const unstated = html`<span class="muted">未披露</span>`;
+  // A field the card's record does not hold is "not recorded", never "not disclosed": the cards imported before the disclosure fields
+  // existed (2026-10-01) hold none of them, and "未披露" read as if something had been withheld.
+  const unstated = html`<span class="muted">未记录</span>`;
   return html`<section aria-labelledby="disclosure"><h2 id="disclosure">披露</h2>
+${card.disclosure ? "" : html`<p class="muted">这张卡写于平台开始记录披露字段之前，下面没有记录的项目在当时没有保存。</p>`}
 <dl class="facts">
 <dt>出品方</dt><dd>${card.producer ? html`${card.producer.kindLabel} ${card.producer.name}。${card.producer.relationLabel}${card.producer.products?.length ? html`（${card.producer.products.join("、")}）` : ""}` : unstated}</dd>
 <dt>性质</dt><dd>${card.originalityLabel ?? unstated}（${/** @type {any} */ (ORIGINALITY_NOTE)[String(card.primary)]}）</dd>

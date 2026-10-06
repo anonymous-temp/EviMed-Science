@@ -109,6 +109,11 @@ test("renderPage writes noindex, the canonical address, lang, the AI-content met
   assert.equal(indexable.includes('name="robots"'), false, "an indexable page says nothing: the default is to index");
   assert.equal(indexable.includes('rel="canonical"'), false, "no usable public address, no canonical");
   assert.equal(indexable.includes('name="AIGC"'), false, "a human-written card carries no AI label");
+  // A card from before the disclosure fields says its record holds none of them, and calls a missing field "not recorded".
+  const legacy = String(cardPage({ card: { ...card(), disclosure: null }, links, view: "clinical" }).body);
+  assert.match(legacy, /这张卡写于平台开始记录披露字段之前/);
+  assert.match(legacy, /未记录/);
+  assert.doesNotMatch(legacy, /未披露/);
 });
 
 test("the zone, index, simulations, requests and withdrawn pages escape every value they are given", () => {

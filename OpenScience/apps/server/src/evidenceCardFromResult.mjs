@@ -550,7 +550,9 @@ export class EvidenceCardFromResult {
       card: {
         title,
         subtype: "academic",
-        summary: "",
+        // The first claim the run's gate verified, in its own words: a card says its headline in one line, and that line is a checked one
+        // (release 7 published result cards with no summary at all).
+        summary: clip(text(claims.find((/** @type {any} */ claim) => statusOf.get(claim.claimId) === "verified")?.claim) ?? text(claims[0]?.claim) ?? "", 500),
         body: bodyOf(claims),
         limitations: "",
         provenance: clip(`研究结果 ${text(version.path).split("/").at(-1)}，保存于 ${generatedAt.slice(0, 10)}`, 12000),
