@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "clinical-evidence-synthesis",
-  "version": "sha256:78c8c7898da0a86e1dbf7ddc00385f63fcb0fdc92f9e69f88985b025db028439",
+  "version": "sha256:009b6739349800eec054e8827e069e40100195db145a8ce7d8006f4712b5e638",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 32,
@@ -953,7 +953,7 @@
     {
       "name": "mcp__evimed__frontier_search",
       "source": "mcp",
-      "description": "Search 前沿动态, EviMed's screened feed of recent medical developments (journal papers, guidelines, regulatory and safety notices, trial and industry news) from the last 24 hours to 30 days. Use it when a question asks what is new or recent; settled knowledge does not need it. Results are leads, not evidence: read the original through the returned DOI or link and cite that, never this feed.",
+      "description": "Search 前沿动态, EviMed's screened feed of recent medical developments (papers, guidelines, regulatory and safety notices, trial and industry news) from the last 24 hours to 30 days, and for a keyword query EviMed's own evidence cards. Use it when a question asks what is new or recent; settled knowledge does not need it. Results are leads, not evidence: read the original through the returned DOI or link and cite that, never this feed or a card.",
       "inputSchema": {
         "type": "object",
         "properties": {

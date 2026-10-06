@@ -62,7 +62,7 @@ import {
   VCR_FOLLOWUP_KINDS, VCR_INTENDED_USES, VCR_JOB_KINDS, VCR_MODEL_DOCUMENT_SECTIONS, VCR_MODEL_DOCUMENT_SECTION_LABELS_ZH, VCR_MODEL_RISKS,
   VCR_MODEL_DOCUMENT_KINDS, VCR_POPULATION_KINDS, VCR_RATINGS, VCR_RUN_SCENARIO_FIELDS, VCR_SCENARIO_SCHEMAS,
   VCR_STEPS, VCR_SYNTHETIC_USES, VCR_TRIAL_DESIGNS, canonicalScenarioJson, findExpressionFields, validateRequirement, vcrAssessmentIssues,
-  vcrModelDocumentTakesProse,
+  isPlatformCardAddress, platformCardCitations, vcrModelDocumentTakesProse,
 } from "@evimed/domain";
 
 import { HttpError } from "./security.mjs";
@@ -361,6 +361,23 @@ const OWNED_TABLES = Object.freeze({
 
 /** A protocol variable, a subject's pseudonym and the like: one token of plain characters. */
 const TOKEN = /^[A-Za-z0-9][A-Za-z0-9_.:-]{0,79}$/;
+/**
+ * The card an evidence item says it was found through (`candidateFrom`, flywheel F23): its id and, optionally, the claim's. Two
+ * short tokens and nothing else — a note, a quotation or a number here would be one more place a card's wording reaches a study.
+ * @param {InstanceType<typeof Item>} item @returns {{ cardId: string, claimId?: string } | undefined}
+ */
+function candidateOf(item) {
+  const from = item.obj("candidateFrom", { bytes: 512 });
+  if (!from) return undefined;
+  const extra = Object.keys(from).filter((key) => key !== "cardId" && key !== "claimId");
+  if (extra.length) return void item.bad("candidateFrom", `candidateFrom 只写 cardId（和可选的 claimId），不写 ${extra[0]}。`);
+  const cardId = typeof from.cardId === "string" ? from.cardId.trim() : "";
+  const claimId = from.claimId == null ? "" : typeof from.claimId === "string" ? from.claimId.trim() : null;
+  if (!TOKEN.test(cardId)) return void item.bad("candidateFrom.cardId", "cardId 是证据卡的编号：一个短标识。");
+  if (claimId === null || (claimId && !TOKEN.test(claimId))) return void item.bad("candidateFrom.claimId", "claimId 是这张卡上一条结论的编号：一个短标识。");
+  return { cardId, ...(claimId ? { claimId } : {}) };
+}
+
 /** An ISO date or instant. */
 const ISO = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?(Z|[+-]\d{2}:\d{2})?)?$/;
 
@@ -846,9 +863,10 @@ const WRITERS = {
     return extracted.precedent?.id ?? null;
   },
 
-  async evidence_item(item, { evidence, study }, extra) {
+  async evidence_item(item, { evidence, study, service }, extra) {
     if (!item.only(["registry", "registryId", "parameter", "arm", "armRole", "value", "valueText", "unit", "ciLow", "ciHigh", "sampleSize",
-      "events", "valueSource", "quote", "locator", "endpointKey", "enrollmentKind", "historicalBaseline", "line", "biomarker", "outcome", "note"])) return null;
+      "events", "valueSource", "quote", "locator", "endpointKey", "enrollmentKind", "historicalBaseline", "line", "biomarker", "outcome", "note",
+      "source", "candidateFrom"])) return null;
     const registry = item.choice("registry", ["clinicaltrials.gov", "chictr", "ctis"], { fallback: "clinicaltrials.gov" });
     const registryId = item.token("registryId", /^[A-Za-z0-9][A-Za-z0-9-]{2,63}$/, "这条数所在的登记记录的登记号", { required: true });
     const parameter = item.str("parameter", { max: 120, required: true });
@@ -871,11 +889,23 @@ const WRITERS = {
     if (item.row.historicalBaseline != null && typeof item.row.historicalBaseline !== "boolean") item.bad("historicalBaseline", "historicalBaseline 是 true 或 false。");
     const line = item.str("line", { max: 40 });
     const biomarker = item.str("biomarker", { max: 80 });
+    // Where the run says it read the quotation. An evidence item stands on a registry record the study holds, so the field is a
+    // statement, never a lookup — but a platform card's page is an index of other people's sources, and an item that names one as
+    // its source is refused whole (flywheel F23, 2026-10-06): the card may point at a primary source, it is never one.
+    const source = item.str("source", { max: 500 });
+    // A root-relative link (`/evidence/c/…`) is not an address to `isPlatformCardAddress`, and a run may write either.
+    const publicUrl = service?.config?.publicUrl;
+    if (source && (isPlatformCardAddress(source, { publicUrl }) || platformCardCitations(source, { publicUrl }).length)) {
+      item.bad("source", "出处不能是证据卡的页面：证据卡只是线索。读它列出的原始来源，在条目里写那份来源和逐字的引文。", "vcr_evidence_source_is_card");
+    }
+    // Which card led the run to this value. Stored and shown, never trusted: nothing about the item's verdict reads it.
+    const candidateFrom = item.row.candidateFrom == null ? undefined : candidateOf(item);
     if (!item.ok) return null;
     if (!evidence?.addEvidenceItem) return void item.bad("registryId", "证据参数化未接入本部署。", "vcr_write_refused");
     const written = await evidence.addEvidenceItem({ userId: study.userId, studyId: study.id, item: {
       registry, registryId, parameter, arm, armRole, value, valueText, unit, ciLow, ciHigh, sampleSize, events, valueSource, quote, locator,
       endpointKey, enrollmentKind, historicalBaseline: item.row.historicalBaseline === true, line, biomarker, outcome: item.row.outcome, note: item.row.note,
+      ...(source ? { source } : {}), ...(candidateFrom ? { candidateFrom } : {}),
     } });
     if (written.status !== "ok") return void item.bad(written.code === "vcr_precedent_not_in_study" ? "registryId" : "quote", written.message ?? "没有写入。",
       written.code === "vcr_precedent_not_in_study" ? "vcr_write_value_invalid" : "vcr_evidence_unverified");

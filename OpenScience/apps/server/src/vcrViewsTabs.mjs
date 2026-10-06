@@ -1169,6 +1169,8 @@ function forestOf(card, evidence, precedentById) {
       n: numeric(item.sample_size ?? item.sampleSize),
       value: numeric(item.value), low: numeric(item.ci_low ?? item.ciLow), high: numeric(item.ci_high ?? item.ciHigh),
       weight: null, highlighted: Boolean(object(item.applicability).chinesePopulation), pooled: false, prediction: false,
+      // The card a run says led it to this value (flywheel F23): the page says so, and nothing about the row's check reads it.
+      ...(object(item.detail).candidateFrom ? { candidateFrom: object(item.detail).candidateFrom } : {}),
     };
   });
   if (!studies.length) return [];

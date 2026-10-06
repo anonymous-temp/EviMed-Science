@@ -1101,6 +1101,7 @@ export async function vcrMetricsSnapshot(vcr) {
     worker: vcr.worker?.status?.() ?? null,
     engine: vcr.engineStatus ?? null,
     intake: vcr.intake ? { counters: { ...vcr.intake.counters } } : null,
+    evidence: vcr.evidence?.counters ? { ...vcr.evidence.counters } : null,
   };
 }
 
@@ -1141,6 +1142,11 @@ export function vcrMetricFamilies(enabled, snapshot) {
   if (snapshot.intake?.counters) {
     add("intake_total", "What the intake conversions did since this process started: record documents converted or refused (needsText, unreadable, tooLong, tooLarge), conversions that timed out, failed or had no converter, and figures digitized or refused.", "counter",
       Object.entries(snapshot.intake.counters).map(([kind, value]) => ({ labels: { kind }, value: Number(value) })));
+  }
+  if (snapshot.evidence) {
+    add("card_candidates_total", "Evidence items a run wrote as candidates it found through an evidence card (flywheel F23): written, and the ones that passed the quote and number check.", "counter",
+      [{ labels: { outcome: "written" }, value: Number(snapshot.evidence.cardCandidates ?? 0) },
+        { labels: { outcome: "verified" }, value: Number(snapshot.evidence.cardCandidatesVerified ?? 0) }]);
   }
   const loops = Object.entries(snapshot.worker?.loops ?? {}).filter(([, loop]) => loop?.wired);
   if (loops.length) {

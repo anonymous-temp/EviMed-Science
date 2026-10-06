@@ -1088,6 +1088,12 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
   const note = (message, detail) => { logger?.info?.(message, detail); };
 
   /**
+   * Items a run wrote as candidates it found through an evidence card (flywheel F23), and how many of them passed the check every item
+   * passes: the share that verified is what says whether the cards are worth reading as leads.
+   */
+  const counters = { cardCandidates: 0, cardCandidatesVerified: 0 };
+
+  /**
    * A registry read that did not give a record, as the answer the run reads:
    * `available: false`, the code, and whether the record is not there at all
    * (`registry_not_found`) or the registry could not be asked
@@ -1397,12 +1403,18 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
           enrollmentKind: item.enrollmentKind ?? null,
           historicalBaseline: item.historicalBaseline === true,
           applicability: { line: item.line, biomarker: item.biomarker, endpointKey: String(item.endpointKey ?? "") },
-          detail: { outcome: item.outcome ?? null, note: item.note ?? null },
+          // `candidateFrom` and `source` are the run's own statements, kept beside the verdict and read by nothing that decides it.
+          detail: { outcome: item.outcome ?? null, note: item.note ?? null,
+            ...(item.candidateFrom ? { candidateFrom: item.candidateFrom } : {}), ...(item.source ? { source: String(item.source) } : {}) },
         },
         sourceText: String(precedent.record_text ?? ""),
         checkedAt,
       });
       const appended = await store.appendEvidenceItems({ userId, studyId, precedentId: precedent.id, items: [checked.item] });
+      if (item.candidateFrom) {
+        counters.cardCandidates += 1;
+        if (checked.verified) counters.cardCandidatesVerified += 1;
+      }
       return { status: "ok", id: appended.ids[0], state: checked.state };
     },
 
@@ -1700,6 +1712,7 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
           sampleSize: row.sample_size, events: row.events, valueSource: row.value_source,
           verification: row.locator?.verification ?? "no_quote", historicalBaseline: row.historical_baseline,
           enrollmentKind: row.enrollment_kind, quote: row.quote, sourceRef: row.source_ref,
+          ...(row.detail?.candidateFrom ? { candidateFrom: row.detail.candidateFrom } : {}),
           registry: precedents.get(String(row.precedent_id))?.registry ?? null,
           registryId: precedents.get(String(row.precedent_id))?.registry_id ?? null,
         })),
@@ -1713,6 +1726,8 @@ export function createVcrEvidencePipeline({ store, registry = null, jobs = null,
      * @param {{ userId: string, studyId: string, parameter: string }} input
      */
     verifiedEvidenceIds(input) { return store.verifiedEvidenceIds(input); },
+
+    counters,
   };
   return pipeline;
 }

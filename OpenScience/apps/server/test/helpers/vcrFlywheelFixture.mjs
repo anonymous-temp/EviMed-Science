@@ -1,0 +1,49 @@
+// The composed 虚拟临研 module on a database of its own, the way `vcrEvidenceMatching.integration.test.mjs` composes it, for the
+// flywheel suites (cards as candidates, the 「模拟研究」 column, frontier events, platform packs, prediction filing). Each suite
+// brings its own config and its own ports; the registry answers FLAURA for NCT02296125 and nothing else.
+import assert from "node:assert/strict";
+
+import { ControlPlaneDatabase } from "../../src/controlPlaneDatabase.mjs";
+import { composeVcr } from "../../src/vcrComposition.mjs";
+import { vcrRuntimeWrite } from "../../src/vcrGateway.mjs";
+import { createGeoTestDatabase } from "./geoTestDatabase.mjs";
+import { FLAURA } from "../vcrEvidenceFixtures.mjs";
+
+export const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
+if (databaseUrl) {
+  const parsed = new URL(databaseUrl);
+  assert.ok(["127.0.0.1", "localhost", "::1"].includes(parsed.hostname));
+  assert.match(parsed.pathname, /evimed_test/);
+}
+export const skipWithoutDatabase = { skip: !databaseUrl && "OPEN_SCIENCE_TEST_POSTGRES_URL is not configured" };
+
+/**
+ * @param {{ label: string, config?: Record<string, any>, composeOptions?: Record<string, any> }} input
+ * @returns {Promise<{ vcr: any, database: ControlPlaneDatabase, write: (study: any, what: string, items: any[], extra?: Record<string, any>) => Promise<any>, close: () => Promise<void> }>}
+ */
+export async function startVcr({ label, config = {}, composeOptions = {} }) {
+  const isolated = await createGeoTestDatabase(databaseUrl, label);
+  const database = new ControlPlaneDatabase({ databaseUrl: isolated.url, databasePoolMax: 6, databaseConnectionTimeoutMs: 3_000 });
+  const registry = async (/** @type {string} */ url) => {
+    if (!String(url).includes("NCT02296125")) return new Response("{}", { status: 404 });
+    return new Response(JSON.stringify(FLAURA), { status: 200 });
+  };
+  const vcr = composeVcr({
+    config: { vcrEnabled: true, vcrAudience: "all", vcrJobCpuSeconds: 600, vcrStudyCpuBudget: 100_000, vcrMaxConcurrentJobs: 2, vcrLeaseMs: 900_000,
+      vcrDataPlaneDir: "", vcrEngineUrl: "", ...config },
+    productDatabase: database, fetchImpl: registry, ...composeOptions,
+  });
+  await vcr.store.ready();
+  return {
+    vcr, database,
+    write: (study, what, items, extra = {}) => vcrRuntimeWrite({
+      store: vcr.store, service: vcr.service, orchestrator: null, study, what, items,
+      evidence: vcr.evidence, evidenceStore: vcr.evidenceStore, matchStore: vcr.matchStore, matching: vcr.matching, seal: null,
+      dataPlane: null, documents: null, report: () => {}, ...extra,
+    }),
+    close: async () => {
+      await database.close?.().catch(() => {});
+      await isolated.drop();
+    },
+  };
+}
