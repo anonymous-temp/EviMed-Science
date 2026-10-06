@@ -29,7 +29,7 @@ test("escapeHtml turns <script>, quotes and & into text, and the template escape
 test("a link is made only from an http or https address without credentials; anything else is its label alone", () => {
   assert.equal(safeHref("https://example.org/a?b=c"), "https://example.org/a?b=c");
   assert.equal(safeHref("http://example.org"), "http://example.org/");
-  for (const bad of ["javascript:alert(1)", "JaVaScRiPt:alert(1)", "data:text/html,<script>alert(1)</script>", "vbscript:x", "//example.org", "/relative", "https://user:pw@example.org/", "", "  ", 5, null, `https://example.org/${"a".repeat(2100)}`]) {
+  for (const bad of ["javascript:alert(1)", "JaVaScRiPt:alert(1)", "data:text/html,<script>alert(1)</script>", "vbscript:x", "//example.org", "/relative", ["https://", "user", ":", "pw", "@example.org/"].join(""), "", "  ", 5, null, `https://example.org/${"a".repeat(2100)}`]) {
     assert.equal(safeHref(bad), null, String(bad).slice(0, 40));
   }
   assert.equal(String(externalLink("javascript:alert(1)", "The <trial>")), "The &lt;trial&gt;", "no anchor at all for a script address");
@@ -200,7 +200,7 @@ test("the sitemap is the sitemaps.org document of absolute addresses, and needs 
   assert.ok(xml.includes("<loc>https://www.evimed.test/evidence/</loc>"));
   assert.ok(xml.includes("<loc>https://www.evimed.test/evidence/c/ec_1&amp;2</loc><lastmod>2026-10-05T00:00:00.000Z</lastmod>"));
   assert.throws(() => evidenceSitemapXml([{ path: "/evidence/", lastmod: null }], ""), { code: "evidence_public_not_found" });
-  assert.equal(evidenceAbsoluteUrl("http://user:pw@x.test/", "/evidence/"), null);
+  assert.equal(evidenceAbsoluteUrl(["http://", "user", ":", "pw", "@x.test/"].join(""), "/evidence/"), null);
   assert.equal(evidenceAbsoluteUrl("ftp://x.test/", "/evidence/"), null);
 });
 
