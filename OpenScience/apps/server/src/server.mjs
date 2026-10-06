@@ -73,7 +73,7 @@ import { EVIDENCE_PROJECT_ID, EVOLUTION_PROJECT_ID, LEARNING_PROJECT_ID, assertC
 import { createEvidenceBudget, evidenceBudgetMetricFamilies } from "./evidenceBudget.mjs";
 import { PROGRAMME_DECISION_KIND, createEvidenceProgramme, evidenceProgrammeMetricFamilies } from "./evidenceProgramme.mjs";
 import { HANDBOOK_LESSON_CLASSES, createPlatformHandbooks, handbookJudgeMessages, platformHandbookMetricFamilies, projectFactsReader } from "./learningPlatformHandbooks.mjs";
-import { establishedAuthors } from "./evidenceVerifiedCards.mjs";
+import { evidenceEstablishedAuthors } from "./evidenceAuthorStanding.mjs";
 import { callReviewModel } from "./reviewModel.mjs";
 import { guestMarkedRuns } from "./capsuleShareTrust.mjs";
 import { createEvolutionLeadSources, evolutionLeadSourceMetricFamilies, programmeLeadReader } from "./evolutionLeadSources.mjs";
@@ -4763,7 +4763,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             messages: handbookJudgeMessages({ text, capabilityId }) });
           return { ...result.value, independent: result.modelReported === true && /^qwen/i.test(result.model) };
         } : null,
-        established: (userIds) => establishedAuthors(productDatabase, userIds),
+        established: (userIds) => evidenceEstablishedAuthors(productDatabase, userIds),
         recentGuestRun: async (userId, runId) => (runId ? (await guestMarkedRuns(productDatabase, userId, [runId])).has(runId) : false),
       });
     }

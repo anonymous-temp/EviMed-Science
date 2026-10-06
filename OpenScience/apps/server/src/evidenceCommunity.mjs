@@ -12,6 +12,10 @@
  *   as if they were independent); never the platform's own. And only an *established* author's: three published cards that each carry a ✓
  *   (plan §7, "新作者的公开内容在被独立佐证之前不进官方专区的社区栏"). A new author's cards are not hidden from the author or from the
  *   author's page — they are simply not placed under the platform's name until the third ✓ card exists, at which point they appear by themselves.
+ * - **Established, or corroborated.** The first condition is the one rule `evidenceAuthorStanding.mjs` states; this column adds one of its
+ *   own, kept beside the call (plan §7: 「在被独立佐证之前不进……社区栏」): a card whose author is not established is listed when `corroborated`
+ *   says something independent of its author vouches for it. No such signal is merged yet, so no deployment passes one and the column lists
+ *   established authors only.
  * - **The platform never edits them.** The column reads rows and returns them: no field is rewritten, summarised or softened, and the card
  *   keeps its own producer, disclosure and ✓/⚠ marks when the reader opens it.
  * - **Ordering reads `EVIDENCE_RANKING_INPUTS` and nothing else**: the share of the card's claims found in their sources first, then the readers'
@@ -29,7 +33,8 @@ import { evidenceRankingComparator } from "@evimed/domain";
 import { ENTITY_TEXT_KINDS, keyKind, splitKeys } from "@evimed/domain/entity-keys";
 import { HttpError, sendJson } from "./security.mjs";
 import { migrateEvidenceZones } from "./evidenceZonePersistence.mjs";
-import { establishedAuthors, verifiedClaimCounts } from "./evidenceVerifiedCards.mjs";
+import { evidenceEstablishedAuthors } from "./evidenceAuthorStanding.mjs";
+import { verifiedClaimCounts } from "./evidenceVerifiedCards.mjs";
 import { authorHandlesFor } from "./evidenceAuthorHandles.mjs";
 
 /** Candidates read before the established-author rule and the order are applied. */
@@ -43,9 +48,11 @@ const ZONE_ID = /^ez_[A-Za-z0-9]{8,64}$/;
 const isSubjectKey = (/** @type {string} */ key) => ENTITY_TEXT_KINDS.includes(/** @type {any} */ (keyKind(key)));
 
 /**
- * @param {{ database: any, maxCards?: number, platformPublisherUserId?: string | null }} options
+ * @param {{ database: any, maxCards?: number, platformPublisherUserId?: string | null,
+ *   corroborated?: ((card: { id: string, userId: string }) => Promise<boolean>) | null }} options
+ *   `corroborated`: whether something independent of the card's author vouches for the card; absent, only established authors' cards are listed.
  */
-export function createEvidenceCommunity({ database, maxCards = COMMUNITY_DEFAULT_MAX_CARDS, platformPublisherUserId = null }) {
+export function createEvidenceCommunity({ database, maxCards = COMMUNITY_DEFAULT_MAX_CARDS, platformPublisherUserId = null, corroborated = null }) {
   const counters = { requests: 0, empty: 0, listed: 0, heldBackNewAuthors: 0, failures: 0 };
   const limit = Math.max(1, Math.min(COMMUNITY_MAX_CARDS_CEILING, Math.floor(maxCards)));
   const rank = evidenceRankingComparator(["verified_share", "review_score", "recency"]);
@@ -74,8 +81,12 @@ export function createEvidenceCommunity({ database, maxCards = COMMUNITY_DEFAULT
          WHERE c.entity_keys && $1::text[] AND c.zone_id<>$2 AND z.kind='user' AND z.visibility='internet' AND z.state='published'
            AND c.state='published' AND c.withdrawn IS NULL AND c.user_id<>COALESCE($3::text,'')
          ORDER BY c.updated_at DESC,c.id LIMIT $4`, [keys, zoneId, platformPublisherUserId, COMMUNITY_CANDIDATES])).rows;
-      const established = await establishedAuthors(database, [...new Set(candidates.map((row) => String(row.user_id)))]);
-      const standing = candidates.filter((row) => established.has(String(row.user_id)));
+      const established = await evidenceEstablishedAuthors(database, candidates.map((row) => String(row.user_id)));
+      /** @type {any[]} */
+      const standing = [];
+      for (const row of candidates) {
+        if (established.has(String(row.user_id)) || (corroborated && await corroborated({ id: String(row.id), userId: String(row.user_id) }))) standing.push(row);
+      }
       counters.heldBackNewAuthors += candidates.length - standing.length;
       const handles = await authorHandlesFor(database, standing.map((row) => row.user_id));
       // An account that is gone between the two reads has no handle and no card here, as it has no page.

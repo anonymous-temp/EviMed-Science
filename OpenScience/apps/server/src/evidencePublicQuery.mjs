@@ -19,7 +19,9 @@
 //   `excerpt` are not selected into the model at all. A restricted source's claim carries no quotation (the card writer's rule), so
 //   nothing here has any text to show for it.
 // - **Authors are new until three of their published cards each carry a ✓.** The lift is a count taken at read time, so it is
-//   automatic (`authorQualifies`); official zones are exempt (the platform is not a new author).
+//   automatic (`authorQualifies`); official zones are exempt (the platform is not a new author). The count is the one rule
+//   (`evidenceAuthorStanding.mjs`), the same the feed and the community column ask; this module keeps only a memory of its verdicts,
+//   made again when the author's published cards or their revisions change.
 // - **No account id leaves.** An author or a zone's owner is named by the public handle (`evidenceAuthorHandles.mjs`), made for every
 //   account a result mentions in one statement before the result is built; `author(handle)` and `authorQualifies(handle)` take a
 //   handle and find the account behind it here, and an account id is the same "no such author" as a handle nobody holds. The account
@@ -43,6 +45,7 @@ import {
 } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 import { migrateEvidenceZones } from "./evidenceZonePersistence.mjs";
+import { evidenceAuthorIsEstablished } from "./evidenceAuthorStanding.mjs";
 import { EVIDENCE_AUTHOR_HANDLE, accountOfHandle, authorHandlesFor, migrateAuthorHandles } from "./evidenceAuthorHandles.mjs";
 import { evidenceCurrencyView, EVIDENCE_ZONE_CURRENCY_SQL } from "./evidenceCurrency.mjs";
 import { EVIDENCE_CHANGE_LOG_MAX_PAGE, readEvidenceChangeLog } from "./evidenceChangeLog.mjs";
@@ -60,10 +63,6 @@ const INDEX_CANDIDATES = 100;
 /** Cards one list page carries, at most. */
 export const EVIDENCE_PUBLIC_MAX_PAGE = 50;
 export const EVIDENCE_PUBLIC_DEFAULT_PAGE = 20;
-/** Cards considered when an author's cards are counted for the new-author rule: three ✓ cards among the newest fifty is enough. */
-const QUALIFYING_WINDOW = 50;
-/** The published ✓ cards that make an author no longer new. */
-export const EVIDENCE_PUBLIC_QUALIFYING_CARDS = 3;
 /** Entries one sitemap lists at most (the protocol allows 50,000; this is a resource bound). */
 export const EVIDENCE_PUBLIC_SITEMAP_CARDS = 5000;
 /** Verified-card results kept: one small object per (card, revision). */
@@ -166,7 +165,7 @@ export function createEvidencePublicReads({ database, now = () => new Date() }) 
   const counters = { verifications: 0, verificationCacheHits: 0, authorChecks: 0, failures: 0 };
   /** @type {Map<string, { total: number, verified: number, derived: number, warned: number }>} */
   const verificationCache = new Map();
-  /** @type {Map<string, { qualifies: boolean, key: string }>} */
+  /** @type {import("./evidenceAuthorStanding.mjs").EvidenceStandingCache} */
   const authorCache = new Map();
 
   async function ready() {
@@ -465,29 +464,16 @@ export function createEvidencePublicReads({ database, now = () => new Date() }) 
     },
 
     /**
-     * Whether an author is no longer new: at least three published cards that each carry a ✓ claim. Taken at read time and cached by the
-     * author's card revisions, so it lifts by itself the moment the third card is published. Asked by the author's handle, the only name
-     * the pages hold; a handle nobody holds does not qualify.
+     * Whether an author is no longer new: at least three published cards that each carry a ✓ claim (the one rule, `evidenceAuthorIsEstablished`).
+     * Taken at read time and remembered by the author's card revisions, so it lifts by itself the moment the third card is published. Asked by
+     * the author's handle, the only name the pages hold; a handle nobody holds does not qualify.
      * @param {string} authorHandle
      */
     async authorQualifies(authorHandle) {
       await ready();
       counters.authorChecks += 1;
       const authorId = await accountIdOf(authorHandle);
-      if (!authorId) return false;
-      const cards = (await database.query(
-        `SELECT c.id, c.revision, jsonb_array_length(c.claims) AS claim_count FROM evimed_frontier.evidence_cards c JOIN evimed_frontier.evidence_zones z ON z.id = c.zone_id
-         WHERE c.user_id = $1 AND c.state = 'published' AND z.state = 'published' AND c.withdrawn IS NULL AND jsonb_array_length(c.claims) > 0
-         ORDER BY c.updated_at DESC, c.id LIMIT $2`, [authorId, QUALIFYING_WINDOW])).rows;
-      const key = cards.map((card) => `${card.id}:${card.revision}`).join(",");
-      const known = authorCache.get(authorId);
-      if (known && known.key === key) return known.qualifies;
-      const counts = await verificationOf(cards);
-      const qualifying = cards.filter((card) => (counts.get(card.id)?.verified ?? 0) >= 1).length;
-      const qualifies = qualifying >= EVIDENCE_PUBLIC_QUALIFYING_CARDS;
-      authorCache.set(authorId, { qualifies, key });
-      if (authorCache.size > AUTHOR_CACHE) authorCache.delete(/** @type {string} */ (authorCache.keys().next().value));
-      return qualifies;
+      return authorId ? evidenceAuthorIsEstablished(database, authorId, { cache: authorCache }) : false;
     },
 
     /**
