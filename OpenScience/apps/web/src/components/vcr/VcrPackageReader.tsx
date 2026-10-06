@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { Tag } from "@/components/ui/Tag";
 import { useVcrLoad, VcrTabError } from "./vcrTabKit";
 import { VcrTabSkeleton } from "./VcrStates";
+import { VcrPublishSimulation } from "./VcrPublishSimulation";
 
 /** A run file's address: every segment of its path encoded, so a name can never climb out of the run. */
 export function runFilePath(runId: string, path: string): string {
@@ -62,6 +63,9 @@ export function VcrPackageReader({ studyId, exportId, onBack }: { studyId: strin
 
           {deliverable.snapshotChanged && <p role="status" className="mt-3 text-caption text-warn-strong">研究已有更新，此报告保留生成时的内容。</p>}
           {sections.length > 0 && <div className="mt-3"><DocumentExportActions source={{ studyId, exportId }} initialId={deliverable.documentExportId} /></div>}
+          {deliverable.publication && sections.length > 0 && (
+            <VcrPublishSimulation studyId={studyId} exportId={exportId} defaultTitle={deliverable.title} publication={deliverable.publication} onChanged={reload} />
+          )}
           {deliverable.document?.status && deliverable.document.status.length > 0 && (
             <dl className="mt-6 grid gap-px overflow-hidden rounded-card border border-border bg-border sm:grid-cols-2 lg:grid-cols-4 [&>div]:bg-surface">
               {deliverable.document.status.map((item) => (

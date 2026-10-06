@@ -86,7 +86,11 @@ function fixture({ who = OWNER, roles = {}, overrides = {}, operators = [], sett
     },
     async addReview(/** @type {any} */ input) { calls.push(["vcr.review", input.kind, input.reviewer]); return { id: "rvw_1", ...input }; },
     async addDecision(/** @type {any} */ input) { calls.push(["vcr.decision", input.decidedBy]); return { id: "dec_1", ...input }; },
-    async exportRow(/** @type {string} */ _studyId, /** @type {string} */ id) { calls.push(["vcr.export", id]); return id === "exp_1" ? { id: "exp_1", kind: "study_package", state: "ready" } : null; },
+    async exportRow(/** @type {string} */ _studyId, /** @type {string} */ id) {
+      calls.push(["vcr.export", id]);
+      if (id === "exp_sim") return { id: "exp_sim", kind: "simulation_report", state: "ready" };
+      return id === "exp_1" ? { id: "exp_1", kind: "study_package", state: "ready" } : null;
+    },
   };
   const service = {
     allows: (/** @type {any} */ user) => vcrAudienceAllows(config, user),
@@ -114,7 +118,7 @@ function fixture({ who = OWNER, roles = {}, overrides = {}, operators = [], sett
       const found = await this.requireStudy(user, id);
       const row = await vcrStore.exportRow(found.id, exportId);
       if (!row) throw new HttpError(404, "vcr_export_not_found", "Export not found.");
-      return { title: "研究包", runId: null, path: null, document: { status: row.state, sections: [] } };
+      return { title: "研究包", kind: row.kind, runId: null, path: null, document: { status: row.state, sections: [] } };
     },
     store: vcrStore,
   };
@@ -975,4 +979,35 @@ test("a prediction is filed by the study's lead alone, with no number in the bod
   none.as(OWNER);
   await assert.rejects(none.routes(request("POST", "/api/vcr/studies/std_1/predictions", body), response()), { status: 404, code: "vcr_predictions_not_enabled" });
   assert.equal(none.calls.some((call) => call[0] === "vcr.rolesOf"), false);
+});
+
+test("the study page says which flywheel actions this deployment offers, and a report's page offers publishing to the lead alone and only for the two reports the column takes", async () => {
+  const hooks = { ...composedHooks(), publications: { ...composedHooks().publications, forStudy: async () => [{ id: "sim_7", exportId: "exp_sim", publishedAt: "2026-10-06T00:00:00.000Z" }] } };
+  const { routes, as } = fixture({ overrides: hooks });
+  as(OWNER);
+  const page = response();
+  await routes(request("GET", "/api/vcr/studies/std_1"), page);
+  assert.deepEqual(page.json().data.features, { simulations: true, predictions: true, platformPacks: true });
+  const bare = fixture({ overrides: { ...composedHooks(), publications: null, predictions: null, knowledge: null }, settings: { vcrPlatformPacksEnabled: false } });
+  bare.as(OWNER);
+  const plain = response();
+  await bare.routes(request("GET", "/api/vcr/studies/std_1"), plain);
+  assert.deepEqual(plain.json().data.features, { simulations: false, predictions: false, platformPacks: false });
+
+  const report = response();
+  await routes(request("GET", "/api/vcr/studies/std_1/export/exp_sim"), report);
+  assert.deepEqual(report.json().data.publication, { canPublish: true, live: { id: "sim_7", publishedAt: "2026-10-06T00:00:00.000Z" } });
+  const pack = response();
+  await routes(request("GET", "/api/vcr/studies/std_1/export/exp_1"), pack);
+  assert.equal("publication" in pack.json().data, false, "a study package is not a report the column takes");
+  const member = fixture({ roles: { viewer: ["viewer"] }, overrides: hooks });
+  member.as("viewer");
+  const seen = response();
+  await member.routes(request("GET", "/api/vcr/studies/std_1/export/exp_sim"), seen);
+  assert.equal(seen.json().data.publication.canPublish, false, "a reader sees the state and is not offered the act");
+  const off = fixture({ overrides: hooks, settings: { vcrPublicSimulationsEnabled: false } });
+  off.as(OWNER);
+  const hidden = response();
+  await off.routes(request("GET", "/api/vcr/studies/std_1/export/exp_sim"), hidden);
+  assert.equal("publication" in hidden.json().data, false);
 });

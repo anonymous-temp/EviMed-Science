@@ -29,8 +29,8 @@
  */
 
 import {
-  VCR_COUNT_LABELS_ZH, VCR_INTENDED_USE_LABELS_ZH, VCR_MODEL_DOCUMENT_SECTION_LABELS_ZH, VCR_VALUE_SOURCES, VCR_VALUE_SOURCE_LABELS_ZH,
-  readNumberPath,
+  VCR_COUNT_LABELS_ZH, VCR_INTENDED_USE_LABELS_ZH, VCR_MODEL_DOCUMENT_SECTION_LABELS_ZH, VCR_SIMULATION_NOT_EVIDENCE_ZH, VCR_VALUE_SOURCES,
+  VCR_VALUE_SOURCE_LABELS_ZH, readNumberPath,
 } from "@evimed/domain";
 
 import { HttpError } from "./security.mjs";
@@ -42,8 +42,8 @@ import { defaultSourceOf, measureLabel } from "./vcrViewsKit.mjs";
 /** The two reports a lead may publish: the simulation report and the model analysis report (ICH M15). */
 export const VCR_PUBLICATION_KINDS = Object.freeze(["simulation_report", "model_analysis_report"]);
 
-/** What every publication says about itself, in the reader's own words: the fixed sentence of ruling 10. */
-export const VCR_SIMULATION_NOT_EVIDENCE = "模拟研究的结果是模型按假设算出来的，不是证据：不能当作临床结论，也不能当作循证依据引用。";
+/** What every publication says about itself, in the reader's own words: the fixed sentence of ruling 10 (the domain's, so the page says the same). */
+export const VCR_SIMULATION_NOT_EVIDENCE = VCR_SIMULATION_NOT_EVIDENCE_ZH;
 
 /** The longest title and summary a lead may write, in characters. */
 export const VCR_PUBLICATION_LIMITS = Object.freeze({ title: 120, summary: 600 });

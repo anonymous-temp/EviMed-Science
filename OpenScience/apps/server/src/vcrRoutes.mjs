@@ -67,7 +67,7 @@ import { HttpError, readJson, sendJson } from "./security.mjs";
 import { fileView, importAttemptAuditDetail, importAuditDetail, snapshotView, sourceView, tableView, uploadAttemptAuditDetail, uploadAuditDetail } from "./vcrDataPlane.mjs";
 import { abilitiesOfRoles } from "./vcrMembers.mjs";
 import { isSiteScopedRole } from "./vcrRecruit.mjs";
-import { VCR_PUBLICATION_LIMITS } from "./vcrPublications.mjs";
+import { VCR_PUBLICATION_KINDS, VCR_PUBLICATION_LIMITS } from "./vcrPublications.mjs";
 
 /**
  * Every code these routes answer with — or that a module behind them answers
@@ -577,7 +577,10 @@ export function createVcrRoutes(dependencies) {
         if (roles.some((role) => roleHolds(role, "manage_study"))) abilities.add("manage_study");
         // What this caller may do, from the roles it holds now: the page reads
         // it to show only the actions that will not be refused.
-        return reply({ ...view, sessionId, roles, abilities: [...abilities].sort() });
+        // What this deployment offers on the page besides the module's own: each is a switch the page reads to show or hide one action.
+        const features = { simulations: Boolean(config.vcrPublicSimulationsEnabled && hooks.publications), predictions: Boolean(hooks.predictions),
+          platformPacks: Boolean(config.vcrPlatformPacksEnabled && hooks.knowledge) };
+        return reply({ ...view, sessionId, roles, abilities: [...abilities].sort(), features });
       }
       if (method === "PATCH") {
         const body = await bodyOf(req, maxJsonBytes, ["name", "question", "action", "dataTier", "intendedUse", "status"]);
@@ -1086,10 +1089,14 @@ export function createVcrRoutes(dependencies) {
         return reply(result, 201);
       }
       if (parts.length === 4 && method === "GET") {
-        await authorize(id, "read");
+        const { study, roles } = await authorize(id, "read");
         // The reader page, not the stored row: the presenter shapes it the way
         // `VcrPackageReader` reads it (title, meta, sections, the run and file).
-        return reply(await service.exportView(user, id, parts[3]));
+        const view = await service.exportView(user, id, parts[3]);
+        // 发布到模拟研究: said only where the column is on and the report is one it takes; the lead alone is offered the act.
+        if (!config.vcrPublicSimulationsEnabled || !hooks.publications || !VCR_PUBLICATION_KINDS.includes(String(view?.kind))) return reply(view);
+        const live = (await hooks.publications.forStudy(study.id)).find((/** @type {any} */ entry) => entry.exportId === parts[3]) ?? null;
+        return reply({ ...view, publication: { canPublish: roles.some((role) => roleHolds(role, "manage_study")), live: live ? { id: live.id, publishedAt: live.publishedAt } : null } });
       }
       throw new HttpError(404, "not_found", "虚拟临研 route not found.");
     }

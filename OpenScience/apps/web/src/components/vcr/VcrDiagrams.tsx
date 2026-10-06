@@ -255,6 +255,8 @@ export interface ForestRow {
   highlighted?: boolean;
   pooled?: boolean;
   prediction?: boolean;
+  /** The evidence card a run says led it to this value: said beside the study, never as its source. */
+  candidateFrom?: { cardId: string; claimId?: string };
 }
 
 /**
@@ -303,6 +305,7 @@ export function VcrForestPlot({
               <th scope="row" className="py-1.5 pr-2 text-left font-normal text-text">
                 {row.label}
                 {row.note && <span className="ml-1.5 text-text-3">{row.note}</span>}
+                {row.candidateFrom && <span data-vcr-candidate-from={row.candidateFrom.cardId} className="ml-1.5 text-text-3" title="这个值是顺着一张证据卡找到的线索；是否成立，只看它对原文的核对">候选 · 来自证据卡</span>}
               </th>
               <td className="py-1.5 pr-2 text-right tabular-nums text-text-2">{row.n != null ? numberText(row.n, 0) : ""}</td>
               <td className="py-1.5">

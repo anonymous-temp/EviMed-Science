@@ -712,6 +712,12 @@ export const VCR_NOTIFICATION_LABELS_ZH = Object.freeze({
   new_candidates: '有新的匹配候选', accrual_off_forecast: '实际入组偏离预测', new_evidence: '假设卡有了新证据',
 })
 
+/**
+ * The one sentence every public 「模拟研究」 publication and every page that offers to publish says about itself (flywheel ruling 10,
+ * 2026-10-06): a simulated result is the model's output under stated assumptions, and it is not evidence.
+ */
+export const VCR_SIMULATION_NOT_EVIDENCE_ZH = '模拟研究的结果是模型按假设算出来的，不是证据：不能当作临床结论，也不能当作循证依据引用。'
+
 /** Why a result went stale (§6.3). Stale results are never deleted or hidden. */
 export const VCR_STALE_REASONS = frozen(['assumption_changed', 'criterion_changed', 'source_corrected', 'protocol_revised', 'method_version_changed'])
 export const VCR_STALE_REASON_LABELS_ZH = Object.freeze({
