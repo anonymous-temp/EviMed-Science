@@ -85,7 +85,7 @@ test("/status offers what this deployment has, says personalization is off witho
   assert.equal(answer.status, 200);
   const status = (await answer.json()).data;
   assert.equal(status.personalization, "off", "a memory store without a model to read it with cannot personalize");
-  assert.deepEqual(status.capabilities, { saveToLibrary: true, abstractZh: false, forYou: false, hot: true, daily: true, weekly: true });
+  assert.deepEqual(status.capabilities, { saveToLibrary: true, abstractZh: false, forYou: false, hot: true, daily: true, weekly: true, evidencePublicPages: false, evidenceUpkeep: false });
   const seen = (await database.query("SELECT last_seen_at FROM evimed_frontier.user_prefs WHERE user_id = $1", [accounts.reader])).rows[0];
   assert.ok(seen?.last_seen_at, "the page read marks the reader for the daily's audience");
   const forYou = await (await fetch(`${base}/api/frontier/for-you`, { headers: sessions.reader })).json();

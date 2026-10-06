@@ -11,6 +11,9 @@ import { FrontierNavigation } from "@/components/frontier/FrontierNavigation";
 import { FrontierSkeleton } from "@/components/frontier/FrontierSkeleton";
 import { EvidenceReading } from "@/components/frontier/EvidenceReading";
 import { EvidenceCardLinks, EvidenceContinueAction } from "@/components/frontier/EvidenceCardLinks";
+import { EvidenceChangeLog } from "@/components/frontier/EvidenceChangeLog";
+import { useEvidenceFeatures } from "@/components/frontier/useEvidenceFeatures";
+import { listMyEvidenceChallenges, type EvidenceChallengeView } from "@/lib/evidenceUpkeepClient";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { Button } from "@/components/ui/Button";
 import {
@@ -59,6 +62,24 @@ function EvidenceReadingContent({
   const [busy, setBusy] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const capture = useEvidenceScope(`${zoneId}:${cardId}:${refresh}`);
+  // Keeping cards current (flywheel F14): where the deployment has it, each claim offers 「质疑」 and the card shows its history.
+  const features = useEvidenceFeatures();
+  const [challenges, setChallenges] = useState<EvidenceChallengeView[] | undefined>(undefined);
+  const challengeable = features.upkeep && evidence?.state === "published";
+  useEffect(() => {
+    if (!challengeable) {
+      setChallenges(undefined);
+      return;
+    }
+    let active = true;
+    // A failure to read the reader's earlier challenges leaves the claims challengeable and merely forgets them.
+    listMyEvidenceChallenges(cardId)
+      .then((items) => active && setChallenges(items))
+      .catch(() => active && setChallenges([]));
+    return () => {
+      active = false;
+    };
+  }, [challengeable, cardId]);
   useEffect(() => {
     let active = true;
     setLoading(true);
@@ -196,6 +217,7 @@ function EvidenceReadingContent({
           <>
             <EvidenceReading
               evidence={evidence}
+              challenges={challengeable ? (challenges ?? []) : undefined}
               onDeleteComment={(id) => {
                 const current = capture();
                 setBusy(true);
@@ -219,6 +241,12 @@ function EvidenceReadingContent({
               >
                 回到相关动态
               </Link>
+            )}
+            {features.upkeep && evidence.state === "published" && (
+              <section className="mt-6" aria-label="这张卡的变更记录">
+                <h3 className="mb-2 text-ui font-medium text-text">变更记录</h3>
+                <EvidenceChangeLog zoneId={zoneId} cardId={evidence.id} pageSize={10} />
+              </section>
             )}
             <div className="mt-6 space-y-4">
               <EvidenceContinueAction evidence={evidence} />

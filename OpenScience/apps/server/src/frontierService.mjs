@@ -947,6 +947,10 @@ export class FrontierService {
         hot: Boolean(this.events),
         daily: Boolean(this.daily),
         weekly: Boolean(this.weekly),
+        // The evidence zones' own switches (flywheel F08, F14): whether a zone has a public page to link to, and whether a card's
+        // history and a reader's challenge are offered. A button is never shown for a route that would answer 404.
+        evidencePublicPages: this.config.evidencePublicWebEnabled === true,
+        evidenceUpkeep: this.config.evidenceUpkeepEnabled === true,
       },
       versions: {
         content: String(metaNumber(read.meta[FRONTIER_META_KEYS.contentVersion])),

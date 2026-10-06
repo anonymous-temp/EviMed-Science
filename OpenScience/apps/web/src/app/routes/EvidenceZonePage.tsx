@@ -12,6 +12,8 @@ import {
 import { ZoneEditor, CardEditor } from "@/components/frontier/EvidenceEditors";
 import { EvidenceMaintenance } from "@/components/frontier/EvidenceMaintenance";
 import { EvidenceVisibility } from "@/components/frontier/EvidenceVisibility";
+import { EvidenceChangeLog } from "@/components/frontier/EvidenceChangeLog";
+import { useEvidenceFeatures } from "@/components/frontier/useEvidenceFeatures";
 import { PageShell } from "@/components/layout/PageShell";
 import { FrontierNavigation } from "@/components/frontier/FrontierNavigation";
 import { FrontierSkeleton } from "@/components/frontier/FrontierSkeleton";
@@ -37,6 +39,8 @@ export function EvidenceZonePage() {
 }
 function EvidenceZoneContent({ zoneId }: { zoneId: string }) {
   const feedbackRequestId = useEvidenceRequestId();
+  const features = useEvidenceFeatures();
+  const [logOpened, setLogOpened] = useState(false);
   const [params] = useSearchParams();
   const fromItem = params.get("fromItem");
   const [sourceItem, setSourceItem] = useState<FrontierItem | null>(null);
@@ -240,6 +244,19 @@ function EvidenceZoneContent({ zoneId }: { zoneId: string }) {
                 {zone.state === "draft" ? "草稿" : "已发布"}
                 {zone.creator && ` · ${zone.creator}`}
                 {zone.createdAt && ` · ${evidenceDate(zone.createdAt)}`}
+                {features.publicPages && zone.state === "published" && zone.visibility === "internet" && (
+                  <>
+                    {" · "}
+                    <a
+                      className="text-accent"
+                      href={`/evidence/z/${encodeURIComponent(zone.id)}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      公开页
+                    </a>
+                  </>
+                )}
               </p>
               {zone.description && (
                 <p className="mt-2 max-w-measure text-ui text-text-2">
@@ -410,6 +427,21 @@ function EvidenceZoneContent({ zoneId }: { zoneId: string }) {
                 </Button>
               )}
             </section>
+            {features.upkeep && zone.state === "published" && (
+              <details
+                className="text-ui"
+                onToggle={(event) => {
+                  if (event.currentTarget.open) setLogOpened(true);
+                }}
+              >
+                <summary className="cursor-pointer text-text-3">变更记录</summary>
+                {logOpened && (
+                  <div className="mt-3">
+                    <EvidenceChangeLog zoneId={zone.id} />
+                  </div>
+                )}
+              </details>
+            )}
             {zone.canEdit && suggestions.length > 0 && (
               <section>
                 <h3 className="mb-2 text-ui font-medium text-text">
