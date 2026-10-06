@@ -14,9 +14,10 @@
 // - **A sitemap lists what the same rules call indexable, and nothing else.** With the deployment's switch off the sitemap is a 404.
 
 import { HttpError } from "./security.mjs";
+import { evidencePublicPath } from "./evidencePublicPaths.mjs";
 
-/** The static pages a sitemap lists besides zones, cards and authors. */
-const SITE_PATHS = ["/evidence/", "/evidence/about", "/evidence/metrics", "/evidence/simulations"];
+/** The static pages a sitemap lists besides zones, cards and authors, under the base the deployment serves the pages at. */
+const sitePaths = () => ["/", "/about", "/metrics", "/simulations"].map((suffix) => evidencePublicPath(suffix));
 
 /**
  * @param {{ config: Record<string, any>, reads: { authorQualifies: (authorHandle: string | null) => Promise<boolean> } }} options
@@ -56,18 +57,18 @@ export function createEvidencePublicIndexing({ config, reads }) {
       return /** @type {boolean} */ (verdicts.get(authorHandle));
     };
     /** @type {{ path: string, lastmod: string | null }[]} */
-    const paths = SITE_PATHS.map((path) => ({ path, lastmod: null }));
+    const paths = sitePaths().map((path) => ({ path, lastmod: null }));
     const authors = new Map();
     for (const zone of zones) {
       if (!(await allowed(zone.kind, zone.authorHandle))) continue;
-      paths.push({ path: `/evidence/z/${encodeURIComponent(zone.id)}`, lastmod: zone.updatedAt });
+      paths.push({ path: evidencePublicPath(`/z/${encodeURIComponent(zone.id)}`), lastmod: zone.updatedAt });
       if (zone.authorHandle) authors.set(zone.authorHandle, zone.updatedAt);
     }
     for (const card of cards) {
       if (!(await allowed(card.kind, card.authorHandle))) continue;
-      paths.push({ path: `/evidence/c/${encodeURIComponent(card.id)}`, lastmod: card.updatedAt });
+      paths.push({ path: evidencePublicPath(`/c/${encodeURIComponent(card.id)}`), lastmod: card.updatedAt });
     }
-    for (const [authorHandle, lastmod] of authors) paths.push({ path: `/evidence/a/${encodeURIComponent(authorHandle)}`, lastmod });
+    for (const [authorHandle, lastmod] of authors) paths.push({ path: evidencePublicPath(`/a/${encodeURIComponent(authorHandle)}`), lastmod });
     counters.sitemapUrls += paths.length;
     return paths;
   }

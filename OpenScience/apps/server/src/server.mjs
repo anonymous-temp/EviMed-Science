@@ -251,6 +251,7 @@ import { createGeoCardCitationReader } from "./geoCardCitations.mjs";
 import { createEvidenceOutcomes, evidenceOutcomeMetricFamilies } from "./evidenceIncidents.mjs";
 import { createEvidenceCommunity, createEvidenceCommunityRoutes, evidenceCommunityMetricFamilies } from "./evidenceCommunity.mjs";
 import { createEvidenceFeedRoutes } from "./evidenceFeedRoutes.mjs";
+import { setEvidencePublicBase } from "./evidencePublicPaths.mjs";
 import { createEvidencePublicRoutes, evidencePublicMetricFamilies } from "./evidencePublicRoutes.mjs";
 import { EVIDENCE_TOPIC_REQUEST_LIST_MAX, createEvidenceTopicRequestRoutes, createEvidenceTopicRequests, topicRequestCounts } from "./evidencePublicRequests.mjs";
 import { pageReads } from "./evidencePublicReads.mjs";
@@ -1015,6 +1016,9 @@ function geoSourceReaderOf(controlProject) {
 export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = createHostedExtensionIntegration, runtimeManagerFactory = (config, hooks) => new RuntimeManager(config, hooks)} = {}) {
   if(typeof extensionIntegrationFactory !== "function" || typeof runtimeManagerFactory !== "function") throw new TypeError("Invalid server constructor factory.");
   const config = loadConfig(overrides);
+  // Where the public evidence pages, their API, the sitemap and the feed are served: one setting, read by everything that writes or answers
+  // one of their addresses (`evidencePublicPaths.mjs`), made once here.
+  setEvidencePublicBase(config.evidencePublicBasePath);
   // Whether a project is the platform's own, for its owner (`internalProjects.mjs`): a name alone is never enough.
   const internalFor = (/** @type {unknown} */ userId, /** @type {unknown} */ projectId) => isInternalProjectOf(config, userId, projectId);
   if (config.evolutionRefusal) process.stderr.write(`evolution: ${config.evolutionRefusal.code} (${config.evolutionRefusal.key}); the module stays off and the platform starts\n`);

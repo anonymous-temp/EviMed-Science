@@ -950,6 +950,8 @@ export class FrontierService {
         // The evidence zones' own switches (flywheel F08, F14): whether a zone has a public page to link to, and whether a card's
         // history and a reader's challenge are offered. A button is never shown for a route that would answer 404.
         evidencePublicPages: this.config.evidencePublicWebEnabled === true,
+        // Where those pages are served, said only with them: a link to a page needs the base the deployment serves it under.
+        ...(this.config.evidencePublicWebEnabled === true ? { evidencePublicBasePath: this.config.evidencePublicBasePath } : {}),
         evidenceUpkeep: this.config.evidenceUpkeepEnabled === true,
       },
       versions: {

@@ -383,18 +383,28 @@ export function citationUrlDefectsByLine(path, text) {
 //
 // What is recognised is an address shape, not a host: the deployment's public host is not known to a run, is
 // numeric today and will be a domain tomorrow, so a card page is the path `/evidence/c/<id>` (a card) or
-// `/evidence/z/<id>` (a zone) on any host, the in-app page `/app/frontier/zones/<zone>/evidence/<card>` on any
+// `/evidence/z/<id>` (a zone) on any host — or the same under the other member of the closed set of public base
+// paths, `/evimed-evidence`, which a deployment whose own `/evidence/` belongs to another product serves them at
+// (`OPEN_SCIENCE_EVIDENCE_PUBLIC_BASE_PATH`) — the in-app page `/app/frontier/zones/<zone>/evidence/<card>` on any
 // host or as a root-relative link, and — when the caller knows the configured public URL — the same paths under
 // that URL's own path prefix. Identifier formats, not prose (principle 5).
+
+/**
+ * The paths the public evidence pages may be served under: `/evidence` (the default, and the address of the eventual domain) and
+ * `/evimed-evidence` (a deployment on a numeric address whose `/evidence/` another product holds). A closed set: the server's lever
+ * refuses anything else by name, and a card address under either member is recognised on any host.
+ */
+export const EVIDENCE_PUBLIC_BASE_PATHS = Object.freeze(['/evidence', '/evimed-evidence'])
+const BASE_PATH_ALTERNATIVES = EVIDENCE_PUBLIC_BASE_PATHS.map((path) => path.slice(1)).join('|')
 
 /** What a reader is told about a card cited as a source. */
 export const PLATFORM_CARD_CITATION_SENTENCE = '这是 EviMed 自己的证据卡，请改引原始来源'
 
 const CARD_ID = '[A-Za-z0-9][A-Za-z0-9_-]{5,79}'
-const CARD_PAGE_PATH = new RegExp(`^/evidence/[cz]/${CARD_ID}(?:/|$)`)
+const CARD_PAGE_PATH = new RegExp(`^/(?:${BASE_PATH_ALTERNATIVES})/[cz]/${CARD_ID}(?:/|$)`)
 const IN_APP_CARD_PATH = new RegExp(`^/app/frontier/zones/${CARD_ID}/evidence/${CARD_ID}(?:/|$)`)
 /** A root-relative card link in running text: never the tail of a longer path or of an absolute address. */
-const RELATIVE_CARD_LINK = new RegExp(`(?<![A-Za-z0-9_./:-])(?:/evidence/[cz]/${CARD_ID}|/app/frontier/zones/${CARD_ID}/evidence/${CARD_ID})(?![A-Za-z0-9_-])`, 'g')
+const RELATIVE_CARD_LINK = new RegExp(`(?<![A-Za-z0-9_./:-])(?:/(?:${BASE_PATH_ALTERNATIVES})/[cz]/${CARD_ID}|/app/frontier/zones/${CARD_ID}/evidence/${CARD_ID})(?![A-Za-z0-9_-])`, 'g')
 
 /** The path prefix of a configured public URL, without a trailing slash; empty when it has none or is not an address. @param {unknown} publicUrl */
 function publicPathPrefix(publicUrl) {

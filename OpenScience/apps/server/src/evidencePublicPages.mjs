@@ -19,6 +19,7 @@ import {
 import { externalLink, html, pathLink, timeTag } from "./evidencePublicHtml.mjs";
 import { EVIDENCE_ABOUT_SECTIONS } from "./evidencePublicAbout.mjs";
 import { EVIDENCE_SITE_NAME, appCardPath, appZonePath, authorPath, cardPath, changesPath, zonePath } from "./evidencePublicLayout.mjs";
+import { evidencePublicPath } from "./evidencePublicPaths.mjs";
 
 const CLAIM_TYPE_LABELS = { direct: "直接引用", synthesized: "跨来源综合", derived: "分析者推算" };
 const CLAIM_STATUS_LABELS = {
@@ -116,7 +117,7 @@ ${zone.description ? html`<p>${clip(zone.description, 120)}</p>` : ""}
     title: `${EVIDENCE_SITE_NAME}：官方专区、产品专区和用户专区`,
     description: "EviMed 证据中心公开的证据专区。官方专区、产品专区和用户专区分开列出，每张证据卡都写明出品方，每条结论都能追到来源原文。",
     body: html`<h1>${EVIDENCE_SITE_NAME}</h1>
-<p class="lede">每张证据卡写明是谁出的、凭什么这样说，每条结论都标出它的引文有没有在来源里逐字找到（✓ 或 ⚠）。证据卡只是索引，请引用它列出的原始来源。排序只看更新日期、关注数和读者评分，没有付费字段。详见${pathLink("/evidence/about", "编辑说明")}。</p>
+<p class="lede">每张证据卡写明是谁出的、凭什么这样说，每条结论都标出它的引文有没有在来源里逐字找到（✓ 或 ⚠）。证据卡只是索引，请引用它列出的原始来源。排序只看更新日期、关注数和读者评分，没有付费字段。详见${pathLink(evidencePublicPath("/about"), "编辑说明")}。</p>
 ${section("official", "官方专区", "由平台出品。", sections.official, false)}
 ${section("product", "产品专区", "由企业或医生出品，讲的是他们自己的产品；每个专区写明出品方和与产品的关系。", sections.product, true)}
 ${section("user", "用户专区", "由研究者出品、署名发表，并选择公开到互联网。", sections.user, false)}`,
@@ -383,7 +384,7 @@ ${EVIDENCE_ABOUT_SECTIONS.map((section) => html`<section aria-labelledby="${sect
     const items = block.items.map((item) => html`<li>${item}</li>`);
     return block.type === "ol" ? html`<ol>${items}</ol>` : html`<ul>${items}</ul>`;
   })}</section>`)}
-<p class="muted">按月公开的数在${pathLink("/evidence/metrics", "这一页")}，选题申请在${pathLink("/evidence/requests", "这一页")}。</p>`,
+<p class="muted">按月公开的数在${pathLink(evidencePublicPath("/metrics"), "这一页")}，选题申请在${pathLink(evidencePublicPath("/requests"), "这一页")}。</p>`,
   };
 }
 
@@ -430,7 +431,7 @@ export function simulationsPage({ reader, items, next }) {
     description: "EviMed 的“模拟研究”栏目：虚拟临研的模拟结果。模拟的结果不是证据。",
     body: html`<h1>模拟研究</h1>
 <p class="notice warn">${SIMULATION_BANNER}</p>
-${!reader || !items.length ? html`<p class="muted">这个栏目现在没有公开的模拟研究。</p>` : html`<ul class="list">${items.map((item) => html`<li><h3>${pathLink(`/evidence/simulations/${encodeURIComponent(item.id)}`, item.title)}</h3>${item.summary ? html`<p>${clip(item.summary, 200)}</p>` : ""}${item.publishedAt ?? item.createdAt ? html`<p class="meta">${item.producer?.name ? html`${item.producer.name} · ` : ""}${timeTag(item.publishedAt ?? item.createdAt)}</p>` : ""}</li>`)}</ul>${pager(next, "/evidence/simulations")}`}`,
+${!reader || !items.length ? html`<p class="muted">这个栏目现在没有公开的模拟研究。</p>` : html`<ul class="list">${items.map((item) => html`<li><h3>${pathLink(evidencePublicPath(`/simulations/${encodeURIComponent(item.id)}`), item.title)}</h3>${item.summary ? html`<p>${clip(item.summary, 200)}</p>` : ""}${item.publishedAt ?? item.createdAt ? html`<p class="meta">${item.producer?.name ? html`${item.producer.name} · ` : ""}${timeTag(item.publishedAt ?? item.createdAt)}</p>` : ""}</li>`)}</ul>${pager(next, evidencePublicPath("/simulations"))}`}`,
   };
 }
 
@@ -462,7 +463,7 @@ ${numbers.length ? html`<h2>数字和它们的来源</h2>${rows(numbers)}` : ""}
 ${Array.isArray(record.assumptions) && record.assumptions.length ? html`<h2>假设</h2><ul>${record.assumptions.map((/** @type {string} */ item) => html`<li>${item}</li>`)}</ul>` : ""}
 ${limitations.length ? html`<h2>局限</h2><ul>${limitations.map((/** @type {string} */ item) => html`<li>${item}</li>`)}</ul>` : ""}
 ${receipts.length ? html`<h2>计算回执</h2><p class="muted">这些数字由统计引擎计算，回执编号：${receipts.map((/** @type {any} */ receipt) => String(typeof receipt === "string" ? receipt : receipt?.id ?? "")).filter(Boolean).join("、")}</p>` : ""}
-<p>${pathLink("/evidence/simulations", "返回模拟研究")}</p>`,
+<p>${pathLink(evidencePublicPath("/simulations"), "返回模拟研究")}</p>`,
   };
 }
 
@@ -486,7 +487,7 @@ export function notFoundPage() {
   return {
     title: `没有找到这一页 · ${EVIDENCE_SITE_NAME}`,
     description: "没有找到这个公开页面。",
-    body: html`<h1>没有找到这一页</h1><p>这个地址没有公开的内容。它可能不存在，或者作者没有把它公开到互联网。</p><p>${pathLink("/evidence/", "回到证据专区")}</p>`,
+    body: html`<h1>没有找到这一页</h1><p>这个地址没有公开的内容。它可能不存在，或者作者没有把它公开到互联网。</p><p>${pathLink(evidencePublicPath("/"), "回到证据专区")}</p>`,
   };
 }
 

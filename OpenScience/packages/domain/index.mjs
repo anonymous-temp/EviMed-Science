@@ -470,9 +470,10 @@ export {
   traceNumber,
 } from './src/numericTraceability.mjs'
 
-// citedSources — 21 exports
+// citedSources — 22 exports
 export {
   EMPTY_SNAPSHOT_MESSAGE,
+  EVIDENCE_PUBLIC_BASE_PATHS,
   EVIDENCE_SNAPSHOT_FILE,
   INVALID_SNAPSHOT_MESSAGE,
   NOT_OBJECT_SNAPSHOT_MESSAGE,

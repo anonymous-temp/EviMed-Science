@@ -33,6 +33,13 @@ describe("a zone's page and the features the server says it has", () => {
     expect(link).toHaveAttribute("rel", "noopener noreferrer");
   });
 
+  it("links the public page under the base the server says the pages are served at", async () => {
+    client.fetchEvidenceZoneDetail.mockResolvedValue({ zone: open, feedback: [] });
+    upkeep.fetchEvidenceFeatures.mockResolvedValue({ publicPages: true, publicBasePath: "/evimed-evidence", upkeep: false });
+    mount();
+    expect(await screen.findByRole("link", { name: "公开页" })).toHaveAttribute("href", "/evimed-evidence/z/ez_1");
+  });
+
   it("shows no 公开页 link for a zone that is platform-only, a draft, or on a deployment without public pages", async () => {
     upkeep.fetchEvidenceFeatures.mockResolvedValue({ publicPages: true, upkeep: false });
     client.fetchEvidenceZoneDetail.mockResolvedValue({ zone: { ...open, visibility: "platform" }, feedback: [] });

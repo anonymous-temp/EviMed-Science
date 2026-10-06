@@ -37,6 +37,7 @@ import { HttpError } from "./security.mjs";
 import { evidenceAuthorIsEstablished } from "./evidenceAuthorStanding.mjs";
 import { migrateEvidenceZones } from "./evidenceZonePersistence.mjs";
 import { evidencePublicPredicate } from "./evidencePublicQuery.mjs";
+import { evidencePublicPath } from "./evidencePublicPaths.mjs";
 
 /** The shape of the JSON feed; a non-additive change is a new number. */
 export const EVIDENCE_FEED_VERSION = "evimed-evidence-feed/1";
@@ -72,12 +73,13 @@ export function evidenceFeedAbout(card) {
 }
 
 /**
- * The address a card is read at: fixed, on the deployment's public URL (`/evidence/c/<id>`). With no public URL
+ * The address a card is read at: fixed, on the deployment's public URL (`/evidence/c/<id>`, or `/evimed-evidence/c/<id>` where the
+ * pages are served there: `evidencePublicPaths.mjs`). With no public URL
  * configured it is the path alone — a feed nobody can reach has no use for an absolute address.
  * @param {string | null | undefined} publicUrl @param {string} cardId
  */
 export function evidenceCardAddress(publicUrl, cardId) {
-  const path = `/evidence/c/${encodeURIComponent(cardId)}`;
+  const path = evidencePublicPath(`/c/${encodeURIComponent(cardId)}`);
   try {
     const base = new URL(String(publicUrl ?? ""));
     if (!/^https?:$/.test(base.protocol) || base.username || base.password) return path;
@@ -131,12 +133,12 @@ export function evidenceFeedRss(page, { publicUrl, selfPath }) {
     '<?xml version="1.0" encoding="UTF-8"?>',
     '<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom"><channel>',
     "<title>EviMed 证据中心</title>",
-    `<link>${xml(absolute("/evidence/"))}</link>`,
+    `<link>${xml(absolute(evidencePublicPath("/")))}</link>`,
     "<description>EviMed 证据专区里平台的官方证据卡，和作者公开的原创研究。证据卡只是索引，请引用它列出的原始来源。</description>",
     "<language>zh-CN</language>",
     `<lastBuildDate>${new Date(page.generatedAt).toUTCString()}</lastBuildDate>`,
     `<atom:link rel="self" type="application/rss+xml" href="${xml(absolute(selfPath))}"/>`,
-    ...(page.next ? [`<atom:link rel="next" type="application/rss+xml" href="${xml(absolute(`/evidence/feed.xml?cursor=${encodeURIComponent(page.next)}`))}"/>`] : []),
+    ...(page.next ? [`<atom:link rel="next" type="application/rss+xml" href="${xml(absolute(`${evidencePublicPath("/feed.xml")}?cursor=${encodeURIComponent(page.next)}`))}"/>`] : []),
   ];
   for (const item of page.items) {
     lines.push("<item>",

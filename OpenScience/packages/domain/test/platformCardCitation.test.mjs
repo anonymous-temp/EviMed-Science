@@ -5,6 +5,7 @@ import test from 'node:test'
 
 import {
   CONTRACT_KINDS,
+  EVIDENCE_PUBLIC_BASE_PATHS,
   PLATFORM_CARD_CITATION_SENTENCE,
   GATE_CHECK_IDS,
   GATE_CHECK_TITLES_ZH,
@@ -40,6 +41,30 @@ test('a card or zone page is recognised by its path on any host, and so is the i
     'not a url',
     '',
   ]) assert.equal(isPlatformCardAddress(address), false, address)
+})
+
+test('the public base path is a closed set of two, and a card or zone page under either is recognised on any host, absolute or root-relative', () => {
+  assert.deepEqual([...EVIDENCE_PUBLIC_BASE_PATHS], ['/evidence', '/evimed-evidence'])
+  assert.equal(Object.isFrozen(EVIDENCE_PUBLIC_BASE_PATHS), true)
+  for (const address of [
+    `https://203.0.113.9/evimed-evidence/c/${CARD}`,
+    `https://203.0.113.9/evimed-evidence/c/${CARD}?view=public`,
+    `http://203.0.113.9:8787/evimed-evidence/z/${ZONE}`,
+    `https://anything.example/evimed-evidence/z/${ZONE}/changes`,
+  ]) assert.equal(isPlatformCardAddress(address), true, address)
+  for (const address of [
+    'https://203.0.113.9/evimed-evidence/about',
+    'https://203.0.113.9/evimed-evidence/c/x',
+    `https://203.0.113.9/other-evidence/c/${CARD}`,
+    `https://203.0.113.9/evimed/c/${CARD}`,
+    `https://example.org/news/evimed-evidence/c/${CARD}`,
+  ]) assert.equal(isPlatformCardAddress(address), false, address)
+  assert.deepEqual(platformCardCitations(`见 [证据卡](/evimed-evidence/c/${CARD}) 与 https://203.0.113.9/evimed-evidence/z/${ZONE}，不是 /other-evidence/c/${CARD}。`), [
+    { line: 1, url: 'https://203.0.113.9/evimed-evidence/z/' + ZONE },
+    { line: 1, url: `/evimed-evidence/c/${CARD}` },
+  ])
+  const [finding] = platformCardCitationsByLine('report.md', `依据 https://203.0.113.9/evimed-evidence/c/${CARD} 的结论。`)
+  assert.ok(finding.message.startsWith(PLATFORM_CARD_CITATION_SENTENCE), 'a run citing the other base path gets the same notice')
 })
 
 test('the configured public URL adds the pages under its own path prefix, and only on its own host', () => {

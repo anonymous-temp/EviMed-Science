@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { MCP_TOOL_CALL_TIMEOUT_MS, SOCKET_PLUGIN_SWITCHES } from "./dshProfilePatch.mjs";
 import { readReleaseManifestFile, validateReleaseManifest } from "./releaseManifest.mjs";
-import { GENE_EXPRESSION_LIMITS, GEO_DEFAULT_ENGINES, GEO_ENGINES, SIMULATED_START_CREDITS } from "@evimed/domain";
+import { EVIDENCE_PUBLIC_BASE_PATHS, GENE_EXPRESSION_LIMITS, GEO_DEFAULT_ENGINES, GEO_ENGINES, SIMULATED_START_CREDITS } from "@evimed/domain";
 import { MAX_MOUNTED_CAPSULE_METHOD_BYTES } from "./capsuleMethods.mjs";
 import { researchBillingSettings } from "./researchBillingConfig.mjs";
 import { validateEvolutionConfiguration } from "./evolutionConfiguration.mjs";
@@ -364,6 +364,9 @@ function frontierSettings(overrides) {
  * - The public pages are off by default; `OPEN_SCIENCE_EVIDENCE_PUBLIC_INDEXABLE` is a second, separate
  *   lever and also off: until the owner has chosen a domain the pages say `noindex` and no sitemap is
  *   served, so a page reachable by IP address can never become a search result by accident.
+ * - `OPEN_SCIENCE_EVIDENCE_PUBLIC_BASE_PATH` says where the public pages, their API, the sitemap and the feed are served: `/evidence`
+ *   (the plan's address for the eventual domain, the default) or `/evimed-evidence`, for a deployment on a numeric address whose own
+ *   `/evidence/` belongs to another product. A closed choice; anything else stops the start by the variable's name.
  * - These are the levers only. What reads them — the programme's selector, the public routes — is the
  *   later work packages'; each must do nothing at all, and answer 404 by its own code, while its switch
  *   is off.
@@ -381,6 +384,10 @@ function evidenceSettings(overrides) {
   const budget = Number(budgetValue);
   if (!Number.isFinite(budget) || budget < 0 || budget > 10_000) {
     throw new Error(`OPEN_SCIENCE_EVIDENCE_PROGRAMME_DAILY_BUDGET_CNY must be a number from 0 to 10000, got ${JSON.stringify(budgetValue)}.`);
+  }
+  const publicBasePath = read("evidencePublicBasePath", "OPEN_SCIENCE_EVIDENCE_PUBLIC_BASE_PATH", EVIDENCE_PUBLIC_BASE_PATHS[0]);
+  if (typeof publicBasePath !== "string" || !EVIDENCE_PUBLIC_BASE_PATHS.includes(publicBasePath)) {
+    throw new Error(`OPEN_SCIENCE_EVIDENCE_PUBLIC_BASE_PATH must be one of ${EVIDENCE_PUBLIC_BASE_PATHS.join(", ")}, got ${JSON.stringify(publicBasePath)}.`);
   }
   const concurrencyValue = read("evidenceProgrammeMaxConcurrency", "OPEN_SCIENCE_EVIDENCE_PROGRAMME_MAX_CONCURRENCY", 1);
   const concurrency = Number(concurrencyValue);
@@ -425,6 +432,8 @@ function evidenceSettings(overrides) {
     evidenceProgrammeStaleCardDays: whole("evidenceProgrammeStaleCardDays", "OPEN_SCIENCE_EVIDENCE_PROGRAMME_STALE_CARD_DAYS", 30, 1, 365),
     evidencePublicWebEnabled: overrides.evidencePublicWebEnabled ?? boolEnv("OPEN_SCIENCE_EVIDENCE_PUBLIC_WEB_ENABLED", false),
     evidencePublicIndexable: overrides.evidencePublicIndexable ?? boolEnv("OPEN_SCIENCE_EVIDENCE_PUBLIC_INDEXABLE", false),
+    // Where the public pages, their API, the sitemap and the feed are served (see the note above): `/evidence` or `/evimed-evidence`.
+    evidencePublicBasePath: publicBasePath,
     // What one address may fetch of the public pages and the read-only API in a minute (the pages are outside `/api/`, so the API's own
     // limiter never sees them). A crawler that behaves is far under it; a scraper that does not is answered 429 with Retry-After.
     evidencePublicRatePerMinute: whole("evidencePublicRatePerMinute", "OPEN_SCIENCE_EVIDENCE_PUBLIC_RATE_PER_MINUTE", 120, 10, 100_000),

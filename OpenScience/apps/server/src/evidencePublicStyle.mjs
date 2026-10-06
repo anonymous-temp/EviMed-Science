@@ -6,11 +6,12 @@
 // is written by hand, no web font is requested (the stack names faces the reader's system already has), no image is needed, and the
 // dark scheme follows the reader's system setting. Under 640px (`BREAKPOINTS.sm`) the layout is one column.
 //
-// The sheet is served at `/evidence/assets/site.css`, so the pages' Content-Security-Policy admits it by path (`style-src 'self'`)
-// and no page carries an inline style.
+// The sheet is served at `<base>/assets/site.css` (`/evidence/assets/site.css` unless the deployment serves the pages elsewhere), so the
+// pages' Content-Security-Policy admits it by path (`style-src 'self'`) and no page carries an inline style.
 
 import { createHash } from "node:crypto";
 import { BREAKPOINTS, CONTAINERS, FONT_STACKS_EN, FONT_STACKS, RADII, SPACE, TYPE_SCALE, colorRole, rem, remLineHeight } from "@evimed/design-tokens";
+import { evidencePublicPath } from "./evidencePublicPaths.mjs";
 
 /** The roles the pages use, each a CSS variable of the same name. */
 const ROLES = [
@@ -144,4 +145,5 @@ export function evidencePublicStylesheet() {
   return cached;
 }
 
-export const EVIDENCE_PUBLIC_STYLESHEET_PATH = "/evidence/assets/site.css";
+/** Where the sheet is served: the pages' stylesheet link and the router's own path. */
+export const evidencePublicStylesheetPath = () => evidencePublicPath("/assets/site.css");

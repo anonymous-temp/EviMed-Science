@@ -1,12 +1,13 @@
 // `/evidence/…`: the public evidence pages and their read-only API (flywheel F08, F27, 2026-10-06). One router, registered by one line in
 // `createWebApiApp` after the feed's, answering to nobody's session: what it serves is what the platform and its authors published to be
-// read by anyone.
+// read by anyone. `/evidence` is the default base; a deployment whose own `/evidence/` belongs to another product serves everything under
+// `/evimed-evidence` instead (`OPEN_SCIENCE_EVIDENCE_PUBLIC_BASE_PATH`, `evidencePublicPaths.mjs`) and answers nothing under the other.
 //
 //   /evidence/                        the index          /evidence/about            《编辑说明》
 //   /evidence/z/<zone>                a zone             /evidence/metrics          the monthly figures
 //   /evidence/z/<zone>/changes        its change log     /evidence/simulations[/id] 「模拟研究」
 //   /evidence/c/<card>?view=          a card             /evidence/requests         the public topic requests
-//   /evidence/a/<handle>              an author (`au_…`)          /evidence/sitemap.xml      only while indexing is on
+//   /evidence/a/<handle>              an author (`au_…`) /evidence/sitemap.xml      only while indexing is on
 //   /evidence/api/v1/…                the JSON API       /evidence/assets/site.css  the stylesheet
 //
 // Hidden knowledge:
@@ -30,15 +31,17 @@ import { HttpError } from "./security.mjs";
 import { createEvidencePublicReads, EVIDENCE_PUBLIC_AUTHOR_HANDLE } from "./evidencePublicQuery.mjs";
 import { createEvidencePublicIndexing, evidenceSitemapXml } from "./evidencePublicIndexing.mjs";
 import { createEvidencePublicMetrics } from "./evidencePublicMetrics.mjs";
-import { createEvidencePublicApi, EVIDENCE_PUBLIC_API_PREFIX } from "./evidencePublicApi.mjs";
+import { createEvidencePublicApi, evidencePublicApiPrefix } from "./evidencePublicApi.mjs";
 import { evidencePublicDay, evidencePublicIsBot, recordPageRead } from "./evidencePublicReads.mjs";
-import { aigcMetadata, renderPage } from "./evidencePublicLayout.mjs";
-import { EVIDENCE_PUBLIC_STYLESHEET_PATH, evidencePublicStylesheet } from "./evidencePublicStyle.mjs";
+import { aigcMetadata, authorPath, cardPath, changesPath, renderPage, zonePath } from "./evidencePublicLayout.mjs";
+import { evidencePublicBase, evidencePublicPath, evidencePublicSuffix } from "./evidencePublicPaths.mjs";
+import { evidencePublicStylesheet, evidencePublicStylesheetPath } from "./evidencePublicStyle.mjs";
 import {
   aboutPage, authorPage, cardPage, changesPage, indexPage, metricsPage, notFoundPage, rateLimitedPage, requestsPage, simulationPage, simulationsPage, withdrawnCardPage, zonePage,
 } from "./evidencePublicPages.mjs";
 
-const FEED_PATHS = new Set(["/evidence/feed.json", "/evidence/feed.xml"]);
+/** The feed's two documents, below the base: the feed's own router answers them (`evidenceFeedRoutes.mjs`). */
+const FEED_SUFFIXES = new Set(["/feed.json", "/feed.xml"]);
 const SIMULATION_ID = /^[A-Za-z0-9._:-]{1,100}$/;
 const MAX_AGE_SECONDS = 300;
 
@@ -117,7 +120,7 @@ export function createEvidencePublicRoutes({ config, database, simulations = nul
   /** The 404 every missing, hidden or malformed public page gets. @param {any} res @param {boolean} head @param {number} [status] */
   function sendNotFound(res, head, status = 404) {
     counters.notFound += 1;
-    sendPage(res, head, status, notFoundPage(), { path: "/evidence/", noindex: true });
+    sendPage(res, head, status, notFoundPage(), { path: evidencePublicPath("/"), noindex: true });
   }
 
   /** @param {any} req @param {any} res @param {URL} url @param {string[]} parts @param {boolean} head */
@@ -126,30 +129,30 @@ export function createEvidencePublicRoutes({ config, database, simulations = nul
     const r = /** @type {NonNullable<typeof reads>} */ (reads);
     if (section === "" && parts.length === 1) {
       const sections = await r.indexZones();
-      return sendPage(res, head, 200, indexPage(sections), { path: "/evidence/", noindex: await noindexFor({ kind: "site" }), active: "zones", alternates: true });
+      return sendPage(res, head, 200, indexPage(sections), { path: evidencePublicPath("/"), noindex: await noindexFor({ kind: "site" }), active: "zones", alternates: true });
     }
     if (section === "about" && parts.length === 1) {
-      return sendPage(res, head, 200, aboutPage(), { path: "/evidence/about", noindex: await noindexFor({ kind: "site" }), active: "about", wide: false });
+      return sendPage(res, head, 200, aboutPage(), { path: evidencePublicPath("/about"), noindex: await noindexFor({ kind: "site" }), active: "about", wide: false });
     }
     if (section === "metrics" && parts.length === 1) {
       const months = await /** @type {NonNullable<typeof figures>} */ (figures).months();
-      return sendPage(res, head, 200, metricsPage({ months }), { path: "/evidence/metrics", noindex: await noindexFor({ kind: "site" }), active: "metrics" });
+      return sendPage(res, head, 200, metricsPage({ months }), { path: evidencePublicPath("/metrics"), noindex: await noindexFor({ kind: "site" }), active: "metrics" });
     }
     if (section === "requests" && parts.length === 1) {
       const list = requests ? await requests.list({ limit: 50 }) : { items: [] };
       // Every title is a signed-in account's own words and nobody reviewed them: the page is never indexed (evidencePublicIndexing).
-      return sendPage(res, head, 200, requestsPage({ items: list.items }), { path: "/evidence/requests", noindex: await noindexFor({ kind: "never" }), active: "requests" });
+      return sendPage(res, head, 200, requestsPage({ items: list.items }), { path: evidencePublicPath("/requests"), noindex: await noindexFor({ kind: "never" }), active: "requests" });
     }
     if (section === "simulations" && parts.length <= 2) {
       if (parts.length === 1) {
         const page = simulations ? await simulations.list({ limit: 20, before: url.searchParams.get("cursor") }) : { items: [], next: null };
         return sendPage(res, head, 200, simulationsPage({ reader: Boolean(simulations), items: page.items, next: page.next ?? null }), {
-          path: "/evidence/simulations", noindex: await noindexFor({ kind: "site" }), active: "simulations",
+          path: evidencePublicPath("/simulations"), noindex: await noindexFor({ kind: "site" }), active: "simulations",
         });
       }
       const record = simulations && SIMULATION_ID.test(id) ? await simulations.get(id) : null;
       if (!record) return sendNotFound(res, head);
-      return sendPage(res, head, 200, simulationPage(record), { path: `/evidence/simulations/${encodeURIComponent(id)}`, noindex: await noindexFor({ kind: "site" }), active: "simulations", wide: false });
+      return sendPage(res, head, 200, simulationPage(record), { path: evidencePublicPath(`/simulations/${encodeURIComponent(id)}`), noindex: await noindexFor({ kind: "site" }), active: "simulations", wide: false });
     }
     if (section === "z" && id && (parts.length === 2 || (parts.length === 3 && sub === "changes"))) {
       const zone = await r.zone(id);
@@ -157,11 +160,11 @@ export function createEvidencePublicRoutes({ config, database, simulations = nul
       const noindex = await noindexFor({ kind: "zone", zoneKind: zone.kind, ownerHandle: zone.owner.id });
       if (parts.length === 3) {
         const page = await r.changeLog(id, { limit: null, before: url.searchParams.get("before") });
-        return sendPage(res, head, 200, changesPage({ zone, items: page.items, nextBefore: page.nextBefore }), { path: `/evidence/z/${encodeURIComponent(id)}/changes`, noindex, active: "zones" });
+        return sendPage(res, head, 200, changesPage({ zone, items: page.items, nextBefore: page.nextBefore }), { path: changesPath(id), noindex, active: "zones" });
       }
       const cards = await r.zoneCards(id, { limit: null, cursor: url.searchParams.get("cursor") });
       await countRead(req, head, { zoneId: id });
-      return sendPage(res, head, 200, zonePage({ zone, cards }), { path: `/evidence/z/${encodeURIComponent(id)}`, noindex, active: "zones" });
+      return sendPage(res, head, 200, zonePage({ zone, cards }), { path: zonePath(id), noindex, active: "zones" });
     }
     if (section === "c" && id && parts.length === 2) {
       const view = url.searchParams.get("view") ?? "clinical";
@@ -170,14 +173,14 @@ export function createEvidencePublicRoutes({ config, database, simulations = nul
       if (!card) return sendNotFound(res, head);
       if (card.withdrawn) {
         counters.withdrawn += 1;
-        return sendPage(res, head, 410, withdrawnCardPage({ card }), { path: `/evidence/c/${encodeURIComponent(id)}`, noindex: await noindexFor({ kind: "card", zoneKind: card.zone.kind, authorHandle: card.creator.id, withdrawn: true }), wide: false, active: "zones" });
+        return sendPage(res, head, 410, withdrawnCardPage({ card }), { path: cardPath(id), noindex: await noindexFor({ kind: "card", zoneKind: card.zone.kind, authorHandle: card.creator.id, withdrawn: true }), wide: false, active: "zones" });
       }
       const noindex = await noindexFor({ kind: "card", zoneKind: card.zone.kind, authorHandle: card.creator.id, withdrawn: false });
       const links = await r.cardLinks(card);
       await countRead(req, head, { zoneId: card.zone.id, cardId: card.id });
       const version = `${card.id}@${card.revision}`;
       return sendPage(res, head, 200, cardPage({ card, links, view }), {
-        path: `/evidence/c/${encodeURIComponent(id)}`, noindex, wide: false, active: "zones",
+        path: cardPath(id), noindex, wide: false, active: "zones",
         aigc: card.aiGenerated ? aigcMetadata({ producerName: EVIDENCE_PLATFORM_PRODUCER_NAME, produceId: version, propagateId: version }) : null,
       });
     }
@@ -185,7 +188,7 @@ export function createEvidencePublicRoutes({ config, database, simulations = nul
       const author = EVIDENCE_PUBLIC_AUTHOR_HANDLE.test(id) ? await r.author(id) : null;
       if (!author) return sendNotFound(res, head);
       return sendPage(res, head, 200, authorPage(author), {
-        path: `/evidence/a/${encodeURIComponent(id)}`, noindex: await noindexFor({ kind: "author", official: author.official, authorHandle: id }), active: "zones",
+        path: authorPath(id), noindex: await noindexFor({ kind: "author", official: author.official, authorHandle: id }), active: "zones",
       });
     }
     return sendNotFound(res, head);
@@ -238,11 +241,14 @@ export function createEvidencePublicRoutes({ config, database, simulations = nul
     async (req, res) => {
       const url = new URL(req.url ?? "/", "http://evimed.local");
       const pathname = url.pathname;
-      if (pathname !== "/evidence" && !pathname.startsWith("/evidence/")) return false;
+      // Only the base this deployment serves the pages at is answered; the other member of the closed set falls through like any unknown path.
+      const below = evidencePublicSuffix(pathname);
+      if (below === null) return false;
       if (!enabled || !reads || !indexing || !figures || !api) return false;
-      if (FEED_PATHS.has(pathname)) return false;
+      if (FEED_SUFFIXES.has(below)) return false;
       const method = req.method ?? "GET";
-      const isApi = pathname === EVIDENCE_PUBLIC_API_PREFIX || pathname.startsWith(`${EVIDENCE_PUBLIC_API_PREFIX}/`);
+      const apiPrefix = evidencePublicApiPrefix();
+      const isApi = pathname === apiPrefix || pathname.startsWith(`${apiPrefix}/`);
       if (method !== "GET" && method !== "HEAD") {
         send(res, 405, { Allow: "GET, HEAD", "Content-Type": "application/json; charset=utf-8", "Cache-Control": "no-store" }, JSON.stringify({ error: "The public evidence pages are read-only.", code: "method_not_allowed" }), false);
         return true;
@@ -259,23 +265,23 @@ export function createEvidencePublicRoutes({ config, database, simulations = nul
         } else {
           counters.pages += 1;
           send(res, 429, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "Retry-After": String(seconds), "X-Robots-Tag": "noindex" },
-            renderPage({ ...rateLimitedPage(seconds), path: "/evidence/", noindex: true, wide: true }), head);
+            renderPage({ ...rateLimitedPage(seconds), path: evidencePublicPath("/"), noindex: true, wide: true }), head);
         }
         return true;
       }
-      if (pathname === "/evidence") {
-        res.writeHead(301, { Location: "/evidence/", "Cache-Control": "public, max-age=3600" });
+      if (below === "") {
+        res.writeHead(301, { Location: evidencePublicPath("/"), "Cache-Control": "public, max-age=3600" });
         res.end();
         return true;
       }
-      const parts = pathname.slice("/evidence/".length).split("/").map((part) => { try { return decodeURIComponent(part); } catch { return "\u0000"; } });
+      const parts = pathname.slice(evidencePublicBase().length + 1).split("/").map((part) => { try { return decodeURIComponent(part); } catch { return "\u0000"; } });
       if (parts.includes("\u0000")) { sendNotFound(res, head); return true; }
       try {
         if (isApi) {
           await serveApi(req, res, url, parts.slice(2), head);
           return true;
         }
-        if (pathname === EVIDENCE_PUBLIC_STYLESHEET_PATH) {
+        if (pathname === evidencePublicStylesheetPath()) {
           counters.assets += 1;
           const { css, etag } = evidencePublicStylesheet();
           const headers = { "Content-Type": "text/css; charset=utf-8", ETag: etag, "Cache-Control": "public, max-age=3600" };
@@ -283,7 +289,7 @@ export function createEvidencePublicRoutes({ config, database, simulations = nul
           send(res, 200, headers, css, head);
           return true;
         }
-        if (pathname === "/evidence/sitemap.xml") {
+        if (below === "/sitemap.xml") {
           if (config.evidencePublicIndexable !== true) { sendNotFound(res, head); return true; }
           counters.sitemap += 1;
           indexing.count("sitemapRequests");
@@ -302,7 +308,7 @@ export function createEvidencePublicRoutes({ config, database, simulations = nul
     {
       /** The counters of the pages, the read counter, the indexing rule and the caches; null where the pages are off. */
       stats: () => (enabled && reads && indexing && figures
-        ? { ...counters, indexing: indexing.stats(), reads: reads.stats(), metrics: figures.stats(), requests: requests?.stats() ?? null }
+        ? { ...counters, base: evidencePublicBase(), indexing: indexing.stats(), reads: reads.stats(), metrics: figures.stats(), requests: requests?.stats() ?? null }
         : null),
     },
   );
@@ -316,6 +322,8 @@ export function evidencePublicMetricFamilies(stats) {
   if (!stats) return [];
   const counter = (/** @type {string} */ name, /** @type {string} */ help, /** @type {any[]} */ series) => ({ name, help, type: /** @type {const} */ ("counter"), series });
   return [
+    { name: "open_science_evidence_public_base_path", help: "The path the public evidence pages, their API, the sitemap and the feed are served under (OPEN_SCIENCE_EVIDENCE_PUBLIC_BASE_PATH): one series, labelled with it.",
+      type: /** @type {const} */ ("gauge"), series: [{ labels: { path: stats.base }, value: 1 }] },
     counter("open_science_evidence_public_requests_total", "Requests the public evidence pages answered, by kind (a page, the read-only API, the stylesheet, the sitemap).", [
       { labels: { kind: "page" }, value: stats.pages }, { labels: { kind: "api" }, value: stats.api }, { labels: { kind: "asset" }, value: stats.assets }, { labels: { kind: "sitemap" }, value: stats.sitemap },
     ]),
