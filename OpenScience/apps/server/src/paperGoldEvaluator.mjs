@@ -73,27 +73,51 @@ export function paperGoldExposureTier({audit,durableComplete,traceCoverage,sourc
  if(['cited','exposed_uncited'].includes(audit.tier))return audit.tier;
  return durableComplete&&traceCoverage.complete&&sourceTrace.complete?audit.tier:'unknown';
 }
+/**
+ * `cite_lookup` (the dsh-cite package, registered through the citation bridge) is a native tool, not an `evimed_*` socket tool: its
+ * result reaches the session history as the text its own renderer produced, one `N. <title>（<year>, <journal>）` line per work,
+ * with no `ok` head and no JSON (dsh-cite@0.3.2 `cite_lookup.output.render`). Release 6 held 19 successful results of it across six
+ * runs; none parsed, so the trace was incomplete and four units read unknown exposure. A rendered result is read back to the works
+ * it lists, and anything that is not exactly that shape (empty, cut off, another layout) stays unparsed, which keeps the trace
+ * incomplete: the failure is unknown, never unexposed.
+ * @param {any} value @returns {{ ok: true, data: { works: string[] } } | null}
+ */
+function parseCiteLookupRendering(value){
+ const parts=Array.isArray(value)?value:Array.isArray(value?.content)?value.content:null;
+ const text=typeof value==='string'?value:parts&&parts.length&&parts.every(part=>part?.type==='text'&&typeof part.text==='string')?parts.map(part=>part.text).join('\n'):null;
+ if(text===null)return null;
+ const works=[];
+ for(const line of text.replace(/\s+$/,'').split('\n')){
+  const numbered=/^(\d+)\. /.exec(line);
+  if(numbered&&Number(numbered[1])===works.length+1)works.push(line.slice(numbered[0].length));
+  else if(works.length)works[works.length-1]+=`\n${line}`;
+  else return null;
+ }
+ // The renderer closes every label with a full-width parenthesis; an entry that does not end in one was cut.
+ return works.length&&works.every(work=>work.endsWith('）'))?{ok:true,data:{works}}:null;
+}
 /** Source exposure requires a successful observed response, never prompts or requested identifiers. @param {any} transcript */
 export function paperGoldSourceResponses(transcript){
  const responses=[],unknownTools=[];
- const parse=value=>{
+ const parse=(value,tool='')=>{
+  if(typeof value==='string'&&/^Error:|^error\n/.test(value))return {ok:false};
+  if(/(?:^|__|[./])cite_lookup$/.test(tool)){const rendered=parseCiteLookupRendering(value);if(rendered)return rendered;}
   if(typeof value==='string'){
-   if(/^Error:|^error\n/.test(value))return {ok:false};
    if(value.startsWith('ok\n')){const body=value.slice(3);if(!body.trim())return null;try{return {ok:true,data:JSON.parse(body)};}catch{return {ok:true,data:body};}}
-   try{return parse(JSON.parse(value));}catch{return null;}
+   try{return parse(JSON.parse(value),tool);}catch{return null;}
   }
   if(!value||typeof value!=='object')return null;
   if(typeof value.ok==='boolean')return value.ok===false?{ok:false}:((Object.hasOwn(value,'data')&&value.data!==undefined)||(Object.hasOwn(value,'artifacts')&&value.artifacts!==undefined))?{ok:true,data:value.data,artifacts:value.artifacts}:null;
   if(value.status==='error')return {ok:false};
   if(['ok','success','warning'].includes(value.status))return ((Object.hasOwn(value,'data')&&value.data!==undefined)||(Object.hasOwn(value,'artifacts')&&value.artifacts!==undefined))?{ok:true,data:value.data,artifacts:value.artifacts}:null;
   if(value.isError===true)return {ok:false};
-  if(Array.isArray(value.content)){const parsed=value.content.filter(x=>x.type==='text').map(x=>parse(x.text)).filter(Boolean);if(parsed.length===1)return parsed[0];}
+  if(Array.isArray(value.content)){const parsed=value.content.filter(x=>x.type==='text').map(x=>parse(x.text,tool)).filter(Boolean);if(parsed.length===1)return parsed[0];}
   return null;
  };
  for(const message of transcript?.messages??[])for(const part of message.parts??[]){
   if(part.type!=='tool'||!/web_read|web_search|open_access_full_text|literature_search|public_source|pubmed|europe|crossref|frontier|knowledge|memory|capsule|tooluniverse|source_search|cite_lookup/i.test(part.tool??part.name??''))continue;
   if(part.status==='failed'||part.status==='error'||part.error)continue;
-  const result=part.status==='completed'?parse(part.output):null;
+  const result=part.status==='completed'?parse(part.output,part.tool??part.name??''):null;
   if(!result){unknownTools.push(part.tool??part.name??'unknown');continue;}
   if(result.ok)responses.push({tool:part.tool??part.name,data:result.data,artifacts:result.artifacts});
  }

@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import {createRequire} from 'node:module';
+import {pathToFileURL} from 'node:url';
 import {paperGoldSourceResponses,paperGoldTraceCoverage,readPaperGoldNativeCoverage,paperGoldExposureTier} from '../src/paperGoldEvaluator.mjs';
 test('requested and self-emitted DOI before failed or blocked retrieval is not observed exposure',()=>{
  const trace=paperGoldSourceResponses({messages:[{role:'assistant',parts:[{type:'text',text:'10.1136/bmj.n71'}]},{role:'user',parts:[{type:'text',text:'10.1136/bmj.n71'}]},{parts:[{type:'tool',tool:'web_read',status:'completed',input:{doi:'10.1136/bmj.n71'},output:'Error: HTTP 502'}]},{parts:[{type:'tool',tool:'web_read',status:'completed',output:{status:'error',data:{doi:'10.1136/bmj.n71',code:'evaluation_source_excluded'}}}]}]});
@@ -44,4 +46,51 @@ test('trusted verifier binds current producer; forged transcript proof or reject
 test('observed target exposure takes precedence while incomplete coverage never proves unexposed',()=>{
  for(const tier of ['cited','exposed_uncited'])assert.equal(paperGoldExposureTier({audit:{tier},durableComplete:false,traceCoverage:{complete:false},sourceTrace:{complete:false}}),tier);
  assert.equal(paperGoldExposureTier({audit:{tier:'unexposed'},durableComplete:true,traceCoverage:{complete:false},sourceTrace:{complete:true}}),'unknown');
+});
+
+// Release 6, 2026-10-06: all six producer runs called cite_lookup, 19 successful results were unparsed, and the four units with no
+// observed exposure read unknown for that reason alone. A native tool's result is the text its renderer produced: this is the
+// output of dsh-cite@0.3.2's own `cite_lookup` renderer for two works (one with no year, one with only a publisher), written out
+// verbatim so the reader is tested against what the tool emits and not against a shape this repository imagined.
+const CITE_LOOKUP_TEXT = '1. Random-effects meta-analysis of binary outcomes（2001, Statistics in Medicine）\n2. A handbook of study design（Example Press）';
+const citeLookup = output => ({ messages: [{ parts: [{ type: 'tool', tool: 'cite_lookup', status: 'completed', input: { doi: '10.1000/xyz' }, output }] }] });
+test('a successful cite_lookup result is read back to the works it lists, so its trace is complete and its text is auditable', () => {
+ for (const output of [CITE_LOOKUP_TEXT, `${CITE_LOOKUP_TEXT}\n`, [{ type: 'text', text: CITE_LOOKUP_TEXT }], { content: [{ type: 'text', text: CITE_LOOKUP_TEXT }] }]) {
+  const trace = paperGoldSourceResponses(citeLookup(output));
+  assert.equal(trace.complete, true);
+  assert.deepEqual(trace.unknownTools, []);
+  assert.equal(trace.responses.length, 1);
+  assert.deepEqual(trace.responses[0].data.works, ['Random-effects meta-analysis of binary outcomes（2001, Statistics in Medicine）', 'A handbook of study design（Example Press）']);
+ }
+ // The tool is named in the history by its namespaced forms too.
+ for (const tool of ['cite_lookup', 'mcp__cite__cite_lookup', 'dsh-cite.cite_lookup']) {
+  assert.equal(paperGoldSourceResponses({ messages: [{ parts: [{ type: 'tool', tool, status: 'completed', output: CITE_LOOKUP_TEXT }] }] }).complete, true, tool);
+ }
+});
+test('a cite_lookup result that is not exactly what its renderer emits stays unparsed, and an unparsed result is unknown, never unexposed', () => {
+ for (const output of ['', '   ', 'no results', '2. Starts at two（2001, Journal）', '1. Cut off before the closing parenthesis（2001, Statis', '1. A（2001, B）\n3. Skips two（2002, C）\nstill A', { works: [{ title: 'x' }] }, 42]) {
+  const trace = paperGoldSourceResponses(citeLookup(output));
+  assert.equal(trace.complete, false, JSON.stringify(output));
+  assert.deepEqual(trace.unknownTools, ['cite_lookup']);
+  assert.equal(trace.responses.length, 0);
+ }
+ // The same lines from another tool are not read as a cite_lookup result: the reader is per tool, not a guess about text.
+ assert.equal(paperGoldSourceResponses({ messages: [{ parts: [{ type: 'tool', tool: 'web_read', status: 'completed', output: CITE_LOOKUP_TEXT }] }] }).complete, false);
+ // A failed lookup is still no response and no unknown.
+ for (const part of [{ status: 'error', output: 'Error: Crossref returned 404' }, { status: 'completed', output: 'Error: Crossref returned 404' }]) {
+  const trace = paperGoldSourceResponses({ messages: [{ parts: [{ type: 'tool', tool: 'cite_lookup', ...part }] }] });
+  assert.deepEqual([trace.complete, trace.responses.length], [true, 0]);
+ }
+});
+test('the cite_lookup fixture is what the pinned dsh-cite renderer emits, when the package is installed', async t => {
+ let renderer;
+ try {
+  const resolved = createRequire(new URL('../../../packages/socket/package.json', import.meta.url)).resolve('dsh-cite');
+  renderer = await import(pathToFileURL(resolved).href);
+ } catch { t.skip('dsh-cite is not installed in this checkout'); return; }
+ const tool = renderer.buildCiteTools(renderer.resolveConfig({})).find(row => row.name === 'cite_lookup');
+ const works = [{ title: 'Random-effects meta-analysis of binary outcomes', year: 2001, containerTitle: 'Statistics in Medicine', publisher: '' }, { title: 'A handbook of study design', year: 0, containerTitle: '', publisher: 'Example Press' }];
+ const [part] = tool.output.render({}, { count: 2, works });
+ assert.equal(part.text, CITE_LOOKUP_TEXT);
+ assert.equal(paperGoldSourceResponses(citeLookup(part.text)).complete, true);
 });
