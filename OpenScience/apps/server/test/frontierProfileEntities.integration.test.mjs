@@ -169,3 +169,23 @@ test("without the vocabulary the two signals are not read, and a reader who has 
     embedder: { ...testEmbedder, embedQuery: async () => vectorAt(1) }, config: CONFIG, now: () => NOW, entityVocabulary: { enabled: false, keysForText: async () => [], describe: async () => [] } });
   assert.deepEqual(await off.refreshUser("reader"), { state: "off", reason: "no-signal" }, "a vocabulary that is off reads nothing");
 });
+
+test("every phrase is stored with the entity keys the shared vocabulary found in it, so the programme can count readers by key and never read a word; a vocabulary that cannot tag leaves the property off", options, async () => {
+  await followedZone("reader", "糖尿病用药", ["司美格鲁肽与心力衰竭", "司美格鲁肽的安全性"]);
+  const asked = [{ projectId: "p1", run: { id: "run_1", startedAt: new Date(NOW.getTime() - 3_600_000).toISOString(), question: "阿哌沙班用于房颤的剂量", titleSource: "question" } }];
+  const editor = { available: true, extractProfile: async () => ({ specialties: [], dropped: [], error: null, phrases: [
+    { text: "阿哌沙班用于房颤", source: "question", kind: "question" }, { text: "怎么写好一篇综述", source: "question", kind: "question" },
+  ] }) };
+  const runner = (entityVocabulary) => new FrontierProfiles({ database, researchMemory: memory, editor, embedder: { ...testEmbedder, embedQuery: async () => vectorAt(1) }, config: CONFIG,
+    budget: async () => ({ state: "ok" }), now: () => NOW, entityVocabulary, conversations: async () => asked });
+  await runner(vocabulary).refreshUser("reader");
+  const keys = Object.fromEntries((await stored("reader")).phrases.map((phrase) => [phrase.text, phrase.entityKeys]));
+  assert.deepEqual([...keys["阿哌沙班用于房颤"]].sort(), ["disease:atrial fibrillation", "drug:apixaban"], "a model phrase carries what the glossary found in it");
+  assert.deepEqual(keys["怎么写好一篇综述"], [], "tagged and found to be about no known entity is not the same as untagged");
+  assert.deepEqual(keys["司美格鲁肽"], ["drug:semaglutide"], "a zone's phrase is the key it came from");
+  // A vocabulary that cannot tag: the phrases stand without the property, which is how a profile without keys is told from one with none.
+  await database.query("DELETE FROM evimed_frontier.user_profiles");
+  await runner({ enabled: true, describe: vocabulary.describe, keysForText: async () => [], tag: async () => null }).refreshUser("reader");
+  const untagged = (await stored("reader")).phrases.filter((phrase) => phrase.source === "question");
+  assert.ok(untagged.length > 0 && untagged.every((phrase) => !("entityKeys" in phrase)));
+});

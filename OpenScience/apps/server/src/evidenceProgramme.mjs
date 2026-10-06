@@ -150,6 +150,7 @@ export function evidenceProgrammeMetricFamilies(/** @type {ReturnType<typeof cre
   return [
     counter("decisions_total", "Daily topic decisions made, by who chose: the model, the recorded fallback, or no action (nothing changed, or no budget).", by(counters.decisions, "source")),
     counter("signals_total", "Signal reads of the topic selector, by class: frontier items matched, reader profiles read (counts only, no reader is named), follows, stale cards, observed errors.", by(counters.signals, "class")),
+    counter("demand_profiles_without_keys_total", "Reader profiles the selector read that had a question or memory phrase with no entity keys (built before keys were stored, or by a vocabulary that could not tag): their reader is not counted until the profile refreshes.", [{ value: counters.demandProfilesWithoutKeys }]),
     counter("demand_entities_total", "Entities that reached the reader-count floor and were shown to the selector as a count.", [{ value: counters.demandEntities }]),
     counter("actions_total", "Zone actions of the day's decision, by what became of them: scheduled, failed, or deferred (by reason).", by(counters.actions, "outcome")),
     counter("cards_total", "Settled programme episodes, by outcome: a card published or revised, none for want of a qualifying claim, waiting for an independent check, deferred by the weekly original-analysis cap, and the refusals.", by(counters.cards, "outcome")),
@@ -194,6 +195,8 @@ export function createEvidenceProgramme({ config, database, documents, jobs = nu
     decisions: { model: 0, fallback: 0, none: 0 },
     signals: { frontier: 0, demand: 0, attention: 0, stale: 0, observed: 0 },
     demandEntities: 0,
+    /** Profiles read for demand with a phrase that carries no entity keys: built before the keys were stored, or by a vocabulary that could not tag. */
+    demandProfilesWithoutKeys: 0,
     actions: /** @type {Record<string, number>} */ ({ scheduled: 0, failed: 0 }),
     cards: /** @type {Record<string, number>} */ (Object.fromEntries(PROGRAMME_CARD_OUTCOMES.map((outcome) => [outcome, 0]))),
     claimsExcluded: /** @type {Record<string, number>} */ (Object.fromEntries(PROGRAMME_CLAIM_EXCLUSIONS.map((reason) => [reason, 0]))),
@@ -303,13 +306,19 @@ export function createEvidenceProgramme({ config, database, documents, jobs = nu
   /**
    * How many distinct readers have each of `keys` among the entities of their 「与你相关」 profile. The profile rows are read
    * without their owner: a row is one reader, and the only thing kept is a number per entity.
+   *
+   * The selector counts entities and reads nobody's words (owner's ruling, 2026-10-06): the query selects each phrase's `source` and
+   * its `entityKeys`, which the profile builder tagged through the shared vocabulary when it built the profile
+   * (`frontierProfiles.mjs`), and nothing else — no phrase text leaves the table, so none can be tagged, kept or shown here.
+   * Hidden knowledge: a profile built before the keys were stored has none on its phrases until its next refresh, so until then
+   * its reader is not counted; `demandProfilesWithoutKeys` counts how many profiles that is, and falls as they refresh.
    * @param {string[]} keys
    */
   async function readDemand(keys) {
     /** @type {Map<string, number>} */
     const counts = new Map();
     if (!keys.length) return { counts, profiles: 0, truncated: false };
-    const rows = (await database.query(`SELECT (SELECT coalesce(jsonb_agg(jsonb_build_object('text', p->>'text', 'source', p->>'source', 'entityKeys', p->'entityKeys')), '[]'::jsonb)
+    const rows = (await database.query(`SELECT (SELECT coalesce(jsonb_agg(jsonb_build_object('source', p->>'source', 'entityKeys', p->'entityKeys')), '[]'::jsonb)
         FROM jsonb_array_elements(pr.phrases) p) AS phrases
       FROM evimed_frontier.user_profiles pr WHERE jsonb_array_length(pr.phrases) > 0 LIMIT $1`, [PROGRAMME_DEMAND_MAX_PROFILES + 1])).rows;
     counters.signals.demand += 1;
@@ -317,8 +326,7 @@ export function createEvidenceProgramme({ config, database, documents, jobs = nu
     for (const row of rows.slice(0, PROGRAMME_DEMAND_MAX_PROFILES)) {
       const phrases = (Array.isArray(row.phrases) ? row.phrases : []).filter((/** @type {any} */ phrase) => PROGRAMME_DEMAND_PHRASE_SOURCES.includes(String(phrase?.source)));
       const own = new Set(phrases.flatMap((/** @type {any} */ phrase) => (Array.isArray(phrase.entityKeys) ? phrase.entityKeys.map(String) : [])));
-      const texts = phrases.map((/** @type {any} */ phrase) => String(phrase?.text ?? "")).filter(Boolean);
-      if (texts.length) for (const key of (await entityVocabulary.keysForText({ texts })) ?? []) own.add(key);
+      if (phrases.some((/** @type {any} */ phrase) => !Array.isArray(phrase.entityKeys))) counters.demandProfilesWithoutKeys += 1;
       for (const key of keys) if (own.has(key)) counts.set(key, (counts.get(key) ?? 0) + 1);
     }
     return { counts, profiles: Math.min(rows.length, PROGRAMME_DEMAND_MAX_PROFILES), truncated };
