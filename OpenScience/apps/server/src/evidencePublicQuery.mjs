@@ -74,8 +74,10 @@ const AUTHOR_CACHE = 500;
  */
 export function evidencePublicPredicate(audience, { card = "c", zone = "z" } = {}) {
   if (audience === "feed") {
-    return `${card}.state = 'published' AND ${zone}.state = 'published'
-            AND (${zone}.kind = 'official' OR (${zone}.kind = 'user' AND ${zone}.visibility = 'internet' AND ${card}.originality = 'original_research'))`;
+    // A user's card is admitted only when the platform published it from a research result (a lineage key no client can set) and
+    // never on what its author says of it; whether its author is established is asked per author by the feed (2026-10-06 review).
+    return `${card}.state = 'published' AND ${zone}.state = 'published' AND ${card}.withdrawn IS NULL
+            AND (${zone}.kind = 'official' OR (${zone}.kind = 'user' AND ${zone}.visibility = 'internet' AND ${card}.lineage->>'resultVersionId' IS NOT NULL))`;
   }
   if (audience === "pages") return `${card}.state = 'published' AND ${zone}.state = 'published' AND ${zone}.visibility = 'internet'`;
   if (audience === "zones") return `${zone}.state = 'published' AND ${zone}.visibility = 'internet'`;

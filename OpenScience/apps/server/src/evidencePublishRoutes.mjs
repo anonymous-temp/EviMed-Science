@@ -1,7 +1,7 @@
 import { HttpError, readJson, sendJson } from "./security.mjs";
 
 const RESULT_CARD_PATH = /^\/api\/results\/(rv_[a-f0-9]{64})\/evidence-card$/;
-const CARD_PATH = /^\/api\/frontier\/evidence\/([^/]+)\/(continue|links)$/;
+const CARD_PATH = /^\/api\/frontier\/evidence\/([^/]+)\/(continue|links|verify-sources)$/;
 const AUTHOR_PATH = /^\/api\/frontier\/authors\/([^/]+)$/;
 
 /**
@@ -11,7 +11,9 @@ const AUTHOR_PATH = /^\/api\/frontier\/authors\/([^/]+)$/;
  *   `{ projectId, zoneId | newZone: { title }, claimIds? }`.
  * - `POST /api/frontier/evidence/:cardId/continue` — continue research from a card; `{ projectId? }`.
  * - `GET /api/frontier/evidence/:cardId/links` — what a card points to and what points to it.
- * - `GET /api/frontier/authors/:userId` — one author's page.
+ * - `GET /api/frontier/authors/:authorId` — one author's page, by the author's public handle (`au_` and sixteen hex digits), never the account id.
+ * - `POST /api/frontier/evidence/:cardId/verify-sources` — the card's owner has the platform read each source's address, so the
+ *   claims quoting them can earn ✓ (`evidenceSourceVerification.mjs`); answers per source, and the card as it now stands.
  *
  * Hidden knowledge: all four are the frontier's, so with the module off — or on for operators only and the caller not
  * among them — each answers 404 `frontier_not_enabled`, the answer a URL that never existed gets. Each needs a session
@@ -25,9 +27,10 @@ const AUTHOR_PATH = /^\/api\/frontier\/authors\/([^/]+)$/;
  *   publisher: { publish: (user: any, versionId: string, body: any) => Promise<any> } | null,
  *   continuation: { start: (user: any, cardId: string, body: any) => Promise<any> } | null,
  *   authors: { page: (user: any, authorId: string) => Promise<any>, links: (user: any, cardId: string) => Promise<any> } | null,
+ *   verification?: { verify: (user: any, cardId: string) => Promise<any> } | null,
  *   audit?: ((event: string, status: string, details: Record<string, any>) => Promise<unknown>) | null }} options
  */
-export function createEvidencePublishRoutes({ store, frontier, config, maxJsonBytes, publisher, continuation, authors, audit = null }) {
+export function createEvidencePublishRoutes({ store, frontier, config, maxJsonBytes, publisher, continuation, authors, verification = null, audit = null }) {
   /** @param {any} req @param {any} res @returns {Promise<boolean>} */
   return async (req, res) => {
     const url = new URL(req.url ?? "/", "http://evimed.local");
@@ -64,6 +67,13 @@ export function createEvidencePublishRoutes({ store, frontier, config, maxJsonBy
         const answer = await continuation.start(user, cardId, await readJson(req, maxJsonBytes));
         await audit?.("evidence.continue", "completed", { userId: user.id, code: cardId, detail: `${answer.library.saved.length} saved, ${answer.library.failed.length} failed` });
         return reply(answer, 201);
+      }
+      if (cardAction[2] === "verify-sources") {
+        if (method !== "POST") throw new HttpError(405, "method_not_allowed", "Having the platform read a card's sources is a POST.");
+        if (!verification) throw new HttpError(404, "frontier_not_enabled", "The frontier feed is not enabled.");
+        const answer = await verification.verify(user, cardId);
+        await audit?.("evidence.verify_sources", "completed", { userId: user.id, code: cardId, detail: answer.sources.map((/** @type {any} */ entry) => entry.status).join(",") });
+        return reply(answer);
       }
       if (method !== "GET") throw new HttpError(405, "method_not_allowed", "A card's links are read with GET.");
       return reply(await authors.links(user, cardId));

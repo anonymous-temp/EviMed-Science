@@ -176,7 +176,7 @@ export async function followedZoneCards(database, { userId, from, to, limit = FR
         ${cardWordsFingerprint((column) => (["content", "claims", "public_view"].includes(column) ? `(before.snapshot->'${column}')::text` : `(before.snapshot->>'${column}')`))} AS words_before
       FROM evimed_frontier.evidence_zone_follows f
       JOIN evimed_frontier.evidence_zones z ON z.id = f.zone_id AND z.state = 'published'
-      JOIN evimed_frontier.evidence_cards c ON c.zone_id = z.id AND c.state = 'published'
+      JOIN evimed_frontier.evidence_cards c ON c.zone_id = z.id AND c.state = 'published' AND c.withdrawn IS NULL
       LEFT JOIN LATERAL (SELECT r.snapshot FROM evimed_frontier.evidence_card_revisions r
         WHERE r.card_id = c.id AND r.recorded_at < $2::timestamptz AND r.snapshot->>'state' = 'published'
         ORDER BY r.revision DESC LIMIT 1) before ON true

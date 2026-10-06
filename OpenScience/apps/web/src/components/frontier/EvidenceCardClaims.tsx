@@ -11,6 +11,7 @@ const STATUS_TEXT: Record<string, string> = {
   quote_not_found: "来源里没有找到这段引文",
   source_unavailable: "来源原文不可用，无法核对",
   no_quote: "没有附引文，无法核对",
+  author_excerpt_only: "摘录由作者提供，平台未读取原文",
 };
 const CONFIDENCE: Record<string, string> = { high: "高", moderate: "中", low: "低" };
 

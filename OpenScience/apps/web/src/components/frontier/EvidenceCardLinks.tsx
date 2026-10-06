@@ -13,7 +13,7 @@ import {
 import { useProjectStore } from "@/lib/projects";
 import type { RuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 
-const RELATION_LABEL = { next_version: "后续版本", research_from_card: "由这张卡发起的研究" } as const;
+const RELATION_LABEL = { next_version: "后续版本", research_from_card: "后续研究" } as const;
 
 const cardPath = (card: Pick<EvidenceCardRef, "zoneId" | "id">) => `/app/frontier/zones/${encodeURIComponent(card.zoneId)}/evidence/${encodeURIComponent(card.id)}`;
 

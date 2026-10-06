@@ -118,6 +118,8 @@ export const FRONTIER_FOR_YOU_EDITORIAL_SHARE = 0.1;
  * `hiddenDropped` counter and the reader's hides before moving it.
  */
 export const FRONTIER_FOR_YOU_HIDDEN_COSINE = 0.85;
+/** The entity keys kept on one phrase: a phrase is about a few things, and the demand signal counts each. */
+const FRONTIER_PROFILE_PHRASE_ENTITY_KEYS = 12;
 /** Entity phrases a profile adds from followed zones and from the library, each at most (the model's own are ten). */
 export const FRONTIER_PROFILE_ENTITY_PHRASES = Object.freeze({ zone: 3, library: 3 });
 /** Followed zones, their cards and library documents read for those keys, at most. */
@@ -304,6 +306,7 @@ export class FrontierProfiles {
    *           budget?: (() => Promise<{ state: string }>) | null, now?: () => Date, dimension?: number,
    *           conversations?: ((userId: string) => Promise<Array<{ projectId: string, run: Record<string, any> }>>) | null,
    *           entityVocabulary?: { enabled?: boolean, keysForText: (input: { texts: string[] }) => Promise<string[]>,
+   *             tag?: (input: { texts: string[] }) => Promise<string[] | null>,
    *             describe: (keys: string[]) => Promise<Array<{ key: string, label: string }>> } | null }} options
    *   `researchMemory` the account memory store (`listAllRecords`, `settings`),
    *   `editor` a `FrontierEditor` (`extractProfile`), `embedder` the feed's,
@@ -569,7 +572,7 @@ export class FrontierProfiles {
    * and a vocabulary that cannot tag leaves the signal out (counted, never faked). The two signals fail apart: a
    * library that cannot be read costs the zones nothing.
    * @param {string} userId @param {string[]} pausedProjects
-   * @returns {Promise<Array<{ text: string, source: "zone" | "library", memoryId: string, kind: "zone" | "library" }>>}
+   * @returns {Promise<Array<{ text: string, source: "zone" | "library", memoryId: string, kind: "zone" | "library", entityKeys: string[] }>>}
    */
   async #entityPhrases(userId, pausedProjects) {
     const vocabulary = this.entityVocabulary;
@@ -591,7 +594,7 @@ export class FrontierProfiles {
       for (const zone of zones) records.push(await vocabulary.keysForText({ texts: [String(zone.title ?? ""), String(zone.description ?? "")] }));
       if (zones.length) {
         const cards = (await this.database.query(`SELECT c.entity_keys FROM evimed_frontier.evidence_cards c
-          WHERE c.zone_id = ANY($1::text[]) AND c.state = 'published' ORDER BY c.updated_at DESC LIMIT ${FRONTIER_PROFILE_ENTITY_LIMITS.zoneCards}`,
+          WHERE c.zone_id = ANY($1::text[]) AND c.state = 'published' AND c.withdrawn IS NULL ORDER BY c.updated_at DESC LIMIT ${FRONTIER_PROFILE_ENTITY_LIMITS.zoneCards}`,
         [zones.map((zone) => String(zone.id))])).rows ?? [];
         for (const card of cards) records.push(Array.isArray(card.entity_keys) ? card.entity_keys.map(String) : []);
       }
@@ -625,12 +628,35 @@ export class FrontierProfiles {
       return [];
     }
     const label = new Map(named.map((entry) => [entry.key, String(entry.label ?? "").trim()]));
-    /** @type {Array<{ text: string, source: "zone" | "library", memoryId: string, kind: "zone" | "library" }>} */
+    /** @type {Array<{ text: string, source: "zone" | "library", memoryId: string, kind: "zone" | "library", entityKeys: string[] }>} */
     const phrases = [];
     for (const [source, keys] of /** @type {const} */ ([["zone", zoneKeys], ["library", libraryKeys]])) {
-      for (const key of keys) if (label.get(key)) phrases.push({ text: /** @type {string} */ (label.get(key)), source, memoryId: "", kind: source });
+      for (const key of keys) if (label.get(key)) phrases.push({ text: /** @type {string} */ (label.get(key)), source, memoryId: "", kind: source, entityKeys: [key] });
     }
     return phrases;
+  }
+
+  /**
+   * Every phrase of a profile tagged with the entity keys the shared vocabulary finds in it, kept on the phrase (2026-10-06 review).
+   * The evidence programme's demand signal counts readers by these keys and reads no phrase text, so a phrase the vocabulary could
+   * not tag at all (no glossary loaded) carries no `entityKeys` property — which is not the same as `[]`, a phrase tagged and found to
+   * be about no known entity — and its profile is counted as one without keys. Profiles built before this carry none on their model
+   * phrases until their next refresh. A vocabulary that fails leaves the phrases as they were: tagging is a label, never a gate.
+   * @param {Array<{ text: string, entityKeys?: string[] }>} phrases
+   */
+  async #tagPhrases(phrases) {
+    const vocabulary = this.entityVocabulary;
+    if (!vocabulary) return;
+    for (const phrase of phrases) {
+      if (Array.isArray(phrase.entityKeys)) continue;
+      try {
+        const keys = await (typeof vocabulary.tag === "function" ? vocabulary.tag({ texts: [phrase.text] }) : vocabulary.keysForText({ texts: [phrase.text] }));
+        if (Array.isArray(keys)) phrase.entityKeys = keys.map(String).slice(0, FRONTIER_PROFILE_PHRASE_ENTITY_KEYS);
+      } catch (error) {
+        this.counters.entityFailures += 1;
+        this.lastError = codeOf(error);
+      }
+    }
   }
 
   /** @param {string} userId @returns {Promise<string>} */
@@ -685,11 +711,12 @@ export class FrontierProfiles {
     const readsLanguage = memories.length > 0 || questions.length > 0 || items.length > 0;
     const extracted = readsLanguage ? await this.editor.extractProfile({ memories, questions, items }) : { error: null, phrases: [], specialties: [] };
     if (extracted.error) throw Object.assign(new Error("The profile could not be extracted."), { code: extracted.error });
-    /** @type {Array<{ text: string, source: string, memoryId: string, kind: string, vector?: string }>} */
+    /** @type {Array<{ text: string, source: string, memoryId: string, kind: string, vector?: string, entityKeys?: string[] }>} */
     const phrases = [...extracted.phrases.map((/** @type {any} */ phrase) => ({ text: String(phrase.text), source: frontierPhraseSource(phrase),
       memoryId: frontierPhraseSource(phrase) === "memory" ? String(phrase.memoryId ?? "") : "", kind: String(phrase.kind ?? "profile") }))
       .filter((/** @type {any} */ phrase) => phrase.text && (phrase.source !== "memory" || phrase.memoryId)), ...entities];
     this.counters.entityPhrases += entities.length;
+    await this.#tagPhrases(phrases);
     const capabilities = await this.ready();
     if (phrases.length && capabilities.vector && this.embedder?.configured) {
       try {

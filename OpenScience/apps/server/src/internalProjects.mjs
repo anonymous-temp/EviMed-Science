@@ -172,6 +172,22 @@ export function isReservedProjectId(projectId) {
 }
 
 /**
+ * A request from a browser session may not name a project the platform made for itself: it is answered
+ * exactly as a project that does not exist (the code and message `requireProject` gives), so nothing says
+ * the name is taken. The platform's own work in those projects is waived from the credit hold, the
+ * settlement and the spend caps (`internalFor` in `server.mjs`), and the learning loop makes
+ * `evimed-learning` in every account and the evidence upkeep `evimed-evidence` in an ordinary one — so a
+ * researcher who named one in the project header ran research nobody paid for (evidence-flywheel review,
+ * 2026-10-06: dispatch, session and runtime creation and upload all answered 2xx). Called where client
+ * requests resolve their project; the platform's workers never come through it. The self-measurement
+ * names stay usable by their accounts — `isInternalProjectOf` already rules who may hold them.
+ * @param {unknown} projectId
+ */
+export function assertClientProject(projectId) {
+  if (isReservedProjectId(projectId)) throw new HttpError(404, "project_not_found", "Project not found.");
+}
+
+/**
  * How many of the deployment's runtimes the platform's own background work may
  * hold at once: all but one researcher's full share, and never fewer than one.
  *

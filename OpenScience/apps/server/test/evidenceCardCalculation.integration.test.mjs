@@ -60,7 +60,9 @@ const userZone = async () => {
 };
 const refusedWith = (code) => (error) => error?.code === code;
 let seed = 0;
-const official = (zone, fields) => plain.saveEditorial(publisher, { requestId: `calc-card-${++seed}`, ...card(fields) }, zone.id, null, true, "programme").then((result) => result.evidence);
+// The platform's own writer read its sources: the read receipt it keeps beside an excerpt is what makes a quotation found there ✓.
+const platformRead = (/** @type {any} */ value) => ({ ...value, sources: value.sources.map((/** @type {any} */ source) => (source.url ? { ...source, fetchedSha256: "c".repeat(64) } : source)) });
+const official = (zone, fields) => plain.saveEditorial(publisher, { requestId: `calc-card-${++seed}`, ...platformRead(card(fields)) }, zone.id, null, true, "programme").then((result) => result.evidence);
 
 test("an official card of primary originality with no calculated claim is refused by name, and one with a calculation is saved", options, async () => {
   const zone = await officialZone();

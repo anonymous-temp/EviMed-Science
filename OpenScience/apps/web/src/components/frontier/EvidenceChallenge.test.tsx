@@ -34,6 +34,12 @@ describe("challenging one claim", () => {
     expect(screen.queryByRole("textbox")).toBeNull();
   });
 
+  it("says a challenge is received and queued while the platform's day for judging is spent", async () => {
+    render(<EvidenceChallenge cardId="ec_1" claimId="CLM-2" existing={challenge({ waiting: true })} />);
+    expect(await screen.findByText(/已收到，排队复核/)).toBeInTheDocument();
+    expect(screen.queryByText(/正在复核/)).toBeNull();
+  });
+
   it("keeps what the reader wrote when the server refuses, and says why in the registry's words", async () => {
     client.submitEvidenceChallenge.mockRejectedValue(new WebApiError("limit", { status: 429, code: "evidence_challenge_rate_limited" }));
     render(<EvidenceChallenge cardId="ec_1" claimId="CLM-2" />);

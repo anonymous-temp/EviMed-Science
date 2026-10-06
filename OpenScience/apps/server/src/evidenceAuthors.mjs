@@ -17,11 +17,15 @@
  *   page carries it; when it is absent or cannot answer, the page leaves it out and is otherwise the same.
  * - **Links read lineage, and only published cards.** A card's `relatedCards` are the published cards whose lineage names
  *   it — as the earlier card they follow (`previousCardId`) or as the card their research began from (`originCardId`).
- *   What a card points back to is shown to the reader only when the reader may read it.
+ *   What a card points back to is shown to the reader only when the reader may read it. A card is the *next version* of
+ *   another only when the same account made both (a link another account's card names is never a version of it, whatever
+ *   it says; the write refuses it and an old row is not believed); anyone else's card that names it is listed as research
+ *   that followed from it, with its author.
  *
  * @module evidenceAuthors
  */
 
+import { randomBytes } from "node:crypto";
 import { HttpError } from "./security.mjs";
 import { EVIDENCE_CARD_ID, migrateEvidenceOrigins } from "./evidenceOrigins.mjs";
 
@@ -29,7 +33,32 @@ import { EVIDENCE_CARD_ID, migrateEvidenceOrigins } from "./evidenceOrigins.mjs"
 export const EVIDENCE_AUTHOR_PAGE_LIMITS = Object.freeze({ zones: 50, cards: 30, changes: 10 });
 /** The most related cards one card lists. */
 export const EVIDENCE_RELATED_CARD_LIMIT = 20;
-const USER_ID = /^[A-Za-z0-9._@:-]{1,200}$/;
+/**
+ * A public author handle: opaque, stable, random, one per account. The account id is the login name for a local account, so it
+ * is never the address of an author page or a field of a card's links (review 2026-10-06): `/evidence/a/<handle>`.
+ */
+export const EVIDENCE_AUTHOR_HANDLE = /^au_[a-f0-9]{16}$/;
+const HANDLE_ATTEMPTS = 5;
+
+const AUTHOR_HANDLES_SQL = `
+CREATE TABLE IF NOT EXISTS evimed_frontier.evidence_author_handles (
+ user_id text PRIMARY KEY REFERENCES evimed_control.users(id) ON DELETE CASCADE,
+ handle text NOT NULL UNIQUE CHECK(handle ~ '^au_[a-f0-9]{16}$'),
+ created_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
+`;
+const handleMigrations = new WeakMap();
+/** @param {any} database */
+async function migrateAuthorHandles(database) {
+  await migrateEvidenceOrigins(database);
+  if (!handleMigrations.has(database)) {
+    handleMigrations.set(database, database.transaction(async (/** @type {any} */ client) => {
+      await client.query("SELECT pg_advisory_xact_lock(hashtext('evimed-evidence-author-handles-v1'))");
+      await client.query(AUTHOR_HANDLES_SQL);
+    }).catch((/** @type {unknown} */ error) => { handleMigrations.delete(database); throw error; }));
+  }
+  await handleMigrations.get(database);
+}
 
 const notFound = () => new HttpError(404, "evidence_author_not_found", "No evidence published by this author.");
 
@@ -55,17 +84,38 @@ export class EvidenceAuthors {
   }
 
   /**
-   * One author's page, as a reader sees it.
-   * @param {{ id: string }} _reader @param {string} authorId
+   * The public handle of an account, made on first need and the same ever after. The one place a handle is made: the author page,
+   * a card's links and every public page name an author by it.
+   * @param {string} userId
+   * @returns {Promise<string>}
    */
-  async page(_reader, authorId) {
-    if (typeof authorId !== "string" || !USER_ID.test(authorId)) throw notFound();
-    await migrateEvidenceOrigins(this.database);
-    const author = (await this.database.query("SELECT id,name FROM evimed_control.users WHERE id=$1", [authorId])).rows[0];
+  async handleFor(userId) {
+    await migrateAuthorHandles(this.database);
+    for (let attempt = 0; attempt < HANDLE_ATTEMPTS; attempt += 1) {
+      const known = (await this.database.query("SELECT handle FROM evimed_frontier.evidence_author_handles WHERE user_id=$1", [userId])).rows[0];
+      if (known) return String(known.handle);
+      // A taken handle (a collision of 64 random bits) or a concurrent first need for the same account both fall through to the read.
+      await this.database.query(
+        "INSERT INTO evimed_frontier.evidence_author_handles(user_id,handle) VALUES($1,$2) ON CONFLICT DO NOTHING", [userId, `au_${randomBytes(8).toString("hex")}`]);
+    }
+    throw new HttpError(503, "evidence_author_handle_unavailable", "An author handle could not be made.");
+  }
+
+  /**
+   * One author's page, as a reader sees it. `authorHandle` is the public handle; an account id, a handle nobody holds and a
+   * malformed one are the same answer, so the page cannot be used to find out who has signed up.
+   * @param {{ id: string }} _reader @param {string} authorHandle
+   */
+  async page(_reader, authorHandle) {
+    if (typeof authorHandle !== "string" || !EVIDENCE_AUTHOR_HANDLE.test(authorHandle)) throw notFound();
+    await migrateAuthorHandles(this.database);
+    const author = (await this.database.query(
+      "SELECT u.id,u.name FROM evimed_frontier.evidence_author_handles h JOIN evimed_control.users u ON u.id=h.user_id WHERE h.handle=$1", [authorHandle])).rows[0];
     if (!author) throw notFound();
+    const authorId = String(author.id);
     const zones = (await this.database.query(
       `SELECT z.id,z.title,z.description,z.kind,z.visibility,z.updated_at,
-         (SELECT count(*)::integer FROM evimed_frontier.evidence_cards c WHERE c.zone_id=z.id AND c.state='published') AS evidence_count,
+         (SELECT count(*)::integer FROM evimed_frontier.evidence_cards c WHERE c.zone_id=z.id AND c.state='published' AND c.withdrawn IS NULL) AS evidence_count,
          (SELECT count(*)::integer FROM evimed_frontier.evidence_zone_follows f WHERE f.zone_id=z.id) AS follows
        FROM evimed_frontier.evidence_zones z WHERE z.user_id=$1 AND z.state='published' ORDER BY z.updated_at DESC, z.id LIMIT $2`,
       [authorId, EVIDENCE_AUTHOR_PAGE_LIMITS.zones],
@@ -74,7 +124,7 @@ export class EvidenceAuthors {
     const cards = (await this.database.query(
       `SELECT c.id,c.zone_id,c.title,c.summary,c.producer,c.originality,c.updated_at,jsonb_array_length(c.claims) AS claim_count,u.name AS creator
          FROM evimed_frontier.evidence_cards c JOIN evimed_frontier.evidence_zones z ON z.id=c.zone_id JOIN evimed_control.users u ON u.id=c.user_id
-        WHERE z.user_id=$1 AND z.state='published' AND c.state='published' AND c.user_id=$1
+        WHERE z.user_id=$1 AND z.state='published' AND c.state='published' AND c.withdrawn IS NULL AND c.user_id=$1
         ORDER BY c.updated_at DESC, c.id LIMIT $2`,
       [authorId, EVIDENCE_AUTHOR_PAGE_LIMITS.cards],
     )).rows;
@@ -84,9 +134,9 @@ export class EvidenceAuthors {
            WHERE z.user_id=$1 AND z.state='published') AS followers,
          (SELECT count(*)::integer FROM evimed_frontier.evidence_card_runs r JOIN evimed_frontier.evidence_cards c ON c.id=r.card_id
            JOIN evimed_frontier.evidence_zones z ON z.id=c.zone_id
-           WHERE c.user_id=$1 AND z.user_id=$1 AND z.state='published' AND c.state='published' AND r.user_id<>$1) AS runs_from_cards,
+           WHERE c.user_id=$1 AND z.user_id=$1 AND z.state='published' AND c.state='published' AND c.withdrawn IS NULL AND r.user_id<>$1) AS runs_from_cards,
          (SELECT count(*)::integer FROM evimed_frontier.evidence_cards c JOIN evimed_frontier.evidence_zones z ON z.id=c.zone_id
-           WHERE c.user_id=$1 AND z.user_id=$1 AND z.state='published' AND c.state='published') AS cards`,
+           WHERE c.user_id=$1 AND z.user_id=$1 AND z.state='published' AND c.state='published' AND c.withdrawn IS NULL) AS cards`,
       [authorId],
     )).rows[0];
     /** @type {unknown[] | null} */
@@ -95,7 +145,7 @@ export class EvidenceAuthors {
       try { changes = await this.changeLog.recentForAuthor(authorId, { limit: EVIDENCE_AUTHOR_PAGE_LIMITS.changes }); } catch { changes = null; }
     }
     return {
-      author: { id: String(author.id), name: String(author.name), platform: this.platformPublisherUserId != null && author.id === this.platformPublisherUserId },
+      author: { id: authorHandle, name: String(author.name), platform: this.platformPublisherUserId != null && author.id === this.platformPublisherUserId },
       zones: zones.map((/** @type {any} */ zone) => ({
         id: String(zone.id), title: String(zone.title), description: String(zone.description ?? ""), kind: zone.kind, visibility: zone.visibility,
         evidenceCount: zone.evidence_count, follows: zone.follows, updatedAt: zone.updated_at,
@@ -137,14 +187,14 @@ export class EvidenceAuthors {
     };
     const related = (await this.database.query(
       `SELECT c.id,c.zone_id,c.title,c.producer,u.name AS creator,
-              CASE WHEN c.lineage->>'previousCardId'=$1 THEN 'next_version' ELSE 'research_from_card' END AS relation
+              CASE WHEN c.lineage->>'previousCardId'=$1 AND c.user_id=$3 THEN 'next_version' ELSE 'research_from_card' END AS relation
          FROM evimed_frontier.evidence_cards c JOIN evimed_frontier.evidence_zones z ON z.id=c.zone_id JOIN evimed_control.users u ON u.id=c.user_id
-        WHERE c.state='published' AND z.state='published' AND c.id<>$1 AND (c.lineage->>'originCardId'=$1 OR c.lineage->>'previousCardId'=$1)
+        WHERE c.state='published' AND z.state='published' AND c.withdrawn IS NULL AND c.id<>$1 AND (c.lineage->>'originCardId'=$1 OR c.lineage->>'previousCardId'=$1)
         ORDER BY c.updated_at DESC, c.id LIMIT $2`,
-      [cardId, EVIDENCE_RELATED_CARD_LIMIT],
+      [cardId, EVIDENCE_RELATED_CARD_LIMIT, card.user_id],
     )).rows;
     return {
-      author: { id: String(card.user_id), name: String(card.author) },
+      author: { id: await this.handleFor(String(card.user_id)), name: String(card.author) },
       origin: await pointed(card.lineage?.originCardId),
       previous: await pointed(card.lineage?.previousCardId),
       related: related.map((/** @type {any} */ row) => ({ ...cardRef(row), relation: row.relation })),

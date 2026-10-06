@@ -104,7 +104,8 @@ test("a negative value and a thousands-grouped value are printed as the renderer
 
 test("counts include calculated claims beside quoted ones, and only a held receipt makes one ✓", () => {
   const card = { claims: [claim(), { claimId: "Q-1", claimType: "direct", claim: "原文说 12 例。", sourceIndexes: [1], supportQuote: "12 deaths" }],
-    sources: [{ title: "Paper", excerpt: "There were 12 events in the trial." }] };
+    // The platform read this source (its read receipt is there), so a quotation missing from it is "not found" (2026-10-06 review).
+    sources: [{ title: "Paper", excerpt: "There were 12 events in the trial.", fetchedSha256: "a".repeat(64) }] };
   const verdict = verifyEvidenceCardClaims(card, { receipts: receipts(RECEIPT) });
   assert.deepEqual(verdict.claims.map((entry) => [entry.claimId, entry.status]), [["CALC-1", "verified"], ["Q-1", "quote_not_found"]], "card order, and each by its own rule");
   assert.equal(verdict.counts.total, 2);

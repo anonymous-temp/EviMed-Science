@@ -162,6 +162,19 @@ export function capsuleMethodDirectoryName(entryId) {
   }
 }
 
+/** The longest share label a frontmatter line carries: a display name is a few words, and a label is not a place to put a document. */
+const SHARED_LABEL_MAX_CHARS = 200;
+
+/**
+ * Somebody else's text as one line of frontmatter: control characters, line and paragraph separators (U+0085, U+2028, U+2029) and format
+ * characters become a space, runs of whitespace one space, and the length is bounded. Empty after that, there is nothing to say.
+ * @param {unknown} value @param {number} max @returns {string}
+ */
+export function frontmatterLine(value, max) {
+  if (typeof value !== "string") return "";
+  return value.replace(/[\p{Cc}\p{Cf}\p{Zl}\p{Zp}]/gu, " ").replace(/\s+/g, " ").trim().slice(0, max).trim();
+}
+
 /**
  * One method, as the bytes the plugin reads.
  *
@@ -178,10 +191,16 @@ export function capsuleMethodDirectoryName(entryId) {
  */
 export function renderCapsuleMethod(method) {
   const digest = createHash("sha256").update(method.content, "utf8").digest("hex");
+  // The sharer's display name is somebody else's text, and it reaches a line of the frontmatter: a name with a line break in it added a
+  // key of its own to the file a run reads (2026-10-06 review). Control characters and line breaks are stripped, the length is bounded, and
+  // a description that carries one is written as a quoted scalar, so the value can neither end its line nor open a second one. A method with
+  // no share label is written exactly as it always was.
+  const shared = frontmatterLine(method.sharedLabel, SHARED_LABEL_MAX_CHARS);
+  const description = `用户记忆胶囊中的工作方式（${method.factKind}）${shared ? `，${shared}` : ""}，作为背景参考，不替代证据，也不改变交付要求。`;
   return [
     "---",
     `name: method-${method.directoryName}`,
-    `description: 用户记忆胶囊中的工作方式（${method.factKind}）${method.sharedLabel ? `，${method.sharedLabel}` : ""}，作为背景参考，不替代证据，也不改变交付要求。`,
+    `description: ${shared ? JSON.stringify(description) : description}`,
     "whenToUse: 当这条方法适用于当前任务时参考它。",
     `source_kind: ${method.factKind}`,
     `source_digest: ${digest}`,

@@ -160,7 +160,7 @@ export class EvidenceZoneSubscriptions {
   async #readableZone(zoneId) {
     if (!ZONE_ID.test(zoneId)) return null;
     await migrateEvidenceZones(this.database);
-    const row = (await this.database.query(`SELECT z.id,z.title,z.kind,(SELECT count(*) FROM evimed_frontier.evidence_cards c WHERE c.zone_id=z.id AND c.state='published')::integer AS cards
+    const row = (await this.database.query(`SELECT z.id,z.title,z.kind,(SELECT count(*) FROM evimed_frontier.evidence_cards c WHERE c.zone_id=z.id AND c.state='published' AND c.withdrawn IS NULL)::integer AS cards
       FROM evimed_frontier.evidence_zones z WHERE z.id=$1 AND z.state='published'`, [zoneId])).rows[0];
     return row ? { id: String(row.id), title: String(row.title), kind: String(row.kind), cards: Number(row.cards) } : null;
   }
@@ -229,7 +229,7 @@ export class EvidenceZoneSubscriptions {
     const valid = ids.filter((id) => ZONE_ID.test(id));
     if (!valid.length) return new Map();
     await migrateEvidenceZones(this.database);
-    const rows = (await this.database.query(`SELECT z.id,z.title,z.kind,z.state,(SELECT count(*) FROM evimed_frontier.evidence_cards c WHERE c.zone_id=z.id AND c.state='published')::integer AS cards
+    const rows = (await this.database.query(`SELECT z.id,z.title,z.kind,z.state,(SELECT count(*) FROM evimed_frontier.evidence_cards c WHERE c.zone_id=z.id AND c.state='published' AND c.withdrawn IS NULL)::integer AS cards
       FROM evimed_frontier.evidence_zones z WHERE z.id=ANY($1::text[])`, [valid])).rows;
     return new Map(rows.map((/** @type {any} */ row) => [String(row.id), { id: String(row.id), title: String(row.title), kind: String(row.kind), cards: Number(row.cards), state: String(row.state) }]));
   }
@@ -321,4 +321,21 @@ export class EvidenceZoneSubscriptions {
       content,
     };
   }
+}
+
+/**
+ * The subscriptions a runtime's recall may read for one account: the frontier's audience first, as every zone route asks it
+ * (2026-10-06 review: the routes and this recall used to skip it, so a deployment that showed the frontier to a preview list
+ * still recalled zone cards for every account that had subscribed). An account the frontier is not shown to is offered
+ * nothing, quietly — a recall never fails a conversation.
+ * @param {{ subscriptions: { recall: (userId: string, projectId: string, query: string) => Promise<any[]> },
+ *   userById: (userId: string) => Promise<{ id: string } | null>, allows: (user: any) => boolean }} dependencies
+ */
+export function subscriptionsForAudience({ subscriptions, userById, allows }) {
+  return {
+    recall: async (/** @type {string} */ userId, /** @type {string} */ projectId, /** @type {string} */ query) => {
+      const owner = await userById(userId);
+      return owner && allows(owner) ? subscriptions.recall(owner.id, projectId, query) : [];
+    },
+  };
 }

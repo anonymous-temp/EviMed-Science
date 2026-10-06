@@ -147,7 +147,7 @@ export function createEvidenceCardSearch({ database, entityVocabulary = null, so
               (SELECT count(*) FROM unnest(c.entity_keys) k WHERE k = ANY($2::text[]))::integer AS shared_entities,
               (SELECT count(*) FROM unnest($3::text[]) t WHERE strpos(lower(concat_ws(' ', c.title, c.summary, c.content->>'question', c.content->>'answer')), t) > 0)::integer AS term_hits
             FROM evimed_frontier.evidence_cards c JOIN evimed_frontier.evidence_zones z ON z.id = c.zone_id
-            WHERE c.state = 'published' AND z.state = 'published') matched
+            WHERE c.state = 'published' AND z.state = 'published' AND c.withdrawn IS NULL) matched
           WHERE shared_identifiers > 0 OR shared_entities > 0 OR term_hits > 0
           ORDER BY shared_identifiers DESC, shared_entities DESC, term_hits DESC, updated_at DESC, id
           LIMIT $4`, [identifierKeys, entityKeys, terms, size + 1])).rows ?? [];

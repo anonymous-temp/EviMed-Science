@@ -51,14 +51,14 @@ describe("continuing research from a card", () => {
 });
 
 describe("what a card points to", () => {
-  const links = { author: { id: "alice", name: "李研究" }, origin: null, previous: { id: "ec_0", zoneId: "ez_1", title: "更早的一版", creator: "李研究", producer: null },
+  const links = { author: { id: "au_0123456789abcdef", name: "李研究" }, origin: null, previous: { id: "ec_0", zoneId: "ez_1", title: "更早的一版", creator: "李研究", producer: null },
     related: [{ id: "ec_2", zoneId: "ez_2", title: "后续研究", creator: "王医生", producer: null, relation: "research_from_card" as const }, { id: "ec_3", zoneId: "ez_1", title: "新版本", creator: "李研究", producer: null, relation: "next_version" as const }] };
   it("links the author's page, the earlier version and the cards that follow or began from it", async () => {
     client.fetchEvidenceCardLinks.mockResolvedValue(links);
     mount(<EvidenceCardLinks cardId="ec_1" />);
-    expect(await screen.findByRole("link", { name: "李研究" })).toHaveAttribute("href", "/app/frontier/authors/alice");
+    expect(await screen.findByRole("link", { name: "李研究" })).toHaveAttribute("href", "/app/frontier/authors/au_0123456789abcdef");
     expect(screen.getByRole("link", { name: "更早的一版" })).toHaveAttribute("href", "/app/frontier/zones/ez_1/evidence/ec_0");
-    expect(screen.getByText(/由这张卡发起的研究 ·/)).toBeInTheDocument();
+    expect(screen.getByText(/后续研究 ·/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "后续研究" })).toHaveAttribute("href", "/app/frontier/zones/ez_2/evidence/ec_2");
     expect(screen.getByRole("link", { name: "新版本" })).toBeInTheDocument();
     expect(screen.getByText(/后续版本 ·/)).toBeInTheDocument();

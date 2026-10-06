@@ -35,7 +35,7 @@ before(async () => {
   await database.query("INSERT INTO evimed_frontier.evidence_zones(id,user_id,title,state) VALUES($1,$2,'房颤抗凝','published'),($3,$2,'未发布的专区','draft')", [published, owner, draft]);
   await database.query(`INSERT INTO evimed_frontier.evidence_cards(id,zone_id,user_id,title,subtype,summary,sources,state,content,claims,producer)
     VALUES($1,$2,$3,'达比加群酯与卒中','academic','房颤抗凝的证据',$4::jsonb,'published',$5::jsonb,$6::jsonb,$7::jsonb)`,
-  [card, published, owner, JSON.stringify([{ title: "RE-LY 试验", url: "https://doi.org/10.1056/NEJMoa0905561", excerpt: `${QUOTE}。`, coverage: "excerpt" }]),
+  [card, published, owner, JSON.stringify([{ title: "RE-LY 试验", url: "https://doi.org/10.1056/NEJMoa0905561", excerpt: `${QUOTE}。`, coverage: "excerpt", fetchedSha256: "a".repeat(64) }]),
     JSON.stringify({ question: "房颤抗凝用达比加群酯吗？", answer: "可降低卒中风险。" }),
     JSON.stringify([{ claimId: "CLM-001", claimType: "direct", claim: "达比加群酯降低卒中风险", sourceIndexes: [1], supportQuote: QUOTE },
       { claimId: "CLM-002", claimType: "direct", claim: "出血风险更低", sourceIndexes: [1], supportQuote: "这句话不在原文里" }]),

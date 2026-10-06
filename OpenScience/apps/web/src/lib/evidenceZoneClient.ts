@@ -142,12 +142,14 @@ export interface EvidenceClaimCounts {
   quote_not_found: number;
   source_unavailable: number;
   no_quote: number;
+  /** The quotation is in an excerpt its author supplied; the platform has not read the source. */
+  author_excerpt_only?: number;
   derived: number;
 }
 export interface EvidenceClaimVerification {
   claimId: string;
   claimType: string;
-  status: "verified" | "quote_not_found" | "source_unavailable" | "no_quote" | "derived" | "calculation_unverified";
+  status: "verified" | "quote_not_found" | "source_unavailable" | "no_quote" | "author_excerpt_only" | "derived" | "calculation_unverified";
   mark: EvidenceClaimMark;
   /** Why a calculated claim could not be checked against its receipt (`EVIDENCE_CALCULATION_REASONS`). */
   reason?: string;
@@ -638,14 +640,16 @@ export const fetchEvidenceCardLinks = (cardId: string) =>
   productRequest<EvidenceCardLinks>(`/frontier/evidence/${id(cardId)}/links`);
 
 export interface EvidenceAuthorPage {
+  /** `id` is the author's public handle, never the account id. */
   author: { id: string; name: string; platform: boolean };
   zones: Array<{ id: string; title: string; description: string; kind: EvidenceZoneKind; visibility: EvidenceZoneVisibility; evidenceCount: number; follows: number; updatedAt: string }>;
   cards: Array<EvidenceCardRef & { summary: string; originality: EvidenceOriginality | null; claimCount: number; updatedAt: string }>;
   totals: { cards: number; followers: number; runsFromCards: number };
   /** The author's recent change-log entries, when the deployment keeps a change log. */
-  changes?: Array<{ id?: string; summary?: string; kind?: string; at?: string }>;
+  changes?: Array<{ id?: string; summary?: string; categoryLabel?: string; cardTitle?: string | null; occurredAt?: string }>;
 }
-export const fetchEvidenceAuthor = (userId: string) => productRequest<EvidenceAuthorPage>(`/frontier/authors/${id(userId)}`);
+/** `authorId` is the author's public handle, as the card's links and the author page carry it; an account id is never in a URL. */
+export const fetchEvidenceAuthor = (authorId: string) => productRequest<EvidenceAuthorPage>(`/frontier/authors/${id(authorId)}`);
 
 /** Native evidence failures explain the action while keeping unsaved input intact. */
 export function evidenceErrorMessage(error: unknown): string {

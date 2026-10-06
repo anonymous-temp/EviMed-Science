@@ -7,6 +7,7 @@ import {
   EVIDENCE_ZONE_VISIBILITY,
   assertEvidenceCardForZone,
   evidenceCalculationReceiptIds,
+  assertEvidenceProducerName,
   evidenceCardClaims,
   evidenceCardClinicalView,
   evidenceCardIdentifiers,
@@ -104,6 +105,36 @@ function identity(prefix, userId, body) {
     throw error(400, "invalid", "Invalid request identity.");
   return `${prefix}_${createHash("sha256").update(`${userId}:${body.requestId}`).digest("hex").slice(0, 32)}`;
 }
+const DROPPED_TEXT = Symbol("droppedSourceText");
+/**
+ * A source whose text the card does not keep (no public address) keeps the passages the card's own claims quote from it,
+ * each found verbatim in the text the platform read, as its excerpt beside the read receipt — so those claims stay ✓
+ * whichever writer saved them (2026-10-06: a 循证传播 card written from a project's preserved label lost every check
+ * mark when its text was dropped; the result publisher did this for itself, now every writer has it). A quotation the
+ * text does not hold is never added: its claim stays ⚠, as it would have against the full text.
+ * @param {any[]} list @param {any[]} claims
+ */
+function keepQuotedPassages(list, claims) {
+  return list.map((source, position) => {
+    const dropped = source?.[DROPPED_TEXT];
+    if (typeof dropped !== "string") return source;
+    const index = position + 1;
+    /** @type {string[]} */
+    const found = [];
+    for (const claim of claims ?? []) {
+      const quoted = claim?.claimType === "synthesized" ? (claim.supportingSources ?? []).map((/** @type {any} */ bond) => [bond.sourceIndex, bond.supportQuote])
+        : claim?.claimType === "direct" ? [[claim.sourceIndexes?.[0], claim.supportQuote]] : [];
+      for (const [at, quote] of quoted) {
+        if (at !== index || typeof quote !== "string" || !quote || found.includes(quote)) continue;
+        const checked = verifyEvidenceCardClaims({ claims: [{ claimId: "Q", claimType: "direct", claim: "q", sourceIndexes: [1], supportQuote: quote }],
+          sources: [{ title: "s", documentText: dropped }] });
+        if (checked.claims[0]?.status === "verified") found.push(quote);
+      }
+    }
+    const excerpt = found.length ? found.join("\n\n").slice(0, 12000) : source.excerpt;
+    return { ...source, excerpt, sha256: evidenceHash(excerpt ?? ""), fetchedSha256: source.fetchedSha256 ?? evidenceHash(dropped) };
+  });
+}
 /** @param {any} value */
 function sources(value) {
   if (!Array.isArray(value) || value.length > 50)
@@ -119,13 +150,25 @@ function sources(value) {
     const coverage = source.coverage ?? "excerpt";
     if (!["full-text", "abstract", "excerpt"].includes(coverage)) throw error(400, "invalid", "Invalid source coverage.");
     const documentText = source.documentText == null ? null : (typeof source.documentText === "string" && source.documentText.length<=2000000 ? source.documentText : text(source.documentText,2000000));
-    const sha256 = evidenceHash(documentText ?? excerpt ?? "");
-    if (source.sha256 != null && source.sha256 !== sha256) throw error(400,"invalid","Source hash does not match its retained text.");
+    // A card never stores the full text of a source that has no public address (2026-10-06 review): a researcher's own uploaded
+    // document reached a card as a source's `documentText`, and "continue research from this card" handed it to another account.
+    // Such a source keeps its citation, its excerpt and the receipt of what the platform read, and nothing else; the passages
+    // its claims quote are the excerpt (`evidenceCardFromResult.mjs`), which is all a reader's ✓ needs.
+    const heldText = url ? documentText : null;
+    const sha256 = evidenceHash(heldText ?? excerpt ?? "");
+    const hashOfDropped = Boolean(documentText && !heldText && source.sha256 === evidenceHash(documentText));
+    if (source.sha256 != null && source.sha256 !== sha256 && !hashOfDropped) throw error(400,"invalid","Source hash does not match its retained text.");
     if (source.fetchedSha256 != null && (typeof source.fetchedSha256 !== "string" || !/^[a-f0-9]{64}$/.test(source.fetchedSha256))) throw error(400,"invalid","Invalid fetched document hash.");
     if (sha256 != null && (typeof sha256 !== "string" || !/^[a-f0-9]{64}$/.test(sha256))) throw error(400,"invalid","Invalid source hash.");
     if (source.checkedAt != null && (typeof source.checkedAt !== "string" || !Number.isFinite(Date.parse(source.checkedAt)))) throw error(400,"invalid","Invalid source check date.");
-    if (coverage === "full-text" && !documentText) throw error(400,"invalid","Full-text coverage requires retained document text.");
-    return { title, url, excerpt, sha256, ...(source.fetchedSha256 ? {fetchedSha256:source.fetchedSha256} : {}), ...(source.checkedAt ? {checkedAt:source.checkedAt} : {}), coverage, ...(documentText ? {documentText} : {}), ...(publicationStatus ? {publicationStatus} : {}) };
+    if (coverage === "full-text" && !heldText && !documentText) throw error(400,"invalid","Full-text coverage requires retained document text.");
+    // What is no longer held is no longer full text.
+    const held = coverage === "full-text" && !heldText ? "excerpt" : coverage;
+    const normalized = { title, url, excerpt, sha256, ...(source.fetchedSha256 ? {fetchedSha256:source.fetchedSha256} : {}), ...(source.checkedAt ? {checkedAt:source.checkedAt} : {}), coverage: held, ...(heldText ? {documentText:heldText} : {}), ...(publicationStatus ? {publicationStatus} : {}) };
+    // The text dropped above is kept out of the row but not out of reach of this save: the claims it carries quote it, and the
+    // passages they quote are what the card keeps (`keepQuotedPassages`). Never enumerable, so nothing stores or answers it.
+    if (documentText && !heldText) Object.defineProperty(normalized, DROPPED_TEXT, { value: documentText, enumerable: false });
+    return normalized;
   });
 }
 
@@ -236,6 +279,10 @@ export class EvidenceZoneService {
     }
     try {
       assertEvidenceCardForZone({ zoneKind: parent.kind, producer, journeyStage, disclosure, producerChanged });
+      // The platform's name is signed only by the platform's publisher, whether the writer typed it or the default (the owner's own
+      // display name) came to be it; a card that already carries a producer is not asked again. The writer is the zone's owner (checked
+      // before this runs), so the zone's owner is the actor.
+      if (producerChanged) assertEvidenceProducerName({ producer, actorIsPlatformPublisher: this.actorIsPlatformPublisher({ id: parent.user_id }, parent) });
     } catch (failure) {
       throw asHttpError(failure);
     }
@@ -255,6 +302,28 @@ export class EvidenceZoneService {
       entityKeys = evidenceMergeEntityKeys(entityKeys, found);
     }
     return { producer, originality, lineage: Object.keys(stored).length ? stored : null, entity_keys: entityKeys, journey_stage: journeyStage, disclosure };
+  }
+  /**
+   * An account's own lineage links to other cards. `previousCardId` is a card in a zone the writer owns; `originCardId` is a
+   * published card the writer can read. A link the card already carried is not asked again: the card is what it was.
+   * Each refusal is its own named code and touches that one field of that one write.
+   * @param {any} client @param {any} user @param {any} existing @param {{ previousCardId?: string, originCardId?: string }} lineage
+   */
+  async assertLineageLinks(client, user, existing, lineage) {
+    const previous = lineage.previousCardId;
+    if (previous != null && previous !== existing?.lineage?.previousCardId) {
+      const own = previous !== existing?.id && (await client.query(
+        `SELECT 1 FROM evimed_frontier.evidence_cards c JOIN evimed_frontier.evidence_zones z ON z.id=c.zone_id
+          WHERE c.id=$1 AND c.user_id=$2 AND z.user_id=$2`, [previous, user.id])).rowCount;
+      if (!own) throw error(400, "lineage_previous_not_own", "A card can follow only another card in a zone of the writer's own.");
+    }
+    const origin = lineage.originCardId;
+    if (origin != null && origin !== existing?.lineage?.originCardId) {
+      const readable = (await client.query(
+        `SELECT 1 FROM evimed_frontier.evidence_cards c JOIN evimed_frontier.evidence_zones z ON z.id=c.zone_id
+          WHERE c.id=$1 AND c.state='published' AND (z.state='published' OR (c.user_id=$2 AND z.user_id=$2))`, [origin, user.id])).rowCount;
+      if (!readable) throw error(400, "lineage_origin_unreadable", "A card's research can begin only from a published card the writer can read.");
+    }
   }
   /** @param {any} client @param {any} user @param {string} id @param {boolean} [lock] */
   async zoneRow(client, user, id, lock = false) {
@@ -761,6 +830,10 @@ export class EvidenceZoneService {
           else if ((sourceItemInput ?? existing?.source_item_id) !== lineage.frontierItemId)
             throw error(400, "invalid", "Lineage names a different frontier item than sourceItemId.");
         }
+        // What a card says it follows and what its research began from is a claim about another card, so the writer proves it
+        // (review 2026-10-06: a session could name another author's card as its `previousCardId` and appear as that card's
+        // next version). The platform's own writers stamp their own links and are not asked.
+        if (origin === "owner" && lineage) await this.assertLineageLinks(client, user, existing, lineage);
         value.source_item_id =
           sourceItemInput === undefined
             ? (existing?.source_item_id ?? null)
@@ -802,6 +875,7 @@ export class EvidenceZoneService {
         // Claims quote the card's own sources by index, so they are checked against the sources the card now has; the
         // public view's panels may name only claims the card has.
         value.claims = evidenceContract(evidenceCardClaims)(body.claims === undefined ? (existing?.claims ?? []) : body.claims, value.sources.length);
+        value.sources = keepQuotedPassages(value.sources, value.claims);
         value.public_view = evidenceContract(evidencePublicViewContent)(body.publicView === undefined ? (existing?.public_view ?? null) : body.publicView, value.claims);
         const changed = ["title","summary","body","sources","limitations","content"].some(key => JSON.stringify(value[key]) !== JSON.stringify(existing?.[key]))
           || ["claims","public_view"].some(key => evidenceHash(value[key] ?? null) !== evidenceHash(existing?.[key] ?? null));
@@ -1026,7 +1100,7 @@ export class EvidenceZoneService {
         const total = Number(
           (
             await client.query(
-              "SELECT count(*) AS n FROM evimed_frontier.evidence_cards WHERE zone_id=$1 AND state='published'",
+              "SELECT count(*) AS n FROM evimed_frontier.evidence_cards WHERE zone_id=$1 AND state='published' AND withdrawn IS NULL",
               [zoneId],
             )
           ).rows[0].n,
@@ -1035,7 +1109,7 @@ export class EvidenceZoneService {
           ? [card]
           : (
               await client.query(
-                "SELECT * FROM evimed_frontier.evidence_cards WHERE zone_id=$1 AND state='published' ORDER BY updated_at DESC,id LIMIT 10",
+                "SELECT * FROM evimed_frontier.evidence_cards WHERE zone_id=$1 AND state='published' AND withdrawn IS NULL ORDER BY updated_at DESC,id LIMIT 10",
                 [zoneId],
               )
             ).rows;

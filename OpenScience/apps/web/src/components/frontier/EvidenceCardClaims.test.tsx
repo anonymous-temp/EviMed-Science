@@ -14,6 +14,15 @@ describe("the claims of a card", () => {
     expect(within(unverified).getByText("来源里没有找到这段引文")).toBeInTheDocument();
     expect(within(unverified).getByRole("link", { name: "查看来源 1" })).toHaveAttribute("href", expect.stringContaining("evidence-source-"));
   });
+  it("says a quotation found only in the author's own excerpt is theirs and not the platform's reading, with ⚠", () => {
+    render(<EvidenceClaims evidence={{ ...card, claims: [
+      { text: "试验药降低卒中风险。", claimId: "CLM-009", claimType: "direct", sourceIndexes: [1], supportQuote: "7 had a stroke",
+        verification: { claimId: "CLM-009", claimType: "direct", status: "author_excerpt_only", mark: "⚠", sources: [{ sourceIndex: 1, status: "author_excerpt_only", mark: "⚠" }] } },
+    ] }} />);
+    const [item] = screen.getAllByRole("listitem");
+    expect(within(item).getByLabelText("未能核验")).toHaveTextContent("⚠");
+    expect(within(item).getByText("摘录由作者提供，平台未读取原文")).toBeInTheDocument();
+  });
   it("shows an estimate with its working and a synthesis with each of its sources", () => {
     render(<EvidenceClaims evidence={{ ...card, claims: [
       { text: "约少 50 例。", claimId: "CLM-003", claimType: "derived", method: "120 减 70", assumptions: "两组可比", sensitivity: "随事件数变化", verification: { claimId: "CLM-003", claimType: "derived", status: "derived", mark: null, sources: [] } },

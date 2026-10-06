@@ -92,11 +92,11 @@ test("continuing from a card writes its primary sources, not its prose, into the
   const [withText, record] = log.saved;
   assert.match(withText.text, /^# Trial A: stroke outcomes/);
   assert.ok(withText.text.includes("原文链接：https://example.org/a"));
-  assert.ok(withText.text.includes(PRESERVED), "the text the card preserved is saved");
-  assert.ok(withText.text.includes("open-label"), "all of it, not the excerpt");
+  assert.ok(withText.text.includes(PRESERVED), "the passage the card shows of it is saved");
+  assert.ok(!withText.text.includes("open-label"), "never the source's full text (2026-10-06): the account reads the address itself");
   assert.match(record.text, /这里没有原文，请按上面的链接阅读。/);
   assert.ok(record.text.includes("https://registry.example.org/r1"), "otherwise a record that cites it");
-  assert.deepEqual(answer.library.saved.map((file) => file.kind), ["text", "record"]);
+  assert.deepEqual(answer.library.saved.map((file) => file.kind), ["record", "record"]);
   // The card is an index: nothing of its own words is written into the knowledge base.
   for (const file of log.saved) {
     assert.ok(!file.text.includes("BODY-OF-THE-CARD") && !file.text.includes("SUMMARY-OF-THE-CARD"), "the card's prose is not a source");
@@ -117,7 +117,8 @@ test("continuing from a card writes its primary sources, not its prose, into the
   assert.equal(await origins.originCardOf({ userId: "alice", id: "continue-1" }, { sessionId: answer.sessionId }), null, "the binding belongs to the account");
   const outcome = (name) => evidencePublishMetricFamilies({ citationGiftEnabled: false }).find((family) => family.name === name);
   assert.equal(outcome("open_science_evidence_continuations_total").series.find((entry) => entry.labels.outcome === "started").value, 1);
-  assert.equal(outcome("open_science_evidence_continuation_sources_total").series.find((entry) => entry.labels.kind === "saved_text").value, 1);
+  assert.equal(outcome("open_science_evidence_continuation_sources_total").series.find((entry) => entry.labels.kind === "saved_text").value, 0, "retired: no full text is handed over");
+  assert.equal(outcome("open_science_evidence_continuation_sources_total").series.find((entry) => entry.labels.kind === "saved_record").value, 2);
 });
 
 test("an own project is reused and none is made; the platform's own projects and stray fields are refused", options, async () => {
@@ -226,7 +227,7 @@ test("when the research publishes, the new card carries the card it began from, 
   await zones.save(bob, { expectedRevision: published.evidence.revision, state: "published" }, bobsZone.id, published.evidence.id);
   const links = await authors.links(alice, card.id);
   assert.deepEqual(links.related.map((entry) => [entry.id, entry.relation, entry.creator]), [[published.evidence.id, "research_from_card", "Bob"]]);
-  assert.deepEqual(links.author, { id: "alice", name: "Alice Li" });
+  assert.deepEqual(links.author, { id: await authors.handleFor("alice"), name: "Alice Li" });
   const back = await authors.links(bob, published.evidence.id);
   assert.equal(back.origin.id, card.id, "and the new card points back to it");
 });

@@ -91,6 +91,27 @@ test("the selector counts an entity from five distinct readers and stores no rea
   assert.ok(!/奥希替尼|房颤合并/.test(serialised), "no text a reader wrote is in what the selector reads");
 });
 
+test("the selector reads entity keys and never a reader's words: the query selects no text, and a profile built before keys were stored is counted, not guessed at", options, async () => {
+  await fx.database.query("DELETE FROM evimed_frontier.user_profiles");
+  // Six readers who asked about apixaban, with the keys the profile builder stored; five more built before keys were stored.
+  for (let n = 0; n < 6; n += 1) await fx.reader([{ text: "apixaban 在房颤合并肾功能不全时怎么用", source: "question", memoryId: "", kind: "question" }]);
+  for (let n = 0; n < 5; n += 1) await fx.reader([{ text: "apixaban 的剂量调整", source: "question", memoryId: "", kind: "question" }], { tagged: false });
+  const queries = [];
+  const database = fx.database;
+  const original = database.query.bind(database);
+  database.query = (/** @type {any} */ sql, /** @type {any} */ ...rest) => { queries.push(String(sql)); return original(sql, ...rest); };
+  let signals;
+  try { signals = await fx.programme.gatherSignals(day); } finally { database.query = original; }
+  const profileQueries = queries.filter((sql) => sql.includes("user_profiles"));
+  assert.equal(profileQueries.length, 1, "the readers are read once");
+  assert.doesNotMatch(profileQueries[0], /'text'|->>\s*'text'|\btext\b/i, "no text column of a phrase is in the query");
+  assert.match(profileQueries[0], /'source'/);
+  assert.match(profileQueries[0], /'entityKeys'/);
+  const af = signals.zones["af-anticoagulation"].demand;
+  assert.deepEqual(af.entities.filter((entry) => entry.key === "drug:apixaban").map((entry) => entry.users), [6], "the five without keys are not counted: nobody's words are tagged here");
+  assert.equal(fx.programme.status().counters.demandProfilesWithoutKeys, 5, "and they are counted, until their next refresh");
+});
+
 test("the five signal classes are counts and ids: the feed, the readers, the follows, the stale cards, the observed errors", options, async () => {
   const keys = ["disease:atrial fibrillation", "drug:apixaban"];
   const covered = await fx.feedItem({ title: "Trial A", doi: "10.1056/covered", entityKeys: keys, score: 70 });

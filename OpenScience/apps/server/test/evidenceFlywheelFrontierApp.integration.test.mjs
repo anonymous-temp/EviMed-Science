@@ -53,9 +53,18 @@ test("a card published in a followed zone reaches the follower's inbox through t
   const live = (await zones.save(owner, { expectedRevision: zone.revision, state: "published" }, zone.id)).zone;
   const open = (await zones.setVisibility(owner, live.id, { visibility: "internet", expectedRevision: live.revision })).zone;
   await zones.act(follower, open.id, "follow", { expectedRevision: open.revision });
+  // The feed carries a researcher's card only from an established author: three published cards with a quotation the platform verified.
+  const standing = (await zones.save(owner, { title: "已核验", description: "d", background: "b" })).zone;
+  await zones.save(owner, { expectedRevision: standing.revision, state: "published" }, standing.id);
+  for (const name of ["a", "b", "c"]) await zones.saveEditorial(owner, {
+    title: `已核验 ${name}`, subtype: "academic", summary: "摘要", body: "正文", state: "published", limitations: "单中心", provenance: "p",
+    sources: [{ title: "Registry", url: "https://example.org/registry", excerpt: "x", documentText: "单中心结果显示出血较少。" }], content: { question: "q", answer: "a" },
+    claims: [{ claimId: "CLM-1", claimType: "direct", claim: "出血较少。", sourceIndexes: [1], supportQuote: "出血较少" }],
+  }, standing.id, null, true, "result");
   const card = (await zones.saveEditorial(owner, {
     title: "单中心房颤抗凝出血", subtype: "academic", summary: "摘要", body: "正文", state: "published", limitations: "单中心", provenance: "p",
     sources: [{ title: "Registry", url: "https://example.org/registry", excerpt: "x" }], content: { question: "q", answer: "单中心结果。" }, originality: "original_research",
+    lineage: { resultVersionId: `rv_${"5".repeat(64)}` },
   }, open.id, null, true, "result")).evidence;
 
   // The hook the server composed told the notifier; its worker delivers.

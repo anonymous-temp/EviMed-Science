@@ -90,11 +90,12 @@ async function zoneOf(owner, { kind = "user", title = unique("Zone ") } = /** @t
 async function cardOf(zone, owner, { ai = false, entityKeys = /** @type {string[]} */ ([]), url: sourceUrl = unique("https://example.org/src-"), claims = /** @type {any[]} */ ([]), extra = /** @type {any} */ ({}), origin = ai ? "model" : "owner" } = {}) {
   const body = {
     title: unique("Card "), subtype: "academic", summary: "Fewer strokes", body: "The trial reports fewer strokes.", limitations: "One trial.",
-    sources: [{ title: "The cited trial", url: sourceUrl, excerpt: SOURCE_TEXT, ...(ai || origin !== "owner" ? { documentText: SOURCE_TEXT, sha256: evidenceHash(SOURCE_TEXT), coverage: "abstract" } : {}) }],
+    // A card with claims has sources the platform read (a ✓ means it did): the account's own write cannot say so, its own writers can.
+    sources: [{ title: "The cited trial", url: sourceUrl, excerpt: SOURCE_TEXT, ...(ai || origin !== "owner" ? { documentText: SOURCE_TEXT, sha256: evidenceHash(SOURCE_TEXT), coverage: "abstract" } : claims.length ? { fetchedSha256: "e".repeat(64) } : {}) }],
     content: { question: "Does it prevent stroke?", answer: "Fewer strokes.", population: "Adults" },
     state: "published", entityKeys, claims, ...extra,
   };
-  if (!ai && origin === "owner") return (await service.save(owner, body, zone.id, null, true)).evidence;
+  if (!ai && origin === "owner" && !claims.length) return (await service.save(owner, body, zone.id, null, true)).evidence;
   const saved = (await service.saveEditorial(owner, { ...body, ...(ai ? { editorial: { author: AI, status: "review-pending", sourceCheckedAt: new Date().toISOString(), findings: [] } } : {}) }, zone.id, null, true, origin)).evidence;
   if (!ai) return saved;
   return (await service.saveEditorial(owner, { expectedRevision: saved.revision, editorial: { ...saved.editorial, status: "ai-reviewed", reviewer: { ...AI, name: "Reviewer" }, contentHash: evidenceContentHash(saved), findings: [], reviewedAt: new Date().toISOString() } }, zone.id, saved.id, false, origin)).evidence;
@@ -514,14 +515,15 @@ test("an upheld claim whose quotation is not in the source cannot stand as writt
   const calls = { n: 0 };
   const judge = async () => { calls.n += 1; return { outcome: "uphold", sourceIndex: 1, passage, reason: "原文支持这条结论的大意。" }; };
   let granted = false;
-  const budget = { tryAcquireSlot: () => ({ release: () => {} }), reserve: async () => (granted ? { granted: true } : { granted: false, reason: "exhausted" }) };
+  const budget = { reserveChallenge: async () => (granted ? { granted: true } : { granted: false, reason: "exhausted" }) };
   const { challenges } = build({ judge, budget });
   const card = await platformCardWithClaims();
   const filed = await challenges.submit(bob, card.id, { claimId: "CLM-1", reason: "引文找不到" });
-  assert.equal(await challenges.recheckTick(), "open", "the evidence programme's day is spent");
+  assert.equal(await challenges.recheckTick(), "open", "the day's judging budget is spent");
   assert.equal(calls.n, 0, "no model call without budget");
   const waiting = (await rows("SELECT attempts,last_error FROM evimed_frontier.evidence_challenges WHERE id=$1", [filed.challenge.id]))[0];
   assert.deepEqual([waiting.attempts, waiting.last_error], [0, "evidence_budget_exhausted"], "waiting for the budget is not an attempt at the judgement");
+  assert.equal((await challenges.listFor(bob, card.id)).items[0].waiting, true, "the reader is told it is queued (「已收到，排队复核」)");
   assert.equal((await build({ judge: null }).challenges.recheckTick()), "idle", "with no judge nothing is attempted");
   granted = true;
   await db.query("UPDATE evimed_frontier.evidence_challenges SET available_at=clock_timestamp() WHERE id=$1", [filed.challenge.id]);
@@ -529,6 +531,61 @@ test("an upheld claim whose quotation is not in the source cannot stand as writt
   const [entry] = (await changeLog.list({ cardId: card.id })).items;
   assert.equal(entry.category, "correction", "an uphold of a claim with no quotation in the source becomes an amendment");
   assert.equal((await service.detail(bob, card.zoneId, card.id)).evidence.claims[0].verification.mark, "✓");
+});
+
+/** A usage ledger double that books by run scope, and answers `purposeSpend` the way the real one filters: by account, project, purpose, window and run prefix. */
+function challengeLedger(/** @type {{ runId: string, cost: number, purpose?: string }[]} */ rowsSpent = []) {
+  return { rows: rowsSpent, async purposeSpend(/** @type {any} */ q) {
+    return this.rows.filter((row) => (row.purpose ?? "evidence") === q.purpose && (!q.runIdPrefix || row.runId.startsWith(q.runIdPrefix))).reduce((sum, row) => sum + row.cost, 0);
+  } };
+}
+
+test("challenges on a platform card are judged with the evidence programme OFF, under their own daily ceiling, and wait queued beyond it", options, async () => {
+  const { createEvidenceBudget } = await import("../src/evidenceBudget.mjs");
+  const ledger = challengeLedger([{ runId: "run_programme_1", cost: 400 }]);
+  // The programme is off (no switch, no slot); the programme's own money is not the challenges' to count.
+  const budget = createEvidenceBudget({ usageLedger: /** @type {any} */ (ledger), config: { evidenceProgrammeEnabled: false, evidenceChallengeDailyBudgetCny: 5, frontierTimeZone: "Asia/Shanghai" }, now });
+  assert.equal(budget.enabled, false);
+  const seen = /** @type {string[]} */ ([]);
+  const judge = async (/** @type {any} */ input) => { seen.push(input.scope); return { outcome: "uphold", sourceIndex: 1, passage: "Major bleeding occurred in 3 of 100 on the drug", reason: "原文支持。" }; };
+  const { challenges } = build({ judge, budget });
+  const first = await platformCardWithClaims();
+  const filedOne = await challenges.submit(bob, first.id, { claimId: "CLM-1", reason: "引文找不到" });
+  assert.equal(await challenges.recheckTick(), "resolved", "judged although the programme is off");
+  assert.ok(seen[0].startsWith("evch_"), "booked under the challenges' own run scope");
+  assert.equal((await challenges.listFor(bob, first.id)).items[0].waiting, false);
+  // The day's judging has spent its ceiling (the judgements are booked under `evch_` scopes; the programme's 400 yuan above did not count).
+  ledger.rows.push({ runId: seen[0], cost: 4.98 });
+  const second = await platformCardWithClaims();
+  const filedTwo = await challenges.submit(carol, second.id, { claimId: "CLM-1", reason: "引文找不到" });
+  assert.equal(await challenges.recheckTick(), "open", "one more judgement would not fit in what is left of the day");
+  assert.equal(seen.length, 1, "no second model call");
+  const waiting = (await challenges.listFor(carol, second.id)).items[0];
+  assert.deepEqual([waiting.state, waiting.waiting, waiting.id], ["open", true, filedTwo.challenge.id]);
+  const row = (await rows("SELECT attempts,last_error FROM evimed_frontier.evidence_challenges WHERE id=$1", [filedTwo.challenge.id]))[0];
+  assert.deepEqual([row.attempts, row.last_error], [0, "evidence_budget_estimate_exceeds_remaining"]);
+  const stats = challenges.stats();
+  assert.deepEqual([stats.judged, stats.waiting], [1, 1]);
+  assert.equal(budget.status().challenge.refused.estimate_exceeds_remaining, 1);
+  // Tomorrow's day is new, and a spent ceiling is not a verdict on the challenge.
+  ledger.rows.length = 0;
+  await db.query("UPDATE evimed_frontier.evidence_challenges SET available_at=clock_timestamp() WHERE id=$1", [filedTwo.challenge.id]);
+  assert.equal(await challenges.recheckTick(), "resolved");
+  assert.equal(filedOne.challenge.route, "platform_recheck");
+});
+
+test("with the programme ON its own day also has to have room, and a ledger that cannot be read admits no judgement", options, async () => {
+  const { createEvidenceBudget } = await import("../src/evidenceBudget.mjs");
+  const ledger = challengeLedger([{ runId: "run_programme_1", cost: 30 }]);
+  const config = { evidenceProgrammeEnabled: true, evidenceProgrammeDailyBudgetCny: 30, evidenceChallengeDailyBudgetCny: 5, frontierTimeZone: "Asia/Shanghai" };
+  const budget = createEvidenceBudget({ usageLedger: /** @type {any} */ (ledger), config, now });
+  assert.deepEqual((await budget.reserveChallenge(0.5)).reason, "programme_day", "the challenges' ceiling has room but the programme has spent its day");
+  ledger.rows.length = 0;
+  assert.equal((await budget.reserveChallenge(0.5)).granted, true);
+  const broken = createEvidenceBudget({ usageLedger: /** @type {any} */ ({ purposeSpend: async () => { throw new Error("database down"); } }), config, now });
+  assert.equal((await broken.reserveChallenge(0.5)).reason, "unmeasured");
+  const unbounded = createEvidenceBudget({ usageLedger: /** @type {any} */ (ledger), config: { ...config, evidenceProgrammeEnabled: false, evidenceChallengeDailyBudgetCny: 0 }, now });
+  assert.equal((await unbounded.reserveChallenge(1000)).granted, true, "0 is no ceiling");
 });
 
 test("a challenge on a user's card changes nothing: the verbatim check runs, its producer is told, and the producer's own later edit closes it", options, async () => {
@@ -582,7 +639,7 @@ test("the change log cannot be updated or deleted: the database refuses, and the
   await assert.rejects(db.query("DELETE FROM evimed_frontier.evidence_change_log WHERE id=$1", [entry.id]), { code: "55000" });
   await assert.rejects(db.query("TRUNCATE evimed_frontier.evidence_change_log"), { code: "55000" });
   assert.equal((await rows("SELECT summary_zh FROM evimed_frontier.evidence_change_log WHERE id=$1", [entry.id]))[0].summary_zh, entry.summary);
-  assert.deepEqual(Object.keys(log).sort(), ["append", "list", "stats"], "append, read and count — nothing that rewrites");
+  assert.deepEqual(Object.keys(log).sort(), ["append", "list", "recentForAuthor", "stats"], "append, two reads and count — nothing that rewrites");
   await assert.rejects(log.append({ zoneId: "z", cardId: "c", category: "rewritten", trigger: "scheduled_check" }), TypeError);
   await assert.rejects(log.append({ zoneId: "z", cardId: "c", category: "retired", trigger: "whim" }), TypeError);
   // Its categories and triggers are closed in the table too.

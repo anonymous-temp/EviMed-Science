@@ -75,7 +75,9 @@ function comparable(card) {
   return {
     title: card.title,
     claims: card.claims ?? [],
-    sources: (card.sources ?? []).map((/** @type {any} */ source) => [source.title, source.url ?? null, source.sha256 ?? sha256(String(source.documentText ?? source.excerpt ?? ""))]),
+    // A source is the text the platform read: a source with no public address keeps only the passages its claims quote, and its
+    // read receipt (`fetchedSha256`) is what still names the whole text (EvidenceZoneService, 2026-10-06).
+    sources: (card.sources ?? []).map((/** @type {any} */ source) => [source.title, source.url ?? null, source.fetchedSha256 ?? source.sha256 ?? sha256(String(source.documentText ?? source.excerpt ?? ""))]),
     journeyStage: card.journeyStage ?? null,
     producer: card.producer ?? null,
     authors: card.disclosure?.authors ?? [],

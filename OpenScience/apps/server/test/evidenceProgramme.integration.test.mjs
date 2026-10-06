@@ -130,6 +130,34 @@ test("`reserve` is a question, not a hold: it admits what the day can afford and
   assert.deepEqual([(await unbounded.budget()).state, await unbounded.remainingCny(), (await unbounded.reserve(1000)).granted], ["ok", null, true]);
 });
 
+test("the challenges' day is the ledger's `evch_` run scopes of the publisher's evidence rows, whatever the programme's switch, and the programme's day counts them too", options, async () => {
+  const day = new Date("2034-06-06T05:00:00.000Z");
+  const off = createEvidenceBudget({ usageLedger: ledger, config: programme({ evidenceProgrammeEnabled: false, evidenceChallengeDailyBudgetCny: 5 }), now: () => day });
+  const on = createEvidenceBudget({ usageLedger: ledger, config: programme({ evidenceChallengeDailyBudgetCny: 5 }), now: () => day });
+  await spend(PLATFORM_PUBLISHER_USER_ID, EVIDENCE_PROJECT_ID, "evidence", 2, day, { runId: "evch_ch_aaa_1" });
+  await spend(PLATFORM_PUBLISHER_USER_ID, EVIDENCE_PROJECT_ID, "evidence", 1.5, day, { runId: "evch_ch_bbb_1" });
+  // The programme's own calls, another purpose, another account and yesterday are none of the challenges' day.
+  await spend(PLATFORM_PUBLISHER_USER_ID, EVIDENCE_PROJECT_ID, "evidence", 100, day, { runId: "run_programme" });
+  await spend(PLATFORM_PUBLISHER_USER_ID, EVIDENCE_PROJECT_ID, "evidence", 100, day);
+  await spend(PLATFORM_PUBLISHER_USER_ID, EVIDENCE_PROJECT_ID, "frontier", 100, day, { runId: "evch_ch_ccc_1" });
+  await spend(researcher, EVIDENCE_PROJECT_ID, "evidence-upkeep", 100, day, { runId: "evch_ch_ddd_1" });
+  await spend(PLATFORM_PUBLISHER_USER_ID, EVIDENCE_PROJECT_ID, "evidence", 100, new Date("2034-06-05T05:00:00.000Z"), { runId: "evch_ch_eee_1" });
+  for (const budget of [off, on]) {
+    const reading = await budget.challengeBudget();
+    assert.deepEqual({ spentCny: reading.spentCny, budgetCny: reading.budgetCny, remainingCny: reading.remainingCny, state: reading.state }, { spentCny: 3.5, budgetCny: 5, remainingCny: 1.5, state: "ok" });
+  }
+  assert.equal((await off.reserveChallenge(0.05)).granted, true, "the programme is off and the challenge is judged");
+  assert.equal((await off.reserveChallenge(2)).reason, "estimate_exceeds_remaining");
+  assert.equal(off.status().counters.reads, 0, "the programme's own budget was never read while it is off");
+  await spend(PLATFORM_PUBLISHER_USER_ID, EVIDENCE_PROJECT_ID, "evidence", 2, day, { runId: "evch_ch_fff_1" });
+  assert.equal((await off.reserveChallenge(0.05)).reason, "exhausted");
+  const families = Object.fromEntries(evidenceBudgetMetricFamilies(programme(), off, null, null, await off.challengeBudget()).map((family) => [family.name, family.series]));
+  assert.deepEqual(families.open_science_evidence_challenge_budget_spent_cny, [{ value: 5.5 }]);
+  assert.deepEqual(families.open_science_evidence_challenge_budget_limit_cny, [{ value: 5 }]);
+  assert.equal(families.open_science_evidence_challenge_budget_refusals_total.find((entry) => entry.labels?.reason === "exhausted")?.value, 1);
+  assert.equal(evidenceBudgetMetricFamilies(programme(), off, null, null, null).some((family) => family.name.includes("challenge")), false, "nothing is exported where the upkeep is not composed");
+});
+
 test("a switch that is off reads no table, and a budget that cannot be read admits nothing", options, async () => {
   let reads = 0;
   const watching = { purposeSpend: async () => { reads += 1; return 0; } };

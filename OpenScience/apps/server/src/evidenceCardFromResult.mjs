@@ -37,6 +37,7 @@ import {
   evidenceCardClaims,
   evidencePublicExcerpt,
   evidenceValueSourceIssues,
+  verifyEvidenceCardClaims,
 } from "@evimed/domain";
 import { claimEvidenceSources, claimVerification } from "@evimed/domain/clinical-evidence";
 import { evidenceContract, evidenceStructuredContent } from "./evidenceCardContent.mjs";
@@ -397,6 +398,8 @@ export class EvidenceCardFromResult {
     const sources = [];
     /** @type {Map<string, number>} */
     const indexOf = new Map();
+    /** The preserved text of each source that has no public address (1-based), which the card does not keep: see below. @type {Map<number, string>} */
+    const unaddressed = new Map();
     /**
      * The card source for one bond of a claim, 1-based, or null when it cannot be cited.
      * @param {any} bond
@@ -424,6 +427,8 @@ export class EvidenceCardFromResult {
         ...(kept ? { documentText: kept } : {}),
       });
       indexOf.set(key, sources.length);
+      // The text the card does not keep: a source with no public address, or one too large to keep whole.
+      if (preserved && (!url || !kept)) unaddressed.set(sources.length, preserved);
       return sources.length;
     };
     /** Whether the bond's source is one this account may no longer read. @param {any} bond */
@@ -502,6 +507,26 @@ export class EvidenceCardFromResult {
     }
     // Every selected claim fell out: nothing is left to publish.
     if (!claims.length) throw refused("evidence_result_no_verified_claim");
+
+    // A source with no public address is the researcher's own document (an upload, a private record), and one too large is not kept whole:
+    // the card keeps none of the text (`EvidenceZoneService` drops the first) and shows only the passages its claims quote, found verbatim
+    // in the text the platform read and carried as the excerpt beside the read receipt — which is what keeps those claims ✓ without
+    // keeping the document.
+    for (const [index, preserved] of unaddressed) {
+      /** @type {string[]} */
+      const found = [];
+      for (const claim of claims) {
+        const quoted = claim.claimType === "synthesized" ? (claim.supportingSources ?? []).map((/** @type {any} */ bond) => [bond.sourceIndex, bond.supportQuote])
+          : claim.claimType === "direct" ? [[claim.sourceIndexes?.[0], claim.supportQuote]] : [];
+        for (const [at, quote] of quoted) {
+          if (at !== index || typeof quote !== "string" || !quote || found.includes(quote)) continue;
+          const checked = verifyEvidenceCardClaims({ claims: [{ claimId: "Q", claimType: "direct", claim: "q", sourceIndexes: [1], supportQuote: quote }],
+            sources: [{ title: "s", documentText: preserved, fetchedSha256: "0".repeat(64) }] });
+          if (checked.claims[0]?.status === "verified") found.push(quote);
+        }
+      }
+      if (found.length) sources[index - 1].excerpt = clip(found.join("\n\n"), 12000);
+    }
 
     const comparisons = this.#comparisons(matrix, claims, sourcesOfClaims(claims));
     const pico = matrix.questionPico && typeof matrix.questionPico === "object" ? matrix.questionPico : null;

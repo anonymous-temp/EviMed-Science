@@ -118,11 +118,17 @@ export async function programmeFixture({ url, label, config: over = {}, callMode
     await ledger.settleModel(userId, reserved.id, { usage: { cacheHitTokens: 0, cacheMissTokens: 10, completionTokens: 5 }, actualCost: cost, priced: true });
   }
 
-  /** A reader whose 「与你相关」 profile carries `phrases` (`{ text, source }`); the row is the only trace of them. */
-  async function reader(phrases) {
+  /**
+   * A reader whose 「与你相关」 profile carries `phrases` (`{ text, source }`); the row is the only trace of them. Each phrase is
+   * tagged with its entity keys through the vocabulary, as the profile builder stores them (2026-10-06): the selector reads the keys
+   * and never the text. `tagged: false` is a profile built before keys were stored.
+   */
+  async function reader(phrases, { tagged = true } = {}) {
     const id = `reader-${randomUUID().slice(0, 12)}`;
     await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,$1,'development')", [id]);
-    await database.query("INSERT INTO evimed_frontier.user_profiles(user_id, specialties, phrases) VALUES($1, '{}', $2::jsonb)", [id, JSON.stringify(phrases)]);
+    const stored = [];
+    for (const phrase of phrases) stored.push(tagged ? { ...phrase, entityKeys: await vocabulary.keysForText({ texts: [phrase.text] }) } : phrase);
+    await database.query("INSERT INTO evimed_frontier.user_profiles(user_id, specialties, phrases) VALUES($1, '{}', $2::jsonb)", [id, JSON.stringify(stored)]);
     return id;
   }
 

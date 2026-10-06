@@ -582,12 +582,17 @@ services:
       # A general lesson of an account's handbook may become a platform skill after an independent re-check (2026-10-06): the switch (off) and the candidates re-checked in a day.
       OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_ENABLED:
       OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PER_DAY:
+      # What the platform reads for one account that asks it to verify a card's sources, per rolling day.
+      OPEN_SCIENCE_EVIDENCE_VERIFY_READS_PER_DAY:
+      # The most the judging of readers' challenges may spend in a day.
+      OPEN_SCIENCE_EVIDENCE_CHALLENGE_DAILY_BUDGET_CNY:
       # Sharing memory inside the platform (evidence-flywheel plan 2026-10-05, F17-F19):
       # how long a share link lives and how often it may be used, how many other
       # accounts must keep a new author's pack before it counts for platform
       # learning and for how long, the daily ceiling on deliveries to other
-      # accounts, and the evidence-zone subscription (on with the frontier).
+      # accounts, and the evidence-zone subscription (each switch off until turned on).
       # Value-less: unset keeps config.mjs's defaults.
+      OPEN_SCIENCE_CAPSULE_SHARE_ENABLED:
       OPEN_SCIENCE_CAPSULE_SHARE_LINK_TTL_DAYS:
       OPEN_SCIENCE_CAPSULE_SHARE_LINK_MAX_USES:
       OPEN_SCIENCE_CAPSULE_SHARE_CORROBORATION_MIN_ACCOUNTS:

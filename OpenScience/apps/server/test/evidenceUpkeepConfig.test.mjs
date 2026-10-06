@@ -19,6 +19,8 @@ const LEVERS = [
   ["OPEN_SCIENCE_EVIDENCE_CHALLENGES_PER_DAY", "evidenceChallengesPerDay", 10],
   ["OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_CHECKS", "evidenceRetireAfterChecks", 6],
   ["OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_DAYS", "evidenceRetireAfterDays", 180],
+  ["OPEN_SCIENCE_EVIDENCE_VERIFY_READS_PER_DAY", "evidenceVerifyReadsPerDay", 60],
+  ["OPEN_SCIENCE_EVIDENCE_CHALLENGE_DAILY_BUDGET_CNY", "evidenceChallengeDailyBudgetCny", 5],
 ];
 
 /** loadConfig under exactly `env`. @param {Record<string, string>} env */
@@ -54,6 +56,8 @@ test("a value outside its range stops the start by the variable's name", () => {
     ["OPEN_SCIENCE_EVIDENCE_UPKEEP_INTERVAL_HOURS", "0"], ["OPEN_SCIENCE_EVIDENCE_UPKEEP_INTERVAL_HOURS", "721"],
     ["OPEN_SCIENCE_EVIDENCE_CHALLENGES_PER_DAY", "0"], ["OPEN_SCIENCE_EVIDENCE_CHALLENGES_PER_DAY", "many"],
     ["OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_CHECKS", "1"], ["OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_DAYS", "6"], ["OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_DAYS", "3651"],
+    ["OPEN_SCIENCE_EVIDENCE_VERIFY_READS_PER_DAY", "0"], ["OPEN_SCIENCE_EVIDENCE_VERIFY_READS_PER_DAY", "1001"],
+    ["OPEN_SCIENCE_EVIDENCE_CHALLENGE_DAILY_BUDGET_CNY", "-1"], ["OPEN_SCIENCE_EVIDENCE_CHALLENGE_DAILY_BUDGET_CNY", "1001"], ["OPEN_SCIENCE_EVIDENCE_CHALLENGE_DAILY_BUDGET_CNY", "plenty"],
   ]) assert.throws(() => configUnder({ [name]: value }), new RegExp(name), `${name}=${value}`);
 });
 
@@ -101,7 +105,7 @@ test("every loop's counter is exported as a metric family, labelled, and nothing
     ...evidenceChangeLogMetricFamilies(changeLog.stats()),
   ].map((family) => family.name);
   assert.deepEqual(names.sort(), [
-    "open_science_evidence_challenge_rechecks_total", "open_science_evidence_challenges_total", "open_science_evidence_change_log_entries_total",
+    "open_science_evidence_challenge_judging_total", "open_science_evidence_challenge_rechecks_total", "open_science_evidence_challenges_total", "open_science_evidence_change_log_entries_total",
     "open_science_evidence_upkeep_answers_total", "open_science_evidence_upkeep_cards_checked_total", "open_science_evidence_upkeep_downstream_total",
     "open_science_evidence_upkeep_labelled_total", "open_science_evidence_upkeep_source_feed_total",
   ]);

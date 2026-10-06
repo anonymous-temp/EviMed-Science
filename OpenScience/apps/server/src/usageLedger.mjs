@@ -777,10 +777,12 @@ export class UsageLedger {
    * module's own daily budget gates on (`evidenceBudget.mjs`, the frontier pipeline's `budget()`).
    * `until`, when given, closes the window (exclusive): a day's budget read at an injected instant — a test's, a replay's —
    * must not count rows written after that day. Absent, the window is open-ended, as the frontier pipeline's is.
-   * @param {{ userId: string, projectId: string, purpose: string, since: Date, until?: Date | null }} input
+   * `runIdPrefix` narrows the sum to the calls whose run id starts with it (the evidence challenges' judgements are booked under
+   * `evch_…` scopes, which is how their day is told from the programme's own).
+   * @param {{ userId: string, projectId: string, purpose: string, since: Date, until?: Date | null, runIdPrefix?: string | null }} input
    * @returns {Promise<number>} CNY, to 4 decimals
    */
-  async purposeSpend({ userId, projectId, purpose, since, until = null }) {
+  async purposeSpend({ userId, projectId, purpose, since, until = null, runIdPrefix = null }) {
     if (!isUsagePurpose(purpose)) throw new HttpError(400, "usage_payload_invalid", "Invalid usage purpose.");
     const at = instant(since, "spend window start");
     const end = until == null ? null : instant(until, "spend window end");
@@ -794,8 +796,9 @@ export class UsageLedger {
         ELSE 0 END), 0) AS spent
       FROM evimed_usage.model_requests m
       WHERE m.user_id=$1 AND m.project_id=$2 AND m.purpose=$3 AND m.created_at >= $4::timestamptz
-        AND ($5::timestamptz IS NULL OR m.created_at < $5::timestamptz)`,
-    [productId(userId, "user"), productId(projectId, "project"), purpose, at, end]);
+        AND ($5::timestamptz IS NULL OR m.created_at < $5::timestamptz)
+        AND ($6::text IS NULL OR left(coalesce(m.run_id, ''), length($6::text)) = $6::text)`,
+    [productId(userId, "user"), productId(projectId, "project"), purpose, at, end, runIdPrefix]);
     return Math.round(Number(result.rows[0]?.spent ?? 0) * 10_000) / 10_000;
   }
 

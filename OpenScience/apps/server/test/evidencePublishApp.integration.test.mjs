@@ -64,7 +64,7 @@ const call = async (role, method, pathname, body) => {
 
 test("the four routes need a session, the frontier audience and, to write, the CSRF token", options, async () => {
   const rv = `rv_${"a".repeat(64)}`;
-  for (const [method, pathname] of [["POST", `/api/results/${rv}/evidence-card`], ["POST", "/api/frontier/evidence/ec_0123456789abcdef/continue"], ["GET", "/api/frontier/evidence/ec_0123456789abcdef/links"], ["GET", `/api/frontier/authors/${accounts.author}`]]) {
+  for (const [method, pathname] of [["POST", `/api/results/${rv}/evidence-card`], ["POST", "/api/frontier/evidence/ec_0123456789abcdef/continue"], ["POST", "/api/frontier/evidence/ec_0123456789abcdef/verify-sources"], ["GET", "/api/frontier/evidence/ec_0123456789abcdef/links"], ["GET", `/api/frontier/authors/${accounts.author}`]]) {
     assert.equal((await fetch(`${context.base}${pathname}`, { method, ...(method === "POST" ? { body: "{}", headers: { "content-type": "application/json" } } : {}) })).status, 401, `${method} ${pathname}`);
     const outside = await call("outsider", method, pathname, method === "POST" ? {} : undefined);
     assert.equal(outside.status, 404, `${method} ${pathname}`);
@@ -73,6 +73,25 @@ test("the four routes need a session, the frontier audience and, to write, the C
   const { "x-open-science-csrf": _csrf, ...withoutCsrf } = context.sessions.reader;
   const forged = await fetch(`${context.base}/api/frontier/evidence/ec_0123456789abcdef/continue`, { method: "POST", headers: withoutCsrf, body: "{}" });
   assert.equal(forged.status, 403);
+});
+
+test("having the platform read a card's sources is the owner's: another account's card, and one that is not there, are the same 404, and a GET is not the route", options, async () => {
+  const zone = (await call("author", "POST", "/api/frontier/zones", { title: "Verify zone", description: "", background: "", requestId: "request-verify-zone" })).body.data.zone;
+  const card = (await call("author", "POST", `/api/frontier/zones/${zone.id}/evidence`, { title: "A trial", subtype: "academic", summary: "s", body: "b", limitations: "l", provenance: "p",
+    sources: [{ title: "Trial", excerpt: "Observed outcomes only the author typed." }], requestId: "request-verify-card" })).body.data.evidence;
+  for (const id of [card.id, "ec_0123456789abcdef"]) {
+    const refused = await call("reader", "POST", `/api/frontier/evidence/${id}/verify-sources`, {});
+    assert.equal(refused.status, 404, id);
+    assert.equal(refused.body.code, "evidence_not_found");
+  }
+  assert.equal((await call("author", "GET", `/api/frontier/evidence/${card.id}/verify-sources`)).status, 405);
+  // The owner's own request: a source with no address has nothing to read, and the answer says so for that source alone.
+  const own = await call("author", "POST", `/api/frontier/evidence/${card.id}/verify-sources`, {});
+  assert.equal(own.status, 200);
+  assert.deepEqual(own.body.data.sources, [{ sourceIndex: 1, status: "no_address" }]);
+  const scrape = await (await fetch(`${context.base}/api/ops/metrics`, { headers: { authorization: "Bearer test-only-metrics-token" } })).text();
+  assert.match(scrape, /^open_science_evidence_source_verifications_total\{outcome="nothing_to_read"\} 1$/m);
+  assert.match(scrape, /^open_science_evidence_source_reads_total\{outcome="no_address"\} 1$/m);
 });
 
 test("a result that is not there is not found, and a result route with a bad body is refused by name", options, async () => {
@@ -90,6 +109,7 @@ test("an author's page and a card's links as a reader gets them, and continuing 
   const zone = created.body.data.zone;
   // Nothing is published yet: there is no page, and the answer is the one an id that is no account gets.
   assert.equal((await call("reader", "GET", `/api/frontier/authors/${accounts.author}`)).body.code, "evidence_author_not_found");
+  assert.equal((await call("reader", "GET", `/api/frontier/authors/au_${"0".repeat(16)}`)).body.code, "evidence_author_not_found");
   await call("author", "PATCH", `/api/frontier/zones/${zone.id}`, { expectedRevision: zone.revision, state: "published" });
   const card = (await call("author", "POST", `/api/frontier/zones/${zone.id}/evidence`, {
     title: "Does the drug prevent stroke?", subtype: "academic", summary: "s", body: "b", limitations: "", requestId: "request-cocreate-card",
@@ -97,17 +117,21 @@ test("an author's page and a card's links as a reader gets them, and continuing 
   })).body.data.evidence;
   // A draft card has no links for anyone else, and is not on the page of an author whose zone is published.
   assert.equal((await call("reader", "GET", `/api/frontier/evidence/${card.id}/links`)).status, 404);
-  assert.deepEqual((await call("reader", "GET", `/api/frontier/authors/${accounts.author}`)).body.data.cards, []);
   await call("author", "PATCH", `/api/frontier/zones/${zone.id}/evidence/${card.id}`, { expectedRevision: card.revision, state: "published" });
-  const page = await call("reader", "GET", `/api/frontier/authors/${accounts.author}`);
+  // The author is named by an opaque handle, from the card's links on; the login name is not an address and is in no body.
+  const links = (await call("reader", "GET", `/api/frontier/evidence/${card.id}/links`)).body.data;
+  const handle = links.author.id;
+  assert.match(handle, /^au_[a-f0-9]{16}$/);
+  assert.deepEqual(links.author, { id: handle, name: accounts.author });
+  assert.equal((await call("reader", "GET", `/api/frontier/authors/${accounts.author}`)).status, 404, "the account id is not an address");
+  const page = await call("reader", "GET", `/api/frontier/authors/${handle}`);
   assert.equal(page.status, 200);
   assert.equal(page.headers.get("cache-control"), "private, no-store");
   assert.deepEqual(page.body.data.zones.map((entry) => entry.title), ["Stroke research"]);
   assert.deepEqual(page.body.data.cards.map((entry) => entry.id), [card.id]);
   assert.deepEqual(page.body.data.totals, { cards: 1, followers: 0, runsFromCards: 0 });
   assert.equal(page.body.data.author.platform, false);
-  const links = (await call("reader", "GET", `/api/frontier/evidence/${card.id}/links`)).body.data;
-  assert.deepEqual(links.author, { id: accounts.author, name: accounts.author });
+  assert.equal(page.body.data.author.id, handle, "the page names its author by the handle too");
   assert.deepEqual(links.related, []);
 
   // 用这张卡继续研究: a new project of the reader's, the card's source in its knowledge base, the question unsent.

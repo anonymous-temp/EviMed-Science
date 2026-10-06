@@ -468,6 +468,11 @@ function evidenceCitationGiftSettings(overrides) {
  * - `OPEN_SCIENCE_EVIDENCE_CHALLENGES_PER_DAY` (10): the challenges one reader may file in a day; each one on a platform card costs a model call.
  * - `OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_CHECKS` (6) and `OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_DAYS` (180): the exit rule of §2.5 for an AI-kept card —
  *   this many consecutive checks without a matching new study, over at least this many days, and nobody following its zone or writing on it.
+ * - `OPEN_SCIENCE_EVIDENCE_CHALLENGE_DAILY_BUDGET_CNY` (5): the most the platform's judging of readers' challenges may spend in a day, across every
+ *   reader (`evidenceBudget.mjs`, counted from the usage ledger by the judgements' own run scopes). Beyond it a challenge waits, and the reader is told
+ *   so (「已收到，排队复核」); 0 is no ceiling. It is the challenges' own day: judging works with the upkeep on, whether the evidence programme is on or off.
+ * - `OPEN_SCIENCE_EVIDENCE_VERIFY_READS_PER_DAY` (60): the sources the platform reads for one account in a rolling day when the account asks it to
+ *   verify a card's sources (`evidenceSourceVerification.mjs`). Not part of the upkeep: that request is the frontier's and works with the upkeep off.
  *
  * @param {Record<string, any>} overrides
  */
@@ -479,6 +484,13 @@ function evidenceUpkeepSettings(overrides) {
     if (!Number.isSafeInteger(value) || value < min || value > max) throw new Error(`${name} must be a whole number from ${min} to ${max}, got ${JSON.stringify(raw)}.`);
     return value;
   };
+  /** @param {string} key @param {string} name @param {number} fallback @param {number} min @param {number} max */
+  const cny = (key, name, fallback, min, max) => {
+    const raw = overrides[key] !== undefined ? overrides[key] : process.env[name];
+    const value = raw == null || raw === "" ? fallback : Number(raw);
+    if (!Number.isFinite(value) || value < min || value > max) throw new Error(`${name} must be a number from ${min} to ${max}, got ${JSON.stringify(raw)}.`);
+    return Math.round(value * 100) / 100;
+  };
   return {
     evidenceUpkeepEnabled: overrides.evidenceUpkeepEnabled ?? boolEnv("OPEN_SCIENCE_EVIDENCE_UPKEEP_ENABLED", false),
     evidenceUpkeepBatch: whole("evidenceUpkeepBatch", "OPEN_SCIENCE_EVIDENCE_UPKEEP_BATCH", 20, 1, 200),
@@ -486,6 +498,8 @@ function evidenceUpkeepSettings(overrides) {
     evidenceChallengesPerDay: whole("evidenceChallengesPerDay", "OPEN_SCIENCE_EVIDENCE_CHALLENGES_PER_DAY", 10, 1, 100),
     evidenceRetireAfterChecks: whole("evidenceRetireAfterChecks", "OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_CHECKS", 6, 2, 1000),
     evidenceRetireAfterDays: whole("evidenceRetireAfterDays", "OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_DAYS", 180, 7, 3650),
+    evidenceVerifyReadsPerDay: whole("evidenceVerifyReadsPerDay", "OPEN_SCIENCE_EVIDENCE_VERIFY_READS_PER_DAY", 60, 1, 1000),
+    evidenceChallengeDailyBudgetCny: cny("evidenceChallengeDailyBudgetCny", "OPEN_SCIENCE_EVIDENCE_CHALLENGE_DAILY_BUDGET_CNY", 5, 0, 1000),
   };
 }
 
@@ -542,6 +556,10 @@ function evidenceFlywheelSettings(overrides) {
  * the discipline of the frontier's: passed value-less by compose, and a value outside its range stops the process at
  * start with the variable's name.
  *
+ * - Every line has its own switch, and each is off until an operator turns it on (2026-10-06): `OPEN_SCIENCE_CAPSULE_SHARE_ENABLED` for sharing a
+ *   capsule with other accounts (deliveries, links, take-downs, the Agent Skills method pack: off, those routes answer 404
+ *   `capsule_share_not_enabled`, nothing of them is composed or read, and the share panel is hidden through `features.capsuleShare`), and
+ *   `OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_ENABLED` for subscribing a project to an evidence zone, which also needs the frontier on.
  * - A share link lives `OPEN_SCIENCE_CAPSULE_SHARE_LINK_TTL_DAYS` days (30) and is used at most
  *   `OPEN_SCIENCE_CAPSULE_SHARE_LINK_MAX_USES` times (20): both are the default and the ceiling an owner may ask for, because
  *   a link that never ends is a pack nobody can take back without remembering it exists.
@@ -550,7 +568,7 @@ function evidenceFlywheelSettings(overrides) {
  *   without disabling it. Both are the write-side defence of plan §7: nothing is filtered at reading time.
  * - An account may deliver to others at most `OPEN_SCIENCE_CAPSULE_SHARE_DELIVERIES_PER_DAY` times in a day (50): a limit that
  *   protects other people's inboxes, not an opinion about what is shared.
- * - Subscribing a project to an evidence zone follows the frontier by default (`OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_ENABLED`):
+ * - Subscribing a project to an evidence zone is off by default and needs the frontier as well (`OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_ENABLED`):
  *   with the frontier off there is no zone to read. A project holds at most
  *   `OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_MAX_PER_PROJECT` subscriptions (5) and a recall carries at most
  *   `OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_MAX_ITEMS` cards of them (6).
@@ -569,12 +587,13 @@ function memorySharingSettings(overrides, frontierEnabled) {
     return number;
   };
   return {
+    capsuleShareEnabled: overrides.capsuleShareEnabled ?? boolEnv("OPEN_SCIENCE_CAPSULE_SHARE_ENABLED", false),
     capsuleShareLinkTtlDays: integer("capsuleShareLinkTtlDays", "OPEN_SCIENCE_CAPSULE_SHARE_LINK_TTL_DAYS", 30, 1, 365),
     capsuleShareLinkMaxUses: integer("capsuleShareLinkMaxUses", "OPEN_SCIENCE_CAPSULE_SHARE_LINK_MAX_USES", 20, 1, 1000),
     capsuleShareCorroborationMinAccounts: integer("capsuleShareCorroborationMinAccounts", "OPEN_SCIENCE_CAPSULE_SHARE_CORROBORATION_MIN_ACCOUNTS", 3, 1, 100),
     capsuleShareCorroborationKeptDays: integer("capsuleShareCorroborationKeptDays", "OPEN_SCIENCE_CAPSULE_SHARE_CORROBORATION_KEPT_DAYS", 14, 1, 365),
     capsuleShareDeliveriesPerDay: integer("capsuleShareDeliveriesPerDay", "OPEN_SCIENCE_CAPSULE_SHARE_DELIVERIES_PER_DAY", 50, 1, 1000),
-    evidenceZoneSubscriptionEnabled: overrides.evidenceZoneSubscriptionEnabled ?? boolEnv("OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_ENABLED", frontierEnabled),
+    evidenceZoneSubscriptionEnabled: frontierEnabled && (overrides.evidenceZoneSubscriptionEnabled ?? boolEnv("OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_ENABLED", false)),
     evidenceZoneSubscriptionMaxPerProject: integer("evidenceZoneSubscriptionMaxPerProject", "OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_MAX_PER_PROJECT", 5, 1, 20),
     evidenceZoneSubscriptionMaxItems: integer("evidenceZoneSubscriptionMaxItems", "OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_MAX_ITEMS", 6, 1, 30),
   };

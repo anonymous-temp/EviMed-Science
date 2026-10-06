@@ -8,9 +8,9 @@ import {
   evidenceHash,
   evidenceContentHash,
   evidenceSourceFingerprint,
-  evidencePublicExcerpt,
   evidencePublicationStatus,
 } from "./evidenceCardContent.mjs";
+import { retainedSource } from "./evidenceSourceReader.mjs";
 import { migrateEvidenceZones } from "./evidenceZonePersistence.mjs";
 import { frontierProviderUnavailable, FRONTIER_PROVIDER_RETRY_MS, FRONTIER_PROVIDER_REFUSED_WAIT_MS } from "./frontierPipeline.mjs";
 
@@ -652,6 +652,10 @@ export class EvidenceEditorial {
       );
     const user = { id: zone.user_id };
     const upkeep = this.startUpkeep(zone, job);
+    // An account's own zone is paid for by its owner, so whether they can pay comes before anything that costs a network read (2026-10-06
+    // review: the source was read first and the allowance asked at the model step, so an owner with no allowance had every source of the
+    // zone re-read each time the job was set aside and came back). Official zones are the platform's and are not asked.
+    if (!upkeep.official) await this.requireAllowance(upkeep);
     const roleAccounts = (
       await this.database.query(
         "SELECT id,name,auth_type FROM evimed_control.users WHERE id=ANY($1::text[])",
@@ -918,25 +922,7 @@ export class EvidenceEditorial {
         continue;
       }
       await this.renew(job);
-      const excerpt = evidencePublicExcerpt(
-        documentText,
-        source.excerpt ?? null,
-      );
-      sources.push({
-        ...source,
-        excerpt,
-        documentText,
-        sha256: evidenceHash(documentText),
-        fetchedSha256: result.receipt?.sha256 ?? evidenceHash(documentText),
-        checkedAt: this.now().toISOString(),
-        // Explicit null clears a previously verified notice; absent metadata does not.
-        publicationStatus: evidencePublicationStatus(result.publicationStatus),
-        coverage:
-          (result.receipt?.truncated || String(result.text ?? "").length > 2000000) ? "excerpt" : result.coverage ??
-          (source.coverage === "full-text" && !result.receipt?.truncated
-            ? "full-text"
-            : (source.coverage ?? "excerpt")),
-      });
+      sources.push(retainedSource(source, result, documentText, this.now().toISOString()));
       this.counters.checked++;
     }
     // Unread sources retain their original position, document text and check date.

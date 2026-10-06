@@ -90,6 +90,10 @@ const officialZone = async () => {
   return (await service.saveEditorial(publisher, { expectedRevision: zone.revision, state: "published" }, zone.id, null, false, "programme")).zone;
 };
 const saveCard = (zone, fields = {}, user = alice) => service.save(user, { ...cardInput, ...fields }, zone.id, null, true).then((result) => result.evidence);
+// ✓ means the platform read the source: its own writers keep the receipt of the bytes it read beside the excerpt, and a writer's
+// session cannot send one. `saveCard` is the account's own write; this is a card whose sources the platform has read.
+const PLATFORM_READ = [{ ...cardInput.sources[0], fetchedSha256: "f".repeat(64) }];
+const saveReadCard = (zone, fields = {}, user = alice) => service.saveEditorial(user, { ...cardInput, sources: PLATFORM_READ, ...fields }, zone.id, null, true, "result").then((result) => result.evidence);
 const metric = (name, labels = {}) => {
   const family = evidenceCardMetricFamilies({ cardsWithoutProducer: 0 }).find((entry) => entry.name === name);
   const series = family?.series.find((entry) => Object.entries(labels).every(([key, value]) => entry.labels?.[key] === value));
@@ -98,7 +102,12 @@ const metric = (name, labels = {}) => {
 
 test("a card built from claims returns each claim with ✓ or ⚠ and both views, the numbers computed by code", options, async () => {
   const zone = await makeZone();
-  const card = await saveCard(zone);
+  // The same card as the account itself writes it has only an excerpt it typed, which the platform has not read.
+  const typed = await saveCard(zone, { requestId: "typed-excerpt-card" });
+  assert.deepEqual(typed.claims.map((claim) => claim.verification.status), ["author_excerpt_only", "source_unavailable"]);
+  assert.deepEqual(typed.claims.map((claim) => claim.verification.mark), ["⚠", "⚠"]);
+  assert.equal(typed.claimVerification.verified, 0);
+  const card = await saveReadCard(zone);
   assert.equal(card.claims.length, 2);
   assert.equal(card.claims[0].verification.status, "verified");
   assert.equal(card.claims[0].verification.mark, "✓");
@@ -311,6 +320,52 @@ test("lineage links a card to what it grew from, and only the platform's writers
   assert.equal(edited.revision, stamped.revision + 1);
 });
 
+test("a session may link a card only to a card of its own (previous) or a published card it can read (origin); the platform's writers stamp their own", options, async () => {
+  const mine = await makeZone();
+  const theirs = await makeZone(bob);
+  const hidden = await makeZone(bob, { published: false });
+  const own = await saveCard(mine, { requestId: "lineage-own-card" });
+  const bobs = await saveCard(theirs, { requestId: "lineage-bob-card", state: "published" }, bob);
+  const bobDraft = await saveCard(hidden, { requestId: "lineage-bob-draft", state: "draft" }, bob);
+  // Another author's card is not a card this one follows: the field is refused by name, whatever the id.
+  await assert.rejects(saveCard(mine, { lineage: { previousCardId: bobs.id } }), { code: "evidence_lineage_previous_not_own" });
+  await assert.rejects(saveCard(mine, { lineage: { previousCardId: "ec_0123456789abcdef" } }), { code: "evidence_lineage_previous_not_own" });
+  assert.equal((await saveCard(mine, { lineage: { previousCardId: own.id } })).lineage.previousCardId, own.id, "the writer's own card");
+  // An origin is a published card the writer can read: another author's published card, not their draft nor a card that is not there.
+  assert.equal((await saveCard(mine, { requestId: "lineage-origin-ok", lineage: { originCardId: bobs.id } })).lineage.originCardId, bobs.id);
+  await assert.rejects(saveCard(mine, { lineage: { originCardId: bobDraft.id } }), { code: "evidence_lineage_origin_unreadable" });
+  await assert.rejects(saveCard(mine, { lineage: { originCardId: "ec_0123456789abcdef" } }), { code: "evidence_lineage_origin_unreadable" });
+  // An edit of a card that already carries a link does not ask again (the card is what it was), and a link may be changed to one that is allowed.
+  const linked = await saveCard(mine, { requestId: "lineage-keep", lineage: { originCardId: bobs.id } });
+  assert.equal((await service.save(alice, { expectedRevision: linked.revision, summary: "Edited" }, mine.id, linked.id)).evidence.lineage.originCardId, bobs.id);
+  await assert.rejects(service.save(alice, { expectedRevision: linked.revision + 1, lineage: { originCardId: bobs.id, previousCardId: bobs.id } }, mine.id, linked.id), { code: "evidence_lineage_previous_not_own" });
+  // The result publisher is the platform's writer: it stamps the earlier card of the researcher and the card a session began from, and is not asked.
+  const stamped = (await service.saveEditorial(alice, { ...cardInput, requestId: "lineage-platform", lineage: { previousCardId: own.id, originCardId: bobs.id } }, mine.id, null, true, "result")).evidence;
+  assert.deepEqual(stamped.lineage, { previousCardId: own.id, originCardId: bobs.id });
+});
+
+test("the platform's own producer name is refused for any writer that is not the publisher: typed, spelled differently, or the account's own default", options, async () => {
+  const zone = await makeZone();
+  for (const name of ["EviMed 证据中心", "evimed 证据中心", "ＥｖｉＭｅｄ证据中心", "EviMed\u200b证据中心"]) {
+    await assert.rejects(saveCard(zone, { requestId: `reserved-${name.length}-${name.charCodeAt(0)}`, producer: { kind: "user", name, relation: "none" } }), { code: "evidence_producer_name_reserved", status: 400 }, JSON.stringify(name));
+  }
+  // The default producer is the owner's display name: an account that came to be named so (before the registration check, or by an
+  // identity provider) cannot sign a card with it either.
+  await db.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES('namesake','EviMed 证据中心','development') ON CONFLICT DO NOTHING");
+  const namesake = await makeZone({ id: "namesake" });
+  await assert.rejects(saveCard(namesake, { requestId: "reserved-default" }, { id: "namesake" }), { code: "evidence_producer_name_reserved" });
+  assert.equal(metric("open_science_evidence_cards_without_producer"), 0, "a refused card left nothing behind");
+  // Other names, including one that merely contains it, are the writer's own.
+  assert.equal((await saveCard(zone, { requestId: "reserved-ok", producer: { kind: "user", name: "EviMed 证据中心 研究组", relation: "none" } })).producer.name, "EviMed 证据中心 研究组");
+  // The platform's own writers sign as it: the publisher in an official zone, by its default and by name.
+  const official = await officialZone();
+  assert.equal((await service.saveEditorial(publisher, { ...cardInput, requestId: "reserved-platform" }, official.id, null, true, "programme")).evidence.producer.name, "EviMed 证据中心");
+  assert.equal((await service.saveEditorial(publisher, { ...cardInput, requestId: "reserved-platform-2", producer: { kind: "platform", name: "evimed 证据中心", relation: "none" } }, official.id, null, true, "import")).evidence.producer.kind, "platform");
+  // A card that already carries the producer is not asked again when its other fields are edited.
+  const kept = await service.saveEditorial(publisher, { ...cardInput, requestId: "reserved-keep" }, official.id, null, true, "programme");
+  assert.equal((await service.saveEditorial(publisher, { expectedRevision: kept.evidence.revision, summary: "Edited" }, official.id, kept.evidence.id, false, "model")).evidence.summary, "Edited");
+});
+
 test("entity keys are filled by the injected resolver from the card's words and identifiers, and a resolver that fails leaves the card as written", options, async () => {
   const zone = await makeZone();
   resolver.answer = ["drug:warfarin", "disease:atrial fibrillation"];
@@ -346,7 +401,7 @@ test("the operator import keeps its reach into the nominated owner's zone until 
 test("the card's new fields are in every revision snapshot", options, async () => {
   const zone = await makeZone();
   resolver.answer = ["drug:warfarin"];
-  const card = await saveCard(zone, { originality: "original_research", journeyStage: { key: "follow-up", label: "随访" }, publicView: { oneLineAnswer: { text: "一句话", claimIds: ["CLM-001"] } } });
+  const card = await saveReadCard(zone, { originality: "original_research", journeyStage: { key: "follow-up", label: "随访" }, publicView: { oneLineAnswer: { text: "一句话", claimIds: ["CLM-001"] } } });
   await service.save(alice, { expectedRevision: card.revision, summary: "Second" }, zone.id, card.id);
   const rows = (await db.query("SELECT revision,snapshot FROM evimed_frontier.evidence_card_revisions WHERE card_id=$1 ORDER BY revision", [card.id])).rows;
   assert.equal(rows.length, 2);
@@ -488,7 +543,7 @@ test("over HTTP a product zone is the owner's to make, an official one is not, a
     assert.equal(refused.body.error.code, "evidence_producer_required");
     const card = await call("POST", `/api/frontier/zones/${zone.id}/evidence`, "alice", { ...cardInput, ...productFields });
     assert.equal(card.status, 200);
-    assert.equal(card.body.data.evidence.claims[0].verification.mark, "✓");
+    assert.equal(card.body.data.evidence.claims[0].verification.status, "author_excerpt_only", "over HTTP the excerpt is the author's, not the platform's reading");
     assert.equal(card.body.data.evidence.claims[0].text, cardInput.claims[0].claim);
     assert.equal(card.body.data.evidence.views.clinical.rows[0].absoluteEffect.control, 120);
     // The default is the platform's audience until the owner chooses; the choice is a route of its own.

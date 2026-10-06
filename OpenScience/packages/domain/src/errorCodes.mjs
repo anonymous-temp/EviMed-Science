@@ -1540,6 +1540,10 @@ export const EVIDENCE_PUBLISH_ERROR_MESSAGES_ZH = Object.freeze({
   evidence_continue_unavailable: '这个部署没有开通知识库，不能从证据卡带着来源继续研究。',
   evidence_continue_request_invalid: '这次继续研究的内容不对，没有建项目也没有存入来源。',
   evidence_author_not_found: '没有这位作者公开的内容。',
+  evidence_author_handle_unavailable: '暂时没能生成这位作者的公开地址，请稍后再试。',
+  evidence_lineage_previous_not_own: '这张卡只能接在你自己专区里的另一张卡之后；要引用别人的卡，请把它设为“研究始于”。',
+  evidence_lineage_origin_unreadable: '“研究始于”只能指向一张已发布、而且你有权阅读的卡片。',
+  evidence_source_verification_rate_limited: '你今天让平台读取来源的次数已达上限，明天再试；已经读取过的来源不会再占用次数。',
 })
 
 /**
@@ -1602,6 +1606,7 @@ export const EVIDENCE_FLYWHEEL_ERROR_CODES = Object.freeze([
  * refusing one answer alike, so a name cannot be probed.
  */
 export const CAPSULE_SHARE_ERROR_CODES = Object.freeze([
+  'capsule_share_not_enabled',
   'capsule_share_not_text_only',
   'capsule_share_not_own',
   'capsule_share_not_found',
@@ -2313,6 +2318,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   capsule_password_required: '这个胶囊需要发送者设定的口令才能打开。',
   // Sharing inside the platform (`capsuleTransferService.mjs`, `capsuleShareLinks.mjs`): text only, the author's own
   // pack, and what the recipient hears when a share can no longer be used.
+  capsule_share_not_enabled: '这个部署没有开放胶囊分享。',
   capsule_share_not_text_only: '这个胶囊里含有文字以外的内容，平台不接收：用户之间只分享纯文字的方法，不分享脚本、附件或工具。',
   capsule_share_not_own: '只能分享你自己的胶囊；收到的胶囊不能再转发。',
   capsule_share_not_found: '这个分享不存在，或已经不能用了。',

@@ -106,7 +106,7 @@ test("a published official card can be cited by reference; an unpublished one ca
   const { project } = await carded();
   const zone = (await zones.saveEditorial({ id: "publisher" }, { title: "官方专区", description: "", background: "", kind: "official", state: "published" }, null, null, false, "programme")).zone;
   const make = async (/** @type {string} */ state, /** @type {string} */ requestId) => (await zones.saveEditorial({ id: "publisher" }, {
-    title: "官方卡", subtype: "knowledge", summary: "s", body: "- 官方结论", sources: [{ title: "指南", url: "https://example.org/g", excerpt: "指南原文：每周一次 2.5 mg。" }],
+    title: "官方卡", subtype: "knowledge", summary: "s", body: "- 官方结论", sources: [{ title: "指南", url: "https://example.org/g", excerpt: "指南原文：每周一次 2.5 mg。", fetchedSha256: "b".repeat(64) }],
     claims: [{ claimId: "g1", claimType: "direct", claim: "指南推荐每周一次 2.5 mg。", sourceIndexes: [1], supportQuote: "每周一次 2.5 mg" }],
     state, requestId }, zone.id, null, true, "programme")).evidence;
   const published = await make("published", "official-card-0001");

@@ -65,6 +65,18 @@ const userZone = async (user, { internet = false, kind, title = "User zone", pub
 };
 const officialCard = (zone, title, extra = {}, origin = "programme") => zones.saveEditorial(publisher, cardInput(title, extra), zone.id, null, true, /** @type {any} */ (origin)).then((result) => result.evidence);
 const userCard = (user, zone, title, extra = {}, origin = "result") => zones.saveEditorial(user, cardInput(title, extra), zone.id, null, true, /** @type {any} */ (origin)).then((result) => result.evidence);
+const RESULT = (/** @type {string} */ id) => ({ lineage: { resultVersionId: `rv_${id.repeat(64).slice(0, 64)}` } });
+/** An author the platform has checked: three published cards, each with a quotation found in text the platform read (a platform-only zone: none of them is in the feed). */
+const establish = async (/** @type {any} */ user, title = "Standing zone") => {
+  const standing = await userZone(user, { title });
+  for (const name of ["a", "b", "c"]) {
+    await zones.saveEditorial(user, cardInput(`${title} ${name}`, {
+      sources: [{ title: "The trial", url: "https://doi.org/10.1000/Stroke.1", excerpt: TEXT, documentText: TEXT, coverage: "full-text" }],
+      claims: [{ claimId: "CLM-1", claimType: "direct", claim: "Strokes were rarer.", sourceIndexes: [1], supportQuote: "7 had a stroke" }],
+    }), standing.id, null, true, "result");
+  }
+  return standing;
+};
 const titles = async (query) => (await feed.page(query)).page.items.map((item) => item.title);
 
 test("an official zone's cards and a researcher's original research in an open zone are in the feed; nothing else is", options, async () => {
@@ -76,11 +88,13 @@ test("an official zone's cards and a researcher's original research in an open z
   await officialCard(official, "Official brief", { originality: "brief" });
   await officialCard(official, "Official recalculation", { originality: "recalculation", claims: [{ claimId: "CALC-1", claimType: "calculated", claim: "复算得到的合并效应值为 0.82。", calculation: { engine: "evolution_recalculation", method: "meta-pool@abc", receiptId: "evolution-recalculation-receipt-0123456789abcdef0123456789abcdef", inputs: [{ identifier: "doi:10.1000/meta.2026.1" }], valuePath: "recalculated.value", machineValue: 0.82, format: "f2" } }] });
   await officialCard(official, "Official draft", { state: "draft" });
-  await userCard(alice, open, "Original research of Alice", { originality: "original_research" });
-  await userCard(alice, open, "Alice's synthesis in an open zone", { originality: "synthesis" });
-  await userCard(alice, closed, "Original research in a platform-only zone", { originality: "original_research" });
-  await userCard(alice, product, "A product card", { ...productFields, originality: "original_research" }, "geo");
-  await userCard(alice, draftZone, "A card in an unpublished zone", { originality: "original_research" });
+  await establish(alice);
+  await userCard(alice, open, "Original research of Alice", { originality: "original_research", ...RESULT("1") });
+  await userCard(alice, open, "Alice's own claim of original research", { originality: "original_research" });
+  await userCard(alice, closed, "Original research in a platform-only zone", { originality: "original_research", ...RESULT("2") });
+  await userCard(alice, product, "A product card", { ...productFields, originality: "original_research", ...RESULT("3") }, "geo");
+  await userCard(alice, draftZone, "A card in an unpublished zone", { originality: "original_research", ...RESULT("4") });
+  // What the author says of a card decides nothing: only a card published from a research result, by an established author, enters.
   assert.deepEqual((await titles()).sort(), ["Official brief", "Official recalculation", "Original research of Alice"].sort());
   const { page } = await feed.page();
   const byTitle = Object.fromEntries(page.items.map((item) => [item.title, item]));

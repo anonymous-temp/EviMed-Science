@@ -7,7 +7,8 @@ import {
 } from "../src/evidenceChallenges.mjs";
 
 const TEXT = "In this randomized trial, 7 of 100 adults on the drug had a stroke. Major bleeding occurred in 3 of 100 on the drug.";
-const sources = [{ title: "Trial", url: "https://example.org/t", excerpt: TEXT }, { title: "Second", url: "https://example.org/s", excerpt: "A second source says nothing about stroke." }];
+// A platform card's sources: what the platform read, kept beside the receipt of the bytes (`fetchedSha256`) — a passage counts only there.
+const sources = [{ title: "Trial", url: "https://example.org/t", excerpt: TEXT, fetchedSha256: "a".repeat(64) }, { title: "Second", url: "https://example.org/s", excerpt: "A second source says nothing about stroke.", fetchedSha256: "b".repeat(64) }];
 const direct = { claimId: "CLM-1", claimType: "direct", claim: "Bleeding occurred in 9 of 100.", sourceIndexes: [1], supportQuote: "Major bleeding occurred in 9 of 100" };
 const PASSAGE = "Major bleeding occurred in 3 of 100 on the drug";
 const answer = (/** @type {any} */ over = {}) => ({ outcome: "amend", reason: "原文是 3/100。", sourceIndex: 1, passage: PASSAGE, amendedClaim: "Bleeding occurred in 3 of 100.", ...over });
@@ -15,6 +16,7 @@ const judged = (/** @type {any} */ raw, deterministic = "quote_not_found", claim
 
 test("a passage counts only if the source preserved it, by the comparison the reader's ✓ uses", () => {
   assert.equal(passageIsInSource(sources, 1, PASSAGE), true);
+  assert.equal(passageIsInSource(sources.map(({ fetchedSha256: _read, ...typed }) => typed), 1, PASSAGE), false, "an excerpt the platform did not read is not a source it preserved");
   assert.equal(passageIsInSource(sources, 2, PASSAGE), false, "another source does not hold it");
   assert.equal(passageIsInSource(sources, 1, "Major bleeding occurred in 9 of 100 on the drug"), false);
 });

@@ -203,6 +203,22 @@ CREATE TABLE IF NOT EXISTS evimed_frontier.evidence_topic_request_votes (
  created_at timestamptz NOT NULL DEFAULT clock_timestamp(), PRIMARY KEY(request_id,user_id)
 );
 CREATE INDEX IF NOT EXISTS evidence_topic_request_votes_user_idx ON evimed_frontier.evidence_topic_request_votes(user_id,created_at DESC);
+-- A source with no public address keeps none of its text (2026-10-06 review): a researcher's own uploaded document could reach a card as a
+-- source's retained text, and a card is readable by others. The writers no longer store it (EvidenceZoneService); this takes it off the
+-- rows an earlier release wrote, cards and the revision snapshots that copy them, and says the source is no longer full text. Idempotent:
+-- a row with nothing to remove is not touched, and the next start finds none.
+UPDATE evimed_frontier.evidence_cards c SET sources=(
+    SELECT jsonb_agg(CASE WHEN COALESCE(e.s->>'url','')='' AND e.s ? 'documentText'
+      THEN (e.s - 'documentText') || CASE WHEN e.s->>'coverage'='full-text' THEN '{"coverage":"excerpt"}'::jsonb ELSE '{}'::jsonb END ELSE e.s END ORDER BY e.ord)
+    FROM jsonb_array_elements(c.sources) WITH ORDINALITY AS e(s,ord))
+  WHERE jsonb_typeof(c.sources)='array'
+    AND EXISTS(SELECT 1 FROM jsonb_array_elements(c.sources) AS x(s) WHERE COALESCE(x.s->>'url','')='' AND x.s ? 'documentText');
+UPDATE evimed_frontier.evidence_card_revisions r SET snapshot=jsonb_set(r.snapshot,'{sources}',(
+    SELECT jsonb_agg(CASE WHEN COALESCE(e.s->>'url','')='' AND e.s ? 'documentText'
+      THEN (e.s - 'documentText') || CASE WHEN e.s->>'coverage'='full-text' THEN '{"coverage":"excerpt"}'::jsonb ELSE '{}'::jsonb END ELSE e.s END ORDER BY e.ord)
+    FROM jsonb_array_elements(r.snapshot->'sources') WITH ORDINALITY AS e(s,ord)))
+  WHERE jsonb_typeof(r.snapshot->'sources')='array'
+    AND EXISTS(SELECT 1 FROM jsonb_array_elements(r.snapshot->'sources') AS x(s) WHERE COALESCE(x.s->>'url','')='' AND x.s ? 'documentText');
 `;
 const migrations = new WeakMap();
 /** @param {any} database */

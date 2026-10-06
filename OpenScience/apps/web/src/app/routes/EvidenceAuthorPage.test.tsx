@@ -9,12 +9,12 @@ const client = vi.hoisted(() => ({ fetchEvidenceAuthor: vi.fn() }));
 vi.mock("@/lib/evidenceZoneClient", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/evidenceZoneClient")>()), ...client }));
 
 const author = {
-  author: { id: "alice", name: "李研究", platform: false },
+  author: { id: "au_0123456789abcdef", name: "李研究", platform: false },
   zones: [{ id: "ez_1", title: "卒中研究", description: "", kind: "user" as const, visibility: "platform" as const, evidenceCount: 2, follows: 3, updatedAt: "2026-10-04T00:00:00Z" }],
   cards: [{ id: "ec_1", zoneId: "ez_1", title: "试验药能预防卒中吗", summary: "试验显示卒中减少。", creator: "李研究", producer: null, originality: "synthesis" as const, claimCount: 3, updatedAt: "2026-10-04T00:00:00Z" }],
   totals: { cards: 2, followers: 3, runsFromCards: 5 },
 };
-const mount = () => render(<MemoryRouter initialEntries={["/app/frontier/authors/alice"]}><Routes><Route path="/app/frontier/authors/:userId" element={<EvidenceAuthorPage />} /></Routes></MemoryRouter>);
+const mount = () => render(<MemoryRouter initialEntries={["/app/frontier/authors/au_0123456789abcdef"]}><Routes><Route path="/app/frontier/authors/:authorId" element={<EvidenceAuthorPage />} /></Routes></MemoryRouter>);
 beforeEach(() => vi.clearAllMocks());
 
 describe("an author's page", () => {
@@ -22,7 +22,7 @@ describe("an author's page", () => {
     client.fetchEvidenceAuthor.mockResolvedValue(author);
     mount();
     expect(await screen.findByRole("heading", { name: "李研究" })).toBeInTheDocument();
-    expect(client.fetchEvidenceAuthor).toHaveBeenCalledWith("alice");
+    expect(client.fetchEvidenceAuthor).toHaveBeenCalledWith("au_0123456789abcdef");
     expect(screen.getByText("2 张已发布证据卡 · 3 位关注者 · 别人的研究由这位作者的卡片发起了 5 次")).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "卒中研究" })).toHaveAttribute("href", "/app/frontier/zones/ez_1");
     expect(screen.getByText("用户专区 · 2 条证据 · 3 人关注")).toBeInTheDocument();
@@ -32,7 +32,7 @@ describe("an author's page", () => {
     expect(screen.queryByText(/排名|排行/)).not.toBeInTheDocument();
   });
   it("marks the platform publisher and lists the change log when the deployment keeps one", async () => {
-    client.fetchEvidenceAuthor.mockResolvedValue({ ...author, author: { id: "evimed-evidence-center", name: "EviMed 证据中心", platform: true }, changes: [{ id: "c1", summary: "更正了一处数字", at: "2026-10-05T00:00:00Z" }] });
+    client.fetchEvidenceAuthor.mockResolvedValue({ ...author, author: { id: "evimed-evidence-center", name: "EviMed 证据中心", platform: true }, changes: [{ id: "c1", summary: "更正了一处数字", occurredAt: "2026-10-05T00:00:00Z" }] });
     mount();
     expect(await screen.findByText("平台出版方")).toBeInTheDocument();
     expect(screen.getByText("最近的变更")).toBeInTheDocument();
