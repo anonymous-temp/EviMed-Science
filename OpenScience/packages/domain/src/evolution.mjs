@@ -166,4 +166,9 @@ export const EVOLUTION_ERROR_MESSAGES = Object.freeze({
   'evolution_tool_rate_limited': '这个项目调用平台工具过于频繁，请稍后重试。',
   'evolution_tool_missing': '这条研究记录已变化，请刷新后重试。',
   'evolution_version_immutable': '这条研究记录已变化，请刷新后重试。',
+  // The prediction registry (flywheel F25): a registration that is not a prediction of a trial's primary endpoint, a module that is off, a
+  // registration the viewer may not see (it answers as missing, so a private prediction is not confirmed to exist).
+  'prediction_invalid': '这条预测登记的内容不完整或格式不对：需要试验登记号、终点，以及估计值或成功概率。',
+  'prediction_registry_disabled': '预测登记模块没有启用，其他研究不受影响。',
+  'prediction_not_found': '没有找到这条预测登记。',
 })
