@@ -73,6 +73,7 @@ import { EVIDENCE_PROJECT_ID, LEARNING_PROJECT_ID, ensureEvidenceProject, isEvol
 import { createEvidenceBudget, evidenceBudgetMetricFamilies } from "./evidenceBudget.mjs";
 import { createEvidenceProgramme, evidenceProgrammeMetricFamilies } from "./evidenceProgramme.mjs";
 import { createCalculationReceiptReader } from "./evidenceCalculationReceipts.mjs";
+import { createEvidenceRecalculation, createOfficialZoneMatcher, evidenceRecalculationMetricFamilies } from "./evidenceRecalculation.mjs";
 import { evidenceCardMetricFamilies } from "./evidenceCardMetrics.mjs";
 import { assertNotPlatformAccount } from "./platformAccount.mjs";
 import { completeEvolutionRuntime } from './evolutionRuntimeCompletion.mjs';
@@ -1000,6 +1001,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   let maintenanceService = null;
   /** @type {ReturnType<typeof createEvolution> | null} */
   let evolution = null;
+  /** @type {ReturnType<typeof createEvidenceRecalculation> | null} */
+  let evidenceRecalculation = null;
   const maintenanceMutation = (operation) => maintenanceService ? maintenanceService.withMutation(operation) : operation();
   const productDocuments = productDatabase ? new ProductDocuments(productDatabase) : null;
   const productJobs = productDatabase ? new ProductJobs(productDatabase) : null;
@@ -4490,6 +4493,14 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   if (evolution) {
     runtimeManager.platformSkillSupply = evolution.supply;
     if (autopilotService) autopilotService.evolution = evolution.integration;
+    // A research-proof the evolution module records is told to the recalculation-card publisher (flywheel F03): one call, advice and never part
+    // of the loop. Composed only with its own switch, the frontier whose official zones it writes and the glossary that finds the zone.
+    if (config.evidenceRecalculationCardsEnabled && frontier && entityVocabulary && productDatabase) {
+      const recalculation = createEvidenceRecalculation({ config, evolution: evolution.service, zones: frontier.evidenceZones,
+        matchZone: createOfficialZoneMatcher({ database: productDatabase, entityVocabulary }), report: code => process.stderr.write(`${code}\n`) });
+      evidenceRecalculation = recalculation;
+      evolution.service.callbacks.recalculationProof = (/** @type {any} */ proof) => recalculation.onProofRecorded(proof);
+    }
   }
   const reviewGatewayHandler = createReviewGatewayHandler({
     runtimeManager, service: review?.service ?? null, config,
@@ -5043,6 +5054,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           evaluationIsolation,
           evidenceBudget,
           evidenceProgramme,
+          evidenceRecalculation,
           entityVocabulary,
           evidencePublish,
           evidenceUpkeep,
@@ -7856,7 +7868,7 @@ function addHistogramMetric(lines, name, help, series) {
   }
 }
 
-async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, evidenceBudget = null, entityVocabulary = null, evidencePublish = null, evidenceUpkeep = null, evidenceProgramme = null, evidenceFeed = null }) {
+async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, evidenceBudget = null, entityVocabulary = null, evidencePublish = null, evidenceUpkeep = null, evidenceProgramme = null, evidenceFeed = null, evidenceRecalculation = null }) {
   const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate, frontier, review, geo, vcr, credits);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
@@ -8254,6 +8266,8 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
   for (const family of evidenceBudgetMetricFamilies(config, evidenceBudget, evidenceReading, frontier?.evidenceEditorial?.status().counters ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
   // What the programme decided and wrote: decisions by who chose, signals read (counts only), actions and cards by outcome, claims left out by why.
   for (const family of evidenceProgrammeMetricFamilies(evidenceProgramme)) addMetric(lines, family.name, family.help, family.type, family.series);
+  // Recalculation cards (evidenceRecalculation.mjs): the switch, and what became of each proof the evolution module recorded.
+  for (const family of evidenceRecalculationMetricFamilies(evidenceRecalculation, config)) addMetric(lines, family.name, family.help, family.type, family.series);
   // The evidence card's guardrails (evidenceCardMetrics.mjs): cards without a producer (must be 0), writes refused by
   // origin, cards refused for a simulated value. Read from the zone service only while the frontier is composed.
   for (const family of evidenceCardMetricFamilies(frontier ? await frontier.evidenceZones.metrics().catch(() => null) : null)) addMetric(lines, family.name, family.help, family.type, family.series);

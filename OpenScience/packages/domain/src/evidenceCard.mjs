@@ -696,6 +696,17 @@ export const EVIDENCE_REPORTING_STANDARDS = Object.freeze({
   mendelian_randomization: 'STROBE-MR',
   drug_safety_analysis: 'READUS-PV',
 })
+/**
+ * What a recalculation card concludes about a published result, in a closed vocabulary (flywheel plan §5.1, F03): the platform's
+ * independent reproduction matched what the paper printed (`reproduced`), landed within the tolerance the paper's printed precision
+ * allows but not at that precision (`reproduced_with_difference`), or did not land and the disagreement has been adjudicated
+ * (`not_reproduced_adjudicated`). A paper is said not to have been reproduced only when the disagreement is adjudicated.
+ */
+export const EVIDENCE_RECALCULATION_VERDICTS = frozen(['reproduced', 'reproduced_with_difference', 'not_reproduced_adjudicated'])
+export const EVIDENCE_RECALCULATION_VERDICT_LABELS_ZH = Object.freeze({
+  reproduced: '已复现', reproduced_with_difference: '已复现（有差异，在容差内）', not_reproduced_adjudicated: '未复现（分歧已经裁定）',
+})
+
 /** @param {unknown} engine @returns {string | null} */
 export const evidenceReportingStandard = (engine) => (typeof engine === 'string' && Object.hasOwn(EVIDENCE_REPORTING_STANDARDS, engine) ? EVIDENCE_REPORTING_STANDARDS[engine] : null)
 

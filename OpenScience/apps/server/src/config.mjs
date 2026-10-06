@@ -406,6 +406,12 @@ function evidenceSettings(overrides) {
   }
   return {
     evidenceProgrammeEnabled: overrides.evidenceProgrammeEnabled ?? boolEnv("OPEN_SCIENCE_EVIDENCE_PROGRAMME_ENABLED", false),
+    // Recalculation cards (flywheel F03): the evolution module's independent reproduction of a published result, published as a first-hand
+    // card in the matching official zone. Off by default, and it does nothing unless the evolution module is on beside it.
+    evidenceRecalculationCardsEnabled: overrides.evidenceRecalculationCardsEnabled ?? boolEnv("OPEN_SCIENCE_EVIDENCE_RECALCULATION_CARDS_ENABLED", false),
+    // The prediction registry (flywheel F25): time-stamped registrations of predictions for trials in progress, scored when the trial's result
+    // is published. Off by default; with it off no registration is read or written and no route answers.
+    predictionRegistryEnabled: overrides.predictionRegistryEnabled ?? boolEnv("OPEN_SCIENCE_PREDICTION_REGISTRY_ENABLED", false),
     evidenceProgrammeDailyBudgetCny: budget,
     evidenceProgrammeMaxConcurrency: concurrency,
     // What one programme episode, with the independent checks of its claims, may spend: the agenda's per-episode cap.

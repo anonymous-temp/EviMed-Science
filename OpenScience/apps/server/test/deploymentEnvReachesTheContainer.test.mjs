@@ -215,6 +215,9 @@ const operatorLevers = {
   // day's model money and its slot, and the two public-page switches. A lever that does not arrive leaves the programme off, or
   // on and spending, or the public pages indexable, with the operator believing otherwise.
   OPEN_SCIENCE_EVIDENCE_PROGRAMME_ENABLED: ["open-science-web"],
+  // First-hand cards and the prediction registry (flywheel F03, F25): two more switches an operator must see arrive.
+  OPEN_SCIENCE_EVIDENCE_RECALCULATION_CARDS_ENABLED: ["open-science-web"],
+  OPEN_SCIENCE_PREDICTION_REGISTRY_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_EVIDENCE_PROGRAMME_DAILY_BUDGET_CNY: ["open-science-web"],
   OPEN_SCIENCE_EVIDENCE_PROGRAMME_MAX_CONCURRENCY: ["open-science-web"],
   OPEN_SCIENCE_EVIDENCE_PROGRAMME_EPISODE_BUDGET_CNY: ["open-science-web"],

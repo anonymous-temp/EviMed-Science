@@ -6,6 +6,8 @@ import { before, after, beforeEach, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { EvidenceZoneService } from "../src/evidenceZoneService.mjs";
 import { migrateFrontier } from "../src/frontierPersistence.mjs";
+import { createCalculationReceiptReader } from "../src/evidenceCalculationReceipts.mjs";
+import { createEvidenceRecalculation, createOfficialZoneMatcher } from "../src/evidenceRecalculation.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL;
@@ -125,4 +127,36 @@ test("a comparison whose counts a machine produced is in the fact box only when 
   const without = (await reading.detail(alice, zone.id, saved.id)).evidence;
   assert.equal(without.views.public.factBox.status, "unavailable", "the receipt carries no denominator: the counts are not used");
   assert.deepEqual(without.views.public.factBox.excluded, [{ index: 0, reason: "calculation_unverified" }]);
+});
+
+test("a reproduced paper becomes a recalculation card in the official zone its entities name, and the reader sees it ✓ through the evolution receipt", options, async () => {
+  const { zone } = await plain.saveEditorial(publisher, { title: "房颤抗凝", description: "d", background: "b", kind: "official" }, null, null, false, "programme");
+  const af = (await plain.saveEditorial(publisher, { expectedRevision: zone.revision, state: "published" }, zone.id, null, false, "programme")).zone;
+  const other = await plain.saveEditorial(publisher, { title: "心肾与慢性肾病", description: "d", background: "b", kind: "official" }, null, null, false, "programme");
+  await plain.saveEditorial(publisher, { expectedRevision: other.zone.revision, state: "published" }, other.zone.id, null, false, "programme");
+  // The glossary double: the paper's text mentions apixaban; the atrial-fibrillation zone's terms do too, the kidney zone's do not.
+  const vocabulary = { keysForText: async ({ texts }) => (texts.some((text) => /apixaban|房颤|anticoagulation/i.test(text)) ? ["drug:apixaban"] : ["disease:chronic kidney disease"]) };
+  const ledger = new Map();
+  const evolution = {
+    get: async (id) => ledger.get(id) ?? null,
+    save: async (type, id, payload) => { const row = { id, payload: { ...payload, recordType: `evolution-${type}` } }; ledger.set(id, row); return row; },
+  };
+  const paper = "In the pooled analysis of apixaban trials the summary hazard ratio for stroke was 0.82 across 12 trials.";
+  const quote = "the summary hazard ratio for stroke was 0.82";
+  const row = { type: "research", goldSourceHash: "a".repeat(64), comparison: { title: "Apixaban meta-analysis", url: "https://doi.org/10.1000/meta.2026.1",
+    source: { title: "Apixaban meta-analysis", url: "https://doi.org/10.1000/meta.2026.1", documentText: paper }, items: [{ key: "hr", published: { value: 0.82, printed: "0.82", quote }, recalculated: { value: 0.8213 } }] } };
+  const publisherOfCards = createEvidenceRecalculation({ config: { evidenceRecalculationCardsEnabled: true, evolutionEnabled: true }, evolution, zones: plain,
+    matchZone: createOfficialZoneMatcher({ database: db, entityVocabulary: vocabulary }), now: () => new Date("2026-10-06T01:00:00.000Z"), publisherUser: publisher });
+  const result = await publisherOfCards.onProofRecorded({ proofId: "evolution-research-proof-9", toolId: "meta-pool", artifactDigest: "d".repeat(64), paperId: "doi:10.1000/meta.2026.1", passed: true, rows: [row] });
+  assert.equal(result.outcome, "published", JSON.stringify(result));
+  const stored = (await db.query("SELECT c.id, c.zone_id, c.originality, c.state FROM evimed_frontier.evidence_cards c WHERE c.zone_id=$1", [af.id])).rows;
+  assert.deepEqual(stored.map((card) => [card.originality, card.state]), [["recalculation", "published"]], "in the zone the paper's entities name");
+  assert.equal((await db.query("SELECT count(*)::integer AS n FROM evimed_frontier.evidence_cards WHERE zone_id=$1", [other.zone.id])).rows[0].n, 0);
+  const seen = (await new EvidenceZoneService({ database: db, platformPublisherUserId: "publisher", calculationReceipts: createCalculationReceiptReader({ evolution }) }).detail(alice, af.id, stored[0].id)).evidence;
+  assert.deepEqual(seen.claims.map((claim) => [claim.claimId, claim.verification.mark]), [["QUOTE-1", "✓"], ["CALC-1", "✓"]], "the quotation is in the preserved paper and the numbers are in the receipt");
+  assert.equal(seen.views.clinical.claims.find((claim) => claim.claimId === "CALC-1").platformCalculation.engine, "evolution_recalculation");
+  // A paper about a topic no official zone holds publishes nothing.
+  const elsewhere = createEvidenceRecalculation({ config: { evidenceRecalculationCardsEnabled: true, evolutionEnabled: true }, evolution, zones: plain,
+    matchZone: createOfficialZoneMatcher({ database: db, entityVocabulary: { keysForText: async (input) => (input.texts.some((text) => /summary hazard ratio/.test(text)) ? ["drug:something-no-zone-holds"] : vocabulary.keysForText(input)) } }), publisherUser: publisher });
+  assert.equal((await elsewhere.onProofRecorded({ proofId: "evolution-research-proof-10", toolId: "meta-pool", artifactDigest: "d".repeat(64), paperId: "doi:10.1000/meta.2026.2", passed: true, rows: [row] })).outcome, "no_matching_zone");
 });

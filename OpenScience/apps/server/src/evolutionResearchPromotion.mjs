@@ -67,8 +67,12 @@ export async function recordResearchPromotion({ service, report, userId, toolId,
       const id = `evolution-research-proof-${hash([toolId, artifactDigest, paperId])}`;
       const prior = await service.get(id);
       // The first measured outcome of a paper stands, whichever it is.
-      if (!prior) await service.save('research-proof', id, { toolId, artifactDigest, paperId, identityProof: identities.get(rows[0].publishedPaperId), goldSourceHashes: [...new Set(rows.map(row => row.goldSourceHash))],
-        producerRunIds: [...new Set(rows.map(row => row.producerRunId))], independent: true, passed: reproduced, exposed: false, retracted: false, at: service.now().toISOString() });
+      if (!prior) {
+        await service.save('research-proof', id, { toolId, artifactDigest, paperId, identityProof: identities.get(rows[0].publishedPaperId), goldSourceHashes: [...new Set(rows.map(row => row.goldSourceHash))],
+          producerRunIds: [...new Set(rows.map(row => row.producerRunId))], independent: true, passed: reproduced, exposed: false, retracted: false, at: service.now().toISOString() });
+        // A recorded proof is told to the recalculation-card publisher (flywheel F03): told and never asked, so a card that cannot be made leaves the proof as it is.
+        try { await service.callbacks?.recalculationProof?.({ proofId: id, toolId, artifactDigest, paperId, passed: reproduced, rows }); } catch { /* the card is advice to the loop, never part of it */ }
+      }
       if (prior ? prior.payload.passed === true : reproduced) observed.push(paperId);
     }
     const proofs = (await service.list('research-proof')).filter(row => row.payload.toolId === toolId && row.payload.artifactDigest === artifactDigest);

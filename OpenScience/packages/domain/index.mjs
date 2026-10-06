@@ -1840,7 +1840,7 @@ export {
 
 export { EVOLUTION_ERROR_MESSAGES, EVOLUTION_TRACKS, EVOLUTION_DATA_LEVELS, EVOLUTION_VALIDATION_LEVELS, EVOLUTION_DECISION_CLASSES, EVOLUTION_GAP_CODES, EVOLUTION_LEAD_SOURCES, EVOLUTION_ORIGINS, EVOLUTION_BUILD_FORMS, EVOLUTION_CASE_GROUPS, EVOLUTION_TOOL_STATES, EVOLUTION_JOB_KINDS, EVOLUTION_EXECUTABLE_OPERATIONS, EVOLUTION_ONE_WAY_OPERATIONS, evolutionDecisionClass, evolutionAdaptiveClass, evolutionValidationLevel, evolutionToolVisible, evolutionMethodFields, evolutionDataMatch, validateEvolutionDataRequirements } from './src/evolution.mjs'
 
-// evidenceCard — 78 exports: the evidence card, the platform's single evidence unit (flywheel plan 2026-10-05 §4): its contract
+// evidenceCard — 80 exports: the evidence card, the platform's single evidence unit (flywheel plan 2026-10-05 §4): its contract
 // (producer, originality, lineage, entity keys, journey stage, disclosure, claims, the public view's content), the two
 // views of one card, the three rules (who may write where, no paid ranking input, no simulated value) and the error
 // codes they raise
@@ -1874,6 +1874,8 @@ export {
   EVIDENCE_CALCULATION_EXTRA_VALUES,
   EVIDENCE_METHOD_ENGINES,
   EVIDENCE_REPORTING_STANDARDS,
+  EVIDENCE_RECALCULATION_VERDICTS,
+  EVIDENCE_RECALCULATION_VERDICT_LABELS_ZH,
   evidenceReportingStandard,
   evidenceCalculationBasis,
   evidenceComparisonCalculation,
