@@ -87,6 +87,23 @@ test("the module-leads levers: off and five a day by default, read from the envi
   assert.match(apiOnly, /OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_ENABLED: \$\{OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_ENABLED:-false\}/);
 });
 
+test("the platform-handbook levers: off and three a day by default, read from the environment, a count outside 1 to 30 stops the start by its name, carried by .env.example and compose", async () => {
+  const defaults = configUnder({});
+  assert.deepEqual([defaults.learningPlatformHandbooksEnabled, defaults.learningPlatformHandbooksPerDay], [false, 3]);
+  const set = configUnder({ OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_ENABLED: "true", OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PER_DAY: "7" });
+  assert.deepEqual([set.learningPlatformHandbooksEnabled, set.learningPlatformHandbooksPerDay], [true, 7]);
+  assert.equal(configUnder({ OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PER_DAY: "" }).learningPlatformHandbooksPerDay, 3);
+  for (const value of ["0", "31", "1.5", "many"]) assert.throws(() => configUnder({ OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PER_DAY: value }), /OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PER_DAY/, value);
+  const example = await readFile(path.join(repoRoot, "deploy/web/.env.example"), "utf8");
+  const compose = await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8");
+  const apiOnly = await readFile(path.join(repoRoot, "deploy/web/docker-compose.api-only.yml"), "utf8");
+  for (const [name, value] of [["OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_ENABLED", "false"], ["OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PER_DAY", "3"]]) {
+    assert.deepEqual([...example.matchAll(new RegExp(`^${name}=(.*)$`, "gm"))].map((line) => line[1]), [value], name);
+    assert.match(compose, new RegExp(`^\\s+${name}:\\s*$`, "m"), name);
+  }
+  assert.match(apiOnly, /OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_ENABLED: \$\{OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_ENABLED:-false\}/);
+});
+
 test("off, the route answers 404 by name once the token is checked and the metrics say 0 with no family; without the token it is refused first", async () => {
   const dataDir = await mkdtemp(path.join(tmpdir(), "os-flywheel-config-"));
   const app = createWebApiApp({ dataDir, port: 0, runtimeMode: "mock", devAuth: true, operatorMetricsToken: "test-only-metrics-token" });
@@ -105,6 +122,7 @@ test("off, the route answers 404 by name once the token is checked and the metri
     assert.doesNotMatch(scrape, /open_science_evidence_community_/, "a column that is not composed exports nothing");
     assert.doesNotMatch(scrape, /open_science_learning_evidence_/, "a consumer that is not composed exports nothing");
     assert.doesNotMatch(scrape, /open_science_evolution_module_leads_/, "lead sources that are not composed export nothing");
+    assert.doesNotMatch(scrape, /open_science_learning_platform_handbooks_/, "a path that is not composed exports nothing");
   } finally {
     await app.close();
     await rm(dataDir, { recursive: true, force: true });

@@ -92,7 +92,9 @@ export function createPlatformSkillSupply(config,{listActive,report=()=>{}}={}){
       if(!packageCheck.ok)throw new HttpError(400,'extension_contract_invalid',packageCheck.issues.map(issue=>`${issue.field}: ${issue.message}`).join(' '));
       const {files,skillBody,hasFrontmatter,description,body,id}=packageCheck;
       if(card?.toolKind==='workflow'&&evaluation.verificationLevel==='V0'&&evaluation.smokePassed!==true)throw invalid();
-      if(card?.toolKind!=='workflow'&&evaluation.verificationLevel==='V0')throw invalid();
+      // A text-only handbook entry (flywheel F16) is effective only after its independent re-check, which the caller states and this refuses to run without.
+      if(card?.toolKind==='handbook'&&(evaluation.recheckPassed!==true||candidate.publicationKind!=='skill'||Object.keys(candidate.files??{}).some(name=>name!=='SKILL.md')))throw invalid();
+      if(card?.toolKind!=='workflow'&&card?.toolKind!=='handbook'&&evaluation.verificationLevel==='V0')throw invalid();
       const digest=`sha256:${sha(canonicalJson(files))}`,nativeName=`platform-${sha(id+'\0'+digest).slice(0,24)}`;
       // Discovery metadata is platform-owned; frozen candidate bytes remain untouched.
       // Written whole by the platform from two checked fields (`runtimeSkillText`): the builder's front matter never reaches a tenant.

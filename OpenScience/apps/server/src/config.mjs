@@ -505,10 +505,16 @@ function evidenceUpkeepSettings(overrides) {
  * - `OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_ENABLED` (off): the platform's own modules (the evidence programme, 循证传播, 虚拟临研) hand 循证进化 what they could
  *   not do as research leads; needs the evolution module on. `OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_PER_DAY` (5, at most 50) bounds the new leads of these
  *   sources taken in a day, because each lead is a scouting run on the module's own budget.
+ * - `OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_ENABLED` (off): a lesson an account's handbook learned that holds no project fact may go to the platform's skill supply as a
+ *   text-only entry, after an independent re-check; needs the evolution module and the learning loop on. `OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PER_DAY` (3, at most 30)
+ *   bounds the candidates re-checked and activated in a day, each a model call of the evolution module's own budget.
  *
  * @param {Record<string, any>} overrides
  */
 function evidenceFlywheelSettings(overrides) {
+  const handbooksRaw = overrides.learningPlatformHandbooksPerDay !== undefined ? overrides.learningPlatformHandbooksPerDay : process.env.OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PER_DAY;
+  const handbooksPerDay = handbooksRaw == null || handbooksRaw === "" ? 3 : Number(handbooksRaw);
+  if (!Number.isSafeInteger(handbooksPerDay) || handbooksPerDay < 1 || handbooksPerDay > 30) throw new Error(`OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_PER_DAY must be a whole number from 1 to 30, got ${JSON.stringify(handbooksRaw)}.`);
   const perDayRaw = overrides.evolutionModuleLeadsPerDay !== undefined ? overrides.evolutionModuleLeadsPerDay : process.env.OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_PER_DAY;
   const moduleLeadsPerDay = perDayRaw == null || perDayRaw === "" ? 5 : Number(perDayRaw);
   if (!Number.isSafeInteger(moduleLeadsPerDay) || moduleLeadsPerDay < 1 || moduleLeadsPerDay > 50) throw new Error(`OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_PER_DAY must be a whole number from 1 to 50, got ${JSON.stringify(perDayRaw)}.`);
@@ -526,6 +532,8 @@ function evidenceFlywheelSettings(overrides) {
     learningEvidenceOutcomesBatch: outcomesBatch,
     evolutionModuleLeadsEnabled: overrides.evolutionModuleLeadsEnabled ?? boolEnv("OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_ENABLED", false),
     evolutionModuleLeadsPerDay: moduleLeadsPerDay,
+    learningPlatformHandbooksEnabled: overrides.learningPlatformHandbooksEnabled ?? boolEnv("OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_ENABLED", false),
+    learningPlatformHandbooksPerDay: handbooksPerDay,
   };
 }
 

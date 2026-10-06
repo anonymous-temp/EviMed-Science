@@ -66,6 +66,8 @@ export function evolutionValidationLevel(assessments, usage = {}) {
 export function evolutionToolVisible(tool) {
   if (tool.status !== 'active') return false
   if (tool.toolKind === 'workflow') return tool.smokePassed === true
+  // A text-only handbook entry from an account's general lesson is visible once its independent re-check held (flywheel F16).
+  if (tool.toolKind === 'handbook') return tool.recheckPassed === true
   return Number(String(tool.validationLevel).slice(1)) >= (tool.noPublishedCases === true ? 1 : 2)
 }
 /** Public field contract, with no hidden expected values. @param {any} value */

@@ -69,9 +69,13 @@ import path from "node:path";
 import { createGzip } from "node:zlib";
 import { postgresBackupReadiness } from "./postgresBackupReadiness.mjs";
 import { vcrBackupReadiness } from "./vcrBackupReadiness.mjs";
-import { EVIDENCE_PROJECT_ID, LEARNING_PROJECT_ID, ensureEvidenceProject, isEvolutionProject, isInternalProjectOf, isReservedProjectId } from "./internalProjects.mjs";
+import { EVIDENCE_PROJECT_ID, EVOLUTION_PROJECT_ID, LEARNING_PROJECT_ID, ensureEvidenceProject, isEvolutionProject, isInternalProjectOf, isReservedProjectId } from "./internalProjects.mjs";
 import { createEvidenceBudget, evidenceBudgetMetricFamilies } from "./evidenceBudget.mjs";
 import { PROGRAMME_DECISION_KIND, createEvidenceProgramme, evidenceProgrammeMetricFamilies } from "./evidenceProgramme.mjs";
+import { HANDBOOK_LESSON_CLASSES, createPlatformHandbooks, handbookJudgeMessages, platformHandbookMetricFamilies } from "./learningPlatformHandbooks.mjs";
+import { establishedAuthors } from "./evidenceVerifiedCards.mjs";
+import { callReviewModel } from "./reviewModel.mjs";
+import { guestMarkedRuns } from "./capsuleShareTrust.mjs";
 import { createEvolutionLeadSources, evolutionLeadSourceMetricFamilies, leadEntityKeys } from "./evolutionLeadSources.mjs";
 import { programmeZoneByKey } from "./evidenceProgrammeData.mjs";
 import { createCalculationReceiptReader } from "./evidenceCalculationReceipts.mjs";
@@ -1025,6 +1029,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   let evidenceOutcomes = null;
   /** @type {ReturnType<typeof createEvolutionLeadSources> | null} */
   let evolutionLeadSources = null;
+  /** @type {ReturnType<typeof createPlatformHandbooks> | null} */
+  let platformHandbooks = null;
   const maintenanceMutation = (operation) => maintenanceService ? maintenanceService.withMutation(operation) : operation();
   const productDocuments = productDatabase ? new ProductDocuments(productDatabase) : null;
   const productJobs = productDatabase ? new ProductJobs(productDatabase) : null;
@@ -3529,6 +3535,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       resolveSourceRun: (userId, projectId, runId) => resolveLessonSourceRun(store, agentRuns, userId, projectId, runId),
       enabled: async (userId, projectId) => config.learningEnabled
         && !(await memoryPausedFor(researchMemory, userId, projectId)).learning,
+      // A lesson that became an account's handbook may be general enough for the platform's (learningPlatformHandbooks.mjs, flywheel F16); told, never asked.
+      onApplied: (applied) => platformHandbooks?.consider(applied),
     }));
     const consolidation = new MethodConsolidation({
       handbookConsolidation: { run: async (input) => (await handbookConsolidation).run(input) },
@@ -3639,6 +3647,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           return user ? store.requireProject(user, projectId) : null;
         } });
         await evidenceOutcomes?.tick();
+        await platformHandbooks?.tick();
       },
       resolveProject: async (job) => {
         const user = await store.userById(job.userId);
@@ -4573,6 +4582,53 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       evidenceRecalculation = recalculation;
       evolution.service.callbacks.recalculationProof = (/** @type {any} */ proof) => recalculation.onProofRecorded(proof);
     }
+    // General lessons become platform handbooks (learningPlatformHandbooks.mjs, flywheel F16): composed with its switch, the evolution module (whose supply and
+    // records it uses and whose budget its two model calls spend) and the learning loop that notices the lesson. Off, `onApplied` finds nothing and no tick runs.
+    if (config.learningPlatformHandbooksEnabled && config.learningEnabled && productDatabase && productDocuments) {
+      const handbooksFetch = overrides.frontierModelFetch ?? globalThis.fetch;
+      const handbookLimits = { daily: config.evolutionDailyBudgetCny, weekly: 0 };
+      const evolutionService = evolution.service;
+      platformHandbooks = createPlatformHandbooks({
+        service: evolutionService, supply: evolution.supply, perDay: config.learningPlatformHandbooksPerDay, report: code => process.stderr.write(`${code}\n`),
+        facts: async (userId, projectId) => {
+          /** @type {Set<string>} */ const names = new Set();
+          /** @type {Set<string>} */ const identifiers = new Set();
+          const user = await store.userById(userId);
+          const project = user && projectId ? await store.requireProject(user, projectId).catch(() => null) : null;
+          if (project?.name) names.add(String(project.name));
+          if (projectId) {
+            for (const row of (await productDocuments.list(userId, "source", { projectId, limit: 100 })).items) {
+              for (const file of Array.isArray(row.payload.paths) ? row.payload.paths : []) { names.add(String(file)); names.add(path.basename(String(file))); }
+              if (typeof row.payload.metadata?.title === "string") names.add(row.payload.metadata.title);
+              for (const key of ["doi", "pmid"]) if (typeof row.payload.metadata?.[key] === "string") identifiers.add(row.payload.metadata[key]);
+            }
+            for (const row of (await productDocuments.list(userId, "dataset-semantics", { projectId, limit: 50 })).items) {
+              for (const binding of Array.isArray(row.payload.bindings) ? row.payload.bindings : []) {
+                names.add(String(binding.table ?? "")); names.add(path.basename(String(binding.path ?? "")));
+                for (const column of Array.isArray(binding.columns) ? binding.columns : []) names.add(String(column.name ?? ""));
+              }
+            }
+          }
+          return { names: [...names].filter(Boolean), identifiers: [...identifiers], numbers: [] };
+        },
+        judge: async ({ text, capabilityId }) => {
+          const response = await callModelForControlPlane({ config, usageLedger, fetchImpl: handbooksFetch }, { userId: await evolutionService.owner(), projectId: EVOLUTION_PROJECT_ID,
+            purpose: "evolution", limits: handbookLimits, signal: AbortSignal.timeout(60_000),
+            body: { model: "deepseek-flash", thinking: { type: "disabled" }, response_format: { type: "json_object" }, max_tokens: 200, messages: handbookJudgeMessages({ text, capabilityId }) } });
+          return JSON.parse(response.choices?.[0]?.message?.content ?? "{}");
+        },
+        // Another family, or none: with the DeepSeek review provider there is no independent reviewer and a candidate stays a candidate.
+        review: config.reviewProvider === "dashscope" ? async ({ text, capabilityId }) => {
+          const result = await callReviewModel({ config, usageLedger, fetchImpl: handbooksFetch }, { userId: await evolutionService.owner(), projectId: EVOLUTION_PROJECT_ID, purpose: "evolution",
+            limits: handbookLimits, signal: AbortSignal.timeout(120_000), schemaName: "platform_handbook_review", maxTokens: 400,
+            schema: { type: "object", properties: { general: { type: "boolean" }, class: { type: "string", enum: [...HANDBOOK_LESSON_CLASSES] } }, required: ["general", "class"], additionalProperties: false },
+            messages: handbookJudgeMessages({ text, capabilityId }) });
+          return { ...result.value, independent: result.modelReported === true && /^qwen/i.test(result.model) };
+        } : null,
+        established: (userIds) => establishedAuthors(productDatabase, userIds),
+        recentGuestRun: async (userId, runId) => (runId ? (await guestMarkedRuns(productDatabase, userId, [runId])).has(runId) : false),
+      });
+    }
     // What the platform's own modules could not do goes to the evolution module as leads (evolutionLeadSources.mjs, flywheel F20): the evidence programme is read by
     // the worker's daily scan; 循证传播 and 虚拟临研 get an `offer` where their modules are composed. Off, nothing is composed and the worker ingests no scan event.
     if (config.evolutionModuleLeadsEnabled) {
@@ -5174,6 +5230,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           evidenceCommunity,
           evidenceOutcomes,
           evolutionLeadSources,
+          platformHandbooks,
         });
         return;
       }
@@ -8004,7 +8061,7 @@ function addHistogramMetric(lines, name, help, series) {
   }
 }
 
-async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, evidenceBudget = null, entityVocabulary = null, evidencePublish = null, evidenceUpkeep = null, evidenceProgramme = null, evidenceFeed = null, evidencePublic = null, evidenceRecalculation = null, predictionRegistry = null, evidenceFlywheel = null, evidenceCommunity = null, evidenceOutcomes = null, evolutionLeadSources = null }) {
+async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, evidenceBudget = null, entityVocabulary = null, evidencePublish = null, evidenceUpkeep = null, evidenceProgramme = null, evidenceFeed = null, evidencePublic = null, evidenceRecalculation = null, predictionRegistry = null, evidenceFlywheel = null, evidenceCommunity = null, evidenceOutcomes = null, evolutionLeadSources = null, platformHandbooks = null }) {
   const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate, frontier, review, geo, vcr, credits);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
@@ -8428,6 +8485,7 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
   for (const family of evidencePublicMetricFamilies(evidencePublic?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
   // The evidence flywheel's figures (evidenceFlywheelMetrics.mjs): exported only with the switch on; a figure with no input has no series.
   addMetric(lines, "open_science_evidence_flywheel_enabled", "Whether the evidence flywheel's figures are switched on (OPEN_SCIENCE_EVIDENCE_FLYWHEEL_METRICS_ENABLED).", "gauge", [{ value: config.evidenceFlywheelMetricsEnabled ? 1 : 0 }]);
+  for (const family of platformHandbookMetricFamilies(platformHandbooks?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
   for (const family of evolutionLeadSourceMetricFamilies(evolutionLeadSources?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
   for (const family of evidenceOutcomeMetricFamilies(evidenceOutcomes?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
   for (const family of evidenceCommunityMetricFamilies(evidenceCommunity)) addMetric(lines, family.name, family.help, family.type, family.series);
