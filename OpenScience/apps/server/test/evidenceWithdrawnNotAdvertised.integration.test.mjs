@@ -58,7 +58,7 @@ test("a withdrawn card leaves the feed, the card search, the author page and the
 
   const feedTitles = async () => (await feed.page({})).page.items.map((/** @type {any} */ item) => item.title).sort();
   const searched = async () => (await search.search(bob, { q: "warfarin", limit: 20 })).cards.map((/** @type {any} */ card) => card.title).sort();
-  const authorCards = async () => (await authors.page(bob, "alice")).cards.map((/** @type {any} */ card) => card.title).sort();
+  const authorCards = async () => (await authors.page(bob, await authors.handleFor("alice"))).cards.map((/** @type {any} */ card) => card.title).sort();
   const listed = async () => (await zones.list(bob, new URLSearchParams({ scope: "public" }), official.id)).items.map((/** @type {any} */ card) => card.title).sort();
   assert.deepEqual(await feedTitles(), ["Warfarin kept", "Warfarin withdrawn"]);
   assert.deepEqual(await searched(), ["Alice's first", "Alice's second", "Warfarin kept", "Warfarin withdrawn"]);
@@ -71,7 +71,7 @@ test("a withdrawn card leaves the feed, the card search, the author page and the
   assert.deepEqual(await feedTitles(), ["Warfarin kept"], "the feed");
   assert.deepEqual(await searched(), ["Alice's first", "Warfarin kept"], "a run's card search");
   assert.deepEqual(await authorCards(), ["Alice's first"], "the author page's list");
-  const page = await authors.page(bob, "alice");
+  const page = await authors.page(bob, await authors.handleFor("alice"));
   assert.equal(page.totals.cards, 1, "and its total");
   assert.equal(page.zones[0].evidenceCount, 1, "and the zone's count on it");
   assert.deepEqual((await authors.links(bob, first.id)).related, [], "a withdrawn card is not the next version of anything");

@@ -51,6 +51,8 @@ async function card(user, zone, title, { published = true } = /** @type {any} */
   if (!published) return made;
   return (await zones.save(user, { expectedRevision: made.revision, state: "published" }, zone.id, made.id)).evidence;
 }
+/** The public handle of an account: made on first need, and what every outward shape names an author by. */
+const handle = (/** @type {string} */ id) => authors.handleFor(id);
 const follow = async (user, zone) => zones.act(user, zone.id, "follow", { expectedRevision: (await zones.detail(user, zone.id)).zone.revision });
 
 test("an author's page is their published zones and cards, the followers over those zones and the runs others started from their cards", options, async () => {
@@ -67,8 +69,12 @@ test("an author's page is their published zones and cards, the followers over th
   await origins.runStarted({ userId: "bob", id: "b1" }, { id: "r2", originCardId: c1.id });
   await origins.runStarted({ userId: "carol", id: "c1" }, { id: "r3", originCardId: c1.id });
   await origins.runStarted({ userId: "alice", id: "a1" }, { id: "r4", originCardId: c1.id });
-  const page = await authors.page(bob, "alice");
-  assert.deepEqual(page.author, { id: "alice", name: "Alice Li", platform: false });
+  const page = await authors.page(bob, await handle("alice"));
+  assert.deepEqual(page.author, { id: await handle("alice"), name: "Alice Li", platform: false });
+  assert.match(page.author.id, /^au_[a-f0-9]{16}$/);
+  assert.equal(JSON.stringify(page).includes('"id":"alice"'), false, "the account id is the id of nothing on the page");
+  assert.equal(await handle("alice"), page.author.id, "the handle is stable");
+  assert.notEqual(await handle("bob"), page.author.id, "and one per account");
   assert.deepEqual(page.zones.map((zone) => zone.title), ["Stroke"], "only the published zone");
   assert.equal(page.zones[0].evidenceCount, 2);
   assert.equal(page.zones[0].follows, 2);
@@ -77,30 +83,46 @@ test("an author's page is their published zones and cards, the followers over th
   assert.deepEqual(page.totals, { cards: 2, followers: 2, runsFromCards: 3 });
   assert.equal("changes" in page, false, "no change section without a change log's reader");
   // The page is the same to everyone: the author reads it as a reader does.
-  assert.deepEqual((await authors.page(alice, "alice")).totals, page.totals);
+  assert.deepEqual((await authors.page(alice, await handle("alice"))).totals, page.totals);
   // A follower of two of the author's zones is one follower.
   const z2 = await zoneOf(alice, "Kidney");
   await card(alice, z2, "Kidney card");
   await follow(bob, z2);
-  assert.equal((await authors.page(carol, "alice")).totals.followers, 2);
+  assert.equal((await authors.page(carol, await handle("alice"))).totals.followers, 2);
   // Withdrawing the zone takes its cards, its followers and the runs from the page.
   const zone2 = (await zones.detail(alice, z2.id)).zone;
   await zones.save(alice, { expectedRevision: zone2.revision, state: "draft" }, z2.id);
-  assert.deepEqual((await authors.page(carol, "alice")).zones.map((zone) => zone.title), ["Stroke"]);
+  assert.deepEqual((await authors.page(carol, await handle("alice"))).zones.map((zone) => zone.title), ["Stroke"]);
 });
 
 test("an account with nothing published has no page, and the answer is the same as for an id that is not an account", options, async () => {
   await zoneOf(carol, "Only a draft", { published: false });
-  for (const id of ["carol", "nobody", "no-such-account", "has space", "", "x".repeat(300)]) {
+  // The account id is not an address, even for an account with a page: only the handle is, and an unknown handle is no different.
+  for (const id of ["carol", "alice", "nobody", "no-such-account", "has space", "", "x".repeat(300), `au_${"0".repeat(16)}`, "au_ABCDEF0123456789"]) {
     await assert.rejects(authors.page(bob, id), (error) => error.status === 404 && error.code === "evidence_author_not_found", JSON.stringify(id));
   }
+});
+
+test("a handle is made once per account, however many ask at the same time, and is random and unrelated to the account id", options, async () => {
+  const asked = await Promise.all(Array.from({ length: 8 }, () => authors.handleFor("nobody")));
+  assert.equal(new Set(asked).size, 1);
+  assert.match(asked[0], /^au_[a-f0-9]{16}$/);
+  assert.equal((await db.query("SELECT count(*)::integer AS n FROM evimed_frontier.evidence_author_handles WHERE user_id='nobody'")).rows[0].n, 1);
+  const others = await Promise.all(["alice", "bob", "carol"].map((id) => authors.handleFor(id)));
+  assert.equal(new Set([...others, asked[0]]).size, 4, "one handle each");
+  assert.ok(others.every((value) => !value.includes("alice") && !value.includes("bob")));
+  // An account that is deleted takes its handle with it, and a handle is never given to another account.
+  await db.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES('leaver','Leaver','development')");
+  const gone = await authors.handleFor("leaver");
+  await db.query("DELETE FROM evimed_control.users WHERE id='leaver'");
+  assert.equal((await db.query("SELECT 1 FROM evimed_frontier.evidence_author_handles WHERE handle=$1", [gone])).rowCount, 0);
 });
 
 test("the platform's own publisher account has an author page, marked as the platform's", options, async () => {
   const official = (await zones.saveEditorial(publisher, { title: "官方专区", description: "", background: "", kind: "official" }, null, null, false, "programme")).zone;
   await zones.saveEditorial(publisher, { expectedRevision: official.revision, state: "published" }, official.id, null, false, "programme");
-  const page = await authors.page(bob, "publisher");
-  assert.deepEqual(page.author, { id: "publisher", name: "EviMed 证据中心", platform: true });
+  const page = await authors.page(bob, await handle("publisher"));
+  assert.deepEqual(page.author, { id: await handle("publisher"), name: "EviMed 证据中心", platform: true });
   assert.equal(page.zones[0].kind, "official");
 });
 
@@ -110,10 +132,10 @@ test("the change log comes through an optional reader: carried when it answers, 
   const entries = [{ id: "ch_1", kind: "correction", at: "2026-10-05T00:00:00Z", summary: "更正" }];
   const asked = [];
   const withLog = new EvidenceAuthors({ database: db, changeLog: { recentForAuthor: async (authorId, { limit }) => { asked.push([authorId, limit]); return entries; } } });
-  assert.deepEqual((await withLog.page(bob, "alice")).changes, entries);
+  assert.deepEqual((await withLog.page(bob, await handle("alice"))).changes, entries);
   assert.deepEqual(asked, [["alice", EVIDENCE_AUTHOR_PAGE_LIMITS.changes]]);
   const failing = new EvidenceAuthors({ database: db, changeLog: { recentForAuthor: async () => { throw new Error("change log down"); } } });
-  const page = await failing.page(bob, "alice");
+  const page = await failing.page(bob, await handle("alice"));
   assert.equal("changes" in page, false);
   assert.equal(page.zones.length, 1, "the page is otherwise the same");
 });
@@ -144,7 +166,7 @@ test("a card's links name its author, what it points back to and the published c
   assert.deepEqual((await authors.links(carol, base.id)).related, []);
   for (const [user, zone, entry] of [[bob, zb, next], [alice, za, successor]]) await zones.save(user, { expectedRevision: entry.revision, state: "published" }, zone.id, entry.id);
   const links = await authors.links(carol, base.id);
-  assert.deepEqual(links.author, { id: "alice", name: "Alice Li" });
+  assert.deepEqual(links.author, { id: await handle("alice"), name: "Alice Li" });
   assert.deepEqual(links.related.map((entry) => [entry.title, entry.relation]).sort(), [["Alice's next version", "next_version"], ["Bob's follow-up", "research_from_card"]]);
   assert.equal(links.origin, null);
   const back = await authors.links(carol, next.id);

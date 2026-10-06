@@ -11,7 +11,7 @@ const AUTHOR_PATH = /^\/api\/frontier\/authors\/([^/]+)$/;
  *   `{ projectId, zoneId | newZone: { title }, claimIds? }`.
  * - `POST /api/frontier/evidence/:cardId/continue` — continue research from a card; `{ projectId? }`.
  * - `GET /api/frontier/evidence/:cardId/links` — what a card points to and what points to it.
- * - `GET /api/frontier/authors/:userId` — one author's page.
+ * - `GET /api/frontier/authors/:authorId` — one author's page, by the author's public handle (`au_` and sixteen hex digits), never the account id.
  * - `POST /api/frontier/evidence/:cardId/verify-sources` — the card's owner has the platform read each source's address, so the
  *   claims quoting them can earn ✓ (`evidenceSourceVerification.mjs`); answers per source, and the card as it now stands.
  *

@@ -226,7 +226,7 @@ test("when the research publishes, the new card carries the card it began from, 
   await zones.save(bob, { expectedRevision: published.evidence.revision, state: "published" }, bobsZone.id, published.evidence.id);
   const links = await authors.links(alice, card.id);
   assert.deepEqual(links.related.map((entry) => [entry.id, entry.relation, entry.creator]), [[published.evidence.id, "research_from_card", "Bob"]]);
-  assert.deepEqual(links.author, { id: "alice", name: "Alice Li" });
+  assert.deepEqual(links.author, { id: await authors.handleFor("alice"), name: "Alice Li" });
   const back = await authors.links(bob, published.evidence.id);
   assert.equal(back.origin.id, card.id, "and the new card points back to it");
 });

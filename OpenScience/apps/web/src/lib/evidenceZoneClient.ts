@@ -628,6 +628,7 @@ export const fetchEvidenceCardLinks = (cardId: string) =>
   productRequest<EvidenceCardLinks>(`/frontier/evidence/${id(cardId)}/links`);
 
 export interface EvidenceAuthorPage {
+  /** `id` is the author's public handle, never the account id. */
   author: { id: string; name: string; platform: boolean };
   zones: Array<{ id: string; title: string; description: string; kind: EvidenceZoneKind; visibility: EvidenceZoneVisibility; evidenceCount: number; follows: number; updatedAt: string }>;
   cards: Array<EvidenceCardRef & { summary: string; originality: EvidenceOriginality | null; claimCount: number; updatedAt: string }>;
@@ -635,7 +636,8 @@ export interface EvidenceAuthorPage {
   /** The author's recent change-log entries, when the deployment keeps a change log. */
   changes?: Array<{ id?: string; summary?: string; kind?: string; at?: string }>;
 }
-export const fetchEvidenceAuthor = (userId: string) => productRequest<EvidenceAuthorPage>(`/frontier/authors/${id(userId)}`);
+/** `authorId` is the author's public handle, as the card's links and the author page carry it; an account id is never in a URL. */
+export const fetchEvidenceAuthor = (authorId: string) => productRequest<EvidenceAuthorPage>(`/frontier/authors/${id(authorId)}`);
 
 /** Native evidence failures explain the action while keeping unsaved input intact. */
 export function evidenceErrorMessage(error: unknown): string {

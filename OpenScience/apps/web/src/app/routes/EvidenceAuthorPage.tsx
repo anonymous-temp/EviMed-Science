@@ -12,17 +12,17 @@ import { evidenceErrorMessage, fetchEvidenceAuthor, type EvidenceAuthorPage as A
 import { WebApiError } from "@/lib/apiClient";
 
 /**
- * One author's page (`/app/frontier/authors/:userId`): their published zones and cards, the accounts that follow their zones,
+ * One author's page (`/app/frontier/authors/:authorId`, the author's public handle): their published zones and cards, the accounts that follow their zones,
  * and how many times other accounts' research started from their cards — the only citation signal there is, and named for
  * what it is. No ranking, no comparison with anyone: the page is one author's own record. An author with nothing published
  * has no page.
  */
 export function EvidenceAuthorPage() {
-  const { userId = "" } = useParams();
-  return <EvidenceAuthorContent key={userId} userId={userId} />;
+  const { authorId = "" } = useParams();
+  return <EvidenceAuthorContent key={authorId} authorId={authorId} />;
 }
 
-function EvidenceAuthorContent({ userId }: { userId: string }) {
+function EvidenceAuthorContent({ authorId }: { authorId: string }) {
   const [author, setAuthor] = useState<Author | null>(null);
   const [error, setError] = useState<{ message: string; missing: boolean } | null>(null);
   const [loading, setLoading] = useState(true);
@@ -31,12 +31,12 @@ function EvidenceAuthorContent({ userId }: { userId: string }) {
     let active = true;
     setLoading(true);
     setError(null);
-    fetchEvidenceAuthor(userId)
+    fetchEvidenceAuthor(authorId)
       .then((page) => { if (active) setAuthor(page); })
       .catch((reason) => { if (active) setError({ message: evidenceErrorMessage(reason), missing: reason instanceof WebApiError && reason.status === 404 && reason.code === "evidence_author_not_found" }); })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [userId, attempt]);
+  }, [authorId, attempt]);
   return (
     <PageShell title="前沿动态">
       <FrontierNavigation active="zones" />
