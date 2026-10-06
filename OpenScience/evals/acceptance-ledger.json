@@ -188,7 +188,7 @@
       "id": "geo-content",
       "visibility": "public",
       "evalHarness": "evals/geo-content",
-      "briefCount": 7,
+      "briefCount": 10,
       "realDelivery": {
         "status": "accepted",
         "evidence": "evals/geo-content/results/2026-09-25-xinermei-batch6-corrections/run.json",
