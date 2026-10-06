@@ -384,6 +384,15 @@ export function measure([leakSources, backOfficeSources]) {
     if (contentSized && textOnly && lineHeight > 0 && Math.round(lines) >= 1 && Math.abs(lines - Math.round(lines)) < 0.05) {
       return around ? `text+${Math.round(around)}` : "text";
     }
+    // A card whose CSS sets a minimum height and lets its text grow it past
+    // that is one kind at every height its text gives it: the tools of 科研工具
+    // (`min-h-32`) drew 136, 162 and 182 px for descriptions of three lengths
+    // and failed the walk as three kinds (2026-10-06). At its minimum it is
+    // measured like any other control.
+    const minHeight = declared !== null ? String(declared.get("min-height")) : "auto";
+    if (declared !== null && String(declared.get("height")) === "auto" && /^[\d.]+px$/.test(minHeight) && r.height > parseFloat(minHeight) + 0.5) {
+      return `min${Math.round(parseFloat(minHeight))}+`;
+    }
     return `${Math.round(r.height)}h`;
   };
   const looks = new Map();
