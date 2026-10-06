@@ -290,6 +290,7 @@ import { VCR_GATEWAY_PATH, createVcrGatewayHandler, vcrGatewayRoutePattern } fro
 import { VcrOrchestrator, vcrRunId } from "./vcrOrchestrator.mjs";
 import { VcrWorker, createVcrWorkerLoops, withVcrWorkerWarnings } from "./vcrWorker.mjs";
 import { createVcrNotifier } from "./vcrNotify.mjs";
+import { createOfficialZoneLookup } from "./vcrZoneLink.mjs";
 import { seedVcrCatalogue, vcrAudienceAllows, vcrReadiness } from "./vcrService.mjs";
 import { deleteVcrProjectRows, deleteVcrUserRows, removeVcrArtifacts } from "./vcrStoreBase.mjs";
 import { GeoMeasureStore } from "./geoMeasureStore.mjs";
@@ -1925,6 +1926,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     intakeController,
     entityVocabulary,
     sourceChanges,
+    officialZoneForKeys: productDatabase ? createOfficialZoneLookup({ database: productDatabase }) : null,
   });
   // Rows made while the vocabulary could not tag (the frontier off, the glossary not yet seeded) are tagged once it
   // can: a bounded pass per module after each glossary load, each row through its own owner (entityVocabulary.mjs).
@@ -4301,7 +4303,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       report: (/** @type {string} */ loop, /** @type {string} */ code) => process.stderr.write(`vcr ${loop}: ${code}\n`),
       // `matching` is the deferral recheck loop: a washout that ends is re-judged on
       // its own day, not when someone next opens the study.
-      loops: createVcrWorkerLoops({ jobs: vcr.jobs, orchestrator, store: vcr.store, matching: vcr.matching, frontierEvents: vcr.frontierEvents }),
+      loops: createVcrWorkerLoops({ jobs: vcr.jobs, orchestrator, store: vcr.store, matching: vcr.matching, frontierEvents: vcr.frontierEvents, knowledge: vcr.knowledge }),
     });
     // The catalogue the 模型与方法 page reads: three reference simulators and
     // the engine's own method list, seeded once, idempotently.

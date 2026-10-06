@@ -1,4 +1,4 @@
-// The worker's timer and its five loops, without a database: which loops exist
+// The worker's timer and its six loops, without a database: which loops exist
 // and how often they start, what a loop without its function reports, that one
 // loop failing leaves the others running, and that the recheck loop is wired to
 // the matching package's `recheckDue` and only when it is composed.
@@ -6,8 +6,10 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { VCR_WORKER_LOOPS, VcrWorker, createVcrWorkerLoops, withVcrWorkerWarnings } from "../src/vcrWorker.mjs";
 
-test("the five loops, their cadences and which of them are leased", () => {
-  assert.deepEqual(VCR_WORKER_LOOPS.map((loop) => loop.name), ["jobs", "orchestrator", "recompute", "recheck", "frontierEvents"]);
+test("the six loops, their cadences and which of them are leased", () => {
+  assert.deepEqual(VCR_WORKER_LOOPS.map((loop) => loop.name), ["jobs", "orchestrator", "recompute", "recheck", "frontierEvents", "packSources"]);
+  const packs = VCR_WORKER_LOOPS.find((loop) => loop.name === "packSources");
+  assert.deepEqual([packs?.leased, packs?.optional], [true, true], "a platform pack is watched once, by whichever control plane sees it first, and only while the switch is on");
   const events = VCR_WORKER_LOOPS.find((loop) => loop.name === "frontierEvents");
   assert.equal(events?.leased, true, "one frontier event is one candidate, whichever control plane sees it first");
   assert.equal(events?.optional, true, "its switch is off by default, which is not a missing loop");
@@ -34,7 +36,9 @@ test("the frontier loop is the consumer's own tick, absent while off, and an abs
   const loops = createVcrWorkerLoops({ jobs: null, orchestrator: null, store: null, frontierEvents: consumer });
   assert.deepEqual(await loops.frontierEvents?.(), { studies: 3, candidates: 1 });
   assert.equal(createVcrWorkerLoops({ jobs: null, orchestrator: null, store: null }).frontierEvents, null);
-  const worker = new VcrWorker({ loops: { jobs: async () => null, orchestrator: async () => null, recompute: async () => null, recheck: async () => null, frontierEvents: null } });
+  assert.equal(typeof createVcrWorkerLoops({ jobs: null, orchestrator: null, store: null, knowledge: { platform: { enabled: true }, watchPlatformPackSources: async () => ({ checked: 0 }) } }).packSources, "function");
+  assert.equal(createVcrWorkerLoops({ jobs: null, orchestrator: null, store: null, knowledge: { platform: { enabled: false }, watchPlatformPackSources: async () => ({}) } }).packSources, null);
+  const worker = new VcrWorker({ loops: { jobs: async () => null, orchestrator: async () => null, recompute: async () => null, recheck: async () => null, frontierEvents: null, packSources: null } });
   assert.deepEqual(worker.status().missing, []);
   assert.deepEqual(withVcrWorkerWarnings({ enabled: true, ok: true }, worker).warnings ?? [], []);
   await worker.close();

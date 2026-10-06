@@ -62,7 +62,7 @@
 
 import { createHash } from "node:crypto";
 
-import { VCR_ENGINE_PROTOCOL_VERSION, canonicalScenarioJson, vcrResultOutputPayload } from "@evimed/domain";
+import { PLATFORM_PUBLISHER_USER_ID, VCR_ENGINE_PROTOCOL_VERSION, canonicalScenarioJson, vcrResultOutputPayload } from "@evimed/domain";
 
 import { HttpError } from "./security.mjs";
 import { VcrAccess } from "./vcrAccess.mjs";
@@ -902,9 +902,10 @@ export function createVcrEngineJobRemover({ config, fetchImpl, engine = null }) 
  *   intakeController?: { runVcrIntake?: Function } | null,
  *   entityVocabulary?: { tag: (input: { texts: string[] }) => Promise<string[] | null>, frontierItemsMatching?: (query: any) => Promise<any[]> } | null,
  *   sourceChanges?: { getMany?: (identifiers: unknown[]) => Promise<Map<string, any>> } | null,
+ *   officialZoneForKeys?: ((keys: string[]) => Promise<string | null>) | null,
  * }} input
  */
-export function composeVcr({ config, productDatabase, projectStore = null, audit = async () => {}, fetchImpl, report = () => {}, connectorCredentials = null, intakeController = null, entityVocabulary = null, sourceChanges = null }) {
+export function composeVcr({ config, productDatabase, projectStore = null, audit = async () => {}, fetchImpl, report = () => {}, connectorCredentials = null, intakeController = null, entityVocabulary = null, sourceChanges = null, officialZoneForKeys = null }) {
   if (!config?.vcrEnabled || !productDatabase) return null;
 
   // The shared entity vocabulary tags a study with what it is about (`entityVocabulary.mjs`).
@@ -1002,7 +1003,10 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   // The disease packs and the account's library of population definitions: read and written by the study's pages,
   // by the runtime's `pack` and `library` and by the population writer; the job queue is the comparison's.
   const knowledgeStore = new VcrKnowledgeStore({ database: productDatabase });
-  const knowledge = new VcrKnowledge({ store: knowledgeStore, studyStore: store, dataStore, jobs });
+  const knowledge = new VcrKnowledge({ store: knowledgeStore, studyStore: store, dataStore, jobs,
+    // Platform packs (flywheel F26): off, no platform row is read and the request is a 404 by its own code.
+    platform: { enabled: Boolean(config.vcrPlatformPacksEnabled), publisherId: PLATFORM_PUBLISHER_USER_ID, sourceChanges, entityVocabulary, officialZoneForKeys,
+      people: (ids) => store.personNames(ids) } });
   service.attach({ corrections, knowledge });
   // The public 「模拟研究」 column: the lead's publish and withdraw, and the reader the public pages package takes. Neither exists
   // while the switch is off, so nothing reads the table and the routes answer 404 by their own code.
@@ -1121,6 +1125,8 @@ export async function vcrMetricsSnapshot(vcr) {
     evidence: vcr.evidence?.counters ? { ...vcr.evidence.counters } : null,
     publications: vcr.publications ? { ...vcr.publications.counters, reads: Number(vcr.simulations?.counters?.reads ?? 0) } : null,
     frontierEvents: vcr.frontierEvents ? { ...vcr.frontierEvents.counters } : null,
+    platformPacks: vcr.knowledge?.platform?.enabled
+      ? Object.fromEntries(Object.entries(vcr.knowledge.counters).filter(([kind]) => kind.startsWith("platform"))) : null,
   };
 }
 
@@ -1166,6 +1172,10 @@ export function vcrMetricFamilies(enabled, snapshot) {
     add("card_candidates_total", "Evidence items a run wrote as candidates it found through an evidence card (flywheel F23): written, and the ones that passed the quote and number check.", "counter",
       [{ labels: { outcome: "written" }, value: Number(snapshot.evidence.cardCandidates ?? 0) },
         { labels: { outcome: "verified" }, value: Number(snapshot.evidence.cardCandidatesVerified ?? 0) }]);
+  }
+  if (snapshot.platformPacks) {
+    add("platform_packs_total", "What the platform knowledge packs did since this process started (flywheel F26): packs that passed the re-check and were copied, requests that failed it, authors who took their name off, and platform packs labelled 来源有变更.", "counter",
+      Object.entries(snapshot.platformPacks).map(([kind, value]) => ({ labels: { kind: kind.replace(/^platform/, "").replace(/^./, (letter) => letter.toLowerCase()) }, value: Number(value) })));
   }
   if (snapshot.frontierEvents) {
     add("frontier_events_total", "What the frontier-events consumer did since this process started (flywheel F24): studies scanned, feed items read, precedent candidates raised or already in the library, cards labelled 有新证据, new-version runs requested, versions that took the news in (and those written after the plan froze), and scans that failed.", "counter",

@@ -707,6 +707,10 @@ function vcrSettings(overrides) {
     // looks at this many studies, the one looked at longest ago first (a resource limit: every study is one query set), and reads
     // the feed this many days back (an item enters the feed with its own publication date, so a window, not a cursor). Counters:
     // `open_science_vcr_frontier_events_total`.
+    // Platform knowledge packs (flywheel F26, 2026-10-06): a pack the study lead curated may be re-checked and offered as the platform's
+    // own immutable version, read by every account beside the shipped packs. Off, the request routes answer 404
+    // `vcr_platform_packs_not_enabled`, no platform row is read and the source watch does not run. Counter: `open_science_vcr_platform_packs_total`.
+    vcrPlatformPacksEnabled: overrides.vcrPlatformPacksEnabled ?? boolEnv("OPEN_SCIENCE_VCR_PLATFORM_PACKS_ENABLED", false),
     vcrFrontierEventsEnabled: overrides.vcrFrontierEventsEnabled ?? boolEnv("OPEN_SCIENCE_VCR_FRONTIER_EVENTS_ENABLED", false),
     vcrFrontierEventsStudiesPerTick: integer("vcrFrontierEventsStudiesPerTick", "OPEN_SCIENCE_VCR_FRONTIER_EVENTS_STUDIES_PER_TICK", 10, 1, 200),
     vcrFrontierEventsWindowDays: integer("vcrFrontierEventsWindowDays", "OPEN_SCIENCE_VCR_FRONTIER_EVENTS_WINDOW_DAYS", 30, 1, 365),

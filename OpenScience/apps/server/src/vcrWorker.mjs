@@ -1,5 +1,5 @@
 /**
- * 「虚拟临研」's background work: one timer, five loops (build plan
+ * 「虚拟临研」's background work: one timer, six loops (build plan
  * 2026-09-28 §11.2 layer 2).
  *
  *   `jobs`          — claim queued compute, push each running job one step,
@@ -15,6 +15,9 @@
  *                     entity keys: precedent candidates, 「有新证据」 on a card,
  *                     and the request for a new version (flywheel F24; absent
  *                     while its switch is off, which readiness does not report)
+ *   `packSources`   — label a live platform knowledge pack 「来源有变更」 when the
+ *                     source-change ledger holds a change to one of its sources
+ *                     (flywheel F26; absent while platform packs are off)
  *
  * Hidden knowledge:
  *
@@ -53,6 +56,7 @@ export const VCR_WORKER_LOOPS = Object.freeze([
   Object.freeze({ name: "recompute", package: "orchestrator", every: MINUTE, leased: true }),
   Object.freeze({ name: "recheck", package: "matching", every: 15 * MINUTE, leased: true }),
   Object.freeze({ name: "frontierEvents", package: "frontierEvents", every: 10 * MINUTE, leased: true, optional: true }),
+  Object.freeze({ name: "packSources", package: "knowledge", every: 30 * MINUTE, leased: true, optional: true }),
 ]);
 
 /** @param {unknown} error */
@@ -247,9 +251,9 @@ export class VcrWorker {
  * `server.mjs` composes a worker with one call and the loops' own logic stays
  * with the packages that own it.
  *
- * @param {{ jobs: any, orchestrator: any, store: any, matching?: any, frontierEvents?: any }} vcr
+ * @param {{ jobs: any, orchestrator: any, store: any, matching?: any, frontierEvents?: any, knowledge?: any }} vcr
  */
-export function createVcrWorkerLoops({ jobs, orchestrator, store, matching = null, frontierEvents = null }) {
+export function createVcrWorkerLoops({ jobs, orchestrator, store, matching = null, frontierEvents = null, knowledge = null }) {
   return {
     /**
      * Claim what is queued, then push everything this process holds one step.
@@ -326,5 +330,8 @@ export function createVcrWorkerLoops({ jobs, orchestrator, store, matching = nul
 
     /** The frontier feed's trial events for every active study, a bounded number each tick (`vcrFrontierEvents.mjs`). Absent while off. */
     frontierEvents: frontierEvents?.tick ? () => frontierEvents.tick() : null,
+
+    /** The platform packs' source watch (`vcrKnowledge.mjs`). Absent while platform packs are off. */
+    packSources: knowledge?.platform?.enabled && knowledge.watchPlatformPackSources ? () => knowledge.watchPlatformPackSources() : null,
   };
 }

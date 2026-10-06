@@ -43,7 +43,7 @@ import {
   VCR_EXPORT_KINDS, VCR_FOLLOWUP_KINDS, VCR_INTENDED_USES, VCR_JOB_KINDS, VCR_JOB_STATES, VCR_MEMBER_ROLES,
   VCR_MISSING_REASONS, VCR_MODEL_RISKS, VCR_MODEL_TIERS, VCR_POOLING_METHODS, VCR_POPULATION_KINDS,
   VCR_RATINGS, VCR_REFERRAL_STATES, VCR_REVIEW_KINDS, VCR_REVIEW_STATES, VCR_STALE_REASONS, VCR_STEPS, VCR_STUDY_STATUSES,
-  VCR_TRIAL_DESIGNS, VCR_VALUE_SOURCES, VCR_FIELD_ROLES, VCR_PACK_STATUSES,
+  VCR_TRIAL_DESIGNS, VCR_VALUE_SOURCES, VCR_FIELD_ROLES, VCR_PACK_STATUSES, PLATFORM_PUBLISHER_USER_ID,
 } from "@evimed/domain";
 import { refreshVocabularyChecks } from "./vocabularyChecks.mjs";
 
@@ -88,7 +88,7 @@ export const VCR_TABLES = Object.freeze([
   "referrals", "referral_events", "sites", "followup_episodes",
   "dependencies", "stale_marks", "reviews", "decisions", "regulatory_contacts", "exports", "audit", "schedule_marks",
   "model_assessments", "model_plan_versions", "published_simulations",
-  "precedent_candidates", "evidence_signals", "frontier_scans",
+  "precedent_candidates", "evidence_signals", "frontier_scans", "platform_packs", "pack_promotions",
 ]);
 
 const migrations = new WeakMap();
@@ -1267,6 +1267,63 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.evidence_signals (
   UNIQUE (study_id, assumption_key, assumption_version, identifier, cause)
 );
 CREATE INDEX IF NOT EXISTS vcr_evidence_signals_study_idx ON evimed_vcr.evidence_signals (study_id, state, noticed_at DESC);
+
+-- A knowledge pack an account's study lead curated and the platform re-checked, copied as the platform's own immutable version
+-- (flywheel F26, 2026-10-06). The copy is a row of \`knowledge_packs\` owned by the platform publisher account, so every reader of a pack
+-- reads it as it reads any stored one; this table is what the row stands on: whose pack it was copied from (the author, by name, for
+-- as long as they allow it), which version, the official zone of the same disease and whether a source of it has since changed. A
+-- retired version is no longer offered to new studies and stays readable to the studies that pinned it.
+CREATE TABLE IF NOT EXISTS evimed_vcr.platform_packs (
+  pack_id        text PRIMARY KEY REFERENCES evimed_vcr.knowledge_packs(id),
+  disease_key    text NOT NULL,
+  version        integer NOT NULL,
+  source_pack_id text NOT NULL,
+  source_version integer NOT NULL,
+  author_user_id text NOT NULL,
+  author_name    text NOT NULL DEFAULT '',
+  authored_at    timestamptz NOT NULL,
+  entity_keys    text[] NOT NULL DEFAULT '{}',
+  zone_id        text,
+  state          text NOT NULL DEFAULT 'live' CHECK (state IN ('live', 'retired')),
+  retired_at     timestamptz,
+  retired_reason text,
+  source_changed_at timestamptz,
+  source_changes jsonb NOT NULL DEFAULT '[]'::jsonb,
+  recheck        jsonb NOT NULL DEFAULT '{}'::jsonb,
+  promoted_at    timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS vcr_platform_packs_disease_idx ON evimed_vcr.platform_packs (disease_key, version DESC);
+CREATE INDEX IF NOT EXISTS vcr_platform_packs_keys_idx ON evimed_vcr.platform_packs USING gin (entity_keys);
+
+-- Every request to make an account's pack a platform pack, and what the re-check said: the pack stays the account's when it did not
+-- pass, with the failing entries and sources named, and the account reads the result on the pack's page.
+CREATE TABLE IF NOT EXISTS evimed_vcr.pack_promotions (
+  id             text PRIMARY KEY,
+  user_id        text NOT NULL,
+  pack_id        text NOT NULL,
+  pack_version   integer NOT NULL,
+  requested_by   text NOT NULL,
+  state          text NOT NULL CHECK (state IN ('passed', 'failed')),
+  failing        jsonb NOT NULL DEFAULT '[]'::jsonb,
+  checked        jsonb NOT NULL DEFAULT '{}'::jsonb,
+  platform_pack_id text,
+  created_at     timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS vcr_pack_promotions_pack_idx ON evimed_vcr.pack_promotions (user_id, pack_id, created_at DESC);
+
+-- The platform's version is immutable: a row of the publisher account's packs is written once.
+CREATE OR REPLACE FUNCTION evimed_vcr.refuse_platform_pack_change() RETURNS trigger AS $$
+BEGIN
+  IF OLD.user_id = '${PLATFORM_PUBLISHER_USER_ID}' THEN
+    RAISE EXCEPTION 'a platform knowledge pack version is immutable' USING ERRCODE = 'integrity_constraint_violation';
+  END IF;
+  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+DROP TRIGGER IF EXISTS vcr_platform_pack_immutable ON evimed_vcr.knowledge_packs;
+CREATE TRIGGER vcr_platform_pack_immutable BEFORE UPDATE OR DELETE ON evimed_vcr.knowledge_packs
+  FOR EACH ROW EXECUTE FUNCTION evimed_vcr.refuse_platform_pack_change();
 
 -- When the frontier consumer last looked at a study, so a tick takes the study looked at longest ago first.
 CREATE TABLE IF NOT EXISTS evimed_vcr.frontier_scans (

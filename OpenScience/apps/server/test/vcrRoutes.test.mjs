@@ -35,7 +35,7 @@ function response() {
   };
 }
 
-const config = { vcrEnabled: true, vcrAudience: "all", operatorUsers: [], vcrPreviewUsers: [], vcrPublicSimulationsEnabled: true };
+const config = { vcrEnabled: true, vcrAudience: "all", operatorUsers: [], vcrPreviewUsers: [], vcrPublicSimulationsEnabled: true, vcrPlatformPacksEnabled: true };
 const OWNER = "owner";
 const study = { id: "std_1", userId: OWNER, projectId: "prj_1", name: "EV-201", dataTier: "T0",
   intendedUse: "exploratory", status: "active", budget: {}, steps: {} };
@@ -427,6 +427,7 @@ const REQUESTS = {
   "POST /studies/:id/assessments/:assessment/review": ["POST", "/api/vcr/studies/std_1/assessments/asm_1/review", {}],
   "POST /studies/:id/pack": ["POST", "/api/vcr/studies/std_1/pack", { use: "nsclc" }],
   "POST /studies/:id/pack/promote": ["POST", "/api/vcr/studies/std_1/pack/promote", {}],
+  "POST /studies/:id/pack/platform": ["POST", "/api/vcr/studies/std_1/pack/platform", {}],
   "POST /studies/:id/definitions": ["POST", "/api/vcr/studies/std_1/definitions", { populationId: "pop_1", name: "成人 ECOG 0-1", text: "年龄不小于 18 岁、ECOG 0 或 1。" }],
   "POST /studies/:id/definitions/:definition/use": ["POST", "/api/vcr/studies/std_1/definitions/dfn_1/use", { version: 1 }],
   "POST /studies/:id/definitions/:definition/compare": ["POST", "/api/vcr/studies/std_1/definitions/dfn_1/compare", { versionA: 1, versionB: 2 }],
@@ -455,7 +456,8 @@ function composedHooks() {
     publications: { forStudy: async () => [], publish: async () => ({ id: "sim_1", exportKind: "simulation_report", existing: false }), withdraw: async () => ({ id: "sim_1" }) },
     // The disease packs and the definition library: each answers the shape the real one does.
     knowledge: {
-      bindPack: ok, promotePack: ok, saveFromStudy: async () => ({ definitionId: "dfn_1", version: 1 }),
+      bindPack: ok, promotePack: ok, requestPlatformPromotion: async () => ({ state: "passed", existing: false, failing: [] }), withdrawPlatformPack: async () => ({ id: "pkg_1", state: "retired" }),
+      saveFromStudy: async () => ({ definitionId: "dfn_1", version: 1 }),
       useInStudy: async () => ({ definitionId: "dfn_1", version: 1, populationId: "pop_1", renamed: [], unmatched: [] }),
       compareVersions: ok, listPacks: async () => ({ packs: [] }), getPack: async () => ({ id: "nsclc" }),
       listLibrary: async () => ({ definitions: [] }), getLibraryDefinition: async () => ({ id: "dfn_1" }),
@@ -704,7 +706,7 @@ test("every code these routes emit is one this module declares", async () => {
   // nobody raises is dropped, not left as decoration.
   const fromElsewhere = ["vcr_study_not_found", "vcr_study_paused", "vcr_tab_not_found", "vcr_referral_not_found", "vcr_model_exists", "vcr_export_not_found",
     "vcr_pack_not_found", "vcr_pack_invalid", "vcr_definition_not_found", "vcr_definition_invalid",
-    "vcr_publication_not_found", "vcr_publication_not_ready", "vcr_publication_patient_data"];
+    "vcr_publication_not_found", "vcr_publication_not_ready", "vcr_publication_patient_data", "vcr_pack_not_curated"];
   for (const code of fromElsewhere) assert.ok(VCR_ROUTE_ERROR_CODES.includes(code), code);
   const neverEmitted = VCR_ROUTE_ERROR_CODES.filter((code) => !literals.has(code) && !fromElsewhere.includes(code));
   assert.deepEqual(neverEmitted, [], `declared but never emitted: ${neverEmitted.join(", ")}`);
@@ -930,4 +932,28 @@ test("publishing to 模拟研究 is the lead's alone, takes an export, a title a
     await assert.rejects(off.routes(request("GET", "/api/vcr/studies/std_1/publications"), response()), { status: 404, code: "vcr_publications_not_enabled" });
     assert.equal(off.calls.some((call) => call[0] === "vcr.rolesOf"), false, "no study is even looked at");
   }
+});
+
+test("a platform pack is asked for by the study's lead alone, and the author takes their name off as themselves; off, both answer by name", async () => {
+  const { routes, as, calls } = fixture({ overrides: composedHooks() });
+  as(OWNER);
+  const asked = response();
+  await routes(request("POST", "/api/vcr/studies/std_1/pack/platform", {}), asked);
+  assert.equal(asked.status, 201);
+  const withdrawn = response();
+  await routes(request("DELETE", "/api/vcr/packs/pkg_1/platform"), withdrawn);
+  assert.equal(withdrawn.status, 200);
+  assert.deepEqual(withdrawn.json().data, { id: "pkg_1", state: "retired" });
+  // A data manager holds neither manage_study nor the lead's word.
+  const member = fixture({ roles: { dm: ["data_manager"] }, overrides: composedHooks() });
+  member.as("dm");
+  await assert.rejects(member.routes(request("POST", "/api/vcr/studies/std_1/pack/platform", {}), response()), { status: 403, code: "vcr_forbidden" });
+  // The body takes nothing, and a switch that is off is the module's own code before anything is read.
+  await assert.rejects(routes(request("POST", "/api/vcr/studies/std_1/pack/platform", { pack: "pkg_x" }), response()), { status: 400, code: "vcr_payload_invalid" });
+  const off = fixture({ overrides: composedHooks(), settings: { vcrPlatformPacksEnabled: false } });
+  off.as(OWNER);
+  await assert.rejects(off.routes(request("POST", "/api/vcr/studies/std_1/pack/platform", {}), response()), { status: 404, code: "vcr_platform_packs_not_enabled" });
+  await assert.rejects(off.routes(request("DELETE", "/api/vcr/packs/pkg_1/platform"), response()), { status: 404, code: "vcr_platform_packs_not_enabled" });
+  assert.equal(off.calls.some((call) => call[0] === "vcr.rolesOf"), false);
+  void calls;
 });

@@ -74,7 +74,7 @@ before(async () => {
     dataDir, port: 0, runtimeMode: "mock", devAuth: false, authMode: "local", bootstrapUser: "", bootstrapPassword: "",
     stateStore: "postgres", requireSharedStateStore: true, databaseUrl: isolated.url, operatorMetricsToken: "test-only-metrics-token",
     rateLimitMaxRequests: 100_000, authRateLimitMaxRequests: 1_000,
-    vcrEnabled: true, vcrAudience: "all", vcrPollMs: 3_600_000, vcrDataPlaneDir: plane, vcrPublicSimulationsEnabled: true,
+    vcrEnabled: true, vcrAudience: "all", vcrPollMs: 3_600_000, vcrDataPlaneDir: plane, vcrPublicSimulationsEnabled: true, vcrPlatformPacksEnabled: true,
     // The two things that leave the process. The engine is a fake that answers
     // its health and accepts a job's deletion; a run is recorded, not started.
     vcrEngineUrl: ENGINE, vcrEngineToken: "t".repeat(40), vcrEngineReceiptKey: "r".repeat(40),
@@ -216,6 +216,7 @@ function requests(target, ids) {
     // The study's pack and the library's definitions: allowed roles reach the package, which answers 404 for what the account does not have.
     "POST /studies/:id/pack": async () => ["POST", `${S}/pack`, { use: "no_such_pack" }],
     "POST /studies/:id/pack/promote": async () => ["POST", `${S}/pack/promote`, {}],
+    "POST /studies/:id/pack/platform": async () => ["POST", `${S}/pack/platform`, {}],
     "POST /studies/:id/definitions": async () => ["POST", `${S}/definitions`, { populationId: "pop_none", name: "无此人群", text: "没有这个人群" }],
     "POST /studies/:id/definitions/:definition/use": async () => ["POST", `${S}/definitions/dfn_none/use`, {}],
     "POST /studies/:id/definitions/:definition/compare": async () => ["POST", `${S}/definitions/dfn_none/compare`, { versionA: 1, versionB: 2 }],

@@ -117,6 +117,9 @@ export const VCR_ROUTE_ERROR_CODES = Object.freeze([
   "vcr_publication_not_found",
   "vcr_publication_not_ready",
   "vcr_publication_patient_data",
+  // Platform knowledge packs (flywheel F26): the switch is off, the pack is not yet marked curated.
+  "vcr_platform_packs_not_enabled",
+  "vcr_pack_not_curated",
 ]);
 
 /**
@@ -163,6 +166,7 @@ export const VCR_ROUTE_ABILITIES = Object.freeze({
   "POST /models (with a study)": ["write"],
   "POST /studies/:id/pack": ["write"],
   "POST /studies/:id/pack/promote": ["manage_study"],
+  "POST /studies/:id/pack/platform": ["manage_study"],
   "POST /studies/:id/definitions": ["write"],
   "POST /studies/:id/definitions/:definition/use": ["write"],
   "POST /studies/:id/definitions/:definition/compare": ["run"],
@@ -496,6 +500,13 @@ export function createVcrRoutes(dependencies) {
       throw new HttpError(404, "not_found", "虚拟临研 route not found.");
     }
     // The packs the account can use, and its library of population definitions: the account's, so no study is named.
+    // The author takes their name off a platform pack: the account's own act, so no study is named.
+    if (parts[0] === "packs" && parts.length === 3 && parts[2] === "platform" && method === "DELETE") {
+      await bodyOf(req, maxJsonBytes, []);
+      if (!config.vcrPlatformPacksEnabled || !hooks.knowledge) throw new HttpError(404, "vcr_platform_packs_not_enabled", "平台知识包 is not enabled.");
+      return reply(await audited("vcr.pack.platform_withdraw", (result) => ({ code: String(result.id) }), { code: parts[1] },
+        () => hooks.knowledge.withdrawPlatformPack(String(user.id), parts[1])));
+    }
     if (parts[0] === "packs" || parts[0] === "definitions") {
       if (method !== "GET" || parts.length > 2) throw new HttpError(404, "not_found", "虚拟临研 route not found.");
       const knowledge = hooks.knowledge;
@@ -618,6 +629,15 @@ export function createVcrRoutes(dependencies) {
         if (!hooks.knowledge) throw UNAVAILABLE();
         return reply(await audited("vcr.pack.promote", () => ({ code: id, detail: "curated" }), { code: id },
           () => hooks.knowledge.promotePack(study, String(user.id))));
+      }
+      // 申请成为平台知识包: the study's lead alone; the re-check is the answer, passed or failed with the failing entries named.
+      if (parts.length === 4 && parts[3] === "platform" && method === "POST") {
+        await bodyOf(req, maxJsonBytes, []);
+        if (!config.vcrPlatformPacksEnabled || !hooks.knowledge) throw new HttpError(404, "vcr_platform_packs_not_enabled", "平台知识包 is not enabled.");
+        const { study } = await authorize(id, "manage_study");
+        const result = await audited("vcr.pack.platform_request", (outcome) => ({ code: id, detail: String(outcome.state) }), { code: id },
+          () => hooks.knowledge.requestPlatformPromotion(study, String(user.id)));
+        return reply(result, result.state === "passed" && !result.existing ? 201 : 200);
       }
       throw new HttpError(404, "not_found", "虚拟临研 route not found.");
     }

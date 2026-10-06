@@ -28,11 +28,18 @@ export const skipWithoutDatabase = { skip: !databaseUrl && "OPEN_SCIENCE_TEST_PO
 export async function startVcr({ label, config = {}, composeOptions = {}, withFrontier = false, users = [] }) {
   const isolated = await createGeoTestDatabase(databaseUrl, label);
   const database = new ControlPlaneDatabase({ databaseUrl: isolated.url, databasePoolMax: 6, databaseConnectionTimeoutMs: 3_000 });
-  if (withFrontier) {
-    await migrateFrontier(database, { dimension: 1024 });
-    await migrateProductStore(database);
-    await migrateEvidenceZones(database);
-    for (const id of users) await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,$2,'development') ON CONFLICT DO NOTHING", [id, id]);
+  try {
+    if (withFrontier) {
+      await migrateFrontier(database, { dimension: 1024 });
+      await migrateProductStore(database);
+      await migrateEvidenceZones(database);
+      for (const id of users) await database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,$2,'development') ON CONFLICT DO NOTHING", [id, id]);
+    }
+  } catch (error) {
+    // A setup that failed must not leave its pool open: the process would not end and the failure would never be read.
+    await database.close?.().catch(() => {});
+    await isolated.drop().catch(() => {});
+    throw error;
   }
   const registry = async (/** @type {string} */ url) => {
     if (!String(url).includes("NCT02296125")) return new Response("{}", { status: 404 });
