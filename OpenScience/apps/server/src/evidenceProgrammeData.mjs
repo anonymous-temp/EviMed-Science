@@ -117,25 +117,52 @@ export const PROGRAMME_CARD_TITLES = Object.freeze({
 
 /**
  * The specialist engines whose analyses of public data are the platform's own first-hand work (`original_analysis`), keyed by the
- * capability that runs them, with the reporting standard each is written to (plan §5.1: STROBE-MR for Mendelian randomisation,
- * READUS-PV for pharmacovigilance signals). Closed: a capability not named here makes a synthesis, never an original analysis.
- * @type {Readonly<Record<string, { engine: string, standard: string }>>}
+ * capability that runs them. The reporting standard each is written to is the domain's closed map (`evidenceReportingStandard`:
+ * STROBE-MR for Mendelian randomisation, READUS-PV for pharmacovigilance signals, plan §5.1). Closed: a capability not named here
+ * makes a synthesis, never an original analysis. An episode of one of them becomes an original-analysis card only when its run
+ * left engine receipts (a result version with a method record and machine values); without one it is read as before, through its
+ * evidence matrix, and is a synthesis.
+ * @type {Readonly<Record<string, { engine: string }>>}
  */
 export const ORIGINAL_ANALYSIS_ENGINES = Object.freeze({
-  "adr-analysis": Object.freeze({ engine: "drug_safety_analysis", standard: "READUS-PV" }),
-  "mendelian-randomization": Object.freeze({ engine: "mendelian_randomization", standard: "STROBE-MR" }),
+  "adr-analysis": Object.freeze({ engine: "drug_safety_analysis" }),
+  "mendelian-randomization": Object.freeze({ engine: "mendelian_randomization" }),
 });
 
 /**
- * The one structured field of a result that says an analysis was replicated in a second, independent dataset: a machine value
- * of that key (`ResultVersion.machineValues` is `{ key, value, unit }`), a count of independent replication datasets. An analysis
- * is titled a 「发现」 only when a result of its run carries this key with a value of 1 or more. No engine writes it yet, so every
- * original analysis is, today, 「信号，待验证」 — which is the honest label for a signal nobody has replicated.
+ * The number of independent datasets in which an analysis holds, the one it was run on included: a machine value of this key
+ * (`ResultVersion.machineValues` is `{ key, value, unit }`) in any receipt of the run. An analysis is titled a 「发现」 only when it is
+ * at least `REPLICATION_MIN_INDEPENDENT_DATASETS` — the analysed dataset and a second, independent one (plan §5.1). No engine
+ * writes it yet, so every original analysis is, today, 「信号，待验证」 — the honest label for a signal nobody has replicated.
  */
 export const REPLICATION_MACHINE_VALUE_KEY = "replication.independent_dataset_count";
+export const REPLICATION_MIN_INDEPENDENT_DATASETS = 2;
 
-/** What an original analysis is called in its title and answer. */
-export const ORIGINAL_ANALYSIS_LABELS = Object.freeze({ replicated: "发现", unreplicated: "信号，待验证" });
+/**
+ * What a receipt says about multiple comparisons, as two machine values: how many hypotheses the analysis tested, and whether it
+ * corrected for them (1) or not (0). A receipt that tested more than one and says it corrected states the correction; one that
+ * tested more than one and does not say, or does not report either, makes the card say 「未报告多重比较校正」 and call itself a
+ * signal. No engine writes them yet (the drug-safety replay lists its unadjusted tables as a diagnostic only).
+ */
+export const MULTIPLICITY_MACHINE_VALUE_KEYS = Object.freeze({ tested: "multiplicity.tested_hypotheses", corrected: "multiplicity.correction_applied" });
+
+/** What an original analysis is called in its title and answer, and what it says when no correction is reported. */
+export const ORIGINAL_ANALYSIS_LABELS = Object.freeze({ replicated: "发现", unreplicated: "信号，待验证", multiplicityNotReported: "未报告多重比较校正" });
+
+/**
+ * The sentences an original analysis states from a receipt, by the method that produced it: each a template over the
+ * receipt's machine-value paths in the report-number renderer's grammar (`{{n:<path>|<format>}}`), so every number in the
+ * card is rendered from the receipt and none is typed (principle 10c). A headline whose paths the receipt does not hold is
+ * left out and counted; the card keeps the rest. The paths are the engine's own (`deterministic_replay.py`'s `values[0].…`).
+ * Build to delete: a receipt that names its own headline measures needs none of this table.
+ * @type {Readonly<Record<string, readonly { id: string, template: string }[]>>}
+ */
+export const ORIGINAL_ANALYSIS_HEADLINES = Object.freeze({
+  "faers.signals": Object.freeze([
+    Object.freeze({ id: "ror", template: "该药物与该不良事件的报告比值比（ROR）为 {{n:values[0].ror.value|f2}}，置信区间下限 {{n:values[0].ror.ci95_lower|f2}}、上限 {{n:values[0].ror.ci95_upper|f2}}。" }),
+    Object.freeze({ id: "reports", template: "同时报告了该药物与该不良事件的病例报告有 {{n:values[0].table.a|thousands}} 份。" }),
+  ]),
+});
 
 /** How many days of the feed the topic selector reads, and the day's hour (feed time zone) its decision is made. */
 export const PROGRAMME_FRONTIER_WINDOW_DAYS = 7;

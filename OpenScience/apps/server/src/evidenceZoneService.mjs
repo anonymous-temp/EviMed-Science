@@ -6,6 +6,7 @@ import {
   EVIDENCE_ZONE_KINDS,
   EVIDENCE_ZONE_VISIBILITY,
   assertEvidenceCardForZone,
+  evidenceCalculationReceiptIds,
   evidenceCardClaims,
   evidenceCardClinicalView,
   evidenceCardIdentifiers,
@@ -18,6 +19,7 @@ import {
   evidenceLineage,
   evidenceMergeEntityKeys,
   evidenceOriginality,
+  evidenceOriginalityBasisIssues,
   evidenceOriginalityIsPrimary,
   evidenceProducer,
   evidencePublicViewContent,
@@ -149,12 +151,17 @@ export class EvidenceZoneService {
    * `onCardPublished` hears, once a write has committed, that a card became published or that its published content
    * changed (`change` is `"published"` or `"revised"`; a refresh of check dates alone is neither) — the followers'
    * notice hangs on it (flywheel F10). It is told and never asked: a failure of it never reaches the writer.
+   * `calculationReceipts` reads the engine receipts a first-hand card's calculated claims and comparisons stand on
+   * (`evidenceCalculationReceipts.mjs`): `get(receiptId)` answers the receipt or null. Without it every such claim reads as
+   * unverified (its receipt is unavailable), never ✓ — and a card with no calculated claim needs none.
    * @param {{database:any, entityKeysFor?:((input:{texts:string[],identifiers:string[]})=>Promise<string[]>)|null, platformPublisherUserId?:string|null,
+   *   calculationReceipts?:{get:(receiptId:string)=>Promise<any>}|null,
    *   onCardSaved?:((event:{origin:string,zoneId:string,cardId:string,revision:number,state:string})=>Promise<unknown>)|null,
    *   onCardPublished?:((event:{zoneId:string,cardId:string,revision:number,change:"published"|"revised",origin:string})=>Promise<unknown>|unknown)|null}} options
    */
-  constructor({ database, entityKeysFor = null, platformPublisherUserId = null, onCardSaved = null, onCardPublished = null }) {
+  constructor({ database, entityKeysFor = null, platformPublisherUserId = null, calculationReceipts = null, onCardSaved = null, onCardPublished = null }) {
     this.database = database;
+    this.calculationReceipts = calculationReceipts;
     this.entityKeysFor = entityKeysFor;
     this.platformPublisherUserId = platformPublisherUserId;
     this.onCardSaved = onCardSaved;
@@ -237,6 +244,9 @@ export class EvidenceZoneService {
       recordEvidenceSimulatedRefused(issue.valueSource);
       throw error(400, "value_source_refused", issue.message);
     }
+    // First-hand work in the platform's voice stands on a calculation, and interpretation never claims one: each refuses this write alone.
+    const [basisIssue] = evidenceOriginalityBasisIssues({ originality, claims: value.claims, zoneKind: parent.kind });
+    if (basisIssue) throw error(400, basisIssue.code.replace(/^evidence_/, ""), basisIssue.message);
     let entityKeys = body.entityKeys === undefined ? (existing?.entity_keys ?? []) : parse(evidenceEntityKeys, body.entityKeys);
     if (this.entityKeysFor) {
       const draft = { ...value, lineage: { ...stored, ...(value.source_item_id ? { frontierItemId: value.source_item_id } : {}) } };
@@ -312,6 +322,21 @@ export class EvidenceZoneService {
       updatedAt: row.updated_at,
     };
   }
+  /**
+   * The engine receipts a card's calculated claims name, read once before the card is checked. A receipt that cannot be read is
+   * left out and its claim says so; reading never fails the card.
+   * @param {any} card @returns {Promise<Map<string, any>>}
+   */
+  async receiptsFor(card) {
+    /** @type {Map<string, any>} */
+    const found = new Map();
+    if (!this.calculationReceipts) return found;
+    for (const id of evidenceCalculationReceiptIds(card)) {
+      const receipt = await this.calculationReceipts.get(id).catch(() => null);
+      if (receipt) found.set(id, receipt);
+    }
+    return found;
+  }
   /** @param {any} client @param {any} user @param {any} row @param {boolean} [detail] */
   async cardView(client, user, row, detail = false) {
     const reviews = (
@@ -349,7 +374,8 @@ export class EvidenceZoneService {
       originality: row.originality ?? null, lineage, journeyStage: row.journey_stage ?? null, disclosure: row.disclosure ?? null,
       publicView: row.public_view ?? null, editorial: row.editorial ?? null,
     } : null;
-    const verification = contract ? verifyEvidenceCardClaims(contract, { locations: contract.claims.length > 0 }) : null;
+    const receipts = contract ? await this.receiptsFor(contract) : null;
+    const verification = contract ? verifyEvidenceCardClaims(contract, { locations: contract.claims.length > 0, receipts }) : null;
     const verdicts = new Map((verification?.claims ?? []).map((/** @type {any} */ claim) => [claim.claimId, claim]));
     return {
       id: row.id,

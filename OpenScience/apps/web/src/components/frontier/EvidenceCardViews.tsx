@@ -22,6 +22,7 @@ const ABSOLUTE_REASON: Record<string, string> = {
   no_comparison: "没有比较数据",
   counts_missing: "缺少事件数或分母",
   events_exceed_denominator: "事件数超过了人数",
+  calculation_unverified: "平台计算的回执没有对上这些数字",
 };
 /** Why the public fact box has no row for a comparison, or none at all. */
 export const FACT_BOX_REASON: Record<string, string> = {
@@ -30,6 +31,7 @@ export const FACT_BOX_REASON: Record<string, string> = {
   counts_missing: "比较缺少事件数或分母，所以没有事实框。",
   events_exceed_denominator: "比较里的事件数超过了人数，所以没有事实框。",
   not_per_people: "比较是按人年计的，不能换算成每 1000 人，所以没有事实框。",
+  calculation_unverified: "比较里的数字是平台计算的，但引擎回执没有对上这些数字，所以没有事实框。",
   nothing_usable: "没有能放进事实框的比较。",
 };
 
@@ -46,6 +48,7 @@ const columns: DataColumn<ClinicalRow>[] = [
       <span>
         {row.outcome}
         <span className="block text-caption text-text-3">{row.timeframe}</span>
+        {row.platformCalculation && <span className="block text-caption text-text-3">{row.platformCalculation.label} · {row.platformCalculation.engine} · {row.platformCalculation.method}</span>}
       </span>
     ),
   },
@@ -83,6 +86,9 @@ export function EvidenceClinicalTable({ evidence, view }: { evidence: EvidenceCa
         emptyText="这张卡还没有结局比较。"
         footnote={view.rows.length ? "绝对效应按每 1000 人计，由事件数和分母算出。" : undefined}
       />
+      {(view.withheldCalculations?.length ?? 0) > 0 && (
+        <p className="text-caption text-verify-pending">有 {view.withheldCalculations?.length} 条平台计算的结论没有对上引擎回执，没有列出。</p>
+      )}
       {view.rows.some((row) => row.sourceIndexes.length > 0) && (
         <p className="text-caption text-text-3">
           数据来源
@@ -177,6 +183,19 @@ export function EvidencePublicLayout({ view }: { view: EvidencePublicView }) {
     <div className="space-y-4">
       {written.length === 0 && <p className="text-ui text-text-2">作者还没有写公众版内容。</p>}
       {view.panels.map((panel) => <PanelBlock key={panel.key} panel={panel} />)}
+      {(view.calculations?.length ?? 0) > 0 && (
+        <section className="space-y-1">
+          <h4 className="text-ui font-medium text-text">平台计算</h4>
+          <ul className="space-y-1">
+            {view.calculations?.map((entry) => (
+              <li key={entry.claimId} className="text-ui text-text-2">
+                {entry.text}
+                <span className="block text-caption text-text-3">{entry.engine} · {entry.method} · 回执 {entry.receiptId}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       <section className="space-y-2">
         <h4 className="text-ui font-medium text-text">事实框</h4>
         <EvidenceFactBoxView factBox={view.factBox} />

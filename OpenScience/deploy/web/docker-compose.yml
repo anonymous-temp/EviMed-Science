@@ -537,6 +537,8 @@ services:
       # config.mjs's defaults — everything off, 30 yuan a day, one slot — so a
       # deployment turns each on in .env and nowhere else.
       OPEN_SCIENCE_EVIDENCE_PROGRAMME_ENABLED:
+      OPEN_SCIENCE_EVIDENCE_RECALCULATION_CARDS_ENABLED:
+      OPEN_SCIENCE_PREDICTION_REGISTRY_ENABLED:
       OPEN_SCIENCE_EVIDENCE_PROGRAMME_DAILY_BUDGET_CNY:
       OPEN_SCIENCE_EVIDENCE_PROGRAMME_MAX_CONCURRENCY:
       # The programme's own limits (F01/F02): an episode's budget, the least number of distinct readers

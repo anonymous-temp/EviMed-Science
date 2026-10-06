@@ -75,8 +75,11 @@ export async function monthlyEvidenceFigures(database, { month }) {
     if (!page.length) break;
     for (const row of page) {
       const counts = verifyEvidenceCardClaims({ claims: row.snapshot.claims ?? [], sources: row.snapshot.sources ?? [] }).counts;
-      if (counts.total > 0) cards += 1;
-      claims += counts.total;
+      // A claim the platform computed is checked against its engine receipt, which this figure does not read: it is left out of both counts, so
+      // the rate stays the rate of quotations found, and a card of calculations is not scored as if its receipts were missing.
+      const quoted = counts.total - (counts.calculation_unverified ?? 0);
+      if (quoted > 0) cards += 1;
+      claims += quoted;
       verified += counts.verified;
     }
     after = page.at(-1).card_id;

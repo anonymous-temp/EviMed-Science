@@ -69,9 +69,12 @@ import path from "node:path";
 import { createGzip } from "node:zlib";
 import { postgresBackupReadiness } from "./postgresBackupReadiness.mjs";
 import { vcrBackupReadiness } from "./vcrBackupReadiness.mjs";
-import { LEARNING_PROJECT_ID, ensureEvidenceProject, isEvolutionProject, isInternalProjectOf, isReservedProjectId } from "./internalProjects.mjs";
+import { EVIDENCE_PROJECT_ID, LEARNING_PROJECT_ID, ensureEvidenceProject, isEvolutionProject, isInternalProjectOf, isReservedProjectId } from "./internalProjects.mjs";
 import { createEvidenceBudget, evidenceBudgetMetricFamilies } from "./evidenceBudget.mjs";
 import { createEvidenceProgramme, evidenceProgrammeMetricFamilies } from "./evidenceProgramme.mjs";
+import { createCalculationReceiptReader } from "./evidenceCalculationReceipts.mjs";
+import { createEvidenceRecalculation, createOfficialZoneMatcher, evidenceRecalculationMetricFamilies } from "./evidenceRecalculation.mjs";
+import { createPredictionRegistry, predictionRegistryMetricFamilies } from "./predictionRegistry.mjs";
 import { evidenceCardMetricFamilies } from "./evidenceCardMetrics.mjs";
 import { assertNotPlatformAccount } from "./platformAccount.mjs";
 import { completeEvolutionRuntime } from './evolutionRuntimeCompletion.mjs';
@@ -1006,6 +1009,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   let maintenanceService = null;
   /** @type {ReturnType<typeof createEvolution> | null} */
   let evolution = null;
+  /** @type {ReturnType<typeof createEvidenceRecalculation> | null} */
+  let evidenceRecalculation = null;
+  /** @type {ReturnType<typeof createPredictionRegistry> | null} */
+  let predictionRegistry = null;
   const maintenanceMutation = (operation) => maintenanceService ? maintenanceService.withMutation(operation) : operation();
   const productDocuments = productDatabase ? new ProductDocuments(productDatabase) : null;
   const productJobs = productDatabase ? new ProductJobs(productDatabase) : null;
@@ -2139,6 +2146,15 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   }
   const evidenceUpkeepRoutes = createEvidenceUpkeepRoutes({ store, service: frontier?.evidenceZones ?? null, frontier: frontier?.service ?? null, config,
     challenges: evidenceUpkeep?.challenges ?? null, upkeep: evidenceUpkeep?.upkeep ?? null, changeLog: evidenceUpkeep?.changeLog ?? null, maxJsonBytes: config.maxJsonBytes });
+  // The engine receipts a first-hand card's calculated claims are read back from (evidenceCalculationReceipts.mjs): the platform's own
+  // internal evidence project and never another account's, and the evolution module's recalculation receipts. Reading is lazy, so
+  // the evolution module composed further down is found when a card is read; with it off a recalculation receipt reads as unavailable.
+  if (frontier && resultProvenance) {
+    frontier.evidenceZones.calculationReceipts = createCalculationReceiptReader({
+      results: resultProvenance, scopes: [{ userId: PLATFORM_PUBLISHER_USER_ID, projectId: EVIDENCE_PROJECT_ID }],
+      evolution: { get: (/** @type {string} */ id) => (evolution?.service ? evolution.service.get(id) : Promise.resolve(null)) },
+    });
+  }
   // The platform's own evidence programme (evidenceProgramme.mjs, plan §5.1 F01/F02/F04): a daily topic decision, agendas the publisher
   // account runs in its internal evidence project, and the cards their verified conclusions earn. Composed only with its switch on and
   // the frontier (which it reads and whose zones it writes) and the autopilot (which runs its agendas) beside it; off, it is nothing.
@@ -4519,6 +4535,22 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   if (evolution) {
     runtimeManager.platformSkillSupply = evolution.supply;
     if (autopilotService) autopilotService.evolution = evolution.integration;
+    // A research-proof the evolution module records is told to the recalculation-card publisher (flywheel F03): one call, advice and never part
+    // of the loop. Composed only with its own switch, the frontier whose official zones it writes and the glossary that finds the zone.
+    if (config.evidenceRecalculationCardsEnabled && frontier && entityVocabulary && productDatabase) {
+      const recalculation = createEvidenceRecalculation({ config, evolution: evolution.service, zones: frontier.evidenceZones,
+        matchZone: createOfficialZoneMatcher({ database: productDatabase, entityVocabulary }), report: code => process.stderr.write(`${code}\n`) });
+      evidenceRecalculation = recalculation;
+      evolution.service.callbacks.recalculationProof = (/** @type {any} */ proof) => recalculation.onProofRecorded(proof);
+    }
+    // The prediction registry (flywheel F25) rides the evolution module's prospective records: the module's publication match tells it of each
+    // paper the feed publishes, and a virtual study or an agenda files through `predictionRegistry.register`. Off, nothing here exists.
+    if (config.predictionRegistryEnabled) {
+      const registry = createPredictionRegistry({ config, evolution: evolution.service, isOperator: (/** @type {{ id: string }} */ user) => config.operatorUsers.includes(user.id),
+        report: code => process.stderr.write(`${code}\n`) });
+      predictionRegistry = registry;
+      evolution.service.callbacks.predictionPublication = (/** @type {any} */ input) => registry.onPublication(input);
+    }
   }
   const reviewGatewayHandler = createReviewGatewayHandler({
     runtimeManager, service: review?.service ?? null, config,
@@ -5075,6 +5107,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           evaluationIsolation,
           evidenceBudget,
           evidenceProgramme,
+          evidenceRecalculation,
+          predictionRegistry,
           entityVocabulary,
           evidencePublish,
           evidenceUpkeep,
@@ -7898,7 +7932,7 @@ function addHistogramMetric(lines, name, help, series) {
   }
 }
 
-async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, evidenceBudget = null, entityVocabulary = null, evidencePublish = null, evidenceUpkeep = null, evidenceProgramme = null, evidenceFeed = null, evidencePublic = null }) {
+async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, evidenceBudget = null, entityVocabulary = null, evidencePublish = null, evidenceUpkeep = null, evidenceProgramme = null, evidenceFeed = null, evidencePublic = null, evidenceRecalculation = null, predictionRegistry = null }) {
   const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate, frontier, review, geo, vcr, credits);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
@@ -8299,6 +8333,10 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
   // Sharing memory inside the platform (capsuleShareMetrics.mjs): shares, imports, trials, declines, take-downs, what the write-side
   // defences refused, zone subscriptions, and what learning did with runs that used a guest capsule.
   for (const family of capsuleShareMetricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
+  // Recalculation cards (evidenceRecalculation.mjs): the switch, and what became of each proof the evolution module recorded.
+  for (const family of evidenceRecalculationMetricFamilies(evidenceRecalculation, config)) addMetric(lines, family.name, family.help, family.type, family.series);
+  // The prediction registry (predictionRegistry.mjs): the switch, registrations, scores and what each published paper that named a registered trial led to.
+  for (const family of predictionRegistryMetricFamilies(predictionRegistry, config)) addMetric(lines, family.name, family.help, family.type, family.series);
   // The evidence card's guardrails (evidenceCardMetrics.mjs): cards without a producer (must be 0), writes refused by
   // origin, cards refused for a simulated value. Read from the zone service only while the frontier is composed.
   for (const family of evidenceCardMetricFamilies(frontier ? await frontier.evidenceZones.metrics().catch(() => null) : null)) addMetric(lines, family.name, family.help, family.type, family.series);

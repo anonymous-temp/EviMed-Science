@@ -40,6 +40,8 @@
 
 import { VCR_VALUE_SOURCES, VCR_VALUE_SOURCE_LABELS_ZH } from './vcrVocabulary.mjs'
 import { attachClaimSourceLocations, claimVerification } from './clinicalEvidence.mjs'
+import { typedNumberSpans } from './numberBinding.mjs'
+import { applyBindingFormat } from './valueBindings.mjs'
 
 /** @param {readonly string[]} list */
 const frozen = (list) => Object.freeze([...list])
@@ -86,6 +88,8 @@ export const EVIDENCE_CARD_ERROR_MESSAGES_ZH = Object.freeze({
   evidence_zone_kind_forbidden: '官方专区只能由平台的内部操作建立，专区类型建立之后也不能更改。',
   evidence_visibility_requires_publication: '专区先发布，才能公开到互联网；撤回发布后会自动回到平台内可见。',
   evidence_ranking_input_unknown: '排序只能读取已登记的输入（时效、核验比例、评议分、关注数）；付费等其他字段不能参与排序。',
+  evidence_primary_requires_calculation: '官方专区里的一手卡（原创分析、复算核验、原创研究）至少要有一条带计算依据的结论：数字要有引擎回执，不能只靠引用。这张卡没有保存。',
+  evidence_interpretive_calculation_refused: '解读类的卡（综合、速览）不能把数字标成平台自己的计算；论文里的数字只能作为引文。这张卡没有保存。',
 })
 export const EVIDENCE_CARD_ERROR_CODES = frozen(Object.keys(EVIDENCE_CARD_ERROR_MESSAGES_ZH))
 
@@ -136,6 +140,12 @@ export const EVIDENCE_AI_STEP_LABELS_ZH = Object.freeze({ search: '检索', scre
 
 /** The claim types of a research run's evidence matrix, reused unchanged. */
 export const EVIDENCE_CLAIM_TYPES = frozen(['direct', 'synthesized', 'derived'])
+/**
+ * What a card's claim may be: the run's three, and `calculated` — a number the platform's own engine computed, which no
+ * source sentence contains. It stands on a calculation basis (an engine receipt), never on a quotation (flywheel plan
+ * §5.1, F03, 2026-10-06).
+ */
+export const EVIDENCE_CARD_CLAIM_TYPES = frozen([...EVIDENCE_CLAIM_TYPES, 'calculated'])
 export const EVIDENCE_CLAIM_CONFIDENCE = frozen(['high', 'moderate', 'low'])
 /** Whether a comparison's outcome is a benefit or a harm, which is what the public fact box groups by. */
 export const EVIDENCE_OUTCOME_ROLES = frozen(['benefit', 'harm'])
@@ -416,7 +426,9 @@ export function evidenceStructuredContent(value, sourceCount) {
           || !count(c.participants)
           || !count(c.studies)
           || (c.outcomeRole != null && !EVIDENCE_OUTCOME_ROLES.includes(c.outcomeRole))
-          || (c.valueSource != null && !VCR_VALUE_SOURCES.includes(c.valueSource)),
+          || (c.valueSource != null && !VCR_VALUE_SOURCES.includes(c.valueSource))
+          // Counts a machine produced say so and name the receipt paths they stand on (`evidenceComparisonCalculation`).
+          || (c.calculation != null && (c.valueSource !== 'calculated' || !evidenceComparisonCalculation(c.calculation, 'comparison.calculation'))),
       ))
   ) throw invalid()
   return value
@@ -632,6 +644,278 @@ export function assertEvidenceCardForZone({ zoneKind, producer, journeyStage, di
 }
 
 // ---------------------------------------------------------------------------
+// Calculation basis: a number a machine computed, and the receipt it can be read back from
+// ---------------------------------------------------------------------------
+
+/** What a reader is told a calculated claim is. */
+export const EVIDENCE_CALCULATION_LABEL_ZH = '平台计算'
+/**
+ * The formats a calculated number may be printed in: the numeric ones of the report-number renderer
+ * (`numberBinding.mjs`), so a card's rounding is that renderer's and not a second rule.
+ */
+export const EVIDENCE_CALCULATION_FORMATS = frozen(['raw', 'int', 'f1', 'f2', 'f3', 'pct0', 'pct1', 'pct2', 'thousands'])
+/** Why a calculation basis did not check out; the claim carries one and the reader is shown its sentence. */
+export const EVIDENCE_CALCULATION_REASONS = frozen([
+  'receipt_unavailable', 'engine_mismatch', 'method_mismatch', 'inputs_mismatch', 'value_missing', 'value_mismatch',
+  'unit_mismatch', 'number_not_printed', 'number_unbound',
+])
+export const EVIDENCE_CALCULATION_REASON_LABELS_ZH = Object.freeze({
+  receipt_unavailable: '找不到这条结论引用的引擎回执，没有核对',
+  engine_mismatch: '回执记录的引擎与结论写的不一致',
+  method_mismatch: '回执记录的方法与结论写的不一致',
+  inputs_mismatch: '回执记录的输入数据与结论写的不一致',
+  value_missing: '回执里没有结论所指路径上的数值',
+  value_mismatch: '回执里的数值与结论记录的机器值不一致',
+  unit_mismatch: '回执记录的单位无法按这种格式印出这个数',
+  number_not_printed: '结论文字里印出的数字不是机器值按所选格式取整后的结果',
+  number_unbound: '结论文字里还有没有出处的数字：每个数字都要来自回执',
+})
+
+const CALCULATION_ENGINE = /^[a-z][a-z0-9_.-]{1,63}$/
+const CALCULATION_RECEIPT_ID = /^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,199}$/
+const CALCULATION_VALUE_PATH = /^[A-Za-z0-9_.[\]一-鿿-]{1,300}$/
+const CALCULATION_HASH = /^[a-f0-9]{64}$/
+/** The most further numbers one calculated claim states beside its first. */
+export const EVIDENCE_CALCULATION_EXTRA_VALUES = 6
+
+/**
+ * The engine a result's method record names (the result subsystem's own method ids), so a receipt read from a result
+ * version says which engine computed it. Closed: a method not listed here is not a receipt a card may cite.
+ */
+export const EVIDENCE_METHOD_ENGINES = Object.freeze({
+  'faers.signals': 'drug_safety_analysis',
+  'meta.dl': 'meta_analysis',
+  'bibliometric.network': 'bibliometric',
+})
+/**
+ * The reporting standard an original analysis is written to, by the engine that computed it (plan §5.1: STROBE-MR for
+ * Mendelian randomization, READUS-PV for pharmacovigilance signals). Closed: an engine with no standard here does not make
+ * an original analysis card. @type {Readonly<Record<string, string>>}
+ */
+export const EVIDENCE_REPORTING_STANDARDS = Object.freeze({
+  mendelian_randomization: 'STROBE-MR',
+  drug_safety_analysis: 'READUS-PV',
+})
+/**
+ * What a recalculation card concludes about a published result, in a closed vocabulary (flywheel plan §5.1, F03): the platform's
+ * independent reproduction matched what the paper printed (`reproduced`), landed within the tolerance the paper's printed precision
+ * allows but not at that precision (`reproduced_with_difference`), or did not land and the disagreement has been adjudicated
+ * (`not_reproduced_adjudicated`). A paper is said not to have been reproduced only when the disagreement is adjudicated.
+ */
+export const EVIDENCE_RECALCULATION_VERDICTS = frozen(['reproduced', 'reproduced_with_difference', 'not_reproduced_adjudicated'])
+export const EVIDENCE_RECALCULATION_VERDICT_LABELS_ZH = Object.freeze({
+  reproduced: '已复现', reproduced_with_difference: '已复现（有差异，在容差内）', not_reproduced_adjudicated: '未复现（分歧已经裁定）',
+})
+
+/** @param {unknown} engine @returns {string | null} */
+export const evidenceReportingStandard = (engine) => (typeof engine === 'string' && Object.hasOwn(EVIDENCE_REPORTING_STANDARDS, engine) ? EVIDENCE_REPORTING_STANDARDS[engine] : null)
+
+/** @param {unknown} value @param {string} where */
+function calculationFormat(value, where) {
+  if (value == null) return 'raw'
+  if (typeof value !== 'string' || !EVIDENCE_CALCULATION_FORMATS.includes(value)) throw invalid(`${where}.format`)
+  return value
+}
+
+/**
+ * What identifies one calculation: the engine, its method, the receipt that records it and the inputs it ran on. A claim
+ * and a comparison state the same four, so one reader checks both.
+ * @param {Record<string, any>} raw @param {string} where
+ */
+function calculationIdentity(raw, where) {
+  if (typeof raw.engine !== 'string' || !CALCULATION_ENGINE.test(raw.engine)) throw invalid(`${where}.engine`)
+  if (!filled(raw.method, 200)) throw invalid(`${where}.method`)
+  if (typeof raw.receiptId !== 'string' || !CALCULATION_RECEIPT_ID.test(raw.receiptId)) throw invalid(`${where}.receiptId`)
+  if (!Array.isArray(raw.inputs) || !raw.inputs.length || raw.inputs.length > 20) throw invalid(`${where}.inputs`)
+  const inputs = raw.inputs.map((/** @type {any} */ input) => {
+    if (!isRecord(input) || !onlyKeys(input, ['identifier', 'datasetId', 'hash'])) throw invalid(`${where}.inputs`)
+    const named = ['identifier', 'datasetId'].filter((key) => input[key] != null)
+    if (named.length !== 1 || !filled(input[named[0]], 200)) throw invalid(`${where}.inputs`)
+    if (input.hash != null && (typeof input.hash !== 'string' || !CALCULATION_HASH.test(input.hash))) throw invalid(`${where}.inputs hash`)
+    return { [named[0]]: input[named[0]].trim(), ...(input.hash != null ? { hash: input.hash } : {}) }
+  })
+  return { engine: raw.engine, method: raw.method.trim(), receiptId: raw.receiptId, inputs }
+}
+
+/** @param {{ identifier?: string, datasetId?: string, hash?: string | null }} input */
+const calculationInputKey = (input) => `${input.identifier != null ? 'identifier' : 'datasetId'}\u0000${input.identifier ?? input.datasetId}\u0000${input.hash ?? ''}`
+/** Whether two lists of inputs name the same data, order and repetition aside. @param {any[]} left @param {any[]} right */
+const sameInputs = (left, right) => {
+  const keys = (/** @type {any[]} */ list) => [...new Set((Array.isArray(list) ? list : []).map(calculationInputKey))].sort()
+  return JSON.stringify(keys(left)) === JSON.stringify(keys(right))
+}
+
+/**
+ * The calculation basis of a claim: `{ engine, method, receiptId, valuePath, machineValue, format?, inputs, alsoValues? }`.
+ * `valuePath` is the path of the number in the receipt's machine values (`analyses[0].estimate`), `machineValue` the value
+ * read there, and `format` the renderer's format the claim text prints it in (`f2`: 0.7134 is printed 0.71). A sentence
+ * that states more than one number says each in `alsoValues` (`{ valuePath, machineValue, format? }`), because a number
+ * the receipt does not hold has no place in a calculated claim. Shape only: whether the receipt says this is the
+ * verification's business and a label.
+ *
+ * @param {unknown} value @param {string} where
+ */
+export function evidenceCalculationBasis(value, where = 'calculation') {
+  if (!isRecord(value) || !onlyKeys(value, ['engine', 'method', 'receiptId', 'valuePath', 'machineValue', 'format', 'inputs', 'alsoValues'])) throw invalid(where)
+  const identity = calculationIdentity(value, where)
+  /** One stated number: its path, the machine value read there and the format it is printed in. @param {any} raw @param {string} at */
+  const stated = (raw, at) => {
+    if (typeof raw.valuePath !== 'string' || !CALCULATION_VALUE_PATH.test(raw.valuePath)) throw invalid(`${at}.valuePath`)
+    if (typeof raw.machineValue !== 'number' || !Number.isFinite(raw.machineValue)) throw invalid(`${at}.machineValue`)
+    return { valuePath: raw.valuePath, machineValue: raw.machineValue, format: calculationFormat(raw.format, at) }
+  }
+  const first = stated(value, where)
+  if (value.alsoValues != null && (!Array.isArray(value.alsoValues) || value.alsoValues.length > EVIDENCE_CALCULATION_EXTRA_VALUES)) throw invalid(`${where}.alsoValues`)
+  const also = (value.alsoValues ?? []).map((/** @type {any} */ raw, /** @type {number} */ position) => {
+    if (!isRecord(raw) || !onlyKeys(raw, ['valuePath', 'machineValue', 'format'])) throw invalid(`${where}.alsoValues[${position}]`)
+    return stated(raw, `${where}.alsoValues[${position}]`)
+  })
+  const paths = [first, ...also].map((entry) => entry.valuePath)
+  if (new Set(paths).size !== paths.length) throw invalid(`${where} states one path twice`)
+  return { ...identity, ...first, ...(also.length ? { alsoValues: also } : {}) }
+}
+
+/**
+ * What a comparison's counts stand on when a machine produced them: the calculation's identity and the receipt paths of
+ * its denominator and its two arms' events (and, when it states them, its participants and studies). The summary-of-
+ * findings row and the fact box use such a comparison's counts only when the receipt carries every one of them.
+ *
+ * @param {unknown} value @param {string} where
+ */
+export function evidenceComparisonCalculation(value, where = 'calculation') {
+  if (!isRecord(value) || !onlyKeys(value, ['engine', 'method', 'receiptId', 'inputs', 'valuePaths'])) throw invalid(where)
+  const identity = calculationIdentity(value, where)
+  const paths = value.valuePaths
+  if (!isRecord(paths) || !onlyKeys(paths, ['denominator', 'controlEvents', 'interventionEvents', 'participants', 'studies'])) throw invalid(`${where}.valuePaths`)
+  for (const key of ['denominator', 'controlEvents', 'interventionEvents']) {
+    if (typeof paths[key] !== 'string' || !CALCULATION_VALUE_PATH.test(paths[key])) throw invalid(`${where}.valuePaths.${key}`)
+  }
+  for (const key of ['participants', 'studies']) {
+    if (paths[key] != null && (typeof paths[key] !== 'string' || !CALCULATION_VALUE_PATH.test(paths[key]))) throw invalid(`${where}.valuePaths.${key}`)
+  }
+  return { ...identity, valuePaths: Object.fromEntries(Object.entries(paths).filter(([, path]) => path != null)) }
+}
+
+/**
+ * @typedef {object} EvidenceCalculationReceipt What a reader of receipts hands the check: the record of one calculation,
+ *   whichever subsystem kept it (a result version of a specialist engine, an evolution proof).
+ * @property {string} receiptId
+ * @property {string} engine
+ * @property {string} method
+ * @property {{ identifier?: string, datasetId?: string, hash?: string | null }[]} inputs
+ * @property {{ key: string, value: number, unit?: string | null }[]} values the receipt's machine values, each at its path
+ */
+
+/** @param {any} receipt @param {string} path */
+const receiptValue = (receipt, path) => (Array.isArray(receipt?.values) ? receipt.values.find((/** @type {any} */ entry) => entry?.key === path) : undefined)
+
+/**
+ * The numbers a sentence prints, as words: a sign, its digits as typed (a thousands comma kept) and a percent sign.
+ * Every number counts here — the closed exemptions of the typed-number reader (a year, an ordinal up to twelve) are
+ * about what a statement must bind, not about what it printed. @param {string} text
+ */
+function printedWords(text) {
+  const words = new Set()
+  for (const match of String(text).matchAll(/(?<![\w.])([-−]?)(\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?)(%?)(?!\w)(?!\.\d)/g)) words.add(`${match[1] ? '-' : ''}${match[2]}${match[3]}`)
+  return words
+}
+
+/** @param {string} words */
+const bareDigits = (words) => words.replace(/^[-−]/, '').replace(/%$/, '')
+
+/**
+ * Whether one calculated claim's basis holds against the receipt it names: the receipt exists, its engine, method and
+ * inputs are the claim's, each stated path holds the stated machine value, and the number the sentence prints is that
+ * value in the format the renderer rounds it by. A number in the sentence that no stated value prints is a number nobody
+ * computed, and is named. Code only: the same inputs give the same verdict (principle 1).
+ *
+ * @param {{ claim: string, calculation: any }} claim @param {EvidenceCalculationReceipt | null | undefined} receipt
+ * @returns {{ ok: true } | { ok: false, reason: (typeof EVIDENCE_CALCULATION_REASONS)[number] }}
+ */
+export function evidenceCalculationVerdict(claim, receipt) {
+  const basis = claim?.calculation
+  if (!isRecord(basis) || !receipt) return { ok: false, reason: 'receipt_unavailable' }
+  if (receipt.engine !== basis.engine) return { ok: false, reason: 'engine_mismatch' }
+  if (receipt.method !== basis.method) return { ok: false, reason: 'method_mismatch' }
+  if (!sameInputs(receipt.inputs, basis.inputs)) return { ok: false, reason: 'inputs_mismatch' }
+  const printed = printedWords(claim.claim)
+  const stated = [{ valuePath: basis.valuePath, machineValue: basis.machineValue, format: basis.format }, ...(basis.alsoValues ?? [])]
+  const bound = new Set()
+  for (const entry of stated) {
+    const found = receiptValue(receipt, entry.valuePath)
+    if (!found || typeof found.value !== 'number' || !Number.isFinite(found.value)) return { ok: false, reason: 'value_missing' }
+    if (found.value !== entry.machineValue) return { ok: false, reason: 'value_mismatch' }
+    const words = applyBindingFormat({ id: entry.format ?? 'raw' }, found.value, found.unit ?? null)
+    if (words == null) return { ok: false, reason: 'unit_mismatch' }
+    if (!printed.has(words.replace(/−/g, '-'))) return { ok: false, reason: 'number_not_printed' }
+    bound.add(bareDigits(words))
+  }
+  const unbound = typedNumberSpans(claim.claim, { report: true }).some((span) => !bound.has(span.raw))
+  return unbound ? { ok: false, reason: 'number_unbound' } : { ok: true }
+}
+
+/**
+ * Whether a comparison's counts are what its receipt holds: the identity as for a claim, and each count equal to the
+ * value at its path. A receipt without the events and denominators of both arms cannot stand for the row.
+ *
+ * @param {any} comparison @param {EvidenceCalculationReceipt | null | undefined} receipt
+ * @returns {{ ok: true } | { ok: false, reason: (typeof EVIDENCE_CALCULATION_REASONS)[number] }}
+ */
+export function evidenceComparisonCalculationVerdict(comparison, receipt) {
+  const basis = comparison?.calculation
+  if (!isRecord(basis) || !receipt) return { ok: false, reason: 'receipt_unavailable' }
+  if (receipt.engine !== basis.engine) return { ok: false, reason: 'engine_mismatch' }
+  if (receipt.method !== basis.method) return { ok: false, reason: 'method_mismatch' }
+  if (!sameInputs(receipt.inputs, basis.inputs)) return { ok: false, reason: 'inputs_mismatch' }
+  const counts = {
+    denominator: comparison.denominator, controlEvents: comparison.control?.events, interventionEvents: comparison.intervention?.events,
+    participants: comparison.participants, studies: comparison.studies,
+  }
+  for (const [key, path] of Object.entries(basis.valuePaths ?? {})) {
+    const found = receiptValue(receipt, /** @type {string} */ (path))
+    if (!found || typeof found.value !== 'number' || !Number.isFinite(found.value)) return { ok: false, reason: 'value_missing' }
+    if (found.value !== /** @type {any} */ (counts)[key]) return { ok: false, reason: 'value_mismatch' }
+  }
+  return { ok: true }
+}
+
+/**
+ * The receipt ids a card's claims and comparisons name, so the caller that reads them (asynchronously) knows what to fetch
+ * before the synchronous check.
+ * @param {{ claims?: any[], content?: any }} card @returns {string[]}
+ */
+export function evidenceCalculationReceiptIds(card) {
+  const ids = new Set()
+  for (const claim of Array.isArray(card?.claims) ? card.claims : []) if (typeof claim?.calculation?.receiptId === 'string') ids.add(claim.calculation.receiptId)
+  for (const comparison of Array.isArray(card?.content?.comparisons) ? card.content.comparisons : []) {
+    if (typeof comparison?.calculation?.receiptId === 'string') ids.add(comparison.calculation.receiptId)
+  }
+  return [...ids]
+}
+
+/**
+ * The two rules of originality (flywheel plan §5.1): first-hand work in the platform's own voice stands on a calculation —
+ * an official-zone card of primary originality has at least one claim with a calculation basis — and interpretation never
+ * claims one: a card of interpretive originality has no claim marked as its own calculation (a number quoted from a paper
+ * stays a quote). User and product zones are the author's own voice and keep their own rules. Each issue refuses that one
+ * write with its named code.
+ *
+ * @param {{ originality: string | null | undefined, claims?: any[], zoneKind?: string | null }} card
+ * @returns {{ code: 'evidence_primary_requires_calculation' | 'evidence_interpretive_calculation_refused', message: string }[]}
+ */
+export function evidenceOriginalityBasisIssues({ originality, claims, zoneKind = null }) {
+  const list = Array.isArray(claims) ? claims : []
+  const calculated = list.filter((claim) => claim?.claimType === 'calculated' || claim?.calculation != null || claim?.valueSource === 'calculated')
+  if (EVIDENCE_INTERPRETIVE_ORIGINALITY.includes(/** @type {any} */ (originality)) && calculated.length) {
+    return [{ code: 'evidence_interpretive_calculation_refused', message: `A card of originality "${originality}" interprets someone else's research; claim ${calculated[0].claimId} is marked as the card's own calculation. A number from a paper stays a quote.` }]
+  }
+  if (evidenceOriginalityIsPrimary(originality) && zoneKind === 'official' && !list.some((claim) => claim?.claimType === 'calculated' && claim.calculation)) {
+    return [{ code: 'evidence_primary_requires_calculation', message: `An official card of originality "${originality}" has at least one claim with a calculation basis (an engine receipt).` }]
+  }
+  return []
+}
+
+// ---------------------------------------------------------------------------
 // Claims
 // ---------------------------------------------------------------------------
 
@@ -639,7 +923,7 @@ export function assertEvidenceCardForZone({ zoneKind, producer, journeyStage, di
 export const EVIDENCE_CLAIM_LIMIT = 60
 const CLAIM_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,59}$/
 const CLAIM_KEYS = ['claimId', 'claimType', 'claim', 'applicability', 'uncertainty', 'valueSource', 'sourceIndexes', 'supportQuote',
-  'supportingSources', 'confidence', 'derivedFrom', 'method', 'assumptions', 'sensitivity']
+  'supportingSources', 'confidence', 'derivedFrom', 'method', 'assumptions', 'sensitivity', 'calculation']
 
 /**
  * A card's claims, in the shape of a research run's evidence matrix adapted to
@@ -668,19 +952,25 @@ export function evidenceCardClaims(value, sourceCount) {
     if (!isRecord(raw) || !onlyKeys(raw, CLAIM_KEYS)) throw invalid(where)
     if (typeof raw.claimId !== 'string' || !CLAIM_ID.test(raw.claimId)) throw invalid(`${where}.claimId`)
     const claimType = raw.claimType ?? 'direct'
-    if (!EVIDENCE_CLAIM_TYPES.includes(claimType)) throw invalid(`${where}.claimType`)
+    if (!EVIDENCE_CARD_CLAIM_TYPES.includes(claimType)) throw invalid(`${where}.claimType`)
     if (!filled(raw.claim, 1500)) throw invalid(`${where}.claim`)
     if (!optionalText(raw.applicability, 800) || !optionalText(raw.uncertainty, 800)) throw invalid(`${where} text`)
     if (raw.valueSource != null && !VCR_VALUE_SOURCES.includes(raw.valueSource)) throw invalid(`${where}.valueSource`)
+    // A number a machine computed is labelled so, and only such a claim carries a calculation basis.
+    if (claimType === 'calculated' ? raw.valueSource != null && raw.valueSource !== 'calculated' : raw.calculation != null) throw invalid(`${where}.calculation`)
     const out = /** @type {Record<string, any>} */ ({
       claimId: raw.claimId,
       claimType,
       claim: raw.claim.trim(),
       ...(raw.applicability?.trim() ? { applicability: raw.applicability.trim() } : {}),
       ...(raw.uncertainty?.trim() ? { uncertainty: raw.uncertainty.trim() } : {}),
-      ...(raw.valueSource ? { valueSource: raw.valueSource } : {}),
+      ...(raw.valueSource || claimType === 'calculated' ? { valueSource: claimType === 'calculated' ? 'calculated' : raw.valueSource } : {}),
     })
-    if (claimType === 'direct') {
+    if (claimType === 'calculated') {
+      if (raw.sourceIndexes != null || raw.supportQuote != null || raw.supportingSources != null || raw.derivedFrom != null || raw.method != null
+        || raw.assumptions != null || raw.sensitivity != null || raw.confidence != null) throw invalid(`${where} fields of another claim type`)
+      out.calculation = evidenceCalculationBasis(raw.calculation, `${where}.calculation`)
+    } else if (claimType === 'direct') {
       if (!sourceIndexList(raw.sourceIndexes, sourceCount) || raw.sourceIndexes.length !== 1) throw invalid(`${where}.sourceIndexes`)
       if (raw.supportQuote != null && !filled(raw.supportQuote, 2000)) throw invalid(`${where}.supportQuote`)
       if (raw.supportingSources != null || raw.derivedFrom != null || raw.method != null) throw invalid(`${where} fields of another claim type`)
@@ -737,7 +1027,7 @@ export function evidenceCardClaims(value, sourceCount) {
   return claims
 }
 
-const MARKS = Object.freeze({ verified: '✓', quote_not_found: '⚠', source_unavailable: '⚠', no_quote: '⚠', derived: null })
+const MARKS = Object.freeze({ verified: '✓', quote_not_found: '⚠', source_unavailable: '⚠', no_quote: '⚠', derived: null, calculation_unverified: '⚠' })
 /** A status this build does not know is a warning, never a pass. @param {string} status @returns {'✓' | '⚠' | null} */
 const markOf = (status) => (Object.hasOwn(MARKS, status) ? /** @type {any} */ (MARKS)[status] : '⚠')
 
@@ -748,14 +1038,24 @@ const markOf = (status) => (Object.hasOwn(MARKS, status) ? /** @type {any} */ (M
  * `excerpt`; a source with neither is `source_unavailable`, never "not found".
  * `derived` claims have no quotation to check and carry `mark: null`.
  *
+ * A `calculated` claim has no quotation either; it is checked against its receipt (`evidenceCalculationVerdict`): ✓ is
+ * status `verified`, the same word a quotation found earns, and anything else is `calculation_unverified` with the
+ * named `reason`. `options.receipts` is the reader of receipts — anything with `get(receiptId)`, a `Map` of the receipts the
+ * caller read first being the usual one; without it every calculated claim says its receipt is unavailable, never ✓.
+ * A comparison that carries a calculation is judged the same way, under `comparisons`.
+ *
  * Statuses are labels. This function never refuses a card.
  *
- * @param {{ claims?: any[], sources?: any[] }} card
- * @param {{ locations?: boolean }} [options] `locations` adds each quotation's table, row, cell and page (best effort, time-boxed)
- * @returns {{ claims: { claimId: string, claimType: string, status: string, mark: '✓' | '⚠' | null, sources: { sourceIndex: number | null, status: string, mark: '✓' | '⚠' | null, location?: any }[] }[], counts: Record<string, number> }}
+ * @param {{ claims?: any[], sources?: any[], content?: any }} card
+ * @param {{ locations?: boolean, receipts?: { get(receiptId: string): EvidenceCalculationReceipt | null | undefined } | null }} [options]
+ *   `locations` adds each quotation's table, row, cell and page (best effort, time-boxed)
+ * @returns {{ claims: { claimId: string, claimType: string, status: string, mark: '✓' | '⚠' | null, reason?: string, sources: { sourceIndex: number | null, status: string, mark: '✓' | '⚠' | null, location?: any }[] }[],
+ *   comparisons: { index: number, status: 'verified' | 'calculation_unverified', mark: '✓' | '⚠', reason?: string }[], counts: Record<string, number> }}
  */
 export function verifyEvidenceCardClaims(card, options = {}) {
-  const claims = Array.isArray(card?.claims) ? card.claims : []
+  const everyClaim = Array.isArray(card?.claims) ? card.claims : []
+  const claims = everyClaim.filter((claim) => claim?.claimType !== 'calculated')
+  const receiptOf = (/** @type {string} */ id) => options.receipts?.get(id) ?? null
   const sources = Array.isArray(card?.sources) ? card.sources : []
   const pathOf = (/** @type {number} */ index) => `.evimed-sources/card/source-${index}`
   /** @type {Map<string, string>} */
@@ -788,21 +1088,38 @@ export function verifyEvidenceCardClaims(card, options = {}) {
   }
   const verdict = claimVerification({ matrix, sourceArtifacts: artifacts })
   if (options.locations && verdict.claims.length) attachClaimSourceLocations(verdict, { matrix, sourceArtifacts: artifacts })
-  const counts = Object.fromEntries(['verified', 'quote_not_found', 'source_unavailable', 'no_quote', 'derived'].map((status) => [status, verdict.counts[status] ?? 0]))
-  return {
-    claims: verdict.claims.map((entry) => ({
-      claimId: entry.claimId,
-      claimType: entry.claimType,
-      status: entry.status,
-      mark: markOf(entry.status),
-      sources: entry.sources.map((/** @type {any} */ source) => ({
-        sourceIndex: indexOfPath.get(source.artifactPath) ?? null,
-        status: source.status,
-        mark: markOf(source.status),
-        ...(source.location ? { location: source.location } : {}),
-      })),
+  const checked = new Map(verdict.claims.map((entry) => [entry.claimId, {
+    claimId: entry.claimId,
+    claimType: entry.claimType,
+    status: entry.status,
+    mark: markOf(entry.status),
+    sources: entry.sources.map((/** @type {any} */ source) => ({
+      sourceIndex: indexOfPath.get(source.artifactPath) ?? null,
+      status: source.status,
+      mark: markOf(source.status),
+      ...(source.location ? { location: source.location } : {}),
     })),
-    counts: { total: verdict.claims.length, ...counts },
+  }]))
+  const counts = Object.fromEntries(['verified', 'quote_not_found', 'source_unavailable', 'no_quote', 'derived'].map((status) => [status, verdict.counts[status] ?? 0]))
+  let calculationUnverified = 0
+  const ordered = everyClaim.map((claim) => {
+    if (claim?.claimType !== 'calculated') return checked.get(claim.claimId)
+    const result = evidenceCalculationVerdict(claim, receiptOf(claim.calculation?.receiptId))
+    if (result.ok) counts.verified += 1
+    else calculationUnverified += 1
+    return { claimId: claim.claimId, claimType: 'calculated', status: result.ok ? 'verified' : 'calculation_unverified', mark: result.ok ? '✓' : '⚠',
+      ...(result.ok ? {} : { reason: /** @type {any} */ (result).reason }), sources: [] }
+  }).filter(Boolean)
+  const comparisons = (Array.isArray(card?.content?.comparisons) ? card.content.comparisons : []).flatMap((/** @type {any} */ comparison, /** @type {number} */ index) => {
+    if (!comparison?.calculation) return []
+    const result = evidenceComparisonCalculationVerdict(comparison, receiptOf(comparison.calculation.receiptId))
+    return [{ index, status: result.ok ? 'verified' : 'calculation_unverified', mark: result.ok ? '✓' : '⚠', ...(result.ok ? {} : { reason: /** @type {any} */ (result).reason }) }]
+  })
+  return {
+    claims: /** @type {any[]} */ (ordered),
+    comparisons,
+    // The count a card with no calculated claim never had is not added to it: its counts read exactly as they did.
+    counts: { total: ordered.length, ...counts, ...(everyClaim.length !== claims.length ? { calculation_unverified: calculationUnverified } : {}) },
   }
 }
 
@@ -900,7 +1217,15 @@ export function evidenceAbsoluteEffect(comparison) {
 }
 
 /** Why a fact box has no row for a comparison, or none at all. */
-export const EVIDENCE_FACT_BOX_REASONS = frozen(['no_comparisons', 'outcome_role_missing', 'counts_missing', 'events_exceed_denominator', 'not_per_people', 'nothing_usable'])
+export const EVIDENCE_FACT_BOX_REASONS = frozen(['no_comparisons', 'outcome_role_missing', 'counts_missing', 'events_exceed_denominator', 'not_per_people', 'calculation_unverified', 'nothing_usable'])
+
+/**
+ * Whether a comparison's counts may be used: one that a machine produced (it carries a `calculation`) only when its receipt
+ * was found to hold every count, as `verifyEvidenceCardClaims` reports under `comparisons`. A comparison with no calculation is
+ * the author's own and is judged as it always was.
+ * @param {any} comparison @param {number} index @param {{ index: number, status: string }[] | undefined} verdicts
+ */
+const countsStand = (comparison, index, verdicts) => !comparison?.calculation || (Array.isArray(verdicts) && verdicts.some((entry) => entry.index === index && entry.status === 'verified'))
 
 /**
  * The public fact box: per 1000 people, one denominator for both arms, benefits
@@ -908,16 +1233,23 @@ export const EVIDENCE_FACT_BOX_REASONS = frozen(['no_comparisons', 'outcome_role
  * and denominators. A comparison enters it only when it says whether its
  * outcome is a benefit or a harm and is a risk over people (a rate per
  * person-years is not a count of people). What cannot enter is listed with its
- * reason; when none can, the box is `unavailable` and says why.
+ * reason; when none can, the box is `unavailable` and says why. A comparison whose counts a machine produced enters only
+ * when its receipt holds the events and the denominator (`options.verdicts`, the `comparisons` of
+ * `verifyEvidenceCardClaims`); without the verdict it does not.
  *
  * @param {any[]} comparisons
+ * @param {{ verdicts?: { index: number, status: string }[] }} [options]
  */
-export function evidenceFactBox(comparisons) {
+export function evidenceFactBox(comparisons, options = {}) {
   const list = Array.isArray(comparisons) ? comparisons : []
   /** @type {any[]} */ const benefits = []
   /** @type {any[]} */ const harms = []
   /** @type {{ index: number, reason: string }[]} */ const excluded = []
   list.forEach((comparison, position) => {
+    if (!countsStand(comparison, position, options.verdicts)) {
+      excluded.push({ index: position, reason: 'calculation_unverified' })
+      return
+    }
     const role = comparison?.outcomeRole
     if (!EVIDENCE_OUTCOME_ROLES.includes(role)) {
       excluded.push({ index: position, reason: 'outcome_role_missing' })
@@ -1027,6 +1359,14 @@ const cardHeader = (card) => ({
 })
 
 /**
+ * How a calculation is shown to a reader: the label, the engine, the method and the receipt it can be read back from.
+ * @param {any} calculation
+ */
+const platformCalculationOf = (calculation) => ({
+  label: EVIDENCE_CALCULATION_LABEL_ZH, engine: calculation?.engine ?? null, method: calculation?.method ?? null, receiptId: calculation?.receiptId ?? null,
+})
+
+/**
  * The card for doctors and pharmacists, in the layout of a GRADE
  * summary-of-findings table: one row per outcome with its time frame, the
  * relative effect as the author wrote it, the absolute effect per 1000 computed
@@ -1041,18 +1381,20 @@ export function evidenceCardClinicalView(card, options = {}) {
   const verification = options.verification ?? verifyEvidenceCardClaims(card)
   const verified = new Set(verification.claims.filter((claim) => claim.status === 'verified').map((claim) => claim.claimId))
   const comparisons = Array.isArray(card?.content?.comparisons) ? card.content.comparisons : []
+  const unverifiedCalculation = new Map(verification.claims.filter((claim) => claim.claimType === 'calculated' && claim.status !== 'verified').map((claim) => [claim.claimId, claim.reason ?? 'receipt_unavailable']))
   return {
     kind: 'clinical',
     header: { ...cardHeader(card), lastCheckedAt: card?.disclosure?.lastCheckedAt ?? null },
     population: card?.content?.population ?? null,
-    rows: comparisons.map((/** @type {any} */ comparison) => ({
+    rows: comparisons.map((/** @type {any} */ comparison, /** @type {number} */ index) => ({
       title: comparison.title,
       outcome: comparison.outcome,
       timeframe: comparison.timeframe,
       comparator: comparison.control?.label ?? null,
       intervention: comparison.intervention?.label ?? null,
       relativeEffect: comparison.relativeEffect ?? null,
-      absoluteEffect: evidenceAbsoluteEffect(comparison),
+      absoluteEffect: countsStand(comparison, index, verification.comparisons) ? evidenceAbsoluteEffect(comparison) : { status: 'unavailable', reason: 'calculation_unverified' },
+      ...(comparison.calculation ? { platformCalculation: platformCalculationOf(comparison.calculation) } : {}),
       participants: comparison.participants ?? null,
       studies: comparison.studies ?? null,
       certainty: comparison.certainty ?? null,
@@ -1060,7 +1402,11 @@ export function evidenceCardClinicalView(card, options = {}) {
       note: comparison.note ?? null,
       sourceIndexes: comparison.sourceIndexes ?? [],
     })),
-    claims: /** @type {any[]} */ (Array.isArray(card?.claims) ? card.claims : []).filter((claim) => verified.has(claim.claimId)),
+    claims: /** @type {any[]} */ (Array.isArray(card?.claims) ? card.claims : []).filter((claim) => verified.has(claim.claimId))
+      .map((claim) => (claim.claimType === 'calculated' ? { ...claim, platformCalculation: platformCalculationOf(claim.calculation) } : claim)),
+    // A calculated claim that did not check out is not shown as a claim, and says why it is not: a reader who sees a
+    // ✓ elsewhere on the card is never left to wonder where the rest went.
+    withheldCalculations: [...unverifiedCalculation].map(([claimId, reason]) => ({ claimId, reason })),
     counts: verification.counts,
   }
 }
@@ -1109,7 +1455,10 @@ export function evidenceCardPublicView(card, options = {}) {
     kind: 'public',
     header: cardHeader(card),
     panels,
-    factBox: evidenceFactBox(card?.content?.comparisons),
+    factBox: evidenceFactBox(card?.content?.comparisons, { verdicts: verification.comparisons }),
+    // What the platform computed itself, with where the number can be read back from; only claims whose receipt held.
+    calculations: /** @type {any[]} */ (Array.isArray(card?.claims) ? card.claims : []).filter((claim) => claim.claimType === 'calculated' && verified.has(claim.claimId))
+      .map((claim) => ({ claimId: claim.claimId, text: claim.claim, ...platformCalculationOf(claim.calculation) })),
   }
 }
 

@@ -22,11 +22,12 @@
  *   normalisation between two copies of the text.
  * - **Numbers are never typed by the model.** A comparison is accepted only when each of its numbers is a machine value
  *   the result version recorded (`machineValues`); with none, the card carries claims and no comparison.
- * - **An original analysis carries four more rules** (the anti-paper-mill rules, plan §2.4/§5.1): it needs the selector's
- *   decision behind it (`evidence_programme_decision_required`, by name, for every card); it states its reporting standard
- *   in `disclosure`; it is titled a 「发现」 only when a result of its run records a replication in a second independent
- *   dataset (`REPLICATION_MACHINE_VALUE_KEY`), and otherwise its title and answer say 「信号，待验证」; and at most
- *   `originalPerWeek` of them are published in a rolling week — the next is deferred, not dropped.
+ * - **An original analysis is a different card, from a different input** (`buildOriginalAnalysisCard`, 2026-10-06): the platform's
+ *   own engine calculation, read from the receipts the run left, never from quotations. A card that stands on quotations is an
+ *   interpretation whatever capability ran it, and the card contract refuses to let it say otherwise. The anti-paper-mill rules
+ *   (plan §2.4/§5.1) are that builder's: the selector's decision behind it, the reporting standard in `disclosure`, multiple
+ *   comparisons stated or said unreported, 「发现」 only with a replication in a second independent dataset and otherwise
+ *   「信号，待验证」, and at most `originalPerWeek` a rolling week — the next is deferred, not dropped.
  *
  * Which model capability would make it deletable: a reviewer that reads a card against its sources and is trusted as
  * a quotation matcher is — until then, the deterministic comparison is the floor and this file is its caller.
@@ -35,18 +36,21 @@
  */
 
 import {
-  EVIDENCE_AI_STEPS, EVIDENCE_PLATFORM_PRODUCER_NAME, digestPlacement, evidenceCardClaims, evidenceStructuredContent,
-  verifyEvidenceCardClaims,
+  EVIDENCE_AI_STEPS, EVIDENCE_CALCULATION_FORMATS, EVIDENCE_CALCULATION_LABEL_ZH, EVIDENCE_PLATFORM_PRODUCER_NAME, NUMBER_UNCOMPUTED, digestPlacement,
+  evidenceCardClaims, evidenceReportingStandard, evidenceStructuredContent, renderNumberTemplate, verifyEvidenceCardClaims,
 } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 import { evidenceSourceUrl } from "./evidenceZoneService.mjs";
-import { ORIGINAL_ANALYSIS_ENGINES, ORIGINAL_ANALYSIS_LABELS, PROGRAMME_CARD_TITLES, REPLICATION_MACHINE_VALUE_KEY } from "./evidenceProgrammeData.mjs";
+import {
+  MULTIPLICITY_MACHINE_VALUE_KEYS, ORIGINAL_ANALYSIS_ENGINES, ORIGINAL_ANALYSIS_HEADLINES, ORIGINAL_ANALYSIS_LABELS, PROGRAMME_CARD_TITLES,
+  REPLICATION_MACHINE_VALUE_KEY, REPLICATION_MIN_INDEPENDENT_DATASETS,
+} from "./evidenceProgrammeData.mjs";
 
 /** Why a claim of an episode's matrix is not in the card, closed so the counter's label set is. */
-export const PROGRAMME_CLAIM_EXCLUSIONS = Object.freeze(["run_not_verified", "derived_claim", "refuted", "weakened", "source_unavailable", "claim_shape", "card_not_verified"]);
+export const PROGRAMME_CLAIM_EXCLUSIONS = Object.freeze(["run_not_verified", "derived_claim", "refuted", "weakened", "source_unavailable", "claim_shape", "card_not_verified", "headline_unresolved", "calculation_not_verified"]);
 
 /** Why no card is written for an episode, closed for the same reason. `pending` and `deferred` are not refusals: the episode is looked at again. */
-export const PROGRAMME_CARD_OUTCOMES = Object.freeze(["published", "revised", "no_qualifying_claims", "no_evidence_matrix", "episode_failed", "decision_required", "zone_unavailable", "pending_verification", "deferred_original_cap"]);
+export const PROGRAMME_CARD_OUTCOMES = Object.freeze(["published", "revised", "no_qualifying_claims", "no_evidence_matrix", "episode_failed", "decision_required", "zone_unavailable", "pending_verification", "deferred_original_cap", "no_engine_receipt"]);
 
 /** The confidence labels a synthesized claim keeps, in the reader's words. */
 const CONFIDENCE_ZH = Object.freeze({ high: "高", moderate: "中", low: "低" });
@@ -113,14 +117,6 @@ export function programmeComparisons({ candidates = [], machineValues = [], sour
     } catch { /* an invalid candidate is left out, the card keeps its claims */ }
   }
   return kept;
-}
-
-/**
- * Whether a result of the run records a replication in a second independent dataset.
- * @param {any[]} machineValues @returns {boolean}
- */
-export function analysisReplicated(machineValues) {
-  return listOf(machineValues).some((entry) => entry?.key === REPLICATION_MACHINE_VALUE_KEY && Number.isFinite(entry.value) && Number(entry.value) >= 1);
 }
 
 /**
@@ -210,10 +206,6 @@ export function buildProgrammeCard(input) {
   if (!input.decisionId) {
     throw new HttpError(409, "evidence_programme_decision_required", "A programme card is written only for a topic the selector decided on.");
   }
-  const engine = input.capabilityId && Object.hasOwn(ORIGINAL_ANALYSIS_ENGINES, input.capabilityId) ? ORIGINAL_ANALYSIS_ENGINES[input.capabilityId] : null;
-  // An engine's analysis is the platform's own first-hand work only when the engine left a receipt: a result with machine values.
-  const original = Boolean(engine) && listOf(input.machineValues).length > 0;
-  const replicated = original && analysisReplicated(input.machineValues ?? []);
   /** @type {{ claimId: string, reason: string }[]} */
   const excluded = [...input.evaluation.excluded];
 
@@ -254,19 +246,14 @@ export function buildProgrammeCard(input) {
   }
   if (!claims.length) return { status: "refused", outcome: "no_qualifying_claims", excluded };
 
-  if (original && !input.revising && Number(input.originalPerWeek ?? 0) <= Number(input.originalThisWeek ?? 0)) {
-    return { status: "deferred", outcome: "deferred_original_cap", originalThisWeek: Number(input.originalThisWeek ?? 0) };
-  }
-
   // The first sentence: a headline claim, reproduced ones first, else the neutral sentence that states no finding.
   const headlines = candidates.filter((entry) => entry.headline).sort((left, right) =>
     (TIER_RANK[/** @type {keyof typeof TIER_RANK} */ (left.agendaClaim?.tier)] ?? 3) - (TIER_RANK[/** @type {keyof typeof TIER_RANK} */ (right.agendaClaim?.tier)] ?? 3));
   const lead = headlines[0] ?? null;
   const labelled = (/** @type {any} */ claim) => (String(claim.claimType) === "synthesized" ? `${claim.claim}（综合判断，把握度：${CONFIDENCE_ZH[/** @type {keyof typeof CONFIDENCE_ZH} */ (claim.confidence)] ?? "未标注"}）` : claim.claim);
   const leadClaim = lead ? claims.find((made) => made.claimId === lead.claim.claimId) : null;
-  const caution = original ? (replicated ? "" : `${ORIGINAL_ANALYSIS_LABELS.unreplicated}：`) : "";
-  const answer = leadClaim ? `${caution}${labelled(leadClaim)}`
-    : `${caution}这张卡汇总了 ${claims.length} 条引文已逐字核对的结论；其中没有达到“发现”标准的结论，请逐条阅读下面的限定。`;
+  const answer = leadClaim ? labelled(leadClaim)
+    : `这张卡汇总了 ${claims.length} 条引文已逐字核对的结论；其中没有达到“发现”标准的结论，请逐条阅读下面的限定。`;
 
   const independent = candidates.filter((entry) => entry.agendaClaim?.refutation === "stands" || entry.agendaClaim?.tier === "reproduced").length;
   const lines = claims.map((made, position) => {
@@ -283,15 +270,13 @@ export function buildProgrammeCard(input) {
     ...(uncertainty.length ? ["", "## 不确定性", ...uncertainty.map((line) => `- ${line}`)] : []),
   ].join("\n");
 
-  const label = original ? (replicated ? ORIGINAL_ANALYSIS_LABELS.replicated : ORIGINAL_ANALYSIS_LABELS.unreplicated) : null;
   const taskTitle = PROGRAMME_CARD_TITLES[/** @type {keyof typeof PROGRAMME_CARD_TITLES} */ (input.taskType)] ?? "证据更新";
-  const title = `${input.zone.title}：${taskTitle}${label ? `（${label}）` : ""}`.slice(0, 300);
-  const standard = original && engine ? engine.standard : null;
+  const title = `${input.zone.title}：${taskTitle}`.slice(0, 300);
   const sourcesOut = sources.map((entry) => entry.source);
   const comparisons = programmeComparisons({ candidates: input.comparisonCandidates, machineValues: input.machineValues, sourceCount: sourcesOut.length });
   const reviewed = candidates.some((entry) => entry.agendaClaim?.verification?.status === "recorded");
   const at = input.at.toISOString();
-  const context = `本卡由平台议程完成：${claims.length} 条结论的引文已逐字核对${independent ? `，其中 ${independent} 条经独立复核未被推翻` : ""}。${standard ? `按 ${standard} 报告规范写成。` : ""}`;
+  const context = `本卡由平台议程完成：${claims.length} 条结论的引文已逐字核对${independent ? `，其中 ${independent} 条经独立复核未被推翻` : ""}。`;
   const card = {
     title,
     subtype: "academic",
@@ -301,23 +286,21 @@ export function buildProgrammeCard(input) {
     limitations: [
       ...uncertainty.slice(0, 5),
       excludedCount ? `另有 ${excludedCount} 条结论没有通过核验或复核，没有放进这张卡，留在平台的内部研究记录里。` : "",
-      original && !replicated ? "这是一项尚未在第二个独立数据集中复现的信号，不能当作发现。" : "",
     ].filter(Boolean).join("\n").slice(0, 12_000),
     provenance: programmeCardProvenance(input.agenda.id, input.taskType),
     content: { question: input.question, answer, context, ...(comparisons.length ? { comparisons } : {}) },
     claims,
     producer: { kind: "platform", name: EVIDENCE_PLATFORM_PRODUCER_NAME, relation: "none" },
-    originality: original ? "original_analysis" : "synthesis",
+    originality: "synthesis",
     lineage: { agendaId: input.agenda.id, episodeId: input.episode.id, runId: input.runId, resultVersionId: input.resultVersionId },
     disclosure: {
       model: input.model, generatedAt: at, lastCheckedAt: at,
       aiSteps: EVIDENCE_AI_STEPS.filter((step) => step !== "review" || reviewed),
       authors: [], reviewers: [],
-      ...(standard ? { reportingStandard: standard } : {}),
     },
     state: "published",
   };
-  return { status: "card", card, requestId: programmeCardRequestId(input.agenda.id, input.taskType), originality: card.originality, replicated,
+  return { status: "card", card, requestId: programmeCardRequestId(input.agenda.id, input.taskType), originality: card.originality, replicated: false,
     headlineClaimId: leadClaim?.claimId ?? null, excluded, includedCount: claims.length };
 }
 
@@ -333,4 +316,175 @@ export function programmeCardProvenance(agendaId, taskType) {
 /** The request identity a programme card is created under: a replay of the creation finds the same card. @param {string} agendaId @param {string} taskType */
 export function programmeCardRequestId(agendaId, taskType) {
   return `programme-${agendaId}-${taskType}`.slice(0, 100);
+}
+
+// ── The original analysis: the platform's own calculation, read from engine receipts ───────────────────────────────────────────────
+
+/**
+ * The most receipts one original-analysis card stands on (a run delivers a few; past this the card says so by not citing more).
+ */
+const ORIGINAL_RECEIPT_LIMIT = 6;
+
+/** @param {any[]} values @param {string} key @returns {number | null} */
+const machineValueOf = (values, key) => {
+  const found = listOf(values).find((entry) => entry?.key === key && Number.isFinite(entry.value));
+  return found ? Number(found.value) : null;
+};
+
+/**
+ * The number of independent datasets an analysis holds in, from the receipts of its run (the analysed one included).
+ * @param {any[]} receipts @returns {number}
+ */
+export function independentDatasetCount(receipts) {
+  return Math.max(0, ...listOf(receipts).map((receipt) => machineValueOf(receipt?.values, REPLICATION_MACHINE_VALUE_KEY) ?? 0));
+}
+
+/**
+ * What the receipts say about multiple comparisons: `single` (one hypothesis tested: nothing to correct), `corrected` (more than
+ * one tested and a correction applied) or `not_reported` (more than one tested and none stated, or the receipt reports neither).
+ * @param {any[]} receipts @returns {{ status: "single" | "corrected" | "not_reported", tested: number | null, receipt: any | null }}
+ */
+export function multiplicityOf(receipts) {
+  const holder = listOf(receipts).find((receipt) => machineValueOf(receipt?.values, MULTIPLICITY_MACHINE_VALUE_KEYS.tested) != null) ?? null;
+  const tested = holder ? machineValueOf(holder.values, MULTIPLICITY_MACHINE_VALUE_KEYS.tested) : null;
+  if (tested == null) return { status: "not_reported", tested: null, receipt: null };
+  if (tested <= 1) return { status: "single", tested, receipt: holder };
+  return { status: machineValueOf(holder.values, MULTIPLICITY_MACHINE_VALUE_KEYS.corrected) === 1 ? "corrected" : "not_reported", tested, receipt: holder };
+}
+
+/**
+ * One sentence of an original analysis as a calculated claim: the template rendered from the receipt's machine values, and the
+ * basis that lets the reader's check read each printed number back. Null when a path the sentence needs is not in the receipt, or a
+ * format is not one a calculation may print.
+ * @param {{ claimId: string, template: string, receipt: any }} input
+ */
+function calculatedClaim({ claimId, template, receipt }) {
+  const rendered = renderNumberTemplate(template, (path) => {
+    const found = listOf(receipt.values).find((entry) => entry?.key === path);
+    return found ? { value: found.value, unit: found.unit ?? null } : { value: undefined, unit: null };
+  });
+  if (!rendered.bindings.length || rendered.unparsed.length || rendered.typed.length || rendered.text.includes(NUMBER_UNCOMPUTED)) return null;
+  if (rendered.bindings.some((binding) => !binding.ok || !Number.isFinite(binding.value) || !(/** @type {readonly string[]} */ (EVIDENCE_CALCULATION_FORMATS)).includes(binding.format))) return null;
+  const [first, ...more] = rendered.bindings;
+  return {
+    claimId, claimType: "calculated", valueSource: "calculated", claim: rendered.text.slice(0, 1500),
+    calculation: {
+      engine: receipt.engine, method: receipt.method, receiptId: receipt.receiptId, inputs: receipt.inputs,
+      valuePath: first.path, machineValue: first.value, format: first.format,
+      ...(more.length ? { alsoValues: more.map((binding) => ({ valuePath: binding.path, machineValue: binding.value, format: binding.format })) } : {}),
+    },
+  };
+}
+
+/**
+ * The preserved text of a receipt as a card source: the machine values the card states, each at its path with its unit, so a
+ * reader sees the numbers the claims were rendered from and the sentence's ✓ is a comparison with them.
+ * @param {any} receipt @param {Set<string>} paths
+ */
+function receiptSource(receipt, paths) {
+  const lines = listOf(receipt.values).filter((entry) => paths.has(entry.key)).map((entry) => `${entry.key}\t${entry.value}${entry.unit ? `\t${entry.unit}` : ""}`);
+  const text = [`引擎：${receipt.engine}`, `方法：${receipt.method}`, `回执：${receipt.receiptId}`, ...lines].join("\n");
+  return { title: `引擎回执：${receipt.method}`, url: null, excerpt: text.slice(0, 12_000), documentText: text, coverage: "excerpt" };
+}
+
+/**
+ * The card the programme writes for a finished episode of an analysis engine, from the receipts the run left: or why it writes none.
+ * Pure and deterministic. Every number in the card is rendered from a receipt's machine value and carries the basis that lets a reader
+ * (and the card's own re-check) find it again — the model types none (principle 10c).
+ *
+ * The rules of plan §5.1, each one code: the topic comes only from the selector's recorded decision (`evidence_programme_decision_required`);
+ * the reporting standard is the domain's map by engine and is named in `disclosure`; the multiple-comparison correction is stated when
+ * the receipt reports one and otherwise the card says 「未报告多重比较校正」 and calls itself a signal; 「发现」 only when the receipts show
+ * the analysis holds in a second independent dataset, and otherwise 「信号，待验证」; at most `originalPerWeek` in a rolling week, the
+ * next deferred and not dropped.
+ *
+ * @param {{
+ *   zone: { id: string, title: string }, question: string, taskType: string, capabilityId: string | null,
+ *   decisionId: string | null, agenda: { id: string }, episode: { id: string }, runId: string,
+ *   receipts: import("@evimed/domain").EvidenceCalculationReceipt[], model: string, at: Date, revising?: boolean,
+ *   originalThisWeek?: number, originalPerWeek?: number }} input
+ * @returns {{ status: "card", card: Record<string, any>, requestId: string, originality: "original_analysis", replicated: boolean, headlineClaimId: string | null,
+ *     excluded: { claimId: string, reason: string }[], includedCount: number, receiptIds: string[] }
+ *   | { status: "refused", outcome: "no_engine_receipt" | "no_qualifying_claims", excluded: { claimId: string, reason: string }[] }
+ *   | { status: "deferred", outcome: "deferred_original_cap", originalThisWeek: number }}
+ */
+export function buildOriginalAnalysisCard(input) {
+  if (!input.decisionId) {
+    throw new HttpError(409, "evidence_programme_decision_required", "A programme card is written only for a topic the selector decided on.");
+  }
+  const engine = input.capabilityId && Object.hasOwn(ORIGINAL_ANALYSIS_ENGINES, input.capabilityId) ? ORIGINAL_ANALYSIS_ENGINES[input.capabilityId] : null;
+  const standard = engine ? evidenceReportingStandard(engine.engine) : null;
+  const receipts = listOf(input.receipts).filter((receipt) => engine && receipt?.engine === engine.engine && typeof receipt.receiptId === "string").slice(0, ORIGINAL_RECEIPT_LIMIT);
+  if (!engine || !standard || !receipts.length) return { status: "refused", outcome: "no_engine_receipt", excluded: [] };
+
+  /** @type {{ claimId: string, reason: string }[]} */
+  const excluded = [];
+  /** @type {any[]} */
+  let claims = [];
+  receipts.forEach((receipt, position) => {
+    const methodId = String(receipt.method).split("@")[0];
+    for (const headline of Object.hasOwn(ORIGINAL_ANALYSIS_HEADLINES, methodId) ? ORIGINAL_ANALYSIS_HEADLINES[methodId] : []) {
+      const claimId = `CALC-${position + 1}-${headline.id}`;
+      const made = calculatedClaim({ claimId, template: headline.template, receipt });
+      if (made) claims.push(made); else excluded.push({ claimId, reason: "headline_unresolved" });
+    }
+  });
+  const replicated = independentDatasetCount(receipts) >= REPLICATION_MIN_INDEPENDENT_DATASETS;
+  const multiplicity = multiplicityOf(receipts);
+  if (multiplicity.status === "corrected" && multiplicity.receipt) {
+    const made = calculatedClaim({ claimId: "CALC-MULT", template: "本次分析共检验了 {{n:multiplicity.tested_hypotheses|int}} 个假设，并已做多重比较校正。", receipt: multiplicity.receipt });
+    if (made) claims.push(made); else excluded.push({ claimId: "CALC-MULT", reason: "headline_unresolved" });
+  }
+
+  // The card checks itself again: its claims against the very receipts it cites, by the reader's own comparison.
+  const byId = new Map(receipts.map((receipt) => [receipt.receiptId, receipt]));
+  claims = claims.filter((claim) => { try { evidenceCardClaims([claim], 0); return true; } catch { excluded.push({ claimId: claim.claimId, reason: "claim_shape" }); return false; } });
+  const verdict = verifyEvidenceCardClaims({ claims, sources: [] }, { receipts: byId });
+  const standing = new Set(verdict.claims.filter((entry) => entry.status === "verified").map((entry) => entry.claimId));
+  for (const claim of claims) if (!standing.has(claim.claimId)) excluded.push({ claimId: claim.claimId, reason: "calculation_not_verified" });
+  claims = claims.filter((claim) => standing.has(claim.claimId));
+  if (!claims.length) return { status: "refused", outcome: "no_qualifying_claims", excluded };
+
+  if (!input.revising && Number(input.originalPerWeek ?? 0) <= Number(input.originalThisWeek ?? 0)) {
+    return { status: "deferred", outcome: "deferred_original_cap", originalThisWeek: Number(input.originalThisWeek ?? 0) };
+  }
+
+  // A finding needs the replication and a stated treatment of multiple comparisons; anything less is a signal awaiting verification.
+  const finding = replicated && multiplicity.status !== "not_reported";
+  const label = finding ? ORIGINAL_ANALYSIS_LABELS.replicated : ORIGINAL_ANALYSIS_LABELS.unreplicated;
+  const cited = receipts.filter((receipt) => claims.some((claim) => claim.calculation.receiptId === receipt.receiptId));
+  const sources = cited.map((receipt) => receiptSource(receipt, new Set(claims.filter((claim) => claim.calculation.receiptId === receipt.receiptId)
+    .flatMap((claim) => [claim.calculation.valuePath, ...(claim.calculation.alsoValues ?? []).map((/** @type {any} */ also) => also.valuePath)]))));
+  const lead = claims[0];
+  const answer = `${finding ? "" : `${label}：`}${lead.claim}`.slice(0, 600);
+  const lines = claims.map((claim, position) => `${position + 1}. ${claim.claim}（${EVIDENCE_CALCULATION_LABEL_ZH}：${claim.calculation.method}，回执 ${claim.calculation.receiptId}）`);
+  const body = [
+    "## 平台计算的结论", ...lines,
+    "", "## 报告规范", `按 ${standard} 报告规范写成。`,
+    ...(multiplicity.status === "not_reported" ? ["", "## 多重比较", `${ORIGINAL_ANALYSIS_LABELS.multiplicityNotReported}。`] : []),
+  ].join("\n");
+  const taskTitle = PROGRAMME_CARD_TITLES[/** @type {keyof typeof PROGRAMME_CARD_TITLES} */ (input.taskType)] ?? "证据更新";
+  const at = input.at.toISOString();
+  const card = {
+    title: `${input.zone.title}：${taskTitle}（${label}）`.slice(0, 300),
+    subtype: "academic",
+    summary: answer,
+    body,
+    sources,
+    limitations: [
+      multiplicity.status === "not_reported" ? `${ORIGINAL_ANALYSIS_LABELS.multiplicityNotReported}：这次分析检验了多个假设，引擎的回执没有说明是否做过校正。` : "",
+      finding ? "" : "这是一项尚未在第二个独立数据集中复现的信号，不能当作发现。",
+      "数字由平台的分析引擎计算，每个数字都可以在引用的回执里按路径读回。",
+    ].filter(Boolean).join("\n").slice(0, 12_000),
+    provenance: programmeCardProvenance(input.agenda.id, input.taskType),
+    content: { question: input.question, answer, context: `本卡由平台议程完成：${claims.length} 条结论的数字来自分析引擎的回执。按 ${standard} 报告规范写成。` },
+    claims,
+    producer: { kind: "platform", name: EVIDENCE_PLATFORM_PRODUCER_NAME, relation: "none" },
+    originality: "original_analysis",
+    lineage: { agendaId: input.agenda.id, episodeId: input.episode.id, runId: input.runId, resultVersionId: cited[0]?.receiptId ?? receipts[0].receiptId },
+    disclosure: { model: input.model, generatedAt: at, lastCheckedAt: at, aiSteps: ["extract", "synthesize"], authors: [], reviewers: [], reportingStandard: standard },
+    state: "published",
+  };
+  return { status: "card", card, requestId: programmeCardRequestId(input.agenda.id, input.taskType), originality: "original_analysis", replicated: finding,
+    headlineClaimId: lead.claimId, excluded, includedCount: claims.length, receiptIds: cited.map((receipt) => receipt.receiptId) };
 }

@@ -402,6 +402,6 @@ test("identifiers are read from closed formats in a card's sources and verified 
 });
 
 test("every code the card raises has a Chinese sentence in the registry", () => {
-  assert.equal(EVIDENCE_CARD_ERROR_CODES.length, 9);
+  assert.equal(EVIDENCE_CARD_ERROR_CODES.length, 11);
   for (const code of EVIDENCE_CARD_ERROR_CODES) assert.match(knownErrorCodeMessage(code) ?? "", /[一-鿿]/, code);
 });

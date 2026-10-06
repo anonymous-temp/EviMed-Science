@@ -266,6 +266,8 @@ export class EvolutionIntegration {
         matchedPublicationEventId: event.id, caseGroup: "prospective" }, row);
       if (eligible) await this.service.enqueue("evaluate", { action: "prospective-score", registrationId: row.id, paperId: paper.id, publicationEventId: event.id }, `prospective-score:${row.id}:${event.id}`);
     }
+    // The predictions a virtual study or an agenda registered for this trial are woken by the same publication (flywheel F25); it never throws.
+    await this.service.callbacks.predictionPublication?.({ paper, eventId: event.id });
   }
 
   /** Public publication dates alone cannot establish absence of training exposure. @param {any} event */

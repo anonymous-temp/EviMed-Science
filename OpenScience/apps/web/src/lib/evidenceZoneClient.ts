@@ -147,16 +147,22 @@ export interface EvidenceClaimCounts {
 export interface EvidenceClaimVerification {
   claimId: string;
   claimType: string;
-  status: "verified" | "quote_not_found" | "source_unavailable" | "no_quote" | "derived";
+  status: "verified" | "quote_not_found" | "source_unavailable" | "no_quote" | "derived" | "calculation_unverified";
   mark: EvidenceClaimMark;
+  /** Why a calculated claim could not be checked against its receipt (`EVIDENCE_CALCULATION_REASONS`). */
+  reason?: string;
   sources: Array<{ sourceIndex: number | null; status: string; mark: EvidenceClaimMark; location?: unknown }>;
 }
 export interface EvidenceClaim {
   /** The statement, under the name the reading page renders. */
   text: string;
   claimId?: string;
-  claimType?: "direct" | "synthesized" | "derived";
+  claimType?: "direct" | "synthesized" | "derived" | "calculated";
   claim?: string;
+  /** What a calculated claim stands on: the engine's receipt and the path of its number in it. */
+  calculation?: { engine: string; method: string; receiptId: string; valuePath: string; machineValue: number; format?: string };
+  /** The label, engine, method and receipt a reader is shown for a claim the platform computed. */
+  platformCalculation?: { label: string; engine: string | null; method: string | null; receiptId: string | null };
   /** 1-based positions in the card's own sources. */
   sourceIndexes?: number[];
   supportQuote?: string;
@@ -180,7 +186,7 @@ export interface EvidencePublicViewContent {
 }
 export type EvidenceAbsoluteEffect =
   | { status: "computed"; per: 1000; unit: "people" | "person-years"; control: number; intervention: number; difference: number }
-  | { status: "unavailable"; reason: "no_comparison" | "counts_missing" | "events_exceed_denominator" };
+  | { status: "unavailable"; reason: "no_comparison" | "counts_missing" | "events_exceed_denominator" | "calculation_unverified" };
 /** The GRADE summary-of-findings layout for doctors and pharmacists. */
 export interface EvidenceClinicalView {
   kind: "clinical";
@@ -208,8 +214,12 @@ export interface EvidenceClinicalView {
     outcomeRole: "benefit" | "harm" | null;
     note: string | null;
     sourceIndexes: number[];
+    /** Present when the row's counts were produced by a machine: where they can be read back from. */
+    platformCalculation?: { label: string; engine: string | null; method: string | null; receiptId: string | null };
   }>;
   claims: EvidenceClaim[];
+  /** Calculated claims whose receipt did not hold, with why; they are not listed as claims. */
+  withheldCalculations?: Array<{ claimId: string; reason: string }>;
   counts: EvidenceClaimCounts;
 }
 export interface EvidenceFactBoxRow {
@@ -225,7 +235,7 @@ export interface EvidenceFactBoxRow {
 /** Per 1000 people, one denominator for both arms, computed by the server; when it cannot be, `reason` says why. */
 export interface EvidenceFactBox {
   status: "available" | "unavailable";
-  reason?: "no_comparisons" | "outcome_role_missing" | "counts_missing" | "events_exceed_denominator" | "not_per_people" | "nothing_usable";
+  reason?: "no_comparisons" | "outcome_role_missing" | "counts_missing" | "events_exceed_denominator" | "not_per_people" | "calculation_unverified" | "nothing_usable";
   per: 1000;
   unit: "people";
   benefits: EvidenceFactBoxRow[];
@@ -248,6 +258,8 @@ export interface EvidencePublicView {
     checkedAt?: string | null;
   }>;
   factBox: EvidenceFactBox;
+  /** What the platform computed itself, each with where the number can be read back from. */
+  calculations?: Array<{ claimId: string; text: string; label: string; engine: string | null; method: string | null; receiptId: string | null }>;
 }
 export interface EvidenceContent {
   question: string;
