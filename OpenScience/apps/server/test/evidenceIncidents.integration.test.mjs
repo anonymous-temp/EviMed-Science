@@ -177,8 +177,23 @@ test("the cursor moves past what was read, a replay of the log changes nothing, 
   const mine = await resultCard(userZone, "Mine", [claim("Stroke was less frequent on the drug.", "Among 100 adults on the drug, 7 had a stroke")]);
   await append(mine, userZone, { category: "withdrawal", trigger: "challenge", refs: { claimId: "CLM-001" } });
   const feedback = feedbackDouble();
-  const subject = consumer({ methodFeedback: feedback, resolveProject: async (userId, projectId) => ({ userId, id: projectId }) });
-  const both = await Promise.all([subject.tick(), consumer({ methodFeedback: feedback, resolveProject: async () => null }).tick()]);
+  const entered = Promise.withResolvers(), release = Promise.withResolvers();
+  const subject = consumer({ methodFeedback: feedback, resolveProject: async (userId, projectId) => {
+    entered.resolve();
+    await release.promise;
+    return { userId, id: projectId };
+  } });
+  // Pause after acquisition: simultaneous starts alone can legitimately execute sequentially.
+  const first = subject.tick();
+  let contender;
+  try {
+    await entered.promise;
+    contender = await consumer({ methodFeedback: feedback, resolveProject: async () => null }).tick();
+    assert.equal(contender.leased, false, "the contender cannot acquire a lease still held by the first tick");
+  } finally {
+    release.resolve();
+  }
+  const both = [await first, contender];
   assert.deepEqual(both.map((result) => result.leased).sort(), [false, true], "one holds the lease");
   assert.deepEqual(await subject.tick(), { read: 0, leased: true }, "nothing new after the cursor");
   // The log read again from the start: the incident is not written twice and the observation is asked for again only to find it already there.

@@ -49,6 +49,10 @@ export async function resolveEvolutionUsage(client, request) {
   const local = evolutionUsageContext();
   if (local) return local;
   if (!request.runId) return { missionId: null, moduleId: null };
+  // Usage/auth deployments predate the optional product ledger. Check before querying it: a missing-table
+  // catch would already have aborted the reservation transaction in PostgreSQL.
+  const product = await client.query("SELECT to_regclass('evimed_product.documents') IS NOT NULL AS present");
+  if (!product.rows[0]?.present) return { missionId: null, moduleId: null };
   const result = await client.query(`SELECT payload FROM evimed_product.documents
     WHERE user_id=$1 AND kind='knowledge' AND deleted_at IS NULL
       AND payload->>'recordType'='evolution-run-attribution' AND payload->>'projectId'=$2
@@ -61,6 +65,8 @@ export async function resolveEvolutionUsage(client, request) {
 /** A mission's reservation includes every unsettled request at its ceiling. @param {any} client @param {any} request @param {any} attribution */
 export async function evolutionMissionBudget(client, request, attribution) {
   if (!attribution.missionId) return null;
+  const product = await client.query("SELECT to_regclass('evimed_product.documents') IS NOT NULL AS present");
+  if (!product.rows[0]?.present) return { limit: 0, committed: 0 };
   const result = await client.query(`SELECT d.payload->'budget'->>'reservedCny' AS limit,
     coalesce((SELECT sum(CASE WHEN r.status='settled' THEN coalesce(r.actual_cost,r.reserved_cost)
       WHEN r.status IN ('reserved','uncertain') THEN r.reserved_cost ELSE 0 END)

@@ -124,6 +124,13 @@ test("a week is compared with the baseline only on the engines both were measure
   // The domain's rolling windows: the current window averages 50 and 60 (+5), the control's 10 and 12 (+1).
   assert.ok(same.every((row) => row.numerator === 5 && row.denominator === 1 && row.value === 4), JSON.stringify(same));
 
+  // Missing observed versions block an otherwise computable effect, preserving structural failure reasons.
+  const unknown = { ...input(FOUR), round: { ...input(FOUR).round, surface: { intervention: { engines: [{ observedVersion: "unknown" }] } } } };
+  const series = { pilot: [point("2026-09-25", 50, FOUR), point("2026-10-05", 60, FOUR)], control: [point("2026-09-25", 10, FOUR), point("2026-10-05", 12, FOUR)] };
+  assert.ok((await netEffectRows(storeWith(series), unknown)).every(row => row.reason === "engine_version_unknown"));
+  assert.ok((await netEffectRows(storeWith(series), { ...unknown, controlGroups: 0 })).every(row => row.reason === "too_few_control_groups"));
+  assert.ok((await netEffectRows(storeWith(series), { ...unknown, round: { ...unknown.round, sampleDate: "2026-09-25" } })).every(row => row.reason === "no_follow_up"));
+
   // A round with no recorded engine set is not known to match.
   const legacy = await netEffectRows(storeWith({
     pilot: [point("2026-09-25", 50, null), point("2026-10-05", 60, FOUR)],

@@ -1222,6 +1222,7 @@ export class FrontierService {
   async forYou(user) {
     if (!this.profiles) return { state: "off", basis: null, items: [] };
     const result = await this.profiles.forYou(user, (/** @type {{ id: string }} */ reader, /** @type {string[]} */ publicIds) => this.hydrate(reader, { publicIds }));
+    if (result.state === "off") return result;
     const policy = await this.policies.resolve("frontier", {});
     const exposure = await issueFrontierExposure(this.database, user.id, {surface: "for-you", policyRevisionId: policy.revisionId.startsWith("default:") ? `${FRONTIER_EDITOR_VERSION}:threshold:${frontierSelectThreshold(this.config)}` : policy.revisionId, candidateIds: result.items.map((entry) => String(entry.item.id))});
     return {...result, exposure};

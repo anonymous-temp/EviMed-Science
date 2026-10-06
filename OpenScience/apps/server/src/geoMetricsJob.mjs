@@ -243,11 +243,6 @@ export async function netEffectRows(store, { project, round, controlGroups, engi
       const noise = noiseIds.has(metricId) ? await store.latestNoiseBand(project.id, metricId) : null;
       const where = { scope: index ? "project" : "pool", pool: index ? null : pool, metricId: GEO_NET_METRIC_ID, variant: metricId, dataType: "derived",
         ciLow: null, ciHigh: null, snapshotCount: null };
-      // Assistant names do not establish stable model versions.
-      if (round.surface?.intervention?.engines?.some((engine) => engine.observedVersion === "unknown")) {
-        rows.push({ ...where, value: null, numerator: null, denominator: null, status: "not_measurable", reason: "engine_version_unknown" });
-        continue;
-      }
       // With nothing after the baseline window there is no change to compare.
       if (!baselineDate || !round.sampleDate || round.sampleDate <= baselineDate) {
         rows.push({ ...where, value: null, numerator: null, denominator: null, status: "not_measurable", reason: "no_follow_up" });
@@ -267,6 +262,11 @@ export async function netEffectRows(store, { project, round, controlGroups, engi
         continue;
       }
       const effect = netEffect(comparable.pilot, comparable.control, { noise, baselineDate, controlGroupCount: controlGroups });
+      // Assistant names do not establish stable model versions.
+      if (effect.status === "computed" && round.surface?.intervention?.engines?.some((engine) => engine.observedVersion === "unknown")) {
+        rows.push({ ...where, value: null, numerator: null, denominator: null, status: "not_measurable", reason: "engine_version_unknown" });
+        continue;
+      }
       rows.push(effect.status === "computed"
         ? { ...where, value: effect.value ?? null, numerator: effect.pilotChange ?? null, denominator: effect.controlChange ?? null, status: "ok",
           reason: effect.verdict ?? null }

@@ -404,5 +404,38 @@
     "runtimeDefaults": "Existing subsystem switches preserved; only light concurrency (2) and search pause (false) are new platform configuration keys.",
     "dataMigration": "Idempotent additive schema changes; per-mission usage columns nullable for historical calls.",
     "rawTenantDataInPlatformLearning": false
+  },
+  "ciRegressionClosure": {
+    "recordedAt": "2026-10-06T13:29:49.782070+00:00",
+    "initialRun": "https://github.com/anonymous-temp/EviMed-Science/actions/runs/37466494268",
+    "initialCommit": "dbc070cab0b1d0e6e38a2e46d7c93dfe38f17015",
+    "initialOutcome": "failed: seven assertions in the durable-product-state step; all other executed jobs passed",
+    "serverApiSuiteOnInitialCommit": "passed in the remote Test Hosted Web API step",
+    "fixes": [
+      "Keep usage-only schema deployments compatible; attributed missions still refuse without a product ledger or matching budget.",
+      "Only record personalized frontier exposures for enabled pages; disabled pages create no snapshot.",
+      "Keep fundamental GEO non-measurable reasons before the unknown-engine-version guard.",
+      "Assert the new frontier exposure tables and nullable autopilot policy attribution in integration fixtures.",
+      "Make the lease contention test deterministically overlap after acquisition instead of relying on simultaneous starts."
+    ],
+    "focusedValidation": {
+      "realPostgres": {
+        "tests": 52,
+        "pass": 50,
+        "fail": 0,
+        "skipped": 2,
+        "skipReason": "The focused module database uses PostgreSQL without pgvector; the full product-state rerun uses the installed pgvector image."
+      },
+      "geoUnitTests": {
+        "tests": 29,
+        "pass": 29,
+        "fail": 0
+      },
+      "additionalAssertions": "Disabled personalization stores no exposure snapshot; GEO preserves no_follow_up and too_few_control_groups; a trusted mission with no product ledger inserts no reservation.",
+      "serverLint": "passed",
+      "serverTypecheck": "passed"
+    },
+    "fullProductStateAtRecording": "running in a new isolated pgvector-backed database; final remote CI evidence is available on the feature branch",
+    "initialFailureLogSha256": "02a1b70a8981119a9563ea88f65a2d6c76d44d7a60a6126423f8850a3cfb437f"
   }
 }

@@ -90,6 +90,8 @@ test("/status offers what this deployment has, says personalization is off witho
   assert.ok(seen?.last_seen_at, "the page read marks the reader for the daily's audience");
   const forYou = await (await fetch(`${base}/api/frontier/for-you`, { headers: sessions.reader })).json();
   assert.deepEqual(forYou.data, { state: "off", basis: null, items: [] });
+  const snapshots = await database.query("SELECT count(*)::integer AS count FROM evimed_frontier.exposure_snapshots WHERE user_id = $1 AND surface = 'for-you'", [accounts.reader]);
+  assert.equal(snapshots.rows[0].count, 0, "an off page cannot create an exposure snapshot");
 });
 
 test("safety=1 lists safety alerts from every lane; a bad value is refused", options, async () => {

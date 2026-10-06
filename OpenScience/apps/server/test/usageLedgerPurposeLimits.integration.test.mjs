@@ -6,6 +6,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
+import {withEvolutionUsage} from "../src/evolutionUsage.mjs";
 import { UsageLedger } from "../src/usageLedger.mjs";
 
 const databaseUrl = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL ?? "";
@@ -52,4 +53,15 @@ test("a named purpose is counted even when the account's caps leave it out, so i
   // The account's own cap (no purposes named) never counted the platform's uncapped work and still does not.
   assert.deepEqual(await ledger.assertWithinLimits(userId, { dailyLimit: 50, weeklyLimit: 0 }), { allowed: true });
   await assert.rejects(ledger.assertWithinLimits(userId, { dailyLimit: 0.5, weeklyLimit: 0 }), { code: "usage_budget_exceeded" });
+});
+
+
+test("trusted evolution mission attribution cannot bypass a missing product ledger or missing mission", options, async () => {
+  const ledger = new UsageLedger(database);
+  const id = `usage_${randomUUID()}`;
+  await assert.rejects(withEvolutionUsage({missionId:'evolution-mission-missing-purpose-limit-test',moduleId:'tools'},()=>ledger.reserveModel({
+    id,userId,projectId,runId:'attributed-run',purpose:'evolution',model:'test-model',priceVersion:'test-price-v1',
+    currency:'CNY',requestFingerprint:'b'.repeat(64),estimatedCost:1,
+  })),error=>error.code==='usage_budget_exceeded'&&error.details?.window==='mission');
+  assert.equal((await database.query('SELECT count(*)::integer AS count FROM evimed_usage.model_requests WHERE id=$1',[id])).rows[0].count,0);
 });
