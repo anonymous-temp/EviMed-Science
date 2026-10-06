@@ -1,6 +1,9 @@
 import { randomUUID } from "node:crypto";
-import { BALANCE_REFUSAL_CODES, FRONTIER_SOURCE_TYPES, PLATFORM_PUBLISHER_USER_ID } from "@evimed/domain";
+import { BALANCE_REFUSAL_CODES, FRONTIER_SOURCE_TYPES, PLATFORM_PUBLISHER_USER_ID, canonicalSourceIdentifier } from "@evimed/domain";
+import { identifierKeys } from "@evimed/domain/entity-keys";
 import { HttpError } from "./security.mjs";
+import { frontierItemsMatching } from "./entityVocabulary.mjs";
+import { zoneMatchKeys } from "./evidenceCurrency.mjs";
 import {
   evidenceHash,
   evidenceContentHash,
@@ -62,9 +65,15 @@ export class EvidenceEditorial {
    * the research allowance (`EvimedCreditsService`; null where billing is off, and then attribution and the
    * account's caps still apply), `ensureProject(userId)` is the account's `evimed-evidence` project the
    * usage ledger books to. `isOperator` lets an operator manage an official zone, whose owner cannot sign in.
+   *
+   * `sourceChanges` is the one record of what was published about a work (`sourceChanges.mjs`): what Europe PMC says of a source is
+   * written to it as the editor reads it. `upkeep` (`evidenceCurrency.mjs`) and `challenges` (`evidenceChallenges.mjs`) are the loops that
+   * keep a card current and answer a reader's challenge; the editor ticks them with its own tick and tells `upkeep` when one of its
+   * follow-up jobs ended. `matchItems` finds the frontier items that share keys with a zone (default: `frontierItemsMatching`).
+   * All four are absent until `useUpkeep`, and absent they do nothing.
    * @param {{database:any,service:any,editor:any,budget?:any,readSource:any,canRun?:()=>boolean,now?:()=>Date,workerId?:string,
    *   credits?:any,ensureProject?:((userId:string)=>Promise<{userId:string,projectId:string}>)|null,isOperator?:(userId:string)=>boolean,
-   *   deferralMs?:number}} dependencies
+   *   deferralMs?:number,sourceChanges?:any,upkeep?:any,challenges?:any,matchItems?:((query:any)=>Promise<any[]>)|null}} dependencies
    */
   constructor({
     database,
@@ -79,6 +88,10 @@ export class EvidenceEditorial {
     ensureProject = null,
     isOperator = () => false,
     deferralMs = UPKEEP_DEFERRAL_MS,
+    sourceChanges = null,
+    upkeep = null,
+    challenges = null,
+    matchItems = null,
   }) {
     this.database = database;
     this.service = service;
@@ -92,6 +105,12 @@ export class EvidenceEditorial {
     this.ensureProject = ensureProject;
     this.isOperator = isOperator;
     this.deferralMs = deferralMs;
+    this.sourceChanges = sourceChanges;
+    this.upkeepLoops = upkeep;
+    this.challenges = challenges;
+    this.matchItems = matchItems ?? ((/** @type {any} */ query) => frontierItemsMatching(this.database, query));
+    /** When each upkeep loop is next due (ms since epoch), so a tick that comes every few seconds asks each only as often as it needs. @type {Record<string, number>} */
+    this.nextUpkeepAt = {};
     this.running = false;
     this.lastError = null;
     this.lastRunAt = null;
@@ -115,7 +134,44 @@ export class EvidenceEditorial {
       charged: 0,
       waived: 0,
       chargeFailed: 0,
+      // Discovery (F13): zones whose candidates came from shared keys, and zones with no keys at all that fell back to the owner's query.
+      discoveryByKeys: 0,
+      discoveryByQuery: 0,
+      // What Europe PMC said of a source, written to the one source-change record, and the writes that failed.
+      statusRecorded: 0,
+      statusRecordFailed: 0,
+      upkeepStepFailures: 0,
     };
+  }
+
+  /**
+   * Late binding of the loops that keep a card current and answer a challenge: they are composed after the feed (`server.mjs`), and a
+   * worker built without them is exactly the editor it was.
+   * @param {{ sourceChanges?: any, upkeep?: any, challenges?: any }} loops
+   */
+  useUpkeep({ sourceChanges, upkeep, challenges }) {
+    if (sourceChanges !== undefined) this.sourceChanges = sourceChanges;
+    if (upkeep !== undefined) this.upkeepLoops = upkeep;
+    if (challenges !== undefined) this.challenges = challenges;
+  }
+
+  /**
+   * What Europe PMC said of a source as the editor read it, written through the one record every module reads (B5). A clear status is
+   * an answered check with nothing found, a missing one nothing at all (`recordPublicationStatus`); a work with no identifier of the
+   * kinds the record holds is not recorded, and a write that fails is counted, never thrown: the editor's own card carries the status either way.
+   * @param {string} url @param {any} result what `readSource` returned
+   */
+  async noteStatus(url, result) {
+    if (!this.sourceChanges || result?.publicationStatus === undefined) return;
+    const identifier = canonicalSourceIdentifier(url);
+    if (!identifier) return;
+    try {
+      await this.sourceChanges.recordPublicationStatus(identifier, result.publicationStatus);
+      this.counters.statusRecorded++;
+    } catch (error) {
+      this.counters.statusRecordFailed++;
+      this.sourceChanges.failed?.(codeOf(error));
+    }
   }
 
   /**
@@ -194,6 +250,10 @@ export class EvidenceEditorial {
             "evidence_invalid",
             "Invalid evidence update settings.",
           );
+        // A product zone is written by its producer alone (`evidenceWriteAllowed`: the editor's origin `model` is not one of its origins), so
+        // switching the editor on there would only make every job fail at its first write. The producer is told of new evidence instead.
+        if (body.enabled === true && zone.kind === "product")
+          throw new HttpError(409, "evidence_automation_product_zone", "A product zone's cards are written by its producer; the platform tells the producer about new evidence instead.");
         await client.query(
           `INSERT INTO evimed_frontier.evidence_automation(zone_id,enabled,query,source_types,interval_hours,max_cards_per_run)
           VALUES($1,$2,$3,$4,$5,$6) ON CONFLICT(zone_id) DO UPDATE SET enabled=$2,query=$3,source_types=$4,interval_hours=$5,max_cards_per_run=$6,next_run_at=clock_timestamp(),updated_at=clock_timestamp()`,
@@ -322,37 +382,66 @@ export class EvidenceEditorial {
       recent,
     };
   }
+  /**
+   * The frontier items a zone has not yet been asked about, found by what they share with it (F13, 2026-10-05). Until then an item was a
+   * candidate when the zone's query was a substring of its title or summary, which finds a drug under its brand name's translation only by
+   * luck. Now an item is a candidate when it carries an entity key of the zone — its own words resolved through the vocabulary, joined to the
+   * entities of its cards — or names a study one of its cards cites (an identifier key: a correction, a new report of it, which the editor
+   * maps onto that card). An item that is itself a cited source is the card's own and is left out.
+   *
+   * The owner's query stays what they wrote it for: it orders the candidates (an item that also carries their words first) and, for a zone
+   * with no keys at all — nothing the vocabulary or a card can say it is about — it is the only thing left to match by, as it always was.
+   * @param {any} client @param {any} settings the zone's `evidence_automation` row
+   * @returns {Promise<Array<{public_id:string,identity_key:string,canonical_url:string,title_raw:string}>>}
+   */
+  async discover(client, settings) {
+    const zone = (await client.query("SELECT * FROM evimed_frontier.evidence_zones WHERE id=$1", [settings.zone_id])).rows[0];
+    const keys = zone ? await zoneMatchKeys({ database: this.database, service: this.service, zone }) : { entityKeys: [], identifierKeys: [] };
+    const unseen = `NOT EXISTS(SELECT 1 FROM evimed_frontier.evidence_editorial_jobs j WHERE j.zone_id=$3 AND j.identity_key=i.identity_key
+          AND NOT COALESCE(j.state='completed' AND j.card_id IS NULL AND j.payload->>'decision'='skip' AND j.available_at<=clock_timestamp(),false))`;
+    if (!keys.entityKeys.length && !keys.identifierKeys.length) {
+      this.counters.discoveryByQuery++;
+      return (await client.query(
+        `SELECT i.public_id,i.identity_key,i.canonical_url,i.title_raw FROM evimed_frontier.items i JOIN evimed_frontier.sources s ON s.id=i.primary_source_id
+        WHERE i.state='published' AND s.enabled AND i.source_type=ANY($1::text[]) AND strpos(lower(concat_ws(' ',i.title_raw,i.title_zh,i.summary_zh)),lower($2))>0
+        AND ${unseen}
+        ORDER BY i.timeline_at DESC,i.id DESC LIMIT $4`,
+        [settings.source_types, settings.query, settings.zone_id, settings.max_cards_per_run],
+      )).rows;
+    }
+    this.counters.discoveryByKeys++;
+    const matched = await this.matchItems({ entityKeys: keys.entityKeys, identifierKeys: keys.identifierKeys, limit: 50 });
+    const cited = new Set(keys.identifierKeys.filter((key) => key.startsWith("doi:") || key.startsWith("pmid:")));
+    const ids = matched.filter((item) => !identifierKeys({ doi: item.doi, pmid: item.pmid }).some((key) => cited.has(key))).map((item) => item.publicId);
+    if (!ids.length) return [];
+    const rows = (await client.query(
+      `SELECT i.public_id,i.identity_key,i.canonical_url,i.title_raw,lower(concat_ws(' ',i.title_raw,i.title_zh,i.summary_zh)) AS words
+        FROM evimed_frontier.items i JOIN evimed_frontier.sources s ON s.id=i.primary_source_id
+        WHERE i.public_id=ANY($2::text[]) AND i.state='published' AND s.enabled AND i.source_type=ANY($1::text[]) AND ${unseen}`,
+      [settings.source_types, ids, settings.zone_id],
+    )).rows;
+    const wording = String(settings.query ?? "").trim().toLowerCase();
+    // Matched order (identifier matches, then the most keys shared, then the newest) is kept; the owner's wording only moves its items up.
+    const rank = (/** @type {any} */ row) => ids.indexOf(row.public_id) - (wording && row.words.includes(wording) ? ids.length : 0);
+    return rows.sort((left, right) => rank(left) - rank(right)).slice(0, settings.max_cards_per_run);
+  }
   async schedule() {
     return this.database.transaction(async (/** @type {any} */ client) => {
       const settings = (
         await client.query(`SELECT a.* FROM evimed_frontier.evidence_automation a JOIN evimed_frontier.evidence_zones z ON z.id=a.zone_id
-        WHERE a.enabled AND a.next_run_at<=clock_timestamp() AND z.state='published' ORDER BY a.next_run_at LIMIT 1 FOR UPDATE OF a SKIP LOCKED`)
+        WHERE a.enabled AND a.next_run_at<=clock_timestamp() AND z.state='published' AND z.kind<>'product' ORDER BY a.next_run_at LIMIT 1 FOR UPDATE OF a SKIP LOCKED`)
       ).rows[0];
       if (!settings) return 0;
       // Maintenance rotates by oldest job attempt; discovery gets alternating first place. AI authorship and zone opt-in are both required.
       const cards = (
         await client.query(
           `SELECT c.*,j.identity_key AS editorial_identity FROM evimed_frontier.evidence_cards c LEFT JOIN LATERAL(SELECT identity_key,state,updated_at FROM evimed_frontier.evidence_editorial_jobs WHERE card_id=c.id AND zone_id=c.zone_id ORDER BY updated_at DESC LIMIT 1) j ON true
-        WHERE c.zone_id=$1 AND c.state='published' AND c.editorial->'author'->>'kind'='ai' AND COALESCE(j.state,'completed') NOT IN ('conflict','failed')
+        WHERE c.zone_id=$1 AND c.state='published' AND c.retired_at IS NULL AND c.withdrawn IS NULL AND c.editorial->'author'->>'kind'='ai' AND COALESCE(j.state,'completed') NOT IN ('conflict','failed')
         ORDER BY COALESCE(j.updated_at,(c.editorial->>'sourceCheckedAt')::timestamptz,'epoch'::timestamptz),c.id LIMIT $2`,
           [settings.zone_id, settings.max_cards_per_run],
         )
       ).rows;
-      const candidates = (
-        await client.query(
-          `SELECT i.public_id,i.identity_key,i.canonical_url,i.title_raw FROM evimed_frontier.items i JOIN evimed_frontier.sources s ON s.id=i.primary_source_id
-        WHERE i.state='published' AND s.enabled AND i.source_type=ANY($1::text[]) AND strpos(lower(concat_ws(' ',i.title_raw,i.title_zh,i.summary_zh)),lower($2))>0
-        AND NOT EXISTS(SELECT 1 FROM evimed_frontier.evidence_editorial_jobs j WHERE j.zone_id=$3 AND j.identity_key=i.identity_key
-          AND NOT COALESCE(j.state='completed' AND j.card_id IS NULL AND j.payload->>'decision'='skip' AND j.available_at<=clock_timestamp(),false))
-        ORDER BY i.timeline_at DESC,i.id DESC LIMIT $4`,
-          [
-            settings.source_types,
-            settings.query,
-            settings.zone_id,
-            settings.max_cards_per_run,
-          ],
-        )
-      ).rows;
+      const candidates = await this.discover(client, settings);
       const maintained = cards.map((c) => ({
         identity_key: c.editorial_identity ?? `card:${c.id}`,
         card_id: c.id,
@@ -404,6 +493,7 @@ export class EvidenceEditorial {
     const result = await this.database.query(
       `WITH candidate AS(SELECT j.id FROM evimed_frontier.evidence_editorial_jobs j JOIN evimed_frontier.evidence_automation a ON a.zone_id=j.zone_id
       WHERE a.enabled AND j.attempts<3 AND ((j.state='pending' AND j.available_at<=clock_timestamp()) OR (j.state='running' AND j.lease_until<clock_timestamp()))
+        AND NOT EXISTS(SELECT 1 FROM evimed_frontier.evidence_zones pz WHERE pz.id=j.zone_id AND pz.kind='product')
       ORDER BY j.available_at,j.id LIMIT 1 FOR UPDATE OF j SKIP LOCKED)
       UPDATE evimed_frontier.evidence_editorial_jobs j SET state='running',attempts=attempts+1,lease_owner=$1,lease_until=clock_timestamp()+interval '10 minutes',updated_at=clock_timestamp()
       FROM candidate WHERE j.id=candidate.id RETURNING j.*`,
@@ -605,6 +695,7 @@ export class EvidenceEditorial {
         prefetched = await this.readSource(job.source_url, {
           signal: AbortSignal.timeout(90000),
         });
+        await this.noteStatus(job.source_url, prefetched);
         await this.renew(job);
         if (prefetched.publicationStatus) {
           const skipped = await this.database.query(`UPDATE evimed_frontier.evidence_editorial_jobs
@@ -707,6 +798,46 @@ export class EvidenceEditorial {
         "evidence_revision_conflict",
         "A researcher edited this card; automatic writing has stopped for it.",
       );
+    // A follow-up the platform queued because frontier items bear on this card (F13): the editor first judges whether the newest one does
+    // bear on this card's question, the way it does for a discovered item (`evidenceTarget`), and only a source that does is taken in. An item
+    // that does not is handled and the card is as current as it was; it is never added to the card's sources.
+    const upkeepJob = job.payload?.upkeep ?? null;
+    if (card && upkeepJob?.kind === "new_evidence" && job.source_url && !card.sources.some((/** @type {any} */ source) => source.url === job.source_url)) {
+      await this.renew(job);
+      prefetched = await this.readSource(job.source_url, { signal: AbortSignal.timeout(90000) });
+      await this.noteStatus(job.source_url, prefetched);
+      await this.renew(job);
+      let relevant = false;
+      if (!prefetched.publicationStatus) {
+        if (!String(prefetched.text ?? "").trim())
+          throw Object.assign(new Error("No readable source."), { code: "evidence_source_empty" });
+        await this.requireModel(upkeep);
+        await this.renew(job);
+        const verdict = await this.editor.evidenceTarget({
+          zone: zone.title, description: zone.description, background: zone.background,
+          source: {
+            title: job.source_title, url: job.source_url,
+            coverage: prefetched.receipt?.truncated ? "excerpt" : prefetched.coverage ?? "excerpt",
+            publicationStatus: null,
+            inputTruncated: !!prefetched.receipt?.truncated || String(prefetched.text ?? "").length > 12000,
+            text: String(prefetched.text ?? "").slice(0, 12000),
+          },
+          cards: [{ id: card.id, title: card.title, summary: card.summary, content: card.content }],
+        }, upkeep.billing);
+        await this.renew(job);
+        relevant = verdict === card.id;
+      }
+      if (!relevant) {
+        // The job goes back to the card's own first source, so a later rotation does not read the rejected one as an addition.
+        await this.database.query(`UPDATE evimed_frontier.evidence_editorial_jobs SET source_item_id=$3,source_url=$4,source_title=$5,
+          payload=COALESCE(payload,'{}'::jsonb)||$6::jsonb WHERE id=$1 AND lease_owner=$2`,
+          [job.id, this.workerId, card.source_item_id, card.sources[0]?.url ?? null, card.sources[0]?.title ?? null, JSON.stringify({ managedRevision: card.revision, decision: "upkeep-not-relevant" })]);
+        await this.finish(job, "completed");
+        this.counters.skipped++;
+        await this.endUpkeepJob(job, card, "not_relevant");
+        return;
+      }
+    }
     const originals = card
       ? [...card.sources]
       : [{ title: job.source_title, url: job.source_url, coverage: "excerpt" }];
@@ -763,6 +894,7 @@ export class EvidenceEditorial {
       try {
         result = prefetched && source.url === job.source_url
           ? prefetched : await this.readSource(source.url,{signal:AbortSignal.timeout(90000)});
+        if (result !== prefetched) await this.noteStatus(source.url, result);
         documentText = String(result.text ?? "").slice(0,2000000);
         const retained = typeof source.documentText === "string" && source.documentText.trim() && source.sha256 === evidenceHash(source.documentText);
         if (!documentText.trim() && result.publicationStatus && card && retained) {
@@ -850,6 +982,7 @@ export class EvidenceEditorial {
       await this.database.query("UPDATE evimed_frontier.evidence_editorial_jobs SET payload=COALESCE(payload,'{}'::jsonb)||$3::jsonb WHERE id=$1 AND lease_owner=$2",
         [job.id,this.workerId,JSON.stringify({managedRevision:card?.revision,publicationStatus:"requires-review"})]);
       await this.finish(job,"completed");
+      await this.endUpkeepJob(job, card, "paused");
       return;
     }
     if (unchanged && !rewriteRequested && (card.editorial.status === "ai-reviewed" || publicationFindings.length)) {
@@ -881,6 +1014,7 @@ export class EvidenceEditorial {
       );
       this.counters.unchanged++;
       await this.finish(job, "completed");
+      await this.endUpkeepJob(job, card, "unchanged");
       return;
     }
     if (!unchanged || rewriteRequested) {
@@ -1075,6 +1209,43 @@ export class EvidenceEditorial {
 
     this.counters.reviewed++;
     await this.finish(job, "completed");
+    await this.endUpkeepJob(job, card, "revised");
+  }
+  /**
+   * A follow-up job queued by the upkeep ended; tell it how, so the card's label and the public log say what was done. Never fails the job:
+   * the card is as the editor left it either way, and the next check of the card reads it again.
+   * @param {any} job @param {any} card @param {'revised'|'not_relevant'|'paused'|'unchanged'} outcome
+   */
+  async endUpkeepJob(job, card, outcome) {
+    const upkeep = job.payload?.upkeep;
+    if (!upkeep || !card || !this.upkeepLoops) return;
+    try {
+      await this.upkeepLoops.afterFollowUp({ cardId: card.id, upkeep, outcome });
+      // Told once: a later rotation of the same job must not raise the same items again.
+      await this.database.query("UPDATE evimed_frontier.evidence_editorial_jobs SET payload=COALESCE(payload,'{}'::jsonb)-'upkeep' WHERE id=$1", [job.id]);
+    } catch (error) { this.counters.upkeepStepFailures++; this.lastError = codeOf(error); }
+  }
+  /**
+   * The loops that keep a card current (`evidenceCurrency.mjs`) and answer a reader's challenge (`evidenceChallenges.mjs`), each asked as
+   * often as it needs and each leased by itself, so two control planes never run the same pass. A loop that fails is counted and does not
+   * hold up the editor's own work.
+   */
+  async upkeepStep() {
+    if (!this.upkeepLoops && !this.challenges) return;
+    const at = this.now().getTime();
+    /** @type {Array<[string, number, (() => Promise<unknown>) | null]>} */
+    const loops = [
+      ["sourceChanges", 60_000, this.upkeepLoops ? () => this.upkeepLoops.sourcePollTick() : null],
+      ["watch", 60_000, this.upkeepLoops ? () => this.upkeepLoops.watchTick() : null],
+      ["downstream", 60_000, this.upkeepLoops ? () => this.upkeepLoops.downstreamTick() : null],
+      ["challenges", 30_000, this.challenges ? () => this.challenges.recheckTick() : null],
+    ];
+    for (const [name, every, run] of loops) {
+      if (!run || at < (this.nextUpkeepAt[name] ?? 0)) continue;
+      this.nextUpkeepAt[name] = at + every;
+      try { await run(); }
+      catch (error) { this.counters.upkeepStepFailures++; this.lastError = codeOf(error); }
+    }
   }
   async tick() {
     if (this.running || !this.canRun()) return;
@@ -1086,6 +1257,7 @@ export class EvidenceEditorial {
         "UPDATE evimed_frontier.evidence_editorial_jobs SET state='failed',lease_owner=NULL,lease_until=NULL,last_error='evidence_lease_expired' WHERE state='running' AND lease_until<clock_timestamp() AND attempts>=3",
       );
       await this.schedule();
+      await this.upkeepStep();
       if (this.now().getTime() < this.providerPausedUntil) return;
       const job = await this.claim();
       if (!job) return;

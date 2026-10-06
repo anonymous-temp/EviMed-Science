@@ -1,8 +1,15 @@
 import {
+  EVIDENCE_CHALLENGE_OUTCOMES,
+  EVIDENCE_CHALLENGE_ROUTES,
+  EVIDENCE_CHALLENGE_STATES,
+  EVIDENCE_CHANGE_CATEGORIES,
+  EVIDENCE_CHANGE_SUMMARY_MAX_CHARS,
+  EVIDENCE_CHANGE_TRIGGERS,
   EVIDENCE_ORIGINALITY,
   EVIDENCE_PLATFORM_PRODUCER_NAME,
   EVIDENCE_ZONE_KINDS,
   EVIDENCE_ZONE_VISIBILITY,
+  SOURCE_CURRENCY_LABELS,
 } from "@evimed/domain";
 
 /** The domain's closed lists as a SQL list, so the table's CHECK and the contract cannot disagree.
@@ -105,6 +112,71 @@ UPDATE evimed_frontier.evidence_cards c SET producer=CASE
   FROM evimed_control.users u WHERE u.id=c.user_id AND c.producer IS NULL;
 UPDATE evimed_frontier.evidence_cards SET originality=CASE WHEN editorial->'author'->>'kind'='ai' THEN 'brief' ELSE 'synthesis' END
   WHERE originality IS NULL;
+-- Keeping a card current (flywheel F13, F14, §4.4, §8, 2026-10-05). A card carries its own 时效 — one of the five labels of
+-- \`currencyLabel\` — with the frontier items that bear on it, when the platform last looked, and, for a card taken back,
+-- why. \`source_keys\` are the identifiers its sources name in the form the source-change record uses, so a change in that
+-- record finds the cards that cite it without reading a source's text. Every card that existed is current, never looked at.
+ALTER TABLE evimed_frontier.evidence_cards ADD COLUMN IF NOT EXISTS currency text NOT NULL DEFAULT 'current' CHECK(currency IN (${sqlList(SOURCE_CURRENCY_LABELS)}));
+ALTER TABLE evimed_frontier.evidence_cards ADD COLUMN IF NOT EXISTS pending_item_ids text[] NOT NULL DEFAULT '{}';
+ALTER TABLE evimed_frontier.evidence_cards ADD COLUMN IF NOT EXISTS currency_detail jsonb;
+ALTER TABLE evimed_frontier.evidence_cards ADD COLUMN IF NOT EXISTS last_checked_at timestamptz;
+ALTER TABLE evimed_frontier.evidence_cards ADD COLUMN IF NOT EXISTS withdrawn jsonb;
+ALTER TABLE evimed_frontier.evidence_cards ADD COLUMN IF NOT EXISTS retired_at timestamptz;
+ALTER TABLE evimed_frontier.evidence_cards ADD COLUMN IF NOT EXISTS no_change_checks integer NOT NULL DEFAULT 0;
+ALTER TABLE evimed_frontier.evidence_cards ADD COLUMN IF NOT EXISTS no_change_since timestamptz;
+ALTER TABLE evimed_frontier.evidence_cards ADD COLUMN IF NOT EXISTS source_keys text[] NOT NULL DEFAULT '{}';
+ALTER TABLE evimed_frontier.evidence_cards ADD COLUMN IF NOT EXISTS source_keys_revision integer;
+CREATE INDEX IF NOT EXISTS evidence_cards_source_keys_idx ON evimed_frontier.evidence_cards USING gin (source_keys);
+CREATE INDEX IF NOT EXISTS evidence_cards_watch_idx ON evimed_frontier.evidence_cards (last_checked_at NULLS FIRST, id) WHERE state='published';
+-- The public change log (plan §8): append-only. No foreign key on purpose — a log entry outlives the card and the account
+-- that wrote it, and a cascade that deleted history would be a way to rewrite it. The database refuses an UPDATE, a DELETE
+-- and a TRUNCATE itself, so the refusal does not depend on the module that writes it being the only writer.
+CREATE TABLE IF NOT EXISTS evimed_frontier.evidence_change_log (
+ id bigserial PRIMARY KEY, zone_id text NOT NULL, card_id text NOT NULL,
+ revision_before integer, revision_after integer,
+ category text NOT NULL CHECK(category IN (${sqlList(EVIDENCE_CHANGE_CATEGORIES)})),
+ trigger text NOT NULL CHECK(trigger IN (${sqlList(EVIDENCE_CHANGE_TRIGGERS)})),
+ summary_zh text NOT NULL CHECK(char_length(summary_zh) BETWEEN 1 AND ${EVIDENCE_CHANGE_SUMMARY_MAX_CHARS}),
+ refs jsonb NOT NULL DEFAULT '{}' CHECK(jsonb_typeof(refs)='object'),
+ occurred_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
+CREATE INDEX IF NOT EXISTS evidence_change_log_zone_idx ON evimed_frontier.evidence_change_log(zone_id,id DESC);
+CREATE INDEX IF NOT EXISTS evidence_change_log_card_idx ON evimed_frontier.evidence_change_log(card_id,id DESC);
+CREATE OR REPLACE FUNCTION evimed_frontier.evidence_change_log_append_only() RETURNS trigger LANGUAGE plpgsql AS $fn$
+BEGIN
+  RAISE EXCEPTION 'evidence_change_log is append-only: % is refused', TG_OP USING ERRCODE='55000';
+END
+$fn$;
+DROP TRIGGER IF EXISTS evidence_change_log_no_rewrite ON evimed_frontier.evidence_change_log;
+CREATE TRIGGER evidence_change_log_no_rewrite BEFORE UPDATE OR DELETE ON evimed_frontier.evidence_change_log
+  FOR EACH ROW EXECUTE FUNCTION evimed_frontier.evidence_change_log_append_only();
+DROP TRIGGER IF EXISTS evidence_change_log_no_truncate ON evimed_frontier.evidence_change_log;
+CREATE TRIGGER evidence_change_log_no_truncate BEFORE TRUNCATE ON evimed_frontier.evidence_change_log
+  FOR EACH STATEMENT EXECUTE FUNCTION evimed_frontier.evidence_change_log_append_only();
+-- A reader's challenge to one claim of a published card (F14). One open challenge per reader per claim; the judgement and
+-- the verbatim check are kept as they were made.
+CREATE TABLE IF NOT EXISTS evimed_frontier.evidence_challenges (
+ id text PRIMARY KEY, card_id text NOT NULL REFERENCES evimed_frontier.evidence_cards(id) ON DELETE CASCADE,
+ zone_id text NOT NULL, claim_id text NOT NULL,
+ user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
+ reason text NOT NULL, card_revision integer NOT NULL,
+ route text NOT NULL CHECK(route IN (${sqlList(EVIDENCE_CHALLENGE_ROUTES)})),
+ state text NOT NULL CHECK(state IN (${sqlList(EVIDENCE_CHALLENGE_STATES)})),
+ outcome text CHECK(outcome IN (${sqlList(EVIDENCE_CHALLENGE_OUTCOMES)})),
+ check_result jsonb, judgement jsonb, change_log_id bigint, last_error text,
+ attempts integer NOT NULL DEFAULT 0, available_at timestamptz NOT NULL DEFAULT clock_timestamp(),
+ lease_owner text, lease_until timestamptz,
+ created_at timestamptz NOT NULL DEFAULT clock_timestamp(), resolved_at timestamptz
+);
+CREATE UNIQUE INDEX IF NOT EXISTS evidence_challenges_one_open_idx ON evimed_frontier.evidence_challenges(card_id,claim_id,user_id) WHERE state IN ('open','notified');
+CREATE INDEX IF NOT EXISTS evidence_challenges_due_idx ON evimed_frontier.evidence_challenges(state,available_at) WHERE state='open';
+CREATE INDEX IF NOT EXISTS evidence_challenges_reader_idx ON evimed_frontier.evidence_challenges(user_id,created_at DESC);
+-- What the upkeep loops have read so far (the source-change feed's position, the downstream reconcilers'), and the lease a
+-- loop holds while it works, so two control planes never run the same pass.
+CREATE TABLE IF NOT EXISTS evimed_frontier.evidence_upkeep_state (
+ name text PRIMARY KEY, cursor bigint NOT NULL DEFAULT 0, payload jsonb NOT NULL DEFAULT '{}',
+ lease_owner text, lease_until timestamptz, updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
 `;
 const migrations = new WeakMap();
 /** @param {any} database */

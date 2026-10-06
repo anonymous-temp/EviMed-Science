@@ -964,6 +964,29 @@ export {
   sourceUpdateStatusOfFact,
   sourceUpdatesOfChanges,
 } from './src/sourceChange.mjs'
+// evidenceUpkeep — keeping evidence current (flywheel plan 2026-10-05 §5.4, §8): the public change log's categories and
+// triggers, a reader's challenge, who answers when something bears on a card, and the sentence an entry reads as.
+export {
+  EVIDENCE_CHALLENGE_OUTCOMES,
+  EVIDENCE_CHALLENGE_OUTCOME_LABELS_ZH,
+  EVIDENCE_CHALLENGE_REASON_LIMITS,
+  EVIDENCE_CHALLENGE_ROUTES,
+  EVIDENCE_CHALLENGE_STATES,
+  EVIDENCE_CHANGE_CATEGORIES,
+  EVIDENCE_CHANGE_CATEGORY_LABELS_ZH,
+  EVIDENCE_CHANGE_SUMMARY_MAX_CHARS,
+  EVIDENCE_CHANGE_TRIGGERS,
+  EVIDENCE_CHANGE_TRIGGER_LABELS_ZH,
+  EVIDENCE_UPKEEP_ERROR_CODES,
+  EVIDENCE_UPKEEP_ERROR_MESSAGES_ZH,
+  EVIDENCE_UPKEEP_ROUTES,
+  evidenceChallengeRoute,
+  evidenceChangeSummaryZh,
+  evidenceConclusionChanged,
+  evidenceConclusionOf,
+  evidenceNewEvidenceNoticeTitleZh,
+  evidenceUpkeepRoute,
+} from './src/evidenceUpkeep.mjs'
 // sourceDocuments — 12 exports: what the knowledge base accepts, where each
 // format is read, where its pages begin, how a quotation's offset becomes a
 // page number, and what a personal-library document's state reads as.

@@ -417,6 +417,41 @@ function evidenceCitationGiftSettings(overrides) {
 }
 
 /**
+ * Keeping the evidence zones' cards current and answering a reader's challenge (evidence-flywheel plan 2026-10-05 §5.4, F13, F14, §2.5),
+ * each lever checked at load with the discipline of the programme's above.
+ *
+ * - `OPEN_SCIENCE_EVIDENCE_UPKEEP_ENABLED` (off): the watch for new evidence and source changes, the follow-ups and notices it causes, the
+ *   public change log, readers' challenges and a producer's retirement of a card. Off, none of it exists: no loop ticks, no table of it is read,
+ *   and its routes answer 404 `evidence_upkeep_not_enabled`. (Finding a zone's candidates by shared keys instead of a title substring, and
+ *   refusing automation on a product zone, are corrections of the existing editor and do not wait for this switch.)
+ * - `OPEN_SCIENCE_EVIDENCE_UPKEEP_BATCH` (20) cards the watch checks per pass and `OPEN_SCIENCE_EVIDENCE_UPKEEP_INTERVAL_HOURS` (24) the least
+ *   time between two checks of one card: the watch reads the frontier feed's index and the source-change record, so this is a bound on the
+ *   database's work, not on how soon a retraction is noticed (the source-change feed is polled apart from it).
+ * - `OPEN_SCIENCE_EVIDENCE_CHALLENGES_PER_DAY` (10): the challenges one reader may file in a day; each one on a platform card costs a model call.
+ * - `OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_CHECKS` (6) and `OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_DAYS` (180): the exit rule of §2.5 for an AI-kept card —
+ *   this many consecutive checks without a matching new study, over at least this many days, and nobody following its zone or writing on it.
+ *
+ * @param {Record<string, any>} overrides
+ */
+function evidenceUpkeepSettings(overrides) {
+  /** @param {string} key @param {string} name @param {number} fallback @param {number} min @param {number} max */
+  const whole = (key, name, fallback, min, max) => {
+    const raw = overrides[key] !== undefined ? overrides[key] : process.env[name];
+    const value = raw == null || raw === "" ? fallback : Number(raw);
+    if (!Number.isSafeInteger(value) || value < min || value > max) throw new Error(`${name} must be a whole number from ${min} to ${max}, got ${JSON.stringify(raw)}.`);
+    return value;
+  };
+  return {
+    evidenceUpkeepEnabled: overrides.evidenceUpkeepEnabled ?? boolEnv("OPEN_SCIENCE_EVIDENCE_UPKEEP_ENABLED", false),
+    evidenceUpkeepBatch: whole("evidenceUpkeepBatch", "OPEN_SCIENCE_EVIDENCE_UPKEEP_BATCH", 20, 1, 200),
+    evidenceUpkeepIntervalHours: whole("evidenceUpkeepIntervalHours", "OPEN_SCIENCE_EVIDENCE_UPKEEP_INTERVAL_HOURS", 24, 1, 720),
+    evidenceChallengesPerDay: whole("evidenceChallengesPerDay", "OPEN_SCIENCE_EVIDENCE_CHALLENGES_PER_DAY", 10, 1, 100),
+    evidenceRetireAfterChecks: whole("evidenceRetireAfterChecks", "OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_CHECKS", 6, 2, 1000),
+    evidenceRetireAfterDays: whole("evidenceRetireAfterDays", "OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_DAYS", 180, 7, 3650),
+  };
+}
+
+/**
  * 「循证 GEO」's settings (build spec 2026-09-25 §0, §5, §7), each checked at
  * load, and the media marketplace it places orders through.
  *
@@ -2384,6 +2419,7 @@ export function loadConfig(overrides = {}) {
     ...frontierSettings(overrides),
     ...evidenceSettings(overrides),
     ...evidenceCitationGiftSettings(overrides),
+    ...evidenceUpkeepSettings(overrides),
     // --- 循证 GEO and the media marketplace (2026-09-25) ---
     ...geoSettings(overrides),
     // --- 虚拟临研: the virtual clinical research module (2026-09-28) ---

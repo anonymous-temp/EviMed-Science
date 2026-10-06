@@ -545,6 +545,16 @@ services:
       # off and worth 0 until the owner chooses an amount.
       OPEN_SCIENCE_EVIDENCE_CITATION_GIFT_ENABLED:
       OPEN_SCIENCE_EVIDENCE_CITATION_GIFT_AMOUNT:
+      # Keeping the cards current and answering readers' challenges (flywheel F13/F14,
+      # 2026-10-05): the switch (off), the watch's batch and interval, a reader's daily
+      # challenges, and the exit rule for an AI-kept card. Value-less: unset keeps
+      # config.mjs's defaults.
+      OPEN_SCIENCE_EVIDENCE_UPKEEP_ENABLED:
+      OPEN_SCIENCE_EVIDENCE_UPKEEP_BATCH:
+      OPEN_SCIENCE_EVIDENCE_UPKEEP_INTERVAL_HOURS:
+      OPEN_SCIENCE_EVIDENCE_CHALLENGES_PER_DAY:
+      OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_CHECKS:
+      OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_DAYS:
       # 「循证 GEO」 (geoService.mjs) and the media marketplace it places orders
       # through. Value-less: unset keeps config.mjs's defaults — the module off,
       # open to operators once on, no social channel, no marketplace. The

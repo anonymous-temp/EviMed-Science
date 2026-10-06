@@ -222,6 +222,13 @@ const operatorLevers = {
   // The card-citation gift (F07): off and worth 0 until the owner chooses an amount.
   OPEN_SCIENCE_EVIDENCE_CITATION_GIFT_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_EVIDENCE_CITATION_GIFT_AMOUNT: ["open-science-web"],
+  // Keeping the cards current and answering readers' challenges (flywheel F13/F14, 2026-10-05): the switch and the four limits a deployment tunes.
+  OPEN_SCIENCE_EVIDENCE_UPKEEP_ENABLED: ["open-science-web"],
+  OPEN_SCIENCE_EVIDENCE_UPKEEP_BATCH: ["open-science-web"],
+  OPEN_SCIENCE_EVIDENCE_UPKEEP_INTERVAL_HOURS: ["open-science-web"],
+  OPEN_SCIENCE_EVIDENCE_CHALLENGES_PER_DAY: ["open-science-web"],
+  OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_CHECKS: ["open-science-web"],
+  OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_DAYS: ["open-science-web"],
   OPEN_SCIENCE_KNOWLEDGE_PLUGIN_URL: ["open-science-web"],
   OPEN_SCIENCE_KNOWLEDGE_PLUGIN_TOKEN_FILE: ["open-science-web"],
   OPEN_SCIENCE_KNOWLEDGE_PLUGIN_POLL_MS: ["open-science-web"],
