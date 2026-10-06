@@ -320,6 +320,30 @@ test("lineage links a card to what it grew from, and only the platform's writers
   assert.equal(edited.revision, stamped.revision + 1);
 });
 
+test("a session may link a card only to a card of its own (previous) or a published card it can read (origin); the platform's writers stamp their own", options, async () => {
+  const mine = await makeZone();
+  const theirs = await makeZone(bob);
+  const hidden = await makeZone(bob, { published: false });
+  const own = await saveCard(mine, { requestId: "lineage-own-card" });
+  const bobs = await saveCard(theirs, { requestId: "lineage-bob-card", state: "published" }, bob);
+  const bobDraft = await saveCard(hidden, { requestId: "lineage-bob-draft", state: "draft" }, bob);
+  // Another author's card is not a card this one follows: the field is refused by name, whatever the id.
+  await assert.rejects(saveCard(mine, { lineage: { previousCardId: bobs.id } }), { code: "evidence_lineage_previous_not_own" });
+  await assert.rejects(saveCard(mine, { lineage: { previousCardId: "ec_0123456789abcdef" } }), { code: "evidence_lineage_previous_not_own" });
+  assert.equal((await saveCard(mine, { lineage: { previousCardId: own.id } })).lineage.previousCardId, own.id, "the writer's own card");
+  // An origin is a published card the writer can read: another author's published card, not their draft nor a card that is not there.
+  assert.equal((await saveCard(mine, { requestId: "lineage-origin-ok", lineage: { originCardId: bobs.id } })).lineage.originCardId, bobs.id);
+  await assert.rejects(saveCard(mine, { lineage: { originCardId: bobDraft.id } }), { code: "evidence_lineage_origin_unreadable" });
+  await assert.rejects(saveCard(mine, { lineage: { originCardId: "ec_0123456789abcdef" } }), { code: "evidence_lineage_origin_unreadable" });
+  // An edit of a card that already carries a link does not ask again (the card is what it was), and a link may be changed to one that is allowed.
+  const linked = await saveCard(mine, { requestId: "lineage-keep", lineage: { originCardId: bobs.id } });
+  assert.equal((await service.save(alice, { expectedRevision: linked.revision, summary: "Edited" }, mine.id, linked.id)).evidence.lineage.originCardId, bobs.id);
+  await assert.rejects(service.save(alice, { expectedRevision: linked.revision + 1, lineage: { originCardId: bobs.id, previousCardId: bobs.id } }, mine.id, linked.id), { code: "evidence_lineage_previous_not_own" });
+  // The result publisher is the platform's writer: it stamps the earlier card of the researcher and the card a session began from, and is not asked.
+  const stamped = (await service.saveEditorial(alice, { ...cardInput, requestId: "lineage-platform", lineage: { previousCardId: own.id, originCardId: bobs.id } }, mine.id, null, true, "result")).evidence;
+  assert.deepEqual(stamped.lineage, { previousCardId: own.id, originCardId: bobs.id });
+});
+
 test("entity keys are filled by the injected resolver from the card's words and identifiers, and a resolver that fails leaves the card as written", options, async () => {
   const zone = await makeZone();
   resolver.answer = ["drug:warfarin", "disease:atrial fibrillation"];

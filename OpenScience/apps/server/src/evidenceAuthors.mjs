@@ -17,7 +17,10 @@
  *   page carries it; when it is absent or cannot answer, the page leaves it out and is otherwise the same.
  * - **Links read lineage, and only published cards.** A card's `relatedCards` are the published cards whose lineage names
  *   it — as the earlier card they follow (`previousCardId`) or as the card their research began from (`originCardId`).
- *   What a card points back to is shown to the reader only when the reader may read it.
+ *   What a card points back to is shown to the reader only when the reader may read it. A card is the *next version* of
+ *   another only when the same account made both (a link another account's card names is never a version of it, whatever
+ *   it says; the write refuses it and an old row is not believed); anyone else's card that names it is listed as research
+ *   that followed from it, with its author.
  *
  * @module evidenceAuthors
  */
@@ -137,11 +140,11 @@ export class EvidenceAuthors {
     };
     const related = (await this.database.query(
       `SELECT c.id,c.zone_id,c.title,c.producer,u.name AS creator,
-              CASE WHEN c.lineage->>'previousCardId'=$1 THEN 'next_version' ELSE 'research_from_card' END AS relation
+              CASE WHEN c.lineage->>'previousCardId'=$1 AND c.user_id=$3 THEN 'next_version' ELSE 'research_from_card' END AS relation
          FROM evimed_frontier.evidence_cards c JOIN evimed_frontier.evidence_zones z ON z.id=c.zone_id JOIN evimed_control.users u ON u.id=c.user_id
         WHERE c.state='published' AND z.state='published' AND c.withdrawn IS NULL AND c.id<>$1 AND (c.lineage->>'originCardId'=$1 OR c.lineage->>'previousCardId'=$1)
         ORDER BY c.updated_at DESC, c.id LIMIT $2`,
-      [cardId, EVIDENCE_RELATED_CARD_LIMIT],
+      [cardId, EVIDENCE_RELATED_CARD_LIMIT, card.user_id],
     )).rows;
     return {
       author: { id: String(card.user_id), name: String(card.author) },

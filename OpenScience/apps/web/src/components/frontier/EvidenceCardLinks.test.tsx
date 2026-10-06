@@ -58,7 +58,7 @@ describe("what a card points to", () => {
     mount(<EvidenceCardLinks cardId="ec_1" />);
     expect(await screen.findByRole("link", { name: "李研究" })).toHaveAttribute("href", "/app/frontier/authors/alice");
     expect(screen.getByRole("link", { name: "更早的一版" })).toHaveAttribute("href", "/app/frontier/zones/ez_1/evidence/ec_0");
-    expect(screen.getByText(/由这张卡发起的研究 ·/)).toBeInTheDocument();
+    expect(screen.getByText(/后续研究 ·/)).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "后续研究" })).toHaveAttribute("href", "/app/frontier/zones/ez_2/evidence/ec_2");
     expect(screen.getByRole("link", { name: "新版本" })).toBeInTheDocument();
     expect(screen.getByText(/后续版本 ·/)).toBeInTheDocument();

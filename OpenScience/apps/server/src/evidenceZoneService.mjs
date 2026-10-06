@@ -246,6 +246,28 @@ export class EvidenceZoneService {
     }
     return { producer, originality, lineage: Object.keys(stored).length ? stored : null, entity_keys: entityKeys, journey_stage: journeyStage, disclosure };
   }
+  /**
+   * An account's own lineage links to other cards. `previousCardId` is a card in a zone the writer owns; `originCardId` is a
+   * published card the writer can read. A link the card already carried is not asked again: the card is what it was.
+   * Each refusal is its own named code and touches that one field of that one write.
+   * @param {any} client @param {any} user @param {any} existing @param {{ previousCardId?: string, originCardId?: string }} lineage
+   */
+  async assertLineageLinks(client, user, existing, lineage) {
+    const previous = lineage.previousCardId;
+    if (previous != null && previous !== existing?.lineage?.previousCardId) {
+      const own = previous !== existing?.id && (await client.query(
+        `SELECT 1 FROM evimed_frontier.evidence_cards c JOIN evimed_frontier.evidence_zones z ON z.id=c.zone_id
+          WHERE c.id=$1 AND c.user_id=$2 AND z.user_id=$2`, [previous, user.id])).rowCount;
+      if (!own) throw error(400, "lineage_previous_not_own", "A card can follow only another card in a zone of the writer's own.");
+    }
+    const origin = lineage.originCardId;
+    if (origin != null && origin !== existing?.lineage?.originCardId) {
+      const readable = (await client.query(
+        `SELECT 1 FROM evimed_frontier.evidence_cards c JOIN evimed_frontier.evidence_zones z ON z.id=c.zone_id
+          WHERE c.id=$1 AND c.state='published' AND (z.state='published' OR (c.user_id=$2 AND z.user_id=$2))`, [origin, user.id])).rowCount;
+      if (!readable) throw error(400, "lineage_origin_unreadable", "A card's research can begin only from a published card the writer can read.");
+    }
+  }
   /** @param {any} client @param {any} user @param {string} id @param {boolean} [lock] */
   async zoneRow(client, user, id, lock = false) {
     const row = (
@@ -733,6 +755,10 @@ export class EvidenceZoneService {
           else if ((sourceItemInput ?? existing?.source_item_id) !== lineage.frontierItemId)
             throw error(400, "invalid", "Lineage names a different frontier item than sourceItemId.");
         }
+        // What a card says it follows and what its research began from is a claim about another card, so the writer proves it
+        // (review 2026-10-06: a session could name another author's card as its `previousCardId` and appear as that card's
+        // next version). The platform's own writers stamp their own links and are not asked.
+        if (origin === "owner" && lineage) await this.assertLineageLinks(client, user, existing, lineage);
         value.source_item_id =
           sourceItemInput === undefined
             ? (existing?.source_item_id ?? null)

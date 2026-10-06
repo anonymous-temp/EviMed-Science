@@ -118,6 +118,22 @@ test("the change log comes through an optional reader: carried when it answers, 
   assert.equal(page.zones.length, 1, "the page is otherwise the same");
 });
 
+test("another account's card is never the next version of a card, whatever its lineage says: it is research that followed from it, with its author", options, async () => {
+  const za = await zoneOf(alice, "Alice zone");
+  const base = await card(alice, za, "Base card");
+  const zb = await zoneOf(bob, "Bob zone");
+  const forged = (await zones.saveEditorial(bob, cardFields("Bob claims to be the next version"), zb.id, null, true, "owner")).evidence;
+  await zones.save(bob, { expectedRevision: forged.revision, state: "published" }, zb.id, forged.id);
+  // The write refuses the link, so the row an old release could have written is made by hand.
+  await assert.rejects(zones.save(bob, { expectedRevision: forged.revision + 1, lineage: { previousCardId: base.id } }, zb.id, forged.id), { code: "evidence_lineage_previous_not_own" });
+  await db.query("UPDATE evimed_frontier.evidence_cards SET lineage=$2::jsonb WHERE id=$1", [forged.id, JSON.stringify({ previousCardId: base.id })]);
+  const own = (await zones.saveEditorial(alice, { ...cardFields("Alice's real next version"), lineage: { previousCardId: base.id } }, za.id, null, true, "owner")).evidence;
+  await zones.save(alice, { expectedRevision: own.revision, state: "published" }, za.id, own.id);
+  const related = (await authors.links(carol, base.id)).related;
+  assert.deepEqual(related.map((entry) => [entry.title, entry.relation, entry.creator]).sort(),
+    [["Alice's real next version", "next_version", "Alice Li"], ["Bob claims to be the next version", "research_from_card", "Bob"]]);
+});
+
 test("a card's links name its author, what it points back to and the published cards that follow it — and only what the reader may read", options, async () => {
   const za = await zoneOf(alice, "Alice zone");
   const base = await card(alice, za, "Base card");
@@ -137,7 +153,8 @@ test("a card's links name its author, what it points back to and the published c
   assert.equal((await authors.links(carol, successor.id)).previous.id, base.id);
   // What a card points back to is shown only to a reader who may read it.
   const draftOrigin = await card(alice, za, "Alice's draft", { published: false });
-  const pointing = (await zones.saveEditorial(bob, { ...cardFields("Points at a draft"), lineage: { originCardId: draftOrigin.id } }, zb.id, null, true, "owner")).evidence;
+  // (Written as the platform's own writer would: a session may no longer name a card it cannot read, so this is the old row a card can still be.)
+  const pointing = (await zones.saveEditorial(bob, { ...cardFields("Points at a draft"), lineage: { originCardId: draftOrigin.id } }, zb.id, null, true, "result")).evidence;
   await zones.save(bob, { expectedRevision: pointing.revision, state: "published" }, zb.id, pointing.id);
   assert.equal((await authors.links(carol, pointing.id)).origin, null, "Carol cannot read Alice's draft");
   assert.equal((await authors.links(alice, pointing.id)).origin.id, draftOrigin.id, "Alice can");
