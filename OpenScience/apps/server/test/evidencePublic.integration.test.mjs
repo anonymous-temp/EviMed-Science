@@ -161,12 +161,13 @@ test("only a published card in a published zone opened to the internet is public
   const index = (await text("/evidence/")).body;
   const listed = (api) => JSON.stringify(api);
   assert.ok(index.includes("Official zone") && index.includes("User zone"));
-  for (const title of ["Platform-visible official", "Platform-only zone", "Draft zone", "Carol&#39;s zone"]) assert.equal(index.includes(title), false, title);
+  assert.ok(index.includes("Official zone nobody opened"), "an official zone is listed once it is published");
+  for (const title of ["Platform-only zone", "Draft zone", "Carol&#39;s zone"]) assert.equal(index.includes(title), false, title);
   const zonePage = (await text(`/evidence/z/${open.id}`)).body;
   assert.ok(zonePage.includes("Open user card"));
   assert.equal(zonePage.includes("A draft card"), false, "a draft card is not listed");
   const api = json(await text("/evidence/api/v1/zones"));
-  assert.deepEqual(api.data.zones.map((zone) => zone.id).sort(), [official.id, open.id].sort());
+  assert.deepEqual(api.data.zones.map((zone) => zone.id).sort(), [official.id, unopenedOfficial.id, open.id].sort());
   const cards = json(await text(`/evidence/api/v1/zones/${open.id}/cards`));
   assert.deepEqual(cards.data.cards.map((card) => card.id), [shownUser.id]);
   assert.equal((await text(`/evidence/api/v1/cards/${shown.id}`)).status, 200);
