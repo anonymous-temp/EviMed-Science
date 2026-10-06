@@ -207,6 +207,9 @@ export function createEvidencePublicRoutes({ config, database, simulations = nul
   /** @param {any} req @param {any} res @param {URL} url @param {string[]} parts @param {boolean} head */
   async function serveApi(req, res, url, parts, head) {
     counters.api += 1;
+    // The API is anonymous and public: `*` is its whole CORS policy. The server's own CORS step (for the app's origin, with credentials)
+    // may already have run, and `*` beside `Allow-Credentials: true` is a pair a browser refuses, so that header goes.
+    if (typeof res.removeHeader === "function") res.removeHeader("Access-Control-Allow-Credentials");
     const cors = { "Access-Control-Allow-Origin": "*" };
     try {
       const result = await /** @type {NonNullable<typeof api>} */ (api).handle(parts, url.searchParams);
