@@ -70,6 +70,11 @@ CREATE INDEX IF NOT EXISTS usage_model_requests_run_idx
 -- the ledger's sum for its session (2026-10-04). With the session on the row
 -- they are attributed once the run is known (UsageLedger.attributeSession).
 ALTER TABLE evimed_usage.model_requests ADD COLUMN IF NOT EXISTS session_id text;
+-- Attribution is control-plane metadata; historical requests remain unknown.
+ALTER TABLE evimed_usage.model_requests ADD COLUMN IF NOT EXISTS evolution_mission_id text;
+ALTER TABLE evimed_usage.model_requests ADD COLUMN IF NOT EXISTS evolution_module text;
+CREATE INDEX IF NOT EXISTS usage_model_requests_evolution_mission_idx
+  ON evimed_usage.model_requests(evolution_mission_id,created_at) WHERE evolution_mission_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS usage_model_requests_unattributed_session_idx
   ON evimed_usage.model_requests(user_id,project_id,session_id,created_at) WHERE run_id IS NULL AND session_id IS NOT NULL;
 DO $foreign_keys$

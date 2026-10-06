@@ -404,6 +404,26 @@ INSERT INTO evimed_frontier.meta(key, value) VALUES
   ('content_version', '0'::jsonb), ('hot_version', '0'::jsonb), ('daily_version', '0'::jsonb), ('plugin_cursor', '0'::jsonb)
 ON CONFLICT (key) DO NOTHING;
 
+CREATE TABLE IF NOT EXISTS evimed_frontier.exposure_snapshots (
+  token uuid PRIMARY KEY,
+  user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
+  surface text NOT NULL,
+  policy_revision_id text NOT NULL,
+  candidate_ids jsonb NOT NULL,
+  created_at timestamptz(3) NOT NULL DEFAULT clock_timestamp()
+);
+CREATE INDEX IF NOT EXISTS frontier_exposure_snapshots_time_idx ON evimed_frontier.exposure_snapshots(created_at);
+CREATE TABLE IF NOT EXISTS evimed_frontier.exposures (
+  id bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
+  surface text NOT NULL,
+  policy_revision_id text NOT NULL,
+  items jsonb NOT NULL,
+  candidate_ids jsonb NOT NULL,
+  exposed_at timestamptz(3) NOT NULL DEFAULT clock_timestamp()
+);
+CREATE INDEX IF NOT EXISTS frontier_exposure_user_time_idx ON evimed_frontier.exposures(user_id, exposed_at);
+
 CREATE TABLE IF NOT EXISTS evimed_frontier.user_state (
   user_id    text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
   item_id    bigint NOT NULL REFERENCES evimed_frontier.items(id) ON DELETE CASCADE,

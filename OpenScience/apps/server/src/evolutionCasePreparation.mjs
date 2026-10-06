@@ -36,6 +36,7 @@ export function createEvolutionCasePreparation({ config, controller, fetchImpl =
       simulationReady, workflowSmokeReady, noPublishedExamples: definition.noPublishedExamples === true,
       independentImplementation: published.length > 0 && published.every(row => row.independentImplementation),
       caseIds: admitted.map(row => row.id), publishedReferenceCount, publicInputCount: definition.publicInputCount ?? (definition.methodId === "cohort-state-transition" ? 2 : 0),
+      caseGroups: admitted.map(row=>({id:row.id,group:row.reserve===true?'audit':'development',earliestPublicAt:row.earliestPublicAt??null})),
       sourceHashes: admitted.map(row => row.sourceHash), access: "evaluation-only", hash: hash(JSON.stringify(definition)) };
   };
   return {

@@ -92,10 +92,22 @@ test('a branch whose only finding is a recalled reference validates and publishe
   // The retraction screen asks Crossref about DOI-shaped publications; here it is answered locally, with a clean record.
   const screened = [], fetchImpl = async url => { screened.push(String(url)); return { ok: true, json: async () => ({ message: {} }) }; };
   const evaluator = createEvolutionCandidateEvaluator({ config: { dataDir, evaluationDataDir: dataDir }, auditCandidateExposure, fetchImpl, controller: { execVerify: pythonExecVerify({}) } });
+  let nextPaper=7;
+  const release={modelReleasedAt:'2026-01-01',modelReleaseEvidenceId:'official-fixture-release'};
   const build = async (id, developmentRuns) => {
     const published = [];
-    const builder = createEvolutionBuilder({ verification: { verify: async () => ({ ok: true }) }, evaluator: { evaluate: (candidate, options) => evaluator.evaluate(candidate, { ...options, card: { methodId: 'method' } }) },
-      dispatch: async () => ({ id, publicationKind: 'isolated-tool', entrypoint: 'scripts/estimate.py:estimate', files: { 'SKILL.md': `Public instructions for ${id}`, 'scripts/estimate.py': "def estimate(x): return {'value':x}" }, lineage: { developmentRuns, developmentProjectId: `eval-paper-build-${id}` } }),
+    const builder = createEvolutionBuilder({ verification: { verify: async () => ({ ok: true }) }, evaluator: {
+        freezeCandidate:async(candidate,options)=>{
+          const frozen=await evaluator.freezeCandidate(candidate,{...options,card:{...options.card,...release}});
+          await new Promise(resolve=>setTimeout(resolve,2));
+          const ids=[nextPaper,nextPaper+2];nextPaper+=4;
+          definition.cases.push(...ids.map((paper,index)=>({id:`opaque-${paper}`,sourceRoot:`doi:10.1136/paper.${paper}`,hidden:true,kind:'published',publicationId:`10.1136/paper.${paper}`,independentQa:{passed:true},sourceHash:String(paper).repeat(64).slice(0,64),input:{x:paper},numeric:{value:{value:paper,absoluteTolerance:0}},...(index===0?{earliestPublicAt:new Date().toISOString()}:{reserve:true})})));
+          await fs.writeFile(path.join(dataDir,'paper-gold/candidate-cases/method.json'),JSON.stringify(definition));
+          return frozen;
+        },
+        evaluate:(candidate,options)=>evaluator.evaluate(candidate,{...options,card:{...options.card,...release}})
+      },
+      dispatch: async () => ({ id, publicationKind: 'isolated-tool', entrypoint: 'scripts/estimate.py:estimate', files: { 'SKILL.md': `Public instructions for ${id}`, 'scripts/estimate.py': "def estimate(x): return {'value':x}" }, proposal:{components:['callable'],mechanisms:['identity'],change:'Use the preserved callable.',reason:'Preserve numerical identity.',rollbackVersion:'prior',predictedBenefits:['identity'],possibleHarms:[],costChange:0},lineage: { developmentRuns, developmentProjectId: `eval-paper-build-${id}` } }),
       publisher: { publish: async (candidate, { evaluation }) => { published.push({ candidate, evaluation }); return { id: `publication-${id}` }; } } });
     return { built: await builder.build({ id: 'dossier', methodId: 'method' }), published };
   };
@@ -114,10 +126,12 @@ test('a branch whose only finding is a recalled reference validates and publishe
   const receipt = JSON.parse(await fs.readFile(path.join(dataDir, 'paper-gold/candidate-evaluations', `${verdict.evaluationReceiptHash}.json`), 'utf8'));
   assert.deepEqual(receipt.notices.map(row => [row.code, row.runId]), [['reference_named_from_memory', 'run-recalled']]); assert.equal(receipt.exposureTier, 'unexposed');
   // A branch that was served the paper still waits, and says why; a clean branch publishes with no label.
-  const served = await build('served-branch', ['run-served', 'run-clean']);
-  assert.deepEqual([served.built.status, served.published.length], ['repair', 0]);
+  transcripts['run-served-clean']=structuredClone(transcripts['run-clean']);
+  const served = await build('served-branch', ['run-served', 'run-served-clean']);
+  assert.deepEqual([served.built.status, served.published.length], ['waiting_resource', 0]);
   assert.equal((await isolation.audit('run-served')).tier, 'exposed_uncited');
-  const clean = await build('clean-branch', ['run-clean']);
+  transcripts['run-clean-new']=structuredClone(transcripts['run-clean']);
+  const clean = await build('clean-branch', ['run-clean-new']);
   assert.equal(clean.built.status, 'published'); assert.deepEqual(referenceRecallLabel(clean.published[0].evaluation), {});
   assert.equal(isolation.counters.recalled, 1);
   // The published tool's record takes the label from the same verdict.

@@ -392,7 +392,7 @@ export function methodStrength(observations, nowMs, tauDays = MEMORY_STRENGTH_TA
  *
  * @param {MethodLearning} learning
  * @param {Partial<Record<keyof typeof METHOD_HARM_TEST, number>>} [options] the test's bounds; any of them may be replaced
- * @returns {{state: 'harm'|'clear'|'watching', runs: number, bad: number, llr: number}}
+ * @returns {{state: 'harm'|'clear'|'watching', reason: 'upper-boundary'|'lower-boundary'|'window-exhausted'|'accumulating', runs: number, bad: number, llr: number}}
  */
 export function methodHarmTest(learning, options = {}) {
   const { baseRate, harmRate, alpha, beta, minRuns, maxRuns } = { ...METHOD_HARM_TEST, ...options }
@@ -413,10 +413,10 @@ export function methodHarmTest(learning, options = {}) {
     if (rejected) bad += 1
     llr += rejected ? badStep : goodStep
     // A small tolerance: two exact log steps must reach a boundary they sum to.
-    if (runs >= minRuns && llr >= upper - 1e-9) return { state: 'harm', runs, bad, llr }
-    if (llr <= lower + 1e-9) return { state: 'clear', runs, bad, llr }
+    if (runs >= minRuns && llr >= upper - 1e-9) return { state: 'harm', reason: 'upper-boundary', runs, bad, llr }
+    if (llr <= lower + 1e-9) return { state: 'clear', reason: 'lower-boundary', runs, bad, llr }
   }
-  return { state: runs >= maxRuns ? 'clear' : 'watching', runs, bad, llr }
+  return { state: runs >= maxRuns ? 'clear' : 'watching', reason: runs >= maxRuns ? 'window-exhausted' : 'accumulating', runs, bad, llr }
 }
 
 /**

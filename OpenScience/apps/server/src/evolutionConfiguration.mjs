@@ -4,6 +4,7 @@ export const EVOLUTION_CONFIG_SCHEMA=Object.freeze({
   evolutionDailyBudgetCny:{env:'OPEN_SCIENCE_EVOLUTION_DAILY_BUDGET_CNY',default:50,min:0.01,max:10000},
   evolutionRunBudgetCny:{env:'OPEN_SCIENCE_EVOLUTION_RUN_BUDGET_CNY',default:10,min:0.01,max:1000},
   evolutionMaxConcurrency:{env:'OPEN_SCIENCE_EVOLUTION_MAX_CONCURRENCY',default:1,min:1,max:4,integer:true},
+  evolutionLightConcurrency:{env:'OPEN_SCIENCE_EVOLUTION_LIGHT_CONCURRENCY',default:2,min:1,max:2,integer:true},
   evolutionMaxDecisionCards:{env:'OPEN_SCIENCE_EVOLUTION_MAX_DECISION_CARDS',default:3,min:1,max:3,integer:true},
   evolutionMaxPaperScoutsPerDay:{env:'OPEN_SCIENCE_EVOLUTION_MAX_PAPER_SCOUTS_PER_DAY',default:8,min:0,max:200,integer:true},
   evolutionDecisionTimeoutMs:{env:'OPEN_SCIENCE_EVOLUTION_DECISION_TIMEOUT_MS',default:86400000,min:1000,max:7*86400000,integer:true},
@@ -26,6 +27,7 @@ export const EVOLUTION_CONFIG_SCHEMA=Object.freeze({
  * @param {any} config @returns {{code:string,key:string}[]} */
 export function validateEvolutionConfiguration(config){
   const issues=[];
+  if(config.evolutionSearchPaused!==undefined&&typeof config.evolutionSearchPaused!=='boolean')issues.push({code:'evolution_setting_invalid',key:'evolutionSearchPaused'});
   if(config.evolutionEnabled!==undefined&&typeof config.evolutionEnabled!=='boolean')issues.push({code:'evolution_setting_invalid',key:'evolutionEnabled'});
   if(config.evolutionEvaluationNetwork!==undefined&&(typeof config.evolutionEvaluationNetwork!=='string'||config.evolutionEvaluationNetwork!==''&&!/^[A-Za-z0-9][A-Za-z0-9_.-]{0,127}$/.test(config.evolutionEvaluationNetwork)))issues.push({code:'evolution_setting_invalid',key:'evolutionEvaluationNetwork'});
   for(const [key,field]of Object.entries(EVOLUTION_CONFIG_SCHEMA)){

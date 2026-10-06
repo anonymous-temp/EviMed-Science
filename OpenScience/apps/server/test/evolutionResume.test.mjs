@@ -56,3 +56,20 @@ test('a protected dispatch binds the run under both of its names, so its bounded
     assert.deepEqual((await isolation.audit('run_ledger')).events.map(event => event.tier), ['blocked', 'blocked']);
   } finally { await rm(dataDir, { recursive: true, force: true }); }
 });
+
+test('fixed native turns share one mission reservation and cleanup is generation fenced',async()=>{
+ const {withEvolutionUsage}=await import('../src/evolutionUsage.mjs');
+ const docs=new Map(),recorded=[];let reservations=0,target=null;const stops=[];
+ const service={get:async id=>docs.get(id),save:async(_kind,id,payload)=>{const row={id,payload};docs.set(id,row);return row;}};
+ const project={id:'eval-paper-runtime-fixture',userId:'operator'};
+ const runtimeManager={reserveBoundedRuntimeSession:async(_project,scope)=>{reservations++;target={runId:scope.runId,generation:'observed-generation'};return {id:'same-session'};},boundedRuntimeCleanupTarget:()=>target,endBoundedRuntime:async(...args)=>{stops.push(args);return true;}};
+ const runs=createEvolutionRuns({config:{evolutionEnabled:true,operatorUsers:['operator'],evolutionDailyBudgetCny:10,evolutionRunBudgetCny:10},service,store:{userById:async id=>({id}),projectFor:async()=>project},registry:Promise.resolve(new Map([['open-domain-answer',{id:'open-domain-answer',version:'1'}]])),runtimeManager,researchSessions:{get:async()=>({}),put:async()=>{}},usageLedger:{assertWithinLimits:async()=>{}},agentRuns:{list:async()=>recorded,dispatch:async(_project,input)=>{const row={id:'run-'+recorded.length,dispatchId:input.dispatchId,sessionId:input.sessionId,status:'succeeded'};recorded.push(row);return row;}}});
+ const request={userId:'operator',projectId:project.id,capabilityId:'open-domain-answer',nativeProbe:true,brief:'fixed task'};
+ const first=await withEvolutionUsage({missionId:'evolution-mission-same',moduleId:'runtime'},()=>runs.dispatch({...request,dispatchId:'runtime-probe-first'}));
+ await withEvolutionUsage({missionId:'evolution-mission-same',moduleId:'runtime'},()=>runs.dispatch({...request,sessionId:first.sessionId,dispatchId:'runtime-probe-second'}));
+ assert.equal(reservations,1);assert.equal(recorded.length,2);
+ const attribution=docs.get(`evolution-run-attribution-${evolutionKey(['operator',project.id,'runtime-probe-first'])}`);
+ assert.deepEqual(attribution.payload.runIds,['runtime-probe-first','runtime-probe-second']);
+ await assert.rejects(()=>withEvolutionUsage({missionId:'evolution-mission-different',moduleId:'runtime'},()=>runs.dispatch({...request,sessionId:first.sessionId,dispatchId:'runtime-probe-third'})),{code:'evolution_scope_invalid'});
+ await runs.closeNativeProbe(project,first.nativeScope);assert.equal(stops[0][2],'observed-generation');
+});

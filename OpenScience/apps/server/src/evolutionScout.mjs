@@ -4,13 +4,21 @@ import { METHOD_RECORDS } from "@evimed/domain/method-records";
 import { HttpError } from "./security.mjs";
 
 /** A score uses measured counts, never a model's claimed overall importance. @param {any} features */
-export function evolutionPriority(features = {}) {
+export function evolutionPriorityBreakdown(features = {}, weights = {}) {
   const count = key => Math.max(0, Math.min(10_000, Number(features[key]) || 0));
-  return 3 * Math.log1p(count("literature24Months")) + 4 * Math.log1p(count("runtimeFailures"))
-    + 5 * Math.log1p(count("waitingAgendas")) + 2 * Number(features.referenceCode === true)
-    + 2 * Number(features.reachableData === true) + Math.min(count("publishedExamples"), 5)
-    + 3 * Number(features.coverageGap === true) - 3 * count("unresolvedDependencies");
+  const w = { demand: 4, unlock: 3, reuse: 2, progress: 2, exploration: 1.5, cost: .2, ...weights };
+  return { literature: 3 * Math.log1p(count("literature24Months")), failure: 4 * Math.log1p(count("runtimeFailures")),
+    waiting: 5 * Math.log1p(count("waitingAgendas")), reference: 2 * Number(features.referenceCode === true),
+    data: 2 * Number(features.reachableData === true), examples: Math.min(count("publishedExamples"), 5),
+    coverage: 3 * Number(features.coverageGap === true), dependencies: -3 * count("unresolvedDependencies"),
+    demand: count("distinctAccounts") >= 5 ? w.demand * Math.log1p(count("distinctAccounts")) : 0,
+    unlock: w.unlock * Math.log1p(count("unlockedFamilies")), reuse: w.reuse * Math.min(count("otherModules"), 3),
+    progress: w.progress * Math.min(count("confirmedProgressPoints"), 5),
+    exploration: w.exploration * Math.sqrt(Math.log(Math.max(1, count("totalResearch"))) / (1 + count("objectResearch"))),
+    cost: -w.cost * count("estimatedCostCny") };
 }
+/** @param {any} features @param {any} weights */
+export function evolutionPriority(features = {}, weights = {}) { return Object.values(evolutionPriorityBreakdown(features, weights)).reduce((a,b) => a+b, 0); }
 
 /** The first loop has stronger evidence requirements than subsequent simulation or workflow work.
  * Readiness comes from the private evaluator, never a candidate's claim. @param {any} input */
@@ -126,6 +134,7 @@ export function createEvolutionScout({ config, service, runs, registry, decision
       if (payload.decisionActionId && previous?.payload.decisionActionId !== payload.decisionActionId) Object.assign(data, { decisionActionId: payload.decisionActionId, buildAttempts: 0,
         branchHistory: [...(previous?.payload.branchHistory ?? []), ...(previous ? [{ decisionActionId: previous.payload.decisionActionId ?? null, buildAttempts: previous.payload.buildAttempts ?? 0, status: previous.payload.status, toolId: previous.payload.toolId ?? null }] : [])] });
       const dossier = previous ? await service.save("dossier", id, { ...previous.payload, ...data, status: "planned" }, previous) : await service.addDossier(data);
+      await service.callbacks?.registerToolOpportunity?.(dossier, lead);
       if (!eligibility.eligible) {
         await decisions.propose({ category: "resource", subjectId: id, resourceOnly: true, title: "研发线索等待资料", body: card.goal,
           options: [{ id: "wait", label: "等待所需资源" }, { id: "rescout", label: "重新检索" }], recommended: "wait", conservative: "wait" });
@@ -133,7 +142,7 @@ export function createEvolutionScout({ config, service, runs, registry, decision
       }
       const next = (await service.dossiers()).filter(row => row.payload.status === "planned" && row.payload.eligibility?.eligible)
         .sort((a, b) => b.payload.score - a.payload.score || a.id.localeCompare(b.id))[0];
-      if (next) await service.queueBuild(next.id);
+      if (next && !service.callbacks?.registerToolOpportunity) await service.queueBuild(next.id);
       return { dossierId: dossier.id, queued: next?.id === dossier.id, nextDossierId: next?.id ?? null };
     },
   };

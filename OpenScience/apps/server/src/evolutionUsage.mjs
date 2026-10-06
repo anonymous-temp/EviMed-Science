@@ -28,3 +28,47 @@ export function evolutionCompletedResult(use, run, transcript) {
   return { supported, resultState: supported === true ? 'supported-completed-tool-result' : supported === false ? 'no-supported-completed-result' : 'result-evidence-unknown',
     resultScope: 'completed-run-with-substantive-tool-output', runStatus: run.status };
 }
+
+import { AsyncLocalStorage } from 'node:async_hooks';
+
+// This context is set by the trusted worker, never by an agent's tool arguments.
+const context = new AsyncLocalStorage();
+export const EVOLUTION_MODULE_IDS = Object.freeze(['tools', 'frontier', 'geo', 'autopilot', 'sources', 'evidence', 'memory', 'runtime']);
+
+/** @param {{missionId:string,moduleId:string}} value @param {()=>any} operation */
+export function withEvolutionUsage(value, operation) {
+  if (!/^evolution-mission-[a-zA-Z0-9_-]+$/.test(value.missionId) || !EVOLUTION_MODULE_IDS.includes(value.moduleId)) throw new Error('Invalid evolution accounting context.');
+  return context.run(Object.freeze({ missionId: value.missionId, moduleId: value.moduleId }), operation);
+}
+/** The async context also covers nested reviewer/curator calls. */
+export function evolutionUsageContext() { return context.getStore() ?? null; }
+
+/** Resolve attribution for a runtime request in a different process. @param {any} client @param {any} request */
+export async function resolveEvolutionUsage(client, request) {
+  if (request.purpose !== 'evolution') return { missionId: null, moduleId: null };
+  const local = evolutionUsageContext();
+  if (local) return local;
+  if (!request.runId) return { missionId: null, moduleId: null };
+  const result = await client.query(`SELECT payload FROM evimed_product.documents
+    WHERE user_id=$1 AND kind='knowledge' AND deleted_at IS NULL
+      AND payload->>'recordType'='evolution-run-attribution' AND payload->>'projectId'=$2
+      AND payload->'runIds' ? $3 LIMIT 1`, [request.userId, request.projectId, request.runId]);
+  const payload = result.rows[0]?.payload;
+  return payload && EVOLUTION_MODULE_IDS.includes(payload.moduleId)
+    ? { missionId: payload.missionId, moduleId: payload.moduleId } : { missionId: null, moduleId: null };
+}
+
+/** A mission's reservation includes every unsettled request at its ceiling. @param {any} client @param {any} request @param {any} attribution */
+export async function evolutionMissionBudget(client, request, attribution) {
+  if (!attribution.missionId) return null;
+  const result = await client.query(`SELECT d.payload->'budget'->>'reservedCny' AS limit,
+    coalesce((SELECT sum(CASE WHEN r.status='settled' THEN coalesce(r.actual_cost,r.reserved_cost)
+      WHEN r.status IN ('reserved','uncertain') THEN r.reserved_cost ELSE 0 END)
+      FROM evimed_usage.model_requests r WHERE r.user_id=$1 AND r.purpose='evolution'
+        AND r.evolution_mission_id=$2),0) AS committed
+    FROM evimed_product.documents d WHERE d.user_id=$1 AND d.id=$2 AND d.kind='knowledge'
+      AND d.deleted_at IS NULL AND d.payload->>'recordType'='evolution-mission'
+      AND d.payload->>'moduleId'=$3`, [request.userId, attribution.missionId, attribution.moduleId]);
+  const row = result.rows[0];
+  return { limit: row && Number(row.limit) > 0 ? Number(row.limit) : 0, committed: Number(row?.committed ?? 0) };
+}

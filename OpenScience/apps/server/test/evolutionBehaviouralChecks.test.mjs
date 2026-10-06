@@ -20,7 +20,7 @@ const formula = BEHAVIOUR_FAMILIES["decision-net-benefit"].reference;
 function publishedCase(specification, index, extra = {}) {
   const exact = formula({ specification });
   const numeric = Object.fromEntries(["netBenefit", "treatAll"].map(key => [key, { value: Number(exact[key].toFixed(4)), printed: exact[key].toFixed(4), outputPath: key }]));
-  return { id: `case-${index}`, hidden: true, kind: "published", publicationId: `synthetic-paper-${index}`, independentQa: { passed: true }, sourceHash: "a".repeat(64), input: { specification }, numeric, ...extra };
+  return { id: `case-${index}`, hidden: true, kind: "published", publicationId: `synthetic-paper-${index}`, sourceRoot:`synthetic-study-${index}`, independentQa: { passed: true }, sourceHash: "a".repeat(64), input: { specification }, numeric, ...extra };
 }
 const HONEST = `def net_benefit(specification):
     n = specification["n"]
@@ -198,7 +198,7 @@ test("sudden-perfect review runs reserved cases and fresh inputs; it is never th
   const honest = await f.evaluate(candidateOf(HONEST, "honest"));
   assert.equal(honest.ok, true, JSON.stringify(honest.suddenPerfectReview));
   assert.equal(honest.suddenPerfectReview.passed, true);
-  assert.equal(honest.suddenPerfectReview.heldOut.reservedCases, 1);
+  assert.equal(honest.suddenPerfectReview.heldOut.reservedCases, 0, "a reserved case used by the prior review is never fresh again");
   assert.ok(honest.suddenPerfectReview.heldOut.freshCases >= 9, "fresh cases for every admitted case, drawn under the review's seed");
   const reviews = path.join(f.dataDir, "paper-gold/sudden-perfect-reviews");
   const sealed = (await readdir(reviews)).filter(file => !file.endsWith(".queued.json"));
@@ -206,10 +206,10 @@ test("sudden-perfect review runs reserved cases and fresh inputs; it is never th
   const records = await Promise.all(sealed.map(async file => JSON.parse(await readFile(path.join(reviews, file), "utf8")).receipt));
   const passedRecord = records.find(row => row.passed === true);
   assert.equal(passedRecord.purpose, "sudden-perfect-held-out-review");
-  assert.deepEqual(passedRecord.reviewChecks, { frozenEvidenceAndEvaluatorUnchanged: true, candidateCodeAndContractUnchanged: true, exposureUnexposed: true, reservedCasesPassed: true, behaviouralChecksPassed: true });
+  assert.deepEqual(passedRecord.reviewChecks, { frozenEvidenceAndEvaluatorUnchanged: true, candidateCodeAndContractUnchanged: true, exposureUnexposed: true, reservedCasesPassed: null, behaviouralChecksPassed: true });
   // The review's derived inputs are not the ordinary evaluation's.
   const honestBatches = f.record.calls.filter(call => Array.isArray(call.input?.batch) && call.files["scripts/net_benefit.py"] === HONEST);
-  const ordinary = honestBatches.slice(0, 2).flatMap(call => call.input.batch.slice(1)), review = honestBatches.slice(2).flatMap(call => call.input.batch.slice(1));
+  const ordinary = honestBatches.slice(0, 3).flatMap(call => call.input.batch.slice(2)), review = honestBatches.slice(3).flatMap(call => call.input.batch.slice(2));
   assert.ok(ordinary.length > 0 && review.length > 0);
   assert.equal(review.some(input => ordinary.some(seen => JSON.stringify(seen) === JSON.stringify(input))), false);
   // Asking again resumes the sealed record instead of reviewing twice.

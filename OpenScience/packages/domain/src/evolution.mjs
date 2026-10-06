@@ -24,9 +24,9 @@ export const EVOLUTION_LEAD_SOURCES = Object.freeze(['literature', 'runtime-fail
   'evidence-programme', 'communication', 'virtual-study'])
 export const EVOLUTION_ORIGINS = Object.freeze(['literature', 'tool-result', 'platform-inference', 'user-statement'])
 export const EVOLUTION_BUILD_FORMS = Object.freeze(['compose', 'extend', 'wrap', 'rewrite', 'new-capability'])
-export const EVOLUTION_CASE_GROUPS = Object.freeze(['development', 'holdout', 'time-holdout', 'prospective'])
+export const EVOLUTION_CASE_GROUPS = Object.freeze(['development', 'confirmation', 'audit', 'prospective'])
 export const EVOLUTION_TOOL_STATES = Object.freeze(['staged', 'active', 'alias', 'retired'])
-export const EVOLUTION_JOB_KINDS = Object.freeze(['evolution-event', 'evolution-scout', 'evolution-build', 'evolution-evaluate', 'evolution-decision', 'evolution-digest', 'evolution-maintain', 'evolution-self-check'])
+export const EVOLUTION_JOB_KINDS = Object.freeze(['evolution-event', 'evolution-scout', 'evolution-build', 'evolution-evaluate', 'evolution-decision', 'evolution-digest', 'evolution-maintain', 'evolution-self-check', 'evolution-plan', 'evolution-mission', 'evolution-mission-heavy', 'evolution-meta', 'evolution-research', 'evolution-audit'])
 /**
  * What a decision's option can do, as the control plane's executor knows it (`evolutionComposition.mjs`). This list is
  * closed, and it is what stops the engine: an option whose operation is not here is refused when it is chosen, by a
@@ -55,7 +55,7 @@ export function evolutionAdaptiveClass(history) {
 export function evolutionValidationLevel(assessments, usage = {}) {
   const independent = assessments.filter((a) => a.independent === true && a.passed === true
     && (a.kind === 'simulation' ? a.exposed !== true : a.exposed === false && a.retracted === false))
-  if (independent.some((a) => a.kind === 'research' && Number(a.papers) >= 5)) return usage.harmState === 'clear' && Number(usage.runs) >= EVOLUTION_TOOL_HARM_TEST.minRuns ? 'V4' : 'V3'
+  if (independent.some((a) => a.kind === 'research' && Number(a.papers) >= 5)) return usage.harmState === 'clear' && Number(usage.runs) >= EVOLUTION_TOOL_HARM_TEST.minRuns && Number(usage.attributablePositiveResults) >= 1 ? 'V4' : 'V3'
   if (new Set(independent.filter((a) => a.kind === 'published-case').map((a) => a.caseId)).size >= 2 && independent.every((a) => a.crossImplementationPassed !== false)) return 'V2'
   if (independent.some((a) => a.kind === 'simulation' && a.preRegistered === true
     && (typeof a.monteCarloError === 'number' ? Number.isFinite(a.monteCarloError) && a.monteCarloError >= 0

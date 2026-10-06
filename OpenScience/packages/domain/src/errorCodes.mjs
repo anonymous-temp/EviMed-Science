@@ -2746,7 +2746,7 @@ export function runOutcomeKind(run) {
  */
 export const ERROR_DETAIL_FIELDS = Object.freeze({
   usage_budget_exceeded: Object.freeze({
-    window: Object.freeze(['day', 'week', 'run']),
+    window: Object.freeze(['day', 'week', 'run', 'mission']),
     limit: 'number',
     committed: 'number',
     requested: 'number',

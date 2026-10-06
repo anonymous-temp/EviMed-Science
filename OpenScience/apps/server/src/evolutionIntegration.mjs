@@ -100,7 +100,7 @@ export class EvolutionIntegration {
         sourceEpisodeId: event.sourceEpisodeId, kind: need.kind, capabilityId: need.capabilityId, methodId: need.methodId,
         toolId: need.toolId, requirementId: need.requirementId, dataRequirements: matchedTool?.payload?.dataRequirements ?? null });
       await this.service.addLead({ source: "autopilot", track: need.kind === "data" ? "U" : "M",
-        gapCode: event.gapCode, code: need.capabilityId ?? event.gapCode });
+        gapCode: event.gapCode, code: need.capabilityId ?? event.gapCode, userId: event.userId, projectId: event.projectId, sourceEventId: event.id });
     } else if (event.type === "dataset-ready") {
       await this.datasetOpportunities(event);
       return this.service.resolveWaiters(event);
@@ -129,7 +129,7 @@ export class EvolutionIntegration {
       return this.metaUpdateOpportunity(event);
     } else if (["runtime-gap", "handbook-gap"].includes(event.type)) {
       return this.service.addLead({ source: event.type === "runtime-gap" ? "runtime-failure" : "handbook",
-        track: event.track ?? "M", gapCode: event.gapCode, code: event.code });
+        track: event.track ?? "M", gapCode: event.gapCode, code: event.code, userId: event.userId, projectId: event.projectId, sourceEventId: event.id });
     }
   }
 
@@ -326,6 +326,8 @@ export class EvolutionIntegration {
 
   /** @param {any} input */
   wakeAgenda(input) { return this.autopilot.wakeForEvolution(input); }
+  /** Account-local completion only; shared reports use thresholded counts. @param {any} input */
+  recordResumedResearchCompleted(input) { return this.service.callbacks.recordResumedResearchCompleted?.(input); }
 }
 
 /** The furthest back the feed's changes are read when the module has not looked for longer than this. */
@@ -338,8 +340,8 @@ export const EVOLUTION_FRONTIER_LOOKBACK_MS = 3 * 86_400_000;
  * and only a paper's publication is read: the feed also records every rescoring and selection of an item.
  */
 export class EvolutionFrontierSignals {
-  /** @param {{database:any,service:any,integration:EvolutionIntegration}} input */
-  constructor({ database, service, integration }) { this.database = database; this.service = service; this.integration = integration; }
+  /** @param {{database:any,service:any,integration:EvolutionIntegration,resolveProvenance?:(paper:any)=>Promise<any>}} input */
+  constructor({ database, service, integration, resolveProvenance = null }) { this.database = database; this.service = service; this.integration = integration; this.resolveProvenance = resolveProvenance; }
   async tick() {
     const id = "evolution-frontier-cursor";
     const cursor = await this.service.get(id);
@@ -361,6 +363,7 @@ export class EvolutionFrontierSignals {
       const paper = { id: String(row.id), title: row.title_raw, url: row.canonical_url,
         publishedAt: row.published_at, identity: row.identity_key,
         excerpt: String(row.abstract_raw ?? row.body_excerpt ?? "").slice(0, 24_000) };
+      if (this.resolveProvenance) Object.assign(paper, await this.resolveProvenance(paper));
       const savedEvent = await this.integration.publish({ id: `frontier:${row.seq}`, type: "frontier-publication", paper, origin: "literature" });
       if (!savedEvent) break;
       sequence = Number(row.seq);

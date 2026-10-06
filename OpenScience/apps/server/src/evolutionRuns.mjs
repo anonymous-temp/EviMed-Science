@@ -1,3 +1,4 @@
+import { evolutionUsageContext } from './evolutionUsage.mjs';
 import fs from "node:fs/promises";
 import { constants } from "node:fs";
 import path from "node:path";
@@ -62,7 +63,7 @@ export async function hydrateCandidateFiles(project,run,candidate,limit=2_000_00
 /** The normal run ledger and DSH dispatch, in platform-owned isolated projects.
  * @param {any} dependencies */
 export function createEvolutionRuns({ config, store, registry, runtimeManager, researchSessions, agentRuns, usageLedger, evaluationIsolation, service }) {
-  async function dispatch({ userId, projectId = EVOLUTION_PROJECT_ID, capabilityId, dispatchId, brief, evaluationPolicy = null, jobId = null }) {
+  async function dispatch({ userId, projectId = EVOLUTION_PROJECT_ID, capabilityId, dispatchId, brief, evaluationPolicy = null, jobId = null, sessionId = null, nativeProbe = false }) {
     if (config.evolutionEnabled !== true || !config.operatorUsers.includes(userId)
       || !(projectId === EVOLUTION_PROJECT_ID || /^eval-paper-[a-z0-9_-]+$/.test(projectId))) {
       throw new HttpError(403, "evolution_scope_invalid", "Evolution runs require an enabled operator-owned internal project.");
@@ -74,6 +75,12 @@ export function createEvolutionRuns({ config, store, registry, runtimeManager, r
       const id = `evolution-runtime-work-${evolutionKey(jobId)}`, previous = await service.get(id);
       if (previous?.payload.dispatchId !== dispatchId) await service.save("runtime-work", id, { jobId, userId, projectId, dispatchId }, previous);
     }
+    const attribution = evolutionUsageContext();
+    if (attribution && service) {
+      const id = `evolution-run-attribution-${evolutionKey([userId, projectId, dispatchId])}`;
+      const previous = await service.get(id);
+      if (!previous) await service.save("run-attribution", id, { ...attribution, projectId, runIds: [dispatchId] });
+    }
     if (evaluationPolicy) await evaluationIsolation.registerPending({ userId, projectId }, evaluationPolicy);
     const runs = await agentRuns.list(project), existing = runs.find(run => run.dispatchId === dispatchId);
     if (existing) {
@@ -83,25 +90,44 @@ export function createEvolutionRuns({ config, store, registry, runtimeManager, r
     if (runs.some(run => run.status === "running")) throw new HttpError(409, "runtime_busy", "Evolution waits for its preceding run.");
     const selected = (await registry).get(capabilityId);
     if (!selected) throw new HttpError(503, "evolution_capability_missing", "The requested evolution capability is not installed.");
-    if (!evaluationPolicy && !["evolution-scout", "tool-builder"].includes(capabilityId)) throw new HttpError(403, "evolution_scope_invalid", "A scientific evaluation requires an exclusion policy.");
+    const nativeConversation=nativeProbe===true&&capabilityId==="open-domain-answer"&&/^eval-paper-runtime-/.test(projectId);
+    if (!evaluationPolicy && !nativeConversation && !["evolution-scout", "tool-builder"].includes(capabilityId)) throw new HttpError(403, "evolution_scope_invalid", "A scientific evaluation requires an exclusion policy.");
     await usageLedger.assertWithinLimits(userId, { dailyLimit: config.evolutionDailyBudgetCny, weeklyLimit: 0, purposes: ["evolution"] });
     const scope = { dailyLimit: config.evolutionDailyBudgetCny, weeklyLimit: 1_000_000, runLimit: config.evolutionRunBudgetCny };
-    const session = await runtimeManager.reserveBoundedRuntimeSession(project, { runId: dispatchId, capabilityId: selected.id, ...scope });
+    if(sessionId && (!nativeConversation || !await researchSessions.get(project,sessionId)))throw new HttpError(403,"evolution_scope_invalid","Conversation reuse requires an existing isolated native evaluation session.");
+    let reusedScope = null;
+    if (sessionId && nativeConversation) {
+      const prior = runs.filter(run => run.sessionId === sessionId).at(-1);
+      const target = runtimeManager.boundedRuntimeCleanupTarget(project);
+      if (target && prior && ["delivered", "succeeded"].includes(prior.status) && target.runId === prior.dispatchId) reusedScope = target;
+      if (!reusedScope) throw new HttpError(403,"evolution_scope_invalid","Native context requires its original completed turn and live reservation.");
+    }
+    const reserved = reusedScope ? {id:sessionId} : await runtimeManager.reserveBoundedRuntimeSession(project, { runId: dispatchId, capabilityId: selected.id, ...scope });
+    const session=sessionId?{...reserved,id:sessionId}:reserved;
+    const nativeScope = nativeConversation ? runtimeManager.boundedRuntimeCleanupTarget(project) : null;
+    if (reusedScope && attribution && service) {
+      const id = `evolution-run-attribution-${evolutionKey([userId, projectId, reusedScope.runId])}`;
+      const previous = await service.get(id);
+      if (!previous || previous.payload.missionId !== attribution.missionId) throw new HttpError(403,"evolution_scope_invalid","Native session cannot borrow another mission budget.");
+      await service.save("run-attribution",id,{...previous.payload,runIds:[...new Set([...(previous.payload.runIds??[]),dispatchId])]},previous);
+    }
+
     try {
-      await researchSessions.put(project, session.id, { mode: "specialist", agentId: selected.id, agentVersion: selected.version });
-      return await agentRuns.dispatch(project, { sessionId: session.id, dispatchId, automated: true, question: brief,
+      await researchSessions.put(project, session.id, nativeConversation?{mode:"open-domain"}:{ mode: "specialist", agentId: selected.id, agentVersion: selected.version });
+      const dispatched = await agentRuns.dispatch(project, { sessionId: session.id, dispatchId, automated: true, question: brief,
         effectiveAgentId: selected.id, effectiveAgentVersion: selected.version, effectiveRuntimeAgent: selected.runtimeAgent,
         effectiveRouteReason: "platform-evolution" }, async (binding, run, repairText = null) => {
         if (evaluationPolicy) await evaluationIsolation.bindRun({ userId, projectId }, run.id, { dispatchId });
         const prepared = await prepareResearchContext(project, binding, config, { query: brief, memories: [], specialists: [],
           routedSpecialist: { agentId: selected.id, agentVersion: selected.version, runtimeAgent: selected.runtimeAgent,
             skill: selected.skill, companionSkills: selected.companionSkills } });
-        const marker = issueModelGatewayBudgetMarker({ secret: config.modelGatewaySigningSecret, userId, projectId, runId: dispatchId, ...scope });
+        const marker = issueModelGatewayBudgetMarker({ secret: config.modelGatewaySigningSecret, userId, projectId, runId: reusedScope?.runId ?? dispatchId, ...scope });
         return runtimeManager.dispatchPrompt(project, session.id, { text: `${repairText || brief}\n\n<evimed-evolution>${dispatchId}</evimed-evolution>\n\n${marker}`,
           system: prepared.system, memoryContext: prepared.memoryContext, residentProfile: true, strictContext: true,
           agent: selected.runtimeAgent, model: "deepseek/deepseek-flash", runId: run.id, allowBounded: true,
           requestId: run.kernelRequestIds?.at(-1) });
       });
+      return nativeConversation ? {...dispatched,nativeScope} : dispatched;
     } catch (error) {
       const recorded = (await agentRuns.list(project)).find(run => run.dispatchId === dispatchId);
       if (recorded) return recorded;
@@ -111,6 +137,10 @@ export function createEvolutionRuns({ config, store, registry, runtimeManager, r
   }
   return {
     dispatch,
+    async closeNativeProbe(project, scope) {
+      if (!/^eval-paper-runtime-/.test(project.id) || !scope?.runId || !scope?.generation) return false;
+      return runtimeManager.endBoundedRuntime(project,scope.runId,scope.generation);
+    },
     /** A recovered job may inspect its existing run even when no new runtime slot is available. */
     async canResume(job) {
       if (!job?.id || !service) return false;

@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { ArrowUp, Filter, Newspaper, Search } from "lucide-react";
-import type { FrontierItem } from "@/lib/frontierClient";
+import type { FrontierExposure, FrontierItem } from "@/lib/frontierClient";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
 import { Button } from "@/components/ui/Button";
@@ -10,6 +10,8 @@ import { groupByDay } from "./frontierText";
 /** A page of the feed as it is on screen, with the query it answers and when it was read. */
 export interface Listing {
   key: string;
+  exposure?: FrontierExposure;
+  exposures?: FrontierExposure[];
   items: FrontierItem[];
   nextCursor: string | null;
   version: string | null;

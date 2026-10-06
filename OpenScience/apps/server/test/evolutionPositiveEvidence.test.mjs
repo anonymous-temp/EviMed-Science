@@ -1,0 +1,23 @@
+import test from 'node:test';import assert from 'node:assert/strict';
+import {createEvolutionPositiveEvidence} from '../src/evolutionPositiveEvidence.mjs';
+test('positive utility requires persisted replay bond and bound producer, corrections invalidate it',async()=>{let corrected=false;const method={contentDigest:'revision',scientific:{entries:[{id:'entry',digest:'revision',signal:'replay_agreed',result:{versionId:'result',digest:'bytes'},replay:{id:'replay'},at:'2026-10-06'}]}};const result={producer:{runId:'run'},digest:'bytes',coverage:{producer:'bound'},method:{id:'method'},machineValues:[{key:'n',value:1}]};const resolve=createEvolutionPositiveEvidence({loadMethod:async()=>method,loadResult:async()=>result,hasCorrection:async()=>corrected});const run={id:'run'},use={toolId:'tool',contentDigest:'revision',invoked:true};assert.equal((await resolve(run,use)).kind,'verified-uncorrected-result');corrected=true;assert.equal(await resolve(run,use),null);corrected=false;assert.equal(await resolve(run,{...use,contentDigest:'other'}),null);result.coverage.producer='observed';assert.equal(await resolve(run,use),null);});
+import {createEvolutionFeedback} from '../src/evolutionFeedback.mjs';
+test('verified run hook refuses mere success and applies trusted proof once',async()=>{const rows=new Map();const service={list:async()=>[{projectId:'project',payload:{runId:'run',toolId:'tool'}}],get:async id=>rows.get(id),save:async(type,id,payload)=>rows.set(id,{payload})};let proof=null,count=0,handbooks=0;const feedback=createEvolutionFeedback({service,maintenance:{observationOf:async()=>({invoked:true}),observe:async()=>count++},resolvePositiveEvidence:async()=>proof,observeHandbookOutcome:async()=>handbooks++});const run={id:'run',userId:'owner',projectId:'project',status:'succeeded'};assert.equal((await feedback.observeVerifiedRun(run)).observed,0);proof={verified:true,evidenceId:'receipt',resultId:'result',at:'2026-10-06'};assert.equal((await feedback.observeVerifiedRun(run)).observed,1);assert.equal((await feedback.observeVerifiedRun(run)).observed,0);assert.equal(count,1);assert.equal(handbooks,1);});
+import {evolutionServiceFixture} from './helpers/evolutionServiceFixture.mjs';
+test('trusted replay regression requires same environment, exact original run and artifact; dedup preserves one harm',async()=>{
+ const {service}=evolutionServiceFixture();
+ const method={id:'method',payload:{contentDigest:'revision',scientific:{entries:[{id:'entry',digest:'revision',signal:'replay_differed',runId:'run',result:{versionId:'result',digest:'bytes'},replay:{id:'replay',numbers:'changed'},at:'2026-10-06'}]}}};
+ const result={producer:{runId:'run'},digest:'bytes',coverage:{producer:'bound'},method:{id:'engine-method'},machineValues:[{key:'n',value:1}]};
+ const replay={projectId:'project',payload:{recordType:'result-replay',versionId:'result',state:'succeeded',cleanup:'confirmed',partial:false,comparison:{numbers:'changed',environment:{status:'same'}}}};
+ const resolve=createEvolutionPositiveEvidence({loadMethod:async()=>method,loadResult:async()=>result,loadReplay:async()=>replay,hasCorrection:async()=>false});
+ const run={id:'run',userId:'owner',projectId:'project'},use={runId:'run',toolId:'tool',contentDigest:'revision',methodId:'method',invoked:true,artifactDigest:'artifact'};
+ assert.equal((await resolve.resolveNegativeEvidence(run,use)).kind,'trusted-replay-regression');
+ replay.payload.comparison.environment.status='differs';assert.equal(await resolve.resolveNegativeEvidence(run,use),null);replay.payload.comparison.environment.status='same';
+ await service.save('tool','tool',{artifactDigest:'artifact'});await service.save('mission','mission',{regressions:0,regressionObservations:[]});
+ await service.save('candidate-verdict','verdict',{toolId:'tool',artifactDigest:'artifact',receiptValid:true,missionId:'mission'});
+ await service.save('use','use',{...use,projectId:'project',evaluation:false,researcherOwned:true},null,'owner');
+ const feedback=createEvolutionFeedback({service,maintenance:{observationOf:async()=>({invoked:true,corrected:true})},resolvePositiveEvidence:resolve});
+ await feedback.observeVerifiedRun(run);await feedback.observeVerifiedRun(run);assert.equal((await service.get('mission')).payload.regressions,1);
+ method.payload.scientific.entries[0].signal='analytic_corrected';assert.equal(await resolve.resolveNegativeEvidence(run,use),null);
+ method.payload.scientific.entries[0].signal='replay_differed';result.producer.runId='another';assert.equal(await resolve.resolveNegativeEvidence(run,use),null);
+});

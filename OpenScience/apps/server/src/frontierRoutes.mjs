@@ -1,3 +1,4 @@
+import { recordFrontierExposure } from "./frontierEvolution.mjs";
 import { HttpError, readJson, sendJson } from "./security.mjs";
 
 /**
@@ -94,6 +95,11 @@ export function createFrontierRoutes({ store, service, config, maxJsonBytes, aud
       sendJson(res, 200, { data: result.body }, headers);
       return true;
     };
+    if (parts[0] === "exposures" && parts.length === 1 && method === "POST") {
+      const body = await bodyOf(req, maxJsonBytes, ["token", "items"]);
+      await service.ready();
+      return reply(await recordFrontierExposure(service.database, user.id, body));
+    }
     const requireOperator = () => {
       if (!service.isOperator(user)) throw new HttpError(403, "frontier_operator_required", "Only an operator may change what the feed shows.");
     };

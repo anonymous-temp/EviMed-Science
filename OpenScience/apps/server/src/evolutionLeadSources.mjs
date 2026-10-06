@@ -59,7 +59,7 @@ export function leadEntityKeys(keys) {
 /**
  * The payload of a lead from one of these sources, or a refusal naming the lead vocabulary: a source the module does not own, a code outside that
  * source's closed list, a gap code the source does not state, an endpoint outside the engine's three. Nothing else of the input is read.
- * @param {{ source?: unknown, gapCode?: unknown, code?: unknown, endpoint?: unknown, entityKeys?: unknown }} input
+ * @param {{ source?: unknown, gapCode?: unknown, code?: unknown, endpoint?: unknown, entityKeys?: unknown, userId?: string, projectId?: string, sourceEventId?: string, evidenceVersion?: string }} input
  * @returns {{ track: "M", source: string, gapCode: string, code: string, entityKeys: string[], endpoint?: string }}
  */
 export function moduleLeadPayload(input) {
@@ -68,7 +68,7 @@ export function moduleLeadPayload(input) {
     throw new HttpError(400, "evolution_lead_invalid", "Unknown evolution lead vocabulary.");
   }
   const endpoint = typeof input.endpoint === "string" && LEAD_ENDPOINTS.includes(input.endpoint) ? input.endpoint : null;
-  return { track: "M", source: /** @type {string} */ (input.source), gapCode: rule.gapCode, code: input.code, entityKeys: leadEntityKeys(input.entityKeys), ...(endpoint ? { endpoint } : {}) };
+  return { track: "M", source: /** @type {string} */ (input.source), gapCode: rule.gapCode, code: input.code, entityKeys: input.userId ? [] : leadEntityKeys(input.entityKeys), ...(endpoint ? { endpoint } : {}) };
 }
 
 /**
@@ -119,9 +119,10 @@ export function createEvolutionLeadSources({ service, perDay = MODULE_LEADS_DEFA
     try {
       const payload = moduleLeadPayload(input);
       counters.offered[payload.source] += 1;
-      if (await service.get(service.leadId(payload))) { counters.outcomes.duplicate += 1; return { state: "duplicate" }; }
-      if (await takenToday() >= perDay) { counters.outcomes.deferred += 1; return { state: "deferred" }; }
-      await service.addLead(payload);
+      const prior = await service.get(service.leadId(payload));
+      if (!prior && await takenToday() >= perDay) { counters.outcomes.deferred += 1; return { state: "deferred" }; }
+      const saved = await service.addLead({ ...payload, userId: input.userId, projectId: input.projectId, sourceEventId: input.sourceEventId, evidenceVersion: input.evidenceVersion });
+      if (prior && saved?.revision === prior.revision) { counters.outcomes.duplicate += 1; return { state: "duplicate" }; }
       counters.outcomes.lead += 1;
       return { state: "lead" };
     } catch (error) {
@@ -148,7 +149,7 @@ export function createEvolutionLeadSources({ service, perDay = MODULE_LEADS_DEFA
         const capabilityId = autopilotEpisodeCapability(String(action.taskType));
         if (typeof capabilityId !== "string") continue;
         read += 1;
-        const result = await lead({ source: "evidence-programme", gapCode: "method-implementation", code: capabilityId, entityKeys: await programme.keysForZone(String(action.zone)).catch(() => []) });
+        const result = await lead({ source: "evidence-programme", gapCode: "method-implementation", code: capabilityId, sourceEventId: `programme:${action.episodeId}`, entityKeys: await programme.keysForZone(String(action.zone)).catch(() => []) });
         if (result.state === "lead") leads += 1;
       }
     }
@@ -161,22 +162,25 @@ export function createEvolutionLeadSources({ service, perDay = MODULE_LEADS_DEFA
   if (communication) {
     /**
      * A question of a 循证传播 project that needs an analysis no capability offers. Nothing calls this today: the module has no field marking it.
-     * @param {{ entityKeys?: unknown }} input
+     * @param {{ entityKeys?: unknown, userId?: string, projectId?: string, sourceEventId?: string, evidenceVersion?: string }} input
      */
-    composed.communication = { offer: (input) => lead({ source: "communication", gapCode: "method-missing", code: COMMUNICATION_CODE, entityKeys: input?.entityKeys }) };
+    composed.communication = { offer: (input) => input?.userId && input?.projectId && input?.sourceEventId
+      ? lead({ source: "communication", gapCode: "method-missing", code: COMMUNICATION_CODE, userId: input.userId, projectId: input.projectId, sourceEventId: input.sourceEventId, evidenceVersion: input.evidenceVersion })
+      : Promise.resolve({ state: "refused", reason: "owner-event-required" }) };
   }
   if (virtualStudy) {
     /**
      * A method a 虚拟临研 study asked for. One the engine publishes is not a lead; any other is, as its family and the study's endpoint. Nothing calls
      * this today: a job's method is fixed by its kind, so no asked method outside the list is persisted.
-     * @param {{ asked?: unknown, endpoint?: unknown, entityKeys?: unknown }} input
+     * @param {{ asked?: unknown, endpoint?: unknown, entityKeys?: unknown, userId?: string, projectId?: string, sourceEventId?: string }} input
      */
     composed.virtualStudy = {
       offer: async (input) => {
         const asked = typeof input?.asked === "string" ? input.asked : "";
         if (VCR_ENGINE_METHOD_IDS.includes(/** @type {any} */ (asked))) { counters.outcomes.supported += 1; return { state: "supported" }; }
+        if(!input.userId || !input.projectId || !input.sourceEventId)return {state:"refused",reason:"owner-event-required"};
         const family = asked.split(".")[0];
-        return lead({ source: "virtual-study", gapCode: "method-missing", code: VCR_METHOD_FAMILIES.includes(family) ? `vcr-${family}` : "vcr-other", endpoint: input?.endpoint, entityKeys: input?.entityKeys });
+        return lead({ source: "virtual-study", gapCode: "method-missing", code: VCR_METHOD_FAMILIES.includes(family) ? `vcr-${family}` : "vcr-other", endpoint: input?.endpoint, userId:input.userId, projectId:input.projectId, sourceEventId:input.sourceEventId });
       },
     };
   }

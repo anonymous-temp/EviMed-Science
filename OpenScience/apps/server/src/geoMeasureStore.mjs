@@ -1,3 +1,5 @@
+import { createModuleEvolutionPolicies } from "./moduleEvolutionPolicies.mjs";
+import { geoInterventionIdentity } from "./moduleEvolutionAdapters.mjs";
 /**
  * SQL for 「循证传播」's measurement tables (build spec §2): rounds, probe
  * jobs, snapshots, facts, errors and metrics, plus the reads of the content
@@ -80,6 +82,7 @@ const list = (value) => (Array.isArray(value) ? value : []);
  * @property {Array<Record<string, any>>} competitors
  * @property {string[]} engines
  * @property {string} status
+ * @property {string[]} entityKeys
  */
 
 /** @param {any} row @returns {GeoProjectRow} */
@@ -92,6 +95,7 @@ function projectRow(row) {
     competitors: list(row.competitors),
     engines: list(row.engines).map(String),
     status: String(row.status),
+    entityKeys: list(row.entity_keys).map(String),
   };
 }
 
@@ -169,11 +173,13 @@ export function errorRow(row) {
 }
 
 export class GeoMeasureStore {
-  /** @param {{ query: (text: string, values?: unknown[]) => Promise<any>, transaction: (operation: (client: any) => Promise<any>) => Promise<any>, withClient: (operation: (client: any) => Promise<any>) => Promise<any> }} database  a ControlPlaneDatabase */
-  constructor(database) {
+  /** @param {{ query: (text: string, values?: unknown[]) => Promise<any>, transaction: (operation: (client: any) => Promise<any>) => Promise<any>, withClient: (operation: (client: any) => Promise<any>) => Promise<any> }} database  a ControlPlaneDatabase
+   * @param {{policies?: any}} [options] */
+  constructor(database, { policies = createModuleEvolutionPolicies() } = {}) {
     if (!database || typeof database.query !== "function" || typeof database.transaction !== "function") {
       throw new TypeError("The GEO measurement store needs the control-plane database.");
     }
+    this.policies = policies;
     this.database = database;
   }
 
@@ -331,10 +337,22 @@ export class GeoMeasureStore {
    * @param {Array<{ questionId: string, engine: string, repeatIndex: number }>} jobs
    */
   async createRound(round, jobs) {
+    const [strategy, content, placements, sources] = await Promise.all([
+      this.query("SELECT max(version) AS version FROM evimed_geo.strategy WHERE geo_project_id=$1", [round.geoProjectId]),
+      this.query("SELECT id, content_sha256, status FROM evimed_geo.articles WHERE geo_project_id=$1 ORDER BY id", [round.geoProjectId]),
+      this.query("SELECT id, media_type, resource_id, state, body_sha256 FROM evimed_geo.orders WHERE geo_project_id=$1 ORDER BY id", [round.geoProjectId]),
+      this.query("SELECT id, version, status FROM evimed_geo.claims WHERE geo_project_id=$1 ORDER BY id", [round.geoProjectId]),
+    ]);
+    const policy = await this.policies.resolve("geo", {supplements: []});
+    const intervention = geoInterventionIdentity({ intervention: {
+      .../** @type {any} */ (round.surface?.intervention ?? {}), policyRevisionId: policy.revisionId, questionSetVersion: round.setVersion,
+      strategyRevision: strategy.rows[0]?.version ?? null, contentRevision: content.rows,
+      placements: placements.rows, channels: [...new Set(placements.rows.map((row) => row.media_type))], sourceRevision: sources.rows,
+    } }, round.engines);
     await this.transaction(async (client) => {
       await client.query(`INSERT INTO evimed_geo.rounds (id, user_id, geo_project_id, kind, set_version, engines, surface, status, planned, done, failed, ref, created_at)
         VALUES ($1, $2, $3, $4, $5, $6::text[], $7::jsonb, 'queued', $8, 0, 0, $9::jsonb, $10)`,
-      [round.id, round.userId, round.geoProjectId, round.kind, round.setVersion, round.engines, JSON.stringify(round.surface), round.planned,
+      [round.id, round.userId, round.geoProjectId, round.kind, round.setVersion, round.engines, JSON.stringify({ ...round.surface, intervention }), round.planned,
         round.ref ? JSON.stringify(round.ref) : null, round.now.toISOString()]);
       const base = round.now.getTime();
       for (let offset = 0; offset < jobs.length; offset += 200) {

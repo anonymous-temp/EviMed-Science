@@ -38,3 +38,21 @@ export function downloadEvolutionTemplate(tool: EvolutionTool) {
   const url = URL.createObjectURL(new Blob([content], {type: 'text/csv;charset=utf-8'}));
   const anchor = document.createElement('a'); anchor.href = url; anchor.download = `${tool.id}-template.csv`; anchor.click(); URL.revokeObjectURL(url);
 }
+
+export interface EvolutionCapabilityCell {
+  id: string; capabilityId: string; version: string;
+  taskFamily: {operation: string; estimator: string; inputShape: string; evidenceType: string; deliverable: string};
+  status: 'supported' | 'partial' | 'unsupported' | 'untested';
+  dependencies: string[]; demand: {occurrences: number; distinctAccounts: number}; newThisMonth: boolean;
+}
+export interface EvolutionCapabilityMap {cells: EvolutionCapabilityCell[]; counts: Record<string, number>; derivedAt: string | null}
+
+export async function fetchEvolutionCapabilityMap(): Promise<EvolutionCapabilityMap> {
+  const raw = await productRequest<EvolutionCapabilityMap>('/evolution/capability-map');
+  return {cells: Array.isArray(raw.cells) ? raw.cells.filter(cell => cell && typeof cell.id === 'string'
+    && typeof cell.capabilityId === 'string' && ['supported','partial','unsupported','untested'].includes(cell.status)
+    && cell.taskFamily && typeof cell.taskFamily.operation === 'string').map(cell => ({...cell,
+      dependencies: Array.isArray(cell.dependencies) ? cell.dependencies.filter(value => typeof value === 'string') : [],
+      demand: Number(cell.demand?.distinctAccounts) >= 5 ? {occurrences: Number(cell.demand.occurrences) || 0,distinctAccounts: Number(cell.demand.distinctAccounts)} : {occurrences: 0,distinctAccounts: 0}})) : [],
+    counts: raw.counts ?? {}, derivedAt: typeof raw.derivedAt === 'string' ? raw.derivedAt : null};
+}

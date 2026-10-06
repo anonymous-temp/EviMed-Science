@@ -1,22 +1,35 @@
+import { withEvolutionUsage } from './evolutionUsage.mjs';
 import { randomUUID } from 'node:crypto';
 import { EVOLUTION_JOB_KINDS } from '@evimed/domain';
+const LIGHT_KINDS = ['evolution-event','evolution-decision','evolution-digest','evolution-maintain','evolution-plan','evolution-mission','evolution-meta','evolution-research','evolution-audit'];
+const SEARCH_KINDS = new Set(['evolution-scout','evolution-build','evolution-mission','evolution-mission-heavy','evolution-plan','evolution-meta','evolution-research']);
 /** Durable work with budget and concurrency admission. */
 export class EvolutionWorker {
   /** @param {any} dependencies */
-  constructor({ service, decisions, maintenance, callbacks = {}, config = {}, canRun = () => true, logger = console }) {
+  constructor({ service, decisions, maintenance, callbacks = {}, config = {}, canRun = () => true, logger = console, lane = null }) {
     this.service = service; this.decisions = decisions; this.maintenance = maintenance; this.callbacks = callbacks; this.config = config; this.canRun = canRun; this.logger = logger;
     this.workerId = `evolution-${randomUUID()}`; this.timer = null; this.running = false;
     this.activePromise = null; this.abortController = null; this.closed = false;
+    this.lane = lane;
+    this.lanes = lane ? null : ['heavy', ...Array.from({length: Math.max(1,Math.min(2,config.evolutionLightConcurrency ?? 2))}, () => 'light')]
+      .map(workerLane => new EvolutionWorker({service,decisions,maintenance,callbacks,config,canRun,logger,lane:workerLane}));
   }
-  status() { return { enabled: this.config.evolutionEnabled === true, running: this.running }; }
+  status() { return { enabled: this.config.evolutionEnabled === true, running: this.running || Boolean(this.lanes?.some(worker => worker.running)), searchPaused: this.config.evolutionSearchPaused === true }; }
   start() { if (!this.timer) this.timer = setInterval(() => { this.tick().catch((error) => this.logger.error('Evolution worker failed', error)); }, this.config.evolutionPollMs ?? 15000); }
   stop() { if (this.timer) clearInterval(this.timer); this.timer = null; }
-  interrupt() { this.abortController?.abort(); }
-  async close() { this.closed = true; this.stop(); this.interrupt(); await this.activePromise; }
+  interrupt() { this.abortController?.abort(); for (const worker of this.lanes ?? []) worker.interrupt(); }
+  async close() { this.closed = true; this.stop(); this.interrupt(); await this.activePromise; for (const worker of this.lanes ?? []) await worker.close(); }
   /** Optional closed job subset retains the normal lease, budget and runtime admission. @param {{kinds?:string[]}} [options] */
   tick(options = {}) {
     if (this.activePromise) return this.activePromise;
-    this.activePromise = this.tickOnce(options.kinds).finally(() => { this.activePromise = null; });
+    const run = async () => {
+      if (!this.lanes) return this.tickOnce(options.kinds);
+      if (this.closed || this.config.evolutionEnabled !== true || !await this.canRun()) return null;
+      await this.housekeeping();
+      const results = await Promise.all(this.lanes.map(worker => worker.tick(options)));
+      return results.find(Boolean) ?? null;
+    };
+    this.activePromise = run().finally(() => { this.activePromise = null; });
     return this.activePromise;
   }
   /** @param {string[]} [requestedKinds] */
@@ -25,11 +38,10 @@ export class EvolutionWorker {
     if (this.closed || this.running || this.config.evolutionEnabled !== true || !await this.canRun()) return null;
     this.running = true;
     try {
-      await this.housekeeping();
       const claim = async (/** @type {string[]} */ kinds, /** @type {boolean} */ heavy) => this.service.jobs.claim(kinds, this.workerId, { leaseMs: this.config.evolutionLeaseMs ?? 120000, admission: async (/** @type {any} */ client) => {
         await client.query("SELECT pg_advisory_xact_lock(hashtext('evimed-evolution-admission'))");
-        const live = await client.query("SELECT count(*)::integer AS count FROM evimed_product.jobs WHERE kind=ANY($1::text[]) AND status='running' AND lease_expires_at>clock_timestamp()", [[...EVOLUTION_JOB_KINDS]]);
-        if (Number(live.rows[0]?.count ?? 0) >= (this.config.evolutionMaxConcurrency ?? 1)) return false;
+        const live = await client.query("SELECT count(*)::integer AS count FROM evimed_product.jobs WHERE kind=ANY($1::text[]) AND status='running' AND lease_expires_at>clock_timestamp()", [this.lane === 'light' ? LIGHT_KINDS : EVOLUTION_JOB_KINDS.filter(kind => !LIGHT_KINDS.includes(kind))]);
+        if (Number(live.rows[0]?.count ?? 0) >= (this.lane === 'light' ? this.config.evolutionLightConcurrency ?? 2 : this.config.evolutionMaxConcurrency ?? 1)) return false;
         if (!heavy) return true;
         if (!this.callbacks.dailyCost || !this.callbacks.admitRuntime) return false;
         return true;
@@ -38,8 +50,10 @@ export class EvolutionWorker {
         const cost = await this.callbacks.dailyCost(client);
         return cost < (this.config.evolutionDailyBudgetCny ?? 50) && this.callbacks.admitRuntime(client, { kinds, job: candidate });
       } : null });
-      const allowed = requestedKinds ?? EVOLUTION_JOB_KINDS;
-      const lightweight = ['evolution-event', 'evolution-decision', 'evolution-digest', 'evolution-maintain'].filter(kind => allowed.includes(kind));
+      const allowed = (requestedKinds ?? EVOLUTION_JOB_KINDS).filter(kind =>
+        (this.lane === 'light' ? LIGHT_KINDS.includes(kind) : !LIGHT_KINDS.includes(kind))
+        && !(this.config.evolutionSearchPaused && SEARCH_KINDS.has(kind)));
+      const lightweight = LIGHT_KINDS.filter(kind => allowed.includes(kind));
       const runtimeKinds = allowed.filter(kind => !lightweight.includes(kind) && kind !== 'evolution-self-check');
       const computeKinds = allowed.filter(kind => kind === 'evolution-self-check');
       const job = (lightweight.length ? await claim(lightweight, false) : null)
@@ -51,7 +65,14 @@ export class EvolutionWorker {
       let lost = false;
       const heartbeat = setInterval(() => { this.service.jobs.renew(job.userId, job.id, job.leaseToken, this.config.evolutionLeaseMs ?? 120000).then((/** @type {boolean} */ owned) => { if (!owned) { lost = true; this.interrupt(); } }).catch(() => { lost = true; this.interrupt(); }); }, Math.max(1000, Math.floor((this.config.evolutionLeaseMs ?? 120000) / 4)));
       try {
-        const result = await this.perform(job);
+        const mission = await this.callbacks.ensureMission?.(job);
+        if (this.callbacks.ensureMission && !mission?.id && !['evolution-event','evolution-digest','evolution-plan'].includes(job.kind)) {
+          return await this.service.jobs.fail(job.userId, job.id, job.leaseToken, {code:'usage_budget_exceeded',message:'The next mission waits for its budget allocation.'}, {retry:true,refundAttempt:true,delayMs:3600000});
+        }
+        const execute = () => this.perform(job);
+        const result = mission?.id ? await withEvolutionUsage({missionId:mission.id,moduleId:mission.payload.moduleId},execute) : await execute();
+        if (mission?.id) await this.callbacks.recordMission?.(mission,result);
+        if(['waiting_budget'].includes(result?.payload?.status??result?.status)||['confirmation-budget','development-budget'].includes(result?.payload?.reason))return this.service.jobs.fail(job.userId,job.id,job.leaseToken,{code:'usage_budget_exceeded',message:'The mission retains checkpoints while its next funding tranche waits.'},{retry:true,refundAttempt:true,delayMs:3600000});
         if (lost) throw new Error('Evolution work lease lost.');
         return await this.service.jobs.finish(job.userId, job.id, job.leaseToken, result ?? {});
       } catch (error) {
@@ -73,7 +94,7 @@ export class EvolutionWorker {
             { code: 'paper_gold_administrative_deferred', message: 'Evaluation waits after an observed administrative model refusal.' },
             { retry: true, refundAttempt: true, delayMs: 3600000 });
         }
-        if (error?.code === 'usage_budget_exceeded' && (error.status ?? error.statusCode) === 402 && error.details?.window === 'day') {
+        if (error?.code === 'usage_budget_exceeded' && (error.status ?? error.statusCode) === 402 && ['day','mission'].includes(error.details?.window)) {
           return this.service.jobs.fail(job.userId, job.id, job.leaseToken,
             { code: 'usage_budget_exceeded', message: 'Evolution work waits for available rolling daily budget.' },
             { retry: true, refundAttempt: true, delayMs: 3600000 });
@@ -118,8 +139,7 @@ export class EvolutionWorker {
     } else if (!await this.service.get('evolution-release-provenance-unknown')) await this.service.save('observation', 'evolution-release-provenance-unknown', {
       kind: 'release-replay', status: 'waiting', reason: 'A named deployment and immutable source revision are required before claiming release replay.' });
     if (local.toISOString().slice(11, 16) >= digestTime) await this.service.enqueue('digest', { day }, `daily-digest:${day}`);
-    const blockedScout = (await this.service.list('failure')).some(row => row.payload.workerStage === 'scout' && row.payload.status === 'waiting');
-    if (!blockedScout) await this.service.enqueue('scout', { action: 'daily-scan', day }, `daily-scout:${day}`);
+    if (!this.config.evolutionSearchPaused) await this.service.enqueue('scout', { action: 'daily-scan', day }, `daily-scout:${day}`);
     await this.service.ingestEvent({id:`handbook-scan:${day}`,type:"handbook-gap-scan"});
     await this.service.ingestEvent({ id: `source-facts:${day}`, type: 'source-facts-scan', origin: 'tool-result' });
     await this.service.ingestEvent({ id: `prospective-targets:${day}`, type: 'prospective-target-scan', origin: 'tool-result' });
@@ -138,6 +158,16 @@ export class EvolutionWorker {
     }
     if (local.getUTCDay() === 1) await this.service.enqueue('evaluate', { action: 'scorer-audit', day }, `weekly-scorer-audit:${day}`);
     if (local.getUTCDay() === 1) await this.service.enqueue('evaluate', { action: 'time-holdout', day }, `weekly-holdout:${day}`);
+    if (!this.config.evolutionSearchPaused) {
+      const monday = new Date(local); monday.setUTCDate(monday.getUTCDate() - (monday.getUTCDay()+6)%7);
+      const week = monday.toISOString().slice(0,10);
+      await this.service.enqueue('plan', {week}, `platform-plan:${week}:${day}`);
+      await this.service.enqueue('research', {week}, `self-research:${week}`);
+      await this.service.enqueue('meta', {month}, `meta-loop:${month}`);
+    }
+    const quarter = `${local.getUTCFullYear()}-Q${Math.floor(local.getUTCMonth()/3)+1}`;
+    // Audit composition curates and seals the quarter only after independent tasks exist.
+    await this.service.enqueue('audit', {month:previousMonth,quarter}, `heldout-audit:${previousMonth}`);
   }
   /** No private error prose enters shared failures or resource cards. @param {any} job @param {any} error */
   async resourceWait(job, error) {
@@ -145,8 +175,9 @@ export class EvolutionWorker {
     const gapCode = /model|provider|review|credential|budget/.test(code) ? 'model-capability'
       : /source|dataset|semantics|parser|fetch|gateway/.test(code) ? 'connector' : /extract/.test(code) ? 'extraction' : 'method-implementation';
     const stage = job.kind.slice('evolution-'.length);
-    let failure = await this.service.recordFailure({ dossierId: `worker-${stage}`, version: 1, gapCode,
-      workerStage: stage, attemptedPaths: ['bounded-worker-attempts'], wakeConditions: ['new-data', 'new-tool', 'new-model'] });
+    const dependencyKey = String(job.payload.dependencyId ?? job.payload.dossierId ?? job.payload.missionId ?? job.id);
+    let failure = await this.service.recordFailure({ dossierId: `worker-${dependencyKey}`, version: 1, gapCode,
+      workerStage: stage, dependencyKey, moduleId: job.payload.moduleId ?? 'tools', attemptedPaths: ['bounded-worker-attempts'], wakeConditions: ['new-data', 'new-tool', 'new-model'] });
     if (failure.payload.status === 'resolved') failure = await this.service.save('failure', failure.id, { ...failure.payload,
       status: 'waiting', reopens: Number(failure.payload.reopens ?? 0) + 1 }, failure);
     await this.decisions.propose({ category: 'worker-resource', subjectId: failure.id, resourceOnly: true,
@@ -176,12 +207,13 @@ export class EvolutionWorker {
       await this.service.save('event', row.id, { ...row.payload, status: 'processed' }, row, p.eventOwnerId);
       return { eventId: row.id };
     }
-    const name = job.kind.slice('evolution-'.length);
+    const rawName = job.kind.slice('evolution-'.length);
+    const name = rawName === 'mission-heavy' ? 'mission' : rawName;
     const callback = this.callbacks[name === 'self-check' ? 'selfCheck' : name];
     if (!callback) throw new Error(`Missing evolution ${name} worker implementation.`);
     const result = await callback(p, { service: this.service, job, purpose: 'evolution', signal: this.abortController?.signal });
     if (name === 'self-check') await this.service.completeSelfCheck(p, result);
-    for (const failure of await this.service.list('failure')) if (failure.payload.workerStage === name && failure.payload.status === 'waiting') {
+    for (const failure of await this.service.list('failure')) if (failure.payload.workerStage === name && failure.payload.status === 'waiting' && failure.payload.dependencyKey === String(p.dependencyId ?? p.dossierId ?? p.missionId ?? job.id)) {
       await this.service.save('failure', failure.id, { ...failure.payload, status: 'resolved', resolvedAt: this.service.now().toISOString() }, failure);
     }
     return result;

@@ -213,3 +213,12 @@ test("a consumer of the change cannot fail the write it was told about, nor make
   const synchronous = new DataSemanticsService({ documents, now: () => "2026-10-05T08:00:01.000Z", onChanged: () => { throw new Error("not even a synchronous one"); } });
   assert.equal((await synchronous.write("u", "p2", { datasetId: "visits", title: "Other", ...inferred, tables: [{ name: "visits.csv", observationUnit: "one row per visit" }] }, { via: "conversation" })).revision, 1);
 });
+
+test('evolution receives closed correction and contested codes without dataset facts', async()=>{
+ const seen=[];const service=new DataSemanticsService({documents:ledger(),evolutionSignals:{record:async signal=>seen.push(signal)}});
+ await service.write('u','p',{datasetId:'private-labs',basis:'researcher_confirmed',statement:'Private cohort detail',variables:[{table:'secret.csv',name:'glucose',unit:'mmol/L'}]},{via:'page'});
+ await service.write('u','p',{datasetId:'private-labs',...inferred,variables:[{table:'secret.csv',name:'glucose',unit:'mg/dL'}]},{via:'conversation'});
+ await service.write('u','p',{datasetId:'private-labs',basis:'researcher_confirmed',statement:'Private corrected fact',variables:[{table:'secret.csv',name:'glucose',unit:'mol/L'}]},{via:'page'});
+ assert.deepEqual(seen.map(row=>row.kind),['semantics-contested','semantics-correction']);
+ for(const word of ['secret.csv','glucose','Private','mmol','mg/dL'])assert.ok(!JSON.stringify(seen).includes(word));
+});

@@ -25,6 +25,7 @@ function fixture() {
   };
   const service = new EvolutionService({ documents, ownerId: "operator", now: () => time,
     jobs: { async enqueue(owner, kind, payload, options) { const existing = jobs.find((job) => job.key === options.idempotencyKey); if (existing) return existing; const job = { owner, kind, payload, key: options.idempotencyKey }; jobs.push(job); return job; } } });
+  service.callbacks.leadAccountCount=async id=>new Set([...rows.entries()].filter(([,row])=>row.payload.recordType==='evolution-lead-occurrence'&&row.payload.leadId===id&&row.payload.scope==='owner').map(([key])=>key.split(':')[0])).size;
   return { service, rows, jobs, advance(ms) { time = new Date(time.getTime() + ms); } };
 }
 const leads = (f) => [...f.rows.values()].filter((row) => row.payload.recordType === "evolution-lead").map((row) => row.payload);
@@ -49,18 +50,18 @@ test("a code outside the source's closed list, the wrong gap code and a source t
   ]) assert.throws(() => moduleLeadPayload(input), { code: "evolution_lead_invalid", status: 400 }, JSON.stringify(input));
 });
 
-test("through the evolution service's intake: the tenant's extra fields never reach the lead, the same lead from anywhere is one lead and one scouting job, and the older reductions stand", async () => {
-  const f = fixture();
-  const input = { track: "M", source: "communication", gapCode: "method-missing", code: COMMUNICATION_CODE, entityKeys: ["drug:apixaban"], method: "a private method name", papers: ["10.1000/private"], features: { note: "secret" }, userId: "alice", projectId: "p1" };
-  const first = await f.service.addLead(input);
-  assert.deepEqual(first.payload, { track: "M", source: "communication", gapCode: "method-missing", code: COMMUNICATION_CODE, entityKeys: ["drug:apixaban"], recordType: "evolution-lead", createdAt: first.payload.createdAt, status: "queued" });
-  const again = await f.service.addLead({ ...input, userId: "bob", projectId: "p2" });
-  assert.equal(again.id, first.id);
-  assert.equal(f.jobs.filter((job) => job.kind === "evolution-scout").length, 1);
-  await assert.rejects(f.service.addLead({ track: "M", source: "communication", gapCode: "method-missing", code: "anything the researcher typed" }), { code: "evolution_lead_invalid" });
-  // The reductions of the existing sources are exactly what they were.
-  const old = await f.service.addLead({ track: "U", source: "autopilot", gapCode: "connector", code: "private patient narrative", method: "private secret" });
-  assert.deepEqual([old.payload.code, old.payload.method, old.payload.entityKeys], ["connector", undefined, undefined]);
+test("tenant recurrence retains closed codes, counts accounts and queues only at five", async()=>{
+ const f=fixture();
+ const input={track:'M',source:'communication',gapCode:'method-missing',code:COMMUNICATION_CODE,entityKeys:['drug:private'],method:'private narrative',papers:['private'],userId:'alice',projectId:'p1',sourceEventId:'e1'};
+ const first=await f.service.addLead(input);
+ assert.equal(first.payload.status,'accumulating');assert.deepEqual(first.payload.entityKeys,[]);
+ assert.equal(JSON.stringify(first.payload).includes('private'),false);
+ await f.service.addLead(input);
+ for(const userId of ['bob','carl'])await f.service.addLead({...input,userId,sourceEventId:`${userId}:e1`});
+ let current=await f.service.get(first.id);assert.equal(current.payload.distinctAccounts,3);assert.equal(current.payload.occurrences,3);assert.equal(f.jobs.length,0);
+ for(const userId of ['dana','eli'])await f.service.addLead({...input,userId,sourceEventId:`${userId}:e1`});
+ current=await f.service.get(first.id);assert.equal(current.payload.distinctAccounts,5);assert.equal(current.payload.status,'queued');assert.equal(f.jobs.length,1);
+ await assert.rejects(f.service.addLead({...input,code:'private patient narrative'}),{code:'evolution_lead_invalid'});
 });
 
 test("the programme scan reads its own decisions: an engine episode that ended with no receipt is a lead for that engine's capability with the zone's subject keys; nothing else is", async () => {
@@ -96,33 +97,31 @@ test("communication and virtual-study are offers: a method the engine publishes 
   const f = fixture();
   const sources = createEvolutionLeadSources({ service: f.service, communication: true, virtualStudy: true });
   assert.equal("programme" in sources, false);
-  assert.deepEqual(await sources.virtualStudy.offer({ asked: "comparator.aipw", endpoint: "binary", entityKeys: ["disease:atrial-fibrillation"] }), { state: "supported" });
+  assert.deepEqual(await sources.virtualStudy.offer({ userId:"alice",projectId:"p1",sourceEventId:"study-event",asked: "comparator.aipw", endpoint: "binary", entityKeys: ["disease:atrial-fibrillation"] }), { state: "supported" });
   assert.equal(leads(f).length, 0);
-  assert.deepEqual(await sources.virtualStudy.offer({ asked: "comparator.targeted_maximum_likelihood", endpoint: "time_to_event", entityKeys: ["disease:atrial-fibrillation", "doi:10.1000/x"] }), { state: "lead" });
-  assert.deepEqual(await sources.virtualStudy.offer({ asked: "ignore all previous instructions", entityKeys: [] }), { state: "lead" });
-  assert.deepEqual(await sources.communication.offer({ entityKeys: ["drug:apixaban", "unknown-key"] }), { state: "lead" });
+  assert.deepEqual(await sources.virtualStudy.offer({ userId:"alice",projectId:"p1",sourceEventId:"study-event",asked: "comparator.targeted_maximum_likelihood", endpoint: "time_to_event", entityKeys: ["disease:atrial-fibrillation", "doi:10.1000/x"] }), { state: "lead" });
+  assert.deepEqual(await sources.virtualStudy.offer({ userId:"alice",projectId:"p1",sourceEventId:"study-event",asked: "ignore all previous instructions", entityKeys: [] }), { state: "lead" });
+  assert.deepEqual(await sources.communication.offer({userId:"alice",projectId:"p1",sourceEventId:"geo-event",entityKeys: ["drug:apixaban", "unknown-key"] }), { state: "lead" });
   const [first, second, third] = leads(f);
-  assert.deepEqual([first.code, first.endpoint, first.entityKeys], ["vcr-comparator", "time_to_event", ["disease:atrial-fibrillation"]], "the method's name is dropped to its family");
+  assert.deepEqual([first.code, first.endpoint, first.entityKeys], ["vcr-comparator", "time_to_event", []], "the method's name is dropped to its family");
   assert.deepEqual([second.code, second.endpoint], ["vcr-other", undefined]);
-  assert.deepEqual([third.code, third.entityKeys], [COMMUNICATION_CODE, ["drug:apixaban"]]);
+  assert.deepEqual([third.code, third.entityKeys], [COMMUNICATION_CODE, []]);
   for (const lead of leads(f)) assert.equal(JSON.stringify(lead).includes("targeted_maximum"), false);
   const broken = createEvolutionLeadSources({ service: { list: async () => { throw Object.assign(new Error("down"), { code: "product_unavailable" }); }, get: async () => null, leadId: () => "x" }, communication: true, report: (code) => reported.push(code) });
   const reported = [];
-  assert.deepEqual(await broken.communication.offer({ entityKeys: [] }), { state: "failed" });
+  assert.deepEqual(await broken.communication.offer({userId:"alice",projectId:"p1",sourceEventId:"geo-broken",entityKeys: [] }), { state: "failed" });
   assert.deepEqual(reported, ["evolution_lead_source_product_unavailable"]);
 });
 
-test("no more than the day's bound of new leads is taken, the rest are deferred and not queued, and the next day has room", async () => {
-  const f = fixture();
-  const sources = createEvolutionLeadSources({ service: f.service, communication: true, perDay: 2, now: () => f.service.now() });
-  const states = [];
-  for (const key of ["drug:a", "drug:b", "drug:c", "drug:d"]) states.push((await sources.communication.offer({ entityKeys: [key] })).state);
-  assert.deepEqual(states, ["lead", "lead", "deferred", "deferred"]);
-  assert.equal(leads(f).length, 2);
-  assert.equal((await sources.communication.offer({ entityKeys: ["drug:a"] })).state, "duplicate", "a lead already taken is not a new one, whatever the day has left");
-  f.advance(24 * 3_600_000);
-  assert.equal((await sources.communication.offer({ entityKeys: ["drug:c"] })).state, "lead");
-  assert.deepEqual(sources.stats().outcomes, { lead: 3, duplicate: 1, deferred: 2, refused: 0, supported: 0, failed: 0 });
+test("daily intake bounds new closed needs while duplicate events cost no scouting work",async()=>{
+ const f=fixture(),sources=createEvolutionLeadSources({service:f.service,virtualStudy:true,perDay:2,now:()=>f.service.now()});
+ const inputs=['continuous','binary','time_to_event'].map(endpoint=>({userId:'alice',projectId:'p1',sourceEventId:endpoint,asked:'comparator.missing',endpoint}));
+ const states=[];for(const input of inputs)states.push((await sources.virtualStudy.offer(input)).state);assert.deepEqual(states,['lead','lead','deferred']);
+ // Durable mission allocation remains the budget authority; the next distinct code is deferred, and a seen event remains a duplicate.
+ assert.equal((await sources.virtualStudy.offer({...inputs[0],asked:'unknown.missing'})).state,'deferred');
+ assert.equal((await sources.virtualStudy.offer(inputs[0])).state,'duplicate');
+ f.advance(86400000);
+ assert.equal((await sources.virtualStudy.offer({...inputs[0],asked:'unknown.missing'})).state,'lead');
 });
 
 test("the worker's daily scan event exists only where the scan is composed", async () => {

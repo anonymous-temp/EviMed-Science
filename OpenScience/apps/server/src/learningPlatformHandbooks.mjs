@@ -32,12 +32,13 @@
  */
 import { createHash } from "node:crypto";
 import path from "node:path";
+import { handbookRetirementReason, rankHandbookEntries } from "./handbookUtility.mjs";
 
 /** What a lesson is about, as the judge names it: the corroboration is of the same capability and the same class. */
 export const HANDBOOK_LESSON_CLASSES = Object.freeze([
   "evidence-matrix", "citations-and-quotes", "numbers-and-tables", "method-choice", "data-preparation", "reporting-and-delivery", "scope-and-limits", "other",
 ]);
-export const HANDBOOK_CANDIDATE_STATES = Object.freeze(["rejected", "judge_pending", "awaiting_corroboration", "candidate", "effective", "retired"]);
+export const HANDBOOK_CANDIDATE_STATES = Object.freeze(["rejected", "judge_pending", "awaiting_corroboration", "candidate", "probation", "effective", "retired"]);
 /** The field checks, by the code a rejection carries. */
 export const HANDBOOK_FIELD_CHECKS = Object.freeze(["has_attachments", "identifier_format", "data_number", "project_fact", "too_long", "too_short"]);
 export const HANDBOOK_TEXT_LIMITS = Object.freeze({ min: 80, max: 6000 });
@@ -231,11 +232,14 @@ export function createPlatformHandbooks({ service, supply, facts, judge, review 
       const id = recordId(userId, handbookId, digest);
       if (await service.get(id)) return { state: "known" };
       const checked = handbookFieldChecks(handbook, await facts(userId, sourceProjectId).catch(() => ({})));
+      const priorEntry = (await service.list("handbook-candidate")).filter(row=>["probation","effective"].includes(row.payload.status)
+        && row.payload.capabilityId===capabilityId && row.payload.derivedFrom?.userId===userId && row.payload.derivedFrom?.handbookId===handbookId)
+        .sort((a,b)=>Number(b.payload.version??1)-Number(a.payload.version??1))[0];
       const base = {
         recordType: RECORD_TYPE, schemaVersion: 1, capabilityId, text: checked.text, textDigest: `sha256:${sha(checked.text)}`, contributor: contributorKey(userId),
         // Internal: the operator's evolution project only. Never copied into the skill, a notice or a projection.
         derivedFrom: { userId, handbookId, handbookDigest: digest, capabilityId, sourceProjectId, runId, at: now().toISOString() },
-        createdAt: now().toISOString(), judgeAttempts: 0,
+        createdAt: now().toISOString(), judgeAttempts: 0, version: Number(priorEntry?.payload.version ?? 0) + 1, supersedesId: priorEntry?.id ?? null, usefulCount: 0, harmfulCount: 0, lastUsedAt: null, scope: capabilityId, stage: "probation",
       };
       if (!checked.ok) {
         for (const code of checked.failed) counters.rejectedBy[code] = (counters.rejectedBy[code] ?? 0) + 1;
@@ -281,11 +285,42 @@ export function createPlatformHandbooks({ service, supply, facts, judge, review 
     await service.registerTool({ id: toolId, track: "M", toolKind: "handbook", publicationKind: "skill", capabilityIds: [payload.capabilityId], status: "staged",
       recheckPassed: true, nativeName: publication.nativeName, artifactDigest: publication.digest, revision: publication.revision, name: payload.text.name,
       description: payload.text.description || payload.text.name, dataLevel: "D0", frozenAt: now().toISOString(), origin: "general-lesson" });
-    await supply.activate({ id: publication.id, digest: publication.digest, revision: publication.revision });
-    const staged = await service.get(toolId);
-    if (staged.payload.status !== "active") await service.save("tool", toolId, { ...staged.payload, status: "active" }, staged);
-    counters.activated += 1;
-    return update(row, { status: counted("effective"), toolId, rechecked, activatedAt: now().toISOString() });
+    return update(row, { status: counted("probation"), stage: "probation", toolId, publication: { id: publication.id, digest: publication.digest, revision: publication.revision }, rechecked });
+  }
+
+  /** Record attributable observed outcomes once per revision and run. @param {{entryId:string,runId:string,version:number,outcome:string,evidence:any}} input */
+  async function observe({entryId, runId, version, outcome, evidence}) {
+    const row = await service.get(entryId);
+    if (!row || !["probation", "effective"].includes(row.payload.status) || row.payload.version !== version || !runId
+      || !["useful", "harmful", "unknown"].includes(outcome) || evidence?.attributable !== true || !evidence?.resultId) return null;
+    const receiptId = `evolution-handbook-use-${sha([entryId, version, runId]).slice(0,32)}`;
+    if (await service.get(receiptId)) return row;
+    await service.save("handbook-use", receiptId, {entryId, version, runId, outcome, evidence, createdAt:now().toISOString()});
+    const uses = (await service.list("handbook-use")).filter(use=>use.payload.entryId===entryId && use.payload.version===version);
+    const usefulCount = uses.filter(use=>use.payload.outcome==="useful").length;
+    const harmfulCount = uses.filter(use=>use.payload.outcome==="harmful").length;
+    let updated = await update(row, { usefulCount, harmfulCount, lastUsedAt: now().toISOString() });
+    if (updated.payload.status === "probation" && usefulCount > harmfulCount && evidence?.independent === true && updated.payload.rechecked?.independent === true) {
+      await supply.activate(updated.payload.publication);
+      const tool = await service.get(updated.payload.toolId);
+      await service.save("tool", tool.id, {...tool.payload,status:"active"},tool);
+      updated = await update(updated,{status:counted("effective"),stage:"formal",activatedAt:now().toISOString()}); counters.activated += 1;
+      if(updated.payload.supersedesId){
+        const previous=await service.get(updated.payload.supersedesId);
+        if(previous && previous.payload.toolId!==updated.payload.toolId){
+          await supply.retire(previous.payload.toolId);
+          const previousTool=await service.get(previous.payload.toolId);
+          if(previousTool)await service.save("tool",previousTool.id,{...previousTool.payload,status:"retired"},previousTool);
+          await update(previous,{status:counted("retired"),retirementReason:"entry_updated",replacedBy:updated.id,retiredAt:now().toISOString()});
+        }
+      }
+    }
+    return updated;
+  }
+  /** Serving reads formal entries; evaluators may request probation. @param {string} capabilityId @param {{evaluation?:boolean}} [options] */
+  async function entries(capabilityId,{evaluation=false}={}) {
+    return rankHandbookEntries((await service.list("handbook-candidate")).filter(row=>(!capabilityId || row.payload.capabilityId===capabilityId)
+      && (row.payload.status==="effective" || (evaluation && row.payload.status==="probation"))).map(row=>({id:row.id,...row.payload})),6);
   }
 
   /** One pass: judge what is waiting for a judge, re-check candidates within the day's bound, and learn which effective entries were retired. */
@@ -307,9 +342,15 @@ export function createPlatformHandbooks({ service, supply, facts, judge, review 
           }
         }
       }
-      for (const row of (await service.list("handbook-candidate")).filter((candidate) => candidate.payload.status === "effective")) {
+      for (const row of (await service.list("handbook-candidate")).filter((candidate) => ["probation", "effective"].includes(candidate.payload.status))) {
         const tool = await service.get(row.payload.toolId);
-        // Retirement is the harm test's. This only records it on the candidate, and tells nobody: the lesson's author is not named anywhere.
+        const active = (await service.list("handbook-candidate")).filter(item=>item.payload.status==="effective" && item.payload.capabilityId===row.payload.capabilityId).map(item=>({id:item.id,...item.payload}));
+        const retirement = handbookRetirementReason({id:row.id,...row.payload},active,now());
+        if (retirement) {
+          await supply.retire(row.payload.toolId);
+          if(tool) await service.save("tool",tool.id,{...tool.payload,status:"retired"},tool);
+          await update(row,{status:counted("retired"),retiredAt:now().toISOString(),retirementReason:retirement}); result.retired += 1; continue;
+        }
         if (tool?.payload?.status === "retired") { await update(row, { status: counted("retired"), retiredAt: now().toISOString() }); result.retired += 1; }
       }
     } catch (error) {
@@ -319,7 +360,10 @@ export function createPlatformHandbooks({ service, supply, facts, judge, review 
     return result;
   }
 
-  return { consider, tick, stats: () => ({ ...counters, outcomes: { ...counters.outcomes }, rejectedBy: { ...counters.rejectedBy }, perDay, reviewConfigured: Boolean(review) }) };
+  return { consider, tick, observe, entries, observeTool: async input => {
+    const rows=(await service.list("handbook-candidate")).filter(row=>row.payload.toolId===input.toolId && ["probation","effective"].includes(row.payload.status));
+    return Promise.all(rows.map(row=>observe({...input,entryId:row.id,version:row.payload.version??1})));
+  }, stats: () => ({ ...counters, outcomes: { ...counters.outcomes }, rejectedBy: { ...counters.rejectedBy }, perDay, reviewConfigured: Boolean(review) }) };
 }
 
 /**

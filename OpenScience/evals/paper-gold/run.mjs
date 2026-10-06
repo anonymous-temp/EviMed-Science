@@ -135,7 +135,8 @@ export async function runCycle({ dataDir, cycleId, definition, adapter, signal =
       const unit = await adapter.extract(execution);
       const assessed = adapter.assess ? await adapter.assess(unit, testCase.gold) : unit;
       const score = await scoreUnit({ ...assessed, id: testCase.id }, { ...testCase.gold, type: testCase.type }, { review: adapter.review, verifyCode: adapter.verifyCode });
-      rows.push({ ...score, caseId: testCase.id, replicate, variant, track: ({ meta: "E", pharmacovigilance: "P", mr: "P" }[testCase.track] ?? testCase.track ?? definition.track), group: testCase.group ?? definition.group ?? "calibration", at: new Date().toISOString(),
+      const comparison = adapter.comparison ? await adapter.comparison({ unit: assessed, gold: testCase.gold, score }) : null;
+      rows.push({ ...score, ...(comparison ? { comparison } : {}), caseId: testCase.id, replicate, variant, track: ({ meta: "E", pharmacovigilance: "P", mr: "P" }[testCase.track] ?? testCase.track ?? definition.track), group: testCase.group ?? definition.group ?? "calibration", at: new Date().toISOString(),
         producerRunId: execution.run?.id ?? unit.id ?? null, producerProjectId: execution.project?.id ?? execution.projectId ?? unit.projectId ?? null,
         publishedPaperId: testCase.publicationId ?? testCase.paperId ?? testCase.gold.sourcePaperId ?? testCase.dois?.[0] ?? null,
         goldSourceHash: testCase.sourceHash ?? testCase.gold.sourceHash ?? null,

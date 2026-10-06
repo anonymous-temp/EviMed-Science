@@ -255,12 +255,13 @@ export function memoryFeedbackEvents(before, after) {
 
 /** Append-only feedback ledger, and the one producer that reads it. */
 export class FeedbackEvents {
-  /** @param {{database:any,jobs?:any,now?:()=>Date,onRecorded?:((event:any)=>Promise<any>)|null}} dependencies */
-  constructor({ database, jobs = null, now = () => new Date(), onRecorded = null }) {
+  /** @param {{database:any,jobs?:any,now?:()=>Date,onRecorded?:((event:any)=>Promise<any>)|null,evolutionSignals?:any}} dependencies */
+  constructor({ database, jobs = null, now = () => new Date(), onRecorded = null, evolutionSignals = null }) {
     this.database = database;
     this.jobs = jobs;
     this.now = now;
     this.onRecorded = onRecorded;
+    this.evolutionSignals = evolutionSignals;
   }
 
   /**
@@ -305,6 +306,11 @@ export class FeedbackEvents {
     // a crash between the append and the enqueue still reaches the queue.
     const distillJob = await this.#distill(recorded);
     await this.onRecorded?.(recorded);
+    const signalKinds={"memory-inference-accepted":"memory-accepted","memory-value-edited":"memory-modified","memory-rejected":"memory-rejected","result-corrected":"result-correction"};
+    const signalKind=signalKinds[trigger];
+    if(signalKind){
+      try{await this.evolutionSignals?.record({userId:user,projectId,eventId:id,moduleId:trigger.startsWith("memory-")?"memory":"evidence",kind:signalKind,capability:"unknown",operation:trigger.startsWith("memory-")?"recall":"edit",dataShape:"none",version:detail.version??null});}catch{/* feedback remains recorded */}
+    }
     return { event: recorded, created, distillJob };
   }
 

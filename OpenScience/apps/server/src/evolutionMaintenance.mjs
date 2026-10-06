@@ -36,7 +36,7 @@ import { EVOLUTION_PROJECT_ID } from './internalProjects.mjs';
  * is retired by that decision or its default, and the same decision reverses it afterwards.
  */
 const EVALUATED_OUTCOMES = ['accepted', 'repaired', 'rejected'];
-const USAGE_COUNTERS = ['retrieved', 'invoked', 'executionSucceeded', 'executionFailed', 'succeeded', 'corrected', 'costCny', 'runs'];
+const USAGE_COUNTERS = ['retrieved', 'invoked', 'executionSucceeded', 'executionFailed', 'attributablePositiveResults', 'succeeded', 'corrected', 'costCny', 'runs'];
 /** Call and retrieval identities remembered per run for idempotency; a run that goes past this has its
  *  further calls counted without being remembered, so one looping run cannot grow a record without bound. */
 const IDENTITIES_PER_RUN = 500;
@@ -80,6 +80,7 @@ function contribution(observation) {
     executionSucceeded: outcomes.filter(value => value === true).length, executionFailed: outcomes.filter(value => value === false).length,
     succeeded: invoked && observation.outcome === 'accepted' ? ids.filter(id => observation.callOutcomes?.[id] !== false).length + overflow : 0,
     corrected: invoked && observation.corrected ? 1 : 0, costCny: Number(observation?.costCny ?? 0),
+    attributablePositiveResults: invoked && observation.outcome === 'accepted' && observation.corrected !== true && observation.positiveEvidence?.verified === true && ['trusted-replay','verified-uncorrected-result'].includes(observation.positiveEvidence?.kind) ? 1 : 0,
     runs: invoked && EVALUATED_OUTCOMES.includes(observation.outcome) ? 1 : 0 };
 }
 
@@ -112,7 +113,7 @@ function foldHarmTrial(current, observation) {
     trials.push({ accountKey: observation.accountKey, runId: observation.runId, outcome: observation.outcome, at: observation.at });
   }
   const read = methodHarmTest(/** @type {any} */ ({ observations: trials.map(trial => ({ runId: trial.runId, family: trial.runId, outcome: trial.outcome, invoked: true, at: trial.at })) }), EVOLUTION_TOOL_HARM_TEST);
-  return { ...current, axis: 'researcher-correction', trials, state: read.state, runs: read.runs, bad: read.bad, llr: read.llr };
+  return { ...current, axis: 'researcher-correction', trials, state: read.state, reason: read.reason, runs: read.runs, bad: read.bad, llr: read.llr };
 }
 /**
  * What a failed replay of a released tool means.
@@ -260,15 +261,37 @@ export class EvolutionMaintenance {
         const { observations: _migrated, ...payload } = current.payload;
         const countersOnly = said(usage.harm) === said(current.payload.usage?.harm) && usage.harmState === (current.payload.usage?.harmState ?? usage.harmState)
           && current.payload.observations === undefined && current.payload.usage?.harmEpochs === undefined;
-        return this.write('tool', id, { ...payload, usage }, current, { telemetry: countersOnly });
+        const validationLevel=payload.validationLevel==='V4'&&(usage.harmState!=='clear'||usage.attributablePositiveResults<1)?'V3':payload.validationLevel;
+        return this.write('tool', id, { ...payload, usage, validationLevel }, current, { telemetry: countersOnly&&validationLevel===payload.validationLevel });
       });
     });
     if (!saved) return this.service.get(id);
     const harm = saved.payload.usage.harm;
-    if (harm.state === 'harm' && !harm.reviewId && !harm.overriddenAt) return this.proposeHarmReview(saved);
+    if (harm.state === 'harm' && !harm.reviewId && !harm.overriddenAt) { const reviewed=await this.proposeHarmReview(saved); await this.reviewLineageAlerts(reviewed); return reviewed; }
     // The shared test's own parameters decide when live evidence is sufficient.
-    if (saved.payload.validationLevel === 'V3' && harm.state === 'clear' && saved.payload.usage.invoked >= EVOLUTION_TOOL_HARM_TEST.minRuns) return this.service.save('tool', id, { ...saved.payload, validationLevel: 'V4' }, saved);
+    if (saved.payload.validationLevel === 'V3' && harm.state === 'clear' && saved.payload.usage.runs >= EVOLUTION_TOOL_HARM_TEST.minRuns && saved.payload.usage.attributablePositiveResults >= 1) return this.service.save('tool', id, { ...saved.payload, validationLevel: 'V4' }, saved);
     return saved;
+  }
+  /** Aggregate revision alarms over a lineage without disabling any serving revision. @param {any} tool */
+  async reviewLineageAlerts(tool) {
+    const lineageId=tool.payload.lineage?.rootId??tool.payload.lineage?.parents?.[0]??tool.id;
+    return this.service.withLock(`lineage-alert:${lineageId}`,async()=>{
+      const id=`evolution-lineage-alert-${evolutionKey([lineageId])}`,previous=await this.service.get(id);
+      const cutoff=this.service.now().getTime()-90*86400000;
+      const alerts=(previous?.payload.alerts??[]).filter(item=>Date.parse(item.at)>=cutoff);
+      const revision=tool.payload.artifactDigest??tool.payload.revision;
+      if(!alerts.some(item=>item.toolId===tool.id&&item.revision===revision))alerts.push({toolId:tool.id,revision,at:this.service.now().toISOString()});
+      const reviewId=`evolution-lineage-review-${evolutionKey([lineageId,alerts.map(item=>[item.toolId,item.revision])])}`;
+      await this.service.save('lineage-alert',id,{lineageId,alerts,label:alerts.length>=2?'two-recent-alarms':null,reviewId:alerts.length>=2?reviewId:null},previous);
+      if(alerts.length<2)return;
+      const tools=await this.service.tools();
+      for(const row of tools.filter(item=>item.id===lineageId||item.id===tool.id||item.payload.lineage?.rootId===lineageId||item.payload.lineage?.parents?.includes(lineageId))){
+        const current=await this.service.get(row.id);
+        if(!current.payload.labels?.includes('two-recent-alarms'))await this.service.save('tool',row.id,{...current.payload,labels:[...(current.payload.labels??[]),'two-recent-alarms']},current);
+      }
+      if(!await this.service.get(reviewId))await this.service.save('maintenance-review',reviewId,{kind:'lineage-harm',lineageId,parentToolIds:[...new Set(alerts.map(item=>item.toolId))],alerts,status:'pending'});
+      await this.callbacks.proposeReview?.({category:'lineage-harm',subjectId:reviewId,directional:true,attemptedPaths:['revision-harm-review','ninety-day-lineage-review'],title:'复核近期两次报警的工具谱系',body:'同一谱系在 90 天内两次报警，已标记并保留现有服务。复核关联原因和修复方向。',options:[{id:'keep',label:'保留并继续观察',operation:'keep'},{id:'repair',label:'研发修复版本',operation:'maintenance-repair'}],recommended:'keep',conservative:'keep'});
+    });
   }
   /** One-time move of a record written before runs had their own: each legacy observation becomes its
    * own record, already counted. They carry no account, so none of them is a harm trial. @param {any} tool */
@@ -326,7 +349,7 @@ export class EvolutionMaintenance {
       await this.callbacks.notifyAffected?.({ toolId: row.id, reason: current.payload.retirement.reason, preserveHistoricalVersions: true });
       return this.service.save('tool', row.id, { ...current.payload, retirement: { ...current.payload.retirement,
         state: 'complete', completedAt: this.service.now().toISOString() } }, current);
-    });
+    }, {preserveProgress:true});
   }
   /** Reuse immutable build generations and all-parent replay, without exposing evaluator numbers.
    * @param {any} tool @param {any} result @param {string} releaseId */
@@ -382,7 +405,7 @@ export class EvolutionMaintenance {
         const current=await this.service.get(parent.id);
         if(current.payload.replacedBy && current.payload.replacedBy!==merged.id) throw new HttpError(409,'evolution_evaluation_invalid','A newer parent branch cannot be overwritten.');
         await this.service.save('tool',parent.id,{...current.payload,status:'alias',replacedBy:merged.id,aliasSince:this.service.now().toISOString()},current);
-      });
+      }, {preserveProgress:true});
     }
     return merged;
   }
@@ -428,7 +451,7 @@ export class EvolutionMaintenance {
       review=await this.service.get(review.id);
       await this.service.save('maintenance-review',review.id,{...review.payload,restoration:{...review.payload.restoration,state:'complete',completedAt:this.service.now().toISOString()}},review);
       return {state:'restored',toolIds:parents.map(row=>row.id),reversedReplacementId:replacement?.id??null};
-    });
+    }, {preserveProgress:true});
   }
   /** Only a direction is approved here; actual merged publication still requires merge() replay. @param {any} action */
   async executeReview(action) {

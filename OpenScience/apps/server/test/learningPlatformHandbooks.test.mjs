@@ -98,6 +98,10 @@ test("an established author's general lesson becomes a candidate, is re-checked 
     assert.deepEqual(await f.handbooks.tick(), { judged: 0, rechecked: 1, retired: 0 });
     assert.equal(f.reviewed.length, 1);
     assert.ok(!JSON.stringify(f.reviewed[0]).includes("senior-1"), "the reviewer is shown the lesson text alone");
+    const [probation] = candidates(f);
+    assert.equal(probation.payload.status, "probation");
+    assert.deepEqual(await f.service.availableTools({capabilityId:"meta-analysis"}), []);
+    await f.handbooks.observe({entryId:probation.id,version:1,runId:"evaluation-new-task",outcome:"useful",evidence:{resultId:"verified-result",attributable:true,independent:true}});
     const [done] = candidates(f);
     assert.equal(done.payload.status, "effective");
     const tool = await f.service.get(done.payload.toolId);
@@ -251,7 +255,7 @@ test("no more candidates are re-checked and activated in a day than the bound, a
     assert.deepEqual((await f.handbooks.tick()).rechecked, 0);
     f.advance(24 * 3_600_000);
     assert.deepEqual((await f.handbooks.tick()).rechecked, 1);
-    assert.equal(candidates(f).filter((row) => row.payload.status === "effective").length, 2);
+    assert.equal(candidates(f).filter((row) => row.payload.status === "probation").length, 2);
   } finally { await f.cleanup(); }
 });
 

@@ -37,8 +37,8 @@ export async function verifyPlatformSkillGeneration(config,reference){
 }
 /** Immutable shared methods only; researcher data/results never enter this store.
  * Active selection is copied to a generation at runtime launch and never changed during a run.
- * @param {any} config @param {{listActive?:()=>Promise<any[]>,report?:(code:string)=>void}} [dependencies] */
-export function createPlatformSkillSupply(config,{listActive,report=()=>{}}={}){
+ * @param {any} config @param {{listActive?:()=>Promise<any[]>,report?:(code:string)=>void,resolveHandbookSelection?:((project:any)=>Promise<any[]>)|null}} [dependencies] */
+export function createPlatformSkillSupply(config,{listActive,report=()=>{},resolveHandbookSelection=null}={}){
   const root=path.join(config.dataDir,'.openscience','platform-skills'),activeFile=path.join(root,'active.json');
   let mutation=Promise.resolve();
   /** What went wrong and was not allowed to cost a runtime start or a dispatch, for the operator (`status()`). An optional
@@ -95,7 +95,9 @@ export function createPlatformSkillSupply(config,{listActive,report=()=>{}}={}){
       // A text-only handbook entry (flywheel F16) is effective only after its independent re-check, which the caller states and this refuses to run without.
       if(card?.toolKind==='handbook'&&(evaluation.recheckPassed!==true||candidate.publicationKind!=='skill'||Object.keys(candidate.files??{}).some(name=>name!=='SKILL.md')))throw invalid();
       if(card?.toolKind!=='workflow'&&card?.toolKind!=='handbook'&&evaluation.verificationLevel==='V0')throw invalid();
-      const digest=`sha256:${sha(canonicalJson(files))}`,nativeName=`platform-${sha(id+'\0'+digest).slice(0,24)}`;
+      const digest=`sha256:${sha(canonicalJson(files))}`;
+      if(card?.toolKind!=='handbook'&&(!/^[a-f0-9]{64}$/.test(evaluation.evaluationReceiptHash??'')||evaluation.confirmatory!==true||evaluation.candidateFreeze?.artifactDigest!==digest))throw invalid();
+      const nativeName=`platform-${sha(id+'\0'+digest).slice(0,24)}`;
       // Discovery metadata is platform-owned; frozen candidate bytes remain untouched.
       // Written whole by the platform from two checked fields (`runtimeSkillText`): the builder's front matter never reaches a tenant.
       const runtimeSkill=runtimeSkillText({nativeName,description:hasFrontmatter?description:candidate.title??card?.title??id,body:hasFrontmatter?body:skillBody});
@@ -112,7 +114,8 @@ export function createPlatformSkillSupply(config,{listActive,report=()=>{}}={}){
         content['scripts/invoke_isolated.py']=client;
         content['SKILL.md']+=`\n\nExecute this method exclusively through the platform gateway client with a JSON object of named function arguments on stdin: \`python3 "$EVIMED_PLATFORM_SKILLS_DIR/${nativeName}/scripts/invoke_isolated.py"\`. Keys must match the documented function parameters; for a function taking specification, send {"specification": {...}}, not the unwrapped specification fields. Calculations execute in a disposable job with no network.\n`;
       }
-      const pin={id,digest,nativeName,publicationKind:candidate.publicationKind,entrypoint:candidate.entrypoint,dependencies:candidate.dependencies??[],sourceFiles:files,verificationLevel:evaluation.verificationLevel,executionTools:(candidate.executionTools??card?.executionTools??[]).filter(value=>typeof value==='string'&&/^[A-Za-z0-9_/-]{1,160}$/.test(value)),capabilityIds:candidate.capabilityIds??card?.capabilityIds??[],track:candidate.track??card?.track,content};
+      /** @type {any} */
+      const pin={...(evaluation.evaluationReceiptHash?{evaluationReceiptHash:evaluation.evaluationReceiptHash}:{}),...(evaluation.suddenPerfectReview?.reviewReceiptHash?{suddenPerfectReviewReceiptHash:evaluation.suddenPerfectReview.reviewReceiptHash}:{}),id,digest,nativeName,publicationKind:candidate.publicationKind,entrypoint:candidate.entrypoint,dependencies:candidate.dependencies??[],sourceFiles:files,verificationLevel:evaluation.verificationLevel,executionTools:(candidate.executionTools??card?.executionTools??[]).filter(value=>typeof value==='string'&&/^[A-Za-z0-9_/-]{1,160}$/.test(value)),capabilityIds:candidate.capabilityIds??card?.capabilityIds??[],track:candidate.track??card?.track,content};
       /** @type {any} */
       let result=null;const task=mutation.then(async()=>{
         const prior=await active(),directory=path.join(root,'revisions',sha(id));
@@ -141,7 +144,7 @@ export function createPlatformSkillSupply(config,{listActive,report=()=>{}}={}){
         if(existing&&canonicalJson(existing)!==canonicalJson(pin))throw invalid();
         const selected=[...prior.filter(item=>item.id!==id),pin].sort((a,b)=>a.id.localeCompare(b.id));if(selected.length>PLATFORM_SKILL_MAX_TOOLS)throw invalid();result=await materialize(selected);
         await writeFileExclusiveNoFollow(config.dataDir,path.join(root,'revisions',sha(id),digest.slice(7)+'.json'),canonicalJson(pin)+'\n',{mode:0o444}).catch(error=>{if(error.code!=='EEXIST')throw error;});
-        const certificate={reference:result.reference,id,revision:pin.revision,digest,pinDigest:sha(canonicalJson(pin))};
+        const certificate={evaluationReceiptHash:evaluation.evaluationReceiptHash??null,suddenPerfectReviewReceiptHash:evaluation.suddenPerfectReview?.reviewReceiptHash??null,reference:result.reference,id,revision:pin.revision,digest,pinDigest:sha(canonicalJson(pin))};
         await writeFileExclusiveNoFollow(config.dataDir,path.join(root,'activation-certificates',sha(id),digest.slice(7)+'.json'),canonicalJson(certificate)+'\n',{mode:0o444}).catch(error=>{if(error.code!=='EEXIST')throw error;});
         if(activate)await writeFileAtomicNoFollow(config.dataDir,activeFile,canonicalJson(selected)+'\n',{mode:0o600});
       });mutation=task.catch(()=>{});await task;
@@ -201,7 +204,17 @@ export function createPlatformSkillSupply(config,{listActive,report=()=>{}}={}){
       const pins=listActive?await listActive():await active();
       if(pins.length>PLATFORM_SKILL_MAX_TOOLS)throw invalid();
       // An ordinary project gets methods only, not development inputs or evaluator assets.
-      const selected=pins.filter(pin=>(!project.capabilityId||!pin.capabilityIds?.length||pin.capabilityIds.includes(project.capabilityId))&&(!project.track||pin.track===project.track));
+      let selected=pins.filter(pin=>(!project.capabilityId||!pin.capabilityIds?.length||pin.capabilityIds.includes(project.capabilityId))&&(!project.track||pin.track===project.track));
+      const handbookPins=selected.filter(pin=>String(pin.id).startsWith('handbook-'));
+      if(handbookPins.length){
+        const entries=resolveHandbookSelection?await resolveHandbookSelection(project):handbookPins.map(pin=>({toolId:pin.id}));
+        const byId=new Map(handbookPins.map(pin=>[pin.id,pin]));
+        const bounded=[];let bytes=0;
+        for(const entry of entries){const pin=byId.get(entry.toolId);if(!pin||bounded.length>=6)continue;
+          const size=Buffer.byteLength(pin.content?.['SKILL.md']??'');if(bytes+size>8192)continue;
+          bounded.push(pin);bytes+=size;}
+        selected=[...selected.filter(pin=>!String(pin.id).startsWith('handbook-')),...bounded];
+      }
       if(!selected.length)return null;
       if(project.capabilityId&&selected.length<=30)return materialize(selected);
       // Unknown-scope sessions and large libraries expose one search entry. Tool bodies remain

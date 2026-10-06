@@ -1,3 +1,4 @@
+import { resolveEvolutionUsage, evolutionMissionBudget } from './evolutionUsage.mjs';
 import { USAGE_PURPOSES, isUsagePurpose, usagePurpose } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 import { productId, productInteger } from "./productPersistence.mjs";
@@ -240,6 +241,8 @@ function record(row) {
     projectId: row.project_id,
     runId: row.run_id,
     purpose: row.purpose ?? "other",
+    evolutionMissionId: row.evolution_mission_id ?? null,
+    evolutionModule: row.evolution_module ?? null,
     model: row.model,
     priceVersion: row.price_version,
     currency: row.currency,
@@ -315,12 +318,15 @@ export class UsageLedger {
     await migrateUsageLedger(this.database);
     return this.database.transaction(async (client) => {
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))", [`evimed-usage:${values.userId}`]);
+      const attribution = await resolveEvolutionUsage(client, values);
       const existing = await client.query("SELECT *,reservation_expires_at>clock_timestamp() AS reservation_active FROM evimed_usage.model_requests WHERE id=$1 FOR UPDATE", [values.id]);
       if (existing.rowCount) {
         const same = existing.rows[0].user_id === values.userId && existing.rows[0].project_id === values.projectId
           && existing.rows[0].model === values.model && existing.rows[0].request_fingerprint === values.requestFingerprint
           && existing.rows[0].run_id === values.runId
           && existing.rows[0].purpose === values.purpose
+          && (existing.rows[0].evolution_mission_id??null) === attribution.missionId
+          && (existing.rows[0].evolution_module??null) === attribution.moduleId
           && existing.rows[0].price_version === values.priceVersion && existing.rows[0].currency === values.currency
           && Number(existing.rows[0].reserved_cost) === values.estimatedCost
           && existing.rows[0].status === "reserved"
@@ -350,11 +356,16 @@ export class UsageLedger {
           requested: values.estimatedCost, currency: values.currency,
         });
       }
+      const missionBudget = await evolutionMissionBudget(client, values, attribution);
+      if (missionBudget && missionBudget.committed + values.estimatedCost > missionBudget.limit) {
+        throw new HttpError(402, "usage_budget_exceeded", "The request exceeds its evolution mission reservation.",
+          { window: "mission", limit: missionBudget.limit, committed: missionBudget.committed, requested: values.estimatedCost, currency: "CNY" });
+      }
       const inserted = await client.query(`INSERT INTO evimed_usage.model_requests
-        (id,user_id,project_id,run_id,model,price_version,currency,request_fingerprint,status,reserved_cost,reservation_expires_at,created_at,purpose,session_id)
-        VALUES($1,$2,$3,$4,$5,$6,$7,$8,'reserved',$9,$10,$11,$12,$13) RETURNING *`,
+        (id,user_id,project_id,run_id,model,price_version,currency,request_fingerprint,status,reserved_cost,reservation_expires_at,created_at,purpose,session_id,evolution_mission_id,evolution_module)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,'reserved',$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
       [values.id, values.userId, values.projectId, values.runId, values.model, values.priceVersion, values.currency,
-        values.requestFingerprint, values.estimatedCost, values.expiresAt, values.now, values.purpose, values.sessionId]);
+        values.requestFingerprint, values.estimatedCost, values.expiresAt, values.now, values.purpose, values.sessionId, attribution.missionId, attribution.moduleId]);
       return record(inserted.rows[0]);
     });
   }
@@ -463,15 +474,16 @@ export class UsageLedger {
         if (row.user_id === values.userId && row.status === "settled" && row.request_fingerprint === values.requestFingerprint) return record(row);
         throw new HttpError(409, "usage_settlement_conflict", "The request id already names another settlement.");
       }
+      const attribution = await resolveEvolutionUsage(client, values);
       // Nothing was reserved, so the reservation columns say so: the reserved
       // cost is the settled one and the reservation expired as it was made.
       const inserted = await client.query(`INSERT INTO evimed_usage.model_requests
         (id,user_id,project_id,run_id,model,price_version,currency,request_fingerprint,status,reserved_cost,actual_cost,priced,
-          cache_hit_tokens,cache_miss_tokens,output_tokens,provider_request_id,reservation_expires_at,created_at,settled_at,purpose)
-        VALUES($1,$2,$3,$4,$5,$6,$7,$8,'settled',$9,$9,$10,$11,$12,$13,$14,$15,$15,clock_timestamp(),$16) RETURNING *`,
+          cache_hit_tokens,cache_miss_tokens,output_tokens,provider_request_id,reservation_expires_at,created_at,settled_at,purpose,evolution_mission_id,evolution_module)
+        VALUES($1,$2,$3,$4,$5,$6,$7,$8,'settled',$9,$9,$10,$11,$12,$13,$14,$15,$15,clock_timestamp(),$16,$17,$18) RETURNING *`,
       [values.id, values.userId, values.projectId, values.runId, values.model, values.priceVersion, values.currency,
         values.requestFingerprint, values.actualCost, input.priced, values.cacheHitTokens, values.cacheMissTokens,
-        values.completionTokens, values.providerRequestId, values.now, values.purpose]);
+        values.completionTokens, values.providerRequestId, values.now, values.purpose, attribution.missionId, attribution.moduleId]);
       return record(inserted.rows[0]);
     });
   }

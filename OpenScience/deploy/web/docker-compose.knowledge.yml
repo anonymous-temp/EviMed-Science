@@ -5,7 +5,7 @@
 # plugin team's own service — registry, scheduling, fetching, normalisation,
 # enrichment — and the one thing here that reads the outside world for the
 # feed: the control plane only ever pulls from it (`knowledgePluginClient.mjs`),
-# and the plugin never calls the control plane.
+# and the plugin reads only the public discovery-source manifest from the control plane.
 #
 # - Reachable on the compose network and nowhere else: no published port. The
 #   control plane is its only caller, over `default`, where the database it
@@ -90,6 +90,7 @@ services:
       # this name itself and connects by address.
       KNOWLEDGE_PLUGIN_BROWSER_CDP_URL: ${KNOWLEDGE_PLUGIN_BROWSER_CDP_URL:-http://frontier-browser:9222}
       # 0 serves the stream without crawling (a restore drill, a paused registry).
+      EVIMED_SOURCE_REQUESTS_URL: ${OPEN_SCIENCE_PUBLIC_URL:-http://localhost:8787}/evolution/source-requests.json
       KNOWLEDGE_PLUGIN_CRAWL: ${KNOWLEDGE_PLUGIN_CRAWL:-1}
       # The platform's own evidence feed (flywheel F09), read as one more ordinary source: its public address, which
       # the registry cannot name. Unset, the source `evimed-evidence` loads disabled and nothing is polled.

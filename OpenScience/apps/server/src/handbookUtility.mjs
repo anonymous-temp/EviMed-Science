@@ -1,0 +1,7 @@
+/** Utility evidence is observed use, with a neutral prior for sparse entries. */
+/** @param {any} entry */
+export function handbookUtility(entry){const useful=Math.max(0,Number(entry.usefulCount??0)),harmful=Math.max(0,Number(entry.harmfulCount??0)),n=useful+harmful;return {mean:(useful+1)/(n+2),uncertainty:1/Math.sqrt(n+2),unknown:n===0};}
+/** Preserve one exploration slot among otherwise relevance-ranked entries. @param {any[]} entries @param {number} [limit] */
+export function rankHandbookEntries(entries,limit=6){const score=e=>Number(e.semanticRelevance??1)+Number(e.applicability??1)+Number(e.freshness??0)+handbookUtility(e).mean;const ranked=[...entries].sort((a,b)=>score(b)-score(a)||String(a.id).localeCompare(String(b.id)));const unknown=ranked.find(e=>handbookUtility(e).unknown);const picked=ranked.slice(0,limit);if(unknown&&limit>0&&!picked.includes(unknown))picked[picked.length-1]=unknown;return picked;}
+/** Retirement never removes the sole coverage of an applicability scope. @param {any} entry @param {any[]} active @param {Date} now */
+export function handbookRetirementReason(entry,active,now){const unused=Date.parse(entry.lastUsedAt??entry.createdAt??'');const reason=Number(entry.harmfulCount??0)>Number(entry.usefulCount??0)?'harm_exceeds_use':Number.isFinite(unused)&&now.getTime()-unused>=90*86400000?'unused_90_days':null;if(!reason)return null;const coverage=entry.scope??entry.lessonClass;return active.some(other=>other.id!==entry.id&&(other.scope??other.lessonClass)===coverage)?reason:null;}

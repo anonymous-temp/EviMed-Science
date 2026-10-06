@@ -1,3 +1,4 @@
+import { createModuleEvolutionPolicies } from "./moduleEvolutionPolicies.mjs";
 /**
  * The frontier feed's editor (「前沿动态」 初筛与导读, plan §6.3, §10.3.5–10.3.7).
  *
@@ -900,12 +901,13 @@ export class FrontierEditor {
   /**
    * @param {Record<string, any>} config
    * @param {{ usageLedger?: any, owner?: { userId: string, projectId: string } | null,
-   *           callModel?: typeof callModelForControlPlane, fetchImpl?: typeof fetch }} [options]
+   *           policies?: any, callModel?: typeof callModelForControlPlane, fetchImpl?: typeof fetch }} [options]
    *   `owner` is the operator account's internal `evimed-frontier` project;
    *   it may be assigned later (`editor.owner = …`), once the worker has
    *   created the project.
    */
-  constructor(config, { usageLedger = null, owner = null, callModel = callModelForControlPlane, fetchImpl = globalThis.fetch } = {}) {
+  constructor(config, { usageLedger = null, owner = null, policies = createModuleEvolutionPolicies(), callModel = callModelForControlPlane, fetchImpl = globalThis.fetch } = {}) {
+    this.policies = policies;
     this.config = config ?? {};
     this.usageLedger = usageLedger;
     /** @type {{ userId: string, projectId: string } | null} */
@@ -1073,6 +1075,7 @@ export class FrontierEditor {
     const errors = new Map();
     const providerErrors = new Map();
     let calls = 0;
+    const policy = await this.policies.resolve("frontier", { screenInstructions: FRONTIER_SCREEN_INSTRUCTIONS });
     const items = batch.slice(0, FRONTIER_SCREEN_BATCH);
     for (const entry of batch.slice(FRONTIER_SCREEN_BATCH)) errors.set(entry.key, "frontier_screen_batch_too_large");
     if (!items.length) return { verdicts, errors, providerErrors, calls };
@@ -1090,7 +1093,7 @@ export class FrontierEditor {
         })),
       };
       const answer = await this.#call([
-        { role: "system", content: FRONTIER_SCREEN_INSTRUCTIONS },
+        { role: "system", content: policy.policy.screenInstructions },
         { role: "user", content: JSON.stringify(payload) },
       ], SCREEN_MAX_TOKENS, SCREEN_TIMEOUT_MS);
       return validateScreen(group, answer);
@@ -1157,17 +1160,19 @@ export class FrontierEditor {
    * is spent, the editor is unconfigured): the pipeline publishes the item
    * title-only and edits it later.
    * @param {FrontierEditItem} item
+   * @param {{singleAttempt?: boolean}} [options]
    * @returns {Promise<FrontierEditResult>}
    */
-  async edit(item) {
+  async edit(item, { singleAttempt = false } = {}) {
+    const policy = await this.policies.resolve("frontier", { editInstructions: FRONTIER_EDIT_INSTRUCTIONS });
     const modelInput = buildModelInput(item, { timeZone: this.timeZone });
     /** @type {FrontierEditResult} */
     const result = {
       verification: "pending", output: null, modelInput, modelInputSha256: sha256(modelInput), attempts: 0,
-      issues: [], numbers: null, error: null, model: this.model, editorVersion: FRONTIER_EDITOR_VERSION,
+      issues: [], numbers: null, error: null, model: this.model, editorVersion: policy.revisionId.startsWith("default:") ? FRONTIER_EDITOR_VERSION : policy.revisionId,
     };
     const messages = [
-      { role: "system", content: FRONTIER_EDIT_INSTRUCTIONS },
+      { role: "system", content: policy.policy.editInstructions },
       { role: "user", content: modelInput },
     ];
     /** @param {Array<{ role: string, content: string }>} conversation */
@@ -1181,7 +1186,7 @@ export class FrontierEditor {
       answer = await ask(messages);
     } catch (error) {
       const code = errorCode(error);
-      if (code === "usage_budget_exceeded" || code === "frontier_editor_unavailable") return this.#finish(result, code);
+      if (singleAttempt || code === "usage_budget_exceeded" || code === "frontier_editor_unavailable") return this.#finish(result, code);
       try { answer = await ask(messages); } catch (second) { return this.#finish(result, errorCode(second), second); }
     }
     const first = verifyEdit(answer, item, modelInput);
@@ -1197,10 +1202,11 @@ export class FrontierEditor {
       this.counters.verification.passed += 1;
       return result;
     }
-    this.counters.rewrites += 1;
+    if (!singleAttempt) this.counters.rewrites += 1;
     for (const field of first.failed) this.counters.firstPassFailures[field] = (this.counters.firstPassFailures[field] ?? 0) + 1;
     let second = null;
     try {
+      if (!singleAttempt) {
       const again = await ask([
         ...messages,
         { role: "assistant", content: JSON.stringify(answer ?? {}) },
@@ -1212,6 +1218,7 @@ export class FrontierEditor {
       ]);
       second = verifyEdit(again, item, modelInput);
       this.#countNumbers(second.numbers);
+      }
     } catch (error) {
       result.error = errorCode(error);
       Object.assign(result,providerFailureMetadata(error));

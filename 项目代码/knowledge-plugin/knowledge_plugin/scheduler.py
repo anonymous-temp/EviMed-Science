@@ -35,6 +35,7 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+import json
 import logging
 import os
 import random
@@ -50,7 +51,7 @@ from psycopg.types.json import Jsonb
 from . import policy
 from .db import meta_get, meta_set
 from .fetch import ProtectedFetcher, is_empty_shell
-from .model import NEUTRAL_DETAILS, EntryTextResult, FetchError, SourceState
+from .model import NEUTRAL_DETAILS, EntryTextResult, FetchError, SourceState, RequestSpec
 from .normalize import Rejected, drop_boilerplate_summaries, prepare
 from .registry import RegistryError, load_registry, source_from_row, sync_registry
 from .settings import Settings
@@ -131,6 +132,7 @@ class Crawler:
             asyncio.create_task(self._loop("text", self._text_tick, self._settings.tick_s)),
             asyncio.create_task(self._loop("maintenance", self.maintenance, MAINTENANCE_EVERY_S, initial_delay=60.0)),
             asyncio.create_task(self._loop("health", self.recheck_health, HEALTH_RECHECK_EVERY_S, initial_delay=120.0)),
+            asyncio.create_task(self._loop("source-requests", self.pull_source_requests, 86400.0, initial_delay=90.0)),
             asyncio.create_task(self._loop("registry", self.watch_registry, REGISTRY_WATCH_EVERY_S, initial_delay=REGISTRY_WATCH_EVERY_S)),
         ]
         log.info("crawler started: concurrency %s, text concurrency %s, adapters %s",
@@ -737,6 +739,36 @@ class Crawler:
                              row["id"], row["health"], health, successes, episodes)
         return changed
 
+    async def pull_source_requests(self) -> dict:
+        """Read the platform's public wish list through the same protected fetch boundary."""
+        url = os.environ.get("EVIMED_SOURCE_REQUESTS_URL", "")
+        if not url:
+            return {"status": "unconfigured"}
+        host = urlsplit(url).hostname
+        if not host or urlsplit(url).scheme != "https":
+            return {"status": "deferred", "reason": "https_required"}
+        result = await self._fetcher.fetch(RequestSpec(url=url), source_id="evimed-source-requests",
+                                           egress="direct", allowed_hosts=[host])
+        if result.status != 200 or len(result.body) > 262144:
+            return {"status": "deferred", "reason": "manifest_unavailable"}
+        from .source_requests import admitted_requests
+        document = json.loads(result.body)
+        if not isinstance(document, dict) or not isinstance(document.get("sources"), list):
+            return {"status": "deferred", "reason": "manifest_invalid"}
+        base = load_registry(self._settings.registry_path)
+        async with self._pool.connection() as conn:
+            saved = await meta_get(conn, "source_requests_admitted") or {"sources": []}
+            saved_rows, _ = admitted_requests(saved, base)
+            admitted, dispositions = admitted_requests(document, [*base, *saved_rows])
+            all_rows = [*base, *saved_rows, *admitted]
+            await sync_registry(conn, all_rows, self._clock())
+            retained = [row for row in saved.get("sources", []) if isinstance(row, dict)]
+            accepted_ids = {row.source.id for row in admitted}
+            retained.extend(row for row in document["sources"][:25] if isinstance(row, dict) and row.get("id") in accepted_ids)
+            await meta_set(conn, "source_requests_admitted", {"sources": retained})
+            await meta_set(conn, "source_requests_dispositions", {"at": self._clock().isoformat(), "items": dispositions})
+        return {"status": "complete", "admitted": len(admitted), "dispositions": dispositions}
+
     async def watch_registry(self) -> None:
         path = self._settings.registry_path
         try:
@@ -756,7 +788,10 @@ class Crawler:
             log.error("registry file changed but is invalid; keeping the loaded registry: %s", error)
             return
         async with self._pool.connection() as conn:
-            await sync_registry(conn, rows, self._clock())
+            from .source_requests import admitted_requests
+            saved = await meta_get(conn, "source_requests_admitted") or {"sources": []}
+            admitted, _ = admitted_requests(saved, rows)
+            await sync_registry(conn, [*rows, *admitted], self._clock())
 
 
 def _load_enricher() -> tuple[Callable | None, Callable | None]:

@@ -312,14 +312,14 @@ test('a concluded harm test is not restarted: later corrections are counted and 
   assert.equal(tool.payload.usage.runs,46);assert.equal(tool.payload.usage.corrected,6);
 });
 
-test('worker resource failures are bounded, deduplicated and stop automatic daily scout spending', async () => {
+test('worker resource failures are bounded and deduplicated while unrelated daily scouting continues', async () => {
   const f=fixture(),decisions=new EvolutionDecisions({service:f.service,callbacks:{execute:async()=>({state:'waiting'})}});
   const worker=new EvolutionWorker({service:f.service,decisions,maintenance:{},config:{releaseId:'acceptance-release',sourceRevision:'a'.repeat(40)}});
-  await worker.resourceWait({kind:'evolution-scout'},Object.assign(new Error('private narrative'),{code:'provider_unavailable'}));
-  await worker.resourceWait({kind:'evolution-scout'},Object.assign(new Error('private narrative'),{code:'provider_unavailable'}));
+  await worker.resourceWait({id:'one-scout',kind:'evolution-scout',payload:{dependencyId:'one-dependency'}},Object.assign(new Error('private narrative'),{code:'provider_unavailable'}));
+  await worker.resourceWait({id:'one-scout',kind:'evolution-scout',payload:{dependencyId:'one-dependency'}},Object.assign(new Error('private narrative'),{code:'provider_unavailable'}));
   await worker.housekeeping();await worker.housekeeping();
   assert.equal((await f.service.list('failure')).length,1);assert.equal((await f.service.list('decision')).length,1);
-  assert.ok(!JSON.stringify(await f.service.list('failure')).includes('private narrative'));assert.equal(f.jobs.filter(job=>job.kind==='evolution-scout').length,0);
+  assert.ok(!JSON.stringify(await f.service.list('failure')).includes('private narrative'));assert.equal(f.jobs.filter(job=>job.kind==='evolution-scout').length,1);
   assert.equal(f.jobs.filter(job=>job.payload.action==='release-replay').length,1);
 });
 test('compute-only self-check claims retain budget and concurrency without requiring a new DSH slot', async () => {

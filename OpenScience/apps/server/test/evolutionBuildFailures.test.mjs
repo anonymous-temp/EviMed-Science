@@ -26,7 +26,7 @@ test('actual new capability manifest rejection becomes durable public repair fee
  const {HttpError}=await import('../src/security.mjs');
  const failures=[];
  const candidate={publicationKind:'engine-pr',files:{'SKILL.md':'Declared public candidate'}};
- const dependencies={dispatch:async()=>candidate,verification:{verify:async()=>{throw Error('must not validate engine review as isolated tool');}},evaluator:{evaluate:async()=>{throw Error('must not evaluate malformed manifest');}},publisher:{publish:async()=>{throw Error('must not publish malformed manifest');}},recordFailure:async failure=>failures.push(failure)};
+ const dependencies={dispatch:async()=>candidate,verification:{verify:async()=>({ok:true,issues:[]})},evaluator:{evaluate:async()=>{throw Error('must not evaluate malformed manifest');}},publisher:{publish:async()=>{throw Error('must not publish malformed manifest');}},recordFailure:async failure=>failures.push(failure)};
  const builder=createEvolutionBuilder({...dependencies,writeEnginePrInput:createEvolutionEngineReviewWriter({dataDir:'/unused'})});
  const result=await builder.build({id:'missing-manifest',form:'new-capability'});
  assert.equal(result.status,'repair');assert.equal(failures[0].gapCode,'method-implementation');

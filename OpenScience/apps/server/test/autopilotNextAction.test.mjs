@@ -140,7 +140,8 @@ const input = (extra = {}) => ({ userId: "user-1", projectId: "project-1", episo
 test("one metered, bounded call under its own purpose, charged to the episode it chooses for", async () => {
   const { instance, calls } = planner(async () => answer(run), { userDailySpendLimit: 30 });
   const decision = await instance.decide(input({ envelopeCny: 8 }));
-  assert.deepEqual(decision, { ...run, model: "deepseek-flash" });
+  assert.match(decision.policyRevisionId, /^default:[a-f0-9]{64}$/);
+  assert.deepEqual(decision, { ...run, model: "deepseek-flash", policyRevisionId: decision.policyRevisionId });
   assert.equal(calls.length, 1);
   const { call } = calls[0];
   assert.equal(call.purpose, "autopilot");
@@ -170,7 +171,8 @@ test("one metered, bounded call under its own purpose, charged to the episode it
 test("a stop is returned as a stop with its kind, only where one is allowed", async () => {
   const stop = { action: "stop", stopKind: "needs_input", reason: "需要研究者提供原始数据" };
   const { instance } = planner(async () => answer(stop));
-  assert.deepEqual(await instance.decide(input({ stopAllowed: true })), { ...stop, model: "deepseek-flash" });
+  const decision = await instance.decide(input({ stopAllowed: true }));
+  assert.deepEqual(decision, { ...stop, model: "deepseek-flash", policyRevisionId: decision.policyRevisionId });
   await assert.rejects(() => instance.decide(input({ stopAllowed: false })), { code: "autopilot_planner_invalid" });
   assert.equal(instance.counters.stops, 1);
   assert.equal(instance.counters.invalid, 1);
@@ -191,7 +193,8 @@ test("the decision is told about the researcher's words, files and pause only wh
 test("a pause the researcher asked for is returned as a stop only for their own message", async () => {
   const pause = { action: "stop", stopKind: RESEARCHER_PAUSE_KIND, reason: "你说先暂停，等你补充后再继续" };
   const { instance } = planner(async () => answer(pause));
-  assert.deepEqual(await instance.decide(input({ stopAllowed: false, pauseAllowed: true })), { ...pause, model: "deepseek-flash" });
+  const decision = await instance.decide(input({ stopAllowed: false, pauseAllowed: true }));
+  assert.deepEqual(decision, { ...pause, model: "deepseek-flash", policyRevisionId: decision.policyRevisionId });
   await assert.rejects(() => instance.decide(input({ stopAllowed: true })), { code: "autopilot_planner_invalid" });
 });
 

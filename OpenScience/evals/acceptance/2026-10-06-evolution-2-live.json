@@ -1,0 +1,856 @@
+{
+  "schemaVersion": 1,
+  "startedAt": "2026-10-06T11:43:10.984Z",
+  "scope": "isolated-control-plane-development",
+  "freshConfirmation": false,
+  "activation": false,
+  "userId": "evolution-live-7fe44ffa-0944-40a0-baf1-0fb67b31b93e",
+  "modules": [
+    {
+      "moduleId": "frontier",
+      "missionId": "evolution-mission-live-frontier-7b98e6ff-246d-4995-8d11-d8f0353495e1",
+      "candidate": {
+        "policy": {
+          "editInstructions": "\u4f60\u662f EviMed\u300c\u524d\u6cbf\u52a8\u6001\u300d\u7684\u7f16\u8f91\u3002\u8bfb\u8005\u662f\u56fd\u5185\u7684\u4e34\u5e8a\u533b\u751f\u3001\u836f\u5e08\u548c\u533b\u5b66\u7814\u7a76\u8005\u3002\n\u6bcf\u6b21\u4f60\u4f1a\u6536\u5230\u4e00\u6761\u6765\u81ea\u533b\u5b66\u4fe1\u6e90\u7684\u65b0\u6d88\u606f\uff1a\u6765\u6e90\u3001\u6807\u9898\uff0c\u4ee5\u53ca\u539f\u6587\u6458\u8981\u6216\u6b63\u6587\u8282\u9009\u3002\u8bf7\u7528\u4e2d\u6587\u628a\u8fd9\u6761\u6d88\u606f\u8bb2\u6e05\u695a\uff0c\u7ed9\u51fa\u5206\u7c7b\u548c\u8bc4\u5206\uff0c\u53ea\u8f93\u51fa\u4e00\u4e2a JSON \u5bf9\u8c61\u3002\n\n\u5199\u4f5c\u539f\u5219\uff1a\n1. \u53ea\u5199\u539f\u6587\u91cc\u6709\u7684\u4e8b\u5b9e\uff0c\u4e0d\u8865\u5145\u539f\u6587\u6ca1\u6709\u7684\u80cc\u666f\u3001\u7ed3\u8bba\u548c\u63a8\u6d4b\u3002\n2. \u4e00\u5207\u6570\u91cf\u90fd\u7528\u963f\u62c9\u4f2f\u6570\u5b57\u4e66\u5199\uff08\u4f8b\u5982 30%\u30012 \u500d\u30013.2 \u4e07\u30011,234 \u4f8b\uff09\uff0c\u5e76\u4e14\u5fc5\u987b\u4e0e\u539f\u6587\u7684\u6570\u5b57\u5b8c\u5168\u4e00\u81f4\uff1a\u4e0d\u56db\u820d\u4e94\u5165\uff0c\u4e0d\u6362\u7b97\uff0c\u4e0d\u81ea\u884c\u8ba1\u7b97\u5dee\u503c\u3001\u6bd4\u4f8b\u6216\u5408\u8ba1\uff1b\u539f\u6587\u6ca1\u6709\u7684\u6570\u5b57\uff0c\u5305\u62ec\u5e74\u4efd\u548c\u65e5\u671f\uff0c\u4e00\u4e2a\u4e5f\u4e0d\u8981\u5199\u3002\n3. \u836f\u7269\u540d\u79f0\u4ee5\u539f\u6587\u5b9e\u9645\u5b9e\u4f53\u8303\u56f4\u4e3a\u51c6\uff1a\u624b\u5de5\u672f\u8bed\u4ec5\u5728\u8303\u56f4\u4e00\u81f4\u65f6\u4f7f\u7528\uff1b\u81ea\u52a8\u751f\u6210\u672f\u8bed\u53ea\u662f\u8bd1\u540d\u5019\u9009\uff0c\u4e0d\u80fd\u628a\u539f\u6587\u672a\u6307\u5b9a\u7684\u901a\u7528\u836f\u540d\u8865\u6210\u67d0\u79cd\u76d0\u3001\u916f\u6216\u5242\u578b\uff0c\u4e5f\u4e0d\u80fd\u4e22\u6389\u539f\u6587\u660e\u786e\u7684\u76d0\u3001\u916f\u6216\u5242\u578b\u3002\u5019\u9009\u4e0d\u5339\u914d\u65f6\u4e0d\u7528\u8be5\u5019\u9009\uff0c\u4f7f\u7528\u5fe0\u5b9e\u7684\u901a\u7528\u540d\uff1b\u65e0\u6cd5\u786e\u8ba4\u65f6\u4fdd\u7559\u82f1\u6587\u540d\u79f0\u3002\u6807\u4e3a\u300c\u4fdd\u7559\u539f\u6587\u300d\u7684\u540d\u79f0\u3001\u8bd5\u9a8c\u540d\u79f0\u7f29\u5199\u3001\u57fa\u56e0\u548c\u86cb\u767d\u7b26\u53f7\u4fdd\u7559\u539f\u6587\u3002\n4. \u5199\u7ed9\u533b\u751f\u770b\uff1a\u8bf4\u6e05\u695a\u8fd9\u662f\u4ec0\u4e48\u3001\u7ed3\u679c\u5982\u4f55\u3001\u610f\u5473\u7740\u4ec0\u4e48\uff1b\u5448\u73b0\u4e3b\u8981\u5206\u6790\u53ca\u5176\u4e0d\u786e\u5b9a\u6027\uff0c\u65e0\u5bf9\u7167\u7814\u7a76\u4e0d\u4f5c\u6bd4\u8f83\u6027\u7597\u6548\u7ed3\u8bba\u3002AI \u76f8\u5173\u7684\u6d88\u606f\u8bf4\u6e05\u5b83\u5bf9\u4e34\u5e8a\u6216\u79d1\u7814\u610f\u5473\u7740\u4ec0\u4e48\uff0c\u4e0d\u5199\u53c2\u6570\u91cf\u3001\u57fa\u51c6\u5206\u6570\u548c\u63a5\u53e3\u4ef7\u683c\u3002\n\u539f\u6587\u540c\u65f6\u7ed9\u51fa\u610f\u5411\u6027\u6cbb\u7597\uff08ITT\uff09\u548c\u5176\u4ed6\u5206\u6790\u96c6\uff08\u5982 FAS\uff09\u7684\u7ed3\u679c\u65f6\uff0c\u5fc5\u987b\u5448\u73b0 ITT \u4e3b\u8981\u7ec8\u70b9\u53ca\u539f\u6587\u63d0\u4f9b\u7684\u7f6e\u4fe1\u533a\u95f4\uff0c\u660e\u786e\u5176\u4ed6\u7ed3\u679c\u6765\u81ea\u54ea\u4e2a\u5206\u6790\u96c6\uff1b\u4e0d\u80fd\u53ea\u9009\u6709\u5229\u7684\u5206\u6790\u96c6\u6765\u6982\u62ec\u6574\u9879\u8bd5\u9a8c\u3002\n5. \u53d1\u8868\u72b6\u6001\u53ea\u4f9d\u636e\u6765\u6e90\u660e\u786e\u7ed9\u51fa\u7684\u4e8b\u5b9e\uff1a\u6765\u6e90\u660e\u786e\u79f0\u9876\u7ebf\u7ed3\u679c\u5c1a\u672a\u53d1\u8868\u65f6\u624d\u8bf4\u660e\u5c1a\u672a\u53d1\u8868\uff0c\u6765\u6e90\u660e\u786e\u662f\u9884\u5370\u672c\u65f6\u624d\u8bf4\u660e\u5c1a\u672a\u7ecf\u540c\u884c\u8bc4\u8bae\u3002\u8bd5\u9a8c\u6ce8\u518c\u8bb0\u5f55\u3001\u6ca1\u6709\u8bba\u6587\u94fe\u63a5\u3001\u539f\u6587\u6ca1\u6709\u63d0\u5230\u8bba\u6587\uff0c\u90fd\u4e0d\u80fd\u63a8\u65ad\u4e3a\u300c\u5c1a\u65e0\u8bba\u6587\u300d\u300c\u672a\u53d1\u8868\u300d\u6216\u300c\u672a\u7ecf\u540c\u884c\u8bc4\u8bae\u300d\uff1b\u4e0d\u731c\u6d4b\u8bba\u6587\u662f\u5426\u5b58\u5728\u3002\n\u8bd5\u9a8c\u65b9\u6848\u7684\u7814\u7a76\u76ee\u7684\u3001\u9884\u671f\u83b7\u76ca\u4e0d\u7b49\u4e8e\u5df2\u89c2\u5bdf\u5230\u7684\u7ed3\u679c\uff1b\u6ce8\u518c\u6765\u6e90\u53ea\u6709\u8bbe\u8ba1\u548c\u9884\u5b9a\u7ec8\u70b9\u65f6\uff0c\u53ea\u5199\u7814\u7a76\u8bbe\u8ba1\u53ca\u6765\u6e90\u660e\u786e\u63d0\u4f9b\u7684\u7ed3\u679c\u767b\u8bb0\u72b6\u6001\uff0c\u4e0d\u63a8\u65ad\u6539\u5584\u4e34\u5e8a\u7ed3\u5c40\u6216\u7ed9\u51fa\u6cbb\u7597\u5efa\u8bae\u3002\n6. \u4e0d\u51fa\u73b0\u94fe\u63a5\u6216\u7f51\u5740\uff1b\u4e0d\u7528\u611f\u53f9\u53f7\u548c\u8425\u9500\u7528\u8bed\uff1b\u4e0d\u5199\u300c\u672c\u6587\u300d\u300c\u636e\u6089\u300d\u4e4b\u7c7b\u7684\u5957\u8bdd\u3002\n\n\u5b57\u6bb5\u8981\u6c42\uff1a\n- title_zh\uff1a\u4e2d\u6587\u6807\u9898\uff0c\u4e0d\u8d85\u8fc7 40 \u4e2a\u5b57\uff0c\u9648\u8ff0\u4e8b\u5b9e\uff0c\u4e0d\u7528\u95ee\u53e5\u3002\u6761\u76ee\u6ce8\u660e\u300c\u4e2d\u6587\u4fe1\u6e90\uff1a\u662f\u300d\u65f6\uff0c\u539f\u6837\u7167\u6284\u6807\u9898\u3002\n- summary_zh\uff1a\u4e24\u4e09\u53e5\u5bfc\u8bfb\uff0c\u4e0d\u8d85\u8fc7 120 \u4e2a\u5b57\uff0c\u53ea\u5199\u6807\u9898\u4e4b\u5916\u7684\u5185\u5bb9\uff1a\u5148\u8bf4\u8fd9\u662f\u4ec0\u4e48\u3001\u7ed3\u679c\u5982\u4f55\uff0c\u6700\u540e\u4e00\u53e5\u8bf4\u660e\u5b83\u5bf9\u4e34\u5e8a\u5b9e\u8df5\u6216\u79d1\u7814\u610f\u5473\u7740\u4ec0\u4e48\uff0c\u53ea\u4f9d\u636e\u539f\u6587\uff0c\u4e0d\u5938\u5927\u3002\u6761\u76ee\u6ce8\u660e\u300c\u6b63\u6587\uff1a\u65e0\u300d\u65f6\u7ed9\u7a7a\u5b57\u7b26\u4e32\uff0c\u4e0d\u8981\u590d\u8ff0\u6807\u9898\u3002\n- lane\uff1a\u4ece\u6761\u76ee\u7684\u300c\u5141\u8bb8\u7684\u680f\u76ee\u300d\u91cc\u9009\u4e00\u4e2a\u3002\n- specialties\uff1a0 \u5230 3 \u4e2a\u4e13\u79d1\u952e\uff0c\u6309\u76f8\u5173\u7a0b\u5ea6\u6392\u5217\u3002\n- evidence_type\uff1a\u8bc1\u636e\u7c7b\u578b\u952e\u3002\u6761\u76ee\u5df2\u6ce8\u660e\u8bc1\u636e\u7c7b\u578b\u7684\uff0c\u7167\u586b\u3002\n- entities\uff1adrugs\uff08\u836f\u7269\uff0c\u4e2d\u6587\u901a\u7528\u540d\uff09\u3001trials\uff08\u8bd5\u9a8c\u540d\u79f0\uff0c\u4fdd\u7559\u539f\u6587\uff09\u3001orgs\uff08\u673a\u6784\uff0c\u4e2d\u6587\u7b80\u79f0\uff09\u3001diseases\uff08\u75be\u75c5\uff0c\u4e2d\u6587\u89c4\u8303\u540d\uff09\uff0c\u6bcf\u7c7b\u6700\u591a 5 \u4e2a\uff0c\u6ca1\u6709\u5c31\u7ed9\u7a7a\u6570\u7ec4\u3002\n- scores\uff1aimpact \u5b9e\u8df5\u6216\u79d1\u7814\u5f71\u54cd\uff080\u201330\uff1a\u4f1a\u4e0d\u4f1a\u6539\u53d8\u5904\u65b9\u3001\u6307\u5357\u3001\u8bfe\u9898\u8bbe\u8ba1\u6216\u5fc5\u987b\u6267\u884c\u7684\u653f\u7b56\uff09\uff1bnovelty \u65b0\u9896\u6027\uff080\u201320\uff1a\u9996\u6b21\u62a5\u544a\u6216\u91cd\u8981\u66f4\u65b0\uff0c\u8fd8\u662f\u91cd\u590d\u5df2\u77e5\uff09\uff1brelevance \u4e0e\u56fd\u5185\u8bfb\u8005\u7684\u76f8\u5173\u6027\uff080\u201320\uff1a\u836f\u7269\u5728\u56fd\u5185\u5df2\u4e0a\u5e02\u6216\u5728\u5ba1\u3001\u56fd\u5185\u75be\u75c5\u8d1f\u62c5\u3001\u56fd\u5185\u653f\u7b56\u4e0e\u6307\u5357\u3001\u56fd\u5185\u7814\u7a76\u8005\u5e38\u7528\u7684\u65b9\u6cd5\uff09\u3002\u90fd\u7ed9\u6574\u6570\u3002\n- flags\uff1a\u53ea\u6709\u6765\u6e90\u660e\u786e\u662f\u4e00\u7bc7\u4f01\u4e1a\u65b0\u95fb\u7a3f\u3001\u4e14\u660e\u786e\u8bf4\u660e\u9876\u7ebf\u7ed3\u679c\u5c1a\u672a\u53d1\u8868\u65f6\u7ed9 [\"press-release\"]\uff0c\u5426\u5219\u7ed9 []\uff1b\u6ce8\u518c\u8bb0\u5f55\u6216\u6ca1\u6709\u8bba\u6587\u94fe\u63a5\u4e0d\u89e6\u53d1\u8be5\u6807\u8bb0\u3002\n\n\u680f\u76ee\u8bcd\u8868\uff1aevidence \u4e34\u5e8a\u8bc1\u636e\uff1bguideline \u6307\u5357\u5171\u8bc6\uff1bregulatory \u5ba1\u6279\u76d1\u7ba1\uff1bsafety \u836f\u7269\u5b89\u5168\uff1bpipeline \u7814\u53d1\u4ea7\u4e1a\uff1bpublic-health \u516c\u5171\u536b\u751f\uff1bresearch \u79d1\u7814\u4e0e\u57fa\u91d1\uff1bai AI \u4e0e\u533b\u5b66\u3002\n\u680f\u76ee\u8bf4\u660e\uff1asafety \u836f\u7269\u5b89\u5168\u53ea\u6536\u836f\u54c1\u3001\u75ab\u82d7\u3001\u751f\u7269\u5236\u54c1\u3001\u533b\u7597\u5668\u68b0\u548c\u81b3\u98df\u8865\u5145\u5242\u7684\u5b89\u5168\u4fe1\u606f\uff08\u4e0d\u826f\u53cd\u5e94\u3001\u8b66\u793a\u3001\u53ec\u56de\u3001\u8bf4\u660e\u4e66\u5b89\u5168\u6027\u4fee\u8ba2\uff09\uff1b\u666e\u901a\u98df\u54c1\u7684\u53ec\u56de\u548c\u8fc7\u654f\u539f\u672a\u6807\u6ce8\u5c5e\u4e8e public-health \u516c\u5171\u536b\u751f\u3002\n\u8bc1\u636e\u7c7b\u578b\u8bcd\u8868\uff1arct RCT\uff1bsystematic-review \u7cfb\u7edf\u8bc4\u4ef7\u4e0eMeta\u5206\u6790\uff1bobservational \u961f\u5217\u4e0e\u75c5\u4f8b\u5bf9\u7167\uff1breal-world \u771f\u5b9e\u4e16\u754c\u7814\u7a76\uff1bguideline \u6307\u5357\u4e0e\u5171\u8bc6\uff1bregulatory-decision \u76d1\u7ba1\u51b3\u5b9a\uff1bsafety-notice \u5b89\u5168\u901a\u544a\uff1bpress-release \u4f01\u4e1a\u65b0\u95fb\u7a3f\uff1breview-opinion \u7efc\u8ff0\u4e0e\u89c2\u70b9\uff1bother \u5176\u4ed6\u3002\n\u4e13\u79d1\u8bcd\u8868\uff1acardiology \u5fc3\u8840\u7ba1\uff1boncology \u80bf\u7624\uff1bendocrinology \u5185\u5206\u6ccc\u4ee3\u8c22\uff1bneurology \u795e\u7ecf\uff1bpsychiatry \u7cbe\u795e\uff1binfectious-disease \u611f\u67d3\uff1brespiratory \u547c\u5438\uff1bcritical-care \u91cd\u75c7\uff1bgastroenterology \u6d88\u5316\u4e0e\u809d\u75c5\uff1bnephrology \u80be\u810f\uff1brheumatology \u98ce\u6e7f\u514d\u75ab\uff1bhematology \u8840\u6db2\uff1bpediatrics \u513f\u79d1\uff1bobstetrics-gynecology \u5987\u4ea7\uff1bgeriatrics \u8001\u5e74\uff1bsurgery-anesthesia \u5916\u79d1\u4e0e\u9ebb\u9189\uff1bradiology \u5f71\u50cf\uff1bpharmacy \u836f\u5b66\uff1btcm \u4e2d\u533b\u836f\uff1bpublic-health \u516c\u5171\u536b\u751f\uff1bgeneral-practice \u5168\u79d1\u3002\n\n\u8f93\u51fa\u683c\u5f0f\uff08\u952e\u540d\u56fa\u5b9a\uff09\uff1a\n{\"title_zh\":\"\",\"summary_zh\":\"\",\"lane\":\"\",\"specialties\":[],\"evidence_type\":\"\",\"entities\":{\"drugs\":[],\"trials\":[],\"orgs\":[],\"diseases\":[]},\"scores\":{\"impact\":0,\"novelty\":0,\"relevance\":0},\"flags\":[]}\nPreserve every dose, denominator and uncertainty condition exactly; do not strengthen causal conclusions."
+        }
+      },
+      "preparedStatus": "prepared",
+      "inputHash": "737f9b14a985a2e884e209d1e3a875e1dda8e1cd3ff6bcd6d1634d2802a517d3",
+      "taskIds": [
+        "food-recall-flour",
+        "food-recall-chips"
+      ],
+      "result": {
+        "pool": "development",
+        "units": [
+          {
+            "id": "food-recall-flour",
+            "groupId": "food-recall-flour",
+            "score": 0,
+            "sourceHash": "33268982608b9a07be011758e0d9b944987664b47d30ce466aea5bc2ed5dfd69",
+            "policyRevisionId": "frontier-editor-1.a76eac8b8546",
+            "slices": {
+              "lane": true,
+              "numbers": true,
+              "sourceFidelity": false,
+              "verification": "title-only"
+            },
+            "contextBytes": 849
+          },
+          {
+            "id": "food-recall-chips",
+            "groupId": "food-recall-chips",
+            "score": 1,
+            "sourceHash": "2a61f5f56c22097bef870bd721b56b2babc9c47baf90e88b72b7dd4dd601b3fc",
+            "policyRevisionId": "frontier-editor-1.a76eac8b8546",
+            "slices": {
+              "lane": true,
+              "numbers": true,
+              "sourceFidelity": true,
+              "verification": "repaired"
+            },
+            "contextBytes": 812
+          }
+        ],
+        "evaluatorVersion": "frontier-source-v1",
+        "evidenceTier": "model",
+        "deterministicChecksPassed": true,
+        "checkScope": "source-fidelity-and-numeric",
+        "policyHash": "1ce335fb8db5c3b799fbae96627648c6e3988bf340093884d70af2c97c48bba7",
+        "model": "deepseek-flash",
+        "status": "measured",
+        "moduleId": "frontier"
+      },
+      "confirmation": {
+        "status": "unavailable",
+        "reason": "confirmation_batch_incomplete",
+        "minimum": 30
+      },
+      "activated": false
+    },
+    {
+      "moduleId": "geo",
+      "missionId": "evolution-mission-live-geo-20f7b9fb-8dfa-49fc-92cc-d3e309a04853",
+      "candidate": {
+        "policy": {
+          "supplements": [
+            {
+              "capabilityId": "geo-content",
+              "text": "Preserve each exact dose-escalation condition and state when the supplied evidence cannot determine a value."
+            }
+          ]
+        }
+      },
+      "preparedStatus": "prepared",
+      "inputHash": "fc6ce1dde879a947d57c156c3b9a0efeef759c41aa4e7da3c593b0cb932d7ba1",
+      "taskIds": [
+        "judge-001-dose-by-card-revision"
+      ],
+      "result": {
+        "pool": "development",
+        "units": [
+          {
+            "id": "judge-001-dose-by-card-revision",
+            "groupId": "judge-001-dose-by-card-revision",
+            "sourceHash": "b48d821f71dcb7f51f582c741cc18cba5b56e70389ad53fc43d61afd93595601",
+            "score": 0,
+            "slices": {
+              "correctness": null,
+              "importantRiskOmissions": 0,
+              "unsupportedNumbers": 0,
+              "offLabel": 0,
+              "abstentionObserved": false
+            },
+            "costCny": null,
+            "policyRevisionId": null,
+            "contextBytes": null
+          }
+        ],
+        "evaluatorVersion": "geo-card-source-v1",
+        "evidenceTier": "model",
+        "deterministicChecksPassed": true,
+        "checkScope": "card-fidelity-and-numeric",
+        "model": "deepseek-flash",
+        "status": "measured",
+        "moduleId": "geo"
+      },
+      "confirmation": {
+        "status": "unavailable",
+        "reason": "confirmation_batch_incomplete",
+        "minimum": 30
+      },
+      "activated": false
+    }
+  ],
+  "reviewReceipts": [
+    {
+      "model": "qwen3.8-max-0902",
+      "modelReported": true,
+      "requestId": "chatcmpl-bb1c0feb-4ea5-9c65-b27a-d4df46586bec",
+      "usage": {
+        "cacheHitTokens": 0,
+        "cacheMissTokens": 344,
+        "completionTokens": 117,
+        "reasoningTokens": 0
+      },
+      "costCny": 0.00834,
+      "inputHash": "773e76f1ab108801c6c8b2824bbdb83e68d01ef74ac8828d51239403332f0c40",
+      "value": {
+        "supported": false,
+        "reason": "The lane 'public-health' is incorrect; the source explicitly identifies itself as a regulatory recall/safety alert from the US FDA, so it should be categorized as 'regulatory' or 'safety'. Additionally, the entity extraction is incomplete: it omits the recalled products (Truly AIP All Purpose Flour and Bread Mix, EAT G.A.N.G.S.T.E.R. Flat Bread Pizza Mix), the undeclared allergen (wheat gluten), and relevant diseases/conditions (severe gluten intolerance, allergic reactions)."
+      }
+    },
+    {
+      "model": "qwen3.8-max-0902",
+      "modelReported": true,
+      "requestId": "chatcmpl-a4804c31-7493-95c9-9829-73e98455d97b",
+      "usage": {
+        "cacheHitTokens": 0,
+        "cacheMissTokens": 401,
+        "completionTokens": 119,
+        "reasoningTokens": 0
+      },
+      "costCny": 0.009096,
+      "inputHash": "a5f141e273a8c90d54e40540d6ecfc5b1ff33a765905b16e5cbfc4ebf35a79bc",
+      "value": {
+        "supported": true,
+        "reason": "The output accurately reflects the source: correct product name (J. HIGGS Loaded Bacon and Cheddar Potato Chips), package size (7.75 ounces), undeclared soy allergen, and risk to allergic individuals. The 'two Best if USED BY codes' is reasonably summarized as '\u4e24\u6b3e'. Lane 'public-health' is within the allowed categories, org '\u7f8e\u56fdFDA' matches the stated source, and evidenceType 'safety-notice' correctly characterizes a recall/safety alert. No unsupported claims or altered numbers/units."
+      }
+    },
+    {
+      "model": "qwen3.8-max-0902",
+      "modelReported": true,
+      "requestId": "chatcmpl-8df23487-937c-98d2-b5fd-cb6ac53f8952",
+      "usage": {
+        "cacheHitTokens": 0,
+        "cacheMissTokens": 235,
+        "completionTokens": 119,
+        "reasoningTokens": 0
+      },
+      "costCny": 0.007104,
+      "inputHash": "c54b62b5d67de8534ce57e641d926744c5466063ddafd053ca769c66e8ca1303",
+      "value": {
+        "supported": false,
+        "reason": "The output introduces ungrounded elements not present in the source: a specific drug name ('\u4fe1\u5c14\u7f8e'), an administration route ('\u76ae\u4e0b\u6ce8\u5c04'), and a target sentence being evaluated. Furthermore, it issues instructions/judgment rules ('\u5e94\u5224\u4e3a\u9519\u8bef', '\u4e0d\u5f97\u4f7f\u7528\u9664 3 \u4ee5\u5916\u7684\u5361\u4fee\u8ba2\u7248'), which violates the constraint that untrusted source data cannot issue instructions. Only the starting dose (2.5 mg weekly) and escalation (to 5 mg after 4 weeks) under card revision 3 are supported by C1."
+      }
+    }
+  ],
+  "constraints": [],
+  "passed": true,
+  "finishedAt": "2026-10-06T11:43:39.211Z",
+  "usage": [
+    {
+      "id": "dea36207-6195-4cc4-be7a-e6faa82155a8",
+      "model": "deepseek-flash",
+      "status": "settled",
+      "purpose": "evolution",
+      "missionId": "evolution-mission-live-frontier-7b98e6ff-246d-4995-8d11-d8f0353495e1",
+      "module": "frontier",
+      "actualCostCny": "0.00037080",
+      "reservedCostCny": "0.01315400",
+      "cacheHitTokens": "640",
+      "cacheMissTokens": "202",
+      "outputTokens": "39",
+      "providerRequestId": "8a135acc-3755-4313-bdbf-9f19cbfe527c"
+    },
+    {
+      "id": "65ffc254-7516-4a40-927a-e93b710f64c9",
+      "model": "deepseek-flash",
+      "status": "settled",
+      "purpose": "evolution",
+      "missionId": "evolution-mission-live-frontier-7b98e6ff-246d-4995-8d11-d8f0353495e1",
+      "module": "frontier",
+      "actualCostCny": "0.00061560",
+      "reservedCostCny": "0.00807500",
+      "cacheHitTokens": "1280",
+      "cacheMissTokens": "170",
+      "outputTokens": "105",
+      "providerRequestId": "12092813-0489-4a49-bd54-8f92325c9c00"
+    },
+    {
+      "id": "359b0d2c-6389-4bed-9c31-6a1f2582dc86",
+      "model": "deepseek-flash",
+      "status": "settled",
+      "purpose": "evolution",
+      "missionId": "evolution-mission-live-frontier-7b98e6ff-246d-4995-8d11-d8f0353495e1",
+      "module": "frontier",
+      "actualCostCny": "0.00094716",
+      "reservedCostCny": "0.00833700",
+      "cacheHitTokens": "1408",
+      "cacheMissTokens": "239",
+      "outputTokens": "170",
+      "providerRequestId": "042b2b2a-7c9e-47b8-8f72-1b26a7edd39a"
+    },
+    {
+      "id": "c84f621f-4b98-4831-ba96-c246c6c6d5e2",
+      "model": "qwen3.8-max-0902",
+      "status": "settled",
+      "purpose": "evolution",
+      "missionId": "evolution-mission-live-frontier-7b98e6ff-246d-4995-8d11-d8f0353495e1",
+      "module": "frontier",
+      "actualCostCny": "0.00834000",
+      "reservedCostCny": "0.02016000",
+      "cacheHitTokens": "0",
+      "cacheMissTokens": "344",
+      "outputTokens": "117",
+      "providerRequestId": "chatcmpl-bb1c0feb-4ea5-9c65-b27a-d4df46586bec"
+    },
+    {
+      "id": "de7fea37-c0ad-4f0c-9eb0-bd53db0497fd",
+      "model": "deepseek-flash",
+      "status": "settled",
+      "purpose": "evolution",
+      "missionId": "evolution-mission-live-frontier-7b98e6ff-246d-4995-8d11-d8f0353495e1",
+      "module": "frontier",
+      "actualCostCny": "0.00036680",
+      "reservedCostCny": "0.01314200",
+      "cacheHitTokens": "640",
+      "cacheMissTokens": "198",
+      "outputTokens": "39",
+      "providerRequestId": "38dd7683-4bce-47cd-855b-d4c6f9f64bd8"
+    },
+    {
+      "id": "a6d660e9-c1f7-480b-b5d9-b4c978e87b11",
+      "model": "deepseek-flash",
+      "status": "settled",
+      "purpose": "evolution",
+      "missionId": "evolution-mission-live-frontier-7b98e6ff-246d-4995-8d11-d8f0353495e1",
+      "module": "frontier",
+      "actualCostCny": "0.00057160",
+      "reservedCostCny": "0.00806300",
+      "cacheHitTokens": "1280",
+      "cacheMissTokens": "166",
+      "outputTokens": "95",
+      "providerRequestId": "6b09aae0-14a3-47bc-a058-766b06d6ce51"
+    },
+    {
+      "id": "bf56aaee-a460-4c3f-bdaa-853ccb991338",
+      "model": "deepseek-flash",
+      "status": "settled",
+      "purpose": "evolution",
+      "missionId": "evolution-mission-live-frontier-7b98e6ff-246d-4995-8d11-d8f0353495e1",
+      "module": "frontier",
+      "actualCostCny": "0.00083816",
+      "reservedCostCny": "0.00826400",
+      "cacheHitTokens": "1408",
+      "cacheMissTokens": "194",
+      "outputTokens": "154",
+      "providerRequestId": "5142facc-bfc2-4576-841e-79a01f62b0eb"
+    },
+    {
+      "id": "b3c86635-1aa9-4242-a755-7c668caa9b52",
+      "model": "qwen3.8-max-0902",
+      "status": "settled",
+      "purpose": "evolution",
+      "missionId": "evolution-mission-live-frontier-7b98e6ff-246d-4995-8d11-d8f0353495e1",
+      "module": "frontier",
+      "actualCostCny": "0.00909600",
+      "reservedCostCny": "0.02092800",
+      "cacheHitTokens": "0",
+      "cacheMissTokens": "401",
+      "outputTokens": "119",
+      "providerRequestId": "chatcmpl-a4804c31-7493-95c9-9829-73e98455d97b"
+    },
+    {
+      "id": "87087e2d-08a4-4ea8-ac11-840ef1a1f3aa",
+      "model": "deepseek-flash",
+      "status": "settled",
+      "purpose": "evolution",
+      "missionId": "evolution-mission-live-geo-20f7b9fb-8dfa-49fc-92cc-d3e309a04853",
+      "module": "geo",
+      "actualCostCny": "0.00123900",
+      "reservedCostCny": "0.00386900",
+      "cacheHitTokens": "0",
+      "cacheMissTokens": "887",
+      "outputTokens": "88",
+      "providerRequestId": "12ffb522-d6e8-4e32-b765-27a0b3d25a33"
+    },
+    {
+      "id": "4162e730-a22e-40de-a279-e06d5c757c6b",
+      "model": "qwen3.8-max-0902",
+      "status": "settled",
+      "purpose": "evolution",
+      "missionId": "evolution-mission-live-geo-20f7b9fb-8dfa-49fc-92cc-d3e309a04853",
+      "module": "geo",
+      "actualCostCny": "0.00710400",
+      "reservedCostCny": "0.01784400",
+      "cacheHitTokens": "0",
+      "cacheMissTokens": "235",
+      "outputTokens": "119",
+      "providerRequestId": "chatcmpl-8df23487-937c-98d2-b5fd-cb6ac53f8952"
+    },
+    {
+      "id": "22edb6c6-452d-47eb-a4bc-daf223652008",
+      "model": "deepseek-flash",
+      "status": "settled",
+      "purpose": "evolution",
+      "missionId": "evolution-mission-live-geo-20f7b9fb-8dfa-49fc-92cc-d3e309a04853",
+      "module": "geo",
+      "actualCostCny": "0.00182000",
+      "reservedCostCny": "0.03356000",
+      "cacheHitTokens": "0",
+      "cacheMissTokens": "1136",
+      "outputTokens": "171",
+      "providerRequestId": "1968f3f4-9776-4ded-bf6d-a94d61c127a3"
+    }
+  ],
+  "totalSettledCostCny": 0.03130912,
+  "scorerPreflight": {
+    "readOnly": true,
+    "paidCalls": 0,
+    "eligibleUnits": 2,
+    "minimumAuditSamples": 3,
+    "ready": false,
+    "cycles": [
+      {
+        "cycleId": "acceptance-scoped-research-meta-v6",
+        "freezeValid": true,
+        "complete": true,
+        "units": [
+          {
+            "cycleId": "acceptance-scoped-research-meta-v6",
+            "caseId": "hackshaw-main-dl",
+            "producerRunId": "run_ecae0640db300848b04d6f3d9da9c18d",
+            "producerProjectId": "eval-paper-3de045bccef38fe20f659661bf33cc7329f3e6f6",
+            "freezeValid": true,
+            "complete": true,
+            "needsCode": true,
+            "codeProof": true,
+            "verificationDescriptor": true,
+            "citableEvidenceCount": 4,
+            "assessorModel": "qwen3.8-max-0902",
+            "ready": true
+          },
+          {
+            "cycleId": "acceptance-scoped-research-meta-v6",
+            "caseId": "hackshaw-main-dl",
+            "producerRunId": "run_afa0a4674cd62a75f5405bb5a552d223",
+            "producerProjectId": "eval-paper-72ba197634c9b9bfa25d5a5b2de2475fd9a47cc1",
+            "freezeValid": true,
+            "complete": true,
+            "needsCode": true,
+            "codeProof": true,
+            "verificationDescriptor": true,
+            "citableEvidenceCount": 4,
+            "assessorModel": "qwen3.8-max-0902",
+            "ready": true
+          },
+          {
+            "cycleId": "acceptance-scoped-research-meta-v6",
+            "caseId": "hackshaw-main-dl",
+            "producerRunId": "run_d9cc23837d9cc21b8e3e50776e43717a",
+            "producerProjectId": "eval-paper-f8ba08bce07bac2b6c3e4fbe6de268d2421f4bb7",
+            "freezeValid": true,
+            "complete": true,
+            "needsCode": true,
+            "codeProof": false,
+            "verificationDescriptor": true,
+            "citableEvidenceCount": 4,
+            "assessorModel": null,
+            "ready": false
+          },
+          {
+            "cycleId": "acceptance-scoped-research-meta-v6",
+            "caseId": "hackshaw-main-dl",
+            "producerRunId": "run_337b15a28eb121eb4ef998bdf453a4b4",
+            "producerProjectId": "eval-paper-3ca0490feac860510b84ca86068e9144672fe2cb",
+            "freezeValid": true,
+            "complete": true,
+            "needsCode": true,
+            "codeProof": false,
+            "verificationDescriptor": true,
+            "citableEvidenceCount": 4,
+            "assessorModel": null,
+            "ready": false
+          },
+          {
+            "cycleId": "acceptance-scoped-research-meta-v6",
+            "caseId": "hackshaw-main-dl",
+            "producerRunId": "run_01f7b1a4723d62ed567f843882a5a24a",
+            "producerProjectId": "eval-paper-8886e92dce37c04b90ba1f5dc37aa0f71599dee8",
+            "freezeValid": true,
+            "complete": true,
+            "needsCode": true,
+            "codeProof": false,
+            "verificationDescriptor": true,
+            "citableEvidenceCount": 4,
+            "assessorModel": null,
+            "ready": false
+          },
+          {
+            "cycleId": "acceptance-scoped-research-meta-v6",
+            "caseId": "hackshaw-main-dl",
+            "producerRunId": "run_2cd84f0eea63dafc61a56d43accdc1ef",
+            "producerProjectId": "eval-paper-e6dd0c61cfb934dcc862f2945a730c4329525d8d",
+            "freezeValid": true,
+            "complete": true,
+            "needsCode": true,
+            "codeProof": false,
+            "verificationDescriptor": true,
+            "citableEvidenceCount": 4,
+            "assessorModel": null,
+            "ready": false
+          }
+        ]
+      }
+    ],
+    "eligible": [
+      {
+        "cycleId": "acceptance-scoped-research-meta-v6",
+        "caseId": "hackshaw-main-dl",
+        "producerRunId": "run_ecae0640db300848b04d6f3d9da9c18d",
+        "producerProjectId": "eval-paper-3de045bccef38fe20f659661bf33cc7329f3e6f6",
+        "freezeValid": true,
+        "complete": true,
+        "needsCode": true,
+        "codeProof": true,
+        "verificationDescriptor": true,
+        "citableEvidenceCount": 4,
+        "assessorModel": "qwen3.8-max-0902",
+        "ready": true
+      },
+      {
+        "cycleId": "acceptance-scoped-research-meta-v6",
+        "caseId": "hackshaw-main-dl",
+        "producerRunId": "run_afa0a4674cd62a75f5405bb5a552d223",
+        "producerProjectId": "eval-paper-72ba197634c9b9bfa25d5a5b2de2475fd9a47cc1",
+        "freezeValid": true,
+        "complete": true,
+        "needsCode": true,
+        "codeProof": true,
+        "verificationDescriptor": true,
+        "citableEvidenceCount": 4,
+        "assessorModel": "qwen3.8-max-0902",
+        "ready": true
+      }
+    ],
+    "limitation": "Metadata readiness only. Durable transcript, trace coverage, artifact hashes and independent reviewer identity must still be proved by the live scorer audit."
+  },
+  "remoteRuntimeProbe": {
+    "checkedAt": "2026-10-06T11:47:23.334Z",
+    "hostAlias": "evimed-test",
+    "containerStatus": [
+      "/evimed-evolution-acceptance-web exited",
+      "/evimed-evolution-acceptance-pg exited"
+    ],
+    "runtimeImage": "evimed-evolution-acceptance:runtime-final-20261004",
+    "kernelVersion": "0.1.7-rc.2",
+    "network": "none",
+    "paidCalls": 0,
+    "newResearchRuns": 0,
+    "productionMutation": false
+  },
+  "scorerAudit": {
+    "kind": "operator-targeted-historical-scorer-audit",
+    "cycleId": "acceptance-scoped-research-meta-v6",
+    "producerRunId": "run_afa0a4674cd62a75f5405bb5a552d223",
+    "producerProjectId": "eval-paper-72ba197634c9b9bfa25d5a5b2de2475fd9a47cc1",
+    "originalReportHash": "aae3ac6e95f4fc8e300e8827286e6782ed0156b05872d28548220e0204f80d55",
+    "originalDefinitionHash": "b299f33a6ec693c32ac4cfff09fcae96bbf21b7fd99e414db1f9f6acb811a1e2",
+    "originalFrozenHash": "6f3a6706633f291e890720bdcd73469bef6e73c529870175a4bd0a8938db0d25",
+    "originalVerdictHash": "4ab6de30f05b01c70a87deac2f08a130aa55c22282b7100355a6f44f2a365610",
+    "originalScoresChanged": false,
+    "freshConfirmation": false,
+    "newResearchRuns": 0,
+    "reviewed": 1,
+    "status": "reviewed",
+    "auditChallengeHash": "53a5c0a741d8f281aebb0efc46474c0e96f3cc60b8a65ec25eb292bc96a61003",
+    "controlProof": {
+      "verified": true,
+      "proof": {
+        "kind": "isolated-independent-replay",
+        "replicates": 2,
+        "behaviouralChecks": 2,
+        "sourceHash": "a0a8476ab3ce31723e8ebd1a6ca365d77dd9a384bef32c21834f7dfc69d51275",
+        "inputHash": "455ec5147feac9f8bc0cff154dc2900654aa5ba82d1bf6b5036d51bf5448f802",
+        "codeHash": "6046379691e988ae12dd03344c7d5d7686284bd1b8801d6e5aa5ba02814803a4",
+        "referenceHash": "b9c0a0f8e6c0ab9b556c8362327c0ca1ffdf388ec4554c51c9fa63e306120d57",
+        "outputHashes": [
+          "30024e8964011ea700beea27b8ab091604714b0bdc552d029959583467e942e9",
+          "45ff810d1a39489498fcb6c580f9fbf511f6c50599b65b2335abf629c5897af9"
+        ],
+        "proofHash": "10754878eb0c605db3c4169212852cb59f5cf07917eadc6eb14670f76bd5e670"
+      }
+    },
+    "reviewModel": "deepseek-flash",
+    "reviewerFamily": "deepseek",
+    "assessorFamily": "qwen",
+    "missionId": "evolution-mission-scorer-live-104bb2b0-f253-4537-8e82-2651bb248c15",
+    "review": {
+      "stages": {
+        "question": {
+          "observed": true,
+          "valid": true
+        },
+        "method": {
+          "observed": true,
+          "valid": true
+        },
+        "calculation": {
+          "observed": true,
+          "valid": true
+        },
+        "certainty": {
+          "observed": true,
+          "valid": true
+        },
+        "writing": {
+          "observed": true,
+          "valid": true
+        }
+      },
+      "evidenceIds": [
+        "hackshaw-main-dl",
+        "author-dataset-documentation"
+      ]
+    },
+    "verdict": {
+      "auditedRuler": "research",
+      "applicableStageIDs": [
+        "question",
+        "method",
+        "calculation",
+        "certainty",
+        "writing"
+      ],
+      "allStagesValid": true,
+      "fullResearchReproductionValid": false
+    },
+    "nativeProofHash": "66e457e8739c5e18125578ffba38e15d3f2d16af170d71d53585a60fb8b5bb29",
+    "usage": [
+      {
+        "id": "dd596fb4-2b8a-4776-bca1-b3eb5c84eff0",
+        "model": "deepseek-flash",
+        "status": "settled",
+        "purpose": "evolution",
+        "missionId": "evolution-mission-scorer-live-104bb2b0-f253-4537-8e82-2651bb248c15",
+        "module": "evidence",
+        "actualCostCny": "0.18800800",
+        "providerRequestId": "5ac39978-ab41-4a99-82f5-419fbe44042c"
+      }
+    ]
+  },
+  "scorerSettledCostCny": 0.188008,
+  "totalMeasuredSettledCostCny": 0.37398516,
+  "nativeRuntime": {
+    "kind": "native-two-turn-runtime-acceptance",
+    "missionId": "evolution-mission-native-live-498ae48d-989f-4905-a8fe-4f611e0a1a43",
+    "userId": "evolution-acceptance",
+    "startedAt": "2026-10-06T12:26:43.589Z",
+    "taskId": "native-context-0",
+    "newResearchRuns": 2,
+    "activated": false,
+    "result": {
+      "sessionId": "session_6072b397b172fb327b36403a8c2382d0",
+      "kernelVersion": "0.1.7-rc.2",
+      "baselineVersion": "sha256:c44be13ade89870a3dddcf1551e9d23b9fd4588aa30ca596e346ec65afe38698:f394c3b33+evolution-2-working-tree-20261006",
+      "sessionHash": "e647f641bb39286d20df2ff7fb74dd11f0ebf5c6b331b93db65aedef59ee25d2",
+      "turns": [
+        {
+          "runId": "run_85d64afbac4b54a22546420e4479c189",
+          "passed": true,
+          "replyHash": "565339bc4d33d72817b583024112eb7f5cdf3e5eef0252d6ec1b9c9a94e12bb3",
+          "contextBytes": 68058
+        },
+        {
+          "runId": "run_f710d773c7f11978bc475b7d5e0e0801",
+          "passed": true,
+          "replyHash": "4e07408562bedb8b60ce05c1decfe3ad16b72230967de01f640b7e4729b49fce",
+          "contextBytes": 74230
+        }
+      ],
+      "passed": true,
+      "latencyMs": 17859,
+      "contextBytes": 142288,
+      "evaluationScope": "trusted-native-nonclinical"
+    },
+    "status": "passed",
+    "usage": [
+      {
+        "id": "0d6c6a53-8326-4dde-b053-cde2dac8f80a",
+        "runId": "runtime-probe-6aef46ae5dea007f5059f46dfaa1",
+        "model": "deepseek-flash",
+        "status": "settled",
+        "purpose": "evolution",
+        "missionId": "evolution-mission-native-live-498ae48d-989f-4905-a8fe-4f611e0a1a43",
+        "module": "runtime",
+        "actualCostCny": "0.01532796",
+        "providerRequestId": "9f6490d8-773a-48f3-b157-02c75d8005b5"
+      },
+      {
+        "id": "651b2dcb-4bb1-4376-8668-8298d07591b7",
+        "runId": "runtime-probe-6aef46ae5dea007f5059f46dfaa1",
+        "model": "deepseek-flash",
+        "status": "settled",
+        "purpose": "evolution",
+        "missionId": "evolution-mission-native-live-498ae48d-989f-4905-a8fe-4f611e0a1a43",
+        "module": "runtime",
+        "actualCostCny": "0.00018600",
+        "providerRequestId": "c713b059-aa66-40a3-bb81-3890bb517b4e"
+      },
+      {
+        "id": "d66bbfed-1d99-4984-843b-90c316658a86",
+        "runId": "runtime-probe-6aef46ae5dea007f5059f46dfaa1",
+        "model": "deepseek-flash",
+        "status": "settled",
+        "purpose": "evolution",
+        "missionId": "evolution-mission-native-live-498ae48d-989f-4905-a8fe-4f611e0a1a43",
+        "module": "runtime",
+        "actualCostCny": "0.00097380",
+        "providerRequestId": "6f13c617-cc62-4161-8b03-87a5a58efb94"
+      },
+      {
+        "id": "bdb0e9d2-6fe4-43c4-bd80-6ef1bf0ddaac",
+        "runId": "runtime-probe-6aef46ae5dea007f5059f46dfaa1",
+        "model": "deepseek-flash",
+        "status": "settled",
+        "purpose": "evolution",
+        "missionId": "evolution-mission-native-live-498ae48d-989f-4905-a8fe-4f611e0a1a43",
+        "module": "runtime",
+        "actualCostCny": "0.00190992",
+        "providerRequestId": "0e04ea65-de11-4282-a05c-c98bd80fac95"
+      }
+    ],
+    "finishedAt": "2026-10-06T12:27:01.715Z"
+  },
+  "nativeRuntimeDebugAttempts": [
+    {
+      "kind": "native-two-turn-runtime-acceptance",
+      "missionId": "evolution-mission-native-live-50e7a09c-6a43-4c31-b3f9-ea5032a45997",
+      "userId": "evolution-acceptance",
+      "startedAt": "2026-10-06T12:13:57.416Z",
+      "taskId": "native-context-0",
+      "newResearchRuns": 1,
+      "activated": false,
+      "status": "waiting",
+      "failure": {
+        "code": "runtime_not_running",
+        "message": "Runtime is not running for session history monitoring."
+      },
+      "usage": [
+        {
+          "id": "a54d9b04-bee1-409d-b966-68fe89a69d03",
+          "model": "deepseek-flash",
+          "status": "settled",
+          "purpose": "evolution",
+          "missionId": "evolution-mission-native-live-50e7a09c-6a43-4c31-b3f9-ea5032a45997",
+          "module": "runtime",
+          "actualCostCny": "0.02479740",
+          "providerRequestId": "fed81e86-96bb-459c-8e0d-4cf6b103b5b4"
+        },
+        {
+          "id": "94dbd0dd-3ecb-419a-bded-0ea55b5d1840",
+          "model": "deepseek-flash",
+          "status": "settled",
+          "purpose": "evolution",
+          "missionId": "evolution-mission-native-live-50e7a09c-6a43-4c31-b3f9-ea5032a45997",
+          "module": "runtime",
+          "actualCostCny": "0.00018600",
+          "providerRequestId": "7dba9d0f-eed2-4f7e-8ad9-35a73e1b7d42"
+        },
+        {
+          "id": "16b13125-a121-49e0-8a7d-72ba78abc55e",
+          "model": "deepseek-flash",
+          "status": "settled",
+          "purpose": "evolution",
+          "missionId": "evolution-mission-native-live-50e7a09c-6a43-4c31-b3f9-ea5032a45997",
+          "module": "runtime",
+          "actualCostCny": "0.00095280",
+          "providerRequestId": "2faa3228-022a-4bd6-b687-69da3ecd42b9"
+        }
+      ],
+      "finishedAt": "2026-10-06T12:14:13.196Z"
+    },
+    {
+      "kind": "native-two-turn-runtime-acceptance",
+      "missionId": "evolution-mission-native-live-33973079-c326-4f73-81a7-a91452ac3603",
+      "userId": "evolution-acceptance",
+      "startedAt": "2026-10-06T12:16:40.779Z",
+      "taskId": "native-context-0",
+      "newResearchRuns": 1,
+      "activated": false,
+      "status": "waiting",
+      "failure": {
+        "code": "runtime_busy",
+        "message": "The project runtime is already in use; proactive research will retry later."
+      },
+      "usage": [
+        {
+          "id": "f76bb672-d32c-409a-9e55-d2be5b88e1e8",
+          "runId": "runtime-probe-bba7699587c8aca63208256c3c5d",
+          "model": "deepseek-flash",
+          "status": "settled",
+          "purpose": "evolution",
+          "missionId": "evolution-mission-native-live-33973079-c326-4f73-81a7-a91452ac3603",
+          "module": "runtime",
+          "actualCostCny": "0.02116240",
+          "providerRequestId": "bab0df55-ad64-4bb3-bde0-41b6f0c322d0"
+        },
+        {
+          "id": "2c0b08a8-f085-49a9-a3b0-306f12460db6",
+          "runId": "runtime-probe-bba7699587c8aca63208256c3c5d",
+          "model": "deepseek-flash",
+          "status": "settled",
+          "purpose": "evolution",
+          "missionId": "evolution-mission-native-live-33973079-c326-4f73-81a7-a91452ac3603",
+          "module": "runtime",
+          "actualCostCny": "0.00018500",
+          "providerRequestId": "566995c8-b408-4a3f-9d9e-2e58bf0bf937"
+        },
+        {
+          "id": "83b69b68-8c62-46e8-bc3d-114095e69d4a",
+          "runId": "runtime-probe-bba7699587c8aca63208256c3c5d",
+          "model": "deepseek-flash",
+          "status": "settled",
+          "purpose": "evolution",
+          "missionId": "evolution-mission-native-live-33973079-c326-4f73-81a7-a91452ac3603",
+          "module": "runtime",
+          "actualCostCny": "0.03549924",
+          "providerRequestId": "b1862bf6-cd5c-4722-b195-e9feef98f65a"
+        }
+      ],
+      "finishedAt": "2026-10-06T12:16:55.808Z"
+    },
+    {
+      "kind": "native-two-turn-runtime-acceptance",
+      "missionId": "evolution-mission-native-live-f4440a41-591a-48e5-b988-a8d884f1a188",
+      "userId": "evolution-acceptance",
+      "startedAt": "2026-10-06T12:20:45.578Z",
+      "taskId": "native-context-0",
+      "newResearchRuns": 1,
+      "activated": false,
+      "status": "waiting",
+      "failure": {
+        "code": "Error",
+        "message": "Native runtime probe did not produce a completed first answer."
+      },
+      "usage": [
+        {
+          "id": "90d47723-b3a4-49ba-8f50-bbef4b187540",
+          "runId": "runtime-probe-4e4ad356dec1f3c76045b569dd76",
+          "model": "deepseek-flash",
+          "status": "settled",
+          "purpose": "evolution",
+          "missionId": "evolution-mission-native-live-f4440a41-591a-48e5-b988-a8d884f1a188",
+          "module": "runtime",
+          "actualCostCny": "0.02552540",
+          "providerRequestId": "097fd956-9590-41cd-bfb0-2a0a10018d80"
+        },
+        {
+          "id": "6182a1f7-d51c-43c4-9d57-28de3ed88942",
+          "runId": "runtime-probe-4e4ad356dec1f3c76045b569dd76",
+          "model": "deepseek-flash",
+          "status": "settled",
+          "purpose": "evolution",
+          "missionId": "evolution-mission-native-live-f4440a41-591a-48e5-b988-a8d884f1a188",
+          "module": "runtime",
+          "actualCostCny": "0.00018600",
+          "providerRequestId": "cb41089e-55a7-441b-a80e-cf6e0ed1fbe4"
+        },
+        {
+          "id": "03658b49-ebce-4af3-9045-099cf1b7c74c",
+          "runId": "runtime-probe-4e4ad356dec1f3c76045b569dd76",
+          "model": "deepseek-flash",
+          "status": "settled",
+          "purpose": "evolution",
+          "missionId": "evolution-mission-native-live-f4440a41-591a-48e5-b988-a8d884f1a188",
+          "module": "runtime",
+          "actualCostCny": "0.00101536",
+          "providerRequestId": "6656adf6-edd1-4e71-ad3f-d8e0898c60b2"
+        }
+      ],
+      "finishedAt": "2026-10-06T12:21:10.661Z"
+    },
+    {
+      "kind": "native-two-turn-runtime-acceptance",
+      "missionId": "evolution-mission-native-live-615e90fa-28ed-482f-8208-eaa32754f81e",
+      "userId": "evolution-acceptance",
+      "startedAt": "2026-10-06T12:23:44.015Z",
+      "taskId": "native-context-0",
+      "newResearchRuns": 1,
+      "activated": false,
+      "status": "waiting",
+      "failure": {
+        "code": "Error",
+        "message": "Native runtime probe did not produce a completed first answer."
+      },
+      "usage": [
+        {
+          "id": "34dc0418-262f-42c3-a4b0-1c8ff16c3d50",
+          "runId": "runtime-probe-0eed5bb2efa226e535e73ba025bb",
+          "model": "deepseek-flash",
+          "status": "settled",
+          "purpose": "evolution",
+          "missionId": "evolution-mission-native-live-615e90fa-28ed-482f-8208-eaa32754f81e",
+          "module": "runtime",
+          "actualCostCny": "0.02555140",
+          "providerRequestId": "67cc1594-4ee9-492b-bf45-e2bf0eae3cc2"
+        },
+        {
+          "id": "910b62df-095d-4f9f-892c-f92d5f91b97a",
+          "runId": "runtime-probe-0eed5bb2efa226e535e73ba025bb",
+          "model": "deepseek-flash",
+          "status": "settled",
+          "purpose": "evolution",
+          "missionId": "evolution-mission-native-live-615e90fa-28ed-482f-8208-eaa32754f81e",
+          "module": "runtime",
+          "actualCostCny": "0.00018400",
+          "providerRequestId": "32dfef45-c241-4859-a0ee-9db9a3a1486f"
+        },
+        {
+          "id": "6eacd2d7-010d-4910-bc9c-1190c23e6c6c",
+          "runId": "runtime-probe-0eed5bb2efa226e535e73ba025bb",
+          "model": "deepseek-flash",
+          "status": "settled",
+          "purpose": "evolution",
+          "missionId": "evolution-mission-native-live-615e90fa-28ed-482f-8208-eaa32754f81e",
+          "module": "runtime",
+          "actualCostCny": "0.00102536",
+          "providerRequestId": "de08340c-e403-49db-bad1-5848dd7e2fca"
+        }
+      ],
+      "finishedAt": "2026-10-06T12:24:07.809Z"
+    }
+  ],
+  "nativeSettledCostCny": 0.15466804
+}

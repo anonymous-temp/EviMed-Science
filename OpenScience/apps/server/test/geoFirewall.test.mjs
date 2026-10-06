@@ -79,7 +79,7 @@ test("only the GEO modules query the GEO schema, and only the composition, the r
   for (const name of modules) {
     const text = await readFile(path.join(serverSource, name), "utf8");
     if (/\bevimed_geo\./.test(text)) querying.push(name);
-    if (!name.startsWith("geo") && /from "\.\/(?:geo[A-Za-z]*|socialCrawlClient|mediaMarketClient)\.mjs"/.test(text)) importing.push(name);
+    if (!name.startsWith("geo") && /from ['"]\.\/(?:geo[A-Za-z]*|socialCrawlClient|mediaMarketClient)\.mjs['"]/.test(text)) importing.push(name);
   }
   assert.ok(querying.length >= 5, "the walk found the GEO modules");
   assert.deepEqual(querying.filter((name) => !name.startsWith("geo")), [], "no module outside GEO reads its tables");
@@ -88,7 +88,13 @@ test("only the GEO modules query the GEO schema, and only the composition, the r
   // deploymentComposition restates which GEO tools a launch withholds (the
   // availability label) from the same gateway address and audience. None of
   // them is on the path of an answer's retrieval or ranking.
-  assert.deepEqual(importing.sort(), ["deploymentComposition.mjs", "imService.mjs", "runtimeGatewayEntry.mjs", "runtimeManager.mjs", "server.mjs"]);
+  assert.deepEqual(importing.sort(), ["deploymentComposition.mjs", "imService.mjs", "moduleEvolutionEvaluators.mjs", "runtimeGatewayEntry.mjs", "runtimeManager.mjs", "server.mjs"]);
+  // The evolution scorer imports a pure numeric-token checker only. Its injected
+  // judge sees evaluator-owned public tasks, never a GEO client/schema gateway.
+  const evaluator=await readFile(path.join(serverSource,"moduleEvolutionEvaluators.mjs"),"utf8");
+  const geoImports=[...evaluator.matchAll(/import\s+([^;]+?)\s+from\s+['"]\.\/(geo[A-Za-z]*)\.mjs['"]/g)];
+  assert.deepEqual(geoImports.map(match=>[match[1].replace(/\s+/g,""),match[2]]),[["{quantityTokens}","geoJudge"]]);
+  assert.equal(/evimed_geo|geo(?:Service|Store|Gateway|Market|Orchestrator|Measure)|social_posts_search|\/internal\/geo/.test(evaluator),false);
   for (const name of ["researchContext.mjs", "specialistRouting.mjs", "publicSourceGateway.mjs", "webSearchGateway.mjs", "kbSearchGateway.mjs",
     "clinicalEvidenceQuality.mjs", "agentRuns.mjs"]) {
     const text = await readFile(path.join(serverSource, name), "utf8");

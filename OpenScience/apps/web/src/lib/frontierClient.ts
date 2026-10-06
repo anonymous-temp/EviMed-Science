@@ -190,7 +190,10 @@ export interface FrontierItemsQuery {
   limit?: number;
 }
 
+export interface FrontierExposure { token: string; surface: string; policyRevisionId: string; candidateIds: string[] }
+
 export interface FrontierItemsPage {
+  exposure?: FrontierExposure;
   items: FrontierItem[];
   nextCursor: string | null;
   /** The content version the page was read at; compared with `/status`. */
@@ -282,6 +285,7 @@ export interface FrontierFollow {
  * so the block has nothing for them until they switch it on.
  */
 export interface FrontierForYou {
+  exposure?: FrontierExposure;
   state: "available" | "unavailable" | "off";
   basis: "vector" | "tags" | null;
   paused: boolean;
@@ -633,7 +637,9 @@ function parseItems(value: unknown): FrontierItem[] {
 
 function parseItemsPage(value: unknown, restarted: boolean): FrontierItemsPage {
   const raw = record(value) ?? {};
+  const exposure = record(raw.exposure);
   return {
+    exposure: exposure && text(exposure.token) ? exposure as unknown as FrontierExposure : undefined,
     items: parseItems(raw.items),
     nextCursor: text(raw.nextCursor),
     version: version(raw.version),
@@ -1013,6 +1019,7 @@ export function fetchFrontierForYou(): Promise<FrontierForYou | null> {
       return item && because ? [{ item, reason: { text: because, topic: text(reason?.topic), memoryId: text(reason?.memoryId) } }] : [];
     }).slice(0, 8);
     return {
+      exposure: record(raw.exposure) && text(record(raw.exposure)?.token) ? raw.exposure as FrontierExposure : undefined,
       state: oneOf(raw.state ?? raw.status, ["available", "unavailable", "off"] as const, "off"),
       basis: orNull(raw.basis, ["vector", "tags"] as const),
       paused: raw.paused === true,
@@ -1157,4 +1164,8 @@ export async function setFrontierNotificationSwitch(key: FrontierNotificationSwi
     channels: current.channels, expectedRevision: current.revision,
   });
   return saved.switches[key] ?? saved.switches.frontier !== false;
+}
+
+export async function reportFrontierExposure(token: string, items: {id: string; position: number}[]): Promise<void> {
+  await productRequest("/frontier/exposures", "POST", { token, items });
 }
