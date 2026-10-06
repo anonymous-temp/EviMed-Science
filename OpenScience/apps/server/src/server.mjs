@@ -71,7 +71,9 @@ import { postgresBackupReadiness } from "./postgresBackupReadiness.mjs";
 import { vcrBackupReadiness } from "./vcrBackupReadiness.mjs";
 import { EVIDENCE_PROJECT_ID, LEARNING_PROJECT_ID, ensureEvidenceProject, isEvolutionProject, isInternalProjectOf, isReservedProjectId } from "./internalProjects.mjs";
 import { createEvidenceBudget, evidenceBudgetMetricFamilies } from "./evidenceBudget.mjs";
-import { createEvidenceProgramme, evidenceProgrammeMetricFamilies } from "./evidenceProgramme.mjs";
+import { PROGRAMME_DECISION_KIND, createEvidenceProgramme, evidenceProgrammeMetricFamilies } from "./evidenceProgramme.mjs";
+import { createEvolutionLeadSources, evolutionLeadSourceMetricFamilies, leadEntityKeys } from "./evolutionLeadSources.mjs";
+import { programmeZoneByKey } from "./evidenceProgrammeData.mjs";
 import { createCalculationReceiptReader } from "./evidenceCalculationReceipts.mjs";
 import { createEvidenceRecalculation, createOfficialZoneMatcher, evidenceRecalculationMetricFamilies } from "./evidenceRecalculation.mjs";
 import { createPredictionRegistry, predictionRegistryMetricFamilies } from "./predictionRegistry.mjs";
@@ -1021,6 +1023,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   let evidenceFlywheel = null;
   /** @type {ReturnType<typeof createEvidenceOutcomes> | null} */
   let evidenceOutcomes = null;
+  /** @type {ReturnType<typeof createEvolutionLeadSources> | null} */
+  let evolutionLeadSources = null;
   const maintenanceMutation = (operation) => maintenanceService ? maintenanceService.withMutation(operation) : operation();
   const productDocuments = productDatabase ? new ProductDocuments(productDatabase) : null;
   const productJobs = productDatabase ? new ProductJobs(productDatabase) : null;
@@ -4569,6 +4573,20 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       evidenceRecalculation = recalculation;
       evolution.service.callbacks.recalculationProof = (/** @type {any} */ proof) => recalculation.onProofRecorded(proof);
     }
+    // What the platform's own modules could not do goes to the evolution module as leads (evolutionLeadSources.mjs, flywheel F20): the evidence programme is read by
+    // the worker's daily scan; 循证传播 and 虚拟临研 get an `offer` where their modules are composed. Off, nothing is composed and the worker ingests no scan event.
+    if (config.evolutionModuleLeadsEnabled) {
+      evolutionLeadSources = createEvolutionLeadSources({
+        service: evolution.service, perDay: config.evolutionModuleLeadsPerDay, report: code => process.stderr.write(`${code}\n`),
+        programme: evidenceProgramme && productDocuments ? {
+          decisions: async () => (await productDocuments.list(PLATFORM_PUBLISHER_USER_ID, PROGRAMME_DECISION_KIND, { limit: 14, projectId: EVIDENCE_PROJECT_ID })).items.map((/** @type {any} */ row) => row.payload),
+          keysForZone: async (/** @type {string} */ zoneKey) => leadEntityKeys(await entityVocabulary.keysForText({ texts: [...(programmeZoneByKey(zoneKey)?.topic.terms ?? [])] })),
+        } : null,
+        communication: Boolean(geo), virtualStudy: Boolean(vcr),
+      });
+      const sources = evolutionLeadSources;
+      evolution.service.callbacks.scanLeadSources = () => sources.scan();
+    }
     // The prediction registry (flywheel F25) rides the evolution module's prospective records: the module's publication match tells it of each
     // paper the feed publishes, and a virtual study or an agenda files through `predictionRegistry.register`. Off, nothing here exists.
     if (config.predictionRegistryEnabled) {
@@ -5155,6 +5173,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           evidenceFlywheel,
           evidenceCommunity,
           evidenceOutcomes,
+          evolutionLeadSources,
         });
         return;
       }
@@ -7985,7 +8004,7 @@ function addHistogramMetric(lines, name, help, series) {
   }
 }
 
-async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, evidenceBudget = null, entityVocabulary = null, evidencePublish = null, evidenceUpkeep = null, evidenceProgramme = null, evidenceFeed = null, evidencePublic = null, evidenceRecalculation = null, predictionRegistry = null, evidenceFlywheel = null, evidenceCommunity = null, evidenceOutcomes = null }) {
+async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, evidenceBudget = null, entityVocabulary = null, evidencePublish = null, evidenceUpkeep = null, evidenceProgramme = null, evidenceFeed = null, evidencePublic = null, evidenceRecalculation = null, predictionRegistry = null, evidenceFlywheel = null, evidenceCommunity = null, evidenceOutcomes = null, evolutionLeadSources = null }) {
   const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate, frontier, review, geo, vcr, credits);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
@@ -8409,6 +8428,7 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
   for (const family of evidencePublicMetricFamilies(evidencePublic?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
   // The evidence flywheel's figures (evidenceFlywheelMetrics.mjs): exported only with the switch on; a figure with no input has no series.
   addMetric(lines, "open_science_evidence_flywheel_enabled", "Whether the evidence flywheel's figures are switched on (OPEN_SCIENCE_EVIDENCE_FLYWHEEL_METRICS_ENABLED).", "gauge", [{ value: config.evidenceFlywheelMetricsEnabled ? 1 : 0 }]);
+  for (const family of evolutionLeadSourceMetricFamilies(evolutionLeadSources?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
   for (const family of evidenceOutcomeMetricFamilies(evidenceOutcomes?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
   for (const family of evidenceCommunityMetricFamilies(evidenceCommunity)) addMetric(lines, family.name, family.help, family.type, family.series);
   if (evidenceFlywheel) for (const family of await evidenceFlywheel.metricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);

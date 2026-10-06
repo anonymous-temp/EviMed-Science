@@ -502,10 +502,16 @@ function evidenceUpkeepSettings(overrides) {
  *   document for the eval corpus and an observation on the methods of the run that produced it. Ticked by the learning worker's housekeeping timer, so it
  *   needs the learning loop on; off, no table is read and no timer exists. `OPEN_SCIENCE_LEARNING_EVIDENCE_OUTCOMES_BATCH` (25, at most 200) is the
  *   change-log entries one pass reads: a bound on the database's work, not on how soon an outcome is noticed.
+ * - `OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_ENABLED` (off): the platform's own modules (the evidence programme, 循证传播, 虚拟临研) hand 循证进化 what they could
+ *   not do as research leads; needs the evolution module on. `OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_PER_DAY` (5, at most 50) bounds the new leads of these
+ *   sources taken in a day, because each lead is a scouting run on the module's own budget.
  *
  * @param {Record<string, any>} overrides
  */
 function evidenceFlywheelSettings(overrides) {
+  const perDayRaw = overrides.evolutionModuleLeadsPerDay !== undefined ? overrides.evolutionModuleLeadsPerDay : process.env.OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_PER_DAY;
+  const moduleLeadsPerDay = perDayRaw == null || perDayRaw === "" ? 5 : Number(perDayRaw);
+  if (!Number.isSafeInteger(moduleLeadsPerDay) || moduleLeadsPerDay < 1 || moduleLeadsPerDay > 50) throw new Error(`OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_PER_DAY must be a whole number from 1 to 50, got ${JSON.stringify(perDayRaw)}.`);
   const batchRaw = overrides.learningEvidenceOutcomesBatch !== undefined ? overrides.learningEvidenceOutcomesBatch : process.env.OPEN_SCIENCE_LEARNING_EVIDENCE_OUTCOMES_BATCH;
   const outcomesBatch = batchRaw == null || batchRaw === "" ? 25 : Number(batchRaw);
   if (!Number.isSafeInteger(outcomesBatch) || outcomesBatch < 1 || outcomesBatch > 200) throw new Error(`OPEN_SCIENCE_LEARNING_EVIDENCE_OUTCOMES_BATCH must be a whole number from 1 to 200, got ${JSON.stringify(batchRaw)}.`);
@@ -518,6 +524,8 @@ function evidenceFlywheelSettings(overrides) {
     evidenceCommunityMaxCards: maxCards,
     learningEvidenceOutcomesEnabled: overrides.learningEvidenceOutcomesEnabled ?? boolEnv("OPEN_SCIENCE_LEARNING_EVIDENCE_OUTCOMES_ENABLED", false),
     learningEvidenceOutcomesBatch: outcomesBatch,
+    evolutionModuleLeadsEnabled: overrides.evolutionModuleLeadsEnabled ?? boolEnv("OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_ENABLED", false),
+    evolutionModuleLeadsPerDay: moduleLeadsPerDay,
   };
 }
 

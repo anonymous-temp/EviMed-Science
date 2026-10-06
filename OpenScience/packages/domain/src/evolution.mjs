@@ -18,7 +18,10 @@ export const EVOLUTION_DATA_LEVELS = Object.freeze(['D0', 'D1', 'D2', 'D3', 'D4'
 export const EVOLUTION_VALIDATION_LEVELS = Object.freeze(['V0', 'V1', 'V2', 'V3', 'V4'])
 export const EVOLUTION_DECISION_CLASSES = Object.freeze(['A', 'B', 'C', 'D'])
 export const EVOLUTION_GAP_CODES = Object.freeze(['connector', 'extraction', 'method-missing', 'method-implementation', 'routing', 'skill-instruction', 'writing', 'model-capability', 'outside-product'])
-export const EVOLUTION_LEAD_SOURCES = Object.freeze(['literature', 'runtime-failure', 'autopilot', 'evaluation', 'dataset', 'handbook'])
+export const EVOLUTION_LEAD_SOURCES = Object.freeze(['literature', 'runtime-failure', 'autopilot', 'evaluation', 'dataset', 'handbook',
+  // The platform's own modules saying they could not do something (flywheel F20, 2026-10-06): the evidence programme, 循证传播 and 虚拟临研.
+  // Every lead of these three is reduced to a closed code and closed entity keys (`evolutionLeadSources.mjs`), never a researcher's words.
+  'evidence-programme', 'communication', 'virtual-study'])
 export const EVOLUTION_ORIGINS = Object.freeze(['literature', 'tool-result', 'platform-inference', 'user-statement'])
 export const EVOLUTION_BUILD_FORMS = Object.freeze(['compose', 'extend', 'wrap', 'rewrite', 'new-capability'])
 export const EVOLUTION_CASE_GROUPS = Object.freeze(['development', 'holdout', 'time-holdout', 'prospective'])

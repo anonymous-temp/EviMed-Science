@@ -576,6 +576,9 @@ services:
       # What becomes of a published card goes back into learning (2026-10-06): the switch (off) and the change-log entries one pass reads.
       OPEN_SCIENCE_LEARNING_EVIDENCE_OUTCOMES_ENABLED:
       OPEN_SCIENCE_LEARNING_EVIDENCE_OUTCOMES_BATCH:
+      # The platform's own modules hand 循证进化 what they could not do as research leads (2026-10-06): the switch (off) and the new leads taken in a day.
+      OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_ENABLED:
+      OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_PER_DAY:
       # Sharing memory inside the platform (evidence-flywheel plan 2026-10-05, F17-F19):
       # how long a share link lives and how often it may be used, how many other
       # accounts must keep a new author's pack before it counts for platform

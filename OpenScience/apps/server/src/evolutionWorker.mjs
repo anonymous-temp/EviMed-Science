@@ -123,6 +123,7 @@ export class EvolutionWorker {
     await this.service.ingestEvent({id:`handbook-scan:${day}`,type:"handbook-gap-scan"});
     await this.service.ingestEvent({ id: `source-facts:${day}`, type: 'source-facts-scan', origin: 'tool-result' });
     await this.service.ingestEvent({ id: `prospective-targets:${day}`, type: 'prospective-target-scan', origin: 'tool-result' });
+    if (this.service.callbacks?.scanLeadSources) await this.service.ingestEvent({ id: `lead-sources:${day}`, type: 'lead-source-scan', origin: 'platform-inference' });
     const month = now.toISOString().slice(0, 7);
     const previousMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1)).toISOString().slice(0, 7);
     await this.service.enqueue('maintain', { month, metricsMonth: previousMonth }, `monthly-v2:${month}`);
