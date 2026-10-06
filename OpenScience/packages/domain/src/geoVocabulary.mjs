@@ -95,6 +95,42 @@ export const GEO_FAILURE_MODE_LABELS_ZH = Object.freeze({
   omitted: '漏提我方', correct: '讲对我方', wrong_ours: '讲错我方', wrong_competitor: '讲错竞品', none: '未涉及',
 })
 
+/**
+ * What a statement about the product is about. The four specified kinds — indication, dosage, contraindication and adverse
+ * reaction — are the information whose agreement with the label is measured first (指定信息正确率); a statement of another
+ * kind is judged all the same and counts in the overall accuracy.
+ */
+export const GEO_STATEMENT_TOPICS = frozen(['indication', 'dosage', 'contraindication', 'adverse_reaction', 'other'])
+export const GEO_STATEMENT_TOPIC_LABELS_ZH = Object.freeze({
+  indication: '适应证', dosage: '用法用量', contraindication: '禁忌', adverse_reaction: '不良反应', other: '其他',
+})
+export const GEO_SPECIFIED_TOPICS = frozen(['indication', 'dosage', 'contraindication', 'adverse_reaction'])
+/** Whether a cited link says what the answer says it does: the page's own words decide, `unclear` when they do not. */
+export const GEO_CITATION_SUPPORTS = frozen(['yes', 'no', 'unclear'])
+
+/**
+ * 指定信息正确率 of a set of judged statements: of the statements about indication, dosage, contraindication and adverse reaction
+ * the judge could decide, how many agree with the label — computed here from the verdicts and never typed by a model. A statement
+ * the claims could not decide (`unverifiable`) is neither right nor wrong and is left out of the denominator; `rate` is null when
+ * nothing could be decided, never zero. `byTopic` gives the same for each of the four kinds.
+ * @param {readonly { verdict?: string, topic?: string }[]} statements
+ * @returns {{ correct: number, wrong: number, decided: number, rate: number | null, byTopic: Record<string, { correct: number, wrong: number }> }}
+ */
+export function geoSpecifiedInfoAccuracy(statements) {
+  /** @type {Record<string, { correct: number, wrong: number }>} */
+  const byTopic = Object.fromEntries(GEO_SPECIFIED_TOPICS.map((topic) => [topic, { correct: 0, wrong: 0 }]))
+  let correct = 0
+  let wrong = 0
+  for (const statement of Array.isArray(statements) ? statements : []) {
+    const topic = statement?.topic ?? ''
+    if (!GEO_SPECIFIED_TOPICS.includes(/** @type {any} */ (topic))) continue
+    if (statement.verdict === 'correct') { correct += 1; byTopic[topic].correct += 1 }
+    else if (statement.verdict === 'wrong') { wrong += 1; byTopic[topic].wrong += 1 }
+  }
+  const decided = correct + wrong
+  return { correct, wrong, decided, rate: decided ? correct / decided : null, byTopic }
+}
+
 /** Errors (讲错我方) and their trace. */
 export const GEO_ERROR_TYPES = frozen(['label_conflict', 'number', 'dropped_condition', 'unfounded', 'attribute_swap'])
 export const GEO_ERROR_TYPE_LABELS_ZH = Object.freeze({
@@ -281,6 +317,8 @@ export const GEO_VOCABULARIES = Object.freeze({
   statementVerdict: GEO_STATEMENT_VERDICTS,
   failureMode: GEO_FAILURE_MODES,
   errorType: GEO_ERROR_TYPES,
+  statementTopic: GEO_STATEMENT_TOPICS,
+  citationSupport: GEO_CITATION_SUPPORTS,
   severity: GEO_SEVERITIES,
   errorStability: GEO_ERROR_STABILITIES,
   errorAction: GEO_ERROR_ACTIONS,

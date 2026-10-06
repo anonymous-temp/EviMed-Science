@@ -236,3 +236,19 @@ test("the cards route reads and writes only the caller's own project, and the pr
   assert.equal(geoRoutePattern("/api/geo/projects/geo_mine/cards"), "/api/geo/projects/:id/cards");
   assert.equal(geoRoutePattern("/api/geo/projects/geo_mine/cards/refresh"), "/api/geo/projects/:id/cards/:item");
 });
+
+test("metric families: the evidence chain's cards and the judge's checks are counted", () => {
+  const families = geoMetricFamilies(true, {
+    tables: null, service: {}, social: null, worker: null,
+    cards: { zonesMade: 1, cardsCreated: 4, cardsUpdated: 1, cardsUnchanged: 7, claimsCarded: 12, claimsHeld: 3, refused: 2, referencesChecked: 9, referencesUnresolved: 1, articlesFlagged: 2 },
+    checks: { offLabel: 3, omittedSafety: 1, linkMissing: 2 },
+  });
+  const byName = new Map(families.map((family) => [family.name, family]));
+  const cards = byName.get("open_science_geo_cards_total");
+  assert.equal(cards?.type, "counter");
+  assert.deepEqual(cards?.series.find((series) => series.labels?.event === "claimsHeld")?.value, 3);
+  assert.deepEqual(cards?.series.find((series) => series.labels?.event === "articlesFlagged")?.value, 2);
+  assert.deepEqual(byName.get("open_science_geo_checks_total")?.series.map((series) => [series.labels?.check, series.value]), [["offLabel", 3], ["omittedSafety", 1], ["linkMissing", 2]]);
+  assert.equal(byName.has("open_science_geo_cards_total") && geoMetricFamilies(true, { tables: null, service: {}, social: null, worker: null }).some((family) => family.name === "open_science_geo_checks_total"), false,
+    "no checks recorded, no family");
+});

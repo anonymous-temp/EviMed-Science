@@ -1158,6 +1158,10 @@ export {
   GEO_ARTICLE_LAYER_LABELS_ZH,
   GEO_ARTICLE_SAFETY,
   GEO_ARTICLE_STATUSES,
+  GEO_CITATION_SUPPORTS,
+  GEO_SPECIFIED_TOPICS,
+  GEO_STATEMENT_TOPICS,
+  GEO_STATEMENT_TOPIC_LABELS_ZH,
   GEO_ARTICLE_REFERENCE_STATUSES,
   GEO_PLACEMENT_LABELS,
   GEO_PLACEMENT_LABELS_ZH,
@@ -1234,6 +1238,7 @@ export {
   GEO_WRITE_WHATS,
   GEO_WRITE_WHAT_LABELS_ZH,
   geoArticlePublishable,
+  geoSpecifiedInfoAccuracy,
   isGeoValue,
 } from './src/geoVocabulary.mjs'
 // geoMetrics — 20 exports: 「循证传播」's metric table (the owner's

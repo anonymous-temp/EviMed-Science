@@ -21,8 +21,8 @@ function configUnder(env) {
 }
 
 const KEYS = ["geoEnabled", "geoAudience", "geoPreviewUsers", "geoPollMs", "geoLeaseMs", "geoDailyBudgetCny", "geoEngines", "geoNightWindow",
-  "geoTimeZone", "geoWeeklyAskCap", "geoSocialUrl", "geoSocialTimeoutMs", "geoInclusionEngines", "mediaMarketUrl", "mediaMarketApiKeyFile",
-  "mediaMarketBalanceCapCny"];
+  "geoTimeZone", "geoWeeklyAskCap", "geoSocialUrl", "geoSocialTimeoutMs", "geoInclusionEngines", "geoLinkCheckEnabled", "geoQuestionBankEnabled",
+  "mediaMarketUrl", "mediaMarketApiKeyFile", "mediaMarketBalanceCapCny"];
 
 /** @param {Record<string, any>} config */
 const pick = (config) => Object.fromEntries(KEYS.map((key) => [key, config[key]]));
@@ -31,8 +31,8 @@ test("the defaults are the build spec's: off, operators only once on, five engin
   assert.deepEqual(pick(configUnder({})), {
     geoEnabled: false, geoAudience: "operators", geoPreviewUsers: [], geoPollMs: 5_000, geoLeaseMs: 600_000, geoDailyBudgetCny: 20,
     geoEngines: ["doubao", "qianwen", "deepseek", "yuanbao", "kimi"], geoNightWindow: "22-07", geoTimeZone: "Asia/Shanghai",
-    geoWeeklyAskCap: 1_500, geoSocialUrl: "", geoSocialTimeoutMs: 140_000, geoInclusionEngines: [], mediaMarketUrl: "", mediaMarketApiKeyFile: "",
-    mediaMarketBalanceCapCny: null,
+    geoWeeklyAskCap: 1_500, geoSocialUrl: "", geoSocialTimeoutMs: 140_000, geoInclusionEngines: [], geoLinkCheckEnabled: false, geoQuestionBankEnabled: false,
+    mediaMarketUrl: "", mediaMarketApiKeyFile: "", mediaMarketBalanceCapCny: null,
   });
 });
 
@@ -42,14 +42,15 @@ test("every lever is read from the environment, and an empty value reads as unse
     OPEN_SCIENCE_GEO_POLL_MS: "2000", OPEN_SCIENCE_GEO_LEASE_MS: "", OPEN_SCIENCE_GEO_DAILY_BUDGET_CNY: "0",
     OPEN_SCIENCE_GEO_ENGINES: "deepseek, doubao", OPEN_SCIENCE_GEO_NIGHT_WINDOW: "23-6", OPEN_SCIENCE_GEO_TIMEZONE: "UTC",
     OPEN_SCIENCE_GEO_WEEKLY_ASK_CAP: "600", OPEN_SCIENCE_GEO_SOCIAL_URL: "http://social.internal:9966/", OPEN_SCIENCE_GEO_SOCIAL_TIMEOUT_MS: "90000",
-    OPEN_SCIENCE_GEO_INCLUSION_ENGINES: "baidu", OPEN_SCIENCE_MEDIA_MARKET_URL: "https://market.example/", OPEN_SCIENCE_MEDIA_MARKET_API_KEY_FILE: "/run/secrets/media",
+    OPEN_SCIENCE_GEO_INCLUSION_ENGINES: "baidu", OPEN_SCIENCE_GEO_LINK_CHECK_ENABLED: "true", OPEN_SCIENCE_GEO_QUESTION_BANK_ENABLED: "true",
+    OPEN_SCIENCE_MEDIA_MARKET_URL: "https://market.example/", OPEN_SCIENCE_MEDIA_MARKET_API_KEY_FILE: "/run/secrets/media",
     OPEN_SCIENCE_MEDIA_MARKET_BALANCE_CAP_CNY: "20000",
   });
   assert.deepEqual(pick(config), {
     geoEnabled: true, geoAudience: "all", geoPreviewUsers: ["acceptance", "qa"], geoPollMs: 2_000, geoLeaseMs: 600_000, geoDailyBudgetCny: 0,
     geoEngines: ["deepseek", "doubao"], geoNightWindow: "23-6", geoTimeZone: "UTC", geoWeeklyAskCap: 600, geoSocialUrl: "http://social.internal:9966",
-    geoSocialTimeoutMs: 90_000, geoInclusionEngines: ["baidu"], mediaMarketUrl: "https://market.example", mediaMarketApiKeyFile: "/run/secrets/media",
-    mediaMarketBalanceCapCny: 20_000,
+    geoSocialTimeoutMs: 90_000, geoInclusionEngines: ["baidu"], geoLinkCheckEnabled: true, geoQuestionBankEnabled: true,
+    mediaMarketUrl: "https://market.example", mediaMarketApiKeyFile: "/run/secrets/media", mediaMarketBalanceCapCny: 20_000,
   });
   // Wired means a usable key file (mediaMarketConfigured): a path alone is not
   // a key, and the /dev/null compose binds where there is none is not either.

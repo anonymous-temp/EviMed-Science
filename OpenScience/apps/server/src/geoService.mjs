@@ -39,7 +39,7 @@
  */
 
 import path from "node:path";
-import { GEO_FAILURE_MODE_LABELS_ZH } from "@evimed/domain";
+import { GEO_FAILURE_MODE_LABELS_ZH, geoSpecifiedInfoAccuracy } from "@evimed/domain";
 
 /** A failure mode as the page says it. @param {string | null} code */
 const failureModeWord = (code) => (code ? /** @type {Record<string, string>} */ (GEO_FAILURE_MODE_LABELS_ZH)[code] ?? null : null);
@@ -955,7 +955,7 @@ export class GeoService {
     if (!snapshot) throw failure(404, "geo_snapshot_not_found", "Snapshot not found.");
     const [question, facts, siblings, errors, history] = await Promise.all([
       snapshot.question_id ? this.store.question(project.id, String(snapshot.question_id)) : null,
-      this.store.query(`SELECT brands, statements FROM evimed_geo.facts WHERE snapshot_id = $1`, [snapshot.id]),
+      this.store.query(`SELECT brands, statements, checks FROM evimed_geo.facts WHERE snapshot_id = $1`, [snapshot.id]),
       snapshot.round_id && snapshot.question_id
         ? this.store.query(`SELECT s.id, s.engine, s.status, f.snapshot_id AS judged, f.mentions_ours, f.cites_ours, f.statements,
               (SELECT r.engines FROM evimed_geo.rounds r WHERE r.id = s.round_id) AS round_engines
@@ -982,7 +982,14 @@ export class GeoService {
         ...(snapshot.screenshot_sha256 ? { screenshotSha256: String(snapshot.screenshot_sha256) } : {}),
       },
       siblings: answerSiblings(siblings.rows),
-      facts: { brands: Array.isArray(factRow?.brands) ? factRow.brands : [], statements: Array.isArray(factRow?.statements) ? factRow.statements : [] },
+      facts: {
+        brands: Array.isArray(factRow?.brands) ? factRow.brands : [],
+        statements: Array.isArray(factRow?.statements) ? factRow.statements : [],
+        // Judged against the project's verified card claims, in order of importance: the specified information's accuracy (computed from
+        // the verdicts in code), then a claim beyond the label, safety information left out, and what the cited links say.
+        specifiedInfo: geoSpecifiedInfoAccuracy(Array.isArray(factRow?.statements) ? factRow.statements : []),
+        checks: factRow?.checks && typeof factRow.checks === "object" && !Array.isArray(factRow.checks) ? factRow.checks : {},
+      },
       errors: errors.rows.map(errorView),
       history: /** @type {any[]} */ (history.rows).map((row) => ({
         sampleDate: row.sample_date ? rowDay(row, this.timeZone) : (row.asked_at ? dayIn(new Date(row.asked_at), this.timeZone) : null),
@@ -1476,13 +1483,13 @@ export async function geoReadiness({ config, geo, database }) {
 
 /**
  * Everything the metrics endpoint shows about the module, read once per scrape.
- * @param {{ service: GeoService, social?: any, worker?: any, cards?: any }} geo
+ * @param {{ service: GeoService, social?: any, worker?: any, cards?: any, measureState?: { checkTotals?: Record<string, number> } | null }} geo
  */
 export async function geoMetricsSnapshot(geo) {
   let tables = null;
   try { tables = await geo.service.metricsSnapshot(); } catch { tables = null; }
   return { tables, service: { ...geo.service.counters }, social: geo.social?.status?.() ?? null, worker: geo.worker?.status?.() ?? null,
-    cards: geo.cards?.metrics?.() ?? null };
+    cards: geo.cards?.metrics?.() ?? null, checks: geo.measureState?.checkTotals ?? null };
 }
 
 /**
@@ -1520,6 +1527,11 @@ export function geoMetricFamilies(enabled, snapshot) {
     add("cards_total", "Product-zone card writes since this process started, by what happened.", "counter",
       ["zonesMade", "cardsCreated", "cardsUpdated", "cardsUnchanged", "claimsCarded", "claimsHeld", "refused", "referencesChecked", "referencesUnresolved",
         "articlesFlagged"].map((event) => ({ labels: { event }, value: Number(/** @type {any} */ (snapshot.cards)[event] ?? 0) })));
+  }
+  // What the judge's three checks and the cited-link checks found (counted, never decided on).
+  if (snapshot.checks) {
+    add("checks_total", "What the judge's checks found in measured answers since this process started: a claim beyond the label, safety information left out, and the cited links (exists, missing, unreadable, what the page says).", "counter",
+      Object.entries(snapshot.checks).map(([check, value]) => ({ labels: { check }, value: Number(value) })));
   }
   const social = snapshot.social;
   if (social?.counters) {

@@ -243,7 +243,7 @@ export class GeoMeasureStore {
     const project = await this.project(geoProjectId);
     if (!project) return null;
     const [claims, journey, owned, published, ownedLinks] = await Promise.all([
-      this.query(`SELECT DISTINCT ON (claim_key) id, claim_key, statement, quote, source_ref, source_kind, in_label
+      this.query(`SELECT DISTINCT ON (claim_key) id, claim_key, statement, quote, source_ref, source_kind, in_label, card_id, card_claim_id, card_revision
         FROM evimed_geo.claims WHERE geo_project_id = $1 AND status = 'active'
         ORDER BY claim_key, version DESC LIMIT 400`, [geoProjectId]),
       this.query(`SELECT data FROM evimed_geo.journeys WHERE geo_project_id = $1 ORDER BY version DESC LIMIT 1`, [geoProjectId]),
@@ -267,12 +267,17 @@ export class GeoMeasureStore {
         }
       }
     }
+    const claimRows = claims.rows.map((row) => ({
+      id: String(row.id), key: String(row.claim_key), statement: String(row.statement), quote: String(row.quote),
+      sourceRef: String(row.source_ref ?? ""), sourceKind: row.source_kind ?? null, inLabel: row.in_label ?? null,
+      cardId: row.card_id ?? null, cardClaimId: row.card_claim_id ?? null, cardRevision: row.card_revision == null ? null : Number(row.card_revision),
+    }));
+    // The cards are the ground truth: a project with verified claims in its product-zone cards is judged against those and nothing
+    // else (a claim its card ruler marked ⚠ never reached a card). A project with no cards yet is judged against its claim table.
+    const carded = claimRows.filter((claim) => claim.cardId);
     return {
       project,
-      claims: claims.rows.map((row) => ({
-        id: String(row.id), key: String(row.claim_key), statement: String(row.statement), quote: String(row.quote),
-        sourceRef: String(row.source_ref ?? ""), sourceKind: row.source_kind ?? null, inLabel: row.in_label ?? null,
-      })),
+      claims: carded.length ? carded : claimRows,
       careFlags,
       owned: {
         domains: owned.rows.map((row) => String(row.domain).toLowerCase()).filter(Boolean),
@@ -604,16 +609,16 @@ export class GeoMeasureStore {
     return this.transaction(async (client) => {
       const result = await client.query(`INSERT INTO evimed_geo.facts (snapshot_id, user_id, geo_project_id, brands, mentions_ours, first_ours,
           recommended_ours, position_ours, brands_mentioned, retrieval_triggered, cites_ours, cites_ours_in_body, care_hint, statements,
-          failure_mode, parser_version, judged_at, red_flag_expected, red_flag_hits, safety_terms_hit, created_at, registry_key, judge_extract)
+          failure_mode, parser_version, judged_at, red_flag_expected, red_flag_hits, safety_terms_hit, created_at, registry_key, judge_extract, checks)
         VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14::jsonb, $15, $16, $17, $18::jsonb, $19::jsonb, $20::jsonb,
-          coalesce($21::timestamptz, now()), $22, $23::jsonb)
+          coalesce($21::timestamptz, now()), $22, $23::jsonb, $24::jsonb)
         ON CONFLICT (snapshot_id) DO NOTHING RETURNING snapshot_id`,
       [snapshot.id, snapshot.userId, snapshot.geoProjectId, JSON.stringify(facts.brands ?? []), facts.mentionsOurs ?? null, facts.firstOurs ?? null,
         facts.recommendedOurs ?? null, facts.positionOurs ?? null, facts.brandsMentioned ?? null, facts.retrievalTriggered ?? null,
         facts.citesOurs ?? null, facts.citesOursInBody ?? null, facts.careHint ?? null, JSON.stringify(facts.statements ?? []),
         facts.failureMode ?? null, facts.parserVersion ?? null, facts.judgedAt ?? null, JSON.stringify(facts.redFlagExpected ?? []),
         JSON.stringify(facts.redFlagHits ?? []), JSON.stringify(facts.safetyTermsHit ?? []), at ? at.toISOString() : null,
-        facts.registryKey ?? null, facts.judgeExtract ? JSON.stringify(facts.judgeExtract) : null]);
+        facts.registryKey ?? null, facts.judgeExtract ? JSON.stringify(facts.judgeExtract) : null, JSON.stringify(facts.checks ?? {})]);
       if (!result.rows.length) return false;
       if (status) await client.query(`UPDATE evimed_geo.snapshots SET status = $2 WHERE id = $1`, [snapshot.id, status]);
       return true;

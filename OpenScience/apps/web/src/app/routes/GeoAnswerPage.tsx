@@ -22,6 +22,7 @@ import { iconButtonClasses } from "@/components/ui/IconButton";
 import { navItemClasses } from "@/components/ui/NavItem";
 import { Tag } from "@/components/ui/Tag";
 import { Tooltip } from "@/components/ui/Tooltip";
+import { AnswerChecks } from "@/components/geo/AnswerChecks";
 import { AskAi } from "@/components/geo/AskAi";
 import { markAnswer, type AnswerParagraph } from "@/components/geo/answerMarks";
 import { engineName, GEO_ERROR_ACTION_WORDS, GEO_ERROR_STATUS_WORDS, GEO_ERROR_TYPE_WORDS, GEO_MONITORING_TITLE, GEO_POOL_KINDS, monthDay, zh } from "@/components/geo/geoText";
@@ -170,6 +171,7 @@ function Answer({ geoId, data, project, claims }: { geoId: string; data: GeoAnsw
               />
             </div>
           )}
+          <AnswerChecks facts={data.facts} />
           <Citations citations={snapshot.citations} />
         </article>
       </div>

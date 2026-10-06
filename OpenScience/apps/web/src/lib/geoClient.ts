@@ -327,6 +327,18 @@ export interface GeoStatementFact {
   severity: GeoSeverity | null;
   evidence: string | null;
 }
+export interface GeoSpecifiedInfo {
+  correct: number;
+  wrong: number;
+  decided: number;
+  rate: number | null;
+  byTopic: Record<string, { correct: number; wrong: number }>;
+}
+export interface GeoAnswerChecks {
+  offLabel?: string[];
+  omittedSafety?: Array<{ claimId: string; claimKey: string | null; cardId: string | null; cardClaimId: string | null; cardRevision: number | null }>;
+  citations?: Array<{ link: string; url: string; statement: string; exists: boolean | null; supports: "yes" | "no" | "unclear" | null; evidence: string | null }>;
+}
 export interface GeoAnswer {
   question: { id: string; text: string; pool: GeoPool | null };
   snapshot: {
@@ -351,7 +363,14 @@ export interface GeoAnswer {
     wrongOurs?: number | null;
     citesOurs?: boolean | null;
   }>;
-  facts: { brands: GeoBrandFact[]; statements: GeoStatementFact[] } | null;
+  facts: {
+    brands: GeoBrandFact[];
+    statements: GeoStatementFact[];
+    /** 指定信息正确率 of this answer, computed on the server from the verdicts: indication, dosage, contraindication, adverse reaction. */
+    specifiedInfo?: GeoSpecifiedInfo;
+    /** The judge's checks beside the statements: beyond the label, safety left out, what the cited links say. */
+    checks?: GeoAnswerChecks;
+  } | null;
   errors: GeoErrorRow[];
   history: Array<{ sampleDate: string; snapshotId: string }>;
 }

@@ -1872,7 +1872,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
    *   market: any, exporter: any, renameProject: (userId: string, projectId: string, name: string) => Promise<unknown>,
    *   articleGate: (project: any, ref: { runId: string | null, deliverableId: string | null, path: string }) => Promise<string>,
    *   articleRunId: (project: any, deliverableId: string) => Promise<string | null>,
-   *   cards: GeoCards, refreshCards: (geoProject: any, controlProject: any) => ReturnType<GeoCards["refresh"]>,
+   *   cards: GeoCards, refreshCards: (geoProject: any, controlProject: any) => ReturnType<GeoCards["refresh"]>, measureState?: any,
    *   importDelivery: ReturnType<typeof createGeoDeliveryImport> } | null} */
   let geo = null;
   if (config.geoEnabled && productDatabase) {
@@ -4234,7 +4234,20 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       alertOperator: (/** @type {any} */ event) => notifier.alertOperator(event),
       // A measured round moves its project on now rather than at the next tick.
       onRoundMeasured: (/** @type {{ geoProjectId: string }} */ round) => { void orchestrator?.advance(round.geoProjectId).catch(() => {}); },
+      // Whether a link an answer cites exists, and the page's text (`OPEN_SCIENCE_GEO_LINK_CHECK_ENABLED`): a page read through the
+      // web reader, which honours robots.txt and paces per site. Only a page that is gone is `exists: false`; any other failure is
+      // unknown and leaves the citation unchecked.
+      linkChecker: config.geoLinkCheckEnabled ? async (/** @type {string} */ link) => {
+        try {
+          const page = await webReader.read(link, { signal: AbortSignal.timeout(30_000) });
+          return { exists: true, text: String(page?.text ?? "") };
+        } catch (error) {
+          if (/** @type {any} */ (error)?.code === "web_read_not_found") return { exists: false };
+          throw error;
+        }
+      } : null,
     };
+    geoParts.measureState = measureDeps.state;
     orchestrator = new GeoOrchestrator({
       store: geoParts.store, config, notifier,
       dispatchRun: overrides.geoDispatchRun ?? dispatchGeoRun,

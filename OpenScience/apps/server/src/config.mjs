@@ -584,6 +584,15 @@ function geoSettings(overrides) {
     // Engines measured through the marketplace's inclusion check instead of the
     // probe (spec §7.4) — only `baidu` (文心) is meant to be here.
     geoInclusionEngines: inclusionEngines,
+    // Whether the parse loop follows the links an answer cites (flywheel F21, 2026-10-06): each is a public page read through the web
+    // reader (robots honoured, paced per site) and a small judge call under the module's daily budget, at most three links per
+    // answer. Off by default: the cited sentences are recorded and called neither good nor bad. Counted as
+    // `open_science_geo_link_checks_total`.
+    geoLinkCheckEnabled: overrides.geoLinkCheckEnabled ?? boolEnv("OPEN_SCIENCE_GEO_LINK_CHECK_ENABLED", false),
+    // The platform's own medication question bank (F22): about sixty neutral questions by drug class, measured monthly on the probe
+    // host under the module's budget, in a GEO project the platform publisher holds. Off unless this and the module are on; an
+    // engine that is down is skipped and retried the next round. Counted as `open_science_geo_question_bank_total`.
+    geoQuestionBankEnabled: overrides.geoQuestionBankEnabled ?? boolEnv("OPEN_SCIENCE_GEO_QUESTION_BANK_ENABLED", false),
     // The media marketplace's settings are `mediaMarketSettings` below.
   };
 }

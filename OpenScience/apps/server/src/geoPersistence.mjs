@@ -553,6 +553,9 @@ CREATE TABLE IF NOT EXISTS evimed_geo.reconciliations (
 ALTER TABLE evimed_geo.facts ADD COLUMN IF NOT EXISTS red_flag_expected jsonb NOT NULL DEFAULT '[]'::jsonb;
 ALTER TABLE evimed_geo.facts ADD COLUMN IF NOT EXISTS red_flag_hits jsonb NOT NULL DEFAULT '[]'::jsonb;
 ALTER TABLE evimed_geo.facts ADD COLUMN IF NOT EXISTS safety_terms_hit jsonb NOT NULL DEFAULT '[]'::jsonb;
+-- The three checks beside the statements (flywheel F21): a claim beyond the label, safety information left out of the answer, and
+-- what the links it cites say — as the judge found them and code re-verified them.
+ALTER TABLE evimed_geo.facts ADD COLUMN IF NOT EXISTS checks jsonb NOT NULL DEFAULT '{}'::jsonb;
 ALTER TABLE evimed_geo.metrics ADD COLUMN IF NOT EXISTS variant text;
 ALTER TABLE evimed_geo.metrics ADD COLUMN IF NOT EXISTS rival text;
 ALTER TABLE evimed_geo.metrics ADD COLUMN IF NOT EXISTS reason text;
