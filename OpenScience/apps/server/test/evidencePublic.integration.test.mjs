@@ -6,6 +6,7 @@ import { createServer } from "node:http";
 import { after, before, beforeEach, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { withAccountExportSnapshot } from "../src/accountExport.mjs";
+import { authorHandlesFor } from "../src/evidenceAuthorHandles.mjs";
 import { createEvidenceChangeLog } from "../src/evidenceChangeLog.mjs";
 import { EVIDENCE_ZONE_SQL, migrateEvidenceZones } from "../src/evidenceZonePersistence.mjs";
 import { EvidenceZoneService } from "../src/evidenceZoneService.mjs";
@@ -73,6 +74,9 @@ beforeEach(async () => {
   await db.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES('carol','Carol','development') ON CONFLICT DO NOTHING");
 });
 
+/** The public handle of a fixture account: the only name an author has in an address. @param {string} id */
+const handleOf = async (id) => /** @type {string} */ ((await authorHandlesFor(db, [id])).get(id));
+
 /** @param {string} [title] @param {boolean} [internet] */
 const officialZone = async (title = "Official zone", internet = true) => {
   const { zone } = await zones.saveEditorial(publisher, { title, description: "Official description", background: "b", kind: "official" }, null, null, false, "programme");
@@ -133,6 +137,7 @@ test("only a published card in a published zone opened to the internet is public
   assert.equal((await get(`/evidence/c/${unopenedCard.id}`)).status, 200, "a published official zone is public without anyone opening it");
   // Before the account is deleted the card is public; after it, it is not found.
   assert.equal((await get(`/evidence/c/${goneCard.id}`)).status, 200);
+  const carolHandle = await handleOf("carol");
   await db.query("DELETE FROM evimed_control.users WHERE id = 'carol'");
   const missing = await text("/evidence/c/ec_0000000000000000");
   const missingZone = await text("/evidence/z/ez_0000000000000000");
@@ -154,9 +159,11 @@ test("only a published card in a published zone opened to the internet is public
     assert.equal((await text(`/evidence/api/v1/zones/${zone.id}`)).status, 404);
     assert.equal((await text(`/evidence/api/v1/zones/${zone.id}/cards`)).status, 404);
   }
-  assert.equal((await text("/evidence/a/carol")).status, 404, "an account that is gone has no page");
+  assert.equal((await text(`/evidence/a/${carolHandle}`)).status, 404, "an account that is gone has no page");
   assert.equal((await text("/evidence/a/nobody")).status, 404, "nor has an id that is no account");
-  assert.equal((await text("/evidence/a/bob")).status, 404, "an account with nothing public has the same answer, so the page reveals nothing about who signed up");
+  assert.equal((await text(`/evidence/a/${await handleOf("bob")}`)).status, 404, "an account with nothing public has the same answer, so the page reveals nothing about who signed up");
+  assert.equal((await text("/evidence/a/alice")).status, 404, "an account id is not an author: it answers as a missing author does");
+  assert.equal(JSON.parse((await text("/evidence/api/v1/authors/alice")).body).code, "evidence_public_not_found");
   // What is listed: the index, the zone's own list and every API listing.
   const index = (await text("/evidence/")).body;
   const listed = (api) => JSON.stringify(api);
@@ -270,7 +277,7 @@ test("a source whose address is javascript: is not a link, and every author-writ
   // The address check at write time refuses a javascript: URL, so plant it the way an old row could hold one.
   await db.query(`UPDATE evimed_frontier.evidence_cards SET sources = jsonb_set(sources, '{1,url}', '"javascript:alert(1)"') WHERE id = $1`, [card.id]);
   const { text } = await serve(t);
-  for (const path of [`/evidence/z/${zone.id}`, `/evidence/c/${card.id}`, "/evidence/", "/evidence/a/alice"]) {
+  for (const path of [`/evidence/z/${zone.id}`, `/evidence/c/${card.id}`, "/evidence/", `/evidence/a/${await handleOf("alice")}`]) {
     const answer = await text(path);
     assert.equal(answer.status, 200, path);
     assert.equal(/<script/i.test(answer.body), false, `${path}: no script element from a value`);
@@ -324,7 +331,7 @@ test("indexing: with the switch off every page says noindex in its markup and it
   const official = await officialZone();
   const card = await officialCard(official, cardInput("Official card"));
   const { get, text } = await serve(t, { config: { evidencePublicIndexable: false } });
-  for (const path of ["/evidence/", "/evidence/about", "/evidence/metrics", "/evidence/simulations", "/evidence/requests", `/evidence/z/${official.id}`, `/evidence/z/${official.id}/changes`, `/evidence/c/${card.id}`, "/evidence/a/publisher"]) {
+  for (const path of ["/evidence/", "/evidence/about", "/evidence/metrics", "/evidence/simulations", "/evidence/requests", `/evidence/z/${official.id}`, `/evidence/z/${official.id}/changes`, `/evidence/c/${card.id}`, `/evidence/a/${await handleOf("publisher")}`]) {
     const response = await get(path);
     assert.equal(response.status, 200, path);
     assert.equal(response.headers.get("x-robots-tag"), "noindex", path);
@@ -346,19 +353,19 @@ test("indexing: on, a page is indexable unless its author is new (fewer than thr
   assert.deepEqual(await robots(`/evidence/z/${official.id}`), { status: 200, header: null, meta: false }, "an official zone is exempt");
   assert.deepEqual(await robots(`/evidence/c/${officialOne.id}`), { status: 200, header: null, meta: false });
   assert.deepEqual(await robots("/evidence/"), { status: 200, header: null, meta: false });
-  for (const path of [`/evidence/z/${zone.id}`, `/evidence/c/${first.id}`, `/evidence/c/${second.id}`, `/evidence/c/${unverified.id}`, "/evidence/a/alice"]) {
+  for (const path of [`/evidence/z/${zone.id}`, `/evidence/c/${first.id}`, `/evidence/c/${second.id}`, `/evidence/c/${unverified.id}`, `/evidence/a/${await handleOf("alice")}`]) {
     assert.deepEqual(await robots(path), { status: 200, header: "noindex", meta: true }, `${path}: two cards with a ✓ is a new author: it opens, but is noindex`);
   }
   let sitemap = (await text("/evidence/sitemap.xml")).body;
   assert.ok(sitemap.includes(`/evidence/z/${official.id}`) && sitemap.includes(`/evidence/c/${officialOne.id}`));
-  for (const id of [zone.id, first.id, second.id, "alice"]) assert.equal(sitemap.includes(id), false, `${id} is not in the sitemap while the author is new`);
+  for (const id of [zone.id, first.id, second.id, await handleOf("alice")]) assert.equal(sitemap.includes(id), false, `${id} is not in the sitemap while the author is new`);
   // The third card with a ✓ lifts it, by itself, with no one doing anything.
   const third = await userCard(alice, zone, passing("Alice three"));
-  for (const path of [`/evidence/z/${zone.id}`, `/evidence/c/${first.id}`, `/evidence/c/${third.id}`, "/evidence/a/alice"]) {
+  for (const path of [`/evidence/z/${zone.id}`, `/evidence/c/${first.id}`, `/evidence/c/${third.id}`, `/evidence/a/${await handleOf("alice")}`]) {
     assert.deepEqual(await robots(path), { status: 200, header: null, meta: false }, `${path}: lifted at three`);
   }
   sitemap = (await text("/evidence/sitemap.xml")).body;
-  for (const id of [zone.id, first.id, second.id, third.id, "/evidence/a/alice"]) assert.ok(sitemap.includes(id), `${id} is in the sitemap`);
+  for (const id of [zone.id, first.id, second.id, third.id, `/evidence/a/${await handleOf("alice")}`]) assert.ok(sitemap.includes(id), `${id} is in the sitemap`);
   assert.equal(sitemap.includes(unverified.id), true, "every published card of a qualifying author is listed");
   // A withdrawn card is never indexed and never listed, whoever wrote it; its page stays.
   await db.query(`UPDATE evimed_frontier.evidence_cards SET withdrawn = jsonb_build_object('at', '2026-10-04T00:00:00Z', 'reason', 'wrong', 'changeLogId', '1') WHERE id = $1`, [officialOne.id]);
@@ -443,7 +450,8 @@ test("an author page: public zones and cards only, followers, times cited by res
   await db.query("INSERT INTO evimed_frontier.evidence_card_runs(user_id,project_id,run_id,card_id) VALUES('bob','p','r1',$1),('carol','p','r2',$1),('alice','p','r3',$1)", [card.id]);
   await createEvidenceChangeLog({ database: db }).append({ zoneId: zone.id, cardId: card.id, category: "correction", trigger: "challenge", facts: {} });
   const { text } = await serve(t);
-  const answer = await text("/evidence/a/alice");
+  const alicePath = `/evidence/a/${await handleOf("alice")}`;
+  const answer = await text(alicePath);
   assert.equal(answer.status, 200);
   const body = answer.body;
   assert.ok(body.includes("Acme zone") && body.includes("Acme card"));
@@ -454,7 +462,7 @@ test("an author page: public zones and cards only, followers, times cited by res
   assert.ok(body.includes("企业 Acme Pharma"), "an enterprise producer's record");
   assert.ok(body.includes("Dr. Li，PUMCH，主任医师"), "the people the producer names, with affiliation and title");
   assert.ok(body.includes("更正") === false || body.includes("读者对"), "the recent change records are listed");
-  const api = json(await text("/evidence/api/v1/authors/alice"));
+  const api = json(await text(`/evidence/api/v1/authors/${await handleOf("alice")}`));
   assert.deepEqual(api.data.author.totals, { cards: 1, followers: 1, runsFromCards: 2 });
   assert.deepEqual(api.data.author.zones.map((zoneEntry) => zoneEntry.id), [zone.id]);
   assert.equal(api.data.author.changes.length, 1);

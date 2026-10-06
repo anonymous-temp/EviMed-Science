@@ -593,11 +593,15 @@ export class EvidenceCardFromResult {
     return rows;
   }
 
-  /** The name this account signs with: its display name, never a guess. @param {{ id: string, name?: string }} user */
+  /**
+   * The name this account signs with: its display name, never a guess and never the account id (the login name of a local account; a card
+   * is public). An account with no display name signs as 「研究者」.
+   * @param {{ id: string, name?: string }} user
+   */
   async #nameOf(user) {
     if (typeof user.name === "string" && user.name.trim()) return clip(user.name.trim(), 300);
     const { rows } = await this.database.query("SELECT name FROM evimed_control.users WHERE id=$1", [user.id]);
-    return clip(text(rows[0]?.name) || user.id, 300);
+    return clip(text(rows[0]?.name) || "研究者", 300);
   }
 
   /**

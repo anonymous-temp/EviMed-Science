@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { Readable } from "node:stream";
 import { after, before, beforeEach, test } from "node:test";
 import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
+import { authorHandlesFor } from "../src/evidenceAuthorHandles.mjs";
 import { COMMUNITY_MAX_CARDS_CEILING, createEvidenceCommunity, createEvidenceCommunityRoutes, evidenceCommunityMetricFamilies } from "../src/evidenceCommunity.mjs";
 import { establishedAuthors } from "../src/evidenceVerifiedCards.mjs";
 import { EvidenceZoneService } from "../src/evidenceZoneService.mjs";
@@ -70,14 +71,14 @@ test("an established author's public card on the zone's subject is listed, signe
   assert.equal(column?.items.length, 3);
   const item = column?.items.find((entry) => entry.id === cards[0].id);
   assert.equal(item?.author.name, "Alice Li");
-  assert.equal(item?.author.id, "alice", "the account id by default; publicAuthorId is the one place it becomes an opaque id");
+  assert.equal(item?.author.id, (await authorHandlesFor(db, ["alice"])).get("alice"), "the author is the public handle, never the account id");
+  assert.match(item?.author.id ?? "", /^au_[a-f0-9]{16}$/);
+  assert.equal(JSON.stringify(column).includes('"alice"'), false, "no account id appears anywhere in the column");
   assert.deepEqual(item?.claims, { total: 1, verified: 1 });
   assert.equal(item?.verifiedShare, 1);
   assert.deepEqual(item?.sharedKeys, KEYS);
   assert.equal(item?.zoneTitle, "alice's zone");
   assert.equal("ranking" in (item ?? {}), false, "the order's inputs are not part of what is shown");
-  const opaque = await community({ publicAuthorId: (id) => `a_${id.length}` }).forZone(official.id);
-  assert.equal(opaque?.items[0].author.id, "a_5");
 });
 
 test("the new-author boundary is exactly three published cards that each carry a ✓: two are held back, a third lists all three, a ⚠-only card does not count", options, async () => {

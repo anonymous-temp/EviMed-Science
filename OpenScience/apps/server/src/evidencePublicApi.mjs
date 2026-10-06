@@ -9,7 +9,7 @@
 //   zones/:id/cards         ?limit=&cursor=                its published cards, newest first (withdrawn ones are in the list, marked)
 //   zones/:id/changes       ?limit=&before=                its change log, newest first
 //   cards/:id               ?view=clinical|public          one card; a withdrawn card answers 410 with its reason and date
-//   authors/:id                                            an author's public record
+//   authors/:handle                                        an author's public record, by the author's public handle (`au_…`), never an account id
 //   metrics                                                the monthly figures for the last twelve months that have data
 //
 // Every answer is `{ data, meta: { generatedAt, next? } }`: `next` is the cursor (or, for the change log, the `before`) of the page after
@@ -24,7 +24,7 @@ import { evidenceAbsoluteUrl } from "./evidencePublicIndexing.mjs";
 import { authorPath, cardPath, zonePath } from "./evidencePublicLayout.mjs";
 
 /**
- * @typedef {{ id: string, title: string, description: string, kind: "official"|"product"|"user", kindLabel: string, producer: Producer | null, owner: { id: string, name: string }, follows: number, cards?: number, createdAt: string | null, updatedAt: string | null, path: string, url: string | null }} Zone
+ * @typedef {{ id: string, title: string, description: string, kind: "official"|"product"|"user", kindLabel: string, producer: Producer | null, owner: { id: string | null, name: string }, follows: number, cards?: number, createdAt: string | null, updatedAt: string | null, path: string, url: string | null }} Zone
  * @typedef {{ kind: string, kindLabel: string | null, name: string, relation: string, relationLabel: string | null, products: string[] }} Producer
  * @typedef {{ id: string, zoneId: string, title: string, summary: string, revision: number, producer: Producer | null, originality: string | null, primary: boolean, aiGenerated: boolean, claims: { total: number, verified: number, warned: number, derived: number }, currency: string, currencyLabel: string | null, lastCheckedAt: string | null, withdrawn: { at: string | null, reason: string, changeLogId: string | null } | null, updatedAt: string | null, path: string, url: string | null }} CardSummary
  */

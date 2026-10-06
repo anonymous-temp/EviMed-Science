@@ -82,7 +82,7 @@ export interface EvidenceCard {
   content?: EvidenceContent | null;
   editorial?: {
     author: { kind: "ai" | "human"; name: string; model?: string };
-    lastEditor?: { userId: string; name: string; editedAt: string };
+    lastEditor?: { userId?: string; name: string; editedAt: string };
     reviewer: { kind: "ai"; name: string; model?: string } | null;
     sourceFingerprint?: string;
     sourceCheckedAt?: string | null;

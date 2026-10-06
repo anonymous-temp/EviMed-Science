@@ -20,6 +20,10 @@
 //   nothing here has any text to show for it.
 // - **Authors are new until three of their published cards each carry a ✓.** The lift is a count taken at read time, so it is
 //   automatic (`authorQualifies`); official zones are exempt (the platform is not a new author).
+// - **No account id leaves.** An author or a zone's owner is named by the public handle (`evidenceAuthorHandles.mjs`), made for every
+//   account a result mentions in one statement before the result is built; `author(handle)` and `authorQualifies(handle)` take a
+//   handle and find the account behind it here, and an account id is the same "no such author" as a handle nobody holds. The account
+//   id is read inside this module for the SQL (`user_id`) and is not a field of anything it returns.
 //
 // Which model capability would make it deletable: none — it is a projection of rows the platform already holds.
 
@@ -39,7 +43,7 @@ import {
 } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 import { migrateEvidenceZones } from "./evidenceZonePersistence.mjs";
-import { migrateEvidenceOrigins } from "./evidenceOrigins.mjs";
+import { EVIDENCE_AUTHOR_HANDLE, accountOfHandle, authorHandlesFor, migrateAuthorHandles } from "./evidenceAuthorHandles.mjs";
 import { evidenceCurrencyView, EVIDENCE_ZONE_CURRENCY_SQL } from "./evidenceCurrency.mjs";
 import { EVIDENCE_CHANGE_LOG_MAX_PAGE, readEvidenceChangeLog } from "./evidenceChangeLog.mjs";
 import { safeHref } from "./evidencePublicHtml.mjs";
@@ -47,8 +51,8 @@ import { safeHref } from "./evidencePublicHtml.mjs";
 /** The shape of a zone id and a card id: a value of any other shape is never looked up. */
 export const EVIDENCE_PUBLIC_ZONE_ID = /^ez_[A-Za-z0-9]{8,64}$/;
 export const EVIDENCE_PUBLIC_CARD_ID = /^ec_[A-Za-z0-9]{8,64}$/;
-/** An account id as the author page's address names it (the same shape the in-app author page takes). */
-export const EVIDENCE_PUBLIC_AUTHOR_ID = /^[A-Za-z0-9._@:-]{1,200}$/;
+/** An author as the author page's address names it: the public handle, never an account id. */
+export const EVIDENCE_PUBLIC_AUTHOR_HANDLE = EVIDENCE_AUTHOR_HANDLE;
 
 /** Zones one section of the index lists, and the candidates fetched to rank them from. */
 export const EVIDENCE_PUBLIC_INDEX_ZONES = 50;
@@ -167,7 +171,28 @@ export function createEvidencePublicReads({ database, now = () => new Date() }) 
 
   async function ready() {
     await migrateEvidenceZones(database);
-    await migrateEvidenceOrigins(database);
+    await migrateAuthorHandles(database);
+  }
+
+  /**
+   * The public handle of each account in a set of rows, made where missing, in one statement.
+   * @param {any[]} rows @param {string} [column] the row field that holds the account id
+   * @returns {Promise<Map<string, string>>}
+   */
+  const handlesOf = (rows, column = "user_id") => authorHandlesFor(database, rows.map((row) => row[column]));
+
+  /** A handle's account, remembered: the handle of an account never changes. @type {Map<string, string>} */
+  const accounts = new Map();
+  /** @param {unknown} handle @returns {Promise<string | null>} */
+  async function accountIdOf(handle) {
+    if (typeof handle !== "string" || !EVIDENCE_AUTHOR_HANDLE.test(handle)) return null;
+    const known = accounts.get(handle);
+    if (known) return known;
+    const found = await accountOfHandle(database, handle);
+    if (!found) return null;
+    accounts.set(handle, found.id);
+    if (accounts.size > AUTHOR_CACHE) accounts.delete(/** @type {string} */ (accounts.keys().next().value));
+    return found.id;
   }
 
   /** The zones' content version: every zone and card write moves it. */
@@ -213,14 +238,15 @@ export function createEvidencePublicReads({ database, now = () => new Date() }) 
 
   /**
    * One card as a list shows it. @param {any} row @param {{ total: number, verified: number, derived: number, warned: number }} counts
+   * @param {Map<string, string>} handles
    */
-  function cardSummary(row, counts) {
+  function cardSummary(row, counts, handles) {
     const currency = evidenceCurrencyView(row);
     return {
       id: String(row.id), zoneId: String(row.zone_id), zoneTitle: row.zone_title ?? null, zoneKind: row.zone_kind ?? null, title: String(row.title), summary: String(row.summary ?? ""), revision: Number(row.revision),
       producer: producerView(row.producer), originality: row.originality ?? null, originalityLabel: labels(EVIDENCE_ORIGINALITY_LABELS_ZH, row.originality),
       primary: evidenceOriginalityIsPrimary(row.originality), aiGenerated: evidenceCardIsAiGenerated(row),
-      creator: { id: String(row.user_id), name: String(row.creator ?? "") },
+      creator: { id: handles.get(String(row.user_id)) ?? null, name: String(row.creator ?? "") },
       claims: counts, currency: currency.currency, currencyLabel: currency.currencyLabel, pendingItems: currency.pendingItemIds.length, hasPendingEvidence: currency.pendingItemIds.length > 0,
       lastCheckedAt: currency.lastCheckedAt ?? iso(row.disclosure?.lastCheckedAt), withdrawn: currency.withdrawn,
       createdAt: iso(row.created_at), updatedAt: iso(row.updated_at),
@@ -261,12 +287,12 @@ export function createEvidencePublicReads({ database, now = () => new Date() }) 
        WHERE z.id = $1 AND ${evidencePublicPredicate("zones")}`, [zoneId])).rows[0] ?? null;
   }
 
-  /** @param {any} row */
-  function zoneBase(row) {
+  /** @param {any} row @param {Map<string, string>} handles */
+  function zoneBase(row, handles) {
     const producer = row.producer ?? evidenceDefaultProducer({ zoneKind: row.kind, ownerName: row.owner_name });
     return {
       id: String(row.id), title: String(row.title), description: String(row.description ?? ""), kind: String(row.kind), kindLabel: labels(EVIDENCE_ZONE_KIND_LABELS_ZH, row.kind),
-      producer: producerView(producer), owner: { id: String(row.user_id), name: String(row.owner_name ?? "") }, follows: Number(row.follows ?? 0),
+      producer: producerView(producer), owner: { id: handles.get(String(row.user_id)) ?? null, name: String(row.owner_name ?? "") }, follows: Number(row.follows ?? 0),
       createdAt: iso(row.created_at), updatedAt: iso(row.updated_at),
     };
   }
@@ -280,8 +306,10 @@ export function createEvidencePublicReads({ database, now = () => new Date() }) 
       const rank = evidenceRankingComparator(["recency", "follows", "review_score"]);
       /** @type {{ official: any[], product: any[], user: any[] }} */
       const sections = { official: [], product: [], user: [] };
+      /** @type {Record<string, any[]>} */
+      const found = {};
       for (const kind of /** @type {const} */ (["official", "product", "user"])) {
-        const rows = (await database.query(
+        found[kind] = (await database.query(
           `SELECT z.id, z.title, z.description, z.kind, z.revision, z.created_at, z.updated_at, z.user_id, u.name AS owner_name,
              (SELECT count(*)::integer FROM evimed_frontier.evidence_cards c WHERE c.zone_id = z.id AND c.state = 'published' AND c.withdrawn IS NULL) AS card_count,
              (SELECT max(c.updated_at) FROM evimed_frontier.evidence_cards c WHERE c.zone_id = z.id AND c.state = 'published') AS last_card_at,
@@ -292,10 +320,13 @@ export function createEvidencePublicReads({ database, now = () => new Date() }) 
                ORDER BY c.updated_at DESC, c.id LIMIT 1) AS producer
            FROM evimed_frontier.evidence_zones z JOIN evimed_control.users u ON u.id = z.user_id
            WHERE ${evidencePublicPredicate("zones")} AND z.kind = $1 ORDER BY z.updated_at DESC, z.id LIMIT $2`, [kind, INDEX_CANDIDATES])).rows;
-        sections[kind] = rows.map((row) => {
+      }
+      const handles = await handlesOf(Object.values(found).flat());
+      for (const kind of /** @type {const} */ (["official", "product", "user"])) {
+        sections[kind] = found[kind].map((row) => {
           const latest = Math.max(new Date(row.updated_at).getTime(), row.last_card_at ? new Date(row.last_card_at).getTime() : 0);
           return {
-            ...zoneBase(row), cards: Number(row.card_count), lastCardAt: iso(row.last_card_at),
+            ...zoneBase(row, handles), cards: Number(row.card_count), lastCardAt: iso(row.last_card_at),
             // The day, not the instant: two zones touched on one day tie on `recency` and fall to the next input.
             ranking: { recency: Math.floor(latest / 86_400_000), follows: Number(row.follows), review_score: row.review_score === null ? null : Number(row.review_score) },
           };
@@ -315,7 +346,7 @@ export function createEvidencePublicReads({ database, now = () => new Date() }) 
         `SELECT count(*) FILTER (WHERE state = 'published' AND withdrawn IS NULL)::integer AS cards, count(*) FILTER (WHERE state = 'published' AND withdrawn IS NOT NULL)::integer AS withdrawn,
            ${EVIDENCE_ZONE_CURRENCY_SQL} FROM evimed_frontier.evidence_cards WHERE zone_id = $1`, [zoneId])).rows[0];
       return {
-        ...zoneBase(row), background: String(row.background ?? ""), revision: Number(row.revision), cards: counts.cards, withdrawnCards: counts.withdrawn,
+        ...zoneBase(row, await handlesOf([row])), background: String(row.background ?? ""), revision: Number(row.revision), cards: counts.cards, withdrawnCards: counts.withdrawn,
         currencyCounts: Object.fromEntries(Object.keys(SOURCE_CURRENCY_LABELS_ZH).map((label) => [label, Number(counts[`currency_${label}`] ?? 0)])),
         lastCheckedAt: iso(counts.currency_last_checked_at),
       };
@@ -337,8 +368,9 @@ export function createEvidencePublicReads({ database, now = () => new Date() }) 
          ORDER BY c.updated_at DESC, c.id DESC LIMIT $4`, [zoneId, after?.updatedKey ?? null, after?.id ?? null, size + 1])).rows;
       const kept = rows.slice(0, size);
       const verification = await verificationOf(kept.filter((row) => !row.withdrawn));
+      const handles = await handlesOf(kept);
       return {
-        items: kept.map((row) => cardSummary(row, verification.get(row.id) ?? ZERO_COUNTS)),
+        items: kept.map((row) => cardSummary(row, verification.get(row.id) ?? ZERO_COUNTS, handles)),
         next: rows.length > size && kept.length ? encodeCursor(kept[kept.length - 1]) : null,
       };
     },
@@ -358,7 +390,8 @@ export function createEvidencePublicReads({ database, now = () => new Date() }) 
       if (!row) return null;
       const currency = evidenceCurrencyView(row);
       const zone = { id: String(row.zone_id), title: String(row.zone_title), kind: String(row.zone_kind) };
-      if (currency.withdrawn) return { ...cardSummary(row, ZERO_COUNTS), withdrawn: currency.withdrawn, claimList: [], sources: [], view: null, disclosure: row.disclosure ?? null, lineage: null, content: null, zone };
+      const handles = await handlesOf([row]);
+      if (currency.withdrawn) return { ...cardSummary(row, ZERO_COUNTS, handles), withdrawn: currency.withdrawn, claimList: [], sources: [], view: null, disclosure: row.disclosure ?? null, lineage: null, content: null, zone };
       const contract = {
         title: row.title, content: row.content ?? null, sources: row.sources ?? [], claims: row.claims ?? [], producer: row.producer ?? null, originality: row.originality ?? null,
         lineage: row.lineage ?? null, journeyStage: row.journey_stage ?? null, disclosure: row.disclosure ?? null, publicView: row.public_view ?? null, editorial: row.editorial ?? null,
@@ -372,7 +405,7 @@ export function createEvidencePublicReads({ database, now = () => new Date() }) 
       // The claims are listed once, with their marks, by `claimList`; the clinical view's own list is only its verified ones.
       const { claims: _verified, ...viewContent } = /** @type {any} */ (full);
       return {
-        ...cardSummary(row, claimCounts(verification.counts)), view: view === "public" ? "public" : "clinical", viewContent,
+        ...cardSummary(row, claimCounts(verification.counts), handles), view: view === "public" ? "public" : "clinical", viewContent,
         claimList: claimViews(contract.claims, verification, sources), sources, disclosure: row.disclosure ?? null, journeyStage: row.journey_stage ?? null,
         content: row.content ?? null, lineage: publicLineage(row.lineage),
         zone,
@@ -433,12 +466,15 @@ export function createEvidencePublicReads({ database, now = () => new Date() }) 
 
     /**
      * Whether an author is no longer new: at least three published cards that each carry a ✓ claim. Taken at read time and cached by the
-     * author's card revisions, so it lifts by itself the moment the third card is published.
-     * @param {string} authorId
+     * author's card revisions, so it lifts by itself the moment the third card is published. Asked by the author's handle, the only name
+     * the pages hold; a handle nobody holds does not qualify.
+     * @param {string} authorHandle
      */
-    async authorQualifies(authorId) {
+    async authorQualifies(authorHandle) {
       await ready();
       counters.authorChecks += 1;
+      const authorId = await accountIdOf(authorHandle);
+      if (!authorId) return false;
       const cards = (await database.query(
         `SELECT c.id, c.revision, jsonb_array_length(c.claims) AS claim_count FROM evimed_frontier.evidence_cards c JOIN evimed_frontier.evidence_zones z ON z.id = c.zone_id
          WHERE c.user_id = $1 AND c.state = 'published' AND z.state = 'published' AND c.withdrawn IS NULL AND jsonb_array_length(c.claims) > 0
@@ -457,14 +493,17 @@ export function createEvidencePublicReads({ database, now = () => new Date() }) 
     /**
      * An author's page: their public zones and cards, followers, the times other accounts' research started from their cards, and the
      * latest entries of the change log for their public zones. Null when the account has nothing public (the same answer as for no
-     * account, so the page cannot be used to find out who has signed up).
-     * @param {string} authorId
+     * account, so the page cannot be used to find out who has signed up). Asked by handle; an account id is not one.
+     * @param {string} authorHandle
      */
-    async author(authorId) {
-      if (typeof authorId !== "string" || !EVIDENCE_PUBLIC_AUTHOR_ID.test(authorId)) return null;
+    async author(authorHandle) {
+      if (typeof authorHandle !== "string" || !EVIDENCE_PUBLIC_AUTHOR_HANDLE.test(authorHandle)) return null;
       await ready();
-      const author = (await database.query("SELECT id, name FROM evimed_control.users WHERE id = $1", [authorId])).rows[0];
+      const author = await accountOfHandle(database, authorHandle);
       if (!author) return null;
+      const authorId = author.id;
+      /** Every card on the page is this author's own. */
+      const handles = new Map([[authorId, authorHandle]]);
       const zones = (await database.query(
         `SELECT z.id, z.title, z.description, z.kind, z.updated_at,
            (SELECT count(*)::integer FROM evimed_frontier.evidence_cards c WHERE c.zone_id = z.id AND c.state = 'published' AND c.withdrawn IS NULL) AS card_count,
@@ -496,14 +535,14 @@ export function createEvidencePublicReads({ database, now = () => new Date() }) 
       }
       const producer = cards.find((row) => row.producer)?.producer ?? null;
       return {
-        author: { id: String(author.id), name: String(author.name) },
+        author: { id: authorHandle, name: author.name },
         producer: producerView(producer),
         people: [...people.values()].slice(0, 20),
         zones: zones.map((zone) => ({
           id: String(zone.id), title: String(zone.title), description: String(zone.description ?? ""), kind: String(zone.kind), kindLabel: labels(EVIDENCE_ZONE_KIND_LABELS_ZH, zone.kind),
           cards: zone.card_count, follows: zone.follows, updatedAt: iso(zone.updated_at),
         })),
-        cards: cards.map((row) => cardSummary(row, verification.get(row.id) ?? ZERO_COUNTS)),
+        cards: cards.map((row) => cardSummary(row, verification.get(row.id) ?? ZERO_COUNTS, handles)),
         totals: { cards: totals.cards, followers: totals.followers, runsFromCards: totals.runs_from_cards },
         changes: changes.map((row) => ({ id: String(row.id), zoneId: row.zone_id, cardId: row.card_id, cardTitle: row.card_title ?? null, category: row.category, summary: row.summary_zh, occurredAt: iso(row.occurred_at) })),
         official: zones.some((zone) => zone.kind === "official"),
@@ -511,8 +550,8 @@ export function createEvidencePublicReads({ database, now = () => new Date() }) 
     },
 
     /**
-     * Every page a sitemap may list, with what decides whether it may be listed. The caller (`evidencePublicIndexing`) applies the
-     * indexing rules.
+     * Every page a sitemap may list, with what decides whether it may be listed: the author by handle. The caller
+     * (`evidencePublicIndexing`) applies the indexing rules.
      */
     async sitemapEntries() {
       await ready();
@@ -523,9 +562,10 @@ export function createEvidencePublicReads({ database, now = () => new Date() }) 
       const cards = (await database.query(
         `SELECT c.id, c.user_id, z.kind, c.updated_at FROM evimed_frontier.evidence_cards c JOIN evimed_frontier.evidence_zones z ON z.id = c.zone_id JOIN evimed_control.users u ON u.id = c.user_id
          WHERE ${evidencePublicPredicate("pages")} AND c.withdrawn IS NULL ORDER BY c.updated_at DESC, c.id LIMIT $1`, [EVIDENCE_PUBLIC_SITEMAP_CARDS])).rows;
+      const handles = await handlesOf([...zones, ...cards]);
       return {
-        zones: zones.map((row) => ({ id: String(row.id), kind: String(row.kind), authorId: String(row.user_id), updatedAt: iso(row.updated_at) })),
-        cards: cards.map((row) => ({ id: String(row.id), kind: String(row.kind), authorId: String(row.user_id), updatedAt: iso(row.updated_at) })),
+        zones: zones.map((row) => ({ id: String(row.id), kind: String(row.kind), authorHandle: handles.get(String(row.user_id)) ?? null, updatedAt: iso(row.updated_at) })),
+        cards: cards.map((row) => ({ id: String(row.id), kind: String(row.kind), authorHandle: handles.get(String(row.user_id)) ?? null, updatedAt: iso(row.updated_at) })),
       };
     },
 

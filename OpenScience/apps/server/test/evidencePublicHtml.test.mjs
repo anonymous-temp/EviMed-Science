@@ -181,29 +181,32 @@ test("the indexing decision: off is noindex everywhere, a new author is noindex,
   /** @type {Record<string, boolean>} */
   const qualifies = { veteran: true, newcomer: false };
   const asked = [];
-  const reads = { authorQualifies: async (/** @type {string} */ id) => { asked.push(id); return qualifies[id] ?? false; } };
+  // The pages hold only the public handle of an author (an account id never reaches the indexing rule); these stand in for two.
+  const reads = { authorQualifies: async (/** @type {string | null} */ id) => { asked.push(id); return qualifies[/** @type {string} */ (id)] ?? false; } };
   const off = createEvidencePublicIndexing({ config: { evidencePublicIndexable: false }, reads });
-  for (const page of [{ kind: "site" }, { kind: "zone", zoneKind: "official", ownerId: "veteran" }, { kind: "card", zoneKind: "official", authorId: "veteran", withdrawn: false }, { kind: "author", official: true, authorId: "veteran" }]) {
+  for (const page of [{ kind: "site" }, { kind: "zone", zoneKind: "official", ownerHandle: "veteran" }, { kind: "card", zoneKind: "official", authorHandle: "veteran", withdrawn: false }, { kind: "author", official: true, authorHandle: "veteran" }]) {
     assert.deepEqual(await off.decide(/** @type {any} */ (page)), { index: false, reason: "switch_off" }, JSON.stringify(page));
   }
   assert.deepEqual(asked, [], "with the switch off no author is even asked about");
   const on = createEvidencePublicIndexing({ config: { evidencePublicIndexable: true }, reads });
   assert.equal((await on.decide({ kind: "site" })).index, true);
   assert.equal((await on.decide({ kind: "never" })).index, false);
-  assert.equal((await on.decide({ kind: "zone", zoneKind: "official", ownerId: "newcomer" })).index, true, "official zones are exempt");
-  assert.deepEqual(await on.decide({ kind: "zone", zoneKind: "user", ownerId: "newcomer" }), { index: false, reason: "new_author" });
-  assert.equal((await on.decide({ kind: "zone", zoneKind: "user", ownerId: "veteran" })).index, true);
-  assert.deepEqual(await on.decide({ kind: "card", zoneKind: "user", authorId: "newcomer", withdrawn: false }), { index: false, reason: "new_author" });
-  assert.deepEqual(await on.decide({ kind: "card", zoneKind: "official", authorId: "veteran", withdrawn: true }), { index: false, reason: "withdrawn" });
-  assert.deepEqual(await on.decide({ kind: "author", official: false, authorId: "newcomer" }), { index: false, reason: "new_author" });
+  assert.equal((await on.decide({ kind: "zone", zoneKind: "official", ownerHandle: "newcomer" })).index, true, "official zones are exempt");
+  assert.deepEqual(await on.decide({ kind: "zone", zoneKind: "user", ownerHandle: "newcomer" }), { index: false, reason: "new_author" });
+  assert.equal((await on.decide({ kind: "zone", zoneKind: "user", ownerHandle: "veteran" })).index, true);
+  assert.deepEqual(await on.decide({ kind: "card", zoneKind: "user", authorHandle: "newcomer", withdrawn: false }), { index: false, reason: "new_author" });
+  assert.deepEqual(await on.decide({ kind: "card", zoneKind: "official", authorHandle: "veteran", withdrawn: true }), { index: false, reason: "withdrawn" });
+  assert.deepEqual(await on.decide({ kind: "author", official: false, authorHandle: "newcomer" }), { index: false, reason: "new_author" });
   const paths = await on.sitemapPaths({
-    zones: [{ id: "ez_a", kind: "official", authorId: "newcomer", updatedAt: "2026-10-01T00:00:00Z" }, { id: "ez_b", kind: "user", authorId: "newcomer", updatedAt: null }, { id: "ez_c", kind: "user", authorId: "veteran", updatedAt: null }],
-    cards: [{ id: "ec_a", kind: "official", authorId: "newcomer", updatedAt: null }, { id: "ec_b", kind: "user", authorId: "newcomer", updatedAt: null }, { id: "ec_c", kind: "user", authorId: "veteran", updatedAt: null }],
+    zones: [{ id: "ez_a", kind: "official", authorHandle: "newcomer", updatedAt: "2026-10-01T00:00:00Z" }, { id: "ez_b", kind: "user", authorHandle: "newcomer", updatedAt: null }, { id: "ez_c", kind: "user", authorHandle: "veteran", updatedAt: null }],
+    cards: [{ id: "ec_a", kind: "official", authorHandle: "newcomer", updatedAt: null }, { id: "ec_b", kind: "user", authorHandle: "newcomer", updatedAt: null }, { id: "ec_c", kind: "user", authorHandle: "veteran", updatedAt: null }],
   });
   assert.deepEqual(paths.map((entry) => entry.path), [
     "/evidence/", "/evidence/about", "/evidence/metrics", "/evidence/simulations", "/evidence/z/ez_a", "/evidence/z/ez_c", "/evidence/c/ec_a", "/evidence/c/ec_c", "/evidence/a/newcomer", "/evidence/a/veteran",
   ], "the owner of an official zone is exempt, so is listed; a new author with only user zones is not");
   assert.equal(paths.some((entry) => entry.path.endsWith("ez_b") || entry.path.endsWith("ec_b")), false, "a new author's pages are not in the sitemap");
+  const unnamed = await on.sitemapPaths({ zones: [{ id: "ez_d", kind: "user", authorHandle: null, updatedAt: null }], cards: [{ id: "ec_d", kind: "user", authorHandle: null, updatedAt: null }] });
+  assert.equal(unnamed.some((entry) => entry.path.endsWith("ez_d") || entry.path.endsWith("ec_d")), false, "an author whose handle could not be made (the account is gone) is not indexable");
 });
 
 test("the sitemap is the sitemaps.org document of absolute addresses, and needs the public address", () => {

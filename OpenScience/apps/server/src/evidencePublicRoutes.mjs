@@ -6,7 +6,7 @@
 //   /evidence/z/<zone>                a zone             /evidence/metrics          the monthly figures
 //   /evidence/z/<zone>/changes        its change log     /evidence/simulations[/id] 「模拟研究」
 //   /evidence/c/<card>?view=          a card             /evidence/requests         the public topic requests
-//   /evidence/a/<author>              an author          /evidence/sitemap.xml      only while indexing is on
+//   /evidence/a/<handle>              an author (`au_…`)          /evidence/sitemap.xml      only while indexing is on
 //   /evidence/api/v1/…                the JSON API       /evidence/assets/site.css  the stylesheet
 //
 // Hidden knowledge:
@@ -27,7 +27,7 @@
 import { createHash } from "node:crypto";
 import { EVIDENCE_PLATFORM_PRODUCER_NAME } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
-import { createEvidencePublicReads, EVIDENCE_PUBLIC_AUTHOR_ID } from "./evidencePublicQuery.mjs";
+import { createEvidencePublicReads, EVIDENCE_PUBLIC_AUTHOR_HANDLE } from "./evidencePublicQuery.mjs";
 import { createEvidencePublicIndexing, evidenceSitemapXml } from "./evidencePublicIndexing.mjs";
 import { createEvidencePublicMetrics } from "./evidencePublicMetrics.mjs";
 import { createEvidencePublicApi, EVIDENCE_PUBLIC_API_PREFIX } from "./evidencePublicApi.mjs";
@@ -154,7 +154,7 @@ export function createEvidencePublicRoutes({ config, database, simulations = nul
     if (section === "z" && id && (parts.length === 2 || (parts.length === 3 && sub === "changes"))) {
       const zone = await r.zone(id);
       if (!zone) return sendNotFound(res, head);
-      const noindex = await noindexFor({ kind: "zone", zoneKind: zone.kind, ownerId: zone.owner.id });
+      const noindex = await noindexFor({ kind: "zone", zoneKind: zone.kind, ownerHandle: zone.owner.id });
       if (parts.length === 3) {
         const page = await r.changeLog(id, { limit: null, before: url.searchParams.get("before") });
         return sendPage(res, head, 200, changesPage({ zone, items: page.items, nextBefore: page.nextBefore }), { path: `/evidence/z/${encodeURIComponent(id)}/changes`, noindex, active: "zones" });
@@ -170,9 +170,9 @@ export function createEvidencePublicRoutes({ config, database, simulations = nul
       if (!card) return sendNotFound(res, head);
       if (card.withdrawn) {
         counters.withdrawn += 1;
-        return sendPage(res, head, 410, withdrawnCardPage({ card }), { path: `/evidence/c/${encodeURIComponent(id)}`, noindex: await noindexFor({ kind: "card", zoneKind: card.zone.kind, authorId: card.creator.id, withdrawn: true }), wide: false, active: "zones" });
+        return sendPage(res, head, 410, withdrawnCardPage({ card }), { path: `/evidence/c/${encodeURIComponent(id)}`, noindex: await noindexFor({ kind: "card", zoneKind: card.zone.kind, authorHandle: card.creator.id, withdrawn: true }), wide: false, active: "zones" });
       }
-      const noindex = await noindexFor({ kind: "card", zoneKind: card.zone.kind, authorId: card.creator.id, withdrawn: false });
+      const noindex = await noindexFor({ kind: "card", zoneKind: card.zone.kind, authorHandle: card.creator.id, withdrawn: false });
       const links = await r.cardLinks(card);
       await countRead(req, head, { zoneId: card.zone.id, cardId: card.id });
       const version = `${card.id}@${card.revision}`;
@@ -182,10 +182,10 @@ export function createEvidencePublicRoutes({ config, database, simulations = nul
       });
     }
     if (section === "a" && id && parts.length === 2) {
-      const author = EVIDENCE_PUBLIC_AUTHOR_ID.test(id) ? await r.author(id) : null;
+      const author = EVIDENCE_PUBLIC_AUTHOR_HANDLE.test(id) ? await r.author(id) : null;
       if (!author) return sendNotFound(res, head);
       return sendPage(res, head, 200, authorPage(author), {
-        path: `/evidence/a/${encodeURIComponent(id)}`, noindex: await noindexFor({ kind: "author", official: author.official, authorId: id }), active: "zones",
+        path: `/evidence/a/${encodeURIComponent(id)}`, noindex: await noindexFor({ kind: "author", official: author.official, authorHandle: id }), active: "zones",
       });
     }
     return sendNotFound(res, head);

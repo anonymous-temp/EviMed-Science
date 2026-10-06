@@ -8,6 +8,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, test } from "node:test";
 import { createWebApiApp } from "../src/server.mjs";
+import { authorHandlesFor } from "../src/evidenceAuthorHandles.mjs";
 import { createEvidenceChangeLog } from "../src/evidenceChangeLog.mjs";
 import { memoryPlugin, pluginSource } from "./helpers/frontierFixtures.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
@@ -84,13 +85,14 @@ test("every page kind is fetched with no session through the real app, the pages
   }, open.id, null, true, "result")).evidence;
   await createEvidenceChangeLog({ database: context.app.store.database }).append({ zoneId: open.id, cardId: card.id, category: "searched_no_change", trigger: "scheduled_check", facts: {} });
   const sessionless = { headers: {} };
+  const ownerHandle = /** @type {string} */ ((await authorHandlesFor(context.app.store.database, [accounts.owner])).get(accounts.owner));
 
   const index = await page("/evidence/", sessionless);
   assert.equal(index.status, 200);
   assert.ok(index.body.includes("房颤抗凝") && !index.body.includes("仅平台可见"));
   for (const [pathname, needle] of [
     [`/evidence/z/${open.id}`, "阿哌沙班和卒中"], [`/evidence/z/${open.id}/changes`, "已重新检索，结论未变"], [`/evidence/c/${card.id}`, "结果总结（临床版）"], [`/evidence/c/${card.id}?view=public`, "事实框"],
-    [`/evidence/a/${accounts.owner}`, "房颤抗凝"], ["/evidence/about", "钱买得到发布和分发，买不到排名和结论"], ["/evidence/metrics", "核验通过率"], ["/evidence/simulations", "Simulated trial"],
+    [`/evidence/a/${ownerHandle}`, "房颤抗凝"], ["/evidence/about", "钱买得到发布和分发，买不到排名和结论"], ["/evidence/metrics", "核验通过率"], ["/evidence/simulations", "Simulated trial"],
     ["/evidence/simulations/sim-1", "预测"], ["/evidence/requests", "选题申请"],
   ]) {
     const answer = await page(pathname);

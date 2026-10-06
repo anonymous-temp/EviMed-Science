@@ -63,6 +63,9 @@ export function producerLine(producer, fallbackName = "") {
   return html`<p class="producer"><strong>出品方：</strong>${producer.kindLabel ? html`${producer.kindLabel} ` : ""}${producer.name}。${producer.relationLabel ?? ""}${producer.products?.length ? html`（${producer.products.join("、")}）` : ""}</p>`;
 }
 
+/** An author's name, linked to the author's page by public handle; a name alone when no handle could be made. @param {{ id: string | null, name: string }} author */
+const authorLink = (author) => (author.id ? pathLink(authorPath(author.id), author.name) : author.name);
+
 /** @param {{ total: number, verified: number, warned: number, derived: number }} counts */
 export function claimCountsText(counts) {
   if (!counts.total) return html`<span class="muted">没有列出结论</span>`;
@@ -135,7 +138,7 @@ export function zonePage({ zone, cards }) {
     description: clip(zone.description || `${zone.kindLabel}“${zone.title}”的证据卡，每张写明出品方，每条结论标出引文核验的结果。`),
     body: html`${producerLine(zone.producer, zone.owner.name)}
 <h1>${zone.title}</h1>
-<p class="meta">${zone.kindLabel} · ${countOf(zone.cards, "张证据卡")}${zone.withdrawnCards ? `，另有 ${zone.withdrawnCards} 张已撤回` : ""} · ${countOf(zone.follows, "人关注")} · 作者 ${pathLink(authorPath(zone.owner.id), zone.owner.name)}${zone.lastCheckedAt ? html` · 最后核对 ${timeTag(zone.lastCheckedAt)}` : ""}</p>
+<p class="meta">${zone.kindLabel} · ${countOf(zone.cards, "张证据卡")}${zone.withdrawnCards ? `，另有 ${zone.withdrawnCards} 张已撤回` : ""} · ${countOf(zone.follows, "人关注")} · 作者 ${authorLink(zone.owner)}${zone.lastCheckedAt ? html` · 最后核对 ${timeTag(zone.lastCheckedAt)}` : ""}</p>
 ${zone.description ? html`<p>${zone.description}</p>` : ""}
 ${zone.background ? html`<details><summary>专区背景</summary><p>${zone.background}</p></details>` : ""}
 ${currency.length ? html`<p class="meta">时效：${currency.join(" · ")}</p>` : ""}
@@ -270,7 +273,7 @@ export function cardPage({ card, links, view }) {
     description: clip(description),
     body: html`${producerLine(card.producer, card.creator.name)}
 <h1>${card.title}${card.aiGenerated ? html` <span class="badge ai">AI 生成</span>` : ""}</h1>
-<p class="meta">${card.originalityLabel ?? ""} · ${pathLink(zonePath(card.zone.id), card.zone.title)} · 作者 ${pathLink(authorPath(card.creator.id), card.creator.name)} · 第 ${card.revision} 版，更新于 ${timeTag(card.updatedAt)} · ${claimCountsText(card.claims)} · ${currencyBadge(card)}</p>
+<p class="meta">${card.originalityLabel ?? ""} · ${pathLink(zonePath(card.zone.id), card.zone.title)} · 作者 ${authorLink(card.creator)} · 第 ${card.revision} 版，更新于 ${timeTag(card.updatedAt)} · ${claimCountsText(card.claims)} · ${currencyBadge(card)}</p>
 ${card.hasPendingEvidence ? html`<p class="notice warn">平台发现了 ${card.pendingItems} 项可能影响这张卡的新研究，尚未纳入。读到的结论可能不是最新的。</p>` : ""}
 ${card.currency === "source_changed" ? html`<p class="notice warn">这张卡引用的来源出现了撤稿、更正或关注声明，依据这些来源的结论待复核。</p>` : ""}
 <p class="muted">证据卡是 EviMed 对来源的整理，只是索引：需要引用时，请引用下面列出的原始来源，不要引用这张卡。</p>
