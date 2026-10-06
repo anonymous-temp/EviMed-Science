@@ -758,16 +758,18 @@ const sameInputs = (left, right) => {
 export function evidenceCalculationBasis(value, where = 'calculation') {
   if (!isRecord(value) || !onlyKeys(value, ['engine', 'method', 'receiptId', 'valuePath', 'machineValue', 'format', 'inputs', 'alsoValues'])) throw invalid(where)
   const identity = calculationIdentity(value, where)
-  /** @param {any} raw @param {string} at */
+  /** One stated number: its path, the machine value read there and the format it is printed in. @param {any} raw @param {string} at */
   const stated = (raw, at) => {
-    if (!isRecord(raw) || !onlyKeys(raw, at === where ? ['engine', 'method', 'receiptId', 'valuePath', 'machineValue', 'format', 'inputs', 'alsoValues'] : ['valuePath', 'machineValue', 'format'])) throw invalid(at)
     if (typeof raw.valuePath !== 'string' || !CALCULATION_VALUE_PATH.test(raw.valuePath)) throw invalid(`${at}.valuePath`)
     if (typeof raw.machineValue !== 'number' || !Number.isFinite(raw.machineValue)) throw invalid(`${at}.machineValue`)
     return { valuePath: raw.valuePath, machineValue: raw.machineValue, format: calculationFormat(raw.format, at) }
   }
   const first = stated(value, where)
   if (value.alsoValues != null && (!Array.isArray(value.alsoValues) || value.alsoValues.length > EVIDENCE_CALCULATION_EXTRA_VALUES)) throw invalid(`${where}.alsoValues`)
-  const also = (value.alsoValues ?? []).map((/** @type {any} */ raw, /** @type {number} */ position) => stated(raw, `${where}.alsoValues[${position}]`))
+  const also = (value.alsoValues ?? []).map((/** @type {any} */ raw, /** @type {number} */ position) => {
+    if (!isRecord(raw) || !onlyKeys(raw, ['valuePath', 'machineValue', 'format'])) throw invalid(`${where}.alsoValues[${position}]`)
+    return stated(raw, `${where}.alsoValues[${position}]`)
+  })
   const paths = [first, ...also].map((entry) => entry.valuePath)
   if (new Set(paths).size !== paths.length) throw invalid(`${where} states one path twice`)
   return { ...identity, ...first, ...(also.length ? { alsoValues: also } : {}) }
