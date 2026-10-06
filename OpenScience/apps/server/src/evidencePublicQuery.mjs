@@ -41,6 +41,7 @@ import { HttpError } from "./security.mjs";
 import { migrateEvidenceZones } from "./evidenceZonePersistence.mjs";
 import { migrateEvidenceOrigins } from "./evidenceOrigins.mjs";
 import { evidenceCurrencyView, EVIDENCE_ZONE_CURRENCY_SQL } from "./evidenceCurrency.mjs";
+import { EVIDENCE_CHANGE_LOG_MAX_PAGE, readEvidenceChangeLog } from "./evidenceChangeLog.mjs";
 import { safeHref } from "./evidencePublicHtml.mjs";
 
 /** The shape of a zone id and a card id: a value of any other shape is never looked up. */
@@ -80,8 +81,6 @@ export function evidencePublicPredicate(audience, { card = "c", zone = "z" } = {
   if (audience === "zones") return `${zone}.state = 'published' AND ${zone}.visibility = 'internet'`;
   throw new TypeError(`Unknown public audience "${audience}".`);
 }
-
-const notFound = () => new HttpError(404, "evidence_public_not_found", "No such public evidence content.");
 
 /** @param {unknown} value @returns {string | null} */
 const iso = (value) => (value ? new Date(/** @type {any} */ (value)).toISOString() : null);
@@ -216,11 +215,11 @@ export function createEvidencePublicReads({ database, now = () => new Date() }) 
   function cardSummary(row, counts) {
     const currency = evidenceCurrencyView(row);
     return {
-      id: String(row.id), zoneId: String(row.zone_id), zoneTitle: row.zone_title ?? null, title: String(row.title), summary: String(row.summary ?? ""), revision: Number(row.revision),
+      id: String(row.id), zoneId: String(row.zone_id), zoneTitle: row.zone_title ?? null, zoneKind: row.zone_kind ?? null, title: String(row.title), summary: String(row.summary ?? ""), revision: Number(row.revision),
       producer: producerView(row.producer), originality: row.originality ?? null, originalityLabel: labels(EVIDENCE_ORIGINALITY_LABELS_ZH, row.originality),
       primary: evidenceOriginalityIsPrimary(row.originality), aiGenerated: evidenceCardIsAiGenerated(row),
       creator: { id: String(row.user_id), name: String(row.creator ?? "") },
-      claims: counts, currency: currency.currency, currencyLabel: currency.currencyLabel, hasPendingEvidence: currency.pendingItemIds.length > 0,
+      claims: counts, currency: currency.currency, currencyLabel: currency.currencyLabel, pendingItems: currency.pendingItemIds.length, hasPendingEvidence: currency.pendingItemIds.length > 0,
       lastCheckedAt: currency.lastCheckedAt ?? iso(row.disclosure?.lastCheckedAt), withdrawn: currency.withdrawn,
       createdAt: iso(row.created_at), updatedAt: iso(row.updated_at),
     };
@@ -277,9 +276,9 @@ export function createEvidencePublicReads({ database, now = () => new Date() }) 
     async indexZones() {
       await ready();
       const rank = evidenceRankingComparator(["recency", "follows", "review_score"]);
-      /** @type {Record<string, any[]>} */
+      /** @type {{ official: any[], product: any[], user: any[] }} */
       const sections = { official: [], product: [], user: [] };
-      for (const kind of Object.keys(sections)) {
+      for (const kind of /** @type {const} */ (["official", "product", "user"])) {
         const rows = (await database.query(
           `SELECT z.id, z.title, z.description, z.kind, z.revision, z.created_at, z.updated_at, z.user_id, u.name AS owner_name,
              (SELECT count(*)::integer FROM evimed_frontier.evidence_cards c WHERE c.zone_id = z.id AND c.state = 'published' AND c.withdrawn IS NULL) AS card_count,
@@ -356,7 +355,8 @@ export function createEvidencePublicReads({ database, now = () => new Date() }) 
          WHERE c.id = $1 AND ${evidencePublicPredicate("pages")}`, [cardId])).rows[0];
       if (!row) return null;
       const currency = evidenceCurrencyView(row);
-      if (currency.withdrawn) return { ...cardSummary(row, ZERO_COUNTS), withdrawn: currency.withdrawn, claimList: [], sources: [], view: null, disclosure: row.disclosure ?? null, lineage: null, content: null };
+      const zone = { id: String(row.zone_id), title: String(row.zone_title), kind: String(row.zone_kind) };
+      if (currency.withdrawn) return { ...cardSummary(row, ZERO_COUNTS), withdrawn: currency.withdrawn, claimList: [], sources: [], view: null, disclosure: row.disclosure ?? null, lineage: null, content: null, zone };
       const contract = {
         title: row.title, content: row.content ?? null, sources: row.sources ?? [], claims: row.claims ?? [], producer: row.producer ?? null, originality: row.originality ?? null,
         lineage: row.lineage ?? null, journeyStage: row.journey_stage ?? null, disclosure: row.disclosure ?? null, publicView: row.public_view ?? null, editorial: row.editorial ?? null,
@@ -373,7 +373,7 @@ export function createEvidencePublicReads({ database, now = () => new Date() }) 
         ...cardSummary(row, claimCounts(verification.counts)), view: view === "public" ? "public" : "clinical", viewContent,
         claimList: claimViews(contract.claims, verification, sources), sources, disclosure: row.disclosure ?? null, journeyStage: row.journey_stage ?? null,
         content: row.content ?? null, lineage: publicLineage(row.lineage),
-        zone: { id: String(row.zone_id), title: String(row.zone_title), kind: String(row.zone_kind) },
+        zone,
       };
     },
 
@@ -401,6 +401,31 @@ export function createEvidencePublicReads({ database, now = () => new Date() }) 
       return {
         previous: await pointed(card.lineage?.previousCardId), origin: await pointed(card.lineage?.originCardId),
         next: followers.filter((row) => row.relation === "next").map(linkRef), research: followers.filter((row) => row.relation === "research").map(linkRef),
+      };
+    },
+
+    /**
+     * One page of a public zone's change log, newest first. A card's title is named only when that card is itself public: a log entry
+     * outlives the card it is about, and the log must not be a way to read the title of one that was taken back to a draft.
+     * @param {string} zoneId @param {{ limit?: unknown, before?: unknown }} [query]
+     */
+    async changeLog(zoneId, { limit = null, before = null } = {}) {
+      const size = limit === null || limit === undefined || limit === "" ? 50 : Number(limit);
+      const cursor = before === null || before === undefined || before === "" ? null : Number(before);
+      if (!Number.isSafeInteger(size) || size < 1 || size > EVIDENCE_CHANGE_LOG_MAX_PAGE || (cursor !== null && (!Number.isSafeInteger(cursor) || cursor < 1))) {
+        throw new HttpError(400, "evidence_public_query_invalid", `limit is a whole number from 1 to ${EVIDENCE_CHANGE_LOG_MAX_PAGE}; before is an entry number.`);
+      }
+      const page = await readEvidenceChangeLog(database, { zoneId, limit: size, before: cursor });
+      const ids = [...new Set(page.items.map((entry) => entry.cardId))];
+      const titles = ids.length ? new Map((await database.query(
+        `SELECT c.id, c.title FROM evimed_frontier.evidence_cards c JOIN evimed_frontier.evidence_zones z ON z.id = c.zone_id
+         WHERE c.id = ANY($1::text[]) AND ${evidencePublicPredicate("pages")}`, [ids])).rows.map((/** @type {any} */ row) => [String(row.id), String(row.title)])) : new Map();
+      return {
+        items: page.items.map((entry) => ({
+          id: entry.id, zoneId: entry.zoneId, cardId: entry.cardId, cardTitle: titles.get(entry.cardId) ?? null, revisionBefore: entry.revisionBefore, revisionAfter: entry.revisionAfter,
+          category: entry.category, categoryLabel: entry.categoryLabel, trigger: entry.trigger, triggerLabel: entry.triggerLabel, summary: entry.summary, occurredAt: entry.occurredAt,
+        })),
+        nextBefore: page.nextBefore,
       };
     },
 

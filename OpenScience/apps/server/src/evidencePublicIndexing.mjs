@@ -26,7 +26,7 @@ export function createEvidencePublicIndexing({ config, reads }) {
 
   /**
    * Whether a page may be indexed, and why not.
-   * @param {{ kind: "site" | "never" } | { kind: "zone", zoneKind: string, ownerId: string } | { kind: "card", zoneKind: string, authorId: string, withdrawn: boolean } | { kind: "author", official: boolean, authorId: string }} page
+   * @param {{ kind: "site" } | { kind: "never" } | { kind: "zone", zoneKind: string, ownerId: string } | { kind: "card", zoneKind: string, authorId: string, withdrawn: boolean } | { kind: "author", official: boolean, authorId: string }} page
    * @returns {Promise<{ index: boolean, reason: "switch_off" | "new_author" | "withdrawn" | "never" | null }>}
    */
   async function decide(page) {
@@ -34,8 +34,9 @@ export function createEvidencePublicIndexing({ config, reads }) {
     if (page.kind === "card" && page.withdrawn) { counters.noindexWithdrawn += 1; return { index: false, reason: "withdrawn" }; }
     if (config.evidencePublicIndexable !== true) { counters.noindexSwitchOff += 1; return { index: false, reason: "switch_off" }; }
     if (page.kind === "site") { counters.indexable += 1; return { index: true, reason: null }; }
-    const official = page.kind === "author" ? page.official : page.zoneKind === "official";
-    const authorId = page.kind === "zone" ? page.ownerId : page.authorId;
+    const { official, authorId } = page.kind === "author" ? { official: page.official, authorId: page.authorId }
+      : page.kind === "zone" ? { official: page.zoneKind === "official", authorId: page.ownerId }
+        : { official: page.zoneKind === "official", authorId: page.authorId };
     if (!official && !(await reads.authorQualifies(authorId))) { counters.noindexNewAuthor += 1; return { index: false, reason: "new_author" }; }
     counters.indexable += 1;
     return { index: true, reason: null };
