@@ -64,7 +64,7 @@ describe("a step waiting on the allowance", () => {
     expect(screen.queryByRole("link", { name: /充值/ })).not.toBeInTheDocument();
   });
 
-  it("is what a 循证 GEO step's tab says instead of 「正在进行」", () => {
+  it("is what a 循证传播 step's tab says instead of 「正在进行」", () => {
     const project = geoProject({ evidence: "queued" });
     project.steps.evidence = { status: "queued", requested: true, waiting: "allowance", note: "等科研额度" };
     draw(<StepPending geoId="geo_1" project={project} step="evidence" />);

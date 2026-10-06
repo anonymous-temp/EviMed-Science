@@ -199,7 +199,7 @@ test("creating a project makes the control-plane project, its GEO row and a boun
   assert.ok(audits.some((entry) => entry.event === "geo.project.create" && entry.code === created.payload.data.id));
   const unnamed = await call("POST", "/api/geo/projects", { body: {} });
   assert.equal(unnamed.status, 201);
-  assert.equal((await call("GET", `/api/geo/projects/${unnamed.payload.data.id}`)).payload.data.name, "新 GEO 项目");
+  assert.equal((await call("GET", `/api/geo/projects/${unnamed.payload.data.id}`)).payload.data.name, "新循证传播项目");
 
   refused(await call("POST", "/api/geo/projects", { body: { brandName: "x".repeat(41) } }), 400, "geo_brand_name_invalid");
   refused(await call("POST", "/api/geo/projects", { body: { engines: ["bing"] } }), 400, "geo_engines_invalid");
@@ -540,7 +540,7 @@ test("another account's GEO project is a 404 on every route, reads and writes al
   hooks.exporter = null;
 });
 
-test("deleting a GEO project hides it from 循证 GEO and leaves its control-plane project alone", options, async () => {
+test("deleting a GEO project hides it from 循证传播 and leaves its control-plane project alone", options, async () => {
   const { project } = await seededProject();
   const deleted = (await call("DELETE", `/api/geo/projects/${project.id}`, { body: {} })).payload.data;
   assert.deepEqual(deleted, { id: project.id, projectId: project.projectId, deleted: true });

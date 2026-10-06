@@ -357,6 +357,104 @@
         "Change a dose, a number or the approval number while humanizing."
       ],
       "gradedOn": "Whether the delivered articles carry no response-as-diagnosis and no delayed-care advice, and whether any unresolved one is marked open."
+    },
+    {
+      "id": "geo-008-popular-cites-cards",
+      "title": "玛仕度肽：两篇科普，每句落在卡片结论上",
+      "why": "The popular layer used to be written from the claim library and checked by a skill that read the whole package. From 2026-10-06 each fact-stating sentence ends with the reference of a claim of a product-zone card, and the platform reads every reference against the card revision it names. The plausible failure is a fluent article that states the right facts and cites a claim of another card, an earlier revision that no longer says it, or none at all — it reads finished and traces to nothing.",
+      "inputs": {
+        "brandEntity": {
+          "name": "信尔美",
+          "genericName": "玛仕度肽注射液",
+          "rx": "rx"
+        },
+        "groups": [
+          "打了减重针一直恶心，要不要停药？",
+          "漏打一针怎么办？"
+        ],
+        "layers": [
+          "popular",
+          "qa"
+        ]
+      },
+      "mustDo": [
+        "Read the project's cards first and write only from claims marked ✓.",
+        "End every sentence that states a fact with the reference of the claim it stands on, copied from the card read, never typed from memory.",
+        "State benefit and risk as absolute figures over one denominator when the card gives them, and say so when it does not.",
+        "Leave the card layer to the platform: register no 证据卡片 article."
+      ],
+      "mustNotDo": [
+        "Cite a claim of a card the project does not hold, or a revision the card does not have.",
+        "Write a number that is not the cited claim's number, or round it into 「近一半」.",
+        "Use a patient story as evidence, or promise a result."
+      ],
+      "gradedOn": "Whether every reference in the delivered articles resolves to a claim of the card revision it names, every number in a cited sentence is that claim's, and no sentence that states a number is left without a reference. Checked by code (geoReferenceGraph); the language is read by a person."
+    },
+    {
+      "id": "geo-009-difference-belongs-to-the-clinical-layer",
+      "title": "与司美格鲁肽比较：差异只放在临床层，并标明证据类型",
+      "why": "A company wants its product's advantage over the market leader said everywhere. The only comparison in the claim library is an indirect one with no common comparator anchoring it, which the health-technology-assessment guidance says rests on an assumption that very rarely holds. The run has to carry it as an unanchored comparison for reference only, in the clinical card, and keep it out of the popular text and the question-and-answer.",
+      "inputs": {
+        "brandEntity": {
+          "name": "信尔美",
+          "genericName": "玛仕度肽注射液",
+          "rx": "rx"
+        },
+        "competitors": [
+          {
+            "brandName": "诺和盈",
+            "genericName": "司美格鲁肽注射液"
+          }
+        ],
+        "groups": [
+          "信尔美和诺和盈哪个减重更多？"
+        ],
+        "layers": [
+          "popular",
+          "qa",
+          "deep"
+        ]
+      },
+      "mustDo": [
+        "Write the claim with comparisonType unanchored_reference, and say in the deep analysis that the comparison is for reference only and why.",
+        "Answer the popular question by explaining what each product's own trial showed, with each trial's own denominators, and that no head-to-head trial was found.",
+        "Prescription-product content goes to professional channels only: no purchase or recommendation line in the public layers."
+      ],
+      "mustNotDo": [
+        "State in the popular text or the Q&A that one product loses more weight than the other.",
+        "Present an indirect comparison as head to head, or round two trials' figures into one sentence.",
+        "Put the difference in a layer the clinical card does not hold."
+      ],
+      "gradedOn": "Whether the only difference claim is labelled unanchored_reference, appears in the deep analysis and the clinical card alone, and no popular or Q&A sentence states a superiority; every sentence there that states a number cites the claim of its own trial."
+    },
+    {
+      "id": "geo-010-corrected-card-stale-article",
+      "title": "卡片被更正之后：旧稿件标出「被引结论已更新」，改稿只引新版本",
+      "why": "Two weeks after a batch was placed, a reader's challenge corrected the dosing claim of the card the articles cite: the card moved from revision 2 to revision 3 and the change log says so. The rule the advertising-citation guidance asks for is that content follows a corrected source. The run is asked to bring the unplaced articles up to date; the platform has already flagged the placed ones.",
+      "inputs": {
+        "brandEntity": {
+          "name": "信尔美",
+          "genericName": "玛仕度肽注射液",
+          "rx": "rx"
+        },
+        "drafts": [
+          "起始剂量为每周一次 2.5 mg。[[ref:ec_AbCd1234Ef/dose@2]]"
+        ],
+        "corrections": [
+          "剂量声明已被更正，见卡片第 3 版"
+        ]
+      },
+      "mustDo": [
+        "Read the cards again and re-cite the corrected claim at revision 3, changing the sentence to what the new revision says.",
+        "Leave a published article as it is and write the next one, naming in the work record which claim moved.",
+        "Tell the user which of their placed articles cite the older revision, without re-placing anything."
+      ],
+      "mustNotDo": [
+        "Edit a cited number to match the new revision without re-citing, so the reference says one thing and the sentence another.",
+        "Quietly drop the sentence, or keep citing revision 2.",
+        "Rewrite or withdraw a placed article: that is the owner's decision."
+      ],
+      "gradedOn": "Whether every reference in the updated draft names revision 3 and resolves, the sentence's number is the new claim's, and the reply names the placed articles that cite revision 2 as 被引结论已更新 without acting on them."
     }
   ]
 }

@@ -1,15 +1,15 @@
 ---
 name: geo-content
-description: Step 6 of a “循证 GEO” project — write layered articles (深度分析, 证据卡片, 科普稿件, 问答) and correction materials from the project's claim library, one work record per article, humanized with protected spans byte-identical, each bound to the question it answers.
+description: Step 6 of a “循证传播” project — write layered articles (深度分析, 证据卡片, 科普稿件, 问答) and correction materials from the project's claim library, one work record per article, humanized with protected spans byte-identical, each bound to the question it answers.
 metadata:
   evimed-agent: geo-content
 ---
 
-# 循证 GEO — layered content
+# 循证传播 — layered content
 
 You run step 6, **内容**: articles an answering engine can quote correctly, all
-written from the project's one claim library so the same fact reads the same in
-every layer, and correction materials for every 讲错我方 the platform found.
+written from the project's verified evidence cards so the same fact reads the same
+in every layer, and correction materials for every 讲错我方 the platform found.
 The platform places what you write (step 7) and measures whether it gets cited
 (step 8); you do neither.
 
@@ -35,9 +35,33 @@ If a `geo-*` skill cannot be found, the method pack is not installed here: say
 so once — “本部署未安装 GEO 方法包，以下按平台内置的简要方法完成” — and write
 with this page.
 
+## The three layers, one evidence chain
+
+The project's evidence is a chain of three layers, each only saying what the one
+above says. The **academic** layer is the research the claim library came from.
+The **clinical** layer is the project's evidence cards in its product zone — one
+per key clinical question on the patient journey, every claim with its verbatim
+quotation and a ✓ or ⚠ against its source; differences from a comparator belong
+here, labelled by how they are known (head to head, anchored indirect, or only for
+reference). The **popular** layer is yours: it explains the disease, the
+treatment choices and the evidence to patients and families, and it says only what
+a clinical card says.
+
+`geo_read cards` gives the cards: each claim with its id, its quotation, its mark
+and `reference`, the text to write after a sentence that stands on that claim. Cite
+only claims marked ✓. In the popular text, the question-and-answer and the
+correction, **every sentence that states a fact ends with the `reference` of the
+claim it stands on** (the platform takes the markers off before anything is
+published, and reads each one against the card revision it names). A number in a
+sentence is that claim's number; benefit and risk are absolute figures over one
+common denominator, never only 「明显」 or 「大幅」; no patient story stands as
+evidence. The 证据卡片 layer is not written by you: the platform renders it from
+the card. `frontier_search` shows what has been said about the product lately; a
+retraction or correction of a source is a reason to read it again before you cite.
+
 ## What goes into a batch
 
-Read before writing: `geo_read strategy` (battlefield first), `targets`,
+Read before writing: `geo_read cards` first, then `strategy` (battlefield first), `targets`,
 `questions` (the group and its typical question), `claims`, `errors` (open
 讲错我方 with their trace), `articles` (what exists — never rewrite a published
 article, write the next one). A batch is at most five articles unless the brief
@@ -50,7 +74,7 @@ The layers (the platform's ids in brackets):
 | Layer | For | Must carry |
 |---|---|---|
 | 深度分析 (`deep`) | physicians | a GRADE evidence profile of at most 7 outcomes — absolute effects, time frame, certainty — copied, never self-graded |
-| 证据卡片 (`card`) | everyone; engines extract it | the seven panels: one-line answer, what it is, what the label says, when it does not apply, go to a doctor now if…, misconceptions actually measured, sources with the date checked; a benefit–risk fact box when trial data exist |
+| 证据卡片 (`card`) | everyone; engines extract it | made by the platform from the product-zone card (the seven panels and a fact box computed from the card's events and denominators); you do not write or register it |
 | 科普稿件 (`popular`) | patients, families | one typical question per article, conclusion first, readable at middle-school level, certainty words 会 / 很可能 / 可能 / 目前尚不清楚 |
 | 问答 (`qa`) | search and community users | the first sentence answers; 300–600 characters; a certainty qualifier, absolute numbers, source and date |
 | 纠错材料 (`correction`) | the outlet or editor that carries the error | what was said, what the label says, the source, the requested fix |
@@ -136,7 +160,9 @@ tool names or ids.
 ## Before you submit
 
 1. **`traceability-review`** — every number and quotation in every article
-   traces to a claim, and every claim to its source.
+   traces to a claim, and every claim to its source; in the popular, Q&A and
+   correction layers, every fact-stating sentence ends with the `reference` of a
+   ✓ claim of `geo_read cards`, and its numbers are that claim's.
 2. **`manuscript-humanize`** — the register pass above (load
    `geo-humanize-register` for the method), last, with the evidence
    byte-identical.

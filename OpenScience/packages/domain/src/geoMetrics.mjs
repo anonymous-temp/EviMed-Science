@@ -1,5 +1,5 @@
 /**
- * 「循证 GEO」 metrics — the pure arithmetic behind every number the GEO pages,
+ * 「循证传播」 metrics — the pure arithmetic behind every number the GEO pages,
  * the weekly report and the proposal pack show (plan 2026-09-24 §4, build spec
  * 2026-09-25 §2, §5).
  *

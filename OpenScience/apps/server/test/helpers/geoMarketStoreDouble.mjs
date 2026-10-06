@@ -244,13 +244,14 @@ export class GeoMarketStoreDouble {
   }
 
   /** @param {string} articleId @param {string[]} from @param {string} to @param {string} at */
-  async advanceArticleStatus(articleId, from, to, at) {
+  async advanceArticleStatus(articleId, from, to, at, { placementLabel = null } = {}) {
     assertOneOf(to, ARTICLE_STATUSES, "article status");
     for (const state of from) assertOneOf(state, ARTICLE_STATUSES, "article status");
     assertAt(at);
     const article = this.articles.get(String(articleId));
     if (!article || !from.includes(article.status)) return false;
     article.status = to;
+    if (placementLabel != null) article.placementLabel ??= placementLabel;
     return true;
   }
 

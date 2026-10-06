@@ -24,9 +24,11 @@ import { ProgressRail } from "@/components/ui/ProgressRail";
 import { Tabs } from "@/components/ui/Tabs";
 import { Tag } from "@/components/ui/Tag";
 import { GeoOffPage, GeoProjectSkeleton } from "@/components/geo/GeoStates";
+import { MembersDialog } from "@/components/geo/MembersDialog";
+import { ProducerDialog } from "@/components/geo/ProducerDialog";
 import { railSteps } from "@/components/geo/geoOverviewModel";
-import { coverageText, weekOf } from "@/components/geo/geoText";
-import { GEO_TAB_REDIRECTS, GEO_TABS, geoTabPath, resolveGeoTab, type GeoTabKey } from "@/components/geo/geoTabs";
+import { coverageText, GEO_MONITORING_TITLE, weekOf } from "@/components/geo/geoText";
+import { GEO_MONITORING_TABS, GEO_TAB_REDIRECTS, GEO_TABS, geoTabPath, resolveGeoTab, type GeoTabKey } from "@/components/geo/geoTabs";
 import { useOpenGeoConversation } from "@/components/geo/useOpenGeoConversation";
 import { AccuracyTab } from "@/components/geo/tabs/AccuracyTab";
 import { ActionsTab } from "@/components/geo/tabs/ActionsTab";
@@ -82,6 +84,8 @@ export function GeoProjectPage() {
   const [reloads, setReloads] = useState(0);
   const [busy, setBusy] = useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  /** The dialog the ⋯ menu opened: who else is in the project, or who speaks for the product. */
+  const [panel, setPanel] = useState<"members" | "producer" | null>(null);
   const { tab, moved } = resolveGeoTab(tabParam);
 
   useEffect(() => {
@@ -110,14 +114,14 @@ export function GeoProjectPage() {
   if (feature === "off" || loaded.kind === "off") return <GeoOffPage />;
   if (loaded.kind === "missing") {
     return (
-      <PageShell title="循证 GEO" width="wide">
+      <PageShell title="循证传播" width="wide">
         <EmptyState icon={Radar} title="这个项目不存在或已删除。" action={<Button variant="secondary" onClick={() => navigate("/app/geo")}>回到项目列表</Button>} />
       </PageShell>
     );
   }
   if (loaded.kind !== "ready") {
     return (
-      <PageShell title="循证 GEO" width="wide">
+      <PageShell title="循证传播" width="wide">
         {loaded.kind === "error" ? <LoadError message={loaded.message} onRetry={reload} /> : <GeoProjectSkeleton />}
       </PageShell>
     );
@@ -138,18 +142,23 @@ export function GeoProjectPage() {
   };
 
   const paused = project.status === "paused";
+  // What the account may do here: the owner everything, a member what their roles allow. The server judges every operation all the
+  // same; the menu only does not offer what would be refused.
+  const abilities = project.access?.abilities;
+  const can = (ability: string) => !abilities || abilities.includes(ability);
   const menu: MenuEntry[] = [
-    { label: "导出提案资料包", onSelect: () => act("proposal", () => exportGeo(geoId, "proposal"), "提案资料包无法导出，请稍后重试。") },
-    {
+    { label: "成员", onSelect: () => setPanel("members") },
+    ...(can("edit") ? [{ label: "出品方", onSelect: () => setPanel("producer") }] : []),
+    ...(can("run") ? [{ label: "导出提案资料包", onSelect: () => act("proposal", () => exportGeo(geoId, "proposal"), "提案资料包无法导出，请稍后重试。") }] : []),
+    ...(can("edit") ? [{
       label: paused ? "继续" : "暂停",
       onSelect: () => {
         void patchGeoProject(geoId, { status: paused ? "active" : "paused" })
           .then(() => { toast.success(paused ? "已继续。" : "已暂停，测量和投放都停下了。"); reload(); })
           .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "项目状态无法修改，请稍后重试。" })));
       },
-    },
-    "separator",
-    { label: "删除", destructive: true, onSelect: () => setConfirmDelete(true) },
+    }] : []),
+    ...(can("delete") ? ["separator" as const, { label: "删除", destructive: true, onSelect: () => setConfirmDelete(true) }] : []),
   ];
 
   const remove = () => {
@@ -168,6 +177,7 @@ export function GeoProjectPage() {
   return (
     <PageShell
       title={project.name}
+      documentTitle={GEO_MONITORING_TABS.includes(tab) ? `${project.name} · ${GEO_MONITORING_TITLE}` : undefined}
       width="wide"
       meta={<Tag>{week ? `第 ${week} 周` : coverageText(project.coverageDays, project.startedAt ?? project.createdAt ?? null)}</Tag>}
       actions={(
@@ -200,6 +210,8 @@ export function GeoProjectPage() {
       <div id="geo-tab-panel" role="tabpanel" aria-labelledby={`geo-tab-panel-tab-${tab}`} className="pt-6">
         <Tab geoId={geoId} project={project} />
       </div>
+      {panel === "members" && <MembersDialog geoId={geoId} onClose={() => setPanel(null)} />}
+      {panel === "producer" && <ProducerDialog geoId={geoId} initial={project.producer ?? null} onSaved={() => { setPanel(null); reload(); }} onCancel={() => setPanel(null)} />}
       {confirmDelete && (
         <ConfirmDialog
           title={`删除“${project.name}”？`}

@@ -59,17 +59,17 @@ test('the slash popup lists the public tools, with category and summary to searc
 });
 
 test('a tool its own module opens is not a row in the popup, and still has a chip', () => {
-  // 「循证 GEO」 (build spec 2026-09-25 §6): kept public so its module can bind
+  // 「循证传播」 (build spec 2026-09-25 §6): kept public so its module can bind
   // a conversation to it by id, kept out of the list by `display.listed: false`,
   // and named by its chip in the conversation it runs.
   const catalogue = /** @type {any} */ (kitFor(fakeCtx(), fakeTarget({ frame: { capabilities: [
     ...CATALOGUE,
-    { id: 'geo-insight', title: '循证 GEO', category: '写作与传播', brief: 'b', summary: '一句话', starters: ['做一套完整的方案。'], listed: false },
+    { id: 'geo-insight', title: '循证传播', category: '写作与传播', brief: 'b', summary: '一句话', starters: ['做一套完整的方案。'], listed: false },
   ] } })).frame).capabilities;
   assert.equal(capabilityOptions(catalogue).some((option) => option.id === 'geo-insight'), false);
   assert.equal(capabilityOptions(catalogue).length, 3, 'every listed public tool is still a row');
   const page = /** @type {any} */ (toolPageModel(catalogue, 'geo-insight'));
-  assert.equal(page?.title, '循证 GEO', 'a bound conversation still names its tool');
+  assert.equal(page?.title, '循证传播', 'a bound conversation still names its tool');
 });
 
 test('a tool\'s page reads from the catalogue, and an internal capability has none', () => {
@@ -177,8 +177,8 @@ test('references are read back strictly', () => {
   assert.deepEqual(knowledgeCandidates({ ok: false, items: [{ id: 'src_1', title: 'A' }] }), []);
 });
 
-// 循证 GEO: its capabilities are hidden from 科研工具, so the catalogue may not
-// list them, and a conversation bound to any of them still says 「循证 GEO」.
+// 循证传播: its capabilities are hidden from 科研工具, so the catalogue may not
+// list them, and a conversation bound to any of them still says 「循证传播」.
 const GEO_OPTIONS = {
   sessionId: 'session-a', controls: true, coverageDays: 90, coverageOptions: [30, 60, 90, 180],
   engines: ['doubao', 'qianwen', 'deepseek', 'yuanbao', 'kimi'],
@@ -187,7 +187,7 @@ const GEO_OPTIONS = {
     { id: 'yuanbao', name: '元宝' }, { id: 'kimi', name: 'Kimi' },
   ],
   starters: [
-    { label: '完整方案', draft: '做一套完整的 GEO 方案，产品是：' },
+    { label: '完整方案', draft: '做一套完整的循证传播方案，产品是：' },
     { label: 'AI 怎么说我的产品', draft: '看看各家 AI 怎么回答我的产品，产品是：' },
     { label: '信源分析与预期', draft: '看看 AI 回答里引用了谁，产品是：' },
     { label: '优化已有稿件', draft: '把我已有的稿件逐篇优化：' },
@@ -196,18 +196,18 @@ const GEO_OPTIONS = {
   ],
 };
 
-test('a GEO conversation reads 「循证 GEO」 whichever of its capabilities it is bound to, listed or not', () => {
+test('a GEO conversation reads 「循证传播」 whichever of its capabilities it is bound to, listed or not', () => {
   const geo = FRAME_VOCABULARY.geo;
   for (const id of ['geo-insight', 'geo-strategy', 'geo-content', 'geo-proposal']) {
-    assert.equal(/** @type {any} */ (toolPageModel(CATALOGUE, id, geo)).title, '循证 GEO');
+    assert.equal(/** @type {any} */ (toolPageModel(CATALOGUE, id, geo)).title, '循证传播');
   }
   assert.equal(toolPageModel(CATALOGUE, 'geo-insight'), null, 'without the vocabulary it is an unknown tool');
   const f = frame();
   const chip = f.ctx.slots.registrations.find((/** @type {any} */ entry) => entry.name === 'conversation.composer.dock' && entry.options.id === 'evimed-tool');
   f.kit.hub.deliver('capability', { capabilityId: 'geo-insight', sessionId: 'session-a' });
   const drawn = renderStatic(chip.component);
-  assert.match(drawn, /循证 GEO/);
-  assert.match(drawn, /aria-label="移除「循证 GEO」"/);
+  assert.match(drawn, /循证传播/);
+  assert.match(drawn, /aria-label="移除「循证传播」"/);
   assert.doesNotMatch(drawn, /覆盖周期/, 'no controls before the shell has found the project');
 });
 
@@ -233,7 +233,7 @@ test('the GEO chip carries 覆盖周期 and AI 引擎 once the shell has found t
   assert.equal([...docked.matchAll(/type="checkbox" checked=""/g)].length, 5);
   assert.doesNotMatch(docked, /完整方案/, 'the starters live on the blank conversation only');
   const blank = renderStatic(hero.component);
-  assert.match(blank, /循证 GEO/);
+  assert.match(blank, /循证传播/);
   assert.match(blank, /覆盖周期/);
   const labels = [...blank.matchAll(/<button type="button" title="[^"]+"[^>]*><span[^>]*>([^<]+)<\/span><\/button>/g)].map((match) => match[1]);
   assert.deepEqual(labels, ['完整方案', 'AI 怎么说我的产品', '信源分析与预期', '优化已有稿件', '去 AI 味', '持续监测']);

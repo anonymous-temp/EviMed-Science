@@ -217,6 +217,6 @@ test("each tag a dispatcher writes is one the extractor refuses", () => {
     assert.ok(written.has(tag), `no dispatch site writes ${tag}`);
   }
   for (const tag of written) {
-    assert.equal(carriesPlatformContext(`「循证 GEO」自动运行 · 第 6 步\n\n<${tag}>dispatch-1</${tag}>`), true, tag);
+    assert.equal(carriesPlatformContext(`「循证传播」自动运行 · 第 6 步\n\n<${tag}>dispatch-1</${tag}>`), true, tag);
   }
 });

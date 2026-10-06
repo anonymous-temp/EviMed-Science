@@ -1,3 +1,4 @@
+import { GEO_PLACEMENT_LABELS_ZH, stripGeoClaimReferences } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 import { APPEAL_REASONS, MEDIA_FIELD_TYPES, MEDIA_TYPES, mediaMarketConfigured } from "./mediaMarketClient.mjs";
 import { compareProtectedSpans, extractProtectedSpans, htmlToText, markdownToHtml, sha256Hex, splitLeadingTitle } from "./geoMarketText.mjs";
@@ -7,7 +8,7 @@ import { geoAudienceAllows } from "./geoService.mjs";
 export { projectMoney };
 
 /**
- * 「循证 GEO」 distribution: the media marketplace loop (build spec §5, §7).
+ * 「循证传播」 distribution: the media marketplace loop (build spec §5, §7).
  * The AI may propose; this module places orders, and only under rules written
  * here in code (ruling 7: money is code, never the model).
  *
@@ -937,8 +938,10 @@ async function placeOrder(ctx, project, order, state) {
   if (source == null) return "article_body_unavailable";
   // What goes out must be what passed review (decision 7: the post-rewrite hash).
   if (sha256Hex(source) !== article.contentSha256) return "article_changed_since_review";
-  const split = typeof body.markdown === "string" ? splitLeadingTitle(body.markdown) : null;
-  const contentHtml = split ? markdownToHtml(split.body) : String(body.html);
+  // The claim references the article carries (flywheel F21) are the platform's own marks, written after the sentences they support:
+  // the hash above is of the reviewed file, markers and all, and what goes out is that text with the markers taken off.
+  const split = typeof body.markdown === "string" ? splitLeadingTitle(stripGeoClaimReferences(body.markdown)) : null;
+  const contentHtml = split ? markdownToHtml(split.body) : stripGeoClaimReferences(String(body.html));
   const title = String(body.title || split?.title || article.title || "").trim().slice(0, 200);
   if (!title) return "article_untitled";
   // A body the client would refuse to send is refused here, before any money
@@ -947,6 +950,7 @@ async function placeOrder(ctx, project, order, state) {
     await transition(ctx, order, "cancelled", { detail: { reason: "request_invalid", bytes: Buffer.byteLength(contentHtml) } });
     return "request_invalid";
   }
+  const placementLabel = /** @type {keyof typeof GEO_PLACEMENT_LABELS_ZH} */ (article.placementLabel ?? "commercial_cooperation");
   const spans = extractProtectedSpans(htmlToText(contentHtml), { terms: drugTerms(project) });
   const bodySha256 = sha256Hex(contentHtml);
   // The reserve and the send's start are one write, checked against the
@@ -967,7 +971,7 @@ async function placeOrder(ctx, project, order, state) {
   try {
     answer = await ctx.market.send(order.mediaType, {
       resourceId: order.resourceId, title, contentHtml, thirdId: order.id,
-      remark: "医学稿件：请勿改动数字、药名、剂量、引用与链接。",
+      remark: `医学稿件：请勿改动数字、药名、剂量、引用与链接。本稿为${GEO_PLACEMENT_LABELS_ZH[placementLabel]}内容，请按规定标注。`,
     });
   } catch (error) {
     const code = /** @type {any} */ (error)?.code;
@@ -1003,7 +1007,8 @@ async function placeOrder(ctx, project, order, state) {
   const submitted = await transition(ctx, current, "submitted", { patch: { vendorOrderNid: answer.orderNid },
     detail: { vendorOrderNid: answer.orderNid, mappingVersion: VENDOR_STATUS_MAP.version } });
   if (!submitted) await keepLateOrderNumber(ctx, order, answer.orderNid);
-  await ctx.store.advanceArticleStatus(article.id, ["publishable"], "placed", ctx.now().toISOString());
+  // Paid content says so: the article's record keeps the label (广告 or 商业合作), and the outlet was asked to carry it.
+  await ctx.store.advanceArticleStatus(article.id, ["publishable"], "placed", ctx.now().toISOString(), { placementLabel });
   return "submitted";
 }
 

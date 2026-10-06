@@ -85,7 +85,7 @@ describe("every address people already have still arrives", () => {
     // A study package is read on the study's own address, never at a route of
     // its own.
     ["/app/virtual-research/std_1?package=exp_2", "/app/virtual-research/std_1?package=exp_2"],
-    // 循证 GEO: the projects, one project (概览 or a named tab), one answer.
+    // 循证传播: the projects, one project (概览 or a named tab), one answer.
     ["/app/geo", "/app/geo"],
     ["/app/geo/geo_1", "/app/geo/geo_1"],
     ["/app/geo/geo_1/diagnosis", "/app/geo/geo_1/diagnosis"],
@@ -147,7 +147,7 @@ describe("虚拟临研's addresses", () => {
   });
 });
 
-describe("循证 GEO's addresses", () => {
+describe("循证传播's addresses", () => {
   /** The leaf route an address resolves to, and its parameters. */
   function leaf(path: string) {
     const matches = matchRoutes(routes, path) ?? [];

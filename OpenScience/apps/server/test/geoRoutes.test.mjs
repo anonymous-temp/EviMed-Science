@@ -191,3 +191,64 @@ test("market overview uses the composed operations status and preserves reconcil
   assert.equal(result.counts.unknownOrders, 4);
   assert.deepEqual(result.reconciliation, current.lastReconciliation);
 });
+
+test("the cards route reads and writes only the caller's own project, and the producer settings are the domain's own", async () => {
+  const patched = /** @type {any[]} */ ([]);
+  const cardCalls = /** @type {any[]} */ ([]);
+  const project = { id: "geo_mine", userId: "reader", projectId: "p" };
+  const store = { async ensureSessionUser() { return { user: { id: "reader" } }; }, async assertCsrf() {} };
+  const service = {
+    allows: () => true, isOperator: () => false,
+    async requireProject(/** @type {any} */ user, /** @type {string} */ id) {
+      if (user.id !== "reader" || id !== "geo_mine") throw Object.assign(new Error("none"), { status: 404, code: "geo_project_not_found" });
+      return project;
+    },
+    async updateProject(/** @type {any} */ _user, /** @type {string} */ id, /** @type {any} */ patch) { patched.push([id, patch]); return { id, ...patch }; },
+  };
+  const cards = {
+    list: async (/** @type {any} */ found) => { cardCalls.push(["list", found.id]); return { zoneId: "ez_1", cards: [] }; },
+    refresh: async (/** @type {any} */ user, /** @type {any} */ found) => { cardCalls.push(["refresh", user.id, found.id]); return { zoneId: "ez_1", cards: [{ cardId: "ec_1" }], held: [], failed: [], skipped: [] }; },
+  };
+  const real = createGeoRoutes({ store, service, config, maxJsonBytes: 65_536, cards });
+  let res = response();
+  await real(request("GET", "/api/geo/projects/geo_mine/cards"), res);
+  assert.deepEqual(res.json(), { data: { zoneId: "ez_1", cards: [] } });
+  res = response();
+  await real(request("POST", "/api/geo/projects/geo_mine/cards/refresh", {}), res);
+  assert.equal(res.json().data.cards[0].cardId, "ec_1");
+  assert.deepEqual(cardCalls, [["list", "geo_mine"], ["refresh", "reader", "geo_mine"]]);
+  // A project that is not the caller's reads as one that does not exist, for both.
+  await assert.rejects(real(request("GET", "/api/geo/projects/geo_theirs/cards"), response()), { status: 404, code: "geo_project_not_found" });
+  await assert.rejects(real(request("POST", "/api/geo/projects/geo_theirs/cards/refresh", {}), response()), { status: 404, code: "geo_project_not_found" });
+  // Without the card hook the route exists and says so by name.
+  const bare = createGeoRoutes({ store, service, config, maxJsonBytes: 65_536 });
+  await assert.rejects(bare(request("GET", "/api/geo/projects/geo_mine/cards"), response()), { status: 503, code: "geo_unavailable" });
+  // The producer is checked by the domain: a kind outside the list or a doctor with no name is refused for this write and nothing else.
+  await assert.rejects(real(request("PATCH", "/api/geo/projects/geo_mine", { producer: { kind: "agency" } }), response()), { status: 400, code: "geo_producer_invalid" });
+  await assert.rejects(real(request("PATCH", "/api/geo/projects/geo_mine", { producer: { kind: "doctor" } }), response()), { status: 400, code: "geo_producer_invalid" });
+  assert.deepEqual(patched, []);
+  res = response();
+  await real(request("PATCH", "/api/geo/projects/geo_mine", { producer: { kind: "doctor", name: " 张医生 ", hospital: "某某医院" } }), res);
+  assert.deepEqual(patched, [["geo_mine", { producer: { kind: "doctor", name: "张医生", relation: "user_of_therapy", hospital: "某某医院" } }]]);
+  res = response();
+  await real(request("PATCH", "/api/geo/projects/geo_mine", { producer: null }), res);
+  assert.deepEqual(patched.at(-1), ["geo_mine", { producer: null }]);
+  assert.equal(geoRoutePattern("/api/geo/projects/geo_mine/cards"), "/api/geo/projects/:id/cards");
+  assert.equal(geoRoutePattern("/api/geo/projects/geo_mine/cards/refresh"), "/api/geo/projects/:id/cards/:item");
+});
+
+test("metric families: the evidence chain's cards and the judge's checks are counted", () => {
+  const families = geoMetricFamilies(true, {
+    tables: null, service: {}, social: null, worker: null,
+    cards: { zonesMade: 1, cardsCreated: 4, cardsUpdated: 1, cardsUnchanged: 7, claimsCarded: 12, claimsHeld: 3, refused: 2, referencesChecked: 9, referencesUnresolved: 1, articlesFlagged: 2 },
+    checks: { offLabel: 3, omittedSafety: 1, linkMissing: 2 },
+  });
+  const byName = new Map(families.map((family) => [family.name, family]));
+  const cards = byName.get("open_science_geo_cards_total");
+  assert.equal(cards?.type, "counter");
+  assert.deepEqual(cards?.series.find((series) => series.labels?.event === "claimsHeld")?.value, 3);
+  assert.deepEqual(cards?.series.find((series) => series.labels?.event === "articlesFlagged")?.value, 2);
+  assert.deepEqual(byName.get("open_science_geo_checks_total")?.series.map((series) => [series.labels?.check, series.value]), [["offLabel", 3], ["omittedSafety", 1], ["linkMissing", 2]]);
+  assert.equal(byName.has("open_science_geo_cards_total") && geoMetricFamilies(true, { tables: null, service: {}, social: null, worker: null }).some((family) => family.name === "open_science_geo_checks_total"), false,
+    "no checks recorded, no family");
+});

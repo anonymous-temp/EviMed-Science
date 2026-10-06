@@ -4,6 +4,7 @@
 // marketplace; a fake web reader serves published pages through the
 // platform's own HTML extractor.
 import assert from "node:assert/strict";
+import { geoClaimReferenceMarker } from "@evimed/domain";
 import {
   cancelOrder,
   clearStop,
@@ -296,6 +297,33 @@ export function defineGeoMarketScenarios(test, makeFixture, options = {}) {
       assert.equal(cappedOrders.length, 2);
       assert.ok(cappedOrders.every((order) => ["101", "107"].includes(order.resourceId)), "both on jksb.com.cn");
       assert.equal(cappedTick.skipped.no_admitted_outlet, 1);
+    } finally { await w.close(); }
+  });
+
+  test("the claim references an article carries are taken off before it is sent, the hash is of the reviewed file, and a paid placement keeps its label", options, async () => {
+    const w = await world(makeFixture);
+    try {
+      const store = w.fixture.store;
+      const marker = geoClaimReferenceMarker({ cardId: "ec_AbCd1234Ef", claimId: "dose", revision: 2 });
+      const cited = ARTICLE_MARKDOWN.replace("每周注射一次。", `每周注射一次。${marker}`);
+      assert.notEqual(cited, ARTICLE_MARKDOWN);
+      const p = await w.project({ articles: [{ markdown: cited }] });
+      assert.equal((await tickOrders(w.deps)).submitted, 1, "the reviewed file, markers and all, is what the hash binds");
+      const [sent] = w.fake.requestsTo("/api/media/send");
+      assert.ok(!String(sent.form.content).includes("[[ref:"), "no marker reaches the outlet");
+      assert.match(String(sent.form.content), /每周 0\.25 mg，4 周后增至每周 0\.5 mg，每周注射一次。/);
+      assert.match(String(sent.form.remark), /商业合作/, "the outlet is asked to carry the label");
+      const [article] = await store.getArticles([p.articleIds[0]]);
+      assert.equal(article.status, "placed");
+      assert.equal(article.placementLabel, "commercial_cooperation", "paid content says so on its own record");
+      // What the outlet published is the text without the markers, and the placement verifies against the protected spans sent.
+      const [order] = await orders(store, p.id);
+      const url = "https://www.jksb.com.cn/p/2026/0925/11.html";
+      w.fake.setOrder(order.vendorOrderNid, { status: 2, order_url: url });
+      w.reader.pages.set(url, { html: publishedHtml(ARTICLE_MARKDOWN) });
+      await tickPoll(w.deps);
+      w.clock.advance(HOUR + 60_000);
+      assert.equal((await tickVerify(w.deps)).passed, 1);
     } finally { await w.close(); }
   });
 

@@ -1,4 +1,5 @@
 import { randomBytes } from "node:crypto";
+import { GEO_PLACEMENT_LABELS } from "@evimed/domain";
 import { GEO_ORDER_ARTICLE_LIVE_STATES, migrateGeo } from "./geoPersistence.mjs";
 import { HttpError } from "./security.mjs";
 
@@ -82,7 +83,7 @@ async function ledgerSumsWith(client, geoProjectId, since) {
 }
 
 /**
- * SQL for the market side of 「循证 GEO」 (build spec §2): the media catalogue,
+ * SQL for the market side of 「循证传播」 (build spec §2): the media catalogue,
  * outcomes, orders and their events, the ledger, top-ups and reconciliations,
  * plus the few reads and forward-only writes the market needs on the content
  * side (projects, articles, groups, sources, targets). The DDL is package A's
@@ -336,7 +337,7 @@ export function mapArticle(row) {
     id: row.id, userId: row.user_id, geoProjectId: row.geo_project_id, runId: row.run_id ?? null, deliverableId: row.deliverable_id ?? null,
     path: row.path ?? null, layer: row.layer ?? null, title: row.title ?? "", groupId: row.group_id ?? null, claimIds: row.claim_ids ?? [],
     gate: row.gate ?? null, safety: row.safety ?? null, contentSha256: row.content_sha256 ?? null, protectedSha256: row.protected_sha256 ?? null,
-    status: row.status ?? null, isControl: Boolean(row.is_control), createdAt: iso(row.created_at),
+    status: row.status ?? null, isControl: Boolean(row.is_control), placementLabel: row.placement_label ?? null, createdAt: iso(row.created_at),
   };
 }
 
@@ -579,12 +580,17 @@ export class GeoMarketStore {
     return result.rows.map(mapArticle);
   }
 
-  /** Move an article forward (placed, published); never backward. @param {string} articleId @param {string[]} from @param {string} to @param {string} at */
-  async advanceArticleStatus(articleId, from, to, at) {
+  /**
+   * Move an article forward (placed, published); never backward. A paid placement records its label (广告 or 商业合作) on the
+   * article, and a later move keeps the one that is there.
+   * @param {string} articleId @param {string[]} from @param {string} to @param {string} at @param {{ placementLabel?: string | null }} [options]
+   */
+  async advanceArticleStatus(articleId, from, to, at, { placementLabel = null } = {}) {
     assertOneOf(to, ARTICLE_STATUSES, "article status");
     for (const state of from) assertOneOf(state, ARTICLE_STATUSES, "article status");
-    const result = await this.#query(`UPDATE evimed_geo.articles SET status = $3, updated_at = $4 WHERE id = $1 AND status = ANY($2::text[])`,
-      [String(articleId), from, to, assertAt(at)]);
+    if (placementLabel != null) assertOneOf(placementLabel, GEO_PLACEMENT_LABELS, "placement label");
+    const result = await this.#query(`UPDATE evimed_geo.articles SET status = $3, updated_at = $4, placement_label = coalesce(placement_label, $5)
+      WHERE id = $1 AND status = ANY($2::text[])`, [String(articleId), from, to, assertAt(at), placementLabel]);
     return (result.rowCount ?? 0) > 0;
   }
 

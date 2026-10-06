@@ -174,9 +174,9 @@ describe("CapabilitiesPage", () => {
     forgetResearchBilling();
   });
 
-  // 循证 GEO has its own row in the sidebar; its capabilities are not tools
+  // 循证传播 has its own row in the sidebar; its capabilities are not tools
   // one picks here, whatever the catalogue lists.
-  it("offers no 循证 GEO capability", async () => {
+  it("offers no 循证传播 capability", async () => {
     mocks.listWebResearchAgents.mockResolvedValue([
       ...agents,
       { ...agents[0], id: "geo-content", title: "GEO 答案引擎优化", category: "写作与传播" },
@@ -269,7 +269,7 @@ describe("CapabilitiesPage", () => {
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
   });
 
-  // The 「循证 GEO」 capabilities stay public — their module binds a
+  // The 「循证传播」 capabilities stay public — their module binds a
   // conversation to one by id, and an internal one would answer 403 — and are
   // not tools to pick here (build spec 2026-09-25 §6, `display.listed: false`).
   it("leaves out a capability its own module opens, while the catalogue still carries it", async () => {
@@ -282,7 +282,7 @@ describe("CapabilitiesPage", () => {
     for (const entry of geo) {
       expect(screen.queryByRole("button", { name: `用“${CAPABILITY_DISPLAY[entry.id].title}”开始一次对话` })).not.toBeInTheDocument();
     }
-    expect(screen.queryByText(/循证 GEO/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/循证传播/)).not.toBeInTheDocument();
   });
 
   // What the deployment can truthfully say about a tool is a label beside it, and only a label: nothing is hidden, and

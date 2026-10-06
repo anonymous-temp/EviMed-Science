@@ -682,7 +682,7 @@ export function runtimeEnvironment(input) {
     // Where the control plane wrote the tools this runtime does not offer
     // (`syncRuntimeDshProfile`, the MCP server's own EVIMED_DISABLED_TOOLS).
     // The guidance row reads it to leave out a capability whose module tools
-    // are off — 「循证 GEO」's for an account the module is not open to. A path,
+    // are off — 「循证传播」's for an account the module is not open to. A path,
     // not the list: the launch argv is built by the controller, which does not
     // hold the settings the list is derived from.
     EVIMED_DISABLED_TOOLS_FILE: String(input.disabledToolsFile ?? ""),

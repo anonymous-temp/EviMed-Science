@@ -49,6 +49,45 @@ describe("one answer", () => {
     expect(screen.getByTestId("location")).toHaveTextContent("/app/geo/geo_1/answers/snap_deepseek_old");
   });
 
+  it("is a measurement screen of the module: the browser tab says 「AI 回答监测」", async () => {
+    renderAnswer();
+    await screen.findByRole("heading", { level: 1, name: "打了减重针一直恶心，要不要停药？" });
+    await waitFor(() => expect(document.title).toBe("打了减重针一直恶心，要不要停药？ · AI 回答监测 · EviMed"));
+  });
+
+  it("reads the judge's findings against the card claims in their order, as lines of text and never a stop", async () => {
+    client.getGeoAnswer.mockResolvedValue({
+      ...answerFilled,
+      facts: {
+        ...answerFilled.facts,
+        specifiedInfo: { correct: 3, wrong: 1, decided: 4, rate: 0.75, byTopic: { dosage: { correct: 1, wrong: 1 }, indication: { correct: 2, wrong: 0 }, contraindication: { correct: 0, wrong: 0 }, adverse_reaction: { correct: 0, wrong: 0 } } },
+        checks: {
+          offLabel: ["也可以用于青少年减重"],
+          omittedSafety: [{ claimId: "gcl_1", claimKey: "contra", cardId: "ec_1", cardClaimId: "contra", cardRevision: 3 }],
+          citations: [
+            { link: "L1", url: "https://example.org/a", statement: "每周一次", exists: true, supports: "no", evidence: "每日一次" },
+            { link: "L2", url: "https://example.org/gone", statement: "每周一次", exists: false, supports: null, evidence: null },
+            { link: "L3", url: "https://example.org/unchecked", statement: "每周一次", exists: null, supports: null, evidence: null },
+          ],
+        },
+      },
+    });
+    renderAnswer();
+    const section = await screen.findByRole("region", { name: "对照卡片结论的核对" });
+    expect(within(section).getByText(/指定信息：判定 4 句，讲对 3 句，讲错 1 句；适应证 对 2 错 0；用法用量 对 1 错 1/)).toBeInTheDocument();
+    expect(within(section).getByText("超出说明书的说法：“也可以用于青少年减重”")).toBeInTheDocument();
+    expect(within(section).getByText("漏掉了 1 条说明书上的安全信息")).toBeInTheDocument();
+    expect(within(section).getByText(/页面里说的不一样/)).toBeInTheDocument();
+    expect(within(section).getByText(/打不开或已不存在/)).toBeInTheDocument();
+    expect(within(section).queryByText(/unchecked/)).not.toBeInTheDocument();
+  });
+
+  it("draws nothing for an answer the judge has no findings about", async () => {
+    renderAnswer();
+    await screen.findByRole("heading", { level: 1, name: "打了减重针一直恶心，要不要停药？" });
+    expect(screen.queryByRole("region", { name: "对照卡片结论的核对" })).not.toBeInTheDocument();
+  });
+
   it("lists the engines asked the same question, with what each answer did", async () => {
     renderAnswer();
     const nav = await screen.findByRole("navigation", { name: "AI 引擎" });

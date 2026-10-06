@@ -1,0 +1,348 @@
+{
+  "_provenance": "The platform's own medication-question bank (evidence-flywheel plan 2026-10-05 §5.6, F22): about sixty common medication questions by drug class, none of them about a brand, worded the way a person asks. Written for the platform and measured monthly on the consumer AI assistants (apps/server/src/geoQuestionBank.mjs). A question names a drug only by its generic or class name; nothing here says what the right answer is — the judge holds an assistant's answer to the verified claims of the platform's published cards.",
+  "version": 1,
+  "classes": [
+    {
+      "key": "antihypertensive",
+      "label": "降压药"
+    },
+    {
+      "key": "antidiabetic",
+      "label": "降糖药"
+    },
+    {
+      "key": "anticoagulant",
+      "label": "抗凝与抗血小板药"
+    },
+    {
+      "key": "lipid_lowering",
+      "label": "调脂药（他汀类）"
+    },
+    {
+      "key": "antibiotic",
+      "label": "抗菌药"
+    },
+    {
+      "key": "analgesic_antipyretic",
+      "label": "解热镇痛药"
+    },
+    {
+      "key": "gastric_acid",
+      "label": "抑酸与护胃药"
+    },
+    {
+      "key": "psychotropic",
+      "label": "精神科与助眠药"
+    },
+    {
+      "key": "hormone",
+      "label": "激素类药"
+    },
+    {
+      "key": "special_populations",
+      "label": "特殊人群用药"
+    }
+  ],
+  "questions": [
+    {
+      "id": "antihypertensive-01",
+      "class": "antihypertensive",
+      "text": "高血压患者可以同时服用两种降压药吗？"
+    },
+    {
+      "id": "antihypertensive-02",
+      "class": "antihypertensive",
+      "text": "降压药一天中什么时间吃比较合适？"
+    },
+    {
+      "id": "antihypertensive-03",
+      "class": "antihypertensive",
+      "text": "血压降下来以后可以自己停降压药吗？"
+    },
+    {
+      "id": "antihypertensive-04",
+      "class": "antihypertensive",
+      "text": "服用沙坦类降压药期间需要注意哪些情况？"
+    },
+    {
+      "id": "antihypertensive-05",
+      "class": "antihypertensive",
+      "text": "服用降压药后出现干咳是怎么回事？"
+    },
+    {
+      "id": "antihypertensive-06",
+      "class": "antihypertensive",
+      "text": "妊娠期高血压患者可以用哪些降压药？"
+    },
+    {
+      "id": "antidiabetic-01",
+      "class": "antidiabetic",
+      "text": "二甲双胍应该饭前吃还是饭后吃？"
+    },
+    {
+      "id": "antidiabetic-02",
+      "class": "antidiabetic",
+      "text": "2 型糖尿病患者漏服一次降糖药该怎么办？"
+    },
+    {
+      "id": "antidiabetic-03",
+      "class": "antidiabetic",
+      "text": "注射胰岛素后多久需要进食？"
+    },
+    {
+      "id": "antidiabetic-04",
+      "class": "antidiabetic",
+      "text": "服用降糖药期间出现低血糖该怎么处理？"
+    },
+    {
+      "id": "antidiabetic-05",
+      "class": "antidiabetic",
+      "text": "口服降糖药期间饮酒有影响吗？"
+    },
+    {
+      "id": "antidiabetic-06",
+      "class": "antidiabetic",
+      "text": "肾功能不好的糖尿病患者用降糖药要注意什么？"
+    },
+    {
+      "id": "anticoagulant-01",
+      "class": "anticoagulant",
+      "text": "服用华法林期间饮食要注意什么？"
+    },
+    {
+      "id": "anticoagulant-02",
+      "class": "anticoagulant",
+      "text": "阿司匹林肠溶片应该什么时候吃？"
+    },
+    {
+      "id": "anticoagulant-03",
+      "class": "anticoagulant",
+      "text": "同时服用抗凝药和感冒药安全吗？"
+    },
+    {
+      "id": "anticoagulant-04",
+      "class": "anticoagulant",
+      "text": "服用抗凝药期间牙龈出血需要停药吗？"
+    },
+    {
+      "id": "anticoagulant-05",
+      "class": "anticoagulant",
+      "text": "拔牙前需要停用抗血小板药吗？"
+    },
+    {
+      "id": "anticoagulant-06",
+      "class": "anticoagulant",
+      "text": "漏服一次抗凝药可以补吃吗？"
+    },
+    {
+      "id": "lipid_lowering-01",
+      "class": "lipid_lowering",
+      "text": "他汀类药物为什么建议晚上服用？"
+    },
+    {
+      "id": "lipid_lowering-02",
+      "class": "lipid_lowering",
+      "text": "吃他汀类药物会伤肝吗，需要定期检查什么？"
+    },
+    {
+      "id": "lipid_lowering-03",
+      "class": "lipid_lowering",
+      "text": "服用他汀类药物期间肌肉酸痛该怎么办？"
+    },
+    {
+      "id": "lipid_lowering-04",
+      "class": "lipid_lowering",
+      "text": "血脂恢复正常以后可以停用他汀类药物吗？"
+    },
+    {
+      "id": "lipid_lowering-05",
+      "class": "lipid_lowering",
+      "text": "他汀类药物可以和葡萄柚一起吃吗？"
+    },
+    {
+      "id": "lipid_lowering-06",
+      "class": "lipid_lowering",
+      "text": "孕妇可以使用他汀类药物吗？"
+    },
+    {
+      "id": "antibiotic-01",
+      "class": "antibiotic",
+      "text": "普通感冒需要吃抗生素吗？"
+    },
+    {
+      "id": "antibiotic-02",
+      "class": "antibiotic",
+      "text": "抗生素症状好转后可以提前停药吗？"
+    },
+    {
+      "id": "antibiotic-03",
+      "class": "antibiotic",
+      "text": "服用头孢类药物期间为什么不能饮酒？"
+    },
+    {
+      "id": "antibiotic-04",
+      "class": "antibiotic",
+      "text": "抗生素和益生菌需要间隔多久服用？"
+    },
+    {
+      "id": "antibiotic-05",
+      "class": "antibiotic",
+      "text": "对青霉素过敏的人可以使用头孢类药物吗？"
+    },
+    {
+      "id": "antibiotic-06",
+      "class": "antibiotic",
+      "text": "儿童发烧可以直接使用抗生素吗？"
+    },
+    {
+      "id": "analgesic_antipyretic-01",
+      "class": "analgesic_antipyretic",
+      "text": "布洛芬和对乙酰氨基酚可以一起吃吗？"
+    },
+    {
+      "id": "analgesic_antipyretic-02",
+      "class": "analgesic_antipyretic",
+      "text": "成人一天最多可以服用多少对乙酰氨基酚？"
+    },
+    {
+      "id": "analgesic_antipyretic-03",
+      "class": "analgesic_antipyretic",
+      "text": "长期吃止痛药会成瘾吗？"
+    },
+    {
+      "id": "analgesic_antipyretic-04",
+      "class": "analgesic_antipyretic",
+      "text": "空腹服用布洛芬会伤胃吗？"
+    },
+    {
+      "id": "analgesic_antipyretic-05",
+      "class": "analgesic_antipyretic",
+      "text": "退烧药吃完后间隔多久可以再吃？"
+    },
+    {
+      "id": "analgesic_antipyretic-06",
+      "class": "analgesic_antipyretic",
+      "text": "孕期发烧可以使用哪种退烧药？"
+    },
+    {
+      "id": "gastric_acid-01",
+      "class": "gastric_acid",
+      "text": "质子泵抑制剂应该在什么时候服用？"
+    },
+    {
+      "id": "gastric_acid-02",
+      "class": "gastric_acid",
+      "text": "长期服用奥美拉唑有哪些风险？"
+    },
+    {
+      "id": "gastric_acid-03",
+      "class": "gastric_acid",
+      "text": "胃药和其他药物同时吃需要间隔吗？"
+    },
+    {
+      "id": "gastric_acid-04",
+      "class": "gastric_acid",
+      "text": "胃酸多的人可以长期服用抗酸药吗？"
+    },
+    {
+      "id": "gastric_acid-05",
+      "class": "gastric_acid",
+      "text": "服用胃药几天症状没有好转需要换药吗？"
+    },
+    {
+      "id": "gastric_acid-06",
+      "class": "gastric_acid",
+      "text": "儿童反酸可以吃成人的胃药吗？"
+    },
+    {
+      "id": "psychotropic-01",
+      "class": "psychotropic",
+      "text": "安眠药可以长期服用吗？"
+    },
+    {
+      "id": "psychotropic-02",
+      "class": "psychotropic",
+      "text": "抗抑郁药一般多久开始起效？"
+    },
+    {
+      "id": "psychotropic-03",
+      "class": "psychotropic",
+      "text": "服用抗抑郁药感觉好转了可以自己停药吗？"
+    },
+    {
+      "id": "psychotropic-04",
+      "class": "psychotropic",
+      "text": "服用镇静催眠药期间可以开车吗？"
+    },
+    {
+      "id": "psychotropic-05",
+      "class": "psychotropic",
+      "text": "抗抑郁药可以和酒精一起使用吗？"
+    },
+    {
+      "id": "psychotropic-06",
+      "class": "psychotropic",
+      "text": "突然停用苯二氮䓬类药物会有什么后果？"
+    },
+    {
+      "id": "hormone-01",
+      "class": "hormone",
+      "text": "甲状腺激素类药物应该在什么时候服用？"
+    },
+    {
+      "id": "hormone-02",
+      "class": "hormone",
+      "text": "长期使用糖皮质激素有哪些副作用？"
+    },
+    {
+      "id": "hormone-03",
+      "class": "hormone",
+      "text": "服用糖皮质激素期间可以接种疫苗吗？"
+    },
+    {
+      "id": "hormone-04",
+      "class": "hormone",
+      "text": "激素类药物可以突然停用吗？"
+    },
+    {
+      "id": "hormone-05",
+      "class": "hormone",
+      "text": "外用激素药膏可以长期涂在脸上吗？"
+    },
+    {
+      "id": "hormone-06",
+      "class": "hormone",
+      "text": "口服避孕药漏服了怎么办？"
+    },
+    {
+      "id": "special_populations-01",
+      "class": "special_populations",
+      "text": "孕妇感冒可以吃哪些药？"
+    },
+    {
+      "id": "special_populations-02",
+      "class": "special_populations",
+      "text": "哺乳期服药会影响宝宝吗？"
+    },
+    {
+      "id": "special_populations-03",
+      "class": "special_populations",
+      "text": "儿童服用药物的剂量怎么按体重计算？"
+    },
+    {
+      "id": "special_populations-04",
+      "class": "special_populations",
+      "text": "老年人同时服用多种药物要注意什么？"
+    },
+    {
+      "id": "special_populations-05",
+      "class": "special_populations",
+      "text": "肝肾功能不好的人用药需要调整吗？"
+    },
+    {
+      "id": "special_populations-06",
+      "class": "special_populations",
+      "text": "中药和西药可以一起吃吗？"
+    }
+  ]
+}

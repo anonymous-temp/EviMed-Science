@@ -1152,7 +1152,7 @@ export {
   FRONTIER_SOURCE_DISPLAY_NAMES,
   frontierSourceDisplayName,
 } from './src/frontierSourceNames.mjs'
-// geoVocabulary — 81 exports: 「循证 GEO」's closed vocabularies (pools, engines,
+// geoVocabulary — 81 exports: 「循证传播」's closed vocabularies (pools, engines,
 // steps, measurement and error states, source and article words, order and
 // ledger states, the social channel, the runtime tools' words), their Chinese
 // labels, the metric ids the platform's own views read, and the one
@@ -1165,6 +1165,19 @@ export {
   GEO_ARTICLE_LAYER_LABELS_ZH,
   GEO_ARTICLE_SAFETY,
   GEO_ARTICLE_STATUSES,
+  GEO_CITATION_SUPPORTS,
+  GEO_SPECIFIED_TOPICS,
+  GEO_STATEMENT_TOPICS,
+  GEO_STATEMENT_TOPIC_LABELS_ZH,
+  GEO_ABILITIES,
+  GEO_ARTICLE_REFERENCE_STATUSES,
+  GEO_MEMBER_ROLES,
+  GEO_MEMBER_ROLE_LABELS_ZH,
+  GEO_ROLE_ABILITIES,
+  geoAbilitiesOf,
+  geoRoleAllows,
+  GEO_PLACEMENT_LABELS,
+  GEO_PLACEMENT_LABELS_ZH,
   GEO_AUDIENCES,
   GEO_CELL_STATUSES,
   GEO_CLAIM_SOURCE_KINDS,
@@ -1238,9 +1251,10 @@ export {
   GEO_WRITE_WHATS,
   GEO_WRITE_WHAT_LABELS_ZH,
   geoArticlePublishable,
+  geoSpecifiedInfoAccuracy,
   isGeoValue,
 } from './src/geoVocabulary.mjs'
-// geoMetrics — 20 exports: 「循证 GEO」's metric table (the owner's
+// geoMetrics — 20 exports: 「循证传播」's metric table (the owner's
 // geo-skills metrics.yaml as `geo/metrics.json`, with its constants and their
 // provenance), the probe sanity markers (`geo/sanity.json`), and the pure
 // computation — per-scope cells with Wilson intervals and the no-fake-number
@@ -1816,7 +1830,7 @@ export {
 export { EVOLUTION_TOOL_HARM_TEST } from './src/evolution.mjs'
 
 // geneExpression — NCBI Gene Expression Omnibus series to differential expression (plan 2026-10-02 §11.3 N17): the
-// accessions, the six limits, the tool's refusals and the advisory findings over its package. Not 「循证 GEO」.
+// accessions, the six limits, the tool's refusals and the advisory findings over its package. Not 「循证传播」.
 export {
   GENE_EXPRESSION_ACCESSIONS,
   GENE_EXPRESSION_CAPABILITY_ID,
@@ -1841,6 +1855,54 @@ export {
 } from './src/geneExpression.mjs'
 
 export { EVOLUTION_ERROR_MESSAGES, EVOLUTION_TRACKS, EVOLUTION_DATA_LEVELS, EVOLUTION_VALIDATION_LEVELS, EVOLUTION_DECISION_CLASSES, EVOLUTION_GAP_CODES, EVOLUTION_LEAD_SOURCES, EVOLUTION_ORIGINS, EVOLUTION_BUILD_FORMS, EVOLUTION_CASE_GROUPS, EVOLUTION_TOOL_STATES, EVOLUTION_JOB_KINDS, EVOLUTION_EXECUTABLE_OPERATIONS, EVOLUTION_ONE_WAY_OPERATIONS, evolutionDecisionClass, evolutionAdaptiveClass, evolutionValidationLevel, evolutionToolVisible, evolutionMethodFields, evolutionDataMatch, validateEvolutionDataRequirements } from './src/evolution.mjs'
+
+// geoEvidenceChain — 「循证传播」 as one evidence chain (flywheel F21, F28, 2026-10-06): the product zone's cards made from a
+// project's verified claims, the closed vocabulary of how a difference is known, the producer settings and the disclosure's
+// people, and the claim-reference grammar the lower layers cite the cards by
+export {
+  EVIDENCE_FEED_ZONE_KINDS,
+  GEO_CARD_HELD_REASONS_ZH,
+  GEO_COMPARISON_EVIDENCE_TYPES,
+  GEO_AI_LABEL_ZH,
+  GEO_CITING_LAYERS,
+  GEO_COMPARISON_EVIDENCE_TYPE_LABELS_ZH,
+  GEO_DEFAULT_PRODUCER_RELATION,
+  GEO_PRODUCER_KINDS,
+  GEO_PRODUCER_KIND_LABELS_ZH,
+  GEO_STALE_CHANGE_CATEGORIES,
+  geoCardClaimId,
+  geoCardLayerMarkdown,
+  geoCardPlan,
+  geoCardProducer,
+  geoClaimJourneyStage,
+  geoClaimReferenceMarker,
+  geoComparisonEvidenceType,
+  geoDisclosurePerson,
+  geoNumberTokens,
+  geoProducerSettingsIssues,
+  geoPublishableText,
+  geoReferenceGraph,
+  geoSentences,
+  geoSourceUrl,
+  geoStaleReferences,
+  parseGeoClaimReferences,
+  stripGeoClaimReferences,
+  isFeedEligibleCard,
+  isFeedEligibleZone,
+  normalizeGeoProducerSettings,
+} from './src/geoEvidenceChain.mjs'
+
+// geoQuestionBank — the platform's own medication-question bank (flywheel F22): about sixty neutral questions by drug class, the month
+// they are measured in, and the per-class accuracy and the share of answers citing an EviMed page, computed from the judged answers
+export {
+  GEO_QUESTION_BANK,
+  GEO_QUESTION_BANK_CLASSES,
+  GEO_QUESTION_BANK_CLASS_LABELS_ZH,
+  GEO_QUESTION_BANK_VERSION,
+  geoQuestionBankClassOf,
+  geoQuestionBankMonth,
+  summarizeQuestionBank,
+} from './src/geoQuestionBank.mjs'
 
 // evidenceCard — 80 exports: the evidence card, the platform's single evidence unit (flywheel plan 2026-10-05 §4): its contract
 // (producer, originality, lineage, entity keys, journey stage, disclosure, claims, the public view's content), the two

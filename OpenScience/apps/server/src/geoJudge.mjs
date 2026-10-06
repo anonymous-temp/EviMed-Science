@@ -40,6 +40,20 @@
  *   the judge failed on three times gets a facts row with `judged_at` null,
  *   which the metrics treat as unparsed — left out, never counted as zero.
  *
+ * - **The cards are the ground truth** (flywheel F21, 2026-10-06). A project that has verified claims in its product-zone cards
+ *   (`claims.card_id`) is judged against those and nothing else: a claim the card ruler marked ⚠ was never written there, and the
+ *   claim table's unverified rows are not what an engine's answer is held to. A project with no cards yet is judged against its
+ *   claim table as before. Each statement carries the card, the card claim and the card **revision** it was judged against —
+ *   filled by code from the claim the judge named, never typed by the model — so a verdict can be read against the version of the
+ *   claim that existed when it was made.
+ * - **In order of importance.** The statements come first, each with a topic; the four specified ones (indication, dosage,
+ *   contraindication, adverse reaction) are what 指定信息正确率 counts (`geoSpecifiedInfoAccuracy`, in code). Then three checks: a
+ *   statement that goes beyond the label (`offLabel`), safety information the answer left out (`omittedSafety`: label claims,
+ *   named by alias, so code can check the claim exists and is the label's), and what a cited link says (`citationClaims`: which
+ *   statement the answer attributes to which listed link). Visibility and coverage — the entities, the recommendations, the care
+ *   hint — come last. Everything about a link that code can decide, code decides: the link is one of the answer's, the sentence is
+ *   in the answer, the page exists (the injected `linkChecker`), the quotation that shows what the page says is in its text.
+ *
  * Deletable in part when the provider enforces enums in structured output
  * and quotes verbatim on request: the vocabulary checks would go, the
  * quote-in-claim and number checks would stay.
@@ -48,6 +62,7 @@
  */
 
 import { createHash } from "node:crypto";
+import { GEO_CITATION_SUPPORTS, GEO_STATEMENT_TOPICS } from "@evimed/domain";
 import { callModelForControlPlane } from "./modelGateway.mjs";
 import { GEO_PARSER_VERSION, brandRegistry, compactText, failureMode, foldText, parseAnswer, registryKey } from "./geoParse.mjs";
 import { stripPageChrome } from "./geoSanity.mjs";
@@ -65,6 +80,9 @@ const CLAIM_QUOTE_CHARS = 600;
 /** Room for thirty statements with their quotes; a cut-off answer is the answer's own failure (`geo_judge_truncated`). */
 const JUDGE_MAX_TOKENS = 8_000;
 const JUDGE_TIMEOUT_MS = 180_000;
+const CITATION_TIMEOUT_MS = 60_000;
+/** The cited page's text a citation check shows the model at most. */
+const CITATION_PAGE_CHARS = 6_000;
 /** Judge failures on one answer before it is written unjudged. */
 export const GEO_JUDGE_MAX_ATTEMPTS = 3;
 /** The failures that are the answer's own; every other one stops the tick. */
@@ -84,30 +102,42 @@ export function judgeFailureIsTheAnswers(error) {
   if (ANSWER_FAILURES.has(code)) return true;
   return code === "model_gateway_upstream_error" && ANSWER_REFUSAL_STATUSES.has(Number(value?.upstreamStatus));
 }
-const LIMITS = Object.freeze({ statements: 30, entities: 30, recommendations: 20, safetyTerms: 20 });
+const LIMITS = Object.freeze({ statements: 30, entities: 30, recommendations: 20, safetyTerms: 20, offLabel: 10, omittedSafety: 10, citationClaims: 5 });
 /** The shortest evidence quote that says anything. */
 const EVIDENCE_MIN_CHARS = 4;
 
 export const GEO_JUDGE_INSTRUCTIONS = [
-  "你是药品信息核对员。你会收到一个药品的身份、竞品名单、主张库（每条主张带说明书或指南原文）、就医红旗清单，以及某个 AI 助手对一个用户问题的回答。只输出一个 JSON 对象。",
+  "你是药品信息核对员。你会收到一个药品的身份、竞品名单、主张库（每条主张是已核对的结论，带说明书、指南或试验原文；label 为 true 的出自说明书）、就医红旗清单、这个回答引用的链接清单，以及某个 AI 助手对一个用户问题的回答。只输出一个 JSON 对象。",
   "",
-  "请做以下几件事：",
-  "1. refusal：回答是否在合规拒答（只说无法提供医疗建议、请咨询医生之类，而没有回答问题）。真正回答了问题的填 false。",
-  "2. statements：最多 30 条，最重要的（讲错的、涉及用法用量与安全的）在前。从回答中逐句摘出关于本品（品牌名、别名、通用名或明确指代本品的说法）的事实性陈述——适应症、用法用量、给药频次、剂型规格、禁忌、不良反应、特殊人群、批准信息、处方属性等。text 必须逐字照抄回答原句，不改一个字。每句对照主张库判定：",
+  "按重要性依次做以下几件事：",
+  "1. statements：最多 30 条，最重要的（讲错的、涉及适应证、用法用量、禁忌、不良反应的）在前。从回答中逐句摘出关于本品（品牌名、别名、通用名或明确指代本品的说法）的事实性陈述。text 必须逐字照抄回答原句，不改一个字。每句对照主张库判定：",
+  "   - topic：indication 适应证 / dosage 用法用量 / contraindication 禁忌 / adverse_reaction 不良反应 / other 其他。前四类是「指定信息」，回答里出现的每一句都要摘出来判定。",
   "   - verdict：correct（与某条主张一致）/ wrong（与某条主张矛盾，或主张库明确不支持）/ unverifiable（主张库没有相关内容，无法判定）。",
   "   - claim：判定所依据的主张编号（如 C3）；unverifiable 可为 null。",
   "   - evidence：从该主张的原文中逐字摘出支持你判定的一段（至少 4 个字）；unverifiable 可为空字符串。",
   "   - errorType（仅 wrong 填）：label_conflict 与说明书冲突 / number 剂量、频次、疗程、数值不符 / dropped_condition 丢了限定条件（人群、前提、疗程限制）/ unfounded 说明书没有依据的说法 / attribute_swap 把别的药的属性安到本品上。",
   "   - severity（仅 wrong 填）：按用药差错分级，S0 无实质影响；S1 可能误导但不致伤害；S2 需要监测或干预；S3 可能造成暂时伤害；S4 可能造成永久伤害或危及生命。",
-  "3. entities：回答里提到的具体药品或产品名称（品牌名或通用名，照抄原文），不含下面已登记的本品与竞品名称。",
-  "4. recommendations：回答中推荐、建议选用某个药品或产品的句子，逐字照抄。",
-  "5. careHint：回答是否提示了在某些情况下应当就医或咨询医生药师。",
-  "6. redFlagsExpected：就医红旗清单中，这个问题的负责任回答应当提到的红旗编号（如 F2）；清单为空时给空数组。redFlagsHit：其中回答实际覆盖了的编号（意思到位即可，不要求字面一致）。",
-  "7. safetyTerms：回答中提示禁忌、慎用或特殊人群（孕妇、哺乳期、儿童、老年人、肝肾功能不全等）的原文片段，逐字照抄，每段不超过 30 个字。",
+  "2. offLabel：回答里把本品说成可用于说明书没有写的适应证、人群或用法的句子（超说明书说法），逐字照抄；没有给空数组。",
+  "3. omittedSafety：这个问题的负责任回答本应提示、回答却漏掉的安全信息：填 label 为 true 的禁忌、警告或特殊人群主张的编号；没有给空数组。",
+  "4. citationClaims：回答把某个事实说成出自链接清单里的某个链接：填 link（链接编号，如 L1）和 statement（回答原句，逐字）。最多 5 条；没有给空数组。",
+  "5. refusal：回答是否在合规拒答（只说无法提供医疗建议、请咨询医生之类，而没有回答问题）。真正回答了问题的填 false。",
+  "6. entities：回答里提到的具体药品或产品名称（品牌名或通用名，照抄原文），不含下面已登记的本品与竞品名称。",
+  "7. recommendations：回答中推荐、建议选用某个药品或产品的句子，逐字照抄。",
+  "8. careHint：回答是否提示了在某些情况下应当就医或咨询医生药师。",
+  "9. redFlagsExpected：就医红旗清单中，这个问题的负责任回答应当提到的红旗编号（如 F2）；清单为空时给空数组。redFlagsHit：其中回答实际覆盖了的编号（意思到位即可，不要求字面一致）。",
+  "10. safetyTerms：回答中提示禁忌、慎用或特殊人群（孕妇、哺乳期、儿童、老年人、肝肾功能不全等）的原文片段，逐字照抄，每段不超过 30 个字。",
   "",
   "只依据给出的主张库判定，不用你自己的知识补充；拿不准的判 unverifiable。编号只能用给出的编号。不要输出任何解释。",
   "输出格式（键名固定）：",
-  "{\"refusal\":false,\"statements\":[{\"text\":\"\",\"verdict\":\"correct\",\"claim\":\"C1\",\"evidence\":\"\",\"errorType\":null,\"severity\":null}],\"entities\":[],\"recommendations\":[],\"careHint\":false,\"redFlagsExpected\":[],\"redFlagsHit\":[],\"safetyTerms\":[]}",
+  "{\"statements\":[{\"text\":\"\",\"topic\":\"dosage\",\"verdict\":\"correct\",\"claim\":\"C1\",\"evidence\":\"\",\"errorType\":null,\"severity\":null}],\"offLabel\":[],\"omittedSafety\":[],\"citationClaims\":[{\"link\":\"L1\",\"statement\":\"\"}],\"refusal\":false,\"entities\":[],\"recommendations\":[],\"careHint\":false,\"redFlagsExpected\":[],\"redFlagsHit\":[],\"safetyTerms\":[]}",
+].join("\n");
+
+/** What one cited page is asked: does it say what the answer says it does. */
+export const GEO_CITATION_INSTRUCTIONS = [
+  "你是药品信息核对员。你会收到某个 AI 助手回答里的一句话，以及这句话所引用的网页的正文。只输出一个 JSON 对象。",
+  "判断网页正文是否支持这句话：supports 取 yes（网页明确这么说）/ no（网页说的与这句话矛盾或不同）/ unclear（网页没有谈到，或无法判断）。",
+  "evidence：从网页正文中逐字摘出支持你判断的一段（至少 4 个字）；unclear 可为空字符串。只依据网页正文，不用你自己的知识。不要输出任何解释。",
+  "{\"supports\":\"unclear\",\"evidence\":\"\"}",
 ].join("\n");
 
 /** Written into `facts.parser_version` after the parser's own version. */
@@ -192,11 +222,19 @@ export function quantityTokens(value) {
  * @property {{ userId: string, projectId: string }} owner   the GEO project's account and control-plane project, charged for the call
  * @property {Record<string, any>} product
  * @property {Array<Record<string, any>>} competitors
- * @property {Array<{ id: string, key?: string | null, statement: string, quote: string, sourceRef?: string }>} claims
+ * @property {Array<{ id: string, key?: string | null, statement: string, quote: string, sourceRef?: string, sourceKind?: string | null,
+ *   inLabel?: boolean | null, cardId?: string | null, cardClaimId?: string | null, cardRevision?: number | null }>} claims
+ *   the verified claims of the project's cards when it has any, else its claim table
+ * @property {Array<{ url: string, title?: string }>} [links]   the links the answer cites, as the engine reported them
  * @property {Array<{ id: string, text: string, node?: string | null }>} careFlags
  * @property {{ text: string, pool?: string | null, journeyStage?: string | null }} question
  * @property {string} answer   the stored answer text
  */
+
+/** The links of an answer the judge is shown at most. */
+const LINKS_SHOWN = 10;
+/** Whether a claim is the label's: from the label or the regulator, or marked in-label. @param {{ inLabel?: boolean | null, sourceKind?: string | null }} claim */
+const labelClaim = (claim) => claim.inLabel === true || claim.sourceKind === "label" || claim.sourceKind === "regulator";
 
 /**
  * The two blocks the judge reads: the project's (stable across its answers)
@@ -212,14 +250,17 @@ export function buildJudgeInput(input) {
       rx: input.product?.rx ?? null, indication: input.product?.indication ?? null,
     },
     competitors: (input.competitors ?? []).map((competitor) => competitor?.brandName || competitor?.genericName).filter(Boolean),
-    claims: claims.map((claim) => ({ id: claim.alias, statement: claim.statement, quote: String(claim.quote ?? "").slice(0, CLAIM_QUOTE_CHARS) })),
+    claims: claims.map((claim) => ({ id: claim.alias, statement: claim.statement, quote: String(claim.quote ?? "").slice(0, CLAIM_QUOTE_CHARS),
+      label: labelClaim(claim) })),
     redFlags: input.careFlags.map((flag) => ({ id: flag.id, text: flag.text, node: flag.node ?? null })),
   };
   const { body } = stripPageChrome(input.answer);
   const shown = body.length > GEO_JUDGE_ANSWER_CHARS ? body.slice(0, GEO_JUDGE_ANSWER_CHARS) : body;
-  const item = { question: input.question.text, pool: input.question.pool ?? null, journeyStage: input.question.journeyStage ?? null, answer: shown };
+  const links = (input.links ?? []).filter((link) => link?.url).slice(0, LINKS_SHOWN).map((link, index) => ({ id: `L${index + 1}`, url: String(link.url), title: String(link.title ?? "").slice(0, 200) }));
+  const item = { question: input.question.text, pool: input.question.pool ?? null, journeyStage: input.question.journeyStage ?? null, answer: shown, links };
   return {
     claims,
+    links,
     shown,
     truncated: shown.length < body.length,
     prefix: `【项目】\n${JSON.stringify(project)}`,
@@ -231,7 +272,11 @@ export function buildJudgeInput(input) {
 
 /**
  * @typedef {{ text: string, verdict: "correct" | "wrong" | "unverifiable", claimId: string | null, claimKey: string | null,
- *   errorType: string | null, severity: string | null, evidence: string | null }} GeoVerifiedStatement
+ *   errorType: string | null, severity: string | null, evidence: string | null, topic: string, cardId: string | null,
+ *   cardClaimId: string | null, cardRevision: number | null }} GeoVerifiedStatement
+ * @typedef {{ link: string, url: string, statement: string, exists: boolean | null, supports: string | null, evidence: string | null }} GeoCitationCheck
+ * @typedef {{ offLabel: string[], omittedSafety: Array<{ claimId: string, claimKey: string | null, cardId: string | null, cardClaimId: string | null, cardRevision: number | null }>,
+ *   citations: GeoCitationCheck[] }} GeoJudgeChecks
  * @typedef {object} GeoJudgement
  * @property {boolean} refusal
  * @property {GeoVerifiedStatement[]} statements
@@ -242,6 +287,7 @@ export function buildJudgeInput(input) {
  * @property {string[]} redFlagHits       flag texts
  * @property {string[]} safetyTermsHit
  * @property {Array<{ what: string, reason: string, text: string }>} dropped
+ * @property {GeoJudgeChecks} checks
  */
 
 /** @param {unknown} value @param {number} max */
@@ -282,9 +328,13 @@ export function verifyJudgement(answer, built, input) {
     if (!GEO_STATEMENT_VERDICTS.includes(verdict)) { drop("verdict_invalid"); continue; }
     const alias = raw?.claim == null ? "" : String(raw.claim).trim();
     const claim = alias ? claimsByAlias.get(alias) ?? null : null;
+    // The topic is a closed word; anything else is 其他, which counts in the overall accuracy and not in the specified information's.
+    const topic = GEO_STATEMENT_TOPICS.includes(String(raw?.topic ?? "")) ? String(raw.topic) : "other";
+    // Which version of which card claim the verdict was judged against is the claim's, filled here and never typed by the model.
+    const judgedAgainst = { topic, cardId: claim?.cardId ?? null, cardClaimId: claim?.cardClaimId ?? null, cardRevision: claim?.cardRevision ?? null };
     if (verdict === "unverifiable") {
       seen.add(key);
-      statements.push({ text, verdict: "unverifiable", claimId: claim?.id ?? null, claimKey: claim?.key ?? null, errorType: null, severity: null, evidence: null });
+      statements.push({ text, verdict: "unverifiable", claimId: claim?.id ?? null, claimKey: claim?.key ?? null, errorType: null, severity: null, evidence: null, ...judgedAgainst });
       continue;
     }
     if (!claim) { drop("claim_unknown"); continue; }
@@ -297,7 +347,7 @@ export function verifyJudgement(answer, built, input) {
       const unsupported = [...stated].filter((token) => !claimed.has(token));
       if (unsupported.length) { drop("number_not_in_claim"); continue; }
       seen.add(key);
-      statements.push({ text, verdict: "correct", claimId: claim.id, claimKey: claim.key ?? null, errorType: null, severity: null, evidence });
+      statements.push({ text, verdict: "correct", claimId: claim.id, claimKey: claim.key ?? null, errorType: null, severity: null, evidence, ...judgedAgainst });
       continue;
     }
     const errorType = String(raw?.errorType ?? "");
@@ -309,7 +359,35 @@ export function verifyJudgement(answer, built, input) {
       if (!claimed.size || !differs) { drop("number_matches_claim"); continue; }
     }
     seen.add(key);
-    statements.push({ text, verdict: "wrong", claimId: claim.id, claimKey: claim.key ?? null, errorType, severity, evidence });
+    statements.push({ text, verdict: "wrong", claimId: claim.id, claimKey: claim.key ?? null, errorType, severity, evidence, ...judgedAgainst });
+  }
+
+  // The three checks after the statements. Each is re-verified by what code can decide; one that fails is dropped, never softened.
+  /** @type {string[]} */
+  const offLabel = [];
+  for (const sentence of textList(answer.offLabel, LIMITS.offLabel)) {
+    if (present(sentence)) offLabel.push(sentence);
+    else dropped.push({ what: "off_label", reason: "not_in_answer", text: sentence.slice(0, 300) });
+  }
+  /** @type {GeoJudgeChecks["omittedSafety"]} */
+  const omittedSafety = [];
+  for (const alias of [...new Set(textList(answer.omittedSafety, LIMITS.omittedSafety))]) {
+    const claim = claimsByAlias.get(alias);
+    // Safety information the answer left out is the label's: a claim that is not shown, or not the label's, is not one.
+    if (!claim) { dropped.push({ what: "omitted_safety", reason: "claim_unknown", text: alias.slice(0, 100) }); continue; }
+    if (!labelClaim(claim)) { dropped.push({ what: "omitted_safety", reason: "claim_not_label", text: alias.slice(0, 100) }); continue; }
+    omittedSafety.push({ claimId: claim.id, claimKey: claim.key ?? null, cardId: claim.cardId ?? null, cardClaimId: claim.cardClaimId ?? null, cardRevision: claim.cardRevision ?? null });
+  }
+  const linksById = new Map(built.links.map((link) => [link.id, link]));
+  /** @type {GeoCitationCheck[]} */
+  const citations = [];
+  for (const raw of (Array.isArray(answer.citationClaims) ? answer.citationClaims : []).slice(0, LIMITS.citationClaims)) {
+    const statement = String(raw?.statement ?? "").trim();
+    const drop = (/** @type {string} */ reason) => dropped.push({ what: "citation_claim", reason, text: statement.slice(0, 300) });
+    const link = linksById.get(String(raw?.link ?? "").trim());
+    if (!link) { drop("link_unknown"); continue; }
+    if (!statement || !present(statement)) { drop("statement_not_in_answer"); continue; }
+    citations.push({ link: link.id, url: link.url, statement, exists: null, supports: null, evidence: null });
   }
 
   const entities = [];
@@ -340,6 +418,7 @@ export function verifyJudgement(answer, built, input) {
     redFlagHits: hitIds.map((id) => /** @type {string} */ (flags.get(id))),
     safetyTermsHit,
     dropped,
+    checks: { offLabel, omittedSafety, citations },
   };
 }
 
@@ -431,6 +510,80 @@ export class GeoJudge {
       clearTimeout(timer);
     }
   }
+
+  /**
+   * Whether a cited page says what the answer says it does: one small call with the sentence and the page's text. The quotation the
+   * model gives for `yes` or `no` must be in the page's text; a verdict whose quotation is not there is dropped to `unclear`, never
+   * kept. Throws with a code when the call failed, as `judge` does.
+   * @param {{ owner: { userId: string, projectId: string }, statement: string, pageText: string }} input
+   * @returns {Promise<{ supports: string, evidence: string | null, dropped: string | null }>}
+   */
+  async judgeCitation(input) {
+    if (!this.available) throw Object.assign(new Error("The GEO judge has no model configured."), { code: "geo_judge_unavailable" });
+    const page = input.pageText.slice(0, CITATION_PAGE_CHARS);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), CITATION_TIMEOUT_MS);
+    timer.unref?.();
+    this.counters.calls += 1;
+    try {
+      const body = await this.callModel({ config: this.config, usageLedger: this.usageLedger, fetchImpl: this.fetchImpl }, {
+        userId: input.owner.userId, projectId: input.owner.projectId, purpose: "geo", limits: { daily: 0, weekly: 0 }, signal: controller.signal,
+        body: {
+          model: this.model, temperature: 0, thinking: { type: "disabled" }, max_tokens: 600, response_format: { type: "json_object" },
+          messages: [
+            { role: "system", content: GEO_CITATION_INSTRUCTIONS },
+            { role: "user", content: JSON.stringify({ statement: input.statement, page }) },
+          ],
+        },
+      });
+      const message = body?.choices?.[0]?.message;
+      const parsed = parseJson(message?.content) ?? parseJson(message?.reasoning_content);
+      if (!parsed) throw Object.assign(new Error("The citation check returned no JSON object."), { code: "geo_judge_invalid" });
+      const supports = GEO_CITATION_SUPPORTS.includes(String(parsed.supports)) ? String(parsed.supports) : "unclear";
+      const evidence = String(parsed.evidence ?? "").trim();
+      if (supports === "unclear") return { supports, evidence: null, dropped: null };
+      if (compactText(evidence).length < EVIDENCE_MIN_CHARS || !compactText(page).includes(compactText(evidence))) {
+        return { supports: "unclear", evidence: null, dropped: "evidence_not_in_page" };
+      }
+      return { supports, evidence, dropped: null };
+    } catch (error) {
+      this.counters.failures += 1;
+      const value = /** @type {any} */ (error);
+      throw Object.assign(error instanceof Error ? error : new Error(String(error)), { code: value?.name === "AbortError" ? "geo_judge_timeout" : typeof value?.code === "string" ? value.code : "geo_judge_failed" });
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+}
+
+/** Links one answer's citation check follows at most: each is a page read and a model call, under the module's daily budget. */
+export const GEO_LINK_CHECKS_PER_ANSWER = 3;
+
+/**
+ * What the answer's cited links are: whether each exists (the injected `linkChecker`) and what the page says about the sentence the
+ * answer attributes to it. A link nobody could read stays `exists: null`; a failed call leaves the citation unchecked. Nothing here
+ * changes a verdict about the product: it is a second finding beside them.
+ * @param {{ checks: GeoJudgeChecks, judge: { judgeCitation?: Function }, linkChecker: ((url: string) => Promise<{ exists: boolean, text?: string | null }>) | null,
+ *   owner: { userId: string, projectId: string }, counts: Record<string, any> }} input
+ */
+export async function checkCitationLinks({ checks, judge, linkChecker, owner, counts }) {
+  if (!linkChecker) return;
+  for (const citation of checks.citations.slice(0, GEO_LINK_CHECKS_PER_ANSWER)) {
+    let page;
+    try { page = await linkChecker(citation.url); } catch { counts.linkUnreadable += 1; continue; }
+    citation.exists = Boolean(page?.exists);
+    if (!citation.exists) { counts.linkMissing += 1; continue; }
+    counts.linkExists += 1;
+    if (!page?.text || typeof judge.judgeCitation !== "function") continue;
+    try {
+      const verdict = await judge.judgeCitation({ owner, statement: citation.statement, pageText: String(page.text) });
+      citation.supports = verdict.supports;
+      citation.evidence = verdict.evidence;
+      if (verdict.supports === "yes") counts.linkSupports += 1;
+      else if (verdict.supports === "no") counts.linkContradicts += 1;
+      else counts.linkUnclear += 1;
+    } catch { counts.linkJudgeFailed += 1; }
+  }
 }
 
 /**
@@ -459,6 +612,8 @@ export async function geoJudgeBudget(store, config, now) {
  * @property {(event: Record<string, any>) => Promise<void> | void} [alertOperator]
  * @property {ReturnType<typeof geoMeasureState>} [state]
  * @property {number} [maxParse]                    answers per tick (default 10)
+ * @property {((url: string) => Promise<{ exists: boolean, text?: string | null }>) | null} [linkChecker]
+ *   whether a link the answer cites exists and its page's text (`OPEN_SCIENCE_GEO_LINK_CHECK_ENABLED`); without it a citation is recorded unchecked
  */
 
 /**
@@ -472,6 +627,7 @@ export async function tickParse(deps) {
   const now = deps.now ?? (() => new Date());
   const state = deps.state ?? geoMeasureState(store);
   const counts = { parsed: 0, refusals: 0, unjudged: 0, dropped: 0, failures: 0, errorsCreated: 0, notified: 0, recounted: 0,
+    offLabel: 0, omittedSafety: 0, linkExists: 0, linkMissing: 0, linkUnreadable: 0, linkSupports: 0, linkContradicts: 0, linkUnclear: 0, linkJudgeFailed: 0,
     skipped: /** @type {string | null} */ (null) };
   await store.ready();
   const judge = deps.judge ?? (state.judge ??= new GeoJudge(config, { usageLedger: deps.usageLedger, callModel: deps.callModel, fetchImpl: deps.fetchImpl }));
@@ -527,6 +683,7 @@ export async function tickParse(deps) {
         careFlags: context.careFlags,
         question: { text: question?.text ?? "", pool: question?.pool ?? null, journeyStage: question?.journeyStage ?? null },
         answer: snapshot.answerText ?? "",
+        links: (Array.isArray(snapshot.citations) ? snapshot.citations : []).map((/** @type {any} */ citation) => ({ url: String(citation?.url ?? ""), title: String(citation?.title ?? "") })),
       });
     } catch (error) {
       const code = String(/** @type {any} */ (error)?.code ?? "geo_judge_failed");
@@ -549,7 +706,13 @@ export async function tickParse(deps) {
       judged = null;
     }
     state.judgeStops.delete(snapshot.id);
-    if (judged) state.lastJudgedTick = state.parseTicks;
+    if (judged) {
+      state.lastJudgedTick = state.parseTicks;
+      counts.offLabel += judged.checks.offLabel.length;
+      counts.omittedSafety += judged.checks.omittedSafety.length;
+      await checkCitationLinks({ checks: judged.checks, judge: /** @type {any} */ (judge), linkChecker: deps.linkChecker ?? null,
+        owner: { userId: context.project.userId, projectId: context.project.projectId }, counts });
+    }
 
     const extract = { recommendations: judged?.recommendations ?? [], entities: judged?.entities ?? [] };
     const code = parseAnswer({
@@ -571,6 +734,8 @@ export async function tickParse(deps) {
       redFlagExpected: judged?.redFlagExpected ?? [],
       redFlagHits: judged?.redFlagHits ?? [],
       safetyTermsHit: judged?.safetyTermsHit ?? [],
+      // The three checks beside the statements: a claim beyond the label, safety information left out, what the cited links say.
+      checks: judged?.checks ?? {},
       // What it was counted under, and the judge's two lists it was counted
       // with: a later registry change counts it again from these, asking no model.
       registryKey: registryKey(registry, context.owned),
@@ -590,6 +755,10 @@ export async function tickParse(deps) {
     const recorded = await recordErrorsFromFacts(deps, { snapshot: { ...snapshot, status }, statements, context, question });
     counts.errorsCreated += recorded.created;
     counts.notified += recorded.notified;
+  }
+  // The three checks and the link checks, counted since this process started: `open_science_geo_checks_total{check}`.
+  for (const key of ["offLabel", "omittedSafety", "linkExists", "linkMissing", "linkUnreadable", "linkSupports", "linkContradicts", "linkUnclear", "linkJudgeFailed"]) {
+    if (counts[/** @type {keyof typeof counts} */ (key)]) state.checkTotals[key] = (state.checkTotals[key] ?? 0) + Number(counts[/** @type {keyof typeof counts} */ (key)]);
   }
   const recounted = await recountRegistryFacts(deps);
   counts.recounted = recounted.facts;

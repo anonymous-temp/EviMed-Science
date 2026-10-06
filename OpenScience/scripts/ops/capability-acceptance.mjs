@@ -29,7 +29,7 @@
 //   Requires OPEN_SCIENCE_PLAYWRIGHT_CORE, existing password-file auth and pdftotext.
 //   It refuses a different release before creating projects or submitting prompts.
 //
-// 「循证 GEO」 capabilities work on a GEO project's data, which a plain
+// 「循证传播」 capabilities work on a GEO project's data, which a plain
 // acceptance project does not have (geo_read answers `geo_no_project`):
 //   --geo-create <brand> [--geo-engines qianwen,kimi] [--geo-coverage-days 90] [--geo-paused]
 //       make a GEO project for the brand and dispatch into its first conversation

@@ -70,7 +70,7 @@ TASK_FIXTURES = {
     # a deployment that does not run 「前沿动态」 declares the tool not offered
     # (it is in `server.OPTIONAL_TOOLS`).
     "frontier_search": {"mode": "all", "limit": 3},
-    # Added 2026-09-25 with 「循证 GEO」's tools. Neither changes anything: the
+    # Added 2026-09-25 with 「循证传播」's tools. Neither changes anything: the
     # probe's project is not a GEO project, so both answer the warning
     # `geo_no_project` (the route and the token certified), and in a GEO
     # project the write is a platform step a run may not mark, refused item by

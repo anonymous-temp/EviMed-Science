@@ -36,11 +36,11 @@ beforeEach(() => {
   client.open.mockResolvedValue(undefined);
 });
 
-describe("循证 GEO home", () => {
+describe("循证传播 home", () => {
   it("lists one row per product with its index, its trend against the target, and 品牌提及率 with its sample", async () => {
     renderHome();
-    expect(screen.getByRole("heading", { level: 1, name: "循证 GEO" })).toBeInTheDocument();
-    const list = await screen.findByRole("list", { name: "GEO 项目" });
+    expect(screen.getByRole("heading", { level: 1, name: "循证传播" })).toBeInTheDocument();
+    const list = await screen.findByRole("list", { name: "循证传播项目" });
     const rows = within(list).getAllByRole("listitem");
     expect(rows).toHaveLength(3);
 
@@ -76,7 +76,7 @@ describe("循证 GEO home", () => {
       { ...GEO_SUMMARIES[0], alert: { wrongOurs: 2, safety: 0, text: "Kimi：甲状腺结节患者禁用信尔美", severity: "S3" } },
     ]);
     renderHome();
-    const list = await screen.findByRole("list", { name: "GEO 项目" });
+    const list = await screen.findByRole("list", { name: "循证传播项目" });
     const sentence = within(list).getByText("Kimi：甲状腺结节患者禁用信尔美");
     expect(sentence).toHaveClass("text-text-2");
     expect(sentence).not.toHaveClass("text-danger");
@@ -86,7 +86,7 @@ describe("循证 GEO home", () => {
   it("creates a project and lands in its conversation — no form", async () => {
     client.createGeoProject.mockResolvedValue({ id: "geo_new", projectId: "p-new", sessionId: "ses_new" });
     renderHome();
-    await screen.findByRole("list", { name: "GEO 项目" });
+    await screen.findByRole("list", { name: "循证传播项目" });
     await userEvent.click(screen.getByRole("button", { name: "新建项目" }));
     await waitFor(() => expect(client.open).toHaveBeenCalledWith({ projectId: "p-new", sessionId: "ses_new" }));
     expect(client.createGeoProject).toHaveBeenCalledWith({});
@@ -96,7 +96,7 @@ describe("循证 GEO home", () => {
   it("says there is nothing yet when there is no project, with the one button in the header", async () => {
     client.listGeoProjects.mockResolvedValue([]);
     renderHome();
-    expect(await screen.findByText("还没有 GEO 项目")).toBeInTheDocument();
+    expect(await screen.findByText("还没有循证传播项目")).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: "新建项目" })).toHaveLength(1);
   });
 
@@ -104,7 +104,7 @@ describe("循证 GEO home", () => {
     client.listGeoProjects.mockRejectedValueOnce(new WebApiError("down", { status: 503, code: "geo_unavailable" }));
     renderHome();
     await userEvent.click(await screen.findByRole("button", { name: /重试/ }));
-    expect(await screen.findByRole("list", { name: "GEO 项目" })).toBeInTheDocument();
+    expect(await screen.findByRole("list", { name: "循证传播项目" })).toBeInTheDocument();
   });
 
   it("is one sentence where the module is off for this account", async () => {

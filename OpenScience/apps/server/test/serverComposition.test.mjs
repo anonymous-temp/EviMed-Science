@@ -351,6 +351,12 @@ class FakePool extends EventEmitter {
       const row = this.geoProjects.get(values[0]);
       return row && row.user_id === values[1] && !row.deleted_at ? { rows: [row], rowCount: 1 } : { rows: [], rowCount: 0 };
     }
+    // The project as an account may reach it (`GeoStore.getProjectAccess`): the owner's own row, with no member roles. The double has no
+    // members table, so an account that is not the owner reads the project as nonexistent, as the real query does for a stranger.
+    if (/^SELECT .*coalesce\(\(SELECT array_agg\(m\.role .* FROM evimed_geo\.projects\s+WHERE id = \$1 AND deleted_at IS NULL AND \(user_id = \$2 OR EXISTS/s.test(sql)) {
+      const row = this.geoProjects.get(values[0]);
+      return row && row.user_id === values[1] && !row.deleted_at ? { rows: [{ ...row, member_roles: [] }], rowCount: 1 } : { rows: [], rowCount: 0 };
+    }
     if (/^SELECT 1 FROM evimed_control\.projects WHERE user_id = \$1 AND id = \$2 FOR UPDATE/.test(sql)) {
       return values[0] === USER_ID && values[1] === PROJECT_ID ? { rows: [{ "?column?": 1 }], rowCount: 1 } : { rows: [], rowCount: 0 };
     }
@@ -1748,26 +1754,26 @@ test("the frontier composer is composed, ticked by the worker's compose loop, an
   assert.equal(app.frontier.actions.capabilities().saveToLibrary, true);
 });
 
-// 「循证 GEO」 (build spec 2026-09-25): composed only when switched on with a
+// 「循证传播」 (build spec 2026-09-25): composed only when switched on with a
 // product database, visible to its audience in `/api/me`, its routes and its
 // runtime gateway dispatched, every slot filled (worker, orchestrator,
 // exporter, market), and a `geo.worker` that the recurring work starts,
 // pauses and closes with the rest whatever fills the slot.
-test("循证 GEO is composed when on, its slot's worker runs with the recurring work, and its routes and gateway are dispatched", async (t) => {
+test("循证传播 is composed when on, its slot's worker runs with the recurring work, and its routes and gateway are dispatched", async (t) => {
   const headers = { Cookie: "os_session=composition-session", "x-open-science-project": PROJECT_ID };
   const fixture = await composedApp(t, { geoEnabled: true, geoAudience: "all", operatorUsers: [USER_ID] });
   const { app } = fixture;
   const base = `http://127.0.0.1:${app.server.address().port}`;
   assert.ok(app.geo, "an enabled module with a product database is composed");
   assert.equal(app.geoService, app.geo.service);
-  assert.deepEqual(Object.keys(app.geo).sort(), ["articleGate", "articleRunId", "exporter", "importDelivery", "market", "orchestrator", "renameProject", "service", "social", "store", "worker"]);
+  assert.deepEqual(Object.keys(app.geo).sort(), ["articleGate", "articleRunId", "cards", "exporter", "importDelivery", "market", "measureState", "members", "orchestrator", "refreshCards", "renameProject", "service", "social", "store", "worker"]);
   // Every slot is filled: the worker with all twelve loops wired (measurement,
   // orchestration, market), the orchestrator, the exporter and the market's
   // user and operator hooks.
   const status = app.geo.worker.status();
   assert.deepEqual(status.missing, [], "every loop has its function");
   assert.deepEqual(Object.keys(status.loops), ["probe", "parse", "metrics", "errors", "orchestrator", "schedules", "catalogue", "orders", "poll",
-    "verify", "reconcile", "topups"]);
+    "verify", "reconcile", "topups", "questionBank"], "the question bank's loop is in the table and is not wired while its lever is off");
   assert.equal(typeof app.geo.orchestrator.runStep, "function");
   assert.equal(typeof app.geo.exporter.export, "function");
   for (const hook of ["setBudget", "cancelOrder", "confirmTopup", "resolveUnknownOrder", "markOrderLost", "clearStop", "balance", "configured"]) {
@@ -1845,7 +1851,7 @@ test("a GEO run is dispatched like an episode, inside the GEO project, bound to 
     await sendPrompt({ sessionId: input.sessionId }, { id: `run-geo-${dispatched.length}`, kernelRequestIds: [] });
     return { id: `run-geo-${dispatched.length}`, status: "running" };
   };
-  const brief = "「循证 GEO」自动运行 · 第 1–3 步（证据、旅程、问题）";
+  const brief = "「循证传播」自动运行 · 第 1–3 步（证据、旅程、问题）";
   const dispatchRun = app.geo.orchestrator.dispatchRun;
   const out = await dispatchRun({ userId: USER_ID, projectId: PROJECT_ID, geoProjectId: "geo_x", capabilityId: "geo-insight",
     dispatchId: "geo-insight-a1", reason: "geo:evidence", brief });
@@ -1929,7 +1935,7 @@ test("a GEO run and an autopilot episode record what they recalled in the run le
   };
 
   await app.geo.orchestrator.dispatchRun({ userId: USER_ID, projectId: PROJECT_ID, geoProjectId: "geo_x", capabilityId: "geo-insight",
-    dispatchId: "geo-insight-recall", reason: "geo:evidence", brief: "「循证 GEO」自动运行 · 第 1 步（证据）" });
+    dispatchId: "geo-insight-recall", reason: "geo:evidence", brief: "「循证传播」自动运行 · 第 1 步（证据）" });
   await app.autopilotWorker.dispatchEpisode({ userId: USER_ID, projectId: PROJECT_ID, agendaId: "agenda-verify",
     episodeId: EPISODE_ID, dispatchId: "episode-recall", taskType: "literature-sentinel", budgetCny: 2,
     prompt: "追踪心衰领域的新证据。" });
@@ -1944,11 +1950,11 @@ test("a GEO run and an autopilot episode record what they recalled in the run le
   app.memorySubstrate.recall = async () => [];
   learned.length = 0;
   await app.geo.orchestrator.dispatchRun({ userId: USER_ID, projectId: PROJECT_ID, geoProjectId: "geo_x", capabilityId: "geo-insight",
-    dispatchId: "geo-insight-none", reason: "geo:evidence", brief: "「循证 GEO」自动运行 · 第 2 步" });
+    dispatchId: "geo-insight-none", reason: "geo:evidence", brief: "「循证传播」自动运行 · 第 2 步" });
   assert.deepEqual(learned, []);
 });
 
-test("循证 GEO off, or on for operators this account is not, is invisible: no feature, a named 404, no composition", async (t) => {
+test("循证传播 off, or on for operators this account is not, is invisible: no feature, a named 404, no composition", async (t) => {
   const headers = { Cookie: "os_session=composition-session", "x-open-science-project": PROJECT_ID };
   const off = await composedApp(t);
   assert.equal(off.app.geo, null);
@@ -2246,7 +2252,7 @@ test("a programme step and a channel question are asked of the allowance before 
     return { id: `run-gate-${runs}`, status: "running" };
   };
   const step = { userId: USER_ID, projectId: PROJECT_ID, geoProjectId: "geo_x", capabilityId: "geo-insight", reason: "geo:evidence",
-    brief: "「循证 GEO」自动运行 · 第 1 步（证据）" };
+    brief: "「循证传播」自动运行 · 第 1 步（证据）" };
   // GEO: refused before a runtime is reserved — the orchestrator leaves the step pending and asks again, so a top-up releases it.
   await assert.rejects(app.geo.orchestrator.dispatchRun({ ...step, dispatchId: "geo-gate-1" }), { status: 402, code: "simulated_credits_exhausted" });
   assert.deepEqual([reserved, runs], [0, 0]);

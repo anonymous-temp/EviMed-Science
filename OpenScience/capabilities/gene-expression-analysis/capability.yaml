@@ -1,7 +1,7 @@
 # Capability manifest — the only definition of this capability.
 #
 # NCBI Gene Expression Omnibus series to differential expression (plan 2026-10-02 §11.3 N17). This is the public data
-# resource at ncbi.nlm.nih.gov/geo, not 「循证 GEO」 (the pharma GEO module and its `geo-*` capabilities): everything of
+# resource at ncbi.nlm.nih.gov/geo, not 「循证传播」 (the pharma GEO module and its `geo-*` capabilities): everything of
 # this one is named `gene-expression` / `gene_expression`.
 id: gene-expression-analysis
 version: 1.0.0

@@ -42,11 +42,11 @@
  */
 
 import {
-  GEO_ARTICLE_GATES, GEO_ARTICLE_LAYERS, GEO_AUDIENCES, GEO_CLAIM_SOURCE_KINDS, GEO_CLAIM_STATUSES, GEO_ENGINE_LABELS_ZH, GEO_ENGINES,
+  GEO_ARTICLE_GATES, GEO_ARTICLE_LAYERS, GEO_AUDIENCES, GEO_CLAIM_SOURCE_KINDS, GEO_CLAIM_STATUSES, GEO_COMPARISON_EVIDENCE_TYPES, GEO_ENGINE_LABELS_ZH, GEO_ENGINES,
   GEO_GAP_CLASSES, GEO_GAP_CLASS_LABELS_ZH,
   GEO_GROUP_SIGNALS, GEO_IDENTITY_STATUSES, GEO_OWNED_LINK_PLATFORMS, GEO_OWNED_LINK_STATUSES, GEO_POOLS, GEO_QUESTION_KINDS, GEO_QUESTION_PLATFORMS,
   GEO_RX_CLASSES, GEO_SOURCE_KINDS, GEO_SOURCE_KIND_LABELS_ZH, GEO_SOURCE_LAYERS, GEO_STEPS, GEO_STEP_STATUSES, GEO_TARGET_DATA_TYPES, GEO_TIERS,
-  GEO_WRITE_WHATS, deliverableDir, deliverableIdOfPath, geoConstant } from "@evimed/domain";
+  GEO_WRITE_WHATS, deliverableDir, deliverableIdOfPath, geoClaimJourneyStage, geoConstant } from "@evimed/domain";
 import { GEO_OWNED_LINKS_MAX, geoOwnedLinkKey } from "./geoStore.mjs";
 import { HttpError } from "./security.mjs";
 
@@ -334,7 +334,32 @@ function validatedProduct(data, issues) {
 // --- claims -------------------------------------------------------------------------------
 
 const CLAIM_FIELDS = Object.freeze(["claimKey", "statement", "quote", "sourceRef", "sourceLabel", "sourceRefLabel", "sourceKind", "evidenceLevel",
-  "population", "inLabel", "elements", "verifiedAt", "validUntil", "status"]);
+  "population", "inLabel", "elements", "verifiedAt", "validUntil", "status", "journeyStage", "clinicalQuestion", "comparisonType", "artifactPath"]);
+
+/**
+ * The preserved source file a claim's quotation is in: a path inside the workspace's `.evimed-sources/`, never absolute and never
+ * climbing out. The card's own ruler reads it later; a path outside the preserving tools' folder is refused for this item.
+ * @param {unknown} value @param {{ refuse: (field: string, code: string, message: string) => any }} read
+ */
+function claimArtifactPath(value, read) {
+  if (value == null || value === "") return null;
+  if (typeof value !== "string" || value.length > 500 || value.includes("\\") || value.includes("\0") || value.startsWith("/")
+    || !value.startsWith(".evimed-sources/") || value.split("/").some((part) => part === ".." || part === ".")) {
+    return read.refuse("artifactPath", "invalid", "artifactPath is a file under .evimed-sources/ that a preserving tool returned.");
+  }
+  return value;
+}
+
+/**
+ * A claim's journey stage as the card says it: an object `{ key, label }` or the label alone, read by the domain. A value it
+ * cannot read is refused for this item only.
+ * @param {unknown} value @param {{ refuse: (field: string, code: string, message: string) => any }} read
+ */
+function claimJourneyStage(value, read) {
+  if (value == null || value === "") return null;
+  const stage = geoClaimJourneyStage(value);
+  return stage ?? read.refuse("journeyStage", "invalid", "journeyStage is a stage label, or { key, label } with a key of letters, digits, . _ or -.");
+}
 
 /** @param {unknown[]} items @param {GeoIssue[]} issues */
 function validatedClaims(items, issues) {
@@ -365,6 +390,13 @@ function validatedClaims(items, issues) {
       verifiedAt: read.instant("verifiedAt"),
       validUntil: read.instant("validUntil"),
       status: read.word("status", GEO_CLAIM_STATUSES, { fallback: "active" }),
+      // Where the claim stands on the patient journey and the key clinical question it answers decide the product-zone card it
+      // is written into; how a difference is known is a closed word (the unanchored comparison is only for reference).
+      journeyStage: claimJourneyStage(item.journeyStage, read),
+      clinicalQuestion: read.text("clinicalQuestion", 300),
+      comparisonType: read.word("comparisonType", GEO_COMPARISON_EVIDENCE_TYPES),
+      // The preserved source file (inside the workspace) the quotation is in, so the card's own ruler can read it.
+      artifactPath: claimArtifactPath(item.artifactPath, read),
     };
     if (read.refused) return;
     seen.add(claimKey);

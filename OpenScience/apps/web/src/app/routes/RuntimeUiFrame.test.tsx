@@ -37,7 +37,7 @@ vi.mock("@/lib/apiClient", async importOriginal => ({
   // The strip for a data source a run went without reads the account's connectors, saves one, and posts the follow-up.
   fetchWebConnectors: mocks.connectors, saveWebConnectorCredential: mocks.saveConnector, dispatchWebAgentRun: mocks.dispatch,
 }));
-// 循证 GEO's two calls: which GEO project this is, and writing an option to it.
+// 循证传播's two calls: which GEO project this is, and writing an option to it.
 const geo = vi.hoisted(() => ({ listGeoProjects: vi.fn(), patchGeoProject: vi.fn() }));
 vi.mock("@/lib/geoClient", async importOriginal => ({
   ...(await importOriginal<typeof import("@/lib/geoClient")>()),
@@ -1498,7 +1498,7 @@ describe("which research tool a conversation runs", () => {
   });
 });
 
-describe("循证 GEO in the conversation", () => {
+describe("循证传播 in the conversation", () => {
   const project = {
     id: "geo_1", projectId: "default", name: "玛仕度肽注射液", product: { brandName: "信尔美", genericName: "玛仕度肽注射液" },
     coverageDays: 90, engines: ["doubao", "qianwen", "deepseek", "yuanbao", "kimi"], status: "active", steps: {},

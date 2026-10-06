@@ -1,4 +1,4 @@
-"""「循证 GEO」's three runtime tools, against a scripted gateway, and through
+"""「循证传播」's three runtime tools, against a scripted gateway, and through
 the server's own `call_tool` -- the path a run takes (a module test that only
 calls the module proves the module, not the tool)."""
 
@@ -131,8 +131,8 @@ class GeoReadTests(_GatewayCase):
         self.assertTrue(result["error"]["retryable"])
 
     def test_outside_a_geo_project_a_read_or_write_is_a_warning_that_names_why(self):
-        _Gateway.answers["read"] = (404, {"error": "This conversation is not in a 循证 GEO project.", "code": "geo_no_project"})
-        _Gateway.answers["write"] = (404, {"error": "This conversation is not in a 循证 GEO project.", "code": "geo_no_project"})
+        _Gateway.answers["read"] = (404, {"error": "This conversation is not in a 循证传播 project.", "code": "geo_no_project"})
+        _Gateway.answers["write"] = (404, {"error": "This conversation is not in a 循证传播 project.", "code": "geo_no_project"})
         read = self.server.call_tool("geo_read", {"what": "claims"})
         self.assertEqual(read["status"], "warning")
         self.assertEqual(read["data"]["code"], "geo_no_project")

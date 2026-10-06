@@ -101,7 +101,7 @@ test("an index that is down costs the search its semantic half and nothing else"
 });
 
 test("a nomination the store no longer holds is dropped rather than guessed at", async (t) => {
-  const summary = record({ id: "rec_summary", kind: "run_summary", summary: "「循证 GEO」自动运行 · 第 6 步" });
+  const summary = record({ id: "rec_summary", kind: "run_summary", summary: "「循证传播」自动运行 · 第 6 步" });
   const researchMemoryWithSummary = storeDouble({ found: [], byId: { rec_summary: summary } });
   const memorySubstrate = { async search() { return [{ recordId: "rec_gone", score: 0.9 }, { recordId: "rec_summary", score: 0.8 }]; } };
   const request = await serve(t, { researchMemory: researchMemoryWithSummary, memorySubstrate });

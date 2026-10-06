@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "geo-insight",
-  "note": "Real briefs, not smoke tests: each is a product somebody would actually bring to 「循证 GEO」, chosen for the specific way steps 1–3 go wrong while looking finished — the wrong holder's label, a claim stronger than its source, a composed question filed as a patient's words. mustDo / mustNotDo are the rubric; the deterministic half (quote in its preserved source, a real phrasing with its URL, the files at their names) is the geo-insight-pack contract in @evimed/domain.",
+  "note": "Real briefs, not smoke tests: each is a product somebody would actually bring to 「循证传播」, chosen for the specific way steps 1–3 go wrong while looking finished — the wrong holder's label, a claim stronger than its source, a composed question filed as a patient's words. mustDo / mustNotDo are the rubric; the deterministic half (quote in its preserved source, a real phrasing with its URL, the files at their names) is the geo-insight-pack contract in @evimed/domain.",
   "briefs": [
     {
       "id": "geo-insight-001-mazdutide-full",

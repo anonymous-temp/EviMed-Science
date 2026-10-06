@@ -233,7 +233,7 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   "frontier_search_response_too_large",
   "frontier_search_gateway_token_missing",
   "frontier_search_gateway_token_invalid",
-  // 「循证 GEO」's runtime tools (geo_platform.py → geoGateway.mjs) not
+  // 「循证传播」's runtime tools (geo_platform.py → geoGateway.mjs) not
   // answering: the module off or not open to this account, a conversation
   // outside a GEO project, the social channel not configured, an outage. The
   // run records that the platform's data was not reachable and goes on with
@@ -595,7 +595,7 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   "frontier_search_limit_invalid",
   "frontier_search_request_invalid",
   "frontier_search_request_too_large",
-  // And for 「循证 GEO」's tools: a `what` outside the tool's vocabulary, a
+  // And for 「循证传播」's tools: a `what` outside the tool's vocabulary, a
   // filter or payload the gateway cannot read, a social query it cannot send.
   // A single invalid item of a write is not one of these — it is refused in the
   // answer's `issues` while the rest are written (principle 14).
@@ -1162,7 +1162,7 @@ const capsuleTransferErrorCodes = Object.freeze([
 ])
 
 /**
- * Codes the 「循证 GEO」 routes answer with (`geoRoutes.mjs`, `/api/geo/*`):
+ * Codes the 「循证传播」 routes answer with (`geoRoutes.mjs`, `/api/geo/*`):
  * the module off, a project that is not this account's, a request the page
  * built wrong, an action whose worker is not composed. The page reads them
  * (it never shows one); they are here so each is held to a Chinese sentence
@@ -1459,6 +1459,18 @@ export const GEO_ROUTE_ERROR_CODES = Object.freeze([
   'geo_unavailable',
   // A paused project runs nothing: 「让 AI 做」 and 导出 wait until it is resumed.
   'geo_project_paused',
+  // One evidence chain (flywheel F21): the producer settings, and the product-zone cards made from the claims.
+  'geo_producer_invalid',
+  'geo_card_producer_required',
+  'geo_card_reviewer_required',
+  'geo_cards_unavailable',
+  'geo_article_text_unavailable',
+  // Project members (F29): the refusals of the member list, and a member's ability.
+  'geo_member_forbidden',
+  'geo_member_role_invalid',
+  'geo_member_user_required',
+  'geo_member_owner_fixed',
+  'geo_member_detail_invalid',
 ])
 
 /**
@@ -1735,6 +1747,16 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   tooluniverse_busy: '补充科研数据源正忙，请稍后再试或继续使用其他来源。',
   tooluniverse_rate_limited: '补充科研数据源请求过于频繁，请稍后再试。',
   geo_project_paused: '这个项目已暂停，继续之后再让 AI 做。',
+  geo_producer_invalid: '出品方设置不对：类型选“企业”或“医生”，医生要写姓名，与产品的关系只能选列出的几种。',
+  geo_card_producer_required: '先在项目里写明由谁出品（企业或医生），才能生成产品专区的证据卡；结论库里的结论都还在。',
+  geo_card_reviewer_required: '产品专区的证据卡要写明作者和审核医生。先在项目成员里加一位医学审核，再生成；结论库里的结论都还在。',
+  geo_cards_unavailable: '这个部署没有开通证据专区，结论暂时不能生成证据卡；结论库里的结论都还在。',
+  geo_article_text_unavailable: '这篇稿件的正文现在读不到，暂时不能核对它引用的结论；稿件本身没有变化。',
+  geo_member_forbidden: '你在这个项目里的角色不能做这件事；请联系项目负责人调整角色。',
+  geo_member_role_invalid: '成员角色只能选：编辑、医学审核、只读。',
+  geo_member_user_required: '请填写成员的账号。',
+  geo_member_owner_fixed: '项目负责人就是创建项目的账号，不能在成员里增减。',
+  geo_member_detail_invalid: '成员的补充信息只能写医院、科室、专业、职称、所属机构和备注，每项不超过 120 个字。',
   // 「虚拟临研」's page refusals. Every one of these is permanent for the request
   // that caused it — retrying the same thing gets the same answer — so none of
   // them says 「稍后再试」, which is what the family sentence for an unknown
@@ -2347,12 +2369,12 @@ export const ERROR_CODE_FAMILIES = Object.freeze([
   // family and not 64 sentences: a table that size is the table nobody keeps
   // current, which is the failure the family mechanism exists to prevent.
   [/^geo_probe_/, '生成式检索的可见度探测这次没能完成，报告会把它记为限制。'],
-  // 「循证 GEO」's runtime tools, then its routes. The tool family comes first:
+  // 「循证传播」's runtime tools, then its routes. The tool family comes first:
   // a run reading the platform's data has a different next step (go on with
   // what it has) from a person whose page action was refused (try again).
   [/^(?:geo_(?:disabled$|no_project$|unconfigured$|gateway_|upstream_|response_|request_|read_|write_)|social_posts_)/,
-    '循证 GEO 的项目数据这次没能读写；运行会如实记下这一点，用已有的资料继续。'],
-  [/^geo_(?!probe_)/, '循证 GEO 这次没能完成这个操作，稍后再试。'],
+    '循证传播的项目数据这次没能读写；运行会如实记下这一点，用已有的资料继续。'],
+  [/^geo_(?!probe_)/, '循证传播这次没能完成这个操作，稍后再试。'],
   // 「虚拟临研」, read the same way and for the same reason: a run whose study
   // data could not be read carries on with what it has, and a person whose
   // page action was refused tries again. The engine family is separate — a
@@ -2626,7 +2648,7 @@ export function errorCodeOutcome(code) {
   if (EXTENSION_ERROR_CODES.includes(text)) return 'upstream'
   if (text === 'managed_browser_busy') return 'capped'
   if (MANAGED_BROWSER_ERROR_CODES.includes(text)) return 'upstream'
-  // 循证 GEO's page refusals are about the module and what it holds — a
+  // 循证传播's page refusals are about the module and what it holds — a
   // project, a round, an order that is not there to act on, a worker not yet
   // composed — never a verdict on a run.
   if (Object.hasOwn(DOCUMENT_EXPORT_ERROR_MESSAGES, text)) return 'upstream'
