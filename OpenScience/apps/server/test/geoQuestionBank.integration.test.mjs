@@ -57,7 +57,8 @@ async function officialCard() {
   const zone = (await zones.saveEditorial({ id: PLATFORM_PUBLISHER_USER_ID }, { title: "官方专区", description: "", background: "", kind: "official", state: "published" }, null, null, false, "programme")).zone;
   return (await zones.saveEditorial({ id: PLATFORM_PUBLISHER_USER_ID }, {
     title: "抗菌药使用要点", subtype: "knowledge", summary: "s", body: "- 抗生素不用于普通感冒", state: "published", requestId: "bank-official-card-1",
-    sources: [{ title: "指南", url: "https://example.org/guideline", excerpt: "普通感冒多由病毒引起，抗菌药物无效。" }],
+    // The platform read this guideline: its read receipt beside the excerpt is what makes the quotation ✓ (2026-10-06 review).
+    sources: [{ title: "指南", url: "https://example.org/guideline", excerpt: "普通感冒多由病毒引起，抗菌药物无效。", fetchedSha256: "d".repeat(64) }],
     claims: [{ claimId: "c1", claimType: "direct", claim: "普通感冒多由病毒引起，不需要使用抗生素。", sourceIndexes: [1], supportQuote: "普通感冒多由病毒引起，抗菌药物无效" }] }, zone.id, null, true, "programme")).evidence;
 }
 
@@ -147,12 +148,13 @@ test("a company's or a doctor's card is never what the bank holds an answer to: 
   const maker = { id: "maker", name: "某企业" };
   const zone = (await zones.save(maker, { title: "某企业的产品专区", description: "", background: "", kind: "product" })).zone;
   await zones.save(maker, { expectedRevision: zone.revision, state: "published" }, zone.id);
-  const productCard = (await zones.save(maker, {
+  // Written the way 循证传播 writes a product card (origin geo, a source the platform read), so its claim verifies and only its kind can keep it out.
+  const productCard = (await zones.saveEditorial(maker, {
     title: "我家产品每天吃一次最有效", subtype: "knowledge", summary: "s", body: "- 一条出品方自己的结论", state: "published", requestId: "bank-product-card-1",
-    sources: [{ title: "内部资料", url: "https://example.org/internal", excerpt: "我家产品每天吃一次最有效，其他产品都不行。" }],
+    sources: [{ title: "内部资料", url: "https://example.org/internal", excerpt: "我家产品每天吃一次最有效，其他产品都不行。", fetchedSha256: "e".repeat(64) }],
     claims: [{ claimId: "p1", claimType: "direct", claim: "我家产品每天吃一次最有效。", sourceIndexes: [1], supportQuote: "我家产品每天吃一次最有效" }],
     producer: { kind: "enterprise", name: "某企业", relation: "own_product" }, journeyStage: { key: "treat", label: "治疗选择" },
-    disclosure: { authors: [{ name: "甲" }], reviewers: [{ name: "乙" }] } }, zone.id, null, true)).evidence;
+    disclosure: { authors: [{ name: "甲" }], reviewers: [{ name: "乙" }] } }, zone.id, null, true, "geo")).evidence;
   assert.equal(productCard.state, "published", "the card is published and its claim verifies: only its kind keeps it out");
   assert.equal(productCard.claims[0].verification.mark, "✓");
   const official = await officialCard();
