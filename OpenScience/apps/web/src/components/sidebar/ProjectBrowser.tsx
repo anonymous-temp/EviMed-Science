@@ -112,7 +112,7 @@ type Destination = () => { to: string; state?: unknown };
  * (`useProjectRuns`); which groups are open survives a reload.
  */
 export function ProjectBrowser({ geo = false, vcr = false }: {
-  /** Whether 「循证 GEO」 is offered: its projects then carry the radar icon. */
+  /** Whether 「循证传播」 is offered: its projects then carry the radar icon. */
   geo?: boolean;
   /** Whether 「虚拟临研」 is offered: its studies then carry the people icon. */
   vcr?: boolean;

@@ -114,19 +114,19 @@ export function GeoMarketCard() {
   const state = loading ? "loading" : listError ? "error" : "content";
   const tableCommon = { state, errorMessage: listError ?? undefined, onRetry: () => setRefresh((n) => n + 1), emptyText: "暂无记录。" } as const;
   if (off) return null;
-  if (overviewError) return <Panel title="GEO 投放" className="mt-6"><EmptyState title="无法读取投放状态" description={overviewError}
+  if (overviewError) return <Panel title="循证传播投放" className="mt-6"><EmptyState title="无法读取投放状态" description={overviewError}
     action={<Button variant="secondary" onClick={() => void overviewLoad()}>重试</Button>} /></Panel>;
-  if (!overview) return <Panel title="GEO 投放" className="mt-6"><div className="h-24 animate-pulse bg-surface-2" aria-label="正在读取投放状态" /></Panel>;
-  if (!overview.operationsAvailable) return <Panel title="GEO 投放" className="mt-6"><EmptyState title="投放管理暂不可用"
+  if (!overview) return <Panel title="循证传播投放" className="mt-6"><div className="h-24 animate-pulse bg-surface-2" aria-label="正在读取投放状态" /></Panel>;
+  if (!overview.operationsAvailable) return <Panel title="循证传播投放" className="mt-6"><EmptyState title="投放管理暂不可用"
     action={<Button variant="secondary" onClick={() => void overviewLoad()}>重试</Button>} /></Panel>;
 
-  return <Panel title="GEO 投放" className="mt-6" action={<Button size="sm" variant="text" onClick={() => { pageTo(null); void overviewLoad(); setRefresh((n) => n + 1); }}>刷新</Button>}>
+  return <Panel title="循证传播投放" className="mt-6" action={<Button size="sm" variant="text" onClick={() => { pageTo(null); void overviewLoad(); setRefresh((n) => n + 1); }}>刷新</Button>}>
     <PanelRow label={overview.configured ? "投放账户余额" : "未配置投放连接"} control={overview.configured && overview.balance == null ? "暂时无法读取余额" : money(overview.balance?.money)} />
     {overview.stopNewOrders?.stopped && <PanelRow label="新订单已暂停" control={<Button variant="secondary" size="sm" disabled={Boolean(pending)}
       onClick={() => setConfirmation({ title: "恢复新订单", body: "确认已核对账目差异后恢复投放。", run: () => mutate("stop", () => clearGeoMarketStop("Operator reviewed reconciliation in GEO operations."), (result) => result.cleared ? "已解除对账暂停" : "本次未解除暂停，请重新核对。") })}>恢复新订单</Button>} />}
     {overview.reconciliation && <PanelRow label={`最近对账 · ${overview.reconciliation.day}`} control={overview.reconciliation.status === "mismatch" ? `差额 ${money(overview.reconciliation.diff)}` : "已核对"} />}
     <div className="p-4">
-      <Tabs label="GEO 投放管理" value={view} onChange={changeView} items={[
+      <Tabs label="循证传播投放管理" value={view} onChange={changeView} items={[
         { value: "unknown", label: "待确认订单", count: overview.counts?.unknownOrders },
         { value: "problems", label: "问题订单", count: overview.counts?.problemOrders },
         { value: "topups", label: "充值记录", count: overview.counts?.requestedTopups }, { value: "settlement", label: "月度结算" },

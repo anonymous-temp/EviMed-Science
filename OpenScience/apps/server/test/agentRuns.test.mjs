@@ -5186,7 +5186,7 @@ test("every fetch-tool error code is classified, so a new one cannot default to 
     "../src/webRead.mjs", "../src/webReadNetwork.mjs", "../src/webReadLimits.mjs", "../src/webReadExtract.mjs", "../src/agentbay/browser.mjs",
     "../src/webRender.mjs", "../src/webRenderPage.mjs", "../src/localBrowser.mjs", "../src/webRenderEgress.mjs",
     "../src/kbSearchGateway.mjs", "../src/frontierGateway.mjs",
-    // 循证 GEO's gateway, the write module it hands writes to, and the social
+    // 循证传播's gateway, the write module it hands writes to, and the social
     // channel behind `social_posts_search` (2026-09-25).
     "../src/geoGateway.mjs", "../src/geoWrites.mjs", "../src/socialCrawlClient.mjs",
   ]) {

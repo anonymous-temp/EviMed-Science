@@ -1,5 +1,5 @@
 // The operator's counters for the NCBI Gene Expression Omnibus workflow (`gene_expression_series` /
-// `gene_expression_differential`; not 「循证 GEO」, which has `geo*.mjs` of its own).
+// `gene_expression_differential`; not 「循证传播」, which has `geo*.mjs` of its own).
 //
 // Principle 15: every limit has a counter, and a limit nobody can see biting is a limit nobody can tune. Six limits
 // protect the resources of one computation (matrix and annotation bytes, samples, probes, memory, time). Two are

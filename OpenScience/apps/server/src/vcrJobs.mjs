@@ -30,7 +30,7 @@ const RELEASE_FITTING_SQL = `UPDATE ${VCR_SCHEMA}.jobs j SET state = 'queued', r
  *
  * A job is not a run. It does not take the study's one run slot, it is not
  * dispatched to a kernel, and a two-hour simulation never blocks the
- * researcher's conversation — that division is the one thing 「循证 GEO」 said
+ * researcher's conversation — that division is the one thing 「循证传播」 said
  * was most worth copying here (attachment E §2.2): the steps that *think* run
  * as AI runs, the steps that *compute* run as platform jobs.
  *

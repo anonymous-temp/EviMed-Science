@@ -19,7 +19,7 @@
  *   - at 390 px nothing overflows horizontally;
  *   - at the desktop width, the style budget of §7: at most 8 kinds of
  *     control (9 on the frontier feed, whose headlines are links; 10 on a
- *     data page — the knowledge base and 循证 GEO), 5 text colours (8 on the
+ *     data page — the knowledge base and 循证传播), 5 text colours (8 on the
  *     frontier feed, which adds the safety red and the rank colours; 7 on a
  *     data page) and 3 kinds of border (6 on a GEO project's tabs, the
  *     measured number — see GEO_BUDGET), with each kind of control named in
@@ -96,7 +96,7 @@ export const ROUTES = [
   // content addresses with ids; the home is the one every account can open.
   ["frontier-zones", "/app/frontier/zones"],
   ["capabilities", "/app/capabilities"],
-  // 循证 GEO's home — its one sentence where the account is not offered the
+  // 循证传播's home — its one sentence where the account is not offered the
   // module; one project's seven tabs are added when the account has one
   // (`geoProjectRoutes`).
   ["geo", "/app/geo"],
@@ -147,10 +147,10 @@ const FRONTIER_BUDGET = { controls: 9, colors: 8 };
  * borders, against the reading page's 8 / 5 / 3. A dashboard legitimately
  * carries more — a metric band, a chart's legend and axis labels, a severity
  * scale, a table's own header — and it is a wider budget, not the absence of
- * one: 循证 GEO shipped inside the old budget and still looked cheap, which is
+ * one: 循证传播 shipped inside the old budget and still looked cheap, which is
  * why the fix was its information architecture and not its allowance.
  *
- * 循证 GEO is the page it was written for (fusion plan §5.5, §5.9): it spends
+ * 循证传播 is the page it was written for (fusion plan §5.5, §5.9): it spends
  * the severity reds of 讲错我方 and the single-hue heat ramp on top of the
  * chrome, and its header carries a rail of eight steps beside the tabs. The
  * per-number 「问 AI」 buttons are gone — one 「对话」 in the header replaced

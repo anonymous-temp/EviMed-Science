@@ -25,8 +25,8 @@ import { Tabs } from "@/components/ui/Tabs";
 import { Tag } from "@/components/ui/Tag";
 import { GeoOffPage, GeoProjectSkeleton } from "@/components/geo/GeoStates";
 import { railSteps } from "@/components/geo/geoOverviewModel";
-import { coverageText, weekOf } from "@/components/geo/geoText";
-import { GEO_TAB_REDIRECTS, GEO_TABS, geoTabPath, resolveGeoTab, type GeoTabKey } from "@/components/geo/geoTabs";
+import { coverageText, GEO_MONITORING_TITLE, weekOf } from "@/components/geo/geoText";
+import { GEO_MONITORING_TABS, GEO_TAB_REDIRECTS, GEO_TABS, geoTabPath, resolveGeoTab, type GeoTabKey } from "@/components/geo/geoTabs";
 import { useOpenGeoConversation } from "@/components/geo/useOpenGeoConversation";
 import { AccuracyTab } from "@/components/geo/tabs/AccuracyTab";
 import { ActionsTab } from "@/components/geo/tabs/ActionsTab";
@@ -110,14 +110,14 @@ export function GeoProjectPage() {
   if (feature === "off" || loaded.kind === "off") return <GeoOffPage />;
   if (loaded.kind === "missing") {
     return (
-      <PageShell title="循证 GEO" width="wide">
+      <PageShell title="循证传播" width="wide">
         <EmptyState icon={Radar} title="这个项目不存在或已删除。" action={<Button variant="secondary" onClick={() => navigate("/app/geo")}>回到项目列表</Button>} />
       </PageShell>
     );
   }
   if (loaded.kind !== "ready") {
     return (
-      <PageShell title="循证 GEO" width="wide">
+      <PageShell title="循证传播" width="wide">
         {loaded.kind === "error" ? <LoadError message={loaded.message} onRetry={reload} /> : <GeoProjectSkeleton />}
       </PageShell>
     );
@@ -168,6 +168,7 @@ export function GeoProjectPage() {
   return (
     <PageShell
       title={project.name}
+      documentTitle={GEO_MONITORING_TABS.includes(tab) ? `${project.name} · ${GEO_MONITORING_TITLE}` : undefined}
       width="wide"
       meta={<Tag>{week ? `第 ${week} 周` : coverageText(project.coverageDays, project.startedAt ?? project.createdAt ?? null)}</Tag>}
       actions={(

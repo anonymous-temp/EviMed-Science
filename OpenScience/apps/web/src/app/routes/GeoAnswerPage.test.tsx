@@ -49,6 +49,12 @@ describe("one answer", () => {
     expect(screen.getByTestId("location")).toHaveTextContent("/app/geo/geo_1/answers/snap_deepseek_old");
   });
 
+  it("is a measurement screen of the module: the browser tab says 「AI 回答监测」", async () => {
+    renderAnswer();
+    await screen.findByRole("heading", { level: 1, name: "打了减重针一直恶心，要不要停药？" });
+    await waitFor(() => expect(document.title).toBe("打了减重针一直恶心，要不要停药？ · AI 回答监测 · EviMed"));
+  });
+
   it("lists the engines asked the same question, with what each answer did", async () => {
     renderAnswer();
     const nav = await screen.findByRole("navigation", { name: "AI 引擎" });

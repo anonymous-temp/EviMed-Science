@@ -1,5 +1,5 @@
 /**
- * SQL for 「循证 GEO」's measurement tables (build spec §2): rounds, probe
+ * SQL for 「循证传播」's measurement tables (build spec §2): rounds, probe
  * jobs, snapshots, facts, errors and metrics, plus the reads of the content
  * tables the measurement needs (projects, questions, claims, sources, the
  * journey's care nodes, published order URLs).

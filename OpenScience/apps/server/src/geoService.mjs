@@ -1,5 +1,5 @@
 /**
- * What 「循证 GEO」's pages are served (build spec 2026-09-25 §3), and the
+ * What 「循证传播」's pages are served (build spec 2026-09-25 §3), and the
  * module's switch, readiness and metrics.
  *
  * Hidden knowledge:
@@ -66,7 +66,7 @@ export const GEO_ANSWER_TEXT_LIMIT = 4_000;
 export const GEO_READ_MAX_ITEMS = 50;
 
 /** The name a new GEO project's control-plane project gets when no brand is given yet. */
-export const GEO_DEFAULT_PROJECT_NAME = "新 GEO 项目";
+export const GEO_DEFAULT_PROJECT_NAME = "新 循证传播项目";
 
 const DIAGNOSIS_ROUND_KINDS = Object.freeze(["baseline", "weekly", "single_step"]);
 /** A rival's mention rate: the owner's M-16, over the same pools as our headline M-01S. */
@@ -528,7 +528,7 @@ export class GeoService {
     return updated;
   }
 
-  /** `DELETE /api/geo/projects/:id`: hidden from 循证 GEO; the project's conversations and files stay. @param {{ id: string }} user @param {string} id */
+  /** `DELETE /api/geo/projects/:id`: hidden from 循证传播; the project's conversations and files stay. @param {{ id: string }} user @param {string} id */
   async deleteProject(user, id) {
     const project = await this.requireProject(user, id);
     await this.store.softDeleteProject(String(user.id), id);
@@ -1480,7 +1480,7 @@ export async function geoMetricsSnapshot(geo) {
  */
 export function geoMetricFamilies(enabled, snapshot) {
   /** @type {{ name: string, help: string, type: "gauge" | "counter", series: { value: number, labels?: Record<string, string> }[] }[]} */
-  const families = [{ name: "open_science_geo_enabled", help: "Whether the 循证 GEO module is composed in this process.", type: "gauge",
+  const families = [{ name: "open_science_geo_enabled", help: "Whether the 循证传播 module is composed in this process.", type: "gauge",
     series: [{ value: enabled && snapshot ? 1 : 0 }] }];
   if (!enabled || !snapshot) return families;
   /** @param {string} name @param {string} help @param {"gauge" | "counter"} type @param {{ value: number, labels?: Record<string, string> }[]} series */

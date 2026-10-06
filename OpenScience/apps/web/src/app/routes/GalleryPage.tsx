@@ -229,7 +229,7 @@ export function GalleryPage() {
               actions={<IconButton icon={Pencil} label="编辑这条通知" size="sm" />}
               menu={<Menu label="更多操作" items={[{ label: "标为已读", onSelect: () => {} }]} />}
             />
-            <ListRow title="GEO 周报已生成" to="/__gallery" leading={<RunStatusDot state="review" />} meta="信尔美 · 9月25日" />
+            <ListRow title="周报已生成" to="/__gallery" leading={<RunStatusDot state="review" />} meta="信尔美 · 9月25日" />
             <ListRow title="孟德尔随机化分析" to="/__gallery" muted leading={<RunStatusDot state="failed" />} meta="未完成 · 2025-12-31" />
           </List>
         </div>

@@ -39,7 +39,7 @@ const sha256 = (text) => createHash("sha256").update(text, "utf8").digest("hex")
 
 /**
  * Which kind of work a learned method belongs to, from the capability it was
- * learnt in (`provenance.capabilityId`): `geo` for the four 「循证 GEO」
+ * learnt in (`provenance.capabilityId`): `geo` for the four 「循证传播」
  * capabilities, `research` for everything else — the researcher's own
  * research, the answer line, and every method learnt before the capability
  * was recorded.

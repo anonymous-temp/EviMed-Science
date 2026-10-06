@@ -97,8 +97,8 @@ const PHRASES = Object.freeze({
   locate_quote: phrase('核对引文', ['quote']),
   // measured visibility
   geo_visibility_probe: phrase('测 AI 可见度', ['question', 'query', 'brand']),
-  geo_read: phrase('读取 GEO 数据'),
-  geo_write: phrase('写入 GEO 数据'),
+  geo_read: phrase('读取循证传播数据'),
+  geo_write: phrase('写入循证传播数据'),
   social_posts_search: phrase('采集社媒真实问法', ['query']),
   // pharmacy data
   drug_label_search: phrase('检索说明书', ['drug', 'query']),

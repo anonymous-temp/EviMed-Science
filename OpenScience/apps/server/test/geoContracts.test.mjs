@@ -1,4 +1,4 @@
-// The three new 「循证 GEO」 contracts — geo-insight-pack, geo-strategy-pack,
+// The three new 「循证传播」 contracts — geo-insight-pack, geo-strategy-pack,
 // geo-proposal-pack — each with a pack it accepts and one changed pack per rule.
 //
 // What may be required is narrow on purpose (build spec 2026-09-25 §0.9): the
@@ -40,7 +40,7 @@ test("the four GEO kinds are contract kinds, clinical, labelled, and shipped by 
   ]) {
     assert.ok(CONTRACT_KINDS.includes(kind), kind);
     assert.ok(CLINICAL_CONTRACT_KINDS.includes(kind), `${kind} is about a medicine, so the safety rules apply`);
-    assert.match(contractKindLabel(kind), /^GEO /);
+    assert.match(contractKindLabel(kind), /^循证传播/);
     const manifest = JSON.parse(await readFile(path.join(repoRoot, "deploy/runtime-dsh/capabilities", `${capability}.json`), "utf8"));
     assert.deepEqual(manifest.produces.map((entry) => entry.contractKind), [kind]);
     assert.equal(manifest.safetyClass, "clinical");

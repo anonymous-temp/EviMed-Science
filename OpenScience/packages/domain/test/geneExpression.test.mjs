@@ -6,7 +6,7 @@ import {
   isClinicalContractKind, mcpToolBaseName, runGate, toolViewPhrase,
 } from '../index.mjs'
 
-// NCBI Gene Expression Omnibus series to differential expression (the public data resource, not 循证 GEO).
+// NCBI Gene Expression Omnibus series to differential expression (the public data resource, not 循证传播).
 
 const receipt = () => ({
   schemaVersion: 1,
@@ -79,7 +79,7 @@ test('two groups that share a sample, and a receipt whose script is not in the p
   assert.ok(geneExpressionFindings({ files: files({ 'gene-expression-receipt.json': JSON.stringify(elsewhere) }), packagePath: 'deliverables/x' }).issues.some((issue) => /not included in the package/.test(issue.message)))
 })
 
-test('the kind is registered, labelled, clinical like its sibling data analysis, and named apart from 循证 GEO', () => {
+test('the kind is registered, labelled, clinical like its sibling data analysis, and named apart from 循证传播', () => {
   assert.ok(CONTRACT_KINDS.includes(GENE_EXPRESSION_CONTRACT_KIND))
   assert.equal(isClinicalContractKind(GENE_EXPRESSION_CONTRACT_KIND), true)
   assert.ok(!GENE_EXPRESSION_CONTRACT_KIND.startsWith('geo-'))

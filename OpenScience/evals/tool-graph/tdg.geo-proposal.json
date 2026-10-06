@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "geo-proposal",
-  "version": "sha256:7b0fbb9976ee93ec4294c7045e3acbeb24e2402ea10b30e05a261db31552dfbd",
+  "version": "sha256:63f282d46d2e607698f7f1409dba4524d01609c06ee2cf070ff03692a334c1a3",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 19,
@@ -422,7 +422,7 @@
     {
       "name": "mcp__evimed__geo_read",
       "source": "mcp",
-      "description": "Read this 循证 GEO project's data: product and claims, question map, journey, diagnosis, metrics, answer snapshots, errors, sources, strategy, targets, articles, orders, owned links or monitoring. Every number is a cell with numerator, denominator and status; absent or insufficient is not zero.",
+      "description": "Read this 循证传播 project's data: product and claims, question map, journey, diagnosis, metrics, answer snapshots, errors, sources, strategy, targets, articles, orders, owned links or monitoring. Every number is a cell with numerator, denominator and status; absent or insufficient is not zero.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -521,7 +521,7 @@
     {
       "name": "mcp__evimed__geo_write",
       "source": "mcp",
-      "description": "Write this 循证 GEO project's products: product identity, claims, a question set and its lock, journey, strategy and sources, three-tier targets, articles, placement preferences, or a step's status. owned_links registers a page the brand published itself {url, platform, title, publishedAt, groupId?} or retires one {id, status: retired}. Items are checked one by one; refused items come back in issues and the rest are written.",
+      "description": "Write this 循证传播 project's products: product identity, claims, a question set and its lock, journey, strategy and sources, three-tier targets, articles, placement preferences, or a step's status. owned_links registers a page the brand published itself {url, platform, title, publishedAt, groupId?} or retires one {id, status: retired}. Items are checked one by one; refused items come back in issues and the rest are written.",
       "inputSchema": {
         "type": "object",
         "properties": {

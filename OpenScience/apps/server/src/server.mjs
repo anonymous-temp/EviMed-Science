@@ -256,7 +256,7 @@ import { FrontierNotifications } from "./frontierNotifications.mjs";
 import { FrontierProfiles } from "./frontierProfiles.mjs";
 import { FrontierActions } from "./frontierActions.mjs";
 import { FrontierComposer } from "./frontierComposer.mjs";
-// 「循证 GEO」 (build spec 2026-09-25): the schema's content store, the pages'
+// 「循证传播」 (build spec 2026-09-25): the schema's content store, the pages'
 // service and routes, the runtime tools' gateway and the social channel. The
 // measurement, market and orchestration packages attach to the composed
 // `geo` object (`geo.worker`, `geo.orchestrator`, `geo.market`, `geo.exporter`).
@@ -1849,7 +1849,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     await audit({ config, user, project }, "project.create", "completed", { target: id });
     return data;
   }
-  // 「循证 GEO」 (geoService.mjs): composed only when switched on and a
+  // 「循证传播」 (geoService.mjs): composed only when switched on and a
   // product database exists; otherwise its routes answer 404 `geo_not_enabled`,
   // its tools are not offered and nothing of it runs. The other packages attach
   // here: `geo.worker` (the leased loops, started and stopped with the rest),
@@ -4146,7 +4146,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const geoGatewayHandler = createGeoGatewayHandler(config, runtimeManager, {
     geo, report: (code) => process.stderr.write(`geo gateway: ${code}\n`),
   });
-  // 「循证 GEO」's moving parts, composed into the slots the routes read at
+  // 「循证传播」's moving parts, composed into the slots the routes read at
   // request time: the market's hooks (C), the orchestrator (F) that dispatches
   // runs inside the GEO project and enqueues the measurement's rounds (B), the
   // exporter, and one worker whose loops are B's, C's and F's ticks. Off, none
@@ -6923,7 +6923,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     review,
     reviewService: review?.service ?? null,
     reviewWorker: review?.worker ?? null,
-    // 「循证 GEO」: null when the module is off or there is no product database.
+    // 「循证传播」: null when the module is off or there is no product database.
     geo,
     geoService: geo?.service ?? null,
     // 「虚拟临研」, on the same terms.
@@ -6973,7 +6973,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           process.stderr.write(`frontier migration failed: ${typeof error?.code === "string" ? error.code : error?.name ?? "frontier_migration_failed"}\n`);
         });
       }
-      // The same for 循证 GEO: a failed migration turns `geo` red.
+      // The same for 循证传播: a failed migration turns `geo` red.
       if (geo) {
         await geo.service.ready().catch((error) => {
           process.stderr.write(`geo migration failed: ${typeof error?.code === "string" ? error.code : error?.name ?? "geo_migration_failed"}\n`);
@@ -8236,7 +8236,7 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
   // The entity vocabulary the frontier, the zones, agendas, products and studies share: the glossary's size and what
   // the taggings found (entityVocabulary.mjs `entityVocabularyMetricFamilies`).
   for (const family of entityVocabularyMetricFamilies(entityVocabulary?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
-  // 循证 GEO: `open_science_geo_enabled 0` when off (geoService.mjs `geoMetricFamilies`).
+  // 循证传播: `open_science_geo_enabled 0` when off (geoService.mjs `geoMetricFamilies`).
   const geoSnapshot = geo ? await geoMetricsSnapshot(geo) : null;
   for (const family of geoMetricFamilies(Boolean(geo), geoSnapshot)) addMetric(lines, family.name, family.help, family.type, family.series);
   // 虚拟临研: `open_science_vcr_enabled 0` when off; queue gauges (queued,
@@ -8275,7 +8275,7 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
   const credentialMissing = publicSourceCredentialMissingMetricFamily();
   addMetric(lines, credentialMissing.name, credentialMissing.help, credentialMissing.type, credentialMissing.series);
   // The NCBI Gene Expression Omnibus workflow's six resource limits and its named downloads (geneExpressionMetrics.mjs;
-  // two limits counted by the gateway as bytes arrive, four reported by the runtime's tool). Not 循证 GEO's.
+  // two limits counted by the gateway as bytes arrive, four reported by the runtime's tool). Not 循证传播's.
   for (const family of geneExpressionMetricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
   // Model requests booked uncertain, by why (usageLedger.mjs): a burst is a
   // provider or a caller losing calls, and shows here while it happens.
@@ -8431,7 +8431,7 @@ async function readinessStatus(config, store, runtimeManager, researchMemory = n
     review: await readinessCheck(async () => (review ? review.service.readiness() : config.reviewEnabled
       ? Promise.reject(readinessFailure("review_unavailable", { reason: productDatabase ? "not_composed" : "no_product_database" }))
       : { required: false, enabled: false })),
-    // 循证 GEO: red only for its own invariants (geoService.mjs `geoReadiness`).
+    // 循证传播: red only for its own invariants (geoService.mjs `geoReadiness`).
     geo: await readinessCheck(async () => withGeoWorkerWarnings(await geoReadiness({ config, geo, database: productDatabase }), geo?.worker ?? null)),
     // The research allowance's wallet: red only for its own invariants (the
     // schema, the policy's activation, a configuration it refused —

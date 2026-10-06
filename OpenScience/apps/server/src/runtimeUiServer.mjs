@@ -452,7 +452,7 @@ export function createRuntimeUiServer({ config, store, runtimeManager, agentRegi
           limits: (display.knownLimits ?? []).slice(0, 4),
           materials: typeof display.materials === "string" ? display.materials : "",
           // Kept in the catalogue so a session bound to it by id still shows
-          // its chip, and left out of the frame's tool list: the 「循证 GEO」
+          // its chip, and left out of the frame's tool list: the 「循证传播」
           // capabilities are opened by their own module (`display.listed`).
           listed: capabilityListed(agent.id),
         }))

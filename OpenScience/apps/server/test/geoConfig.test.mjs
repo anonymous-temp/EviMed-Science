@@ -1,4 +1,4 @@
-// 循证 GEO's settings and the media marketplace's: the build spec's defaults,
+// 循证传播's settings and the media marketplace's: the build spec's defaults,
 // every lever read from the environment, and every value outside its range
 // refused at start by the variable's name.
 import assert from "node:assert/strict";

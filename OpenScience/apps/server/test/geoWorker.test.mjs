@@ -1,4 +1,4 @@
-// 「循证 GEO」's worker: one timer, many loops, each isolated — a failing
+// 「循证传播」's worker: one timer, many loops, each isolated — a failing
 // loop never stops the others; a loop without its function is reported, not
 // run; cadences hold; a leased loop held elsewhere is skipped; readiness
 // hears about all of it as warnings.

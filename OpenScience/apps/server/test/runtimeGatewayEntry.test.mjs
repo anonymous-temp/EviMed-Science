@@ -124,8 +124,8 @@ test("a remote runtime is offered exactly the gateways a local one is, at the pu
   assert.equal(withFrontier?.frontier, "https://evimed.example/runtime-gateway/frontier/v1/search");
   assert.deepEqual(resolveRuntimeGatewayPath("/runtime-gateway/frontier/v1/search"), { kind: "internal", url: "/internal/frontier/v1/search" });
   assert.equal(resolveRuntimeGatewayPath("/runtime-gateway/frontier/%2e%2e/%2e%2e/api/me"), null);
-  // 循证 GEO: one base, three operations under it, offered only when the module is on.
-  assert.equal(urls?.geo, "", "循证 GEO is off here, so its tools are not offered there");
+  // 循证传播: one base, three operations under it, offered only when the module is on.
+  assert.equal(urls?.geo, "", "循证传播 is off here, so its tools are not offered there");
   const withGeo = publicRuntimeGatewayUrls({
     runtimeGatewayPublicUrl: "https://evimed.example/runtime-gateway",
     geoEnabled: true, modelGatewayInternalUrl: "http://open-science-web:8787/internal/model/v1",
@@ -137,7 +137,7 @@ test("a remote runtime is offered exactly the gateways a local one is, at the pu
   assert.equal(resolveRuntimeGatewayPath("/runtime-gateway/geo/%2e%2e/%2e%2e/api/me"), null);
   // `geo` and `geo-probe` are two gateways: a prefix of one is never the other.
   assert.deepEqual(resolveRuntimeGatewayPath("/runtime-gateway/geo-probe/v1"), { kind: "internal", url: "/internal/geo-probe/v1" });
-  // 虚拟临研 (CS-9): one base like 循证 GEO's, offered only when the module is on,
+  // 虚拟临研 (CS-9): one base like 循证传播's, offered only when the module is on,
   // and every operation its gateway serves resolves to the same internal path.
   // Without it a runtime in an AgentBay session had no address for the study it
   // was working on, and every one of the module's five tools answered 「关闭」.

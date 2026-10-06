@@ -548,8 +548,8 @@
             "severity": "warning"
           },
           "annotations": {
-            "summary": "循证 GEO 有 {{ $value }} 条 S3/S4 级「讲错我方」尚未关闭",
-            "description": "消费级 AI 引擎在回答里讲错了客户的药品，且严重度为 S3 或 S4（可能影响用药安全）。在「循证 GEO → 准确与安全」处理或关闭；涉及临床安全的稿件已被 safety_stops 拦下（open_science_geo_safety_stops）。"
+            "summary": "循证传播有 {{ $value }} 条 S3/S4 级「讲错我方」尚未关闭",
+            "description": "消费级 AI 引擎在回答里讲错了客户的药品，且严重度为 S3 或 S4（可能影响用药安全）。在「循证传播 → 准确与安全」处理或关闭；涉及临床安全的稿件已被 safety_stops 拦下（open_science_geo_safety_stops）。"
           }
         },
         {
@@ -560,7 +560,7 @@
             "severity": "warning"
           },
           "annotations": {
-            "summary": "循证 GEO 的探测循环超过 30 分钟没有成功跑完一轮",
+            "summary": "循证传播的探测循环超过 30 分钟没有成功跑完一轮",
             "description": "探测循环每个基础节拍都会跑一次（没有到期的题目也算一次成功），所以半小时没有成功就是它卡住了（超过 OPEN_SCIENCE_GEO_LEASE_MS 仍在运行）或每次都在失败。/api/ready 的 geo.worker.loops.probe 写着 lastError；常见原因是探测主机不可达或 CDP 断开。可见度与准确度的数据会停在最后一轮。"
           }
         },
@@ -572,7 +572,7 @@
             "severity": "warning"
           },
           "annotations": {
-            "summary": "循证 GEO 探测主机上有 {{ $value }} 个 AI 引擎被熔断暂停已超过一小时",
+            "summary": "循证传播探测主机上有 {{ $value }} 个 AI 引擎被熔断暂停已超过一小时",
             "description": "连续多次答回登录页、空壳或错误的引擎会被暂停，每十分钟复查一次；超过一小时仍暂停，基本是引擎在探测主机上被登出了（2026-09-26：DeepSeek 停在登录页、元宝与豆包无有效回答，只剩两个引擎在答）。在探测主机上重新登录对应标签页，熔断器会在十分钟内自行恢复；收件箱里有 geo_probe_engine_paused 通知写明是哪个引擎。"
           }
         }

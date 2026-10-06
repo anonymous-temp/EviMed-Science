@@ -1,5 +1,5 @@
 /**
- * The reader's words for “循证 GEO”'s closed vocabularies.
+ * The reader's words for “循证传播”'s closed vocabularies.
  *
  * Every id the server sends — an engine, a pool, a step, a layer, an order
  * state — is mapped here before it reaches the screen; a page never prints a
@@ -105,6 +105,15 @@ export const GEO_POOL_NAMES: Readonly<Record<GeoPool, string>> = Object.freeze({
   P3: "泛症状场景类",
   P4: "风险监测类",
 });
+
+/**
+ * What the module's measurement screens are called (evidence-flywheel plan
+ * §5.6, 2026-10-06): how the consumer AI assistants answer about the product is
+ * one ruler inside 循证传播, not the name of the module — “GEO” stopped being
+ * the product's word when it was renamed. 可见度, 准确与安全, 问题与回答 and one
+ * answer's page carry it in their browser tab.
+ */
+export const GEO_MONITORING_TITLE = "AI 回答监测";
 
 /** What each pool is for: 存量 / 增量 / 泛增量 / 风险监测. */
 export const GEO_POOL_KINDS: Readonly<Record<GeoPool, string>> = Object.freeze({
@@ -335,7 +344,7 @@ export interface GeoStarter {
 const naming = (product: string | null) => (product ? `产品是${product}。` : "产品是：");
 
 export const GEO_STARTERS: readonly GeoStarter[] = Object.freeze([
-  { key: "full", label: "完整方案", draft: (product) => `做一套完整的 GEO 方案，从证据、问题、诊断到内容、投放和监测，${naming(product)}` },
+  { key: "full", label: "完整方案", draft: (product) => `做一套完整的循证传播方案，从证据、问题、诊断到内容、投放和监测，${naming(product)}` },
   { key: "answers", label: "AI 怎么说我的产品", draft: (product) => `看看各家 AI 怎么回答我的产品，哪里讲对了、哪里讲错了，${naming(product)}` },
   { key: "sources", label: "信源分析与预期", draft: (product) => `看看 AI 回答里引用了谁、我们投内容能做到什么程度，${naming(product)}` },
   { key: "optimize", label: "优化已有稿件", draft: () => "把我已有的稿件逐篇优化，让 AI 更愿意引用，稿件我附在下面：" },

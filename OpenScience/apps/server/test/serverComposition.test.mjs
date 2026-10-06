@@ -1748,12 +1748,12 @@ test("the frontier composer is composed, ticked by the worker's compose loop, an
   assert.equal(app.frontier.actions.capabilities().saveToLibrary, true);
 });
 
-// 「循证 GEO」 (build spec 2026-09-25): composed only when switched on with a
+// 「循证传播」 (build spec 2026-09-25): composed only when switched on with a
 // product database, visible to its audience in `/api/me`, its routes and its
 // runtime gateway dispatched, every slot filled (worker, orchestrator,
 // exporter, market), and a `geo.worker` that the recurring work starts,
 // pauses and closes with the rest whatever fills the slot.
-test("循证 GEO is composed when on, its slot's worker runs with the recurring work, and its routes and gateway are dispatched", async (t) => {
+test("循证传播 is composed when on, its slot's worker runs with the recurring work, and its routes and gateway are dispatched", async (t) => {
   const headers = { Cookie: "os_session=composition-session", "x-open-science-project": PROJECT_ID };
   const fixture = await composedApp(t, { geoEnabled: true, geoAudience: "all", operatorUsers: [USER_ID] });
   const { app } = fixture;
@@ -1845,7 +1845,7 @@ test("a GEO run is dispatched like an episode, inside the GEO project, bound to 
     await sendPrompt({ sessionId: input.sessionId }, { id: `run-geo-${dispatched.length}`, kernelRequestIds: [] });
     return { id: `run-geo-${dispatched.length}`, status: "running" };
   };
-  const brief = "「循证 GEO」自动运行 · 第 1–3 步（证据、旅程、问题）";
+  const brief = "「循证传播」自动运行 · 第 1–3 步（证据、旅程、问题）";
   const dispatchRun = app.geo.orchestrator.dispatchRun;
   const out = await dispatchRun({ userId: USER_ID, projectId: PROJECT_ID, geoProjectId: "geo_x", capabilityId: "geo-insight",
     dispatchId: "geo-insight-a1", reason: "geo:evidence", brief });
@@ -1929,7 +1929,7 @@ test("a GEO run and an autopilot episode record what they recalled in the run le
   };
 
   await app.geo.orchestrator.dispatchRun({ userId: USER_ID, projectId: PROJECT_ID, geoProjectId: "geo_x", capabilityId: "geo-insight",
-    dispatchId: "geo-insight-recall", reason: "geo:evidence", brief: "「循证 GEO」自动运行 · 第 1 步（证据）" });
+    dispatchId: "geo-insight-recall", reason: "geo:evidence", brief: "「循证传播」自动运行 · 第 1 步（证据）" });
   await app.autopilotWorker.dispatchEpisode({ userId: USER_ID, projectId: PROJECT_ID, agendaId: "agenda-verify",
     episodeId: EPISODE_ID, dispatchId: "episode-recall", taskType: "literature-sentinel", budgetCny: 2,
     prompt: "追踪心衰领域的新证据。" });
@@ -1944,11 +1944,11 @@ test("a GEO run and an autopilot episode record what they recalled in the run le
   app.memorySubstrate.recall = async () => [];
   learned.length = 0;
   await app.geo.orchestrator.dispatchRun({ userId: USER_ID, projectId: PROJECT_ID, geoProjectId: "geo_x", capabilityId: "geo-insight",
-    dispatchId: "geo-insight-none", reason: "geo:evidence", brief: "「循证 GEO」自动运行 · 第 2 步" });
+    dispatchId: "geo-insight-none", reason: "geo:evidence", brief: "「循证传播」自动运行 · 第 2 步" });
   assert.deepEqual(learned, []);
 });
 
-test("循证 GEO off, or on for operators this account is not, is invisible: no feature, a named 404, no composition", async (t) => {
+test("循证传播 off, or on for operators this account is not, is invisible: no feature, a named 404, no composition", async (t) => {
   const headers = { Cookie: "os_session=composition-session", "x-open-science-project": PROJECT_ID };
   const off = await composedApp(t);
   assert.equal(off.app.geo, null);
@@ -2246,7 +2246,7 @@ test("a programme step and a channel question are asked of the allowance before 
     return { id: `run-gate-${runs}`, status: "running" };
   };
   const step = { userId: USER_ID, projectId: PROJECT_ID, geoProjectId: "geo_x", capabilityId: "geo-insight", reason: "geo:evidence",
-    brief: "「循证 GEO」自动运行 · 第 1 步（证据）" };
+    brief: "「循证传播」自动运行 · 第 1 步（证据）" };
   // GEO: refused before a runtime is reserved — the orchestrator leaves the step pending and asks again, so a top-up releases it.
   await assert.rejects(app.geo.orchestrator.dispatchRun({ ...step, dispatchId: "geo-gate-1" }), { status: 402, code: "simulated_credits_exhausted" });
   assert.deepEqual([reserved, runs], [0, 0]);

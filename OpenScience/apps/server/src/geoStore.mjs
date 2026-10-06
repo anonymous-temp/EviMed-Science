@@ -1,5 +1,5 @@
 /**
- * 「循证 GEO」's content side (build spec 2026-09-25 §1, §2): the queries and
+ * 「循证传播」's content side (build spec 2026-09-25 §1, §2): the queries and
  * row mappers for projects, claims, the question map (sets, groups,
  * questions), the journey, strategy, targets, placement plans, sources,
  * articles and the links the brand published itself. The measurement tables (`geoMeasureStore.mjs`) and the market

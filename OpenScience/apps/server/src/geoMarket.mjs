@@ -7,7 +7,7 @@ import { geoAudienceAllows } from "./geoService.mjs";
 export { projectMoney };
 
 /**
- * 「循证 GEO」 distribution: the media marketplace loop (build spec §5, §7).
+ * 「循证传播」 distribution: the media marketplace loop (build spec §5, §7).
  * The AI may propose; this module places orders, and only under rules written
  * here in code (ruling 7: money is code, never the model).
  *

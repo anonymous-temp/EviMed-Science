@@ -478,7 +478,7 @@ function evidenceUpkeepSettings(overrides) {
 }
 
 /**
- * 「循证 GEO」's settings (build spec 2026-09-25 §0, §5, §7), each checked at
+ * 「循证传播」's settings (build spec 2026-09-25 §0, §5, §7), each checked at
  * load, and the media marketplace it places orders through.
  *
  * Hidden knowledge — the same discipline as the frontier's: every one is a
@@ -610,7 +610,7 @@ export const VCR_ENGINE_SECRET_MIN_BYTES = 32;
  */
 /**
  * 「虚拟临研」 (build plan 2026-09-28 §11.2): off by default, opened per
- * account like 「循证 GEO」 and 「前沿动态」 before it.
+ * account like 「循证传播」 and 「前沿动态」 before it.
  *
  * Hidden knowledge: the two ceilings here are not opinions, they are the
  * shared host (plan §11.4). The box this runs on is four cores shared with
@@ -767,7 +767,7 @@ function vcrSettings(overrides) {
 
 /**
  * The six limits of the NCBI Gene Expression Omnibus workflow (`gene_expression_series` / `gene_expression_differential`;
- * not 「循证 GEO」), each a whole number inside the bounds `@evimed/domain` fixes (principle 15: a reason, a key, a counter).
+ * not 「循证传播」), each a whole number inside the bounds `@evimed/domain` fixes (principle 15: a reason, a key, a counter).
  * The two byte limits for a download are enforced here, in the public-source gateway, and every limit reaches the
  * runtime as `EVIMED_GENE_EXPRESSION_*` (runtimeManager.mjs), where the tools enforce what only the runtime can see:
  * the samples and probes a matrix holds, the memory one computation may use, and the time it may take. An input over a
@@ -847,7 +847,7 @@ function reviewSettings(overrides) {
 }
 
 /**
- * The media marketplace (「循证 GEO」 distribution, build spec §7) and the
+ * The media marketplace (「循证传播」 distribution, build spec §7) and the
  * vendor's 「GEO 查收录」 channel. Neither the base URL nor the key file has a
  * default a deployment could reach: the vendor's documentation names only a
  * placeholder host, and the key is the operator's. Either missing reads as
@@ -2446,11 +2446,11 @@ export function loadConfig(overrides = {}) {
     ...evidenceSettings(overrides),
     ...evidenceCitationGiftSettings(overrides),
     ...evidenceUpkeepSettings(overrides),
-    // --- 循证 GEO and the media marketplace (2026-09-25) ---
+    // --- 循证传播 and the media marketplace (2026-09-25) ---
     ...geoSettings(overrides),
     // --- 虚拟临研: the virtual clinical research module (2026-09-28) ---
     ...vcrSettings(overrides),
-    // --- NCBI Gene Expression Omnibus: the six resource limits (2026-10-04; not 循证 GEO) ---
+    // --- NCBI Gene Expression Omnibus: the six resource limits (2026-10-04; not 循证传播) ---
     ...geneExpressionSettings(overrides),
     ...reviewSettings(overrides),
     ...mediaMarketSettings(overrides),

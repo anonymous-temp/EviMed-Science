@@ -2,7 +2,7 @@
  * 「虚拟临研」's seven-step program (build plan 2026-09-28 §4, §6.3, §10):
  * which step runs next, decided by platform rules and never by the model.
  *
- * The division of labour is the one 「循证 GEO」 paid for and proved: **the
+ * The division of labour is the one 「循证传播」 paid for and proved: **the
  * steps that think run as AI runs; the steps that compute run as platform
  * jobs.** Drafting the research definition, structuring eligibility criteria,
  * extracting precedents, choosing a comparator route, writing the package —

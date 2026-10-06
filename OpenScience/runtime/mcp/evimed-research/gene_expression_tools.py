@@ -11,7 +11,7 @@ has several platforms, the platform; the gateway builds the address.
 `gene_expression.py` runs in a child process under the six limits and writes its results, a rendered table and a
 receipt as files. Numbers reach the report through `research_calculate` action=render from those files.
 
-Both are named for the data resource (`gene_expression`, `ncbi_geo`); neither has anything to do with the 循证 GEO
+Both are named for the data resource (`gene_expression`, `ncbi_geo`); neither has anything to do with the 循证传播
 module's `geo_read` / `geo_write`.
 
 An input over a limit is refused for that computation with the reason (`gene_expression_input_over_limit`, with

@@ -83,7 +83,7 @@ export function publicRuntimeGatewayUrls(config) {
     geoProbe: String(config.geoProbeUrl ?? "").trim() ? `${base}/geo-probe/v1` : "",
     kbSearch: kbSearchGatewayProviderUrl(config) ? `${base}/kb/v1/search` : "",
     frontier: frontierGatewayProviderUrl(config) ? `${base}/frontier/v1/search` : "",
-    // 循证 GEO's three operations sit under one base (`geo_platform.py` appends them).
+    // 循证传播's three operations sit under one base (`geo_platform.py` appends them).
     geo: geoGatewayProviderUrl(config) ? `${base}/geo/v1` : "",
     // 「虚拟临研」's read / write / simulate operations, under one base likewise
     // (`vcr_platform.py`); a runtime outside this host without it could never

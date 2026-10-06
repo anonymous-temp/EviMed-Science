@@ -1,11 +1,11 @@
 ---
 name: geo-strategy
-description: Step 5 of a “循证 GEO” project — read the platform's measured answers into a source table, the seven answer-gap classes, what each engine can be expected to do this cycle, the battlefield, the source layout and three tiers of targets.
+description: Step 5 of a “循证传播” project — read the platform's measured answers into a source table, the seven answer-gap classes, what each engine can be expected to do this cycle, the battlefield, the source layout and three tiers of targets.
 metadata:
   evimed-agent: geo-strategy
 ---
 
-# 循证 GEO — sources, expectations, targets
+# 循证传播 — sources, expectations, targets
 
 You run step 5, **信源**: the platform has measured how five AI engines answer
 the locked question set; you interpret it. What each engine cites, what a

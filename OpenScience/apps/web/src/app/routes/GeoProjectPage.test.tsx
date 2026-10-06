@@ -202,6 +202,14 @@ describe("a GEO project's page", () => {
     expect(screen.getByTestId("landed")).toHaveTextContent(/^\/app\/geo\/geo_masi$/);
   });
 
+  it("names the three measurement tabs 「AI 回答监测」 in the browser tab, and the others by the project", async () => {
+    renderProject("/app/geo/geo_masi/accuracy");
+    await screen.findByTestId("accuracy-tab");
+    await waitFor(() => expect(document.title).toBe("玛仕度肽注射液 · AI 回答监测 · EviMed"));
+    await userEvent.click(screen.getByRole("tab", { name: "信源" }));
+    await waitFor(() => expect(document.title).toBe("玛仕度肽注射液 · EviMed"));
+  });
+
   it("“对话” opens the project's latest conversation, “周报” exports it", async () => {
     client.exportGeo.mockResolvedValue({ sessionId: "ses_export", runId: "run_1" });
     renderProject();
@@ -235,7 +243,7 @@ describe("a GEO project's page", () => {
 
   it("reads as a new project before anything was measured: “—” and a sentence, never a zero", async () => {
     client.getGeoProject.mockResolvedValue({
-      ...GEO_PROJECT, name: "新 GEO 项目", steps: {}, budget: null, sessionId: "ses_new",
+      ...GEO_PROJECT, name: "新 循证传播项目", steps: {}, budget: null, sessionId: "ses_new",
       overview: { metrics: [], week: [], steps: {} },
     });
     client.getGeoDiagnosis.mockResolvedValue({ round: null, rounds: [], byEngine: [], byPool: [], failureModes: {}, errors: [], noise: null, more: [] });

@@ -1145,7 +1145,7 @@ export {
   FRONTIER_SOURCE_DISPLAY_NAMES,
   frontierSourceDisplayName,
 } from './src/frontierSourceNames.mjs'
-// geoVocabulary — 81 exports: 「循证 GEO」's closed vocabularies (pools, engines,
+// geoVocabulary — 81 exports: 「循证传播」's closed vocabularies (pools, engines,
 // steps, measurement and error states, source and article words, order and
 // ledger states, the social channel, the runtime tools' words), their Chinese
 // labels, the metric ids the platform's own views read, and the one
@@ -1233,7 +1233,7 @@ export {
   geoArticlePublishable,
   isGeoValue,
 } from './src/geoVocabulary.mjs'
-// geoMetrics — 20 exports: 「循证 GEO」's metric table (the owner's
+// geoMetrics — 20 exports: 「循证传播」's metric table (the owner's
 // geo-skills metrics.yaml as `geo/metrics.json`, with its constants and their
 // provenance), the probe sanity markers (`geo/sanity.json`), and the pure
 // computation — per-scope cells with Wilson intervals and the no-fake-number
@@ -1808,7 +1808,7 @@ export {
 export { EVOLUTION_TOOL_HARM_TEST } from './src/evolution.mjs'
 
 // geneExpression — NCBI Gene Expression Omnibus series to differential expression (plan 2026-10-02 §11.3 N17): the
-// accessions, the six limits, the tool's refusals and the advisory findings over its package. Not 「循证 GEO」.
+// accessions, the six limits, the tool's refusals and the advisory findings over its package. Not 「循证传播」.
 export {
   GENE_EXPRESSION_ACCESSIONS,
   GENE_EXPRESSION_CAPABILITY_ID,
