@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { WebApiError } from "./apiClient";
 import {
+  EVIDENCE_PUBLIC_BASE_PATHS,
   evidenceUpkeepErrorMessage,
   fetchEvidenceChanges,
   fetchEvidenceFeatures,
@@ -39,6 +40,17 @@ describe("evidence upkeep client", () => {
     request.mockResolvedValue({ currency: "no_longer_updated" });
     await setEvidenceUpkeep("ec_1", "retire");
     expect(request).toHaveBeenCalledWith("/frontier/evidence/ec_1/upkeep", "POST", { action: "retire" });
+  });
+  it("reads where the public pages are served from the capabilities, only from the closed set, and the closed set is the domain's", async () => {
+    const { EVIDENCE_PUBLIC_BASE_PATHS: domainPaths } = await import("@evimed/domain");
+    expect([...EVIDENCE_PUBLIC_BASE_PATHS]).toEqual([...domainPaths]);
+    resetEvidenceFeatures();
+    request.mockResolvedValue({ capabilities: { evidencePublicPages: true, evidencePublicBasePath: "/evimed-evidence" } });
+    expect(await fetchEvidenceFeatures()).toEqual({ publicPages: true, publicBasePath: "/evimed-evidence", upkeep: false });
+    resetEvidenceFeatures();
+    request.mockResolvedValue({ capabilities: { evidencePublicPages: true, evidencePublicBasePath: "https://elsewhere.example/evidence" } });
+    expect(await fetchEvidenceFeatures()).toEqual({ publicPages: true, upkeep: false });
+    resetEvidenceFeatures();
   });
   it("says a refusal in the registry's words and falls back to a sentence for anything else", () => {
     expect(evidenceUpkeepErrorMessage(new WebApiError("x", { status: 409, code: "evidence_challenge_exists" }))).toMatch(/已经对这条结论提出过质疑/);

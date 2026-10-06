@@ -83,8 +83,16 @@ export function evidenceUpkeepErrorMessage(error: unknown): string {
 /** What this deployment offers around an evidence zone (flywheel F08, F14): a public page to link to, and a card's history and challenges. */
 export interface EvidenceFeatures {
   publicPages: boolean;
+  /**
+   * Where the public pages are served, when the server says: `/evidence`, or `/evimed-evidence` on a deployment whose own `/evidence/`
+   * belongs to another product. Absent, a link uses `DEFAULT_PUBLIC_BASE_PATH`.
+   */
+  publicBasePath?: string;
   upkeep: boolean;
 }
+/** The public pages' base paths a server may report; the closed set is `EVIDENCE_PUBLIC_BASE_PATHS` in `@evimed/domain` (a test holds the two equal). */
+export const EVIDENCE_PUBLIC_BASE_PATHS = ["/evidence", "/evimed-evidence"] as const;
+export const DEFAULT_PUBLIC_BASE_PATH = EVIDENCE_PUBLIC_BASE_PATHS[0];
 const NO_FEATURES: EvidenceFeatures = { publicPages: false, upkeep: false };
 let featuresRead: { at: number; value: Promise<EvidenceFeatures> } | null = null;
 /**
@@ -96,10 +104,15 @@ export function fetchEvidenceFeatures(): Promise<EvidenceFeatures> {
   const now = Date.now();
   if (featuresRead && now - featuresRead.at < 60_000) return featuresRead.value;
   const value = productRequest<{ capabilities?: Record<string, unknown> } | null>("/frontier/status")
-    .then((status): EvidenceFeatures => ({
-      publicPages: status?.capabilities?.evidencePublicPages === true,
-      upkeep: status?.capabilities?.evidenceUpkeep === true,
-    }))
+    .then((status): EvidenceFeatures => {
+      // A base the server names outside the closed set is not a link target: it is left out and the default stands.
+      const base = EVIDENCE_PUBLIC_BASE_PATHS.find((path) => path === status?.capabilities?.evidencePublicBasePath);
+      return {
+        publicPages: status?.capabilities?.evidencePublicPages === true,
+        ...(base ? { publicBasePath: base } : {}),
+        upkeep: status?.capabilities?.evidenceUpkeep === true,
+      };
+    })
     .catch(() => NO_FEATURES);
   featuresRead = { at: now, value };
   return value;

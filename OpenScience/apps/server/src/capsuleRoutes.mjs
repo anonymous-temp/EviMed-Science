@@ -1,4 +1,5 @@
 import { HttpError, readJson, sendJson } from "./security.mjs";
+import { withoutSharerAccount } from "./capsuleSharerAccount.mjs";
 import { CAPSULE_TRANSFER_MAX_BYTES } from "./capsuleTransferService.mjs";
 import { DOCUMENT_MEMORY_LAYER } from "./derivedMemory.mjs";
 import { recordShareTrial } from "./capsuleShareMetrics.mjs";
@@ -47,7 +48,8 @@ export function createCapsuleRoutes({ store, service, transferService = null, ma
     try { parts = url.pathname.slice("/api/capsules".length).split("/").filter(Boolean).map(decodeURIComponent); }
     catch { throw new HttpError(400, "capsule_path_invalid", "Invalid capsule path."); }
     const method = req.method ?? "GET";
-    const reply = (value, status = 200) => { sendJson(res, status, { data: value }); return true; };
+    // The sharer's account id stays inside the platform (`capsuleSharerAccount.mjs`): a recipient is told the display name.
+    const reply = (value, status = 200) => { sendJson(res, status, { data: withoutSharerAccount(value) }); return true; };
     const project = async (id) => {
       if (id != null) await store.requireProject(user, id);
       return id ?? null;

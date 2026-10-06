@@ -13,20 +13,25 @@ import {
   EVIDENCE_AI_STEP_LABELS_ZH,
   EVIDENCE_CHANGE_CATEGORY_LABELS_ZH,
   EVIDENCE_CHANGE_TRIGGER_LABELS_ZH,
+  GEO_ENGINE_LABELS_ZH,
   SOURCE_CURRENCY_LABELS_ZH,
   VCR_VALUE_SOURCE_LABELS_ZH,
 } from "@evimed/domain";
 import { externalLink, html, pathLink, timeTag } from "./evidencePublicHtml.mjs";
 import { EVIDENCE_ABOUT_SECTIONS } from "./evidencePublicAbout.mjs";
 import { EVIDENCE_SITE_NAME, appCardPath, appZonePath, authorPath, cardPath, changesPath, zonePath } from "./evidencePublicLayout.mjs";
+import { evidencePublicPath } from "./evidencePublicPaths.mjs";
 
-const CLAIM_TYPE_LABELS = { direct: "直接引用", synthesized: "跨来源综合", derived: "分析者推算" };
+const CLAIM_TYPE_LABELS = { direct: "直接引用", synthesized: "跨来源综合", derived: "分析者推算", calculated: "平台计算" };
 const CLAIM_STATUS_LABELS = {
   verified: "引文在所标的来源里逐字找到了",
   quote_not_found: "引文在所标的来源里没有找到",
   source_unavailable: "来源的原文当前无法核对，这里只给出处",
   no_quote: "没有给出引文，无法核对",
   derived: "分析者自己的推算，没有引文可核对；它的方法和假设写在下面",
+  // Added when a ✓ came to mean the platform read the source (author_excerpt_only) and when the platform began to compute (calculation_unverified).
+  author_excerpt_only: "引文只在作者自己提供的摘录里找到，平台没有读到来源原文，所以不标 ✓",
+  calculation_unverified: "这个数由平台的计算引擎给出，这里没有读到它的计算回执，所以不标 ✓",
   unknown: "核验状态未知",
 };
 const COVERAGE_LABELS = { "full-text": "全文", abstract: "摘要", excerpt: "摘录" };
@@ -62,6 +67,9 @@ export function producerLine(producer, fallbackName = "") {
   if (!producer) return html`<p class="producer"><strong>出品方：</strong>${fallbackName || "未写明"}</p>`;
   return html`<p class="producer"><strong>出品方：</strong>${producer.kindLabel ? html`${producer.kindLabel} ` : ""}${producer.name}。${producer.relationLabel ?? ""}${producer.products?.length ? html`（${producer.products.join("、")}）` : ""}</p>`;
 }
+
+/** An author's name, linked to the author's page by public handle; a name alone when no handle could be made. @param {{ id: string | null, name: string }} author */
+const authorLink = (author) => (author.id ? pathLink(authorPath(author.id), author.name) : author.name);
 
 /** @param {{ total: number, verified: number, warned: number, derived: number }} counts */
 export function claimCountsText(counts) {
@@ -113,7 +121,7 @@ ${zone.description ? html`<p>${clip(zone.description, 120)}</p>` : ""}
     title: `${EVIDENCE_SITE_NAME}：官方专区、产品专区和用户专区`,
     description: "EviMed 证据中心公开的证据专区。官方专区、产品专区和用户专区分开列出，每张证据卡都写明出品方，每条结论都能追到来源原文。",
     body: html`<h1>${EVIDENCE_SITE_NAME}</h1>
-<p class="lede">每张证据卡写明是谁出的、凭什么这样说，每条结论都标出它的引文有没有在来源里逐字找到（✓ 或 ⚠）。证据卡只是索引，请引用它列出的原始来源。排序只看更新日期、关注数和读者评分，没有付费字段。详见${pathLink("/evidence/about", "编辑说明")}。</p>
+<p class="lede">每张证据卡写明是谁出的、凭什么这样说，每条结论都标出它的引文有没有在来源里逐字找到（✓ 或 ⚠）。证据卡只是索引，请引用它列出的原始来源。排序只看更新日期、关注数和读者评分，没有付费字段。详见${pathLink(evidencePublicPath("/about"), "编辑说明")}。</p>
 ${section("official", "官方专区", "由平台出品。", sections.official, false)}
 ${section("product", "产品专区", "由企业或医生出品，讲的是他们自己的产品；每个专区写明出品方和与产品的关系。", sections.product, true)}
 ${section("user", "用户专区", "由研究者出品、署名发表，并选择公开到互联网。", sections.user, false)}`,
@@ -135,7 +143,7 @@ export function zonePage({ zone, cards }) {
     description: clip(zone.description || `${zone.kindLabel}“${zone.title}”的证据卡，每张写明出品方，每条结论标出引文核验的结果。`),
     body: html`${producerLine(zone.producer, zone.owner.name)}
 <h1>${zone.title}</h1>
-<p class="meta">${zone.kindLabel} · ${countOf(zone.cards, "张证据卡")}${zone.withdrawnCards ? `，另有 ${zone.withdrawnCards} 张已撤回` : ""} · ${countOf(zone.follows, "人关注")} · 作者 ${pathLink(authorPath(zone.owner.id), zone.owner.name)}${zone.lastCheckedAt ? html` · 最后核对 ${timeTag(zone.lastCheckedAt)}` : ""}</p>
+<p class="meta">${zone.kindLabel} · ${countOf(zone.cards, "张证据卡")}${zone.withdrawnCards ? `，另有 ${zone.withdrawnCards} 张已撤回` : ""} · ${countOf(zone.follows, "人关注")} · 作者 ${authorLink(zone.owner)}${zone.lastCheckedAt ? html` · 最后核对 ${timeTag(zone.lastCheckedAt)}` : ""}</p>
 ${zone.description ? html`<p>${zone.description}</p>` : ""}
 ${zone.background ? html`<details><summary>专区背景</summary><p>${zone.background}</p></details>` : ""}
 ${currency.length ? html`<p class="meta">时效：${currency.join(" · ")}</p>` : ""}
@@ -207,7 +215,7 @@ ${box.excluded?.length && box.status === "available" ? html`<p class="muted">另
 /** The claims with their marks, quotations and sources. @param {any} card */
 function basisSection(card) {
   return html`<section aria-labelledby="basis"><h2 id="basis">依据</h2>
-<p class="muted">✓ 表示引文在它标明的来源里逐字找到了；⚠ 表示没有找到，或者来源的原文当前无法核对。</p>
+<p class="muted">✓ 表示引文在平台读到的来源原文里逐字找到了；⚠ 表示没有找到，或者来源的原文当前无法核对（平台没有读到原文、只有作者提供的摘录时，也不标 ✓）。</p>
 ${card.claimList.length ? card.claimList.map((/** @type {any} */ claim) => html`<div class="claim ${claim.mark === "✓" ? "verified" : claim.mark === "⚠" ? "unverified" : ""}" id="claim-${claim.claimId}">
 <p>${claim.mark === "✓" ? html`<span class="mark-ok">✓</span> ` : claim.mark === "⚠" ? html`<span class="mark-warn">⚠</span> ` : ""}${claim.text} <span class="badge">${/** @type {any} */ (CLAIM_TYPE_LABELS)[claim.claimType] ?? claim.claimType}</span>${claim.confidence ? html` <span class="badge">把握度：${claim.confidence === "high" ? "高" : claim.confidence === "moderate" ? "中" : "低"}</span>` : ""}${claim.valueSource ? html` <span class="badge">数值来源：${/** @type {any} */ (VCR_VALUE_SOURCE_LABELS_ZH)[claim.valueSource] ?? claim.valueSource}</span>` : ""}</p>
 <p class="meta">${/** @type {any} */ (CLAIM_STATUS_LABELS)[claim.status] ?? CLAIM_STATUS_LABELS.unknown}</p>
@@ -270,7 +278,7 @@ export function cardPage({ card, links, view }) {
     description: clip(description),
     body: html`${producerLine(card.producer, card.creator.name)}
 <h1>${card.title}${card.aiGenerated ? html` <span class="badge ai">AI 生成</span>` : ""}</h1>
-<p class="meta">${card.originalityLabel ?? ""} · ${pathLink(zonePath(card.zone.id), card.zone.title)} · 作者 ${pathLink(authorPath(card.creator.id), card.creator.name)} · 第 ${card.revision} 版，更新于 ${timeTag(card.updatedAt)} · ${claimCountsText(card.claims)} · ${currencyBadge(card)}</p>
+<p class="meta">${card.originalityLabel ?? ""} · ${pathLink(zonePath(card.zone.id), card.zone.title)} · 作者 ${authorLink(card.creator)} · 第 ${card.revision} 版，更新于 ${timeTag(card.updatedAt)} · ${claimCountsText(card.claims)} · ${currencyBadge(card)}</p>
 ${card.hasPendingEvidence ? html`<p class="notice warn">平台发现了 ${card.pendingItems} 项可能影响这张卡的新研究，尚未纳入。读到的结论可能不是最新的。</p>` : ""}
 ${card.currency === "source_changed" ? html`<p class="notice warn">这张卡引用的来源出现了撤稿、更正或关注声明，依据这些来源的结论待复核。</p>` : ""}
 <p class="muted">证据卡是 EviMed 对来源的整理，只是索引：需要引用时，请引用下面列出的原始来源，不要引用这张卡。</p>
@@ -380,7 +388,7 @@ ${EVIDENCE_ABOUT_SECTIONS.map((section) => html`<section aria-labelledby="${sect
     const items = block.items.map((item) => html`<li>${item}</li>`);
     return block.type === "ol" ? html`<ol>${items}</ol>` : html`<ul>${items}</ul>`;
   })}</section>`)}
-<p class="muted">按月公开的数在${pathLink("/evidence/metrics", "这一页")}，选题申请在${pathLink("/evidence/requests", "这一页")}。</p>`,
+<p class="muted">按月公开的数在${pathLink(evidencePublicPath("/metrics"), "这一页")}，选题申请在${pathLink(evidencePublicPath("/requests"), "这一页")}。</p>`,
   };
 }
 
@@ -390,10 +398,57 @@ function hoursText(hours) {
   return hours >= 48 ? `${Math.round((hours / 24) * 10) / 10} 天` : `${hours} 小时`;
 }
 
+/** A share as a percentage with one decimal; null is not a number and is never written as 0. @param {number | null} share @param {string} [empty] */
+const percentText = (share, empty = "没有可判定的陈述") => (share === null || share === undefined ? empty : `${Math.round(share * 1000) / 10}%`);
+
 /**
- * @param {{ months: { month: string, data: boolean, figures: any }[] }} model
+ * The medication-question bank's month: how right the AI assistants are on a fixed set of common medication questions, per class, and how often an
+ * answer that cited anything cited an EviMed page. Counts and rates the platform's code computed from the answers; a class with nothing decided says so.
+ * @param {any} bank the metrics module's `questionBank()`
  */
-export function metricsPage({ months }) {
+function questionBankSection(bank) {
+  const engines = Object.entries(bank.coverage ?? {});
+  const asked = engines.filter(([, mark]) => /** @type {any} */ (mark).state === "done").map(([engine]) => /** @type {any} */ (GEO_ENGINE_LABELS_ZH)[engine] ?? engine);
+  const missing = engines.filter(([, mark]) => /** @type {any} */ (mark).state !== "done").map(([engine]) => /** @type {any} */ (GEO_ENGINE_LABELS_ZH)[engine] ?? engine);
+  const row = (/** @type {string} */ label, /** @type {any} */ entry) => html`<tr><td>${label}</td><td class="num">${entry.answers}</td><td class="num">${entry.decided}</td><td class="num">${entry.correct}</td><td class="num">${percentText(entry.rate)}</td></tr>`;
+  const cited = bank.overall.cited
+    ? html`<p>在引用了网页的回答里，有 <strong>${percentText(bank.overall.eviMedCitedShare)}</strong> 引用了 EviMed 的页面（${bank.overall.cited} 条中的 ${bank.overall.citedEviMed} 条）。</p>`
+    : html`<p class="muted">这个月的回答里没有引用网页的，所以没有可计算的引用占比。</p>`;
+  return html`<h2>AI 助手回答常见用药问题：${bank.month}</h2>
+<p class="muted">平台用一组固定的常见用药问题，每月问一遍各个 AI 助手，再对照官方证据卡里的结论，判断助手的每条陈述是对是错。正确率只算能判定对错的陈述；一类问题里没有可判定的陈述时，写明没有，不写 0。</p>
+<div class="table-wrap"><table>
+<thead><tr><th>问题类别</th><th class="num">回答数</th><th class="num">可判定的陈述</th><th class="num">其中正确</th><th class="num">正确率</th></tr></thead>
+<tbody>${bank.classes.map((/** @type {any} */ entry) => row(entry.label, entry))}${row("合计", bank.overall)}</tbody></table></div>
+${cited}
+${asked.length || missing.length ? html`<p class="muted">${asked.length ? `本月问到的助手：${asked.join("、")}。` : ""}${missing.length ? `本月还没有问到：${missing.join("、")}，上面的数字不包含它们。` : ""}</p>` : ""}`;
+}
+
+/**
+ * The prediction registry's calibration: predictions registered before a trial's result was public, scored against it. Before enough are scored the
+ * page says how many there are and when the overall calibration will be published; it does not draw a curve from a few points.
+ * @param {any} calibration the metrics module's `predictionCalibration()`
+ */
+function calibrationSection(calibration) {
+  if (!calibration.available) {
+    return html`<h2>预测的校准</h2>
+<p class="muted">平台在试验结果公开之前登记预测，结果公开后按登记时间在先的预测评分。</p>
+<p>已评分 ${calibration.scored} 条，满 ${calibration.minScored} 条后公开整体校准。</p>`;
+  }
+  const { probability, estimate } = calibration;
+  return html`<h2>预测的校准</h2>
+<p class="muted">平台在试验结果公开之前登记预测，结果公开后按登记时间在先的预测评分。共评分 ${calibration.scored} 条。</p>
+${probability.bins.length ? html`<div class="table-wrap"><table>
+<thead><tr><th>预测的成功概率</th><th class="num">条数</th><th class="num">平均预测概率</th><th class="num">实际达成的比例</th></tr></thead>
+<tbody>${probability.bins.map((/** @type {any} */ bin) => html`<tr><td>${Math.round(bin.from * 100)}%–${Math.round(bin.to * 100)}%</td><td class="num">${bin.n}</td><td class="num">${percentText(bin.meanPredicted, "—")}</td><td class="num">${percentText(bin.observedRate, "—")}</td></tr>`)}</tbody></table></div>` : html`<p class="muted">已评分的预测里没有给出成功概率的。</p>`}
+${probability.brierMean === null ? "" : html`<p>概率预测的 Brier 分数平均为 ${Math.round(probability.brierMean * 1000) / 1000}（${probability.n} 条；越小越好）。</p>`}
+${estimate.n ? html`<p>估计值的平均绝对误差为 ${estimate.meanAbsoluteError === null ? "无法计算" : Math.round(estimate.meanAbsoluteError * 1000) / 1000}（${estimate.n} 条）${estimate.coverage.rate === null ? "" : `；公布的值落在预测区间内的占 ${percentText(estimate.coverage.rate, "—")}（${estimate.coverage.n} 条）`}。</p>` : ""}`;
+}
+
+/**
+ * @param {{ months: { month: string, data: boolean, figures: any }[], questionBank?: any, calibration?: any }} model
+ *   `questionBank` and `calibration` are the optional sections the deployment composed; absent, they are not on the page.
+ */
+export function metricsPage({ months, questionBank = null, calibration = null }) {
   return {
     title: `按月公开的数 · ${EVIDENCE_SITE_NAME}`,
     description: "EviMed 证据中心每月公开的三个数：核验通过率、纠错的中位时效、质疑数及其结果。",
@@ -411,7 +466,9 @@ ${months.length ? html`<div class="table-wrap"><table>
 <td>${figures.verification.passRate === null ? "这个月没有已列出的结论" : html`${Math.round(figures.verification.passRate * 1000) / 10}%<br><span class="muted">${figures.verification.verified} / ${figures.verification.claims} 条结论，${figures.verification.cards} 张卡</span>`}</td>
 <td>${hoursText(figures.corrections.medianLatencyHours)}<br><span class="muted">${figures.corrections.entries} 条更正或撤回记录</span></td>
 <td>${figures.challenges.filed ? html`提出 ${figures.challenges.filed}：维持 ${figures.challenges.upheld}，修正 ${figures.challenges.amended}，撤回 ${figures.challenges.withdrawn}，处理中 ${figures.challenges.open}${figures.challenges.upheldShare === null ? "" : html`<br><span class="muted">已判定的里维持的占 ${Math.round(figures.challenges.upheldShare * 1000) / 10}%</span>`}` : "这个月没有质疑"}</td>
-</tr>` : html`<tr><td>${month}</td><td colspan="3" class="muted">这个月没有数据。</td></tr>`)}</tbody></table></div>` : html`<p class="muted">还没有可以公开的数据。</p>`}`,
+</tr>` : html`<tr><td>${month}</td><td colspan="3" class="muted">这个月没有数据。</td></tr>`)}</tbody></table></div>` : html`<p class="muted">还没有可以公开的数据。</p>`}
+${questionBank ? questionBankSection(questionBank) : ""}
+${calibration ? calibrationSection(calibration) : ""}`,
   };
 }
 
@@ -427,7 +484,7 @@ export function simulationsPage({ reader, items, next }) {
     description: "EviMed 的“模拟研究”栏目：虚拟临研的模拟结果。模拟的结果不是证据。",
     body: html`<h1>模拟研究</h1>
 <p class="notice warn">${SIMULATION_BANNER}</p>
-${!reader || !items.length ? html`<p class="muted">这个栏目现在没有公开的模拟研究。</p>` : html`<ul class="list">${items.map((item) => html`<li><h3>${pathLink(`/evidence/simulations/${encodeURIComponent(item.id)}`, item.title)}</h3>${item.summary ? html`<p>${clip(item.summary, 200)}</p>` : ""}${item.publishedAt ?? item.createdAt ? html`<p class="meta">${item.producer?.name ? html`${item.producer.name} · ` : ""}${timeTag(item.publishedAt ?? item.createdAt)}</p>` : ""}</li>`)}</ul>${pager(next, "/evidence/simulations")}`}`,
+${!reader || !items.length ? html`<p class="muted">这个栏目现在没有公开的模拟研究。</p>` : html`<ul class="list">${items.map((item) => html`<li><h3>${pathLink(evidencePublicPath(`/simulations/${encodeURIComponent(item.id)}`), item.title)}</h3>${item.summary ? html`<p>${clip(item.summary, 200)}</p>` : ""}${item.publishedAt ?? item.createdAt ? html`<p class="meta">${item.producer?.name ? html`${item.producer.name} · ` : ""}${timeTag(item.publishedAt ?? item.createdAt)}</p>` : ""}</li>`)}</ul>${pager(next, evidencePublicPath("/simulations"))}`}`,
   };
 }
 
@@ -459,7 +516,7 @@ ${numbers.length ? html`<h2>数字和它们的来源</h2>${rows(numbers)}` : ""}
 ${Array.isArray(record.assumptions) && record.assumptions.length ? html`<h2>假设</h2><ul>${record.assumptions.map((/** @type {string} */ item) => html`<li>${item}</li>`)}</ul>` : ""}
 ${limitations.length ? html`<h2>局限</h2><ul>${limitations.map((/** @type {string} */ item) => html`<li>${item}</li>`)}</ul>` : ""}
 ${receipts.length ? html`<h2>计算回执</h2><p class="muted">这些数字由统计引擎计算，回执编号：${receipts.map((/** @type {any} */ receipt) => String(typeof receipt === "string" ? receipt : receipt?.id ?? "")).filter(Boolean).join("、")}</p>` : ""}
-<p>${pathLink("/evidence/simulations", "返回模拟研究")}</p>`,
+<p>${pathLink(evidencePublicPath("/simulations"), "返回模拟研究")}</p>`,
   };
 }
 
@@ -483,7 +540,7 @@ export function notFoundPage() {
   return {
     title: `没有找到这一页 · ${EVIDENCE_SITE_NAME}`,
     description: "没有找到这个公开页面。",
-    body: html`<h1>没有找到这一页</h1><p>这个地址没有公开的内容。它可能不存在，或者作者没有把它公开到互联网。</p><p>${pathLink("/evidence/", "回到证据专区")}</p>`,
+    body: html`<h1>没有找到这一页</h1><p>这个地址没有公开的内容。它可能不存在，或者作者没有把它公开到互联网。</p><p>${pathLink(evidencePublicPath("/"), "回到证据专区")}</p>`,
   };
 }
 

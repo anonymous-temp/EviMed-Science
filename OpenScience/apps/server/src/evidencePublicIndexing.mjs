@@ -7,26 +7,27 @@
 //   `X-Robots-Tag` header and there is no sitemap. When it is on, a page is indexable unless one of two rules holds:
 //   (a) its author is new — fewer than three published cards that each carry a ✓ claim — in which case the page opens normally but is
 //   `noindex` and absent from the sitemap, and the rule lifts by itself the moment the third card counts (`authorQualifies` is a count
-//   at read time). Official zones are exempt: the platform is not a new author. This stops borrowing the platform's domain to place
+//   at read time; it is asked by the author's public handle, the only name of an author this module holds). Official zones are exempt: the platform is not a new author. This stops borrowing the platform's domain to place
 //   pages without stopping anyone from publishing; (b) the card is withdrawn — its page stays, explaining why, and is never indexed.
 // - **User-written lists stay out of the index.** The topic requests page is made of titles any signed-in account typed; it is
 //   `noindex` always, for the reason (a) exists.
 // - **A sitemap lists what the same rules call indexable, and nothing else.** With the deployment's switch off the sitemap is a 404.
 
 import { HttpError } from "./security.mjs";
+import { evidencePublicPath } from "./evidencePublicPaths.mjs";
 
-/** The static pages a sitemap lists besides zones, cards and authors. */
-const SITE_PATHS = ["/evidence/", "/evidence/about", "/evidence/metrics", "/evidence/simulations"];
+/** The static pages a sitemap lists besides zones, cards and authors, under the base the deployment serves the pages at. */
+const sitePaths = () => ["/", "/about", "/metrics", "/simulations"].map((suffix) => evidencePublicPath(suffix));
 
 /**
- * @param {{ config: Record<string, any>, reads: { authorQualifies: (authorId: string) => Promise<boolean> } }} options
+ * @param {{ config: Record<string, any>, reads: { authorQualifies: (authorHandle: string | null) => Promise<boolean> } }} options
  */
 export function createEvidencePublicIndexing({ config, reads }) {
   const counters = { noindexSwitchOff: 0, noindexNewAuthor: 0, noindexWithdrawn: 0, noindexAlways: 0, indexable: 0, sitemapRequests: 0, sitemapUrls: 0 };
 
   /**
    * Whether a page may be indexed, and why not.
-   * @param {{ kind: "site" } | { kind: "never" } | { kind: "zone", zoneKind: string, ownerId: string } | { kind: "card", zoneKind: string, authorId: string, withdrawn: boolean } | { kind: "author", official: boolean, authorId: string }} page
+   * @param {{ kind: "site" } | { kind: "never" } | { kind: "zone", zoneKind: string, ownerHandle: string | null } | { kind: "card", zoneKind: string, authorHandle: string | null, withdrawn: boolean } | { kind: "author", official: boolean, authorHandle: string }} page
    * @returns {Promise<{ index: boolean, reason: "switch_off" | "new_author" | "withdrawn" | "never" | null }>}
    */
   async function decide(page) {
@@ -34,39 +35,40 @@ export function createEvidencePublicIndexing({ config, reads }) {
     if (page.kind === "card" && page.withdrawn) { counters.noindexWithdrawn += 1; return { index: false, reason: "withdrawn" }; }
     if (config.evidencePublicIndexable !== true) { counters.noindexSwitchOff += 1; return { index: false, reason: "switch_off" }; }
     if (page.kind === "site") { counters.indexable += 1; return { index: true, reason: null }; }
-    const { official, authorId } = page.kind === "author" ? { official: page.official, authorId: page.authorId }
-      : page.kind === "zone" ? { official: page.zoneKind === "official", authorId: page.ownerId }
-        : { official: page.zoneKind === "official", authorId: page.authorId };
-    if (!official && !(await reads.authorQualifies(authorId))) { counters.noindexNewAuthor += 1; return { index: false, reason: "new_author" }; }
+    const { official, authorHandle } = page.kind === "author" ? { official: page.official, authorHandle: page.authorHandle }
+      : page.kind === "zone" ? { official: page.zoneKind === "official", authorHandle: page.ownerHandle }
+        : { official: page.zoneKind === "official", authorHandle: page.authorHandle };
+    if (!official && !(await reads.authorQualifies(authorHandle))) { counters.noindexNewAuthor += 1; return { index: false, reason: "new_author" }; }
     counters.indexable += 1;
     return { index: true, reason: null };
   }
 
   /**
    * The sitemap's entries: every page `decide` calls indexable. Authors are asked about once each.
-   * @param {{ zones: { id: string, kind: string, authorId: string, updatedAt: string | null }[], cards: { id: string, kind: string, authorId: string, updatedAt: string | null }[] }} entries
+   * @param {{ zones: { id: string, kind: string, authorHandle: string | null, updatedAt: string | null }[], cards: { id: string, kind: string, authorHandle: string | null, updatedAt: string | null }[] }} entries
    */
   async function sitemapPaths({ zones, cards }) {
     /** @type {Map<string, boolean>} */
     const verdicts = new Map();
-    const allowed = async (/** @type {string} */ kind, /** @type {string} */ authorId) => {
+    const allowed = async (/** @type {string} */ kind, /** @type {string | null} */ authorHandle) => {
       if (kind === "official") return true;
-      if (!verdicts.has(authorId)) verdicts.set(authorId, await reads.authorQualifies(authorId));
-      return /** @type {boolean} */ (verdicts.get(authorId));
+      if (!authorHandle) return false;
+      if (!verdicts.has(authorHandle)) verdicts.set(authorHandle, await reads.authorQualifies(authorHandle));
+      return /** @type {boolean} */ (verdicts.get(authorHandle));
     };
     /** @type {{ path: string, lastmod: string | null }[]} */
-    const paths = SITE_PATHS.map((path) => ({ path, lastmod: null }));
+    const paths = sitePaths().map((path) => ({ path, lastmod: null }));
     const authors = new Map();
     for (const zone of zones) {
-      if (!(await allowed(zone.kind, zone.authorId))) continue;
-      paths.push({ path: `/evidence/z/${encodeURIComponent(zone.id)}`, lastmod: zone.updatedAt });
-      authors.set(zone.authorId, zone.updatedAt);
+      if (!(await allowed(zone.kind, zone.authorHandle))) continue;
+      paths.push({ path: evidencePublicPath(`/z/${encodeURIComponent(zone.id)}`), lastmod: zone.updatedAt });
+      if (zone.authorHandle) authors.set(zone.authorHandle, zone.updatedAt);
     }
     for (const card of cards) {
-      if (!(await allowed(card.kind, card.authorId))) continue;
-      paths.push({ path: `/evidence/c/${encodeURIComponent(card.id)}`, lastmod: card.updatedAt });
+      if (!(await allowed(card.kind, card.authorHandle))) continue;
+      paths.push({ path: evidencePublicPath(`/c/${encodeURIComponent(card.id)}`), lastmod: card.updatedAt });
     }
-    for (const [authorId, lastmod] of authors) paths.push({ path: `/evidence/a/${encodeURIComponent(authorId)}`, lastmod });
+    for (const [authorHandle, lastmod] of authors) paths.push({ path: evidencePublicPath(`/a/${encodeURIComponent(authorHandle)}`), lastmod });
     counters.sitemapUrls += paths.length;
     return paths;
   }

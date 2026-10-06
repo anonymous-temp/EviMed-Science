@@ -21,24 +21,26 @@
 
 import { html, pathLink, raw } from "./evidencePublicHtml.mjs";
 import { evidenceAbsoluteUrl } from "./evidencePublicIndexing.mjs";
-import { EVIDENCE_PUBLIC_STYLESHEET_PATH } from "./evidencePublicStyle.mjs";
+import { evidencePublicPath } from "./evidencePublicPaths.mjs";
+import { evidencePublicStylesheetPath } from "./evidencePublicStyle.mjs";
 
 export const EVIDENCE_SITE_NAME = "EviMed 证据中心";
 
-export const zonePath = (/** @type {string} */ id) => `/evidence/z/${encodeURIComponent(id)}`;
-export const changesPath = (/** @type {string} */ id) => `/evidence/z/${encodeURIComponent(id)}/changes`;
-export const cardPath = (/** @type {string} */ id) => `/evidence/c/${encodeURIComponent(id)}`;
-export const authorPath = (/** @type {string} */ id) => `/evidence/a/${encodeURIComponent(id)}`;
+export const zonePath = (/** @type {string} */ id) => evidencePublicPath(`/z/${encodeURIComponent(id)}`);
+export const changesPath = (/** @type {string} */ id) => evidencePublicPath(`/z/${encodeURIComponent(id)}/changes`);
+export const cardPath = (/** @type {string} */ id) => evidencePublicPath(`/c/${encodeURIComponent(id)}`);
+export const authorPath = (/** @type {string} */ id) => evidencePublicPath(`/a/${encodeURIComponent(id)}`);
 /** Where an anonymous visitor goes to continue from a card: the in-app reading page, which leads to the sign-in and sign-up page. */
 export const appCardPath = (/** @type {string} */ zoneId, /** @type {string} */ cardId) => `/app/frontier/zones/${encodeURIComponent(zoneId)}/evidence/${encodeURIComponent(cardId)}`;
 export const appZonePath = (/** @type {string} */ zoneId) => `/app/frontier/zones/${encodeURIComponent(zoneId)}`;
 
-const NAV = [
-  ["zones", "/evidence/", "证据专区"],
-  ["requests", "/evidence/requests", "选题申请"],
-  ["simulations", "/evidence/simulations", "模拟研究"],
-  ["metrics", "/evidence/metrics", "按月公开的数"],
-  ["about", "/evidence/about", "编辑说明"],
+/** The header's navigation, under the base the deployment serves the pages at. */
+const navigation = () => [
+  ["zones", evidencePublicPath("/"), "证据专区"],
+  ["requests", evidencePublicPath("/requests"), "选题申请"],
+  ["simulations", evidencePublicPath("/simulations"), "模拟研究"],
+  ["metrics", evidencePublicPath("/metrics"), "按月公开的数"],
+  ["about", evidencePublicPath("/about"), "编辑说明"],
 ];
 
 /**
@@ -60,7 +62,7 @@ export function aigcMetadata({ producerName, produceId, propagateId }) {
 export function renderPage({ title, description, path, noindex, active = "", body, wide = false, aigc = null, publicUrl = null, alternates = false }) {
   const canonical = evidenceAbsoluteUrl(publicUrl, path.split("?")[0]);
   const feedLinks = alternates
-    ? html`<link rel="alternate" type="application/rss+xml" title="${EVIDENCE_SITE_NAME}" href="/evidence/feed.xml"><link rel="alternate" type="application/json" title="${EVIDENCE_SITE_NAME}（JSON）" href="/evidence/feed.json">`
+    ? html`<link rel="alternate" type="application/rss+xml" title="${EVIDENCE_SITE_NAME}" href="${evidencePublicPath("/feed.xml")}"><link rel="alternate" type="application/json" title="${EVIDENCE_SITE_NAME}（JSON）" href="${evidencePublicPath("/feed.json")}">`
     : "";
   return `<!doctype html>\n${html`<html lang="zh-CN">
 <head>
@@ -72,18 +74,18 @@ ${noindex ? raw('<meta name="robots" content="noindex">') : ""}
 ${canonical ? html`<link rel="canonical" href="${canonical}">` : ""}
 ${aigc ? html`<meta name="AIGC" content="${aigc}">` : ""}
 ${feedLinks}
-<link rel="stylesheet" href="${EVIDENCE_PUBLIC_STYLESHEET_PATH}">
+<link rel="stylesheet" href="${evidencePublicStylesheetPath()}">
 </head>
 <body>
 <header class="site-header"><div class="inner">
-<a class="brand" href="/evidence/">${EVIDENCE_SITE_NAME}</a>
-<nav aria-label="站内导航">${NAV.map(([key, href, label]) => html`<a href="${href}"${key === active ? raw(' aria-current="page"') : ""}>${label}</a>`)}</nav>
+<a class="brand" href="${evidencePublicPath("/")}">${EVIDENCE_SITE_NAME}</a>
+<nav aria-label="站内导航">${navigation().map(([key, href, label]) => html`<a href="${href}"${key === active ? raw(' aria-current="page"') : ""}>${label}</a>`)}</nav>
 </div></header>
 <main${wide ? "" : raw(' class="read"')}>
 ${body}
 </main>
 <footer class="site-footer"><div class="inner">
-<p>证据卡是 EviMed 对来源的整理，只是索引，请引用它列出的原始来源。${pathLink("/evidence/about", "编辑说明")} · <a href="/evidence/feed.xml">订阅</a> · <a href="/login">登录或注册</a></p>
+<p>证据卡是 EviMed 对来源的整理，只是索引，请引用它列出的原始来源。${pathLink(evidencePublicPath("/about"), "编辑说明")} · <a href="${evidencePublicPath("/feed.xml")}">订阅</a> · <a href="/login">登录或注册</a></p>
 </div></footer>
 </body>
 </html>

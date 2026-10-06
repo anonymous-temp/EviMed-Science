@@ -10,6 +10,7 @@ import { createCalculationReceiptReader } from "../src/evidenceCalculationReceip
 import { monthlyEvidenceFigures } from "../src/evidenceFigures.mjs";
 import { createEvidenceRecalculation, createOfficialZoneMatcher } from "../src/evidenceRecalculation.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
+import { createEvidencePublicReads } from "../src/evidencePublicQuery.mjs";
 
 const url = process.env.OPEN_SCIENCE_TEST_POSTGRES_URL;
 const options = { skip: !url && "local PostgreSQL required" };
@@ -172,4 +173,14 @@ test("the monthly verification figure counts the quotations it can check, not ca
   // The card was recorded now; the figure looks at the end of a month after it, so the card is read as it stood.
   const figures = await monthlyEvidenceFigures(db, { month: next === month ? month : next });
   assert.deepEqual([figures.verification.claims, figures.verification.verified], [1, 1], "one quotation, found; the calculated claim is not scored as an unread receipt");
+});
+
+test("the public card page checks a calculated claim against its receipt as the app does; without the receipt reader it says the receipt is unavailable", options, async () => {
+  const zone = await officialZone();
+  const saved = await official(zone, {});
+  const statusOf = async (/** @type {any} */ reads) => Object.fromEntries((await reads.card(saved.id)).claimList.map((/** @type {any} */ claim) => [claim.claimId, [claim.status, claim.mark]]));
+  const withReceipts = createEvidencePublicReads({ database: db, receiptsFor: (/** @type {any} */ card) => reading.receiptsFor(card) });
+  assert.deepEqual((await statusOf(withReceipts))["CALC-1"], ["verified", "✓"]);
+  const without = createEvidencePublicReads({ database: db });
+  assert.deepEqual((await statusOf(without))["CALC-1"], ["calculation_unverified", "⚠"]);
 });

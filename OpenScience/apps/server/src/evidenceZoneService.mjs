@@ -94,6 +94,16 @@ function revision(row, body) {
       "Content changed; reload before saving.",
     );
 }
+/**
+ * The editorial receipt as a reader other than the card's owner sees it: the last editor's name and the time, never the account (its id
+ * is the login name of a local account, and another account's reading page has no use for it).
+ * @param {any} editorial
+ */
+function editorialForOtherReader(editorial) {
+  if (!editorial?.lastEditor) return editorial ?? null;
+  const { userId: _account, ...editor } = editorial.lastEditor;
+  return { ...editorial, lastEditor: editor };
+}
 /** @param {string} prefix @param {string} userId @param {any} body */
 function identity(prefix, userId, body) {
   if (body.requestId == null)
@@ -473,7 +483,7 @@ export class EvidenceZoneService {
       views: contract && verification ? { clinical: evidenceCardClinicalView(contract, { verification }), public: evidenceCardPublicView(contract, { verification }) } : null,
       sources: detail ? (row.sources ?? []).map((/** @type {any} */ source) => { const { documentText: _documentText, ...visible } = source; return visible; }) : [],
       content: row.content ?? null,
-      editorial: row.editorial ?? null,
+      editorial: row.user_id === user.id ? row.editorial ?? null : editorialForOtherReader(row.editorial),
       revisions: detail ? (await client.query(`SELECT revision,recorded_at AS "recordedAt",snapshot->>'title' AS title,
         snapshot->'editorial'->>'sourceFingerprint' AS "sourceFingerprint",snapshot->'editorial'->>'status' AS "reviewStatus"
         FROM evimed_frontier.evidence_card_revisions WHERE card_id=$1 ORDER BY revision DESC LIMIT 30`,[row.id])).rows : [],

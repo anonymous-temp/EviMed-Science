@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router";
-import { EVIDENCE_ZONE_KIND_LABELS_ZH } from "@evimed/domain";
+import { EVIDENCE_PRODUCER_KIND_LABELS_ZH, EVIDENCE_PRODUCER_RELATION_LABELS_ZH, EVIDENCE_ZONE_KIND_LABELS_ZH } from "@evimed/domain";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { FrontierNavigation } from "@/components/frontier/FrontierNavigation";
 import { FrontierSkeleton } from "@/components/frontier/FrontierSkeleton";
@@ -55,6 +55,18 @@ function EvidenceAuthorContent({ authorId }: { authorId: string }) {
                 {author.author.name}
                 {author.author.platform && <Tag className="ml-2">平台出版方</Tag>}
               </h2>
+              {author.producer && (
+                <p className="text-ui text-text-2">
+                  出品方：{EVIDENCE_PRODUCER_KIND_LABELS_ZH[author.producer.kind]} {author.producer.name}
+                  {(EVIDENCE_PRODUCER_RELATION_LABELS_ZH as Record<string, string>)[author.producer.relation] && `。${(EVIDENCE_PRODUCER_RELATION_LABELS_ZH as Record<string, string>)[author.producer.relation]}`}
+                  {author.producer.products.length > 0 && `（${author.producer.products.join("、")}）`}
+                </p>
+              )}
+              {author.people && author.people.length > 0 && (
+                <p className="text-ui text-text-2">
+                  卡片里署名的作者和审核人：{author.people.map((person) => [person.name, person.affiliation, person.title].filter(Boolean).join("，")).join("；")}
+                </p>
+              )}
               <p className="text-ui text-text-2">
                 {author.totals.cards} 张已发布证据卡 · {author.totals.followers} 位关注者 · 别人的研究由这位作者的卡片发起了 {author.totals.runsFromCards} 次
               </p>

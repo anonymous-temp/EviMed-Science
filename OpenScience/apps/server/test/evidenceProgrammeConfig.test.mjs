@@ -18,6 +18,7 @@ const LEVERS = [
   ["OPEN_SCIENCE_EVIDENCE_PROGRAMME_STALE_CARD_DAYS", "evidenceProgrammeStaleCardDays", 30],
   ["OPEN_SCIENCE_EVIDENCE_PUBLIC_WEB_ENABLED", "evidencePublicWebEnabled", false],
   ["OPEN_SCIENCE_EVIDENCE_PUBLIC_INDEXABLE", "evidencePublicIndexable", false],
+  ["OPEN_SCIENCE_EVIDENCE_PUBLIC_BASE_PATH", "evidencePublicBasePath", "/evidence"],
   ["OPEN_SCIENCE_EVIDENCE_PUBLIC_RATE_PER_MINUTE", "evidencePublicRatePerMinute", 120],
   ["OPEN_SCIENCE_EVIDENCE_TOPIC_REQUESTS_PER_DAY", "evidenceTopicRequestsPerDay", 5],
 ];

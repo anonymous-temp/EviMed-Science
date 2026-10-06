@@ -16,6 +16,7 @@ import { EvidenceChangeLog } from "@/components/frontier/EvidenceChangeLog";
 import { EvidenceCommunityCards } from "@/components/frontier/EvidenceCommunityCards";
 import { ZoneSubscription } from "@/components/capsule/ZoneSubscription";
 import { useEvidenceFeatures } from "@/components/frontier/useEvidenceFeatures";
+import { DEFAULT_PUBLIC_BASE_PATH } from "@/lib/evidenceUpkeepClient";
 import { PageShell } from "@/components/layout/PageShell";
 import { FrontierNavigation } from "@/components/frontier/FrontierNavigation";
 import { FrontierSkeleton } from "@/components/frontier/FrontierSkeleton";
@@ -251,7 +252,7 @@ function EvidenceZoneContent({ zoneId }: { zoneId: string }) {
                     {" · "}
                     <a
                       className="text-accent"
-                      href={`/evidence/z/${encodeURIComponent(zone.id)}`}
+                      href={`${features.publicBasePath ?? DEFAULT_PUBLIC_BASE_PATH}/z/${encodeURIComponent(zone.id)}`}
                       target="_blank"
                       rel="noopener noreferrer"
                     >

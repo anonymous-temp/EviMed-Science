@@ -1,16 +1,19 @@
 // The read-only JSON API of the public evidence pages (flywheel F27, plan §12 「两个专区长期并存」, 2026-10-06): what the team platform
 // reads so that its zone page shows what the Science side holds, not a second copy of it.
 //
-// `GET /evidence/api/v1/…`, no session, no cookie read or set, and the same rule as the pages for what exists: a zone that is
-// platform-visible, a draft, or a card of an account that is gone is the same 404 as an id that was never made.
+// `GET /evidence/api/v1/…` (under `/evimed-evidence/api/v1/…` where a deployment serves the pages there: `evidencePublicPaths.mjs`), no
+// session, no cookie read or set, and the same rule as the pages for what exists: a zone that is platform-visible, a draft, or a card of
+// an account that is gone is the same 404 as an id that was never made.
 //
 //   zones                   ?kind=official|product|user   the public zones, ranked as the index ranks them, at most 50 per kind
 //   zones/:id                                              one zone
 //   zones/:id/cards         ?limit=&cursor=                its published cards, newest first (withdrawn ones are in the list, marked)
 //   zones/:id/changes       ?limit=&before=                its change log, newest first
 //   cards/:id               ?view=clinical|public          one card; a withdrawn card answers 410 with its reason and date
-//   authors/:id                                            an author's public record
-//   metrics                                                the monthly figures for the last twelve months that have data
+//   authors/:handle                                        an author's public record, by the author's public handle (`au_…`), never an account id
+//   metrics                                                the monthly figures for the last twelve months that have data, and — where
+//                                                          the deployment has them — `questionBank` (the medication-question bank's latest
+//                                                          month) and `predictionCalibration` (or how many predictions are scored so far)
 //
 // Every answer is `{ data, meta: { generatedAt, next? } }`: `next` is the cursor (or, for the change log, the `before`) of the page after
 // this one. The shape is versioned by the path (`v1`): a change that is not additive is `v2`. `Cache-Control: public, max-age=300` and
@@ -22,14 +25,16 @@ import { EVIDENCE_ZONE_KINDS } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 import { evidenceAbsoluteUrl } from "./evidencePublicIndexing.mjs";
 import { authorPath, cardPath, zonePath } from "./evidencePublicLayout.mjs";
+import { evidencePublicPath } from "./evidencePublicPaths.mjs";
 
 /**
- * @typedef {{ id: string, title: string, description: string, kind: "official"|"product"|"user", kindLabel: string, producer: Producer | null, owner: { id: string, name: string }, follows: number, cards?: number, createdAt: string | null, updatedAt: string | null, path: string, url: string | null }} Zone
+ * @typedef {{ id: string, title: string, description: string, kind: "official"|"product"|"user", kindLabel: string, producer: Producer | null, owner: { id: string | null, name: string }, follows: number, cards?: number, createdAt: string | null, updatedAt: string | null, path: string, url: string | null }} Zone
  * @typedef {{ kind: string, kindLabel: string | null, name: string, relation: string, relationLabel: string | null, products: string[] }} Producer
  * @typedef {{ id: string, zoneId: string, title: string, summary: string, revision: number, producer: Producer | null, originality: string | null, primary: boolean, aiGenerated: boolean, claims: { total: number, verified: number, warned: number, derived: number }, currency: string, currencyLabel: string | null, lastCheckedAt: string | null, withdrawn: { at: string | null, reason: string, changeLogId: string | null } | null, updatedAt: string | null, path: string, url: string | null }} CardSummary
  */
 
-export const EVIDENCE_PUBLIC_API_PREFIX = "/evidence/api/v1";
+/** Where the API is served: under the base the deployment serves the pages at. */
+export const evidencePublicApiPrefix = () => evidencePublicPath("/api/v1");
 
 const notFound = () => new HttpError(404, "evidence_public_not_found", "No such public evidence content.");
 const invalid = (/** @type {string} */ message) => new HttpError(400, "evidence_public_query_invalid", message);
@@ -53,7 +58,11 @@ export function createEvidencePublicApi({ reads, metrics, config }) {
   async function handle(parts, query) {
     const [resource, id, sub] = parts;
     if (resource === "metrics" && parts.length === 1) {
-      return { data: { months: (await metrics.months()).map(({ month, data, figures }) => ({ month, hasData: data, figures })) } };
+      const months = (await metrics.months()).map(({ month, data, figures }) => ({ month, hasData: data, figures }));
+      // The two optional sections are there only where the deployment composed them and they have something to say (additive: `v1` readers ignore them).
+      const questionBank = await metrics.questionBank?.() ?? null;
+      const predictionCalibration = await metrics.predictionCalibration?.() ?? null;
+      return { data: { months, ...(questionBank ? { questionBank } : {}), ...(predictionCalibration ? { predictionCalibration } : {}) } };
     }
     if (resource === "zones" && parts.length === 1) {
       const kind = query.get("kind");

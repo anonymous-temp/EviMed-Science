@@ -4,13 +4,16 @@
 // switched off, the two paths answer 404 `evidence_public_not_enabled` by name and read nothing.
 //
 // Everything else under `/evidence/` belongs to the pages (`evidencePublicRoutes.mjs`); this answers only these two
-// paths and says it did not handle any other, so the two modules never need to know of each other.
+// paths and says it did not handle any other, so the two modules never need to know of each other. Under the base the
+// deployment serves the pages at (`evidencePublicPaths.mjs`: `/evidence`, or `/evimed-evidence` where another product holds
+// `/evidence/`); the other base's feed path is not answered.
 
 import { EVIDENCE_FEED_VERSION, evidenceFeedRss } from "./evidenceFeed.mjs";
+import { evidencePublicPath } from "./evidencePublicPaths.mjs";
 import { HttpError } from "./security.mjs";
 
-export const EVIDENCE_FEED_JSON_PATH = "/evidence/feed.json";
-export const EVIDENCE_FEED_RSS_PATH = "/evidence/feed.xml";
+export const evidenceFeedJsonPath = () => evidencePublicPath("/feed.json");
+export const evidenceFeedRssPath = () => evidencePublicPath("/feed.xml");
 /** How long a reader may keep a page without asking again: the version's ETag answers the rest. */
 const MAX_AGE_SECONDS = 60;
 
@@ -27,7 +30,7 @@ function matches(header, etag) {
 export function createEvidenceFeedRoutes({ config, feed }) {
   return async (/** @type {any} */ req, /** @type {any} */ res) => {
     const url = new URL(req.url ?? "/", "http://evimed.local");
-    if (url.pathname !== EVIDENCE_FEED_JSON_PATH && url.pathname !== EVIDENCE_FEED_RSS_PATH) return false;
+    if (url.pathname !== evidenceFeedJsonPath() && url.pathname !== evidenceFeedRssPath()) return false;
     if (config.evidencePublicWebEnabled !== true) throw new HttpError(404, "evidence_public_not_enabled", "The public evidence pages are not enabled.");
     if (!feed) throw new HttpError(404, "evidence_public_not_enabled", "The public evidence pages are not available in this deployment.");
     if (req.method !== "GET" && req.method !== "HEAD") {
@@ -38,7 +41,7 @@ export function createEvidenceFeedRoutes({ config, feed }) {
     feed.count("requests");
     const limit = url.searchParams.get("limit");
     const { etag, page } = await feed.page({ cursor: url.searchParams.get("cursor"), limit: limit == null || limit === "" ? null : Number(limit) });
-    const rss = url.pathname === EVIDENCE_FEED_RSS_PATH;
+    const rss = url.pathname === evidenceFeedRssPath();
     const headers = { ETag: etag, "Cache-Control": `public, max-age=${MAX_AGE_SECONDS}`, Vary: "Accept-Encoding" };
     if (matches(req.headers["if-none-match"], etag)) {
       feed.count("notModified");

@@ -12,12 +12,16 @@
  *   as if they were independent); never the platform's own. And only an *established* author's: three published cards that each carry a ✓
  *   (plan §7, "新作者的公开内容在被独立佐证之前不进官方专区的社区栏"). A new author's cards are not hidden from the author or from the
  *   author's page — they are simply not placed under the platform's name until the third ✓ card exists, at which point they appear by themselves.
+ * - **Established, or corroborated.** The first condition is the one rule `evidenceAuthorStanding.mjs` states; this column adds one of its
+ *   own, kept beside the call (plan §7: 「在被独立佐证之前不进……社区栏」): a card whose author is not established is listed when `corroborated`
+ *   says something independent of its author vouches for it. No such signal is merged yet, so no deployment passes one and the column lists
+ *   established authors only.
  * - **The platform never edits them.** The column reads rows and returns them: no field is rewritten, summarised or softened, and the card
  *   keeps its own producer, disclosure and ✓/⚠ marks when the reader opens it.
  * - **Ordering reads `EVIDENCE_RANKING_INPUTS` and nothing else**: the share of the card's claims found in their sources first, then the readers'
  *   score of its current revision, then recency. A placement, a follower count of the author or a platform preference is not an input.
- * - **The author is named by the shape the rest of the product names authors by.** `publicAuthorId` is the one place an account id becomes the
- *   id the author page's address takes; when the public author id replaces the account id everywhere, it is changed here and nowhere else.
+ * - **The author is named by the public handle, never the account id** (`evidenceAuthorHandles.mjs`): the column is read by every account the
+ *   frontier admits, and the id of a local account is its login name. The handles of all the listed cards' authors are made in one statement.
  * - **Off is nothing.** With `OPEN_SCIENCE_EVIDENCE_COMMUNITY_CARDS_ENABLED` unset the route answers 404 `evidence_community_not_enabled` and
  *   no table is read.
  *
@@ -29,7 +33,9 @@ import { evidenceRankingComparator } from "@evimed/domain";
 import { ENTITY_TEXT_KINDS, keyKind, splitKeys } from "@evimed/domain/entity-keys";
 import { HttpError, sendJson } from "./security.mjs";
 import { migrateEvidenceZones } from "./evidenceZonePersistence.mjs";
-import { establishedAuthors, verifiedClaimCounts } from "./evidenceVerifiedCards.mjs";
+import { evidenceEstablishedAuthors } from "./evidenceAuthorStanding.mjs";
+import { verifiedClaimCounts } from "./evidenceVerifiedCards.mjs";
+import { authorHandlesFor } from "./evidenceAuthorHandles.mjs";
 
 /** Candidates read before the established-author rule and the order are applied. */
 export const COMMUNITY_CANDIDATES = 200;
@@ -42,9 +48,11 @@ const ZONE_ID = /^ez_[A-Za-z0-9]{8,64}$/;
 const isSubjectKey = (/** @type {string} */ key) => ENTITY_TEXT_KINDS.includes(/** @type {any} */ (keyKind(key)));
 
 /**
- * @param {{ database: any, maxCards?: number, publicAuthorId?: ((userId: string) => string) | null, platformPublisherUserId?: string | null }} options
+ * @param {{ database: any, maxCards?: number, platformPublisherUserId?: string | null,
+ *   corroborated?: ((card: { id: string, userId: string }) => Promise<boolean>) | null }} options
+ *   `corroborated`: whether something independent of the card's author vouches for the card; absent, only established authors' cards are listed.
  */
-export function createEvidenceCommunity({ database, maxCards = COMMUNITY_DEFAULT_MAX_CARDS, publicAuthorId = null, platformPublisherUserId = null }) {
+export function createEvidenceCommunity({ database, maxCards = COMMUNITY_DEFAULT_MAX_CARDS, platformPublisherUserId = null, corroborated = null }) {
   const counters = { requests: 0, empty: 0, listed: 0, heldBackNewAuthors: 0, failures: 0 };
   const limit = Math.max(1, Math.min(COMMUNITY_MAX_CARDS_CEILING, Math.floor(maxCards)));
   const rank = evidenceRankingComparator(["verified_share", "review_score", "recency"]);
@@ -73,16 +81,23 @@ export function createEvidenceCommunity({ database, maxCards = COMMUNITY_DEFAULT
          WHERE c.entity_keys && $1::text[] AND c.zone_id<>$2 AND z.kind='user' AND z.visibility='internet' AND z.state='published'
            AND c.state='published' AND c.withdrawn IS NULL AND c.user_id<>COALESCE($3::text,'')
          ORDER BY c.updated_at DESC,c.id LIMIT $4`, [keys, zoneId, platformPublisherUserId, COMMUNITY_CANDIDATES])).rows;
-      const established = await establishedAuthors(database, [...new Set(candidates.map((row) => String(row.user_id)))]);
-      const listed = candidates.filter((row) => established.has(String(row.user_id)));
-      counters.heldBackNewAuthors += candidates.length - listed.length;
+      const established = await evidenceEstablishedAuthors(database, candidates.map((row) => String(row.user_id)));
+      /** @type {any[]} */
+      const standing = [];
+      for (const row of candidates) {
+        if (established.has(String(row.user_id)) || (corroborated && await corroborated({ id: String(row.id), userId: String(row.user_id) }))) standing.push(row);
+      }
+      counters.heldBackNewAuthors += candidates.length - standing.length;
+      const handles = await authorHandlesFor(database, standing.map((row) => row.user_id));
+      // An account that is gone between the two reads has no handle and no card here, as it has no page.
+      const listed = standing.filter((row) => handles.has(String(row.user_id)));
       const counts = await verifiedClaimCounts(database, listed.map((row) => String(row.id)));
       const items = listed.map((row) => {
         const found = counts.get(String(row.id)) ?? { claims: 0, verified: 0 };
         const share = found.claims ? found.verified / found.claims : null;
         return {
           id: String(row.id), zoneId: String(row.zone_id), zoneTitle: String(row.zone_title), title: String(row.title), summary: String(row.summary ?? ""),
-          author: { id: publicAuthorId ? publicAuthorId(String(row.user_id)) : String(row.user_id), name: String(row.author_name ?? "") },
+          author: { id: /** @type {string} */ (handles.get(String(row.user_id))), name: String(row.author_name ?? "") },
           producer: row.producer ? { kind: row.producer.kind, name: row.producer.name } : null,
           originality: row.originality ?? null,
           claims: { total: found.claims, verified: found.verified }, verifiedShare: share === null ? null : Math.round(share * 10_000) / 10_000,

@@ -73,7 +73,7 @@ import { EVIDENCE_PROJECT_ID, EVOLUTION_PROJECT_ID, LEARNING_PROJECT_ID, assertC
 import { createEvidenceBudget, evidenceBudgetMetricFamilies } from "./evidenceBudget.mjs";
 import { PROGRAMME_DECISION_KIND, createEvidenceProgramme, evidenceProgrammeMetricFamilies } from "./evidenceProgramme.mjs";
 import { HANDBOOK_LESSON_CLASSES, createPlatformHandbooks, handbookJudgeMessages, platformHandbookMetricFamilies, projectFactsReader } from "./learningPlatformHandbooks.mjs";
-import { establishedAuthors } from "./evidenceVerifiedCards.mjs";
+import { evidenceEstablishedAuthors } from "./evidenceAuthorStanding.mjs";
 import { callReviewModel } from "./reviewModel.mjs";
 import { guestMarkedRuns } from "./capsuleShareTrust.mjs";
 import { createEvolutionLeadSources, evolutionLeadSourceMetricFamilies, programmeLeadReader } from "./evolutionLeadSources.mjs";
@@ -251,6 +251,7 @@ import { createGeoCardCitationReader } from "./geoCardCitations.mjs";
 import { createEvidenceOutcomes, evidenceOutcomeMetricFamilies } from "./evidenceIncidents.mjs";
 import { createEvidenceCommunity, createEvidenceCommunityRoutes, evidenceCommunityMetricFamilies } from "./evidenceCommunity.mjs";
 import { createEvidenceFeedRoutes } from "./evidenceFeedRoutes.mjs";
+import { setEvidencePublicBase } from "./evidencePublicPaths.mjs";
 import { createEvidencePublicRoutes, evidencePublicMetricFamilies } from "./evidencePublicRoutes.mjs";
 import { EVIDENCE_TOPIC_REQUEST_LIST_MAX, createEvidenceTopicRequestRoutes, createEvidenceTopicRequests, topicRequestCounts } from "./evidencePublicRequests.mjs";
 import { pageReads } from "./evidencePublicReads.mjs";
@@ -1015,6 +1016,9 @@ function geoSourceReaderOf(controlProject) {
 export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = createHostedExtensionIntegration, runtimeManagerFactory = (config, hooks) => new RuntimeManager(config, hooks)} = {}) {
   if(typeof extensionIntegrationFactory !== "function" || typeof runtimeManagerFactory !== "function") throw new TypeError("Invalid server constructor factory.");
   const config = loadConfig(overrides);
+  // Where the public evidence pages, their API, the sitemap and the feed are served: one setting, read by everything that writes or answers
+  // one of their addresses (`evidencePublicPaths.mjs`), made once here.
+  setEvidencePublicBase(config.evidencePublicBasePath);
   // Whether a project is the platform's own, for its owner (`internalProjects.mjs`): a name alone is never enough.
   const internalFor = (/** @type {unknown} */ userId, /** @type {unknown} */ projectId) => isInternalProjectOf(config, userId, projectId);
   if (config.evolutionRefusal) process.stderr.write(`evolution: ${config.evolutionRefusal.code} (${config.evolutionRefusal.key}); the module stays off and the platform starts\n`);
@@ -1893,10 +1897,19 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     },
     get: async (/** @type {string} */ id) => (vcrSimulations.current ? vcrSimulations.current.get(id) : null),
   };
+  // The monthly page's two optional sections are found the same way (evidencePublicMetrics.mjs): the question bank's month where 循证传播 and its
+  // question-bank lever are composed, and the prediction registry's calibration where its switches are. Neither exists yet here; each is set where
+  // its module is made, and until then (or without it) the section answers nothing and is not rendered.
+  /** @type {{ questionBank: ((query: { month: string }) => Promise<any>) | null, predictionCalibration: (() => Promise<any>) | null }} */
+  const evidenceMetricSections = { questionBank: null, predictionCalibration: null };
   const evidenceTopicRequests = evidencePublicOn ? createEvidenceTopicRequests({ database: productDatabase, config }) : null;
   const evidencePublicRoutes = createEvidencePublicRoutes({
     config: evidencePublicOn ? config : { ...config, evidencePublicWebEnabled: false }, database: evidencePublicOn ? productDatabase : null,
     simulations: overrides.evidenceSimulations ?? evidenceSimulations, requests: evidenceTopicRequests,
+    questionBank: overrides.evidenceQuestionBank ?? (async (query) => evidenceMetricSections.questionBank?.(query) ?? null),
+    predictionCalibration: overrides.evidencePredictionCalibration ?? (async () => evidenceMetricSections.predictionCalibration?.() ?? null),
+    // A first-hand card's calculated claims are checked against their engine receipts here as in the app (the zone service reads them).
+    receiptsFor: frontier ? (/** @type {any} */ card) => frontier.evidenceZones.receiptsFor(card) : null,
     limiter: (req) => rateLimiter.check(`evidence-public:${clientAddress(req, config)}`, { max: config.evidencePublicRatePerMinute, windowMs: 60_000, code: "evidence_public_rate_limited", label: "evidence page requests" }),
     report: (code) => process.stderr.write(`${code}\n`),
   });
@@ -4445,6 +4458,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       geoParts.questionBank = createGeoQuestionBank({ store: geoParts.store, measureDeps, database: productDatabase, config, entityVocabulary,
         report: (code) => process.stderr.write(`geo question bank: ${code}\n`) });
       if (evidenceProgramme) evidenceProgramme.useSignals({ observedErrors: () => geoParts.questionBank.observedErrors() });
+      // The monthly figures page shows the bank's latest month under its three figures (evidencePublicMetrics.mjs).
+      evidenceMetricSections.questionBank = (query) => geoParts.questionBank.summary(query);
     }
     orchestrator = new GeoOrchestrator({
       store: geoParts.store, config, notifier,
@@ -4759,7 +4774,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             messages: handbookJudgeMessages({ text, capabilityId }) });
           return { ...result.value, independent: result.modelReported === true && /^qwen/i.test(result.model) };
         } : null,
-        established: (userIds) => establishedAuthors(productDatabase, userIds),
+        established: (userIds) => evidenceEstablishedAuthors(productDatabase, userIds),
         recentGuestRun: async (userId, runId) => (runId ? (await guestMarkedRuns(productDatabase, userId, [runId])).has(runId) : false),
       });
     }
@@ -4780,6 +4795,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       const registry = createPredictionRegistry({ config, evolution: evolution.service, isOperator: (/** @type {{ id: string }} */ user) => config.operatorUsers.includes(user.id),
         report: code => process.stderr.write(`${code}\n`) });
       predictionRegistry = registry;
+      evidenceMetricSections.predictionCalibration = () => registry.predictionCalibration();
       evolution.service.callbacks.predictionPublication = (/** @type {any} */ input) => registry.onPublication(input);
     }
   }
