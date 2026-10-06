@@ -639,7 +639,7 @@ test("the change log cannot be updated or deleted: the database refuses, and the
   await assert.rejects(db.query("DELETE FROM evimed_frontier.evidence_change_log WHERE id=$1", [entry.id]), { code: "55000" });
   await assert.rejects(db.query("TRUNCATE evimed_frontier.evidence_change_log"), { code: "55000" });
   assert.equal((await rows("SELECT summary_zh FROM evimed_frontier.evidence_change_log WHERE id=$1", [entry.id]))[0].summary_zh, entry.summary);
-  assert.deepEqual(Object.keys(log).sort(), ["append", "list", "stats"], "append, read and count — nothing that rewrites");
+  assert.deepEqual(Object.keys(log).sort(), ["append", "list", "recentForAuthor", "stats"], "append, two reads and count — nothing that rewrites");
   await assert.rejects(log.append({ zoneId: "z", cardId: "c", category: "rewritten", trigger: "scheduled_check" }), TypeError);
   await assert.rejects(log.append({ zoneId: "z", cardId: "c", category: "retired", trigger: "whim" }), TypeError);
   // Its categories and triggers are closed in the table too.
