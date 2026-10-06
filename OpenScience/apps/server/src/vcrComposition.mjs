@@ -87,6 +87,7 @@ import { createVcrModelPlans } from "./vcrModelDocuments.mjs";
 import { createVcrSeal } from "./vcrSeal.mjs";
 import { VcrService } from "./vcrService.mjs";
 import { createVcrPublications, createVcrPublicSimulations } from "./vcrPublications.mjs";
+import { createVcrFrontierEvents } from "./vcrFrontierEvents.mjs";
 import { VcrStore } from "./vcrStore.mjs";
 import { createChictrAdapter, createTrialRegistryClient } from "./trialRegistryClient.mjs";
 import { createVcrImporter } from "./vcrImport.mjs";
@@ -899,10 +900,11 @@ export function createVcrEngineJobRemover({ config, fetchImpl, engine = null }) 
  *   report?: (code: string) => void,
  *   connectorCredentials?: { resolveOwn(userId: string, connector: string): Promise<string | null> } | null,
  *   intakeController?: { runVcrIntake?: Function } | null,
- *   entityVocabulary?: { tag: (input: { texts: string[] }) => Promise<string[] | null> } | null,
+ *   entityVocabulary?: { tag: (input: { texts: string[] }) => Promise<string[] | null>, frontierItemsMatching?: (query: any) => Promise<any[]> } | null,
+ *   sourceChanges?: { getMany?: (identifiers: unknown[]) => Promise<Map<string, any>> } | null,
  * }} input
  */
-export function composeVcr({ config, productDatabase, projectStore = null, audit = async () => {}, fetchImpl, report = () => {}, connectorCredentials = null, intakeController = null, entityVocabulary = null }) {
+export function composeVcr({ config, productDatabase, projectStore = null, audit = async () => {}, fetchImpl, report = () => {}, connectorCredentials = null, intakeController = null, entityVocabulary = null, sourceChanges = null }) {
   if (!config?.vcrEnabled || !productDatabase) return null;
 
   // The shared entity vocabulary tags a study with what it is about (`entityVocabulary.mjs`).
@@ -1006,8 +1008,17 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   // while the switch is off, so nothing reads the table and the routes answer 404 by their own code.
   const publications = config.vcrPublicSimulationsEnabled ? createVcrPublications({ store, service, matchStore }) : null;
   const simulations = config.vcrPublicSimulationsEnabled ? createVcrPublicSimulations({ store }) : null;
+  // The frontier feed's trial events (flywheel F24): a consumer the module's worker ticks. The orchestrator and the notifier are
+  // composed later, so it asks for them when it needs them.
+  const frontierEvents = config.vcrFrontierEventsEnabled
+    ? createVcrFrontierEvents({
+      store, entityVocabulary, sourceChanges, report: (code) => report(code),
+      orchestrator: () => composed?.orchestrator ?? null, notifier: () => composed?.notifier ?? null,
+      levers: { studiesPerTick: config.vcrFrontierEventsStudiesPerTick, windowDays: config.vcrFrontierEventsWindowDays },
+    }) : null;
+  if (frontierEvents) service.attach({ frontierEvents });
   composed = {
-    publications, simulations,
+    publications, simulations, frontierEvents,
     store, dataStore, matchStore, evidenceStore, corrections, knowledge, knowledgeStore,
     access, members, contact, dataPlane, dataPlaneSeam, documents, engine, engineProbe, engineStatus, removeEngineJob, jobs, seal, evidence, matching, registry, service,
     intake: { counters: intakeCounters, extractor, importer, digitizer },
@@ -1109,6 +1120,7 @@ export async function vcrMetricsSnapshot(vcr) {
     intake: vcr.intake ? { counters: { ...vcr.intake.counters } } : null,
     evidence: vcr.evidence?.counters ? { ...vcr.evidence.counters } : null,
     publications: vcr.publications ? { ...vcr.publications.counters, reads: Number(vcr.simulations?.counters?.reads ?? 0) } : null,
+    frontierEvents: vcr.frontierEvents ? { ...vcr.frontierEvents.counters } : null,
   };
 }
 
@@ -1154,6 +1166,10 @@ export function vcrMetricFamilies(enabled, snapshot) {
     add("card_candidates_total", "Evidence items a run wrote as candidates it found through an evidence card (flywheel F23): written, and the ones that passed the quote and number check.", "counter",
       [{ labels: { outcome: "written" }, value: Number(snapshot.evidence.cardCandidates ?? 0) },
         { labels: { outcome: "verified" }, value: Number(snapshot.evidence.cardCandidatesVerified ?? 0) }]);
+  }
+  if (snapshot.frontierEvents) {
+    add("frontier_events_total", "What the frontier-events consumer did since this process started (flywheel F24): studies scanned, feed items read, precedent candidates raised or already in the library, cards labelled 有新证据, new-version runs requested, versions that took the news in (and those written after the plan froze), and scans that failed.", "counter",
+      Object.entries(snapshot.frontierEvents).map(([kind, value]) => ({ labels: { kind }, value: Number(value) })));
   }
   if (snapshot.publications) {
     add("publications_total", "What the public 「模拟研究」 column did since this process started: reports published, publishes that found the live one, reports withdrawn, publications refused (the report not written, a subject named, not the lead's), and reads by the public reader.", "counter",

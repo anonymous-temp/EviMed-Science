@@ -1924,6 +1924,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // controller's disposable container, like a document export does.
     intakeController,
     entityVocabulary,
+    sourceChanges,
   });
   // Rows made while the vocabulary could not tag (the frontier off, the glossary not yet seeded) are tagged once it
   // can: a bounded pass per module after each glossary load, each row through its own owner (entityVocabulary.mjs).
@@ -4300,7 +4301,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       report: (/** @type {string} */ loop, /** @type {string} */ code) => process.stderr.write(`vcr ${loop}: ${code}\n`),
       // `matching` is the deferral recheck loop: a washout that ends is re-judged on
       // its own day, not when someone next opens the study.
-      loops: createVcrWorkerLoops({ jobs: vcr.jobs, orchestrator, store: vcr.store, matching: vcr.matching }),
+      loops: createVcrWorkerLoops({ jobs: vcr.jobs, orchestrator, store: vcr.store, matching: vcr.matching, frontierEvents: vcr.frontierEvents }),
     });
     // The catalogue the 模型与方法 page reads: three reference simulators and
     // the engine's own method list, seeded once, idempotently.

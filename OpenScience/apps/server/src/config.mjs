@@ -702,6 +702,14 @@ function vcrSettings(overrides) {
     // package reads it. Off, the publication routes answer 404 `vcr_publications_not_enabled` and no table is read. Counter:
     // `open_science_vcr_publications_total`.
     vcrPublicSimulationsEnabled: overrides.vcrPublicSimulationsEnabled ?? boolEnv("OPEN_SCIENCE_VCR_PUBLIC_SIMULATIONS_ENABLED", false),
+    // The frontier feed's trial events for a study's subject (flywheel F24, 2026-10-06): precedent candidates, 「有新证据」 on a card
+    // and the request for a new version, ticked by the module's worker. Off, no consumer is composed and nothing is read. Each tick
+    // looks at this many studies, the one looked at longest ago first (a resource limit: every study is one query set), and reads
+    // the feed this many days back (an item enters the feed with its own publication date, so a window, not a cursor). Counters:
+    // `open_science_vcr_frontier_events_total`.
+    vcrFrontierEventsEnabled: overrides.vcrFrontierEventsEnabled ?? boolEnv("OPEN_SCIENCE_VCR_FRONTIER_EVENTS_ENABLED", false),
+    vcrFrontierEventsStudiesPerTick: integer("vcrFrontierEventsStudiesPerTick", "OPEN_SCIENCE_VCR_FRONTIER_EVENTS_STUDIES_PER_TICK", 10, 1, 200),
+    vcrFrontierEventsWindowDays: integer("vcrFrontierEventsWindowDays", "OPEN_SCIENCE_VCR_FRONTIER_EVENTS_WINDOW_DAYS", 30, 1, 365),
     vcrPollMs: integer("vcrPollMs", "OPEN_SCIENCE_VCR_POLL_MS", 5_000, 1_000, 3_600_000),
     vcrLeaseMs: integer("vcrLeaseMs", "OPEN_SCIENCE_VCR_LEASE_MS", 900_000, 60_000, 86_400_000),
     // The deterministic engine. Unset = not composed; the steps that need it say so.

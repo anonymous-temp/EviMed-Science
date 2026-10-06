@@ -1,4 +1,4 @@
-// The worker's timer and its four loops, without a database: which loops exist
+// The worker's timer and its five loops, without a database: which loops exist
 // and how often they start, what a loop without its function reports, that one
 // loop failing leaves the others running, and that the recheck loop is wired to
 // the matching package's `recheckDue` and only when it is composed.
@@ -6,8 +6,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { VCR_WORKER_LOOPS, VcrWorker, createVcrWorkerLoops, withVcrWorkerWarnings } from "../src/vcrWorker.mjs";
 
-test("the four loops, their cadences and which of them are leased", () => {
-  assert.deepEqual(VCR_WORKER_LOOPS.map((loop) => loop.name), ["jobs", "orchestrator", "recompute", "recheck"]);
+test("the five loops, their cadences and which of them are leased", () => {
+  assert.deepEqual(VCR_WORKER_LOOPS.map((loop) => loop.name), ["jobs", "orchestrator", "recompute", "recheck", "frontierEvents"]);
+  const events = VCR_WORKER_LOOPS.find((loop) => loop.name === "frontierEvents");
+  assert.equal(events?.leased, true, "one frontier event is one candidate, whichever control plane sees it first");
+  assert.equal(events?.optional, true, "its switch is off by default, which is not a missing loop");
   const recheck = VCR_WORKER_LOOPS.find((loop) => loop.name === "recheck");
   assert.equal(recheck?.package, "matching");
   assert.equal(recheck?.every, 15 * 60_000);
@@ -24,6 +27,17 @@ test("the recheck loop is the matching package's own function, and absent when m
   assert.deepEqual(calls, ["due"]);
   assert.equal(createVcrWorkerLoops({ jobs: null, orchestrator: null, store: null }).recheck, null);
   assert.equal(createVcrWorkerLoops({ jobs: null, orchestrator: null, store: null, matching: {} }).recheck, null);
+});
+
+test("the frontier loop is the consumer's own tick, absent while off, and an absent optional loop is not reported missing", async () => {
+  const consumer = { async tick() { return { studies: 3, candidates: 1 }; } };
+  const loops = createVcrWorkerLoops({ jobs: null, orchestrator: null, store: null, frontierEvents: consumer });
+  assert.deepEqual(await loops.frontierEvents?.(), { studies: 3, candidates: 1 });
+  assert.equal(createVcrWorkerLoops({ jobs: null, orchestrator: null, store: null }).frontierEvents, null);
+  const worker = new VcrWorker({ loops: { jobs: async () => null, orchestrator: async () => null, recompute: async () => null, recheck: async () => null, frontierEvents: null } });
+  assert.deepEqual(worker.status().missing, []);
+  assert.deepEqual(withVcrWorkerWarnings({ enabled: true, ok: true }, worker).warnings ?? [], []);
+  await worker.close();
 });
 
 test("a tick starts the loops that are due, a loop that throws leaves the others running, and a loop with no function is reported missing", async () => {

@@ -1,5 +1,5 @@
 /**
- * 「虚拟临研」's notices (build plan 2026-09-28 §10.4). Exactly five kinds
+ * 「虚拟临研」's notices (build plan 2026-09-28 §10.4). Exactly six kinds
  * reach a person; every other thing a study does is only shown on its page.
  *
  *   1. 研究包完成            info       — a study package finished
@@ -7,6 +7,7 @@
  *   3. 计算预算需要确认       attention  — the second of the three human stops (§10.1)
  *   4. 有新的匹配候选         info       — pushed to the coordinators, not to everyone
  *   5. 实际入组偏离预测       attention  — the registered forecast and the actual have parted
+ *   6. 假设卡有了新证据       info       — the frontier feed or a source-change record bears on a card (flywheel F24, 2026-10-06)
  *
  * Hidden knowledge:
  *
@@ -198,6 +199,23 @@ export function createVcrNotifier({ notifications, store, config = {}, now = () 
         body: `${when}预测 ${Math.round(predicted)} 例，实际 ${Math.round(actual)} 例。入组模型会用实际数据重新校准，预测与实际对照在试验页上。`,
         severity: "attention", source: source(String(study.id), "trial"),
         idempotencyKey: `vcr:${study.id}:accrual:${forecastId}`,
+      });
+    },
+
+    /**
+     * 6. 假设卡有了新证据 — a new results item of the frontier feed names a work a card stands on, or one of its sources was
+     * retracted, corrected or replaced. To the study's lead: whether a new version follows is told in the sentence, from what
+     * the study allows, never promised.
+     * @param {any} study @param {{ batchKey: string, cards: readonly string[], afterFreeze?: boolean, refreshing?: boolean }} facts
+     */
+    newEvidence(study, { batchKey, cards, afterFreeze = false, refreshing = false }) {
+      const named = cards.slice(0, 3).map((card) => clip(card, 20)).join("、");
+      const tail = afterFreeze ? "分析计划已经冻结：新版本会放在冻结的版本旁边，计划本身不动。"
+        : refreshing ? "AI 会读入新证据并生成新版本；旧版本保留。" : "旧版本保留；数据与证据页上能看到是哪些新证据。";
+      return send(study, "new_evidence", {
+        title: `${vcrStudyName(study)}：${named}有了新证据`,
+        body: tail, severity: "info", source: source(String(study.id), "data"),
+        idempotencyKey: `vcr:${study.id}:new-evidence:${batchKey}`,
       });
     },
 

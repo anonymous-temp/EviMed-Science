@@ -1,5 +1,5 @@
 /**
- * 「虚拟临研」's background work: one timer, four loops (build plan
+ * 「虚拟临研」's background work: one timer, five loops (build plan
  * 2026-09-28 §11.2 layer 2).
  *
  *   `jobs`          — claim queued compute, push each running job one step,
@@ -11,6 +11,10 @@
  *   `recheck`       — queue the matching job of every study with a deferral
  *                     date that has passed (a washout that ended), so a due
  *                     date is re-evaluated without anyone remembering it
+ *   `frontierEvents` — read the frontier feed's trial events for each study's
+ *                     entity keys: precedent candidates, 「有新证据」 on a card,
+ *                     and the request for a new version (flywheel F24; absent
+ *                     while its switch is off, which readiness does not report)
  *
  * Hidden knowledge:
  *
@@ -48,6 +52,7 @@ export const VCR_WORKER_LOOPS = Object.freeze([
   Object.freeze({ name: "orchestrator", package: "orchestrator", every: MINUTE, leased: true }),
   Object.freeze({ name: "recompute", package: "orchestrator", every: MINUTE, leased: true }),
   Object.freeze({ name: "recheck", package: "matching", every: 15 * MINUTE, leased: true }),
+  Object.freeze({ name: "frontierEvents", package: "frontierEvents", every: 10 * MINUTE, leased: true, optional: true }),
 ]);
 
 /** @param {unknown} error */
@@ -109,7 +114,7 @@ export class VcrWorker {
     this.now = now;
     this.report = report;
     this.lease = lease;
-    /** @type {Array<{ name: string, package: string, every?: number, leased?: boolean, run: (() => Promise<unknown>) | null }>} */
+    /** @type {Array<{ name: string, package: string, every?: number, leased?: boolean, optional?: boolean, run: (() => Promise<unknown>) | null }>} */
     this.table = VCR_WORKER_LOOPS.map((loop) => ({ ...loop, ...(cadence[loop.name] ?? {}), run: loops[loop.name] ?? null }));
     /** @type {ReturnType<typeof setInterval> | null} cleared by the maintenance pause */
     this.timer = null;
@@ -221,7 +226,8 @@ export class VcrWorker {
       running: Object.values(this.running).some(Boolean),
       armed: Boolean(this.timer),
       lastError: this.lastError,
-      missing: this.table.filter((loop) => !loop.run).map((loop) => loop.name),
+      // A loop whose module is switched off on purpose is not a missing one.
+      missing: this.table.filter((loop) => !loop.run && !loop.optional).map((loop) => loop.name),
       failing: this.table.filter((loop) => this.loops[loop.name].lastError).map((loop) => loop.name),
       stalled: Object.entries(loops).filter(([, entry]) => entry.stalled).map(([name]) => name),
       loops,
@@ -241,9 +247,9 @@ export class VcrWorker {
  * `server.mjs` composes a worker with one call and the loops' own logic stays
  * with the packages that own it.
  *
- * @param {{ jobs: any, orchestrator: any, store: any, matching?: any }} vcr
+ * @param {{ jobs: any, orchestrator: any, store: any, matching?: any, frontierEvents?: any }} vcr
  */
-export function createVcrWorkerLoops({ jobs, orchestrator, store, matching = null }) {
+export function createVcrWorkerLoops({ jobs, orchestrator, store, matching = null, frontierEvents = null }) {
   return {
     /**
      * Claim what is queued, then push everything this process holds one step.
@@ -317,5 +323,8 @@ export function createVcrWorkerLoops({ jobs, orchestrator, store, matching = nul
      * matching package composed has no such loop, and readiness says so.
      */
     recheck: matching?.recheckDue ? () => matching.recheckDue() : null,
+
+    /** The frontier feed's trial events for every active study, a bounded number each tick (`vcrFrontierEvents.mjs`). Absent while off. */
+    frontierEvents: frontierEvents?.tick ? () => frontierEvents.tick() : null,
   };
 }

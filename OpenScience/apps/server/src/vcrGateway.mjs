@@ -599,7 +599,7 @@ function distributionOf(item, field, value) {
  * runtime is reserved for, when it is a bounded one (`runtimeRunId`).
  * @typedef {{ store: any, service: any, orchestrator: any, study: any, evidence?: any, evidenceStore?: any, matchStore?: any,
  *   matching?: any, seal?: any, dataPlane?: any, documents?: any, report?: (code: string) => void,
- *   caller?: { runtimeRunId?: string | null } | null, knowledge?: any }} WriteDeps
+ *   caller?: { runtimeRunId?: string | null } | null, knowledge?: any, afterFreeze?: boolean }} WriteDeps
  */
 
 /** The criterion fields a protocol write takes. */
@@ -694,6 +694,11 @@ const WRITERS = {
 
   async assumption(item, deps, extra) {
     const { store, study, evidence, evidenceStore } = deps;
+    // A version the evidence-refresh run writes for a study whose analysis plan has frozen (flywheel F24): kept beside the frozen
+    // version, never the study's current one, and starting no recomputation.
+    const afterFreeze = deps.afterFreeze === true;
+    /** @param {{ key: string, version: number }} saved */
+    const noteChange = (saved) => { if (!afterFreeze) extra.changed.push(`assumption:${saved.key}@${saved.version}`); };
     if (!item.only(["key", "name", "endpoint", "unit", "pointValue", "distribution", "sensitivity", "sourceKind", "valueSource",
       "evidenceIds", "applicability", "note", "parameter", "fromPooling", "expertFrom"])) return null;
     const key = item.str("key", { max: 64, required: true });
@@ -736,14 +741,14 @@ const WRITERS = {
       }
       const saved = await evidence.saveAssumptionFromPooling({
         userId: study.userId, studyId: study.id, key, name, parameter: poolParameter, endpoint: endpoint ?? "", unit: unit ?? "",
-        results, evidenceIdsByCalibre, applicability, note,
+        results, evidenceIdsByCalibre, applicability, note, afterFreeze,
       });
       if (!saved.assumption) {
         return void item.bad("fromPooling", saved.reason === "no_pool_succeeded"
           ? "这些合并作业没有一个成功，没有可写的卡：先读作业状态。" : `没有写出假设卡（${saved.reason}）。`);
       }
-      extra.changed.push(`assumption:${saved.assumption.key}@${saved.assumption.version}`);
-      extra.results.push({ index: item.index, status: saved.status, calibre: saved.card?.pooling?.calibre ?? null,
+      noteChange(saved.assumption);
+      extra.results.push({ index: item.index, status: saved.status, calibre: saved.card?.pooling?.calibre ?? null, ...(afterFreeze ? { afterFreeze: true } : {}),
         ...(saved.status === "expert_set" ? { note: "合并结果没有预测区间（少于三项研究），已写成加宽后的专家设定·待补证。" } : {}) });
       return saved.assumption.id;
     }
@@ -776,8 +781,8 @@ const WRITERS = {
         return void item.bad("expertFrom", "expertFrom 写 { evidenceId } 或 { jobId }，再加 reason。");
       }
       const saved = await evidence.saveExpertSet({ userId: study.userId, studyId: study.id, key, name, parameter: parameter ?? "", unit: unit ?? "",
-        nearest, reason, applicability });
-      extra.changed.push(`assumption:${saved.assumption.key}@${saved.assumption.version}`);
+        nearest, reason, applicability, afterFreeze });
+      noteChange(saved.assumption);
       return saved.assumption.id;
     }
 
@@ -809,9 +814,9 @@ const WRITERS = {
         key, name, endpoint, unit, pointValue: Number(row.value),
         distribution: { family: "point", params: { point: Number(row.value) }, range },
         sensitivity: { range, calibres: [] }, sourceKind: "external_evidence", valueSource: "extracted", poolingMethod: "single_study",
-        pooling: { k: 1, note: "单项研究直接取值，没有预测区间" }, evidenceIds: cited, applicability, reviewState: "ai_set", note,
+        pooling: { k: 1, note: "单项研究直接取值，没有预测区间" }, evidenceIds: cited, applicability, reviewState: "ai_set", note, afterFreeze,
       } });
-      extra.changed.push(`assumption:${saved.key}@${saved.version}`);
+      noteChange(saved);
       return saved.id;
     }
 
@@ -827,10 +832,10 @@ const WRITERS = {
     const sensitivity = item.obj("sensitivity", { bytes: 8 * 1024 }) ?? {};
     if (!item.ok) return null;
     const card = { key, name, endpoint, unit, pointValue: pointValue ?? null, distribution, sensitivity, sourceKind, valueSource,
-      poolingMethod: null, pooling: {}, evidenceIds: [], applicability, reviewState: "ai_set", note };
+      poolingMethod: null, pooling: {}, evidenceIds: [], applicability, reviewState: "ai_set", note, afterFreeze };
     const saved = evidenceStore ? await evidenceStore.saveAssumption({ userId: study.userId, studyId: study.id, card })
       : await store.saveAssumption({ studyId: study.id, userId: study.userId, ...card });
-    extra.changed.push(`assumption:${saved.key}@${saved.version}`);
+    noteChange(saved);
     return saved.id;
   },
 
@@ -1459,6 +1464,13 @@ export async function vcrRuntimeWrite({ store, service, orchestrator, study, wha
   }
   /** @type {WriteDeps} */
   const deps = { store, service, orchestrator, study, evidence, evidenceStore, matchStore, matching, seal, dataPlane, documents, report, caller, knowledge };
+  // The run the platform sent to take new evidence into a study's cards (flywheel F24) writes its versions beside the frozen one when
+  // the study's analysis plan has frozen: the dispatch names the run, and a card a run types never decides it. Any other writer — the
+  // researcher's own conversation, an ordinary programme step — writes exactly as before, which for a frozen study is a new freeze.
+  if (what === "assumption" && typeof orchestrator?.evidenceRefreshRun === "function") {
+    const refresh = await orchestrator.evidenceRefreshRun(study.id, { runtimeRunId: caller?.runtimeRunId ?? null }).catch(() => null);
+    if (refresh && (await seal?.sealState?.(study.id).catch(() => null))?.planFrozenAt) deps.afterFreeze = true;
+  }
 
   if (what === "protocol" || what === "criteria") {
     try {

@@ -705,11 +705,11 @@ export const VCR_HUMAN_STOP_LABELS_ZH = Object.freeze({
   contact_patient: '联系真实患者之前', compute_over_budget: '计算超出研究预算', clinical_safety: '出现临床安全问题',
 })
 
-/** The only five notifications this module sends (§10.4). */
-export const VCR_NOTIFICATION_KINDS = frozen(['package_ready', 'not_estimable', 'budget_confirm', 'new_candidates', 'accrual_off_forecast'])
+/** The only six notifications this module sends: the five of §10.4 and, since the evidence flywheel (F24, 2026-10-06), new evidence for a card. */
+export const VCR_NOTIFICATION_KINDS = frozen(['package_ready', 'not_estimable', 'budget_confirm', 'new_candidates', 'accrual_off_forecast', 'new_evidence'])
 export const VCR_NOTIFICATION_LABELS_ZH = Object.freeze({
   package_ready: '研究包完成', not_estimable: '结论为不可估计或假设冲突', budget_confirm: '计算预算需要确认',
-  new_candidates: '有新的匹配候选', accrual_off_forecast: '实际入组偏离预测',
+  new_candidates: '有新的匹配候选', accrual_off_forecast: '实际入组偏离预测', new_evidence: '假设卡有了新证据',
 })
 
 /** Why a result went stale (§6.3). Stale results are never deleted or hidden. */

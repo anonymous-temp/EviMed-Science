@@ -1105,13 +1105,16 @@ export function presentPrecedent(row) {
 /**
  * `GET /api/vcr/precedents`: the library, or the sentence saying it is not
  * there — never an empty table that reads as 「没有先例」.
- * @param {{ available: boolean, message?: string | null, rows?: readonly Record<string, any>[], sources?: string | null, registryCoverage?:any[] }} input
+ * @param {{ available: boolean, message?: string | null, rows?: readonly Record<string, any>[], sources?: string | null, registryCoverage?:any[], candidates?: readonly Record<string, any>[] | null }} input
  */
-export function presentPrecedents({ available, message = null, rows = [], sources = null, registryCoverage = [] }) {
+export function presentPrecedents({ available, message = null, rows = [], sources = null, registryCoverage = [], candidates = null }) {
   return {
     available,
     message: available ? null : message,
     precedents: rows.map(presentPrecedent),
+    // Trial events the frontier feed reported for what the account's studies are about (flywheel F24): pointers, each marked
+    // `candidate: true`, never rows of the library above — a precedent is a registry record the evidence write fetched and checked.
+    ...(candidates ? { candidates } : {}),
     ...(registryCoverage.length ? { registryCoverage } : {}),
     sources,
   };

@@ -88,6 +88,7 @@ export const VCR_TABLES = Object.freeze([
   "referrals", "referral_events", "sites", "followup_episodes",
   "dependencies", "stale_marks", "reviews", "decisions", "regulatory_contacts", "exports", "audit", "schedule_marks",
   "model_assessments", "model_plan_versions", "published_simulations",
+  "precedent_candidates", "evidence_signals", "frontier_scans",
 ]);
 
 const migrations = new WeakMap();
@@ -376,6 +377,10 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.assumptions (
   UNIQUE (study_id, key, version)
 );
 CREATE INDEX IF NOT EXISTS vcr_assumptions_study_idx ON evimed_vcr.assumptions (study_id, key, version DESC);
+-- A version written after the study's analysis plan froze (flywheel F24, 2026-10-06): the new evidence is kept as a version of the
+-- card and shown beside the version the plan froze with, and is never the study's current one — every reader of "the card" skips it,
+-- so a frozen plan is not touched and no recomputation starts from it.
+ALTER TABLE evimed_vcr.assumptions ADD COLUMN IF NOT EXISTS after_freeze boolean NOT NULL DEFAULT false;
 
 -- ---------------------------------------------------------------------------
 -- Data plane (plan §8.1). Patient-level rows live outside this schema.
@@ -1220,6 +1225,54 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.schedule_marks (
 );
 CREATE INDEX IF NOT EXISTS vcr_schedule_marks_open_idx ON evimed_vcr.schedule_marks (study_id, kind, state)
   WHERE state IN ('pending', 'claimed', 'running');
+
+-- Trial events the frontier feed reported for what a study is about (flywheel F24, 2026-10-06). A candidate is a pointer — the feed
+-- item, the registry or DOI identifier it names — and never a precedent: a precedent is a registry record the study fetched and
+-- extracted through the evidence write, checked in code. One row per account and feed item; \`study_ids\` are the studies whose entity
+-- keys led to it. \`dismissed\` hides it from the list and keeps it, so a tick that sees the item again does not raise it again.
+CREATE TABLE IF NOT EXISTS evimed_vcr.precedent_candidates (
+  id               text PRIMARY KEY,
+  user_id          text NOT NULL,
+  frontier_item_id text NOT NULL,
+  event            text NOT NULL CHECK (event IN ('registration', 'results', 'label_change')),
+  registry         text,
+  registry_id      text,
+  doi              text,
+  pmid             text,
+  title            text NOT NULL,
+  study_ids        text[] NOT NULL DEFAULT '{}',
+  state            text NOT NULL DEFAULT 'candidate' CHECK (state IN ('candidate', 'dismissed')),
+  noticed_at       timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (user_id, frontier_item_id)
+);
+CREATE INDEX IF NOT EXISTS vcr_precedent_candidates_user_idx ON evimed_vcr.precedent_candidates (user_id, noticed_at DESC);
+
+-- News about the sources of an assumption card: a new results item of the feed that names a work the card stands on, or a recorded
+-- retraction, correction or new version of one (the source-change ledger). The card reads 「有新证据」 while a signal of its version is
+-- open; \`versioned\` says a later version took the news in, and \`after_freeze\` that the study's plan had frozen when it did.
+CREATE TABLE IF NOT EXISTS evimed_vcr.evidence_signals (
+  id                 text PRIMARY KEY,
+  study_id           text NOT NULL REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
+  user_id            text NOT NULL,
+  assumption_key     text NOT NULL,
+  assumption_version integer NOT NULL,
+  cause              text NOT NULL CHECK (cause IN ('new_results', 'source_retracted', 'source_corrected', 'source_new_version')),
+  frontier_item_id   text,
+  identifier         text NOT NULL,
+  title              text NOT NULL DEFAULT '',
+  state              text NOT NULL DEFAULT 'open' CHECK (state IN ('open', 'versioned')),
+  version_after      integer,
+  after_freeze       boolean NOT NULL DEFAULT false,
+  noticed_at         timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (study_id, assumption_key, assumption_version, identifier, cause)
+);
+CREATE INDEX IF NOT EXISTS vcr_evidence_signals_study_idx ON evimed_vcr.evidence_signals (study_id, state, noticed_at DESC);
+
+-- When the frontier consumer last looked at a study, so a tick takes the study looked at longest ago first.
+CREATE TABLE IF NOT EXISTS evimed_vcr.frontier_scans (
+  study_id   text PRIMARY KEY REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
+  scanned_at timestamptz NOT NULL
+);
 
 -- A report its study lead chose to put in the public 「模拟研究」 column (flywheel plan §5.6, 2026-10-06). The row is the frozen
 -- public form of one export, not a pointer to it: the numbers were rendered from the report model after the runtime's small-cell
