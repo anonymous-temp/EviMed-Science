@@ -63,7 +63,8 @@ export async function reownImportedZones(database, { zoneRequestIds = [], zoneId
     const toMove = found.filter((/** @type {any} */ zone) => zone.user_id !== publisherId).map((/** @type {any} */ zone) => zone.id);
     const zones = toMove.length ? (await client.query("UPDATE evimed_frontier.evidence_zones SET user_id=$2 WHERE id=ANY($1::text[])", [toMove, publisherId])).rowCount : 0;
     const cards = toMove.length ? (await client.query("UPDATE evimed_frontier.evidence_cards SET user_id=$2 WHERE zone_id=ANY($1::text[]) AND user_id<>$2", [toMove, publisherId])).rowCount : 0;
-    const marked = kind && found.length ? (await client.query("UPDATE evimed_frontier.evidence_zones SET kind='official' WHERE id=ANY($1::text[]) AND kind IS DISTINCT FROM 'official'", [found.map((/** @type {any} */ zone) => zone.id)])).rowCount : 0;
+    const marked = kind && found.length ? (await client.query(`UPDATE evimed_frontier.evidence_zones SET kind='official', visibility=CASE WHEN state='published' THEN 'internet' ELSE visibility END
+      WHERE id=ANY($1::text[]) AND (kind IS DISTINCT FROM 'official' OR (state='published' AND visibility<>'internet'))`, [found.map((/** @type {any} */ zone) => zone.id)])).rowCount : 0;
     // Readers' lists are cached against this version.
     if (toMove.length || marked) await service.bump(client);
     return { zonesFound: found.length, zonesMoved: zones, cardsMoved: cards, zonesMarked: marked };

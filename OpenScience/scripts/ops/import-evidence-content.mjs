@@ -145,7 +145,7 @@ export async function applyEvidenceImport(prepared, { store, expectedRevisions =
   // official zone takes the import's writes, and a user zone does not.
   if (await hasKindColumn(db)) {
     const existing = operations.filter(op => op.type === 'zone' && op.current).map(op => op.id);
-    const early = existing.length ? await db.query("UPDATE evimed_frontier.evidence_zones SET kind='official' WHERE id=ANY($1::text[]) AND user_id=$2 AND kind IS DISTINCT FROM 'official'", [existing, owner.id]) : { rowCount: 0 };
+    const early = existing.length ? await db.query("UPDATE evimed_frontier.evidence_zones SET kind='official', visibility=CASE WHEN state='published' THEN 'internet' ELSE visibility END WHERE id=ANY($1::text[]) AND user_id=$2 AND (kind IS DISTINCT FROM 'official' OR (state='published' AND visibility<>'internet'))", [existing, owner.id]) : { rowCount: 0 };
     earlyMarked = early.rowCount ?? 0;
     if (early.rowCount) await service.bump(db);
   }
@@ -168,7 +168,7 @@ export async function applyEvidenceImport(prepared, { store, expectedRevisions =
   // nothing is lost: the publisher's ownership already makes a zone official (`isOfficialZone`), and the marking is made
   // good the next time the script runs.
   if (await hasKindColumn(db)) {
-    const marked = await db.query("UPDATE evimed_frontier.evidence_zones SET kind='official' WHERE id=ANY($1::text[]) AND user_id=$2 AND kind IS DISTINCT FROM 'official'", [operations.filter(op => op.type === 'zone').map(op => op.id), owner.id]);
+    const marked = await db.query("UPDATE evimed_frontier.evidence_zones SET kind='official', visibility=CASE WHEN state='published' THEN 'internet' ELSE visibility END WHERE id=ANY($1::text[]) AND user_id=$2 AND (kind IS DISTINCT FROM 'official' OR (state='published' AND visibility<>'internet'))", [operations.filter(op => op.type === 'zone').map(op => op.id), owner.id]);
     // A zone made by this run is made official at once, and an existing one is marked before it is written: both are this run's marking.
     result.zonesMarked = marked.rowCount + earlyMarked + result.zonesCreated;
     if (marked.rowCount) await service.bump(db);

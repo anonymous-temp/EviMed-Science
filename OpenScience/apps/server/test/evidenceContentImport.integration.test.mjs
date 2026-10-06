@@ -247,6 +247,9 @@ test('at start the operator-owned zones that hold an imported card become the pu
   assert.equal(said.length, 1); assert.match(said[0], /1 official zone\(s\) and 1 card\(s\) moved/);
   const moved = (await rows('SELECT * FROM evimed_frontier.evidence_zones WHERE id=$1', [imported.zoneId]))[0];
   assert.deepEqual([moved.kind, moved.user_id, isOfficialZone(moved)], ['official', PLATFORM_PUBLISHER_USER_ID, true]);
+  // An official zone has no owner who could open it: once it is the platform's and published, it is read on the open internet (release 7
+  // re-owned three such zones at start and left them platform-visible, so their cards were in the feed and their pages answered 404).
+  assert.equal(moved.state === 'published' ? moved.visibility : 'internet', 'internet');
   const card = (await rows('SELECT * FROM evimed_frontier.evidence_cards WHERE id=$1', [imported.cardId]))[0];
   assert.deepEqual([card.user_id, card.revision], [PLATFORM_PUBLISHER_USER_ID, imported.revision], 'a move is not an edit; its follows and ids are as they were');
   assert.equal(await count('evidence_zone_follows', 'zone_id=$1', [imported.zoneId]), 1);
