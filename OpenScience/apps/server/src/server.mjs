@@ -241,6 +241,7 @@ import { EvidenceZoneService } from "./evidenceZoneService.mjs";
 import { createEvidenceCardSearch } from "./evidenceCardSearch.mjs";
 import { createEvidenceFeed, evidenceFeedMetricFamilies } from "./evidenceFeed.mjs";
 import { createEvidenceFlywheelMetrics } from "./evidenceFlywheelMetrics.mjs";
+import { createEvidenceCommunity, createEvidenceCommunityRoutes, evidenceCommunityMetricFamilies } from "./evidenceCommunity.mjs";
 import { createEvidenceFeedRoutes } from "./evidenceFeedRoutes.mjs";
 import { createEvidencePublicRoutes, evidencePublicMetricFamilies } from "./evidencePublicRoutes.mjs";
 import { createEvidenceTopicRequestRoutes, createEvidenceTopicRequests } from "./evidencePublicRequests.mjs";
@@ -1829,6 +1830,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const evidenceBudget = createEvidenceBudget({ usageLedger, config });
   const frontierRoutes = createFrontierRoutes({ store, service: frontier?.service ?? null, config, maxJsonBytes: config.maxJsonBytes,
     audit: (event, status, details) => securityAudit(config, event, status, details) });
+  // The community column of an official zone (evidenceCommunity.mjs, flywheel F07): other users' public cards on the zone's subjects. Composed with its
+  // switch and the frontier; off, the route answers 404 by name and no table is read.
+  const evidenceCommunity = config.evidenceCommunityCardsEnabled && frontier && productDatabase
+    ? createEvidenceCommunity({ database: productDatabase, maxCards: config.evidenceCommunityMaxCards, platformPublisherUserId: PLATFORM_PUBLISHER_USER_ID }) : null;
+  const evidenceCommunityRoutes = createEvidenceCommunityRoutes({ store, service: frontier?.evidenceZones ?? null, frontier: frontier?.service ?? null, config, community: evidenceCommunity });
   const evidenceZoneRoutes = createEvidenceZoneRoutes({store,service:frontier?.evidenceZones??null,editorial:frontier?.evidenceEditorial??null,
     frontier:frontier?.service??null,config,maxJsonBytes:config.maxJsonBytes});
   // What the platform's own evidence offers the frontier (flywheel F09): a public feed the knowledge-source plugin reads like
@@ -5044,6 +5050,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (await autopilotRoutes(req, res)) return;
       if (await evidenceTopicRequestRoutes(req, res)) return;
       if (await evidenceUpkeepRoutes(req, res)) return;
+      if (await evidenceCommunityRoutes(req, res)) return;
       if (await evidenceZoneRoutes(req, res)) return;
       if (await evidencePublishRoutes(req, res)) return;
       if (await frontierRoutes(req, res)) return;
@@ -5130,6 +5137,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           evidenceFeed,
           evidencePublic: evidencePublicRoutes,
           evidenceFlywheel,
+          evidenceCommunity,
         });
         return;
       }
@@ -7960,7 +7968,7 @@ function addHistogramMetric(lines, name, help, series) {
   }
 }
 
-async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, evidenceBudget = null, entityVocabulary = null, evidencePublish = null, evidenceUpkeep = null, evidenceProgramme = null, evidenceFeed = null, evidencePublic = null, evidenceRecalculation = null, predictionRegistry = null, evidenceFlywheel = null }) {
+async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, evidenceBudget = null, entityVocabulary = null, evidencePublish = null, evidenceUpkeep = null, evidenceProgramme = null, evidenceFeed = null, evidencePublic = null, evidenceRecalculation = null, predictionRegistry = null, evidenceFlywheel = null, evidenceCommunity = null }) {
   const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate, frontier, review, geo, vcr, credits);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
@@ -8384,6 +8392,7 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
   for (const family of evidencePublicMetricFamilies(evidencePublic?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
   // The evidence flywheel's figures (evidenceFlywheelMetrics.mjs): exported only with the switch on; a figure with no input has no series.
   addMetric(lines, "open_science_evidence_flywheel_enabled", "Whether the evidence flywheel's figures are switched on (OPEN_SCIENCE_EVIDENCE_FLYWHEEL_METRICS_ENABLED).", "gauge", [{ value: config.evidenceFlywheelMetricsEnabled ? 1 : 0 }]);
+  for (const family of evidenceCommunityMetricFamilies(evidenceCommunity)) addMetric(lines, family.name, family.help, family.type, family.series);
   if (evidenceFlywheel) for (const family of await evidenceFlywheel.metricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
   // The entity vocabulary the frontier, the zones, agendas, products and studies share: the glossary's size and what
   // the taggings found (entityVocabulary.mjs `entityVocabularyMetricFamilies`).

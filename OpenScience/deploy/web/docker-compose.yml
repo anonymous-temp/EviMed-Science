@@ -570,6 +570,9 @@ services:
       OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_DAYS:
       # The flywheel's own figures (2026-10-06): the operator route and the scrape's families. Off by default.
       OPEN_SCIENCE_EVIDENCE_FLYWHEEL_METRICS_ENABLED:
+      # The community column of an official zone (2026-10-06): the switch (off) and the most cards one column lists.
+      OPEN_SCIENCE_EVIDENCE_COMMUNITY_CARDS_ENABLED:
+      OPEN_SCIENCE_EVIDENCE_COMMUNITY_MAX_CARDS:
       # Sharing memory inside the platform (evidence-flywheel plan 2026-10-05, F17-F19):
       # how long a share link lives and how often it may be used, how many other
       # accounts must keep a new author's pack before it counts for platform

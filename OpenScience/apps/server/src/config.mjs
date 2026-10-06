@@ -495,12 +495,20 @@ function evidenceUpkeepSettings(overrides) {
  *
  * - `OPEN_SCIENCE_EVIDENCE_FLYWHEEL_METRICS_ENABLED` (off): the operator's `GET /api/ops/evidence-flywheel` and the `open_science_evidence_flywheel_*`
  *   families. It reads existing tables only; it is a switch because a scrape that verifies cards is database work an operator chooses to ask for.
+ * - `OPEN_SCIENCE_EVIDENCE_COMMUNITY_CARDS_ENABLED` (off): the community column of an official zone, `GET /api/frontier/zones/:id/community`, which lists
+ *   other users' public cards on the zone's subjects (established authors only). `OPEN_SCIENCE_EVIDENCE_COMMUNITY_MAX_CARDS` (20, at most 50) bounds one
+ *   column; a longer list is a resource cost, not an opinion about the cards.
  *
  * @param {Record<string, any>} overrides
  */
 function evidenceFlywheelSettings(overrides) {
+  const raw = overrides.evidenceCommunityMaxCards !== undefined ? overrides.evidenceCommunityMaxCards : process.env.OPEN_SCIENCE_EVIDENCE_COMMUNITY_MAX_CARDS;
+  const maxCards = raw == null || raw === "" ? 20 : Number(raw);
+  if (!Number.isSafeInteger(maxCards) || maxCards < 1 || maxCards > 50) throw new Error(`OPEN_SCIENCE_EVIDENCE_COMMUNITY_MAX_CARDS must be a whole number from 1 to 50, got ${JSON.stringify(raw)}.`);
   return {
     evidenceFlywheelMetricsEnabled: overrides.evidenceFlywheelMetricsEnabled ?? boolEnv("OPEN_SCIENCE_EVIDENCE_FLYWHEEL_METRICS_ENABLED", false),
+    evidenceCommunityCardsEnabled: overrides.evidenceCommunityCardsEnabled ?? boolEnv("OPEN_SCIENCE_EVIDENCE_COMMUNITY_CARDS_ENABLED", false),
+    evidenceCommunityMaxCards: maxCards,
   };
 }
 

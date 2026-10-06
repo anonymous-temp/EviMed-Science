@@ -13,6 +13,7 @@ import { ZoneEditor, CardEditor } from "@/components/frontier/EvidenceEditors";
 import { EvidenceMaintenance } from "@/components/frontier/EvidenceMaintenance";
 import { EvidenceVisibility } from "@/components/frontier/EvidenceVisibility";
 import { EvidenceChangeLog } from "@/components/frontier/EvidenceChangeLog";
+import { EvidenceCommunityCards } from "@/components/frontier/EvidenceCommunityCards";
 import { ZoneSubscription } from "@/components/capsule/ZoneSubscription";
 import { useEvidenceFeatures } from "@/components/frontier/useEvidenceFeatures";
 import { PageShell } from "@/components/layout/PageShell";
@@ -433,6 +434,7 @@ function EvidenceZoneContent({ zoneId }: { zoneId: string }) {
                 </Button>
               )}
             </section>
+            {zone.kind === "official" && zone.state === "published" && <EvidenceCommunityCards zoneId={zone.id} />}
             {features.upkeep && zone.state === "published" && (
               <details
                 className="text-ui"
