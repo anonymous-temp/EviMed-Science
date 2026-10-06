@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm, stat } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -184,6 +184,26 @@ test("PostgreSQL shares tenants, auth sessions, projects, quotas, and research s
       0,
     );
     assert.equal(await pathMissing(path.join(dataDir, "users", "alice", "projects", "workspace-race")), true);
+
+    // A run can leave a read-only directory in a workspace; deleting the project or the account still removes it (2026-10-06).
+    for (const [owner, projectId] of [[aliceFromFirst, "readonly-tree"], [null, "readonly-account"]]) {
+      const account = owner ?? await (async () => {
+        await first.app.store.createUser("readonly-owner", "readonly correct battery staple", "Readonly Owner");
+        return first.app.store.userById("readonly-owner");
+      })();
+      await first.app.store.createProject(account, projectId, "Read-only tree");
+      const leaf = path.join(dataDir, "users", account.id, "projects", projectId, "workspace", ".copied", "__pycache__");
+      await mkdir(leaf, { recursive: true });
+      await chmod(leaf, 0o555);
+      await chmod(path.dirname(leaf), 0o555);
+      if (owner) {
+        await first.app.store.deleteProject(owner, projectId);
+        assert.equal(await pathMissing(path.join(dataDir, "users", account.id, "projects", projectId)), true);
+      } else {
+        await first.app.store.deleteUser(account);
+        assert.equal(await pathMissing(path.join(dataDir, "users", account.id)), true);
+      }
+    }
 
     await first.app.store.createUser("identity-race", "race correct battery staple", "Identity Race");
     const identityFromFirst = await first.app.store.userById("identity-race");

@@ -164,6 +164,29 @@ async function ensureScopedDir(rootDir, targetDir) {
   await assertNoSymlinkPath(rootDir, targetDir);
 }
 
+// A run can leave a directory its owner may not write (a copied read-only tree, a cache made under a
+// read-only mode); removing the tree then fails with EACCES and the account or project cannot be deleted
+// (2026-10-06, an acceptance account's `__pycache__`). Deletion gives the owner back write access on the
+// directories inside the tree it removes — never following a link out of it — and removes again.
+async function removeTree(target) {
+  try {
+    await fs.rm(target, { recursive: true, force: true });
+  } catch (err) {
+    if (err?.code !== "EACCES" && err?.code !== "EPERM") throw err;
+    await restoreOwnerAccess(target);
+    await fs.rm(target, { recursive: true, force: true });
+  }
+}
+
+async function restoreOwnerAccess(dir) {
+  const stat = await fs.lstat(dir).catch((err) => (err?.code === "ENOENT" ? null : Promise.reject(err)));
+  if (!stat?.isDirectory()) return;
+  if ((stat.mode & 0o700) !== 0o700) await fs.chmod(dir, (stat.mode & 0o7777) | 0o700);
+  for (const entry of await fs.readdir(dir, { withFileTypes: true })) {
+    if (entry.isDirectory()) await restoreOwnerAccess(path.join(dir, entry.name));
+  }
+}
+
 async function ensureUserRoot(config, userRoot) {
   const root = usersRoot(config);
   await ensureScopedDir(config.dataDir, root);
@@ -747,7 +770,7 @@ export class InMemoryStore {
       throw new HttpError(404, "project_not_found", "Project not found.");
     }
     if (beforeDelete) await beforeDelete(null);
-    await fs.rm(projectRoot, { recursive: true, force: true });
+    await removeTree(projectRoot);
     this.projects.delete(`${user.id}:${id}`);
     return { id };
   }
@@ -773,7 +796,7 @@ export class InMemoryStore {
     }
 
     if (beforeDelete) await beforeDelete(id, null);
-    await fs.rm(userRoot, { recursive: true, force: true });
+    await removeTree(userRoot);
     for (const key of [...this.projects.keys()]) {
       if (key.startsWith(`${id}:`)) this.projects.delete(key);
     }
@@ -1517,7 +1540,7 @@ export class PostgresStore extends InMemoryStore {
       const projectsRoot = await ensureProjectsRoot(this.config, user);
       const projectRoot = path.join(projectsRoot, id);
       await assertNoSymlinkPath(projectsRoot, projectRoot, { allowMissingTail: true });
-      await fs.rm(projectRoot, { recursive: true, force: true });
+      await removeTree(projectRoot);
       await client.query(
         `DELETE FROM ${CONTROL_PLANE_SCHEMA}.projects WHERE user_id = $1 AND id = $2`,
         [user.id, id],
@@ -1569,7 +1592,7 @@ export class PostgresStore extends InMemoryStore {
       if (locked.rowCount !== 1) return false;
       if (beforeDelete) await beforeDelete(id, client);
       await assertNoSymlinkPath(root, userRoot, { allowMissingTail: true });
-      await fs.rm(userRoot, { recursive: true, force: true });
+      await removeTree(userRoot);
       const result = await client.query(`DELETE FROM ${CONTROL_PLANE_SCHEMA}.users WHERE id = $1`, [id]);
       if (result.rowCount !== 1) return false;
       await client.query(
