@@ -174,7 +174,8 @@ function cardSources(claims, captured) {
   const ordered = [...sources.values()];
   return ordered.map((entry) => {
     const text = typeof entry.held?.text === "string" ? entry.held.text : "";
-    const keepWhole = text.length > 0 && text.length <= 2_000_000;
+    // A source with no public address is not kept whole: the card keeps the passages it stands on and no more (`EvidenceZoneService`).
+    const keepWhole = text.length > 0 && text.length <= 2_000_000 && Boolean(entry.url);
     const excerpt = keepWhole ? text.slice(0, 12_000) : [...new Set(entry.quotes)].join("\n\n").slice(0, 12_000);
     return {
       artifactPath: entry.artifactPath,

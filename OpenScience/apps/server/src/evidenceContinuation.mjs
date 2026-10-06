@@ -5,10 +5,12 @@
  * Hidden knowledge:
  *
  * - **A card is an index, so the research starts from its sources.** Rule 2 of the plan: research may cite an EviMed
- *   card only by the original sources it rests on. What is written into the knowledge base is each of the card's own
- *   sources — the text the card preserved when it has one, otherwise a Markdown record that cites the source — and
- *   never the card's prose. The question names the card as a pointer, quoted as the author's material and not as an
- *   instruction (the same sentence the zone's 「问这个专区」 draft carries).
+ *   card only by the original sources it rests on. What is written into the knowledge base is a Markdown record of each of
+ *   the card's own sources — its citation, its public address when it has one, the passage the card shows of it — and never
+ *   the card's prose, and never a source's full text (2026-10-06 review: a card could hold a researcher's own uploaded
+ *   document, and this route would have handed it to whoever continued from the card). The continuing account reads the
+ *   address itself. The question names the card as a pointer, quoted as the author's material and not as an instruction
+ *   (the same sentence the zone's 「问这个专区」 draft carries).
  * - **The write is the upload's own.** Files go through the injected `library`, which is the object the frontier's
  *   「存入知识库」 writes with (`FrontierActions`, `writeProjectUpload` in `server.mjs`): the knowledge base's format
  *   admission, the project's capacity, the mirror into a running runtime and the source registration. This module adds
@@ -45,24 +47,23 @@ export function evidenceLibrarySlug({ cardId, index, title }) {
 }
 
 /**
- * What one source is saved as: its citation, then the text the card preserved of it — or, with no text, the excerpt and a
- * plain statement that only the citation is here. The citation names the source, never the card's reading of it.
+ * What one source is saved as: its citation, its public address when it has one, and the passage the card shows of it — or, with no
+ * passage, a plain statement that only the citation is here. Never the source's full text: the account that continues reads the
+ * address itself, and a source with no public address is cited and nothing more. The citation names the source, never the card's
+ * reading of it.
  * @param {{ card: any, source: any, index: number }} input
- * @returns {{ kind: "text" | "record", markdown: string }}
+ * @returns {{ kind: "record", markdown: string }}
  */
 export function evidenceSourceRecord({ card, source, index }) {
-  const text = typeof source.documentText === "string" && source.documentText.trim() ? source.documentText : null;
-  const coverage = /** @type {Record<string, string>} */ ({ "full-text": "全文", abstract: "摘要", excerpt: "原文片段" })[source.coverage] ?? "原文片段";
   const lines = [`# ${String(source.title).replace(/\s+/g, " ").trim()}`, ""];
   if (source.url) lines.push(`原文链接：${source.url}`);
   if (source.sha256) lines.push(`原文摘要值：${source.sha256}`);
   if (source.checkedAt) lines.push(`保存时间：${String(source.checkedAt).slice(0, 10)}`);
-  lines.push(`保存的内容：${text ? coverage : source.excerpt ? "原文片段" : "只有题录和链接"}`);
+  lines.push(`保存的内容：${source.excerpt ? "原文片段" : "只有题录和链接"}`);
   lines.push(`这是证据卡「${String(card.title).replace(/\s+/g, " ").trim()}」的第 ${index} 个来源，引用时请引用这份原始来源。`, "", "---", "");
-  if (text) lines.push(text.trim());
-  else if (source.excerpt) lines.push(String(source.excerpt).trim());
-  else lines.push("这里没有原文，请按上面的链接阅读。");
-  return { kind: text ? "text" : "record", markdown: `${lines.join("\n")}\n` };
+  if (source.excerpt) lines.push(String(source.excerpt).trim());
+  else lines.push(source.url ? "这里没有原文，请按上面的链接阅读。" : "这个来源没有公开链接，这里只有题录。");
+  return { kind: "record", markdown: `${lines.join("\n")}\n` };
 }
 
 /**
@@ -155,7 +156,7 @@ export class EvidenceContinuation {
     await this.bindSession(project, sessionId);
     await this.origins.bind(project, sessionId, card.id);
 
-    /** @type {{ index: number, title: string, path: string, kind: "text" | "record" }[]} */
+    /** @type {{ index: number, title: string, path: string, kind: "record" }[]} */
     const saved = [];
     /** @type {{ index: number, code: string }[]} */
     const failed = [];
@@ -167,7 +168,7 @@ export class EvidenceContinuation {
       try {
         await this.library.save({ user, project, rel, buffer: Buffer.from(record.markdown, "utf8") });
         saved.push({ index, title: String(source.title), path: rel, kind: record.kind });
-        recordContinuationSource(record.kind === "text" ? "saved_text" : "saved_record");
+        recordContinuationSource("saved_record");
       } catch (error) {
         const code = /** @type {any} */ (error)?.code;
         failed.push({ index, code: typeof code === "string" && /^[a-z0-9_]{2,80}$/.test(code) ? code : "evidence_continue_source_failed" });

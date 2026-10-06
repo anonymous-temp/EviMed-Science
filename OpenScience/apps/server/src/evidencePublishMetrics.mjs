@@ -65,7 +65,7 @@ export function evidencePublishMetricFamilies({ citationGiftEnabled }) {
     },
     {
       name: "open_science_evidence_continuation_sources_total",
-      help: "The primary sources a continuation wrote into the knowledge base: saved with the card's preserved text, saved as a citation record, or not saved.",
+      help: "The primary sources a continuation wrote into the knowledge base: saved as a citation record (saved_record), or not saved. saved_text is retired and stays 0: a source's full text is never handed to another account (2026-10-06).",
       type: "counter",
       series: series(continuationSources, "kind"),
     },

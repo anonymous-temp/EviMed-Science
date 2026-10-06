@@ -118,13 +118,21 @@ function sources(value) {
     const coverage = source.coverage ?? "excerpt";
     if (!["full-text", "abstract", "excerpt"].includes(coverage)) throw error(400, "invalid", "Invalid source coverage.");
     const documentText = source.documentText == null ? null : (typeof source.documentText === "string" && source.documentText.length<=2000000 ? source.documentText : text(source.documentText,2000000));
-    const sha256 = evidenceHash(documentText ?? excerpt ?? "");
-    if (source.sha256 != null && source.sha256 !== sha256) throw error(400,"invalid","Source hash does not match its retained text.");
+    // A card never stores the full text of a source that has no public address (2026-10-06 review): a researcher's own uploaded
+    // document reached a card as a source's `documentText`, and "continue research from this card" handed it to another account.
+    // Such a source keeps its citation, its excerpt and the receipt of what the platform read, and nothing else; the passages
+    // its claims quote are the excerpt (`evidenceCardFromResult.mjs`), which is all a reader's ✓ needs.
+    const heldText = url ? documentText : null;
+    const sha256 = evidenceHash(heldText ?? excerpt ?? "");
+    const hashOfDropped = Boolean(documentText && !heldText && source.sha256 === evidenceHash(documentText));
+    if (source.sha256 != null && source.sha256 !== sha256 && !hashOfDropped) throw error(400,"invalid","Source hash does not match its retained text.");
     if (source.fetchedSha256 != null && (typeof source.fetchedSha256 !== "string" || !/^[a-f0-9]{64}$/.test(source.fetchedSha256))) throw error(400,"invalid","Invalid fetched document hash.");
     if (sha256 != null && (typeof sha256 !== "string" || !/^[a-f0-9]{64}$/.test(sha256))) throw error(400,"invalid","Invalid source hash.");
     if (source.checkedAt != null && (typeof source.checkedAt !== "string" || !Number.isFinite(Date.parse(source.checkedAt)))) throw error(400,"invalid","Invalid source check date.");
-    if (coverage === "full-text" && !documentText) throw error(400,"invalid","Full-text coverage requires retained document text.");
-    return { title, url, excerpt, sha256, ...(source.fetchedSha256 ? {fetchedSha256:source.fetchedSha256} : {}), ...(source.checkedAt ? {checkedAt:source.checkedAt} : {}), coverage, ...(documentText ? {documentText} : {}), ...(publicationStatus ? {publicationStatus} : {}) };
+    if (coverage === "full-text" && !heldText && !documentText) throw error(400,"invalid","Full-text coverage requires retained document text.");
+    // What is no longer held is no longer full text.
+    const held = coverage === "full-text" && !heldText ? "excerpt" : coverage;
+    return { title, url, excerpt, sha256, ...(source.fetchedSha256 ? {fetchedSha256:source.fetchedSha256} : {}), ...(source.checkedAt ? {checkedAt:source.checkedAt} : {}), coverage: held, ...(heldText ? {documentText:heldText} : {}), ...(publicationStatus ? {publicationStatus} : {}) };
   });
 }
 

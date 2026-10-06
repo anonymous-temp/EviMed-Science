@@ -26,9 +26,10 @@ const TEXTS = {
 /**
  * @param {import("node:test").TestContext} t
  * @param {{ userId?: string, projectId?: string, runId?: string, claims?: string[], matrixExtra?: Record<string, any>, reportBody?: string, reportTitle?: string }} [options]
- *   `claims`: which of the fixture's claims the matrix holds (default all five).
+ *   `claims`: which of the fixture's claims the matrix holds (default all five). `unaddressed`: the sources (`A`, `B`, `R`) that are the
+ *   researcher's own documents — cited with no public address and no DOI, only the preserved text.
  */
-export async function clinicalResultFixture(t, { userId = "alice", projectId = "p", runId = "run_one", claims = ["CLM-001", "CLM-002", "CLM-003", "CLM-004", "CLM-005"], matrixExtra = {}, reportBody = "Observed fewer strokes [1].\n", reportTitle = "Does the drug prevent stroke?" } = {}) {
+export async function clinicalResultFixture(t, { userId = "alice", projectId = "p", runId = "run_one", claims = ["CLM-001", "CLM-002", "CLM-003", "CLM-004", "CLM-005"], matrixExtra = {}, reportBody = "Observed fewer strokes [1].\n", reportTitle = "Does the drug prevent stroke?", unaddressed = /** @type {string[]} */ ([]) } = {}) {
   const root = await mkdtemp("/tmp/evimed-result-card-");
   t.after(() => rm(root, { recursive: true, force: true }));
   const project = { userId, id: projectId, rootDir: root, baseDir: root, workspaceDir: path.join(root, "workspace"), metaDir: path.join(root, "meta") };
@@ -57,8 +58,10 @@ export async function clinicalResultFixture(t, { userId = "alice", projectId = "
     sources[key] = { artifactPath, doi: `10.9999/trial-${key.toLowerCase()}`, digest: sha(TEXTS[key]) };
   }
   const bond = (key, quote, extra = {}) => ({
-    sourceUrl: `https://example.org/${key}`, sourceTitle: `Trial ${key}`, artifactPath: sources[key].artifactPath,
-    identifier: sources[key].doi, accessLevel: "full_text", supportQuote: quote, ...extra,
+    ...(unaddressed.includes(key)
+      ? { sourceTitle: `Trial ${key}`, artifactPath: sources[key].artifactPath, identifier: `kb:src_${key.toLowerCase()}` }
+      : { sourceUrl: `https://example.org/${key}`, sourceTitle: `Trial ${key}`, artifactPath: sources[key].artifactPath, identifier: sources[key].doi }),
+    accessLevel: "full_text", supportQuote: quote, ...extra,
   });
   const all = [
     { claimId: "CLM-001", claimType: "direct", claim: "Stroke was less frequent on the drug in trial A.", ...bond("A", QUOTES.A),
