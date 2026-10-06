@@ -7,6 +7,7 @@ import { ControlPlaneDatabase } from "../src/controlPlaneDatabase.mjs";
 import { EvidenceZoneService } from "../src/evidenceZoneService.mjs";
 import { migrateFrontier } from "../src/frontierPersistence.mjs";
 import { createCalculationReceiptReader } from "../src/evidenceCalculationReceipts.mjs";
+import { monthlyEvidenceFigures } from "../src/evidenceFigures.mjs";
 import { createEvidenceRecalculation, createOfficialZoneMatcher } from "../src/evidenceRecalculation.mjs";
 import { createGeoTestDatabase } from "./helpers/geoTestDatabase.mjs";
 
@@ -159,4 +160,14 @@ test("a reproduced paper becomes a recalculation card in the official zone its e
   const elsewhere = createEvidenceRecalculation({ config: { evidenceRecalculationCardsEnabled: true, evolutionEnabled: true }, evolution, zones: plain,
     matchZone: createOfficialZoneMatcher({ database: db, entityVocabulary: { keysForText: async (input) => (input.texts.some((text) => /summary hazard ratio/.test(text)) ? ["drug:something-no-zone-holds"] : vocabulary.keysForText(input)) } }), publisherUser: publisher });
   assert.equal((await elsewhere.onProofRecorded({ proofId: "evolution-research-proof-10", toolId: "meta-pool", artifactDigest: "d".repeat(64), paperId: "doi:10.1000/meta.2026.2", passed: true, rows: [row] })).outcome, "no_matching_zone");
+});
+
+test("the monthly verification figure counts the quotations it can check, not calculations whose receipts it does not read", options, async () => {
+  const zone = await officialZone();
+  await official(zone, {});
+  const month = new Date().toISOString().slice(0, 7);
+  const next = new Date(Date.now() + 40 * 86_400_000).toISOString().slice(0, 7);
+  // The card was recorded now; the figure looks at the end of a month after it, so the card is read as it stood.
+  const figures = await monthlyEvidenceFigures(db, { month: next === month ? month : next });
+  assert.deepEqual([figures.verification.claims, figures.verification.verified], [1, 1], "one quotation, found; the calculated claim is not scored as an unread receipt");
 });

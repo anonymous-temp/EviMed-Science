@@ -92,7 +92,8 @@ function projectedCard(row, { matchedBy, currency }) {
     producer: row.producer ? { kind: row.producer.kind ?? null, name: text(row.producer.name), relation: row.producer.relation ?? null } : null,
     originality: row.originality ?? null,
     primary: evidenceOriginalityIsPrimary(row.originality),
-    claims: { total: verification.counts.total, verified: verification.counts.verified },
+    // An index entry counts the quotations it can check here; a claim the platform computed is checked against its receipt on the card itself.
+    claims: { total: verification.counts.total - (verification.counts.calculation_unverified ?? 0), verified: verification.counts.verified },
     lastCheckedAt: checked,
     revision: Number(row.revision),
     ...(currency ? { currency } : {}),
