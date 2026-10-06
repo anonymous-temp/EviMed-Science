@@ -276,6 +276,9 @@ export async function deleteVcrUserRows(client, userId) {
   // The account's library of definitions (its versions and uses with it) and its packs that are rows.
   await client.query(`DELETE FROM ${VCR_SCHEMA}.definitions WHERE user_id = $1`, [userId]);
   await client.query(`DELETE FROM ${VCR_SCHEMA}.knowledge_packs WHERE user_id = $1`, [userId]);
+  // The account's pointers and its record of re-checks: rows of the account alone, with no study to cascade from.
+  await client.query(`DELETE FROM ${VCR_SCHEMA}.precedent_candidates WHERE user_id = $1`, [userId]);
+  await client.query(`DELETE FROM ${VCR_SCHEMA}.pack_promotions WHERE user_id = $1`, [userId]);
   // A platform pack the account was the author of is not the account's to take away — studies of others may have pinned it — but the
   // attribution goes with the account: the version is retired for new studies and carries no name.
   await client.query(`UPDATE ${VCR_SCHEMA}.platform_packs SET state = 'retired', retired_at = coalesce(retired_at, now()), retired_reason = 'author_removed',

@@ -181,7 +181,11 @@ test("deleting the author's account retires their platform packs and keeps the v
   await fixture.database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES($1,'离开的人','development')", [author]);
   const { study } = await curatedStudy(author, "sixth_thing", "10.1000/pack.leave");
   const { platformPack } = await knowledge.requestPlatformPromotion(study, author);
+  await fixture.vcr.store.query(`INSERT INTO evimed_vcr.precedent_candidates (id, user_id, frontier_item_id, event, title) VALUES ('pcn_leaver', $1, '77', 'registration', 't')`, [author]);
   await fixture.vcr.store.transaction((client) => deleteVcrUserRows(client, author));
+  for (const table of ["precedent_candidates", "pack_promotions"]) {
+    assert.equal(Number((await fixture.vcr.store.one(`SELECT count(*)::int AS n FROM evimed_vcr.${table} WHERE user_id = $1`, [author])).n), 0, `${table} went with the account`);
+  }
   const row = await fixture.vcr.store.one("SELECT state, author_name, retired_reason FROM evimed_vcr.platform_packs WHERE pack_id = $1", [platformPack.id]);
   assert.deepEqual([row.state, row.author_name, row.retired_reason], ["retired", "", "author_removed"]);
   assert.equal(Number((await fixture.vcr.store.one("SELECT count(*)::int AS n FROM evimed_vcr.knowledge_packs WHERE id = $1", [platformPack.id])).n), 1, "the platform's row stays");
