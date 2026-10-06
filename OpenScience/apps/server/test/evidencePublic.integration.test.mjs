@@ -468,6 +468,20 @@ test("an author page: public zones and cards only, followers, times cited by res
   assert.equal(api.data.author.changes.length, 1);
 });
 
+test("a claim whose quotation only the author's own excerpt holds is a ⚠ the page explains, and is counted among the ⚠: the platform did not read the source", options, async (t) => {
+  const zone = await userZone(alice, { title: "Typed excerpts" });
+  // A session writes an excerpt it typed and no source text: the platform has not read the source, so nothing can earn ✓ (`author_excerpt_only`).
+  const typed = (await zones.save(alice, cardInput("Typed card", { sources: [{ title: "The trial", url: "https://doi.org/10.1000/Stroke.1", excerpt: TEXT }], claims: [cardInput("x").claims[0]] }), zone.id, null, true)).evidence;
+  const { text } = await serve(t);
+  const page = await text(`/evidence/c/${typed.id}`);
+  assert.equal(page.status, 200);
+  assert.ok(page.body.includes("引文只在作者自己提供的摘录里找到，平台没有读到来源原文，所以不标 ✓"), "the status is said, not 核验状态未知");
+  assert.equal(page.body.includes("核验状态未知"), false);
+  const card = json(await text(`/evidence/api/v1/cards/${typed.id}`)).data.card;
+  assert.deepEqual([card.claims.total, card.claims.verified, card.claims.warned], [1, 0, 1], "the ⚠ count includes the claim the platform could not check");
+  assert.equal(card.claimList[0].status, "author_excerpt_only");
+});
+
 test("the AI label: a card an AI wrote carries the visible label and the implicit metadata; one it did not, neither", options, async (t) => {
   const zone = await userZone(alice, { title: "Alice's zone" });
   const ai = await userCard(alice, zone, passing("AI card", { disclosure: { model: "deepseek-v4-flash", modelVersion: "2026-09", aiSteps: ["search", "extract", "synthesize"], generatedAt: "2026-10-01T00:00:00Z", lastCheckedAt: "2026-10-02T00:00:00Z" } }), "model");

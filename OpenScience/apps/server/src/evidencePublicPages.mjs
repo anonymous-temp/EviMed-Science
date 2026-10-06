@@ -22,13 +22,16 @@ import { EVIDENCE_ABOUT_SECTIONS } from "./evidencePublicAbout.mjs";
 import { EVIDENCE_SITE_NAME, appCardPath, appZonePath, authorPath, cardPath, changesPath, zonePath } from "./evidencePublicLayout.mjs";
 import { evidencePublicPath } from "./evidencePublicPaths.mjs";
 
-const CLAIM_TYPE_LABELS = { direct: "直接引用", synthesized: "跨来源综合", derived: "分析者推算" };
+const CLAIM_TYPE_LABELS = { direct: "直接引用", synthesized: "跨来源综合", derived: "分析者推算", calculated: "平台计算" };
 const CLAIM_STATUS_LABELS = {
   verified: "引文在所标的来源里逐字找到了",
   quote_not_found: "引文在所标的来源里没有找到",
   source_unavailable: "来源的原文当前无法核对，这里只给出处",
   no_quote: "没有给出引文，无法核对",
   derived: "分析者自己的推算，没有引文可核对；它的方法和假设写在下面",
+  // Added when a ✓ came to mean the platform read the source (author_excerpt_only) and when the platform began to compute (calculation_unverified).
+  author_excerpt_only: "引文只在作者自己提供的摘录里找到，平台没有读到来源原文，所以不标 ✓",
+  calculation_unverified: "这个数由平台的计算引擎给出，这里没有读到它的计算回执，所以不标 ✓",
   unknown: "核验状态未知",
 };
 const COVERAGE_LABELS = { "full-text": "全文", abstract: "摘要", excerpt: "摘录" };
@@ -212,7 +215,7 @@ ${box.excluded?.length && box.status === "available" ? html`<p class="muted">另
 /** The claims with their marks, quotations and sources. @param {any} card */
 function basisSection(card) {
   return html`<section aria-labelledby="basis"><h2 id="basis">依据</h2>
-<p class="muted">✓ 表示引文在它标明的来源里逐字找到了；⚠ 表示没有找到，或者来源的原文当前无法核对。</p>
+<p class="muted">✓ 表示引文在平台读到的来源原文里逐字找到了；⚠ 表示没有找到，或者来源的原文当前无法核对（平台没有读到原文、只有作者提供的摘录时，也不标 ✓）。</p>
 ${card.claimList.length ? card.claimList.map((/** @type {any} */ claim) => html`<div class="claim ${claim.mark === "✓" ? "verified" : claim.mark === "⚠" ? "unverified" : ""}" id="claim-${claim.claimId}">
 <p>${claim.mark === "✓" ? html`<span class="mark-ok">✓</span> ` : claim.mark === "⚠" ? html`<span class="mark-warn">⚠</span> ` : ""}${claim.text} <span class="badge">${/** @type {any} */ (CLAIM_TYPE_LABELS)[claim.claimType] ?? claim.claimType}</span>${claim.confidence ? html` <span class="badge">把握度：${claim.confidence === "high" ? "高" : claim.confidence === "moderate" ? "中" : "低"}</span>` : ""}${claim.valueSource ? html` <span class="badge">数值来源：${/** @type {any} */ (VCR_VALUE_SOURCE_LABELS_ZH)[claim.valueSource] ?? claim.valueSource}</span>` : ""}</p>
 <p class="meta">${/** @type {any} */ (CLAIM_STATUS_LABELS)[claim.status] ?? CLAIM_STATUS_LABELS.unknown}</p>

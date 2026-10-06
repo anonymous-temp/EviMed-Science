@@ -133,7 +133,7 @@ function sourceView(source, index) {
 /** @param {any} counts the `counts` of `verifyEvidenceCardClaims` */
 const claimCounts = (counts) => ({
   total: counts.total ?? 0, verified: counts.verified ?? 0, derived: counts.derived ?? 0,
-  warned: (counts.quote_not_found ?? 0) + (counts.source_unavailable ?? 0) + (counts.no_quote ?? 0),
+  warned: (counts.quote_not_found ?? 0) + (counts.source_unavailable ?? 0) + (counts.no_quote ?? 0) + (counts.author_excerpt_only ?? 0) + (counts.calculation_unverified ?? 0),
 });
 
 /**
