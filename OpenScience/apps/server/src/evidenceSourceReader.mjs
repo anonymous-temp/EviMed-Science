@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { parseFragment } from "parse5";
 import { RobotsPolicy } from "./webReadRobots.mjs";
 import { HostPacer } from "./webReadLimits.mjs";
-import { evidencePublicationStatus } from "./evidenceCardContent.mjs";
+import { evidenceHash, evidencePublicExcerpt, evidencePublicationStatus } from "./evidenceCardContent.mjs";
 
 /** Only explicit bibliographic notices count; ordinary comments are not corrections.
  * Undefined means that the record supplied no status, null means verified clear.
@@ -38,6 +38,31 @@ function publicationStatus(record) {
   if (kind) return evidencePublicationStatus({kind,notices:notices.slice(0,10)});
   if (record.isRetracted === false || String(record.isRetracted).toUpperCase() === "N") return null;
   return undefined;
+}
+
+/**
+ * What a card keeps of a source the platform has just read: the text, its hash, the receipt of the bytes read, and the public
+ * excerpt. The editor's upkeep and the owner's own request to have their sources read (`evidenceSourceVerification.mjs`) store a
+ * source exactly this way, so a ✓ means the same thing whichever of them earned it — it is the only writer of these fields.
+ * @param {any} source the card's source as it was @param {any} result what the source reader returned
+ * @param {string} documentText the text kept (the reader's text, capped) @param {string} checkedAt
+ */
+export function retainedSource(source, result, documentText, checkedAt) {
+  return {
+    ...source,
+    excerpt: evidencePublicExcerpt(documentText, source.excerpt ?? null),
+    documentText,
+    sha256: evidenceHash(documentText),
+    fetchedSha256: result.receipt?.sha256 ?? evidenceHash(documentText),
+    checkedAt,
+    // Explicit null clears a previously verified notice; absent metadata does not.
+    publicationStatus: evidencePublicationStatus(result.publicationStatus),
+    coverage:
+      (result.receipt?.truncated || String(result.text ?? "").length > 2000000) ? "excerpt" : result.coverage ??
+      (source.coverage === "full-text" && !result.receipt?.truncated
+        ? "full-text"
+        : (source.coverage ?? "excerpt")),
+  };
 }
 
 /** Canonical retained scientific text; excludes JATS front matter and references.

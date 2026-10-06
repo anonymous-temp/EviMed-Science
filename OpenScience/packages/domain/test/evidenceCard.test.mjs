@@ -47,7 +47,8 @@ const refusedWith = (code) => (/** @type {any} */ error) => error instanceof Evi
 const DOCUMENT = "In this randomized trial, 12 of 100 adults on usual care had a stroke. Among 100 adults on the drug, 7 had a stroke. Major bleeding occurred in 3 of 100 on the drug and 1 of 100 on usual care.";
 const sources = [
   { title: "Trial", url: "https://doi.org/10.1000/Trial.1", excerpt: "12 of 100 adults on usual care had a stroke", documentText: DOCUMENT },
-  { title: "Label", url: "https://www.example.org/label", excerpt: "Do not use the drug with severe bleeding." },
+  // The platform read this page (a read receipt beside the excerpt it kept); the trial above was kept whole.
+  { title: "Label", url: "https://www.example.org/label", excerpt: "Do not use the drug with severe bleeding.", fetchedSha256: "b".repeat(64) },
   { title: "Page without text", url: "https://www.example.org/missing" },
 ];
 const comparisons = [
@@ -263,6 +264,46 @@ test("a claim set returns ✓ and ⚠ by the gate's own quotation comparison, an
   const located = verifyEvidenceCardClaims(card(), { locations: true });
   assert.ok(located.claims[0].sources[0].location);
   assert.equal(located.claims[0].status, "verified");
+});
+
+test("✓ means the platform read the source: a quotation found only in an excerpt its author typed is ⚠ author_excerpt_only", () => {
+  // The same card as an author's session can write it: sources carry a title, an address and an excerpt, nothing the platform sets.
+  const typed = {
+    ...card(),
+    sources: [
+      { title: "Trial", url: "https://doi.org/10.1000/Trial.1", excerpt: "Among 100 adults on the drug, 7 had a stroke" },
+      { title: "Label", url: "https://www.example.org/label", excerpt: "Do not use the drug with severe bleeding." },
+      { title: "Page without text", url: "https://www.example.org/missing" },
+    ],
+  };
+  const verdict = verifyEvidenceCardClaims(typed);
+  const byId = Object.fromEntries(verdict.claims.map((claim) => [claim.claimId, claim]));
+  assert.equal(byId["CLM-001"].status, "author_excerpt_only");
+  assert.equal(byId["CLM-001"].mark, "⚠");
+  assert.deepEqual(byId["CLM-001"].sources, [{ sourceIndex: 1, status: "author_excerpt_only", mark: "⚠" }]);
+  // The excerpt does not hold this one at all: still not verified, and not claimed to be anything better.
+  assert.equal(byId["CLM-002"].mark, "⚠");
+  assert.notEqual(byId["CLM-002"].status, "author_excerpt_only");
+  // A synthesis is as good as its worst source, and a source with no text is not helped by its neighbour.
+  assert.equal(byId["CLM-004"].status, "author_excerpt_only");
+  assert.deepEqual(byId["CLM-004"].sources.map((source) => source.status), ["author_excerpt_only", "author_excerpt_only"]);
+  assert.equal(byId["CLM-003"].status, "source_unavailable");
+  assert.equal(verdict.counts.verified, 0, "nothing the platform did not read is ✓");
+  assert.equal(verdict.counts.author_excerpt_only, 2);
+  assert.equal(verdict.counts.total, 6);
+  assert.equal(Object.entries(verdict.counts).filter(([key]) => key !== "total").reduce((sum, [, count]) => sum + count, 0), 6, "every claim is counted once");
+
+  // The platform's read receipt, or the text it kept, is what turns the same excerpt into ✓.
+  const receipted = { ...typed, sources: typed.sources.map((source, index) => (index === 0 ? { ...source, fetchedSha256: "c".repeat(64) } : source)) };
+  assert.equal(verifyEvidenceCardClaims(receipted).claims[0].status, "verified");
+  const kept = { ...typed, sources: typed.sources.map((source, index) => (index === 0 ? { ...source, documentText: DOCUMENT } : source)) };
+  assert.equal(verifyEvidenceCardClaims(kept).claims[0].status, "verified");
+  // Text the platform kept outranks an excerpt the author typed beside it.
+  const contradicted = { ...typed, sources: typed.sources.map((source, index) => (index === 0 ? { ...source, documentText: "A different record altogether." } : source)) };
+  assert.equal(verifyEvidenceCardClaims(contradicted).claims[0].status, "quote_not_found");
+  // A located quotation is only ever one the platform read.
+  const located = verifyEvidenceCardClaims(typed, { locations: true });
+  assert.equal(located.claims[0].sources[0].location.status, "unknown");
 });
 
 test("the clinical view computes the absolute effect per 1000 from events and denominators", () => {

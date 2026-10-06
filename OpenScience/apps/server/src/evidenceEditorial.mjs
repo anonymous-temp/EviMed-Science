@@ -8,9 +8,9 @@ import {
   evidenceHash,
   evidenceContentHash,
   evidenceSourceFingerprint,
-  evidencePublicExcerpt,
   evidencePublicationStatus,
 } from "./evidenceCardContent.mjs";
+import { retainedSource } from "./evidenceSourceReader.mjs";
 import { migrateEvidenceZones } from "./evidenceZonePersistence.mjs";
 import { frontierProviderUnavailable, FRONTIER_PROVIDER_RETRY_MS, FRONTIER_PROVIDER_REFUSED_WAIT_MS } from "./frontierPipeline.mjs";
 
@@ -918,25 +918,7 @@ export class EvidenceEditorial {
         continue;
       }
       await this.renew(job);
-      const excerpt = evidencePublicExcerpt(
-        documentText,
-        source.excerpt ?? null,
-      );
-      sources.push({
-        ...source,
-        excerpt,
-        documentText,
-        sha256: evidenceHash(documentText),
-        fetchedSha256: result.receipt?.sha256 ?? evidenceHash(documentText),
-        checkedAt: this.now().toISOString(),
-        // Explicit null clears a previously verified notice; absent metadata does not.
-        publicationStatus: evidencePublicationStatus(result.publicationStatus),
-        coverage:
-          (result.receipt?.truncated || String(result.text ?? "").length > 2000000) ? "excerpt" : result.coverage ??
-          (source.coverage === "full-text" && !result.receipt?.truncated
-            ? "full-text"
-            : (source.coverage ?? "excerpt")),
-      });
+      sources.push(retainedSource(source, result, documentText, this.now().toISOString()));
       this.counters.checked++;
     }
     // Unread sources retain their original position, document text and check date.

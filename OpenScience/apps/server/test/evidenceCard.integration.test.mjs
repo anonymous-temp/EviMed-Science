@@ -90,6 +90,10 @@ const officialZone = async () => {
   return (await service.saveEditorial(publisher, { expectedRevision: zone.revision, state: "published" }, zone.id, null, false, "programme")).zone;
 };
 const saveCard = (zone, fields = {}, user = alice) => service.save(user, { ...cardInput, ...fields }, zone.id, null, true).then((result) => result.evidence);
+// ✓ means the platform read the source: its own writers keep the receipt of the bytes it read beside the excerpt, and a writer's
+// session cannot send one. `saveCard` is the account's own write; this is a card whose sources the platform has read.
+const PLATFORM_READ = [{ ...cardInput.sources[0], fetchedSha256: "f".repeat(64) }];
+const saveReadCard = (zone, fields = {}, user = alice) => service.saveEditorial(user, { ...cardInput, sources: PLATFORM_READ, ...fields }, zone.id, null, true, "result").then((result) => result.evidence);
 const metric = (name, labels = {}) => {
   const family = evidenceCardMetricFamilies({ cardsWithoutProducer: 0 }).find((entry) => entry.name === name);
   const series = family?.series.find((entry) => Object.entries(labels).every(([key, value]) => entry.labels?.[key] === value));
@@ -98,7 +102,12 @@ const metric = (name, labels = {}) => {
 
 test("a card built from claims returns each claim with ✓ or ⚠ and both views, the numbers computed by code", options, async () => {
   const zone = await makeZone();
-  const card = await saveCard(zone);
+  // The same card as the account itself writes it has only an excerpt it typed, which the platform has not read.
+  const typed = await saveCard(zone, { requestId: "typed-excerpt-card" });
+  assert.deepEqual(typed.claims.map((claim) => claim.verification.status), ["author_excerpt_only", "source_unavailable"]);
+  assert.deepEqual(typed.claims.map((claim) => claim.verification.mark), ["⚠", "⚠"]);
+  assert.equal(typed.claimVerification.verified, 0);
+  const card = await saveReadCard(zone);
   assert.equal(card.claims.length, 2);
   assert.equal(card.claims[0].verification.status, "verified");
   assert.equal(card.claims[0].verification.mark, "✓");
@@ -346,7 +355,7 @@ test("the operator import keeps its reach into the nominated owner's zone until 
 test("the card's new fields are in every revision snapshot", options, async () => {
   const zone = await makeZone();
   resolver.answer = ["drug:warfarin"];
-  const card = await saveCard(zone, { originality: "original_research", journeyStage: { key: "follow-up", label: "随访" }, publicView: { oneLineAnswer: { text: "一句话", claimIds: ["CLM-001"] } } });
+  const card = await saveReadCard(zone, { originality: "original_research", journeyStage: { key: "follow-up", label: "随访" }, publicView: { oneLineAnswer: { text: "一句话", claimIds: ["CLM-001"] } } });
   await service.save(alice, { expectedRevision: card.revision, summary: "Second" }, zone.id, card.id);
   const rows = (await db.query("SELECT revision,snapshot FROM evimed_frontier.evidence_card_revisions WHERE card_id=$1 ORDER BY revision", [card.id])).rows;
   assert.equal(rows.length, 2);
@@ -488,7 +497,7 @@ test("over HTTP a product zone is the owner's to make, an official one is not, a
     assert.equal(refused.body.error.code, "evidence_producer_required");
     const card = await call("POST", `/api/frontier/zones/${zone.id}/evidence`, "alice", { ...cardInput, ...productFields });
     assert.equal(card.status, 200);
-    assert.equal(card.body.data.evidence.claims[0].verification.mark, "✓");
+    assert.equal(card.body.data.evidence.claims[0].verification.status, "author_excerpt_only", "over HTTP the excerpt is the author's, not the platform's reading");
     assert.equal(card.body.data.evidence.claims[0].text, cardInput.claims[0].claim);
     assert.equal(card.body.data.evidence.views.clinical.rows[0].absoluteEffect.control, 120);
     // The default is the platform's audience until the owner chooses; the choice is a route of its own.

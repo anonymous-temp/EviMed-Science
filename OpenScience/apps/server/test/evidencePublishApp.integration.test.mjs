@@ -64,7 +64,7 @@ const call = async (role, method, pathname, body) => {
 
 test("the four routes need a session, the frontier audience and, to write, the CSRF token", options, async () => {
   const rv = `rv_${"a".repeat(64)}`;
-  for (const [method, pathname] of [["POST", `/api/results/${rv}/evidence-card`], ["POST", "/api/frontier/evidence/ec_0123456789abcdef/continue"], ["GET", "/api/frontier/evidence/ec_0123456789abcdef/links"], ["GET", `/api/frontier/authors/${accounts.author}`]]) {
+  for (const [method, pathname] of [["POST", `/api/results/${rv}/evidence-card`], ["POST", "/api/frontier/evidence/ec_0123456789abcdef/continue"], ["POST", "/api/frontier/evidence/ec_0123456789abcdef/verify-sources"], ["GET", "/api/frontier/evidence/ec_0123456789abcdef/links"], ["GET", `/api/frontier/authors/${accounts.author}`]]) {
     assert.equal((await fetch(`${context.base}${pathname}`, { method, ...(method === "POST" ? { body: "{}", headers: { "content-type": "application/json" } } : {}) })).status, 401, `${method} ${pathname}`);
     const outside = await call("outsider", method, pathname, method === "POST" ? {} : undefined);
     assert.equal(outside.status, 404, `${method} ${pathname}`);
@@ -73,6 +73,25 @@ test("the four routes need a session, the frontier audience and, to write, the C
   const { "x-open-science-csrf": _csrf, ...withoutCsrf } = context.sessions.reader;
   const forged = await fetch(`${context.base}/api/frontier/evidence/ec_0123456789abcdef/continue`, { method: "POST", headers: withoutCsrf, body: "{}" });
   assert.equal(forged.status, 403);
+});
+
+test("having the platform read a card's sources is the owner's: another account's card, and one that is not there, are the same 404, and a GET is not the route", options, async () => {
+  const zone = (await call("author", "POST", "/api/frontier/zones", { title: "Verify zone", description: "", background: "", requestId: "request-verify-zone" })).body.data.zone;
+  const card = (await call("author", "POST", `/api/frontier/zones/${zone.id}/evidence`, { title: "A trial", subtype: "academic", summary: "s", body: "b", limitations: "l", provenance: "p",
+    sources: [{ title: "Trial", excerpt: "Observed outcomes only the author typed." }], requestId: "request-verify-card" })).body.data.evidence;
+  for (const id of [card.id, "ec_0123456789abcdef"]) {
+    const refused = await call("reader", "POST", `/api/frontier/evidence/${id}/verify-sources`, {});
+    assert.equal(refused.status, 404, id);
+    assert.equal(refused.body.code, "evidence_not_found");
+  }
+  assert.equal((await call("author", "GET", `/api/frontier/evidence/${card.id}/verify-sources`)).status, 405);
+  // The owner's own request: a source with no address has nothing to read, and the answer says so for that source alone.
+  const own = await call("author", "POST", `/api/frontier/evidence/${card.id}/verify-sources`, {});
+  assert.equal(own.status, 200);
+  assert.deepEqual(own.body.data.sources, [{ sourceIndex: 1, status: "no_address" }]);
+  const scrape = await (await fetch(`${context.base}/api/ops/metrics`, { headers: { authorization: "Bearer test-only-metrics-token" } })).text();
+  assert.match(scrape, /^open_science_evidence_source_verifications_total\{outcome="nothing_to_read"\} 1$/m);
+  assert.match(scrape, /^open_science_evidence_source_reads_total\{outcome="no_address"\} 1$/m);
 });
 
 test("a result that is not there is not found, and a result route with a bad body is refused by name", options, async () => {

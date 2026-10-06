@@ -314,7 +314,7 @@ export function createEvidenceChallenges({
     counters.filed += 1;
     if (route === "producer_notice") {
       counters.producerNotified += 1;
-      const mark = check?.status === "verified" ? "引文在卡片保存的原文里找到了" : check?.status === "source_unavailable" ? "卡片没有保存这条结论所依据的原文，无法核对引文" : check?.status === "derived" ? "这是推算类结论，没有引文可以核对" : "卡片保存的原文里没有找到这条结论的引文";
+      const mark = check?.status === "verified" ? "引文在卡片保存的原文里找到了" : check?.status === "source_unavailable" ? "卡片没有保存这条结论所依据的原文，无法核对引文" : check?.status === "derived" ? "这是推算类结论，没有引文可以核对" : check?.status === "author_excerpt_only" ? "引文只在你自己提供的摘录里找到，平台没有读取来源原文" : "卡片保存的原文里没有找到这条结论的引文";
       await tell(card.user_id, {
         title: "有读者质疑了你卡片里的一条结论", key: id, severity: "attention",
         body: `你的卡片「${card.title}」里的结论 ${claim.claimId}：\n${claim.claim}\n\n读者的理由：${reason}\n\n平台的逐字核对结果：${mark}。\n平台不会替你修改你的卡片；你修改卡片之后，这条质疑会自动关闭。`,

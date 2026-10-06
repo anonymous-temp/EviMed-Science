@@ -737,9 +737,35 @@ export function evidenceCardClaims(value, sourceCount) {
   return claims
 }
 
-const MARKS = Object.freeze({ verified: '✓', quote_not_found: '⚠', source_unavailable: '⚠', no_quote: '⚠', derived: null })
+const MARKS = Object.freeze({ verified: '✓', quote_not_found: '⚠', source_unavailable: '⚠', no_quote: '⚠', author_excerpt_only: '⚠', derived: null })
 /** A status this build does not know is a warning, never a pass. @param {string} status @returns {'✓' | '⚠' | null} */
 const markOf = (status) => (Object.hasOwn(MARKS, status) ? /** @type {any} */ (MARKS)[status] : '⚠')
+
+/** Least trusted first: a claim is as good as its worst source. */
+const WORST_FIRST = ['quote_not_found', 'source_unavailable', 'no_quote', 'author_excerpt_only', 'verified']
+
+/**
+ * A source the platform did not read, whose quotation is in the excerpt its author supplied: its entry says so rather
+ * than "unavailable", and the claim's status and the counts follow. `verdict` is the check over the text the platform
+ * read and `asked` the same claims checked over the authors' excerpts alone, in the same order.
+ * @param {{ claims: any[], counts: Record<string, number> }} verdict @param {{ claims: any[] }} asked
+ */
+function separateAuthorExcerpts(verdict, asked) {
+  verdict.claims.forEach((claim, position) => {
+    let changed = false
+    claim.sources.forEach((/** @type {any} */ source, /** @type {number} */ index) => {
+      if (source.status === 'source_unavailable' && asked.claims[position]?.sources?.[index]?.status === 'verified') {
+        source.status = 'author_excerpt_only'
+        changed = true
+      }
+    })
+    if (!changed) return
+    const status = WORST_FIRST.find((candidate) => claim.sources.some((/** @type {any} */ source) => source.status === candidate)) ?? 'no_quote'
+    verdict.counts[claim.status] = (verdict.counts[claim.status] ?? 1) - 1
+    verdict.counts[status] = (verdict.counts[status] ?? 0) + 1
+    claim.status = status
+  })
+}
 
 /**
  * Whether each claim's quotation is in the source it names — per claim and per
@@ -747,6 +773,13 @@ const markOf = (status) => (Object.hasOwn(MARKS, status) ? /** @type {any} */ (M
  * reader's ✓/⚠ use. A source's preserved text is its `documentText`, else its
  * `excerpt`; a source with neither is `source_unavailable`, never "not found".
  * `derived` claims have no quotation to check and carry `mark: null`.
+ *
+ * ✓ means the platform read the source (2026-10-06 review): the quotation is found in text the
+ * platform itself read — a retained `documentText`, or an `excerpt` beside the platform's read
+ * receipt (`fetchedSha256`). Both are set only by the platform's own operations; a writer's
+ * session can send an excerpt and nothing else. A quotation found only in an excerpt the author
+ * typed is `author_excerpt_only` (⚠), which says so instead of "not found": the author may well
+ * be right, and the platform has not read the source to say so.
  *
  * Statuses are labels. This function never refuses a card.
  *
@@ -758,15 +791,18 @@ export function verifyEvidenceCardClaims(card, options = {}) {
   const claims = Array.isArray(card?.claims) ? card.claims : []
   const sources = Array.isArray(card?.sources) ? card.sources : []
   const pathOf = (/** @type {number} */ index) => `.evimed-sources/card/source-${index}`
-  /** @type {Map<string, string>} */
+  /** The text the platform read. @type {Map<string, string>} */
   const artifacts = new Map()
+  /** An excerpt only the author vouches for. @type {Map<string, string>} */
+  const authored = new Map()
   /** @type {Map<string, number>} */
   const indexOfPath = new Map()
   sources.forEach((source, position) => {
     indexOfPath.set(pathOf(position + 1), position + 1)
-    const preserved = typeof source?.documentText === 'string' && source.documentText ? source.documentText
-      : typeof source?.excerpt === 'string' ? source.excerpt : ''
-    if (preserved) artifacts.set(pathOf(position + 1), preserved)
+    const excerpt = typeof source?.excerpt === 'string' ? source.excerpt : ''
+    if (typeof source?.documentText === 'string' && source.documentText) artifacts.set(pathOf(position + 1), source.documentText)
+    else if (excerpt && typeof source?.fetchedSha256 === 'string' && source.fetchedSha256) artifacts.set(pathOf(position + 1), excerpt)
+    else if (excerpt) authored.set(pathOf(position + 1), excerpt)
   })
   const matrix = {
     claims: claims.map((claim) => {
@@ -787,8 +823,11 @@ export function verifyEvidenceCardClaims(card, options = {}) {
     }),
   }
   const verdict = claimVerification({ matrix, sourceArtifacts: artifacts })
+  if (authored.size) separateAuthorExcerpts(verdict, claimVerification({ matrix, sourceArtifacts: authored }))
   if (options.locations && verdict.claims.length) attachClaimSourceLocations(verdict, { matrix, sourceArtifacts: artifacts })
   const counts = Object.fromEntries(['verified', 'quote_not_found', 'source_unavailable', 'no_quote', 'derived'].map((status) => [status, verdict.counts[status] ?? 0]))
+  // Present only when some claim is in it, so a verdict that has none keeps the shape every reader of the counts already knows.
+  if (verdict.counts.author_excerpt_only) counts.author_excerpt_only = verdict.counts.author_excerpt_only
   return {
     claims: verdict.claims.map((entry) => ({
       claimId: entry.claimId,

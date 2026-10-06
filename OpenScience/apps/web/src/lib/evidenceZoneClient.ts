@@ -142,12 +142,14 @@ export interface EvidenceClaimCounts {
   quote_not_found: number;
   source_unavailable: number;
   no_quote: number;
+  /** The quotation is in an excerpt its author supplied; the platform has not read the source. */
+  author_excerpt_only?: number;
   derived: number;
 }
 export interface EvidenceClaimVerification {
   claimId: string;
   claimType: string;
-  status: "verified" | "quote_not_found" | "source_unavailable" | "no_quote" | "derived";
+  status: "verified" | "quote_not_found" | "source_unavailable" | "no_quote" | "author_excerpt_only" | "derived";
   mark: EvidenceClaimMark;
   sources: Array<{ sourceIndex: number | null; status: string; mark: EvidenceClaimMark; location?: unknown }>;
 }

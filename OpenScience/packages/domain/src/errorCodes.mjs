@@ -1514,6 +1514,7 @@ export const EVIDENCE_PUBLISH_ERROR_MESSAGES_ZH = Object.freeze({
   evidence_continue_unavailable: '这个部署没有开通知识库，不能从证据卡带着来源继续研究。',
   evidence_continue_request_invalid: '这次继续研究的内容不对，没有建项目也没有存入来源。',
   evidence_author_not_found: '没有这位作者公开的内容。',
+  evidence_source_verification_rate_limited: '你今天让平台读取来源的次数已达上限，明天再试；已经读取过的来源不会再占用次数。',
 })
 
 /**

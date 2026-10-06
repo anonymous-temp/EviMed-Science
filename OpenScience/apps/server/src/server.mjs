@@ -247,6 +247,7 @@ import { EvidenceContinuation } from "./evidenceContinuation.mjs";
 import { EvidenceOrigins } from "./evidenceOrigins.mjs";
 import { createEvidencePublishRoutes } from "./evidencePublishRoutes.mjs";
 import { evidencePublishMetricFamilies } from "./evidencePublishMetrics.mjs";
+import { createEvidenceSourceVerification, evidenceSourceVerificationMetricFamilies } from "./evidenceSourceVerification.mjs";
 // Keeping the cards current and answering readers' challenges (flywheel F13, F14): composed after the result impact path they feed.
 import { createEvidenceChangeLog, evidenceChangeLogMetricFamilies } from "./evidenceChangeLog.mjs";
 import { createEvidenceUpkeep, evidenceUpkeepMetricFamilies } from "./evidenceCurrency.mjs";
@@ -2738,7 +2739,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     return { root, canceled: await agentRuns.cancelRun(project, run.id, { by: "user" }) };
   }
   // The co-creation loop's pieces (composed after the run store, which asks the origins for the card a run began from).
-  /** @type {{ origins: EvidenceOrigins, publisher: EvidenceCardFromResult | null, continuation: EvidenceContinuation, authors: EvidenceAuthors } | null} */
+  /** @type {{ origins: EvidenceOrigins, publisher: EvidenceCardFromResult | null, continuation: EvidenceContinuation, authors: EvidenceAuthors,
+   *   verification: ReturnType<typeof createEvidenceSourceVerification> } | null} */
   let evidencePublish = null;
   agentRuns = new AgentRunStore(researchSessions, {
     agentRegistry,
@@ -3389,10 +3391,15 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         createProject: (user, name) => createResearcherProject(user, { name }),
         bindSession: (project, sessionId) => researchSessions.put(project, sessionId, { mode: "open-domain" }) }),
       authors: new EvidenceAuthors({ database: productDatabase, platformPublisherUserId: PLATFORM_PUBLISHER_USER_ID }),
+      // A ✓ means the platform read the source: the owner's request to have it read, through the reader the editor's upkeep uses.
+      verification: createEvidenceSourceVerification({ database: productDatabase, zones: frontier.evidenceZones,
+        readSource: frontier.evidenceEditorial.readSource, perDay: config.evidenceVerifyReadsPerDay,
+        report: (code) => process.stderr.write(`evidence source verification: ${code}\n`) }),
     };
   }
   const evidencePublishRoutes = createEvidencePublishRoutes({ store, frontier: frontier?.service ?? null, config, maxJsonBytes: config.maxJsonBytes,
     publisher: evidencePublish?.publisher ?? null, continuation: evidencePublish?.continuation ?? null, authors: evidencePublish?.authors ?? null,
+    verification: evidencePublish?.verification ?? null,
     audit: (event, status, details) => securityAudit(config, event, status, details) });
   const personalSkillGenerations = productDatabase ? new PersonalSkillGenerationService(productDatabase, {
     config, skillService: skillLibraryService, pluginService, jobs: productJobs,
@@ -8288,6 +8295,8 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
   // The co-creation loop (evidencePublishMetrics.mjs): results published as cards, research continued from a card, the runs a
   // card started, and the citation gift, which is off. Composed only with the frontier.
   if (evidencePublish) for (const family of evidencePublishMetricFamilies({ citationGiftEnabled: config.evidenceCitationGiftEnabled === true && Number(config.evidenceCitationGiftAmount) > 0 })) addMetric(lines, family.name, family.help, family.type, family.series);
+  // The owner's request to have the platform read a card's sources (evidenceSourceVerification.mjs); nothing without the frontier.
+  for (const family of evidenceSourceVerificationMetricFamilies(evidencePublish?.verification?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
   // Keeping the cards current (evidenceCurrency.mjs, evidenceChallenges.mjs, evidenceChangeLog.mjs): the loops' counters, the reader challenges and the public log.
   // With the upkeep off these are not exported at all.
   for (const family of [...evidenceUpkeepMetricFamilies(evidenceUpkeep?.upkeep.stats() ?? null), ...evidenceChallengeMetricFamilies(evidenceUpkeep?.challenges.stats() ?? null),

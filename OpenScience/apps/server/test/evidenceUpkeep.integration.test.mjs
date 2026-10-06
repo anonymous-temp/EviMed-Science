@@ -90,11 +90,12 @@ async function zoneOf(owner, { kind = "user", title = unique("Zone ") } = /** @t
 async function cardOf(zone, owner, { ai = false, entityKeys = /** @type {string[]} */ ([]), url: sourceUrl = unique("https://example.org/src-"), claims = /** @type {any[]} */ ([]), extra = /** @type {any} */ ({}), origin = ai ? "model" : "owner" } = {}) {
   const body = {
     title: unique("Card "), subtype: "academic", summary: "Fewer strokes", body: "The trial reports fewer strokes.", limitations: "One trial.",
-    sources: [{ title: "The cited trial", url: sourceUrl, excerpt: SOURCE_TEXT, ...(ai || origin !== "owner" ? { documentText: SOURCE_TEXT, sha256: evidenceHash(SOURCE_TEXT), coverage: "abstract" } : {}) }],
+    // A card with claims has sources the platform read (a ✓ means it did): the account's own write cannot say so, its own writers can.
+    sources: [{ title: "The cited trial", url: sourceUrl, excerpt: SOURCE_TEXT, ...(ai || origin !== "owner" ? { documentText: SOURCE_TEXT, sha256: evidenceHash(SOURCE_TEXT), coverage: "abstract" } : claims.length ? { fetchedSha256: "e".repeat(64) } : {}) }],
     content: { question: "Does it prevent stroke?", answer: "Fewer strokes.", population: "Adults" },
     state: "published", entityKeys, claims, ...extra,
   };
-  if (!ai && origin === "owner") return (await service.save(owner, body, zone.id, null, true)).evidence;
+  if (!ai && origin === "owner" && !claims.length) return (await service.save(owner, body, zone.id, null, true)).evidence;
   const saved = (await service.saveEditorial(owner, { ...body, ...(ai ? { editorial: { author: AI, status: "review-pending", sourceCheckedAt: new Date().toISOString(), findings: [] } } : {}) }, zone.id, null, true, origin)).evidence;
   if (!ai) return saved;
   return (await service.saveEditorial(owner, { expectedRevision: saved.revision, editorial: { ...saved.editorial, status: "ai-reviewed", reviewer: { ...AI, name: "Reviewer" }, contentHash: evidenceContentHash(saved), findings: [], reviewedAt: new Date().toISOString() } }, zone.id, saved.id, false, origin)).evidence;

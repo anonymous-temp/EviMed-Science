@@ -19,6 +19,7 @@ const LEVERS = [
   ["OPEN_SCIENCE_EVIDENCE_CHALLENGES_PER_DAY", "evidenceChallengesPerDay", 10],
   ["OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_CHECKS", "evidenceRetireAfterChecks", 6],
   ["OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_DAYS", "evidenceRetireAfterDays", 180],
+  ["OPEN_SCIENCE_EVIDENCE_VERIFY_READS_PER_DAY", "evidenceVerifyReadsPerDay", 60],
 ];
 
 /** loadConfig under exactly `env`. @param {Record<string, string>} env */
@@ -54,6 +55,7 @@ test("a value outside its range stops the start by the variable's name", () => {
     ["OPEN_SCIENCE_EVIDENCE_UPKEEP_INTERVAL_HOURS", "0"], ["OPEN_SCIENCE_EVIDENCE_UPKEEP_INTERVAL_HOURS", "721"],
     ["OPEN_SCIENCE_EVIDENCE_CHALLENGES_PER_DAY", "0"], ["OPEN_SCIENCE_EVIDENCE_CHALLENGES_PER_DAY", "many"],
     ["OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_CHECKS", "1"], ["OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_DAYS", "6"], ["OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_DAYS", "3651"],
+    ["OPEN_SCIENCE_EVIDENCE_VERIFY_READS_PER_DAY", "0"], ["OPEN_SCIENCE_EVIDENCE_VERIFY_READS_PER_DAY", "1001"],
   ]) assert.throws(() => configUnder({ [name]: value }), new RegExp(name), `${name}=${value}`);
 });
 

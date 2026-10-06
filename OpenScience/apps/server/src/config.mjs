@@ -456,6 +456,8 @@ function evidenceCitationGiftSettings(overrides) {
  * - `OPEN_SCIENCE_EVIDENCE_CHALLENGES_PER_DAY` (10): the challenges one reader may file in a day; each one on a platform card costs a model call.
  * - `OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_CHECKS` (6) and `OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_DAYS` (180): the exit rule of §2.5 for an AI-kept card —
  *   this many consecutive checks without a matching new study, over at least this many days, and nobody following its zone or writing on it.
+ * - `OPEN_SCIENCE_EVIDENCE_VERIFY_READS_PER_DAY` (60): the sources the platform reads for one account in a rolling day when the account asks it to
+ *   verify a card's sources (`evidenceSourceVerification.mjs`). Not part of the upkeep: that request is the frontier's and works with the upkeep off.
  *
  * @param {Record<string, any>} overrides
  */
@@ -474,6 +476,7 @@ function evidenceUpkeepSettings(overrides) {
     evidenceChallengesPerDay: whole("evidenceChallengesPerDay", "OPEN_SCIENCE_EVIDENCE_CHALLENGES_PER_DAY", 10, 1, 100),
     evidenceRetireAfterChecks: whole("evidenceRetireAfterChecks", "OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_CHECKS", 6, 2, 1000),
     evidenceRetireAfterDays: whole("evidenceRetireAfterDays", "OPEN_SCIENCE_EVIDENCE_RETIRE_AFTER_DAYS", 180, 7, 3650),
+    evidenceVerifyReadsPerDay: whole("evidenceVerifyReadsPerDay", "OPEN_SCIENCE_EVIDENCE_VERIFY_READS_PER_DAY", 60, 1, 1000),
   };
 }
 
