@@ -38,6 +38,7 @@
 
 import {
   EVIDENCE_PRODUCER_RELATIONS,
+  EVIDENCE_PRODUCER_RELATION_LABELS_ZH,
   EVIDENCE_PUBLIC_PANEL_LIMITS,
   evidenceJourneyStage,
   evidenceOriginalityIsPrimary,
@@ -746,5 +747,41 @@ export function geoCardLayerMarkdown({ view, card, withReferences = false }) {
       lines.push(`| ${row.role}：${row.outcome}（${row.timeframe}） | ${row.control.per1000} | ${row.intervention.per1000} | ${row.difference} |`)
     }
   }
+  return `${lines.join('\n')}\n`
+}
+
+// ---------------------------------------------------------------------------
+// Signed, labelled text (flywheel F29)
+// ---------------------------------------------------------------------------
+
+/**
+ * The line every article a run drafted carries when it is read out for publication: that an AI helped write it, that every
+ * statement stands on a verified claim of a card, and that a named person answers for it. The national rules for AI-generated content
+ * and the internet health-science conduct list for medical staff both ask for it; it is written by code, so a draft cannot leave
+ * without it and a model cannot word it away.
+ */
+export const GEO_AI_LABEL_ZH = '本文由 AI 辅助生成，每条陈述都依据已核对的证据卡片结论，由署名作者审核。'
+
+/**
+ * An article as it leaves the platform: its claim references taken off, the author named at the foot — a doctor by hospital,
+ * department and specialty, a company by name, with how it stands to the product — and the AI label. The article's own words are
+ * untouched, byte for byte.
+ *
+ * @param {{ text: string, producer: { kind: string, name: string, relation?: string } | null, person?: { name: string, affiliation?: string, title?: string } | null,
+ *   aiGenerated?: boolean }} input
+ */
+export function geoPublishableText({ text: draft, producer, person = null, aiGenerated = true }) {
+  const body = stripGeoClaimReferences(draft).trimEnd()
+  const lines = [body, '']
+  if (person?.name) {
+    lines.push(`作者：${[person.name, person.affiliation, person.title].filter(Boolean).join('\u3000')}`)
+  } else if (producer?.name) {
+    lines.push(`出品：${producer.name}`)
+  }
+  if (producer?.relation && producer.relation !== 'none') {
+    const label = /** @type {Record<string, string>} */ (EVIDENCE_PRODUCER_RELATION_LABELS_ZH)[producer.relation]
+    if (label) lines.push(`与产品的关系：${label}`)
+  }
+  if (aiGenerated) lines.push(GEO_AI_LABEL_ZH)
   return `${lines.join('\n')}\n`
 }

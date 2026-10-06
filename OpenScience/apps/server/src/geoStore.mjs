@@ -290,7 +290,7 @@ const PROJECT_COLUMNS = `id, user_id, project_id, product, competitors, coverage
 
 /** The tables whose rows go with a project or an account; the money tables are not among them. */
 const OWNED_TABLES = Object.freeze(["facts", "snapshots", "probe_jobs", "rounds", "metrics", "errors", "questions", "question_groups", "schedule_marks",
-  "question_sets", "journeys", "claims", "strategy", "targets", "placement_plans", "sources", "articles", "owned_links"]);
+  "question_sets", "journeys", "claims", "strategy", "targets", "placement_plans", "sources", "articles", "owned_links", "members"]);
 
 /** Whether this database has the GEO schema at all. @param {any} client */
 async function geoSchemaExists(client) {
@@ -476,6 +476,69 @@ export class GeoStore {
     const result = await this.query(`SELECT ${PROJECT_COLUMNS} FROM evimed_geo.projects
       WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL`, [id, userId]);
     return result.rows[0] ? geoProjectFromRow(result.rows[0]) : null;
+  }
+
+  /**
+   * The project as one account may reach it: the project and the roles the account holds in it — `owner` for the account that made it,
+   * and the member roles it was given. Null when the account is neither (another account's project reads as one that does not exist).
+   * @param {string} userId @param {string} id
+   * @returns {Promise<{ project: ReturnType<typeof geoProjectFromRow>, roles: string[] } | null>}
+   */
+  async getProjectAccess(userId, id) {
+    const result = await this.query(`SELECT ${PROJECT_COLUMNS}, coalesce((SELECT array_agg(m.role ORDER BY m.role) FROM evimed_geo.members m
+        WHERE m.geo_project_id = evimed_geo.projects.id AND m.user_id = $2), '{}') AS member_roles FROM evimed_geo.projects
+      WHERE id = $1 AND deleted_at IS NULL AND (user_id = $2 OR EXISTS (SELECT 1 FROM evimed_geo.members m WHERE m.geo_project_id = evimed_geo.projects.id AND m.user_id = $2))`,
+    [id, userId]);
+    const row = result.rows[0];
+    if (!row) return null;
+    const project = geoProjectFromRow(row);
+    return { project, roles: [...(project.userId === userId ? ["owner"] : []), ...(Array.isArray(row.member_roles) ? row.member_roles.map(String) : [])] };
+  }
+
+  /** The projects an account owns or is a member of, newest first. @param {string} userId */
+  async listProjectsFor(userId) {
+    const result = await this.query(`SELECT ${PROJECT_COLUMNS} FROM evimed_geo.projects
+      WHERE deleted_at IS NULL AND (user_id = $1 OR EXISTS (SELECT 1 FROM evimed_geo.members m WHERE m.geo_project_id = evimed_geo.projects.id AND m.user_id = $1))
+      ORDER BY updated_at DESC, id LIMIT 500`, [userId]);
+    return result.rows.map(geoProjectFromRow);
+  }
+
+  // --- members -------------------------------------------------------------------
+
+  /** Every member row of a project, oldest first. @param {string} geoId */
+  async memberRows(geoId) {
+    const result = await this.query(`SELECT user_id, role, invited_by, detail, created_at FROM evimed_geo.members WHERE geo_project_id = $1 ORDER BY created_at, user_id, role`, [geoId]);
+    return result.rows.map((/** @type {any} */ row) => ({ userId: String(row.user_id), role: String(row.role), invitedBy: text(row.invited_by),
+      detail: row.detail && typeof row.detail === "object" ? row.detail : {}, createdAt: iso(row.created_at) }));
+  }
+
+  /**
+   * Give an account a role in a project. Idempotent: the same role again changes only the detail that came with it.
+   * @param {{ geoId: string, userId: string, role: string, invitedBy: string, detail?: Record<string, any> }} input
+   */
+  async addMember({ geoId, userId, role, invitedBy, detail = {} }) {
+    const result = await this.query(`INSERT INTO evimed_geo.members (geo_project_id, user_id, role, invited_by, detail) VALUES ($1, $2, $3, $4, $5::jsonb)
+      ON CONFLICT (geo_project_id, user_id, role) DO UPDATE SET detail = EXCLUDED.detail RETURNING user_id, role`,
+    [geoId, userId, role, invitedBy, JSON.stringify(detail)]);
+    return { userId: String(result.rows[0].user_id), role: String(result.rows[0].role) };
+  }
+
+  /** Take one role away from an account; true when it held it. @param {{ geoId: string, userId: string, role: string }} input */
+  async removeMember({ geoId, userId, role }) {
+    const result = await this.query(`DELETE FROM evimed_geo.members WHERE geo_project_id = $1 AND user_id = $2 AND role = $3`, [geoId, userId, role]);
+    return (result.rowCount ?? 0) > 0;
+  }
+
+  /** The names of accounts, where the control plane knows them. @param {string[]} userIds @returns {Promise<Map<string, string>>} */
+  async personNames(userIds) {
+    /** @type {Map<string, string>} */
+    const names = new Map();
+    if (!userIds.length) return names;
+    try {
+      const result = await this.query(`SELECT id, name FROM evimed_control.users WHERE id = ANY($1::text[])`, [userIds]);
+      for (const row of result.rows) names.set(String(row.id), String(row.name));
+    } catch { /* a store without the control-plane schema names nobody */ }
+    return names;
   }
 
   /** The GEO project a control-plane project is, or null. @param {string} userId @param {string} projectId */

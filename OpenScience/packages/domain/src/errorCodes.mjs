@@ -1447,6 +1447,12 @@ export const GEO_ROUTE_ERROR_CODES = Object.freeze([
   'geo_card_reviewer_required',
   'geo_cards_unavailable',
   'geo_article_text_unavailable',
+  // Project members (F29): the refusals of the member list, and a member's ability.
+  'geo_member_forbidden',
+  'geo_member_role_invalid',
+  'geo_member_user_required',
+  'geo_member_owner_fixed',
+  'geo_member_detail_invalid',
 ])
 
 /**
@@ -1682,6 +1688,11 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   geo_card_reviewer_required: '产品专区的证据卡要写明作者和审核医生。先在项目成员里加一位医学审核，再生成；结论库里的结论都还在。',
   geo_cards_unavailable: '这个部署没有开通证据专区，结论暂时不能生成证据卡；结论库里的结论都还在。',
   geo_article_text_unavailable: '这篇稿件的正文现在读不到，暂时不能核对它引用的结论；稿件本身没有变化。',
+  geo_member_forbidden: '你在这个项目里的角色不能做这件事；请联系项目负责人调整角色。',
+  geo_member_role_invalid: '成员角色只能选：编辑、医学审核、只读。',
+  geo_member_user_required: '请填写成员的账号。',
+  geo_member_owner_fixed: '项目负责人就是创建项目的账号，不能在成员里增减。',
+  geo_member_detail_invalid: '成员的补充信息只能写医院、科室、专业、职称、所属机构和备注，每项不超过 120 个字。',
   // 「虚拟临研」's page refusals. Every one of these is permanent for the request
   // that caused it — retrying the same thing gets the same answer — so none of
   // them says 「稍后再试」, which is what the family sentence for an unknown

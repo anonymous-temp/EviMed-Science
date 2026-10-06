@@ -58,7 +58,7 @@
  */
 
 import {
-  GEO_ARMS, GEO_ARTICLE_GATES, GEO_ARTICLE_LAYERS, GEO_ARTICLE_REFERENCE_STATUSES, GEO_ARTICLE_SAFETY, GEO_ARTICLE_STATUSES, GEO_PLACEMENT_LABELS, GEO_AUDIENCES, GEO_CELL_STATUSES,
+  GEO_ARMS, GEO_ARTICLE_GATES, GEO_ARTICLE_LAYERS, GEO_ARTICLE_REFERENCE_STATUSES, GEO_ARTICLE_SAFETY, GEO_ARTICLE_STATUSES, GEO_MEMBER_ROLES, GEO_PLACEMENT_LABELS, GEO_AUDIENCES, GEO_CELL_STATUSES,
   GEO_CLAIM_SOURCE_KINDS, GEO_CLAIM_STATUSES, GEO_DATA_TYPES, GEO_ERROR_ACTIONS, GEO_ERROR_STATUSES, GEO_ERROR_TYPES,
   GEO_FAILURE_MODES, GEO_GROUP_SIGNALS, GEO_LEDGER_KINDS, GEO_MEDIA_TYPES, GEO_METRIC_ROW_SCOPES, GEO_ORDER_STATES,
   GEO_OWNED_LINK_PLATFORMS, GEO_OWNED_LINK_STATUSES, GEO_POOLS,
@@ -79,7 +79,7 @@ export const GEO_SCHEMA = "evimed_geo";
 export const GEO_TABLES = Object.freeze([
   "projects", "claims", "question_sets", "question_groups", "questions", "journeys", "rounds", "probe_jobs", "snapshots", "facts",
   "errors", "metrics", "strategy", "targets", "placement_plans", "sources", "articles",
-  "media", "media_outcomes", "orders", "order_events", "ledger", "topups", "reconciliations", "schedule_marks", "owned_links",
+  "media", "media_outcomes", "orders", "order_events", "ledger", "topups", "reconciliations", "schedule_marks", "owned_links", "members",
 ]);
 
 /**
@@ -632,6 +632,21 @@ ALTER TABLE evimed_geo.articles ADD COLUMN IF NOT EXISTS card_id text;
 ALTER TABLE evimed_geo.articles ADD COLUMN IF NOT EXISTS card_revision integer;
 ALTER TABLE evimed_geo.articles ADD COLUMN IF NOT EXISTS placement_label text CHECK (placement_label IN ${inList(GEO_PLACEMENT_LABELS)});
 CREATE UNIQUE INDEX IF NOT EXISTS geo_articles_card_key ON evimed_geo.articles (geo_project_id, card_id) WHERE card_id IS NOT NULL AND path IS NULL;
+
+-- Project members (flywheel F29): colleagues and outside agencies, by role, beside the owner (who is the project's account and has no
+-- row). One row per account and role — a person may be both editor and medical reviewer. detail holds how the person is named when a
+-- card discloses them (hospital, department, specialty, title) and, for an agency, who it is. user_id is the member's account, so
+-- the account's deletion removes its memberships; the project's deletion takes the rows with it.
+CREATE TABLE IF NOT EXISTS evimed_geo.members (
+  geo_project_id text NOT NULL REFERENCES evimed_geo.projects(id) ON DELETE CASCADE,
+  user_id        text NOT NULL,
+  role           text NOT NULL CHECK (role IN ${inList(GEO_MEMBER_ROLES)}),
+  invited_by     text,
+  detail         jsonb NOT NULL DEFAULT '{}'::jsonb,
+  created_at     timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (geo_project_id, user_id, role)
+);
+CREATE INDEX IF NOT EXISTS geo_members_user_idx ON evimed_geo.members (user_id);
 
 ALTER TABLE evimed_geo.projects ADD COLUMN IF NOT EXISTS producer jsonb;
 ALTER TABLE evimed_geo.projects ADD COLUMN IF NOT EXISTS product_zone_id text;

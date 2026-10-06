@@ -97,7 +97,7 @@ import { LearningMetrics, learningLedgerCounts, learningMetricFamilies, learning
 import { archivedLessonRun, ensureLearningProject, preserveProjectLessons, resolveLessonSourceRun } from "./learningPreservation.mjs";
 import { learnedMethodFamilyForRuntime, methodFamily } from "./learnedMethodMount.mjs";
 import { persistExecutedToolEdges, persistGoldenTraces } from "./toolExecutionEdges.mjs";
-import { PLATFORM_PUBLISHER_USER_ID, CONNECTOR_CREDENTIAL_IDS, EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON, MIN_PASSWORD_LENGTH, accountMonthStart, autopilotEpisodeCapability, deliverableIdOfPath, evidenceProgrammeRouteReason, geoMetricDefinition, isChargeableResearchRun, isResearcherOwnedWork, meetsPasswordMinimum, mountedMethodDigest, usagePurposeOfRun } from "@evimed/domain";
+import { PLATFORM_PUBLISHER_USER_ID, CONNECTOR_CREDENTIAL_IDS, EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON, MIN_PASSWORD_LENGTH, accountMonthStart, autopilotEpisodeCapability, deliverableIdOfPath, evidenceProgrammeRouteReason, geoCardProducer, geoDisclosurePerson, geoMetricDefinition, geoPublishableText, isChargeableResearchRun, isResearcherOwnedWork, meetsPasswordMinimum, mountedMethodDigest, usagePurposeOfRun } from "@evimed/domain";
 import { ResearchSessionStore } from "./researchSessions.mjs";
 import { prepareResearchContext } from "./researchContext.mjs";
 import {
@@ -263,6 +263,7 @@ import { FrontierComposer } from "./frontierComposer.mjs";
 import { GeoStore, deleteGeoProjectRows, deleteGeoUserRows, removeGeoScreenshotFiles } from "./geoStore.mjs";
 import { createGeoDeliveryImport } from "./geoDeliveryImport.mjs";
 import { GeoCards } from "./geoCards.mjs";
+import { GeoMembers } from "./geoMembers.mjs";
 import { geoArticleGateOf } from "./geoWrites.mjs";
 import { GEO_DEFAULT_PROJECT_NAME, GeoService, geoAudienceAllows, geoMetricFamilies, geoMetricsSnapshot, geoReadiness } from "./geoService.mjs";
 import { createGeoRoutes, geoRoutePattern } from "./geoRoutes.mjs";
@@ -1872,7 +1873,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
    *   market: any, exporter: any, renameProject: (userId: string, projectId: string, name: string) => Promise<unknown>,
    *   articleGate: (project: any, ref: { runId: string | null, deliverableId: string | null, path: string }) => Promise<string>,
    *   articleRunId: (project: any, deliverableId: string) => Promise<string | null>,
-   *   cards: GeoCards, refreshCards: (geoProject: any, controlProject: any) => ReturnType<GeoCards["refresh"]>, measureState?: any,
+   *   cards: GeoCards, members: GeoMembers, refreshCards: (geoProject: any, controlProject: any) => ReturnType<GeoCards["refresh"]>, measureState?: any,
    *   importDelivery: ReturnType<typeof createGeoDeliveryImport> } | null} */
   let geo = null;
   if (config.geoEnabled && productDatabase) {
@@ -1881,8 +1882,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       fetchImpl: overrides.geoSocialFetch ?? globalThis.fetch });
     // The project's product zone and its cards (geoCards.mjs): the evidence zones the frontier composes, or one of its own where
     // the frontier is off — the zone service needs nothing of the feed.
+    // The project's members, and the people a card discloses (the owner and the editors write it, the medical reviewers review it).
+    const geoMembers = new GeoMembers({ store: geoStore });
     const geoCards = new GeoCards({
       store: geoStore, database: productDatabase, report: (code) => process.stderr.write(`geo cards: ${code}\n`),
+      people: async (project) => geoMembers.peopleOf(project, { ownerName: (await store.userById(project.userId))?.name ?? null }),
       zones: frontier?.evidenceZones ?? new EvidenceZoneService({ database: productDatabase, entityKeysFor: entityVocabulary.entityKeysFor, platformPublisherUserId: PLATFORM_PUBLISHER_USER_ID }),
       ownerName: async (userId) => (await store.userById(userId))?.name ?? null,
     });
@@ -1898,6 +1902,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       market: null,
       exporter: null,
       cards: geoCards,
+      members: geoMembers,
       refreshCards: (geoProject, controlProject) => geoCards.refresh(geoProject, { readSource: geoSourceReader(controlProject) }),
       importDelivery: createGeoDeliveryImport({ store: geoStore, report: (code) => process.stderr.write(`geo import: ${code}\n`),
         refreshCards: (geoProject, controlProject) => geo?.refreshCards(geoProject, controlProject) ?? Promise.resolve(null),
@@ -1983,13 +1988,16 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     get orchestrator() { return geo?.orchestrator ?? null; },
     get market() { return geo?.market ?? null; },
     get exporter() { return geo?.exporter ?? null; },
+    get members() { return geo?.members ?? null; },
     // The cards of the project's product zone: read as the project, written as its owner (the zone is the owner's).
     get cards() {
       const parts = geo;
-      return parts ? {
+      if (!parts) return null;
+      /** @type {any} */
+      const hooks = {
         list: (/** @type {any} */ project) => parts.cards.list(project),
-        // An article's references against the cards: a card-layer article as the card renders now, a stored one as its file reads.
-        articleReferences: async (/** @type {any} */ project, /** @type {string} */ articleId) => {
+        // An article's text: a card-layer article as the card renders now, a stored one as its file reads. Null when it cannot be read.
+        articleText: async (/** @type {any} */ project, /** @type {string} */ articleId) => {
           const article = await parts.store.getArticle(project.id, articleId);
           if (!article) throw new HttpError(404, "geo_article_not_found", "Article not found.");
           let text = null;
@@ -2000,16 +2008,30 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             if (control) text = await geoSourceReaderOf(control)(article.path);
           }
           if (text == null) throw new HttpError(404, "geo_article_text_unavailable", "The article's text is not available.");
+          return { article, text };
+        },
+        // An article's references against the cards, and the references a card's change log says moved since.
+        articleReferences: async (/** @type {any} */ project, /** @type {string} */ articleId) => {
+          const { article, text } = await hooks.articleText(project, articleId);
           const checked = await parts.cards.checkText(project, { text, layer: String(article.layer ?? "") });
           const stale = await parts.cards.staleReferences(project, [{ id: article.id, claimRefs: checked.references }]);
           return { articleId: article.id, status: checked.status, ...checked.graph, staleReferences: stale.get(article.id) ?? [] };
+        },
+        // The article as it leaves the platform for a channel of its author's: references off, the author named, the relation to the
+        // product said, and the label that an AI drafted it (a doctor signs their own).
+        articlePublishable: async (/** @type {any} */ project, /** @type {string} */ articleId) => {
+          const { article, text } = await hooks.articleText(project, articleId);
+          const producer = geoCardProducer(project.producer, project.product);
+          const doctor = project.producer?.kind === "doctor" && project.producer?.name ? geoDisclosurePerson({ ...project.producer, name: String(project.producer.name) }) : null;
+          return { articleId: article.id, layer: article.layer, aiGenerated: true, markdown: geoPublishableText({ text, producer, person: doctor, aiGenerated: true }) };
         },
         refresh: async (/** @type {any} */ _user, /** @type {any} */ project) => {
           const owner = await store.userById(project.userId);
           if (!owner) throw new HttpError(404, "geo_project_not_found", "GEO project not found.");
           return parts.refreshCards(project, await store.requireProject(owner, project.projectId));
         },
-      } : null;
+      };
+      return hooks;
     },
   });
   const documentController = overrides.documentExportController ?? new RuntimeControllerClient(config);

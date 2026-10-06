@@ -192,6 +192,12 @@ export interface GeoProject {
   startedAt?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
+  /** Who speaks for the product; null until the project says. Cards cannot be written without it. */
+  producer?: GeoProducer | null;
+  /** The one product zone the project's cards are in, once there is one. */
+  productZoneId?: string | null;
+  /** Who is reading, and what their roles in the project allow (the owner has every ability). */
+  access?: { roles: string[]; abilities: string[]; owner: boolean };
 }
 
 export interface GeoClaim {
@@ -608,8 +614,49 @@ export async function getGeoProject(geoId: string): Promise<GeoProject> {
   return readProject(await productRequest<GeoProject>(project(geoId)));
 }
 
-export function patchGeoProject(geoId: string, input: { coverageDays?: number; engines?: string[]; tier?: GeoTierId; status?: GeoProjectStatus }) {
+/** Who speaks for the product: a company, or a doctor about their own specialty; the relation to the product is read at the top of every card. */
+export interface GeoProducer {
+  kind: "enterprise" | "doctor";
+  name?: string | null;
+  relation?: "none" | "own_product" | "competitor_product" | "user_of_therapy" | "commercial_cooperation";
+  hospital?: string;
+  department?: string;
+  specialty?: string;
+  title?: string;
+}
+
+export function patchGeoProject(geoId: string, input: { coverageDays?: number; engines?: string[]; tier?: GeoTierId; status?: GeoProjectStatus; producer?: GeoProducer | null }) {
   return productRequest<unknown>(project(geoId), "PATCH", input);
+}
+
+export type GeoMemberRole = "editor" | "medical_reviewer" | "viewer";
+export interface GeoMember {
+  userId: string;
+  name: string | null;
+  owner: boolean;
+  roles: string[];
+  roleLabels: string[];
+  abilities: string[];
+  detail: Record<string, string>;
+}
+export interface GeoMembers {
+  members: GeoMember[];
+  /** What the reader of the list may do in this project. */
+  you: { roles: string[]; abilities: string[] };
+}
+
+/** The project's members: colleagues and outside agencies by role, the owner first. */
+export function getGeoMembers(geoId: string) {
+  return productRequest<GeoMembers>(`${project(geoId)}/members`);
+}
+
+export function addGeoMember(geoId: string, input: { userId: string; role: GeoMemberRole; detail?: Record<string, string> }) {
+  return productRequest<unknown>(`${project(geoId)}/members`, "POST", input);
+}
+
+/** Take one role (or, with none named, every role) away from an account; a member may remove themselves. */
+export function removeGeoMember(geoId: string, userId: string, role?: GeoMemberRole) {
+  return productRequest<{ removed: number }>(`${project(geoId)}/members/${id(userId)}${role ? `?role=${id(role)}` : ""}`, "DELETE", {});
 }
 
 export function deleteGeoProject(geoId: string) {

@@ -221,6 +221,44 @@ export const GEO_ARTICLE_REFERENCE_STATUSES = frozen(['unchecked', 'none', 'reso
 export const GEO_PLACEMENT_LABELS = frozen(['advertisement', 'commercial_cooperation'])
 export const GEO_PLACEMENT_LABELS_ZH = Object.freeze({ advertisement: '广告', commercial_cooperation: '商业合作' })
 
+/**
+ * Who may do what in a project (flywheel F29, the same shape as 虚拟临研's study members): the account that made the project is its
+ * owner and holds every ability without a row; colleagues and outside agencies are members by role. A role is judged per operation
+ * — `geoRoleAllows` — and an account that is neither the owner nor a member reads the project as one that does not exist.
+ *
+ * - `editor` writes and runs: the claim library, the cards, the articles, 「让 AI 做」, the exports.
+ * - `medical_reviewer` reads and looks at what must be looked at: releases a safety stop and is the reviewing doctor a card names.
+ * - `viewer` reads.
+ * - the owner alone manages members, the budget and the orders (money), and deletes the project.
+ */
+export const GEO_MEMBER_ROLES = frozen(['editor', 'medical_reviewer', 'viewer'])
+export const GEO_MEMBER_ROLE_LABELS_ZH = Object.freeze({ owner: '负责人', editor: '编辑', medical_reviewer: '医学审核', viewer: '只读' })
+export const GEO_ABILITIES = frozen(['read', 'edit', 'run', 'review', 'manage_money', 'manage_members', 'delete'])
+export const GEO_ROLE_ABILITIES = Object.freeze({
+  owner: GEO_ABILITIES,
+  editor: frozen(['read', 'edit', 'run']),
+  medical_reviewer: frozen(['read', 'review']),
+  viewer: frozen(['read']),
+})
+
+/**
+ * Whether a role may do an ability. An unknown role may do nothing.
+ * @param {string} role @param {string} ability
+ */
+export function geoRoleAllows(role, ability) {
+  const allowed = /** @type {Record<string, readonly string[]>} */ (GEO_ROLE_ABILITIES)[role]
+  return Array.isArray(allowed) && allowed.includes(ability)
+}
+
+/**
+ * The union of what a set of roles allows, in the order of `GEO_ABILITIES`: one person may hold several roles (the single physician
+ * at a small company is its editor and its reviewing doctor), and collapsing them into the strongest would grant what neither said.
+ * @param {readonly string[]} roles
+ */
+export function geoAbilitiesOf(roles) {
+  return GEO_ABILITIES.filter((ability) => (roles ?? []).some((role) => geoRoleAllows(role, ability)))
+}
+
 /** Media marketplace. */
 export const GEO_MEDIA_TYPES = frozen(['website', 'wemedia'])
 export const GEO_ORDER_STATES = frozen(['planned', 'reserved', 'submitted', 'accepted', 'published', 'verified', 'settled', 'unknown',
@@ -336,6 +374,8 @@ export const GEO_VOCABULARIES = Object.freeze({
   articleSafety: GEO_ARTICLE_SAFETY,
   articleStatus: GEO_ARTICLE_STATUSES,
   articleReferenceStatus: GEO_ARTICLE_REFERENCE_STATUSES,
+  memberRole: GEO_MEMBER_ROLES,
+  ability: GEO_ABILITIES,
   placementLabel: GEO_PLACEMENT_LABELS,
   mediaType: GEO_MEDIA_TYPES,
   orderState: GEO_ORDER_STATES,

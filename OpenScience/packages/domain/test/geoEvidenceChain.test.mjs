@@ -24,6 +24,8 @@ import {
   geoDisclosurePerson,
   geoNumberTokens,
   geoProducerSettingsIssues,
+  geoPublishableText,
+  GEO_AI_LABEL_ZH,
   geoReferenceGraph,
   geoSentences,
   geoSourceUrl,
@@ -325,4 +327,16 @@ test('the card layer is the card: its public view in Markdown, the fact box comp
   assert.ok(cited.includes(ref('weight')))
   assert.equal(stripGeoClaimReferences(cited), published, 'with the markers stripped, the cited text is the published text')
   assert.deepEqual(geoReferenceGraph({ layer: 'card', resolve, text: cited }).issues, [])
+})
+
+test('an article leaves with its references off, its author named, the relation to the product said and the AI label — and its own words untouched', () => {
+  const text = `起始剂量为每周一次 2.5 mg。${ref('dose')}\n第二段说明。${ref('weight')}\n`
+  const doctor = geoPublishableText({ text, producer: { kind: 'doctor', name: '张医生', relation: 'user_of_therapy' },
+    person: { name: '张医生', affiliation: '某某医院 内分泌科', title: '主任医师 · 糖尿病' } })
+  assert.equal(doctor, `起始剂量为每周一次 2.5 mg。\n第二段说明。\n\n作者：张医生\u3000某某医院 内分泌科\u3000主任医师 · 糖尿病\n与产品的关系：出品方是该疗法的使用者\n${GEO_AI_LABEL_ZH}\n`)
+  const company = geoPublishableText({ text: '一句话。', producer: { kind: 'enterprise', name: '某某制药有限公司', relation: 'own_product' } })
+  assert.match(company, /出品：某某制药有限公司\n与产品的关系：涉及出品方自己的产品\n/)
+  assert.ok(company.endsWith(`${GEO_AI_LABEL_ZH}\n`), 'a draft a run wrote always carries the label')
+  const none = geoPublishableText({ text: '一句话。', producer: { kind: 'enterprise', name: '某某', relation: 'none' }, aiGenerated: false })
+  assert.equal(none, '一句话。\n\n出品：某某\n', 'no relation line where there is none, and no label on text no AI wrote')
 })

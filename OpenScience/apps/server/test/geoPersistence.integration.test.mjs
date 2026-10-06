@@ -67,7 +67,7 @@ test("the migration creates every table of the build spec and a second run chang
   const result = await migrateGeo(first);
   assert.deepEqual(result.tables, GEO_TABLES);
   const created = await inventory(first);
-  assert.equal(created.tables.length, 26, created.tables.join());
+  assert.equal(created.tables.length, 27, created.tables.join());
   assert.deepEqual([...created.tables].sort(), [...GEO_TABLES].sort());
   // The columns other packages code against, spot-checked per side.
   const has = (/** @type {string} */ table, /** @type {string} */ column) => created.columns.some((row) => row.table_name === table && row.column_name === column);
@@ -189,6 +189,32 @@ test("deleting a project takes its content and measurements, keeps its money, an
   assert.equal(await count("claims", theirs.id), 0);
   assert.equal(await count("owned_links", theirs.id), 0);
   assert.equal(await count("orders", theirs.id), 1);
+});
+
+test("members go with their project, and an account's deletion takes its memberships and no one else's", options, async () => {
+  const database = open();
+  await migrateGeo(database);
+  const store = new GeoStore({ database });
+  const owner = own("nora");
+  const colleague = own("colin");
+  const mine = await store.createProject({ userId: owner, projectId: own("p-members-a"), engines: ["deepseek"], coverageDays: 90 });
+  const other = await store.createProject({ userId: own("omar"), projectId: own("p-members-b"), engines: ["deepseek"], coverageDays: 90 });
+  await store.addMember({ geoId: mine.id, userId: colleague, role: "editor", invitedBy: owner });
+  await store.addMember({ geoId: mine.id, userId: colleague, role: "medical_reviewer", invitedBy: owner, detail: { hospital: "某某医院" } });
+  await store.addMember({ geoId: other.id, userId: colleague, role: "viewer", invitedBy: own("omar") });
+  assert.deepEqual((await store.getProjectAccess(colleague, mine.id))?.roles, ["editor", "medical_reviewer"]);
+  assert.deepEqual((await store.getProjectAccess(owner, mine.id))?.roles, ["owner"]);
+  assert.equal(await store.getProjectAccess(own("stranger"), mine.id), null);
+  assert.deepEqual((await store.listProjectsFor(colleague)).map((project) => project.id).sort(), [mine.id, other.id].sort());
+  // The colleague's account is deleted: their memberships go, the projects and everyone else's rows stay.
+  await database.transaction((client) => deleteGeoUserRows(client, colleague));
+  assert.equal(await store.getProjectAccess(colleague, mine.id), null);
+  assert.ok(await store.getProject(owner, mine.id));
+  assert.equal((await store.memberRows(other.id)).length, 0);
+  // A member row of a project in the owner's deletion goes with the project.
+  await store.addMember({ geoId: mine.id, userId: own("dora"), role: "viewer", invitedBy: owner });
+  await database.transaction((client) => deleteGeoProjectRows(client, owner, own("p-members-a")));
+  assert.equal((await database.query(`SELECT count(*)::int AS n FROM evimed_geo.members WHERE geo_project_id = $1`, [mine.id])).rows[0].n, 0);
 });
 
 test("a database that never ran the module deletes projects exactly as before", options, async () => {

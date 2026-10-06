@@ -138,3 +138,20 @@ test("the tool codes are classified for a run, the route codes are registered, a
   // The probe's own family is untouched.
   assert.match(knownErrorCodeMessage("geo_probe_timeout") ?? "", /可见度探测/);
 });
+
+test('members: the owner may do everything, each member role only what it names, and several roles are the union of theirs', async () => {
+  const { GEO_ABILITIES, GEO_MEMBER_ROLES, GEO_ROLE_ABILITIES, geoAbilitiesOf, geoRoleAllows } = await import('../index.mjs')
+  assert.deepEqual([...GEO_MEMBER_ROLES], ['editor', 'medical_reviewer', 'viewer'], 'the owner is not a member role: it is the project row')
+  assert.deepEqual([...GEO_ROLE_ABILITIES.owner], [...GEO_ABILITIES])
+  assert.deepEqual(geoAbilitiesOf(['viewer']), ['read'])
+  assert.deepEqual(geoAbilitiesOf(['editor']), ['read', 'edit', 'run'])
+  assert.deepEqual(geoAbilitiesOf(['medical_reviewer']), ['read', 'review'])
+  assert.deepEqual(geoAbilitiesOf(['editor', 'medical_reviewer']), ['read', 'edit', 'run', 'review'], 'the union, in the order of the abilities')
+  for (const role of GEO_MEMBER_ROLES) {
+    for (const money of ['manage_money', 'manage_members', 'delete']) assert.equal(geoRoleAllows(role, money), false, `${role} ${money}`)
+  }
+  assert.equal(geoRoleAllows('medical_reviewer', 'run'), false, 'the reviewer does not run the programme')
+  assert.equal(geoRoleAllows('editor', 'review'), false, 'an editor does not release a safety stop')
+  assert.equal(geoRoleAllows('intruder', 'read'), false)
+  assert.deepEqual(geoAbilitiesOf([]), [])
+})

@@ -39,7 +39,7 @@
  */
 
 import path from "node:path";
-import { GEO_FAILURE_MODE_LABELS_ZH, geoSpecifiedInfoAccuracy } from "@evimed/domain";
+import { GEO_FAILURE_MODE_LABELS_ZH, geoAbilitiesOf, geoSpecifiedInfoAccuracy } from "@evimed/domain";
 
 /** A failure mode as the page says it. @param {string | null} code */
 const failureModeWord = (code) => (code ? /** @type {Record<string, string>} */ (GEO_FAILURE_MODE_LABELS_ZH)[code] ?? null : null);
@@ -298,7 +298,7 @@ export class GeoService {
     this.timeZone = String(config.geoTimeZone || "Asia/Shanghai");
     /** @param {string} metricId */
     this.metricName = (metricId) => metricName?.(metricId) ?? /** @type {Record<string, string>} */ (GEO_METRIC_LABELS_ZH)[metricId] ?? null;
-    this.counters = { projectsCreated: 0, reads: 0, writes: 0, writeIssues: 0, notFound: 0 };
+    this.counters = { projectsCreated: 0, reads: 0, writes: 0, writeIssues: 0, notFound: 0, forbidden: 0 };
   }
 
   ready() { return this.store.ready(); }
@@ -309,14 +309,25 @@ export class GeoService {
   /** @param {{ id?: string }} user */
   isOperator(user) { return (this.config.operatorUsers ?? []).includes(String(user?.id ?? "")); }
 
-  /** The account's GEO project, or 404. @param {{ id: string }} user @param {string} id */
-  async requireProject(user, id) {
-    const project = typeof id === "string" && /^[A-Za-z0-9_-]{1,80}$/.test(id) ? await this.store.getProject(String(user.id), id) : null;
-    if (!project) {
+  /**
+   * The project as this account may reach it, or 404 — another account's project reads exactly like one that never existed. The
+   * account is the project's owner (every ability) or a member (the abilities of its roles); a member without `ability` is told by
+   * the ability's name, since they know the project is there (`geo_member_forbidden`). The project is the owner's: its rows, its
+   * workspace and its money are the owner's whoever acts, and `access` says who is acting and what they may do.
+   * @param {{ id: string }} user @param {string} id @param {string} [ability]
+   */
+  async requireProject(user, id, ability = "read") {
+    const access = typeof id === "string" && /^[A-Za-z0-9_-]{1,80}$/.test(id) ? await this.store.getProjectAccess(String(user.id), id) : null;
+    if (!access) {
       this.counters.notFound += 1;
       throw failure(404, "geo_project_not_found", "GEO project not found.");
     }
-    return project;
+    const abilities = geoAbilitiesOf(access.roles);
+    if (!abilities.includes(/** @type {any} */ (ability))) {
+      this.counters.forbidden += 1;
+      throw failure(403, "geo_member_forbidden", `Your role in this project does not allow ${ability}.`);
+    }
+    return { ...access.project, access: { roles: access.roles, abilities, owner: access.roles.includes("owner") } };
   }
 
   // --- rows the views share -------------------------------------------------------
@@ -410,13 +421,14 @@ export class GeoService {
 
   /** `GET /api/geo/projects`. @param {{ id: string }} user */
   async listProjects(user) {
-    const projects = await this.store.listProjects(String(user.id));
+    // Projects the account owns and projects it is a member of: the names of both are their owners'.
+    const projects = await this.store.listProjectsFor(String(user.id));
     const ids = projects.map((project) => project.id);
     const headline = [GEO_VIEW_METRIC_IDS.gvi, GEO_VIEW_METRIC_IDS.mentionHeadline];
     const [latest, series, names, alerts, targets, started] = await Promise.all([
       this.#latestProjectMetrics(ids, headline),
       this.#series(ids, [GEO_VIEW_METRIC_IDS.gvi]),
-      this.#controlProjectNames(String(user.id), projects.map((project) => project.projectId)),
+      this.#controlProjectNames(projects.map((project) => ({ userId: project.userId, projectId: project.projectId }))),
       this.#alerts(ids),
       Promise.all(projects.map((project) => this.store.latestTargets(project.id))),
       this.#startedAt(projects),
@@ -450,13 +462,15 @@ export class GeoService {
     };
   }
 
-  /** @param {string} userId @param {string[]} projectIds */
-  async #controlProjectNames(userId, projectIds) {
+  /** @param {Array<{ userId: string, projectId: string }>} pairs */
+  async #controlProjectNames(pairs) {
     /** @type {Map<string, string>} */
     const names = new Map();
-    if (!projectIds.length) return names;
+    if (!pairs.length) return names;
     try {
-      const result = await this.store.query(`SELECT id, name FROM evimed_control.projects WHERE user_id = $1 AND id = ANY($2::text[])`, [userId, projectIds]);
+      const result = await this.store.query(`SELECT p.id, p.name FROM evimed_control.projects p
+        JOIN unnest($1::text[], $2::text[]) AS wanted(user_id, id) ON wanted.user_id = p.user_id AND wanted.id = p.id`,
+      [pairs.map((pair) => pair.userId), pairs.map((pair) => pair.projectId)]);
       for (const row of result.rows) names.set(String(row.id), String(row.name));
     } catch {
       // A store without the control-plane schema (a unit test's double) names nothing.
@@ -525,16 +539,16 @@ export class GeoService {
    * @param {{ id: string }} user @param {string} id @param {{ coverageDays?: number, engines?: string[], tier?: string, status?: string }} patch
    */
   async updateProject(user, id, patch) {
-    await this.requireProject(user, id);
-    const updated = await this.store.updateProject(String(user.id), id, patch);
+    const project = await this.requireProject(user, id, "edit");
+    const updated = await this.store.updateProject(project.userId, id, patch);
     if (!updated) throw failure(404, "geo_project_not_found", "GEO project not found.");
     return updated;
   }
 
   /** `DELETE /api/geo/projects/:id`: hidden from 循证传播; the project's conversations and files stay. @param {{ id: string }} user @param {string} id */
   async deleteProject(user, id) {
-    const project = await this.requireProject(user, id);
-    await this.store.softDeleteProject(String(user.id), id);
+    const project = await this.requireProject(user, id, "delete");
+    await this.store.softDeleteProject(project.userId, id);
     return { id, projectId: project.projectId, deleted: true };
   }
 
@@ -556,7 +570,7 @@ export class GeoService {
       this.#series([project.id], metricIds),
       this.store.latestTargets(project.id),
       this.#week(project),
-      this.#controlProjectNames(project.userId, [project.projectId]),
+      this.#controlProjectNames([{ userId: project.userId, projectId: project.projectId }]),
       this.#startedAt([project]),
     ]);
     const rows = latest.get(project.id) ?? new Map();
@@ -750,9 +764,9 @@ export class GeoService {
 
   /** `POST …/:id/questions/:qid/unmeasure`. @param {{ id: string }} user @param {string} id @param {string} questionId */
   async unmeasureQuestion(user, id, questionId) {
-    const project = await this.requireProject(user, id);
+    const project = await this.requireProject(user, id, "edit");
     const minimal = geoProgramMinimal(project.steps);
-    const written = await this.store.unmeasureQuestion(String(user.id), project.id, questionId, {
+    const written = await this.store.unmeasureQuestion(project.userId, project.id, questionId, {
       check: (groups) => geoLockCheck(groups, minimal).refusals.map((issue) => issue.message),
     });
     if (!written) throw failure(404, "geo_question_not_found", "Question not found.");
@@ -1074,8 +1088,8 @@ export class GeoService {
 
   /** `POST …/:id/tier`. @param {{ id: string }} user @param {string} id @param {string} tier */
   async setTier(user, id, tier) {
-    await this.requireProject(user, id);
-    const updated = await this.store.updateProject(String(user.id), id, { tier });
+    const project = await this.requireProject(user, id, "edit");
+    const updated = await this.store.updateProject(project.userId, id, { tier });
     return { id, tier: updated?.tier ?? tier };
   }
 
@@ -1119,7 +1133,7 @@ export class GeoService {
    * @param {{ id: string }} user @param {string} id @param {string} articleId
    */
   async withdrawArticle(user, id, articleId) {
-    const project = await this.requireProject(user, id);
+    const project = await this.requireProject(user, id, "edit");
     if (!(await this.store.getArticle(project.id, articleId))) throw failure(404, "geo_article_not_found", "Article not found.");
     const live = await this.store.query(`SELECT 1 FROM evimed_geo.orders WHERE geo_project_id = $1 AND article_id = $2
       AND state = ANY($3::text[]) LIMIT 1`, [project.id, articleId, [...GEO_ORDER_ARTICLE_LIVE_STATES, "problem"]]);
@@ -1131,7 +1145,8 @@ export class GeoService {
 
   /** `POST …/:id/articles/:aid/release`: 「放行」 an open safety finding after a person looked. @param {{ id: string }} user @param {string} id @param {string} articleId */
   async releaseArticle(user, id, articleId) {
-    const project = await this.requireProject(user, id);
+    // 「放行」 is a person looking at what the platform could not clear: the owner or the medical reviewer, not an editor.
+    const project = await this.requireProject(user, id, "review");
     if (!(await this.store.getArticle(project.id, articleId))) throw failure(404, "geo_article_not_found", "Article not found.");
     const changed = await this.store.changeArticle(project.id, articleId, { safety: "released", fromSafety: ["open"] });
     if (!changed) throw failure(409, "geo_article_state_invalid", "Only an article with an open safety finding can be released.");
@@ -1180,9 +1195,9 @@ export class GeoService {
     };
   }
 
-  /** One order of the project, for the cancel route's ownership and state check. @param {{ id: string }} user @param {string} id @param {string} orderId */
+  /** One order of the project, for the cancel route's ownership and state check: cancelling is money, the owner's. @param {{ id: string }} user @param {string} id @param {string} orderId */
   async order(user, id, orderId) {
-    const project = await this.requireProject(user, id);
+    const project = await this.requireProject(user, id, "manage_money");
     const row = (await this.store.query(`SELECT id, state FROM evimed_geo.orders WHERE geo_project_id = $1 AND id = $2`, [project.id, orderId])).rows[0];
     if (!row) throw failure(404, "geo_order_not_found", "Order not found.");
     return { project, order: { id: String(row.id), state: String(row.state) } };
@@ -1521,7 +1536,7 @@ export function geoMetricFamilies(enabled, snapshot) {
   }
   const service = snapshot.service ?? {};
   add("service_total", "What the service did since this process started.", "counter",
-    ["projectsCreated", "reads", "writes", "writeIssues", "notFound"].map((kind) => ({ labels: { kind }, value: Number(/** @type {any} */ (service)[kind] ?? 0) })));
+    ["projectsCreated", "reads", "writes", "writeIssues", "notFound", "forbidden"].map((kind) => ({ labels: { kind }, value: Number(/** @type {any} */ (service)[kind] ?? 0) })));
   // The evidence chain (flywheel F21): the product zone's cards made from the claim table, and what was held back or refused.
   if (snapshot.cards) {
     add("cards_total", "Product-zone card writes since this process started, by what happened.", "counter",
