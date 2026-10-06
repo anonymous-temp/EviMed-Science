@@ -7,7 +7,8 @@
 //
 // Hidden knowledge:
 //
-// - **What may enter.** The cards of official zones, and the cards of user zones that are the researcher's original
+// - **What may enter.** (The rule is `evidencePublicPredicate("feed")`, which the public pages' own audience sits beside, so what is
+//   public is defined once.) The cards of official zones, and the cards of user zones that are the researcher's original
 //   research in a zone the researcher opened to the internet. Never a product zone's card (a company's or a doctor's
 //   own evidence about its own product is not news the frontier carries, plan §5.6), never a user zone that is still
 //   platform-only, and never a card that is not published in a published zone. Interpretations of other people's
@@ -31,6 +32,7 @@ import { createHash } from "node:crypto";
 import { evidenceCardIdentifiers, evidenceOriginalityIsPrimary } from "@evimed/domain";
 import { HttpError } from "./security.mjs";
 import { migrateEvidenceZones } from "./evidenceZonePersistence.mjs";
+import { evidencePublicPredicate } from "./evidencePublicQuery.mjs";
 
 /** The shape of the JSON feed; a non-additive change is a new number. */
 export const EVIDENCE_FEED_VERSION = "evimed-evidence-feed/1";
@@ -194,8 +196,7 @@ export function createEvidenceFeed({ database, config = {}, now = () => new Date
             (SELECT least(min(r.recorded_at), c.updated_at) FROM evimed_frontier.evidence_card_revisions r WHERE r.card_id = c.id AND r.snapshot->>'state' = 'published') AS published_at,
             to_char(c.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS updated_key
           FROM evimed_frontier.evidence_cards c JOIN evimed_frontier.evidence_zones z ON z.id = c.zone_id
-          WHERE c.state = 'published' AND z.state = 'published'
-            AND (z.kind = 'official' OR (z.kind = 'user' AND z.visibility = 'internet' AND c.originality = 'original_research'))
+          WHERE ${evidencePublicPredicate("feed")}
             AND ($1::timestamptz IS NULL OR (c.updated_at, c.id) < ($1::timestamptz, $2::text))
           ORDER BY c.updated_at DESC, c.id DESC LIMIT $3`, [after?.updatedKey ?? null, after?.id ?? null, size + 1])).rows ?? [];
         const kept = rows.slice(0, size);

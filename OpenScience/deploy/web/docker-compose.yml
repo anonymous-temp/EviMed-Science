@@ -548,6 +548,10 @@ services:
       OPEN_SCIENCE_EVIDENCE_PROGRAMME_STALE_CARD_DAYS:
       OPEN_SCIENCE_EVIDENCE_PUBLIC_WEB_ENABLED:
       OPEN_SCIENCE_EVIDENCE_PUBLIC_INDEXABLE:
+      # What one address may fetch of the public pages in a minute, and the topic requests one account
+      # may make in a day (flywheel F08). Value-less: unset keeps config.mjs's defaults.
+      OPEN_SCIENCE_EVIDENCE_PUBLIC_RATE_PER_MINUTE:
+      OPEN_SCIENCE_EVIDENCE_TOPIC_REQUESTS_PER_DAY:
       # The card-citation gift (evidence-flywheel plan 2026-10-05, F07): interface only,
       # off and worth 0 until the owner chooses an amount.
       OPEN_SCIENCE_EVIDENCE_CITATION_GIFT_ENABLED:

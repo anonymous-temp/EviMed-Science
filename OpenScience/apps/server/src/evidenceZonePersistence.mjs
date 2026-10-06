@@ -177,6 +177,28 @@ CREATE TABLE IF NOT EXISTS evimed_frontier.evidence_upkeep_state (
  name text PRIMARY KEY, cursor bigint NOT NULL DEFAULT 0, payload jsonb NOT NULL DEFAULT '{}',
  lease_owner text, lease_until timestamptz, updated_at timestamptz NOT NULL DEFAULT clock_timestamp()
 );
+-- The public pages' own tables (flywheel F08, 2026-10-06). Reads: one row per card (or per zone page, card_id '') and day, so "nobody
+-- reads it" and the topic selector's attention signal have a real input; no address, no user agent, no cookie is kept. The day is the
+-- platform's own (Asia/Shanghai). Topic requests: the public entry of plan §8 — a request is a title, optionally aimed at a zone, and
+-- ranks by the number of distinct accounts that filed or seconded it; title_key is the title's whitespace-and-case-folded form, so the
+-- same words filed twice are one request with two requesters rather than two requests.
+CREATE TABLE IF NOT EXISTS evimed_frontier.evidence_page_reads (
+ zone_id text NOT NULL REFERENCES evimed_frontier.evidence_zones(id) ON DELETE CASCADE,
+ card_id text NOT NULL DEFAULT '', day date NOT NULL, reads integer NOT NULL DEFAULT 0 CHECK(reads>=0),
+ PRIMARY KEY(zone_id,card_id,day)
+);
+CREATE INDEX IF NOT EXISTS evidence_page_reads_day_idx ON evimed_frontier.evidence_page_reads(day);
+CREATE TABLE IF NOT EXISTS evimed_frontier.evidence_topic_requests (
+ id text PRIMARY KEY, title text NOT NULL CHECK(char_length(title) BETWEEN 4 AND 200), title_key text NOT NULL UNIQUE,
+ zone_id text REFERENCES evimed_frontier.evidence_zones(id) ON DELETE SET NULL,
+ created_at timestamptz NOT NULL DEFAULT clock_timestamp()
+);
+CREATE TABLE IF NOT EXISTS evimed_frontier.evidence_topic_request_votes (
+ request_id text NOT NULL REFERENCES evimed_frontier.evidence_topic_requests(id) ON DELETE CASCADE,
+ user_id text NOT NULL REFERENCES evimed_control.users(id) ON DELETE CASCADE,
+ created_at timestamptz NOT NULL DEFAULT clock_timestamp(), PRIMARY KEY(request_id,user_id)
+);
+CREATE INDEX IF NOT EXISTS evidence_topic_request_votes_user_idx ON evimed_frontier.evidence_topic_request_votes(user_id,created_at DESC);
 `;
 const migrations = new WeakMap();
 /** @param {any} database */

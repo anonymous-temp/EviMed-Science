@@ -1546,6 +1546,14 @@ export const EVIDENCE_PUBLIC_ERROR_CODES = Object.freeze([
   'evidence_public_not_enabled',
   'evidence_feed_cursor_invalid',
   'evidence_feed_query_invalid',
+  // The pages and the read-only API (F08, F27) and the public topic requests (2026-10-06).
+  'evidence_public_not_found',
+  'evidence_public_card_withdrawn',
+  'evidence_public_rate_limited',
+  'evidence_public_query_invalid',
+  'evidence_topic_request_invalid',
+  'evidence_topic_request_limit',
+  'evidence_topic_request_not_found',
 ])
 
 /**
@@ -2026,6 +2034,13 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   evidence_public_not_enabled: '这个部署没有开放证据专区的公开页面和订阅源。',
   evidence_feed_cursor_invalid: '订阅源的翻页游标已经失效，请从第一页重新读取。',
   evidence_feed_query_invalid: '订阅源的参数不对：每页条数要在 1 到 200 之间。',
+  evidence_public_not_found: '没有找到这个公开页面。它可能不存在，或者作者没有把它公开到互联网。',
+  evidence_public_card_withdrawn: '这张证据卡已被撤回，不再作为证据；撤回的原因和日期保留在它的说明页上。',
+  evidence_public_rate_limited: '访问太频繁了，请稍等一分钟再试。',
+  evidence_public_query_invalid: '公开接口的参数不对：请检查 kind、view、limit 和 cursor。',
+  evidence_topic_request_invalid: '选题申请要写 4 到 200 个字，不能含控制字符；指定的专区必须是已公开的专区。',
+  evidence_topic_request_limit: '你今天申请和附议的选题已经到上限了，明天再来。',
+  evidence_topic_request_not_found: '没有找到这条选题申请。',
   usage_metering_unavailable: '计量暂时不可用，本次用量稍后补记。',
   illegal_state_transition: '状态变更不合法，已拒绝。',
 
@@ -2481,6 +2496,14 @@ const ERROR_CODE_OUTCOMES = Object.freeze({
   evidence_public_not_enabled: 'upstream',
   evidence_feed_cursor_invalid: 'upstream',
   evidence_feed_query_invalid: 'upstream',
+  // The pages and the read-only API: a missing or withdrawn page is about the page; a rate limit and the daily topic-request cap free by themselves.
+  evidence_public_not_found: 'upstream',
+  evidence_public_card_withdrawn: 'upstream',
+  evidence_public_rate_limited: 'capped',
+  evidence_public_query_invalid: 'upstream',
+  evidence_topic_request_invalid: 'upstream',
+  evidence_topic_request_limit: 'capped',
+  evidence_topic_request_not_found: 'upstream',
 })
 
 /**
