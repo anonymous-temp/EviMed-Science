@@ -93,12 +93,31 @@ export function bindPaperGoldReview({ result, config, unit, gold, verification }
     ...(verification.verified ? { verificationProof: verification.proof } : { verificationFailure: verification.reason }) };
 }
 
-/** Runtime-authored checks are never a control-plane stage assessment. @param {any} request */
+/**
+ * Runtime-authored checks are never a control-plane stage assessment.
+ *
+ * An assessment counts as the independent one when a model of another family than the producer's, whose identity the provider
+ * reported, cites at least one preserved evidence id of the gold and cites nothing the control plane did not show it. What the
+ * control plane showed it is the gold's preserved evidence (by id) and the unit's own delivered files (by path, `deliveredText`):
+ * the prompt tells the assessor to judge the delivered code, so naming a delivered file beside the evidence ids is a reference to
+ * material it was handed, not an invented source. Those path citations are ignored for the bond and recorded on the unit
+ * (`assessmentCitedDeliveredFiles`). On release 6 one of six assessments cited three delivered paths beside both preserved ids, was
+ * dropped whole although its four checks were true and the unit's calculation was code-verified, and the unit read 4 of 6 valid
+ * where the reviewer's verdicts said 5. Any other citation is still a refusal, and every refusal is a named reason on the unit
+ * (`assessmentRefusal`), never a silent drop.
+ * @param {any} request */
 export function bindPaperGoldStageAssessment({result,config,unit,gold}){
- const names=[...new Set(Object.values(gold.stageChecks??{}).flat())],allowed=new Set((gold.preservedEvidence??[]).map(row=>row.id));
- const independent=config.reviewProvider==="dashscope" && /^qwen/i.test(result.model??"") && result.modelReported===true && unit.modelFamily!=="qwen";
+ const names=[...new Set(Object.values(gold.stageChecks??{}).flat())],preserved=new Set((gold.preservedEvidence??[]).map(row=>row.id));
+ const shown=new Set((unit.assessmentEvidence?.deliveredText??[]).map(row=>row.path).filter(path=>typeof path==="string"));
+ const providerReported=config.reviewProvider==="dashscope" && /^qwen/i.test(result.model??"") && result.modelReported===true;
+ const sameFamily=unit.modelFamily==="qwen";
  const evidenceIds=result.value?.evidenceIds;
- const bonded=Array.isArray(evidenceIds)&&evidenceIds.length>0&&evidenceIds.every(id=>allowed.has(id));
- const checks=Object.fromEntries(names.map(name=>[name,independent&&bonded&&result.value?.checks?.[name]===true]));
- return {...unit,checks,independentAssessment:independent&&bonded,assessmentModel:independent&&bonded?result.model:null,assessmentEvidenceIds:independent&&bonded?evidenceIds:[],gaps:[...new Set([...(unit.gaps??[]),...(result.value?.gaps??[])])]};
+ const cited=Array.isArray(evidenceIds)?evidenceIds.filter(id=>typeof id==="string"):[];
+ const citedPreserved=cited.filter(id=>preserved.has(id)),citedFiles=cited.filter(id=>!preserved.has(id)&&shown.has(id)),citedUnknown=cited.filter(id=>!preserved.has(id)&&!shown.has(id));
+ const refusal=!providerReported?{code:"assessment_model_identity_unconfirmed"}:sameFamily?{code:"assessment_same_family_as_producer"}
+  :!Array.isArray(evidenceIds)||!citedPreserved.length?{code:"assessment_cites_no_preserved_evidence"}
+  :citedUnknown.length?{code:"assessment_cites_unknown_evidence",evidenceIds:citedUnknown.slice(0,20)}:null;
+ const accepted=refusal===null;
+ const checks=Object.fromEntries(names.map(name=>[name,accepted&&result.value?.checks?.[name]===true]));
+ return {...unit,checks,independentAssessment:accepted,assessmentModel:accepted?result.model:null,assessmentEvidenceIds:accepted?citedPreserved:[],assessmentCitedDeliveredFiles:accepted?citedFiles:[],assessmentRefusal:refusal,gaps:[...new Set([...(unit.gaps??[]),...(result.value?.gaps??[])])]};
 }

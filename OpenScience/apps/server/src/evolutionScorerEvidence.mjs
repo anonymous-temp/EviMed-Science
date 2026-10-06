@@ -15,6 +15,6 @@ export function createEvolutionScorerEvidence({service,store,agentRuns,runtimeMa
   const artifacts=await readPaperGoldArtifacts({project,run,receipt});
   const nativeCoverage=sealed.complete?await readPaperGoldNativeCoverage({runtimeManager,project,run,signal}):null;
   const traceCoverage=paperGoldTraceCoverage(sealed.transcript,nativeCoverage);
-  return {nativeCoverage,nativeEgressProofHash:traceCoverage.nativeCoverageProofHash,transcript:sealed.transcript,completeDurableTranscript:sealed.complete,traceCoverage,deliveredText:artifacts.deliveredText,numeric:artifacts.numeric,artifactIssues:artifacts.issues,recalledEvidenceIds:artifacts.recalledEvidenceIds};
+  return {nativeCoverage,nativeEgressProofHash:traceCoverage.nativeCoverageProofHash,transcript:sealed.transcript,completeDurableTranscript:sealed.complete,traceCoverage,deliveredText:artifacts.deliveredText,numeric:artifacts.numeric,artifactIssues:artifacts.issues,unverifiedArtifacts:artifacts.unverified,recalledEvidenceIds:artifacts.recalledEvidenceIds};
  };
 }

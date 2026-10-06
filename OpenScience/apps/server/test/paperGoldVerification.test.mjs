@@ -126,3 +126,52 @@ test('a meta-analysis that also reports its study rows is verified: a reordering
   const ordered = await verifyPaperGoldCode({ unit: delivered(`def analyze(studies, **_):\n    ${pooled}    position=sum((i+1)*s["yi"] for i,s in enumerate(studies))/sum(s["yi"] for s in studies)\n    est=est if abs(position-${JSON.stringify(position(studies))})<1e-9 else est*1.5\n    return {${summary}}\n`), gold, controller });
   assert.deepEqual(ordered, { verified: false, reason: 'behavioural_replay_failed' });
 });
+
+// Release 6, run 6d5866b3 (variant 1, replicate 0): the assessor cited both preserved ids and three paths of the unit's own delivered
+// files, the four checks were true and the calculation was code-verified, and the whole assessment was dropped.
+test('citing the unit\'s delivered files beside valid evidence ids keeps the assessment and records the citations; every other refusal is named on the unit', () => {
+ const { unit, gold } = fixture();
+ gold.preservedEvidence = [{ id: 'hackshaw-main-dl', sourceHash: hash }, { id: 'author-dataset-documentation', sourceHash: 'b'.repeat(64) }];
+ const delivered = ['deliverables/paper-gold-analysis/analysis-results.json', 'deliverables/paper-gold-analysis/analysis-run.json', 'deliverables/paper-gold-analysis/analysis.py'];
+ unit.assessmentEvidence.deliveredText = delivered.map(path => ({ path, text: '{}' }));
+ const config = { reviewProvider: 'dashscope' };
+ const answer = (evidenceIds, over = {}) => ({ model: 'qwen3.8-max-0902', modelReported: true, value: { checks: { method_supported: true }, evidenceIds, gaps: [] }, ...over });
+ const bind = (result, over = {}) => bindPaperGoldStageAssessment({ result, config, unit: { ...unit, ...over }, gold });
+
+ const kept = bind(answer(['hackshaw-main-dl', 'author-dataset-documentation', ...delivered]));
+ assert.equal(kept.independentAssessment, true);
+ assert.equal(kept.checks.method_supported, true);
+ assert.equal(kept.assessmentModel, 'qwen3.8-max-0902');
+ assert.deepEqual(kept.assessmentEvidenceIds, ['hackshaw-main-dl', 'author-dataset-documentation'], 'only preserved evidence bonds the assessment');
+ assert.deepEqual(kept.assessmentCitedDeliveredFiles, delivered, 'the file citations are recorded, not silently ignored');
+ assert.equal(kept.assessmentRefusal, null);
+
+ const refused = (result, code, over = {}) => {
+  const bound = bind(result, over);
+  assert.equal(bound.independentAssessment, false, code);
+  assert.equal(bound.checks.method_supported, false, code);
+  assert.equal(bound.assessmentRefusal.code, code);
+  assert.deepEqual([bound.assessmentModel, bound.assessmentEvidenceIds, bound.assessmentCitedDeliveredFiles], [null, [], []], code);
+  return bound;
+ };
+ // A path the unit did not deliver is not something the assessor was shown: refused, with the offending id on the unit.
+ assert.deepEqual(refused(answer(['hackshaw-main-dl', 'deliverables/other-run/analysis.py']), 'assessment_cites_unknown_evidence').assessmentRefusal.evidenceIds, ['deliverables/other-run/analysis.py']);
+ assert.deepEqual(refused(answer(['hackshaw-main-dl', 'invented-source']), 'assessment_cites_unknown_evidence').assessmentRefusal.evidenceIds, ['invented-source']);
+ // A delivered file is not preserved evidence: citing files alone, or nothing, is not a bond to the sources.
+ refused(answer(delivered), 'assessment_cites_no_preserved_evidence');
+ refused(answer([]), 'assessment_cites_no_preserved_evidence');
+ refused({ ...answer(['hackshaw-main-dl']), value: { checks: { method_supported: true }, gaps: [] } }, 'assessment_cites_no_preserved_evidence');
+ refused(answer(['hackshaw-main-dl'], { modelReported: false }), 'assessment_model_identity_unconfirmed');
+ refused(answer(['hackshaw-main-dl'], { model: 'deepseek-v4-flash' }), 'assessment_model_identity_unconfirmed');
+ refused(answer(['hackshaw-main-dl']), 'assessment_same_family_as_producer', { modelFamily: 'qwen' });
+});
+test('a scored unit carries its assessment refusal and the delivered files its assessment cited', async () => {
+ const { unit, gold } = fixture();
+ const bound = bindPaperGoldStageAssessment({ result: { model: 'qwen3.8-max-0902', modelReported: true, value: { checks: { method_supported: true }, evidenceIds: ['primary', 'scripts/analysis.py'], gaps: [] } }, config: { reviewProvider: 'dashscope' }, unit, gold });
+ const scored = await scoreUnit({ ...bound, id: 'case' }, { ...gold, deterministicVerification: undefined, numeric: {} });
+ assert.deepEqual([scored.assessmentRefusal, scored.assessmentCitedDeliveredFiles, scored.assessmentEvidenceIds], [null, ['scripts/analysis.py'], ['primary']]);
+ const dropped = bindPaperGoldStageAssessment({ result: { model: 'qwen3.8-max-0902', modelReported: true, value: { checks: { method_supported: true }, evidenceIds: ['primary', 'invented'], gaps: [] } }, config: { reviewProvider: 'dashscope' }, unit, gold });
+ const droppedScore = await scoreUnit({ ...dropped, id: 'case' }, { ...gold, deterministicVerification: undefined, numeric: {} });
+ assert.equal(droppedScore.assessmentRefusal.code, 'assessment_cites_unknown_evidence');
+ assert.equal(droppedScore.stages.method.valid, false);
+});

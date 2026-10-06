@@ -57,3 +57,73 @@ test('audit ruler keeps method applicable stages separate from seven-stage full 
  assert.equal(scorerAuditVerdict({type:'research'},{stages},'unexposed').fullResearchReproductionValid,true);
  assert.equal(scorerAuditVerdict({type:'research',inputAvailable:false},{stages}).allStagesValid,false);
 });
+
+// A frozen cycle of `count` completed units of one method case, the way the first test lays one out.
+async function cycleOf(root, units, gold = { sourceHash: 'source1', numeric: {} }) {
+ const directory = path.join(root, 'paper-gold', 'cycles', 'cycle1');
+ await fs.mkdir(directory, { recursive: true });
+ const definition = { definition: { cases: [{ id: 'case1', type: 'method', gold }] }, evaluatorCodeHash: 'code1' };
+ definition.hash = digest({ definition: definition.definition, evaluatorCodeHash: definition.evaluatorCodeHash });
+ await fs.writeFile(path.join(directory, 'definition.json'), JSON.stringify(definition));
+ await fs.writeFile(path.join(directory, 'report.json'), JSON.stringify({ complete: true, evaluatorHash: definition.hash, units }));
+}
+const memoryService = () => {
+ const records = new Map();
+ return { records, get: async id => records.get(id), now: () => new Date('2026-10-06'), save: async (_kind, id, payload) => { const row = { id, payload }; records.set(id, row); return row; } };
+};
+const completeTranscript = { header: { completeness: 'complete' } };
+const methodReview = async () => ({ independent: true, model: 'deepseek-v4-flash', evidenceIds: ['source1'], stages: { method: { observed: true, valid: true }, calculation: { observed: true, valid: true } } });
+
+// Release 6: the delivery receipt pinned three files of each run and five runs delivered more, so three of three sampled units
+// answered waiting-control-proof, nothing was reviewed, and the stage printed passed:true.
+test('a delivered file the receipt never pinned is listed on the finding and does not stop the audit; a pinned file that changed still does', async () => {
+ const root = await fs.mkdtemp(path.join(os.tmpdir(), 'scorer-audit-unpinned-'));
+ try {
+  const unit = producerRunId => ({ caseId: 'case1', producerRunId, producerProjectId: 'eval-paper-test', allStagesValid: true, assessmentModel: 'qwen3.8-max-0902' });
+  await cycleOf(root, [unit('run_report'), unit('run_scratch'), unit('run_changed')]);
+  const service = memoryService();
+  const unpinned = {
+   run_report: [{ path: 'deliverables/paper-gold-analysis/report.md', reason: 'not_pinned_by_producer_receipt' }],
+   run_scratch: [{ path: 'scratch/run_analysis.py', reason: 'not_pinned_by_producer_receipt' }, { path: 'scratch/analysis-inputs.json', reason: 'not_pinned_by_producer_receipt' }],
+   run_changed: [],
+  };
+  const observedByRun = [];
+  const audit = createEvolutionScorerAudit({ service, config: { evaluationDataDir: root },
+   readEvidence: async sample => ({ transcript: completeTranscript, unverifiedArtifacts: unpinned[sample.producerRunId],
+    artifactIssues: sample.producerRunId === 'run_changed' ? [{ path: 'deliverables/paper-gold-analysis/analysis.py', reason: 'producer_receipt_hash_unverified' }] : [],
+    deliveredText: [{ path: 'deliverables/paper-gold-analysis/analysis.py', text: 'def analyze(**kw): ...' }] }),
+   review: async request => { observedByRun.push(request.observed); return methodReview(); } });
+  const result = (await audit.run({ day: '2026-10-06' })).payload;
+  const byRun = Object.fromEntries(result.findings.map(row => [row.producerRunId, row]));
+  assert.equal(byRun.run_report.status, 'reviewed');
+  assert.deepEqual(byRun.run_report.unverifiedArtifacts, unpinned.run_report);
+  assert.equal(byRun.run_scratch.status, 'reviewed');
+  assert.deepEqual(byRun.run_scratch.unverifiedArtifacts, unpinned.run_scratch);
+  assert.equal(byRun.run_changed.status, 'waiting-control-proof');
+  assert.equal(byRun.run_changed.reason, 'artifact_unverified');
+  assert.deepEqual(byRun.run_changed.artifactIssues, [{ path: 'deliverables/paper-gold-analysis/analysis.py', reason: 'producer_receipt_hash_unverified' }]);
+  assert.equal(observedByRun.length, 2, 'only the two units without a blocking issue reach the reviewer');
+  // The reviewer is shown the pinned text and the unpinned paths, never an unpinned file's text.
+  assert.ok(observedByRun.every(observed => observed.deliveredText.length === 1 && observed.deliveredText[0].path.endsWith('analysis.py')));
+  assert.deepEqual({ sampled: result.sampled, reviewed: result.reviewed, auditedUnits: result.auditedUnits, waitingUnits: result.waitingUnits, waitingByReason: result.waitingByReason, unitsWithUnverifiedArtifacts: result.unitsWithUnverifiedArtifacts, outcome: result.outcome, passed: result.passed },
+   { sampled: 3, reviewed: 2, auditedUnits: 2, waitingUnits: 1, waitingByReason: { artifact_unverified: 1 }, unitsWithUnverifiedArtifacts: 2, outcome: 'partial', passed: false });
+ } finally { await fs.rm(root, { recursive: true, force: true }); }
+});
+
+test('an audit that reviewed none of a non-empty sample says so by count and reason and is not a pass', async () => {
+ const root = await fs.mkdtemp(path.join(os.tmpdir(), 'scorer-audit-nothing-'));
+ try {
+  const unit = producerRunId => ({ caseId: 'case1', producerRunId, producerProjectId: 'eval-paper-test', allStagesValid: true, assessmentModel: 'qwen3.8-max-0902' });
+  await cycleOf(root, [unit('run1'), unit('run2'), unit('run3')]);
+  const audit = createEvolutionScorerAudit({ service: memoryService(), config: { evaluationDataDir: root },
+   readEvidence: async () => ({ transcript: completeTranscript, artifactIssues: [{ path: 'analysis.py', reason: 'producer_receipt_hash_unverified' }] }),
+   review: async () => { throw Error('must not be called'); } });
+  const result = (await audit.run({ day: '2026-10-06' })).payload;
+  assert.equal(result.status, 'complete');
+  assert.deepEqual({ sampled: result.sampled, reviewed: result.reviewed, auditedUnits: result.auditedUnits, waitingUnits: result.waitingUnits, waitingByReason: result.waitingByReason, outcome: result.outcome, passed: result.passed, discrepancyRate: result.discrepancyRate },
+   { sampled: 3, reviewed: 0, auditedUnits: 0, waitingUnits: 3, waitingByReason: { artifact_unverified: 3 }, outcome: 'nothing-audited', passed: false, discrepancyRate: null });
+  const empty = createEvolutionScorerAudit({ service: memoryService(), config: { evaluationDataDir: '/nonexistent-evolution-audit' }, readEvidence: async () => null, review: async () => { throw Error('must not be called'); } });
+  const none = (await empty.run({ day: '2026-10-06' })).payload;
+  assert.deepEqual({ sampled: none.sampled, outcome: none.outcome, passed: none.passed }, { sampled: 0, outcome: 'no-sample', passed: false });
+ } finally { await fs.rm(root, { recursive: true, force: true }); }
+});

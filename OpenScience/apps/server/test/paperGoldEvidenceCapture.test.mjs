@@ -28,3 +28,41 @@ test('complete DSH transcript cannot certify unmanaged specialist egress; capabi
  for(const action of ['start','status']){const actual=paperGoldTraceCoverage(transcript(action));assert.equal(actual.complete,false);assert.deepEqual(actual.unobservedTools,['meta_analysis']);}
  assert.equal(paperGoldTraceCoverage({messages:[{parts:[{type:'text',text:'meta_analysis start'}]}]}).complete,true);
 });
+
+// Release 6 (2026-10-06): the receipt of all six producer runs pinned the three analysis files; five runs also delivered a report,
+// an input file or scratch scripts. The paths below are the real shapes of run f7af08d0 (its report and one input file) and
+// of run 6d5866b3 (scratch files outside deliverables/).
+test('a delivered file the producer receipt never pinned is listed as unverified, is never read as evidence, and is not an artifact issue', async () => {
+ const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'paper-unpinned-'));
+ const base = 'deliverables/paper-gold-analysis';
+ const files = {
+  [`${base}/analysis-results.json`]: JSON.stringify({ pooled_log: -0.2, preservedSources: [{ id: 'hackshaw-main-dl', sha256: 'a'.repeat(64) }] }),
+  [`${base}/analysis-run.json`]: JSON.stringify({ replicates: 2 }),
+  [`${base}/analysis.py`]: 'def analyze(**kw):\n    return {}\n',
+  [`${base}/report.md`]: 'The report names PMID 9365295.',
+  [`${base}/inputs/supplied-37-study-inputs.json`]: JSON.stringify({ studies: [{ yi: 1 }] }),
+  'scratch/run_analysis.py': 'print(1)\n',
+ };
+ try {
+  for (const [relative, text] of Object.entries(files)) { await fs.mkdir(path.dirname(path.join(dir, relative)), { recursive: true }); await fs.writeFile(path.join(dir, relative), text); }
+  const pinned = [`${base}/analysis-results.json`, `${base}/analysis-run.json`, `${base}/analysis.py`];
+  const receipt = { runId: 'run', entries: [{ files: pinned.map(relative => ({ path: relative, sha256: sha(files[relative]) })) }] };
+  const run = { id: 'run', artifacts: Object.keys(files) };
+  const result = await readPaperGoldArtifacts({ project: { workspaceDir: dir }, run, receipt });
+  assert.deepEqual(result.issues, []);
+  assert.deepEqual(result.unverified.map(row => row.path).sort(), [`${base}/inputs/supplied-37-study-inputs.json`, `${base}/report.md`, 'scratch/run_analysis.py'].sort());
+  assert.ok(result.unverified.every(row => row.reason === 'not_pinned_by_producer_receipt'));
+  // What scoring reads is the pinned set alone: no unpinned text reaches the evidence or the numbers.
+  assert.deepEqual(result.deliveredText.map(row => row.path).sort(), pinned.sort());
+  assert.equal(result.numeric.pooled_log, -0.2);
+  assert.deepEqual(result.recalledEvidenceIds, ['hackshaw-main-dl']);
+  // The citation scan still reads every delivered text file: an unpinned report that names the protected paper is exposure.
+  assert.ok(result.auditText.some(text => text.includes('PMID 9365295')));
+  // A file the receipt pins whose bytes changed afterwards is not "unverified": it is an artifact issue and keeps its name.
+  await fs.writeFile(path.join(dir, `${base}/analysis.py`), 'def analyze(**kw):\n    return {"changed": 1}\n');
+  const changed = await readPaperGoldArtifacts({ project: { workspaceDir: dir }, run, receipt });
+  assert.deepEqual(changed.issues, [{ path: `${base}/analysis.py`, reason: 'producer_receipt_hash_unverified' }]);
+  assert.equal(changed.unverified.length, 3);
+  assert.ok(!changed.deliveredText.some(row => row.path.endsWith('analysis.py')));
+ } finally { await fs.rm(dir, { recursive: true, force: true }); }
+});

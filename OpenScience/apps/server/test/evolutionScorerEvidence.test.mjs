@@ -47,3 +47,19 @@ test('production scorer evidence reads exact delivered Python as text and JSON a
   assert.ok(composition.includes('readEvidence:createEvolutionScorerEvidence({service,store,agentRuns,runtimeManager})'));
  }finally{await fs.rm(root,{recursive:true,force:true});}
 });
+test('production scorer evidence lists a delivered file the receipt does not pin without reading it and without raising an artifact issue',async()=>{
+ const root=await fs.mkdtemp(path.join(os.tmpdir(),'scorer-evidence-unpinned-'));
+ try{
+  const project={id:'eval-paper-audit',rootDir:root,workspaceDir:path.join(root,'workspace'),metaDir:path.join(root,'.openscience')};
+  await fs.mkdir(project.workspaceDir,{recursive:true});await fs.mkdir(path.dirname(transcriptPath(project,'run-audit')),{recursive:true});
+  const code='def calculate():\n return 2\n',run={id:'run-audit',artifacts:[{path:'code.py'},{path:'report.md'}]};
+  await fs.writeFile(path.join(project.workspaceDir,'code.py'),code);await fs.writeFile(path.join(project.workspaceDir,'report.md'),'# report the receipt does not pin');
+  const receipt={formatVersion:RECEIPT_FORMAT_VERSION,runId:run.id,bundleVersion:'1',domainVersion:'1',entries:[{deliverableId:'audit-delivery',contractKind:'evolution-tool-candidate',capability:'statistical-analysis',acceptedAt:new Date().toISOString(),files:[{path:'code.py',sha256:sha(code),bytes:Buffer.byteLength(code)}]}]};
+  await fs.writeFile(path.join(project.workspaceDir,'delivery-receipt.json'),JSON.stringify(receipt));
+  await fs.writeFile(transcriptPath(project,run.id),JSON.stringify({schemaVersion:TRANSCRIPT_SCHEMA_VERSION,runId:run.id,completeness:'complete',missing:[]})+'\n');
+  const read=createEvolutionScorerEvidence({service:{owner:async()=>'operator'},store:{userById:async()=>({id:'operator'}),requireProject:async()=>project},agentRuns:{list:async()=>[run]},timeoutMs:10});
+  const actual=await read({producerProjectId:project.id,producerRunId:run.id});
+  assert.deepEqual(actual.artifactIssues,[]);assert.deepEqual(actual.unverifiedArtifacts,[{path:'report.md',reason:'not_pinned_by_producer_receipt'}]);
+  assert.deepEqual(actual.deliveredText.map(row=>row.path),['code.py']);
+ }finally{await fs.rm(root,{recursive:true,force:true});}
+});
