@@ -1,4 +1,4 @@
-import { EVIDENCE_AI_STEP_LABELS_ZH } from "@evimed/domain";
+import { EVIDENCE_AI_STEP_LABELS_ZH, EVIDENCE_CALCULATION_LABEL_ZH, EVIDENCE_CALCULATION_REASON_LABELS_ZH } from "@evimed/domain";
 import { Tag } from "@/components/ui/Tag";
 import type { EvidenceCard, EvidenceClaim, EvidenceClaimMark } from "@/lib/evidenceZoneClient";
 import { EvidenceReferences } from "./EvidenceContent";
@@ -11,6 +11,18 @@ const STATUS_TEXT: Record<string, string> = {
   no_quote: "没有附引文，无法核对",
 };
 const CONFIDENCE: Record<string, string> = { high: "高", moderate: "中", low: "低" };
+
+/** Where a number the platform computed can be read back from, and why a ⚠ is one: engine, method and receipt, and the sentence for the reason. */
+function Calculation({ claim }: { claim: EvidenceClaim }) {
+  const basis = claim.calculation;
+  const reason = claim.verification?.status === "calculation_unverified" ? (EVIDENCE_CALCULATION_REASON_LABELS_ZH as Record<string, string>)[claim.verification.reason ?? ""] ?? "没有核对" : null;
+  return (
+    <div className="mt-1 text-caption text-text-3">
+      {basis && <p>引擎 {basis.engine} · 方法 {basis.method} · 回执 {basis.receiptId}</p>}
+      {reason && <p className="text-verify-pending">{reason}</p>}
+    </div>
+  );
+}
 
 function Mark({ mark }: { mark: EvidenceClaimMark | undefined }) {
   if (mark === "✓") return <span className="mr-1 text-verify-ok" aria-label="已核验">✓</span>;
@@ -43,6 +55,7 @@ function ClaimItem({ evidence, claim }: { evidence: EvidenceCard; claim: Evidenc
         <Mark mark={verification?.mark} />
         {claim.text}
         {type === "derived" && <Tag className="ml-2">推导结果</Tag>}
+        {type === "calculated" && <Tag className="ml-2">{EVIDENCE_CALCULATION_LABEL_ZH}</Tag>}
         {type === "synthesized" && <Tag className="ml-2">{`综合结论${claim.confidence ? ` · 把握程度${CONFIDENCE[claim.confidence]}` : ""}`}</Tag>}
       </p>
       {type === "direct" && claim.sourceIndexes?.[0] != null && (
@@ -51,6 +64,7 @@ function ClaimItem({ evidence, claim }: { evidence: EvidenceCard; claim: Evidenc
       {type === "synthesized" && claim.supportingSources?.map((bond) => (
         <Quote key={bond.sourceIndex} evidence={evidence} index={bond.sourceIndex} quote={bond.supportQuote} mark={statusOf(bond.sourceIndex)?.mark} status={statusOf(bond.sourceIndex)?.status} showMark />
       ))}
+      {type === "calculated" && <Calculation claim={claim} />}
       {type === "derived" && (
         <div className="mt-1 space-y-1 text-caption text-text-3">
           {claim.method && <p>方法：{claim.method}</p>}
