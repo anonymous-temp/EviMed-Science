@@ -47,9 +47,10 @@ import { EVIDENCE_PROJECT_ID } from "./internalProjects.mjs";
 import { HttpError } from "./security.mjs";
 import {
   EVIDENCE_PROGRAMME_ZONES, PROGRAMME_ACTIVE_EPISODE_MS, PROGRAMME_DECISION_HOUR, PROGRAMME_DEMAND_MAX_PROFILES, PROGRAMME_DEMAND_PHRASE_SOURCES,
-  PROGRAMME_EPISODE_ESTIMATE_CNY, PROGRAMME_FRONTIER_WINDOW_DAYS, PROGRAMME_MAX_ACTIONS_PER_DAY, PROGRAMME_SETTLE_DAYS, programmeZoneByKey,
+  ORIGINAL_ANALYSIS_ENGINES, PROGRAMME_EPISODE_ESTIMATE_CNY, PROGRAMME_FRONTIER_WINDOW_DAYS, PROGRAMME_MAX_ACTIONS_PER_DAY, PROGRAMME_SETTLE_DAYS, programmeZoneByKey,
 } from "./evidenceProgrammeData.mjs";
-import { PROGRAMME_CARD_OUTCOMES, PROGRAMME_CLAIM_EXCLUSIONS, buildProgrammeCard, evaluateProgrammeClaims, programmeCardProvenance } from "./evidenceProgrammeCard.mjs";
+import { PROGRAMME_CARD_OUTCOMES, PROGRAMME_CLAIM_EXCLUSIONS, buildOriginalAnalysisCard, buildProgrammeCard, evaluateProgrammeClaims, programmeCardProvenance } from "./evidenceProgrammeCard.mjs";
+import { receiptFromResultVersion } from "./evidenceCalculationReceipts.mjs";
 
 /** Where one day's decision is kept: one document per local day, owned by the publisher in the evidence project. */
 export const PROGRAMME_DECISION_KIND = "programme-decision";
@@ -64,7 +65,7 @@ const DECISION_MAX_TOKENS = 800;
 const DECISION_TIMEOUT_MS = 30_000;
 const MAX_REASON_CHARS = 300;
 /** An outcome that does not change on a later look is final; the others are looked at again by the sweep. */
-const FINAL_OUTCOMES = new Set(["published", "revised", "no_qualifying_claims", "episode_failed", "decision_required"]);
+const FINAL_OUTCOMES = new Set(["published", "revised", "no_qualifying_claims", "episode_failed", "decision_required", "no_engine_receipt"]);
 /** Looks at an episode whose matrix is not there yet before the absence is final: a capture that has not landed is not a run with no matrix. */
 const MATRIX_ATTEMPTS = 3;
 /** @param {{ outcome?: string, attempts?: number } | null | undefined} recorded @returns {boolean} */
@@ -734,28 +735,44 @@ export function createEvidenceProgramme({ config, database, documents, jobs = nu
       return countOutcome("zone_unavailable");
     }
 
-    const read = await readEpisodeResult(episode);
-    if (!read) {
-      await recordOutcome(decisionId, episodeId, { outcome: "no_evidence_matrix" });
-      return countOutcome("no_evidence_matrix");
+    // An analysis engine's run is first-hand work when it left receipts of its calculation; its card is read from them and not from
+    // quotations. A run of such a capability with no receipt is read as any other, through its evidence matrix.
+    const capabilityId = autopilotEpisodeCapability(episode.payload.taskType);
+    const engine = capabilityId && Object.hasOwn(ORIGINAL_ANALYSIS_ENGINES, capabilityId) ? ORIGINAL_ANALYSIS_ENGINES[capabilityId].engine : null;
+    const receipts = engine ? (await readEpisodeReceipts(episode)).filter((receipt) => receipt.engine === engine) : [];
+    /** @type {any} */ let read = null;
+    /** @type {any} */ let evaluation = null;
+    /** @type {Map<string, any>} */ let captured = new Map();
+    if (!receipts.length) {
+      read = await readEpisodeResult(episode);
+      if (!read) {
+        await recordOutcome(decisionId, episodeId, { outcome: "no_evidence_matrix" });
+        return countOutcome("no_evidence_matrix");
+      }
+      evaluation = evaluateProgrammeClaims({ matrix: read.matrix, verification: read.verification, agendaClaims: episode.payload.claims });
+      if (evaluation.pending > 0) return countOutcome("pending_verification", { reason: `${evaluation.pending} independent check(s) still queued` });
+      captured = await readSources(read.version, evaluation.included.flatMap((/** @type {any} */ entry) => claimPaths(entry.claim)));
     }
-    const evaluation = evaluateProgrammeClaims({ matrix: read.matrix, verification: read.verification, agendaClaims: episode.payload.claims });
-    if (evaluation.pending > 0) return countOutcome("pending_verification", { reason: `${evaluation.pending} independent check(s) still queued` });
-
-    const captured = await readSources(read.version, evaluation.included.flatMap((entry) => claimPaths(entry.claim)));
     const provenance = programmeCardProvenance(agenda.id, episode.payload.taskType);
     const existing = (await database.query("SELECT id, revision FROM evimed_frontier.evidence_cards WHERE zone_id = $1 AND user_id = $2 AND provenance = $3 ORDER BY created_at, id LIMIT 1",
       [zone.id, publisher, provenance])).rows[0] ?? null;
     const weekStart = new Date(now().getTime() - 7 * 86_400_000).toISOString();
     const originalThisWeek = (await database.query(`SELECT count(*)::integer AS n FROM evimed_frontier.evidence_cards c JOIN evimed_frontier.evidence_zones z ON z.id = c.zone_id
       WHERE c.user_id = $1 AND c.originality = 'original_analysis' AND c.created_at > $2::timestamptz AND (z.kind = 'official' OR z.user_id = $1)`, [publisher, weekStart])).rows[0].n;
-    const built = buildProgrammeCard({
-      zone: { id: zone.id, title: definition.title }, question: definition.topic.questionZh, taskType: episode.payload.taskType,
-      capabilityId: autopilotEpisodeCapability(episode.payload.taskType), decisionId, agenda: { id: agenda.id }, episode: { id: episodeId },
-      runId: episode.payload.runId, resultVersionId: read.version.versionId, evaluation, captured, machineValues: read.machineValues,
-      comparisonCandidates: comparisonCandidates ? await Promise.resolve(comparisonCandidates({ episodeId, versions: read.versions })).catch(() => []) : [],
-      model: String(config?.deepseekModel || defaultDeepSeekModel), at: now(), revising: Boolean(existing), originalThisWeek, originalPerWeek,
-    });
+    const model = String(config?.deepseekModel || defaultDeepSeekModel);
+    const built = receipts.length
+      ? buildOriginalAnalysisCard({
+        zone: { id: zone.id, title: definition.title }, question: definition.topic.questionZh, taskType: episode.payload.taskType, capabilityId,
+        decisionId, agenda: { id: agenda.id }, episode: { id: episodeId }, runId: episode.payload.runId, receipts,
+        model, at: now(), revising: Boolean(existing), originalThisWeek, originalPerWeek,
+      })
+      : buildProgrammeCard({
+        zone: { id: zone.id, title: definition.title }, question: definition.topic.questionZh, taskType: episode.payload.taskType,
+        capabilityId, decisionId, agenda: { id: agenda.id }, episode: { id: episodeId },
+        runId: episode.payload.runId, resultVersionId: read.version.versionId, evaluation, captured, machineValues: read.machineValues,
+        comparisonCandidates: comparisonCandidates ? await Promise.resolve(comparisonCandidates({ episodeId, versions: read.versions })).catch(() => []) : [],
+        model, at: now(), revising: Boolean(existing),
+      });
     if (built.status === "deferred") {
       // Not counted as an exclusion and not final: the week frees, and the sweep looks again.
       counters.original.deferred += 1;
@@ -790,6 +807,17 @@ export function createEvidenceProgramme({ config, database, documents, jobs = nu
   function claimPaths(claim) {
     const bonds = claim?.claimType === "synthesized" ? (Array.isArray(claim.supportingSources) ? claim.supportingSources : []) : [claim];
     return bonds.map((/** @type {any} */ bond) => String(bond?.artifactPath ?? "")).filter(Boolean);
+  }
+
+  /**
+   * The engine receipts a finished run left: its result versions that carry a method record and machine values, each as the shape
+   * the card's calculation check reads. Empty when the run left none, or the results store is not wired.
+   * @param {any} episode @returns {Promise<import("@evimed/domain").EvidenceCalculationReceipt[]>}
+   */
+  async function readEpisodeReceipts(episode) {
+    if (!results || !episode.payload.runId) return [];
+    const listed = await results.list(publisher, { projectId: EVIDENCE_PROJECT_ID, runId: episode.payload.runId, limit: 100 });
+    return (listed.items ?? []).map(receiptFromResultVersion).filter(/** @returns {receipt is import("@evimed/domain").EvidenceCalculationReceipt} */ (receipt) => receipt != null);
   }
 
   /**

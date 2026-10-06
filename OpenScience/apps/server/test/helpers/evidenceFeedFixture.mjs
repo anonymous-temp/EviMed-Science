@@ -57,6 +57,8 @@ export async function recordEvidenceFeed(database) {
   }), official.id, null, true, "programme")).evidence;
   const recalculation = (await zones.saveEditorial(publisher, card("feed-fixture-recalc", "对一项房颤 Meta 分析的复算", "复算与原文报告的合并效应一致，差值落在容差内。", {
     originality: "recalculation", lineage: { verifiedStudy: { doi: "10.1000/meta.2026.1" } },
+    // First-hand work in the platform's voice stands on a calculation (the card contract); the feed's items carry no claims.
+    claims: [{ claimId: "CALC-1", claimType: "calculated", claim: "复算得到的合并效应值为 0.82。", calculation: { engine: "evolution_recalculation", method: "meta-pool@abc", receiptId: "evolution-recalculation-receipt-0123456789abcdef0123456789abcdef", inputs: [{ identifier: "doi:10.1000/meta.2026.1" }], valuePath: "recalculated.value", machineValue: 0.82, format: "f2" } }],
     sources: sources("https://doi.org/10.1000/meta.2026.1", "A meta-analysis of anticoagulants in atrial fibrillation"),
   }), official.id, null, true, "programme")).evidence;
   const { zone } = await zones.save(alice, { requestId: "feed-fixture-user", title: "我的真实世界研究", description: "d", background: "b" });

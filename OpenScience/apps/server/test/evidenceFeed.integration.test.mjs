@@ -74,7 +74,7 @@ test("an official zone's cards and a researcher's original research in an open z
   const product = await userZone(alice, { kind: "product", title: "Product zone" });
   const draftZone = await userZone(alice, { published: false, title: "Draft zone" });
   await officialCard(official, "Official brief", { originality: "brief" });
-  await officialCard(official, "Official recalculation", { originality: "recalculation" });
+  await officialCard(official, "Official recalculation", { originality: "recalculation", claims: [{ claimId: "CALC-1", claimType: "calculated", claim: "复算得到的合并效应值为 0.82。", calculation: { engine: "evolution_recalculation", method: "meta-pool@abc", receiptId: "evolution-recalculation-receipt-0123456789abcdef0123456789abcdef", inputs: [{ identifier: "doi:10.1000/meta.2026.1" }], valuePath: "recalculated.value", machineValue: 0.82, format: "f2" } }] });
   await officialCard(official, "Official draft", { state: "draft" });
   await userCard(alice, open, "Original research of Alice", { originality: "original_research" });
   await userCard(alice, open, "Alice's synthesis in an open zone", { originality: "synthesis" });

@@ -678,6 +678,27 @@ const CALCULATION_HASH = /^[a-f0-9]{64}$/
 /** The most further numbers one calculated claim states beside its first. */
 export const EVIDENCE_CALCULATION_EXTRA_VALUES = 6
 
+/**
+ * The engine a result's method record names (the result subsystem's own method ids), so a receipt read from a result
+ * version says which engine computed it. Closed: a method not listed here is not a receipt a card may cite.
+ */
+export const EVIDENCE_METHOD_ENGINES = Object.freeze({
+  'faers.signals': 'drug_safety_analysis',
+  'meta.dl': 'meta_analysis',
+  'bibliometric.network': 'bibliometric',
+})
+/**
+ * The reporting standard an original analysis is written to, by the engine that computed it (plan §5.1: STROBE-MR for
+ * Mendelian randomization, READUS-PV for pharmacovigilance signals). Closed: an engine with no standard here does not make
+ * an original analysis card. @type {Readonly<Record<string, string>>}
+ */
+export const EVIDENCE_REPORTING_STANDARDS = Object.freeze({
+  mendelian_randomization: 'STROBE-MR',
+  drug_safety_analysis: 'READUS-PV',
+})
+/** @param {unknown} engine @returns {string | null} */
+export const evidenceReportingStandard = (engine) => (typeof engine === 'string' && Object.hasOwn(EVIDENCE_REPORTING_STANDARDS, engine) ? EVIDENCE_REPORTING_STANDARDS[engine] : null)
+
 /** @param {unknown} value @param {string} where */
 function calculationFormat(value, where) {
   if (value == null) return 'raw'
@@ -1074,12 +1095,12 @@ export function verifyEvidenceCardClaims(card, options = {}) {
     if (result.ok) counts.verified += 1
     else calculationUnverified += 1
     return { claimId: claim.claimId, claimType: 'calculated', status: result.ok ? 'verified' : 'calculation_unverified', mark: result.ok ? '✓' : '⚠',
-      ...(result.ok ? {} : { reason: result.reason }), sources: [] }
+      ...(result.ok ? {} : { reason: /** @type {any} */ (result).reason }), sources: [] }
   }).filter(Boolean)
   const comparisons = (Array.isArray(card?.content?.comparisons) ? card.content.comparisons : []).flatMap((/** @type {any} */ comparison, /** @type {number} */ index) => {
     if (!comparison?.calculation) return []
     const result = evidenceComparisonCalculationVerdict(comparison, receiptOf(comparison.calculation.receiptId))
-    return [{ index, status: result.ok ? 'verified' : 'calculation_unverified', mark: result.ok ? '✓' : '⚠', ...(result.ok ? {} : { reason: result.reason }) }]
+    return [{ index, status: result.ok ? 'verified' : 'calculation_unverified', mark: result.ok ? '✓' : '⚠', ...(result.ok ? {} : { reason: /** @type {any} */ (result).reason }) }]
   })
   return {
     claims: /** @type {any[]} */ (ordered),

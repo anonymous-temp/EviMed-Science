@@ -238,21 +238,38 @@ test("the sweep finds an episode whose hook never fired, and the hook ignores ev
   } finally { await fx.close(); }
 });
 
-test("an original analysis names its standard, says 信号，待验证 without a replication, and at most two are published in a rolling week", options, async () => {
+/** The versions a drug-safety replay leaves in an episode's run: a method record and machine values, no evidence matrix. */
+const engineVersions = (seed, extra = []) => [{
+  path: "deliverables/d1/signals.json", versionId: `rv_${sha256(`engine-${seed}`)}`, digest: sha256(`engine-bytes-${seed}`),
+  method: { id: "faers.signals", version: "1.1.0", digest: sha256("method"), seeded: false, seed: null },
+  inputs: [{ kind: "data", id: `faers-snapshot-${seed}`, digest: sha256(`snapshot-${seed}`), versionId: null, path: "inputs/faers.json", availability: "captured" }],
+  machineValues: [{ key: "values[0].ror.value", value: 2.4012, unit: "ratio" }, { key: "values[0].ror.ci95_lower", value: 1.5034 }, { key: "values[0].ror.ci95_upper", value: 3.2199 },
+    { key: "values[0].table.a", value: 1234 }, ...extra],
+}];
+
+/** Fold an episode whose run left engine receipts and no evidence matrix. */
+async function foldEngineEpisode(fx, { action, versions }) {
+  counter += 1;
+  const runId = `run_engine_${counter}`;
+  await fx.autopilot.markEpisodeDispatched(PUBLISHER, action.episodeId, { runId, sessionId: `ses_engine_${counter}` });
+  fx.resultsByRun.set(runId, versions);
+  await fx.autopilot.completeRun(PUBLISHER, {
+    projectId: EVIDENCE_PROJECT_ID, runId, episodeId: action.episodeId, sessionId: `ses_engine_${counter}`, status: "succeeded", artifacts: ["deliverables/d1/signals.json"],
+    deltaSchemaVersion: 1, costCny: 2, claims: [],
+  });
+  return { runId, episodeId: action.episodeId, agendaId: action.agendaId };
+}
+
+test("an original analysis stands on engine receipts, names its standard, says 信号，待验证 without a replication, and at most two are published in a rolling week", options, async () => {
   const fx = await setup("cardoriginal", { evidenceProgrammeMaxConcurrency: 3 });
   try {
-    const engine = [{ key: "ror.fatigue", value: 2.4, unit: "ratio" }];
     fx.state.model = async () => modelAnswer({ actions: [
       { zone: "nsclc", taskType: "signal-monitoring", reason: "有安全警示" }, { zone: "breast-cancer", taskType: "signal-monitoring", reason: "有安全警示" },
       { zone: "type2-diabetes", taskType: "signal-monitoring", reason: "有安全警示" }], reason: "三个药物安全信号" });
     const decision = (await fx.programme.runDay("2026-10-05")).decision;
     assert.deepEqual(decision.actions.map((action) => action.status), ["scheduled", "scheduled", "scheduled"]);
     const runs = [];
-    for (const action of decision.actions) {
-      const run = await foldEpisode(fx, { action, sources: [SOURCE_A], matrixClaims: [claim("CLM-001", SOURCE_A, QUOTE_A)], agendaClaims: [agendaClaim("CLM-001")], machineValues: engine });
-      await verify(fx, run, { "CLM-001": "stands" });
-      runs.push(run);
-    }
+    for (const [index, action] of decision.actions.entries()) runs.push(await foldEngineEpisode(fx, { action, versions: engineVersions(index) }));
     const results = [];
     for (const run of runs) results.push((await fx.programme.onRunFinished(project, { id: run.runId })).state);
     assert.deepEqual(results, ["published", "published", "deferred_original_cap"], "the third is deferred, not dropped");
@@ -262,6 +279,9 @@ test("an original analysis names its standard, says 信号，待验证 without a
       assert.equal(card.disclosure.reportingStandard, "READUS-PV", "the reporting standard is in disclosure");
       assert.match(card.title, /（信号，待验证）/);
       assert.match(card.content.answer, /^信号，待验证：/);
+      assert.deepEqual(card.claims.map((claim) => claim.claimType), ["calculated", "calculated"], "the card stands on calculations, which the official zone requires of first-hand work");
+      assert.equal(card.claims[0].claim, "该药物与该不良事件的报告比值比（ROR）为 2.40，置信区间下限 1.50、上限 3.22。");
+      assert.match(card.limitations, /未报告多重比较校正/);
     }
     assert.equal((await cardsOf(fx, "2 型糖尿病")).length, 0);
     assert.equal(fx.programme.status().counters.original.deferred >= 1, true);
@@ -275,18 +295,32 @@ test("an original analysis names its standard, says 信号，待验证 without a
   } finally { await fx.close(); }
 });
 
-test("an original analysis replicated in a second independent dataset is a 「发现」", options, async () => {
+test("an original analysis replicated in a second independent dataset and corrected for its comparisons is a 「发现」", options, async () => {
   const fx = await setup("cardfinding");
   try {
-    const run = await episodeOf(fx, { day: "2026-10-05", zone: "nsclc", taskType: "signal-monitoring", sources: [SOURCE_A],
-      matrixClaims: [claim("CLM-001", SOURCE_A, QUOTE_A)], agendaClaims: [agendaClaim("CLM-001")],
-      machineValues: [{ key: "ror.fatigue", value: 2.4 }, { key: "replication.independent_dataset_count", value: 1 }] });
-    await verify(fx, run, { "CLM-001": "stands" });
+    fx.state.model = async () => modelAnswer({ actions: [{ zone: "nsclc", taskType: "signal-monitoring", reason: "有安全警示" }], reason: "测试" });
+    const action = (await fx.programme.runDay("2026-10-05")).decision.actions[0];
+    const run = await foldEngineEpisode(fx, { action, versions: engineVersions("found", [{ key: "replication.independent_dataset_count", value: 2 },
+      { key: "multiplicity.tested_hypotheses", value: 12 }, { key: "multiplicity.correction_applied", value: 1 }]) });
     assert.equal((await fx.programme.onRunFinished(project, { id: run.runId })).state, "published");
     const [card] = await cardsOf(fx, "非小细胞肺癌");
     assert.match(card.title, /（发现）/);
     assert.doesNotMatch(card.content.answer, /信号，待验证/);
+    assert.equal(card.claims.at(-1).claim, "本次分析共检验了 12 个假设，并已做多重比较校正。");
     assert.equal(fx.programme.status().counters.original.finding, 1);
+  } finally { await fx.close(); }
+});
+
+test("an analysis engine's episode with no receipt is read through its evidence matrix: a synthesis, and never an original analysis", options, async () => {
+  const fx = await setup("cardnoreceipt");
+  try {
+    const run = await episodeOf(fx, { day: "2026-10-05", zone: "nsclc", taskType: "signal-monitoring", sources: [SOURCE_A],
+      matrixClaims: [claim("CLM-001", SOURCE_A, QUOTE_A)], agendaClaims: [agendaClaim("CLM-001")], machineValues: [{ key: "ror.fatigue", value: 2.4 }] });
+    await verify(fx, run, { "CLM-001": "stands" });
+    assert.equal((await fx.programme.onRunFinished(project, { id: run.runId })).state, "published");
+    const [card] = await cardsOf(fx, "非小细胞肺癌");
+    assert.equal(card.originality, "synthesis");
+    assert.equal(card.disclosure.reportingStandard, undefined);
   } finally { await fx.close(); }
 });
 
