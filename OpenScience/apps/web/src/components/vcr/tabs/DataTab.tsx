@@ -224,17 +224,17 @@ const CANDIDATE_EVENT_LABELS: Readonly<Record<VcrPrecedentCandidate["event"], st
 });
 
 /**
- * 候选先例: trial events the frontier feed reported for what the study is about. Each is marked a candidate and says so in a sentence,
+ * 待核对的先例: trial events the frontier feed reported for what the study is about. Each is marked a candidate and says so in a sentence,
  * because a candidate is a pointer — a precedent is a registry record the evidence step fetched and checked against its own text.
  */
 function PrecedentCandidates({ rows }: { rows: readonly VcrPrecedentCandidate[] }) {
   return (
-    <VcrSection title="候选先例" meta={`${rows.length} 项`}>
+    <VcrSection title="待核对的先例" meta={`${rows.length} 项`}>
       <p className="mb-2 text-caption text-text-3">前沿动态里出现的、与本研究对象有关的试验事件，只是线索，不是先例：证据步骤取回登记记录并逐项核对之后，才会进入试验先例。</p>
       <ul className="divide-y divide-faint">
         {rows.map((row) => (
           <li key={row.id} data-vcr-precedent-candidate={row.id} className="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-2">
-            <Tag>候选</Tag>
+            <Tag>待核对</Tag>
             <span className="min-w-0 flex-1 text-ui text-text">{row.title}</span>
             <span className="shrink-0 text-caption text-text-3">
               {[CANDIDATE_EVENT_LABELS[row.event], row.registryId ?? (row.doi ? `DOI ${row.doi}` : null)].filter(Boolean).join(" · ")}

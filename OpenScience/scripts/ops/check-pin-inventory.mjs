@@ -58,6 +58,11 @@ export const RULES = [
   },
   {
     kind: "provenance",
+    where: /^OpenScience\/evals\/acceptance\/[^/]+\.json$/,
+    why: "a live acceptance record names the release and the image tags it was measured on; re-dating it claims the acceptance ran on a kernel it never saw",
+  },
+  {
+    kind: "provenance",
     where: /^OpenScience\/evals\/method-quality\/(reports|results)\//,
     why: "an evaluation report records the kernel a measurement was taken on; re-dating it claims the number came from a version that never produced it",
   },

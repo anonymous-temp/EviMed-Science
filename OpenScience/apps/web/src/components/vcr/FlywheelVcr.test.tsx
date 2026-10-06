@@ -62,10 +62,10 @@ describe("the data tab (F23, F24)", () => {
       if (!node) throw new Error("no provenance");
       return node as HTMLElement;
     });
-    expect(row).toHaveTextContent("候选 · 来自证据卡");
+    expect(row).toHaveTextContent("线索 · 来自证据卡");
     const candidates = container.querySelectorAll("[data-vcr-precedent-candidate]");
     expect(candidates).toHaveLength(2);
-    expect(candidates[0]).toHaveTextContent("候选");
+    expect(candidates[0]).toHaveTextContent("待核对");
     expect(candidates[0]).toHaveTextContent("结果发布 · NCT05550002");
     expect(candidates[1]).toHaveTextContent("说明书变更 · DOI 10.1000/x");
     expect(screen.getByText(/只是线索，不是先例/)).toBeInTheDocument();
