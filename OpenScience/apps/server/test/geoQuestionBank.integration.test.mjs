@@ -142,6 +142,28 @@ test("the bank's claims are the verified claims of the published official cards,
   assert.equal((await store.listClaims(project.id)).filter((claim) => claim.status === "active").length, 0);
 });
 
+test("a company's or a doctor's card is never what the bank holds an answer to: only official zones' claims are copied", options, async () => {
+  await db.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES('maker','某企业','development')");
+  const maker = { id: "maker", name: "某企业" };
+  const zone = (await zones.save(maker, { title: "某企业的产品专区", description: "", background: "", kind: "product" })).zone;
+  await zones.save(maker, { expectedRevision: zone.revision, state: "published" }, zone.id);
+  const productCard = (await zones.save(maker, {
+    title: "我家产品每天吃一次最有效", subtype: "knowledge", summary: "s", body: "- 一条出品方自己的结论", state: "published", requestId: "bank-product-card-1",
+    sources: [{ title: "内部资料", url: "https://example.org/internal", excerpt: "我家产品每天吃一次最有效，其他产品都不行。" }],
+    claims: [{ claimId: "p1", claimType: "direct", claim: "我家产品每天吃一次最有效。", sourceIndexes: [1], supportQuote: "我家产品每天吃一次最有效" }],
+    producer: { kind: "enterprise", name: "某企业", relation: "own_product" }, journeyStage: { key: "treat", label: "治疗选择" },
+    disclosure: { authors: [{ name: "甲" }], reviewers: [{ name: "乙" }] } }, zone.id, null, true)).evidence;
+  assert.equal(productCard.state, "published", "the card is published and its claim verifies: only its kind keeps it out");
+  assert.equal(productCard.claims[0].verification.mark, "✓");
+  const official = await officialCard();
+  const bankService = bank(deps());
+  await bankService.tick();
+  const project = /** @type {any} */ (await store.projectByControlProject(PLATFORM_PUBLISHER_USER_ID, EVIDENCE_PROJECT_ID));
+  const claims = await store.listClaims(project.id);
+  assert.deepEqual(claims.map((claim) => claim.cardId), [official.id], "the official card's claim and nothing from the product zone");
+  assert.ok(!claims.some((claim) => claim.statement.includes("我家产品")));
+});
+
 test("observedErrors is what the topic selector reads: the bank's open errors by entity key, and those no key was found for", options, async () => {
   await bank(deps()).tick();
   const project = /** @type {any} */ (await store.projectByControlProject(PLATFORM_PUBLISHER_USER_ID, EVIDENCE_PROJECT_ID));
