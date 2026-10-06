@@ -160,10 +160,16 @@ const LINK_RELATIONS = Object.freeze({
  * the paper, the regulator's notice, the label, the guideline). A journal's
  * comment or editorial is background; a company's press release and media
  * coverage are reports.
- * @param {{ sourceType?: string | null, evidenceType?: string | null }} item
+ *
+ * An item of a source whose content is the platform's own (contract 1.3.0, flywheel F09) is a report whatever it
+ * says it is. Only a first-hand item folds two events into one (`frontierClusterDecision`), and the platform's
+ * reading of a study — or its own analysis — is not another institution's first-hand text: it joins the event of the
+ * study it is about, or stands in an event of its own, and never merges two events (plan §4.3 rule 2, §2.2).
+ * @param {{ sourceType?: string | null, evidenceType?: string | null, platformProduced?: boolean }} item
  * @returns {"primary" | "report" | "background"}
  */
-export function frontierEventRole({ sourceType, evidenceType }) {
+export function frontierEventRole({ sourceType, evidenceType, platformProduced = false }) {
+  if (platformProduced) return "report";
   if (sourceType === "journal") return evidenceType === "review-opinion" ? "background" : "primary";
   if (sourceType === "preprint" || sourceType === "regulator") return "primary";
   if (sourceType === "evidence-body") {
@@ -192,7 +198,7 @@ export function frontierPrimaryKind(members) {
 /**
  * @typedef {{ role: string, ownerEntity: string, authority: number, timelineAt: string | Date, lang?: string | null,
  *             sourceType?: string | null, evidenceType?: string | null, selected?: boolean, safetyAlert?: boolean,
- *             scoreTotal?: number | null }} FrontierEventMember
+ *             scoreTotal?: number | null, platformProduced?: boolean }} FrontierEventMember
  */
 
 /**
@@ -209,12 +215,16 @@ export function frontierEventCounts({ members, now }) {
   for (const member of members) {
     const at = new Date(member.timelineAt).getTime();
     const entity = String(member.ownerEntity || "");
-    entities.add(entity);
-    if (at >= since) recent.add(entity);
+    // The platform's own report is a report of the event and no corroboration of it: it is no independent institution,
+    // so it adds to no count of them (plan §4.3 rule 2).
+    if (member.platformProduced !== true) {
+      entities.add(entity);
+      if (at >= since) recent.add(entity);
+    }
     firstAt = Math.min(firstAt, at);
     lastAt = Math.max(lastAt, at);
   }
-  const languages = new Set(members.map((member) => String(member.lang ?? "")));
+  const languages = new Set(members.filter((member) => member.platformProduced !== true).map((member) => String(member.lang ?? "")));
   return {
     sourceCount72h: recent.size,
     reportCount: members.length,
@@ -242,6 +252,8 @@ export function frontierEventHeat({ members, now }) {
   /** @type {Map<string, { authority: number, at: number }>} */
   const byEntity = new Map();
   for (const member of members) {
+    // The platform's own report lends an event no heat: heat is what independent institutions reporting it adds up to.
+    if (member.platformProduced === true) continue;
     const entity = String(member.ownerEntity || "");
     const at = new Date(member.timelineAt).getTime();
     const authority = Math.min(5, Math.max(1, Number(member.authority) || 1));
@@ -460,7 +472,7 @@ export function frontierEventInstitutions({ members, now }) {
   /** @type {Map<string, { type: string, authority: number }>} */
   const entities = new Map();
   for (const member of members) {
-    if (!(new Date(member.timelineAt).getTime() >= since)) continue;
+    if (!(new Date(member.timelineAt).getTime() >= since) || member.platformProduced === true) continue;
     const entity = String(member.ownerEntity || "");
     const type = String(member.sourceType || "media");
     const authority = Number(member.authority) || 0;
@@ -704,7 +716,7 @@ export class FrontierEvents {
           OR EXISTS (SELECT 1 FROM evimed_frontier.item_vectors v WHERE v.item_id = i.id AND v.model_key = $${values.push(modelKey)}))` : "";
     const rows = (await this.database.query(`SELECT i.id, i.public_id, i.title_raw, i.title_zh, i.summary_zh, i.lane, i.lang,
         i.source_type, i.evidence_type, i.identity_key, i.registry_ids, i.entity_keys, i.published_at, i.timeline_at, i.visible_at,
-        i.doi AS doi, i.pmid AS pmid, s.name AS source_name, s.owner_entity AS owner_entity
+        i.doi AS doi, i.pmid AS pmid, s.name AS source_name, s.owner_entity AS owner_entity, s.platform_produced AS platform_produced
       FROM evimed_frontier.items i JOIN evimed_frontier.sources s ON s.id = i.primary_source_id
       WHERE i.state = 'published' AND i.event_id IS NULL AND i.visible_at >= $1::timestamptz
         AND NOT ('digest' = ANY(i.flags)) AND (i.verification <> 'pending' OR i.visible_at < $2::timestamptz) ${vectorWait}
@@ -824,7 +836,7 @@ export class FrontierEvents {
       const named = [...new Set([...found.identifier, ...found.strong, ...found.yes, ...found.related])];
       const events = await this.#resolveEvents(client, named);
       const survivorOf = (/** @type {string} */ id) => events.get(id)?.id ?? null;
-      const role = frontierEventRole({ sourceType: item.source_type, evidenceType: item.evidence_type });
+      const role = frontierEventRole({ sourceType: item.source_type, evidenceType: item.evidence_type, platformProduced: item.platform_produced === true });
       const decision = frontierClusterDecision({
         role,
         identifier: found.identifier.map(survivorOf).filter(/** @returns {id is string} */ (id) => Boolean(id)),
@@ -966,7 +978,8 @@ export class FrontierEvents {
    */
   async #members(client, eventIds) {
     const rows = (await client.query(`SELECT ei.event_id, ei.role, i.id AS item_id, i.timeline_at, i.lang, i.lane, i.title_zh, i.title_raw,
-        i.entity_keys, i.source_type, i.evidence_type, i.selected, i.safety_alert, i.score_total, s.owner_entity, s.authority
+        i.entity_keys, i.source_type, i.evidence_type, i.selected, i.safety_alert, i.score_total, s.owner_entity, s.authority,
+        s.platform_produced
       FROM evimed_frontier.event_items ei
       JOIN evimed_frontier.items i ON i.id = ei.item_id
       JOIN evimed_frontier.sources s ON s.id = i.primary_source_id
@@ -982,7 +995,8 @@ export class FrontierEvents {
   #asMembers(rows) {
     return rows.map((row) => ({ role: row.role, ownerEntity: row.owner_entity, authority: Number(row.authority), timelineAt: row.timeline_at,
       lang: row.lang, sourceType: row.source_type, evidenceType: row.evidence_type, selected: row.selected === true,
-      safetyAlert: row.safety_alert === true, scoreTotal: row.score_total == null ? null : Number(row.score_total) }));
+      safetyAlert: row.safety_alert === true, scoreTotal: row.score_total == null ? null : Number(row.score_total),
+      platformProduced: row.platform_produced === true }));
   }
 
   /**
@@ -1211,7 +1225,7 @@ export class FrontierEvents {
     }
     const rows = (await this.database.query(`SELECT e.id, e.public_id, e.title_zh, e.latest_zh, e.source_count_72h, e.report_count, e.first_at,
         e.last_at, e.status,
-        count(DISTINCT s.owner_entity) FILTER (WHERE i.timeline_at >= $1::timestamptz)::integer AS institutions,
+        count(DISTINCT s.owner_entity) FILTER (WHERE i.timeline_at >= $1::timestamptz AND NOT s.platform_produced)::integer AS institutions,
         count(*) FILTER (WHERE i.timeline_at >= $1::timestamptz)::integer AS reports,
         bool_or(ei.role = 'primary') AS has_primary
       FROM evimed_frontier.events e
@@ -1221,7 +1235,7 @@ export class FrontierEvents {
       WHERE e.merged_into IS NULL AND e.last_at >= $1::timestamptz
       GROUP BY e.id
       HAVING count(*) FILTER (WHERE i.timeline_at >= $1::timestamptz) > 0
-        AND (count(DISTINCT s.owner_entity) FILTER (WHERE i.timeline_at >= $1::timestamptz) >= $2 OR e.id = ANY($3::bigint[]))`,
+        AND (count(DISTINCT s.owner_entity) FILTER (WHERE i.timeline_at >= $1::timestamptz AND NOT s.platform_produced) >= $2 OR e.id = ANY($3::bigint[]))`,
     [since, FRONTIER_HOT_MIN_INSTITUTIONS, [...onList.keys()]])).rows ?? [];
     /** @type {Array<{ id: string, institutions: number, hasPrimary: boolean, bestRank: number | null, lastAt: Date | string | null, row: any }>} */
     const candidates = rows.map((row) => ({ id: String(row.id), institutions: Number(row.institutions), hasPrimary: row.has_primary === true,

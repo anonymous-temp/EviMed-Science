@@ -22597,6 +22597,32 @@
      "诊疗规范"
     ]
    }
+  },
+  {
+   "id": "evimed-evidence",
+   "name": "EviMed 证据中心（平台出品的证据卡）",
+   "homepage": "https://www.evimed.com/evidence/",
+   "lane": "evidence",
+   "source_type": "evidence-body",
+   "access": "json-api",
+   "egress": "direct",
+   "authority": 3,
+   "safety_feed": false,
+   "owner_entity": "EviMed 证据中心",
+   "launch_tier": "P0",
+   "language": "zh",
+   "region": "CN",
+   "poll_floor_s": 3600,
+   "poll_ceiling_s": 21600,
+   "enabled": true,
+   "disabled_reason": null,
+   "category": "evidence-platform",
+   "platform_produced": true,
+   "config": {
+    "family": "evimed-evidence",
+    "url_env": "EVIMED_EVIDENCE_FEED_URL",
+    "max_pages": 5
+   }
   }
  ],
  "probe_sha256": "09ba424f2447b58eb4ee7e8197f343deb58c63575d0ffdc2cb0aa7775c76d94f"

@@ -45,9 +45,11 @@
  *
  *   OPEN_SCIENCE_KNOWLEDGE_PLUGIN_TOKEN_FILE=/tmp/frontier-dev/knowledge-plugin.token \
  *   node packages/contracts/knowledge-plugin/fixtures/record.mjs [--url http://127.0.0.1:18080]
+ *
+ * `--platform-source` records only what a contract minor changes (`recordPlatformSource` below) and keeps the rest.
  */
 
-import { readdir, rm, writeFile } from "node:fs/promises";
+import { readdir, readFile, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
@@ -296,6 +298,55 @@ export async function recordKnowledgePluginContract({ baseUrl, token, outDir = h
   return recordings.map(({ name, status }) => ({ name, status }));
 }
 
+/**
+ * Re-record the three fixtures a contract minor adds to or changes, off a live plugin speaking the new contract, and
+ * leave every other recording as it was made.
+ *
+ * Hidden knowledge: why this is not `recordKnowledgePluginContract`. That records a stream, and a stream (13,775 entries,
+ * days of crawling) is what only the development instance that holds it can give; a minor version that adds a field to
+ * the registry's rows (1.3.0: `Source.platform_produced`) changes what `manifest.json` and `health.json` say about the
+ * contract and adds one source row, and nothing in the stream. So the manifest, the health answer and the one source row
+ * are recorded again off a live plugin of the new version, `provenance.json` says so (`partialRecordings`: when, off
+ * which build, which files), and the recordings of the stream stay what they were — still valid, since a minor only adds.
+ * The plugin may serve an empty stream (crawler off): nothing here reads one.
+ *
+ * @param {{ baseUrl: string, token: string, outDir?: string, sourceId?: string }} options
+ */
+export async function recordPlatformSource({ baseUrl, token, outDir = here, sourceId = "evimed-evidence" }) {
+  const base = String(baseUrl).replace(/\/+$/, "");
+  const signed = { token, credential: "the deployment token" };
+  const recordings = [
+    await exchange(base, { name: "health.json", path: "/v1/health" }),
+    await exchange(base, { name: "manifest.json", path: "/v1/manifest", ...signed }),
+    await exchange(base, { name: "source-platform-produced.json", path: `/v1/sources/${encodeURIComponent(sourceId)}`, ...signed }),
+  ];
+  for (const recorded of recordings) expectStatus(recorded, 200);
+  const [health, manifest, source] = recordings.map(json);
+  if (source.platform_produced !== true) throw new Error(`${sourceId} does not say it is platform produced: this is not a plugin of contract 1.3.0`);
+  if (health.contract !== manifest.contract?.version) throw new Error("the plugin's health and manifest name different contracts");
+  for (const recorded of recordings) {
+    assertNoSecret(token, recorded.bytes);
+    assertNoSecret(token, JSON.stringify(recorded.headers));
+    assertNoSecret(token, JSON.stringify(recorded.request));
+  }
+  const provenance = JSON.parse(await readFile(path.join(outDir, "provenance.json"), "utf8"));
+  const recordedAt = new Date().toISOString();
+  // `plugin`, `server` and `recordedAt` stay the stream's: they say where the stream came from. The contract the set
+  // speaks is the new one; which of it was recorded when, and off what, is `partialRecordings`.
+  provenance.contractVersion = manifest.contract.version;
+  provenance.partialRecordings = [...(provenance.partialRecordings ?? []), {
+    recordedAt, server: base, plugin: manifest.plugin, contractVersion: manifest.contract.version, fixtures: recordings.map((recorded) => recorded.name),
+    reason: "Contract 1.3.0 adds Source.platform_produced: the manifest and health name the new contract and one source row carries the field. The stream's recordings are the 1.2.0 plugin's, still valid, since a minor only adds.",
+    serverRole: "a local instance of 项目代码/knowledge-plugin built from this repository (crawler off, the whole registry synced, EVIMED_EVIDENCE_FEED_URL set), not a production plugin",
+  }];
+  for (const recorded of recordings) {
+    provenance.fixtures[recorded.name] = { request: recorded.request, status: recorded.status, headers: recorded.headers, recordedAt: recorded.recordedAt };
+    await writeFile(path.join(outDir, recorded.name), recorded.bytes);
+  }
+  await writeFile(path.join(outDir, "provenance.json"), `${JSON.stringify(provenance, null, 2)}\n`);
+  return recordings.map(({ name, status }) => ({ name, status }));
+}
+
 function argument(/** @type {string} */ name) {
   const index = process.argv.indexOf(`--${name}`);
   return index >= 0 ? process.argv[index + 1] : undefined;
@@ -309,7 +360,9 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     process.stderr.write(`the token file is unusable (${loaded.error}); set OPEN_SCIENCE_KNOWLEDGE_PLUGIN_TOKEN_FILE or --token-file\n`);
     process.exitCode = 1;
   } else {
-    const recorded = await recordKnowledgePluginContract({ baseUrl, token: loaded.value });
+    const recorded = process.argv.includes("--platform-source")
+      ? await recordPlatformSource({ baseUrl, token: loaded.value })
+      : await recordKnowledgePluginContract({ baseUrl, token: loaded.value });
     process.stdout.write(`${JSON.stringify(recorded, null, 2)}\n`);
   }
 }

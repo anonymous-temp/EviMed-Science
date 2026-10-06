@@ -1,5 +1,5 @@
 import { frontierSourceDisplayName } from '@evimed/domain';
-import { clockMinutes, zonedClock, zonedInstant, frontierDailyIssue, frontierDailyMarkdown, dayLabel } from './frontierDaily.mjs';
+import { clockMinutes, zonedClock, zonedInstant, frontierDailyIssue, frontierDailyMarkdown, dayLabel, followedZoneCards } from './frontierDaily.mjs';
 import { frontierEventRole } from './frontierEvents.mjs';
 import { migrateFrontier } from './frontierPersistence.mjs';
 /** @param {string} day @param {number} offset */
@@ -122,5 +122,8 @@ export class FrontierWeekly {
         return row ? { weekStart: row.week, weekEnd: frontierCalendarDay(row.week, 6), day: row.week, windowStart: new Date(row.window_start).toISOString(), windowEnd: new Date(row.window_end).toISOString(),
             lead: row.lead, sections: row.sections, safety: row.safety, aiMinute: null, markdown: row.markdown, itemCount: row.item_ids.length, generatedAt: new Date(row.generated_at).toISOString(), previousDay: row.previous_week, nextDay: row.next_week } : null;
     }
+    /** 「你关注的专区」 of an issue for one reader, over the week's own window (`followedZoneCards`).
+     * @param {string} userId @param {{windowStart:string,windowEnd:string}} issue */
+    followedZones(userId, issue) { return followedZoneCards(this.database, { userId, from: issue.windowStart, to: issue.windowEnd }); }
     status() { return { available: Boolean(this.jobs && this.owner()), counters: { ...this.counters } }; }
 }

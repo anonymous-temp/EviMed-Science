@@ -230,6 +230,10 @@ import { createFrontierRoutes, frontierRoutePattern } from "./frontierRoutes.mjs
 import { createEvidenceSourceReader } from "./evidenceSourceReader.mjs";
 import { EvidenceEditorial } from "./evidenceEditorial.mjs";
 import { EvidenceZoneService } from "./evidenceZoneService.mjs";
+import { createEvidenceCardSearch } from "./evidenceCardSearch.mjs";
+import { createEvidenceFeed, evidenceFeedMetricFamilies } from "./evidenceFeed.mjs";
+import { createEvidenceFeedRoutes } from "./evidenceFeedRoutes.mjs";
+import { platformContentCitedMetricFamilies } from "./evidenceCitationMetrics.mjs";
 import { createEvidenceZoneRoutes } from "./evidenceZoneRoutes.mjs";
 import { EvidenceCardFromResult } from "./evidenceCardFromResult.mjs";
 import { EvidenceAuthors } from "./evidenceAuthors.mjs";
@@ -1736,7 +1740,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       workerId: randomId("frontier-weekly-") });
     const frontierNotifications = new FrontierNotifications({ database: productDatabase, jobs: productJobs,
       notifications: notificationService, weekly, config, workerId: randomId("frontier-notify-") });
-    const profiles = new FrontierProfiles({ database: productDatabase, researchMemory, editor, embedder, config, budget,
+    const profiles = new FrontierProfiles({ database: productDatabase, researchMemory, editor, embedder, config, budget, entityVocabulary,
       // 与我相关 reads a reader's own recent questions: their runs across
       // their projects, the platform's internal ones left out. Asked in the
       // background, a few readers a round, never on a request.
@@ -1764,7 +1768,12 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       canRun: () => !maintenanceService || maintenanceService.claimingAllowed(),
       report: (loop, code) => process.stderr.write(`frontier ${loop}: ${code}\n`) });
     // Official zones belong to the platform publisher; a zone and its cards are tagged with the shared entity keys.
-    const evidenceZones = new EvidenceZoneService({database:productDatabase,entityKeysFor:entityVocabulary.entityKeysFor,platformPublisherUserId:PLATFORM_PUBLISHER_USER_ID});
+    const evidenceZones = new EvidenceZoneService({database:productDatabase,entityKeysFor:entityVocabulary.entityKeysFor,platformPublisherUserId:PLATFORM_PUBLISHER_USER_ID,
+      // A card published or revised in a followed zone is an inbox notice for each follower (flywheel F10): told after the
+      // write committed, and a notice that could not be queued is said on stderr and never reaches the writer.
+      onCardPublished: async (event) => {
+        try { await frontierNotifications.notifyZoneFollowers(event); } catch (error) { process.stderr.write(`frontier zone notice: ${typeof error?.code === "string" ? error.code : error?.name ?? "error"}\n`); }
+      }});
     // An official zone keeps running on the feed's budget; every other zone's upkeep is booked to its owner, in the
     // owner's own `evimed-evidence` project, and charged through the allowance composed below (`useBilling`).
     const evidenceEditorial = new EvidenceEditorial({database:productDatabase,service:evidenceZones,editor,budget,
@@ -1792,6 +1801,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     audit: (event, status, details) => securityAudit(config, event, status, details) });
   const evidenceZoneRoutes = createEvidenceZoneRoutes({store,service:frontier?.evidenceZones??null,editorial:frontier?.evidenceEditorial??null,
     frontier:frontier?.service??null,config,maxJsonBytes:config.maxJsonBytes});
+  // What the platform's own evidence offers the frontier (flywheel F09): a public feed the knowledge-source plugin reads like
+  // any other publisher's. It reads cards, so it exists only where the evidence tables do; off, its two paths answer by name.
+  const evidenceFeed = frontier && config.evidencePublicWebEnabled ? createEvidenceFeed({ database: productDatabase, config }) : null;
+  const evidenceFeedRoutes = createEvidenceFeedRoutes({ config, feed: evidenceFeed });
   /**
    * A researcher's new project, as `POST /api/projects` makes it and as a new
    * GEO project makes its own: a name in any language and an id the
@@ -2070,7 +2083,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   if (frontier && config.evidenceUpkeepEnabled && productDatabase) {
     const zones = frontier.evidenceZones;
     const followers = /** @type {any} */ (frontier.notifications);
-    const notifyZoneFollowers = typeof followers?.notifyZoneFollowers === "function" ? (/** @type {any} */ event) => followers.notifyZoneFollowers(event) : null;
+    // The upkeep names what happened to the card (updated, corrected, withdrawn); the followers' notice names the change it words. One notice per
+    // card revision either way: a revision the zone service already announced as published content changing is not announced twice.
+    const notifyZoneFollowers = typeof followers?.notifyZoneFollowers === "function"
+      ? (/** @type {{ zoneId: string, cardId: string, revision: number, kind: string }} */ event) => followers.notifyZoneFollowers({ zoneId: event.zoneId, cardId: event.cardId, revision: event.revision, change: event.kind === "updated" ? "revised" : event.kind })
+      : null;
     const changeLog = createEvidenceChangeLog({ database: productDatabase });
     const upkeep = createEvidenceUpkeep({
       database: productDatabase, changeLog, sourceChanges, notifications: notificationService, notifyZoneFollowers, resultImpacts, knowledgeChange,
@@ -4133,6 +4150,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const frontierGatewayHandler = createFrontierGatewayHandler(config, runtimeManager, {
     evaluationIsolation,
     service: frontier?.service ?? null,
+    // Published evidence cards ride beside the items, as an index only (flywheel F12).
+    cards: frontier ? createEvidenceCardSearch({ database: productDatabase, entityVocabulary, sourceChanges }) : null,
     report: (code) => process.stderr.write(`frontier search: ${code}\n`),
   });
   // `geo_read` / `geo_write` / `social_posts_search`: the GEO project the
@@ -4913,6 +4932,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       // "Authentication required" for want of a session it was never going to
       // have.
       if (await agentMemoryRoutes(req, res)) return;
+      // The public evidence feed carries no session either: what it lists is what the platform published to be read.
+      if (await evidenceFeedRoutes(req, res)) return;
       // A device token (own-app reservation, off by default) is read here, so
       // the store's session and CSRF checks below recognise the request.
       await im.authenticateDevice(req, pathname);
@@ -5015,6 +5036,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           entityVocabulary,
           evidencePublish,
           evidenceUpkeep,
+          evidenceFeed,
         });
         return;
       }
@@ -7824,7 +7846,7 @@ function addHistogramMetric(lines, name, help, series) {
   }
 }
 
-async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, evidenceBudget = null, entityVocabulary = null, evidencePublish = null, evidenceUpkeep = null, evidenceProgramme = null }) {
+async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, evidenceBudget = null, entityVocabulary = null, evidencePublish = null, evidenceUpkeep = null, evidenceProgramme = null, evidenceFeed = null }) {
   const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate, frontier, review, geo, vcr, credits);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
@@ -8233,6 +8255,10 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
   for (const family of [...evidenceUpkeepMetricFamilies(evidenceUpkeep?.upkeep.stats() ?? null), ...evidenceChallengeMetricFamilies(evidenceUpkeep?.challenges.stats() ?? null),
     ...evidenceChangeLogMetricFamilies(evidenceUpkeep?.changeLog.stats() ?? null)]) addMetric(lines, family.name, family.help, family.type, family.series);
   addMetric(lines, "open_science_evidence_upkeep_enabled", "Whether keeping the evidence cards current is switched on (OPEN_SCIENCE_EVIDENCE_UPKEEP_ENABLED).", "gauge", [{ value: config.evidenceUpkeepEnabled ? 1 : 0 }]);
+  // Rule 2's guardrail: delivered reports that cite one of EviMed's own cards as a source (evidenceCitationMetrics.mjs).
+  for (const family of platformContentCitedMetricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
+  // The public evidence feed the knowledge-source plugin reads (evidenceFeed.mjs).
+  for (const family of evidenceFeedMetricFamilies(evidenceFeed?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
   // The entity vocabulary the frontier, the zones, agendas, products and studies share: the glossary's size and what
   // the taggings found (entityVocabulary.mjs `entityVocabularyMetricFamilies`).
   for (const family of entityVocabularyMetricFamilies(entityVocabulary?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);

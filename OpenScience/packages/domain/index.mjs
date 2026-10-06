@@ -160,6 +160,7 @@ export {
   EVIDENCE_PLATFORM_ERROR_CODES,
   EVIDENCE_PUBLISH_ERROR_MESSAGES_ZH,
   EVIDENCE_PROGRAMME_ERROR_CODES,
+  EVIDENCE_PUBLIC_ERROR_CODES,
   GEO_ROUTE_ERROR_CODES,
   MANAGED_BROWSER_ERROR_CODES,
   VCR_GATEWAY_ERROR_CODES,
@@ -467,19 +468,24 @@ export {
   traceNumber,
 } from './src/numericTraceability.mjs'
 
-// citedSources — 16 exports
+// citedSources — 21 exports
 export {
   EMPTY_SNAPSHOT_MESSAGE,
   EVIDENCE_SNAPSHOT_FILE,
   INVALID_SNAPSHOT_MESSAGE,
   NOT_OBJECT_SNAPSHOT_MESSAGE,
+  PLATFORM_CARD_CITATION_SENTENCE,
   SNAPSHOT_RETRIEVED_KEY,
   UNRECORDED_LIMIT,
   auditCitedSources,
   citationUrlDefects,
   citationUrlDefectsByLine,
   citedHttpUrls,
+  isPlatformCardAddress,
   normalizedUrl,
+  platformCardCitationMessage,
+  platformCardCitations,
+  platformCardCitationsByLine,
   pmidOfUrl,
   unrecordedCitationMessage,
   unresolvableCitationHost,

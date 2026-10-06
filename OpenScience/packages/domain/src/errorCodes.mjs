@@ -853,6 +853,10 @@ export const SOCKET_TOOL_ERROR_CODES = Object.freeze([
   // A link over plain HTTP: reachable, so a notice (the manifest's
   // `citationsResolvable`, applied in the run's gate since 2026-09-28).
   'citation_plain_http',
+  // A link to one of EviMed's own evidence-card pages: the platform's reading of
+  // sources is an index, so the run is asked to cite the card's primary sources
+  // (flywheel plan §4.3 rule 2). Advice; nothing is withheld.
+  'platform_card_cited',
   'deliverable_run_receipt_shape',
   'deliverable_run_receipt_unbound',
   'deliverable_run_artifact_missing',
@@ -1534,6 +1538,17 @@ export const EVIDENCE_PROGRAMME_ERROR_CODES = Object.freeze([
 ])
 
 /**
+ * The public evidence pages' own refusals (flywheel F08, F09): the feed that lets the knowledge-source plugin read
+ * what the platform publishes is a public URL, and with the module's switch off it is a route that answers by name
+ * rather than a path that never existed.
+ */
+export const EVIDENCE_PUBLIC_ERROR_CODES = Object.freeze([
+  'evidence_public_not_enabled',
+  'evidence_feed_cursor_invalid',
+  'evidence_feed_query_invalid',
+])
+
+/**
  * Every code this build knows, so a mapping test can prove a new code was
  * classified rather than silently inheriting a default.
  *
@@ -1579,6 +1594,7 @@ export const ALL_ERROR_CODES = Object.freeze([...new Set([
   ...EVIMED_CREDITS_ROUTE_ERROR_CODES,
   ...EVIDENCE_PLATFORM_ERROR_CODES,
   ...EVIDENCE_PROGRAMME_ERROR_CODES,
+  ...EVIDENCE_PUBLIC_ERROR_CODES,
   ...Object.keys(EVIDENCE_CARD_ERROR_MESSAGES_ZH),
   ...Object.keys(EVIDENCE_PUBLISH_ERROR_MESSAGES_ZH),
   ...Object.keys(EVIDENCE_UPKEEP_ERROR_MESSAGES_ZH),
@@ -1945,6 +1961,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   deliverable_json_unparseable: '交付包里的 JSON 文件无法解析，下游读不到它写的内容。',
   cited_source_unretrieved: '报告链接的来源只出现在运行自己写的证据快照里，本次运行的检索工具没有取回过它。',
   citation_plain_http: '报告里有引用使用未加密的 http 链接；来源可以打开，结论不受影响，出版方提供 https 地址时换用即可。',
+  platform_card_cited: '这是 EviMed 自己的证据卡，请改引原始来源。证据卡只是索引，引用它等于平台引用自己；打开卡片列出的论文、指南或说明书，引用它们。',
   deliverable_run_receipt_shape: '引擎运行回执缺少必要字段（作业 id、终态、产物清单）。',
   deliverable_run_receipt_unbound: '引擎运行回执没有作业 id，交付包无法与产生它的那次引擎运行对上。',
   deliverable_run_artifact_missing: '运行回执点名的产物不在交付包里。',
@@ -2006,6 +2023,9 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   evidence_programme_budget_spent: '证据中心今天的预算已经用完，这次研究顺延到预算恢复后再做。',
   evidence_programme_slot_busy: '证据中心正在做另一项研究，这次排在它后面，不会丢。',
   evidence_programme_original_weekly_cap: '平台每周最多发布两张原创分析卡，这张顺延到下一周。',
+  evidence_public_not_enabled: '这个部署没有开放证据专区的公开页面和订阅源。',
+  evidence_feed_cursor_invalid: '订阅源的翻页游标已经失效，请从第一页重新读取。',
+  evidence_feed_query_invalid: '订阅源的参数不对：每页条数要在 1 到 200 之间。',
   usage_metering_unavailable: '计量暂时不可用，本次用量稍后补记。',
   illegal_state_transition: '状态变更不合法，已拒绝。',
 
@@ -2457,6 +2477,10 @@ const ERROR_CODE_OUTCOMES = Object.freeze({
   evidence_programme_budget_spent: 'capped',
   evidence_programme_slot_busy: 'capped',
   evidence_programme_original_weekly_cap: 'capped',
+  // The public evidence pages are off in this deployment: about the module, never a verdict on work.
+  evidence_public_not_enabled: 'upstream',
+  evidence_feed_cursor_invalid: 'upstream',
+  evidence_feed_query_invalid: 'upstream',
 })
 
 /**

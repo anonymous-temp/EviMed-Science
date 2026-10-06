@@ -42,6 +42,20 @@ beforeEach(() => {
   useToastStore.setState({ toasts: [] });
 });
 
+describe("a card of the platform's own content", () => {
+  it("says 「EviMed 出品」 beside the source, and says nothing of the kind on any other card", () => {
+    renderCard(scored({ source: { id: "evimed-evidence", name: "EviMed 证据中心", homepage: null, platformProduced: true } }));
+    const card = screen.getByRole("article");
+    expect(within(card).getByText("EviMed 出品")).toBeInTheDocument();
+    expect(within(card).getByText("EviMed 证据中心")).toBeInTheDocument();
+  });
+
+  it("is absent from a card of an outside source", () => {
+    renderCard(scored());
+    expect(screen.queryByText("EviMed 出品")).not.toBeInTheDocument();
+  });
+});
+
 describe("a card", () => {
   it("says who said it, how hard the evidence is, and what it says, under a title that is the row's one title", () => {
     renderCard(scored({ alsoReportedBy: [{ sourceId: "stat", sourceName: "STAT", url: "https://www.statnews.com/x" }], alsoReportedCount: 3,

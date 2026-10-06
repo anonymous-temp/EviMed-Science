@@ -135,6 +135,7 @@ export function FrontierCard({ item, expanded = false, onExpand, grouped = true,
         <div className="flex min-h-6 items-center gap-2 text-caption text-text-3">
           {item.safetyAlert && <Tag tone="safety">安全警示</Tag>}
           <span className="min-w-0 truncate">{item.source.name}</span>
+          {item.source.platformProduced && <Tag>EviMed 出品</Tag>}
           {evidence && <Tag>{evidence}</Tag>}
           {flags.map((flag) => (flag.key === "retracted"
             ? <Tag key={flag.key} tone="safety">{flag.label}</Tag>

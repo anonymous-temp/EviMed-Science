@@ -22,7 +22,7 @@ import { GEO_RECORDS_PREFIX, geoCompanionPaths, geoContentFindings, geoInsightFi
 import { VCR_CHECK_IDS, vcrCohortFindings, vcrComparatorFindings, vcrMatchingFindings, vcrSimulationReportFindings, vcrStudyPackageFindings } from './vcrContracts.mjs'
 import { MANUSCRIPT_SCRATCH_FILE, manuscriptSectionFindings } from './manuscriptContract.mjs'
 import { researchTopicPortfolioFindings } from './researchTopicContract.mjs'
-import { EMPTY_SNAPSHOT_MESSAGE, EVIDENCE_SNAPSHOT_FILE, INVALID_SNAPSHOT_MESSAGE, NOT_OBJECT_SNAPSHOT_MESSAGE, UNRECORDED_LIMIT, auditCitedSources, citationUrlDefectsByLine, unrecordedCitationMessage, unretrievedCitationMessage } from './citedSources.mjs'
+import { EMPTY_SNAPSHOT_MESSAGE, EVIDENCE_SNAPSHOT_FILE, INVALID_SNAPSHOT_MESSAGE, NOT_OBJECT_SNAPSHOT_MESSAGE, UNRECORDED_LIMIT, auditCitedSources, citationUrlDefectsByLine, platformCardCitationsByLine, unrecordedCitationMessage, unretrievedCitationMessage } from './citedSources.mjs'
 import { statConsistencyFindings } from './statConsistency.mjs'
 import { workspaceLayout } from './workspaceLayout.mjs'
 import { validateSourceUnderstanding, SOURCE_UNDERSTANDING_FILE, SOURCE_UNDERSTANDING_INPUT_FILE } from './sourceUnderstanding.mjs'
@@ -191,6 +191,7 @@ export const GATE_CHECK_IDS = Object.freeze([
  * @property {string} [finalReplyText]
  * @property {readonly string[]} [checks]        the manifest's `produces[].checks` for this contract
  * @property {readonly Record<string, any>[]} [retrievedSources]  what this run's retrieval tools returned (the platform's record)
+ * @property {string | null} [publicUrl]          the deployment's configured public URL, when the caller has it (an EviMed card page is recognised by its path anyway)
  */
 
 /** @param {GateInput} input @param {string} path @returns {string} */
@@ -412,6 +413,7 @@ function validateClinicalEvidenceReport(input) {
     sourceArtifacts: input.sourceArtifacts ?? {},
     sourceTypes: input.sourceTypes ?? {},
     briefText: input.briefText ?? null,
+    publicUrl: input.publicUrl ?? null,
   })
   // The gate's own distinction between blocking and degradable is preserved,
   // not flattened. A degradable finding is one the run cannot repair and the
@@ -912,10 +914,13 @@ export function runGate(input) {
  */
 function withManifestChecks(verdict, input) {
   const checks = Array.isArray(input.checks) ? input.checks : []
+  // A finding the kind's own validator already raised is not raised twice: the clinical package's report is
+  // read by both, and says the same words of the same link.
+  const raised = new Set(verdict.issues.map((item) => item.message))
   const extra = [
     ...(checks.includes('citationsResolvable') ? citationAddressIssues(input) : []),
     ...(checks.includes('citedSourcesRecorded') ? citedSourceIssues(input) : []),
-  ]
+  ].filter((item) => !raised.has(item.message))
   if (!extra.length) return verdict
   const blocked = extra.some((item) => item.severity === 'required')
   return {
@@ -938,6 +943,10 @@ function citationAddressIssues(input) {
     const { blocking, advisory } = citationUrlDefectsByLine(path, text(input, path))
     for (const { line, message } of blocking) issues.push(issue('specialist_citation_invalid', message, { path, line, check: 'citations-resolvable' }))
     for (const { line, message } of advisory) issues.push(issue('citation_plain_http', message, { severity: 'advisory', path, line, check: 'citations-resolvable' }))
+    // EviMed's own card page cited as a source: a notice, the platform's reading of sources being an index (rule 2).
+    for (const { line, message } of platformCardCitationsByLine(path, text(input, path), { publicUrl: input.publicUrl ?? null })) {
+      issues.push(issue('platform_card_cited', message, { severity: 'advisory', path, line, check: 'platform-card-citation' }))
+    }
   }
   return issues
 }

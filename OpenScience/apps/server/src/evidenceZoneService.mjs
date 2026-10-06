@@ -146,14 +146,19 @@ export class EvidenceZoneService {
    * before flywheel B2), the owner of an official zone stands in for it.
    * `onCardSaved` is told after a card was saved (its origin, ids and new revision), so the loops that keep a card current can record a
    * producer's own edit; it is advice to them and never part of the save — one that throws is ignored.
+   * `onCardPublished` hears, once a write has committed, that a card became published or that its published content
+   * changed (`change` is `"published"` or `"revised"`; a refresh of check dates alone is neither) — the followers'
+   * notice hangs on it (flywheel F10). It is told and never asked: a failure of it never reaches the writer.
    * @param {{database:any, entityKeysFor?:((input:{texts:string[],identifiers:string[]})=>Promise<string[]>)|null, platformPublisherUserId?:string|null,
-   *   onCardSaved?:((event:{origin:string,zoneId:string,cardId:string,revision:number,state:string})=>Promise<unknown>)|null}} options
+   *   onCardSaved?:((event:{origin:string,zoneId:string,cardId:string,revision:number,state:string})=>Promise<unknown>)|null,
+   *   onCardPublished?:((event:{zoneId:string,cardId:string,revision:number,change:"published"|"revised",origin:string})=>Promise<unknown>|unknown)|null}} options
    */
-  constructor({ database, entityKeysFor = null, platformPublisherUserId = null, onCardSaved = null }) {
+  constructor({ database, entityKeysFor = null, platformPublisherUserId = null, onCardSaved = null, onCardPublished = null }) {
     this.database = database;
     this.entityKeysFor = entityKeysFor;
     this.platformPublisherUserId = platformPublisherUserId;
     this.onCardSaved = onCardSaved;
+    this.onCardPublished = onCardPublished;
   }
   /** What the operator metrics read: the guardrail that must stay at zero. */
   async metrics() {
@@ -639,6 +644,8 @@ export class EvidenceZoneService {
     if (!internalOperation && card && body.lineage != null && typeof body.lineage === "object" && EVIDENCE_PLATFORM_LINEAGE_KEYS.some(key => body.lineage[key] != null))
       throw error(400, "invalid", "Run lineage is written by the platform, not by a session.");
     await this.ready();
+    /** @type {"published"|"revised"|null} */
+    let publication = null;
     const saved = await this.database.transaction(async (/** @type {any} */ client) => {
       if(internalOperation?.lease) {
         const lease=internalOperation.lease;
@@ -770,6 +777,8 @@ export class EvidenceZoneService {
         value.public_view = evidenceContract(evidencePublicViewContent)(body.publicView === undefined ? (existing?.public_view ?? null) : body.publicView, value.claims);
         const changed = ["title","summary","body","sources","limitations","content"].some(key => JSON.stringify(value[key]) !== JSON.stringify(existing?.[key]))
           || ["claims","public_view"].some(key => evidenceHash(value[key] ?? null) !== evidenceHash(existing?.[key] ?? null));
+        // What a follower of the zone is told about (F10): the card becoming published, or its published content changing.
+        publication = value.state === "published" && parent.state === "published" ? (existing?.state !== "published" ? "published" : changed ? "revised" : null) : null;
         const receipt = body.editorial === undefined
           ? changed && existing?.editorial ? {...existing.editorial,status:"review-pending",reviewer:null,...(!internalOperation ? {sourceChecks:[],...(JSON.stringify(value.sources)!==JSON.stringify(existing.sources) ? {sourceCheckedAt:null} : {})} : {})} : existing?.editorial ?? null
           : body.editorial;
@@ -886,6 +895,9 @@ export class EvidenceZoneService {
     if (card && this.onCardSaved) {
       try { await this.onCardSaved({ origin, zoneId: saved.evidence.zoneId, cardId: saved.evidence.id, revision: saved.evidence.revision, state: saved.evidence.state }); }
       catch { /* what keeps a card current is told of the save and is never part of it */ }
+    }
+    if (publication && this.onCardPublished) {
+      try { await this.onCardPublished({ zoneId: zoneId ?? "", cardId: saved.evidence.id, revision: saved.evidence.revision, change: publication, origin }); } catch { /* told, never asked: the publication stands */ }
     }
     return saved;
   }

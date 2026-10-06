@@ -21,7 +21,7 @@ export function rawFrontierItem(overrides: Record<string, unknown> = {}): Record
     specialties: [{ key: "cardiology", label: "心血管" }],
     flags: [],
     entities: { drugs: ["PCSK9"], trials: [], orgs: [], diseases: [] },
-    source: { id: "nejm", name: "NEJM", homepage: "https://www.nejm.org" },
+    source: { id: "nejm", name: "NEJM", homepage: "https://www.nejm.org", platformProduced: false },
     url: "https://www.nejm.org/doi/full/10.1056/example",
     doi: "10.1056/example", pmid: null, registryIds: [],
     publishedAt: "2026-09-22T06:00:00.000Z", datePrecision: "instant",

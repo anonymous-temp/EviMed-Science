@@ -1,7 +1,7 @@
 openapi: 3.1.0
 info:
   title: EviMed Knowledge Source Plugin
-  version: "1.2.0"
+  version: "1.3.0"
   summary: The one interface through which the EviMed platform reads knowledge sources.
   description: |
     The plugin owns everything between the outside world and the platform for *knowledge*
@@ -433,6 +433,7 @@ components:
         authority: { type: integer, minimum: 1, maximum: 5 }
         safety_feed: { type: boolean, description: "An official safety-alert feed; the platform lets its entries bypass scoring." }
         owner_entity: { type: string, description: "The operating entity (a publisher, a company, a WeChat matrix). Independent-source counts for heat are by entity, not by feed." }
+        platform_produced: { type: boolean, default: false, description: "Added in 1.3.0 (flywheel F09): the content of this source is produced by the platform that consumes the plugin (EviMed's own evidence cards), read from a public feed like any other source. The platform labels such items as its own and never counts them as independent corroboration of anything; it gives them no weight in scoring. Absent means false." }
         launch_tier: { $ref: "#/components/schemas/LaunchTier" }
         language: { type: string }
         region: { type: string }

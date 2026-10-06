@@ -6,6 +6,7 @@
 import clinicalSafetyRulesData from "./clinical-safety-rules.json" with { type: "json" };
 import { claimAppraisalFindings } from "./appraisalStructure.mjs";
 import { normalizeWorkspacePath } from "./workspaceLayout.mjs";
+import { isPlatformCardAddress, platformCardCitationMessage, platformCardCitationsByLine } from "./citedSources.mjs";
 import { deriveMarkdownStructure } from "./sourceMaterials.mjs";
 import { locateQuoteInText } from "./sourceMaterialsLocate.mjs";
 
@@ -352,6 +353,8 @@ export const clinicalEvidenceCheckIds = Object.freeze([
   "runtime-leakage",
   "claim-marker-format",
   "internal-api-citation",
+  // EviMed's own card page cited as a source (flywheel plan §4.3 rule 2): a notice, in no tier.
+  "platform-card-citation",
   "exclusive-safety",
   "matrix-present",
   "matrix-schema",
@@ -3192,12 +3195,13 @@ function validSourceArtifactPath(value) {
  *   artifactText: Map<string, string>,
  *   sourceDomains: Set<string>,
  *   issues: IssueLog,
+ *   publicUrl?: string | null,
  * }} context
  * @returns {void}
  */
 function validateSynthesizedClaim(
   value,
-  { label, reportReferenceNumbers, successfulArtifacts, artifactText, sourceDomains, issues },
+  { label, reportReferenceNumbers, successfulArtifacts, artifactText, sourceDomains, issues, publicUrl = null },
 ) {
   if (!synthesizedConfidenceLevels.has(value.confidence)) {
     issues.push(`${label}.confidence must be one of high, moderate, low for a synthesized claim.`);
@@ -3269,6 +3273,7 @@ function validateSynthesizedClaim(
       if (domain === "www.evimed.com" && String(source.sourceUrl ?? "").includes("/api-evimed/")) {
         issues.push(`${sourceLabel}.sourceUrl is an internal API route, not a public evidence citation.`);
       }
+      platformCardSourceNotice(issues, `${sourceLabel}.sourceUrl`, source.sourceUrl, publicUrl);
     }
     for (const token of supportNumericTokens([source.supportQuote, source.sourceTitle, source.identifier].join(" "))) {
       supportNumbers.add(token);
@@ -3322,6 +3327,19 @@ function auditClaim(value, label, context) {
 }
 
 /**
+ * A notice, never a finding the tiers act on: the claim's source address is one of EviMed's own card pages (plan
+ * §4.3 rule 2). The region of the check that was running is restored, because the pushes after this one belong to it.
+ * @param {IssueLog} issues @param {string} where @param {unknown} sourceUrl @param {string | null | undefined} publicUrl
+ */
+function platformCardSourceNotice(issues, where, sourceUrl, publicUrl) {
+  if (typeof sourceUrl !== "string" || !isPlatformCardAddress(sourceUrl, { publicUrl })) return;
+  const running = issues.current;
+  issues.region("platform-card-citation");
+  issues.push(platformCardCitationMessage({ path: where, url: sourceUrl }));
+  issues.current = running;
+}
+
+/**
  * @typedef {{
  *   issues: IssueLog,
  *   reportReferenceNumbers: Set<number> | null,
@@ -3332,6 +3350,7 @@ function auditClaim(value, label, context) {
  *   seen: Set<string>,
  *   claimIds: string[],
  *   derivedClaims: { label: string, claim: Record<string, any> }[],
+ *   publicUrl?: string | null,
  * }} ClaimAuditContext
  */
 
@@ -3399,7 +3418,7 @@ function auditClaimAppraisal(value, label, { issues, artifactText, successfulArt
  * @returns {void}
  */
 function auditClaimEvidence(value, label, context) {
-  const { issues, reportReferenceNumbers, successfulArtifacts, artifactText, sourceDomains, seen, claimIds, derivedClaims } = context;
+  const { issues, reportReferenceNumbers, successfulArtifacts, artifactText, sourceDomains, seen, claimIds, derivedClaims, publicUrl = null } = context;
   issues.region("claim-schema");
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     issues.push(`${label} must be an object.`);
@@ -3430,6 +3449,7 @@ function auditClaimEvidence(value, label, context) {
       artifactText,
       sourceDomains,
       issues,
+      publicUrl,
     });
     // The optional legacy bond adds information, never another independent
     // supporting source or a numeric anchor. Its finding is advisory: a false
@@ -3517,6 +3537,7 @@ function auditClaimEvidence(value, label, context) {
     if (domain === "www.evimed.com" && value.sourceUrl.includes("/api-evimed/")) {
       issues.push(`${label}.sourceUrl is an internal API route, not a public evidence citation.`);
     }
+    platformCardSourceNotice(issues, `${label}.sourceUrl`, value.sourceUrl, publicUrl);
   }
 }
 
@@ -3638,6 +3659,9 @@ export function validateClinicalEvidencePackage({
   // randomized body from an observational one; absent, it falls back to the
   // instrument and the stated start, and nothing else in the gate changes.
   sourceTypes = {},
+  // The deployment's configured public URL, when the caller has it. A card page is recognised by its path on any
+  // host; this adds the pages under a public URL that carries a path prefix of its own.
+  publicUrl = null,
 } = {}) {
   const issues = new IssueLog();
   /** @type {string[]} */
@@ -3808,6 +3832,12 @@ export function validateClinicalEvidencePackage({
   if (/https:\/\/www\.evimed\.com\/api-evimed\//i.test(reportText ?? "")) {
     issues.push("EviMed API endpoints cannot be used as public evidence citations.");
   }
+  // The report's links and its reference list: one finding per address and line. Advice in every tier — it
+  // never withholds, never fails a run, and the reader is told in the sentence above all.
+  issues.region("platform-card-citation");
+  for (const found of platformCardCitationsByLine("clinical-evidence-report.md", reportText, { publicUrl })) {
+    issues.pushAttributed({ text: found.message, line: found.line });
+  }
   issues.region("exclusive-safety");
   if (exclusiveSafetyPattern.test(reportText ?? "")) {
     issues.push("The report must not turn a bounded recommendation into an unsupported exclusive safety claim.");
@@ -3853,7 +3883,7 @@ export function validateClinicalEvidencePackage({
   const seen = new Set();
   /** @type {{ label: string, claim: Record<string, any> }[]} */
   const derivedClaims = [];
-  const claimContext = { issues, reportReferenceNumbers, successfulArtifacts, artifactText, sourceTypes: typeMap(sourceTypes), sourceDomains, seen, claimIds, derivedClaims };
+  const claimContext = { issues, reportReferenceNumbers, successfulArtifacts, artifactText, sourceTypes: typeMap(sourceTypes), sourceDomains, seen, claimIds, derivedClaims, publicUrl };
   for (const [index, value] of claims.entries()) auditClaim(value, `claims[${index}]`, claimContext);
   const reportClaims = reportClaimIds(reportText);
   const reportSet = new Set(reportClaims);

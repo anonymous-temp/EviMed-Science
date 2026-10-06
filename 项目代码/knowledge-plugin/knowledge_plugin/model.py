@@ -1,7 +1,7 @@
 """The shared vocabulary and the reader interfaces of the knowledge-source plugin.
 
 Everything another module needs to agree on lives here, once: the closed vocabularies of the HTTP
-contract (``contract/knowledge-plugin-openapi.yaml`` v1.2.0, whose enums these tuples copy value
+contract (``contract/knowledge-plugin-openapi.yaml`` v1.3.0, whose enums these tuples copy value
 for value), the whitelists that decide which adapter facts and enrichment fields exist past the
 adapter (contract rule 4), and the dataclasses that pass between the scheduler, the protected
 fetch, the adapters (package P2) and the store.
@@ -32,8 +32,9 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Protocol, runtime_checkable
 
-CONTRACT_VERSION = "1.2.0"   # 1.1.0 (2026-09-22): EntryText.enrichment.affiliation_countries;
-                             # 1.2.0 (2026-09-22): Health.last_ok_fetch_at, Health.rate_limited_1h
+CONTRACT_VERSION = "1.3.0"   # 1.1.0 (2026-09-22): EntryText.enrichment.affiliation_countries;
+                             # 1.2.0 (2026-09-22): Health.last_ok_fetch_at, Health.rate_limited_1h;
+                             # 1.3.0 (2026-10-05): Source.platform_produced (flywheel F09)
 PLUGIN_NAME = "evimed-knowledge-plugin"
 
 # ---------------------------------------------------------------------------------------------
@@ -210,6 +211,10 @@ class SourceConfig:
     poll_floor_s: int
     poll_ceiling_s: int
     config: dict
+    #: The content is produced by the platform that consumes this plugin (contract 1.3.0): EviMed's own evidence
+    #: cards, read from a public feed like any other publisher's. A label the platform shows and a reason it never
+    #: counts the source as independent corroboration; the plugin treats the source like every other one.
+    platform_produced: bool = False
 
 
 @dataclass
