@@ -94,8 +94,8 @@ function EvidenceAuthorContent({ authorId }: { authorId: string }) {
                 <ul className="space-y-1">
                   {author.changes.map((change, index) => (
                     <li key={change.id ?? index} className="text-ui text-text-2">
-                      {change.at && <span className="text-text-3">{evidenceDate(change.at)} · </span>}
-                      {change.summary ?? change.kind}
+                      {change.occurredAt && <span className="text-text-3">{evidenceDate(change.occurredAt)} · </span>}
+                      {change.summary ?? change.categoryLabel}
                     </li>
                   ))}
                 </ul>

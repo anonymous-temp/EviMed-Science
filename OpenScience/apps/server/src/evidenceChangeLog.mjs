@@ -116,7 +116,30 @@ export function createEvidenceChangeLog({ database }) {
     return { items: page, nextBefore: rows.length > size ? page.at(-1)?.id ?? null : null };
   }
 
-  return { append, list, stats: () => ({ appended: { ...counters.appended }, rejected: counters.rejected, reads: counters.reads }) };
+  /**
+   * The author's recent changes: the log entries of their cards, newest first, through the cards' zones — only cards the author wrote in zones
+   * the author owns and has published, and cards that are published (a draft's history is the author's workbench, not the public record; a
+   * withdrawn card keeps its entries, which are what says why). The entries are the log's own: a code-made sentence, no card text.
+   * @param {string} userId @param {{ limit?: number }} [options]
+   * @returns {Promise<ReturnType<typeof entryOf>[]>}
+   */
+  async function recentForAuthor(userId, { limit = 10 } = {}) {
+    const size = Number(limit);
+    if (typeof userId !== "string" || !userId) return [];
+    if (!Number.isSafeInteger(size) || size < 1 || size > EVIDENCE_CHANGE_LOG_MAX_PAGE) throw new HttpError(400, "evidence_query_invalid", "Invalid change-log query.");
+    await migrateEvidenceZones(database);
+    counters.reads += 1;
+    const rows = (await database.query(
+      `SELECT l.*,c.title AS card_title FROM evimed_frontier.evidence_change_log l
+         JOIN evimed_frontier.evidence_cards c ON c.id=l.card_id JOIN evimed_frontier.evidence_zones z ON z.id=c.zone_id
+        WHERE c.user_id=$1 AND z.user_id=$1 AND z.state='published' AND c.state='published'
+        ORDER BY l.id DESC LIMIT $2`,
+      [userId, size],
+    )).rows;
+    return rows.map(entryOf);
+  }
+
+  return { append, list, recentForAuthor, stats: () => ({ appended: { ...counters.appended }, rejected: counters.rejected, reads: counters.reads }) };
 }
 
 /**

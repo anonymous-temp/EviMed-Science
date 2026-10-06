@@ -32,7 +32,7 @@ describe("an author's page", () => {
     expect(screen.queryByText(/排名|排行/)).not.toBeInTheDocument();
   });
   it("marks the platform publisher and lists the change log when the deployment keeps one", async () => {
-    client.fetchEvidenceAuthor.mockResolvedValue({ ...author, author: { id: "evimed-evidence-center", name: "EviMed 证据中心", platform: true }, changes: [{ id: "c1", summary: "更正了一处数字", at: "2026-10-05T00:00:00Z" }] });
+    client.fetchEvidenceAuthor.mockResolvedValue({ ...author, author: { id: "evimed-evidence-center", name: "EviMed 证据中心", platform: true }, changes: [{ id: "c1", summary: "更正了一处数字", occurredAt: "2026-10-05T00:00:00Z" }] });
     mount();
     expect(await screen.findByText("平台出版方")).toBeInTheDocument();
     expect(screen.getByText("最近的变更")).toBeInTheDocument();

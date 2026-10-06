@@ -3395,7 +3395,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       continuation: new EvidenceContinuation({ database: productDatabase, origins, library: frontier.actions.library,
         createProject: (user, name) => createResearcherProject(user, { name }),
         bindSession: (project, sessionId) => researchSessions.put(project, sessionId, { mode: "open-domain" }) }),
-      authors: new EvidenceAuthors({ database: productDatabase, platformPublisherUserId: PLATFORM_PUBLISHER_USER_ID }),
+      // The author page carries the author's recent changes where the change log is composed (the upkeep's); without it the page has none.
+      authors: new EvidenceAuthors({ database: productDatabase, platformPublisherUserId: PLATFORM_PUBLISHER_USER_ID, changeLog: evidenceUpkeep?.changeLog ?? null }),
       // A ✓ means the platform read the source: the owner's request to have it read, through the reader the editor's upkeep uses.
       verification: createEvidenceSourceVerification({ database: productDatabase, zones: frontier.evidenceZones,
         readSource: frontier.evidenceEditorial.readSource, perDay: config.evidenceVerifyReadsPerDay,

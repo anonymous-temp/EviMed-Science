@@ -634,7 +634,7 @@ export interface EvidenceAuthorPage {
   cards: Array<EvidenceCardRef & { summary: string; originality: EvidenceOriginality | null; claimCount: number; updatedAt: string }>;
   totals: { cards: number; followers: number; runsFromCards: number };
   /** The author's recent change-log entries, when the deployment keeps a change log. */
-  changes?: Array<{ id?: string; summary?: string; kind?: string; at?: string }>;
+  changes?: Array<{ id?: string; summary?: string; categoryLabel?: string; cardTitle?: string | null; occurredAt?: string }>;
 }
 /** `authorId` is the author's public handle, as the card's links and the author page carry it; an account id is never in a URL. */
 export const fetchEvidenceAuthor = (authorId: string) => productRequest<EvidenceAuthorPage>(`/frontier/authors/${id(authorId)}`);

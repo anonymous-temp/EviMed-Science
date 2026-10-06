@@ -118,6 +118,34 @@ test("a handle is made once per account, however many ask at the same time, and 
   assert.equal((await db.query("SELECT 1 FROM evimed_frontier.evidence_author_handles WHERE handle=$1", [gone])).rowCount, 0);
 });
 
+test("an author's recent changes are the log entries of their own published cards in their published zones, newest first, and nobody else's", options, async () => {
+  const { createEvidenceChangeLog } = await import("../src/evidenceChangeLog.mjs");
+  const log = createEvidenceChangeLog({ database: db });
+  const za = await zoneOf(alice, "Alice zone");
+  const mine = await card(alice, za, "Alice's card");
+  const draft = await card(alice, za, "Alice's draft", { published: false });
+  const hidden = await card(alice, await zoneOf(alice, "Alice's unpublished zone", { published: false }), "Card in an unpublished zone");
+  const zb = await zoneOf(bob, "Bob zone");
+  const bobs = await card(bob, zb, "Bob's card");
+  const entry = (c, trigger = "scheduled_check", category = "searched_no_change") => log.append({ zoneId: c.zoneId, cardId: c.id, category, trigger });
+  const first = await entry(mine);
+  await entry(draft); await entry(hidden); await entry(bobs);
+  const latest = await entry(mine, "producer_edit", "correction");
+  const recent = await log.recentForAuthor("alice", { limit: 10 });
+  assert.deepEqual(recent.map((item) => item.id), [latest.id, first.id], "newest first, and only the published cards of the published zones");
+  assert.ok(recent.every((item) => item.cardId === mine.id && typeof item.summary === "string" && item.summary));
+  assert.equal(recent[0].cardTitle, "Alice's card");
+  assert.deepEqual((await log.recentForAuthor("alice", { limit: 1 })).map((item) => item.id), [latest.id], "bounded by the limit");
+  assert.deepEqual(await log.recentForAuthor("nobody"), [], "an account with no cards has none");
+  assert.deepEqual((await log.recentForAuthor("bob")).map((item) => item.cardId), [bobs.id]);
+  await assert.rejects(log.recentForAuthor("alice", { limit: 0 }), { status: 400, code: "evidence_query_invalid" });
+  // The page carries them through the reader.
+  const withLog = new EvidenceAuthors({ database: db, changeLog: log });
+  const page = await withLog.page(carol, await withLog.handleFor("alice"));
+  assert.deepEqual(page.changes.map((item) => item.id), [latest.id, first.id]);
+  assert.equal(JSON.stringify(page.changes).includes("Alice's draft"), false);
+});
+
 test("the platform's own publisher account has an author page, marked as the platform's", options, async () => {
   const official = (await zones.saveEditorial(publisher, { title: "官方专区", description: "", background: "", kind: "official" }, null, null, false, "programme")).zone;
   await zones.saveEditorial(publisher, { expectedRevision: official.revision, state: "published" }, official.id, null, false, "programme");
