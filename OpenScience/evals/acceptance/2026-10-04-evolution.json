@@ -1933,6 +1933,720 @@
       "sourceArtifactHash": "0f8e97db83207e227f6969359b2af01d134ec5d0bbd84352e388bb0d5b2a3f96",
       "imageId": "sha256:36e63b0e4ce115712ae70e3d3c0059b0c14a730294101dd8f9d4039cef14967d",
       "qualification": "Final wiring now verifies the original signed native proof. One producer receipt hash remains unverified; the previous audit record and scientific scores were not changed."
+    },
+    "release5IsolatedAcceptance": {
+      "recordedAt": "2026-10-06T01:25:56Z",
+      "measuredOn": "2026-10-05",
+      "release": {
+        "rev12": "90e0869f2b77",
+        "sourceRevision": "90e0869f2b77bf720ca19495fb0a317925fb4bf5",
+        "imagesRetaggedOnly": true
+      },
+      "environment": "Isolated acceptance stack on the production host: its own PostgreSQL, volumes and networks, no production network, volume or database. The steps were run on 2026-10-05; the evidence was projected, scanned and copied on 2026-10-06 before the stack was removed.",
+      "runbook": "evimed-wt/live/evolution-acceptance.md with the kit evimed-wt/live/evolution/evo-stack.sh (neither is in this repository)",
+      "spendSettings": {
+        "moduleDailyBudgetCny": 40,
+        "moduleRunBudgetCny": 4,
+        "userDailyCny": 5,
+        "userRunCny": 3
+      },
+      "steps": {
+        "composeCheck": {
+          "passed": true,
+          "runtimesVisibleThroughShim": 0
+        },
+        "gatewayProbes": {
+          "passed": true,
+          "probes": 7,
+          "probesPassed": 7,
+          "failed": 0,
+          "notDeployed": 0,
+          "paidCalls": 0,
+          "qualification": "Handler-level probes with fixture responses; three of them run against a scripted upstream. They show the filter and the audit, not the services and not a live runtime."
+        },
+        "decisions": {
+          "passed": true,
+          "cardsExecuted": 3,
+          "inboxItemsResolved": 3,
+          "oneWayDoor": {
+            "status": "executed",
+            "selected": "wait",
+            "source": "default",
+            "modelCalls": 0
+          },
+          "controlledClock": true
+        },
+        "isolation": {
+          "passed": false,
+          "failure": "Blocked control produced no actual gateway exclusion event.",
+          "policyUnreadableRefusals": 25,
+          "cause": "Product defect of this release: the runtime's gateway token names the run by its dispatch id and the binding by its ledger id, so every gateway request of a bound evaluation run was refused 503 evaluation_policy_unreadable. Fixed by 03bcb142e, first released in 9639c7c53923."
+        },
+        "workflow": {
+          "passed": true,
+          "toolsCalled": [
+            "evidence_deduplicate"
+          ],
+          "uniqueCount": 2,
+          "duplicateCount": 1,
+          "runId": "run_1180b7c9db9a62bcede1d603d14ed8c5"
+        },
+        "nativeProof": {
+          "passed": true,
+          "probe": "ledger-r1",
+          "runId": "run_7d179412205b1386732945e5f8771bc1",
+          "nativeCoverageVerified": true,
+          "reason": "observed_isolated_docker",
+          "traceComplete": true,
+          "nativeToolCalls": 12,
+          "proofHash": "ddcee49d9d4463db1eff66f627647db08ffb9104c5c89f8eb774378f305ee147"
+        },
+        "build": {
+          "passed": true,
+          "methodId": "decision-net-benefit",
+          "toolId": "tool-decision-net-benefit-189cc66a3bca846e",
+          "digest": "sha256:38b60dcfe18d69515ce4dfd4ee222eae9ca7cd17f443acc05f200a60655a6dc2",
+          "revision": 1,
+          "validationLevel": "V2",
+          "publishedOnBranch": 3,
+          "attemptOnThatBranch": 0,
+          "hiddenAssessmentsPassed": 4,
+          "hiddenAssessmentsExposed": 0,
+          "earlierAttempts": [
+            {
+              "result": "product_state_unavailable",
+              "cause": "Environment: the kit's docker shim read its label only from the environment and the candidate executor runs docker with PATH only. Fixed in the kit the same day."
+            },
+            {
+              "branch": 1,
+              "buildAttempts": 4,
+              "status": "waiting_resource",
+              "cause": "A builder run named the method paper's DOI from memory, which on this release raised the whole branch to exposed_uncited. Ruled a label, not an exposure, by d72f14a80 (first released in 9639c7c53923)."
+            },
+            {
+              "branch": 2,
+              "buildAttempts": 1,
+              "status": "waiting_resource",
+              "enteredBy": "the dossier's own decision card answered with its rescout option"
+            }
+          ],
+          "qualification": "The scout was handed the method. This is scout, build, hidden verification and publication, not an unprompted discovery."
+        },
+        "use": {
+          "passed": true,
+          "conversations": 3,
+          "conversationsWithRequiredReceipts": 2,
+          "naturalRoute": "choice:statistical-analysis",
+          "usagePurpose": "kernel"
+        },
+        "researcherUse": {
+          "passed": true,
+          "operatorOnlyPaths": {
+            "operator": 200,
+            "ordinary": 403
+          },
+          "ordinaryAccountSeesPublishedTool": true,
+          "plainQuestionEvolutionUseRows": 0,
+          "toolTaskResearcherOwnedOkReceipts": 1,
+          "tenantFetchOfExcludedPaperRefused": false,
+          "qualification": "An account the wrapper created, not a researcher."
+        },
+        "upload": {
+          "passed": true,
+          "selfCheckStatus": "passed",
+          "pinnedCallsOnUploadedData": 3,
+          "qualification": "Public Pima teaching data; descriptive net-benefit arithmetic; the waiting agenda is an automated fixture."
+        },
+        "wake": {
+          "passed": true,
+          "kind": "tool-publication-wake-engineering-fixture",
+          "receiptId": "evolution-use-76ea953c91fa98388eb5249ef6f3e463"
+        },
+        "releaseReplay": {
+          "passed": true,
+          "allPassed": true,
+          "toolsReplayed": 2,
+          "earlierRunWithNoTool": "allPassed null with no result, before any tool was published; the kit now fails a replay of nothing"
+        },
+        "scopedCycle": {
+          "cycleId": "acceptance-scoped-research-meta-r90e0869f2b77",
+          "frozenHash": "f7538c4264e92adfa82d41e142ad71b2545048c65629dafdf4f9783ba4022644",
+          "complete": true,
+          "completedUnits": 6,
+          "applicableValid": 0,
+          "independentAssessments": 4,
+          "fullResearchValid": 0,
+          "unknownExposure": 0,
+          "codeVerifiedUnits": 0,
+          "verificationFailures": {
+            "behavioural_replay_failed": 4,
+            "isolated_replay_disagrees": 1,
+            "reported_result_disagrees_with_independent_implementation": 1
+          },
+          "policyUnreadableRefusals": 132,
+          "qualification": "Every source request of the six producer runs was refused 503 on this release, so unexposed here is the absence of any source response, not a filter at work. Four of the six verification failures were a false positive of the reordering relation (fixed by 0c0d7eb5d) and one was a brief that did not say where the callable must return its fields (fixed by 74f4e7fe5)."
+        },
+        "scorerAudit": {
+          "status": "complete",
+          "eligibleUnits": 6,
+          "sampled": 3,
+          "reviewed": 0,
+          "sameFamilyRereads": 0,
+          "findingStatuses": {
+            "waiting-control-proof": 3
+          },
+          "modelCalls": 0,
+          "qualification": "The audit audited nothing: no unit of the cycle carried a code proof."
+        }
+      },
+      "spend": {
+        "totalCommittedCny": 22.378,
+        "byPurpose": {
+          "evolution": {
+            "calls": 871,
+            "settledCny": 18.8902
+          },
+          "kernel": {
+            "calls": 414,
+            "settledCny": 3.458
+          },
+          "autopilot": {
+            "calls": 2,
+            "settledCny": 0.0024
+          },
+          "memory-extraction": {
+            "calls": 3,
+            "settledCny": 0.0161
+          },
+          "routing": {
+            "calls": 3,
+            "settledCny": 0.0085
+          },
+          "title": {
+            "calls": 12,
+            "settledCny": 0.0028
+          }
+        },
+        "budgetRaisedOrReset": false
+      },
+      "evidence": {
+        "archive": "evidence-90e0869f2b77.tgz",
+        "archiveSha256": "5381a36d77ff98427a84b6f98677209b71ce2f72fb245690e218ec5243006f15",
+        "archiveBytes": 22306,
+        "stageReportSha256": "7b0d67b0c78c32e0fe3538d6ca1415b0b5047790613046f6dc7c8d887e06ea9d",
+        "cycleReportProjectionSha256": "7f7efc6a56c48ccdff8d71aabdf1728384b451f8f93ac6e8201cf2785365f84d",
+        "databaseProjectionSha256": "2cf5e0c57993c71d5355ed9d740ef68652619f89066b3c76bf9be0d9a6298d2c",
+        "databaseProjectionTablesCutToTheirFirstRow": 10,
+        "databaseProjectionTables": 14,
+        "scan": {
+          "filesScanned": 39,
+          "secretsCompared": 6,
+          "hiddenNumbersCompared": 39,
+          "findings": 0
+        },
+        "inRepository": false
+      },
+      "teardown": {
+        "at": "2026-10-06T00:30:48Z",
+        "containersVolumesNetworksImageTagsRemoved": true,
+        "verifyClean": true
+      }
+    },
+    "release6IsolatedAcceptance": {
+      "recordedAt": "2026-10-06T01:25:56Z",
+      "measuredOn": "2026-10-06",
+      "release": {
+        "rev12": "9639c7c53923",
+        "sourceRevision": "9639c7c53923f4191da283a12b8146dc06914388",
+        "webImage": "open-science-web:9639c7c53923",
+        "runtimeImage": "open-science-runtime:dsh-0.1.7-rc.2-uv-0.11.26-9639c7c53923",
+        "imagesRetaggedOnly": true,
+        "imagesLoadedPulledOrBuilt": 0,
+        "liveInProductionAtTheTime": true
+      },
+      "environment": "Isolated acceptance stack on the production host: its own PostgreSQL (fresh database), volumes and networks under the label io.evimed.acceptance=evolution-9639c7c53923; no production network, volume or database. In production the module stayed off: OPEN_SCIENCE_EVOLUTION_ENABLED is not set in the production .env, and nothing of production was restarted or changed.",
+      "runbook": "evimed-wt/live/evolution-acceptance.md with the kit evimed-wt/live/evolution/evo-stack.sh (neither is in this repository)",
+      "scope": "The three items release 5 left open (isolation, the scoped cycle, the scorer audit) and the free gateway probes. Decisions, native-proof, workflow, build, use, researcher-use, upload, wake and release-replay were not repeated on this release.",
+      "spendSettings": {
+        "moduleDailyBudgetCny": 27,
+        "moduleDailyBudgetCnyFromTheSecondCycleInvocation": 29,
+        "moduleRunBudgetCny": 4,
+        "userDailyCny": 5,
+        "userRunCny": 3,
+        "sessionStopLineCny": 30,
+        "qualification": "The ceiling of 27 was this session's own margin under its cap of 30 and was set to 29 before the remaining five units, when no call had been refused. No call was refused for budget in the session."
+      },
+      "steps": {
+        "composeCheck": {
+          "passed": true,
+          "evolutionEnabled": true,
+          "evolutionRefusal": null,
+          "offControlComposesModule": false,
+          "offControlComposesExclusionLayer": false,
+          "runtimesVisibleThroughShim": 0,
+          "runtimesOnHost": 3,
+          "runtimeNetworkInternal": true,
+          "resultSha256": "4a0bad9fafdc87f36bfefd70fd5e60735f0e2d99f67f1de300a06e5d1b59b4a7"
+        },
+        "gatewayProbes": {
+          "passed": true,
+          "probes": 7,
+          "probesPassed": 7,
+          "failed": 0,
+          "notDeployed": 0,
+          "paidCalls": 0,
+          "qualification": "Handler-level probes with fixture responses; three of them run against a scripted upstream. They show the filter and the audit, not the services and not a live runtime."
+        },
+        "isolation": {
+          "passed": true,
+          "probe": "r6a",
+          "resultSha256": "b4ab1f8f55206d0412ed575e1dae83756846581e7cafbf1276d0af4207349f46",
+          "costCny": 0.3359,
+          "modelCalls": 65,
+          "scored": false,
+          "leakControl": {
+            "projectId": "eval-paper-isolation-r6a-leak",
+            "runId": "run_9436b45501568fb616acb8d9f01a37d4",
+            "runStatus": "succeeded",
+            "exposureTier": "cited",
+            "events": {
+              "intentional-live-source-output|exposed|identifier": 1,
+              "deliverable|cited|identifier": 1
+            },
+            "sourceToolErrorCodes": {
+              "web_read_upstream_unavailable": 1,
+              "web_search_unconfigured": 1
+            },
+            "transcriptHash": "d6ad345aab35fe5f7505e67330205a6652cec9e06593f5662ec9add52b996739",
+            "auditHash": "c52199b4f26bfab1b56be392292a48047c27afb0f04dd9205ec9656f9ea22172"
+          },
+          "blockedControl": {
+            "projectId": "eval-paper-isolation-r6a-blocked",
+            "runId": "run_4f8e2c72e0e2ce218346471a96adee7b",
+            "runStatus": "succeeded",
+            "exposureTier": "unexposed",
+            "blockedEvents": 10,
+            "events": {
+              "public-source|blocked|identifier": 5,
+              "public-source|blocked|title": 5
+            },
+            "sourceToolErrorCodes": {
+              "source_access_denied": 1,
+              "evaluation_source_excluded": 1,
+              "web_search_unconfigured": 1
+            },
+            "eventsRecordedUnderLedgerRunId": 10,
+            "eventsRecordedUnderDispatchId": 0,
+            "transcriptHash": "5f070d56e4e9993c305e4b2d3d8dffe5d36ef9fb49d326050f47814c4615d088",
+            "auditHash": "29b40f06e967e57913e38525aa187212ab35f2e4aa985a98e83b424bd3baa15f"
+          },
+          "policyUnreadableRefusals": 0,
+          "policyUnreadableRefusalsOnRelease5": 25,
+          "establishes": "03bcb142e holds on a live runtime: a bound evaluation run's requests reach its policy and are matched, and their events are recorded under the ledger run id.",
+          "doesNotEstablish": "Any gateway but public-source (the one gateway observed; web search is not configured in the stack). The events do not say whether a request or a response was refused, so response-side filtering from a live runtime is not shown by this step. An engineering control, excluded from every score."
+        },
+        "scopedCycle": {
+          "cycleId": "acceptance-scoped-research-meta-r9639c7c53923",
+          "frozenHash": "0876bd1abdc61c62a0e2374884976152cbee5a81aa9cfe31e4dcf9379fa76ad8",
+          "evaluatorCodeHash": "0abc52c0d9e7294dc8a5bf87aad81bc850737a20ee01cb37be2f12bcd2c9625c",
+          "plan": {
+            "manifestId": "hackshaw-main-dl",
+            "proofHash": "0387d8a7c102dbe3e768d8152841a617fb659145b9489126292757a8948802c8",
+            "plannedDshRuns": 6,
+            "paidCalls": 0
+          },
+          "invocations": [
+            "--execute --isolated-egress --max-new-units=1 (00:39:59Z to 00:46:20Z)",
+            "--execute --isolated-egress (00:49:57Z to 01:10:59Z)"
+          ],
+          "semanticQa": "a fresh Qwen call (the v1 QA was not in the pack)",
+          "result": {
+            "complete": true,
+            "completedUnits": 6,
+            "applicableValid": 4,
+            "independentAssessments": 5,
+            "fullResearchValid": 0,
+            "unknownExposure": 4
+          },
+          "codeVerifiedUnits": 5,
+          "codeVerifiedUnitsOnRelease5": 0,
+          "nativeEgressProofs": 6,
+          "exposureTiers": {
+            "unexposed": 0,
+            "exposed_uncited": 2,
+            "unknown": 4
+          },
+          "sourceIsolationDuringTheCycle": {
+            "publicSourceBlockedEvents": 48,
+            "byReason": {
+              "identifier": 42,
+              "title": 6
+            },
+            "policyUnreadableRefusals": 0,
+            "policyUnreadableRefusalsOnRelease5": 132,
+            "transcriptSourceResponseExposedEvents": 2
+          },
+          "units": [
+            {
+              "variant": 0,
+              "replicate": 0,
+              "producerRunId": "run_1ac0b1af729e4eaf7b97cf390dbb31ce",
+              "codeVerified": true,
+              "verificationFailure": null,
+              "numericFieldsValid": 6,
+              "numericFields": 6,
+              "stagesValid": {
+                "question": true,
+                "method": true,
+                "calculation": true,
+                "certainty": true,
+                "writing": true
+              },
+              "independentAssessment": true,
+              "applicableStagesValid": true,
+              "exposureTier": "exposed_uncited",
+              "exposureCause": "pubmed-id-list-stub",
+              "sourceBlockedEvents": 34,
+              "unparsedCiteLookupResults": 1,
+              "unpinnedArtifacts": 1,
+              "nativeEgressProofHash": "4da6bac1ab5e606d6003f5367826420650b3f62491a3aef1e172a9fbae5dadf9",
+              "verificationCodeHash": "18c31bf79e9671ed8120cd4cee8f826a2193656215c03b918f9f28b2dfbaa7ff"
+            },
+            {
+              "variant": 0,
+              "replicate": 1,
+              "producerRunId": "run_f7af08d03cd286855a8eaf0918912085",
+              "codeVerified": true,
+              "verificationFailure": null,
+              "numericFieldsValid": 6,
+              "numericFields": 6,
+              "stagesValid": {
+                "question": true,
+                "method": true,
+                "calculation": true,
+                "certainty": true,
+                "writing": true
+              },
+              "independentAssessment": true,
+              "applicableStagesValid": true,
+              "exposureTier": "unknown",
+              "exposureCause": "cite-lookup-result-unparsed",
+              "sourceBlockedEvents": 5,
+              "unparsedCiteLookupResults": 4,
+              "unpinnedArtifacts": 2,
+              "nativeEgressProofHash": "be5b145fe4827f6d43a7e38e40f9071608c40b4574730d69bce23eedb2b3a99c",
+              "verificationCodeHash": "813c5772959cfc68cc8c7efe726192a7d422ae4b71501ed28cb8e49a4641bdd4"
+            },
+            {
+              "variant": 1,
+              "replicate": 0,
+              "producerRunId": "run_6d5866b3dd581f66edc099239831a5e5",
+              "codeVerified": true,
+              "verificationFailure": null,
+              "numericFieldsValid": 6,
+              "numericFields": 6,
+              "stagesValid": {
+                "question": true,
+                "method": true,
+                "calculation": true,
+                "certainty": true,
+                "writing": true
+              },
+              "independentAssessment": true,
+              "applicableStagesValid": true,
+              "exposureTier": "unknown",
+              "exposureCause": "cite-lookup-result-unparsed",
+              "sourceBlockedEvents": 0,
+              "unparsedCiteLookupResults": 5,
+              "unpinnedArtifacts": 3,
+              "nativeEgressProofHash": "27b72de613c188c374fbd5c68ba0f915d5d0cc3a56c237330b8c7e3418a48843",
+              "verificationCodeHash": "9f808ba9a8334a999cc66252628a471a51243728c2b0170706e7308833450882"
+            },
+            {
+              "variant": 1,
+              "replicate": 1,
+              "producerRunId": "run_c8df70fea68f0f566bd220497b29af2e",
+              "codeVerified": false,
+              "verificationFailure": "reported_result_disagrees_with_independent_implementation",
+              "numericFieldsValid": 1,
+              "numericFields": 6,
+              "stagesValid": {
+                "question": true,
+                "method": true,
+                "calculation": false,
+                "certainty": true,
+                "writing": false
+              },
+              "independentAssessment": true,
+              "applicableStagesValid": false,
+              "disagreementReview": {
+                "verdict": "reasonable_difference",
+                "reviewerModel": "qwen3.8-max-0902",
+                "verificationFailure": "primary_evidence_uninspectable"
+              },
+              "exposureTier": "exposed_uncited",
+              "exposureCause": "own-query-echoed-in-tool-result",
+              "sourceBlockedEvents": 9,
+              "unparsedCiteLookupResults": 5,
+              "unpinnedArtifacts": 1,
+              "nativeEgressProofHash": "16b81391690b66501193b423db5333f34ea89a1cc366eda565180c97de601327",
+              "verificationCodeHash": null
+            },
+            {
+              "variant": 2,
+              "replicate": 0,
+              "producerRunId": "run_096d760944a2df69f897a9a89319021a",
+              "codeVerified": true,
+              "verificationFailure": null,
+              "numericFieldsValid": 6,
+              "numericFields": 6,
+              "stagesValid": {
+                "question": false,
+                "method": false,
+                "calculation": true,
+                "certainty": false,
+                "writing": false
+              },
+              "independentAssessment": false,
+              "applicableStagesValid": false,
+              "assessmentDropped": "The Qwen assessment answered all four checks true and cited both preserved evidence ids plus three paths of the unit's own delivered files; an id outside the preserved evidence drops the whole assessment.",
+              "exposureTier": "unknown",
+              "exposureCause": "cite-lookup-result-unparsed",
+              "sourceBlockedEvents": 0,
+              "unparsedCiteLookupResults": 2,
+              "unpinnedArtifacts": 4,
+              "nativeEgressProofHash": "f70edd86784d48c30ba477297ff1912c2c9bb83d07ba993aa0777b46cde7e3a2",
+              "verificationCodeHash": "624d96647326463146a944acaf12e8e7e19867a4555444100bf8e8fe5d5608fb"
+            },
+            {
+              "variant": 2,
+              "replicate": 1,
+              "producerRunId": "run_692356720b1a8b98c61af2e372534511",
+              "codeVerified": true,
+              "verificationFailure": null,
+              "numericFieldsValid": 6,
+              "numericFields": 6,
+              "stagesValid": {
+                "question": true,
+                "method": true,
+                "calculation": true,
+                "certainty": true,
+                "writing": true
+              },
+              "independentAssessment": true,
+              "applicableStagesValid": true,
+              "exposureTier": "unknown",
+              "exposureCause": "cite-lookup-result-unparsed",
+              "sourceBlockedEvents": 0,
+              "unparsedCiteLookupResults": 2,
+              "unpinnedArtifacts": 0,
+              "nativeEgressProofHash": "96523b879334d945bb8aeae75e331df830b4cda46cc2740a125607223996fb7c",
+              "verificationCodeHash": "3d8f373f70ea199dbb973dae69ac6edf386e39811a8c5c079405760033714b04"
+            }
+          ],
+          "reportProjectionSha256": "c53effaf5ef3412297bcac8ffeae2f495f827ed7123a27b60cfbf7d5f24a848b",
+          "costCny": 14.4711,
+          "costQualification": "QA call, six producer runs, six stage assessments and one disagreement review; committed total 0.3359 before and 14.8070 after.",
+          "runbookPassLine": {
+            "complete": true,
+            "completedUnits6": true,
+            "unknownExposure0": false
+          },
+          "establishes": "0c0d7eb5d and 74f4e7fe5 hold live: five of six units are code-verified by isolated replay with relations (none on release 5), each with all six numeric fields inside tolerance; the sixth is a real numeric disagreement (one of six fields inside tolerance). No request of the six runs was refused for an unreadable policy (132 on release 5).",
+          "doesNotEstablish": "A cycle with known exposure: no unit is unexposed (findings cite-lookup-results-make-exposure-unknown, protected-pmid-served-in-a-pubmed-id-list, own-query-echo-counted-as-exposure). Whole-research reproduction, by construction: a supplied-input pooled analysis of one paper, fullResearchValid 0.",
+          "noHiddenNumericValues": true
+        },
+        "scorerAudit": {
+          "day": "2026-10-06",
+          "status": "complete",
+          "eligibleUnits": 6,
+          "sampled": 3,
+          "reviewed": 0,
+          "sameFamilyRereads": 0,
+          "discrepancies": 0,
+          "discrepancyRate": null,
+          "sampledProducerRunIds": [
+            "run_f7af08d03cd286855a8eaf0918912085",
+            "run_1ac0b1af729e4eaf7b97cf390dbb31ce",
+            "run_c8df70fea68f0f566bd220497b29af2e"
+          ],
+          "findingStatuses": {
+            "waiting-control-proof": 3
+          },
+          "modelCalls": 0,
+          "costCny": 0,
+          "wallSeconds": 3,
+          "resultSha256": "e2f172b7d6920619070d0e9deb49981661e0c6ee87441beb63b09dc9d6b295b2",
+          "stageLineSaidPassed": true,
+          "judgement": "Not passed. The audit audited nothing, as on release 5, for another reason: finding scorer-audit-refuses-unpinned-artifacts. Two of the three sampled units carry a code proof."
+        },
+        "scorerAuditPathProbe": {
+          "kind": "engineering probe of the audit path, not the acceptance step",
+          "day": "2026-10-07",
+          "realDay": "2026-10-06",
+          "why": "The audit of a day is stored once. The next calendar day's sample is the first that holds the one unit with no artifact issue.",
+          "sampleOrder": [
+            "run_1ac0b1af729e4eaf7b97cf390dbb31ce",
+            "run_692356720b1a8b98c61af2e372534511",
+            "run_c8df70fea68f0f566bd220497b29af2e"
+          ],
+          "passed": false,
+          "failure": "Scorer audit requires an actual independent evidence-citing review.",
+          "resultSha256": "8093edd1a90594a79ada83cfb30c493831d999297b269fb9510be5a566689252",
+          "modelCalls": 1,
+          "reviewModel": "qwen3.8-max-0902",
+          "costCny": 1.4795,
+          "auditRecordStored": false,
+          "qualification": "That the isolated replay of the clean unit verified with the recorded code hash is implied by the order of the code (the reviewer is called only after it), not separately observed."
+        }
+      },
+      "spend": {
+        "totalCommittedCny": 16.2866,
+        "sessionStopLineCny": 30,
+        "byPurpose": {
+          "evolution": {
+            "calls": 397,
+            "settledCny": 16.2866
+          }
+        },
+        "byModel": {
+          "deepseek-flash": {
+            "calls": 388,
+            "settledCny": 3.4124
+          },
+          "qwen3.8-max-0902": {
+            "calls": 9,
+            "settledCny": 12.8742
+          }
+        },
+        "byModelQualification": "The review-model row is the total less the deepseek-flash row: the kit cut it from the database projection (finding kit-projection-cuts-multi-row-tables). Nine calls are one semantic QA, six stage assessments, one disagreement review and one audit review.",
+        "openReservationsAtTheEnd": 0,
+        "budgetRaisedOrReset": true,
+        "budgetRaisedOrResetDetail": "The module's daily ceiling, which this session had set to 27, was set to 29 once, before the second cycle invocation and before any refusal. It stayed under the kit's default of 40 and the session cap of 30. Nothing was reset."
+      },
+      "findings": [
+        {
+          "id": "scorer-audit-refuses-unpinned-artifacts",
+          "kind": "product",
+          "blocks": "the scorer audit",
+          "where": "apps/server/src/evolutionScorerAudit.mjs run() (`if(evidence.artifactIssues?.length)` answers waiting-control-proof) reading apps/server/src/paperGoldEvaluator.mjs readPaperGoldArtifacts (issue producer_receipt_hash_unverified for every run artifact the delivery receipt does not pin)",
+          "observed": "In all six producer runs the delivery receipt pins three files (analysis-results.json, analysis-run.json, analysis.py). Five runs list further artifacts: report.md in three (the brief asks for it), and scratch or input files in three. Each unpinned file is an artifact issue, and one issue makes the unit unauditable. The primary scorer records the same issue as an extraction gap and scores the unit. The three units sampled on 2026-10-06 carried 2, 1 and 1 such issues.",
+          "effect": "sampled 3, reviewed 0, same-family rereads 0, no replay and no model call: the same outcome as release 5 for another reason."
+        },
+        {
+          "id": "scorer-audit-review-guard-discards-a-paid-review",
+          "kind": "product",
+          "blocks": "the scorer audit",
+          "where": "apps/server/src/evolutionScorerAudit.mjs run(): `throw new Error('Scorer audit requires an actual independent evidence-citing review.')`, with allowedEvidence built from gold.sourceHash, gold.reachableEvidenceIds and gold.evidenceIds",
+          "observed": "With the sample of the next calendar day (2026-10-07), the one unit without an artifact issue reached the reviewer: one qwen3.8-max-0902 call settled at CNY 1.4795 and the audit threw. Nothing was stored for that day and the reviewer's answer is not preserved, so which clause refused it was not observed. For this cycle's gold the allowed set is the source hash alone (reachableEvidenceIds is empty and there is no evidenceIds), while all six stage assessments of the same reviewer cited the preserved evidence ids hackshaw-main-dl and author-dataset-documentation.",
+          "effect": "The audit cannot complete on a scoped cycle; a retry pays for the call again."
+        },
+        {
+          "id": "cite-lookup-results-make-exposure-unknown",
+          "kind": "product",
+          "blocks": "unknownExposure 0",
+          "where": "apps/server/src/paperGoldEvaluator.mjs paperGoldSourceResponses (names cite_lookup as a source tool and cannot parse its successful result, which is rendered text) and paperGoldExposureTier (an incomplete source trace is unknown)",
+          "observed": "All six producer runs called cite_lookup; 19 successful results were unparsed, and the unparsed tools of every run were cite_lookup only. The four units with no observed exposure are unknown for that reason alone. Reproduced on the release-6 source with one rendered result.",
+          "effect": "unexposed is unreachable for a run that uses cite_lookup successfully. On release 5 the same calls were refused 503, which read as a complete trace."
+        },
+        {
+          "id": "protected-pmid-served-in-a-pubmed-id-list",
+          "kind": "product",
+          "blocks": "exposure of one unit",
+          "where": "apps/server/src/evaluationIsolation.mjs matched() as used by filter() (a PMID alias matches only beside a pmid/id key or in a PubMed URL, so a bare id string in an array passes), and runtime/mcp/evimed-research/public_sources.py, the NCBI branch of the source search, which builds an item from every id of esearchresult.idlist",
+          "observed": "The filter removed the protected paper's ESummary record and left its PMID in the id list; the tool returned a stub item whose id, title and description are the PMID and whose url is its PubMed address. The evaluator's own transcript audit then recorded transcript-source-response exposed (identifier). In the same run 34 public-source events refused requests or rows naming the paper (28 identifier, 6 title). Reproduced on the release-6 source: idlist and result.uids are served with the protected PMID.",
+          "effect": "exposed_uncited for a unit that was handed an identifier and no content."
+        },
+        {
+          "id": "own-query-echo-counted-as-exposure",
+          "kind": "product",
+          "blocks": "exposure of one unit",
+          "where": "apps/server/src/paperGoldEvaluator.mjs extract(): auditExposure over the whole source response, which includes data.provenance.arguments; and evaluationIsolation.mjs assertRequest, which does not see an identifier percent-encoded in the upstream URL",
+          "observed": "One run searched Europe PMC with the paper's DOI as its query. The request was served (four items, none naming the paper) and the tool result echoed the query under data.provenance.arguments.query; that echo is the only match in the run's source responses. Reproduced on the release-6 source: a request URL carrying the DOI with %2F is served, the same URL with a plain slash is refused, and a result whose only mention is the echoed query is recorded as exposed.",
+          "effect": "exposed_uncited from the model's own recalled identifier, the case d72f14a80 ruled a label for development runs."
+        },
+        {
+          "id": "stage-assessment-dropped-for-citing-delivered-files",
+          "kind": "product-observation",
+          "blocks": "validity of one unit",
+          "where": "apps/server/src/paperGoldVerification.mjs bindPaperGoldStageAssessment (`bonded` requires every cited id to be a preserved evidence id)",
+          "observed": "One of six assessments cited three paths of the unit's delivered files beside both preserved ids, and was dropped whole although its four checks were true and the unit's calculation was code-verified.",
+          "effect": "4 of 6 units valid on the applicable stages where the reviewer's verdicts say 5."
+        },
+        {
+          "id": "kit-collect-and-scan-could-not-read-or-write",
+          "kind": "kit",
+          "observed": "collect failed EACCES (the collector runs as uid 10001 into a 0700 directory of the calling user) and scan could read neither the wrapper's own 0600 files nor the stack's database password, which it skipped silently. On the host copy the evidence directory is made writable and the scan runs as root with DAC_READ_SEARCH only; both archives were scanned that way (six secrets compared each)."
+        },
+        {
+          "id": "kit-projection-cuts-multi-row-tables",
+          "kind": "kit",
+          "observed": "collect keeps only the lines of the database projection that start with a brace, and a table with more than one row continues on lines that start with a space. Each such table kept its first row: 10 of 14 tables in the release-5 archive, 1 of 14 in the release-6 archive (usage by purpose). Found after both stacks were removed, so the cut rows are not recoverable. The stage report, the step logs, the cycle projections and spend.txt are whole; the facts recorded here come from those."
+        },
+        {
+          "id": "kit-networks-took-default-pool-subnets",
+          "kind": "kit",
+          "observed": "The three networks `up` creates had no subnet of their own; this host had three default-pool blocks left. On the host copy they are 10.253.251.0/24, 10.253.252.0/24 and 10.253.253.0/24 beside the evaluation network's 10.253.250.0/24."
+        }
+      ],
+      "notEstablished": [
+        "An audited unit: reviewed 0 and same-family rereads 0 on both releases. Even unblocked, the reviewer is of the assessor's family, so the plan's criterion (reviewed at least 3 by a reviewer that is not the assessor) needs a third family or a person.",
+        "An unexposed unit in a scoped cycle on a release whose sources answer.",
+        "Response-side filtering from a live runtime for any gateway, and any live runtime test of the web-search, ToolUniverse, knowledge-base, frontier, handbook, session-memory and capsule-memory call sites.",
+        "The recalled tier of d72f14a80 on a live build: no build ran on this release, and the counter open_science_evolution_reference_recalled_total was not read.",
+        "Everything release 5 passed (decisions, native proof, workflow, build, use, researcher use, upload, wake, release replay) on release-6 images.",
+        "The long-horizon exit criteria of the plan: V3 and V4, a complete calendar month, temporal and prospective scores, real researchers."
+      ],
+      "kitChangesOnTheHostCopy": [
+        "evo-stack.sh: collect makes the evidence directory writable for the collector; scan runs as root with DAC_READ_SEARCH only; the three networks of `up` name their subnets.",
+        "node/evo-stage.mjs: scorer-audit takes --day and prints each finding's run id and code-side results.",
+        "r7-step.sh: one command per call with the 4 GB disk floor checked first.",
+        "The development machine's kit and the runbook are unchanged; the diffs are kit-r7.diff and kit-r7-stage.diff beside the kit on the host."
+      ],
+      "teardown": {
+        "collectedAt": "2026-10-06T01:18:38Z",
+        "downAt": "2026-10-06T01:19:20Z",
+        "verifyClean": true,
+        "containersNamedForTheAcceptance": 0,
+        "volumesNamedForTheAcceptance": 0,
+        "networksNamedForTheAcceptance": 0,
+        "imageTagsNamedForTheAcceptance": 0,
+        "alsoRemoved": [
+          "the release-5 stack and its two image tags",
+          "the network evimed-evolution-acceptance-internal left from 2026-10-04",
+          "the copied provider key files",
+          "the hidden-case and public-data source copy",
+          "both evidence roots on the host"
+        ],
+        "kitLeftOnTheHost": true,
+        "kitLeftBecause": "the acceptance is not complete",
+        "productionReadinessAfter": 200,
+        "productionChanged": false,
+        "diskFreeOnRoot": {
+          "beforeTheSession": "6.4G",
+          "afterTheRelease5Teardown": "7.3G",
+          "afterTheBuildCachePrune": "15G",
+          "afterTheSession": "15G"
+        }
+      },
+      "evidence": {
+        "archive": "evidence-9639c7c53923.tgz",
+        "archiveSha256": "295d3700b517875cc07fa6cec8719bed1148fe87a8d34645cbbc4fac14b6db7f",
+        "archiveBytes": 10173,
+        "stageReportSha256": "deea3a6ac72b95b5fc5cf20bb8a3b9bee50f48f4a8339a5f4ac35cfd95194c00",
+        "cycleReportProjectionSha256": "c53effaf5ef3412297bcac8ffeae2f495f827ed7123a27b60cfbf7d5f24a848b",
+        "databaseProjectionSha256": "7723ecd5deb4aaf38adb1416625eaa55426212123d2a26f18f33d25eca2d3c1e",
+        "databaseProjectionTablesCutToTheirFirstRow": 1,
+        "databaseProjectionTables": 14,
+        "scan": {
+          "filesScanned": 16,
+          "secretsCompared": 6,
+          "hiddenNumbersCompared": 39,
+          "findings": 0
+        },
+        "scanQualification": "The scan's hidden-number layer reads the candidate cases; the scoped proof's numbers are kept out by the collector's key allow-list, not by the scan.",
+        "inRepository": false
+      }
     }
   },
   "historicalImageDivergence": {
@@ -1982,7 +2696,30 @@
     "scopedMetaCycleComplete": false,
     "scopedMetaRawReportComplete": true,
     "scopedMetaCycleQualification": "Raw six-unit report is complete, but four quota-censored units do not provide a complete interpretable scientific comparison.",
-    "independentScorerAuditAccepted": false
+    "independentScorerAuditAccepted": false,
+    "release6ScopedMetaCycle": {
+      "rawReportComplete": true,
+      "administrativelyCensoredUnits": 0,
+      "codeVerifiedUnits": 5,
+      "applicableStagesValidUnits": 4,
+      "unexposedUnits": 0,
+      "unknownExposureUnits": 4,
+      "fullResearchReproductionValidUnits": 0,
+      "qualification": "Six scored units with no quota censoring, five of them code-verified. No unit's exposure is established as absent, and the cycle is one supplied-input pooled analysis, never whole research. scopedMetaCycleComplete above is left as recorded for v6."
+    },
+    "release6ScorerAudit": {
+      "auditedUnits": 0,
+      "reviewed": 0,
+      "sameFamilyRereads": 0,
+      "independentScorerAuditAccepted": false
+    },
+    "release6LiveGatewayIsolation": {
+      "bindingDefectOfRelease5Fixed": true,
+      "gatewaysObservedFromALiveRuntime": [
+        "public-source"
+      ],
+      "responseSideFilteringShownLive": false
+    }
   },
   "deploymentRequirements": {
     "featureFlag": "OPEN_SCIENCE_EVOLUTION_ENABLED=false until operator activation",
@@ -2007,6 +2744,18 @@
     {
       "kind": "requires-time-or-real-use",
       "task": "V3 requires five qualifying independent full-research reproductions; V4 requires genuine-use outcomes. Publication-after-freeze temporal/prospective results and a complete calendar month are separate prerequisites for the main monthly scientific-success metric."
+    },
+    {
+      "kind": "found-on-release-6-blocks-the-scorer-audit",
+      "task": "Let the scorer audit reach a unit of a scoped cycle: an artifact the delivery receipt does not pin currently makes the unit unauditable (five of six units), and the one clean unit's paid review was discarded by the evidence-id guard with nothing stored. See liveEvidence.release6IsolatedAcceptance.findings (scorer-audit-refuses-unpinned-artifacts, scorer-audit-review-guard-discards-a-paid-review). Then re-run the audit on a complete cycle."
+    },
+    {
+      "kind": "found-on-release-6-blocks-known-exposure",
+      "task": "Make absence of exposure establishable for a run that uses cite_lookup, keep a protected PMID out of a PubMed id list, and stop counting the echo of a run's own query as a served source. See findings cite-lookup-results-make-exposure-unknown, protected-pmid-served-in-a-pubmed-id-list, own-query-echo-counted-as-exposure. Then re-run a scoped cycle and read unknownExposure."
+    },
+    {
+      "kind": "not-repeated-on-release-6",
+      "task": "The steps release 5 passed were not repeated on release-6 images, and the recalled tier of d72f14a80 has no live build behind it yet."
     }
   ],
   "reproduction": {
@@ -2211,6 +2960,16 @@
       "file": "evolution-final-resource-state-followup.json",
       "sha256": "24b0141fe73f51f62a1b299d406f8a385d7a77233dd016e797f58f7f00bb9ec4",
       "bytes": 1306
+    },
+    {
+      "file": "evidence-90e0869f2b77.tgz",
+      "sha256": "5381a36d77ff98427a84b6f98677209b71ce2f72fb245690e218ec5243006f15",
+      "bytes": 22306
+    },
+    {
+      "file": "evidence-9639c7c53923.tgz",
+      "sha256": "295d3700b517875cc07fa6cec8719bed1148fe87a8d34645cbbc4fac14b6db7f",
+      "bytes": 10173
     }
   ],
   "corrections": [
