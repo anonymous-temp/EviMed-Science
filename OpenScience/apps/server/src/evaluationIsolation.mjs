@@ -101,8 +101,25 @@ export function createEvaluationIsolation({ dataDir, resolveRunId = identity => 
     await appendFile(`${file(runId)}.jsonl`, `${JSON.stringify(event)}\n`, { mode: 0o600 });
     report(event);
   };
-  const matched = (policy, value) => {
-    const text = typeof value === "string" ? value : JSON.stringify(value);
+  /**
+   * What a gateway would make of a request or a body: percent escapes undone, up to three layers deep (`%252F`). A DOI is written
+   * into an upstream URL as `10.1136%2Fbmj.315.7114.980` by every client that encodes it, and the plain slash was the only form the
+   * match below saw: on release 6 the same request was refused with the slash and served with `%2F`. An escape that does not decode
+   * (a stray `%`) is left as it is.
+   * @param {string} text
+   */
+  const percentDecoded = text => {
+    let current = text;
+    for (let layer = 0; layer < 3 && current.includes("%"); layer += 1) {
+      let next;
+      try { next = decodeURIComponent(current); } catch { next = current.replace(/%([0-9a-f]{2})/gi, (escape, hex) => parseInt(hex, 16) < 0x80 ? String.fromCharCode(parseInt(hex, 16)) : escape); }
+      if (next === current) break;
+      current = next;
+    }
+    return current;
+  };
+  /** One text against one policy: its identifiers, then its titles. @param {any} policy @param {string} text */
+  const matchedIn = (policy, text) => {
     const lower = text.toLowerCase();
     for (const alias of policy.aliases ?? []) {
       const normalized = String(alias).toLowerCase().replace(/^https?:\/\/(?:dx\.)?doi\.org\//, "");
@@ -110,11 +127,19 @@ export function createEvaluationIsolation({ dataDir, resolveRunId = identity => 
       const pmid = /^(?:pmid:?)?(\d+)$/i.exec(normalized)?.[1];
       if (pmid && new RegExp(`(?:pmid["\\s:=>/]*|pubmed\\.ncbi\\.nlm\\.nih\\.gov/|article/med/|id["\\s:=>]+)${pmid}(?:[^0-9]|$)`, "i").test(text)) return "identifier";
     }
+    // A protected id named as a query parameter value, alone or in a list (`id=30158069,9365295`, `term=9365295[uid]`).
+    const bare = bareIdsOf(policy);
+    if (bare.size) for (const parameter of text.matchAll(/[?&;]([^=&#;\s"'<>]+)=([^&#;\s"'<>]*)/g)) if (parameter[2].split(/[\s,+[\]()]+/).some(token => bare.has(token))) return "identifier";
     const fingerprint = evaluationFingerprint(text);
     if ((policy.titles ?? []).some(title => {
       const key = evaluationFingerprint(title); return key.length >= 16 && fingerprint.includes(key);
     })) return "title";
     return null;
+  };
+  const matched = (policy, value) => {
+    const text = (typeof value === "string" ? value : JSON.stringify(value)) ?? "";
+    const decoded = percentDecoded(text);
+    return matchedIn(policy, text) ?? (decoded === text ? null : matchedIn(policy, decoded));
   };
   /**
    * The bare numeric ids a policy protects: its PMIDs and the number of a PMCID. A PubMed or PMC response carries a paper as a

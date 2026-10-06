@@ -313,3 +313,41 @@ test("a number that only contains a protected id, or is not a list entry, is not
     assert.deepEqual(await isolation.filter({ userId: "researcher", projectId: "my-study" }, "public-source", tenantList), tenantList);
   } finally { await rm(dataDir, { recursive: true, force: true }); }
 });
+
+// Release 6: the request `…/europepmc/webservices/rest/search?query=10.1136/bmj.315.7114.980` was refused and the same request with the
+// DOI written `10.1136%2Fbmj.315.7114.980` was served, because the match saw the escaped text only.
+test("a request that names the protected paper is refused in any encoding the gateway would decode, and an unprotected request is served", async () => {
+  const dataDir = await mkdtemp(path.join(os.tmpdir(), "evaluation-"));
+  try {
+    const isolation = createEvaluationIsolation({ dataDir });
+    await isolation.register("run", scoped);
+    const attempt = async url => { try { await isolation.assertRequest({ runId: "run" }, "public-source", { method: "GET", url }); return "served"; } catch (error) { return error.code; } };
+    const europePmc = "https://www.ebi.ac.uk/europepmc/webservices/rest/search";
+    const refused = [
+      `${europePmc}?query=10.1136/bmj.315.7114.980&format=json`,
+      `${europePmc}?query=10.1136%2Fbmj.315.7114.980&format=json`,
+      `${europePmc}?query=10.1136%2FBMJ.315.7114.980&format=json`,
+      `${europePmc}?query=10.1136%252Fbmj.315.7114.980&format=json`,
+      `https://api.crossref.org/works/10.1136%2Fbmj.315.7114.980`,
+      `https://api.unpaywall.org/v2/https%3A%2F%2Fdoi.org%2F10.1136%2Fbmj.315.7114.980`,
+      `${europePmc}?query=The%20accumulated%20evidence%20on%20lung%20cancer%20and%20environmental%20tobacco%20smoke&format=json`,
+      `${europePmc}?query=The+accumulated+evidence+on+lung+cancer+and+environmental+tobacco+smoke.&format=json`,
+      "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&id=30158069,9365295&retmode=json",
+      "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&id=30158069%2C9365295&retmode=json",
+      "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi?db=pubmed&term=9365295%5Buid%5D&retmode=json",
+      "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/elink.fcgi?dbfrom=pubmed&db=pmc&id=2127653",
+    ];
+    for (const url of refused) assert.equal(await attempt(url), "evaluation_source_excluded", url);
+    // The same requests for another paper, a stray percent sign, and a longer number that merely contains the id are served.
+    for (const url of [
+      `${europePmc}?query=10.1000%2Fother.2001&format=json`,
+      `${europePmc}?query=100%&format=json`,
+      `${europePmc}?query=lung%20cancer%20and%20tobacco%20smoke&format=json`,
+      "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&id=30158069,30158070&retmode=json",
+      "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esummary.fcgi?db=pubmed&id=19365295,93652951&retmode=json",
+    ]) assert.equal(await attempt(url), "served", url);
+    const events = (await isolation.audit("run")).events;
+    assert.equal(events.length, refused.length);
+    assert.deepEqual([...new Set(events.map(event => `${event.tier}|${event.reason}`))].sort(), ["blocked|identifier", "blocked|title"]);
+  } finally { await rm(dataDir, { recursive: true, force: true }); }
+});

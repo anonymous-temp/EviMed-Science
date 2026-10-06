@@ -96,6 +96,19 @@ function parseCiteLookupRendering(value){
  // The renderer closes every label with a full-width parenthesis; an entry that does not end in one was cut.
  return works.length&&works.every(work=>work.endsWith('）'))?{ok:true,data:{works}}:null;
 }
+/**
+ * The evimed MCP server wraps every result with `provenance: { tool, arguments, scope }`, and `arguments` is the call's own request
+ * echoed back (`_data_with_provenance`). What the run typed into its own query is not what the platform served it: on release 6 a
+ * run searched Europe PMC with the protected DOI, was served four items none of which was the paper, and that echo was the only
+ * match in its source responses, so the unit read exposed_uncited from the model's own recalled identifier. The request side
+ * refuses a request that names the protected paper; the response side is audited without the echo of what was asked.
+ * @param {any} data
+ */
+function withoutRequestEcho(data){
+ if(!data||typeof data!=='object'||Array.isArray(data)||!data.provenance||typeof data.provenance!=='object'||Array.isArray(data.provenance)||!Object.hasOwn(data.provenance,'arguments'))return data;
+ const {arguments:_asked,...provenance}=data.provenance;
+ return {...data,provenance};
+}
 /** Source exposure requires a successful observed response, never prompts or requested identifiers. @param {any} transcript */
 export function paperGoldSourceResponses(transcript){
  const responses=[],unknownTools=[];
@@ -119,7 +132,7 @@ export function paperGoldSourceResponses(transcript){
   if(part.status==='failed'||part.status==='error'||part.error)continue;
   const result=part.status==='completed'?parse(part.output,part.tool??part.name??''):null;
   if(!result){unknownTools.push(part.tool??part.name??'unknown');continue;}
-  if(result.ok)responses.push({tool:part.tool??part.name,data:result.data,artifacts:result.artifacts});
+  if(result.ok)responses.push({tool:part.tool??part.name,data:withoutRequestEcho(result.data),artifacts:result.artifacts});
  }
  return {responses,complete:unknownTools.length===0,unknownTools};
 }

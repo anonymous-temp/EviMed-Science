@@ -2,6 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createRequire} from 'node:module';
 import {pathToFileURL} from 'node:url';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import {createEvaluationIsolation} from '../src/evaluationIsolation.mjs';
 import {paperGoldSourceResponses,paperGoldTraceCoverage,readPaperGoldNativeCoverage,paperGoldExposureTier} from '../src/paperGoldEvaluator.mjs';
 test('requested and self-emitted DOI before failed or blocked retrieval is not observed exposure',()=>{
  const trace=paperGoldSourceResponses({messages:[{role:'assistant',parts:[{type:'text',text:'10.1136/bmj.n71'}]},{role:'user',parts:[{type:'text',text:'10.1136/bmj.n71'}]},{parts:[{type:'tool',tool:'web_read',status:'completed',input:{doi:'10.1136/bmj.n71'},output:'Error: HTTP 502'}]},{parts:[{type:'tool',tool:'web_read',status:'completed',output:{status:'error',data:{doi:'10.1136/bmj.n71',code:'evaluation_source_excluded'}}}]}]});
@@ -93,4 +97,35 @@ test('the cite_lookup fixture is what the pinned dsh-cite renderer emits, when t
  const [part] = tool.output.render({}, { count: 2, works });
  assert.equal(part.text, CITE_LOOKUP_TEXT);
  assert.equal(paperGoldSourceResponses(citeLookup(part.text)).complete, true);
+});
+
+// Release 6, run c8df70fe: it searched Europe PMC with the protected DOI as its query. The request was served; four items came back, none of
+// them the paper; the tool result echoed the query under data.provenance.arguments.query, and that echo was the only match.
+const ECHO_POLICY = { aliases: ['10.1136/bmj.315.7114.980', 'PMID:9365295', 'PMC2127653'], titles: ['The accumulated evidence on lung cancer and environmental tobacco smoke.'] };
+const sourceSearch = (data, input = { source: 'europe-pmc', query: '10.1136/bmj.315.7114.980', limit: 5 }) => ({ type: 'tool', tool: 'mcp__evimed__biomedical_source_search', status: 'completed', input,
+  output: JSON.stringify({ status: 'ok', data: { source: 'europe-pmc', ...data, provenance: { tool: 'biomedical_source_search', arguments: input, scope: { tenantId: 'u', userId: 'u', projectId: 'eval-paper-x', workspaceDir: '/workspace' } } } }) });
+test('the echo of the run\'s own request is not served content, and served content that names the protected paper still is', async () => {
+ const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'echo-'));
+ try {
+  const isolation = createEvaluationIsolation({ dataDir });
+  await isolation.register('run', ECHO_POLICY);
+  const items = [{ id: 'PMID:1', title: 'Another passive smoking study' }, { id: 'PMID:2', title: 'Cohort of non-smoking wives' }];
+  const audit = async part => {
+   const trace = paperGoldSourceResponses({ messages: [{ parts: [part] }] });
+   assert.equal(trace.complete, true);
+   for (const response of trace.responses) await isolation.auditExposure({ runId: 'run' }, 'transcript-source-response', response);
+   return { trace, tier: (await isolation.audit('run')).tier };
+  };
+  const echoOnly = await audit(sourceSearch({ items }));
+  assert.equal(echoOnly.trace.responses.length, 1);
+  assert.equal('arguments' in echoOnly.trace.responses[0].data.provenance, false, 'the echo is left out');
+  assert.deepEqual(echoOnly.trace.responses[0].data.items, items, 'everything else of the response is kept');
+  assert.equal(echoOnly.trace.responses[0].data.provenance.tool, 'biomedical_source_search');
+  assert.equal(echoOnly.tier, 'unexposed');
+  // A response that serves the paper (here: an item whose DOI is the protected one) is exposure, with or without the echo.
+  const served = await audit(sourceSearch({ items: [...items, { id: 'PMID:9365295', doi: '10.1136/bmj.315.7114.980', title: 'x' }] }, { source: 'europe-pmc', query: 'passive smoking lung cancer', limit: 5 }));
+  assert.equal(served.tier, 'exposed_uncited');
+  // The echo is only dropped from a result that has one; other shapes are returned untouched.
+  assert.deepEqual(paperGoldSourceResponses({ messages: [{ parts: [{ type: 'tool', tool: 'web_read', status: 'completed', output: { status: 'ok', data: { provenance: 'text', body: 'b' } } }] }] }).responses[0].data, { provenance: 'text', body: 'b' });
+ } finally { await fs.rm(dataDir, { recursive: true, force: true }); }
 });
