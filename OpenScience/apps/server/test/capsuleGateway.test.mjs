@@ -291,3 +291,18 @@ test("the project's evidence-zone subscriptions are one more provider of a recal
   const none = await fixture(t, { recallItems: [{ id: "fact-1", content: "own", mode: "own" }] });
   assert.deepEqual((await (await none.request("recall", { query: "x" })).json()).items.map((item) => item.id), ["fact-1"], "with no subscriptions the recall is what it was");
 });
+
+test("a recall of subscribed zones asks the frontier's audience first, like every zone route: an account outside it is offered nothing, quietly", async (t) => {
+  const { subscriptionsForAudience } = await import("../src/evidenceZoneSubscription.mjs");
+  const asked = [];
+  const inner = { recall: async (userId, projectId, query) => { asked.push([userId, projectId, query]); return [{ id: "ec_1", source: "evidence_zone", contextOnly: true }]; } };
+  const users = new Map([["owner", { id: "owner" }], ["outsider", { id: "outsider" }]]);
+  const audience = new Set(["owner"]);
+  const guarded = subscriptionsForAudience({ subscriptions: inner, userById: async (id) => users.get(id) ?? null, allows: (user) => audience.has(user.id) });
+  assert.deepEqual((await guarded.recall("owner", "project-one", "房颤")).map((item) => item.id), ["ec_1"]);
+  assert.deepEqual(await guarded.recall("outsider", "project-one", "房颤"), [], "subscribed, but the frontier is not shown to this account");
+  assert.deepEqual(await guarded.recall("nobody", "project-one", "房颤"), [], "an account that is not there");
+  assert.deepEqual(asked, [["owner", "project-one", "房颤"]], "nothing of the zones was read for the others");
+  const f = await fixture(t, { recallItems: [{ id: "fact-1", content: "own", mode: "own" }], subscriptions: guarded });
+  assert.deepEqual((await (await f.request("recall", { query: "房颤" })).json()).items.map((item) => item.id), ["fact-1", "ec_1"], "through the gateway for the project's own account");
+});

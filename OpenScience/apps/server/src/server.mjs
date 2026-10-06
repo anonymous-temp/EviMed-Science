@@ -170,7 +170,7 @@ import { CapsuleShareLinks } from "./capsuleShareLinks.mjs";
 import { CapsuleSharing } from "./capsuleSharing.mjs";
 import { capsuleShareMetricFamilies } from "./capsuleShareMetrics.mjs";
 import { createGuestInfluence } from "./capsuleShareTrust.mjs";
-import { EvidenceZoneSubscriptions, createEvidenceLinkStates } from "./evidenceZoneSubscription.mjs";
+import { EvidenceZoneSubscriptions, createEvidenceLinkStates, subscriptionsForAudience } from "./evidenceZoneSubscription.mjs";
 import { createCapsuleRoutes } from "./capsuleRoutes.mjs";
 import { SourceService, assertKnowledgeBaseFormat, projectSourceManifestRecord, sourceIndexDocument } from "./sourceService.mjs";
 import { verifySourceMetadata } from "./sourceMetadata.mjs";
@@ -1444,8 +1444,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     privateAccountCleanup: userId => removePrivateExtensionFiles(config.dataDir, userId),
   }) : null;
   // Sharing a capsule with other accounts of this deployment, in the app (plan §7, F17): share links, deliveries to named accounts, and
-  // taking either back. Needs the control-plane database and the transfer service; absent either, the routes answer 503 by name.
-  const capsuleShareLinks = productDatabase && capsuleTransferService
+  // taking either back. Off with its own switch (`OPEN_SCIENCE_CAPSULE_SHARE_ENABLED`): not composed, so no table of it is read and its routes
+  // answer 404 by name. Needs the control-plane database and the transfer service; absent either, the routes answer 503 by name.
+  const capsuleShareLinks = config.capsuleShareEnabled && productDatabase && capsuleTransferService
     ? new CapsuleShareLinks({ database: productDatabase, ttlDays: config.capsuleShareLinkTtlDays, maxUses: config.capsuleShareLinkMaxUses }) : null;
   const capsuleSharing = capsuleShareLinks && notificationService
     ? new CapsuleSharing({ database: productDatabase, transfers: capsuleTransferService, links: capsuleShareLinks, notifications: notificationService,
@@ -1456,6 +1457,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       maxPerProject: config.evidenceZoneSubscriptionMaxPerProject, maxItems: config.evidenceZoneSubscriptionMaxItems }) : null;
   const capsuleRoutes = createCapsuleRoutes({ store, service: capsuleService, transferService: capsuleTransferService, maxJsonBytes: config.maxJsonBytes,
     sharing: capsuleSharing, links: capsuleShareLinks, subscriptions: zoneSubscriptions, isOperator: user => config.operatorUsers.includes(user.id),
+    // Sharing has its own switch; a zone subscription is the frontier's, so it asks the frontier's audience like every zone route.
+    // (Asked per request: the frontier is composed further down.)
+    shareEnabled: config.capsuleShareEnabled === true, frontier: { allows: user => Boolean(frontier) && frontier.service.allows(user) },
     // A 「试用一次」 conversation is marked in its own memory state.
     trials: researchMemory.configured ? { mark: (userId, projectId, sessionId, capsuleId) => researchMemory.updateSessionState(userId, projectId, sessionId,
       { trialCapsuleId: capsuleId }) } : null,
@@ -4032,7 +4036,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       reportFailure: code => process.stderr.write(`evaluation isolation: ${code}\n`) })
     : null;
   const capsuleGatewayHandler = createCapsuleGatewayHandler({ runtimeManager, store, service: capsuleService, memorySubstrate, handbooks: nativeHandbookContext, evaluationIsolation,
-    subscriptions: zoneSubscriptions?.enabled ? zoneSubscriptions : null,
+    // A runtime's recall of a subscribed zone is the frontier's too: an account outside its audience is offered nothing, as every zone route answers it.
+    subscriptions: zoneSubscriptions?.enabled && frontier
+      ? subscriptionsForAudience({ subscriptions: zoneSubscriptions, userById: userId => store.userById(userId), allows: user => frontier.service.allows(user) }) : null,
     // Whose conversation a runtime's recall is (capsuleGateway.mjs): the
     // project's running runs, each conversation's own state, and the run
     // ledger line that records what it was handed.
@@ -5281,6 +5287,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             // readiness uses. The last known answer is served at once and
             // refreshed behind it; an OpenList that cannot say is `false`.
             features: { frontier: Boolean(frontier) && frontierAudienceAllows(config, user), review: Boolean(review),
+              // Sharing a capsule with other accounts, and subscribing a project to an evidence zone: each its own switch, and the
+              // second the frontier's audience too. The panels are drawn only where the server says so.
+              capsuleShare: Boolean(capsuleSharing),
+              zoneSubscription: Boolean(zoneSubscriptions?.enabled) && Boolean(frontier) && frontierAudienceAllows(config, user),
               geo: Boolean(geo) && geoAudienceAllows(config, user),
               vcr: Boolean(vcr) && vcrAudienceAllows(config, user),
               openList: openListConnector
@@ -8290,7 +8300,7 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
   for (const family of evidenceProgrammeMetricFamilies(evidenceProgramme)) addMetric(lines, family.name, family.help, family.type, family.series);
   // Sharing memory inside the platform (capsuleShareMetrics.mjs): shares, imports, trials, declines, take-downs, what the write-side
   // defences refused, zone subscriptions, and what learning did with runs that used a guest capsule.
-  for (const family of capsuleShareMetricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
+  if (config.capsuleShareEnabled === true) for (const family of capsuleShareMetricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
   // The evidence card's guardrails (evidenceCardMetrics.mjs): cards without a producer (must be 0), writes refused by
   // origin, cards refused for a simulated value. Read from the zone service only while the frontier is composed.
   for (const family of evidenceCardMetricFamilies(frontier ? await frontier.evidenceZones.metrics().catch(() => null) : null)) addMetric(lines, family.name, family.help, family.type, family.series);

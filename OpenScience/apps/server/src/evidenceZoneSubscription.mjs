@@ -322,3 +322,20 @@ export class EvidenceZoneSubscriptions {
     };
   }
 }
+
+/**
+ * The subscriptions a runtime's recall may read for one account: the frontier's audience first, as every zone route asks it
+ * (2026-10-06 review: the routes and this recall used to skip it, so a deployment that showed the frontier to a preview list
+ * still recalled zone cards for every account that had subscribed). An account the frontier is not shown to is offered
+ * nothing, quietly — a recall never fails a conversation.
+ * @param {{ subscriptions: { recall: (userId: string, projectId: string, query: string) => Promise<any[]> },
+ *   userById: (userId: string) => Promise<{ id: string } | null>, allows: (user: any) => boolean }} dependencies
+ */
+export function subscriptionsForAudience({ subscriptions, userById, allows }) {
+  return {
+    recall: async (/** @type {string} */ userId, /** @type {string} */ projectId, /** @type {string} */ query) => {
+      const owner = await userById(userId);
+      return owner && allows(owner) ? subscriptions.recall(owner.id, projectId, query) : [];
+    },
+  };
+}

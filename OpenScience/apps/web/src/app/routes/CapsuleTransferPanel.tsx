@@ -6,6 +6,7 @@ import { Disclosure } from "@/components/ui/Disclosure";
 import { CAPSULE_SCAN_REASONS, capsuleEntryLabel, fromSender } from "@/lib/capsuleText";
 import { Input, inputClasses } from "@/components/ui/Input";
 import { takeDownSnapshot } from "@/lib/capsuleShareClient";
+import { useCapsuleShareFeature } from "@/lib/capsuleShareFeature";
 import { formatDateTime } from "@/lib/format";
 import { labelFor } from "@/lib/statusLabel";
 import {
@@ -46,6 +47,8 @@ export function CapsuleTransferPanel({ capsule, onImported }: { capsule: Capsule
   const [revoking, setRevoking] = useState<CapsuleExportSnapshot | null>(null);
   /** The snapshot an author asked to take down: it also switches off every recipient's copy, so it asks first (flywheel F17). */
   const [takingDown, setTakingDown] = useState<CapsuleExportSnapshot | null>(null);
+  // Sharing between accounts has its own switch: its panel and the take-down of a share are drawn only where the server says so.
+  const sharing = useCapsuleShareFeature() === "on";
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -166,7 +169,7 @@ export function CapsuleTransferPanel({ capsule, onImported }: { capsule: Capsule
       <Button disabled={busy || !capsuleId || !exportPassword || outgoing?.empty === true} loading={busy} onClick={() => void createExport()}>加密导出</Button>
     </section>
 
-    <CapsuleSharePanel capsuleId={capsuleId ?? null} />
+    {sharing && <CapsuleSharePanel capsuleId={capsuleId ?? null} />}
 
     <section className="space-y-3" aria-label="胶囊导入">
       <h3 className="text-ui font-semibold text-text">导入</h3>
@@ -231,7 +234,7 @@ export function CapsuleTransferPanel({ capsule, onImported }: { capsule: Capsule
               <Button size="sm" variant="text" disabled={busy || snapshot.status === "revoked"} onClick={() => void perform(() => downloadCapsuleExport(capsuleId, snapshot.id))}>再次下载</Button>
               <Button size="sm" variant="text" disabled={busy || !exportPassword} onClick={() => void createExport(snapshot.id, snapshot.scopes)}>更新快照</Button>
               <Button size="sm" variant="text" destructive disabled={busy || snapshot.status === "revoked"} onClick={() => setRevoking(snapshot)}>撤销此快照</Button>
-              <Button size="sm" variant="text" destructive disabled={busy} onClick={() => setTakingDown(snapshot)}>下架并停用副本</Button>
+              {sharing && <Button size="sm" variant="text" destructive disabled={busy} onClick={() => setTakingDown(snapshot)}>下架并停用副本</Button>}
             </div>
           </li>)}
         </ul>

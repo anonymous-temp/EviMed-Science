@@ -14,7 +14,7 @@ import { unzipSync } from "fflate";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
 
-async function fixture(t, { operator = false, subscriptionsEnabled = true } = {}) {
+async function fixture(t, { operator = false, subscriptionsEnabled = true, shareEnabled = true, audience = true } = {}) {
   const calls = [];
   const own = (user, id) => { if (id !== "mine") throw new HttpError(404, "capsule_not_found", "The capsule is unavailable."); };
   const transferService = {
@@ -45,7 +45,8 @@ async function fixture(t, { operator = false, subscriptionsEnabled = true } = {}
     requireProject: async (_user, id) => { if (id !== "owned-project") throw new HttpError(404, "project_not_found", "Project unavailable."); return { id }; },
   };
   const links = { list: async () => [], revoke: async () => ({}) };
-  const handle = createCapsuleRoutes({ store, service: {}, transferService, sharing, links, subscriptions, maxJsonBytes: 262144, isOperator: () => operator });
+  const handle = createCapsuleRoutes({ store, service: {}, transferService, sharing, links, subscriptions, maxJsonBytes: 262144, isOperator: () => operator,
+    shareEnabled, frontier: { allows: () => audience } });
   const server = createServer((req, res) => { handle(req, res).then((handled) => { if (!handled) { res.writeHead(404); res.end(); } }).catch((error) => sendError(res, error)); });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   t.after(() => new Promise((resolve) => { server.closeAllConnections(); server.close(resolve); }));
@@ -53,6 +54,35 @@ async function fixture(t, { operator = false, subscriptionsEnabled = true } = {}
   const headers = { cookie: "fixture_session=active", "x-open-science-csrf": "fixture-csrf", "content-type": "application/json" };
   return { base, headers, calls };
 }
+
+test("with the share switch off every sharing route is a 404 by name and reaches nothing; the capsule's own routes are untouched", async (t) => {
+  const { base, headers, calls } = await fixture(t, { shareEnabled: false });
+  const token = "A".repeat(32);
+  for (const [method, url, body] of [
+    ["GET", `/api/capsules/shared/${token}`], ["POST", `/api/capsules/shared/${token}/import`, {}], ["GET", "/api/capsules/deliveries"], ["GET", "/api/capsules/deliveries/dlv_1"],
+    ["POST", "/api/capsules/deliveries/dlv_1/decline", {}], ["POST", "/api/capsules/takedowns", { authorId: "someone" }],
+    ["POST", "/api/capsules/mine/deliveries", { recipients: ["x"] }], ["GET", "/api/capsules/mine/deliveries"], ["POST", "/api/capsules/mine/links", {}], ["GET", "/api/capsules/mine/links"],
+    ["DELETE", "/api/capsules/mine/links/l1"], ["POST", "/api/capsules/mine/exports/s1/takedown", {}], ["GET", "/api/capsules/mine/methods/export?format=agent-skills"],
+  ]) {
+    const response = await fetch(`${base}${url}`, { method, headers, ...(body ? { body: JSON.stringify(body) } : {}) });
+    assert.equal(response.status, 404, `${method} ${url}`);
+    assert.equal((await response.json()).code, "capsule_share_not_enabled", `${method} ${url}`);
+  }
+  assert.deepEqual(calls, [], "nothing of sharing was called");
+  const own = await fetch(`${base}/api/capsules/subscriptions?projectId=owned-project`, { headers });
+  assert.equal(own.status, 200, "a zone subscription is not sharing: it has its own switch");
+});
+
+test("a zone subscription is the frontier's: an account outside its audience reads the answer an unknown path gets, and nothing is read or written", async (t) => {
+  const { base, headers, calls } = await fixture(t, { audience: false });
+  for (const [method, url, body] of [["GET", "/api/capsules/subscriptions?projectId=owned-project"], ["POST", "/api/capsules/subscriptions", { projectId: "owned-project", zoneId: "ez_1" }],
+    ["DELETE", "/api/capsules/subscriptions", { projectId: "owned-project", zoneId: "ez_1" }]]) {
+    const response = await fetch(`${base}${url}`, { method, headers, ...(body ? { body: JSON.stringify(body) } : {}) });
+    assert.equal(response.status, 404, `${method} ${url}`);
+    assert.equal((await response.json()).code, "frontier_not_enabled", `${method} ${url}`);
+  }
+  assert.deepEqual(calls, []);
+});
 
 test("a share link and a delivery are reached only by a signed-in account", async (t) => {
   const { base, headers, calls } = await fixture(t);
@@ -142,9 +172,14 @@ function configUnder(env) {
 test("the sharing levers have the defaults the plan names, are range-checked by name, and the subscription follows the frontier", () => {
   const defaults = configUnder({});
   for (const [, key, expected] of LEVERS) assert.equal(defaults[key], expected, key);
+  // Every line has its own switch, off until turned on; the subscription also needs the frontier (2026-10-06 review).
   assert.equal(defaults.evidenceZoneSubscriptionEnabled, false, "off with the frontier off");
-  assert.equal(configUnder({ OPEN_SCIENCE_FRONTIER_ENABLED: "true" }).evidenceZoneSubscriptionEnabled, true, "on with the frontier on");
-  assert.equal(configUnder({ OPEN_SCIENCE_FRONTIER_ENABLED: "true", OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_ENABLED: "false" }).evidenceZoneSubscriptionEnabled, false);
+  assert.equal(configUnder({ OPEN_SCIENCE_FRONTIER_ENABLED: "true" }).evidenceZoneSubscriptionEnabled, false, "the frontier being on does not turn it on");
+  assert.equal(configUnder({ OPEN_SCIENCE_FRONTIER_ENABLED: "true", OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_ENABLED: "true" }).evidenceZoneSubscriptionEnabled, true);
+  assert.equal(configUnder({ OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_ENABLED: "true" }).evidenceZoneSubscriptionEnabled, false, "and its own switch does not turn it on without the frontier");
+  assert.equal(defaults.capsuleShareEnabled, false);
+  assert.equal(configUnder({ OPEN_SCIENCE_FRONTIER_ENABLED: "true" }).capsuleShareEnabled, false, "sharing is not the frontier's");
+  assert.equal(configUnder({ OPEN_SCIENCE_CAPSULE_SHARE_ENABLED: "true" }).capsuleShareEnabled, true);
   assert.equal(configUnder({ OPEN_SCIENCE_CAPSULE_SHARE_LINK_TTL_DAYS: "7", OPEN_SCIENCE_CAPSULE_SHARE_LINK_MAX_USES: "" }).capsuleShareLinkTtlDays, 7);
   for (const [name, , , bad] of LEVERS) for (const value of bad) assert.throws(() => configUnder({ [name]: value }), new RegExp(name), `${name}=${value}`);
 });
@@ -153,7 +188,7 @@ test("each lever is documented in .env.example and passed value-less by the web 
   const example = await readFile(path.join(repoRoot, "deploy/web/.env.example"), "utf8");
   const compose = await readFile(path.join(repoRoot, "deploy/web/docker-compose.yml"), "utf8");
   const defaults = configUnder({});
-  for (const [name, key] of [...LEVERS, ["OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_ENABLED", "evidenceZoneSubscriptionEnabled"]]) {
+  for (const [name, key] of [...LEVERS, ["OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_ENABLED", "evidenceZoneSubscriptionEnabled"], ["OPEN_SCIENCE_CAPSULE_SHARE_ENABLED", "capsuleShareEnabled"]]) {
     const lines = [...example.matchAll(new RegExp(`^${name}=(.*)$`, "gm"))];
     assert.equal(lines.length, 1, `${name} appears once in .env.example`);
     assert.equal(lines[0][1], String(defaults[key]), `${name} in .env.example is the code's default`);

@@ -570,8 +570,9 @@ services:
       # how long a share link lives and how often it may be used, how many other
       # accounts must keep a new author's pack before it counts for platform
       # learning and for how long, the daily ceiling on deliveries to other
-      # accounts, and the evidence-zone subscription (on with the frontier).
+      # accounts, and the evidence-zone subscription (each switch off until turned on).
       # Value-less: unset keeps config.mjs's defaults.
+      OPEN_SCIENCE_CAPSULE_SHARE_ENABLED:
       OPEN_SCIENCE_CAPSULE_SHARE_LINK_TTL_DAYS:
       OPEN_SCIENCE_CAPSULE_SHARE_LINK_MAX_USES:
       OPEN_SCIENCE_CAPSULE_SHARE_CORROBORATION_MIN_ACCOUNTS:

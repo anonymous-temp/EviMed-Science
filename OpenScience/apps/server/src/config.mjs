@@ -496,6 +496,10 @@ function evidenceUpkeepSettings(overrides) {
  * the discipline of the frontier's: passed value-less by compose, and a value outside its range stops the process at
  * start with the variable's name.
  *
+ * - Every line has its own switch, and each is off until an operator turns it on (2026-10-06): `OPEN_SCIENCE_CAPSULE_SHARE_ENABLED` for sharing a
+ *   capsule with other accounts (deliveries, links, take-downs, the Agent Skills method pack: off, those routes answer 404
+ *   `capsule_share_not_enabled`, nothing of them is composed or read, and the share panel is hidden through `features.capsuleShare`), and
+ *   `OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_ENABLED` for subscribing a project to an evidence zone, which also needs the frontier on.
  * - A share link lives `OPEN_SCIENCE_CAPSULE_SHARE_LINK_TTL_DAYS` days (30) and is used at most
  *   `OPEN_SCIENCE_CAPSULE_SHARE_LINK_MAX_USES` times (20): both are the default and the ceiling an owner may ask for, because
  *   a link that never ends is a pack nobody can take back without remembering it exists.
@@ -504,7 +508,7 @@ function evidenceUpkeepSettings(overrides) {
  *   without disabling it. Both are the write-side defence of plan §7: nothing is filtered at reading time.
  * - An account may deliver to others at most `OPEN_SCIENCE_CAPSULE_SHARE_DELIVERIES_PER_DAY` times in a day (50): a limit that
  *   protects other people's inboxes, not an opinion about what is shared.
- * - Subscribing a project to an evidence zone follows the frontier by default (`OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_ENABLED`):
+ * - Subscribing a project to an evidence zone is off by default and needs the frontier as well (`OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_ENABLED`):
  *   with the frontier off there is no zone to read. A project holds at most
  *   `OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_MAX_PER_PROJECT` subscriptions (5) and a recall carries at most
  *   `OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_MAX_ITEMS` cards of them (6).
@@ -523,12 +527,13 @@ function memorySharingSettings(overrides, frontierEnabled) {
     return number;
   };
   return {
+    capsuleShareEnabled: overrides.capsuleShareEnabled ?? boolEnv("OPEN_SCIENCE_CAPSULE_SHARE_ENABLED", false),
     capsuleShareLinkTtlDays: integer("capsuleShareLinkTtlDays", "OPEN_SCIENCE_CAPSULE_SHARE_LINK_TTL_DAYS", 30, 1, 365),
     capsuleShareLinkMaxUses: integer("capsuleShareLinkMaxUses", "OPEN_SCIENCE_CAPSULE_SHARE_LINK_MAX_USES", 20, 1, 1000),
     capsuleShareCorroborationMinAccounts: integer("capsuleShareCorroborationMinAccounts", "OPEN_SCIENCE_CAPSULE_SHARE_CORROBORATION_MIN_ACCOUNTS", 3, 1, 100),
     capsuleShareCorroborationKeptDays: integer("capsuleShareCorroborationKeptDays", "OPEN_SCIENCE_CAPSULE_SHARE_CORROBORATION_KEPT_DAYS", 14, 1, 365),
     capsuleShareDeliveriesPerDay: integer("capsuleShareDeliveriesPerDay", "OPEN_SCIENCE_CAPSULE_SHARE_DELIVERIES_PER_DAY", 50, 1, 1000),
-    evidenceZoneSubscriptionEnabled: overrides.evidenceZoneSubscriptionEnabled ?? boolEnv("OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_ENABLED", frontierEnabled),
+    evidenceZoneSubscriptionEnabled: frontierEnabled && (overrides.evidenceZoneSubscriptionEnabled ?? boolEnv("OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_ENABLED", false)),
     evidenceZoneSubscriptionMaxPerProject: integer("evidenceZoneSubscriptionMaxPerProject", "OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_MAX_PER_PROJECT", 5, 1, 20),
     evidenceZoneSubscriptionMaxItems: integer("evidenceZoneSubscriptionMaxItems", "OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_MAX_ITEMS", 6, 1, 30),
   };

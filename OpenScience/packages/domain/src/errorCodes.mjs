@@ -1561,6 +1561,7 @@ export const EVIDENCE_PUBLIC_ERROR_CODES = Object.freeze([
  * refusing one answer alike, so a name cannot be probed.
  */
 export const CAPSULE_SHARE_ERROR_CODES = Object.freeze([
+  'capsule_share_not_enabled',
   'capsule_share_not_text_only',
   'capsule_share_not_own',
   'capsule_share_not_found',
@@ -2242,6 +2243,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   capsule_password_required: '这个胶囊需要发送者设定的口令才能打开。',
   // Sharing inside the platform (`capsuleTransferService.mjs`, `capsuleShareLinks.mjs`): text only, the author's own
   // pack, and what the recipient hears when a share can no longer be used.
+  capsule_share_not_enabled: '这个部署没有开放胶囊分享。',
   capsule_share_not_text_only: '这个胶囊里含有文字以外的内容，平台不接收：用户之间只分享纯文字的方法，不分享脚本、附件或工具。',
   capsule_share_not_own: '只能分享你自己的胶囊；收到的胶囊不能再转发。',
   capsule_share_not_found: '这个分享不存在，或已经不能用了。',

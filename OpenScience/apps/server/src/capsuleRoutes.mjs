@@ -33,8 +33,9 @@ function pageOptions(url) {
  *   trials?: { mark: (userId: string, projectId: string, sessionId: string, capsuleId: string) => Promise<unknown> } | null,
  *   sharing?: import('./capsuleSharing.mjs').CapsuleSharing | null, links?: import('./capsuleShareLinks.mjs').CapsuleShareLinks | null,
  *   subscriptions?: import('./evidenceZoneSubscription.mjs').EvidenceZoneSubscriptions | null, isOperator?: (user: any) => boolean,
+ *   shareEnabled?: boolean, frontier?: { allows: (user: any) => boolean } | null,
  *   audit?: (user: any, action: string, details: Record<string, unknown>) => Promise<void> }} dependencies */
-export function createCapsuleRoutes({ store, service, transferService = null, maxJsonBytes, trials = null, sharing = null, links = null, subscriptions = null, isOperator = () => false, audit = async () => {} }) {
+export function createCapsuleRoutes({ store, service, transferService = null, maxJsonBytes, trials = null, sharing = null, links = null, subscriptions = null, isOperator = () => false, shareEnabled = false, frontier = null, audit = async () => {} }) {
   /** @param {any} req @param {any} res @returns {Promise<boolean>} */
   return async (req, res) => {
     const url = new URL(req.url ?? "/", "http://evimed.local");
@@ -78,6 +79,7 @@ export function createCapsuleRoutes({ store, service, transferService = null, ma
     }
     // ------------------------------------------------------------------ sharing inside the platform
     const shares = () => {
+      if (!shareEnabled) throw new HttpError(404, "capsule_share_not_enabled", "Capsule sharing is not enabled.");
       if (!sharing || !transferService) throw new HttpError(503, "product_state_unavailable", "Capsule sharing is temporarily unavailable.");
       return { sharing, transferService, links };
     };
@@ -86,6 +88,8 @@ export function createCapsuleRoutes({ store, service, transferService = null, ma
     // module's own "not enabled" answer, and nothing read.
     if (parts[0] === "subscriptions" && parts.length === 1) {
       if (!subscriptions || !subscriptions.enabled) throw new HttpError(404, "evidence_zone_subscription_not_enabled", "Evidence-zone subscription is not enabled.");
+      // The frontier's own door: an account outside its audience reads the answer a path that never existed gets.
+      if (!frontier || !frontier.allows(user)) throw new HttpError(404, "frontier_not_enabled", "The frontier feed is not enabled.");
       if (method === "GET") {
         const projectId = await project(url.searchParams.get("projectId"));
         if (!projectId) throw new HttpError(400, "capsule_payload_invalid", "A subscription belongs to a project.");
@@ -180,6 +184,7 @@ export function createCapsuleRoutes({ store, service, transferService = null, ma
     }
     // The approved learned methods as an Agent Skills pack: a zip, text only.
     if (parts.length === 3 && parts[1] === "methods" && parts[2] === "export" && method === "GET") {
+      if (!shareEnabled) throw new HttpError(404, "capsule_share_not_enabled", "Capsule sharing is not enabled.");
       if (!transferService) throw new HttpError(503, "product_state_unavailable", "Capsule transfer is temporarily unavailable.");
       if (url.searchParams.get("format") !== "agent-skills") throw new HttpError(400, "capsule_payload_invalid", "Unsupported method pack format.");
       const pack = await transferService.methodPack(user.id, parts[0]);
