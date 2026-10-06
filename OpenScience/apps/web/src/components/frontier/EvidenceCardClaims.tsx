@@ -1,6 +1,8 @@
 import { EVIDENCE_AI_STEP_LABELS_ZH } from "@evimed/domain";
 import { Tag } from "@/components/ui/Tag";
 import type { EvidenceCard, EvidenceClaim, EvidenceClaimMark } from "@/lib/evidenceZoneClient";
+import type { EvidenceChallengeView } from "@/lib/evidenceUpkeepClient";
+import { EvidenceChallenge } from "./EvidenceChallenge";
 import { EvidenceReferences } from "./EvidenceContent";
 import { evidenceDate } from "./evidenceDate";
 
@@ -33,7 +35,11 @@ function Quote({ evidence, index, quote, mark, status, showMark = false }: { evi
   );
 }
 
-function ClaimItem({ evidence, claim }: { evidence: EvidenceCard; claim: EvidenceClaim }) {
+/** The reader's latest challenge on a claim, when they have made one. */
+const latestChallenge = (challenges: EvidenceChallengeView[], claimId: string) =>
+  challenges.filter((challenge) => challenge.claimId === claimId).sort((a, b) => Date.parse(b.createdAt) - Date.parse(a.createdAt))[0] ?? null;
+
+function ClaimItem({ evidence, claim, challenges }: { evidence: EvidenceCard; claim: EvidenceClaim; challenges?: EvidenceChallengeView[] }) {
   const verification = claim.verification;
   const type = claim.claimType ?? "direct";
   const statusOf = (index: number) => verification?.sources.find((entry) => entry.sourceIndex === index);
@@ -61,6 +67,11 @@ function ClaimItem({ evidence, claim }: { evidence: EvidenceCard; claim: Evidenc
       {(claim.applicability || claim.uncertainty) && (
         <p className="mt-1 text-caption text-text-3">{[claim.applicability && `适用：${claim.applicability}`, claim.uncertainty && `不确定性：${claim.uncertainty}`].filter(Boolean).join(" · ")}</p>
       )}
+      {challenges && claim.claimId && (
+        <div className="mt-2">
+          <EvidenceChallenge cardId={evidence.id} claimId={claim.claimId} existing={latestChallenge(challenges, claim.claimId)} />
+        </div>
+      )}
     </li>
   );
 }
@@ -69,14 +80,14 @@ function ClaimItem({ evidence, claim }: { evidence: EvidenceCard; claim: Evidenc
  * The card's claims, each with ✓ (its quotation was found in the source it names) or ⚠ (not found, or not checkable) and
  * the quotation beside it. A claim from an older card — a statement and nothing else — is shown as a plain line.
  */
-export function EvidenceClaims({ evidence }: { evidence: EvidenceCard }) {
+export function EvidenceClaims({ evidence, challenges }: { evidence: EvidenceCard; challenges?: EvidenceChallengeView[] }) {
   if (!evidence.claims.length) return null;
   return (
     <section>
       <h3 className="mb-2 text-ui font-medium text-text">证据要点</h3>
       <ul className="space-y-3">
         {evidence.claims.map((claim, index) => claim.claimId
-          ? <ClaimItem key={claim.claimId} evidence={evidence} claim={claim} />
+          ? <ClaimItem key={claim.claimId} evidence={evidence} claim={claim} challenges={challenges} />
           : <li key={index} className="whitespace-pre-wrap text-ui leading-relaxed text-text-2">{claim.text}</li>)}
       </ul>
     </section>

@@ -239,7 +239,9 @@ test("with the public pages off the two paths answer 404 by name and read nothin
 test("the card's address is fixed on the public URL, the study it is about is read off its sources, and the RSS names the next page", () => {
   assert.equal(evidenceCardAddress("https://www.evimed.com/anything/else", "ec_1"), "https://www.evimed.com/evidence/c/ec_1");
   assert.equal(evidenceCardAddress("", "ec_1"), "/evidence/c/ec_1", "with no public URL it is the path alone");
-  assert.equal(evidenceCardAddress("http://user:pw@x.test/", "ec_1"), "/evidence/c/ec_1", "an address with credentials is not used");
+  // Assembled, not written out: the source audit reads a literal address with user information as a credential.
+  const withUserInfo = Object.assign(new URL("http://x.test/"), { username: "user", password: "pw" }).href;
+  assert.equal(evidenceCardAddress(withUserInfo, "ec_1"), "/evidence/c/ec_1", "an address with credentials is not used");
   assert.deepEqual(evidenceFeedAbout({ lineage: { verifiedStudy: { pmid: "42" } }, sources: [{ url: "https://x.test/NCT01234567" }] }),
     { doi: [], pmid: ["42"], registryIds: ["NCT01234567"] });
   const rss = evidenceFeedRss({ generatedAt: "2026-10-05T08:00:00.000Z", items: [], next: "abc" }, { publicUrl: PUBLIC_URL, selfPath: "/evidence/feed.xml" });

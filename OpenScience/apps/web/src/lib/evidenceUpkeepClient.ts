@@ -77,3 +77,32 @@ export function setEvidenceUpkeep(cardId: string, action: "retire" | "reopen" | 
 export function evidenceUpkeepErrorMessage(error: unknown): string {
   return webErrorMessage(error, { fallback: "操作没有完成，请稍后重试。" });
 }
+
+/** What this deployment offers around an evidence zone (flywheel F08, F14): a public page to link to, and a card's history and challenges. */
+export interface EvidenceFeatures {
+  publicPages: boolean;
+  upkeep: boolean;
+}
+const NO_FEATURES: EvidenceFeatures = { publicPages: false, upkeep: false };
+let featuresRead: { at: number; value: Promise<EvidenceFeatures> } | null = null;
+/**
+ * Read from `/frontier/status` `capabilities`, which names a feature only when the route behind it exists, so a link or a button is never
+ * shown for a page that would answer 404. A server that does not say, or does not answer, offers none of them. One read serves every
+ * evidence page opened within the minute.
+ */
+export function fetchEvidenceFeatures(): Promise<EvidenceFeatures> {
+  const now = Date.now();
+  if (featuresRead && now - featuresRead.at < 60_000) return featuresRead.value;
+  const value = productRequest<{ capabilities?: Record<string, unknown> } | null>("/frontier/status")
+    .then((status): EvidenceFeatures => ({
+      publicPages: status?.capabilities?.evidencePublicPages === true,
+      upkeep: status?.capabilities?.evidenceUpkeep === true,
+    }))
+    .catch(() => NO_FEATURES);
+  featuresRead = { at: now, value };
+  return value;
+}
+/** For tests: forget what was read. */
+export function resetEvidenceFeatures() {
+  featuresRead = null;
+}

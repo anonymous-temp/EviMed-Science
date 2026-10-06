@@ -9,6 +9,7 @@ import { EvidenceCardHeader } from "./EvidenceCardHeader";
 import { EvidenceCardViews } from "./EvidenceCardViews";
 import { EvidenceClaims, EvidenceDisclosure } from "./EvidenceCardClaims";
 import { evidenceDate } from "./evidenceDate";
+import type { EvidenceChallengeView } from "@/lib/evidenceUpkeepClient";
 
 /** Source text stays text: imported cards never supply HTML or navigation code. */
 const safeUrl = (value: string | null) => {
@@ -37,9 +38,12 @@ export const evidenceReviewLabel = (evidence: EvidenceCard) =>
 export function EvidenceReading({
   evidence,
   onDeleteComment,
+  challenges,
 }: {
   evidence: EvidenceCard;
   onDeleteComment?: (id: string) => void;
+  /** The reader's own challenges on this card; given (even empty), each claim offers 「质疑」. Absent where the deployment keeps no upkeep. */
+  challenges?: EvidenceChallengeView[];
 }) {
   const retainedSources = evidence.editorial?.sourceChecks?.filter(
     (check) => check.status === "retained",
@@ -142,7 +146,7 @@ export function EvidenceReading({
           </p>
         </section>
       )}
-      <EvidenceClaims evidence={evidence} />
+      <EvidenceClaims evidence={evidence} challenges={challenges} />
       {evidence.limitations && (
         <section>
           <h3 className="mb-2 text-ui font-medium text-text">适用范围与局限</h3>

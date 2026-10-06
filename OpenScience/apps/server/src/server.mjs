@@ -238,6 +238,8 @@ import { EvidenceZoneService } from "./evidenceZoneService.mjs";
 import { createEvidenceCardSearch } from "./evidenceCardSearch.mjs";
 import { createEvidenceFeed, evidenceFeedMetricFamilies } from "./evidenceFeed.mjs";
 import { createEvidenceFeedRoutes } from "./evidenceFeedRoutes.mjs";
+import { createEvidencePublicRoutes, evidencePublicMetricFamilies } from "./evidencePublicRoutes.mjs";
+import { createEvidenceTopicRequestRoutes, createEvidenceTopicRequests } from "./evidencePublicRequests.mjs";
 import { platformContentCitedMetricFamilies } from "./evidenceCitationMetrics.mjs";
 import { createEvidenceZoneRoutes } from "./evidenceZoneRoutes.mjs";
 import { EvidenceCardFromResult } from "./evidenceCardFromResult.mjs";
@@ -1822,6 +1824,18 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // any other publisher's. It reads cards, so it exists only where the evidence tables do; off, its two paths answer by name.
   const evidenceFeed = frontier && config.evidencePublicWebEnabled ? createEvidenceFeed({ database: productDatabase, config }) : null;
   const evidenceFeedRoutes = createEvidenceFeedRoutes({ config, feed: evidenceFeed });
+  // The public evidence pages and their read-only API (flywheel F08, F27) and the topic requests behind their 「选题申请」 page. Composed
+  // only where the feed is (the frontier's zones, a database) and with the same switch; off, the router answers `false` before it does
+  // anything and the request is whatever an unknown path is. The per-address limiter is the server's own, keyed apart from the API's.
+  const evidencePublicOn = Boolean(frontier && productDatabase && config.evidencePublicWebEnabled);
+  const evidenceTopicRequests = evidencePublicOn ? createEvidenceTopicRequests({ database: productDatabase, config }) : null;
+  const evidencePublicRoutes = createEvidencePublicRoutes({
+    config: evidencePublicOn ? config : { ...config, evidencePublicWebEnabled: false }, database: evidencePublicOn ? productDatabase : null,
+    simulations: overrides.evidenceSimulations ?? null, requests: evidenceTopicRequests,
+    limiter: (req) => rateLimiter.check(`evidence-public:${clientAddress(req, config)}`, { max: config.evidencePublicRatePerMinute, windowMs: 60_000, code: "evidence_public_rate_limited", label: "evidence page requests" }),
+    report: (code) => process.stderr.write(`${code}\n`),
+  });
+  const evidenceTopicRequestRoutes = createEvidenceTopicRequestRoutes({ store, requests: evidenceTopicRequests, frontier: frontier?.service ?? null, config, maxJsonBytes: config.maxJsonBytes });
   /**
    * A researcher's new project, as `POST /api/projects` makes it and as a new
    * GEO project makes its own: a name in any language and an id the
@@ -4959,6 +4973,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (await agentMemoryRoutes(req, res)) return;
       // The public evidence feed carries no session either: what it lists is what the platform published to be read.
       if (await evidenceFeedRoutes(req, res)) return;
+      // The public evidence pages and their API: no session either, and nothing of them runs while their switch is off.
+      if (await evidencePublicRoutes(req, res)) return;
       // A device token (own-app reservation, off by default) is read here, so
       // the store's session and CSRF checks below recognise the request.
       await im.authenticateDevice(req, pathname);
@@ -4979,6 +4995,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       if (await sourceRoutes(req, res)) return;
       if (await library.routes(req, res)) return;
       if (await autopilotRoutes(req, res)) return;
+      if (await evidenceTopicRequestRoutes(req, res)) return;
       if (await evidenceUpkeepRoutes(req, res)) return;
       if (await evidenceZoneRoutes(req, res)) return;
       if (await evidencePublishRoutes(req, res)) return;
@@ -5062,6 +5079,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           evidencePublish,
           evidenceUpkeep,
           evidenceFeed,
+          evidencePublic: evidencePublicRoutes,
         });
         return;
       }
@@ -7880,7 +7898,7 @@ function addHistogramMetric(lines, name, help, series) {
   }
 }
 
-async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, evidenceBudget = null, entityVocabulary = null, evidencePublish = null, evidenceUpkeep = null, evidenceProgramme = null, evidenceFeed = null }) {
+async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, sourceChanges = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null, evolution = null, evaluationIsolation = null, evidenceBudget = null, entityVocabulary = null, evidencePublish = null, evidenceUpkeep = null, evidenceProgramme = null, evidenceFeed = null, evidencePublic = null }) {
   const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate, frontier, review, geo, vcr, credits);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
@@ -8296,6 +8314,8 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
   for (const family of platformContentCitedMetricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
   // The public evidence feed the knowledge-source plugin reads (evidenceFeed.mjs).
   for (const family of evidenceFeedMetricFamilies(evidenceFeed?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
+  // The public evidence pages, their read-only API and the topic requests (evidencePublicRoutes.mjs): nothing is exported where they are off.
+  for (const family of evidencePublicMetricFamilies(evidencePublic?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
   // The entity vocabulary the frontier, the zones, agendas, products and studies share: the glossary's size and what
   // the taggings found (entityVocabulary.mjs `entityVocabularyMetricFamilies`).
   for (const family of entityVocabularyMetricFamilies(entityVocabulary?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);

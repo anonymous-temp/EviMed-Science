@@ -419,6 +419,12 @@ function evidenceSettings(overrides) {
     evidenceProgrammeStaleCardDays: whole("evidenceProgrammeStaleCardDays", "OPEN_SCIENCE_EVIDENCE_PROGRAMME_STALE_CARD_DAYS", 30, 1, 365),
     evidencePublicWebEnabled: overrides.evidencePublicWebEnabled ?? boolEnv("OPEN_SCIENCE_EVIDENCE_PUBLIC_WEB_ENABLED", false),
     evidencePublicIndexable: overrides.evidencePublicIndexable ?? boolEnv("OPEN_SCIENCE_EVIDENCE_PUBLIC_INDEXABLE", false),
+    // What one address may fetch of the public pages and the read-only API in a minute (the pages are outside `/api/`, so the API's own
+    // limiter never sees them). A crawler that behaves is far under it; a scraper that does not is answered 429 with Retry-After.
+    evidencePublicRatePerMinute: whole("evidencePublicRatePerMinute", "OPEN_SCIENCE_EVIDENCE_PUBLIC_RATE_PER_MINUTE", 120, 10, 100_000),
+    // How many topic requests (filed or seconded) one signed-in account may make in a day: a public list anyone may add to needs a
+    // ceiling on what one account can put on it.
+    evidenceTopicRequestsPerDay: whole("evidenceTopicRequestsPerDay", "OPEN_SCIENCE_EVIDENCE_TOPIC_REQUESTS_PER_DAY", 5, 1, 1000),
   };
 }
 

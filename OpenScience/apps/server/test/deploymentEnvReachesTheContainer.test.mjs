@@ -223,6 +223,8 @@ const operatorLevers = {
   OPEN_SCIENCE_EVIDENCE_PROGRAMME_STALE_CARD_DAYS: ["open-science-web"],
   OPEN_SCIENCE_EVIDENCE_PUBLIC_WEB_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_EVIDENCE_PUBLIC_INDEXABLE: ["open-science-web"],
+  OPEN_SCIENCE_EVIDENCE_PUBLIC_RATE_PER_MINUTE: ["open-science-web"],
+  OPEN_SCIENCE_EVIDENCE_TOPIC_REQUESTS_PER_DAY: ["open-science-web"],
   // The card-citation gift (F07): off and worth 0 until the owner chooses an amount.
   OPEN_SCIENCE_EVIDENCE_CITATION_GIFT_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_EVIDENCE_CITATION_GIFT_AMOUNT: ["open-science-web"],

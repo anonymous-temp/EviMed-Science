@@ -3,6 +3,8 @@ import { WebApiError } from "./apiClient";
 import {
   evidenceUpkeepErrorMessage,
   fetchEvidenceChanges,
+  fetchEvidenceFeatures,
+  resetEvidenceFeatures,
   listMyEvidenceChallenges,
   setEvidenceUpkeep,
   submitEvidenceChallenge,
@@ -42,5 +44,20 @@ describe("evidence upkeep client", () => {
     expect(evidenceUpkeepErrorMessage(new WebApiError("x", { status: 409, code: "evidence_challenge_exists" }))).toMatch(/已经对这条结论提出过质疑/);
     expect(evidenceUpkeepErrorMessage(new WebApiError("x", { status: 429, code: "evidence_challenge_rate_limited" }))).toMatch(/上限/);
     expect(evidenceUpkeepErrorMessage(new Error("offline"))).toBe("操作没有完成，请稍后重试。");
+  });
+  it("reads which evidence features the deployment has from the status capabilities, once a minute, and none when it cannot tell", async () => {
+    resetEvidenceFeatures();
+    request.mockResolvedValue({ capabilities: { evidencePublicPages: true, evidenceUpkeep: "yes", saveToLibrary: true } });
+    expect(await fetchEvidenceFeatures()).toEqual({ publicPages: true, upkeep: false });
+    expect(await fetchEvidenceFeatures()).toEqual({ publicPages: true, upkeep: false });
+    expect(request).toHaveBeenCalledTimes(1);
+    expect(request).toHaveBeenCalledWith("/frontier/status");
+    resetEvidenceFeatures();
+    request.mockResolvedValue({});
+    expect(await fetchEvidenceFeatures()).toEqual({ publicPages: false, upkeep: false });
+    resetEvidenceFeatures();
+    request.mockRejectedValue(new WebApiError("down", { status: 502 }));
+    expect(await fetchEvidenceFeatures()).toEqual({ publicPages: false, upkeep: false });
+    resetEvidenceFeatures();
   });
 });

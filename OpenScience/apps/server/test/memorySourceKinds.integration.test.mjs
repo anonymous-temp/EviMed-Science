@@ -15,6 +15,7 @@ const opened = [];
 /** A fresh pool each time: a migration is remembered per database object, so this is a new process starting. */
 const connect = () => { const database = new ControlPlaneDatabase({ databaseUrl: url, databasePoolMax: 3, databaseConnectionTimeoutMs: 5_000 }); opened.push(database); return database; };
 after(async () => {
+  if (!url) return;
   const database = connect();
   await database.query("DELETE FROM evimed_control.users WHERE id=$1", [owner]);
   for (const item of opened) await item.close();

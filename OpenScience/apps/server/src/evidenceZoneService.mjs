@@ -718,7 +718,9 @@ export class EvidenceZoneService {
           }
         }
         // Reading on the open internet is the owner's separate choice (setVisibility); a zone taken back to a draft leaves it.
-        value.visibility = value.state === "draft" ? "platform" : (existing?.visibility ?? "platform");
+        // An official zone is the platform's public voice and has no owner who could choose: published, it is read on the
+        // open internet (plan §5.3, §8) — without this the feed listed official cards whose public pages answered 404.
+        value.visibility = value.state === "draft" ? "platform" : value.kind === "official" ? "internet" : (existing?.visibility ?? "platform");
       }
       if (card) {
         value.subtype = body.subtype ?? existing?.subtype;
