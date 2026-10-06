@@ -119,6 +119,7 @@ const researcherInstructions = Object.freeze({
   researcherMessages: "- researcherMessages is what the researcher has written to this question, oldest first. A correction there stands over the findings it corrects: do not queue work to re-prove what they corrected unless new evidence is in reach, and say in focus what the correction changes. A question there is open until an episode answered it.",
   materials: "- materials are files the researcher added for this question. Pick the task type that reads a material whose state is ready; one that is reading is not usable yet, and one that needs attention could not be read fully.",
   earlierStop: "- earlierStop is what an earlier decision stopped for. When it asked for input, the material added after it (see materials) is what was asked for.",
+  frontierItems: "- frontierItems are what the platform's screened feed of recent medical publications and notices already holds for this question's entities since the last episode: an id, a title, a date, an evidence type and whether it is a safety alert. When they hold something new, prefer literature-sentinel or evidence-update and say in focus which of them the episode should read; do not queue a fresh search for what the feed already lists. They are leads, never evidence: the episode reads the originals and cites those.",
   pauseAllowed: "- pauseAllowed is true: request.trigger is follow-up and the researcher is writing to you now. If the note only asks to pause, hold or stop the research for the time being and asks for nothing to be looked into, choose stop with stopKind paused_by_researcher and say so in reason; this is the one stop allowed when stopAllowed is false. A question, a correction, an added requirement or a request with a condition is never a pause: choose run.",
 });
 
@@ -178,9 +179,11 @@ function episodeOutcome(status, claims) {
  * not an episode that found nothing.
  *
  * @param {{agenda:any, progress:any, eligible:string[], date:string, trigger:string, note?:string|null,
- *   reducedPriority:boolean, stopAllowed:boolean, pauseAllowed?:boolean, availableTools?:any[], evolutionEnabled?:boolean}} input
+ *   reducedPriority:boolean, stopAllowed:boolean, pauseAllowed?:boolean, availableTools?:any[], evolutionEnabled?:boolean,
+ *   frontier?: ReturnType<typeof plannerFrontierItems>}} input
+ *   `frontier`: the feed's items for the agenda's entities (`plannerFrontierItems`); a field with nothing in it is left out of the prompt.
  */
-export function buildPlannerContext({ agenda, progress, eligible, date, trigger, note = null, reducedPriority, stopAllowed, pauseAllowed = false, availableTools = [], evolutionEnabled = false }) {
+export function buildPlannerContext({ agenda, progress, eligible, date, trigger, note = null, reducedPriority, stopAllowed, pauseAllowed = false, availableTools = [], evolutionEnabled = false, frontier = [] }) {
   const typeState = agenda.payload.taskTypeState ?? {};
   const episodes = (progress?.episodes ?? []).map((/** @type {any} */ episode) => ({
     date: episode.date,
@@ -207,6 +210,7 @@ export function buildPlannerContext({ agenda, progress, eligible, date, trigger,
       validationLevel: tool.validationLevel, dataLevel: tool.dataLevel, dataRequirements: tool.dataRequirements,
     })) } : {}),
     ...(pauseAllowed ? { pauseAllowed } : {}),
+    ...(frontier.length ? { frontierItems: frontier.slice(0, PLANNER_FRONTIER_ITEMS_MAX) } : {}),
     taskTypes: (agenda.payload.taskTypes ?? []).filter((/** @type {string} */ type) => AUTOPILOT_TASK_TYPES.includes(/** @type {any} */ (type))).map((/** @type {string} */ type) => ({
       id: type, does: TASK_TYPE_SUMMARIES[/** @type {keyof typeof TASK_TYPE_SUMMARIES} */ (type)],
       state: eligible.includes(type) ? "available" : "paused_after_repeated_failures",
@@ -229,6 +233,27 @@ export function buildPlannerContext({ agenda, progress, eligible, date, trigger,
     context.progressTruncated = true;
   }
   return context;
+}
+
+/** The most feed items one decision is shown, and the longest title it reads of each. */
+export const PLANNER_FRONTIER_ITEMS_MAX = 8;
+const FRONTIER_TITLE_CHARS = 160;
+
+/**
+ * What the decision is shown of the frontier items that match an agenda's entities (evidence-flywheel F04, 2026-10-05): the
+ * feed's id, a title, a date, the evidence type and whether it is a safety alert — bounded, and no text of the item. This is
+ * what "new literature" is for every agenda, the researcher's own included, so the planner chooses `literature-sentinel` or
+ * `evidence-update` from what the feed already holds instead of having each agenda crawl it again.
+ * @param {any[]} matches `frontierItemsMatching`'s rows @returns {{ id: string, title: string, date: string | null, evidenceType: string | null, safetyAlert?: true }[]}
+ */
+export function plannerFrontierItems(matches) {
+  return (Array.isArray(matches) ? matches : []).slice(0, PLANNER_FRONTIER_ITEMS_MAX).map((item) => ({
+    id: String(item.publicId),
+    title: cut(item.titleZh || item.titleRaw, FRONTIER_TITLE_CHARS),
+    date: typeof item.timelineAt === "string" ? item.timelineAt.slice(0, 10) : null,
+    evidenceType: typeof item.evidenceType === "string" ? item.evidenceType : null,
+    ...(item.safetyAlert === true ? { safetyAlert: /** @type {const} */ (true) } : {}),
+  }));
 }
 
 /** @param {string} code @param {string} message */
@@ -321,10 +346,12 @@ export class AutopilotPlanner {
    * envelope.
    * Throws a coded error when no usable decision was had; the caller falls back.
    *
+   * The decision is booked under purpose `autopilot`, a researcher's own; the platform's evidence programme asks for `evidence`
+   * (its own agendas are the platform's money, `evidenceProgramme.mjs`).
    * @param {{userId: string, projectId: string, episodeId: string, context: any, eligible: string[], stopAllowed: boolean,
-   *   pauseAllowed?: boolean, envelopeCny?: number}} input
+   *   pauseAllowed?: boolean, envelopeCny?: number, purpose?: "autopilot" | "evidence"}} input
    */
-  async decide({ userId, projectId, episodeId, context, eligible, stopAllowed, pauseAllowed = false, envelopeCny = 0 }) {
+  async decide({ userId, projectId, episodeId, context, eligible, stopAllowed, pauseAllowed = false, envelopeCny = 0, purpose = "autopilot" }) {
     if (!this.available) throw plannerError("autopilot_planner_unavailable", "The next-action planner is not available.");
     if (this.now() < this.openUntil) {
       this.counters.circuitOpen += 1;
@@ -335,7 +362,7 @@ export class AutopilotPlanner {
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
     try {
       const body = await this.callModel({ config: this.config, usageLedger: this.usageLedger, fetchImpl: this.fetchImpl }, {
-        userId, projectId, runId: episodeId, purpose: "autopilot",
+        userId, projectId, runId: episodeId, purpose,
         limits: {
           daily: Number(this.config.userDailySpendLimit) || 0,
           weekly: Number(this.config.userWeeklySpendLimit) || 0,

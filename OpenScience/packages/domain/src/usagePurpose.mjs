@@ -141,6 +141,7 @@ export function usagePurpose(value) {
 export function usagePurposeOfRun(run) {
   const reason = String(run?.effectiveRouteReason ?? '')
   if (Object.hasOwn(PLATFORM_ROUTE_PURPOSES, reason)) return PLATFORM_ROUTE_PURPOSES[reason]
+  if (isEvidenceProgrammeRouteReason(reason)) return 'evidence'
   const agent = String(run?.effectiveAgentId ?? '')
   if (['evolution-scout', 'tool-builder'].includes(agent)) return 'evolution'
   if (agent === 'source-understanding') return 'source-understanding'
@@ -204,6 +205,30 @@ export const PLATFORM_ROUTE_PURPOSES = Object.freeze(/** @type {Record<string, U
   'platform-evolution': 'evolution',
   'platform-learning': 'learning',
 }))
+
+/**
+ * The route reasons of the platform's own evidence programme (evidence-flywheel plan §5.1, F01, 2026-10-05): the
+ * episodes of an agenda the publisher account runs in its internal `evimed-evidence` project, and the independent
+ * verifications of their claims. They keep the `autopilot:` family's prefix on purpose — the completion fold, the
+ * usage keys of a bounded runtime and the dispatch recovery all recognise an autopilot run by it — and add the one word
+ * that makes the run the platform's: `usagePurposeOfRun` reads these as `evidence`, so none of the programme's
+ * model spend is a researcher's to pay or counts against anyone's caps, and `isChargeableResearchRun` is false for it.
+ * Only the control plane's own dispatcher (`server.mjs`, for an agenda owned by the publisher in that project) writes
+ * them; the public dispatch route computes its own reasons and never takes one from a caller.
+ */
+export const EVIDENCE_PROGRAMME_ROUTE_REASON_PREFIX = 'autopilot:evidence:'
+export const EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON = 'autopilot-verify:evidence'
+
+/** The route reason of one programme episode of `taskType`. @param {string} taskType @returns {string} */
+export function evidenceProgrammeRouteReason(taskType) {
+  return `${EVIDENCE_PROGRAMME_ROUTE_REASON_PREFIX}${taskType}`
+}
+
+/** @param {unknown} reason @returns {boolean} */
+export function isEvidenceProgrammeRouteReason(reason) {
+  const text = String(reason ?? '')
+  return text.startsWith(EVIDENCE_PROGRAMME_ROUTE_REASON_PREFIX) || text === EVIDENCE_PROGRAMME_VERIFICATION_ROUTE_REASON
+}
 
 /**
  * What every paired-evaluation dispatch id starts with. An identifier the

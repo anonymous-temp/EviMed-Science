@@ -4,7 +4,7 @@ import { ALLOWED_EFFECT_MEASURES, AUTOPILOT_TASK_TYPES, digestPlacement, directi
   AGENDA_MIN_EPISODE_BUDGET_CNY, MIN_RUN_BUDGET_CNY, STOPPING_RULES, VERIFICATION_CANCELED_BY_STOP, knownErrorCodeMessage,
   splitEpisodeBudget, standingVerdict, tierRaiseAllowed, userSignalScore, validateAgendaClaim } from "@evimed/domain";
 import { AUTOPILOT_MATERIALS_MAX, loadAutopilotProgress, projectResearchState, renderAutopilotProgress, safeAutopilotArtifactRefs } from "./autopilotProgress.mjs";
-import { RESEARCHER_PAUSE_KIND, buildPlannerContext, eligibleTaskTypes, rotationTaskType } from "./autopilotNextAction.mjs";
+import { RESEARCHER_PAUSE_KIND, buildPlannerContext, eligibleTaskTypes, plannerFrontierItems, rotationTaskType } from "./autopilotNextAction.mjs";
 import { foldOutcome, reducedPriority } from "./autopilotOutcome.mjs";
 import { AGENDA_WINDOW_MS, agendaAllowance, agendaBudget, budgetFreesAt, taskBudgetRefusal } from "./agendaBudget.mjs";
 import { sourceIdFor } from "./sourceService.mjs";
@@ -458,9 +458,9 @@ function continuationBindingKey(value) {
 /** Persistent proactive-research policy and decision ledger. Episodes remain
  * ordinary ProductJobs and are dispatched through the ordinary AgentRun path. */
 export class AutopilotService {
-  /** @param {{documents:any,jobs:any,usage?:any,accountCaps?:()=>Record<string,any>,notifications?:any,capsules?:any,planner?:{decide:(input:any)=>Promise<any>}|null,evolution?:any,entityVocabulary?:{tag:(input:{texts:string[]})=>Promise<string[]|null>}|null,authorizeContinuation?:((userId:string,projectId:string,binding:any)=>Promise<void>)|null,now?:()=>Date,id?:(prefix:string)=>string}} dependencies */
+  /** @param {{documents:any,jobs:any,usage?:any,accountCaps?:()=>Record<string,any>,notifications?:any,capsules?:any,planner?:{decide:(input:any)=>Promise<any>}|null,evolution?:any,entityVocabulary?:{tag:(input:{texts:string[]})=>Promise<string[]|null>,frontierItemsMatching?:(query:any)=>Promise<any[]>}|null,programme?:{owns:(userId:string,projectId:string)=>boolean,assertAdmitted:(userId:string,agenda:any,options?:{episodeId?:string|null})=>Promise<void>}|null,authorizeContinuation?:((userId:string,projectId:string,binding:any)=>Promise<void>)|null,now?:()=>Date,id?:(prefix:string)=>string}} dependencies */
   constructor({ documents, jobs, usage = null, accountCaps = () => ({}), notifications = null, capsules = null, planner = null,
-    evolution = null, entityVocabulary = null, authorizeContinuation = null, now = () => new Date(), id = (prefix) => `${prefix}${randomUUID()}` }) {
+    evolution = null, entityVocabulary = null, programme = null, authorizeContinuation = null, now = () => new Date(), id = (prefix) => `${prefix}${randomUUID()}` }) {
     if (!documents || !jobs) throw new TypeError("AutopilotService requires product documents and jobs.");
     this.documents = documents;
     this.jobs = jobs;
@@ -474,6 +474,12 @@ export class AutopilotService {
     this.evolution = evolution;
     /** The shared entity vocabulary (`entityVocabulary.mjs`): an agenda is tagged with it, and without it carries no keys. */
     this.entityVocabulary = entityVocabulary;
+    /**
+     * The platform's evidence programme (`evidenceProgramme.mjs`), which runs agendas of its own account: it says which
+     * agendas are its own (`owns`: the publisher's, in its internal project), and whether the day's budget and its one slot
+     * admit one more episode (`assertAdmitted`). Absent, or for any other agenda, nothing here changes.
+     */
+    this.programme = programme;
     this.now = now;
     this.id = id;
     this.authorizeContinuation = authorizeContinuation;
@@ -1830,6 +1836,8 @@ export class AutopilotService {
     // the account's (`assertAffordable`): the agenda's ¥3 a day was once compared
     // with everything the account had spent that day (2026-10-04).
     const allowance = existingEpisode ? null : await this.assertAffordable(userId, agenda);
+    // The programme's own agendas are held by its day's budget and its one slot as well, before an episode exists to hold them.
+    if (!existingEpisode && this.programme?.owns(userId, agenda.projectId)) await this.programme.assertAdmitted(userId, agenda, { episodeId });
     // What this episode will do is decided once, from the progress, before the
     // episode exists; a replay of the same request reads the decision back from
     // the episode instead of asking again.
@@ -1999,11 +2007,14 @@ export class AutopilotService {
     try {
       // The tools 循证进化 offers are context for the decision; a store that cannot say what they are does not take the decision with it.
       const availableTools = await Promise.resolve(this.evolution?.availableTools(agenda)).catch(() => []) ?? [];
+      const frontier = await this.frontierItemsFor(agenda, progress);
       const decision = await this.planner.decide({
         userId, projectId: agenda.projectId, episodeId, eligible, stopAllowed, pauseAllowed,
         context: buildPlannerContext({ agenda, progress, eligible, date, trigger, note, reducedPriority: reduced, stopAllowed, pauseAllowed,
-          availableTools, evolutionEnabled: Boolean(this.evolution) }),
+          availableTools, evolutionEnabled: Boolean(this.evolution), frontier }),
         envelopeCny: Number.isFinite(envelopeCny) ? envelopeCny : 0,
+        // The platform's own agenda is the platform's money (purpose `evidence`), never a researcher's `autopilot`.
+        ...(this.programme?.owns(userId, agenda.projectId) ? { purpose: "evidence" } : {}),
       });
       return decision.action === "stop"
         ? { ...base, source: "model", model: decision.model, action: "stop", stopKind: decision.stopKind, reason: decision.reason,
@@ -2014,6 +2025,27 @@ export class AutopilotService {
       // an identifier of ours, never the provider's words.
       const code = typeof error?.code === "string" && /^[a-z0-9_]{1,64}$/.test(error.code) ? error.code : "autopilot_planner_failed";
       return rotation(code);
+    }
+  }
+
+  /**
+   * The feed's items for an agenda's entities since its last episode (evidence-flywheel F04): what "new literature" is for
+   * every agenda, a researcher's included. The period is the time since the last episode on the agenda (14 days when there is
+   * none), never longer than the feed keeps (30 days). An agenda with no entity keys, a module that is off, or a read that
+   * fails has none: the decision is made without them, as it was before the feed existed.
+   * @param {any} agenda @param {any} progress
+   * @returns {Promise<ReturnType<typeof plannerFrontierItems>>}
+   */
+  async frontierItemsFor(agenda, progress) {
+    const keys = Array.isArray(agenda.payload.entityKeys) ? agenda.payload.entityKeys : [];
+    if (!keys.length || typeof this.entityVocabulary?.frontierItemsMatching !== "function") return [];
+    const now = this.now().getTime();
+    const last = Date.parse(`${progress?.episodes?.[0]?.date ?? ""}T00:00:00Z`);
+    const since = new Date(Math.max(now - 30 * 86_400_000, Number.isFinite(last) ? last : now - 14 * 86_400_000));
+    try {
+      return plannerFrontierItems(await this.entityVocabulary.frontierItemsMatching({ entityKeys: keys, since, limit: 8 }));
+    } catch {
+      return [];
     }
   }
 
@@ -2182,7 +2214,8 @@ export class AutopilotService {
       digest = await this.getDigest(userId, digestId);
       if (digest.projectId !== agenda.projectId || digest.payload.agendaId !== agenda.id) throw new HttpError(409, "autopilot_digest_conflict", "Digest identity belongs to another agenda.");
     }
-    if (this.notifications) await this.notifications.create(userId, {
+    // The platform's own agendas have no reader to tell: their conclusions become cards, or stay in the internal project.
+    if (this.notifications && !this.programme?.owns(userId, agenda.projectId)) await this.notifications.create(userId, {
       noticeType: "review", title: `主动科研简报：${agenda.payload.title}`,
       body: `${headlines.length} 条重点发现，${leads.length} 条待验证线索。`, projectId: agenda.projectId,
       source: { type: "digest", id: digest.id }, idempotencyKey: `autopilot-digest:${digest.id}`,

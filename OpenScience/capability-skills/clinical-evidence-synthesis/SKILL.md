@@ -277,6 +277,8 @@ whether it truly needs the missing premise; most do not.
 
 Search iteratively across at least two relevant source classes. Use English and Chinese synonyms when relevant. Continue until every material section has usable evidence and further query variation is no longer changing the conclusion; do not stop because a numeric query target was reached.
 
+When the question is what is new — a proactive-research update or sentinel episode, or any question about recent publications, guidance or safety notices — look in `mcp__evimed__frontier_search` first: the platform's screened feed already holds them by entity, so search the sources yourself only for what it does not list. Its results are leads to read at the original and cite there, never evidence themselves.
+
 Report the search in `资料与方法`: the source classes searched, the date, and the
 query strings as you sent them — copied from the call, not paraphrased or
 shortened. Only searches you actually ran count; a planned, duplicate or failed

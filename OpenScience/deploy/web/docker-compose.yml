@@ -539,6 +539,13 @@ services:
       OPEN_SCIENCE_EVIDENCE_PROGRAMME_ENABLED:
       OPEN_SCIENCE_EVIDENCE_PROGRAMME_DAILY_BUDGET_CNY:
       OPEN_SCIENCE_EVIDENCE_PROGRAMME_MAX_CONCURRENCY:
+      # The programme's own limits (F01/F02): an episode's budget, the least number of distinct readers
+      # before a topic's demand is counted, the original analyses published in a week, and the age
+      # at which an official card's last source check makes it stale.
+      OPEN_SCIENCE_EVIDENCE_PROGRAMME_EPISODE_BUDGET_CNY:
+      OPEN_SCIENCE_EVIDENCE_PROGRAMME_MIN_DEMAND_USERS:
+      OPEN_SCIENCE_EVIDENCE_PROGRAMME_ORIGINAL_ANALYSES_PER_WEEK:
+      OPEN_SCIENCE_EVIDENCE_PROGRAMME_STALE_CARD_DAYS:
       OPEN_SCIENCE_EVIDENCE_PUBLIC_WEB_ENABLED:
       OPEN_SCIENCE_EVIDENCE_PUBLIC_INDEXABLE:
       # The card-citation gift (evidence-flywheel plan 2026-10-05, F07): interface only,

@@ -580,8 +580,8 @@ function people(value, what) {
  */
 export function evidenceDisclosure(value) {
   if (value == null) return null
-  if (!isRecord(value) || !onlyKeys(value, ['model', 'modelVersion', 'generatedAt', 'lastCheckedAt', 'aiSteps', 'authors', 'reviewers'])) throw invalid('disclosure')
-  if (!optionalText(value.model, 200) || !optionalText(value.modelVersion, 200)) throw invalid('disclosure model')
+  if (!isRecord(value) || !onlyKeys(value, ['model', 'modelVersion', 'generatedAt', 'lastCheckedAt', 'aiSteps', 'authors', 'reviewers', 'reportingStandard'])) throw invalid('disclosure')
+  if (!optionalText(value.model, 200) || !optionalText(value.modelVersion, 200) || !optionalText(value.reportingStandard, 200)) throw invalid('disclosure model')
   for (const key of ['generatedAt', 'lastCheckedAt']) {
     if (value[key] != null && !isoDate(value[key])) throw invalid(`disclosure ${key}`)
   }
@@ -589,6 +589,9 @@ export function evidenceDisclosure(value) {
   return {
     ...(value.model?.trim() ? { model: value.model.trim() } : {}),
     ...(value.modelVersion?.trim() ? { modelVersion: value.modelVersion.trim() } : {}),
+    // The reporting standard an original analysis was written to (STROBE-MR, READUS-PV): the platform's programme names it
+    // here, beside the model and the steps, because it is a statement about how the card was made (plan §5.1).
+    ...(value.reportingStandard?.trim() ? { reportingStandard: value.reportingStandard.trim() } : {}),
     ...(value.generatedAt ? { generatedAt: value.generatedAt } : {}),
     ...(value.lastCheckedAt ? { lastCheckedAt: value.lastCheckedAt } : {}),
     aiSteps: EVIDENCE_AI_STEPS.filter((step) => (value.aiSteps ?? []).includes(step)),

@@ -2008,7 +2008,8 @@ test("a capability's two skill copies never drift apart by more than their known
   const knownDivergence = {
     "adr-analysis": 63,
     "bibliometric-analysis": 58,
-    "clinical-evidence-synthesis": 267,
+    // Raised on 2026-10-05 (evidence-flywheel F04): one sentence saying to look in the frontier feed first for what is new (+1).
+    "clinical-evidence-synthesis": 268,
     "comprehensive-drug-evaluation": 45,
     // The optional-output scoping revision synchronized the retained body too.
     "dataset-research-scoping": 0,

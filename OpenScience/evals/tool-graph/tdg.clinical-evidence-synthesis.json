@@ -1,10 +1,10 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "clinical-evidence-synthesis",
-  "version": "sha256:0fd4cb11f534a9ceefeeb1b0c2147de0bb3a1848fd5aae905d87cab49fbce40a",
+  "version": "sha256:78c8c7898da0a86e1dbf7ddc00385f63fcb0fdc92f9e69f88985b025db028439",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
-    "nodes": 31,
+    "nodes": 32,
     "edges": 31,
     "byVia": {
       "schema": 31,
@@ -948,6 +948,99 @@
         "doi",
         "pmid"
       ],
+      "stateEffect": "none"
+    },
+    {
+      "name": "mcp__evimed__frontier_search",
+      "source": "mcp",
+      "description": "Search 前沿动态, EviMed's screened feed of recent medical developments (journal papers, guidelines, regulatory and safety notices, trial and industry news) from the last 24 hours to 30 days. Use it when a question asks what is new or recent; settled knowledge does not need it. Results are leads, not evidence: read the original through the returned DOI or link and cite that, never this feed.",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "q": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Keywords: drug, disease, trial, agency (Chinese or English). Omit to list the newest items."
+          },
+          "lane": {
+            "type": "string",
+            "enum": [
+              "evidence",
+              "guideline",
+              "regulatory",
+              "safety",
+              "pipeline",
+              "public-health",
+              "research",
+              "ai"
+            ]
+          },
+          "specialty": {
+            "type": "string",
+            "enum": [
+              "cardiology",
+              "oncology",
+              "endocrinology",
+              "neurology",
+              "psychiatry",
+              "infectious-disease",
+              "respiratory",
+              "critical-care",
+              "gastroenterology",
+              "nephrology",
+              "rheumatology",
+              "hematology",
+              "pediatrics",
+              "obstetrics-gynecology",
+              "geriatrics",
+              "surgery-anesthesia",
+              "radiology",
+              "pharmacy",
+              "tcm",
+              "public-health",
+              "general-practice"
+            ]
+          },
+          "window": {
+            "type": "string",
+            "enum": [
+              "24h",
+              "3d",
+              "7d",
+              "30d"
+            ],
+            "default": "30d"
+          },
+          "mode": {
+            "type": "string",
+            "enum": [
+              "selected",
+              "all"
+            ],
+            "default": "selected",
+            "description": "selected: the editors' picks; all: everything collected."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 20,
+            "default": 8
+          }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "declaredBy": "scripts/dev/build-tool-graph.mjs",
+        "note": "MCP publishes no output schema for this tool; these are the result fields an edge may depend on.",
+        "fields": []
+      },
+      "typeTags": [
+        "doi"
+      ],
+      "requiredTypeTags": [],
+      "outputTypeTags": [],
       "stateEffect": "none"
     },
     {

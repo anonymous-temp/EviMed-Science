@@ -12,6 +12,10 @@ const LEVERS = [
   ["OPEN_SCIENCE_EVIDENCE_PROGRAMME_ENABLED", "evidenceProgrammeEnabled", false],
   ["OPEN_SCIENCE_EVIDENCE_PROGRAMME_DAILY_BUDGET_CNY", "evidenceProgrammeDailyBudgetCny", 30],
   ["OPEN_SCIENCE_EVIDENCE_PROGRAMME_MAX_CONCURRENCY", "evidenceProgrammeMaxConcurrency", 1],
+  ["OPEN_SCIENCE_EVIDENCE_PROGRAMME_EPISODE_BUDGET_CNY", "evidenceProgrammeEpisodeBudgetCny", 10],
+  ["OPEN_SCIENCE_EVIDENCE_PROGRAMME_MIN_DEMAND_USERS", "evidenceProgrammeMinDemandUsers", 5],
+  ["OPEN_SCIENCE_EVIDENCE_PROGRAMME_ORIGINAL_ANALYSES_PER_WEEK", "evidenceProgrammeOriginalPerWeek", 2],
+  ["OPEN_SCIENCE_EVIDENCE_PROGRAMME_STALE_CARD_DAYS", "evidenceProgrammeStaleCardDays", 30],
   ["OPEN_SCIENCE_EVIDENCE_PUBLIC_WEB_ENABLED", "evidencePublicWebEnabled", false],
   ["OPEN_SCIENCE_EVIDENCE_PUBLIC_INDEXABLE", "evidencePublicIndexable", false],
 ];
@@ -39,6 +43,26 @@ test("every lever is read from the environment, and an empty value reads as unse
   assert.deepEqual([empty.evidenceProgrammeDailyBudgetCny, empty.evidenceProgrammeMaxConcurrency, empty.evidenceProgrammeEnabled], [30, 1, false], "an empty value is the default, not 0");
   assert.equal(/** @type {any} */ (configUnder({ OPEN_SCIENCE_EVIDENCE_PROGRAMME_DAILY_BUDGET_CNY: "0" })).evidenceProgrammeDailyBudgetCny, 0, "0 is no cap, as every spend limit here reads 0");
   assert.equal(/** @type {any} */ (configUnder({ OPEN_SCIENCE_EVIDENCE_PROGRAMME_ENABLED: "false", OPEN_SCIENCE_EVIDENCE_PUBLIC_WEB_ENABLED: "off" })).evidenceProgrammeEnabled, false);
+});
+
+test("the programme's own limits are read, and the demand floor can be raised but never lowered below five readers", () => {
+  const config = /** @type {Record<string, any>} */ (configUnder({
+    OPEN_SCIENCE_EVIDENCE_PROGRAMME_EPISODE_BUDGET_CNY: "6.5", OPEN_SCIENCE_EVIDENCE_PROGRAMME_MIN_DEMAND_USERS: "12",
+    OPEN_SCIENCE_EVIDENCE_PROGRAMME_ORIGINAL_ANALYSES_PER_WEEK: "0", OPEN_SCIENCE_EVIDENCE_PROGRAMME_STALE_CARD_DAYS: "45",
+  }));
+  assert.deepEqual([config.evidenceProgrammeEpisodeBudgetCny, config.evidenceProgrammeMinDemandUsers, config.evidenceProgrammeOriginalPerWeek, config.evidenceProgrammeStaleCardDays],
+    [6.5, 12, 0, 45], "0 original analyses a week is a valid choice: none is published");
+  for (const [name, value] of [
+    ["OPEN_SCIENCE_EVIDENCE_PROGRAMME_MIN_DEMAND_USERS", "4"],
+    ["OPEN_SCIENCE_EVIDENCE_PROGRAMME_MIN_DEMAND_USERS", "1"],
+    ["OPEN_SCIENCE_EVIDENCE_PROGRAMME_MIN_DEMAND_USERS", "5.5"],
+    ["OPEN_SCIENCE_EVIDENCE_PROGRAMME_ORIGINAL_ANALYSES_PER_WEEK", "-1"],
+    ["OPEN_SCIENCE_EVIDENCE_PROGRAMME_ORIGINAL_ANALYSES_PER_WEEK", "15"],
+    ["OPEN_SCIENCE_EVIDENCE_PROGRAMME_STALE_CARD_DAYS", "0"],
+    ["OPEN_SCIENCE_EVIDENCE_PROGRAMME_STALE_CARD_DAYS", "366"],
+    ["OPEN_SCIENCE_EVIDENCE_PROGRAMME_EPISODE_BUDGET_CNY", "1"],
+    ["OPEN_SCIENCE_EVIDENCE_PROGRAMME_EPISODE_BUDGET_CNY", "lots"],
+  ]) assert.throws(() => configUnder({ [name]: value }), new RegExp(name), `${name}=${value}`);
 });
 
 test("a value outside its range stops the start by the variable's name", () => {
