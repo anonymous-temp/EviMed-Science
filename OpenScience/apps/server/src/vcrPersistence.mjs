@@ -87,7 +87,7 @@ export const VCR_TABLES = Object.freeze([
   "matching_assessments", "criterion_judgments", "matching_facts", "language_judgments",
   "referrals", "referral_events", "sites", "followup_episodes",
   "dependencies", "stale_marks", "reviews", "decisions", "regulatory_contacts", "exports", "audit", "schedule_marks",
-  "model_assessments", "model_plan_versions",
+  "model_assessments", "model_plan_versions", "published_simulations",
 ]);
 
 const migrations = new WeakMap();
@@ -1220,6 +1220,34 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.schedule_marks (
 );
 CREATE INDEX IF NOT EXISTS vcr_schedule_marks_open_idx ON evimed_vcr.schedule_marks (study_id, kind, state)
   WHERE state IN ('pending', 'claimed', 'running');
+
+-- A report its study lead chose to put in the public 「模拟研究」 column (flywheel plan §5.6, 2026-10-06). The row is the frozen
+-- public form of one export, not a pointer to it: the numbers were rendered from the report model after the runtime's small-cell
+-- suppression, each carries its value-source label, and nothing in it is a row of a person. A withdrawn publication keeps its row
+-- (the record of what was public) and is read by nobody. One live publication per export.
+CREATE TABLE IF NOT EXISTS evimed_vcr.published_simulations (
+  id              text PRIMARY KEY,
+  study_id        text NOT NULL REFERENCES evimed_vcr.studies(id) ON DELETE CASCADE,
+  user_id         text NOT NULL,
+  published_by    text NOT NULL,
+  export_id       text NOT NULL,
+  export_kind     text NOT NULL CHECK (export_kind IN ('simulation_report', 'model_analysis_report')),
+  title           text NOT NULL,
+  summary         text NOT NULL DEFAULT '',
+  producer        jsonb NOT NULL DEFAULT '{}'::jsonb,
+  sections        jsonb NOT NULL DEFAULT '[]'::jsonb,
+  limitations     jsonb NOT NULL DEFAULT '[]'::jsonb,
+  intended_use    text NOT NULL DEFAULT '',
+  intended_use_key text NOT NULL DEFAULT '',
+  receipts        jsonb NOT NULL DEFAULT '[]'::jsonb,
+  published_at    timestamptz NOT NULL DEFAULT now(),
+  withdrawn_at    timestamptz,
+  withdrawn_by    text
+);
+CREATE UNIQUE INDEX IF NOT EXISTS vcr_published_simulations_live_idx ON evimed_vcr.published_simulations (study_id, export_id)
+  WHERE withdrawn_at IS NULL;
+CREATE INDEX IF NOT EXISTS vcr_published_simulations_public_idx ON evimed_vcr.published_simulations (published_at DESC, id DESC)
+  WHERE withdrawn_at IS NULL;
 `;
 }
 

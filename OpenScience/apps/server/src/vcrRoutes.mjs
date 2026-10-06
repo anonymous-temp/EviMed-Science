@@ -67,6 +67,7 @@ import { HttpError, readJson, sendJson } from "./security.mjs";
 import { fileView, importAttemptAuditDetail, importAuditDetail, snapshotView, sourceView, tableView, uploadAttemptAuditDetail, uploadAuditDetail } from "./vcrDataPlane.mjs";
 import { abilitiesOfRoles } from "./vcrMembers.mjs";
 import { isSiteScopedRole } from "./vcrRecruit.mjs";
+import { VCR_PUBLICATION_LIMITS } from "./vcrPublications.mjs";
 
 /**
  * Every code these routes answer with — or that a module behind them answers
@@ -110,6 +111,12 @@ export const VCR_ROUTE_ERROR_CODES = Object.freeze([
   "vcr_definition_not_found",
   "vcr_definition_invalid",
   "vcr_model_assessment_not_found",
+  // 「模拟研究」 (flywheel 2026-10-06): the column is off, the publication is not the study's, the report is not written yet, the
+  // words of the report name a subject of the study.
+  "vcr_publications_not_enabled",
+  "vcr_publication_not_found",
+  "vcr_publication_not_ready",
+  "vcr_publication_patient_data",
 ]);
 
 /**
@@ -142,6 +149,9 @@ export const VCR_ROUTE_ABILITIES = Object.freeze({
   "POST /studies/:id/decisions": ["write"],
   "POST /studies/:id/export": ["export"],
   "GET /studies/:id/export/:export": ["read"],
+  "GET /studies/:id/publications": ["read"],
+  "POST /studies/:id/publications": ["manage_study"],
+  "DELETE /studies/:id/publications/:publication": ["manage_study"],
   "GET /studies/:id/members": ["read"],
   "POST /studies/:id/members": ["manage_members"],
   "DELETE /studies/:id/members/:user": ["manage_members"],
@@ -193,7 +203,7 @@ export function vcrRoutePattern(pathname) {
   if (parts[0] !== "studies") return "/api/vcr/:route";
   if (parts.length === 1) return "/api/vcr/studies";
   if (parts.length === 2) return "/api/vcr/studies/:id";
-  const known = [...VCR_TABS, "run", "jobs", "budget", "assumptions", "model-assessments", "reviews", "curve-extractions", "correction-cases", "decisions", "export", "members", "referrals", "pack", "definitions"];
+  const known = [...VCR_TABS, "run", "jobs", "budget", "assumptions", "model-assessments", "reviews", "curve-extractions", "correction-cases", "decisions", "export", "publications", "members", "referrals", "pack", "definitions"];
   const section = known.includes(parts[2]) ? parts[2] : ":route";
   if (parts[2] === "data" && parts.length > 3) {
     // The intake routes: `data/<kind>[/:item[/<action>[/confirm]]]`, every id folded.
@@ -314,7 +324,7 @@ function wholeNumber(value, field, max) {
  *     latestSessionId?: (user: any, projectId: string) => Promise<string | null>,
  *     remove?: (user: any, projectId: string) => Promise<unknown> } | null,
  *   orchestrator?: any, jobs?: any, exporter?: any, members?: any, matching?: any, assessments?: any, dataPlane?: any,
- *   evidence?: any, evidenceStore?: any, corrections?: any, knowledge?: any }} dependencies
+ *   evidence?: any, evidenceStore?: any, corrections?: any, knowledge?: any, publications?: any }} dependencies
  *   `store` is the platform's, for the session and the CSRF check only;
  *   `vcrStore` is the module's own (defaults to the service's).
  */
@@ -352,6 +362,8 @@ export function createVcrRoutes(dependencies) {
       get evidenceStore() { return dependencies.evidenceStore ?? service.packages?.evidenceStore ?? null; },
       // The disease packs and the definition library.
       get knowledge() { return dependencies.knowledge ?? service.packages?.knowledge ?? null; },
+      // The public 「模拟研究」 column's publish and withdraw (`vcrPublications.mjs`); null while the switch is off.
+      get publications() { return dependencies.publications ?? null; },
     };
     /** The module's own store: roles, assumptions, reviews, decisions, exports, members. */
     const data = () => {
@@ -984,6 +996,37 @@ export function createVcrRoutes(dependencies) {
           rationale: String(body.rationale ?? "").slice(0, 4_000), decidedBy: String(user.id),
         }));
       return reply(saved, 201);
+    }
+
+    // --- 模拟研究: the lead publishes one of the study's reports to the public column --------------------
+    if (section === "publications") {
+      // Off is invisible: the module's own not-enabled answer, before the study is even looked up.
+      if (!config.vcrPublicSimulationsEnabled || !hooks.publications) throw new HttpError(404, "vcr_publications_not_enabled", "模拟研究 is not enabled.");
+      if (parts.length === 3 && method === "GET") {
+        const { study } = await authorize(id, "read");
+        return reply({ publications: await hooks.publications.forStudy(study.id) });
+      }
+      if (parts.length === 3 && method === "POST") {
+        const body = await bodyOf(req, maxJsonBytes, ["exportId", "title", "summary"]);
+        if (typeof body.exportId !== "string" || !ID.test(body.exportId)) throw new HttpError(400, "vcr_payload_invalid", "exportId is the id of one of the study's reports.");
+        const title = typeof body.title === "string" ? body.title.replace(/\s+/g, " ").trim() : "";
+        const summary = typeof body.summary === "string" ? body.summary.replace(/[ \t]+/g, " ").trim() : "";
+        if (!title || [...title].length > VCR_PUBLICATION_LIMITS.title) throw new HttpError(400, "vcr_payload_invalid", `title is one line of 1 to ${VCR_PUBLICATION_LIMITS.title} characters.`);
+        if ([...summary].length > VCR_PUBLICATION_LIMITS.summary) throw new HttpError(400, "vcr_payload_invalid", `summary is at most ${VCR_PUBLICATION_LIMITS.summary} characters.`);
+        // The study's lead alone: publishing is the one act that makes a study's numbers public.
+        const { study } = await authorize(id, "manage_study");
+        const published = await audited("vcr.simulation.publish", (result) => ({ code: String(result.id), detail: String(result.exportKind) }),
+          { code: id, detail: body.exportId }, () => hooks.publications.publish(user, study, { exportId: body.exportId, title, summary }));
+        return reply(published, published.existing ? 200 : 201);
+      }
+      if (parts.length === 4 && method === "DELETE") {
+        await bodyOf(req, maxJsonBytes, []);
+        const { study } = await authorize(id, "manage_study");
+        const withdrawn = await audited("vcr.simulation.withdraw", (result) => ({ code: String(result.id) }), { code: id, detail: parts[3] },
+          () => hooks.publications.withdraw(user, study, parts[3]));
+        return reply(withdrawn);
+      }
+      throw new HttpError(404, "not_found", "虚拟临研 route not found.");
     }
 
     // --- export -----------------------------------------------------------------------

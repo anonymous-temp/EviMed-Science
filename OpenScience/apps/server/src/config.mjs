@@ -698,6 +698,10 @@ function vcrSettings(overrides) {
     vcrAudience: audience,
     // Accounts that see the module under `operators` without being operators.
     vcrPreviewUsers: overrides.vcrPreviewUsers ?? listEnv("OPEN_SCIENCE_VCR_PREVIEW_USERS"),
+    // The public 「模拟研究」 column (flywheel plan §5.6, 2026-10-06): a study lead may publish a report there and the public pages
+    // package reads it. Off, the publication routes answer 404 `vcr_publications_not_enabled` and no table is read. Counter:
+    // `open_science_vcr_publications_total`.
+    vcrPublicSimulationsEnabled: overrides.vcrPublicSimulationsEnabled ?? boolEnv("OPEN_SCIENCE_VCR_PUBLIC_SIMULATIONS_ENABLED", false),
     vcrPollMs: integer("vcrPollMs", "OPEN_SCIENCE_VCR_POLL_MS", 5_000, 1_000, 3_600_000),
     vcrLeaseMs: integer("vcrLeaseMs", "OPEN_SCIENCE_VCR_LEASE_MS", 900_000, 60_000, 86_400_000),
     // The deterministic engine. Unset = not composed; the steps that need it say so.

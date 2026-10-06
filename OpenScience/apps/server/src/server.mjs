@@ -2197,6 +2197,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     get orchestrator() { return vcr?.orchestrator ?? null; },
     get jobs() { return vcr?.jobs ?? null; },
     get exporter() { return vcr?.exporter ?? null; },
+    get publications() { return vcr?.publications ?? null; },
     get members() { return vcr?.members ?? null; },
     // The referral ledger's acts, the first human stop among them
     // (`vcrContact.mjs`) — not the store, which has no `contactReferral`.

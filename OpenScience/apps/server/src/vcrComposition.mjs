@@ -86,6 +86,7 @@ import { VcrMembers } from "./vcrMembers.mjs";
 import { createVcrModelPlans } from "./vcrModelDocuments.mjs";
 import { createVcrSeal } from "./vcrSeal.mjs";
 import { VcrService } from "./vcrService.mjs";
+import { createVcrPublications, createVcrPublicSimulations } from "./vcrPublications.mjs";
 import { VcrStore } from "./vcrStore.mjs";
 import { createChictrAdapter, createTrialRegistryClient } from "./trialRegistryClient.mjs";
 import { createVcrImporter } from "./vcrImport.mjs";
@@ -1001,7 +1002,12 @@ export function composeVcr({ config, productDatabase, projectStore = null, audit
   const knowledgeStore = new VcrKnowledgeStore({ database: productDatabase });
   const knowledge = new VcrKnowledge({ store: knowledgeStore, studyStore: store, dataStore, jobs });
   service.attach({ corrections, knowledge });
+  // The public 「模拟研究」 column: the lead's publish and withdraw, and the reader the public pages package takes. Neither exists
+  // while the switch is off, so nothing reads the table and the routes answer 404 by their own code.
+  const publications = config.vcrPublicSimulationsEnabled ? createVcrPublications({ store, service, matchStore }) : null;
+  const simulations = config.vcrPublicSimulationsEnabled ? createVcrPublicSimulations({ store }) : null;
   composed = {
+    publications, simulations,
     store, dataStore, matchStore, evidenceStore, corrections, knowledge, knowledgeStore,
     access, members, contact, dataPlane, dataPlaneSeam, documents, engine, engineProbe, engineStatus, removeEngineJob, jobs, seal, evidence, matching, registry, service,
     intake: { counters: intakeCounters, extractor, importer, digitizer },
@@ -1102,6 +1108,7 @@ export async function vcrMetricsSnapshot(vcr) {
     engine: vcr.engineStatus ?? null,
     intake: vcr.intake ? { counters: { ...vcr.intake.counters } } : null,
     evidence: vcr.evidence?.counters ? { ...vcr.evidence.counters } : null,
+    publications: vcr.publications ? { ...vcr.publications.counters, reads: Number(vcr.simulations?.counters?.reads ?? 0) } : null,
   };
 }
 
@@ -1147,6 +1154,10 @@ export function vcrMetricFamilies(enabled, snapshot) {
     add("card_candidates_total", "Evidence items a run wrote as candidates it found through an evidence card (flywheel F23): written, and the ones that passed the quote and number check.", "counter",
       [{ labels: { outcome: "written" }, value: Number(snapshot.evidence.cardCandidates ?? 0) },
         { labels: { outcome: "verified" }, value: Number(snapshot.evidence.cardCandidatesVerified ?? 0) }]);
+  }
+  if (snapshot.publications) {
+    add("publications_total", "What the public 「模拟研究」 column did since this process started: reports published, publishes that found the live one, reports withdrawn, publications refused (the report not written, a subject named, not the lead's), and reads by the public reader.", "counter",
+      Object.entries(snapshot.publications).map(([outcome, value]) => ({ labels: { outcome }, value: Number(value) })));
   }
   const loops = Object.entries(snapshot.worker?.loops ?? {}).filter(([, loop]) => loop?.wired);
   if (loops.length) {

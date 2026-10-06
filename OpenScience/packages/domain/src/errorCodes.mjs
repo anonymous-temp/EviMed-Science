@@ -1212,6 +1212,10 @@ export const VCR_ROUTE_ERROR_CODES = Object.freeze([
   'vcr_definition_not_found',
   'vcr_definition_invalid',
   'vcr_model_assessment_not_found',
+  'vcr_publications_not_enabled',
+  'vcr_publication_not_found',
+  'vcr_publication_not_ready',
+  'vcr_publication_patient_data',
 ])
 
 export const VCR_GATEWAY_ERROR_CODES = Object.freeze([
@@ -1698,6 +1702,10 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_forbidden: '你在这个研究里没有做这件事的权限。',
   vcr_unavailable: '这个操作在当前部署里还没有开放。',
   vcr_not_enabled: '这个部署没有开通虚拟临研。',
+  vcr_publications_not_enabled: '这个部署没有开通模拟研究栏目。',
+  vcr_publication_not_found: '找不到这条发布，或它已经撤回。',
+  vcr_publication_not_ready: '这份报告还没有写完，写完后再发布到模拟研究。',
+  vcr_publication_patient_data: '这份报告的文字里出现了本研究受试者的编号，不能公开；去掉后再发布。',
   vcr_path_invalid: '这个地址不是虚拟临研的页面；从研究列表重新进入。',
   vcr_payload_invalid: '提交的内容格式不对，没有保存；刷新页面后重新填写。',
   vcr_study_not_found: '找不到这个研究，或它不属于你的账号；从研究列表重新进入。',

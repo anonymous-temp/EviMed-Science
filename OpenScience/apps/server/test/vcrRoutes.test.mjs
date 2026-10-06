@@ -35,7 +35,7 @@ function response() {
   };
 }
 
-const config = { vcrEnabled: true, vcrAudience: "all", operatorUsers: [], vcrPreviewUsers: [] };
+const config = { vcrEnabled: true, vcrAudience: "all", operatorUsers: [], vcrPreviewUsers: [], vcrPublicSimulationsEnabled: true };
 const OWNER = "owner";
 const study = { id: "std_1", userId: OWNER, projectId: "prj_1", name: "EV-201", dataTier: "T0",
   intendedUse: "exploratory", status: "active", budget: {}, steps: {} };
@@ -60,9 +60,10 @@ function platformStore(shared) {
 }
 
 /**
- * @param {{ who?: string, roles?: Record<string, string[]>, overrides?: Record<string, any>, operators?: string[] }} [options]
+ * @param {{ who?: string, roles?: Record<string, string[]>, overrides?: Record<string, any>, operators?: string[], settings?: Record<string, any> }} [options]
+ *   `settings` are config keys the test sets for this one fixture.
  */
-function fixture({ who = OWNER, roles = {}, overrides = {}, operators = [] } = {}) {
+function fixture({ who = OWNER, roles = {}, overrides = {}, operators = [], settings = {} } = {}) {
   /** @type {any[]} */
   const calls = [];
   /** @type {any[]} */
@@ -119,7 +120,7 @@ function fixture({ who = OWNER, roles = {}, overrides = {}, operators = [] } = {
   };
   const routes = createVcrRoutes({
     store: /** @type {any} */ (platformStore({ calls, who: () => current })),
-    vcrStore, service, config, maxJsonBytes: 65_536,
+    vcrStore, service, config: { ...config, ...settings }, maxJsonBytes: 65_536,
     audit: async (event, status, details) => { audits.push([event, status, details.code ?? null]); auditLines.push({ event, status, ...details }); },
     // The matching seam's two person-only acts, keyed to the session's account.
     assessments: {
@@ -413,6 +414,9 @@ const REQUESTS = {
   "POST /studies/:id/decisions": ["POST", "/api/vcr/studies/std_1/decisions", { question: "q" }],
   "POST /studies/:id/export": ["POST", "/api/vcr/studies/std_1/export", { kind: "study_package" }],
   "GET /studies/:id/export/:export": ["GET", "/api/vcr/studies/std_1/export/exp_1", undefined],
+  "GET /studies/:id/publications": ["GET", "/api/vcr/studies/std_1/publications", undefined],
+  "POST /studies/:id/publications": ["POST", "/api/vcr/studies/std_1/publications", { exportId: "exp_1", title: "EV-201 模拟", summary: "" }],
+  "DELETE /studies/:id/publications/:publication": ["DELETE", "/api/vcr/studies/std_1/publications/sim_1", undefined],
   "GET /studies/:id/members": ["GET", "/api/vcr/studies/std_1/members", undefined],
   "POST /studies/:id/members": ["POST", "/api/vcr/studies/std_1/members", { userId: "newcomer", role: "viewer" }],
   "DELETE /studies/:id/members/:user": ["DELETE", "/api/vcr/studies/std_1/members/newcomer", undefined],
@@ -447,6 +451,8 @@ function composedHooks() {
     orchestrator: { runStep: ok, recomputeAfterChange: ok },
     jobs: { enqueue: ok, get: async () => ({ id: "job_1" }), listForStudy: async () => [], budgetOf: async () => ({}), cancel: ok, confirmBudget: ok },
     exporter: { requestExport: ok },
+    // The public 「模拟研究」 column: the lead's publish and withdraw.
+    publications: { forStudy: async () => [], publish: async () => ({ id: "sim_1", exportKind: "simulation_report", existing: false }), withdraw: async () => ({ id: "sim_1" }) },
     // The disease packs and the definition library: each answers the shape the real one does.
     knowledge: {
       bindPack: ok, promotePack: ok, saveFromStudy: async () => ({ definitionId: "dfn_1", version: 1 }),
@@ -697,7 +703,8 @@ test("every code these routes emit is one this module declares", async () => {
   // registry takes verbatim. Naming them keeps that true: a declared code that
   // nobody raises is dropped, not left as decoration.
   const fromElsewhere = ["vcr_study_not_found", "vcr_study_paused", "vcr_tab_not_found", "vcr_referral_not_found", "vcr_model_exists", "vcr_export_not_found",
-    "vcr_pack_not_found", "vcr_pack_invalid", "vcr_definition_not_found", "vcr_definition_invalid"];
+    "vcr_pack_not_found", "vcr_pack_invalid", "vcr_definition_not_found", "vcr_definition_invalid",
+    "vcr_publication_not_found", "vcr_publication_not_ready", "vcr_publication_patient_data"];
   for (const code of fromElsewhere) assert.ok(VCR_ROUTE_ERROR_CODES.includes(code), code);
   const neverEmitted = VCR_ROUTE_ERROR_CODES.filter((code) => !literals.has(code) && !fromElsewhere.includes(code));
   assert.deepEqual(neverEmitted, [], `declared but never emitted: ${neverEmitted.join(", ")}`);
@@ -886,4 +893,41 @@ test("only the study's lead edits a model assessment record, and another account
   as("stranger");
   await assert.rejects(routes(request("POST", "/api/vcr/studies/std_1/model-assessments", body), response()), { status: 404, code: "vcr_study_not_found" });
   assert.equal(calls.filter((call) => call[0] === "vcr.assessment").length, 1, "only the lead's edit was saved");
+});
+
+// ------------------------------------------------------------- 模拟研究 (flywheel 2026-10-06)
+
+test("publishing to 模拟研究 is the lead's alone, takes an export, a title and a summary and nothing else, and is off by name when the switch is", async () => {
+  const body = { exportId: "exp_1", title: "EV-201 模拟", summary: "一句话" };
+  // The lead publishes (201) and withdraws; the same act again is the live publication (200).
+  const { routes, as, auditLines } = fixture({ overrides: composedHooks() });
+  as(OWNER);
+  const made = response();
+  await routes(request("POST", "/api/vcr/studies/std_1/publications", body), made);
+  assert.equal(made.status, 201);
+  assert.equal(auditLines.some((line) => line.event === "vcr.simulation.publish" && line.status === "completed"), true);
+  const again = fixture({ overrides: { ...composedHooks(), publications: { ...composedHooks().publications, publish: async () => ({ id: "sim_1", exportKind: "simulation_report", existing: true }) } } });
+  again.as(OWNER);
+  const repeated = response();
+  await again.routes(request("POST", "/api/vcr/studies/std_1/publications", body), repeated);
+  assert.equal(repeated.status, 200);
+  // Anyone who is not the lead is refused by ability, a data manager and a statistical reviewer included.
+  for (const role of ["data_manager", "statistical_reviewer", "clinical_reviewer", "viewer"]) {
+    const member = fixture({ roles: { member: [role] }, overrides: composedHooks() });
+    member.as("member");
+    await assert.rejects(member.routes(request("POST", "/api/vcr/studies/std_1/publications", body), response()), { status: 403, code: "vcr_forbidden" }, role);
+    await assert.rejects(member.routes(request("DELETE", "/api/vcr/studies/std_1/publications/sim_1"), response()), { status: 403, code: "vcr_forbidden" }, role);
+  }
+  // A body that says anything more, a bad id, an empty title, an over-long summary: refused before the service is asked.
+  for (const bad of [{ ...body, published: true }, { ...body, exportId: "../x" }, { ...body, title: "  " }, { ...body, summary: "字".repeat(601) }, { title: "x" }]) {
+    await assert.rejects(routes(request("POST", "/api/vcr/studies/std_1/publications", bad), response()), { status: 400, code: "vcr_payload_invalid" }, JSON.stringify(bad).slice(0, 60));
+  }
+  // The switch off, or the module not composed: the module's own not-enabled code, whoever asks, before anything is read.
+  for (const off of [fixture({ overrides: composedHooks(), settings: { vcrPublicSimulationsEnabled: false } }),
+    fixture({ overrides: { ...composedHooks(), publications: null } })]) {
+    off.as(OWNER);
+    await assert.rejects(off.routes(request("POST", "/api/vcr/studies/std_1/publications", body), response()), { status: 404, code: "vcr_publications_not_enabled" });
+    await assert.rejects(off.routes(request("GET", "/api/vcr/studies/std_1/publications"), response()), { status: 404, code: "vcr_publications_not_enabled" });
+    assert.equal(off.calls.some((call) => call[0] === "vcr.rolesOf"), false, "no study is even looked at");
+  }
 });
