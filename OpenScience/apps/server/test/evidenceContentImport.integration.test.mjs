@@ -6,6 +6,8 @@ import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { PLATFORM_PUBLISHER_USER_ID } from '@evimed/domain';
 import { prepareEvidenceImport, applyEvidenceImport, reownImportedZones } from '../../../scripts/ops/import-evidence-content.mjs';
+import { reownOperatorImportedZones } from '../src/evidenceReown.mjs';
+import { isOfficialZone } from '../src/evidenceEditorial.mjs';
 import { createStore } from '../src/store.mjs';
 import { EvidenceZoneService } from '../src/evidenceZoneService.mjs';
 import { evidenceHash } from '../src/evidenceCardContent.mjs';
@@ -190,4 +192,74 @@ test('an import after re-owning finds the zone under its old id and does not mak
   assert.equal((await currentCard()).id, earlier.cardId, 'the card keeps its id and its links');
   // And with nothing naming the earlier owner, a re-run still finds nothing to make anew only because the zone is the publisher's by title.
   await assert.rejects(applyEvidenceImport(prepared, { store }), /exists under another identity; pass --reown-from/);
+});
+
+// 2026-10-06 review fix 10: the script writes official zones as the publisher with origin `import` (an official zone takes no write of
+// origin `owner`), and a database that comes from release 6 has its operator-owned official zones re-owned at start, with no manual step.
+test('an imported zone that changed is updated as the publisher with origin import, and a zone the import makes is official at once', pgOptions, async () => {
+  const prepared = await prepare();
+  const first = await applyEvidenceImport(prepared, { store });
+  const created = (await rows('SELECT * FROM evimed_frontier.evidence_zones'))[0];
+  assert.deepEqual([created.kind, created.user_id, first.zonesCreated, first.zonesMarked], ['official', PLATFORM_PUBLISHER_USER_ID, 1, 1], 'made official when it is made, with no marking step after');
+  // The seed's zone text changes: the re-import takes the new text through the same door, at the revision it names.
+  const seed = JSON.parse(await (await import('node:fs/promises')).readFile(paths.seedFile, 'utf8'));
+  seed.zones[0].description = 'Fixture only, edited';
+  await writeFile(paths.seedFile, JSON.stringify(seed));
+  const edited = await prepareEvidenceImport(paths);
+  await assert.rejects(applyEvidenceImport(edited, { store }), /Zone af-anticoagulation changed; provide its expected revision/);
+  const second = await applyEvidenceImport(edited, { store, expectedRevisions: { zones: { 'af-anticoagulation': created.revision } } });
+  assert.equal(second.zonesUpdated, 1);
+  const after = (await rows('SELECT * FROM evimed_frontier.evidence_zones'))[0];
+  assert.deepEqual([after.description, after.kind, after.user_id, after.revision], ['Fixture only, edited', 'official', PLATFORM_PUBLISHER_USER_ID, created.revision + 1]);
+  // A zone the publisher owns that no build marked yet is made official before it is written, so the import still reaches it.
+  await store.database.query("UPDATE evimed_frontier.evidence_zones SET kind='user'");
+  seed.zones[0].description = 'Fixture only, edited again';
+  await writeFile(paths.seedFile, JSON.stringify(seed));
+  const third = await applyEvidenceImport(await prepareEvidenceImport(paths), { store, expectedRevisions: { zones: { 'af-anticoagulation': after.revision } } });
+  assert.deepEqual([third.zonesUpdated, (await rows('SELECT kind FROM evimed_frontier.evidence_zones'))[0].kind], [1, 'official']);
+});
+
+/** What release 6 left: an operator-owned user zone holding a card the import reviewed, with the receipt it wrote. */
+async function releaseSixZone(prepared, suffix, { reviewed = true, zoneOwner = owner.id } = {}) {
+  const earlier = await earlierImport(prepared, suffix);
+  if (reviewed) await store.database.query(`UPDATE evimed_frontier.evidence_cards SET editorial = editorial || '{"reviewOrigin":"import","status":"ai-reviewed"}'::jsonb WHERE id=$1`, [earlier.cardId]);
+  if (zoneOwner !== owner.id) {
+    await store.database.query('UPDATE evimed_frontier.evidence_zones SET user_id=$2 WHERE id=$1', [earlier.zoneId, zoneOwner]);
+    await store.database.query('UPDATE evimed_frontier.evidence_cards SET user_id=$2 WHERE id=$1', [earlier.cardId, zoneOwner]);
+  }
+  return earlier;
+}
+
+test('at start the operator-owned zones that hold an imported card become the publisher\'s, once, said on stderr, and nothing else is touched', pgOptions, async () => {
+  await store.database.query(MARKING);
+  const prepared = await prepare();
+  const imported = await releaseSixZone(prepared, '-a');
+  // The controls: an operator's own zone with no imported card, and a researcher's zone that holds one (nobody the deployment names).
+  const own = await releaseSixZone(prepared, '-b', { reviewed: false });
+  await store.database.query("INSERT INTO evimed_control.users(id,name,auth_type) VALUES('content-import-researcher','Researcher','development') ON CONFLICT DO NOTHING");
+  const researchers = await releaseSixZone(prepared, '-c', { zoneOwner: 'content-import-researcher' });
+  const before = (await rows('SELECT id,kind,user_id FROM evimed_frontier.evidence_zones WHERE id=$1', [imported.zoneId]))[0];
+  assert.deepEqual([before.kind, before.user_id], ['user', owner.id], 'the premise: an ordinary user zone in an operator\'s name');
+  assert.equal(isOfficialZone(before), false, 'so its upkeep is the operator\'s to pay');
+  const said = [];
+  const result = await reownOperatorImportedZones(store.database, { operatorUsers: [owner.id], report: line => said.push(line) });
+  assert.deepEqual(result, { zonesFound: 1, zonesMoved: 1, cardsMoved: 1, zonesMarked: 1 });
+  assert.equal(said.length, 1); assert.match(said[0], /1 official zone\(s\) and 1 card\(s\) moved/);
+  const moved = (await rows('SELECT * FROM evimed_frontier.evidence_zones WHERE id=$1', [imported.zoneId]))[0];
+  assert.deepEqual([moved.kind, moved.user_id, isOfficialZone(moved)], ['official', PLATFORM_PUBLISHER_USER_ID, true]);
+  const card = (await rows('SELECT * FROM evimed_frontier.evidence_cards WHERE id=$1', [imported.cardId]))[0];
+  assert.deepEqual([card.user_id, card.revision], [PLATFORM_PUBLISHER_USER_ID, imported.revision], 'a move is not an edit; its follows and ids are as they were');
+  assert.equal(await count('evidence_zone_follows', 'zone_id=$1', [imported.zoneId]), 1);
+  assert.deepEqual((await rows('SELECT user_id,kind FROM evimed_frontier.evidence_zones WHERE id=$1', [own.zoneId]))[0], { user_id: owner.id, kind: 'user' }, 'an operator\'s own zone is not the platform\'s');
+  assert.equal((await rows('SELECT user_id FROM evimed_frontier.evidence_zones WHERE id=$1', [researchers.zoneId]))[0].user_id, 'content-import-researcher', 'nor is an account the deployment does not name an operator');
+  // Idempotent: the next start finds none and says nothing.
+  const again = await reownOperatorImportedZones(store.database, { operatorUsers: [owner.id], report: line => said.push(line) });
+  assert.deepEqual(again, { zonesFound: 0, zonesMoved: 0, cardsMoved: 0, zonesMarked: 0 });
+  assert.equal(said.length, 1);
+  // No operator named, nothing to look for and no table read; no publisher account yet, nothing moved and the next start tries again.
+  const dead = { migrate: async () => { throw new Error('a table was read'); } };
+  assert.equal(await reownOperatorImportedZones(dead, { operatorUsers: [] }), null);
+  const lines = [];
+  assert.equal(await reownOperatorImportedZones(store.database, { operatorUsers: [owner.id], publisherId: 'no-such-publisher', report: line => lines.push(line) }), null);
+  assert.match(lines[0], /publisher account does not exist yet/);
 });

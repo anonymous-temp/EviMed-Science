@@ -171,6 +171,7 @@ import { CapsuleSharing } from "./capsuleSharing.mjs";
 import { capsuleShareMetricFamilies } from "./capsuleShareMetrics.mjs";
 import { createGuestInfluence } from "./capsuleShareTrust.mjs";
 import { EvidenceZoneSubscriptions, createEvidenceLinkStates, subscriptionsForAudience } from "./evidenceZoneSubscription.mjs";
+import { reownOperatorImportedZones } from "./evidenceReown.mjs";
 import { createCapsuleRoutes } from "./capsuleRoutes.mjs";
 import { SourceService, assertKnowledgeBaseFormat, projectSourceManifestRecord, sourceIndexDocument } from "./sourceService.mjs";
 import { verifySourceMetadata } from "./sourceMetadata.mjs";
@@ -6862,6 +6863,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     idleRuntimeSweepTimer = null;
   };
 
+  let evidenceReownRun = false;
   const startRecurringWork = async () => {
     if (recurringWorkStarted || (maintenanceService && !maintenanceService.claimingAllowed())) return;
     recurringWorkStarted = true;
@@ -6879,6 +6881,12 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       evolution?.worker.start();
       im.worker?.start();
       frontier?.worker.start();
+      // The official zones an earlier release left in an operator's name become the platform's, once at start (idempotent; evidenceReown.mjs):
+      // until they do, their AI upkeep is booked to an operator's wallet. Said on stderr; a failure is said too and costs the start nothing.
+      if (frontier && productDatabase && !evidenceReownRun) {
+        evidenceReownRun = true;
+        void reownOperatorImportedZones(productDatabase, { operatorUsers: config.operatorUsers }).catch((/** @type {any} */ error) => process.stderr.write(`evidence re-own failed: ${error?.code ?? error?.name ?? "error"}\n`));
+      }
       evidenceProgramme?.worker?.start();
       review?.worker.start();
       geo?.worker?.start?.();
