@@ -131,6 +131,74 @@ describe("ReportReader", () => {
     expect(within(table).getByText("⚠ 原文中未找到")).toBeInTheDocument();
   });
 
+  // 「未核对」 once stood for three things: the checks still on their way, the checks that could not be read, and a claim nobody checked.
+  it("reads 核对中 on the matrix tab while the checks are on their way, and the marks once they arrive", async () => {
+    let arrive!: (value: unknown) => void;
+    mocks.readClaimVerification.mockReturnValue(new Promise((resolve) => { arrive = resolve; }));
+    renderReader();
+    await userEvent.click(await screen.findByRole("tab", { name: "证据矩阵 2" }));
+    const table = screen.getByRole("table", { name: "证据矩阵：2 条结论" });
+    expect(within(table).getAllByText("核对中")).toHaveLength(2);
+    expect(within(table).queryByText("未核对")).toBeNull();
+    arrive({
+      claims: [{ claimId: "CLM-001", claimType: "direct", status: "verified", sources: [{ artifactPath: ".evimed-sources/aspree/fulltext.md", status: "verified" }] }],
+      counts: { verified: 1 },
+    });
+    // The checks were read and the second claim is not among them: only now is it 未核对.
+    expect(await within(table).findByText("✓ 已核对")).toBeInTheDocument();
+    expect(within(table).getByText("未核对")).toBeInTheDocument();
+    expect(within(table).queryByText("核对中")).toBeNull();
+  });
+
+  it("reads 暂无核对结果, not 未核对, when the checks cannot be read", async () => {
+    mocks.readClaimVerification.mockRejectedValue(new Error("offline"));
+    renderReader();
+    await userEvent.click(await screen.findByRole("tab", { name: "证据矩阵 2" }));
+    const table = screen.getByRole("table", { name: "证据矩阵：2 条结论" });
+    await waitFor(() => expect(within(table).getAllByText("暂无核对结果")).toHaveLength(2));
+    expect(within(table).queryByText("未核对")).toBeNull();
+    expect(within(table).queryByText("核对中")).toBeNull();
+  });
+
+  it("opens a claim of the matrix tab in a drawer beside the report, with its quotation and check", async () => {
+    renderReader();
+    await userEvent.click(await screen.findByRole("tab", { name: "证据矩阵 2" }));
+    await userEvent.click(await screen.findByRole("button", { name: "CLM-002" }));
+    const drawer = await screen.findByRole("dialog", { name: "CLM-002" });
+    expect(within(drawer).getByText("“higher risk of major hemorrhage”")).toBeInTheDocument();
+    expect(within(drawer).getByText("⚠ 原文中未找到")).toBeInTheDocument();
+    expect(within(drawer).getByText(/这段引文没有在保存的原文中找到/)).toBeInTheDocument();
+  });
+
+  // On a phone the two text buttons wrapped onto a second row; the words drawn there are short, the names read out stay whole.
+  it("draws 下载 and 打印 as short words beside the tabs on a phone, and names the actions in full", async () => {
+    renderReader();
+    const download = await screen.findByRole("button", { name: "下载 Markdown" });
+    const print = screen.getByRole("button", { name: "打印 / 存为 PDF" });
+    expect(within(download).getByText("下载")).toHaveClass("sm:hidden");
+    expect(within(download).getByText("下载 Markdown")).toHaveClass("max-sm:hidden");
+    expect(within(print).getByText("打印")).toHaveClass("sm:hidden");
+    expect(within(print).getByText("打印 / 存为 PDF")).toHaveClass("max-sm:hidden");
+    // The same row as the views: one toolbar holds the tabs and both actions.
+    const tabs = await screen.findByRole("tablist", { name: "查看" });
+    expect(tabs.parentElement).toBe(download.parentElement);
+    expect(tabs.parentElement).toBe(print.parentElement);
+  });
+
+  // Chromium focuses a scroller by itself; WebKit and Firefox on the Mac do not, so a wide table in the text says it is a region.
+  it("lets a keyboard reader into a table in the report that is wider than the page", async () => {
+    vi.spyOn(HTMLElement.prototype, "scrollWidth", "get").mockReturnValue(900);
+    vi.spyOn(HTMLElement.prototype, "clientWidth", "get").mockReturnValue(300);
+    renderReader({ text: `${report}\n\n| 指标 | 数值 |\n| --- | --- |\n| 大出血 | 1.4 |\n` });
+    // The text re-renders once the matrix and the checks arrive and replaces the table: read it after that.
+    await screen.findByRole("button", { name: "查看这句话的依据（1 条结论，其中有未核对上的引文）" });
+    await waitFor(() => {
+      const region = screen.getByRole("region", { name: "表格" });
+      expect(region).toHaveAttribute("tabindex", "0");
+      expect(within(region).getByRole("table")).toBeInTheDocument();
+    });
+  });
+
   // C2: a clinical-safety finding's claim has its evidence open, above the text.
   it("opens the evidence of a claim a clinical-safety finding names", async () => {
     renderReader({ run: run({ qualityNotices: [{ code: "clinical_safety_rule", severity: "safety", title: "临床安全", claimId: "CLM-002", text: "SAFETY — x" }] }) });
@@ -205,6 +273,22 @@ describe("version-bound report evidence", () => {
     expect(within(entry as HTMLElement).getByRole("link", { name: /定位原文/ })).toHaveAttribute("href", "/app/runs/run_1/files/.evimed-sources/aspree/fulltext.md?quote=did%20not%20result%20in%20a%20significantly%20lower%20risk&version=rv_source");
     expect(mocks.readArtifact).not.toHaveBeenCalled();
     expect(mocks.readClaimVerification).not.toHaveBeenCalled();
+  });
+  it("says on the matrix tab of an old version that its checks are not there, instead of calling the claims unchecked", async () => {
+    renderReader({ immutableVersion: version({ status: "available", matrixText: JSON.stringify(matrix) }) });
+    await userEvent.click(await screen.findByRole("tab", { name: "证据矩阵 2" }));
+    const table = screen.getByRole("table", { name: "证据矩阵：2 条结论" });
+    expect(within(table).getAllByText("暂无核对结果")).toHaveLength(2);
+    expect(within(table).queryByText("未核对")).toBeNull();
+  });
+  it("shows the frozen checks on the matrix tab of an old version", async () => {
+    renderReader({ immutableVersion: version({ status: "available", matrixText: JSON.stringify(matrix),
+      verification: { claims: [{ claimId: "CLM-001", claimType: "direct", status: "verified", sources: [{ artifactPath: ".evimed-sources/aspree/fulltext.md", status: "verified" }] }], counts: { verified: 1 } } }) });
+    await userEvent.click(await screen.findByRole("tab", { name: "证据矩阵 2" }));
+    const table = screen.getByRole("table", { name: "证据矩阵：2 条结论" });
+    expect(within(table).getByText("✓ 已核对")).toBeInTheDocument();
+    // Read, and the second claim is not in them.
+    expect(within(table).getByText("未核对")).toBeInTheDocument();
   });
   it("does not offer a current-workspace source link when its old snapshot is absent", async () => {
     const selected = version({ status: "available", matrixText: JSON.stringify(matrix) }); selected.inputs = [];
