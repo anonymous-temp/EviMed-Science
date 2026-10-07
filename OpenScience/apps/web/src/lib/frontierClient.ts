@@ -199,6 +199,11 @@ export interface FrontierItemsPage {
   /** The content version the page was read at; compared with `/status`. */
   version: string | null;
   mode: FrontierSearchMode;
+  /**
+   * A search whose words matched no item: what it lists are the nearest items by meaning, not
+   * matches. The page says so once above the results; plain lists are never related.
+   */
+  related: boolean;
   /** The cursor had gone stale and this is page one again (see the module note). */
   restarted: boolean;
 }
@@ -644,6 +649,7 @@ function parseItemsPage(value: unknown, restarted: boolean): FrontierItemsPage {
     nextCursor: text(raw.nextCursor),
     version: version(raw.version),
     mode: oneOf(raw.mode, ["list", "keyword", "hybrid"] as const, "list"),
+    related: raw.related === true,
     restarted,
   };
 }
@@ -870,6 +876,14 @@ export function frontierAbsence(error: unknown): FrontierAbsence | null {
   return null;
 }
 
+/**
+ * An item that is not coming back: unpublished, or its source switched off (404 `frontier_item_not_found`).
+ * A link to it — a card's, a notification's — is dead for good, which is not a failure to retry.
+ */
+export function frontierItemGone(error: unknown): boolean {
+  return error instanceof WebApiError && error.status === 404 && error.code === "frontier_item_not_found";
+}
+
 /** A cursor the server no longer honours: start over from page one. */
 export function isInvalidCursor(error: unknown): boolean {
   return error instanceof WebApiError && error.status === 400 && error.code === "invalid_cursor";
@@ -882,7 +896,7 @@ export function frontierErrorMessage(error: unknown): string {
       frontier_not_enabled: "前沿动态还没有在这个工作空间开放。",
       invalid_cursor: "列表有更新，请从第一页重新加载。",
     },
-    statuses: { 404: "这条动态已不存在，请刷新列表。" },
+    statuses: { 404: "这条动态已不再提供。" },
     fallback: "暂时读不到前沿动态，请稍后重试。",
   });
 }

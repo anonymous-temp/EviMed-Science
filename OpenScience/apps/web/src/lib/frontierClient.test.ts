@@ -13,6 +13,8 @@ import {
   fetchFrontierDigestSwitch,
   fetchFrontierStatus,
   frontierAbsence,
+  frontierErrorMessage,
+  frontierItemGone,
   frontierOffered,
   hideFrontierItem,
   listFrontierDailies,
@@ -69,6 +71,29 @@ describe("the items list", () => {
     fetchMock.mockResolvedValue(reply(400, { error: "bad", code: "invalid_cursor" }));
     await expect(listFrontierItems({ view: "selected" })).rejects.toBeInstanceOf(WebApiError);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("a search whose words matched nothing", () => {
+  it("is read as related, and a list or a matching search is not", async () => {
+    fetchMock
+      .mockResolvedValueOnce(reply(200, { data: { items: [rawItem()], nextCursor: null, version: 1, mode: "hybrid", related: true } }))
+      .mockResolvedValueOnce(reply(200, { data: { items: [rawItem()], nextCursor: null, version: 1, mode: "keyword", related: false } }))
+      .mockResolvedValueOnce(reply(200, { data: { items: [rawItem()], nextCursor: null, version: 1, mode: "list" } }));
+    expect((await listFrontierItems({ q: "没有这个词" })).related).toBe(true);
+    expect((await listFrontierItems({ q: "司美格鲁肽" })).related).toBe(false);
+    expect((await listFrontierItems({})).related).toBe(false);
+  });
+});
+
+describe("an item that is gone", () => {
+  it("is told from a failed read by its code, and its words do not ask for a refresh", () => {
+    const gone = new WebApiError("No such item.", { status: 404, code: "frontier_item_not_found" });
+    expect(frontierItemGone(gone)).toBe(true);
+    expect(frontierItemGone(new WebApiError("off", { status: 404, code: "frontier_not_enabled" }))).toBe(false);
+    expect(frontierItemGone(new WebApiError("down", { status: 502 }))).toBe(false);
+    expect(frontierItemGone(new Error("network"))).toBe(false);
+    expect(frontierErrorMessage(gone)).toBe("这条动态已不再提供。");
   });
 });
 

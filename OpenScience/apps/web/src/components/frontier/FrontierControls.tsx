@@ -3,6 +3,7 @@ import type { FrontierHotBoard, FrontierHotWindow } from "@/lib/frontierClient";
 import { Button } from "@/components/ui/Button";
 import { FilterChip, FilterChips, type FilterOption } from "@/components/ui/FilterChips";
 import { Tabs, type TabItem } from "@/components/ui/Tabs";
+import type { FollowControls } from "./FollowingView";
 import { HotWindowChips } from "./FrontierHot";
 
 /** What the page is showing. `weekly` is the 简报 tab's second period, `daily` its first. */
@@ -31,7 +32,8 @@ const BRIEF_PERIODS: readonly FilterOption<"daily" | "weekly">[] = [
  *  - 热榜: 当前 · 本周 · 本月 and when the ranking was taken;
  *  - 简报: 日报 · 周报;
  *  - 关注: the same filters and 「管理关注」 (with 「全部关注」 while one follow
- *    narrows the feed);
+ *    narrows the feed) — the filters only while a topic is followed, 「管理关注」
+ *    while anything is, and nothing while the reader follows nothing (`follow`);
  *  - 与我相关: nothing.
  *
  * Until now the same choices were a nav row, a row of pill chips and a third
@@ -40,7 +42,7 @@ const BRIEF_PERIODS: readonly FilterOption<"daily" | "weekly">[] = [
  * under the tabs, which is the only second row there is.
  */
 export function FrontierControls({
-  view, onView, filters, hotWindow, hotBoard, hotWindows, onHotWindow, narrowedFollow, onAllFollows, onManageFollows,
+  view, onView, filters, hotWindow, hotBoard, hotWindows, onHotWindow, follow, narrowedFollow, onAllFollows, onManageFollows,
 }: {
   view: PageView;
   onView: (view: PageView) => void;
@@ -52,6 +54,8 @@ export function FrontierControls({
   /** Whether the server stamps its rankings, so that 本周 and 本月 mean something. */
   hotWindows: boolean;
   onHotWindow: (window: FrontierHotWindow) => void;
+  /** What the 关注 view has to control: a feed to filter, only the way to add a follow, or nothing. */
+  follow: FollowControls;
   /** One followed topic narrows the 关注 feed; 「全部关注」 widens it again. */
   narrowedFollow: boolean;
   onAllFollows: () => void;
@@ -68,10 +72,11 @@ export function FrontierControls({
       case "weekly":
         return <FilterChips label="简报周期" options={BRIEF_PERIODS} value={view} onChange={onView} />;
       case "following":
+        if (follow === "none") return null;
         return (
           <>
             {narrowedFollow && <FilterChip onClick={onAllFollows}>全部关注</FilterChip>}
-            {filters}
+            {follow === "full" && filters}
             <Button variant="secondary" size="sm" onClick={onManageFollows}>管理关注</Button>
           </>
         );
