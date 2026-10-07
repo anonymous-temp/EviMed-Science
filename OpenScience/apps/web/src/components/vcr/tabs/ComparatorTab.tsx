@@ -72,7 +72,7 @@ export function ComparatorTab({ studyId, study }: { studyId: string; study: VcrS
     <div className="flex flex-col gap-6">
       {failed
         ? <VcrStepFailed studyId={studyId} study={study} step="comparator" partial={data.partial} />
-        : data.partial && <PartialResultNote done={data.partial.done} missing={data.partial.missing} />}
+        : data.partial && <PartialResultNote sentence={data.partial.sentence} resume={{ studyId, study, step: "comparator" }} />}
 
       <Stale note={data.stale}>
         <div className="flex flex-col gap-6">

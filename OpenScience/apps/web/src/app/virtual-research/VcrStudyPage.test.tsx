@@ -369,12 +369,24 @@ describe("what is computing, in one line", () => {
 
   it("shows a computation that did not finish with the reason it gave — when nothing else is running", async () => {
     const study = fixture("ev201/study.json");
-    study.jobs = [{ ...study.jobs[0], state: "failed", cancelable: false, error: { code: "vcr_engine_failed", message: "引擎在第 3 批重复时退出", partial: true } }];
+    study.jobs = [{ ...study.jobs[0], state: "failed", cancelable: false, error: { code: "vcr_engine_failed", message: "引擎在第 3 批重复时退出", partial: false } }];
     study.budget = { ...study.budget, awaitingBudget: 0 };
     server = installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}`]: study });
     draw();
     await heading();
     expect(document.querySelector("[data-vcr-job-failed]")).toHaveTextContent("引擎在第 3 批重复时退出");
+  });
+
+  it("does not say a second time what a result that stopped part-way says over itself: the line under the tabs is for failures that kept nothing", async () => {
+    const study = fixture("ev201/study.json");
+    study.jobs = [{ ...study.jobs[0], state: "failed", cancelable: false,
+      error: { code: "cpu_budget_exhausted", message: "这项计算用完了它的计算时间上限；已完成的部分作为有限结果保留。", partial: true } }];
+    study.budget = { ...study.budget, awaitingBudget: 0 };
+    server = installVcrServer(network.productRequest, { [`GET /vcr/studies/${STUDY_ID}`]: study });
+    draw(`/app/virtual-research/${STUDY_ID}/trial`);
+    await heading();
+    expect(document.querySelector("[data-vcr-job-failed]")).toBeNull();
+    expect(document.querySelector("[data-vcr-jobs]")).toBeNull();
   });
 
   it("does not show a failure the same computation has since got past", async () => {

@@ -57,7 +57,7 @@ export function PatientsTab({ studyId, study }: { studyId: string; study: VcrStu
     <div className="flex flex-col gap-6">
       {failed
         ? <VcrStepFailed studyId={studyId} study={study} step="patients" partial={data.partial} />
-        : data.partial && <PartialResultNote done={data.partial.done} missing={data.partial.missing} />}
+        : data.partial && <PartialResultNote sentence={data.partial.sentence} resume={{ studyId, study, step: "patients" }} />}
 
       <Stale note={data.stale}>
         <div className="flex flex-col gap-6">

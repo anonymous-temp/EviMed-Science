@@ -240,10 +240,9 @@ export interface VcrStaleNote {
   since?: string | null;
 }
 
-/** 部分结果: what a run that did not finish did keep. */
+/** 部分结果: what a run that did not finish did keep, said once (「这次模拟算完了 18,000 / 20,000 次重复就到了计算时间上限，下面是已完成部分的结果。」). */
 export interface VcrPartial {
-  done: string;
-  missing: string;
+  sentence: string;
 }
 
 /** One row of the home list (`GET /api/vcr/studies`). */
@@ -1329,8 +1328,8 @@ function readStale(raw: unknown): VcrStaleNote | null {
 }
 
 function readPartial(raw: unknown): VcrPartial | null {
-  const value = obj(raw);
-  return text(value.done) || text(value.missing) ? { done: text(value.done) ?? "", missing: text(value.missing) ?? "" } : null;
+  const sentence = text(obj(raw).sentence);
+  return sentence ? { sentence } : null;
 }
 
 function readMetric(raw: unknown): VcrMetric {
@@ -1838,6 +1837,27 @@ export function createVcrStudy(input: VcrCreateBody = {}) {
 
 export async function getVcrStudy(studyId: string): Promise<VcrStudy> {
   return readVcrStudy(await productRequest<unknown>(study(studyId)));
+}
+
+/**
+ * What the conversation frame's chip needs of a study: where it starts, what it is for, and what this reader may change — nothing of
+ * the page. The same fields `frameVcrOptions` reads from a whole `VcrStudy`.
+ */
+export type VcrFrameStudy = Pick<VcrStudy, "id" | "intendedUse" | "steps" | "abilities">;
+
+/**
+ * The study a project belongs to — a draft included, which the home list leaves out. A conversation knows its project and not its
+ * study, so the frame's options for a study nobody has spoken in yet are found here, without the page's heavy reading. A project that
+ * is no study answers 404.
+ */
+export async function getVcrStudyOfProject(projectId: string): Promise<VcrFrameStudy> {
+  const value = obj(await productRequest<unknown>(`/vcr/studies/of-project/${id(projectId)}`));
+  return {
+    id: text(value.id) ?? "",
+    intendedUse: (text(value.intendedUse) ?? "exploratory") as VcrStudy["intendedUse"],
+    steps: readSteps(value.steps),
+    abilities: strings(value.abilities),
+  };
 }
 
 export function patchVcrStudy(studyId: string, input: VcrPatchBody) {

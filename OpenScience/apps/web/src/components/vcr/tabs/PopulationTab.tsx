@@ -74,7 +74,7 @@ export function PopulationTab({ studyId, study, onStudyChanged }: { studyId: str
 
       {failed
         ? <VcrStepFailed studyId={studyId} study={study} step="population" partial={data.partial} />
-        : data.partial && <PartialResultNote done={data.partial.done} missing={data.partial.missing} />}
+        : data.partial && <PartialResultNote sentence={data.partial.sentence} resume={{ studyId, study, step: "population" }} />}
 
       <Stale note={data.stale}>
         <div className="flex flex-col gap-6">

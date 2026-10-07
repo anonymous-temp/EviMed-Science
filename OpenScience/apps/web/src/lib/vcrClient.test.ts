@@ -39,7 +39,7 @@ describe("the readers over the server's own pages", () => {
 
     const patients = await getVcrPatients(STUDY_ID);
     expect(patients.model?.twinLabel).toBe("基线条件化预测");
-    expect(patients.partial?.done).toMatch(/1,200/);
+    expect(patients.partial?.sentence).toMatch(/1,200/);
     expect(patients.sensitivity?.base?.value).toBe(0.41);
 
     const comparator = await getVcrComparator(STUDY_ID);

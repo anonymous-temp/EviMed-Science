@@ -44,11 +44,12 @@ vi.mock("@/lib/geoClient", async importOriginal => ({
   ...(await importOriginal<typeof import("@/lib/geoClient")>()),
   listGeoProjects: geo.listGeoProjects, patchGeoProject: geo.patchGeoProject,
 }));
-// 虚拟临床研究's three calls: which study this project is, what it holds, and writing an option to it.
-const vcr = vi.hoisted(() => ({ getVcrHome: vi.fn(), getVcrStudy: vi.fn(), patchVcrStudy: vi.fn() }));
+// 虚拟临床研究's two calls: the study this project is and what the chip needs of it (a draft included), and writing an option to it.
+// The home list is mocked too, only to say that the frame never reads it: the list leaves out a draft.
+const vcr = vi.hoisted(() => ({ getVcrHome: vi.fn(), getVcrStudyOfProject: vi.fn(), patchVcrStudy: vi.fn() }));
 vi.mock("@/lib/vcrClient", async importOriginal => ({
   ...(await importOriginal<typeof import("@/lib/vcrClient")>()),
-  getVcrHome: vcr.getVcrHome, getVcrStudy: vcr.getVcrStudy, patchVcrStudy: vcr.patchVcrStudy,
+  getVcrHome: vcr.getVcrHome, getVcrStudyOfProject: vcr.getVcrStudyOfProject, patchVcrStudy: vcr.patchVcrStudy,
 }));
 /** `/api/account/allowance` on a deployment that does not bill research (every deployment today), and on one that does. */
 const billing = (enabled: boolean) => ({
@@ -1618,9 +1619,12 @@ describe("虚拟临床研究 in the conversation", () => {
     steps: requested("definition", "evidence", "population", "patients", "comparator", "trial", "matching"), ...over,
   });
 
-  async function openVcrConversation(capability = "vcr-protocol", held = study(), studies = [{ id: "std_1", projectId: "default" }]) {
-    vcr.getVcrHome.mockReset(); vcr.getVcrHome.mockResolvedValue({ studies });
-    vcr.getVcrStudy.mockReset(); vcr.getVcrStudy.mockResolvedValue(held);
+  /** `held`: what the project's study reads as; `null` for a project that is no study (the module answers 404). */
+  async function openVcrConversation(capability = "vcr-protocol", held: Record<string, unknown> | null = study()) {
+    vcr.getVcrHome.mockReset(); vcr.getVcrHome.mockResolvedValue({ studies: [] });
+    vcr.getVcrStudyOfProject.mockReset();
+    if (held) vcr.getVcrStudyOfProject.mockResolvedValue(held);
+    else vcr.getVcrStudyOfProject.mockRejectedValue(new WebApiError("no", { status: 404, code: "vcr_study_not_found" }));
     vcr.patchVcrStudy.mockReset(); vcr.patchVcrStudy.mockResolvedValue({});
     mocks.listSessions.mockResolvedValue([{ sessionId: "session-a", mode: "specialist", agentId: capability, agentVersion: "1.0.0" }]);
     const view = mount(null, "/app/chat/session-a");
@@ -1658,12 +1662,12 @@ describe("虚拟临床研究 in the conversation", () => {
   it("writes a changed option to the study and tells the chip what the study then holds", async () => {
     const { view, frame, vcrPosts } = await openVcrConversation();
     await waitFor(() => expect(vcrPosts()).toHaveLength(1));
-    vcr.getVcrStudy.mockResolvedValue(study({ steps: requested("trial") }));
+    vcr.getVcrStudyOfProject.mockResolvedValue(study({ steps: requested("trial") }));
     emit(frame, { type: "evimed.runtime-ui.vcr-options", seq: 4, sessionId: "session-a", start: "trial" });
     await waitFor(() => expect(vcr.patchVcrStudy).toHaveBeenCalledWith("std_1", { action: "trial" }));
     await waitFor(() => expect(vcrPosts().at(-1)).toMatchObject({ start: "trial" }));
 
-    vcr.getVcrStudy.mockResolvedValue(study({ steps: requested("trial"), intendedUse: "design_support" }));
+    vcr.getVcrStudyOfProject.mockResolvedValue(study({ steps: requested("trial"), intendedUse: "design_support" }));
     emit(frame, { type: "evimed.runtime-ui.vcr-options", seq: 5, sessionId: "session-a", intendedUse: "design_support" });
     await waitFor(() => expect(vcr.patchVcrStudy).toHaveBeenLastCalledWith("std_1", { intendedUse: "design_support" }));
     await waitFor(() => expect(vcrPosts().at(-1)).toMatchObject({ intendedUse: "design_support", start: "trial" }));
@@ -1707,11 +1711,23 @@ describe("虚拟临床研究 in the conversation", () => {
   });
 
   it("gives a project that is not a study the starters alone, with nothing to write options to", async () => {
-    const { view, vcrPosts } = await openVcrConversation("vcr-protocol", study(), []);
+    const { view, vcrPosts } = await openVcrConversation("vcr-protocol", null);
     await waitFor(() => expect(vcrPosts()).toHaveLength(1));
     expect(vcrPosts()[0]).toMatchObject({ controls: false, startOptions: [] });
     expect(vcrPosts()[0].starters).toHaveLength(6);
-    expect(vcr.getVcrStudy).not.toHaveBeenCalled();
+    expect(vcr.patchVcrStudy).not.toHaveBeenCalled();
+    view.unmount();
+  });
+
+  it("finds the study that 「新建研究」 has just made — a draft the home list leaves out — by its project, so the six starters and the chip's options are there", async () => {
+    // The study a conversation belongs to is read by the project; the list (which has no draft in it) is never asked.
+    const { view, vcrPosts } = await openVcrConversation("vcr-protocol", study({ status: "draft", name: "未命名研究" }));
+    await waitFor(() => expect(vcrPosts()).toHaveLength(1));
+    expect(vcr.getVcrStudyOfProject).toHaveBeenCalledWith("default");
+    expect(vcr.getVcrHome).not.toHaveBeenCalled();
+    expect(vcrPosts()[0]).toMatchObject({ sessionId: "session-a", controls: true, canSetUse: true, start: "auto", intendedUse: "exploratory" });
+    expect(vcrPosts()[0].starters.map((starter: { label: string }) => starter.label))
+      .toEqual(["估算样本量", "生成合成人群", "外部对照可行性", "模拟试验方案", "找先例与参数", "匹配患者"]);
     view.unmount();
   });
 
@@ -1719,7 +1735,7 @@ describe("虚拟临床研究 in the conversation", () => {
     const { view, post, vcrPosts } = await openVcrConversation("adr-analysis");
     await waitFor(() => expect(post.mock.calls.map(call => call[0]).some(data => data.type === "evimed.runtime-ui.capability")).toBe(true));
     expect(vcrPosts()).toHaveLength(0);
-    expect(vcr.getVcrHome).not.toHaveBeenCalled();
+    expect(vcr.getVcrStudyOfProject).not.toHaveBeenCalled();
     view.unmount();
   });
 });

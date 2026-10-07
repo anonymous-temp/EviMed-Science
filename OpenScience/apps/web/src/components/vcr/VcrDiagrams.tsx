@@ -388,6 +388,16 @@ function tickFormat(unit: string | null | undefined): (value: number) => string 
 }
 
 /**
+ * Whether the trade-off plot has anything to place: designs with both measures, spread on a scale. A page asks it before it draws the
+ * card, so a card is never a title over an empty box (the scatter itself draws nothing for data it cannot place).
+ */
+export function canDrawTradeoff(designs: readonly VcrDesign[], xKey: string, yKey: string): boolean {
+  const at = (design: VcrDesign, key: string) => design.measures[key]?.value ?? null;
+  const points = designs.filter((design) => at(design, xKey) != null && at(design, yKey) != null);
+  return points.length > 0 && scaleOf(points.map((design) => at(design, xKey))) !== null && scaleOf(points.map((design) => at(design, yKey))) !== null;
+}
+
+/**
  * The designs as a trade-off: how long against how likely, with cost as the
  * bubble's area.
  *

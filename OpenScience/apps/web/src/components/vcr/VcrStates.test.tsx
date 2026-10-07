@@ -94,11 +94,40 @@ describe("a stale result", () => {
   });
 });
 
-describe("a computation that failed part-way", () => {
-  it("names what was kept and what was not, rather than losing both", () => {
-    draw(<PartialResultNote done="方案 A、B 的零假设情景各 20,000 次" missing="方案 C 的备择情景" />);
-    expect(screen.getByText(/方案 A、B 的零假设情景各 20,000 次/)).toBeInTheDocument();
-    expect(screen.getByText(/未完成：方案 C 的备择情景/)).toBeInTheDocument();
+describe("a computation that stopped part-way", () => {
+  const sentence = "这次模拟算完了 18,000 / 20,000 次重复就到了计算时间上限，下面是已完成部分的结果。";
+
+  it("is one line in Chinese: how far it got, why it stopped, and that what is below is what was done", () => {
+    draw(<PartialResultNote sentence={sentence} />);
+    const note = document.querySelector("[data-vcr-partial]")!;
+    expect(note).toHaveTextContent(sentence);
+    // One box, one sentence: no second 「已完成的部分保留 / 未完成」 pair, nothing to press when no step is named.
+    expect(document.querySelectorAll("[data-vcr-partial]")).toHaveLength(1);
+    expect(note).not.toHaveTextContent(/已完成的部分保留|未完成/);
+    expect(note.textContent).not.toMatch(/[A-Za-z]{4,}/);
+    expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  it("offers 「续算」 to a reader who may run the step, and it asks for that step again", async () => {
+    installVcrServer(network.productRequest);
+    const study = ev201();
+    study.steps.trial = { status: "done", requested: true } as never;
+    draw(<PartialResultNote sentence={sentence} resume={{ studyId: STUDY_ID, study, step: "trial" }} />);
+    await userEvent.click(screen.getByRole("button", { name: "续算" }));
+    await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/run`, "POST", { step: "trial" }));
+  });
+
+  it("offers it to nobody who may not run a step, and not while the step is already going on", () => {
+    const reader = ev201();
+    reader.abilities = ["read"];
+    reader.steps.trial = { status: "done", requested: true } as never;
+    const { unmount } = draw(<PartialResultNote sentence={sentence} resume={{ studyId: STUDY_ID, study: reader, step: "trial" }} />);
+    expect(screen.queryByRole("button", { name: "续算" })).not.toBeInTheDocument();
+    unmount();
+    const running = ev201();
+    running.steps.trial = { status: "running", requested: true } as never;
+    draw(<PartialResultNote sentence={sentence} resume={{ studyId: STUDY_ID, study: running, step: "trial" }} />);
+    expect(screen.queryByRole("button", { name: "续算" })).not.toBeInTheDocument();
   });
 });
 
@@ -224,12 +253,12 @@ describe("a step that did not finish", () => {
         studyId={STUDY_ID}
         study={study}
         step="patients"
-        partial={{ done: "已算完 1,200 / 2,000 次重复的结果", missing: "其余重复没有做完，可以接着做" }}
+        partial={{ sentence: "这次生成算完了 1,200 / 2,000 次重复就停下了，下面是已完成部分的结果。" }}
       />,
     );
     expect(screen.getByText("这一步未完成")).toBeInTheDocument();
     expect(screen.getByText(/这一次运行只完成了一部分/)).toBeInTheDocument();
-    expect(screen.getByText(/已算完 1,200 \/ 2,000 次重复的结果/)).toBeInTheDocument();
+    expect(screen.getByText(/算完了 1,200 \/ 2,000 次重复就停下了/)).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: "接着做" }));
     await waitFor(() => expect(network.productRequest).toHaveBeenCalledWith(`/vcr/studies/${STUDY_ID}/run`, "POST", { step: "patients" }));
   });

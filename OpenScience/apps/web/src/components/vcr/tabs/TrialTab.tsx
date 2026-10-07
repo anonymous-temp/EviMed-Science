@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { CircleCheck } from "lucide-react";
-import { getVcrTrial, recordVcrDecision, type VcrDesign, type VcrForecast, type VcrStudy, type VcrTrialTab as TrialData } from "@/lib/vcrClient";
+import { getVcrTrial, recordVcrDecision, type VcrDesign, type VcrStudy, type VcrTrialTab as TrialData } from "@/lib/vcrClient";
 import { webErrorMessage } from "@/lib/apiClient";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/cn";
@@ -8,15 +8,16 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ChartCard } from "@/components/ui/ChartCard";
 import { DataTable, type DataColumn } from "@/components/ui/DataTable";
+import { Disclosure } from "@/components/ui/Disclosure";
 import { Drawer } from "@/components/ui/Drawer";
 import { Textarea } from "@/components/ui/Input";
 import { Tag } from "@/components/ui/Tag";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { HeatGrid } from "@/components/charts/HeatGrid";
 import { VcrSeriesLegend, VcrTrajectoryChart } from "../VcrCharts";
-import { VcrMilestoneTimeline, VcrTradeoffScatter } from "../VcrDiagrams";
+import { VcrMilestoneTimeline, VcrTradeoffScatter, canDrawTradeoff } from "../VcrDiagrams";
 import { ReviewChip } from "../VcrMarks";
-import { VcrFilePrediction } from "../VcrFilePrediction";
+import { VcrPredictionsDrawer } from "../VcrPredictionsDrawer";
 import { VcrNumber } from "../VcrNumber";
 import { VcrSettingsDrawer } from "../VcrSettingsDrawer";
 import { PartialResultNote, Stale, VcrStepFailed, VcrStepPending, VcrTabSkeleton } from "../VcrStates";
@@ -62,6 +63,7 @@ export const VCR_CHANGE_ASSUMPTION_DRAFT = "我想改一下试验的假设：";
 export function TrialTab({ studyId, study }: { studyId: string; study: VcrStudy }) {
   const { state, reload } = useVcrLoad(`${studyId}:trial`, () => getVcrTrial(studyId));
   const [choosing, setChoosing] = useState(false);
+  const [registering, setRegistering] = useState(false);
   const [editing, setEditing] = useState<VcrDesign | null>(null);
   const openConversation = useOpenVcrConversation();
   if (state.kind === "loading") return <VcrTabSkeleton />;
@@ -77,6 +79,12 @@ export function TrialTab({ studyId, study }: { studyId: string; study: VcrStudy 
   const chosenCodes = data.designs.filter((design) => design.chosen).map((design) => design.code);
   const canWrite = study.abilities.includes("write");
   const decided = Boolean(data.decision?.chosen);
+  // 「登记预测」 is the lead's (and only where the deployment has a registry); a reader who may not file still opens what has been filed.
+  const canFile = Boolean(study.features?.predictions) && study.abilities.includes("manage_study");
+  const hasForecasts = data.forecasts.length > 0;
+  // The trade-off is drawn only when there is something to place: two designs with a duration and an assurance. A card whose chart
+  // draws nothing is a title over an empty box.
+  const tradeoff = data.designs.length > 1 && canDrawTradeoff(data.designs, "duration_months", "assurance");
 
   // 「加一个方案」 and 「改假设」 say it in the conversation: the draft waits in the composer, and the reader sends it.
   const draft = (text: string) => {
@@ -88,7 +96,7 @@ export function TrialTab({ studyId, study }: { studyId: string; study: VcrStudy 
     <div className="flex flex-col gap-6">
       {failed
         ? <VcrStepFailed studyId={studyId} study={study} step="trial" partial={data.partial} />
-        : data.partial && <PartialResultNote done={data.partial.done} missing={data.partial.missing} />}
+        : data.partial && <PartialResultNote sentence={data.partial.sentence} resume={{ studyId, study, step: "trial" }} />}
 
       {/* The sentence is dimmed with the numbers it states while they are stale; the three things a reader does about it are not. */}
       <section data-vcr-conclusion="" className="rounded-card border border-border bg-surface p-5">
@@ -100,11 +108,16 @@ export function TrialTab({ studyId, study }: { studyId: string; study: VcrStudy 
             </p>
           )}
         </div>
-        {canWrite && (
+        {(canWrite || canFile || hasForecasts) && (
           <div className="mt-4 flex flex-wrap items-center gap-2">
-            <Button variant={decided ? "secondary" : "primary"} onClick={() => setChoosing(true)}>{decided ? "改选方案" : "选定方案"}</Button>
-            <Button variant="text" onClick={() => draft(VCR_ADD_DESIGN_DRAFT)}>加一个方案</Button>
-            <Button variant="text" onClick={() => draft(VCR_CHANGE_ASSUMPTION_DRAFT)}>改假设</Button>
+            {canWrite && (
+              <>
+                <Button variant={decided ? "secondary" : "primary"} onClick={() => setChoosing(true)}>{decided ? "改选方案" : "选定方案"}</Button>
+                <Button variant="text" onClick={() => draft(VCR_ADD_DESIGN_DRAFT)}>加一个方案</Button>
+                <Button variant="text" onClick={() => draft(VCR_CHANGE_ASSUMPTION_DRAFT)}>改假设</Button>
+              </>
+            )}
+            {(canFile || hasForecasts) && <Button variant="secondary" onClick={() => setRegistering(true)}>登记预测</Button>}
           </div>
         )}
       </section>
@@ -133,6 +146,28 @@ export function TrialTab({ studyId, study }: { studyId: string; study: VcrStudy 
                 </p>
               ))}
             </div>
+          )}
+
+          {/* How the simulation was set up, folded under the comparison it explains: the lines are what a reviewer checks, not what a
+              reader of the table needs first. */}
+          {data.ademp.length > 0 && (
+            <Disclosure
+              summary={(
+                <span className="inline-flex items-center gap-2">
+                  模拟设定
+                  <ReviewChip state={data.ademReview ?? null} />
+                </span>
+              )}
+            >
+              <dl data-vcr-setup="" className="divide-y divide-faint">
+                {data.ademp.map((line) => (
+                  <div key={line.key} className="grid grid-cols-[7rem_1fr] gap-3 py-2">
+                    <dt className="text-caption text-text-3">{line.label}</dt>
+                    <dd className="min-w-0 text-ui text-text">{line.text}</dd>
+                  </div>
+                ))}
+              </dl>
+            </Disclosure>
           )}
 
           {(data.powerCurve || (data.grid && data.grid.rows.length > 0)) && (
@@ -177,9 +212,9 @@ export function TrialTab({ studyId, study }: { studyId: string; study: VcrStudy 
             </div>
           )}
 
-          {(data.designs.length > 1 || data.milestones.length > 0) && (
+          {(tradeoff || data.milestones.length > 0) && (
             <div className="grid gap-4 xl:grid-cols-2">
-              {data.designs.length > 1 && (
+              {tradeoff && (
                 <Card title="周期、成本与成功把握的取舍">
                   <VcrTradeoffScatter
                     designs={data.designs}
@@ -200,49 +235,34 @@ export function TrialTab({ studyId, study }: { studyId: string; study: VcrStudy 
             </div>
           )}
 
-          {data.ademp.length > 0 && (
-            <Card
-              header={(
-                <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-section font-semibold text-text">模拟设定</h2>
-                  <span className="flex-1" />
-                  <ReviewChip state={data.ademReview ?? null} />
-                </div>
-              )}
-            >
-              <dl data-vcr-setup="" className="divide-y divide-faint">
-                {data.ademp.map((line) => (
-                  <div key={line.key} className="grid grid-cols-[7rem_1fr] gap-3 py-2">
-                    <dt className="text-caption text-text-3">{line.label}</dt>
-                    <dd className="min-w-0 text-ui text-text">{line.text}</dd>
-                  </div>
-                ))}
-              </dl>
-            </Card>
-          )}
         </div>
       </Stale>
 
-      {(data.forecasts.length > 0 || data.runRecord.length > 0 || (study.features?.predictions && study.abilities.includes("manage_study"))) && (
-        <div className="grid gap-4 xl:grid-cols-2">
-          {study.features?.predictions && study.abilities.includes("manage_study") && <VcrFilePrediction studyId={studyId} designs={data.designs} />}
-          {data.forecasts.length > 0 && <ForecastRegistry forecasts={data.forecasts} />}
-          {data.runRecord.length > 0 && (
-            <Card title="本次运行">
-              <ul className="flex flex-col gap-3">
-                {data.runRecord.map((record) => (
-                  <li key={record.key} className="flex items-start gap-2">
-                    {record.ok && <CircleCheck size={16} aria-hidden="true" className="mt-0.5 shrink-0 text-ok" />}
-                    <span className="min-w-0">
-                      <span className="block text-ui text-text">{record.title}</span>
-                      {record.detail && <span className="block text-caption text-text-3">{record.detail}</span>}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </Card>
-          )}
-        </div>
+      {data.runRecord.length > 0 && (
+        <Card title="本次运行">
+          <ul className="flex flex-col gap-3">
+            {data.runRecord.map((record) => (
+              <li key={record.key} className="flex items-start gap-2">
+                {record.ok && <CircleCheck size={16} aria-hidden="true" className="mt-0.5 shrink-0 text-ok" />}
+                <span className="min-w-0">
+                  <span className="block text-ui text-text">{record.title}</span>
+                  {record.detail && <span className="block text-caption text-text-3">{record.detail}</span>}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
+      {registering && (
+        <VcrPredictionsDrawer
+          studyId={studyId}
+          designs={data.designs}
+          forecasts={data.forecasts}
+          canFile={canFile}
+          onFiled={reload}
+          onClose={() => setRegistering(false)}
+        />
       )}
 
       {choosing && (
@@ -359,58 +379,6 @@ function designColumns(data: TrialData, onEdit: ((design: VcrDesign) => void) | 
       ),
     }] : []),
   ];
-}
-
-/**
- * 预测登记: every forecast frozen before the data it predicts, with the time
- * it was frozen at, and — once the actual data are in — what was predicted
- * beside what happened (plan §5.4, AC-23). The hash that proves it is the
- * registry's, and stays there.
- */
-function ForecastRegistry({ forecasts }: { forecasts: readonly VcrForecast[] }) {
-  return (
-    <Card title="预测登记">
-      <ul className="flex flex-col gap-4">
-        {forecasts.map((forecast) => {
-          const compared = forecast.lines.some((line) => line.actual != null);
-          return (
-            <li key={forecast.id} data-vcr-forecast={forecast.id}>
-              <p className="flex flex-wrap items-center gap-2">
-                <span className="text-ui font-medium text-text">{forecast.label}</span>
-              </p>
-              {(forecast.frozenAt || forecast.comparedAt) && (
-                <p className="mt-0.5 text-caption text-text-3">
-                  {[forecast.frozenAt ? `冻结于 ${forecast.frozenAt}` : null, forecast.comparedAt ? `与实际对照于 ${forecast.comparedAt}` : null]
-                    .filter(Boolean).join(" · ")}
-                </p>
-              )}
-              <table className="mt-2 w-full border-collapse text-caption">
-                <caption className="sr-only">{forecast.label}</caption>
-                {compared && (
-                  <thead>
-                    <tr className="border-b border-border text-text-3">
-                      <th scope="col" className="py-1 pr-2 text-left font-normal"><span className="sr-only">指标</span></th>
-                      <th scope="col" className="py-1 px-2 text-right font-normal">预测</th>
-                      <th scope="col" className="py-1 pl-2 text-right font-normal">实际</th>
-                    </tr>
-                  </thead>
-                )}
-                <tbody>
-                  {forecast.lines.map((line) => (
-                    <tr key={line.key} data-vcr-forecast-line={line.key} className="border-b border-faint">
-                      <th scope="row" className="py-1.5 pr-2 text-left font-normal text-text-2">{line.label}</th>
-                      <td className="py-1.5 px-2 text-right tabular-nums text-text">{line.predicted}</td>
-                      {compared && <td className="py-1.5 pl-2 text-right tabular-nums text-text">{line.actual ?? "—"}</td>}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </li>
-          );
-        })}
-      </ul>
-    </Card>
-  );
 }
 
 /**
