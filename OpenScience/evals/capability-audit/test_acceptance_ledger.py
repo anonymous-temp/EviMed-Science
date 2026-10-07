@@ -337,6 +337,18 @@ class RealLedgerTests(unittest.TestCase):
     def test_repository_ledger_passes(self):
         self.assertEqual(checker.ledger_issues(), [])
 
+    def test_internal_evolution_rows_do_not_claim_live_acceptance(self):
+        rows = {row["id"]: row for row in checker.load_ledger(REPO)["capabilities"]}
+        for identifier in ("evolution-scout", "tool-builder"):
+            row = rows[identifier]
+            self.assertEqual(row["visibility"], "internal")
+            self.assertEqual(row["evalHarness"], "evals/paper-gold")
+            self.assertEqual(row["briefCount"], 0)
+            self.assertEqual(row["realDelivery"], {
+                "status": "not-run", "evidence": None, "at": None, "surface": None,
+            })
+            self.assertIn("evals/acceptance/2026-10-04-evolution.json", row["relatedEvidence"])
+
     def test_repository_ledger_covers_every_capability(self):
         document = checker.load_ledger(REPO)
         recorded = {row["id"] for row in document["capabilities"]}
@@ -391,8 +403,9 @@ class RealLedgerTests(unittest.TestCase):
         # The platform retains twenty-two accepted deliveries, including statistical analysis.
         # Five VCR capabilities remain not-run until their own live evidence exists, and so does gene-expression-analysis
         # (2026-10-04, N17: three briefs and an offline reference check against base R, no capability-level delivery yet).
+        # The two internal evolution development capabilities are registered not-run: their offline contracts and partial platform acceptance do not establish capability-level live delivery.
         # Delivery acceptance does not imply an unqualified scientific-quality pass.
-        self.assertEqual(statuses.count("not-run"), 6)
+        self.assertEqual(statuses.count("not-run"), 8)
         self.assertEqual(statuses.count("accepted"), 22)
         self.assertEqual(statuses.count("failed"), 0)
         self.assertEqual(

@@ -7,6 +7,27 @@ const agents = [
   { id: "meta-analysis", version: "1.0.0", runtimeAgent: "evimed-meta-analysis", title: "Meta", description: "systematic review and meta-analysis" },
 ];
 
+test("Jev uncertainty leaves routing to the deterministic net without another model", async () => {
+  const fetchImpl = fetchReturning('{"agentId":"meta-analysis","confidence":1}');
+  const classifier = new SpecialistClassifier(baseConfig(), { fetchImpl,
+    judgeService: { judge: async () => ({ outcome: "escalated", code: "judge_uncertain" }) } });
+  assert.equal(await classifier.classify("这篇Meta文章说了什么？", agents), null);
+  assert.equal(fetchImpl.calls.length, 0);
+});
+
+test("Jev explicit none is preserved while outages restore Flash", async () => {
+  const fetchImpl = fetchReturning('{"agentId":"meta-analysis","confidence":1}');
+  const trace = {};
+  const judgeService = { judge: async () => ({ outcome: "settled", value: { agentId: "none" } }) };
+  const classifier = new SpecialistClassifier(baseConfig(), { fetchImpl, judgeService });
+  assert.equal(await classifier.classify("Meta分析是什么意思？", agents, trace), null);
+  assert.equal(trace.verdict, "none");
+  assert.equal(fetchImpl.calls.length, 0);
+  judgeService.judge = async () => ({ outcome: "fallback", code: "judge_timeout" });
+  assert.equal((await classifier.classify("请做Meta分析", agents))?.agentId, "meta-analysis");
+  assert.equal(fetchImpl.calls.length, 1);
+});
+
 function baseConfig(overrides = {}) {
   return {
     llmRoutingEnabled: true,

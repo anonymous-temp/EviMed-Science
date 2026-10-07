@@ -925,7 +925,7 @@ _QUESTION_PATTERNS = [
 ]
 
 _GREETING_PATTERNS = re.compile(
-    r'^(你好|您好|hi|hello|hey|嗨|哈喽|在吗|在不在|你是谁|你是什么|介绍一下你自己|你能做什么|你有什么功能|help|帮助)',
+    r'^(你好|您好|hi|hello|hey|嗨|哈喽|在吗|在不在|你是谁|你是什么|介绍一下你自己|你能做什么|你有什么功能|help|帮助)[\s！!？?。.,，]*$',
     re.IGNORECASE,
 )
 

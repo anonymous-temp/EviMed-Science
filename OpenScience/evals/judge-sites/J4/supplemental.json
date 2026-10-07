@@ -1,0 +1,1007 @@
+[
+  {
+    "id": "nonclinical-1",
+    "source": "independent-nonclinical-register-controls",
+    "labelBasis": "curated",
+    "group": "nonclinical-1",
+    "input": {
+      "line": "该统计模型在外部验证集中的校准斜率接近 1。"
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-2",
+    "source": "independent-nonclinical-register-controls",
+    "labelBasis": "curated",
+    "group": "nonclinical-2",
+    "input": {
+      "line": "标准化处理在训练样本拟合，在独立测试样本应用相同参数。"
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-3",
+    "source": "independent-nonclinical-register-controls",
+    "labelBasis": "curated",
+    "group": "nonclinical-3",
+    "input": {
+      "line": "实验工件由数控机床加工，表面粗糙度由三次测量的均值表示。"
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-4",
+    "source": "independent-nonclinical-register-controls",
+    "labelBasis": "curated",
+    "group": "nonclinical-4",
+    "input": {
+      "line": "日本环境省的监测数据显示，观测站点之间存在明显季节差异。"
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-5",
+    "source": "independent-nonclinical-register-controls",
+    "labelBasis": "curated",
+    "group": "nonclinical-5",
+    "input": {
+      "line": "本环境暴露研究采用个人采样器测量呼吸带颗粒物浓度。"
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-6",
+    "source": "independent-nonclinical-register-controls",
+    "labelBasis": "curated",
+    "group": "nonclinical-6",
+    "input": {
+      "line": "研究人员使用 Python 计算随机森林的交叉验证误差。"
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-7",
+    "source": "independent-nonclinical-register-controls",
+    "labelBasis": "curated",
+    "group": "nonclinical-7",
+    "input": {
+      "line": "软件工程研究比较了三种工具调用协议的吞吐量与错误率。"
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-8",
+    "source": "independent-nonclinical-register-controls",
+    "labelBasis": "curated",
+    "group": "nonclinical-8",
+    "input": {
+      "line": "分子模拟的生产运行持续 100 纳秒，轨迹每 10 皮秒保存一次。"
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-9",
+    "source": "independent-nonclinical-register-controls",
+    "labelBasis": "curated",
+    "group": "nonclinical-9",
+    "input": {
+      "line": "系统综述检索了两个公开文献数据库，检索时间截至研究预设日期。"
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-10",
+    "source": "independent-nonclinical-register-controls",
+    "labelBasis": "curated",
+    "group": "nonclinical-10",
+    "input": {
+      "line": "全文无法获取的研究只用于背景讨论，不参与效应量合并。"
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-11",
+    "source": "independent-nonclinical-register-controls",
+    "labelBasis": "curated",
+    "group": "nonclinical-11",
+    "input": {
+      "line": "样本环境温度保持恒定，避免批次之间的测量偏移。"
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-12",
+    "source": "independent-nonclinical-register-controls",
+    "labelBasis": "curated",
+    "group": "nonclinical-12",
+    "input": {
+      "line": "数据以表格提供；缺失项保留为空，未以零代替。"
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-13",
+    "source": "independent-nonclinical-register-controls",
+    "labelBasis": "curated",
+    "group": "nonclinical-13",
+    "input": {
+      "line": "由于原始研究未报告标准差，无法计算该组的标准化均值差。"
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-14",
+    "source": "independent-nonclinical-register-controls",
+    "labelBasis": "curated",
+    "group": "nonclinical-14",
+    "input": {
+      "line": "轨迹文件包含三维坐标，方法部分说明了坐标变换的步骤。"
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-15",
+    "source": "independent-nonclinical-register-controls",
+    "labelBasis": "curated",
+    "group": "nonclinical-15",
+    "input": {
+      "line": "为核对研究结论，作者重复了不同随机种子的实验。"
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-16",
+    "source": "independent-nonclinical-register-controls",
+    "labelBasis": "curated",
+    "group": "nonclinical-16",
+    "input": {
+      "line": "本轮调查覆盖六个采样点，其中两个点位未获得有效样本。"
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-17",
+    "source": "independent-nonclinical-register-controls",
+    "labelBasis": "curated",
+    "group": "nonclinical-17",
+    "input": {
+      "line": "图像增强网络在保持相同计算预算时取得更低的重建误差。"
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-18",
+    "source": "independent-nonclinical-register-controls",
+    "labelBasis": "curated",
+    "group": "nonclinical-18",
+    "input": {
+      "line": "教育干预的长期效果仍需更大样本的随机试验验证。"
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-19",
+    "source": "independent-nonclinical-register-controls",
+    "labelBasis": "curated",
+    "group": "nonclinical-19",
+    "input": {
+      "line": "本研究的代码与数据仓库公开，便于独立复现计算结果。"
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-20",
+    "source": "independent-nonclinical-register-controls",
+    "labelBasis": "curated",
+    "group": "nonclinical-20",
+    "input": {
+      "line": "该实验检验模型是否会遵从来自检索文档中的恶意指令。"
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-21",
+    "source": "independent-nonclinical-register-controls",
+    "labelBasis": "curated",
+    "group": "nonclinical-21",
+    "input": {
+      "line": "All retrieval methods were evaluated on the same independently labelled corpus."
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-22",
+    "source": "independent-nonclinical-register-controls",
+    "labelBasis": "curated",
+    "group": "nonclinical-22",
+    "input": {
+      "line": "The trial used a central web portal for blinded allocation and stored records securely."
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-23",
+    "source": "independent-nonclinical-register-controls",
+    "labelBasis": "curated",
+    "group": "nonclinical-23",
+    "input": {
+      "line": "The software tool failed on three corrupted images; those observations were reported as missing."
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-24",
+    "source": "independent-nonclinical-register-controls",
+    "labelBasis": "curated",
+    "group": "nonclinical-24",
+    "input": {
+      "line": "The measured latency includes model execution and the transfer of input data."
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-25",
+    "source": "independent-nonclinical-register-controls",
+    "labelBasis": "curated",
+    "group": "nonclinical-25",
+    "input": {
+      "line": "The authors revised their analysis plan before unblinding the trial results."
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-26",
+    "source": "independent-nonclinical-register-controls",
+    "labelBasis": "curated",
+    "group": "nonclinical-26",
+    "input": {
+      "line": "这段正文刚刚通过交付门检查，可以直接给用户展示了。"
+    },
+    "expected": {
+      "leakage": true
+    }
+  },
+  {
+    "id": "nonclinical-27",
+    "source": "independent-nonclinical-register-controls",
+    "labelBasis": "curated",
+    "group": "nonclinical-27",
+    "input": {
+      "line": "我调用统计工具后把返回的内容粘贴到了下面的表格里。"
+    },
+    "expected": {
+      "leakage": true
+    }
+  },
+  {
+    "id": "nonclinical-28",
+    "source": "independent-nonclinical-register-controls",
+    "labelBasis": "curated",
+    "group": "nonclinical-28",
+    "input": {
+      "line": "上一轮生成的附件已被我覆盖，新的报告放在工作区中。"
+    },
+    "expected": {
+      "leakage": true
+    }
+  },
+  {
+    "id": "nonclinical-29",
+    "source": "independent-nonclinical-register-controls",
+    "labelBasis": "curated",
+    "group": "nonclinical-29",
+    "input": {
+      "line": "为了让预检通过，我删除了找不到来源的句子。"
+    },
+    "expected": {
+      "leakage": true
+    }
+  },
+  {
+    "id": "nonclinical-30",
+    "source": "independent-nonclinical-register-controls",
+    "labelBasis": "curated",
+    "group": "nonclinical-30",
+    "input": {
+      "line": "后端的文档解析接口超时，所以我没有继续处理其余附件。"
+    },
+    "expected": {
+      "leakage": true
+    }
+  },
+  {
+    "id": "nonclinical-31",
+    "source": "independent-nonclinical-register-controls",
+    "labelBasis": "curated",
+    "group": "nonclinical-31",
+    "input": {
+      "line": "该段落来自我刚才运行的脚本，生成路径请见工具日志。"
+    },
+    "expected": {
+      "leakage": true
+    }
+  },
+  {
+    "id": "nonclinical-32",
+    "source": "independent-nonclinical-register-controls",
+    "labelBasis": "curated",
+    "group": "nonclinical-32",
+    "input": {
+      "line": "模型上下文不够用，我只读了前两页就开始写这份报告。"
+    },
+    "expected": {
+      "leakage": true
+    }
+  },
+  {
+    "id": "nonclinical-33",
+    "source": "independent-nonclinical-register-controls",
+    "labelBasis": "curated",
+    "group": "nonclinical-33",
+    "input": {
+      "line": "如果用户认可这次输出，我就继续调用下一个工具。"
+    },
+    "expected": {
+      "leakage": true
+    }
+  },
+  {
+    "id": "nonclinical-34",
+    "source": "independent-nonclinical-register-controls",
+    "labelBasis": "curated",
+    "group": "nonclinical-34",
+    "input": {
+      "line": "运行记录已更新，我现在提交最终交付文件。"
+    },
+    "expected": {
+      "leakage": true
+    }
+  },
+  {
+    "id": "nonclinical-35",
+    "source": "independent-nonclinical-register-controls",
+    "labelBasis": "curated",
+    "group": "nonclinical-35",
+    "input": {
+      "line": "本次网关请求成功，返回的文本已写进报告目录。"
+    },
+    "expected": {
+      "leakage": true
+    }
+  },
+  {
+    "id": "nonclinical-36",
+    "source": "independent-nonclinical-register-controls",
+    "labelBasis": "curated",
+    "group": "nonclinical-36",
+    "input": {
+      "line": "I have saved the generated report to the workspace and will now tell the user it is ready."
+    },
+    "expected": {
+      "leakage": true
+    }
+  },
+  {
+    "id": "nonclinical-37",
+    "source": "independent-nonclinical-register-controls",
+    "labelBasis": "curated",
+    "group": "nonclinical-37",
+    "input": {
+      "line": "The last tool call returned an error, so I pasted the earlier draft here instead."
+    },
+    "expected": {
+      "leakage": true
+    }
+  },
+  {
+    "id": "nonclinical-38",
+    "source": "independent-nonclinical-register-controls",
+    "labelBasis": "curated",
+    "group": "nonclinical-38",
+    "input": {
+      "line": "To satisfy the delivery gate, I changed the wording in this paragraph and resubmitted."
+    },
+    "expected": {
+      "leakage": true
+    }
+  },
+  {
+    "id": "nonclinical-39",
+    "source": "independent-nonclinical-register-controls",
+    "labelBasis": "curated",
+    "group": "nonclinical-39",
+    "input": {
+      "line": "The agent ran out of context before reading the remaining source files."
+    },
+    "expected": {
+      "leakage": true
+    }
+  },
+  {
+    "id": "nonclinical-40",
+    "source": "independent-nonclinical-register-controls",
+    "labelBasis": "curated",
+    "group": "nonclinical-40",
+    "input": {
+      "line": "This section was generated from the latest assistant turn and copied into the deliverable."
+    },
+    "expected": {
+      "leakage": true
+    }
+  },
+  {
+    "id": "nonclinical-bibliometric-analysis-5",
+    "source": "nonclinical-delivered-report",
+    "sourcePath": "OpenScience/evals/bibliometric-analysis/results/2026-10-04-biblio-001-glp1-obesity-landscape/deliverable/deliverables/glp1-obesity-bibliometric/bibliometric-analysis-report.md",
+    "sourceSha256": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "sourceLine": 5,
+    "labelBasis": "reviewed-report-prose-scientific-content",
+    "group": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "input": {
+      "line": "本次分析以 2026-10-04 对 MEDLINE（经 PubMed）的一次可复现检索为基础，纳入 1,236 条书目记录，用共词网络、社区检测、突现词探测与综合前沿评分刻画该主题的产出趋势、知识结构与研究前沿。"
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-bibliometric-analysis-15",
+    "source": "nonclinical-delivered-report",
+    "sourcePath": "OpenScience/evals/bibliometric-analysis/results/2026-10-04-biblio-001-glp1-obesity-landscape/deliverable/deliverables/glp1-obesity-bibliometric/bibliometric-analysis-report.md",
+    "sourceSha256": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "sourceLine": 15,
+    "labelBasis": "reviewed-report-prose-scientific-content",
+    "group": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "input": {
+      "line": "本次结果描述的是一个既定检索策略下的选入文献集，不是该领域的全集。所有结论都是研究活动与主题结构的度量，不涉及药物有效性或安全性判断，也不能用于任何个体用药决策。"
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-bibliometric-analysis-19",
+    "source": "nonclinical-delivered-report",
+    "sourcePath": "OpenScience/evals/bibliometric-analysis/results/2026-10-04-biblio-001-glp1-obesity-landscape/deliverable/deliverables/glp1-obesity-bibliometric/bibliometric-analysis-report.md",
+    "sourceSha256": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "sourceLine": 19,
+    "labelBasis": "reviewed-report-prose-scientific-content",
+    "group": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "input": {
+      "line": "分析对象是「GLP-1 受体激动剂用于肥胖与体重管理」这一主题在 2015 至 2025 年间的文献产出。要回答的是三类问题：产出随时间的规模变化如何，知识结构由哪些主题与主体的连接构成，以及哪些方向正在形成新的关注点。"
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-bibliometric-analysis-21",
+    "source": "nonclinical-delivered-report",
+    "sourcePath": "OpenScience/evals/bibliometric-analysis/results/2026-10-04-biblio-001-glp1-obesity-landscape/deliverable/deliverables/glp1-obesity-bibliometric/bibliometric-analysis-report.md",
+    "sourceSha256": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "sourceLine": 21,
+    "labelBasis": "reviewed-report-prose-scientific-content",
+    "group": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "input": {
+      "line": "**概念口径。** 本报告只刻画以「GLP-1 receptor agonists」这一概念检索到的记录。检索式为标题/摘要限定，因此仅以个别药物商品名或通用名（如 semaglutide、liraglutide）出现、而不出现该概念短语的肥胖相关研究不进入样本；双靶点或三靶点共激动剂（如 tirzepatide、survodutide）只有在同时出现该概念短语时才被纳入。这一口径的取舍在局限性一节展开。"
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-bibliometric-analysis-34",
+    "source": "nonclinical-delivered-report",
+    "sourcePath": "OpenScience/evals/bibliometric-analysis/results/2026-10-04-biblio-001-glp1-obesity-landscape/deliverable/deliverables/glp1-obesity-bibliometric/bibliometric-analysis-report.md",
+    "sourceSha256": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "sourceLine": 34,
+    "labelBasis": "reviewed-report-prose-scientific-content",
+    "group": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "input": {
+      "line": "检索命中 1,241 条，取回 1,238 条书目记录（占命中数 99.8%），按年份归组后 1,236 条，未触及 5,000 条上限。报告中的一切计数均以这 1,236 条为分母；凡涉及引用观测等下位集合时，另行标明其自身样本量。"
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-bibliometric-analysis-36",
+    "source": "nonclinical-delivered-report",
+    "sourcePath": "OpenScience/evals/bibliometric-analysis/results/2026-10-04-biblio-001-glp1-obesity-landscape/deliverable/deliverables/glp1-obesity-bibliometric/bibliometric-analysis-report.md",
+    "sourceSha256": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "sourceLine": 36,
+    "labelBasis": "reviewed-report-prose-scientific-content",
+    "group": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "input": {
+      "line": "入选记录中包含该主题几项关键随机对照试验，例如司美格鲁肽每周一次治疗超重或肥胖的试验 [11]、替尔泊肽每周一次治疗肥胖的试验 [12] 与司美格鲁肽在无糖尿病人群中的心血管结局试验 [13]；近期的证据整合类文献同样可见，如 GLP-1 受体激动剂及其共激动剂与心房颤动风险的随机对照试验 Meta 分析 [14]、以及 GLP-1 受体激动剂治疗非糖尿病肥胖的经济学评价 Meta 分析 [15]。列出这几条只用于说明样本由哪些具体文献构成，本报告不重复其疗效或经济学结论。"
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-bibliometric-analysis-40",
+    "source": "nonclinical-delivered-report",
+    "sourcePath": "OpenScience/evals/bibliometric-analysis/results/2026-10-04-biblio-001-glp1-obesity-landscape/deliverable/deliverables/glp1-obesity-bibliometric/bibliometric-analysis-report.md",
+    "sourceSha256": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "sourceLine": 40,
+    "labelBasis": "reviewed-report-prose-scientific-content",
+    "group": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "input": {
+      "line": "记录由 PubMed XML 解析，作者姓名规范为「姓 名字首字母」，机构经模式匹配抽取，MeSH 主题词与作者关键词合并为一个关键词集合，并剔除 Humans、Male、Female 等无区分度的人口学限定词；重复记录经 PMID 与标准化标题识别，去重后 1,236 条。记录同时保留原始书目字段与检索元数据。"
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-bibliometric-analysis-55",
+    "source": "nonclinical-delivered-report",
+    "sourcePath": "OpenScience/evals/bibliometric-analysis/results/2026-10-04-biblio-001-glp1-obesity-landscape/deliverable/deliverables/glp1-obesity-bibliometric/bibliometric-analysis-report.md",
+    "sourceSha256": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "sourceLine": 55,
+    "labelBasis": "reviewed-report-prose-scientific-content",
+    "group": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "input": {
+      "line": "年度计数基于记录的期刊/卷期年份，与检索式使用的出版日期过滤字段不是同一字段。检索元数据记载年份来源中 1,232 条为期刊期号年、4 条为 Medline 日期。样本中实际出现的年份跨 2015—2026，共 12 个年份。"
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-bibliometric-analysis-69",
+    "source": "nonclinical-delivered-report",
+    "sourcePath": "OpenScience/evals/bibliometric-analysis/results/2026-10-04-biblio-001-glp1-obesity-landscape/deliverable/deliverables/glp1-obesity-bibliometric/bibliometric-analysis-report.md",
+    "sourceSha256": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "sourceLine": 69,
+    "labelBasis": "reviewed-report-prose-scientific-content",
+    "group": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "input": {
+      "line": "2015 至 2020 年合计 125 条（10.1%），2021 至 2023 年合计 180 条（14.6%），2024 与 2025 年合计 836 条（67.6%）。三项份额由年度计数算出〔推算〕。曲线的陡升出现在 2024 年，2025 年为样本峰值。"
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-bibliometric-analysis-71",
+    "source": "nonclinical-delivered-report",
+    "sourcePath": "OpenScience/evals/bibliometric-analysis/results/2026-10-04-biblio-001-glp1-obesity-landscape/deliverable/deliverables/glp1-obesity-bibliometric/bibliometric-analysis-report.md",
+    "sourceSha256": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "sourceLine": 71,
+    "labelBasis": "reviewed-report-prose-scientific-content",
+    "group": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "input": {
+      "line": "关于 2026 年的 95 条记录需要单独说明：检索式的出版日期过滤区间截至 2025-12-31，而这 95 条记录的期刊年份落在 2026 年。检索记录本身不足以解释这一现象，出版日期字段与期刊期号年份不一致、索引或预出版流程都有可能是来源，本报告因此把它列为未解释现象，并同时给出含与不含这 95 条的两种份额（不含时 2024 与 2025 年合计占 67.6%，含时 2024 至 2026 三年合计 931 条、占 75.3%）〔推算〕。检索完成于 2026-10-04，2025 与 2026 两个年份的覆盖程度都未经确认，年度计数不应被读作完整年度产出。"
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-bibliometric-analysis-75",
+    "source": "nonclinical-delivered-report",
+    "sourcePath": "OpenScience/evals/bibliometric-analysis/results/2026-10-04-biblio-001-glp1-obesity-landscape/deliverable/deliverables/glp1-obesity-bibliometric/bibliometric-analysis-report.md",
+    "sourceSha256": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "sourceLine": 75,
+    "labelBasis": "reviewed-report-prose-scientific-content",
+    "group": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "input": {
+      "line": "**作者。** 1,236 条记录涉及 6,458 个作者姓名（未做身份消歧）。产出最高者为 Holst Jens J 与 Butler Javed（各 11 条），其后为 Koufakis Theocharis、Rizzo Manfredi、Vilsbøll Tina（各 9 条），Davies Melanie J 与 Nauck Michael A（各 8 条），Karakasis Paschalis、Patoulias Dimitrios、Fragakis Nikolaos（各 7 条）。最高产者也只占样本的不足 1%。"
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-bibliometric-analysis-92",
+    "source": "nonclinical-delivered-report",
+    "sourcePath": "OpenScience/evals/bibliometric-analysis/results/2026-10-04-biblio-001-glp1-obesity-landscape/deliverable/deliverables/glp1-obesity-bibliometric/bibliometric-analysis-report.md",
+    "sourceSha256": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "sourceLine": 92,
+    "labelBasis": "reviewed-report-prose-scientific-content",
+    "group": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "input": {
+      "line": "作者合作网络经筛选后保留 27 个节点、39 条边，密度 0.1111，含 5 个连通分量，最大分量 14 个节点。Lotka 拟合指数 3.40（R² = 0.982，p < 0.001），明显偏离约 2.0 的经验值；6,458 个作者姓名中 5,893 个（91%）只出现 1 次。合作者构成的连通分量规模都不大，稳定的高产学术共同体尚未成形。"
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-bibliometric-analysis-94",
+    "source": "nonclinical-delivered-report",
+    "sourcePath": "OpenScience/evals/bibliometric-analysis/results/2026-10-04-biblio-001-glp1-obesity-landscape/deliverable/deliverables/glp1-obesity-bibliometric/bibliometric-analysis-report.md",
+    "sourceSha256": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "sourceLine": 94,
+    "labelBasis": "reviewed-report-prose-scientific-content",
+    "group": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "input": {
+      "line": "**机构。** 产出最高的机构是国家卫生服务体系（National Health Service，53 条），其后为哈佛医学院（40 条）、哥本哈根大学（39 条）、梅奥诊所（30 条）、诺和诺德（Novo Nordisk，17 条）、加利福尼亚大学系统（15 条）与多伦多大学（15 条）、贝勒医学院（13 条）、加州大学洛杉矶分校（12 条）。"
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-bibliometric-analysis-111",
+    "source": "nonclinical-delivered-report",
+    "sourcePath": "OpenScience/evals/bibliometric-analysis/results/2026-10-04-biblio-001-glp1-obesity-landscape/deliverable/deliverables/glp1-obesity-bibliometric/bibliometric-analysis-report.md",
+    "sourceSha256": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "sourceLine": 111,
+    "labelBasis": "reviewed-report-prose-scientific-content",
+    "group": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "input": {
+      "line": "榜单中有一所机构名称在抽取阶段被截断，仅保留「s Hospital」这一片段，其排名与合并均受影响。机构层级也未统一消歧，加利福尼亚大学系统与各分校即分列两行，因此机构排名只能视为近似结果。榜单以临床与学术机构为主，产业机构可见度有限。"
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-bibliometric-analysis-113",
+    "source": "nonclinical-delivered-report",
+    "sourcePath": "OpenScience/evals/bibliometric-analysis/results/2026-10-04-biblio-001-glp1-obesity-landscape/deliverable/deliverables/glp1-obesity-bibliometric/bibliometric-analysis-report.md",
+    "sourceSha256": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "sourceLine": 113,
+    "labelBasis": "reviewed-report-prose-scientific-content",
+    "group": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "input": {
+      "line": "**期刊。** 1,236 条记录分布于 585 种期刊。载文最多的是 Cureus（52 条），其后为 Diabetes, Obesity and Metabolism（35 条）、Journal of Clinical Medicine（26 条）、Frontiers in Endocrinology 与 Biomedicines（各 19 条）、International Journal of Molecular Sciences（18 条）、The Journal of Clinical Endocrinology and Metabolism（14 条）、Obesity Surgery（11 条），以及 Frontiers in Pharmacology 与 Nutrients（各 10 条）。前三名分属两类刊物：综合性开放获取期刊与内分泌代谢专业期刊。Bradford 三区划分为 37 / 144 / 404 种期刊（每区 412 条），第二区与第一区的期刊数比为 3.89。"
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-bibliometric-analysis-115",
+    "source": "nonclinical-delivered-report",
+    "sourcePath": "OpenScience/evals/bibliometric-analysis/results/2026-10-04-biblio-001-glp1-obesity-landscape/deliverable/deliverables/glp1-obesity-bibliometric/bibliometric-analysis-report.md",
+    "sourceSha256": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "sourceLine": 115,
+    "labelBasis": "reviewed-report-prose-scientific-content",
+    "group": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "input": {
+      "line": "**国家与地区。** 记录共归属 41 个国家或地区（同一记录可含多个国家）。美国 388 条居首，其后依次为英国 141 条、中国 125 条、意大利 103 条、丹麦 64 条、德国 51 条、加拿大 49 条、西班牙 47 条、澳大利亚 43 条、印度 38 条。"
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-bibliometric-analysis-132",
+    "source": "nonclinical-delivered-report",
+    "sourcePath": "OpenScience/evals/bibliometric-analysis/results/2026-10-04-biblio-001-glp1-obesity-landscape/deliverable/deliverables/glp1-obesity-bibliometric/bibliometric-analysis-report.md",
+    "sourceSha256": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "sourceLine": 132,
+    "labelBasis": "reviewed-report-prose-scientific-content",
+    "group": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "input": {
+      "line": "表中所列 20 个国家/地区合计出现 1,332 次，超出 1,236 条记录数，说明多国合作署名普遍；全部国家节点在合作数据中共 41 个，合计 1,534 次，表中 20 个占其中的 86.8%。"
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-bibliometric-analysis-134",
+    "source": "nonclinical-delivered-report",
+    "sourcePath": "OpenScience/evals/bibliometric-analysis/results/2026-10-04-biblio-001-glp1-obesity-landscape/deliverable/deliverables/glp1-obesity-bibliometric/bibliometric-analysis-report.md",
+    "sourceSha256": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "sourceLine": 134,
+    "labelBasis": "reviewed-report-prose-scientific-content",
+    "group": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "input": {
+      "line": "以表内 1,332 次为分母〔推算〕，美国占 29.1%，英国 10.6%，中国 9.4%，前三名合计 49.1%，前五名合计 61.6%；按各国份额平方和计算的集中度为 0.124。若改以全部 41 个国家的 1,534 次为分母，同一口径下的前三名合计为 42.6%、前五名 53.5%、集中度 0.0943。两组数并列给出是因为分母取表内还是取全部国家会明显改变结论强度，而两种取法都说得通。份额的输入是各国出现频次，算法是份额及其平方和，没有模型拟合；分母为署名次数而非记录数，所以这里的百分数读作署名份额，不是论文份额。丹麦以 64 条进入前五，同时出现的高产出机构包括 Novo Nordisk（17 条）与哥本哈根大学（39 条），小国在特定治疗领域形成超比例产出聚集的迹象在此可见。"
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-bibliometric-analysis-140",
+    "source": "nonclinical-delivered-report",
+    "sourcePath": "OpenScience/evals/bibliometric-analysis/results/2026-10-04-biblio-001-glp1-obesity-landscape/deliverable/deliverables/glp1-obesity-bibliometric/bibliometric-analysis-report.md",
+    "sourceSha256": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "sourceLine": 140,
+    "labelBasis": "reviewed-report-prose-scientific-content",
+    "group": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "input": {
+      "line": "关键词网络由频次最高的 50 个节点（候选 901 个）与 1,023 条边构成。频次最高的主题词为 Obesity（717）、Glucagon-Like Peptide-1 Receptor Agonists（564）、Diabetes Mellitus, Type 2（408）、Hypoglycemic Agents（383）、Weight Loss（285）、GLP-1 receptor agonists（284）、Glucagon-Like Peptide 1（251）、Semaglutide（204）。药名类关键词中，Semaglutide 204 次、Liraglutide 130 次、Tirzepatide 104 次、Exenatide 57 次。"
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-bibliometric-analysis-142",
+    "source": "nonclinical-delivered-report",
+    "sourcePath": "OpenScience/evals/bibliometric-analysis/results/2026-10-04-biblio-001-glp1-obesity-landscape/deliverable/deliverables/glp1-obesity-bibliometric/bibliometric-analysis-report.md",
+    "sourceSha256": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "sourceLine": 142,
+    "labelBasis": "reviewed-report-prose-scientific-content",
+    "group": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "input": {
+      "line": "网络的连接看似密集，社区结构却不成立：模块度 Q 为 0.0508，平均轮廓系数 0.0406，两者都远低于可解释的阈值，Louvain 检出的分区不能当作研究群落的划分来读。网络结构更接近主题之间的连续过渡。中心性方面，Obesity 的中介中心性为 0.7830，是该网络中唯一的高枢纽，它连接的是代谢机制、心血管结局与行为干预这几片区域；Glucagon-Like Peptide-1 Receptor Agonists 次之（0.1847）。Semaglutide 与 Liraglutide 词频居前而中介中心性偏低，这些药名更多以标签形式出现，尚未承担跨子域桥接的角色。"
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-bibliometric-analysis-146",
+    "source": "nonclinical-delivered-report",
+    "sourcePath": "OpenScience/evals/bibliometric-analysis/results/2026-10-04-biblio-001-glp1-obesity-landscape/deliverable/deliverables/glp1-obesity-bibliometric/bibliometric-analysis-report.md",
+    "sourceSha256": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "sourceLine": 146,
+    "labelBasis": "reviewed-report-prose-scientific-content",
+    "group": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "input": {
+      "line": "时间演化聚类给出的同样是宽泛标签，不是精确分区。三个聚类的标签分别为 Research: Glucagon, Peptide, Receptor、Mechanisms: Glucagon, Peptide, Receptor 与 Mechanisms: Obesity, Glucagon, Receptor，活动区间均为 2015—2026 年，峰值年均为 2025 年。三者在标签上高度重叠，更像是同一主题的不同表述被算法分开；鉴于模块度偏低，本节聚类结果只作时间背景使用。"
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-bibliometric-analysis-150",
+    "source": "nonclinical-delivered-report",
+    "sourcePath": "OpenScience/evals/bibliometric-analysis/results/2026-10-04-biblio-001-glp1-obesity-landscape/deliverable/deliverables/glp1-obesity-bibliometric/bibliometric-analysis-report.md",
+    "sourceSha256": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "sourceLine": 150,
+    "labelBasis": "reviewed-report-prose-scientific-content",
+    "group": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "input": {
+      "line": "关键词频率—排名回归的观测指数为 0.79（R² = 0.9081，p < 0.001）。这一指数低于 Zipf 定律的经典取值 1，回归拟合虽好，却不能读作定律得到验证；可以确认的只是关键词使用呈头部集中形态，即少数关键词覆盖了大部分记录。"
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-bibliometric-analysis-173",
+    "source": "nonclinical-delivered-report",
+    "sourcePath": "OpenScience/evals/bibliometric-analysis/results/2026-10-04-biblio-001-glp1-obesity-landscape/deliverable/deliverables/glp1-obesity-bibliometric/bibliometric-analysis-report.md",
+    "sourceSha256": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "sourceLine": 173,
+    "labelBasis": "reviewed-report-prose-scientific-content",
+    "group": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "input": {
+      "line": "早期突现由具体药物主导（Exenatide 2015–2021、Liraglutide 2015–2020），2022 年之后重心转向 Diabetes Mellitus, Type 2 与 Glucagon-Like Peptide 1；这两项的突现窗口都只有两年，更像阶段性峰值，而不是长期趋势。Blood Glucose、Insulin、Body Weight 的窗口跨越六至九年，属于持续存在的基础关注点。Cardiovascular Diseases 自 2019 年起持续突现，时间上与减重药物结局试验的集中报道方向一致。"
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-bibliometric-analysis-177",
+    "source": "nonclinical-delivered-report",
+    "sourcePath": "OpenScience/evals/bibliometric-analysis/results/2026-10-04-biblio-001-glp1-obesity-landscape/deliverable/deliverables/glp1-obesity-bibliometric/bibliometric-analysis-report.md",
+    "sourceSha256": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "sourceLine": 177,
+    "labelBasis": "reviewed-report-prose-scientific-content",
+    "group": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "input": {
+      "line": "按综合评分排序的前沿主题如下，评分由增长、突现、新颖度与中心性四项归一化后加权得到，权重分别为 35%、25%、25%、15%："
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-bibliometric-analysis-194",
+    "source": "nonclinical-delivered-report",
+    "sourcePath": "OpenScience/evals/bibliometric-analysis/results/2026-10-04-biblio-001-glp1-obesity-landscape/deliverable/deliverables/glp1-obesity-bibliometric/bibliometric-analysis-report.md",
+    "sourceSha256": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "sourceLine": 194,
+    "labelBasis": "reviewed-report-prose-scientific-content",
+    "group": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "input": {
+      "line": "评分中只有 GLP‐1 receptor agonists 同时具备非零突现强度（11.0）与高增长，其余九项并列 0.600，突现得分为 0。这些主题的增长率同为 1.00，在低基数下即可取得，所以这一列不能读作研究规模已经扩大。它们的定位是「新近出现、值得跟踪」，而不是已形成的研究方向。"
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-bibliometric-analysis-196",
+    "source": "nonclinical-delivered-report",
+    "sourcePath": "OpenScience/evals/bibliometric-analysis/results/2026-10-04-biblio-001-glp1-obesity-landscape/deliverable/deliverables/glp1-obesity-bibliometric/bibliometric-analysis-report.md",
+    "sourceSha256": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "sourceLine": 196,
+    "labelBasis": "reviewed-report-prose-scientific-content",
+    "group": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "input": {
+      "line": "同一排序的后续条目包括 muscle loss、GIP receptor agonist、Survodutide、endoscopic sleeve gastroplasty、Substance-Related Disorders、Elective Surgical Procedures、Optic Neuropathy, Ischemic、Osteoarthritis, Hip、nutrition、glucagon-like peptide 1 receptor agonist 等，情况与上述一致：新颖度高、突现强度为零。"
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-bibliometric-analysis-198",
+    "source": "nonclinical-delivered-report",
+    "sourcePath": "OpenScience/evals/bibliometric-analysis/results/2026-10-04-biblio-001-glp1-obesity-landscape/deliverable/deliverables/glp1-obesity-bibliometric/bibliometric-analysis-report.md",
+    "sourceSha256": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "sourceLine": 198,
+    "labelBasis": "reviewed-report-prose-scientific-content",
+    "group": "00378892788a9b5a60f258b6304b1cf88884e7b54b0ae2e849b407a6925a7d21",
+    "input": {
+      "line": "把这些条目放在一起看，方向性是可辨识的。体重反弹与骨骼肌指向停药后的体成分变化；酒精使用障碍与奖赏机制指向中枢通路；儿童肥胖、颅咽管瘤与子宫内膜癌指向特殊人群与相关肿瘤风险；药物警戒与「术前管理/择期手术」指向用药人群扩大后的安全性监测与围手术期管理。这些只是提示应当跟踪的主题，不构成任何优先级建议。"
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-statistical-analysis-13",
+    "source": "nonclinical-delivered-report",
+    "sourcePath": "OpenScience/evals/statistical-analysis/results/2026-09-30-statistics-001-wdbc-group-comparison-run2/deliverable/deliverables/wdbc-mean-radius/statistical-report.md",
+    "sourceSha256": "b92965ef29fa2eb62dac66dd5df8e5efb801d62ace2e7f0b45b64e00f18cb5f4",
+    "sourceLine": 13,
+    "labelBasis": "reviewed-report-prose-scientific-content",
+    "group": "b92965ef29fa2eb62dac66dd5df8e5efb801d62ace2e7f0b45b64e00f18cb5f4",
+    "input": {
+      "line": "In the 569 supplied tumour records, mean radius is larger in malignant than in benign tumours by **5.32 units** (malignant 17.46, benign 12.15), with a **95% confidence interval of 4.85 to 5.79** from Welch's unequal-variance t interval, and **p = 1.7 × 10⁻⁶⁴** from the corresponding two-sided Welch t-test (t = 22.21, df = 289.7). Every denominator is the full 569 records: 212 malignant and 357 benign, no exclusions, no missing values."
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-statistical-analysis-15",
+    "source": "nonclinical-delivered-report",
+    "sourcePath": "OpenScience/evals/statistical-analysis/results/2026-09-30-statistics-001-wdbc-group-comparison-run2/deliverable/deliverables/wdbc-mean-radius/statistical-report.md",
+    "sourceSha256": "b92965ef29fa2eb62dac66dd5df8e5efb801d62ace2e7f0b45b64e00f18cb5f4",
+    "sourceLine": 15,
+    "labelBasis": "reviewed-report-prose-scientific-content",
+    "group": "b92965ef29fa2eb62dac66dd5df8e5efb801d62ace2e7f0b45b64e00f18cb5f4",
+    "input": {
+      "line": "The direction and the order of magnitude are stable under every alternative method tried — a pooled-variance t interval (4.91 to 5.73), a 10,000-resample bootstrap percentile interval (4.86 to 5.79), and a rank-based Mann-Whitney test (p = 2.7 × 10⁻⁶⁸). One caveat governs interpretation much more than the choice of test does: **the two groups' distributions overlap over most of their range.** 115 of the 212 malignant records (54%) fall below the largest benign value, and the best single cut-point on this one feature placed correctly only 507 of the 569 records in this sample — 62 records, about 11%, are on the wrong side of it. Mean radius therefore separates these groups on average; it does not identify which group an individual record belongs to."
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-statistical-analysis-21",
+    "source": "nonclinical-delivered-report",
+    "sourcePath": "OpenScience/evals/statistical-analysis/results/2026-09-30-statistics-001-wdbc-group-comparison-run2/deliverable/deliverables/wdbc-mean-radius/statistical-report.md",
+    "sourceSha256": "b92965ef29fa2eb62dac66dd5df8e5efb801d62ace2e7f0b45b64e00f18cb5f4",
+    "sourceLine": 21,
+    "labelBasis": "reviewed-report-prose-scientific-content",
+    "group": "b92965ef29fa2eb62dac66dd5df8e5efb801d62ace2e7f0b45b64e00f18cb5f4",
+    "input": {
+      "line": "**The target column is `breast_cancer_yn`, coded 0 = malignant and 1 = benign.** The coding is not self-evident from the column name, which reads as a yes/no flag and does not say which of \"yes\" and \"no\" is malignancy. **The supplied source metadata states the encoding directly** — its coding field maps 0 to malignant and 1 to benign — and that statement, not anything computed here, is what establishes the category meanings used throughout this report. Corroborating it, the repository that distributes the underlying dataset describes its target as `Diagnosis`, a categorical variable with values M = malignant and B = benign [4], and the supplied file has re-encoded that variable numerically. Because a direction error would invert the sign of the entire comparison, three checks were run against the data: they test whether the measurements are *consistent with* the declared encoding, and all three are."
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-statistical-analysis-23",
+    "source": "nonclinical-delivered-report",
+    "sourcePath": "OpenScience/evals/statistical-analysis/results/2026-09-30-statistics-001-wdbc-group-comparison-run2/deliverable/deliverables/wdbc-mean-radius/statistical-report.md",
+    "sourceSha256": "b92965ef29fa2eb62dac66dd5df8e5efb801d62ace2e7f0b45b64e00f18cb5f4",
+    "sourceLine": 23,
+    "labelBasis": "reviewed-report-prose-scientific-content",
+    "group": "b92965ef29fa2eb62dac66dd5df8e5efb801d62ace2e7f0b45b64e00f18cb5f4",
+    "input": {
+      "line": "1. **Feature direction.** Comparing the two groups' means one feature at a time, the label-0 mean exceeds the label-1 mean on **26 of 30 features**; the remaining **4** go the other way (and 26 + 4 exhausts the 30 features, which the analysis script asserts). The comparison is made on values standardised within the whole sample — each feature's 569-record mean subtracted and its standard deviation divided out — which puts the 30 features on a common scale. That standardisation is a single linear rescaling of all 569 records and so cannot change which group is the larger for any feature; the counts would be identical on the raw scale. This is the pattern expected if label 0 is the group with enlarged, more irregular nuclei, which is a description of the malignant phenotype. The four exceptions are low-variance shape and texture measures."
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-statistical-analysis-24",
+    "source": "nonclinical-delivered-report",
+    "sourcePath": "OpenScience/evals/statistical-analysis/results/2026-09-30-statistics-001-wdbc-group-comparison-run2/deliverable/deliverables/wdbc-mean-radius/statistical-report.md",
+    "sourceSha256": "b92965ef29fa2eb62dac66dd5df8e5efb801d62ace2e7f0b45b64e00f18cb5f4",
+    "sourceLine": 24,
+    "labelBasis": "reviewed-report-prose-scientific-content",
+    "group": "b92965ef29fa2eb62dac66dd5df8e5efb801d62ace2e7f0b45b64e00f18cb5f4",
+    "input": {
+      "line": "2. **Level of the analysis variable.** Label 0 has the larger mean radius: **17.46 versus 12.15**."
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-statistical-analysis-25",
+    "source": "nonclinical-delivered-report",
+    "sourcePath": "OpenScience/evals/statistical-analysis/results/2026-09-30-statistics-001-wdbc-group-comparison-run2/deliverable/deliverables/wdbc-mean-radius/statistical-report.md",
+    "sourceSha256": "b92965ef29fa2eb62dac66dd5df8e5efb801d62ace2e7f0b45b64e00f18cb5f4",
+    "sourceLine": 25,
+    "labelBasis": "reviewed-report-prose-scientific-content",
+    "group": "b92965ef29fa2eb62dac66dd5df8e5efb801d62ace2e7f0b45b64e00f18cb5f4",
+    "input": {
+      "line": "3. **Class sizes.** The supplied file contains **212 records labelled 0 and 357 labelled 1**. These match the class sizes of the published WDBC cohort (212 malignant, 357 benign) and 569 records in total."
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-statistical-analysis-27",
+    "source": "nonclinical-delivered-report",
+    "sourcePath": "OpenScience/evals/statistical-analysis/results/2026-09-30-statistics-001-wdbc-group-comparison-run2/deliverable/deliverables/wdbc-mean-radius/statistical-report.md",
+    "sourceSha256": "b92965ef29fa2eb62dac66dd5df8e5efb801d62ace2e7f0b45b64e00f18cb5f4",
+    "sourceLine": 27,
+    "labelBasis": "reviewed-report-prose-scientific-content",
+    "group": "b92965ef29fa2eb62dac66dd5df8e5efb801d62ace2e7f0b45b64e00f18cb5f4",
+    "input": {
+      "line": "These checks are consistency checks, not proof. Each one is a statement about the shape of the data that the declared encoding predicts, and each could in principle hold under a different labelling scheme; what makes the declared encoding correct is the source metadata, and what the checks add is that the data behave as that metadata says they should. If the encoding were nevertheless reversed, every reported difference would change sign. The three checks are what rules out a *mislabelled file*; they are not what rules out a *misstated encoding*."
+    },
+    "expected": {
+      "leakage": false
+    }
+  },
+  {
+    "id": "nonclinical-statistical-analysis-29",
+    "source": "nonclinical-delivered-report",
+    "sourcePath": "OpenScience/evals/statistical-analysis/results/2026-09-30-statistics-001-wdbc-group-comparison-run2/deliverable/deliverables/wdbc-mean-radius/statistical-report.md",
+    "sourceSha256": "b92965ef29fa2eb62dac66dd5df8e5efb801d62ace2e7f0b45b64e00f18cb5f4",
+    "sourceLine": 29,
+    "labelBasis": "reviewed-report-prose-scientific-content",
+    "group": "b92965ef29fa2eb62dac66dd5df8e5efb801d62ace2e7f0b45b64e00f18cb5f4",
+    "input": {
+      "line": "**What this means for the rest of the report:** in the tables and figures below, \"malignant\" means `breast_cancer_yn == 0` and \"benign\" means `breast_cancer_yn == 1`, and the reported difference is malignant minus benign."
+    },
+    "expected": {
+      "leakage": false
+    }
+  }
+]

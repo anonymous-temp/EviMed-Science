@@ -1,5 +1,6 @@
 import { PLATFORM_SKILL_GENERATION_MAX_PINS } from './platformSkillLimits.mjs';
 import { createPlatformSkillTelemetry } from './platformSkillTelemetry.mjs';
+import { reviewDeliveredRegister } from "./reportRegisterJudge.mjs";
 import { createHash } from "node:crypto";
 import { mkdir, readdir, rm, stat } from "node:fs/promises";
 import path from "node:path";
@@ -4010,6 +4011,7 @@ export class AgentRunStore {
     // reached no reader. Absent, a run carries none.
     /** @type {((project: any, runId: string) => Promise<any[]>) | null} */
     this.reviewNotices = typeof options.reviewNotices === "function" ? options.reviewNotices : null;
+    this.judgeService = options.judgeService ?? null;
     // Workflow-owned runs may retain a different workspace after a user changes
     // the active workspace. Null means its durable owner cannot authorize recovery.
     this.resolveRunProject = options.resolveRunProject ?? (async (project) => project);
@@ -5474,6 +5476,14 @@ export class AgentRunStore {
       this.progressTrackers.delete(runId);
     }
     if (outcome.transitioned) {
+      if (this.judgeService) {
+        const pending = this.independentWork(() => reviewDeliveredRegister({
+          project, run: result, judgeService: this.judgeService,
+          onNotices: notices => this.appendQualityNotices(project, runId, notices),
+        })).catch(() => {});
+        this.backgroundLabels.add(pending);
+        void pending.finally(() => this.backgroundLabels.delete(pending));
+      }
       try {
         await this.onRunFinished(project, result);
       } catch (error) {

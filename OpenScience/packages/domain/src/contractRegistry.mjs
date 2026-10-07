@@ -262,7 +262,7 @@ function proseHygieneIssues(input, proseFiles) {
     if (leak) {
       // The matched term is the actionable part: the line excerpt alone sent a
       // run through three rewrites of everything but the two words that tripped it.
-      issues.push(issue('runtime_leakage', `${path} line ${leak.line} names the retrieval machinery (matched "${leak.match}"): ${leak.text}`, { path, line: leak.line, check: checkIdOf(runtimeLeakageLine) }))
+      issues.push(issue('runtime_leakage', `${path} line ${leak.line} names an internal runtime identifier (matched "${leak.match}"): ${leak.text}`, { path, line: leak.line, check: checkIdOf(runtimeLeakageLine) }))
     }
     for (const citationIssue of citationIntegrityIssues(body)) {
       issues.push(issue('citation_integrity', `${path}: ${citationIssue}`, { path, check: checkIdOf(citationIntegrityIssues) }))
@@ -1624,7 +1624,7 @@ function validateEvolutionPackage(input, file, candidate) {
     } else if (candidate) {
       const inline = isRecord(value.files) ? value.files : {}
       const references = isRecord(value.filePaths) ? value.filePaths : {}
-      const safePath = resource => typeof resource === 'string' && /^(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_.-]+$/.test(resource) && !resource.split('/').some(part => part === '.' || part === '..')
+      const safePath = (/** @type {unknown} */ resource) => typeof resource === 'string' && /^(?:[A-Za-z0-9_-]+\/)*[A-Za-z0-9_.-]+$/.test(resource) && !resource.split('/').some(part => part === '.' || part === '..')
       if ((value.files !== undefined && !isRecord(value.files)) || (value.filePaths !== undefined && !isRecord(value.filePaths)) || (!Object.keys(inline).length && !Object.keys(references).length)) finding('The candidate must carry reusable artifact files or delivered file references.')
       for (const [name, artifactText] of Object.entries(inline)) if (!safePath(name) || typeof artifactText !== 'string' || /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/u.test(artifactText)) finding('Artifact paths must be relative regular UTF-8 resources.')
       for (const [name, reference] of Object.entries(references)) if (!safePath(name) || !safePath(reference) || Object.hasOwn(inline,name)) finding('Delivered artifact references must use safe relative paths and distinct artifact keys.')

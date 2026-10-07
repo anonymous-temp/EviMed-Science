@@ -51,10 +51,29 @@ import { callModelForControlPlane } from "./modelGateway.mjs";
 import { callReviewModel } from "./reviewModel.mjs";
 import { OPEN_COST_VALUE, openCostPredicate } from "./usageLedger.mjs";
 
+/** Closed decision options prevent model output from inventing an executable action.
+ * @param {any[]} options @param {unknown} value */
+export function evolutionOptionId(options, value) {
+  if (typeof value !== "string" || !options.some(item => item.id === value)) throw new HttpError(503, "evolution_refresh_unavailable", "The model selected an unknown option.");
+  return value;
+}
+
+/** The general evolution decision call shares the same explicit metering and thinking policy.
+ * @param {any} dependencies @param {typeof callModelForControlPlane} [callModel] */
+export function createEvolutionDecisionModel({ config, usageLedger, fetchImpl, owner }, callModel = callModelForControlPlane) {
+  return async (/** @type {string} */ system, /** @type {any} */ input) => {
+    const response = await callModel({ config, usageLedger, fetchImpl }, { userId: await owner(), projectId: EVOLUTION_PROJECT_ID,
+      purpose: "evolution", limits: { daily: config.evolutionDailyBudgetCny, weekly: 0 },
+      body: { model: "deepseek-flash", thinking: { type: "disabled" }, response_format: { type: "json_object" }, max_tokens: 4096,
+        messages: [{ role: "system", content: system }, { role: "user", content: JSON.stringify(input) }] }, signal: AbortSignal.timeout(120_000) });
+    return JSON.parse(response.choices?.[0]?.message?.content ?? "{}");
+  };
+}
+
 /** Compose the optional platform loop using the same ledger, runtime and inbox as research.
  * @param {any} dependencies */
 export function createEvolution({ config, store, documents, jobs, database, usageLedger, notifications, registry, runtimeManager,
-  researchSessions, agentRuns, evaluationIsolation, sourceService, autopilot, dataSemantics, controller, canRun, report = () => {}, fetchImpl = fetch }) {
+  researchSessions, agentRuns, evaluationIsolation, sourceService, autopilot, dataSemantics, controller, canRun, judgeService = null, report = () => {}, fetchImpl = fetch }) {
   if (!config.evolutionEnabled || !database || !documents || !jobs || !usageLedger) return null;
   const settingsIssues = validateEvolutionConfiguration(config);
   if (settingsIssues.length) throw new HttpError(503, "evolution_setting_invalid", `Invalid evolution setting: ${settingsIssues[0].key}.`);
@@ -115,12 +134,7 @@ export function createEvolution({ config, store, documents, jobs, database, usag
   const paperGold = createPaperGoldEvaluator({ config, usageLedger, store, agentRuns, evaluationIsolation,
     dispatch: input => runs.dispatch(input), runtimeManager, controller, fetchImpl });
   const limits = { daily: config.evolutionDailyBudgetCny, weekly: 0 };
-  const model = async (system, input) => {
-    const response = await callModelForControlPlane({ config, usageLedger, fetchImpl }, { userId: await service.owner(), projectId: EVOLUTION_PROJECT_ID,
-      purpose: "evolution", limits, body: { model: "deepseek-flash", response_format: { type: "json_object" }, max_tokens: 4096,
-        messages: [{ role: "system", content: system }, { role: "user", content: JSON.stringify(input) }] }, signal: AbortSignal.timeout(120_000) });
-    return JSON.parse(response.choices?.[0]?.message?.content ?? "{}");
-  };
+  const model = createEvolutionDecisionModel({ config, usageLedger, fetchImpl, owner: () => service.owner() });
   const referenceCuration = createEvolutionReferenceCuration({ config, controller, fetchImpl,
     write: async input => {
       const response = await callModelForControlPlane({ config, usageLedger, fetchImpl }, { userId: await service.owner(), projectId: EVOLUTION_PROJECT_ID,
@@ -172,6 +186,7 @@ export function createEvolution({ config, store, documents, jobs, database, usag
       const items = (await response.json()).message?.items ?? [];
       const evidence = items.map(item => ({ doi: item.DOI, title: item.title, published: item.published, url: item.URL }));
       const answer = await model("Select one of the supplied decision option IDs after considering the newly fetched primary publication metadata. Metadata alone cannot establish a paper's findings. Return JSON {recommended,reason}.", { decision, evidence });
+      evolutionOptionId(decision.options, answer.recommended);
       return { ...answer, evidence, family: "deepseek", retrievedAt: service.now().toISOString() };
     },
     review: async ({ decision, refreshed }) => {
@@ -181,10 +196,15 @@ export function createEvolution({ config, store, documents, jobs, database, usag
         messages: [{ role: "system", content: "Independently check this reversible research development decision using the supplied freshly retrieved sources. Clinical safety, external sending, deletion and over-budget actions must stay on the conservative path. Choose only a supplied option. Return the JSON schema." }, { role: "user", content: JSON.stringify({ decision, refreshed }) }], maxTokens: 2048 });
       return { ...result.value, ...evolutionDecisionReviewProof(config,result) };
     },
-    interpretOverride: async (decision, text) => (await model("Interpret the operator's correction as exactly one existing option. Return JSON {option}; never create an action or change permissions.", { options: decision.options, text })).option,
+    interpretOverride: async (decision, text) => {
+      const answer = await model("Interpret the operator's correction as exactly one existing option. Return JSON {option}; never create an action or change permissions.", { options: decision.options, text });
+      evolutionOptionId(decision.options, answer.option);
+      return answer.option;
+    },
     execute: async action => {
       const id = `evolution-action-${evolutionKey(action.actionId)}`, prior = await service.get(id);
       if (prior?.payload.status === "complete") return prior.payload.result;
+      evolutionOptionId(action.options, action.option);
       const selected = action.options.find(item => item.id === action.option), operation = selected.operation ?? action.option;
       let result;
       if(operation==='keep' && (await service.get(action.subjectId))?.payload.recordType==='evolution-maintenance-review') result=await maintenance.executeReview(action);
@@ -204,7 +224,7 @@ export function createEvolution({ config, store, documents, jobs, database, usag
       return result;
     },
   } });
-  const maintenance = createEvolutionMaintenance({ service, callbacks: {
+  const maintenance = createEvolutionMaintenance({ service, judgeService, callbacks: {
     proposeReview: input => decisions.propose(input),
     restorePin: pin => supply.activate(pin),
     retirePin: id => supply.retire(id),
@@ -235,7 +255,7 @@ export function createEvolution({ config, store, documents, jobs, database, usag
   } });
   const feedback = createEvolutionFeedback({ service, maintenance });
   service.callbacks.observeFeedback = feedback.observeFeedback;
-  const scout = createEvolutionScout({ config, service, runs, registry, decisions, fetchImpl,
+  const scout = createEvolutionScout({ config, service, runs, registry, decisions, fetchImpl, judgeService,
     normalizeFeatures: input => model("Normalize only missing structural fields from this preserved scout result and the supplied actual inventory. Return JSON {literatureQuery:string,implementationMissing:boolean,reason:string}. literatureQuery must preserve the named research method, not its example findings; omit the date window, which code applies. implementationMissing is true only when the described executable calculation is absent from the actual inventory; a prose mention is not an implementation. Do not infer literature counts, invent sources, change the method, or declare correctness. This is metadata extraction, not a new search or validation.", input),
     references: (card, options) => candidateEvaluator.prepareCases(card, options) });
   const verification = createEvolutionVerification({ execute: (body, options) => controller.execVerify(body, options),

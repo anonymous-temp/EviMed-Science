@@ -359,7 +359,7 @@ _QUESTION_RE = re.compile(r'[？?]|^.{0,10}(什么|为什么|怎么|如何|哪�
 _MR_KEYWORDS = {"mr", "孟德尔", "随机化", "因果", "gwas", "遗传", "暴露", "结局", "instrument", "iv"}
 
 _GREETING_PATTERNS_MR = re.compile(
-    r'^(你好|您好|hi|hello|hey|嗨|哈喽|在吗|在不在|你是谁|你是什么|介绍一下你自己|你能做什么|你有什么功能|help|帮助)',
+    r'^(你好|您好|hi|hello|hey|嗨|哈喽|在吗|在不在|你是谁|你是什么|介绍一下你自己|你能做什么|你有什么功能|help|帮助)[\s！!？?。.,，]*$',
     re.IGNORECASE,
 )
 
@@ -666,13 +666,7 @@ async def _handle_session(
                 continue
 
             if not exposure or not outcome:
-                input_lower = input_text.lower()
-                _GREETING_PATTERNS = [
-                    "你好", "你是谁", "你能做什么", "你能干什么", "帮我什么",
-                    "hello", "hi", "who are you", "what can you",
-                    "介绍", "功能", "使用", "怎么用", "帮助",
-                ]
-                is_greeting = any(p in input_lower for p in _GREETING_PATTERNS) and len(input_text) < 50
+                is_greeting = bool(_GREETING_PATTERNS_MR.fullmatch(input_text.strip()))
 
                 if is_greeting:
                     await push_typewriter(

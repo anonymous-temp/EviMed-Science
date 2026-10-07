@@ -155,7 +155,7 @@ test("every agent-scope plugin of ours carries one off switch, read from its own
 
   // Negative control: one switch moves one row, so the evaluation really reads it.
   const screeningOff = { EVIMED_SCREENING_ENABLED: "0" };
-  assert.deepEqual(ROWS.filter((row) => !isOn(row, screeningOff)).map((row) => row.id).sort(), ["evimed-review", "evimed-screening"]);
+  assert.deepEqual(ROWS.filter((row) => !isOn(row, screeningOff)).map((row) => row.id).sort(), ["evimed-duplicate-lines", "evimed-review", "evimed-screening"]);
 });
 
 /**

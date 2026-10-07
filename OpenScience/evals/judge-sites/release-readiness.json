@@ -1,0 +1,503 @@
+{
+  "schemaVersion": 1,
+  "recordedAt": "2026-10-07",
+  "branch": "codex/jev-judge-integration-20261006",
+  "baseCommit": "c1f02c3cccb28da9d3ad71c0c42627852af1decf",
+  "status": "implementation-and-partial-calibration-complete-not-a-full-release-acceptance",
+  "productionModified": false,
+  "merged": false,
+  "newQualifiedSites": [
+    "J2",
+    "J4"
+  ],
+  "model": "jev-1.13.0",
+  "policy": "New uncalibrated or changed-fingerprint sites preserve their original paths. Calibration does not withhold research delivery. Threshold recommendations are exploratory; they do not rewrite production pins.",
+  "sites": {
+    "J1": {
+      "implementation": "wired",
+      "qualification": "uncalibrated",
+      "threshold": 0.8,
+      "measurement": {
+        "pairs": 120,
+        "deleted": 9,
+        "falseDeletions": 0,
+        "deletePrecision": 1,
+        "deletePrecisionLower95": 0.7168711644368865,
+        "relatedPairs": 60,
+        "falseDeletionRateUpper95": 0.04870291331009746,
+        "retainedUnrelated": 51,
+        "baselineCompared": 8,
+        "baselineAgreement": 0,
+        "baselineCorrect": 8
+      },
+      "missing": [
+        "Only 9 confident deletions, exact lower95 precision 0.7169; insufficient deletion precision evidence.",
+        "Original thinking-enabled Flash baseline completed 8 of 120 pairs; larger batches exceeded the 15 second deadline."
+      ]
+    },
+    "J2": {
+      "implementation": "wired",
+      "qualification": "calibrated",
+      "threshold": 0.8,
+      "promptFingerprint": "dea336f70b74908d7138e7b029908f7d39396287bcafea4baf064e7cbc592e8a",
+      "calibratedAt": "2026-10-07T00:57:28.907Z",
+      "measured": 99,
+      "settled": 70,
+      "correct": 70,
+      "lower95": 0.9581066559331114,
+      "resultSha256": "7e93ba14d6e43dad03cd83c467e9e7df17f1f28361ff2626f28acdc858e97a4f",
+      "observations": "100 authored scenarios, 51 project choices; 99 returned valid judgements, 70 settled with no incorrect settlement. One provider failure preserved safe behavior. Original Flash was correct on 89/100; settled-answer agreement66 / 70.",
+      "baselineAgreement": 0.9428571428571428
+    },
+    "J3": {
+      "implementation": "wired",
+      "qualification": "uncalibrated",
+      "threshold": 0.8,
+      "measurement": {
+        "cases": 135,
+        "measured": 135,
+        "settled": 84,
+        "correct": 76,
+        "lower95": 0.8347164210516738,
+        "agreement": 0.9047619047619048,
+        "falseSpecialists": 0,
+        "baselineFalseSpecialists": 0,
+        "titleToPaperFalseSpecialists": 0,
+        "recommendation": null,
+        "independentGroups": 135,
+        "finalCorrect": 126,
+        "baselineAgreement": null,
+        "missingReleaseEvidence": [],
+        "status": "measured-not-release-certified",
+        "finalTotal": 135,
+        "finalLower95": 0.8865503814412181,
+        "baselineFinalCorrect": 123,
+        "baselineFinalAccuracy": 0.9111111111111111,
+        "noninferiorityTarget": 0.8911111111111111,
+        "titleToPaper": {
+          "cases": 50,
+          "falseSpecialists": 0,
+          "baselineFalseSpecialists": 0
+        }
+      },
+      "missing": [
+        "Critical false-specialist checks pass, but final accuracy lower95 does not meet the observed original-classifier accuracy minus 0.02.",
+        "Legacy labels from an 11-capability catalog conflict with current named meta/bibliometric/off-label deliverables; labels were preserved, not retargeted to improve scores."
+      ]
+    },
+    "J4": {
+      "implementation": "wired",
+      "qualification": "calibrated",
+      "threshold": 0.7,
+      "promptFingerprint": "3aeb08fdf2ecdc61f68011cc10548b4599d6ba00e2b010d75c1abea872200695",
+      "calibratedAt": "2026-10-07T00:58:29.077Z",
+      "measured": 140,
+      "settled": 127,
+      "correct": 127,
+      "lower95": 0.9766875895717869,
+      "resultSha256": "9a9c44523254c93d7952d1dcaedb93c7fecb65f97cd9f9a68b21afe20abae6bd",
+      "observations": "140 labelled lines, including 35 preserved lines from real statistical and bibliometric reports; 127 settled / 127 correct. Sentences share report groups, so line-level confidence bounds are not independent-report generalization."
+    },
+    "J5": {
+      "implementation": "wired",
+      "qualification": "uncalibrated",
+      "threshold": 0.8,
+      "measurement": {
+        "cases": 10,
+        "measured": 9,
+        "settled": 0,
+        "correct": 0,
+        "lower95": 0,
+        "agreement": null,
+        "falseSpecialists": 0,
+        "baselineFalseSpecialists": 0,
+        "titleToPaperFalseSpecialists": 0,
+        "recommendation": null,
+        "independentGroups": 5,
+        "finalCorrect": 0,
+        "baselineAgreement": null,
+        "missingReleaseEvidence": [
+          "approximately-100-labelled-examples"
+        ],
+        "status": "measured-not-release-certified"
+      },
+      "missing": [
+        "Online-shaped exploratory measurement only; accepted gold labels and/or original thinking-enabled baseline remain incomplete."
+      ]
+    },
+    "J6": {
+      "implementation": "wired",
+      "qualification": "uncalibrated",
+      "threshold": 0.8,
+      "measurement": {
+        "cases": 100,
+        "measured": 99,
+        "settled": 21,
+        "correct": 15,
+        "lower95": 0.5126112083011307,
+        "agreement": 0.7142857142857143,
+        "falseSpecialists": 0,
+        "baselineFalseSpecialists": 0,
+        "titleToPaperFalseSpecialists": 0,
+        "recommendation": null,
+        "independentGroups": 11,
+        "finalCorrect": 0,
+        "baselineAgreement": null,
+        "missingReleaseEvidence": [
+          "approximately-100-labelled-examples"
+        ],
+        "status": "measured-not-release-certified"
+      },
+      "missing": [
+        "Online-shaped exploratory measurement only; accepted gold labels and/or original thinking-enabled baseline remain incomplete."
+      ]
+    },
+    "J7": {
+      "implementation": "wired",
+      "qualification": "uncalibrated",
+      "threshold": 0.8,
+      "missing": [
+        "Researcher-confirmed document-type labels over all 22 choices have not been collected."
+      ]
+    },
+    "J8": {
+      "implementation": "wired",
+      "qualification": "uncalibrated",
+      "threshold": 0.9,
+      "missing": [
+        "CONSORT-TM Methods annotations do not establish a full-manuscript criterion pass; no full-manuscript false-pass comparison against thinking-enabled Flash."
+      ]
+    },
+    "J9": {
+      "implementation": "wired",
+      "qualification": "uncalibrated",
+      "threshold": 0.8,
+      "measurement": {
+        "cases": 14,
+        "measured": 9,
+        "settled": 9,
+        "correct": 9,
+        "lower95": 0.7168711644368865,
+        "agreement": 1,
+        "falseSpecialists": 0,
+        "baselineFalseSpecialists": 0,
+        "titleToPaperFalseSpecialists": 0,
+        "recommendation": null,
+        "independentGroups": 0,
+        "finalCorrect": 0,
+        "baselineAgreement": null,
+        "missingReleaseEvidence": [
+          "approximately-100-labelled-examples"
+        ],
+        "status": "measured-not-release-certified"
+      },
+      "missing": [
+        "Online-shaped exploratory measurement only; accepted gold labels and/or original thinking-enabled baseline remain incomplete."
+      ]
+    },
+    "J10": {
+      "implementation": "registry-only-caller-absent-at-base",
+      "qualification": "uncalibrated",
+      "threshold": 0.8,
+      "missing": [
+        "Approximately 100 labelled online-shaped cases and measured threshold evidence are still required."
+      ]
+    },
+    "J11": {
+      "implementation": "wired",
+      "qualification": "uncalibrated",
+      "threshold": 0.8,
+      "missing": [
+        "A reviewed live method/tool-pair corpus and current incumbent comparison are required."
+      ]
+    },
+    "J12": {
+      "implementation": "wired",
+      "qualification": "uncalibrated",
+      "threshold": 0.8,
+      "missing": [
+        "A reviewed live method/tool-pair corpus and current incumbent comparison are required."
+      ]
+    },
+    "J13": {
+      "implementation": "registry-only-caller-absent-at-base",
+      "qualification": "uncalibrated",
+      "threshold": 0.8,
+      "missing": [
+        "Approximately 100 labelled online-shaped cases and measured threshold evidence are still required."
+      ]
+    },
+    "J14": {
+      "implementation": "registry-only-caller-absent-at-base",
+      "qualification": "uncalibrated",
+      "threshold": 0.8,
+      "missing": [
+        "Approximately 100 labelled online-shaped cases and measured threshold evidence are still required."
+      ]
+    },
+    "J15": {
+      "implementation": "wired",
+      "qualification": "uncalibrated",
+      "threshold": 0.8,
+      "measurement": {
+        "cases": 90,
+        "measured": 90,
+        "settled": 62,
+        "correct": 61,
+        "lower95": 0.9257578410169836,
+        "agreement": 0.9838709677419355,
+        "falseSpecialists": 0,
+        "baselineFalseSpecialists": 0,
+        "titleToPaperFalseSpecialists": 0,
+        "recommendation": null,
+        "independentGroups": 0,
+        "finalCorrect": 0,
+        "baselineAgreement": null,
+        "missingReleaseEvidence": [
+          "approximately-100-labelled-examples"
+        ],
+        "status": "measured-not-release-certified"
+      },
+      "missing": [
+        "Online-shaped exploratory measurement only; accepted gold labels and/or original thinking-enabled baseline remain incomplete."
+      ]
+    },
+    "J16": {
+      "implementation": "wired",
+      "qualification": "uncalibrated",
+      "threshold": 0.8,
+      "missing": [
+        "A reviewed live method/tool-pair corpus and current incumbent comparison are required."
+      ]
+    },
+    "J17": {
+      "implementation": "registry-only-caller-absent-at-base",
+      "qualification": "uncalibrated",
+      "threshold": 0.8,
+      "missing": [
+        "Approximately 100 labelled online-shaped cases and measured threshold evidence are still required."
+      ]
+    },
+    "J18": {
+      "implementation": "wired",
+      "qualification": "uncalibrated",
+      "threshold": 0.8,
+      "measurement": {
+        "cases": 34,
+        "measured": 34,
+        "settled": 31,
+        "correct": 31,
+        "lower95": 0.9078859400526763,
+        "agreement": 1,
+        "falseSpecialists": 0,
+        "baselineFalseSpecialists": 0,
+        "titleToPaperFalseSpecialists": 0,
+        "recommendation": null,
+        "independentGroups": 0,
+        "finalCorrect": 0,
+        "baselineAgreement": null,
+        "missingReleaseEvidence": [
+          "approximately-100-labelled-examples"
+        ],
+        "status": "measured-not-release-certified"
+      },
+      "missing": [
+        "Online-shaped exploratory measurement only; accepted gold labels and/or original thinking-enabled baseline remain incomplete."
+      ]
+    },
+    "J19": {
+      "implementation": "wired",
+      "qualification": "uncalibrated",
+      "threshold": 0.8,
+      "measurement": {
+        "cases": 13,
+        "measured": 13,
+        "settled": 12,
+        "correct": 12,
+        "lower95": 0.7790778080544442,
+        "agreement": 1,
+        "falseSpecialists": 0,
+        "baselineFalseSpecialists": 0,
+        "titleToPaperFalseSpecialists": 0,
+        "recommendation": null,
+        "independentGroups": 0,
+        "finalCorrect": 0,
+        "baselineAgreement": null,
+        "missingReleaseEvidence": [
+          "approximately-100-labelled-examples"
+        ],
+        "status": "measured-not-release-certified"
+      },
+      "missing": [
+        "Online-shaped exploratory measurement only; accepted gold labels and/or original thinking-enabled baseline remain incomplete."
+      ]
+    },
+    "J20": {
+      "implementation": "wired",
+      "qualification": "uncalibrated",
+      "threshold": 0.8,
+      "measurement": {
+        "cases": 20,
+        "measured": 20,
+        "settled": 20,
+        "correct": 20,
+        "lower95": 0.8608916593317348,
+        "agreement": 1,
+        "falseSpecialists": 0,
+        "baselineFalseSpecialists": 0,
+        "titleToPaperFalseSpecialists": 0,
+        "recommendation": null,
+        "independentGroups": 0,
+        "finalCorrect": 0,
+        "baselineAgreement": null,
+        "missingReleaseEvidence": [
+          "approximately-100-labelled-examples"
+        ],
+        "status": "measured-not-release-certified"
+      },
+      "missing": [
+        "Online-shaped exploratory measurement only; accepted gold labels and/or original thinking-enabled baseline remain incomplete."
+      ]
+    },
+    "J21": {
+      "implementation": "wired",
+      "qualification": "uncalibrated",
+      "threshold": 0.8,
+      "missing": [
+        "Approximately 100 labelled online-shaped cases and measured threshold evidence are still required."
+      ]
+    },
+    "J22": {
+      "implementation": "wired",
+      "qualification": "uncalibrated",
+      "threshold": 0.8,
+      "missing": [
+        "Approximately 100 labelled online-shaped cases and measured threshold evidence are still required."
+      ]
+    },
+    "meta-evidence-role": {
+      "implementation": "wired",
+      "qualification": "uncalibrated",
+      "threshold": 0.8,
+      "missing": [
+        "Approximately 100 labelled online-shaped cases and measured threshold evidence are still required."
+      ]
+    },
+    "peer-review-checklist": {
+      "implementation": "wired",
+      "qualification": "uncalibrated",
+      "threshold": 0.8,
+      "missing": [
+        "Approximately 100 labelled online-shaped cases and measured threshold evidence are still required."
+      ]
+    }
+  },
+  "privateEvidence": {
+    "intent-calibration-v3.json": {
+      "file": "probes/2026-10-06-jev-integration/intent-calibration-v3.json",
+      "sha256": "7e93ba14d6e43dad03cd83c467e9e7df17f1f28361ff2626f28acdc858e97a4f"
+    },
+    "routing-calibration-v3.json": {
+      "file": "probes/2026-10-06-jev-integration/routing-calibration-v3.json",
+      "sha256": "c5e328b9a5739cf0759657f13fb238e90acc75cd8a080b5c5a879d288275cd7e"
+    },
+    "register-calibration-v3.json": {
+      "file": "probes/2026-10-06-jev-integration/register-calibration-v3.json",
+      "sha256": "9a9c44523254c93d7952d1dcaedb93c7fecb65f97cd9f9a68b21afe20abae6bd"
+    },
+    "secondary-sites-calibration.json": {
+      "file": "probes/2026-10-06-jev-integration/secondary-sites-calibration.json",
+      "sha256": "38faa43c392c5b3c244a733db6880cc61680a253b5a843fc09db205ecc9baac9"
+    },
+    "J1-120-method-pairs.json": {
+      "file": "probes/2026-10-06-jev-integration/J1-120-method-pairs.json",
+      "sha256": "d74834d2b59dcf684c35a37054530e5bcc58d653b059824926e211e17fec8b68"
+    },
+    "latency-production-host.json": {
+      "file": "probes/2026-10-06-jev-integration/latency-production-host.json",
+      "sha256": "876c7f5bce41bf769d57187488d26ae4e4488eca007c7a46910f6f3ffd6d49b6"
+    },
+    "routing-final-replay-v2.json": {
+      "file": "probes/2026-10-06-jev-integration/routing-final-replay-v2.json",
+      "sha256": "eac07d0e013832789b53a20a71a6497f74bd0bb07acbe4c0dc512fef3f868997"
+    },
+    "manifest.json": {
+      "file": "acceptance/jev-runtime-20261007/manifest.json",
+      "sha256": "786582276d305d3f3d2ceca47995944ce642d404a1433141bda62daef4c272b3"
+    },
+    "report-register-results.json": {
+      "file": "acceptance/jev-runtime-20261007/report-register-results.json",
+      "sha256": "2f8af19a4675e2e4fe5a359bb853b31585dc13b3141d97fe4dbd3c9dda9dba76"
+    },
+    "engine-builds/results.json": {
+      "file": "acceptance/jev-runtime-20261007/engine-builds/results.json",
+      "sha256": "21861a3afcff1a46b49867d6eb24c934645c00dbd0210376ea2a43ce31242e22"
+    }
+  },
+  "releaseRequirements": [
+    "Refresh the deployment tool-probe evidence: current capability audit references 40 tools while this source registry has 54; 13 have never been probed and source identity is absent.",
+    "Rebuild and release the runtime for screening and duplicate-log changes, and run engine incremental release for shared-client and engine changes after team review.",
+    "Observe each released batch for seven days; inspect per-site settled/escalated/fallback ratios and first three days of per-account learning spend.",
+    "Rebase or integrate the later release-line modules before wiring J10/J17, J13 and J14; those callers do not exist at this plan base.",
+    "Collect the missing human-reviewed and full-manuscript reference labels before qualifying remaining sites; weak incumbent labels and synthetic smoke controls are not independent acceptance."
+  ],
+  "frontierSnapshot": {
+    "sha256": "00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb",
+    "screeningRows": 26812,
+    "eventItemRows": 12868,
+    "eventLinks": 41,
+    "eventRevisions": 246,
+    "operatorMergeSplitLabels": 0,
+    "access": "read-only production transaction; private compressed snapshot retained outside Git"
+  },
+  "runtimeVerification": {
+    "kernel": "0.1.7-rc.2",
+    "model": "deepseek-flash",
+    "duplicateLogs": {
+      "inputCharacters": 33024,
+      "outputCharacters": 69,
+      "repetitionsPreserved": 1000,
+      "scientificRowsPreserved": 1000
+    },
+    "screening": {
+      "requested": 4,
+      "included": 2,
+      "excluded": 1,
+      "unclear": 1,
+      "failed": 0,
+      "scope": "Authentic publication subset plus explicitly labelled title-only and damaged-record controls, not a full 119 record rerun."
+    },
+    "reportRegister": {
+      "actualNativeReplyNotices": 0,
+      "injectedPositiveNotices": 1,
+      "terminalRunAndArtifactUnchanged": true
+    },
+    "limits": [
+      "Composed classifier-to-native trajectory, not full hosted browser/admission acceptance.",
+      "Supplement was sent after the prior native turn settled, not overlapping correction.",
+      "Routing template subsequently changed; current template is covered by 135 live classifier cases but not a new complete native trajectory."
+    ]
+  },
+  "engineBuilds": {
+    "count": 6,
+    "checks": [
+      "shared-client import",
+      "source compilation"
+    ],
+    "scope": "Offline source delta builds against cached bases; not full dependency installation or production activation.",
+    "temporaryImagesRemoved": true
+  },
+  "laterEvolution2Points": {
+    "status": "deferred-with-own-phase",
+    "reason": "Plan section4.5 schedules these with Evolution2, not as an independent feature release."
+  },
+  "validation": {
+    "typechecks": "All five final project typechecks passed serially.",
+    "webBuild": "build:web passed.",
+    "mcp": "902 research tests (1 skipped) and 9 memory tests passed.",
+    "server": "7251 tests:6029 passed,1214 skipped,8 initial failures. All8 were corrected and their full affected files passed focused reruns; no failure was skipped or hidden.",
+    "web": "2253passed in broad run;12resource-pressure failures passed in serial191test rerun.",
+    "audits": "Source secrets, dependency vulnerabilities, hosted compliance, SaaS alignment, manifests/skill digests passed. Capability live-probe evidence audit remains red as listed above.",
+    "finalAdditionalChecks": "Focused domain regression, calibration-pin binding, report advisory behavior, evaluator final dispatch, shared client builds and regenerated tool graph checks passed. Final server ESLint/typecheck passed."
+  }
+}

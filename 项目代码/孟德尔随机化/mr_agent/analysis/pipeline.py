@@ -5,6 +5,16 @@
 
 from __future__ import annotations
 
+try:
+    from evimed_judge import ask as judge_ask, ask_async as judge_ask_async
+except ImportError:
+    def judge_ask(*args, **kwargs):
+        return None
+
+    async def judge_ask_async(*args, **kwargs):
+        return None
+
+
 import logging
 import re
 import tempfile
@@ -419,19 +429,42 @@ class MRPipeline:
         for term, entries in gwas_map.items():
             if not entries:
                 continue
-            formatted = gwas.format_gwas_for_llm(entries)
-            prompt = GWAS_ID_SELECT.format(trait=term, datasets=formatted)
-            result = self.llm.chat_structured(
-                prompt=prompt, schema=GWAS_ID_SCHEMA, system=SYSTEM_MR_SCIENTIST,
-            )
-            logger.info(f"GWAS ID选择 '{term}': LLM返回={result}")
-            raw_ids = (
-                result.get("selected_ids")
-                or result.get("selected_gwas_ids")
-                or []
-            )
-            ids = self._validate_selected_ids(raw_ids)
-            logger.info(f"GWAS ID选择 '{term}': 有效IDs={ids}")
+            available = {entry.gwas_id for entry in entries}
+            submitted = {entry.gwas_id for entry in entries[:50]}
+            def original_selection(term=term, entries=tuple(entries), available=frozenset(available)):
+                result = self.llm.chat_structured(
+                    prompt=GWAS_ID_SELECT.format(trait=term, datasets=gwas.format_gwas_for_llm(entries)),
+                    schema=GWAS_ID_SCHEMA, system=SYSTEM_MR_SCIENTIST,
+                )
+                raw_ids = result.get("selected_ids") or result.get("selected_gwas_ids") or []
+                return {"selectedIds": [gid for gid in self._validate_selected_ids(raw_ids) if gid in available]}
+
+            judgment = judge_ask("J9", {"trait": term, "candidates": [
+                {"id": entry.gwas_id, "trait": entry.trait, "description": f"Population: {entry.population}; sample size: {entry.sample_size}; year: {entry.year}"} for entry in entries[:50]
+            ]}, baseline=original_selection)
+            ids = []
+            if isinstance(judgment, dict) and isinstance(judgment.get("candidates"), list):
+                ranked = [row for row in judgment["candidates"] if isinstance(row, dict)
+                          and isinstance(row.get("id"), str) and row.get("id") in submitted and isinstance(row.get("relevance"), (float, int))
+                          and not isinstance(row.get("relevance"), bool) and 0.9 <= row["relevance"] <= 1]
+                counts = {}
+                for row in judgment["candidates"]:
+                    if isinstance(row, dict) and isinstance(row.get("id"), str):
+                        counts[row["id"]] = counts.get(row["id"], 0) + 1
+                ranked = [row for row in ranked if counts[row["id"]] == 1]
+                ranked.sort(key=lambda row: row["relevance"], reverse=True)
+                ids = [row["id"] for row in ranked[:1]]
+            if not ids:
+                try:
+                    ids = original_selection()["selectedIds"]
+                except Exception:
+                    ids = []
+            if not ids:
+                exact = entries[0] if entries[0].trait.strip().casefold() == term.strip().casefold() else None
+                if exact:
+                    ids = [exact.gwas_id]
+                else:
+                    self.on_progress(f"未能可靠匹配 {term} 的GWAS，跳过该性状", 0.40)
             if ids:
                 selected[term] = ids
                 self.on_progress(f"已选择 {term} 的GWAS: {', '.join(ids)}", 0.40)

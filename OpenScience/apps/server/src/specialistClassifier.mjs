@@ -1,11 +1,9 @@
 // LLM-based open-domain routing (item 10b), an OPTIONAL augmentation of the
 // deterministic regex router in specialistRouting.mjs.
 //
-// Safety contract: this classifier never runs before the deterministic router
-// and never overrides it. server.mjs consults it ONLY when the regex rules
-// return null, so every clinical / high-risk-medicine / named-specialty match
-// the regex already makes is preserved. The classifier can therefore only ADD
-// routes the regex missed, never remove one — it cannot reduce safety coverage.
+// Bound sessions, explicit selections and named deliverables precede this
+// classifier. The commissioning-verb rules remain the net beneath an absent
+// verdict; an affirmative open-domain verdict is preserved.
 // It is also fully fail-safe: any disabled flag, missing key, timeout, bad
 // response, low confidence, or unknown agent id resolves to null (open-domain),
 // never an exception and never a blocked dispatch.
@@ -70,12 +68,13 @@ const classifierInstructions = [
 export class SpecialistClassifier {
   /**
    * @param {Record<string, any>} config
-   * @param {{ fetchImpl?: typeof fetch, usageLedger?: any }} [options]
+   * @param {{ fetchImpl?: typeof fetch, usageLedger?: any, judgeService?: any }} [options]
    */
-  constructor(config, { fetchImpl = globalThis.fetch, usageLedger = null } = {}) {
+  constructor(config, { fetchImpl = globalThis.fetch, usageLedger = null, judgeService = null } = {}) {
     this.config = config;
     this.fetchImpl = fetchImpl;
     this.usageLedger = usageLedger;
+    this.judgeService = judgeService;
     this.enabled = config?.llmRoutingEnabled === true;
     const threshold = Number(config?.llmRoutingConfidenceThreshold);
     this.threshold = Number.isFinite(threshold) ? Math.max(0, Math.min(1, threshold)) : 0.75;
@@ -117,9 +116,47 @@ export class SpecialistClassifier {
    *   project the question belongs to, which the classification is charged to
    */
   async classify(query, agents, trace, owner = null) {
-    if (!this.available) return null;
+    if (!this.enabled) return null;
     if (typeof query !== "string" || !query.trim()) return null;
     if (!Array.isArray(agents) || agents.length === 0) return null;
+    if (this.judgeService) {
+      try {
+        const decision = await this.judgeService.judge("J3", {
+          question: query,
+          capabilities: agents.map(agent => ({ id: agent.id, title: agent.title ?? agent.id,
+            description: agent.description ?? "", requiredInputs: agent.requiredInputs ?? [], starterPrompts: agent.starterPrompts ?? [] })),
+        }, {
+          userId: owner?.userId ?? "", projectId: owner?.projectId ?? "",
+          baseline: async () => {
+            const baselineTrace = {};
+            const old = await this.classifyWithModel(query, agents, baselineTrace, owner);
+            if (!old && baselineTrace.verdict !== "none") throw new Error("routing_baseline_unavailable");
+            return { value: { agentId: old?.agentId ?? "none" } };
+          },
+        });
+        if (decision.outcome === "escalated") return null;
+        if (decision.outcome === "settled") {
+          if (decision.value?.agentId === "none") {
+            if (trace) trace.verdict = "none";
+            return null;
+          }
+          const selected = agents.find(agent => agent.id === decision.value?.agentId);
+          if (!selected) return null;
+          return Object.freeze({ agentId: selected.id, agentVersion: selected.version,
+            runtimeAgent: selected.runtimeAgent, reason: `jev:${Number(decision.confidence).toFixed(2)}`,
+            confidence: decision.confidence });
+        }
+      } catch { /* A failed optional judge falls through to the incumbent. */ }
+    }
+    return this.classifyWithModel(query, agents, trace, owner);
+  }
+
+  /** The original classifier is also the independent drift comparator.
+   * @param {string} query @param {any[]} agents
+   * @param {{failure?:string,verdict?:string}} [trace]
+   * @param {{userId:string,projectId:string}|null} [owner] */
+  async classifyWithModel(query, agents, trace, owner = null) {
+    if (!this.available) return null;
     const byId = new Map(agents.map((agent) => [agent.id, agent]));
     // The catalog was an id, a title, and a third of a description — enough to
     // match a topic and not enough to tell one deliverable from another. What

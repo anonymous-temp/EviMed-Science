@@ -1,3 +1,6 @@
+import { jevTransport } from "./jevTransport.mjs";
+import { createJudgeService } from './judgeService.mjs';
+import { createJudgeGatewayHandler, JUDGE_GATEWAY_PATH } from './judgeGateway.mjs';
 import { renderEvolutionToolContext } from './evolutionToolContext.mjs';
 import { routeExplicitEvolutionTool } from './evolutionToolRouting.mjs';
 import { DocumentExportService, freezeArtifactDocument, freezeResultVersionDocument } from "./documentExport.mjs";
@@ -84,7 +87,7 @@ import { createLearningRuntime } from "./learningRuntime.mjs";
 import { EVALUATION_JUDGE_LIMITS, evaluateLearnedMethod } from "./learningEvaluation.mjs";
 import { freezeLearningBaseline } from "./learningBaseline.mjs";
 import { MethodDistillationRuns } from "./methodDistillationRuns.mjs";
-import { MethodConsolidation } from "./methodConsolidation.mjs";
+import { MethodConsolidation, createMethodScreenBaseline } from "./methodConsolidation.mjs";
 import { HandbookConsolidation } from "./handbookConsolidation.mjs";
 import { NativeHandbookContext } from "./nativeHandbookContext.mjs";
 import { createOwnedHandbookSelector, createOwnedResearchContext, remainingHandbookPromptBytes } from "./ownedResearchContext.mjs";
@@ -1085,6 +1088,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // `overrides.usageLedger` is for tests that need the ledger's interface
   // without a database, as `researchMemory` and `connectorCredentials` are.
   const usageLedger = overrides.usageLedger ?? (productDatabase ? new UsageLedger(productDatabase) : null);
+  const judgeService = overrides.judgeService ?? createJudgeService({config,usageLedger,database:productDatabase,fetchImpl:overrides.jevFetch});
+  const judgeGatewayHandler = createJudgeGatewayHandler({config,judgeService,runtimeManager:{assertActiveModelGatewayToken: token => runtimeManager.assertActiveModelGatewayToken(token)}});
   const notificationService = productDatabase ? new NotificationService(productDatabase) : null;
   const notificationRoutes = createNotificationRoutes({ store, service: notificationService, maxJsonBytes: config.maxJsonBytes });
   // Alertmanager's deliveries, into the operators' inbox (alertReceiver.mjs).
@@ -1425,6 +1430,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // A file that arrives with new bytes for one the project already held is a source change: what rests on the old
   // document is labelled and told (N15). `resultImpacts` is composed below; the hook runs only after boot.
   const sourceService = productDocuments && productJobs ? new SourceService(productDocuments, productJobs, {
+    judgeService,
     afterReplace: event => resultImpacts?.reconcileReplacement(event.userId, event) ?? Promise.resolve(null),
     report: code => { void securityAudit(config, "source.replacement", "failed", { code }).catch(() => {}); },
   }) : null;
@@ -1683,7 +1689,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     }, { fetchImpl: overrides.kbEmbeddingFetch ?? globalThis.fetch });
     const ingest = new FrontierIngest({ database: productDatabase, plugin: client, vocabulary,
       dimension: config.kbEmbeddingDimension, pollMs: config.knowledgePluginPollMs });
-    const editor = new FrontierEditor(config, { usageLedger, fetchImpl: overrides.frontierModelFetch ?? globalThis.fetch });
+    const editor = new FrontierEditor(config, { judgeService, usageLedger, fetchImpl: overrides.frontierModelFetch ?? globalThis.fetch });
     const pipeline = new FrontierPipeline({ database: productDatabase, editor, plugin: client, embedder, config,
       workerId: randomId("frontier-") });
     // One implementation of "today's spend": the pipeline's, which it gates on.
@@ -2145,6 +2151,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     audit: (event, status, details) => securityAudit(config, event, status, details),
   });
   const specialistClassifier = new SpecialistClassifier(config, {
+    judgeService,
     fetchImpl: overrides.specialistClassifierFetch ?? globalThis.fetch,
     usageLedger,
   });
@@ -2476,7 +2483,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   let review = null;
   if (config.reviewEnabled && productDatabase) {
     const service = new ReviewService({
-      config, database: productDatabase, jobs: productJobs, usageLedger, runtimeManager, store, agentRegistry,
+      config, database: productDatabase, jobs: productJobs, usageLedger, judgeService, runtimeManager, store, agentRegistry,
       attributeRun: (input) => attributeRun(input),
       notifications: notificationService,
       imService: { sendRunCorrection: (userId, projectId, runId, text) => im?.service?.sendRunCorrection?.(userId, projectId, runId, text) },
@@ -2563,6 +2570,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       ?? (credits ? ({ capabilityId }) => credits.service.estimate(capabilityId) : null),
   });
   agentRuns = new AgentRunStore(researchSessions, {
+    judgeService,
     agentRegistry,
     captureRuntimeEgressProof: (project, run) => config.evolutionEnabled === true && isEvolutionProject(project.id)
       ? runtimeManager.captureRunEgressProof({ project, runId: run.id, phase: 'start' }) : null,
@@ -3233,6 +3241,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         && !(await memoryPausedFor(researchMemory, userId, projectId)).learning,
     }));
     const consolidation = new MethodConsolidation({
+      judgeService,
+      screenBaseline: createMethodScreenBaseline({ config, usageLedger }),
       handbookConsolidation: { run: async (input) => (await handbookConsolidation).run(input) },
       platformTools: async () => evolution ? evolution.service.availableTools({}) : [],
       dispatch: dispatchLearningRun,
@@ -3740,7 +3750,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   }
   // IM: Feishu, the channel port and the own-app reservations (imService.mjs).
   const im = createImModule({
-    config, database: productDatabase, credentials: connectorCredentials, notifications: notificationService,
+    judgeService,    config, database: productDatabase, credentials: connectorCredentials, notifications: notificationService,
     users: store, agentRuns, runtimeManager, usageLedger, maxJsonBytes: config.maxJsonBytes,
     audit: (event, status, details) => securityAudit(config, event, status, details),
     dispatchRun: ({ user, project, sessionId, dispatchId, text }) => dispatchChannelRun(user, project, sessionId, dispatchId, text),
@@ -3928,6 +3938,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       return { markdown: String(await readFileNoFollow(project.workspaceDir, file, "utf8")) };
     };
     const marketDeps = {
+      judgeService,
       store: new GeoMarketStore(productDatabase), market: marketClient, webReader, articleBody, config, timeZone: geoTimeZone,
       notify: (/** @type {any} */ event) => notifier.textChanged(event),
       alertOperator: (/** @type {any} */ event) => notifier.alertOperator(event),
@@ -3935,6 +3946,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     /** @type {GeoOrchestrator | null} */
     let orchestrator = null;
     const measureDeps = {
+      judgeService,
       store: new GeoMeasureStore(productDatabase), config, usageLedger, inclusion, state: geoMeasureState(),
       notify: (/** @type {any} */ event) => notifier.measurement(event),
       alertOperator: (/** @type {any} */ event) => notifier.alertOperator(event),
@@ -4213,7 +4225,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   }
   // A submission's independent review: started, asked after, answered
   // (reviewGateway.mjs); off, it answers `review_disabled`.
-  evolution = createEvolution({ config, store, documents: productDocuments, jobs: productJobs, database: productDatabase,
+  evolution = createEvolution({ judgeService, config, store, documents: productDocuments, jobs: productJobs, database: productDatabase,
     usageLedger, notifications: notificationService, registry: agentRegistry, runtimeManager, researchSessions, agentRuns,
     evaluationIsolation, sourceService, autopilot: autopilotService, dataSemantics, controller: overrides.evolutionController ?? new RuntimeControllerClient(config),
     canRun: () => maintenanceService ? maintenanceService.claimingAllowed() : !productDatabase,
@@ -4567,6 +4579,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         ? connectorCredentialGatewayHandler
       : pathname === ENGINE_USAGE_PATH
         ? engineUsageHandler
+      : pathname === JUDGE_GATEWAY_PATH
+        ? judgeGatewayHandler
       : pathname === ENGINE_MODEL_TOKEN_PATH
         ? engineModelTokenHandler
         : pathname === WEB_SEARCH_GATEWAY_PATH
@@ -4721,6 +4735,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
 
       if (pathname === "/api/ops/metrics" && (req.method === "GET" || req.method === "HEAD")) {
         await sendOperatorMetrics(req, res, {
+          judgeService,
           config,
           store,
           taskManager,
@@ -6745,6 +6760,8 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       await im.worker?.close();
       await frontier?.worker.close();
       await review?.worker.close();
+      await judgeService.close();
+      jevTransport.close();
       await geo?.worker?.close?.();
       await vcr?.worker?.close?.();
       await documentExportWorker?.close();
@@ -7546,7 +7563,7 @@ function addHistogramMetric(lines, name, help, series) {
   }
 }
 
-async function operatorMetricsText({ config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null }) {
+async function operatorMetricsText({ judgeService = null, config, store, taskManager, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, operationalMetrics, activeCommands, memorySubstrate = null, runMetrics = null, imMetrics = null, webReader = null, sourceUpdates = null, edgeProxy = null, frontier = null, review = null, geo = null, vcr = null, credits = null, learning = null, autopilotPlanner = null, alertReceiver = null, availability = null, eventPump = null }) {
   const readiness = await readinessStatus(config, store, runtimeManager, researchMemory, memoryIndexWorker, usageLedger, notificationService, documentParser, openList, productDatabase, memorySubstrate, frontier, review, geo, vcr, credits);
   const memory = process.memoryUsage();
   const cpu = process.resourceUsage();
@@ -7936,6 +7953,12 @@ async function operatorMetricsText({ config, store, taskManager, runtimeManager,
       "counter", { value: Number(store.expiredSessionsPurged) || 0 });
   }
 
+  const judgeRows=judgeService?.metrics()??[];
+  addMetric(lines,'open_science_jev_decisions_total','Registered Jev decisions by site.','counter',judgeRows.filter(row=>['settled','escalated','fallback'].includes(row.outcome)).map(row=>({value:row.value,labels:{site:row.site,outcome:row.outcome}})));
+  addMetric(lines,'open_science_jev_requests_total','Registered Jev calls by site.','counter',(judgeService?.requestMetrics()??[]).map(row=>({value:row.value,labels:{site:row.site,outcome:row.outcome}})));
+  const driftRows=await judgeService?.driftMetrics().catch(()=>[])??[];
+  addMetric(lines,'open_science_jev_drift_below_baseline_seven_days','Seven consecutive observed UTC days below calibrated baseline.','gauge',driftRows.map(row=>({value:row.belowBaselineSevenDays?1:0,labels:{site:row.site}})));
+  addMetric(lines,'open_science_jev_baseline_agreement','Observed agreement against trusted baseline; absent samples are omitted.','gauge',driftRows.filter(row=>row.agreement!==null).map(row=>({value:row.agreement,labels:{site:row.site}})));
   return `${lines.join("\n")}\n`;
 }
 
@@ -8075,6 +8098,7 @@ async function readinessStatus(config, store, runtimeManager, researchMemory = n
     // the platform that cannot be reached is a warning on a green check.
     frontier: await readinessCheck(async () => frontierReadiness({ config, frontier, database: productDatabase })),
     // The independent reviewer: red only for its own invariants (reviewService.mjs).
+    jev: {required:false, ok:true, ...createJudgeService({config}).status()},
     review: await readinessCheck(async () => (review ? review.service.readiness() : config.reviewEnabled
       ? Promise.reject(readinessFailure("review_unavailable", { reason: productDatabase ? "not_composed" : "no_product_database" }))
       : { required: false, enabled: false })),

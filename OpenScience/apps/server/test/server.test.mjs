@@ -837,6 +837,8 @@ test("readiness reports writable data storage and static asset availability", as
     assert.equal(res.status, 200);
     const body = (await res.json()).data;
     assert.equal(body.ok, true);
+    assert.equal(body.checks.jev.ok, true);
+    assert.equal(body.checks.jev.required, false);
     assert.equal(body.checks.dataDir.ok, true);
     assert.equal(body.checks.dataDir.symlink, false);
     assert.equal(body.checks.examples.ok, true);

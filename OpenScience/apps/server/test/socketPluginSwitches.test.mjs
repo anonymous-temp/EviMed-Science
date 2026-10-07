@@ -34,14 +34,15 @@ function withLever(value, run) {
   }
 }
 
-test("each switch is read by its own plugin's preset row, off only at 0", async () => {
+test("each switch is read by its own plugin's preset row with its declared enablement", async () => {
   const preset = await readFile(path.join(repoRoot, "packages/socket/presets/evimed-universal/agent.cordis.yml"), "utf8");
   const ids = Object.keys(SOCKET_PLUGIN_SWITCHES);
-  assert.equal(ids.length, 6, `found ${ids.length} switches; the table is wrong, not the preset`);
+  assert.equal(ids.length, 7, `found ${ids.length} switches; the table is wrong, not the preset`);
   for (const [id, name] of Object.entries(SOCKET_PLUGIN_SWITCHES)) {
     // The row from its id to the next row at any depth.
     const row = new RegExp(`- id: ${id}\\n([\\s\\S]*?)(?=\\n\\s*- id: |$)`).exec(preset)?.[1] ?? "";
-    assert.match(row, new RegExp(`enabled: !!js process\\.env\\.${name} !== '0'`), `${id}'s row does not read ${name}`);
+    const condition = id === "evimed-duplicate-lines" ? "=== '1'" : "!== '0'";
+    assert.match(row, new RegExp(`enabled: !!js process\\.env\\.${name} ${condition}`), `${id}'s row does not read ${name}`);
   }
 });
 
@@ -67,7 +68,7 @@ test("the deployment names the plugins to switch off, and a name that switches n
     ["evimed-screening", "evimed-compaction"],
   );
   assert.throws(() => withLever("evimed-screening,screening", () => loadConfig({ rootDir: repoRoot })),
-    /OPEN_SCIENCE_RUNTIME_DISABLED_SOCKET_PLUGINS must name plugins among evimed-guidance, .*got "screening"/);
+    /OPEN_SCIENCE_RUNTIME_DISABLED_SOCKET_PLUGINS must name plugins among evimed-duplicate-lines, evimed-guidance, .*got "screening"/);
 });
 
 test("the launch plan writes the switches into the container", async () => {

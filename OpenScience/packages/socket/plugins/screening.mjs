@@ -185,7 +185,8 @@ export async function apply(ctx, config) {
           screened: verdicts.length,
           requested: records.length,
           included,
-          excluded: verdicts.length - included,
+          excluded: verdicts.filter((verdict) => verdict?.decision === 'exclude').length,
+          unclear: verdicts.filter((verdict) => verdict?.decision === 'unclear').length,
           batches: batches.length,
           ledgerPath: normalized,
           // A batch that failed is reported, never silently dropped: a

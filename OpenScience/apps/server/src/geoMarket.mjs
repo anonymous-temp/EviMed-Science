@@ -267,6 +267,7 @@ const DAY = 24 * HOUR;
 /**
  * @typedef {object} MarketDeps
  * @property {any} store a `GeoMarketStore` (or its double)
+ * @property {any} [judgeService]
  * @property {any} [market] a `MediaMarketClient`; absent or unconfigured = no network call
  * @property {{ read: (url: string, options?: { signal?: AbortSignal }) => Promise<{ receipt: any, text: string }> } | null} [webReader]
  * @property {(article: any, project: any) => Promise<{ title?: string, markdown?: string, html?: string }>} [articleBody]
@@ -678,6 +679,7 @@ export async function tickCatalogue(deps) {
   if (!ctx.configured) return { skipped: "market_unconfigured" };
   const counts = { rows: 0, pages: 0, invalid: 0, blacklisted: 0, priceChanges: 0, unavailable: 0, complete: /** @type {Record<string, boolean>} */ ({}),
     domainChecks: 0, domainsVerified: 0, errors: /** @type {string[]} */ ([]) };
+  const remarkJudgments = new Map();
   for (const mediaType of MEDIA_TYPES) {
     const categories = await loadCategories(ctx, /** @type {"website" | "wemedia"} */ (mediaType));
     const started = ctx.now().toISOString();
@@ -692,7 +694,28 @@ export async function tickCatalogue(deps) {
         const existing = new Map((await ctx.store.getMediaRows(mediaType, rows.map((row) => row.resourceId))).map((row) => [row.resourceId, row]));
         const syncedAt = ctx.now().toISOString();
         const mapped = rows.map((row) => catalogueRow(row, /** @type {"website" | "wemedia"} */ (mediaType), categories, existing.get(row.resourceId), syncedAt));
+        // Cache identical remarks for this sync; repeated catalogue text is judged once.
         for (const row of mapped) {
+          if (row.remarks && deps.judgeService) {
+            try {
+              let result = remarkJudgments.get(row.remarks);
+              if (!result) {
+                result = await deps.judgeService.judge("J22", { remark: row.remarks }, { userId: ctx.config.operatorUsers?.[0], projectId: "evimed-geo-market", module: "geo" });
+                remarkJudgments.set(row.remarks, result);
+              }
+              if (['settled', 'escalated'].includes(result?.outcome) && typeof result.value?.blacklisted === "boolean") {
+                const value = result.value;
+                row.blacklisted ||= value.blacklisted || value.medicalExcluded || value.contactRequired;
+                if (row.blacklisted && !row.blacklistReason) row.blacklistReason = "semantic_remark";
+                row.flags = { ...row.flags, remarkJudgment: value, urgent: value.urgent === true, linkRetention: value.linkRetention === true,
+                  weekend: typeof value.weekendPosting === "boolean" ? value.weekendPosting : row.flags.weekend,
+                  silentEdits: row.flags.silentEdits || value.changesCopy === true,
+                  indexingPromise: row.flags.indexingPromise || value.promisesIndex === true,
+                  medicalRefused: row.flags.medicalRefused || value.medicalExcluded === true,
+                  contactAllowed: row.flags.contactAllowed || value.contactRequired === true };
+              }
+            } catch { /* Regex blacklist and score flags remain the fallback. */ }
+          }
           if (row.blacklisted) counts.blacklisted += 1;
           const stored = existing.get(row.resourceId);
           if (stored && stored.priceCny !== row.priceCny) counts.priceChanges += 1;

@@ -61,25 +61,9 @@ const synthesizedSourceFields = Object.freeze(["sourceUrl", "sourceTitle", "arti
 const sourceCountWordPattern = /(?:研究|试验|项|篇|文献|stud(?:y|ies)|trials?|sources?|records?)/i;
 const claimIdPattern = /^CLM-[0-9]{3,6}$/;
 const operationalFailurePattern = /(?:Transport error|Runtime configuration bootstrap|网页访问失败|工具调用失败|public[_ -]source[_ -]gateway.*(?:failed|error))/i;
-// Runtime/retrieval-process leakage — banned anywhere in the report. Tool and
-// gateway names, artifact paths, and first-person retrieval diaries are never
-// scientific analysis.
-//
-// 工件 / 访问层级 / 本环境 / 本轮检索 / 检索环境 are the runtime's own nouns for
-// a preserved artifact, an accessLevel field, the container, and one retrieval
-// pass. They were the most common Chinese wording of this leak and none of them
-// was matched: nine of fifteen production reports carried one (工件 19 times,
-// 本环境 13, 访问层级 12) and every one of them was delivered.
-// The MCP server is mounted as `evimed`, so DSH shows its tools to the model
-// as `mcp__evimed__<tool>`. Both spellings are banned: a run that has read an
-// older skill file will reproduce the legacy one.
-// 基本环境/日本环境/样本环境 and 加工件 are ordinary words that contain these,
-// so each is anchored away from its innocent compounds.
-const runtimeLeakagePattern = /(?:clinical-evidence-synthesis|\bmcp__evimed__[a-z_]+\b|\bevimed_[a-z_]+\b|EviMed.{0,24}(?:引擎|网关|工具)|证据追溯契约|\.evimed-sources\/|(?:抓取|落盘).{0,16}(?:核验|来源|文件|原文)|白名单抓取|工具调用|(?<!加)工件|访问层级|(?<![基日样标根成])本环境|本轮检索|检索环境|(?:未触及|未读取|未检索).{0,16}(?:完整|全文|文件|页面))/i;
-// A material limit on evidence accessibility (e.g. a guideline whose full text
-// is not openly available) is a legitimate property of the evidence base. It is
-// banned in the analysis body but permitted inside the Limitations section.
-const evidenceAccessLimitationPattern = /(?:全文|页面|文件).{0,12}(?:不可及|无法获取|无法获得|未能获取|未能获得|不可得)/i;
+// Closed runtime identifiers and internal artifact paths are decidable here.
+// Open-language register is judged after delivery by J4, never by preflight.
+const runtimeLeakagePattern = /(?:clinical-evidence-synthesis|\bmcp__evimed__[a-z_]+\b|\bevimed_[a-z_]+\b|\.evimed-sources\/)/i;
 const emergencyCallClaimPattern = /(?:(?:呼叫|拨打).{0,16}(?:急救|120|999)|(?:急救|120|999).{0,16}(?:呼叫|拨打))/i;
 const emergencyCallSupportPattern = /(?:call.{0,16}(?:999|emergency|ambulance)|(?:999|emergency|ambulance).{0,16}call|呼叫|拨打|急救)/i;
 // Generic (non-drug-specific) safety rule. Drug- and scenario-specific rules
@@ -3724,15 +3708,12 @@ export function validateClinicalEvidencePackage({
     issues.push("The academic report contains operational failure prose. A tool or source that failed is not a finding: leave it out of the report, and state a missing source as a limitation of the evidence in 局限性 if it matters.");
   }
   issues.region("runtime-leakage");
-  const leakageLine = firstMatchingLine(reportText, runtimeLeakagePattern)
-    ?? firstMatchingLine(withoutReportSections(reportText, "局限|Limitations?"), evidenceAccessLimitationPattern);
+  const leakageLine = firstMatchingLine(reportText, runtimeLeakagePattern);
   if (leakageLine) {
     issues.push(
-      "The academic report contains runtime or retrieval-process prose instead of scientific analysis: "
+      "The academic report contains runtime or retrieval-process prose (an internal identifier or path): "
       + `line ${leakageLine.line} reads ${leakageLine.text}. `
-      + "Write what the evidence shows, not how it was obtained — the run's tools, gateways, preserved artifacts (工件), "
-      + "access levels (访问层级), environment (本环境), and retrieval passes (本轮检索) stay out of the report; the platform records them. "
-      + "A source you could not obtain is stated as a limitation of the evidence base inside 局限性, in the reader's terms.",
+      + "Remove the internal identifier from report prose; the platform retains execution provenance.",
     );
   }
   for (const finding of issues.from(declaredAppraisalIssues, reportText)) {

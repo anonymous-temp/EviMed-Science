@@ -3167,3 +3167,17 @@ test("a follow-up turn in the same conversation gets a fresh allowance of submis
   const followUp = await f.execute("evimed_submit_deliverable", { deliverableId: "d1" });
   assert.equal(followUp.value?.ok, true, JSON.stringify(followUp));
 });
+
+test('screening counts unresolved decisions separately from exclusions', async () => {
+  const f = await screeningFixture((index, options) => {
+    const child = childRun(`screen-count-${index}`, options.signal)
+    queueMicrotask(() => child.settle({stopReason:'completed',output:[],structured:{verdicts:[{
+      id:`r${index + 1}`,decision:['include','exclude','unclear'][index],reason:'recorded criterion',
+    }]}}))
+    return child
+  }, 3)
+  const outcome = await f.screen(3)
+  assert.equal(outcome.value.data.included, 1)
+  assert.equal(outcome.value.data.excluded, 1)
+  assert.equal(outcome.value.data.unclear, 1)
+})

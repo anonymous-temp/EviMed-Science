@@ -115,3 +115,20 @@ export const GEO_RETRIABLE_RAW_STATUSES = Object.freeze([...SANITY.retriable_raw
 export function isRetriableRawStatus(rawStatus) {
   return GEO_RETRIABLE_RAW_STATUSES.includes(String(rawStatus ?? "").trim().toLowerCase());
 }
+
+/** Semantic classification preserves raw failures and empty shells. Uncertainty uses the marker verdict.
+ * @param {{rawStatus?:unknown,answer?:unknown}} input @param {any} judgeService @param {any} context */
+export async function classifyProbeAnswerWithJudge(input, judgeService, context) {
+  const baseline = classifyProbeAnswer(input);
+  const text = String(input.answer ?? "").trim();
+  if (!judgeService || baseline.status === "failed" || !text || text.length > 400) return baseline;
+  try {
+    const result = await judgeService.judge("J21", { text }, context);
+    if (!['settled', 'escalated'].includes(result?.outcome)) return baseline;
+    const status = result.value?.status;
+    if (status === "normal") return { status: "valid", reason: null, marker: null };
+    if (status === "refusal") return { status: "refusal", reason: "refusal_marker", marker: null };
+    if (status === "login" || status === "busy" || status === "other") return { status: "suspect", reason: status === "login" ? "session_invalid" : status === "busy" ? "service_unavailable" : "empty_shell", marker: null };
+  } catch { /* Keep measured probe marker behavior when the semantic check is unavailable. */ }
+  return baseline;
+}

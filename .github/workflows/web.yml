@@ -97,6 +97,7 @@ jobs:
           pnpm test:eval-briefs
           pnpm test:specialist-driver
           pnpm test:release-audit
+          pnpm test:judge-sites
           pnpm test:phi-masking
 
       # The host scripts under `scripts/ops/` (the Postgres backup, the recovery

@@ -72,7 +72,7 @@ test("the composition mounts every agent plugin we own and nothing we ruled out"
   const patch = await readFile(new URL("../cordis.patch.yml", import.meta.url), "utf8");
   // Counted, not named in the title: it said "five" while there were eight,
   // and a number in a sentence is a number nothing checks.
-  assert.equal(AGENT_PLUGIN_IDS.length, 8, "add the row here when a plugin is added, so the count stays a fact");
+  assert.equal(AGENT_PLUGIN_IDS.length, 9, "add the row here when a plugin is added, so the count stays a fact");
   assert.deepEqual([...HOST_PLUGIN_IDS].sort(), [
     "evimed-runtime-ui", "evimed-skill-catalogue", "evimed-plugin-probe", "evimed-seam-probe",
     "evimed-evidence-store", "evimed-web", "evimed-engine-context",

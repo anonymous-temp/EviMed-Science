@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-evidence",
-  "version": "sha256:ab4c615371d09574546425eea4d4c010cd0f05f5e1ce39d62ca0b3cbb3c45921",
+  "version": "sha256:0af9f987ebeeab13f48d49ddfe3048a42263a831637b5c699aa47996d24630fa",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 31,
@@ -751,7 +751,7 @@
     {
       "name": "mcp__evimed__evidence_deduplicate",
       "source": "mcp",
-      "description": "Deduplicate evidence records by DOI, PMID, URL, then normalized title.",
+      "description": "Deduplicate exact evidence records by DOI, PMID, URL, then normalized title; annotate suspected same-trial publications without merging them.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -771,6 +771,10 @@
                   "type": "string",
                   "minLength": 1,
                   "maxLength": 2048
+                },
+                "abstract": {
+                  "type": "string",
+                  "maxLength": 20000
                 },
                 "doi": {
                   "type": "string",

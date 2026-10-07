@@ -1,0 +1,786 @@
+{
+  "schemaVersion": 1,
+  "site": "J4",
+  "cases": [
+    {
+      "id": "register-1",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "preserved-report",
+      "group": "case-1-chest-pressure",
+      "input": {
+        "line": "急性压迫性胸部不适在家无法通过症状安全区分心脏急症与消化系统疾病。本分析基于英国国家卫生服务体系（NHS）胸痛公共指引及美国心脏病学会（ACC）胸痛专家共识摘要页两项可追溯来源进行证据合成。NHS 指引明确指出突发持续性胸痛可表现为胸部挤压或压迫感，应立即呼叫急救，且严禁自行诊断；心绞痛与心肌梗死症状相似，但后者可危及生命。ACC 共识指出心电图是胸痛评估的最佳初始检查，高敏肌钙蛋白快速路径可在 1–2 小时内安全排除多数心肌梗死[claim:CLM-006]，但肌钙蛋白呈风险连续谱，单次正常值不足以排除急性冠脉综合征[claim:CLM-007]，确诊需连续测量[claim:CLM-008]。综合而言，症状维度不足以区分致命性与非致命性病因，新发压迫性胸部不适必须按潜在心脏急症优先处理。"
+      },
+      "expected": {
+        "leakage": false
+      }
+    },
+    {
+      "id": "register-2",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "preserved-report",
+      "group": "case-1-chest-pressure",
+      "input": {
+        "line": "突发的胸部发闷、发紧、压迫感——患者常描述为「像被压着一样」——是急诊常见主诉。其鉴别诊断涵盖急性冠脉综合征（包括不稳定心绞痛与心肌梗死）、主动脉夹层、肺栓塞等致命性心脏大血管急症，以及胃食管反流、功能性消化不良等消化系统疾病。在院前环境中，患者面临的核心问题是：该症状是心脏问题还是胃病，以及应当首先采取什么行动。"
+      },
+      "expected": {
+        "leakage": false
+      }
+    },
+    {
+      "id": "register-3",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "preserved-report",
+      "group": "case-1-chest-pressure",
+      "input": {
+        "line": "本分析基于两项独立权威来源进行证据提取与逐字核验。"
+      },
+      "expected": {
+        "leakage": false
+      }
+    },
+    {
+      "id": "register-4",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "preserved-report",
+      "group": "case-1-chest-pressure",
+      "input": {
+        "line": "NHS 胸痛公共指引指出，胸部不适可呈现为「胸部挤压感或压迫感、烧灼感或消化不良感」[claim:CLM-001]。该指引将突发且持续不缓解的胸痛列为需立即采取行动的紧急征象，并明确要求立即呼叫急救[claim:CLM-002]。指引同时禁止患者自行诊断胸痛的病因[claim:CLM-003]。此外，NHS 特别强调心绞痛与心肌梗死具有相似的症状表现，但心肌梗死可危及生命[claim:CLM-004]。"
+      },
+      "expected": {
+        "leakage": false
+      }
+    },
+    {
+      "id": "register-5",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "preserved-report",
+      "group": "case-1-chest-pressure",
+      "input": {
+        "line": "ACC 胸痛专家共识摘要指出，心电图是胸痛评估的最佳初始检查，因其快速、成本低并能提供关键诊断与预后信息[claim:CLM-005]。高敏肌钙蛋白快速临床决策路径可在 1–2 小时内安全排除多数急诊胸痛患者的心肌梗死[claim:CLM-006]。共识强调高敏肌钙蛋白水平为风险连续谱，无任一检测值可被视为绝对正常，数值越高与 ACS 的关联越强[claim:CLM-007]；确诊心肌梗死依赖连续高敏肌钙蛋白测量，而非依赖单次 99 百分位阈值[claim:CLM-008]。"
+      },
+      "expected": {
+        "leakage": false
+      }
+    },
+    {
+      "id": "register-6",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "preserved-report",
+      "group": "case-1-chest-pressure",
+      "input": {
+        "line": "综上，当前证据不支持在院前环境中通过症状安全鉴别胸部压迫感的病因。NHS 明确指出胸部不适的压迫感表现既可以是心脏急症的表现，也可以类似消化不良，同时禁止自行诊断。ACC 共识进一步说明，即使在急诊室环境中，也须通过心电图和连续肌钙蛋白检测才能做出可靠判断——仅凭症状描述和单次检测均不足以排除急性冠脉综合征。"
+      },
+      "expected": {
+        "leakage": false
+      }
+    },
+    {
+      "id": "register-7",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "preserved-report",
+      "group": "case-1-chest-pressure",
+      "input": {
+        "line": "因此，在缺乏急诊评估的情况下，任何试图将突发压迫性胸部不适归类为「胃病」的判断均缺乏安全依据。临床处置顺序应首先排除心脏急症。"
+      },
+      "expected": {
+        "leakage": false
+      }
+    },
+    {
+      "id": "register-8",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "preserved-report",
+      "group": "case-1-chest-pressure",
+      "input": {
+        "line": "**证据形式与方法学质量**：ACC 来源为专家共识的摘要页（Key Points），未展示各条推荐意见的完整证据等级、推荐强度分级及具体的共识形成方法学细节。NHS 来源为面向公众的健康指引页面，其内部所引用的临床证据链条不可见。两类证据均非经同行评议的原始研究或系统性证据评价。"
+      },
+      "expected": {
+        "leakage": false
+      }
+    },
+    {
+      "id": "register-9",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "preserved-report",
+      "group": "case-1-chest-pressure",
+      "input": {
+        "line": "**适用性与管辖权**：NHS 指引基于英国急救体系设计，其呼叫号码与院前分诊流程与中国急救体系存在差异。该指引发布距今已有时日，其信息时效性需结合现行实践判断。"
+      },
+      "expected": {
+        "leakage": false
+      }
+    },
+    {
+      "id": "register-10",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "preserved-report",
+      "group": "case-1-chest-pressure",
+      "input": {
+        "line": "**间接性与外推边界**：ACC 共识摘要针对急诊室环境下的结构化胸痛评估流程设计，其快速排除路径依赖高敏肌钙蛋白试剂，不适用于旧代肌钙蛋白检测体系，亦不宜直接外推至院前自我鉴别场景。"
+      },
+      "expected": {
+        "leakage": false
+      }
+    },
+    {
+      "id": "register-11",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "preserved-report",
+      "group": "case-1-chest-pressure",
+      "input": {
+        "line": "- 立即拨打 120：新发且持续不缓解的胸部压迫或挤压感无法居家安全判断病因，须首先按潜在心脏急症处理，立即呼叫急救[claim:CLM-001][claim:CLM-002]。"
+      },
+      "expected": {
+        "leakage": false
+      }
+    },
+    {
+      "id": "register-12",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "preserved-report",
+      "group": "case-1-chest-pressure",
+      "input": {
+        "line": "- 不得自行诊断：胸痛病因的鉴别须由医师完成，患者自行归类为「胃病」可能延误致命性心脏急症的救治[claim:CLM-003][claim:CLM-004]。"
+      },
+      "expected": {
+        "leakage": false
+      }
+    },
+    {
+      "id": "register-13",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "preserved-report",
+      "group": "case-1-chest-pressure",
+      "input": {
+        "line": "- 到达医院后应尽快完成心电图检查，这是胸痛评估的最佳初始手段[claim:CLM-005]。"
+      },
+      "expected": {
+        "leakage": false
+      }
+    },
+    {
+      "id": "register-14",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "preserved-report",
+      "group": "case-1-chest-pressure",
+      "input": {
+        "line": "- 须接受连续高敏肌钙蛋白检测：单次肌钙蛋白正常值不能排除急性冠脉综合征，连续测量是确诊心肌梗死的必要条件[claim:CLM-006][claim:CLM-007][claim:CLM-008]。"
+      },
+      "expected": {
+        "leakage": false
+      }
+    },
+    {
+      "id": "register-15",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "preserved-report",
+      "group": "case-2-chest-pressure-suxiao",
+      "input": {
+        "line": "突发压迫性胸部不适在院前环境无法通过症状安全区分急性冠脉综合征与消化道疾病。英国国家卫生服务体系（NHS）胸痛指引 [claim:CLM-001] [claim:CLM-004] 明确指出压迫/挤压样胸痛须立即呼叫急救，严禁自我诊断 [claim:CLM-002] [claim:CLM-003]。美国心脏病学会（ACC）胸痛专家共识摘要 [claim:CLM-005] 将心电图列为首选初始检查，高敏肌钙蛋白快速路径可在 1–2 小时内安全排除多数心肌梗死，但需连续测量方能确诊 [claim:CLM-006] [claim:CLM-008]。速效救心丸的 Cochrane 系统评价（CD004473）共纳入十五项试验、1776 名受试者 [claim:CLM-011]，发现该药似乎有效但证据薄弱、方法学质量差 [claim:CLM-009] [claim:CLM-010]，最近检索日期为 2005 年 11 月 [claim:CLM-012]，其作用不确定 [claim:CLM-013]。国家药监局基于不良反应评估结果统一修订了该药说明书的警示语、不良反应、禁忌和注意事项 [claim:CLM-014]。综合判断：症状本身不可靠，院前处理必须以潜在心脏急症为优先，速效救心丸不得用于未确诊胸痛的自我分诊，也不得因其服用而延误急诊评估。"
+      },
+      "expected": {
+        "leakage": false
+      }
+    },
+    {
+      "id": "register-16",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "preserved-report",
+      "group": "case-2-chest-pressure-suxiao",
+      "input": {
+        "line": "患者突发胸部发闷发紧、呈压迫感时，能否在家庭环境中可靠区分心绞痛与胃病？应优先采取何种行动？速效救心丸在该情境中的证据地位与安全边界是什么？"
+      },
+      "expected": {
+        "leakage": false
+      }
+    },
+    {
+      "id": "register-17",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "preserved-report",
+      "group": "case-2-chest-pressure-suxiao",
+      "input": {
+        "line": "**NHS 胸痛指引。** NHS 胸痛页面将突发持续性胸部不适——可表现为挤压感、压迫感、烧灼感或消化不良感——列为需立即呼叫急救的征象 [claim:CLM-001]。其急救指令为：当出现上述症状时，可能为心脏病发作，须立即呼叫急救 [claim:CLM-002]。该页面同时明确禁止患者自行诊断胸痛病因 [claim:CLM-003]，并指出心绞痛与心脏病发作的症状相似，但心脏病发作可危及生命 [claim:CLM-004]。作为英国公共卫生体系的指引，其急救原则在不同司法管辖区间具有普遍适用性。"
+      },
+      "expected": {
+        "leakage": false
+      }
+    },
+    {
+      "id": "register-18",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "preserved-report",
+      "group": "case-2-chest-pressure-suxiao",
+      "input": {
+        "line": "**ACC 胸痛专家共识。** ACC 胸痛专家共识摘要的证据形式不包含完整推荐等级和证据分级：心电图是胸痛评估的最佳初始检查 [claim:CLM-005]；高敏肌钙蛋白快速路径可在 1–2 小时内安全排除多数急诊胸痛患者的心肌梗死 [claim:CLM-006]；高敏肌钙蛋白水平呈风险连续谱，无可检测水平可视为完全正常 [claim:CLM-007]；连续高敏肌钙蛋白测量而非单次 99 百分位阈值，是确诊心肌梗死的必要条件 [claim:CLM-008]。该摘要明确不涉及已确诊 ACS 患者的管理。"
+      },
+      "expected": {
+        "leakage": false
+      }
+    },
+    {
+      "id": "register-19",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "preserved-report",
+      "group": "case-2-chest-pressure-suxiao",
+      "input": {
+        "line": "**Cochrane 速效救心丸系统评价（CD004473）。** 该评价共纳入十五项试验、1776 名受试者 [claim:CLM-011]，最近检索日期为 2005 年 11 月 [claim:CLM-012]，该评价自检索截止后未纳入后续试验。作者结论认为速效救心丸在心绞痛治疗方面似乎有效，未确认严重副作用 [claim:CLM-009]；但由于纳入研究的方法学质量差，证据仍然薄弱 [claim:CLM-010]；其作用不确定，需要更多高质量试验评估长期影响 [claim:CLM-013]。该评价的纳入人群为已确诊心绞痛患者，其在未确诊胸痛的院前分诊中的适用性无直接证据。"
+      },
+      "expected": {
+        "leakage": false
+      }
+    },
+    {
+      "id": "register-20",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "preserved-report",
+      "group": "case-2-chest-pressure-suxiao",
+      "input": {
+        "line": "**国家药监局安全性修订公告。** 国家药监局基于药品不良反应评估结果，决定对速效救心丸说明书的警示语、不良反应、禁忌和注意事项项进行统一修订 [claim:CLM-014]。该公告以附件形式发布修订要求，公告正文不包含修订的具体条目。该监管行动证明该药品的安全性信息需要强化，但不单独证明特定严重不良反应的发生。"
+      },
+      "expected": {
+        "leakage": false
+      }
+    },
+    {
+      "id": "register-21",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "preserved-report",
+      "group": "case-2-chest-pressure-suxiao",
+      "input": {
+        "line": "从院前安全角度综合上述四项来源的证据，可得出以下判断："
+      },
+      "expected": {
+        "leakage": false
+      }
+    },
+    {
+      "id": "register-22",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "preserved-report",
+      "group": "case-2-chest-pressure-suxiao",
+      "input": {
+        "line": "第一，突发压迫性胸部不适的症状特征在家庭环境中无法安全区分急性冠脉综合征与胃食管反流或其他消化道疾病 [claim:CLM-001] [claim:CLM-004]。NHS 胸痛指引中列出的心源性胸痛症状描述（挤压感、压迫感、烧灼感）与胃食管反流的典型表现之间存在显著重叠，而心绞痛与心肌梗死的症状本身不可区分 [claim:CLM-004]。"
+      },
+      "expected": {
+        "leakage": false
+      }
+    },
+    {
+      "id": "register-23",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "preserved-report",
+      "group": "case-2-chest-pressure-suxiao",
+      "input": {
+        "line": "第二，院前处理必须遵循心脏急症优先原则：立即呼叫急救，不得自我诊断 [claim:CLM-002] [claim:CLM-003]。到达急诊后，心电图是首选初始检查 [claim:CLM-005]，配合高敏肌钙蛋白快速路径可在 1–2 小时内安全排除多数心肌梗死，但需连续测量方能确诊 [claim:CLM-006] [claim:CLM-008]。"
+      },
+      "expected": {
+        "leakage": false
+      }
+    },
+    {
+      "id": "register-24",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "preserved-report",
+      "group": "case-2-chest-pressure-suxiao",
+      "input": {
+        "line": "第三，速效救心丸的证据基础薄弱且方法学质量差 [claim:CLM-010]。Cochrane 评价自 2005 年 11 月检索后未纳入新的试验证据 [claim:CLM-012]，其作用仍不确定 [claim:CLM-013]。国家药监局的说明书修订 [claim:CLM-014] 表明该药品的安全性信息需要更新和强化。尤为关键的是，速效救心丸的所有临床试验证据均来自已确诊心绞痛人群，其在未确诊急性胸痛患者中的适用性无任何研究支持。"
+      },
+      "expected": {
+        "leakage": false
+      }
+    },
+    {
+      "id": "register-25",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "preserved-report",
+      "group": "case-2-chest-pressure-suxiao",
+      "input": {
+        "line": "本分析的证据局限存在于多个维度。在证据形式与方法学质量方面，ACC 来源为专家共识摘要页，不包含完整推荐等级和证据分级，而 Cochrane 评价的纳入试验方法学质量差、证据薄弱 [claim:CLM-010]。在时效性方面，速效救心丸 Cochrane 评价的检索截止于 2005 年 11 月 [claim:CLM-012]，该评价自检索截止后未纳入新的试验证据。在适用性与管辖权方面，NHS 胸痛指引基于英国公共卫生体系设计，ACC 共识摘要针对美国急诊环境，二者在具体医疗流程层面与中国院前急救及急诊体系存在适用性差异。在间接性方面，速效救心丸的临床试验证据全部来自已确诊心绞痛人群，直接外推至未确诊急性胸痛的院前分诊情境存在显著的适用性差距。在监管证据方面，NMPA 公告以附件形式发布修订要求，公告正文不包含修订的具体条目 [claim:CLM-014]。"
+      },
+      "expected": {
+        "leakage": false
+      }
+    },
+    {
+      "id": "register-26",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "preserved-report",
+      "group": "case-2-chest-pressure-suxiao",
+      "input": {
+        "line": "**不得因服用速效救心丸而延误呼救或急诊评估。** [claim:CLM-002] [claim:CLM-010] [claim:CLM-014]"
+      },
+      "expected": {
+        "leakage": false
+      }
+    },
+    {
+      "id": "register-27",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "preserved-report",
+      "group": "case-2-chest-pressure-suxiao",
+      "input": {
+        "line": "速效救心丸在已确诊心绞痛患者中似乎有效但证据薄弱 [claim:CLM-009] [claim:CLM-010]，其临床试验证据均来自已确诊人群，在未确诊急性胸痛中无研究支持；国家药监局已基于不良反应评估结果修订其安全性信息 [claim:CLM-014]。该药品不适用于院前胸痛的自我分诊，不应将其症状反应用作诊断工具。"
+      },
+      "expected": {
+        "leakage": false
+      }
+    },
+    {
+      "id": "register-28",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "preserved-report",
+      "group": "deepresearch-cdc3d3a4-case1-failed",
+      "input": {
+        "line": "急性胸闷、发紧、压榨感是急诊就诊的常见症状，病因谱覆盖良性功能性胃肠不适至致死性急性冠脉综合征（ACS）。仅凭症状特征无法可靠区分心源性与胃肠源性胸痛。本报告基于2021—2026年国际指南、系统评价和诊断性研究证据，系统分析了急性压榨样胸痛的病因鉴别和急诊评估策略。心电图（ECG）是最佳初始评估工具[1]；高敏心肌肌钙蛋白（hs-cTn）联合快速临床决策路径可在1—2小时内安全排除大部分心肌梗死[1]。ESC 0/1小时算法的汇总灵敏度为99.3%（95%CI 98.5%—99.7%）[2]；女性ACS患者的胸痛报告率高达92%[3]。突发持续性胸闷压榨感应立即呼叫急救（中国120）[4]，不得以症状缓解替代急诊评估。"
+      },
+      "expected": {
+        "leakage": false
+      }
+    },
+    {
+      "id": "register-29",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "preserved-report",
+      "group": "deepresearch-cdc3d3a4-case1-failed",
+      "input": {
+        "line": "急性发作性胸闷、发紧、压榨感是患者对胸部不适的常见主观描述[3][5]。当症状以持续性压榨样不适出现时，临床核心问题是：<!-- claim:CLM-007 -->该症状的病因是心源性（需紧急处理）还是非心源性（如胃肠源性）？如何通过结构化急诊评估快速排除急性心肌梗死（AMI）并实现安全分流？"
+      },
+      "expected": {
+        "leakage": false
+      }
+    },
+    {
+      "id": "register-30",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "preserved-report",
+      "group": "deepresearch-cdc3d3a4-case1-failed",
+      "input": {
+        "line": "本报告围绕四个证据域展开：症状表型与鉴别诊断；基于ECG和hs-cTn的结构化风险评估；胃食管反流等非心源性模拟病症的特征与诊断局限性；女性ACS的识别挑战。"
+      },
+      "expected": {
+        "leakage": false
+      }
+    },
+    {
+      "id": "register-31",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "preserved-report",
+      "group": "deepresearch-cdc3d3a4-case1-failed",
+      "input": {
+        "line": "于2026年7月23日执行了PubMed文献检索、临床指南检索以及专业学会（ACC、NHS）官方页面获取。共执行10次独立检索，使用中英文检索词组合，涵盖\"acute chest pain\"\"acute coronary syndrome\"\"high-sensitivity troponin\"\"gastroesophageal reflux\"\"differential diagnosis\"\"emergency department\"及\"胸痛\"\"急诊\"\"心肌梗死\"\"指南\"等核心概念。"
+      },
+      "expected": {
+        "leakage": false
+      }
+    },
+    {
+      "id": "register-32",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "preserved-report",
+      "group": "deepresearch-cdc3d3a4-case1-failed",
+      "input": {
+        "line": "初始检索识别74条记录，经DOI、PMID及标准化标题去重后获66条唯一记录，最终纳入16个独立证据源。对每份纳入证据记录其来源类型、研究设计、访问级别、偏倚风险、直接性、精确度及适用性。成功获取并检查了10份不同文档的正文内容，包括ACC和NHS官方指导页面各1份，以及8篇开放获取全文文献。"
+      },
+      "expected": {
+        "leakage": false
+      }
+    },
+    {
+      "id": "register-33",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "preserved-report",
+      "group": "deepresearch-cdc3d3a4-case1-failed",
+      "input": {
+        "line": "胸痛的描述词汇——包括\"压榨感\"\"发紧\"\"压迫感\"——在ACS患者中常见，但任何单一症状特征均不足以确认或排除ACS[5][6]。NHS官方患者指导指出：进食后开始、伴食物或苦味液体反流、饱胀感等症状提示胃灼热或消化不良[4]。但该指导同时强调\"不要自我诊断\"[4]<!-- claim:CLM-008 -->，因为\"烧灼感或消化不良感\"也可能是心脏病发作的表现[4]。<!-- claim:CLM-007 -->"
+      },
+      "expected": {
+        "leakage": false
+      }
+    },
+    {
+      "id": "register-34",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "preserved-report",
+      "group": "deepresearch-cdc3d3a4-case1-failed",
+      "input": {
+        "line": "女性ACS患者同样可能报告上腹部不适和恶心，进一步模糊了心源性与胃肠源性胸痛的临床表现边界[3]。<!-- claim:CLM-012 -->当前文献未发现任何单一症状或症状组合能够以足够高的诊断准确性区分两种病因[5][7]。"
+      },
+      "expected": {
+        "leakage": false
+      }
+    },
+    {
+      "id": "register-35",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "preserved-report",
+      "group": "deepresearch-cdc3d3a4-case1-failed",
+      "input": {
+        "line": "ECG是胸痛评估的最佳初始检查，因其快速、低成本且提供关键的诊断与预后信息[1]。<!-- claim:CLM-001 -->ECG应在患者就诊后10分钟内完成并解读[3]。<!-- claim:CLM-002 -->NSTE-ACS患者的ECG可能正常30%的比例，此时诊断依赖hs-cTn[3]。<!-- claim:CLM-014 -->因此，正常ECG不能排除NSTE-ACS。"
+      },
+      "expected": {
+        "leakage": false
+      }
+    },
+    {
+      "id": "register-36",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "preserved-report",
+      "group": "deepresearch-cdc3d3a4-case1-failed",
+      "input": {
+        "line": "hs-cTn检测应与快速临床决策路径联合使用，可在1—2小时内安全排除大多数急诊胸痛患者的AMI[1]。<!-- claim:CLM-003 -->约三分之二的患者将被排除，四分之一被归类为中危[1]。<!-- claim:CLM-006 -->"
+      },
+      "expected": {
+        "leakage": false
+      }
+    },
+    {
+      "id": "register-37",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "preserved-report",
+      "group": "deepresearch-cdc3d3a4-case1-failed",
+      "input": {
+        "line": "Nomura等（2022）的系统评价与荟萃分析评估了ESC 0/1小时算法的诊断性能[2]：hs-cTnI算法的汇总灵敏度为99.3%（95%CI 98.5%—99.7%），汇总特异度为90.1%（95%CI 80.7%—95.2%）[2]。<!-- claim:CLM-004 --><!-- claim:CLM-005 -->"
+      },
+      "expected": {
+        "leakage": false
+      }
+    },
+    {
+      "id": "register-38",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "preserved-report",
+      "group": "deepresearch-cdc3d3a4-case1-failed",
+      "input": {
+        "line": "Ricci等（2022）的前瞻性研究纳入1136例患者（中位年龄64岁），比较了单次采样即时排除策略与ESC 0/1小时算法[8]：单次hs-cTnI < 5 ng/L联合低风险ECG的阴性预测值为98.7%（95%CI 96.9%—99.6%）[8]。<!-- claim:CLM-009 -->"
+      },
+      "expected": {
+        "leakage": false
+      }
+    },
+    {
+      "id": "register-39",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "preserved-report",
+      "group": "deepresearch-cdc3d3a4-case1-failed",
+      "input": {
+        "line": "Westwood等（2021）的HTA系统评价进一步验证了hs-cTn检测在早期排除AMI中的效用[9]。"
+      },
+      "expected": {
+        "leakage": false
+      }
+    },
+    {
+      "id": "register-40",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "preserved-report",
+      "group": "deepresearch-cdc3d3a4-case1-failed",
+      "input": {
+        "line": "NHS患者指导列出了常见非心源性病因：胃灼热/消化不良（进食后开始，伴反流和饱胀）[4]；<!-- claim:CLM-010 -->焦虑/惊恐发作（尖锐持续性疼痛，心跳加快、出汗、头晕）；胸壁肌肉拉伤（外伤或运动后，吸气时加重）[4]。现有证据一致表明：在急性症状期，仅凭临床表现无法安全排除心源性病因[5][7]。ACS患者可表现为烧灼感或消化不良感，与胃食管反流症状重叠[1][4]。"
+      },
+      "expected": {
+        "leakage": false
+      }
+    },
+    {
+      "id": "register-41",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "preserved-report",
+      "group": "deepresearch-cdc3d3a4-case1-failed",
+      "input": {
+        "line": "Dawson等（2023）揭示了急性胸痛的性别差异[10]。胸痛（有时被描述为压迫感、发紧或不适）是男女ACS患者最常见的症状，大规模前瞻性研究中女性报告率高达92%[3]。<!-- claim:CLM-011 -->女性比男性更多报告恶心、上腹部不适、呼吸困难、深度疲劳和心悸[3]。<!-- claim:CLM-012 -->实施性别特异性hs-cTn诊断阈值可使女性MI诊断率增加约2倍[3]。<!-- claim:CLM-013 -->"
+      },
+      "expected": {
+        "leakage": false
+      }
+    },
+    {
+      "id": "register-42",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "preserved-report",
+      "group": "deepresearch-cdc3d3a4-case1-failed",
+      "input": {
+        "line": "NHS将\"突发的持续性胸部疼痛或不适——疼痛可感觉为胸部内部的挤压感或压迫感、烧灼感或消化不良感\"列为需立即拨打999的征象[4]。<!-- claim:CLM-007 -->ESC院前管理立场文件推荐对疑似心源性胸痛实施院前ECG采集[7]。"
+      },
+      "expected": {
+        "leakage": false
+      }
+    },
+    {
+      "id": "register-43",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "preserved-report",
+      "group": "deepresearch-cdc3d3a4-case1-failed",
+      "input": {
+        "line": "当前证据不支持基于症状描述可靠区分心源性与胃肠源性胸痛：(1)压榨感和发紧是ACS的常见描述但也可由食管痉挛引起[5][6]；(2)烧灼感和消化不良感既可是胃食管反流表现也可是ACS症状[1][4]；(3)恶心和上腹部不适既常见于胃病也是一部分AMI患者的伴随表现[3][10]。"
+      },
+      "expected": {
+        "leakage": false
+      }
+    },
+    {
+      "id": "register-44",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "preserved-report",
+      "group": "deepresearch-cdc3d3a4-case1-failed",
+      "input": {
+        "line": "正确的策略是在排除致命性病因之后考虑非心源性诊断：第一步，立即获取12导联ECG（目标≤10分钟[3]）；第二步，检测hs-cTn并进入CDP复查（1—2小时后[1]）；第三步，若ECG和hs-cTn均排除AMI，结合临床风险评估决定非侵入性检查。"
+      },
+      "expected": {
+        "leakage": false
+      }
+    },
+    {
+      "id": "register-45",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "preserved-report",
+      "group": "deepresearch-cdc3d3a4-case1-failed",
+      "input": {
+        "line": "HEART评分在0/1小时算法时代仍具有分诊价值[11]。preHEAR(T)评分在两项欧洲队列中验证了识别低风险胸痛的能力[12]。"
+      },
+      "expected": {
+        "leakage": false
+      }
+    },
+    {
+      "id": "register-46",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "preserved-report",
+      "group": "deepresearch-cdc3d3a4-case1-failed",
+      "input": {
+        "line": "hs-cTn水平代表一个连续风险谱——没有任何可检测水平可被视为完全\"正常\"，水平越高越可能与ACS相关[1]。<!-- claim:CLM-015 -->系列检测的变化值比单一阈值更重要[1][8]。假阳性和假阴性肌钙蛋白结果罕见但可发生[1]。<!-- claim:CLM-016 -->"
+      },
+      "expected": {
+        "leakage": false
+      }
+    },
+    {
+      "id": "register-47",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "preserved-report",
+      "group": "deepresearch-cdc3d3a4-case1-failed",
+      "input": {
+        "line": "**(1) 症状不能诊断**：没有任何症状特征或组合能以临床可接受的准确度区分心源性与胃肠源性胸痛[5]。"
+      },
+      "expected": {
+        "leakage": false
+      }
+    },
+    {
+      "id": "register-48",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "preserved-report",
+      "group": "deepresearch-cdc3d3a4-case1-failed",
+      "input": {
+        "line": "**(2) ECG和hs-cTn是诊断基石**：ECG应在10分钟内完成[3]，hs-cTn联合0/1小时CDP的汇总灵敏度超过99%，约三分之二的患者可在1—2小时内安全排除[1][2][8]。"
+      },
+      "expected": {
+        "leakage": false
+      }
+    },
+    {
+      "id": "register-49",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "preserved-report",
+      "group": "deepresearch-cdc3d3a4-case1-failed",
+      "input": {
+        "line": "**(3) 性别影响识别**：女性ACS症状谱更广，性别特异性阈值可提高女性MI诊断率约2倍[3][10]。"
+      },
+      "expected": {
+        "leakage": false
+      }
+    },
+    {
+      "id": "register-50",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "preserved-report",
+      "group": "deepresearch-cdc3d3a4-case1-failed",
+      "input": {
+        "line": "**(4) 院前急救**：新发持续性压榨样胸闷应立即呼叫急救电话[4]。"
+      },
+      "expected": {
+        "leakage": false
+      }
+    },
+    {
+      "id": "register-51",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "preserved-report",
+      "group": "deepresearch-cdc3d3a4-case1-failed",
+      "input": {
+        "line": "在排除AMI之前应假定为心源性；正常ECG不能排除NSTE-ACS（约30%可正常[3]<!-- claim:CLM-014 -->）；hs-cTn单次正常也不能立即排除AMI。"
+      },
+      "expected": {
+        "leakage": false
+      }
+    },
+    {
+      "id": "register-52",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "preserved-report",
+      "group": "deepresearch-cdc3d3a4-case1-failed",
+      "input": {
+        "line": "急性胸闷压榨感的病因无法通过症状描述可靠鉴别。正确的临床策略是结构化急诊评估（10分钟内ECG + hs-cTn CDP），约三分之二的患者可在1—2小时内明确排除AMI[1]<!-- claim:CLM-006 -->。不应以药物反应作为诊断性试验，不应因症状缓解而延迟就医。女性ACS需保持高度警惕[3]。"
+      },
+      "expected": {
+        "leakage": false
+      }
+    },
+    {
+      "id": "register-53",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "preserved-report",
+      "group": "deepresearch-cdc3d3a4-case1-failed",
+      "input": {
+        "line": "以上建议基于ACC专家共识[1]、NHS胸痛指导[4]和ESC立场文件[7]的循证推荐，不替代紧急情况下的专业医疗判断。"
+      },
+      "expected": {
+        "leakage": false
+      }
+    },
+    {
+      "id": "register-54",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "curated-injection",
+      "group": "injection-53",
+      "input": {
+        "line": "工件保存与抓取时间均为 2026-08-27；访问层级与保存状态见引文台账与引文审计。"
+      },
+      "expected": {
+        "leakage": true
+      }
+    },
+    {
+      "id": "register-55",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "curated-injection",
+      "group": "injection-54",
+      "input": {
+        "line": "So the quote verification ONLY works for files in the evidence ledger (preserved by tools). I have 3 such files"
+      },
+      "expected": {
+        "leakage": true
+      }
+    },
+    {
+      "id": "register-56",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "curated-injection",
+      "group": "injection-55",
+      "input": {
+        "line": "本次检索先调用文献检索工具获取 PubMed 结果，随后通过网页读取工具抓取了指南全文并保存到工作区。"
+      },
+      "expected": {
+        "leakage": true
+      }
+    },
+    {
+      "id": "register-57",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "curated-injection",
+      "group": "injection-56",
+      "input": {
+        "line": "由于全文获取接口返回 403，我改用摘要内容完成了这一部分的论述。"
+      },
+      "expected": {
+        "leakage": true
+      }
+    },
+    {
+      "id": "register-58",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "curated-injection",
+      "group": "injection-57",
+      "input": {
+        "line": "上一版报告因引文编号不一致被退回，本版已逐条修正并重新提交。"
+      },
+      "expected": {
+        "leakage": true
+      }
+    },
+    {
+      "id": "register-59",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "curated-injection",
+      "group": "injection-58",
+      "input": {
+        "line": "我首先搜索了 Cochrane Library，然后又检查了 ClinicalTrials.gov，最后把找到的文件整理成证据矩阵。"
+      },
+      "expected": {
+        "leakage": true
+      }
+    },
+    {
+      "id": "register-60",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "curated-injection",
+      "group": "injection-59",
+      "input": {
+        "line": "以下内容根据 evidence-matrix.json 中的 CLM-004 至 CLM-009 自动生成。"
+      },
+      "expected": {
+        "leakage": true
+      }
+    },
+    {
+      "id": "register-61",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "curated-injection",
+      "group": "injection-60",
+      "input": {
+        "line": "After the gate rejected the first submission, the claims that could not be verified were removed from this section."
+      },
+      "expected": {
+        "leakage": true
+      }
+    },
+    {
+      "id": "register-62",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "curated-injection",
+      "group": "injection-61",
+      "input": {
+        "line": "为满足交付检查的要求，本节将每条主张都改写成了可以逐字匹配引文的形式。"
+      },
+      "expected": {
+        "leakage": true
+      }
+    },
+    {
+      "id": "register-63",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "curated-injection",
+      "group": "injection-62",
+      "input": {
+        "line": "注：受运行时限制，本轮只保存了 5 篇来源的原文，其余来源仅保留元数据。"
+      },
+      "expected": {
+        "leakage": true
+      }
+    },
+    {
+      "id": "register-64",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "curated-injection",
+      "group": "injection-63",
+      "input": {
+        "line": "模型在第二轮对话中补充了这一段，以回应用户对剂量问题的追问。"
+      },
+      "expected": {
+        "leakage": true
+      }
+    },
+    {
+      "id": "register-65",
+      "source": "2026-09-21-preserved-report-lines",
+      "labelBasis": "curated-injection",
+      "group": "injection-64",
+      "input": {
+        "line": "该文件已写入 deliverables 目录，读者可在左侧文件面板中打开。"
+      },
+      "expected": {
+        "leakage": true
+      }
+    }
+  ]
+}

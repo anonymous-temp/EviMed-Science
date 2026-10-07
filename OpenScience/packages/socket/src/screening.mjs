@@ -43,10 +43,9 @@ export function chunk(items, size) {
 /**
  * The prompt one screening child gets.
  *
- * `unclear` is a first-class answer on purpose: forcing a binary decision on an
- * abstract that does not settle the question produces a confident wrong answer,
- * and a screening ledger full of those is worse than one that says where a
- * human has to look.
+ * Missing abstract details advance to full-text review. `unclear` remains a
+ * separate answer for unreadable records or failed assessments, never an
+ * implicit exclusion.
  *
  * @param {string} criteria @param {readonly Record<string, any>[]} records
  * @returns {string}
@@ -70,7 +69,7 @@ export function screeningPrompt(criteria, records) {
     ].filter(Boolean).join('\n')),
     '',
     '每条给出 include / exclude / unclear 与一句理由，排除时写清违反了哪条标准。',
-    '题录信息不足以判断时给 unclear —— 不要猜。一条猜错的 include 会被后续全文核对发现，一条猜错的 exclude 不会。',
+    '标题摘要筛选采用保守纳入：没有明确违反标准时给 include，并说明需要全文核对的信息。只有明确不合格才 exclude；无法处理或记录损坏才给 unclear，unclear 也进入全文核对。',
   ].join('\n')
 }
 

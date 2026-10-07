@@ -5,6 +5,35 @@ import { CHANNEL_INTENT_PURPOSE, ChannelIntentClassifier, verifiedIntent } from 
 const config = { deepseekProviderEnabled: true, deepseekApiKey: "test-key", deepseekModel: "deepseek-flash", modelGatewayTimeoutMs: 5_000 };
 const projects = [{ id: "default", name: "我的研究" }, { id: "p-onc", name: "肿瘤免疫" }, { id: "p-dm", name: "糖尿病" }];
 
+test("Jev project selection is still checked against account projects", async () => {
+  const classifier = new ChannelIntentClassifier({}, { judgeService: { judge: async () => ({
+    outcome: "settled", value: { switch_to: "another-account", has_request: false, continues_running_task: true },
+  }) } });
+  assert.deepEqual(await classifier.classify({ userId: "u", projectId: "default", text: "切换项目", projects }),
+    { switchTo: null, hasRequest: true, continuesRunningTask: false, source: "judge" });
+});
+
+test("uncertain or failed Jev never switches projects or changes a running task", async () => {
+  const fake = model({ switch_to: "p-onc", has_request: false, continues_running_task: true });
+  for (const outcome of ["escalated", "fallback"]) {
+    const classifier = new ChannelIntentClassifier(config, { callModel: fake.callModel,
+      judgeService: { judge: async () => ({ outcome, code: "judge_timeout" }) } });
+    const result = await classifier.classify({ userId: "u", projectId: "default", text: "再看看", projects, runningTask: { question: "研究问题" } });
+    assert.equal(result.switchTo, null);
+    assert.equal(result.hasRequest, true);
+    assert.equal(result.continuesRunningTask, false);
+  }
+  assert.equal(fake.calls.length, 0);
+});
+
+test("the J2 off switch restores the incumbent classifier", async () => {
+  const fake = model({ switch_to: "p-onc", has_request: false, continues_running_task: false });
+  const classifier = new ChannelIntentClassifier(config, { callModel: fake.callModel,
+    judgeService: { judge: async () => ({ outcome: "fallback", code: "judge_disabled" }) } });
+  assert.equal((await classifier.classify({ userId: "u", projectId: "default", text: "换到肿瘤免疫", projects })).switchTo, "p-onc");
+  assert.equal(fake.calls.length, 1);
+});
+
 /** A model that answers with `content`, and remembers what it was asked. */
 function model(content) {
   const calls = [];

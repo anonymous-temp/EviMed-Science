@@ -11,7 +11,8 @@ const migrations = new WeakMap();
 for (const purpose of USAGE_PURPOSES) {
   if (!/^[a-z][a-z-]*$/.test(purpose)) throw new Error(`usage purpose ${JSON.stringify(purpose)} cannot be written into SQL`);
 }
-const purposeCheck = `usage_model_requests_purpose_${createHash("sha256").update(USAGE_PURPOSES.join(",")).digest("hex").slice(0, 12)}_check`;
+const purposeCheck = `usage_model_requests_purpose_${createHash("sha256").update(USAGE_PURPOSES.join(",")).digest("hex").slice(0, 12)}_check
+`;
 
 const sql = `
 CREATE SCHEMA IF NOT EXISTS evimed_usage;
@@ -175,6 +176,10 @@ DO $estimate$ BEGIN
     ALTER TABLE evimed_usage.model_requests VALIDATE CONSTRAINT usage_model_requests_estimated_cost_check;
   END IF;
 END $estimate$;
+ALTER TABLE evimed_usage.model_requests ADD COLUMN IF NOT EXISTS operation text;
+ALTER TABLE evimed_usage.model_requests ADD COLUMN IF NOT EXISTS task_id text;
+ALTER TABLE evimed_usage.model_requests ADD COLUMN IF NOT EXISTS module text;
+CREATE INDEX IF NOT EXISTS model_requests_operation_time_idx ON evimed_usage.model_requests(operation,created_at) WHERE operation IS NOT NULL;
 `;
 
 /** The purpose CHECK's current name, for the tests that pin the migration. */

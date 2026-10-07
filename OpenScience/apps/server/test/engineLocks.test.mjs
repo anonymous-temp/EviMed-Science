@@ -116,3 +116,15 @@ test("every image that has a lock installs it, and the delta installs a lock the
   assert.match(delta, /RUN pip install --index-url %s --no-cache-dir -r \/adapter\/requirements\.lock/);
   assert.match(delta, /RUN pip install --index-url %s --no-cache-dir -r \/app\/requirements\.lock/);
 });
+
+test('full and delta engine images carry the same shared scoped judge client', async () => {
+  const engine = await read(path.join(adapterDir, 'Dockerfile'));
+  const meta = await read(path.join(workspace, '项目代码/meta/Dockerfile.evimed'));
+  const delta = await read(path.join(openScience, 'scripts/ops/host-engine-delta.sh'));
+  const compose = await read(path.join(openScience, 'deploy/web/docker-compose.yml'));
+  assert.ok(engine.includes('COPY 项目代码/evimed_judge.py /agent/evimed_judge.py'));
+  assert.ok(meta.includes('COPY 项目代码/evimed_judge.py /app/evimed_judge.py'));
+  assert.ok(delta.includes('COPY 项目代码/evimed_judge.py /agent/evimed_judge.py'));
+  assert.ok(delta.includes('COPY 项目代码/evimed_judge.py /app/evimed_judge.py'));
+  assert.match(compose, /evimed-meta-agent:[\s\S]*?context: \.\.\/\.\.\/\.\.[\s\S]*?dockerfile: 项目代码\/meta\/Dockerfile.evimed/);
+});

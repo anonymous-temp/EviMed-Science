@@ -22,6 +22,7 @@ from pathlib import Path, PurePosixPath
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import public_sources
+import trial_linkage
 import source_outcome
 import science_connectors
 import drug_assessment
@@ -475,7 +476,7 @@ TOOL_DEFINITIONS = [
     },
     {
         "name": "evidence_deduplicate",
-        "description": "Deduplicate evidence records by DOI, PMID, URL, then normalized title.",
+        "description": "Deduplicate exact evidence records by DOI, PMID, URL, then normalized title; annotate suspected same-trial publications without merging them.",
         "inputSchema": object_schema(
             {
                 "items": {
@@ -486,6 +487,7 @@ TOOL_DEFINITIONS = [
                         {
                             "id": SHORT_STRING,
                             "title": {"type": "string", "minLength": 1, "maxLength": 2048},
+                            "abstract": {"type": "string", "maxLength": 20000},
                             "doi": SHORT_STRING,
                             "pmid": SHORT_STRING,
                             "url": {"type": "string", "minLength": 1, "maxLength": 2048},
@@ -2368,6 +2370,7 @@ def _dispatch(name, arguments, execution_context=None):
         )
     if name == "evidence_deduplicate":
         data = _deduplicate(arguments["items"])
+        data.update(trial_linkage.annotate(data["items"]))
         return success(
             "Deduplicated %d evidence records into %d unique records."
             % (len(arguments["items"]), len(data["items"])),

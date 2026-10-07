@@ -33,7 +33,7 @@ const instructions = [
   "只输出 JSON：{\"switch_to\": \"<项目 id 或 null>\", \"has_request\": true 或 false, \"continues_running_task\": true 或 false}。",
 ].join("\n");
 
-/** @typedef {{ switchTo: string | null, hasRequest: boolean, continuesRunningTask: boolean, source: 'model' | 'fallback' | 'skipped', failure?: string }} ChannelIntent */
+/** @typedef {{ switchTo: string | null, hasRequest: boolean, continuesRunningTask: boolean, source: 'model' | 'judge' | 'fallback' | 'skipped', failure?: string }} ChannelIntent */
 
 /** @returns {ChannelIntent} */
 export function fallbackIntent(/** @type {string} */ failure) {
@@ -80,14 +80,15 @@ export function verifiedIntent(verdict, { projectIds, currentProjectId, running 
 export class ChannelIntentClassifier {
   /**
    * @param {Record<string, any>} config
-   * @param {{ usageLedger?: any, fetchImpl?: typeof fetch,
+   * @param {{ usageLedger?: any, fetchImpl?: typeof fetch, judgeService?: any,
    *   callModel?: (deps: Record<string, any>, call: Record<string, any>) => Promise<any> }} [options]
    */
-  constructor(config, { usageLedger = null, fetchImpl = globalThis.fetch, callModel = callModelForControlPlane } = {}) {
+  constructor(config, { usageLedger = null, fetchImpl = globalThis.fetch, callModel = callModelForControlPlane, judgeService = null } = {}) {
     this.config = config;
     this.usageLedger = usageLedger;
     this.fetchImpl = fetchImpl;
     this.callModel = callModel;
+    this.judgeService = judgeService;
     // On the reply's critical path, so the gateway's own timeout caps it at 30 s.
     this.timeoutMs = Math.max(1_000, Math.min(30_000, Number(config?.modelGatewayTimeoutMs ?? 30_000)));
   }
@@ -106,6 +107,39 @@ export class ChannelIntentClassifier {
     // Nothing to decide: one project and nothing running leaves only "a new
     // request here", which is also the fail-safe answer. No call is made.
     if (projects.length <= 1 && !running) return { switchTo: null, hasRequest: true, continuesRunningTask: false, source: "skipped" };
+    const input = { userId, projectId, text, projects, runningTask };
+    if (this.judgeService) {
+      try {
+        const decision = await this.judgeService.judge("J2", {
+          message: text, currentProjectId: projectId, projects,
+          currentTask: runningTask?.question ?? null,
+        }, {
+          userId, projectId,
+          baseline: async () => {
+            const old = await this.classifyWithModel(input);
+            if (old.source !== "model") throw new Error("channel_baseline_unavailable");
+            return { value: { switch_to: old.switchTo, has_request: old.hasRequest, continues_running_task: old.continuesRunningTask } };
+          },
+        });
+        if (decision.outcome === "settled") {
+          const intent = verifiedIntent(decision.value, { projectIds: projects.map(project => project.id), currentProjectId: projectId, running });
+          return intent ? { ...intent, source: "judge" } : fallbackIntent("verdict_invalid");
+        }
+        // An off switch restores the previous implementation. An uncertain
+        // live judgement must never move the chat or edit an existing task.
+        if (!["judge_disabled", "judge_unconfigured", "judge_uncalibrated", "judge_calibration_mismatch"].includes(decision.code)) return fallbackIntent(decision.code ?? "judge_uncertain");
+      } catch {
+        return fallbackIntent("judge_failed");
+      }
+    }
+    return this.classifyWithModel(input);
+  }
+
+  /** The incumbent is retained for the off switch and sampled drift checks.
+   * @param {{userId:string,projectId:string,text:string,projects:readonly {id:string,name:string}[],runningTask?:{question:string}|null}} input
+   * @returns {Promise<ChannelIntent>} */
+  async classifyWithModel({ userId, projectId, text, projects, runningTask = null }) {
+    const running = Boolean(runningTask);
     if (!this.available) return fallbackIntent("model_unavailable");
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), this.timeoutMs);
@@ -131,7 +165,7 @@ export class ChannelIntentClassifier {
                 role: "user",
                 content: JSON.stringify({
                   message: String(text).slice(0, 2_000),
-                  projects: projects.slice(0, 50).map((project) => ({ id: project.id, name: project.name })),
+                  projects: projects.slice(0, 51).map((project) => ({ id: project.id, name: project.name })),
                   current_project: projectId,
                   running_task: runningTask ? { question: String(runningTask.question ?? "").slice(0, 500) } : null,
                 }),

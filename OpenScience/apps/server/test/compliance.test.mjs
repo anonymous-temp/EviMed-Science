@@ -357,3 +357,13 @@ test("the boot proof boots under the environment production actually emits", asy
   assert.match(smoke, /DSH_TELEMETRY_DISABLED=1/, "telemetry has no redaction rules and must be off wherever the kernel boots");
   assert.match(smoke, /DSH_PERMISSION_MODE=workspace-write/);
 });
+
+
+test("the judge credential audit proves task injection rather than accepting a token name", async () => {
+  const { judgeTaskCredentialWired } = await import("../../../scripts/ops/audit-hosted-compliance.mjs");
+  const model = await readFile(path.join(repoRoot, "deploy/specialist-adapter/evimed_specialist_adapter/engine_model.py"), "utf8");
+  const worker = await readFile(path.join(repoRoot, "deploy/specialist-adapter/evimed_specialist_adapter/service.py"), "utf8");
+  assert.equal(judgeTaskCredentialWired(model, worker), true);
+  assert.equal(judgeTaskCredentialWired(model.replace('"EVIMED_JUDGE_GATEWAY_TOKEN": token', '"UNWIRED_TOKEN": token'), worker), false);
+  assert.equal(judgeTaskCredentialWired(model, worker.replace('environment.update(engine_model.child_environment(', 'unwired(')), false);
+});

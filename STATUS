@@ -897,3 +897,12 @@ DONE S507 2026-09-04T18:55:00+00:00 **计量在生产里真的记到数了**,不
 2026-10-04T14:00Z DONE REL-1004-rc9-pushed head=d60e3053a2a8 rc8=failed-skill-package-table-digest-of-local-bytecode-caches fix=digest-skips-pycache clean-checkout=8-generated-checks-pass
 2026-10-04T14:31Z DONE REL-1004-merge-n15-n17 head=2ef6095d0 checks=7 lint,typecheck rc9-web=success
 2026-10-04T14:32Z DONE REL-1004-merge-followups head=388fc71f6 checks=7 lint,typecheck
+
+JEV-A0 2026-10-06 14:29 UTC: Preserved the production frontier calibration snapshot before retention: 26,812 screening records, 12,868 event memberships, 41 links and 246 revisions; no operator-labelled merge/split rows exist in this snapshot. Private gzip SHA256 00795f279283f1424f9846b475ec0eeb8419ce9634a0005e04fad8098499cacb. Incumbent decisions are comparison labels, not human gold.
+DONE JEV-A1-A5 2026-10-07T01:16:41+00:00 Implemented the bounded shared judge, scoped gateway, pooled transport, per-site switches/circuits, operation attribution, per-account learning budgets and content-free sampled drift; verified PostgreSQL accounting.
+DONE JEV-B1 2026-10-07T01:16:41+00:00 Repaired method SCREEN/DECIDE/BUILD contracts and Chinese candidate matching; existing useful methods survive pending validation and each account has bounded learning decisions/builds.
+DONE JEV-B3-B5 2026-10-07T01:16:41+00:00 Qualified J2 and J4 against live online-shaped corpora; J2 settled70/70 correctly and J4 settled127/127 correctly; J3 final title-to-paper routes passed50/50 but its noninferiority confidence bound remains insufficient.
+DONE JEV-B6-D1 2026-10-07T01:16:41+00:00 Verified conservative screening and exact repeated-log folding in actual isolated DSH+DeepSeek sessions, including scientific-data preservation and provider/tool failure controls.
+DONE JEV-C-G-CODE 2026-10-07T01:16:41+00:00 Wired the available later-stage server/engine sites and annotation-only runtime J18; verified shared-client shipment in six isolated engine source-delta builds; unqualified sites keep incumbent behavior.
+DONE JEV-A2-LATENCY 2026-10-07T01:16:41+00:00 Measured deployed Jev client on the production host in an isolated operator probe: cold1237ms; warm329/1149/1230ms; no customer account or serving deployment changed.
+PENDING JEV-RELEASE 2026-10-07T01:16:41+00:00 Remaining site calibration, later-release caller integration, refreshed live capability probes and phased production observation are recorded in OpenScience/evals/judge-sites/release-readiness.json; this branch does not claim full release acceptance.

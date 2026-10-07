@@ -327,7 +327,7 @@ test("backstage prose has a designated file, and the gate does not read it as re
   // report file by name and never saw the outlet either way — writing the case
   // against one of those made the exemption untestable, and the mutation that
   // deleted it stayed green.
-  const backstage = "本次修订说明：依据契约完成白名单抓取和落盘核验，并把第 3 节改挂到另一篇来源。";
+  const backstage = "本次修订说明：依据 mcp__evimed__literature_search 的返回记录重做第 3 节。";
   const brief = "# 研究简报\n\n## 结论\n\n证据支持该结论。\n";
 
   const inReport = runGate({
@@ -676,8 +676,8 @@ test("each register rule reports its own reason and names the sentence to fix", 
       expect: /line \d+ writes about itself rather than about the evidence/,
     },
     {
-      label: "the runtime's vocabulary",
-      write: "该来源的访问层级为摘要，相关工件已保存于本环境。",
+      label: "an internal artifact path",
+      write: "引用来自 .evimed-sources/paper.txt。",
       expect: /runtime or retrieval-process prose .*line \d+ reads/,
     },
     {
@@ -989,15 +989,15 @@ test("permits an evidence-accessibility limitation but still rejects uncited pra
   assert.match(result.issues.join("\n"), /Medication response/);
 });
 
-test("still bans an evidence-accessibility statement outside the Limitations section", () => {
+test("leaves evidence-accessibility language to the post-delivery judge", () => {
   const input = validPackage();
   input.reportText = input.reportText.replace(
     "## 药物角色\n速效救心丸不应延误急诊评估。[3] <!-- claim:CLM-003 -->",
     "## 药物角色\n核心指南全文不可及。速效救心丸不应延误急诊评估。[3] <!-- claim:CLM-003 -->",
   );
   const result = validateClinicalEvidencePackage(input);
-  assert.equal(result.valid, false);
-  assert.match(result.issues.join("\n"), /runtime or retrieval-process prose/);
+  assert.equal(result.valid, true);
+  assert.doesNotMatch(result.issues.join("\n"), /runtime or retrieval-process prose/);
 });
 
 test("rejects a report number absent from every cited claim proposition and source passage", () => {
@@ -1183,7 +1183,7 @@ test("rejects an emergency-call recommendation when the quote only describes sym
   assert.match(result.issues.join("\n"), /emergency-call action is not present in its direct support/);
 });
 
-test("rejects authored retrieval excuses and uncited Chinese practical steps or bullets", () => {
+test("keeps practical safety checks while leaving retrieval language to the judge", () => {
   const input = validPackage();
   input.reportText = input.reportText
     .replace(
@@ -1202,7 +1202,7 @@ test("rejects authored retrieval excuses and uncited Chinese practical steps or 
     );
   const result = validateClinicalEvidencePackage(input);
   assert.equal(result.valid, false);
-  assert.match(result.issues.join("\n"), /runtime or retrieval-process prose/);
+  assert.doesNotMatch(result.issues.join("\n"), /runtime or retrieval-process prose/);
   assert.match(result.issues.join("\n"), /Every practical-action step or bullet/);
 });
 

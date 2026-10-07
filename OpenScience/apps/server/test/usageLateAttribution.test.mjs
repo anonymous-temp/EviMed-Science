@@ -115,8 +115,9 @@ test("a reservation with no run stores its session, and one with a run stores no
     const database = recordingDatabase();
     await new UsageLedger(database).reserveModel(reservation(input));
     const insert = database.statements.find((statement) => /^\s*INSERT INTO evimed_usage\.model_requests/.test(statement.sql));
-    assert.match(insert.sql, /session_id\)/);
-    assert.equal(insert.params.at(-1), expected, JSON.stringify(input));
+    assert.match(insert.sql, /purpose,session_id,operation,task_id,module\)/);
+    assert.equal(insert.params[12], expected, JSON.stringify(input));
+    assert.deepEqual(insert.params.slice(13), [null, null, null]);
   }
 });
 

@@ -1,6 +1,16 @@
 """Screening agent — title/abstract + full-text screening with PRISMA tracking."""
 from __future__ import annotations
 
+try:
+    from evimed_judge import ask as judge_ask, ask_async as judge_ask_async
+except ImportError:
+    def judge_ask(*args, **kwargs):
+        return None
+
+    async def judge_ask_async(*args, **kwargs):
+        return None
+
+
 import json
 import re
 from concurrent.futures import ThreadPoolExecutor
@@ -870,6 +880,14 @@ class ScreeningAgent(BaseAgent):
     ) -> str:
         """Classify whether a full-text record is a primary trial publication or related source."""
         title = str(paper.get("title") or "")
+        judgment = judge_ask("meta-evidence-role", {
+            "title": title, "abstract": paper.get("abstract") or "",
+            "text": str((parsed or {}).get("text") or (parsed or {}).get("full_text") or ""),
+            "targetOutcome": (protocol.pico.outcome_primary if protocol else "") or "",
+        })
+        roles = {"primary_publication", "design_or_protocol", "secondary_analysis", "adjacent_outcome_trial"}
+        if isinstance(judgment, dict) and isinstance(judgment.get("role"), str) and judgment.get("role") in roles:
+            return judgment["role"]
         title_norm = ScreeningAgent._norm_text(title)
         outcome_norm = ScreeningAgent._norm_text((protocol.pico.outcome_primary if protocol else "") or "")
 
