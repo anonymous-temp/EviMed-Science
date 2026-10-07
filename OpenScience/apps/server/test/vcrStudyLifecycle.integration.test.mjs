@@ -285,7 +285,7 @@ function routeFor(user, extra = {}) {
         { sessionId: "run-analysis", capabilityId: "vcr-analysis", status: "running", startedAt: "2026-10-07T02:00:00.000Z" },
         ...(own ? [] : []),
       ],
-      rename: async (...args) => { projectCalls.push(["rename", ...args.slice(1)]); },
+      rename: async (...args) => { projectCalls.push(["rename", ...args]); },
       ...extra,
     },
   });
@@ -345,7 +345,7 @@ test("renaming a study renames its project when the project still carries the ol
   const renamed = await call("PATCH", `/api/vcr/studies/${created.id}`, { name: "新名字" });
   assert.equal(renamed.status, 200);
   assert.equal(renamed.body.name, "新名字");
-  assert.deepEqual(projectCalls, [["rename", "prj_rn", "新名字", "旧名字"]], "the project is asked with the old name so it can tell whether the researcher renamed it");
+  assert.deepEqual(projectCalls, [["rename", user.id, "prj_rn", "新名字", "旧名字"]], "the project is the owner's, and is asked with the old name so it can tell whether the researcher renamed it");
   assert.equal((await store.getStudy(user.id, created.id))?.name, "新名字");
   assert.equal((await call("PATCH", `/api/vcr/studies/${created.id}`, { name: "   " })).status, 400);
   assert.equal((await call("PATCH", `/api/vcr/studies/${created.id}`, { name: "长".repeat(41) })).status, 400);

@@ -74,16 +74,16 @@ export function VcrListSkeleton() {
   );
 }
 
-/** A study page's first paint: the rail, the tab row and the number band. */
+/** A study page's first paint: the tab row and a conclusion with the table under it. */
 export function VcrStudySkeleton() {
   return (
     <div className="animate-pulse" aria-hidden="true" data-vcr-loading="study">
-      <Bar className="h-20 rounded-card" />
-      <div className="mt-6 flex h-10 items-end gap-6 border-b border-border">
-        {Array.from({ length: 7 }, (_, index) => <Bar key={index} className="mb-3 h-3.5 w-10" />)}
+      <div className="flex h-10 items-end gap-6 border-b border-border">
+        {Array.from({ length: 7 }, (_, index) => <Bar key={index} className="mb-3 h-3.5 w-14" />)}
       </div>
-      <div className="mt-6 grid grid-cols-2 gap-px rounded-panel border border-border bg-border lg:grid-cols-5">
-        {Array.from({ length: 5 }, (_, index) => <Bar key={index} className="h-28 rounded-none" />)}
+      <Bar className="mt-6 h-20 rounded-card" />
+      <div className="mt-4 flex flex-col gap-px rounded-panel border border-border bg-border">
+        {Array.from({ length: 4 }, (_, index) => <Bar key={index} className="h-12 rounded-none" />)}
       </div>
     </div>
   );
@@ -156,10 +156,10 @@ export function VcrNoDefinition({ study }: { study: Pick<VcrStudy, "projectId" |
   };
   return (
     <div data-vcr-no-definition="" className="flex flex-col items-center gap-4 py-12 text-center">
-      <p className="max-w-measure text-ui text-text-2">{VCR_NO_DEFINITION}</p>
+      <p id="vcr-no-definition" className="max-w-measure text-ui text-text-2">{VCR_NO_DEFINITION}</p>
       <div className="flex flex-wrap items-center justify-center gap-2">
         {/* There is nothing for the AI to start from yet: the button is there, and says why it is not pressable. */}
-        {study.abilities.includes("run") && <Button disabled title={VCR_NO_DEFINITION}>让 AI 做</Button>}
+        {study.abilities.includes("run") && <Button disabled aria-describedby="vcr-no-definition">让 AI 做</Button>}
         <Button variant="secondary" onClick={go} loading={opening}>去对话</Button>
       </div>
     </div>

@@ -2414,9 +2414,12 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       remove: (user, projectId) => removeStudyProject(user, projectId),
       // The project carries the study's name, so a rename of the study is the project's too (the sidebar lists projects). A project
       // the researcher renamed on its own is left alone: only a name equal to the study's previous one follows it.
-      rename: async (user, projectId, name, previousName) => {
-        const current = (await store.listProjects(user)).find((project) => project.id === projectId);
-        if (current && current.name === previousName) await store.renameProject(user, projectId, [...String(name)].slice(0, 40).join(""));
+      rename: async (ownerId, projectId, name, previousName) => {
+        // The project is the owner's, whoever renamed the study.
+        const owner = await store.userById(ownerId);
+        if (!owner) return;
+        const current = (await store.listProjects(owner)).find((project) => project.id === projectId);
+        if (current && current.name === previousName) await store.renameProject(owner, projectId, [...String(name)].slice(0, 40).join(""));
       },
       // The conversation a study made before it recorded its own was opened with: the oldest one bound to its first capability, which
       // is made at creation and before any programme step runs in the project.
@@ -4619,7 +4622,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // A study nobody described (「新建研究」 made it before the first word) is deleted with its project an hour after it was made,
     // unless somebody spoke in it: the run ledger holds every message a person sent, so a project with any run is kept.
     vcr.drafts = createVcrDraftSweeper({
-      store: vcr.store, ttlMs: config.vcrDraftTtlMinutes * 60_000,
+      store: vcr.store, ttlMs: Number(config.vcrDraftTtlMinutes) > 0 ? Number(config.vcrDraftTtlMinutes) * 60_000 : undefined,
       spokenIn: async (study) => {
         const owner = await store.userById(study.userId);
         if (!owner) return false;

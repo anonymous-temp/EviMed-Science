@@ -28,7 +28,7 @@ describe("Tabs", () => {
     expect(daily).toHaveFocus();
   });
 
-  it("says a tab's state three ways: a dot whose shape and colour differ, a tooltip, and words after the name", () => {
+  it("says a tab's state three ways: a dot whose shape and colour differ, and words after the name for a reader who cannot see it", () => {
     render(
       <Tabs
         label="研究视图"
@@ -50,6 +50,5 @@ describe("Tabs", () => {
     expect(screen.getByRole("tab", { name: "定义与证据 已完成" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "对照 需要留意" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "总览" }), "a tab with no dot is named by its label alone").toBeInTheDocument();
-    expect(document.querySelector("[data-tab-dot=active]")).toHaveAttribute("title", "进行中");
   });
 });

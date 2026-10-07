@@ -1609,7 +1609,7 @@ describe("虚拟临研 in the conversation", () => {
     return { view, frame, post, vcrPosts };
   }
 
-  it("tells the chip where the study starts, what it is for, and the six single-task starters", async () => {
+  it("tells the chip where the study starts, what it is for, and the six starting points of a new study", async () => {
     const { view, vcrPosts } = await openVcrConversation("vcr-analysis");
     await waitFor(() => expect(vcrPosts()).toHaveLength(1));
     const [options] = vcrPosts();
@@ -1617,7 +1617,7 @@ describe("虚拟临研 in the conversation", () => {
     expect(options.startOptions.map((choice: { label: string }) => choice.label)).toEqual(["自动", "队列", "患者", "对照", "试验"]);
     expect(options.useOptions.map((choice: { label: string }) => choice.label)).toEqual(["探索", "研究设计支持", "指定研究分析", "申报准备"]);
     expect(options.starters.map((starter: { label: string }) => starter.label))
-      .toEqual(["估算样本量", "外部对照可行性", "找先例和参数", "生成合成数据", "匹配患者", "完整研究"]);
+      .toEqual(["估算样本量", "生成合成人群", "外部对照可行性", "模拟试验方案", "找先例与参数", "匹配患者"]);
     view.unmount();
   });
 

@@ -340,7 +340,7 @@ function wholeNumber(value, field, max) {
  *     latestSessionId?: (user: any, projectId: string) => Promise<string | null>,
  *     conversationSessionId?: (user: any, projectId: string) => Promise<string | null>,
  *     backgroundRuns?: (userId: string, projectId: string, conversationSessionId: string | null) => Promise<Array<Record<string, any>>>,
- *     rename?: (user: any, projectId: string, name: string, previousName: string) => Promise<unknown>,
+ *     rename?: (ownerId: string, projectId: string, name: string, previousName: string) => Promise<unknown>,
  *     remove?: (user: any, projectId: string) => Promise<unknown> } | null,
  *   orchestrator?: any, jobs?: any, exporter?: any, members?: any, matching?: any, assessments?: any, dataPlane?: any,
  *   evidence?: any, evidenceStore?: any, corrections?: any, knowledge?: any, publications?: any, predictions?: any, cards?: any }} dependencies
@@ -620,7 +620,7 @@ export function createVcrRoutes(dependencies) {
           { detail: Object.keys(patch).join(",") }, () => service.updateStudy(user, id, patch));
         // The project carries the study's name (the sidebar lists projects): a rename follows it, and never undoes the study's.
         if (patch.name !== undefined && study.name !== patch.name) {
-          await dependencies.projects?.rename?.(user, study.projectId, patch.name, study.name).catch(() => null);
+          await dependencies.projects?.rename?.(study.userId, study.projectId, patch.name, study.name).catch(() => null);
         }
         return reply(updated);
       }

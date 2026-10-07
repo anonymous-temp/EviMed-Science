@@ -100,7 +100,7 @@ export function Tabs<V extends string>({
               selected ? "border-text text-text" : "border-transparent text-text-3 hover:text-text",
             )}
           >
-            {item.dot && <span aria-hidden="true" title={DOT_WORDS[item.dot]} data-tab-dot={item.dot} data-forced-colors="preserve" className={cn("mr-0.5 inline-block shrink-0", DOT_CLASSES[item.dot])} />}
+            {item.dot && <span aria-hidden="true" data-tab-dot={item.dot} data-forced-colors="preserve" className={cn("mr-0.5 inline-block shrink-0", DOT_CLASSES[item.dot])} />}
             {item.label}
             {item.count !== undefined && <span className="tabular-nums text-text-3">{item.count}</span>}
             {/* The state in words, after the name: a screen reader hears 「试验 进行中」, and the dot's shape and colour are not the only way to know. */}
