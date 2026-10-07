@@ -3,6 +3,7 @@ import { Link } from "react-router";
 import { Button } from "@/components/ui/Button";
 import { WebApiError } from "@/lib/apiClient";
 import { fetchEvidenceCommunity, type EvidenceCommunityCard } from "@/lib/evidenceCommunityClient";
+import type { EvidenceFrom } from "./FrontierBack";
 
 const cardPath = (card: Pick<EvidenceCommunityCard, "zoneId" | "id">) => `/app/frontier/zones/${encodeURIComponent(card.zoneId)}/evidence/${encodeURIComponent(card.id)}`;
 
@@ -17,10 +18,10 @@ function standing(card: EvidenceCommunityCard): string {
 /**
  * 社区卡片 — other users' public cards on the same subjects as an official zone, signed with their author and read-only: the platform does not
  * edit them, rank them by anything but how many of their claims were found in their sources and how readers scored them, or vouch for them.
- * Only authors with three published cards that each carry a ✓ appear (the server's rule). Quiet where there is nothing to show: a deployment that has
+ * An author link carries `from` (the zone it is read on) so the author's page can say its way back. Only authors with three published cards that each carry a ✓ appear (the server's rule). Quiet where there is nothing to show: a deployment that has
  * not switched the column on, a zone with no such cards, and a read that fails (said once, with a retry) never replace the zone.
  */
-export function EvidenceCommunityCards({ zoneId }: { zoneId: string }) {
+export function EvidenceCommunityCards({ zoneId, from }: { zoneId: string; from?: EvidenceFrom }) {
   const [items, setItems] = useState<EvidenceCommunityCard[] | null>(null);
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -58,7 +59,7 @@ export function EvidenceCommunityCards({ zoneId }: { zoneId: string }) {
           <li key={card.id} className="py-3">
             <Link className="text-ui text-accent hover:underline" to={cardPath(card)}>{card.title}</Link>
             <p className="mt-1 text-caption text-text-3">
-              <Link className="hover:underline" to={`/app/frontier/authors/${encodeURIComponent(card.author.id)}`}>{card.author.name}</Link>
+              <Link className="hover:underline" to={`/app/frontier/authors/${encodeURIComponent(card.author.id)}`} state={from ? { evidenceFrom: from } : undefined}>{card.author.name}</Link>
               {` · ${card.zoneTitle}`}
               {standing(card) && ` · ${standing(card)}`}
             </p>

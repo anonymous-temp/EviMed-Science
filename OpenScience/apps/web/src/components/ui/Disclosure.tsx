@@ -13,17 +13,20 @@ export function Disclosure({
   summary,
   children,
   defaultOpen = false,
+  onToggle,
   className,
   summaryClassName,
 }: {
   summary: ReactNode;
   children: ReactNode;
   defaultOpen?: boolean;
+  /** Told when the reader opens or closes it — for content that is only fetched once it is wanted. */
+  onToggle?: (open: boolean) => void;
   className?: string;
   summaryClassName?: string;
 }) {
   return (
-    <details className={cn("group", className)} open={defaultOpen || undefined}>
+    <details className={cn("group", className)} open={defaultOpen || undefined} onToggle={onToggle ? (event) => onToggle(event.currentTarget.open) : undefined}>
       <summary
         className={cn(
           "flex min-h-sm cursor-pointer list-none items-center gap-1 rounded text-ui text-muted hover:text-text [&::-webkit-details-marker]:hidden",
