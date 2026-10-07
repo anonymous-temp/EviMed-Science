@@ -327,5 +327,8 @@ vcr_test_handler_jobs <- function() {
   # --- robustness methods (2026-10-04): their jobs are in tests/helpers/robustness.R ---
   cases <- c(cases, vcr_test_robustness_handler_jobs())
   # --- end robustness methods ---
+  # --- the 2026-10-07 extensions: their jobs are in tests/helpers/extensions.R ---
+  cases <- c(cases, vcr_test_extension_handler_jobs())
+  # --- end extensions ---
   cases
 }

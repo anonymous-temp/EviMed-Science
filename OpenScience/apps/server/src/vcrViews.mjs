@@ -88,7 +88,7 @@ export const JOB_KIND_LABELS = Object.freeze(/** @type {Record<string, string>} 
   profile_snapshot: "数据快照画像", build_cohort: "构建队列", generate_population: "生成情景人群",
   literature_population: "文献人群", synthesize_population: "合成人群", population_quality: "人群质量报告",
   generate_patients: "生成虚拟患者", generate_patients_continuous: "生成虚拟患者（连续终点）",
-  generate_patients_binary: "生成虚拟患者（二分类终点）", reconstruct_km: "重建生存曲线", pool_evidence: "合并证据",
+  generate_patients_binary: "生成虚拟患者（二分类终点）", generate_patients_longitudinal: "生成虚拟患者（纵向轨迹）", reconstruct_km: "重建生存曲线", pool_evidence: "合并证据",
   weight_comparator: "熵平衡加权", propensity_weight_comparator: "倾向评分加权", maic_comparator: "匹配调整间接比较",
   weighted_cox_comparator: "加权 Cox 风险比", maic_time_to_event_comparator: "事件时间终点的匹配调整间接比较",
   aipw_comparator: "双重稳健估计（AIPW）", covariate_set_comparator: "协变量集敏感性分析",

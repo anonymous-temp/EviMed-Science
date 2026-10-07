@@ -219,8 +219,8 @@ export function vcrReferenceModelInputs(endpointType) {
 }
 
 /**
- * The three mathematical reference simulators the first catalogue ships
- * (plan §8.2). Scenario-tier by construction: they answer 「在这些假设下会
+ * The mathematical reference simulators the catalogue ships (plan §8.2): one per endpoint
+ * family, and since 2026-10-07 the trajectory model beside the continuous one. Scenario-tier by construction: they answer 「在这些假设下会
  * 怎样」 and carry no claim about any real population, which is why their
  * applicability says so in words rather than naming an indication.
  */
@@ -274,6 +274,26 @@ export const VCR_REFERENCE_MODELS = Object.freeze([
     }),
     applicability: Object.freeze({ population: "不限，但只作情景推演", region: "不限", endpoints: Object.freeze(["time_to_event"]) }),
     validation: Object.freeze({ codeVerification: "对照 simsurv 的已知真值", seedReproducible: true }),
+    evidence: Object.freeze(["code_verification", "seed_reproducible"]),
+  }),
+  // The trajectory model (2026-10-07, plan 5.2): a linear mixed model of a continuous outcome over a visit schedule. Its inputs are
+  // listed by hand: the shared table above labels `truth.effect` as a difference of means, which is not what this model's effect is.
+  Object.freeze({
+    name: "reference-longitudinal", version: "1.0.0", tier: "scenario", risk: "none", endpointType: "continuous",
+    card: Object.freeze({
+      title: "连续终点纵向轨迹参考仿真器",
+      type: "mathematical_simulation",
+      provider: "EviMed 虚拟临研",
+      interface: "vcr-engine patients.longitudinal",
+      inputs: Object.freeze(["两组人数", "随访时间表", "基线水平与对照组的变化速度", "处理效应（每个时间单位变化速度的差）",
+        "个体间的差异（截距与斜率的标准差及相关）", "残差标准差", "每次随访前退出的概率", "协变量效应（取自已存人群）"]),
+      outputs: "按给定参数生成的每次随访的连续终点观测值、两组的平均轨迹和 95% 范围，以及同一个人在两种分组下的轨迹；输出的是情景推演，不是对任何真实人群或个体的预测。",
+      missingData: "输入缺项不插补：缺哪一项就报哪一项，不用默认值顶替。退出的人退出后的随访记为缺失。",
+      knownLimits: Object.freeze(["线性轨迹，随机截距与随机斜率", "退出为完全随机缺失，不模拟与结局有关的退出", "不含任何真实人群的协变量结构", "不可用于个体层面的预测", "不承载疗效或安全性证据"]),
+      retirement: "当引擎的 patients.longitudinal 方法版本变更时退役并重新发布。",
+    }),
+    applicability: Object.freeze({ population: "不限，但只作情景推演", region: "不限", endpoints: Object.freeze(["continuous"]) }),
+    validation: Object.freeze({ codeVerification: "对照线性混合模型拟合（nlme）与解析均值和方差", seedReproducible: true }),
     evidence: Object.freeze(["code_verification", "seed_reproducible"]),
   }),
 ]);

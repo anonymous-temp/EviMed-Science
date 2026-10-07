@@ -85,6 +85,8 @@ JOB_KINDS = (
     "weighted_cox_comparator", "maic_time_to_event_comparator", "aipw_comparator", "covariate_set_comparator",
     # robustness methods (2026-10-04)
     "negative_control_comparator", "tipping_point", "prognostic_adjustment_comparator",
+    # longitudinal virtual patients (2026-10-07)
+    "generate_patients_longitudinal",
 )
 POOLING_METHODS = ("single_study", "random_effects_dl", "random_effects_reml", "random_effects_hksj", "fixed_effect")
 POOLING_CALIBRES = ("closest", "overall", "next_closest")
@@ -95,7 +97,7 @@ SIMULATE_ACTIONS = ("start", "status", "cancel", "shape")
 OBJECT_SHAPES = {
     "trial_scenario (configuration)": ("design_analytic", "design_simulation"),
     "design_grid": ("design_grid",),
-    "patient_set (scenario)": ("generate_patients", "generate_patients_continuous", "generate_patients_binary"),
+    "patient_set (scenario)": ("generate_patients", "generate_patients_continuous", "generate_patients_binary", "generate_patients_longitudinal"),
     "population (definition)": ("generate_population", "literature_population", "synthesize_population"),
     "comparator (configuration)": ("weight_comparator", "propensity_weight_comparator", "weighted_cox_comparator", "aipw_comparator",
                                    "covariate_set_comparator", "maic_comparator", "maic_time_to_event_comparator", "map_prior", "procova",
@@ -202,7 +204,8 @@ def tool_definitions():
                 "carries only the keys the engine reads for the job that computes it: before you write a trial scenario, "
                 "patient set, population or comparator, call vcr_simulate with action shape and that job's kind "
                 "(design_analytic and design_simulation for a trial scenario; generate_patients, "
-                "generate_patients_continuous or generate_patients_binary for a patient set; generate_population for a "
+                "generate_patients_continuous, generate_patients_binary or generate_patients_longitudinal (a trajectory over a "
+                "visit schedule) for a patient set; generate_population for a "
                 "population; the comparator kind for a comparator) and write those keys and no others. Items are checked "
                 "one by one; refused items come back in issues and the rest are written."
             ),

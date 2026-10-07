@@ -92,6 +92,17 @@ export const NUMERIC_REFERENCES = {
   N39c: { methods: ['comparator.prognostic_adjustment'], anchors: ['Against the truth. 300 randomized trials', 'all(abs(bias_z) < 3)'] },
   N39d: { methods: ['comparator.prognostic_adjustment'], anchors: ['The time-to-event half against survival', 'abs(g("rmst_treatment_standardised") - a1$rmst) < 1e-8'] },
 
+  // --- the 2026-10-07 extensions: each held to a reference that is not the method's own code ---
+  // patients.longitudinal: a linear mixed model fitted to the OUTPUT table by nlme, and the model's closed-form mean and SD at every visit
+  N46a: { methods: ['patients.longitudinal'], anchors: ['fit <- suppressWarnings(nlme::lme(y ~ time * arm', 'ci <- nlme::intervals(fit, level = 0.999)', 'z_worst < 4'] },
+  // design.assurance (group sequential): rpact's group-sequential power per effect integrated over the prior by a quadrature written in the case, and rpact per stage
+  N47a: { methods: ['design.assurance'], anchors: ['every stage\'s rejection probability agrees with rpact::getPowerSurvival', 'worst_rp < 1e-6'] },
+  N47b: { methods: ['design.assurance'], anchors: ['rpact::getPowerSurvival(design = des', 'abs(a - ref) < 1e-6', 'abs(s$value - a) <= 3 * s$mcse'] },
+  // design.simulate / design.grid (single-arm mean): the exact non-central t from stats::power.t.test and a normal closed form; (survival time): an independent plain-R simulation
+  N48a: { methods: ['design.simulate'], anchors: ['stats::power.t.test(n = 40, delta = 5, sd = 12, sig.level = 0.025', 'abs(m$value - rows[[i]]$ref) <= 3 * m$mcse'] },
+  N48c: { methods: ['design.simulate'], anchors: ['against an independent simulation written in plain R', 'abs(z) <= 3.5'] },
+  N48d: { methods: ['design.grid'], anchors: ['a grid cell equals the single job at the cell\'s own seed', 'identical(cell$value, vcr_measure_value(one, "power"))'] },
+
   // --- the comparator-effect stream's cases (listed so that merging it needs no edit here; inert until the cases exist) ---
   N33a: { methods: ['comparator.weighted_cox'], anchors: ['Cross-software: the weights are WeightIt', 'rel(m(j_ebal, "hazard_ratio"), r_ebal$hr) < 1e-6'] },
   N34a: { methods: ['comparator.maic_time_to_event'], anchors: ['The unanchored vignette: 500 patients of arm A matched', 'abs(m("hazard_ratio_robust")$value - 0.2834780) < 1e-6'] },

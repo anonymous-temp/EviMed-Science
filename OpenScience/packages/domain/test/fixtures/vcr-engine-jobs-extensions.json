@@ -1,0 +1,2069 @@
+{
+  "description": "Parity jobs for the 2026-10-07 engine extensions: longitudinal virtual patients (patients.longitudinal), the assurance of a group-sequential design, and single-arm simulation of a mean and of a survival time against a benchmark (design.simulate / design.grid 1.2.0), with the replays the earlier versions must still accept. A file of its own, read by the domain test and by the engine case N49a, so the two languages' verdicts are held equal.",
+  "valid": [
+    {
+      "name": "longitudinal: a trajectory over five visits with random effects and dropout",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "generate_patients_longitudinal",
+        "method": "patients.longitudinal",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20261007,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "visits": [
+            0,
+            3,
+            6,
+            9,
+            12
+          ],
+          "truth": {
+            "intercept": 50,
+            "slope": -0.4,
+            "effect": -0.2,
+            "sd": 3,
+            "randomEffects": {
+              "sdIntercept": 6,
+              "sdSlope": 0.3,
+              "correlation": -0.2
+            }
+          },
+          "dropoutPerVisit": 0.1
+        },
+        "inputs": []
+      }
+    },
+    {
+      "name": "longitudinal: covariate effects from a stored population",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "generate_patients_longitudinal",
+        "method": "patients.longitudinal",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20261007,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "visits": [
+            0,
+            3,
+            6,
+            9,
+            12
+          ],
+          "truth": {
+            "intercept": 50,
+            "slope": -0.4,
+            "effect": -0.2,
+            "sd": 3,
+            "randomEffects": {
+              "sdIntercept": 6,
+              "sdSlope": 0.3,
+              "correlation": -0.2
+            },
+            "covariateEffects": {
+              "age": 0.05
+            }
+          },
+          "dropoutPerVisit": 0.1
+        },
+        "inputs": [
+          {
+            "kind": "snapshot_file",
+            "id": "pop_1@1",
+            "location": "derived/std_1/job_0/population.csv",
+            "hash": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "valueSource": "synthetic"
+          }
+        ]
+      }
+    },
+    {
+      "name": "longitudinal: the minimum a scenario states",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "generate_patients_longitudinal",
+        "method": "patients.longitudinal",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20261007,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "nTreat": 20
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "visits": [
+            0,
+            1
+          ],
+          "truth": {
+            "effect": 0
+          }
+        },
+        "inputs": []
+      }
+    },
+    {
+      "name": "assurance: a group-sequential design",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "assurance",
+        "method": "design.assurance",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 20261007,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "group_sequential",
+            "allocation": 0.5,
+            "events": 300,
+            "informationRates": [
+              0.4,
+              0.7,
+              1
+            ],
+            "spending": "obrien_fleming"
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "designPrior": {
+            "mean": -0.3,
+            "sd": 0.15
+          },
+          "analysis": {
+            "alpha": 0.025,
+            "sided": 1
+          }
+        },
+        "inputs": []
+      }
+    },
+    {
+      "name": "assurance: a group-sequential design with Pocock spending and two-sided analysis",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "assurance",
+        "method": "design.assurance",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 20261007,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "group_sequential",
+            "allocation": 0.5,
+            "events": 300,
+            "informationRates": [
+              0.4,
+              0.7,
+              1
+            ],
+            "spending": "pocock"
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "designPrior": {
+            "mean": -0.3,
+            "sd": 0.15
+          },
+          "analysis": {
+            "alpha": 0.05,
+            "sided": 2
+          }
+        },
+        "inputs": []
+      }
+    },
+    {
+      "name": "assurance: the fixed design, kind spelt out",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "assurance",
+        "method": "design.assurance",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 20261007,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "two_arm_fixed",
+            "allocation": 0.5,
+            "events": 300
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "designPrior": {
+            "mean": -0.3,
+            "sd": 0.15
+          },
+          "analysis": {
+            "alpha": 0.025,
+            "sided": 1
+          }
+        },
+        "inputs": []
+      }
+    },
+    {
+      "name": "assurance: a fixed design recorded at 1.0.0 is still valid (a replay)",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "assurance",
+        "method": "design.assurance",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20261007,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "allocation": 0.5,
+            "events": 300
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "designPrior": {
+            "mean": -0.3,
+            "sd": 0.15
+          },
+          "analysis": {
+            "alpha": 0.025,
+            "sided": 1
+          }
+        },
+        "inputs": []
+      }
+    },
+    {
+      "name": "simulate: single arm, a mean, one-sample t",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.2.0",
+        "protocolVersion": 1,
+        "seed": 20261007,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "single_arm",
+            "n": 40
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "truth": {
+            "benchmark": 50,
+            "effect": 5,
+            "sd": 12
+          },
+          "analysis": {
+            "method": "one_sample_t",
+            "alternative": "greater",
+            "sided": 1,
+            "alpha": 0.025
+          },
+          "performance": [
+            "power",
+            "bias"
+          ]
+        },
+        "inputs": [],
+        "replicates": 5000
+      }
+    },
+    {
+      "name": "simulate: single arm, a mean, one-sample z, two-sided null",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.2.0",
+        "protocolVersion": 1,
+        "seed": 20261007,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "single_arm",
+            "n": 40
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "truth": {
+            "effect": 0,
+            "sd": 12
+          },
+          "analysis": {
+            "method": "one_sample_z",
+            "sd": 10,
+            "alternative": "two.sided",
+            "sided": 2,
+            "alpha": 0.05
+          }
+        },
+        "inputs": [],
+        "replicates": 20000
+      }
+    },
+    {
+      "name": "simulate: single arm, a survival time, one-sample log-rank",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.2.0",
+        "protocolVersion": 1,
+        "seed": 20261007,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "single_arm",
+            "n": 60
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "truth": {
+            "controlMedian": 12,
+            "hazardRatio": 0.65
+          },
+          "accrual": {
+            "kind": "uniform",
+            "duration": 12,
+            "followup": 12,
+            "dropoutAnnual": 0.05
+          },
+          "analysis": {
+            "method": "one_sample_logrank",
+            "alternative": "less",
+            "sided": 1,
+            "alpha": 0.025
+          }
+        },
+        "inputs": [],
+        "replicates": 5000
+      }
+    },
+    {
+      "name": "simulate: single arm, a survival time against a Weibull benchmark",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.2.0",
+        "protocolVersion": 1,
+        "seed": 20261007,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "single_arm",
+            "n": 60
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "truth": {
+            "hazardRatio": 0.65,
+            "controlDistribution": {
+              "kind": "weibull",
+              "shape": 1.5,
+              "scale": 18
+            }
+          },
+          "accrual": {
+            "kind": "uniform",
+            "duration": 12,
+            "followup": 12,
+            "dropoutAnnual": 0.05
+          },
+          "analysis": {
+            "method": "one_sample_logrank",
+            "alternative": "less",
+            "sided": 1,
+            "alpha": 0.025
+          }
+        },
+        "inputs": [],
+        "replicates": 5000
+      }
+    },
+    {
+      "name": "simulate: the binary single arm recorded at 1.1.0 is still valid (a replay)",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 20261007,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "single_arm",
+            "n": 30
+          },
+          "endpoint": {
+            "type": "binary"
+          },
+          "truth": {
+            "nullRate": 0.2,
+            "responseRate": 0.4
+          },
+          "analysis": {
+            "method": "exact_binomial",
+            "alternative": "greater",
+            "sided": 1,
+            "alpha": 0.05
+          }
+        },
+        "inputs": [],
+        "replicates": 5000
+      }
+    },
+    {
+      "name": "simulate: a two-arm design recorded at 1.1.0 and one at 1.0.0 are still valid (replays)",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 20261007,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "two_arm_fixed",
+            "nTreat": 100,
+            "nControl": 100
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "truth": {
+            "effect": 0.4,
+            "sd": 1
+          },
+          "analysis": {
+            "method": "ttest"
+          }
+        },
+        "inputs": [],
+        "replicates": 5000
+      }
+    },
+    {
+      "name": "simulate: a two-arm design recorded at 1.0.0",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20261007,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "two_arm_fixed",
+            "nTreat": 100,
+            "nControl": 100
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "truth": {
+            "effect": 0.4,
+            "sd": 1
+          },
+          "analysis": {
+            "method": "ttest"
+          }
+        },
+        "inputs": [],
+        "replicates": 5000
+      }
+    },
+    {
+      "name": "simulate: a group-sequential design recorded at 1.1.0",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 20261007,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "group_sequential",
+            "nTreat": 150,
+            "nControl": 150,
+            "informationRates": [
+              0.5,
+              1
+            ]
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "truth": {
+            "hazardRatio": 0.7,
+            "controlMedian": 12
+          },
+          "analysis": {
+            "method": "logrank"
+          },
+          "accrual": {
+            "kind": "uniform",
+            "duration": 12,
+            "followup": 12
+          }
+        },
+        "inputs": [],
+        "replicates": 5000
+      }
+    },
+    {
+      "name": "grid: single arm, a mean, over sample sizes and effects",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "design_grid",
+        "method": "design.grid",
+        "methodVersion": "1.2.0",
+        "protocolVersion": 1,
+        "seed": 20261007,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "single_arm",
+            "n": 40
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "truth": {
+            "benchmark": 50,
+            "effect": 0,
+            "sd": 12
+          },
+          "analysis": {
+            "method": "one_sample_t",
+            "alternative": "greater",
+            "sided": 1,
+            "alpha": 0.025
+          },
+          "performance": [
+            "power"
+          ],
+          "designs": [
+            {
+              "n": 20
+            },
+            {
+              "n": 40
+            }
+          ],
+          "truths": [
+            {
+              "effect": 0
+            },
+            {
+              "effect": 5
+            }
+          ]
+        },
+        "inputs": [],
+        "replicates": 2000
+      }
+    }
+  ],
+  "invalid": [
+    {
+      "name": "longitudinal: no effect stated (a typo must not read as no effect)",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "generate_patients_longitudinal",
+        "method": "patients.longitudinal",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20261007,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "visits": [
+            0,
+            3,
+            6,
+            9,
+            12
+          ],
+          "truth": {
+            "intercept": 50,
+            "slope": -0.4,
+            "sd": 3,
+            "randomEffects": {
+              "sdIntercept": 6,
+              "sdSlope": 0.3,
+              "correlation": -0.2
+            }
+          },
+          "dropoutPerVisit": 0.1
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_field_missing@scenario.truth.effect"
+      ]
+    },
+    {
+      "name": "longitudinal: a key the engine does not read",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "generate_patients_longitudinal",
+        "method": "patients.longitudinal",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20261007,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "visits": [
+            0,
+            3,
+            6,
+            9,
+            12
+          ],
+          "truth": {
+            "intercept": 50,
+            "slope": -0.4,
+            "effect": -0.2,
+            "sd": 3,
+            "randomEffects": {
+              "sdIntercept": 6,
+              "sdSlope": 0.3,
+              "correlation": -0.2
+            },
+            "treatmentEffect": 1
+          },
+          "dropoutPerVisit": 0.1
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.truth.treatmentEffect"
+      ]
+    },
+    {
+      "name": "longitudinal: the dropout as an object, which is not a key",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "generate_patients_longitudinal",
+        "method": "patients.longitudinal",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20261007,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "visits": [
+            0,
+            3,
+            6,
+            9,
+            12
+          ],
+          "truth": {
+            "intercept": 50,
+            "slope": -0.4,
+            "effect": -0.2,
+            "sd": 3,
+            "randomEffects": {
+              "sdIntercept": 6,
+              "sdSlope": 0.3,
+              "correlation": -0.2
+            }
+          },
+          "dropout": {
+            "perVisit": 0.1
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.dropout"
+      ]
+    },
+    {
+      "name": "longitudinal: a prefix of a key is not the key",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "generate_patients_longitudinal",
+        "method": "patients.longitudinal",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20261007,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "visits": [
+            0,
+            3,
+            6,
+            9,
+            12
+          ],
+          "truth": {
+            "intercept": 50,
+            "slope": -0.4,
+            "effect": -0.2,
+            "sd": 3,
+            "randomEffects": {
+              "sdIntercept": 6,
+              "sdSlope": 0.3,
+              "correlation": -0.2
+            }
+          },
+          "dropoutPerVisit": 0.1,
+          "visitsX": [
+            0,
+            1
+          ]
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.visitsX"
+      ]
+    },
+    {
+      "name": "longitudinal: visits out of order",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "generate_patients_longitudinal",
+        "method": "patients.longitudinal",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20261007,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "visits": [
+            0,
+            6,
+            3
+          ],
+          "truth": {
+            "intercept": 50,
+            "slope": -0.4,
+            "effect": -0.2,
+            "sd": 3,
+            "randomEffects": {
+              "sdIntercept": 6,
+              "sdSlope": 0.3,
+              "correlation": -0.2
+            }
+          },
+          "dropoutPerVisit": 0.1
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.visits"
+      ]
+    },
+    {
+      "name": "longitudinal: one visit",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "generate_patients_longitudinal",
+        "method": "patients.longitudinal",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20261007,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "visits": [
+            0
+          ],
+          "truth": {
+            "intercept": 50,
+            "slope": -0.4,
+            "effect": -0.2,
+            "sd": 3,
+            "randomEffects": {
+              "sdIntercept": 6,
+              "sdSlope": 0.3,
+              "correlation": -0.2
+            }
+          },
+          "dropoutPerVisit": 0.1
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.visits"
+      ]
+    },
+    {
+      "name": "longitudinal: a binary endpoint",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "generate_patients_longitudinal",
+        "method": "patients.longitudinal",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20261007,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "binary"
+          },
+          "visits": [
+            0,
+            3,
+            6,
+            9,
+            12
+          ],
+          "truth": {
+            "intercept": 50,
+            "slope": -0.4,
+            "effect": -0.2,
+            "sd": 3,
+            "randomEffects": {
+              "sdIntercept": 6,
+              "sdSlope": 0.3,
+              "correlation": -0.2
+            }
+          },
+          "dropoutPerVisit": 0.1
+        },
+        "inputs": []
+      },
+      "expected": [
+        "endpoint_not_supported@scenario.endpoint.type"
+      ]
+    },
+    {
+      "name": "longitudinal: a residual SD of zero",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "generate_patients_longitudinal",
+        "method": "patients.longitudinal",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20261007,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "visits": [
+            0,
+            3,
+            6,
+            9,
+            12
+          ],
+          "truth": {
+            "intercept": 50,
+            "slope": -0.4,
+            "effect": -0.2,
+            "sd": 0,
+            "randomEffects": {
+              "sdIntercept": 6,
+              "sdSlope": 0.3,
+              "correlation": -0.2
+            }
+          },
+          "dropoutPerVisit": 0.1
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.truth.sd"
+      ]
+    },
+    {
+      "name": "longitudinal: a correlation of one",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "generate_patients_longitudinal",
+        "method": "patients.longitudinal",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20261007,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "visits": [
+            0,
+            3,
+            6,
+            9,
+            12
+          ],
+          "truth": {
+            "intercept": 50,
+            "slope": -0.4,
+            "effect": -0.2,
+            "sd": 3,
+            "randomEffects": {
+              "sdIntercept": 6,
+              "sdSlope": 0.3,
+              "correlation": 1
+            }
+          },
+          "dropoutPerVisit": 0.1
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.truth.randomEffects.correlation"
+      ]
+    },
+    {
+      "name": "longitudinal: a negative random-slope SD",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "generate_patients_longitudinal",
+        "method": "patients.longitudinal",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20261007,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "visits": [
+            0,
+            3,
+            6,
+            9,
+            12
+          ],
+          "truth": {
+            "intercept": 50,
+            "slope": -0.4,
+            "effect": -0.2,
+            "sd": 3,
+            "randomEffects": {
+              "sdIntercept": 6,
+              "sdSlope": -1,
+              "correlation": -0.2
+            }
+          },
+          "dropoutPerVisit": 0.1
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.truth.randomEffects.sdSlope"
+      ]
+    },
+    {
+      "name": "longitudinal: everybody leaves",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "generate_patients_longitudinal",
+        "method": "patients.longitudinal",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20261007,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "visits": [
+            0,
+            3,
+            6,
+            9,
+            12
+          ],
+          "truth": {
+            "intercept": 50,
+            "slope": -0.4,
+            "effect": -0.2,
+            "sd": 3,
+            "randomEffects": {
+              "sdIntercept": 6,
+              "sdSlope": 0.3,
+              "correlation": -0.2
+            }
+          },
+          "dropoutPerVisit": 1
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.dropoutPerVisit"
+      ]
+    },
+    {
+      "name": "longitudinal: no treated patients",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "generate_patients_longitudinal",
+        "method": "patients.longitudinal",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20261007,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "nTreat": 0,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "visits": [
+            0,
+            3,
+            6,
+            9,
+            12
+          ],
+          "truth": {
+            "intercept": 50,
+            "slope": -0.4,
+            "effect": -0.2,
+            "sd": 3,
+            "randomEffects": {
+              "sdIntercept": 6,
+              "sdSlope": 0.3,
+              "correlation": -0.2
+            }
+          },
+          "dropoutPerVisit": 0.1
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.design.nTreat"
+      ]
+    },
+    {
+      "name": "longitudinal: a version the build does not have",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "generate_patients_longitudinal",
+        "method": "patients.longitudinal",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 20261007,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "nTreat": 150,
+            "nControl": 150
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "visits": [
+            0,
+            3,
+            6,
+            9,
+            12
+          ],
+          "truth": {
+            "intercept": 50,
+            "slope": -0.4,
+            "effect": -0.2,
+            "sd": 3,
+            "randomEffects": {
+              "sdIntercept": 6,
+              "sdSlope": 0.3,
+              "correlation": -0.2
+            }
+          },
+          "dropoutPerVisit": 0.1
+        },
+        "inputs": []
+      },
+      "expected": [
+        "method_version_mismatch@methodVersion"
+      ]
+    },
+    {
+      "name": "assurance: a group-sequential design for a continuous endpoint",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "assurance",
+        "method": "design.assurance",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 20261007,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "group_sequential",
+            "nTreat": 100,
+            "nControl": 100,
+            "informationRates": [
+              0.5,
+              1
+            ]
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "truth": {
+            "sd": 1
+          },
+          "designPrior": {
+            "mean": 0.3,
+            "sd": 0.1
+          },
+          "analysis": {
+            "alpha": 0.025
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "design_not_supported@scenario.design.kind"
+      ]
+    },
+    {
+      "name": "assurance: a group-sequential design without its looks",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "assurance",
+        "method": "design.assurance",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 20261007,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "group_sequential",
+            "allocation": 0.5,
+            "events": 300,
+            "spending": "obrien_fleming"
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "designPrior": {
+            "mean": -0.3,
+            "sd": 0.15
+          },
+          "analysis": {
+            "alpha": 0.025,
+            "sided": 1
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_field_missing@scenario.design.informationRates"
+      ]
+    },
+    {
+      "name": "assurance: looks that do not end at one",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "assurance",
+        "method": "design.assurance",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 20261007,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "group_sequential",
+            "allocation": 0.5,
+            "events": 300,
+            "informationRates": [
+              0.4,
+              0.7
+            ],
+            "spending": "obrien_fleming"
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "designPrior": {
+            "mean": -0.3,
+            "sd": 0.15
+          },
+          "analysis": {
+            "alpha": 0.025,
+            "sided": 1
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.design.informationRates"
+      ]
+    },
+    {
+      "name": "assurance: a spending function the engine does not have",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "assurance",
+        "method": "design.assurance",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 20261007,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "group_sequential",
+            "allocation": 0.5,
+            "events": 300,
+            "informationRates": [
+              0.4,
+              0.7,
+              1
+            ],
+            "spending": "hwang_shih_decani"
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "designPrior": {
+            "mean": -0.3,
+            "sd": 0.15
+          },
+          "analysis": {
+            "alpha": 0.025,
+            "sided": 1
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.design.spending"
+      ]
+    },
+    {
+      "name": "assurance: looks given to a fixed design",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "assurance",
+        "method": "design.assurance",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 20261007,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "allocation": 0.5,
+            "events": 300,
+            "informationRates": [
+              0.5,
+              1
+            ]
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "designPrior": {
+            "mean": -0.3,
+            "sd": 0.15
+          },
+          "analysis": {
+            "alpha": 0.025,
+            "sided": 1
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.design.informationRates"
+      ]
+    },
+    {
+      "name": "assurance: a group-sequential design labelled with the version before it existed",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "assurance",
+        "method": "design.assurance",
+        "methodVersion": "1.0.0",
+        "protocolVersion": 1,
+        "seed": 20261007,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "group_sequential",
+            "allocation": 0.5,
+            "events": 300,
+            "informationRates": [
+              0.4,
+              0.7,
+              1
+            ],
+            "spending": "obrien_fleming"
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "designPrior": {
+            "mean": -0.3,
+            "sd": 0.15
+          },
+          "analysis": {
+            "alpha": 0.025,
+            "sided": 1
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "method_version_mismatch@methodVersion"
+      ]
+    },
+    {
+      "name": "assurance: a single-arm design",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "assurance",
+        "method": "design.assurance",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 20261007,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "allocation": 0.5,
+            "events": 300,
+            "kind": "single_arm"
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "designPrior": {
+            "mean": -0.3,
+            "sd": 0.15
+          },
+          "analysis": {
+            "alpha": 0.025,
+            "sided": 1
+          }
+        },
+        "inputs": []
+      },
+      "expected": [
+        "design_not_supported@scenario.design.kind"
+      ]
+    },
+    {
+      "name": "simulate: a z analysis without the SD it takes as known",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.2.0",
+        "protocolVersion": 1,
+        "seed": 20261007,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "single_arm",
+            "n": 40
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "truth": {
+            "effect": 0,
+            "sd": 12
+          },
+          "analysis": {
+            "method": "one_sample_z",
+            "alternative": "two.sided",
+            "sided": 2,
+            "alpha": 0.05
+          }
+        },
+        "inputs": [],
+        "replicates": 5000
+      },
+      "expected": [
+        "scenario_field_missing@scenario.analysis.sd"
+      ]
+    },
+    {
+      "name": "simulate: an exact binomial analysis of a mean",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.2.0",
+        "protocolVersion": 1,
+        "seed": 20261007,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "single_arm",
+            "n": 40
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "truth": {
+            "benchmark": 50,
+            "effect": 5,
+            "sd": 12
+          },
+          "analysis": {
+            "method": "exact_binomial",
+            "alternative": "greater",
+            "sided": 1,
+            "alpha": 0.025
+          },
+          "performance": [
+            "power",
+            "bias"
+          ]
+        },
+        "inputs": [],
+        "replicates": 5000
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.analysis.method"
+      ]
+    },
+    {
+      "name": "simulate: a one-sample t analysis of a binary endpoint",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.2.0",
+        "protocolVersion": 1,
+        "seed": 20261007,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "single_arm",
+            "n": 30
+          },
+          "endpoint": {
+            "type": "binary"
+          },
+          "truth": {
+            "nullRate": 0.2,
+            "responseRate": 0.4
+          },
+          "analysis": {
+            "method": "one_sample_t",
+            "alternative": "greater",
+            "sided": 1,
+            "alpha": 0.05
+          }
+        },
+        "inputs": [],
+        "replicates": 5000
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.analysis.method"
+      ]
+    },
+    {
+      "name": "simulate: a baseline correlation on a trial with no baseline",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.2.0",
+        "protocolVersion": 1,
+        "seed": 20261007,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "single_arm",
+            "n": 40
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "truth": {
+            "benchmark": 50,
+            "effect": 5,
+            "sd": 12,
+            "baselineCorrelation": 0.3
+          },
+          "analysis": {
+            "method": "one_sample_t",
+            "alternative": "greater",
+            "sided": 1,
+            "alpha": 0.025
+          },
+          "performance": [
+            "power",
+            "bias"
+          ]
+        },
+        "inputs": [],
+        "replicates": 5000
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.truth.baselineCorrelation"
+      ]
+    },
+    {
+      "name": "simulate: response rates on a mean",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.2.0",
+        "protocolVersion": 1,
+        "seed": 20261007,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "single_arm",
+            "n": 40
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "truth": {
+            "benchmark": 50,
+            "effect": 5,
+            "sd": 12,
+            "responseRate": 0.4
+          },
+          "analysis": {
+            "method": "one_sample_t",
+            "alternative": "greater",
+            "sided": 1,
+            "alpha": 0.025
+          },
+          "performance": [
+            "power",
+            "bias"
+          ]
+        },
+        "inputs": [],
+        "replicates": 5000
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.truth.responseRate"
+      ]
+    },
+    {
+      "name": "simulate: no alternative",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.2.0",
+        "protocolVersion": 1,
+        "seed": 20261007,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "single_arm",
+            "n": 40
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "truth": {
+            "benchmark": 50,
+            "effect": 5,
+            "sd": 12
+          },
+          "analysis": {
+            "method": "one_sample_t",
+            "sided": 1,
+            "alpha": 0.025
+          },
+          "performance": [
+            "power",
+            "bias"
+          ]
+        },
+        "inputs": [],
+        "replicates": 5000
+      },
+      "expected": [
+        "scenario_field_missing@scenario.analysis.alternative"
+      ]
+    },
+    {
+      "name": "simulate: one-sided analysis of a two-sided alternative",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.2.0",
+        "protocolVersion": 1,
+        "seed": 20261007,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "single_arm",
+            "n": 40
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "truth": {
+            "benchmark": 50,
+            "effect": 5,
+            "sd": 12
+          },
+          "analysis": {
+            "method": "one_sample_t",
+            "alternative": "two.sided",
+            "sided": 1,
+            "alpha": 0.025
+          },
+          "performance": [
+            "power",
+            "bias"
+          ]
+        },
+        "inputs": [],
+        "replicates": 5000
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.analysis.sided"
+      ]
+    },
+    {
+      "name": "simulate: two arm sizes on a single-arm trial",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.2.0",
+        "protocolVersion": 1,
+        "seed": 20261007,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "single_arm",
+            "n": 40,
+            "nTreat": 40
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "truth": {
+            "benchmark": 50,
+            "effect": 5,
+            "sd": 12
+          },
+          "analysis": {
+            "method": "one_sample_t",
+            "alternative": "greater",
+            "sided": 1,
+            "alpha": 0.025
+          },
+          "performance": [
+            "power",
+            "bias"
+          ]
+        },
+        "inputs": [],
+        "replicates": 5000
+      },
+      "expected": [
+        "scenario_field_unknown@scenario.design.nTreat"
+      ]
+    },
+    {
+      "name": "simulate: both a benchmark median and a benchmark distribution",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.2.0",
+        "protocolVersion": 1,
+        "seed": 20261007,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "single_arm",
+            "n": 60
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "truth": {
+            "controlMedian": 12,
+            "hazardRatio": 0.65,
+            "controlDistribution": {
+              "kind": "exponential",
+              "rate": 0.05
+            }
+          },
+          "accrual": {
+            "kind": "uniform",
+            "duration": 12,
+            "followup": 12,
+            "dropoutAnnual": 0.05
+          },
+          "analysis": {
+            "method": "one_sample_logrank",
+            "alternative": "less",
+            "sided": 1,
+            "alpha": 0.025
+          }
+        },
+        "inputs": [],
+        "replicates": 5000
+      },
+      "expected": [
+        "scenario_value_invalid@scenario.truth.controlDistribution"
+      ]
+    },
+    {
+      "name": "simulate: single arm on a mean labelled 1.1.0, before it existed",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 20261007,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "single_arm",
+            "n": 40
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "truth": {
+            "benchmark": 50,
+            "effect": 5,
+            "sd": 12
+          },
+          "analysis": {
+            "method": "one_sample_t",
+            "alternative": "greater",
+            "sided": 1,
+            "alpha": 0.025
+          },
+          "performance": [
+            "power",
+            "bias"
+          ]
+        },
+        "inputs": [],
+        "replicates": 5000
+      },
+      "expected": [
+        "method_version_mismatch@methodVersion"
+      ]
+    },
+    {
+      "name": "simulate: single arm on a survival time labelled 1.1.0",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.1.0",
+        "protocolVersion": 1,
+        "seed": 20261007,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "single_arm",
+            "n": 60
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "truth": {
+            "controlMedian": 12,
+            "hazardRatio": 0.65
+          },
+          "accrual": {
+            "kind": "uniform",
+            "duration": 12,
+            "followup": 12,
+            "dropoutAnnual": 0.05
+          },
+          "analysis": {
+            "method": "one_sample_logrank",
+            "alternative": "less",
+            "sided": 1,
+            "alpha": 0.025
+          }
+        },
+        "inputs": [],
+        "replicates": 5000
+      },
+      "expected": [
+        "method_version_mismatch@methodVersion"
+      ]
+    },
+    {
+      "name": "simulate: an external-control single-arm design on a mean",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.2.0",
+        "protocolVersion": 1,
+        "seed": 20261007,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "single_arm_external",
+            "n": 40
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "truth": {
+            "effect": 1,
+            "sd": 1
+          },
+          "analysis": {
+            "method": "stratified_risk_difference",
+            "estimand": "ATT"
+          }
+        },
+        "inputs": [],
+        "replicates": 5000
+      },
+      "expected": [
+        "design_not_supported@scenario.design.kind"
+      ]
+    },
+    {
+      "name": "simulate: Simon two-stage on a survival time",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "design_simulation",
+        "method": "design.simulate",
+        "methodVersion": "1.2.0",
+        "protocolVersion": 1,
+        "seed": 20261007,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "simon_two_stage",
+            "n1": 10,
+            "n": 29,
+            "r1": 1,
+            "r": 5
+          },
+          "endpoint": {
+            "type": "time_to_event"
+          },
+          "truth": {
+            "hazardRatio": 0.7,
+            "controlMedian": 12
+          },
+          "analysis": {
+            "method": "simon_boundary"
+          }
+        },
+        "inputs": [],
+        "replicates": 5000
+      },
+      "expected": [
+        "design_not_supported@scenario.design.kind"
+      ]
+    },
+    {
+      "name": "grid: a cell that is an external-control design on a mean",
+      "job": {
+        "jobId": "job_1",
+        "studyId": "std_1",
+        "kind": "design_grid",
+        "method": "design.grid",
+        "methodVersion": "1.2.0",
+        "protocolVersion": 1,
+        "seed": 20261007,
+        "cpuSecondsLimit": 600,
+        "scenario": {
+          "design": {
+            "kind": "single_arm",
+            "n": 40
+          },
+          "endpoint": {
+            "type": "continuous"
+          },
+          "truth": {
+            "benchmark": 50,
+            "effect": 0,
+            "sd": 12
+          },
+          "analysis": {
+            "method": "one_sample_t",
+            "alternative": "greater",
+            "sided": 1,
+            "alpha": 0.025
+          },
+          "performance": [
+            "power"
+          ],
+          "designs": [
+            {
+              "kind": "single_arm_external"
+            },
+            {
+              "n": 40
+            }
+          ],
+          "truths": [
+            {
+              "effect": 0
+            },
+            {
+              "effect": 5
+            }
+          ]
+        },
+        "inputs": [],
+        "replicates": 2000
+      },
+      "expected": [
+        "design_not_supported@scenario.designs[0].kind"
+      ]
+    }
+  ],
+  "validResults": [],
+  "invalidResults": []
+}

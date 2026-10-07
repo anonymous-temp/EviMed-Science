@@ -57,6 +57,8 @@ test("every job kind files under a result kind the read models know, and every c
   assert.equal(vcrResultKindFor("profile_snapshot"), "snapshot_profile");
   assert.equal(vcrResultKindFor("design_simulation"), "trial_scenario");
   assert.equal(vcrResultKindFor("reconstruct_km"), "evidence_pool");
+  // every patient generator files under the patient set, the trajectory model with the others
+  for (const kind of ["generate_patients", "generate_patients_continuous", "generate_patients_binary", "generate_patients_longitudinal"]) assert.equal(vcrResultKindFor(kind), "patient_set", kind);
 });
 
 test("a scenario's hash is over its canonical bytes, so key order and undefined never change it", () => {

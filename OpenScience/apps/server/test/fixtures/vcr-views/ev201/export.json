@@ -438,6 +438,12 @@
               "无"
             ],
             [
+              "reference-longitudinal",
+              "情景模型",
+              "无（参考仿真）",
+              "无"
+            ],
+            [
               "reference-time-to-event",
               "情景模型",
               "无（参考仿真）",

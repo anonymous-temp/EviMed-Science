@@ -698,6 +698,9 @@ export const VCR_JOB_KINDS = frozen([
   // --- appended (2026-10-04): the robustness methods ---
   'negative_control_comparator', 'tipping_point', 'prognostic_adjustment_comparator',
   // --- end robustness methods ---
+  // --- appended (2026-10-07): longitudinal virtual patients (plan 5.2) ---
+  'generate_patients_longitudinal',
+  // --- end longitudinal ---
 ])
 export const VCR_JOB_STATES = frozen(['queued', 'running', 'succeeded', 'failed', 'canceled', 'awaiting_budget'])
 export const VCR_JOB_STATE_LABELS_ZH = Object.freeze({

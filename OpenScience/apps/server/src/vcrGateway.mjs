@@ -1939,7 +1939,7 @@ async function startJob(vcr, study, request) {
     detail,
   }).catch(error => {
     if (error?.status === 400 && ['generate_population', 'literature_population', 'synthesize_population',
-      'generate_patients', 'generate_patients_continuous', 'generate_patients_binary'].includes(request.kind)) {
+      'generate_patients', 'generate_patients_continuous', 'generate_patients_binary', 'generate_patients_longitudinal'].includes(request.kind)) {
       const refusal = gatewayError(400, 'vcr_simulate_payload_invalid', String(error.message));
       refusal.issues = fieldFindings(error.issues);
       refusal.alternatives = [

@@ -872,7 +872,7 @@ test("AC-16 the other four things that make a result stale each raise their own 
   const moved = await store.staleMarks(study.id);
   assert.ok(moved.some((mark) => mark.reason === "method_version_changed" && mark.node === scenarioNode), JSON.stringify({ moved, currentExecution }));
   await drainJobs(module, study);
-  assert.equal(VCR_ENGINE_METHODS["design.simulate"].version, "1.1.0");
+  assert.notEqual(VCR_ENGINE_METHODS["design.simulate"].version, "0.9.0", "the pretended old version is not the one the engine publishes");
   const aggregateAfter = await store.currentResultOf(study.id, "trial_scenario", scenario.id);
   const rerun = await store.one("SELECT method_version FROM evimed_vcr.executions WHERE study_id=$1 AND job_id=$2", [study.id, aggregateAfter.diagnostics.stageResults.simulation.jobId]);
   assert.equal(rerun.method_version, VCR_ENGINE_METHODS["design.simulate"].version, "computed again at the version the engine publishes now");

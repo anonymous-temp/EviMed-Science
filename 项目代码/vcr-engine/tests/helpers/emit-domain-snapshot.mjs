@@ -27,6 +27,7 @@ const snapshot = {
     Object.entries(job.VCR_ENGINE_METHODS).map(([id, spec]) => [id, {
       version: spec.version, endpoints: [...spec.endpoints], crossChecks: [...spec.crossChecks], modelTier: spec.modelTier,
       ...('legacyVersion' in spec ? { legacyVersion: spec.legacyVersion, legacyDesigns: [...spec.legacyDesigns] } : {}),
+      ...('legacyReleases' in spec ? { legacyReleases: spec.legacyReleases.map((release) => ({ version: release.version, support: Object.fromEntries(Object.entries(release.support).map(([kind, endpoints]) => [kind, [...endpoints]])) })) } : {}),
     }]),
   ),
   jobMethods: { ...job.VCR_JOB_METHODS },
