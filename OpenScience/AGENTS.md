@@ -154,6 +154,19 @@ per-project workspace + JSONL provenance.
 - **The interface never explains the system** (2026-09-23 plan): no subtitle, no hint
   under a card title, no 「为什么入选」; no internal state as text (已交付, 核对 N 条,
   用过 N 次, token, tok/s, API names, ids). Say what the user can do and the result.
+- **Page structure** (2026-10-07 plan §9.4, `DESIGN.md` 「页面结构」): a page is one list of one
+  kind of object, detail opens in the right-hand drawer, the header is the title, the scope
+  and at most one primary button, and nothing that looks clickable may be silent.
+  `scripts/ops/ui-walk.mjs` measures it on the live pages after every release.
+- **Module names** (the owner's rulings of 2026-10-07): the product calls its two modules 「循证 GEO」
+  (code `geo`; it was 「循证传播」 only from 2026-10-06) and 「虚拟临床研究」 (code `vcr`; it was
+  「虚拟临研」) everywhere a reader or a model sees them — pages, notices, e-mails, error sentences,
+  capability titles and SKILL text. Identifiers, routes, schemas, `OPEN_SCIENCE_*` keys and file
+  names keep `geo` / `vcr`. The old names are retired words: `retiredWords.test.ts` (web) and
+  `geoProductName.test.mjs` (server) fail on them, the walk fails on a page that shows them, and
+  the search boxes over tools, skills and plugins read them as the new names until 2027-01-07
+  (`@evimed/domain`'s `retiredNames.mjs`). A line that must hold an old name as data carries
+  `retired-word-ok`.
 - ESLint bans new arbitrary values (`text-[Npx]`, `rounded-[Npx]`, bare
   `shadow-sm/md/lg`, `shadow-card`, opacity modifiers on token colours) across
   `src/**`, and `font-serif` inside `components/{ui,layout,cards}` — use the
