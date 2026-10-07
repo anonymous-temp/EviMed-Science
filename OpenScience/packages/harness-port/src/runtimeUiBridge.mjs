@@ -336,7 +336,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
       return { sessionId: data.sessionId, checks };
     },
     /**
-     * 循证传播's options for the conversation on screen: the project's
+     * 循证 GEO's options for the conversation on screen: the project's
      * coverage window and engines (with `controls` when there is a GEO project
      * to write them to), the engines on offer with their names, and the
      * single-step starters. Rebuilt from a closed shape; `clear` drops them.
@@ -364,7 +364,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
       };
     },
     /**
-     * 虚拟临研's options for the conversation on screen: where the study starts
+     * 虚拟临床研究's options for the conversation on screen: where the study starts
      * (起点) and what its results are for (预期用途), each with the choices on
      * offer and their words, and the single-task starters. `controls` is true
      * when the shell found the study this conversation belongs to; `canSetUse`
@@ -468,7 +468,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
    * anything else.
    */
   const SHELL_DESTINATIONS = ['new-task', 'runs', 'knowledge', 'memory', 'capabilities', 'account', 'geo', 'virtual-research'];
-  /** The tabs of a 循证传播 project a `geo` destination may name; the project is the shell's to know. */
+  /** The tabs of a 循证 GEO project a `geo` destination may name; the project is the shell's to know. */
   const GEO_TABS = ['overview', 'evidence', 'journey', 'questions', 'diagnosis', 'sources', 'content', 'distribution', 'monitoring'];
 
   /**
@@ -549,7 +549,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
       return { capabilityId, sessionId: validId(fields.sessionId) ? fields.sessionId : null, draft };
     },
     /**
-     * A 循证传播 option the reader changed beside the chip: the coverage
+     * A 循证 GEO option the reader changed beside the chip: the coverage
      * window in days, or the engines. The shell writes it to the project.
      * @param {any} fields
      */
@@ -563,7 +563,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
       return payload.coverageDays === undefined && payload.engines === undefined ? null : payload;
     },
     /**
-     * A 虚拟临研 option the reader changed beside the chip: where the study
+     * A 虚拟临床研究 option the reader changed beside the chip: where the study
      * starts, or what its results are for. The shell writes it to the study.
      * @param {any} fields
      */

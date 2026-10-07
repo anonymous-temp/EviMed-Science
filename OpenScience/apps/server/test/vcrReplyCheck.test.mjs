@@ -1,4 +1,4 @@
-// The numbers a 虚拟临研 conversation says it computed, held against the study's engine results: which numbers are results is the
+// The numbers a 虚拟临床研究 conversation says it computed, held against the study's engine results: which numbers are results is the
 // reviewer's language judgement (stubbed here), whether they are in the results is arithmetic, and a number not found is a ⚠ — a notice,
 // the reply untouched. The pure half first, then the reply check on PostgreSQL with the reviewer's wire stubbed.
 import assert from "node:assert/strict";

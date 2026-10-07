@@ -96,7 +96,7 @@ COPY --from=build /app/packages/socket/index.mjs /app/packages/socket/cordis.pat
 COPY --from=build /app/packages/socket/extensions ./packages/socket/extensions
 COPY --from=build /app/packages/socket/plugins ./packages/socket/plugins
 COPY --from=build /app/packages/socket/presets/evimed-universal/agent.cordis.yml ./packages/socket/presets/evimed-universal/agent.cordis.yml
-# 「虚拟临研」's snapshot profiler: the data plane runs it as a child process
+# 「虚拟临床研究」's snapshot profiler: the data plane runs it as a child process
 # (`VCR_PROFILER_SCRIPT` in vcrDataPlane.mjs resolves it from the server's own
 # directory, `../../../scripts/vcr`). Without it every snapshot profile fails on
 # a missing file the day the module first meets real data.
@@ -109,7 +109,7 @@ COPY --from=build /app/evals/paper-gold/development-contract.json /app/evals/pap
 COPY --from=build /app/evals/tool-graph/*.json ./evals/tool-graph/
 COPY --from=build /app/evals/method-quality ./evals/method-quality
 # 循证进化's module loops read their development cases at run time (moduleEvolutionPreparation,
-# moduleEvolutionEvaluators, moduleEvolutionCalibration): without them every 前沿动态, 循证传播 and
+# moduleEvolutionEvaluators, moduleEvolutionCalibration): without them every 前沿动态, 循证 GEO and
 # 主动科研 mission stopped on a missing file before its first smoke.
 COPY --from=build /app/evals/frontier-editing/cases.json ./evals/frontier-editing/cases.json
 COPY --from=build /app/evals/autopilot-next-action/cases.json ./evals/autopilot-next-action/cases.json

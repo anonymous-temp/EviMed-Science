@@ -525,7 +525,7 @@ function evidenceUpkeepSettings(overrides) {
  *   document for the eval corpus and an observation on the methods of the run that produced it. Ticked by the learning worker's housekeeping timer, so it
  *   needs the learning loop on; off, no table is read and no timer exists. `OPEN_SCIENCE_LEARNING_EVIDENCE_OUTCOMES_BATCH` (25, at most 200) is the
  *   change-log entries one pass reads: a bound on the database's work, not on how soon an outcome is noticed.
- * - `OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_ENABLED` (off): the platform's own modules (the evidence programme, 循证传播, 虚拟临研) hand 循证进化 what they could
+ * - `OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_ENABLED` (off): the platform's own modules (the evidence programme, 循证 GEO, 虚拟临床研究) hand 循证进化 what they could
  *   not do as research leads; needs the evolution module on. `OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_PER_DAY` (5, at most 50) bounds the new leads of these
  *   sources taken in a day, because each lead is a scouting run on the module's own budget.
  * - `OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_ENABLED` (off): a lesson an account's handbook learned that holds no project fact may go to the platform's skill supply as a
@@ -609,7 +609,7 @@ function memorySharingSettings(overrides, frontierEnabled) {
 }
 
 /**
- * 「循证传播」's settings (build spec 2026-09-25 §0, §5, §7), each checked at
+ * 「循证 GEO」's settings (build spec 2026-09-25 §0, §5, §7), each checked at
  * load, and the media marketplace it places orders through.
  *
  * Hidden knowledge — the same discipline as the frontier's: every one is a
@@ -749,8 +749,8 @@ export const VCR_ENGINE_SECRET_MIN_BYTES = 32;
  * @param {Record<string, any>} overrides
  */
 /**
- * 「虚拟临研」 (build plan 2026-09-28 §11.2): off by default, opened per
- * account like 「循证传播」 and 「前沿动态」 before it.
+ * 「虚拟临床研究」 (build plan 2026-09-28 §11.2): off by default, opened per
+ * account like 「循证 GEO」 and 「前沿动态」 before it.
  *
  * Hidden knowledge: the two ceilings here are not opinions, they are the
  * shared host (plan §11.4). The box this runs on is four cores shared with
@@ -926,7 +926,7 @@ function vcrSettings(overrides) {
 
 /**
  * The six limits of the NCBI Gene Expression Omnibus workflow (`gene_expression_series` / `gene_expression_differential`;
- * not 「循证传播」), each a whole number inside the bounds `@evimed/domain` fixes (principle 15: a reason, a key, a counter).
+ * not 「循证 GEO」), each a whole number inside the bounds `@evimed/domain` fixes (principle 15: a reason, a key, a counter).
  * The two byte limits for a download are enforced here, in the public-source gateway, and every limit reaches the
  * runtime as `EVIMED_GENE_EXPRESSION_*` (runtimeManager.mjs), where the tools enforce what only the runtime can see:
  * the samples and probes a matrix holds, the memory one computation may use, and the time it may take. An input over a
@@ -1006,7 +1006,7 @@ function reviewSettings(overrides) {
 }
 
 /**
- * The media marketplace (「循证传播」 distribution, build spec §7) and the
+ * The media marketplace (「循证 GEO」 distribution, build spec §7) and the
  * vendor's 「GEO 查收录」 channel. Neither the base URL nor the key file has a
  * default a deployment could reach: the vendor's documentation names only a
  * placeholder host, and the key is the operator's. Either missing reads as
@@ -2624,11 +2624,11 @@ export function loadConfig(overrides = {}) {
     ...evidenceFlywheelSettings(overrides),
     // --- sharing memory inside the platform (evidence-flywheel F17-F19, 2026-10-05) ---
     ...memorySharingSettings(overrides, overrides.frontierEnabled ?? boolEnv("OPEN_SCIENCE_FRONTIER_ENABLED", false)),
-    // --- 循证传播 and the media marketplace (2026-09-25) ---
+    // --- 循证 GEO and the media marketplace (2026-09-25) ---
     ...geoSettings(overrides),
-    // --- 虚拟临研: the virtual clinical research module (2026-09-28) ---
+    // --- 虚拟临床研究: the virtual clinical research module (2026-09-28) ---
     ...vcrSettings(overrides),
-    // --- NCBI Gene Expression Omnibus: the six resource limits (2026-10-04; not 循证传播) ---
+    // --- NCBI Gene Expression Omnibus: the six resource limits (2026-10-04; not 循证 GEO) ---
     ...geneExpressionSettings(overrides),
     ...reviewSettings(overrides),
     ...mediaMarketSettings(overrides),

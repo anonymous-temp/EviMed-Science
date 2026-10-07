@@ -174,9 +174,9 @@ describe("CapabilitiesPage", () => {
     forgetResearchBilling();
   });
 
-  // 循证传播 has its own row in the sidebar; its capabilities are not tools
+  // 循证 GEO has its own row in the sidebar; its capabilities are not tools
   // one picks here, whatever the catalogue lists.
-  it("offers no 循证传播 capability", async () => {
+  it("offers no 循证 GEO capability", async () => {
     mocks.listWebResearchAgents.mockResolvedValue([
       ...agents,
       { ...agents[0], id: "geo-content", title: "GEO 答案引擎优化", category: "写作与传播" },
@@ -256,6 +256,35 @@ describe("CapabilitiesPage", () => {
     expect(screen.queryByRole("button", { name: /自动化 Meta 分析/ })).not.toBeInTheDocument();
   });
 
+  // The two module names the owner replaced on 2026-10-07 keep finding the tools that carry the new ones until
+  // 2027-01-07 (`@evimed/domain` retiredNames), and the old name is never shown back.
+  it("finds a tool by a module's retired name, as its current name", async () => {
+    mocks.listWebResearchAgents.mockResolvedValue([
+      ...agents,
+      // An id the display table does not know keeps its own record, so the sentence under test is the one written here.
+      { ...agents[0], id: "custom-tool", title: "公共数据差异分析", category: "临床证据", description: "取公共 GEO 系列做两组差异表达，与循证 GEO 无关。", starterPrompts: ["分析一个公共数据集。"] },
+    ]);
+    renderPage();
+    await screen.findByRole("button", { name: /药品安全性分析/ });
+    await userEvent.type(screen.getByRole("searchbox", { name: "搜索工具" }), "循证传播");
+    expect(await screen.findByRole("button", { name: /公共数据差异分析/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /药品安全性分析/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/循证传播/)).not.toBeInTheDocument();
+  });
+
+  it("finds a tool by 虚拟临研, the old name of 虚拟临床研究, and never prints the old name", async () => {
+    mocks.listWebResearchAgents.mockResolvedValue([
+      ...agents,
+      { ...agents[0], id: "custom-sim-tool", title: "样本量估算", category: "临床证据", description: "在虚拟临床研究里估算样本量和功效。", starterPrompts: ["估算一个两组试验的样本量。"] },
+    ]);
+    renderPage();
+    await screen.findByRole("button", { name: /药品安全性分析/ });
+    await userEvent.type(screen.getByRole("searchbox", { name: "搜索工具" }), "虚拟临研");
+    expect(await screen.findByRole("button", { name: /样本量估算/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /药品安全性分析/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/虚拟临研/)).not.toBeInTheDocument();
+  });
+
   // The drawer with its own question box is gone: a card opens the conversation
   // the reader was going to type in anyway, with that tool on.
   it("a card opens a new conversation carrying the tool, and asks nothing here", async () => {
@@ -280,7 +309,7 @@ describe("CapabilitiesPage", () => {
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
   });
 
-  // The 「循证传播」 capabilities stay public — their module binds a
+  // The 「循证 GEO」 capabilities stay public — their module binds a
   // conversation to one by id, and an internal one would answer 403 — and are
   // not tools to pick here (build spec 2026-09-25 §6, `display.listed: false`).
   it("leaves out a capability its own module opens, while the catalogue still carries it", async () => {
@@ -293,7 +322,7 @@ describe("CapabilitiesPage", () => {
     for (const entry of geo) {
       expect(screen.queryByRole("button", { name: `用“${CAPABILITY_DISPLAY[entry.id].title}”开始一次对话` })).not.toBeInTheDocument();
     }
-    expect(screen.queryByText(/循证传播/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/循证 GEO/)).not.toBeInTheDocument();
   });
 
   // What the deployment can truthfully say about a tool is a label beside it, and only a label: nothing is hidden, and

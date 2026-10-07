@@ -2,7 +2,7 @@
  * Report numbers are rendered from results, not typed (build plan 2026-09-28
  * §8.3, platform principle 10c, AC-20).
  *
- * A 「虚拟临研」 report is a template: the words are the AI's, and every number
+ * A 「虚拟临床研究」 report is a template: the words are the AI's, and every number
  * in it is a reference to a field of the study's saved results, resolved here
  * by code. That is the whole mechanism. It is not a checker that reads a
  * finished report and looks for numbers it cannot account for — that check
@@ -64,7 +64,7 @@ import {
 // The mechanism itself — the grammar, the path reader, the formats, the unit
 // rules and the typed-number detector — lives in `@evimed/domain`'s
 // `numberBinding.mjs`, where the meta-analysis and statistical reports read it
-// too (plan 2026-10-02 §11.3 N06). What stays here is what is 「虚拟临研」's own:
+// too (plan 2026-10-02 §11.3 N06). What stays here is what is 「虚拟临床研究」's own:
 // the issue codes, the Chinese sentences the run is told, and the study's
 // `results.json`.
 

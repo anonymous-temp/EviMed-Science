@@ -298,7 +298,7 @@ import { FrontierNotifications } from "./frontierNotifications.mjs";
 import { FrontierProfiles } from "./frontierProfiles.mjs";
 import { FrontierActions } from "./frontierActions.mjs";
 import { FrontierComposer } from "./frontierComposer.mjs";
-// 「循证传播」 (build spec 2026-09-25): the schema's content store, the pages'
+// 「循证 GEO」 (build spec 2026-09-25): the schema's content store, the pages'
 // service and routes, the runtime tools' gateway and the social channel. The
 // measurement, market and orchestration packages attach to the composed
 // `geo` object (`geo.worker`, `geo.orchestrator`, `geo.market`, `geo.exporter`).
@@ -308,7 +308,7 @@ import { GeoCards } from "./geoCards.mjs";
 import { GeoMembers } from "./geoMembers.mjs";
 import { createGeoQuestionBank, questionBankSummary } from "./geoQuestionBank.mjs";
 import { geoArticleGateOf } from "./geoWrites.mjs";
-import { GEO_DEFAULT_PROJECT_NAME, GeoService, geoAudienceAllows, geoMetricFamilies, geoMetricsSnapshot, geoReadiness } from "./geoService.mjs";
+import { GeoService, geoAudienceAllows, isGeoPlaceholderName, geoMetricFamilies, geoMetricsSnapshot, geoReadiness } from "./geoService.mjs";
 import { createGeoRoutes, geoRoutePattern } from "./geoRoutes.mjs";
 import { GEO_GATEWAY_PATH, createGeoGatewayHandler, geoGatewayRoutePattern } from "./geoGateway.mjs";
 import { createSocialCrawlClient } from "./socialCrawlClient.mjs";
@@ -317,7 +317,7 @@ import { createSocialCrawlClient } from "./socialCrawlClient.mjs";
 import { GeoOrchestrator, geoRunId } from "./geoOrchestrator.mjs";
 import { GeoWorker, withGeoWorkerWarnings } from "./geoWorker.mjs";
 import { createGeoNotifier } from "./geoNotify.mjs";
-// 「虚拟临研」 (build plan 2026-09-28 §11.2). Composed in one call
+// 「虚拟临床研究」 (build plan 2026-09-28 §11.2). Composed in one call
 // (`vcrComposition.mjs`) so the seven packages behind it never reach this
 // file; off, or without a product database, the whole module is absent and
 // every route answers 404 `vcr_not_enabled`.
@@ -1019,7 +1019,7 @@ function clientAddress(req, config) {
  */
 /**
  * A file of a project's workspace by its path relative to it, read without following links; null when it cannot be read.
- * What 「循证传播」 reads a claim's preserved source and an article's text with.
+ * What 「循证 GEO」 reads a claim's preserved source and an article's text with.
  * @param {{ workspaceDir: string }} controlProject
  */
 function geoSourceReaderOf(controlProject) {
@@ -1663,7 +1663,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   let kbIndex = null;
   /** @type {import("./libraryService.mjs").LibraryService | null} */
   let libraryService = null;
-  // The disposable intake container's client, shared by 「虚拟临研」's conversions
+  // The disposable intake container's client, shared by 「虚拟临床研究」's conversions
   // and the source-material read (a PDF's pages, a spreadsheet's cells).
   const intakeController = overrides.vcrIntakeController ?? new RuntimeControllerClient(config);
   const sourceWorker = sourceService && config.sourceIngestionEnabled ? new SourceIngestionWorker({
@@ -1937,7 +1937,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // only where the feed is (the frontier's zones, a database) and with the same switch; off, the router answers `false` before it does
   // anything and the request is whatever an unknown path is. The per-address limiter is the server's own, keyed apart from the API's.
   const evidencePublicOn = Boolean(frontier && productDatabase && config.evidencePublicWebEnabled);
-  // The 「模拟研究」 column reads what 虚拟临研's study leads published (vcrPublications.mjs). That module is composed further down, so the
+  // The 「模拟研究」 column reads what 虚拟临床研究's study leads published (vcrPublications.mjs). That module is composed further down, so the
   // reader is found when a page is asked for; the module answers one page as a list and the pages read `{ items, next }`. With the
   // module or its publication switch off there is no reader and the column says it is empty.
   /** @type {{ current: { list: (query: { limit?: number, before?: string | null }) => Promise<any[]>, get: (id: string) => Promise<any> } | null }} */
@@ -1949,7 +1949,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     },
     get: async (/** @type {string} */ id) => (vcrSimulations.current ? vcrSimulations.current.get(id) : null),
   };
-  // The monthly page's two optional sections are found the same way (evidencePublicMetrics.mjs): the question bank's month where 循证传播 and its
+  // The monthly page's two optional sections are found the same way (evidencePublicMetrics.mjs): the question bank's month where 循证 GEO and its
   // question-bank lever are composed, and the prediction registry's calibration where its switches are. Neither exists yet here; each is set where
   // its module is made, and until then (or without it) the section answers nothing and is not rendered.
   /** @type {{ questionBank: ((query: { month: string }) => Promise<any>) | null, predictionCalibration: (() => Promise<any>) | null }} */
@@ -2023,7 +2023,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     await audit({ config, user, project }, "project.create", "completed", { target: id });
     return data;
   }
-  // 「循证传播」 (geoService.mjs): composed only when switched on and a
+  // 「循证 GEO」 (geoService.mjs): composed only when switched on and a
   // product database exists; otherwise its routes answer 404 `geo_not_enabled`,
   // its tools are not offered and nothing of it runs. The other packages attach
   // here: `geo.worker` (the leased loops, started and stopped with the rest),
@@ -2076,7 +2076,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         const owner = await store.userById(userId);
         if (!owner) return;
         const current = (await store.listProjects(owner)).find((project) => project.id === projectId);
-        if (current?.name === GEO_DEFAULT_PROJECT_NAME) await store.renameProject(owner, projectId, [...name].slice(0, 40).join(""));
+        if (isGeoPlaceholderName(current?.name)) await store.renameProject(owner, projectId, [...name].slice(0, 40).join(""));
       },
       // An article's gate is the run ledger's verdict on the deliverable it
       // was written in — the newest run of the project holding that
@@ -2089,7 +2089,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       articleRunId: async (project, deliverableId) => (await geoDeliverableRun(project, deliverableId, null))?.id ?? null,
     };
   }
-  // 「虚拟临研」: one call, seven packages (vcrComposition.mjs). Null when the
+  // 「虚拟临床研究」: one call, seven packages (vcrComposition.mjs). Null when the
   // module is off or this deployment has no product database — the schema is
   // the module, and a half-running module is worse than an absent one.
   const vcr = composeVcr({
@@ -2479,7 +2479,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           .sort((a, b) => String(b.startedAt ?? b.createdAt ?? "").localeCompare(String(a.startedAt ?? a.createdAt ?? "")))
           .map((run) => ({ sessionId: run.sessionId, capabilityId: run.effectiveAgentId ?? null, status: run.status, startedAt: run.startedAt ?? run.createdAt ?? null }));
       },
-      // The study's first conversation, bound to a 虚拟临研 capability before
+      // The study's first conversation, bound to a 虚拟临床研究 capability before
       // the study has a step to run: the binding is what puts the module's
       // chip on the composer and what makes the router honour the choice.
       bindSession: async (user, projectId, capabilityId) => {
@@ -2915,7 +2915,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   let review = null;
   if (config.reviewEnabled && productDatabase) {
     const service = new ReviewService({ evolutionSignals,
-      // A 虚拟临研 study's conversation is held against the numbers its engine computed (vcrReplyCheck.mjs).
+      // A 虚拟临床研究 study's conversation is held against the numbers its engine computed (vcrReplyCheck.mjs).
       vcrFacts: vcr?.service ? (identity) => vcr.service.replyCheckFacts(identity) : null,
       config, database: productDatabase, jobs: productJobs, usageLedger, judgeService, runtimeManager, store, agentRegistry,
       attributeRun: (input) => attributeRun(input),
@@ -3324,7 +3324,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           code: typeof error?.code === "string" ? error.code : "evidence_programme_settle_failed",
         }));
       }
-      // A 虚拟临研 run (dispatch id `vcr-…`): its bounded runtime is let go,
+      // A 虚拟临床研究 run (dispatch id `vcr-…`): its bounded runtime is let go,
       // then the orchestrator folds it into the study's steps — the same order
       // a GEO run takes below. Released whether or not the orchestrator is
       // composed: the reservation belongs to the dispatch, not to the module.
@@ -3507,7 +3507,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         void (async () => {
           const stored = await readRunTranscript(project, run.id);
           const reply = stored ? replyOfRun(stored.messages.filter((/** @type {any} */ message) => message.sessionId === run.sessionId), run) : null;
-          // A reply in a 虚拟临研 study's own conversation is also held against the study's computed numbers.
+          // A reply in a 虚拟临床研究 study's own conversation is also held against the study's computed numbers.
           const study = reply && VCR_CAPABILITIES.includes(agentId) ? await vcr?.store?.studyByControlProject?.(project.userId, project.id).catch(() => null) : null;
           if (reply) await review.service.considerReply({ userId: project.userId, projectId: project.id }, run, reply, { studyId: study?.id ?? null });
         })().catch((error) => process.stderr.write(`review reply check not queued: ${typeof error?.code === "string" ? error.code : error?.name ?? "error"}\n`));
@@ -4502,7 +4502,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   });
   // `geo_read` / `geo_write` / `social_posts_search`: the GEO project the
   // runtime's own project is; off, they answer `geo_disabled` (geoGateway.mjs).
-  // 「虚拟临研」's runtime channel: the token decides the account and the study,
+  // 「虚拟临床研究」's runtime channel: the token decides the account and the study,
   // a read answers aggregates and structure only, and a write refuses item by
   // item (build plan §11.2 layer 3).
   const vcrGatewayHandler = createVcrGatewayHandler(config, runtimeManager, {
@@ -4511,7 +4511,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const geoGatewayHandler = createGeoGatewayHandler(config, runtimeManager, {
     geo, report: (code) => process.stderr.write(`geo gateway: ${code}\n`),
   });
-  // 「循证传播」's moving parts, composed into the slots the routes read at
+  // 「循证 GEO」's moving parts, composed into the slots the routes read at
   // request time: the market's hooks (C), the orchestrator (F) that dispatches
   // runs inside the GEO project and enqueues the measurement's rounds (B), the
   // exporter, and one worker whose loops are B's, C's and F's ticks. Off, none
@@ -4639,7 +4639,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     });
   }
 
-  // 「虚拟临研」's orchestrator and worker, composed after the run dispatcher
+  // 「虚拟临床研究」's orchestrator and worker, composed after the run dispatcher
   // exists. The division is GEO's and the reason is the same: the steps that
   // *think* are runs of the module's capabilities, and the steps that
   // *compute* are platform jobs, so a two-hour simulation never holds the
@@ -4719,7 +4719,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   }
 
   /**
-   * One 虚拟临研 run: the same dispatch as a GEO step — a bounded runtime, a
+   * One 虚拟临床研究 run: the same dispatch as a GEO step — a bounded runtime, a
    * session bound to the capability, `automated` — in the study's own project,
    * so it shows under that project and takes that project's one run slot. A
    * deterministic step is not a run and does not come through here.
@@ -4740,7 +4740,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       throw new HttpError(503, "model_provider_not_configured", "The research model provider is not configured on this EviMed server.");
     }
     const selected = (await agentRegistry)?.get?.(capabilityId) ?? null;
-    if (!selected) throw new HttpError(503, "vcr_unavailable", "This 虚拟临研 capability is not installed on this deployment.");
+    if (!selected) throw new HttpError(503, "vcr_unavailable", "This 虚拟临床研究 capability is not installed on this deployment.");
     const budget = boundedRunBudget({ runLimitCny: 0, dailyLimitCny: 0, weeklyLimitCny: 0, purpose: "vcr", invalidCode: "vcr_unavailable" }, config);
     if (usageLedger) await assertBoundedRunAffordable(usageLedger, user.id, budget);
     // A programme step is researcher-owned work and is charged when it ends, so
@@ -4830,7 +4830,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     const budget = boundedRunBudget({ runLimitCny: 0, dailyLimitCny: 0, weeklyLimitCny: 0, purpose: "geo", invalidCode: "geo_unavailable" }, config);
     if (usageLedger) await assertBoundedRunAffordable(usageLedger, user.id, budget);
     // The same allowance question as a chat run's, for the same reason as the
-    // 虚拟临研 step's: charged at its end, and a refusal leaves the step pending.
+    // 虚拟临床研究 step's: charged at its end, and a refusal leaves the step pending.
     if (credits) await credits.service.assertBalanceForStart(user.id, capabilityId, { unattended: true });
     const interactive = runtimeManager.runtimes.has(runtimeManager.key(project)) && !runtimeManager.boundedRuntimeScope(project);
     const session = interactive ? { id: randomId("session_") } : await runtimeManager.reserveBoundedRuntimeSession(project, { runId: dispatchId, ...budget.scope });
@@ -4970,7 +4970,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       evolution.service.callbacks.handbookSelection = project => platformHandbooks.entries(project.capabilityId??null);
     }
     // What the platform's own modules could not do goes to the evolution module as leads (evolutionLeadSources.mjs, flywheel F20): the evidence programme is read by
-    // the worker's daily scan; 循证传播 and 虚拟临研 get an `offer` where their modules are composed. Off, nothing is composed and the worker ingests no scan event.
+    // the worker's daily scan; 循证 GEO and 虚拟临床研究 get an `offer` where their modules are composed. Off, nothing is composed and the worker ingests no scan event.
     if (config.evolutionModuleLeadsEnabled) {
       evolutionLeadSources = createEvolutionLeadSources({
         service: evolution.service, perDay: config.evolutionModuleLeadsPerDay, report: code => process.stderr.write(`${code}\n`),
@@ -5008,7 +5008,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       citationReaders: { communication: geo ? createGeoCardCitationReader({ database: productDatabase }) : null },
       predictionCalibration: predictionRegistry ? () => predictionRegistry?.predictionCalibration() : null,
       evolutionTools: evolution ? async () => (await evolution?.service.tools() ?? []).map((/** @type {any} */ row) => row.payload) : null,
-      // The platform's question bank (循证传播, F22): this month's rounds and the share of the assistants' cited answers that cited an EviMed page.
+      // The platform's question bank (循证 GEO, F22): this month's rounds and the share of the assistants' cited answers that cited an EviMed page.
       assistantCoverage: geo && config.geoQuestionBankEnabled ? async () => {
         const summary = await questionBankSummary(productDatabase, { publicUrl: config.publicUrl });
         if (!summary.available) return { rounds: null, citedShare: null };
@@ -6606,7 +6606,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             if (capsuleTransferService) await capsuleTransferService.prepareAccountDeletion(id, client);
             // The account's GEO rows, whether or not the module is on today.
             if (client) geoScreenshots = (await deleteGeoUserRows(client, id)).screenshots;
-            // And its 虚拟临研 rows, on the same terms: the schema outlives the
+            // And its 虚拟临床研究 rows, on the same terms: the schema outlives the
             // switch, so an account deleted while the module is off still
             // leaves nothing behind. The audit rows stay — they are the record
             // that the studies existed (plan §11.3).
@@ -7538,10 +7538,10 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     review,
     reviewService: review?.service ?? null,
     reviewWorker: review?.worker ?? null,
-    // 「循证传播」: null when the module is off or there is no product database.
+    // 「循证 GEO」: null when the module is off or there is no product database.
     geo,
     geoService: geo?.service ?? null,
-    // 「虚拟临研」, on the same terms.
+    // 「虚拟临床研究」, on the same terms.
     vcr,
     vcrService: vcr?.service ?? null,
     capsuleService,
@@ -7588,7 +7588,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           process.stderr.write(`frontier migration failed: ${typeof error?.code === "string" ? error.code : error?.name ?? "frontier_migration_failed"}\n`);
         });
       }
-      // The same for 循证传播: a failed migration turns `geo` red.
+      // The same for 循证 GEO: a failed migration turns `geo` red.
       if (geo) {
         await geo.service.ready().catch((error) => {
           process.stderr.write(`geo migration failed: ${typeof error?.code === "string" ? error.code : error?.name ?? "geo_migration_failed"}\n`);
@@ -8878,10 +8878,10 @@ async function operatorMetricsText({ judgeService = null, config, store, taskMan
   // The entity vocabulary the frontier, the zones, agendas, products and studies share: the glossary's size and what
   // the taggings found (entityVocabulary.mjs `entityVocabularyMetricFamilies`).
   for (const family of entityVocabularyMetricFamilies(entityVocabulary?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
-  // 循证传播: `open_science_geo_enabled 0` when off (geoService.mjs `geoMetricFamilies`).
+  // 循证 GEO: `open_science_geo_enabled 0` when off (geoService.mjs `geoMetricFamilies`).
   const geoSnapshot = geo ? await geoMetricsSnapshot(geo) : null;
   for (const family of geoMetricFamilies(Boolean(geo), geoSnapshot)) addMetric(lines, family.name, family.help, family.type, family.series);
-  // 虚拟临研: `open_science_vcr_enabled 0` when off; queue gauges (queued,
+  // 虚拟临床研究: `open_science_vcr_enabled 0` when off; queue gauges (queued,
   // running, awaiting_budget — the second human stop), studies, the service's
   // and the job queue's counters, the worker's loops (vcrComposition.mjs).
   const vcrSnapshot = vcr ? await vcrMetricsSnapshot(vcr) : null;
@@ -8917,7 +8917,7 @@ async function operatorMetricsText({ judgeService = null, config, store, taskMan
   const credentialMissing = publicSourceCredentialMissingMetricFamily();
   addMetric(lines, credentialMissing.name, credentialMissing.help, credentialMissing.type, credentialMissing.series);
   // The NCBI Gene Expression Omnibus workflow's six resource limits and its named downloads (geneExpressionMetrics.mjs;
-  // two limits counted by the gateway as bytes arrive, four reported by the runtime's tool). Not 循证传播's.
+  // two limits counted by the gateway as bytes arrive, four reported by the runtime's tool). Not 循证 GEO's.
   for (const family of geneExpressionMetricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
   // Model requests booked uncertain, by why (usageLedger.mjs): a burst is a
   // provider or a caller losing calls, and shows here while it happens.
@@ -9080,14 +9080,14 @@ async function readinessStatus(config, store, runtimeManager, researchMemory = n
     review: await readinessCheck(async () => (review ? review.service.readiness() : config.reviewEnabled
       ? Promise.reject(readinessFailure("review_unavailable", { reason: productDatabase ? "not_composed" : "no_product_database" }))
       : { required: false, enabled: false })),
-    // 循证传播: red only for its own invariants (geoService.mjs `geoReadiness`).
+    // 循证 GEO: red only for its own invariants (geoService.mjs `geoReadiness`).
     geo: await readinessCheck(async () => withGeoWorkerWarnings(await geoReadiness({ config, geo, database: productDatabase }), geo?.worker ?? null)),
     // The research allowance's wallet: red only for its own invariants (the
     // schema, the policy's activation, a configuration it refused —
     // evimedCreditsService.mjs `creditsReadiness`); a wallet not answering is a
     // warning. Asking is also how a module that came up broken recovers.
     credits: await readinessCheck(async () => creditsReadiness({ config, credits, database: productDatabase })),
-    // 虚拟临研: red only for its own invariants (vcrService.mjs `vcrReadiness`).
+    // 虚拟临床研究: red only for its own invariants (vcrService.mjs `vcrReadiness`).
     // A missing engine or data plane is a warning, not a failure — the module
     // runs the T0 journey end to end without either (plan §3.2).
     vcr: await readinessCheck(async () => withVcrEngineWarnings(

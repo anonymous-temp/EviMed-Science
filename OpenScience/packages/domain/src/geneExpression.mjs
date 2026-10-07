@@ -2,7 +2,7 @@
  * NCBI Gene Expression Omnibus (GEO) series to differential expression: the vocabulary both sides read, and the
  * contract findings for the capability that delivers it (plan 2026-10-02 §11.3 N17).
  *
- * This is the public data resource at ncbi.nlm.nih.gov/geo. It has nothing to do with 「循证传播」 (the pharma
+ * This is the public data resource at ncbi.nlm.nih.gov/geo. It has nothing to do with 「循证 GEO」 (the pharma
  * generative-engine-optimisation module: `geo*.mjs`, `geo_read`/`geo_write`, the `geo-*` capabilities), and every
  * name here is `gene-expression` / `gene_expression` / `ncbi_geo` so the two can never be mistaken for each other.
  *

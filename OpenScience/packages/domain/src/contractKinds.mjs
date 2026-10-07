@@ -29,21 +29,21 @@ export const CONTRACT_KINDS = Object.freeze([
   'research-topic-report',
   'dataset-scoping-package',
   'statistical-analysis-package',
-  // NCBI Gene Expression Omnibus series to differential expression (2026-10-04, N17). Not the 「循证传播」 packs below.
+  // NCBI Gene Expression Omnibus series to differential expression (2026-10-04, N17). Not the 「循证 GEO」 packs below.
   'gene-expression-analysis-package',
   'research-brief',
   // P2 — planned capabilities
   'appraisal-table',
   'manuscript-section',
   'grant-proposal-package',
-  // P3 — 「循证传播」: insight (evidence, journey, questions), strategy
+  // P3 — 「循证 GEO」: insight (evidence, journey, questions), strategy
   // (sources, expectations, targets), content (layered articles), proposal
   // (the client package and the weekly report)
   'geo-insight-pack',
   'geo-strategy-pack',
   'geo-content-pack',
   'geo-proposal-pack',
-  // P4 — 「虚拟临研」: the study package and the four results it renders from
+  // P4 — 「虚拟临床研究」: the study package and the four results it renders from
   // (build plan 2026-09-28 §11.2). Every finding of theirs is advisory: the
   // blocking budget is spent, and 「不可估计」 is a finished delivery.
   'vcr-study-package',
@@ -156,15 +156,15 @@ export const CONTRACT_KIND_LABELS = Object.freeze({
   'appraisal-table': '证据质量评价表',
   'manuscript-section': '稿件章节',
   'grant-proposal-package': '课题申报包',
-  'geo-insight-pack': '循证传播证据与问题地图',
-  'geo-strategy-pack': '循证传播信源与目标',
-  'geo-content-pack': '循证传播分层稿件',
-  'geo-proposal-pack': '循证传播提案资料包',
-  'vcr-study-package': '虚拟临研研究包',
-  'vcr-simulation-report': '虚拟临研模拟报告',
-  'vcr-comparator-analysis': '虚拟临研对照分析',
-  'vcr-cohort-snapshot': '虚拟临研队列快照',
-  'vcr-matching-assessment': '虚拟临研匹配评估',
+  'geo-insight-pack': '循证 GEO 证据与问题地图',
+  'geo-strategy-pack': '循证 GEO 信源与目标',
+  'geo-content-pack': '循证 GEO 分层稿件',
+  'geo-proposal-pack': '循证 GEO 提案资料包',
+  'vcr-study-package': '虚拟临床研究包',
+  'vcr-simulation-report': '虚拟临床研究模拟报告',
+  'vcr-comparator-analysis': '虚拟临床研究对照分析',
+  'vcr-cohort-snapshot': '虚拟临床研究队列快照',
+  'vcr-matching-assessment': '虚拟临床研究匹配评估',
   'clinical-decision-brief': '临床决策辅助简报',
   'episode-plan': '回合计划',
   'agenda-delta': '议程增量',

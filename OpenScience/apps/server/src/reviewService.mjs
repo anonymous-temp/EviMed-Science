@@ -300,7 +300,7 @@ export class ReviewService {
     retryDelayMs = EDITOR_RETRY_DELAY_MS, evolutionSignals = null, vcrFacts = null }) {
     this.config = config;
     /**
-     * What a 虚拟临研 study's conversation is checked against: `(userId, projectId) → { studyId, results, inputs, executions } | null`
+     * What a 虚拟临床研究 study's conversation is checked against: `(userId, projectId) → { studyId, results, inputs, executions } | null`
      * (`VcrService.replyCheckFacts`). Null where the module is not composed, and the check is not made.
      * @type {((identity: { userId: string, projectId: string }) => Promise<{ studyId: string, results: any[], inputs: any[], executions: any[] } | null>) | null}
      */
@@ -916,7 +916,7 @@ export class ReviewService {
   async considerReply(identity, run, { replyText, question = "", turnSeq = null }, { studyId = null } = {}) {
     if (!this.enabled || this.config.reviewRepliesEnabled === false) return null;
     const tier = replyReviewTier(replyText);
-    // A reply in a 虚拟临研 study's conversation that states a number is checked against the study's results even when it cites nothing.
+    // A reply in a 虚拟临床研究 study's conversation that states a number is checked against the study's results even when it cites nothing.
     const numbers = Boolean(studyId && this.vcrFacts && replyNumberSentences(replyText).length);
     if (tier.tier !== "L1" && !numbers) return null;
     await migrateReview(this.database);
@@ -1021,7 +1021,7 @@ export class ReviewService {
   }
 
   /**
-   * The numbers a 虚拟临研 reply reports as computed, against the study's engine results (`vcrReplyCheck.mjs`): the reviewer says which
+   * The numbers a 虚拟临床研究 reply reports as computed, against the study's engine results (`vcrReplyCheck.mjs`): the reviewer says which
    * numbers of which sentences the reply gives as results, code re-reads that they are written there and looks each up within rounding.
    * A reviewer that fails fails the check, which is tried again — never a verdict the reply did not earn.
    * @param {Record<string, any>} row @returns {Promise<{ verdicts: any[], cost: number, model: string | null }>}

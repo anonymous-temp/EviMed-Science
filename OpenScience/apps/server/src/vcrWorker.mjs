@@ -1,5 +1,5 @@
 /**
- * 「虚拟临研」's background work: one timer, seven loops (build plan
+ * 「虚拟临床研究」's background work: one timer, seven loops (build plan
  * 2026-09-28 §11.2 layer 2).
  *
  *   `jobs`          — claim queued compute, push each running job one step,

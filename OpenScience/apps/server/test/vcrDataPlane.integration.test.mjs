@@ -1,4 +1,4 @@
-// 「虚拟临研」's data plane against a real PostgreSQL and real files: what a frozen
+// 「虚拟临床研究」's data plane against a real PostgreSQL and real files: what a frozen
 // snapshot leaves in `evimed_vcr` (metadata, never a row), what a correction is,
 // what the judge decides on the real store exactly as it does on its double, and
 // what deleting a study takes with it. The intake flow end to end, the seal's

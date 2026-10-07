@@ -223,7 +223,7 @@
       }
     },
     "geo-content": {
-      "title": "循证传播 · 分层稿件",
+      "title": "循证 GEO · 分层稿件",
       "category": "写作与传播",
       "description": "从结论库写出四层稿件和纠错材料，逐篇审核后去 AI 味。",
       "listed": false,
@@ -254,12 +254,12 @@
       }
     },
     "geo-insight": {
-      "title": "循证传播",
+      "title": "循证 GEO",
       "category": "写作与传播",
       "description": "核对产品与说明书，建结论库，画患者旅程并锁定测量问句。",
       "listed": false,
       "starterPrompts": [
-        "为信尔美（玛仕度肽注射液）做一套完整的循证传播方案。",
+        "为信尔美（玛仕度肽注射液）做一套完整的循证 GEO 方案。",
         "AI 现在怎么说诺和盈（司美格鲁肽注射液）？先把证据和问题做出来。",
         "只列问题：给连花清瘟胶囊出一版 30 个问句的最小测量集。"
       ],
@@ -285,7 +285,7 @@
       }
     },
     "geo-proposal": {
-      "title": "循证传播 · 提案资料包",
+      "title": "循证 GEO · 提案资料包",
       "category": "写作与传播",
       "description": "用项目冻结的数据导出提案资料包或每周周报。",
       "listed": false,
@@ -313,7 +313,7 @@
       }
     },
     "geo-strategy": {
-      "title": "循证传播 · 信源与目标",
+      "title": "循证 GEO · 信源与目标",
       "category": "写作与传播",
       "description": "读懂各引擎引用谁、缺什么，定主战场和三档目标。",
       "listed": false,
@@ -565,7 +565,7 @@
     },
     "vcr-analysis": {
       "title": "人群、对照与试验仿真",
-      "category": "虚拟临研",
+      "category": "虚拟临床研究",
       "description": "按数据档位构建人群与对照，配置试验方案并交给引擎仿真，每个数都带蒙特卡洛误差。",
       "listed": false,
       "starterPrompts": [
@@ -658,7 +658,7 @@
     },
     "vcr-package": {
       "title": "研究包与沟通资料",
-      "category": "虚拟临研",
+      "category": "虚拟临床研究",
       "description": "把研究的定义、假设、结果与执行记录写成可检查、可复现的研究包，数字由结果渲染。",
       "listed": false,
       "starterPrompts": [
@@ -688,8 +688,8 @@
     },
     "vcr-protocol": {
       "title": "研究分析师",
-      "category": "虚拟临研",
-      "description": "在研究的对话里做你要的那一步：写研究定义、生成合成人群、估算样本量、模拟试验方案、查外部对照能不能做，计算交给引擎。",
+      "category": "虚拟临床研究",
+      "description": "在对话里完成研究定义、合成人群、样本量和方案模拟。",
       "listed": false,
       "starterPrompts": [
         "帮我估算这个研究需要多少例：HR 0.7，单侧 α 0.025，功效 90%。",

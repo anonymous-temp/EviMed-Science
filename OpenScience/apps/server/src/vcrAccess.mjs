@@ -1,5 +1,5 @@
 /**
- * 「虚拟临研」's per-operation access judgment: study × role × source × field ×
+ * 「虚拟临床研究」's per-operation access judgment: study × role × source × field ×
  * window × purpose, decided in code, recorded every time (build plan
  * 2026-09-28 §8.1, §11.2 layer 2; platform principle 14; AC-06, AC-17, AC-22).
  *

@@ -85,7 +85,7 @@ describe("the study page's header", () => {
   it("goes back to the list from a link over the title, and has no rail of seven steps", async () => {
     draw();
     await heading();
-    expect(screen.getByRole("link", { name: /虚拟临研/ })).toHaveAttribute("href", "/app/virtual-research");
+    expect(screen.getByRole("link", { name: /虚拟临床研究/ })).toHaveAttribute("href", "/app/virtual-research");
     expect(screen.queryByRole("list", { name: "七步进度" })).toBeNull();
   });
 
@@ -232,7 +232,7 @@ describe("the study page's addresses", () => {
       [`GET /vcr/studies/${STUDY_ID}`]: () => { throw new WebApiError("off", { status: 404, code: "vcr_not_enabled" }); },
     });
     draw();
-    expect(await screen.findByText("虚拟临研还没有在这个工作空间开放。")).toBeInTheDocument();
+    expect(await screen.findByText("虚拟临床研究还没有在这个工作空间开放。")).toBeInTheDocument();
   });
 
   // No stale study under a new address: moving to another study shows the
@@ -452,7 +452,7 @@ describe("the 「⋯」 menu", () => {
     await waitFor(() => expect(toasts.success).toHaveBeenCalledWith("已暂停。"));
   });
 
-  // CW-10: the study leaves 虚拟临研; the project's conversations and files stay.
+  // CW-10: the study leaves 虚拟临床研究; the project's conversations and files stay.
   it("asks before removing, says what is true about it, and removes once", async () => {
     let finish: (value: unknown) => void = () => undefined;
     server = installVcrServer(network.productRequest, {
@@ -461,7 +461,7 @@ describe("the 「⋯」 menu", () => {
     draw();
     await openMenu("删除");
     const dialog = await screen.findByRole("alertdialog");
-    expect(within(dialog).getByText("研究会从虚拟临研移除；项目里的对话和文件仍在。")).toBeInTheDocument();
+    expect(within(dialog).getByText("研究会从虚拟临床研究移除；项目里的对话和文件仍在。")).toBeInTheDocument();
     expect(dialog.textContent).not.toMatch(/一起删除|不能恢复/);
     expect(server.calls.some((call) => call.method === "DELETE")).toBe(false);
     const confirm = within(dialog).getByRole("button", { name: "删除" });
@@ -533,8 +533,8 @@ describe("变更记录", () => {
 
 describe("AI 运行", () => {
   const runs = { runs: [
-    { sessionId: "ses_ev", label: "虚拟临研 · 证据", state: "finished", at: "今天 09:01" },
-    { sessionId: "ses_an", label: "虚拟临研 · 分析", state: "running", at: "今天 09:12" },
+    { sessionId: "ses_ev", label: "虚拟临床研究 · 证据", state: "finished", at: "今天 09:01" },
+    { sessionId: "ses_an", label: "虚拟临床研究 · 分析", state: "running", at: "今天 09:12" },
   ] };
 
   it("lists the programme's background conversations by what they did, with a state word and a time, and opens the one pressed", async () => {
@@ -543,9 +543,9 @@ describe("AI 运行", () => {
     await openMenu("AI 运行");
     const drawer = await screen.findByRole("dialog", { name: "AI 运行" });
     const rows = await within(drawer).findAllByRole("listitem");
-    expect(rows.map((row) => row.textContent)).toEqual(["虚拟临研 · 证据已完成 · 今天 09:01", "虚拟临研 · 分析进行中 · 今天 09:12"]);
+    expect(rows.map((row) => row.textContent)).toEqual(["虚拟临床研究 · 证据已完成 · 今天 09:01", "虚拟临床研究 · 分析进行中 · 今天 09:12"]);
     expect(drawer.textContent).not.toMatch(/run_|ses_/);
-    await userEvent.click(within(drawer).getByRole("button", { name: "虚拟临研 · 分析" }));
+    await userEvent.click(within(drawer).getByRole("button", { name: "虚拟临床研究 · 分析" }));
     await waitFor(() => expect(store.select).toHaveBeenCalledWith("prj_ev201", expect.any(Function)));
     await waitFor(() => expect(screen.getByTestId("location")).toHaveTextContent("/app/chat"));
   });

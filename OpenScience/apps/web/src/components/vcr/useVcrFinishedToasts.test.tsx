@@ -36,7 +36,7 @@ function draw(path: string, enabled = true) {
   );
 }
 
-/** One notice as the inbox sends it: a 「虚拟临研」 source names `<studyId>/<tab>`. */
+/** One notice as the inbox sends it: a 「虚拟临床研究」 source names `<studyId>/<tab>`. */
 const notice = (id: string, source: string | null, extra: Partial<InboxItem> = {}): InboxItem => ({
   id, projectId: "prj_ev201", source: source ? { type: "vcr", id: source } : null, noticeType: "notify", priority: 0,
   title: `方案模拟完成：${id}`, body: "", actions: [], count: 1, readAt: null, resolvedAt: null, resolution: null, revision: 3,
@@ -122,7 +122,7 @@ describe("a finished computation, said where the reader is looking", () => {
     expect(toasts.success.mock.calls.map((call) => call[0])).toEqual(["方案模拟完成：n1", "方案模拟完成：n2"]);
   });
 
-  it("does not toast another study's notice, or one that is not 虚拟临研's", async () => {
+  it("does not toast another study's notice, or one that is not 虚拟临床研究's", async () => {
     const held = holdInbox([]);
     draw("/app/virtual-research/std_1");
     await tick(0);

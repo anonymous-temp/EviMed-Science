@@ -1,5 +1,5 @@
 /**
- * 「虚拟临研」's data plane: registering a source, taking a file into it,
+ * 「虚拟临床研究」's data plane: registering a source, taking a file into it,
  * confirming what its columns mean, freezing it into a hashed snapshot with a
  * quality profile, deriving the three ADaM-shaped analysis tables in code,
  * sealing outcome fields, and handing the engine — and only the engine — the

@@ -1,4 +1,4 @@
-// The five capability skills of 「虚拟临研」 that this module's runtime writes are
+// The five capability skills of 「虚拟临床研究」 that this module's runtime writes are
 // taught in (protocol, analysis, evidence, matching, package) tell a run exactly what to
 // call. This test holds every such instruction to the real thing:
 //

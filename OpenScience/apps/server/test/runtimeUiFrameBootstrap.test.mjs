@@ -91,7 +91,7 @@ test("each capability card carries its summary and typical duration for the /能
 test("the GEO capabilities reach the frame for their chip, and are marked out of its tool list", async (t) => {
   // Build spec 2026-09-25 §6: hidden from the kernel's own tool list by
   // `display.listed: false`, never by `visibility: internal` — a session the
-  // 「循证传播」 module binds to one must still name its tool.
+  // 「循证 GEO」 module binds to one must still name its tool.
   const f = await bootstrapFor(t);
   const frame = await frameObject(f);
   const byId = new Map(frame.capabilities.map((card) => [card.id, card]));
@@ -99,7 +99,7 @@ test("the GEO capabilities reach the frame for their chip, and are marked out of
     assert.ok(byId.has(id), `${id} did not reach the frame, so a conversation bound to it would have no chip`);
     assert.equal(byId.get(id).listed, false, `${id} would be offered in the frame's tool list`);
   }
-  assert.equal(byId.get("geo-insight").title, "循证传播");
+  assert.equal(byId.get("geo-insight").title, "循证 GEO");
   const listed = frame.capabilities.filter((card) => card.listed !== false);
   // Fourteen: the fifteen public capabilities of 2026-09-24 less geo-content,
   // which moved into the GEO module.

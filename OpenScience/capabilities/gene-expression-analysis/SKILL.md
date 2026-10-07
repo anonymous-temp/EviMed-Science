@@ -5,7 +5,7 @@ description: Take a public NCBI GEO series (GSE...), preserve it, verify its ide
 
 # Gene Expression Omnibus: series to differential expression
 
-This is the public NCBI Gene Expression Omnibus (accession GSE..., platform GPL..., sample GSM...). It is not the 循证传播 pharma module: none of that module's tools or capabilities belong in this work.
+This is the public NCBI Gene Expression Omnibus (accession GSE..., platform GPL..., sample GSM...). It is not the 循证 GEO pharma module: none of that module's tools or capabilities belong in this work.
 
 **You never compute a statistic and never type a number into the report.** Retrieval and computation are two tools; their files carry every number. If a tool refuses or is unavailable, say which step was not done and why, keep everything else, and do not estimate the statistic yourself.
 

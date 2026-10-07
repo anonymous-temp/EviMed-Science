@@ -1,5 +1,5 @@
 /**
- * 「虚拟临研」's disease knowledge pack (plan 2026-09-28 §3.3): the contract a
+ * 「虚拟临床研究」's disease knowledge pack (plan 2026-09-28 §3.3): the contract a
  * pack is written to and the checks every pack — a shipped one, an AI-drafted
  * one — passes before anything reads it.
  *

@@ -336,6 +336,37 @@ Plus the infrastructure a page needs: `Menu`, `Switch`, `SearchInput`, `Input`, 
 `ConfirmDialog`, `Toaster`, `Disclosure`. A card (`Card`) is for unlike content — a hot list
 above a feed, a tool in a grid — and never for a list of like things.
 
+### 页面结构 (2026-10-07)
+
+Six rules, adopted with the owner-approved page rectification of 2026-10-07 (plan §9.4). They
+answer the one defect that showed on nineteen pages at once: two kinds of thing stacked on one
+page with the back office between them — the skills page held the reader's skills and the session's
+under one another, the memory page a chart, two statistics blocks and a list, 科研工具 a grid, a
+capability map and an evolution panel. `scripts/ops/ui-walk.mjs` checks each rule on the live
+pages after every release.
+
+1. **One page, one kind of object, as a list.** Content of a different kind goes in a tab or on its
+   own page, never above or below. The walk reads a page body's top-level sections by shape (a
+   `<section>`, a list of rows, a table, a chart) and fails a page that stacks more kinds than its
+   budget (`SECTION_SHAPES_BY_PAGE`); groups of one shape — a group per use, a group per day — are
+   one kind.
+2. **Detail opens in the right-hand drawer** (`Drawer`); the list stays where it is. A row does not
+   take the reader to another page to read what it holds.
+3. **The header is the title, the scope and at most one primary button** — and a search box. Two
+   solid accent buttons in a header fail the walk.
+4. **Only what can be acted on, and the result itself.** System state, version numbers, model
+   names, identifiers and how a statistic was counted are not on a user page; say what the reader
+   can do and what came of it.
+5. **At most one row of view switches and one row of filters.** A second tab strip, a row of
+   chips under another row of chips, or a navigation row above the views is one row too many.
+6. **What looks clickable shows a result where the reader is looking.** A drawer, a new page, a
+   tab or a row opened in place — never a change somewhere below the fold. The walk clicks the
+   first row of each list on the rebuilt pages and fails a click that shows nothing.
+
+Both module names are a rule of the same kind. The two modules are 「循证 GEO」 and 「虚拟临床研究」
+(identifiers `geo` and `vcr`); 「循证传播」 and 「虚拟临研」 are retired words — `retiredWords.test.ts`
+and the walk fail on them — and a search reads them as the new names until 2027-01-07.
+
 ---
 
 ## Surfaces, states, motion

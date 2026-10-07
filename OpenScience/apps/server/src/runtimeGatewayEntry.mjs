@@ -4,7 +4,7 @@
  *
  * A Docker runtime reaches the model, public-source, search, capsule,
  * revision, connector-credential, GEO-probe, knowledge-base, frontier, GEO and
- * 虚拟临研 gateways by the control plane's container name, and the specialist
+ * 虚拟临床研究 gateways by the control plane's container name, and the specialist
  * engines by theirs. A runtime in an AgentBay session is on the internet: it reaches
  * all of them through this one
  * prefix on port 443, which the host's nginx forwards here, and nothing about
@@ -83,9 +83,9 @@ export function publicRuntimeGatewayUrls(config) {
     geoProbe: String(config.geoProbeUrl ?? "").trim() ? `${base}/geo-probe/v1` : "",
     kbSearch: kbSearchGatewayProviderUrl(config) ? `${base}/kb/v1/search` : "",
     frontier: frontierGatewayProviderUrl(config) ? `${base}/frontier/v1/search` : "",
-    // 循证传播's three operations sit under one base (`geo_platform.py` appends them).
+    // 循证 GEO's three operations sit under one base (`geo_platform.py` appends them).
     geo: geoGatewayProviderUrl(config) ? `${base}/geo/v1` : "",
-    // 「虚拟临研」's read / write / simulate operations, under one base likewise
+    // 「虚拟临床研究」's read / write / simulate operations, under one base likewise
     // (`vcr_platform.py`); a runtime outside this host without it could never
     // reach the study it is working on.
     vcr: vcrGatewayProviderUrl(config) ? `${base}/vcr/v1` : "",

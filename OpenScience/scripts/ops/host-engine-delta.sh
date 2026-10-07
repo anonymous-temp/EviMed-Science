@@ -127,7 +127,7 @@ while IFS='|' read -r service variable fallback agent extra; do
   echo "${service}: ${base} -> ${target} ($(docker image inspect -f '{{.Id}}' "$target" | cut -c1-19))$([ "$agent_lock$adapter_lock" != 00 ] && echo ' lock installed')"
 done <<< "$ENGINES"
 
-# The 虚拟临研 compute engine (项目代码/vcr-engine) is its own image too, and only
+# The 虚拟临床研究 compute engine (项目代码/vcr-engine) is its own image too, and only
 # exists on a host that runs the `vcr` profile: skipped where its image is not
 # on the host. What a delta replaces is its R sources, its service and its
 # tests over /opt/vcr-engine; a changed package lock (the R packages and the R

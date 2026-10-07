@@ -1,5 +1,5 @@
 /**
- * 「虚拟临研」's study members and their roles (build plan 2026-09-28 §11.1
+ * 「虚拟临床研究」's study members and their roles (build plan 2026-09-28 §11.1
  * conclusion 4, §11.2 layer 2).
  *
  * Hidden knowledge:

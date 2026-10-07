@@ -26,8 +26,8 @@
 >   2026-09-04 删除）。「上线执行顺序」里只改了一处：同样以桌面形态为前提的 `pnpm check:tauri`
 >   在 `OpenScience/package.json` 里已经没有这个脚本，留着只会报错，因此在原处写明后删去；
 >   其余命令逐条仍在 `OpenScience/package.json` 里。
-> - **2026-09-29 增补：文末「虚拟临研：只有部署后才能做的检查」一节。** 它是新写的、不是快照，
->   记的是「虚拟临研」模块发版前必须在部署好的栈上做完的六件事，以及这些结果记在哪里。
+> - **2026-09-29 增补：文末「虚拟临床研究：只有部署后才能做的检查」一节。** 它是新写的、不是快照，
+>   记的是「虚拟临床研究」模块发版前必须在部署好的栈上做完的六件事，以及这些结果记在哪里。
 > - 架构与部署以 `OpenScience/AGENTS.md`、`OpenScience/docs/WEB_DEPLOYMENT.md` 为准。**当前的
 >   未完清单与排期是 `docs/superpowers/plans/2026-10-02-evimed-next-stage-research-workbench.md`
 >   的第 11 节（2026-10-03 定稿，该计划的前文是 10 月 2 日的基线与实施记录，不覆盖第 11 节）。**
@@ -136,9 +136,9 @@ pnpm smoke:deployment
 产生真实工件、检查引用/数据/日志/溯源和失败提示。验收后保留 release manifest、测试报告、
 恢复演练记录和镜像摘要，作为本次交付证据。
 
-## 虚拟临研：只有部署后才能做的检查（2026-09-29）
+## 虚拟临床研究：只有部署后才能做的检查（2026-09-29）
 
-「虚拟临研」默认关闭（`OPEN_SCIENCE_VCR_ENABLED=false`，见 `deploy/web/.env.example`）。代码能证明的部分
+「虚拟临床研究」默认关闭（`OPEN_SCIENCE_VCR_ENABLED=false`，见 `deploy/web/.env.example`）。代码能证明的部分
 在 CI 里：三个 `vcr-*` 作业在装好锁定 R 库的机器上跑全部引擎数值用例、引擎服务测试和两个依赖 R 的
 集成测试。下面六件事代码证明不了——它们要一个部署好的栈、真实的模型和生产形状的数据。**六件都做完并
 记录之前，模块保持关闭，也不把 `OPEN_SCIENCE_VCR_AUDIENCE` 从 `operators` 放开。**
@@ -149,7 +149,7 @@ pnpm smoke:deployment
 
 1. **新 `.env` 的键到达 web 容器。** 新 release 的 `.env` 是从上一版拷来的，不含新键；web 服务的环境变量
    由 compose 逐项传入，主机上若有私有 override 覆盖了 web 的 `environment`，它的合并表也要带上新键。
-   - 只比名字，不回显值：`.env.example` 里「虚拟临研」一段的每个名字（`OPEN_SCIENCE_VCR_*`、
+   - 只比名字，不回显值：`.env.example` 里「虚拟临床研究」一段的每个名字（`OPEN_SCIENCE_VCR_*`、
      `EVIMED_VCR_ENGINE_IMAGE`）都在新 release 的 `.env` 里，尤其 `OPEN_SCIENCE_VCR_ENGINE_URL`、
      `OPEN_SCIENCE_VCR_ENGINE_TOKEN_HOST_FILE`、`OPEN_SCIENCE_VCR_ENGINE_RECEIPT_KEY_HOST_FILE`、
      `OPEN_SCIENCE_VCR_DATA_PLANE_HOST_DIR`。

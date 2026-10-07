@@ -1,4 +1,4 @@
-// 「虚拟临研」's job queue on PostgreSQL with the engine's transport faked (the
+// 「虚拟临床研究」's job queue on PostgreSQL with the engine's transport faked (the
 // real engine is `vcrEngineContract.integration.test.mjs`): a scenario frozen
 // into a row under the domain's own validators, what identifies one job as the
 // same job as another, the queue's concurrency and lease under concurrency, a

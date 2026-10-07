@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "geo-insight",
-  "version": "sha256:dce1c1f8aee156026f7cd83f0eb20fb21c70850e59e29ab4584532dda48ae4d4",
+  "version": "sha256:3fb1a6f65c9b82100e4140f1820c662210781e20c2c77e12c171a9e2a8011c17",
   "generatedBy": "scripts/dev/build-tool-graph.mjs",
   "counts": {
     "nodes": 33,
@@ -754,7 +754,7 @@
     {
       "name": "mcp__evimed__geo_read",
       "source": "mcp",
-      "description": "Read this 循证传播 project's data: product and claims, question map, journey, diagnosis, metrics, answer snapshots, errors, sources, strategy, targets, articles, orders, owned links, monitoring or cards (evidence cards: claims with id, quotation, ✓/⚠ and the reference to cite). Every number is a cell with numerator, denominator and status; absent or insufficient is not zero.",
+      "description": "Read this 循证 GEO project's data: product and claims, question map, journey, diagnosis, metrics, answer snapshots, errors, sources, strategy, targets, articles, orders, owned links, monitoring or cards (evidence cards: claims with id, quotation, ✓/⚠ and the reference to cite). Every number is a cell with numerator, denominator and status; absent or insufficient is not zero.",
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -925,7 +925,7 @@
     {
       "name": "mcp__evimed__geo_write",
       "source": "mcp",
-      "description": "Write this 循证传播 project's products: product identity, claims, a question set and its lock, journey, strategy and sources, three-tier targets, articles, placement preferences, or a step's status. owned_links registers a page the brand published itself {url, platform, title, publishedAt, groupId?} or retires one {id, status: retired}. Items are checked one by one; refused items come back in issues and the rest are written.",
+      "description": "Write this 循证 GEO project's products: product identity, claims, a question set and its lock, journey, strategy and sources, three-tier targets, articles, placement preferences, or a step's status. owned_links registers a page the brand published itself {url, platform, title, publishedAt, groupId?} or retires one {id, status: retired}. Items are checked one by one; refused items come back in issues and the rest are written.",
       "inputSchema": {
         "type": "object",
         "properties": {

@@ -196,7 +196,7 @@ describe("模型与方法", () => {
   it("is the module-off sentence, not an error, when the module is off", async () => {
     server = installVcrServer(network.productRequest, { "GET /vcr/models": off });
     draw(<VcrModelsPanel />);
-    expect(await screen.findByText("虚拟临研还没有在这个工作空间开放。")).toBeInTheDocument();
+    expect(await screen.findByText("虚拟临床研究还没有在这个工作空间开放。")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "重试" })).toBeNull();
   });
 });
@@ -264,7 +264,7 @@ describe("试验先例", () => {
   it("is the module-off sentence when the module is off", async () => {
     server = installVcrServer(network.productRequest, { "GET /vcr/precedents": off });
     draw(<VcrPrecedentsPanel />);
-    expect(await screen.findByText("虚拟临研还没有在这个工作空间开放。")).toBeInTheDocument();
+    expect(await screen.findByText("虚拟临床研究还没有在这个工作空间开放。")).toBeInTheDocument();
   });
 });
 

@@ -1,5 +1,5 @@
 /**
- * 「循证传播」 as one evidence chain (flywheel plan §5.6, F21, F28, 2026-10-06):
+ * 「循证 GEO」 as one evidence chain (flywheel plan §5.6, F21, F28, 2026-10-06):
  * the project's verified claims become evidence cards in its product zone, and
  * every sentence of a lower layer cites a claim of a card revision.
  *
@@ -446,7 +446,7 @@ export function geoCardPlan({ claims, producer, authors, reviewers, entityKeys =
         summary: clip(`${group.stage.label}：${group.claims.length} 条已核对的结论`, 500),
         body: cardClaims.map((claim) => `- ${claim.claim}`).join('\n'),
         limitations: '',
-        provenance: '出自循证传播项目的结论库：每条结论的引文已在其原文中逐字核对。',
+        provenance: '出自循证 GEO 项目的结论库：每条结论的引文已在其原文中逐字核对。',
         sources,
         claims: cardClaims,
         content: { question: clip(group.question, 1000), ...(populations.length === 1 ? { population: clip(populations[0], 1000) } : {}) },

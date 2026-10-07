@@ -7,7 +7,7 @@ import { VCR_JOB_KINDS, VCR_REVIEW_STATES } from "@evimed/domain";
 import { declaredVocabularyChecks } from "../src/vocabularyChecks.mjs";
 import { vcrSchemaSql } from "../src/vcrPersistence.mjs";
 
-test("every vocabulary CHECK the 虚拟临研 DDL declares is found, jobs.kind with every job kind", async () => {
+test("every vocabulary CHECK the 虚拟临床研究 DDL declares is found, jobs.kind with every job kind", async () => {
   const checks = declaredVocabularyChecks(vcrSchemaSql(), "evimed_vcr");
   const kinds = checks.find((check) => check.table === "jobs" && check.column === "kind");
   assert.ok(kinds, "jobs.kind is a declared vocabulary check");

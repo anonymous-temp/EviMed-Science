@@ -1,7 +1,7 @@
 /**
  * What the platform's own modules could not do, handed to 循证进化 as research leads (evidence-flywheel plan §5.5, F20, 2026-10-06): the
- * evidence programme (a topic that needed an analysis its engine did not deliver), 循证传播 (a question that needs an analysis no capability
- * offers) and 虚拟临研 (a method the engine does not publish).
+ * evidence programme (a topic that needed an analysis its engine did not deliver), 循证 GEO (a question that needs an analysis no capability
+ * offers) and 虚拟临床研究 (a method the engine does not publish).
  *
  * Hidden knowledge:
  *
@@ -14,7 +14,7 @@
  *   atrial fibrillation", which an operator may read, and carries no account, project, study or sentence.
  * - **Only the programme is read; the other two are asked.** The programme records, on each day's decision, which episode ended
  *   `no_engine_receipt` (an analysis engine ran and left no receipt of its calculation), so the daily scan reads those records and nothing is
- *   pushed. 循证传播 has no closed field marking a question as needing an analysis nobody offers, and 虚拟临研 persists no asked method outside the
+ *   pushed. 循证 GEO has no closed field marking a question as needing an analysis nobody offers, and 虚拟临床研究 persists no asked method outside the
  *   engine's published list (a job's method is fixed by its kind): both are exposed as an `offer` the module can call where it learns this, and
  *   neither is called by anything today. That is said here so that nobody reads an adapter's presence as a signal flowing.
  * - **A lead costs a scouting run, so the intake is bounded.** A lead is idempotent by its content (the same code and keys, from any number of
@@ -161,7 +161,7 @@ export function createEvolutionLeadSources({ service, perDay = MODULE_LEADS_DEFA
   if (programme) composed.programme = { scan: scanProgramme };
   if (communication) {
     /**
-     * A question of a 循证传播 project that needs an analysis no capability offers. Nothing calls this today: the module has no field marking it.
+     * A question of a 循证 GEO project that needs an analysis no capability offers. Nothing calls this today: the module has no field marking it.
      * @param {{ entityKeys?: unknown, userId?: string, projectId?: string, sourceEventId?: string, evidenceVersion?: string }} input
      */
     composed.communication = { offer: (input) => input?.userId && input?.projectId && input?.sourceEventId
@@ -170,7 +170,7 @@ export function createEvolutionLeadSources({ service, perDay = MODULE_LEADS_DEFA
   }
   if (virtualStudy) {
     /**
-     * A method a 虚拟临研 study asked for. One the engine publishes is not a lead; any other is, as its family and the study's endpoint. Nothing calls
+     * A method a 虚拟临床研究 study asked for. One the engine publishes is not a lead; any other is, as its family and the study's endpoint. Nothing calls
      * this today: a job's method is fixed by its kind, so no asked method outside the list is persisted.
      * @param {{ asked?: unknown, endpoint?: unknown, entityKeys?: unknown, userId?: string, projectId?: string, sourceEventId?: string }} input
      */
@@ -195,7 +195,7 @@ export function createEvolutionLeadSources({ service, perDay = MODULE_LEADS_DEFA
 export function evolutionLeadSourceMetricFamilies(stats) {
   if (!stats) return [];
   return [
-    { name: "open_science_evolution_module_leads_offered_total", type: "counter", help: "Leads the platform's own modules offered 循证进化, by source: the evidence programme, 循证传播 and 虚拟临研.",
+    { name: "open_science_evolution_module_leads_offered_total", type: "counter", help: "Leads the platform's own modules offered 循证进化, by source: the evidence programme, 循证 GEO and 虚拟临床研究.",
       series: MODULE_LEAD_SOURCES.map((source) => ({ value: stats.offered[source] ?? 0, labels: { source } })) },
     { name: "open_science_evolution_module_leads_total", type: "counter", help: "What became of each offered lead: taken, already known, deferred past the day's bound, refused for its vocabulary, supported already by the engine, or failed.",
       series: Object.entries(stats.outcomes).map(([outcome, value]) => ({ value, labels: { outcome } })) },

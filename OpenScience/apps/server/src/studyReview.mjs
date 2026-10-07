@@ -26,7 +26,7 @@ export function studyReviewConfiguration(config) {
 /** What a list of findings needs, with room: the answer is a closed schema, never an essay. */
 const STUDY_REVIEW_MAX_OUTPUT_TOKENS = 8000;
 /**
- * The configuration of a review of a frozen study snapshot (a 「虚拟临研」 study), as against a delivered package
+ * The configuration of a review of a frozen study snapshot (a 「虚拟临床研究」 study), as against a delivered package
  * (`studyReviewConfiguration`, which the deliverable review keeps as it was). `study-review-v2`: the reviewer's
  * thinking is off. The answer is a closed schema of located, quoted findings that the control plane re-verifies
  * against the frozen bytes (`acceptEditorFindings`), so what thinking bought was minutes: on 2026-10-04 each call

@@ -1,5 +1,5 @@
 /**
- * Every code the 「虚拟临研」 module emits is registered.
+ * Every code the 「虚拟临床研究」 module emits is registered.
  *
  * The merge review of 2026-09-29 found 86 codes the module's sources raised and
  * `@evimed/domain`'s registry had never heard of: each rendered to a person as a

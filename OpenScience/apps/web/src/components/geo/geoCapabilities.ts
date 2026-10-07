@@ -1,6 +1,6 @@
 /**
  * The capabilities a GEO conversation can be bound to. A conversation bound to
- * any of them carries the “循证传播” chip. The frame holds the same list in
+ * any of them carries the “循证 GEO” chip. The frame holds the same list in
  * its vocabulary (`packages/harness-port/src/runtimeUiFrame.mjs`, `geo`); both
  * belong in the domain's GEO vocabulary once it exists.
  *

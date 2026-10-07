@@ -1,4 +1,4 @@
-// Flywheel F25, the 虚拟临研 side (2026-10-06): a trial scenario's prediction of a registered trial's primary endpoint is read out of the
+// Flywheel F25, the 虚拟临床研究 side (2026-10-06): a trial scenario's prediction of a registered trial's primary endpoint is read out of the
 // engine's own result by path and handed to the registry. The number is never in the request, the result must come from an engine job,
 // and the same prediction is filed once.
 import assert from "node:assert/strict";

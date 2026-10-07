@@ -36,7 +36,7 @@ test("no contract quietly requires more files than the baseline records", async 
   assert.ok(found.length >= 10, `only ${found.length} manifests read — the walk found nothing`);
 
   // Distinct kinds, not produces-entries: a kind may be produced by more than
-  // one capability (「虚拟临研」's study package is written by three of them,
+  // one capability (「虚拟临床研究」's study package is written by three of them,
   // each owning part of it), and counting entries would make that read as a
   // short walk forever.
   const checkedKinds = new Set();

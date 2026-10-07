@@ -1,4 +1,4 @@
-// 「循证传播」's product zone and its cards (flywheel F21, F28): a project's verified claims become the cards of the one product
+// 「循证 GEO」's product zone and its cards (flywheel F21, F28): a project's verified claims become the cards of the one product
 // zone its owner holds, on the real zone service and the real tables — only what the card ruler verifies, one card per clinical
 // question, idempotent, the claim table kept and marked with the card each claim became, and every refusal named and narrow.
 import assert from "node:assert/strict";

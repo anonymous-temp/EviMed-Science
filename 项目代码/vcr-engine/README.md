@@ -1,6 +1,6 @@
 # vcr-engine
 
-The deterministic statistics and simulation engine behind 「虚拟临研」 (EviMed
+The deterministic statistics and simulation engine behind 「虚拟临床研究」 (EviMed
 Virtual Clinical Research). **Every number the module shows is computed here.**
 
 It is an independent container driven by the control plane's job queue, in the

@@ -10,10 +10,10 @@ import {
 } from './vcrIntakeLayout.mjs';
 
 /**
- * The disposable container behind 「虚拟临研」's intake conversions: a
+ * The disposable container behind 「虚拟临床研究」's intake conversions: a
  * patient record as PDF or Word becomes text (`extract`), and a published
  * figure becomes curve points (`digitize`) — and, since controller protocol 10,
- * behind a third that is not 「虚拟临研」's: a knowledge-base source's PDF becomes
+ * behind a third that is not 「虚拟临床研究」's: a knowledge-base source's PDF becomes
  * its text page by page and a spreadsheet becomes its cells (`materials`), so
  * the platform can say which page and which sheet cell a parsed value is on
  * (`sourceMaterials.mjs`). It is the same mechanism, not a second one: a source
@@ -21,7 +21,7 @@ import {
  * patient data; the external parser is sent the same bytes), and the answer is
  * read from its output directory.
  *
- * Since protocol 11 a fourth is 「虚拟临研」's again and is patient data from the
+ * Since protocol 11 a fourth is 「虚拟临床研究」's again and is patient data from the
  * first byte: `convert` turns a source held in a standard format — FHIR
  * resources, OMOP CDM tables, CDISC ADaM transport files — into the module's own
  * tables, a field map and a dictionary (`vcrImport.mjs`, `vcr_import_convert.py`).

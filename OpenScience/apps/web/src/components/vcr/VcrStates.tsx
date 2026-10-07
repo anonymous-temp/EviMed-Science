@@ -16,7 +16,7 @@ import { staleSentence, stepLabel, VCR_NO_DEFINITION, VCR_STEP_EMPTY, VCR_STEP_Q
 import { hasDefinition } from "./vcrTabs";
 
 /**
- * The states every 「虚拟临研」 surface shares.
+ * The states every 「虚拟临床研究」 surface shares.
  *
  * The four every list on this product has — loading, empty, error with 重试,
  * content — and **three more this module needs** (build contract §6):
@@ -37,7 +37,7 @@ import { hasDefinition } from "./vcrTabs";
  */
 
 /** The sentence a direct link lands on where the module is off, or not offered here. */
-export const VCR_OFF_SENTENCE = "虚拟临研还没有在这个工作空间开放。";
+export const VCR_OFF_SENTENCE = "虚拟临床研究还没有在这个工作空间开放。";
 
 /**
  * The module-off page: one sentence, nothing to click. The navigation row is
@@ -46,7 +46,7 @@ export const VCR_OFF_SENTENCE = "虚拟临研还没有在这个工作空间开�
  */
 export function VcrOffPage() {
   return (
-    <PageShell title="虚拟临研">
+    <PageShell title="虚拟临床研究">
       <EmptyState icon={UsersRound} title={VCR_OFF_SENTENCE} />
     </PageShell>
   );

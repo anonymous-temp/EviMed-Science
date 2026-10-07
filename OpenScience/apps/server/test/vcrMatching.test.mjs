@@ -1,4 +1,4 @@
-// 「虚拟临研」's eligibility engine: the four states and the algebra over them,
+// 「虚拟临床研究」's eligibility engine: the four states and the algebra over them,
 // the evidence check that voids a fabricated fact, the as-of replay, and the
 // evaluation report that states a ceiling and refuses a threshold.
 //

@@ -1,4 +1,4 @@
-// 「虚拟临研」's program rules without a database: what a program wants, which
+// 「虚拟临床研究」's program rules without a database: what a program wants, which
 // job a research object needs, the dispatch tag a run carries, and the five
 // notices — their kinds, their titles and who hears them.
 import assert from "node:assert/strict";
@@ -424,7 +424,7 @@ test("an inbox that is down is counted and does not stop a tick; a replay is tak
 
 test("a study with no name is still named in a notice", () => {
   assert.equal(vcrStudyName({ name: "", question: "单臂 II 期能不能用外部对照" }), "单臂 II 期能不能用外部对照");
-  assert.equal(vcrStudyName({}), "虚拟临研研究");
+  assert.equal(vcrStudyName({}), "虚拟临床研究");
   assert.equal(vcrStudyName({ name: "x".repeat(50) }).length, 30, "a title never runs away");
 });
 

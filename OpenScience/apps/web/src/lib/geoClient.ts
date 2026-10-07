@@ -1,5 +1,5 @@
 /**
- * “循证传播” — the browser's side of `/api/geo/*` (build spec 2026-09-25 §3).
+ * “循证 GEO” — the browser's side of `/api/geo/*` (build spec 2026-09-25 §3).
  *
  * Hidden knowledge:
  *

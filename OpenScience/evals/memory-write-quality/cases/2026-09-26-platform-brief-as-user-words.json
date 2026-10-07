@@ -14,7 +14,7 @@
     "reconstructed": false,
     "projectId": "geo-eval",
     "messages": [
-      { "id": "seq_9", "role": "user", "text": "「循证传播」自动运行 · 第 6 步（内容）· 第 1 批\n产品：信尔美（通用名：玛仕度肽注射液）。\n这一批最多 5 篇，先写主战场语义群，再写纠错材料：" }
+      { "id": "seq_9", "role": "user", "text": "「循证 GEO」自动运行 · 第 6 步（内容）· 第 1 批\n产品：信尔美（通用名：玛仕度肽注射液）。\n这一批最多 5 篇，先写主战场语义群，再写纠错材料：" }
     ],
     "note": "The text is the start of the brief as the page showed it; the dispatcher appends its tag, and the check replays it with every registered injected platform tag."
   },

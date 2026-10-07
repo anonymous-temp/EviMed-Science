@@ -1,4 +1,4 @@
-// The knowledge package of 「虚拟临研」 on a real PostgreSQL: the packs that are
+// The knowledge package of 「虚拟临床研究」 on a real PostgreSQL: the packs that are
 // rows, the study's binding, the account's library of population definitions
 // with its versions and uses, the tenant boundary and the deletion paths.
 // Skipped when OPEN_SCIENCE_TEST_POSTGRES_URL is not configured.

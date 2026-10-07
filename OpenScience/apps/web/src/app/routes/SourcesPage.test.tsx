@@ -123,7 +123,7 @@ describe("知识库", () => {
     context.features = { openList: true, geo: true, vcr: true };
     useProjectStore.setState({
       currentId: "default", select: selectSpy as never,
-      projects: [{ id: "default", name: "我的研究" }, { id: "paper-1", name: "疳证 Meta 文献检索" }, { id: "study-1", name: "新虚拟临研研究" }, { id: "geo-1", name: "波立维" }],
+      projects: [{ id: "default", name: "我的研究" }, { id: "paper-1", name: "疳证 Meta 文献检索" }, { id: "study-1", name: "二甲双胍外部对照研究" }, { id: "geo-1", name: "波立维" }],
     });
     mocks.listSources.mockResolvedValue(listing([guideline, sheet]));
     mocks.listDuplicateCandidates.mockResolvedValue({ items: [], scanned: 0, truncated: false });
@@ -358,10 +358,10 @@ describe("知识库", () => {
       renderPage();
       await userEvent.click(await screen.findByRole("button", { name: "范围：我的研究" }));
       const menu = await screen.findByRole("menu", { name: "选择范围" });
-      await waitFor(() => expect(within(menu).getByText("虚拟临研")).toBeInTheDocument());
+      await waitFor(() => expect(within(menu).getByText("虚拟临床研究")).toBeInTheDocument());
       expect(within(menu).getByText("我的项目")).toBeInTheDocument();
-      expect(within(menu).getByText("循证传播")).toBeInTheDocument();
-      expect(within(menu).getAllByRole("menuitemradio").map((item) => item.textContent)).toEqual(["我的研究", "疳证 Meta 文献检索", "新虚拟临研研究", "波立维", "所有项目共享"]);
+      expect(within(menu).getByText("循证 GEO")).toBeInTheDocument();
+      expect(within(menu).getAllByRole("menuitemradio").map((item) => item.textContent)).toEqual(["我的研究", "疳证 Meta 文献检索", "二甲双胍外部对照研究", "波立维", "所有项目共享"]);
       expect(within(menu).getByRole("menuitemradio", { name: "我的研究" })).toHaveAttribute("aria-checked", "true");
     });
 

@@ -1,4 +1,4 @@
-// 「循证传播」's program rules without a database: what a program wants, the
+// 「循证 GEO」's program rules without a database: what a program wants, the
 // calendar arithmetic of the schedules in Asia/Shanghai, the sentinel
 // engines, the briefs a run is told, and the notices' titles and kinds.
 import assert from "node:assert/strict";
@@ -250,7 +250,7 @@ test("an operator is told where each alert is handled: the probe host, the probe
   assert.match(operatorBody({ kind: "geo_probe_host_down" }), /探测机是否在线/);
   assert.match(operatorBody({ kind: "geo_probe_unconfigured" }), /探测通道的地址和密钥/);
   assert.match(operatorBody({ type: "metrics_missing" }), /测量任务/);
-  assert.equal(operatorBody({ type: "reconciliation_mismatch", diff: 12 }), "差额 ¥12.00。在“循证传播”的投放账户里处理。");
+  assert.equal(operatorBody({ type: "reconciliation_mismatch", diff: 12 }), "差额 ¥12.00。在“循证 GEO”的投放账户里处理。");
   for (const type of ["geo_probe_engine_paused", "geo_probe_busy", "diagnosis_empty"]) {
     assert.equal(operatorBody({ type }).includes("投放账户"), false, `${type} is not a placement matter`);
   }

@@ -219,16 +219,16 @@ describe("Menu headings", () => {
     render(<Menu label="选择范围" items={[
       { heading: "我的项目" }, { label: "我的研究", checked: true, onSelect: vi.fn() },
       "separator",
-      { heading: "虚拟临研" }, { label: "新研究", checked: false, onSelect: onPick },
+      { heading: "虚拟临床研究" }, { label: "新研究", checked: false, onSelect: onPick },
     ]} />);
     await userEvent.click(screen.getByRole("button", { name: "选择范围" }));
     expect(await screen.findByText("我的项目")).toBeInTheDocument();
-    expect(screen.getByText("虚拟临研")).not.toHaveAttribute("role", "menuitemradio");
+    expect(screen.getByText("虚拟临床研究")).not.toHaveAttribute("role", "menuitemradio");
     expect(screen.getAllByRole("menuitemradio").map((item) => item.textContent)).toEqual(["我的研究", "新研究"]);
     await vi.waitFor(() => expect(screen.getByRole("menuitemradio", { name: "我的研究" })).toHaveFocus());
     await userEvent.keyboard("{ArrowDown}");
     expect(screen.getByRole("menuitemradio", { name: "新研究" })).toHaveFocus();
-    await userEvent.click(screen.getByText("虚拟临研"));
+    await userEvent.click(screen.getByText("虚拟临床研究"));
     expect(onPick).not.toHaveBeenCalled();
     expect(screen.getByRole("menu")).toBeInTheDocument();
     await userEvent.click(screen.getByRole("menuitemradio", { name: "新研究" }));

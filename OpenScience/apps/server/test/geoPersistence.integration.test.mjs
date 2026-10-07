@@ -1,4 +1,4 @@
-// The 循证传播 schema against a real PostgreSQL: every table of the build spec
+// The 循证 GEO schema against a real PostgreSQL: every table of the build spec
 // created once and again as a no-op, the constraints other packages rely on,
 // and the two deletion paths — content and measurements go with a project or
 // an account, money stays, and so do the screenshots another snapshot still

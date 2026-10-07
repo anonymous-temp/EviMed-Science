@@ -1,4 +1,4 @@
-// A 「虚拟临研」 study furnished the way the platform furnishes one — through the
+// A 「虚拟临床研究」 study furnished the way the platform furnishes one — through the
 // real stores, with results shaped exactly as the engine returns them — so the
 // presenter is proven on rows the module actually writes, not on a shape this
 // test made up. Not a `*.test.mjs` file on purpose: `pnpm test:server` globs

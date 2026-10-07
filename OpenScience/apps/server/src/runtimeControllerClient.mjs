@@ -13,7 +13,7 @@ import { VCR_INTAKE_LONG_KINDS } from "./vcrIntakeLayout.mjs";
 // Version 10 adds the source-material read (a knowledge-base source's PDF as
 // its pages' text, a spreadsheet as its cells) to the intake container of
 // version 9: the same fixed operation over a staged attempt, a third kind.
-// Version 9 adds the two 「虚拟临研」 intake conversions (a record document to
+// Version 9 adds the two 「虚拟临床研究」 intake conversions (a record document to
 // text, a figure to curve points), each one fixed operation over a staged
 // attempt. Version 8 added isolated native skill validation; the version-7
 // citation runtime-start shape stays explicitly supported during coordinated

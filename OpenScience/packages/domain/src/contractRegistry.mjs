@@ -115,7 +115,7 @@ export const GATE_CHECK_IDS = Object.freeze([
   'statistical-results-shape',
   'statistical-finite-results',
   'statistical-execution-provenance',
-  // geneExpression.mjs — four, every one advisory (NCBI Gene Expression Omnibus, not 「循证传播」).
+  // geneExpression.mjs — four, every one advisory (NCBI Gene Expression Omnibus, not 「循证 GEO」).
   ...GENE_EXPRESSION_CHECK_IDS,
   'dataset-profile-parse',
   'dataset-number-provenance',
@@ -129,7 +129,7 @@ export const GATE_CHECK_IDS = Object.freeze([
   'grant-requirement-coverage',
   'geo-measurement',
   'geo-probe-host',
-  // The 「循证传播」 contracts (`geoContracts.mjs`). Three raise a required
+  // The 「循证 GEO」 contracts (`geoContracts.mjs`). Three raise a required
   // finding where the method pack's own `platform_tier` says blocking — a
   // claim bound to nothing (geo-claim-source), a composed question passed off
   // as a real one (geo-question-map), a number labelled with a data type it
@@ -141,7 +141,7 @@ export const GATE_CHECK_IDS = Object.freeze([
   'geo-strategy-shape',
   'geo-article-shape',
   'geo-proposal-shape',
-  // 「虚拟临研」's contracts (`vcrContracts.mjs`), every one of them a notice:
+  // 「虚拟临床研究」's contracts (`vcrContracts.mjs`), every one of them a notice:
   // the blocking budget is spent, and the two findings anyone would reach for
   // first describe legitimate deliveries — a study whose conclusion is
   // 「不可估计」 and a study nobody has reviewed yet.
@@ -849,12 +849,12 @@ const VALIDATORS = Object.freeze({
     manuscriptSectionFindings(input),
   ),
   'grant-proposal-package': validateGrantProposalPackage,
-  // 「循证传播」: steps 1–3, step 5, step 6, and the client package.
+  // 「循证 GEO」: steps 1–3, step 5, step 6, and the client package.
   'geo-insight-pack': (input) => validateGeoPack(input, geoInsightFindings),
   'geo-strategy-pack': (input) => validateGeoPack(input, geoStrategyFindings),
   'geo-content-pack': (input) => validateGeoPack(input, geoContentFindings, { ownSafetyRules: true }),
   'geo-proposal-pack': (input) => validateGeoPack(input, geoProposalFindings),
-  // 「虚拟临研」: prose plus the results it renders from (plan §8.3). The
+  // 「虚拟临床研究」: prose plus the results it renders from (plan §8.3). The
   // number-provenance finding is decidable here because the package ships the
   // result file the template bound to.
   'vcr-study-package': (input) => withFindings(validateReportShaped(input, proseFilesOf(input)), vcrStudyPackageFindings(input)),
@@ -1505,7 +1505,7 @@ function validateGrantProposalPackage(input) {
 }
 
 /**
- * The four 「循证传播」 contracts, composed the one way.
+ * The four 「循证 GEO」 contracts, composed the one way.
  *
  * The shared required-output pass stays here (a declared file that is missing
  * or empty is the unreadable package every kind blocks on); the prose hygiene

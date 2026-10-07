@@ -122,7 +122,7 @@ test("a known alert reaches the inbox as its Chinese title and sentence, and a r
   const inbox = recordingInbox();
   const { post } = await serve(t, { config: { alertReceiverToken: TOKEN, operatorUsers: ["ops"] }, notificationService: inbox });
   const urgent = { ...firing, labels: { alertname: "GeoUrgentFindingsOpen", severity: "warning" },
-    annotations: { summary: "循证传播有 2 条 S3/S4 级「讲错我方」尚未关闭" }, fingerprint: "00112233445566aa" };
+    annotations: { summary: "循证 GEO 有 2 条 S3/S4 级「讲错我方」尚未关闭" }, fingerprint: "00112233445566aa" };
   await post(alertmanagerBody([urgent]));
   await post(alertmanagerBody([{ ...urgent, status: "resolved", endsAt: "2026-09-28T01:30:00.000Z" }]));
   const [open, closed] = inbox.created;

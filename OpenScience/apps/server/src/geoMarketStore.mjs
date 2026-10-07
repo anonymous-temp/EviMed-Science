@@ -83,7 +83,7 @@ async function ledgerSumsWith(client, geoProjectId, since) {
 }
 
 /**
- * SQL for the market side of 「循证传播」 (build spec §2): the media catalogue,
+ * SQL for the market side of 「循证 GEO」 (build spec §2): the media catalogue,
  * outcomes, orders and their events, the ledger, top-ups and reconciliations,
  * plus the few reads and forward-only writes the market needs on the content
  * side (projects, articles, groups, sources, targets). The DDL is package A's

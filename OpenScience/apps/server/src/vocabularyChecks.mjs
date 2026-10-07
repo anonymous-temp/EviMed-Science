@@ -7,7 +7,7 @@
  * the moment the table is first created. On every later start the statement is
  * a no-op, so a word the domain adds afterwards is refused by the database the
  * first time it is written — on production only, because every test database
- * is created fresh. It happened to 「虚拟临研」's `jobs.kind` the day the
+ * is created fresh. It happened to 「虚拟临床研究」's `jobs.kind` the day the
  * engine gained comparator methods (2026-10-04).
  *
  * So, after the DDL has run: every single-column CHECK the DDL declares with an

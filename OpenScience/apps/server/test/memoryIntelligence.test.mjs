@@ -388,7 +388,7 @@ test("a stored value is the fact itself, not a note that it was reinforced", asy
 });
 
 test("the instructions keep a conversation's pending state, the platform's inventory and process notes out of memory", async () => {
-  // 2026-10-07 audit (plan §3.2.7): about ten project facts from 虚拟临研
+  // 2026-10-07 audit (plan §3.2.7): about ten project facts from 虚拟临床研究
   // conversations were 「待用户提供一句话研究问题或上传方案…」 and 「平台现有三份
   // 病种知识包…」 — a conversation waiting, and the platform listing what it
   // offers. Whether a sentence is that is language, so the rule is in the

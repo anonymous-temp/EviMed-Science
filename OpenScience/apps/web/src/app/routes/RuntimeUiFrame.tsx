@@ -311,7 +311,7 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
   // is a choice this shell refuses rather than binds.
   const capabilityAgents = useRef(new Map<string, { agentId: string; agentVersion: string }>());
   // The capability the task on screen is bound to, as the control plane said
-  // it: what decides whether the 「循证传播」 chip carries its options.
+  // it: what decides whether the 「循证 GEO」 chip carries its options.
   const [frameCapability, setFrameCapability] = useState<string | null>(null);
   // The latest `geo-options` handler, read by the message listener.
   const geoOptionsHandler = useRef<((change: { sessionId?: unknown; coverageDays?: unknown; engines?: unknown }) => void) | null>(null);
@@ -680,7 +680,7 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
         const to = routes[String(message.destination)];
         if (!to) return;
         if (message.destination === "geo") {
-          // 「循证传播」, at one of this project's tabs when the frame names
+          // 「循证 GEO」, at one of this project's tabs when the frame names
           // one (a run's report linking to 诊断): the tab is a closed
           // vocabulary, and the project is the tab's own, never the frame's word.
           incoming.current = message.seq;
@@ -776,12 +776,12 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
           })
           .catch(() => { postToFrame("capability", { capabilityId: null, sessionId: from }); });
       } else if (message.type === "evimed.runtime-ui.geo-options") {
-        // 覆盖周期 or AI 引擎 changed beside the 「循证传播」 chip; the handler
+        // 覆盖周期 or AI 引擎 changed beside the 「循证 GEO」 chip; the handler
         // validates it again and writes it to this project's GEO row.
         incoming.current = message.seq;
         geoOptionsHandler.current?.({ sessionId: message.sessionId, coverageDays: message.coverageDays, engines: message.engines });
       } else if (message.type === "evimed.runtime-ui.vcr-options") {
-        // 起点 or 预期用途 changed beside the 「虚拟临研」 chip; the handler
+        // 起点 or 预期用途 changed beside the 「虚拟临床研究」 chip; the handler
         // validates it again and writes it to this project's study.
         incoming.current = message.seq;
         vcrOptionsHandler.current?.({ sessionId: message.sessionId, start: message.start, intendedUse: message.intendedUse });
@@ -921,13 +921,13 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
     return () => { active = false; };
   }, [booted, error, frameId, frameTask, postToFrame]);
 
-  // 循证传播's options beside its chip, for a conversation bound to one of the
+  // 循证 GEO's options beside its chip, for a conversation bound to one of the
   // module's capabilities (`useFrameGeoOptions`).
   const postGeo = useCallback((payload: object) => postToFrame("geo", payload), [postToFrame]);
   geoOptionsHandler.current = useFrameGeoOptions({
     projectId, sessionId: frameTask, capabilityId: frameCapability, enabled: booted > 0 && !error && Boolean(frameId), post: postGeo,
   });
-  // 虚拟临研's options beside its chip, for a conversation bound to one of the
+  // 虚拟临床研究's options beside its chip, for a conversation bound to one of the
   // module's capabilities (`useFrameVcrOptions`).
   const postVcr = useCallback((payload: object) => postToFrame("vcr", payload), [postToFrame]);
   vcrOptionsHandler.current = useFrameVcrOptions({

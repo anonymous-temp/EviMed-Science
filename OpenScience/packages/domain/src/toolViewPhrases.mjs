@@ -97,8 +97,8 @@ const PHRASES = Object.freeze({
   locate_quote: phrase('核对引文', ['quote']),
   // measured visibility
   geo_visibility_probe: phrase('测 AI 可见度', ['question', 'query', 'brand']),
-  geo_read: phrase('读取循证传播数据'),
-  geo_write: phrase('写入循证传播数据'),
+  geo_read: phrase('读取循证 GEO 数据'),
+  geo_write: phrase('写入循证 GEO 数据'),
   social_posts_search: phrase('采集社媒真实问法', ['query']),
   // pharmacy data
   drug_label_search: phrase('检索说明书', ['drug', 'query']),
@@ -133,7 +133,7 @@ const PHRASES = Object.freeze({
   // the researcher's own documents, and the feed
   kb_search: phrase('检索知识库', ['query']),
   frontier_search: phrase('查前沿动态', ['q', 'query']),
-  // 虚拟临研: the study's own data, the deterministic engine behind a
+  // 虚拟临床研究: the study's own data, the deterministic engine behind a
   // submit/poll pair, and the two evidence tools it parameterizes from.
   vcr_read: phrase('读研究数据', ['what']),
   vcr_write: phrase('写研究对象', ['what']),

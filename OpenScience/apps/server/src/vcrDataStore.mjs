@@ -1,5 +1,5 @@
 /**
- * 「虚拟临研」's data-plane and membership queries: sources, grants, snapshots,
+ * 「虚拟临床研究」's data-plane and membership queries: sources, grants, snapshots,
  * field maps, analysis tables and study members (build plan 2026-09-28 §8.1,
  * §11.1 conclusion 4, §11.3).
  *

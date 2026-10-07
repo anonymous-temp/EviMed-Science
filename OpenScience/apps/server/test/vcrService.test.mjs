@@ -1,4 +1,4 @@
-// 「虚拟临研」's switch, its deterministic read-model rules, and the first
+// 「虚拟临床研究」's switch, its deterministic read-model rules, and the first
 // catalogue it seeds — all without a database.
 //
 // The rules held here are the ones a page must never ask a model about: which

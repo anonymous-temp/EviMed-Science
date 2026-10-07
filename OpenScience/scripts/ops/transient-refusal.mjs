@@ -8,7 +8,7 @@
  * conversation again by itself and says 「正在准备运行环境」; a script that calls
  * the same routes must not be the one client that fails on it. On 2026-10-04 the
  * smoke, the stream acceptance, the hosted end-to-end, the revision acceptance
- * and the 虚拟临研 acceptance each failed their first call after a release.
+ * and the 虚拟临床研究 acceptance each failed their first call after a release.
  *
  * One helper, one bounded retry: the refusals listed here and no other, never a
  * body-less 423 (a 423 that is a hold the product does not lift by waiting, such

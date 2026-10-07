@@ -9,7 +9,7 @@ import { TrialTab } from "./tabs/TrialTab";
 import { VcrPackageReader } from "./VcrPackageReader";
 import { fixture, installVcrServer, STUDY_ID } from "./__fixtures__/serverFixtures";
 
-// The evidence flywheel's edges of 虚拟临研 (F23, F24, the 模拟研究 column, F25): each renders from a copy of the server's own fixture
+// The evidence flywheel's edges of 虚拟临床研究 (F23, F24, the 模拟研究 column, F25): each renders from a copy of the server's own fixture
 // with the one field the feature adds, and the browser is held to what it sends.
 const network = vi.hoisted(() => ({ productRequest: vi.fn() }));
 vi.mock("@/lib/productClient", () => network);

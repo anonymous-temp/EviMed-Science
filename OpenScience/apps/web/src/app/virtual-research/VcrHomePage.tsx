@@ -45,7 +45,7 @@ type Listing =
   | { kind: "ready"; home: VcrHome };
 
 /**
- * 「虚拟临研」's home: the studies, and the libraries they draw on.
+ * 「虚拟临床研究」's home: the studies, and the libraries they draw on.
  *
  * One list and one way in. 「新建研究」 is the only entry: it makes a draft study
  * and opens its conversation with the module's chip and the six starting points
@@ -118,9 +118,9 @@ export function VcrHomePage() {
   const todosOf = (study: VcrStudySummary): VcrRecruitTodo[] => (ready?.todos ?? []).filter((todo) => todo.studyId === study.id);
 
   return (
-    <PageShell title="虚拟临研" width="wide" actions={newStudy}>
+    <PageShell title="虚拟临床研究" width="wide" actions={newStudy}>
       <Tabs
-        label="虚拟临研的视图"
+        label="虚拟临床研究的视图"
         items={TABS.map((item) => ({ value: item.value, label: item.label, ...(item.value === "studies" && ready ? { count: ready.studies.length } : {}) }))}
         value={tab}
         onChange={(next) => setParams(next === "studies" ? {} : { tab: next }, { replace: true })}

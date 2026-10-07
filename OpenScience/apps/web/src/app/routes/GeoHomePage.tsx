@@ -22,7 +22,7 @@ type Listing =
   | { kind: "ready"; projects: GeoProjectSummary[] };
 
 /**
- * “循证传播”'s home (plan §5.1, mockup g01): one row per product — its name,
+ * “循证 GEO”'s home (plan §5.1, mockup g01): one row per product — its name,
  * a line under it (the coverage window, or the one red sentence when an AI
  * engine says something wrong about it), and on the right the 综合可见度指数
  * with its trend against the target and the 品牌提及率 over P2 + P3. A number
@@ -30,7 +30,7 @@ type Listing =
  * in the list all the same.
  *
  * “新建项目” creates the project and lands in its conversation, where the
- * composer already carries the “循证传播” chip: no form.
+ * composer already carries the “循证 GEO” chip: no form.
  */
 export function GeoHomePage() {
   const feature = useGeoFeature();
@@ -71,7 +71,7 @@ export function GeoHomePage() {
 
   return (
     <PageShell
-      title="循证传播"
+      title="循证 GEO"
       actions={(
         <Button onClick={create} loading={creating} disabled={listing.kind !== "ready"}>
           <Plus size={16} aria-hidden="true" />
@@ -81,7 +81,7 @@ export function GeoHomePage() {
     >
       {feature === "loading" || listing.kind === "loading" ? <GeoListSkeleton />
         : listing.kind === "error" ? <LoadError message={listing.message} onRetry={() => setReloads((value) => value + 1)} />
-          : listing.projects.length === 0 ? <EmptyState icon={Radar} title="还没有循证传播项目" />
+          : listing.projects.length === 0 ? <EmptyState icon={Radar} title="还没有循证 GEO 项目" />
             : <ProjectList projects={listing.projects} />}
     </PageShell>
   );
@@ -102,7 +102,7 @@ function ProjectList({ projects }: { projects: GeoProjectSummary[] }) {
           <span className="w-4" />
         </span>
       </div>
-      <List divided label="循证传播项目">
+      <List divided label="循证 GEO 项目">
         {projects.map((project) => <ProjectRow key={project.id} project={project} />)}
       </List>
     </div>

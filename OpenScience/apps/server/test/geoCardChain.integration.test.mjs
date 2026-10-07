@@ -1,4 +1,4 @@
-// 「循证传播」's evidence chain, the citing side (flywheel F21): the lower layers cite card claims, and the platform reads each
+// 「循证 GEO」's evidence chain, the citing side (flywheel F21): the lower layers cite card claims, and the platform reads each
 // reference against the card revision it names — the project's own cards and a published official card, never another account's —
 // labels an article whose cited claim a card's change log says moved, and renders the card layer from the card. On the real zone
 // service, change log and tables.

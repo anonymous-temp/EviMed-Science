@@ -1,4 +1,4 @@
-// 「虚拟临研」's study lifecycle on PostgreSQL (R10): 「新建研究」 makes a draft that is not on the list, the first definition names it
+// 「虚拟临床研究」's study lifecycle on PostgreSQL (R10): 「新建研究」 makes a draft that is not on the list, the first definition names it
 // and makes it active, a draft nobody spoke in is swept an hour later, and the page's 「对话」 is the conversation the study was opened with.
 //
 // A real database, because the rules are statements over rows: the list excludes `draft`, the name is unique per account, and the sweep

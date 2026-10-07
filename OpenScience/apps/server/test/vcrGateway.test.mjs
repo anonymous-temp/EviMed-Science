@@ -1,4 +1,4 @@
-// The runtime's channel into a 虚拟临研 study: the token decides the account
+// The runtime's channel into a 虚拟临床研究 study: the token decides the account
 // and the study, the fields are closed, a write refuses item by item and never
 // fails the batch, and a number is not writable at all.
 //

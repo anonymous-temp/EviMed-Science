@@ -1,5 +1,5 @@
 /**
- * 「虚拟临研」's two closed rule grammars (integration contract 2026-09-29 §2).
+ * 「虚拟临床研究」's two closed rule grammars (integration contract 2026-09-29 §2).
  *
  * Hidden knowledge:
  *

@@ -24,7 +24,7 @@
  *  costs is never folded into a researcher's spend. `review` is the
  *  independent reviewer the control plane calls on a researcher's delivery
  *  (a model of another family, never the kernel's): charged to the run it
- *  reviewed, so a report's price includes its review. `geo` is 「循证传播」's
+ *  reviewed, so a report's price includes its review. `geo` is 「循证 GEO」's
  *  own model calls outside a run — parsing and judging measured answers —
  *  held by the module's own daily budget like `frontier`, never by a
  *  researcher's caps. `web-search` is the web-search gateway's own model call
@@ -82,8 +82,8 @@ export const USAGE_PURPOSE_LABELS_ZH = /** @type {Readonly<Record<UsagePurpose, 
   autopilot: '主动科研规划',
   frontier: '前沿动态',
   review: '成果审查',
-  geo: '循证传播',
-  vcr: '虚拟临研',
+  geo: '循证 GEO',
+  vcr: '虚拟临床研究',
   'web-search': '联网搜索',
   evolution: '循证进化',
   evidence: '证据中心',
@@ -160,7 +160,7 @@ export function usagePurposeOfRun(run) {
  * run is an evaluation harness's (`automated`). That statement is typed by the
  * caller of the public dispatch route, so reading it for the charge made
  * `{"automated": true}` a way to research for nothing under research billing.
- * Managed work (GEO, proactive, 虚拟临研) is chargeable as it always was: it
+ * Managed work (GEO, proactive, 虚拟临床研究) is chargeable as it always was: it
  * is kernel work.
  * @param {{ effectiveAgentId?: string | null, effectiveRouteReason?: string | null } | null | undefined} run
  * @returns {boolean}

@@ -1,4 +1,4 @@
-// 「虚拟临研」's report numbers: rendered from results, never typed.
+// 「虚拟临床研究」's report numbers: rendered from results, never typed.
 //
 // This is the whole of AC-20 as a mechanism rather than as a check. A template
 // carries references; the platform resolves them against the study's saved

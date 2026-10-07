@@ -1,4 +1,4 @@
-// 「虚拟临研」's data plane without a database: where patient-level bytes may
+// 「虚拟临床研究」's data plane without a database: where patient-level bytes may
 // live, what an aggregate handed to a model may say, what the three ADaM
 // shapes must hold, and what the snapshot profiler finds.
 //

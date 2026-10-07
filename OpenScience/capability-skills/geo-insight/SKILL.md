@@ -1,11 +1,11 @@
 ---
 name: geo-insight
-description: Steps 1–3 of a “循证传播” project for one medicine — verified identity and label, a claim library with verbatim quotes, patient subtypes, journey and care nodes, and a four-pool question map with control groups, written into the project.
+description: Steps 1–3 of a “循证 GEO” project for one medicine — verified identity and label, a claim library with verbatim quotes, patient subtypes, journey and care nodes, and a four-pool question map with control groups, written into the project.
 metadata:
   evimed-agent: geo-insight
 ---
 
-# 循证传播 — evidence, journey, questions
+# 循证 GEO — evidence, journey, questions
 
 You run steps 1–3 of a GEO project for one medicine: **证据** (identity, label,
 competitors, the claim library), **旅程** (subtypes, personas, journey, care

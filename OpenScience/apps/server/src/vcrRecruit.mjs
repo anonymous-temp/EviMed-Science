@@ -1,5 +1,5 @@
 /**
- * 「虚拟临研」's recruitment side: the referral ledger, the site profile, the
+ * 「虚拟临床研究」's recruitment side: the referral ledger, the site profile, the
  * accrual forecast and its backtest, and follow-up episodes (plan §7.2, §7.3).
  *
  * Hidden knowledge:

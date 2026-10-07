@@ -19,7 +19,7 @@ x-runtime-caps: &runtime-caps
   OPEN_SCIENCE_USER_RUN_SPEND_LIMIT: ${OPEN_SCIENCE_USER_RUN_SPEND_LIMIT:-0}
   OPEN_SCIENCE_MAX_PROJECTS_PER_USER: ${OPEN_SCIENCE_MAX_PROJECTS_PER_USER:-20}
 
-# The 「虚拟临研」 intake conversions' limits (config.mjs `vcrIntake*`,
+# The 「虚拟临床研究」 intake conversions' limits (config.mjs `vcrIntake*`,
 # `vcrDigitizeMaxPixels`, `vcrDataMaxBytes`): a PDF or Word record converted to
 # text, a figure digitized and a FHIR, OMOP or ADaM source converted to tables,
 # each in a disposable container. `vcrDataMaxBytes` is the largest table an
@@ -607,7 +607,7 @@ services:
       OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_ENABLED:
       OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_MAX_PER_PROJECT:
       OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_MAX_ITEMS:
-      # 「循证传播」 (geoService.mjs) and the media marketplace it places orders
+      # 「循证 GEO」 (geoService.mjs) and the media marketplace it places orders
       # through. Value-less: unset keeps config.mjs's defaults — the module off,
       # open to operators once on, no social channel, no marketplace. The
       # marketplace key is the host file bound below.
@@ -626,7 +626,7 @@ services:
       OPEN_SCIENCE_GEO_INCLUSION_ENGINES:
       OPEN_SCIENCE_GEO_LINK_CHECK_ENABLED:
       OPEN_SCIENCE_GEO_QUESTION_BANK_ENABLED:
-      # 「虚拟临研」 (vcrService.mjs, build plan 2026-09-28). Value-less, same
+      # 「虚拟临床研究」 (vcrService.mjs, build plan 2026-09-28). Value-less, same
       # rule: unset keeps config.mjs's defaults — the module off, open to
       # operators once on, no engine composed and no data plane, which is
       # the state in which every tier above T0 says so rather than guessing.
@@ -936,7 +936,7 @@ services:
       OPEN_SCIENCE_GEO_PROBE_SIGNING_SECRET_FILE: ${OPEN_SCIENCE_GEO_PROBE_SIGNING_SECRET_FILE:-}
       OPEN_SCIENCE_PUBLIC_SOURCE_GATEWAY_TIMEOUT_MS: ${OPEN_SCIENCE_PUBLIC_SOURCE_GATEWAY_TIMEOUT_MS:-60000}
       OPEN_SCIENCE_PUBLIC_SOURCE_GATEWAY_MAX_RESPONSE_BYTES: ${OPEN_SCIENCE_PUBLIC_SOURCE_GATEWAY_MAX_RESPONSE_BYTES:-16777216}
-      # The NCBI Gene Expression Omnibus workflow's six resource limits (config.mjs `geneExpression*`; not 循证传播). The two
+      # The NCBI Gene Expression Omnibus workflow's six resource limits (config.mjs `geneExpression*`; not 循证 GEO). The two
       # byte limits are enforced by the public-source gateway as a download streams; every limit also reaches the runtime
       # as EVIMED_GENE_EXPRESSION_*, where the tools refuse an input over one for that computation. Counters:
       # open_science_gene_expression_limits_total{limit,action}.
@@ -1138,7 +1138,7 @@ services:
         source: ${OPEN_SCIENCE_MEDIA_MARKET_API_KEY_HOST_FILE:-/dev/null}
         target: /run/secrets/media-market-api-key
         read_only: true
-      # 「虚拟临研」's engine token and receipt key (each at least 32 bytes,
+      # 「虚拟临床研究」's engine token and receipt key (each at least 32 bytes,
       # owner-and-group readable: the engine reads the same files through its
       # group). The token is required for an engine; the receipt key is optional.
       - type: bind
@@ -1336,14 +1336,14 @@ services:
       - runtime-internal
     restart: unless-stopped
 
-  # 「虚拟临研」's deterministic statistics and simulation engine (plan §11.4).
+  # 「虚拟临床研究」's deterministic statistics and simulation engine (plan §11.4).
   # Not a specialist agent: it holds no model client and no gateway, it reads
   # only the snapshot files a job names, and it answers a job protocol the
   # control plane and the engine both validate against `@evimed/domain`'s
   # `vcrEngineJob.mjs`. It is the one image in this stack that may never call
   # out — the whole point of it is that numbers come from code with a version.
   #
-  # Behind the `vcr` profile: a deployment that does not run 「虚拟临研」 does
+  # Behind the `vcr` profile: a deployment that does not run 「虚拟临床研究」 does
   # not build, pull or start an R image. `--profile vcr` (or COMPOSE_PROFILES)
   # starts it together with the volume's one-shot owner below; the control
   # plane finds it at OPEN_SCIENCE_VCR_ENGINE_URL=http://evimed-vcr-engine:8080.

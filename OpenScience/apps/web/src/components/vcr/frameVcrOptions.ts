@@ -1,5 +1,5 @@
 /**
- * What the conversation frame's 虚拟临研 chip draws, from a study.
+ * What the conversation frame's 虚拟临床研究 chip draws, from a study.
  *
  * Its own module, and loaded by `useFrameVcrOptions` only once a conversation
  * is bound to one of the module's capabilities: every other conversation never
@@ -18,7 +18,7 @@ import type { VcrAction, VcrIntendedUse, VcrStepKey, VcrStudy } from "@/lib/vcrC
 /** Where a study starts: everything, or one of the four workspaces. */
 export type VcrStart = "auto" | VcrAction;
 
-/** What the frame's 虚拟临研 chip draws beside itself (the bridge's `vcr` message). */
+/** What the frame's 虚拟临床研究 chip draws beside itself (the bridge's `vcr` message). */
 export interface FrameVcrOptions {
   sessionId: string;
   /** Whether there is a study to write the options to. */

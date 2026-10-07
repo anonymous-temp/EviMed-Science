@@ -143,7 +143,7 @@ test("the monthly page says a month has no data, never 0, and the simulations ba
   assert.match(text, /模拟研究的结果是模拟，不是证据/);
   assert.match(text, /<td>HR<\/td><td class="num">0\.8<\/td><td>预测<\/td>/);
   assert.match(text, /<td>N<\/td><td class="num">100<\/td><td>来源未标注<\/td>/, "a number with no source says so");
-  // The record 虚拟临研 stores when a study lead publishes a report: sections with their own numbers, a cover's use and limits, receipts.
+  // The record 虚拟临床研究 stores when a study lead publishes a report: sections with their own numbers, a cover's use and limits, receipts.
   const published = String(simulationPage({ id: "s2", title: "T", summary: "", publishedAt: "2026-10-06T00:00:00.000Z", producer: { kind: "researcher", name: "<b>lead</b>" },
     intendedUse: "设计支持", limitations: ["样本来自单中心", "<i>x</i>"], receipts: ["rcp_1"],
     sections: [{ heading: "检验效能", text: "按情景估计。", values: [{ label: "效能", value: "0.82", unit: "", valueSource: "calculated" }, { label: "事件数", value: "未计算", valueSource: "observed" }] }] }).body);

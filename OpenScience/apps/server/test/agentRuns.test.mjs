@@ -5186,7 +5186,7 @@ test("every fetch-tool error code is classified, so a new one cannot default to 
     "../src/webRead.mjs", "../src/webReadNetwork.mjs", "../src/webReadLimits.mjs", "../src/webReadExtract.mjs", "../src/agentbay/browser.mjs",
     "../src/webRender.mjs", "../src/webRenderPage.mjs", "../src/localBrowser.mjs", "../src/webRenderEgress.mjs",
     "../src/kbSearchGateway.mjs", "../src/frontierGateway.mjs",
-    // 循证传播's gateway, the write module it hands writes to, and the social
+    // 循证 GEO's gateway, the write module it hands writes to, and the social
     // channel behind `social_posts_search` (2026-09-25).
     "../src/geoGateway.mjs", "../src/geoWrites.mjs", "../src/socialCrawlClient.mjs",
   ]) {
@@ -8522,7 +8522,7 @@ test("a plain answer typed into the kernel's page counts the persona its session
 
 test("only a dispatch a person is waiting on asks the runtime to wait for a free slot; a worker's dispatch does not", async () => {
   // 2026-10-05: with every runtime slot taken a researcher's dispatch is a place in line. A worker (autopilot,
-  // GEO, 虚拟临研) defers on its own backoff and must not hold its lease for minutes behind the same wait.
+  // GEO, 虚拟临床研究) defers on its own backoff and must not hold its lease for minutes behind the same wait.
   const root = await mkdtemp(path.join(tmpdir(), "os-run-wait-for-room-"));
   const projectAt = async (id) => {
     const rootDir = path.join(root, id);

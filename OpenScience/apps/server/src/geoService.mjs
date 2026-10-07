@@ -1,5 +1,5 @@
 /**
- * What 「循证传播」's pages are served (build spec 2026-09-25 §3), and the
+ * What 「循证 GEO」's pages are served (build spec 2026-09-25 §3), and the
  * module's switch, readiness and metrics.
  *
  * Hidden knowledge:
@@ -66,7 +66,21 @@ export const GEO_ANSWER_TEXT_LIMIT = 4_000;
 export const GEO_READ_MAX_ITEMS = 50;
 
 /** The name a new GEO project's control-plane project gets when no brand is given yet. */
-export const GEO_DEFAULT_PROJECT_NAME = "新循证传播项目";
+export const GEO_DEFAULT_PROJECT_NAME = "新循证 GEO 项目";
+
+/**
+ * The placeholders brandless projects were made with before the module was
+ * called 「循证 GEO」 again (2026-10-07): 「新 GEO 项目」 until 2026-10-06, then
+ * 「新循证传播项目」. A row already holding one is still a placeholder — the
+ * brand replaces it — so a rename of the product never strands a project
+ * under a name nobody chose. No expiry: the rows are the user's data.
+ */
+const GEO_PREVIOUS_DEFAULT_PROJECT_NAMES = Object.freeze(["新 GEO 项目", "新循证传播项目"]); // retired-word-ok
+
+/** Whether a project's name is still a brandless placeholder, current or earlier. @param {string | undefined | null} name */
+export function isGeoPlaceholderName(name) {
+  return name === GEO_DEFAULT_PROJECT_NAME || GEO_PREVIOUS_DEFAULT_PROJECT_NAMES.includes(/** @type {string} */ (name));
+}
 
 const DIAGNOSIS_ROUND_KINDS = Object.freeze(["baseline", "weekly", "single_step"]);
 /** A rival's mention rate: the owner's M-16, over the same pools as our headline M-01S. */
@@ -154,7 +168,7 @@ export function geoCellFromRow(row) {
  */
 export function geoProjectName(project, controlName) {
   const brand = text(project.product?.brandName);
-  if (controlName && controlName !== GEO_DEFAULT_PROJECT_NAME) return controlName;
+  if (controlName && !isGeoPlaceholderName(controlName)) return controlName;
   return brand || controlName || GEO_DEFAULT_PROJECT_NAME;
 }
 
@@ -552,7 +566,7 @@ export class GeoService {
     return name === undefined ? updated : { ...updated, name };
   }
 
-  /** `DELETE /api/geo/projects/:id`: hidden from 循证传播; the project's conversations and files stay. @param {{ id: string }} user @param {string} id */
+  /** `DELETE /api/geo/projects/:id`: hidden from 循证 GEO; the project's conversations and files stay. @param {{ id: string }} user @param {string} id */
   async deleteProject(user, id) {
     const project = await this.requireProject(user, id, "delete");
     await this.store.softDeleteProject(project.userId, id);
@@ -1529,7 +1543,7 @@ export async function geoMetricsSnapshot(geo) {
  */
 export function geoMetricFamilies(enabled, snapshot) {
   /** @type {{ name: string, help: string, type: "gauge" | "counter", series: { value: number, labels?: Record<string, string> }[] }[]} */
-  const families = [{ name: "open_science_geo_enabled", help: "Whether the 循证传播 module is composed in this process.", type: "gauge",
+  const families = [{ name: "open_science_geo_enabled", help: "Whether the 循证 GEO module is composed in this process.", type: "gauge",
     series: [{ value: enabled && snapshot ? 1 : 0 }] }];
   if (!enabled || !snapshot) return families;
   /** @param {string} name @param {string} help @param {"gauge" | "counter"} type @param {{ value: number, labels?: Record<string, string> }[]} series */

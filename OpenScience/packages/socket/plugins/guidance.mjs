@@ -266,8 +266,8 @@ export async function loadCapabilities(ctx, directory) {
 
 /**
  * Tools a capability cannot work without because they ARE its module: the
- * 「循证传播」 capabilities read and write the project's GEO record through
- * `geo_read`/`geo_write`, and the five 「虚拟临研」 capabilities read and write
+ * 「循证 GEO」 capabilities read and write the project's GEO record through
+ * `geo_read`/`geo_write`, and the five 「虚拟临床研究」 capabilities read and write
  * the study through `vcr_read`/`vcr_write`; and the control plane switches them off (`EVIMED_DISABLED_TOOLS`)
  * wherever the module is not open to the account. A capability declaring one
  * of them is not offered there, so plain chat with the module off is what it

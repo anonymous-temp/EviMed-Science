@@ -70,7 +70,7 @@ describe("the module being off for this account", () => {
   it("is one sentence when /api/me says so, and the list is never asked for", async () => {
     me.fetchWebMe.mockResolvedValue({ features: { vcr: false } });
     draw();
-    expect(await screen.findByText("虚拟临研还没有在这个工作空间开放。")).toBeInTheDocument();
+    expect(await screen.findByText("虚拟临床研究还没有在这个工作空间开放。")).toBeInTheDocument();
     expect(server.calls).toHaveLength(0);
   });
 
@@ -79,7 +79,7 @@ describe("the module being off for this account", () => {
       "GET /vcr/studies": () => { throw new WebApiError("no", { status: 404, code: "vcr_not_enabled" }); },
     });
     draw();
-    expect(await screen.findByText("虚拟临研还没有在这个工作空间开放。")).toBeInTheDocument();
+    expect(await screen.findByText("虚拟临床研究还没有在这个工作空间开放。")).toBeInTheDocument();
   });
 });
 

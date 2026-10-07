@@ -1,5 +1,5 @@
 /**
- * The one place 「虚拟临研」 looks at the evidence zones (flywheel F26, 2026-10-06): which official zone is about the same disease as a
+ * The one place 「虚拟临床研究」 looks at the evidence zones (flywheel F26, 2026-10-06): which official zone is about the same disease as a
  * knowledge pack, by entity keys, so the platform pack can say where its zone is and the zone page can link the pack.
  *
  * Hidden knowledge:

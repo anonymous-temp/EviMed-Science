@@ -1,5 +1,5 @@
 /**
- * What the frontier feed knows about a 「虚拟临研」 study's subject (flywheel plan §5.6, F24, 2026-10-06): trial events become
+ * What the frontier feed knows about a 「虚拟临床研究」 study's subject (flywheel plan §5.6, F24, 2026-10-06): trial events become
  * precedent candidates, and new results or a source change on a card's sources label the card 「有新证据」 and ask for a new version.
  *
  * The consumer is one tick of the module's own worker (`frontierEvents` loop of `vcrWorker.mjs`), a bounded number of studies each,

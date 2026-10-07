@@ -1,5 +1,5 @@
 /**
- * 「虚拟临研」 — the browser's side of `/api/vcr/*` (build contract 2026-09-28 §3.1).
+ * 「虚拟临床研究」 — the browser's side of `/api/vcr/*` (build contract 2026-09-28 §3.1).
  *
  * Hidden knowledge:
  *
@@ -1883,7 +1883,7 @@ export function renameVcrStudy(studyId: string, name: string) {
 /** One conversation the programme opened in the study's project, as 「AI 运行」 lists it. */
 export interface VcrBackgroundRun {
   sessionId: string;
-  /** The capability's product name: 「虚拟临研 · 证据」. */
+  /** The capability's product name: 「虚拟临床研究 · 证据」. */
   label: string;
   state: "running" | "finished" | "stopped";
   /** 「今天 14:32」. */

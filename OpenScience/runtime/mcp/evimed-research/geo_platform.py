@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""「循证传播」's platform data and its social channel, through the server's
+"""「循证 GEO」's platform data and its social channel, through the server's
 gateway (build spec 2026-09-25 §4).
 
 Three tools a GEO capability's run uses; none is ever forced into a turn.
@@ -81,7 +81,7 @@ def tool_definitions():
         {
             "name": "geo_read",
             "description": (
-                "Read this 循证传播 project's data: product and claims, question map, journey, diagnosis, metrics, "
+                "Read this 循证 GEO project's data: product and claims, question map, journey, diagnosis, metrics, "
                 "answer snapshots, errors, sources, strategy, targets, articles, orders, owned links, monitoring or cards "
                 "(evidence cards: claims with id, quotation, ✓/⚠ and the reference to cite). "
                 "Every number is a cell with numerator, denominator and status; absent or insufficient is not zero."
@@ -111,7 +111,7 @@ def tool_definitions():
         {
             "name": "geo_write",
             "description": (
-                "Write this 循证传播 project's products: product identity, claims, a question set and its lock, journey, "
+                "Write this 循证 GEO project's products: product identity, claims, a question set and its lock, journey, "
                 "strategy and sources, three-tier targets, articles, placement preferences, or a step's status. "
                 "owned_links registers a page the brand published itself {url, platform, title, publishedAt, groupId?} "
                 "or retires one {id, status: retired}. "
@@ -156,7 +156,7 @@ def _gateway():
     if not base:
         raise GeoPlatformError(
             "geo_disabled",
-            "循证传播 is not available in this conversation: the deployment has it switched off or has not opened it "
+            "循证 GEO is not available in this conversation: the deployment has it switched off or has not opened it "
             "to this account. Go on without the platform's GEO data.",
         )
     try:
@@ -198,23 +198,23 @@ def _post(operation: str, payload: dict, timeout: int) -> dict:
         if not isinstance(code, str) or not GATEWAY_CODE.match(code):
             code = "geo_upstream_error"
         if not isinstance(message, str) or not message.strip() or len(message) > 400:
-            message = "The 循证传播 gateway returned HTTP %d." % error.code
+            message = "The 循证 GEO gateway returned HTTP %d." % error.code
         raise GeoPlatformError(
             code,
             message,
             retryable=error.code in (429, 502, 503, 504) and code not in ("geo_disabled", "social_posts_unconfigured"),
         ) from error
     except (urllib.error.URLError, TimeoutError, OSError) as error:
-        raise GeoPlatformError("geo_gateway_unreachable", "The 循证传播 gateway is unreachable.", retryable=True) from error
+        raise GeoPlatformError("geo_gateway_unreachable", "The 循证 GEO gateway is unreachable.", retryable=True) from error
     if len(body) > MAX_RESPONSE_BYTES:
-        raise GeoPlatformError("geo_response_too_large", "The 循证传播 answer exceeded the client limit.")
+        raise GeoPlatformError("geo_response_too_large", "The 循证 GEO answer exceeded the client limit.")
     try:
         parsed = json.loads(body.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise GeoPlatformError("geo_response_invalid", "The 循证传播 gateway returned a non-JSON answer.") from error
+        raise GeoPlatformError("geo_response_invalid", "The 循证 GEO gateway returned a non-JSON answer.") from error
     data = parsed.get("data") if isinstance(parsed, dict) else None
     if not isinstance(data, dict):
-        raise GeoPlatformError("geo_response_invalid", "The 循证传播 gateway returned no data.")
+        raise GeoPlatformError("geo_response_invalid", "The 循证 GEO gateway returned no data.")
     return data
 
 
@@ -224,7 +224,7 @@ def _outside_a_project(error: GeoPlatformError, what: str, verb: str) -> dict:
     a failure it has to explain."""
     return {
         "status": "warning",
-        "summary": "This conversation is not in a 循证传播 project, so there is no %s to %s." % (what, verb),
+        "summary": "This conversation is not in a 循证 GEO project, so there is no %s to %s." % (what, verb),
         "data": {"what": what, "code": error.code},
         "warnings": [str(error)],
         "next_actions": ["Go on without the platform's GEO data, or work in the GEO project's own conversation."],
@@ -251,7 +251,7 @@ def read(arguments: dict) -> dict:
         next_actions.append("Call again with filter.offset to read the next page, or narrow the filter.")
     return {
         "status": "success",
-        "summary": "Read %s of this 循证传播 project." % what,
+        "summary": "Read %s of this 循证 GEO project." % what,
         "data": data,
         "warnings": warnings,
         "next_actions": next_actions,

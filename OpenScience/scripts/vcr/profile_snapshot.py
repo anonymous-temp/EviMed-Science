@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Profile a 「虚拟临研」 data snapshot: structure, data dictionary, three clocks,
+"""Profile a 「虚拟临床研究」 data snapshot: structure, data dictionary, three clocks,
 missing reasons and a Kahn-2016 quality profile (build plan 2026-09-28 §8.1
 step 5, attachment C2 §2.7, cases C2-23 to C2-25).
 
@@ -1215,7 +1215,7 @@ def build(args) -> dict:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Profile a 虚拟临研 data snapshot.")
+    parser = argparse.ArgumentParser(description="Profile a 虚拟临床研究 data snapshot.")
     parser.add_argument("inputs", nargs="*", help="CSV, TSV or XLSX files of the snapshot")
     parser.add_argument("--json", dest="json_out", default="snapshot-profile.json", help="output file, or - for stdout")
     parser.add_argument("--field-map", dest="field_map", default=None, help="field-map JSON; stdin is read when absent")

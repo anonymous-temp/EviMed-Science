@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "harness": "vcr-reply-check",
-  "about": "Labelled sentences of a 虚拟临研 conversation reply for the reply check's numbers (apps/server/src/vcrReplyCheck.mjs). `claims` is the label of the language judgement the reviewer model makes — the numbers the sentence gives as something the platform computed, written as in the sentence; code then re-verifies and looks each up in `study`. `expect` is the verdict of the code half given the labelled claims, and is held by apps/server/test/vcrReplyCheckCases.test.mjs on every run. The model half is measured by putting each `sentence` to the reviewer with the production prompt and comparing its claims with `claims`; run it before changing the prompt or the model, never in CI.",
+  "about": "Labelled sentences of a 虚拟临床研究 conversation reply for the reply check's numbers (apps/server/src/vcrReplyCheck.mjs). `claims` is the label of the language judgement the reviewer model makes — the numbers the sentence gives as something the platform computed, written as in the sentence; code then re-verifies and looks each up in `study`. `expect` is the verdict of the code half given the labelled claims, and is held by apps/server/test/vcrReplyCheckCases.test.mjs on every run. The model half is measured by putting each `sentence` to the reviewer with the production prompt and comparing its claims with `claims`; run it before changing the prompt or the model, never in CI.",
   "study": {
     "note": "The study every case reads: three designs' engine results (required events, simulated power with its Monte-Carlo error), the settings the researcher gave (hazard ratio 0.7, alpha 0.025) and 5,000 replicates.",
     "results": [

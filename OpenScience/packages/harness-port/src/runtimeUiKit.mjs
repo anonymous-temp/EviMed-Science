@@ -67,7 +67,7 @@ export function validFrame(value) {
         .filter((/** @type {unknown} */ line) => typeof line === 'string' && line).slice(0, 4).map((/** @type {string} */ line) => line.slice(0, 300)),
       materials: typeof entry.materials === 'string' ? entry.materials.slice(0, 200) : '',
       internal: entry.visibility === 'internal',
-      // A capability opened by its own module (「循证传播」): its chip still
+      // A capability opened by its own module (「循证 GEO」): its chip still
       // renders for a session bound to it, and it is not offered in the list.
       listed: entry.listed !== false,
     }));

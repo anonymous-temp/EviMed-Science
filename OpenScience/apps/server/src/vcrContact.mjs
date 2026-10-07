@@ -1,5 +1,5 @@
 /**
- * 「虚拟临研」's first human stop: a coordinator confirms one patient, by name,
+ * 「虚拟临床研究」's first human stop: a coordinator confirms one patient, by name,
  * before anyone outside the platform is contacted (build plan 2026-09-28 §10.1,
  * AC-18) — and the referral ledger's moves around it.
  *

@@ -1,6 +1,6 @@
 # Capability manifest — the only definition of this capability.
 #
-# Step 7 of a 「虚拟临研」 study (build plan 2026-09-28 §4, §7): match a protocol
+# Step 7 of a 「虚拟临床研究」 study (build plan 2026-09-28 §4, §7): match a protocol
 # to patients or a patient to protocols, and draft the recruitment material the
 # study team then reviews. Public so the module can bind a session to it, and
 # kept off 科研工具 and the kernel's own tool list by `display.listed: false` —
@@ -13,14 +13,14 @@
 # produced by this run at all — `vcrMatching.mjs` computes it, and the run's job
 # is to locate evidence and to answer the criteria only language can decide.
 id: vcr-matching
-version: 1.0.0
+version: 1.0.1
 title: Virtual Clinical Research — Matching and Recruitment
 category: Clinical Research
 description: Two-way eligibility matching for a trial protocol — structure the criteria, locate each patient fact
   in its source text with a character span and a visibility time, answer the language-only criteria with a quote,
   and hand back the computed four-state judgment set with its evidence gaps, plus draft pre-screening and
   referral material for the study team to review.
-whenToUse: 「虚拟临研」研究要做患者匹配、预筛材料或招募协作时交给我：把方案的入排条件结构化，为每位候选人从病历里定位证据（带原文区间与可见时间），把只能靠语言理解的条件给出引用原句，再交回逐条判定与待补证据清单。判定由平台代码做，我不改判；联系患者一律等协调员逐人确认。用户只问“这个人能不能入组”时也走我。
+whenToUse: 「虚拟临床研究」要做患者匹配、预筛材料或招募协作时交给我：把方案的入排条件结构化，为每位候选人从病历里定位证据（带原文区间与可见时间），把只能靠语言理解的条件给出引用原句，再交回逐条判定与待补证据清单。判定由平台代码做，我不改判；联系患者一律等协调员逐人确认。用户只问“这个人能不能入组”时也走我。
 persona: |
   你是临床研究的预筛分析员。你的产出是证据，不是结论：每抽出一个事实，都要给出来源文档、字符区间和平台可见时间；
   区间里找不到对应的值，就不要写这个事实。资格判定由平台的确定性引擎在你给的事实上算，你不要自己下「符合/不符合」的结论，
@@ -66,7 +66,7 @@ inputs:
   - asOf
   - draftMaterials
 autopilot:
-  # Scheduling belongs to the 「虚拟临研」 orchestrator, which dispatches this
+  # Scheduling belongs to the 「虚拟临床研究」 orchestrator, which dispatches this
   # capability inside the study. The autopilot allocator has no VCR task type.
   taskTypes: []
   costClass: medium

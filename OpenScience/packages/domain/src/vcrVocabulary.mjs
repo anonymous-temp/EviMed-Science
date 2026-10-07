@@ -1,12 +1,12 @@
 /**
- * 「虚拟临研」's closed vocabularies (build plan 2026-09-28 §3.5, §3.6, §4, §8.2, §11.3).
+ * 「虚拟临床研究」's closed vocabularies (build plan 2026-09-28 §3.5, §3.6, §4, §8.2, §11.3).
  *
  * Hidden knowledge:
  *
  * - **One list per word, read by everyone.** The control plane's schema CHECKs,
  *   the routes' validation, the runtime gateway's per-item checks, the MCP
  *   tools' schemas, the engine's scenario validator and the page's labels all
- *   derive from these arrays. 「循证传播」 learned this the expensive way: a
+ *   derive from these arrays. 「循证 GEO」 learned this the expensive way: a
  *   second copy is the one that drifts, and the drift shows up as a row the
  *   ledger refuses.
  * - **Nine value sources, not seven.** The owner's v1.0 had seven; literature
@@ -475,7 +475,7 @@ export const VCR_USER_STUDY_STATUSES = frozen(['active', 'paused', 'archived'])
 /** What a draft study is called until its definition names it. */
 export const VCR_DRAFT_STUDY_NAME = '未命名研究'
 /** The name every study carried before the draft state existed; one that still has it is named on its next definition write. */
-export const VCR_LEGACY_DEFAULT_STUDY_NAME = '新虚拟临研研究'
+export const VCR_LEGACY_DEFAULT_STUDY_NAME = '新虚拟临研研究' // retired-word-ok
 /** The longest a study's name is taken from its question, in characters. */
 export const VCR_STUDY_NAME_FROM_QUESTION_MAX = 24
 

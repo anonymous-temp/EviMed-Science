@@ -100,7 +100,7 @@ BACKUP_CONTAINER="${PROJECT}-open-science-backup-1"
 # must not be attempted: `OPEN_SCIENCE_OIDC_SCOPES=openid profile email` is a
 # legal compose value and an illegal shell assignment.
 #
-# The 虚拟临研 statistics engine rides the `vcr` profile, and a module that is on without its engine answers every computation with
+# The 虚拟临床研究 statistics engine rides the `vcr` profile, and a module that is on without its engine answers every computation with
 # 「计算引擎暂不可用」: so the profile list a release runs by default — the one `.env` names, or the built-in one — gets `vcr` added when
 # the deployment turns the module on (`OPEN_SCIENCE_VCR_ENABLED`); it is no longer a line somebody must remember to put in `.env`. A
 # deployment that leaves the module off, as the default is, starts no R image; and a list the operator exports in the shell is theirs, as it

@@ -1,5 +1,5 @@
 /**
- * The usage scope of a 「虚拟临研」 study's own model calls: the ones no run asked
+ * The usage scope of a 「虚拟临床研究」 study's own model calls: the ones no run asked
  * for, so that none of them is booked to nobody.
  *
  * Hidden knowledge:

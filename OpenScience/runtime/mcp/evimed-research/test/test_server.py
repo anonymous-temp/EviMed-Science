@@ -124,15 +124,15 @@ class ToolContractTests(unittest.TestCase):
             "dailymed_label",
             # The NCBI Gene Expression Omnibus workflow (2026-10-04, N17): a series
             # preserved and identity-checked, and the differential-expression
-            # computation (`gene_expression_tools.py`). Not 「循证传播」.
+            # computation (`gene_expression_tools.py`). Not 「循证 GEO」.
             "gene_expression_series",
             "gene_expression_differential",
-            # 「循证传播」's platform data and its social channel, through the
+            # 「循证 GEO」's platform data and its social channel, through the
             # server's gateway (`geo_platform.py`, 2026-09-25).
             "geo_read",
             "geo_write",
             "social_posts_search",
-            # 「虚拟临研」's study data, its deterministic engine behind a
+            # 「虚拟临床研究」's study data, its deterministic engine behind a
             # submit/poll pair, and the two evidence tools it parameterizes
             # from (`vcr_platform.py`, 2026-09-28). `vcr_simulate` queues a
             # frozen scenario and answers with a job id: the model never

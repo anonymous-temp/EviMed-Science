@@ -3,7 +3,7 @@
  * resolved, not prose someone typed (platform principle 10c, plan 2026-10-02
  * §11.3 N06).
  *
- * It began as the 「虚拟临研」 renderer (`apps/server/src/vcrRender.mjs`: build
+ * It began as the 「虚拟临床研究」 renderer (`apps/server/src/vcrRender.mjs`: build
  * plan 2026-09-28 §8.3, AC-20) and was lifted here, unchanged in behaviour, so
  * that a meta-analysis report, a statistical report and a study package read
  * one grammar and one set of formats rather than two that drift. The VCR

@@ -1,6 +1,6 @@
 # Capability manifest — the only definition of this capability.
 #
-# Steps 3–6 of a 「虚拟临研」 study (build plan 2026-09-28 §4, §5): the research
+# Steps 3–6 of a 「虚拟临床研究」 study (build plan 2026-09-28 §4, §5): the research
 # population, the virtual patients, the comparator and the trial designs —
 # configured, queued on the deterministic engine, and read back. The four
 # method sections of its skill are injected per step, so one run covers the
@@ -9,16 +9,16 @@
 # The division that matters: this run *decides and explains*; every number it
 # reports came from a `vcr_simulate` job the engine ran. Public so a study's
 # conversation can be bound to it, `display.listed: false` so it is entered
-# only from 「虚拟临研」.
+# only from 「虚拟临床研究」.
 id: vcr-analysis
-version: 1.3.0
+version: 1.3.1
 title: Virtual Clinical Research Analysis
 category: Study Design
 description: Steps 3–6 of a virtual clinical research study — the research population and its screening
   waterfall, virtual patients under a named model, a comparator route with its comparability diagnostics or a
   deterministic not-estimable verdict with the gaps, and trial scenarios compared on power, assurance, duration
   and cost, every number produced by the deterministic engine and reported with its Monte-Carlo error.
-whenToUse: 「虚拟临研」研究的人群、虚拟患者、对照与试验四步交给我：我按数据档位选路、配置好每一步、交给确定性引擎算，再把结果讲清楚。用户问「要多少例」「能不能用外部对照」「哪个方案把握更大」时委派我。我不写研究定义，也不做患者匹配与招募。
+whenToUse: 「虚拟临床研究」的人群、虚拟患者、对照与试验四步交给我：我按数据档位选路、配置好每一步、交给确定性引擎算，再把结果讲清楚。用户问「要多少例」「能不能用外部对照」「哪个方案把握更大」时委派我。我不写研究定义，也不做患者匹配与招募。
 persona: |
   你是虚拟临床研究的分析师。你自己不算任何统计量：每一个数都来自 vcr_simulate 排的引擎作业，
   你读回来、核对、解释。数据够不够决定能走哪条对照路线，不够就如实写「不可估计」并列出缺口——那是一份完成的结果，不是失败。
@@ -43,7 +43,7 @@ tools:
 - mcp__evimed__term_normalize
 - mcp__evimed__web_read
 # Three contract kinds. A run is held to the entries of the products it was
-# dispatched for (`AgentRegistry.get(id, { products })`; the 虚拟临研
+# dispatched for (`AgentRegistry.get(id, { products })`; the 虚拟临床研究
 # orchestrator names them from the steps a run covers, `VCR_STEP_PRODUCTS`): a
 # retry for the patients alone owes the cohort entry's two files and nothing of
 # the comparator or the simulation. A run that names none — a conversation bound
@@ -109,7 +109,7 @@ starterPrompts:
 
 display:
   title: "人群、对照与试验仿真"
-  category: "虚拟临研"
+  category: "虚拟临床研究"
   description: "按数据档位构建人群与对照，配置试验方案并交给引擎仿真，每个数都带蒙特卡洛误差。"
   listed: false
   starterPrompts:

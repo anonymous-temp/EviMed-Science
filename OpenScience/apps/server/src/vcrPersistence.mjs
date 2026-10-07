@@ -1,5 +1,5 @@
 /**
- * 「虚拟临研」's own schema, `evimed_vcr` (build plan 2026-09-28 §11.3).
+ * 「虚拟临床研究」's own schema, `evimed_vcr` (build plan 2026-09-28 §11.3).
  *
  * Hidden knowledge:
  *
@@ -11,7 +11,7 @@
  *   execution (jobs, executions, results, forecasts), the business side
  *   (matching, referrals, sites, follow-up) and governance (lineage, stale
  *   marks, reviews, decisions, regulatory contacts, audit, schedule marks) are
- *   all created here — the shape 「循证传播」 settled on, for the same reason:
+ *   all created here — the shape 「循证 GEO」 settled on, for the same reason:
  *   so no package migrates a table another one reads. Additive and idempotent.
  * - **Tenancy is a column, checked in code**, and here it is not enough on its
  *   own: a study has members, so a row's reader is decided by
@@ -185,7 +185,7 @@ CREATE TABLE IF NOT EXISTS evimed_vcr.study_definitions (
 );
 
 -- What the study is called and the one sentence it asks (R10, 2026-10-07): the conversation's own words for the definition it wrote, so the
--- study is named from what it is about rather than left 「新虚拟临研研究」. Both optional; empty on every definition written before.
+-- study is named from what it is about rather than left 「未命名研究」. Both optional; empty on every definition written before.
 ALTER TABLE evimed_vcr.study_definitions ADD COLUMN IF NOT EXISTS title text NOT NULL DEFAULT '';
 ALTER TABLE evimed_vcr.study_definitions ADD COLUMN IF NOT EXISTS question text NOT NULL DEFAULT '';
 

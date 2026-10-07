@@ -109,7 +109,7 @@ export class AvailabilityService {
     this.registry = registry;
     this.store = store;
     this.engineProbe = engineProbe;
-    // The statistics engine of 「虚拟临研」, read from the module's own probe (`vcrEngineProbe.mjs`) — the reading the
+    // The statistics engine of 「虚拟临床研究」, read from the module's own probe (`vcrEngineProbe.mjs`) — the reading the
     // job a page shows and readiness read too, so the three cannot say different things about the same engine.
     this.vcrEngine = vcrEngine;
     this.vcrEngineRefresh = vcrEngineRefresh;
@@ -345,7 +345,7 @@ export class AvailabilityService {
 
   /**
    * Whether each calculation engine can take work now, one yes or no each, for the plugins page: the six specialist
-   * engines from their own health (asked afresh, at most once per probe lifetime) and 「虚拟临研」's statistics engine from
+   * engines from their own health (asked afresh, at most once per probe lifetime) and 「虚拟临床研究」's statistics engine from
    * its module's probe. Only a positive answer is a yes: an engine the deployment does not compose, one that said it is not
    * ready and one that did not answer are all "not available" — the page has no third word for them, and the label
    * ladder above keeps the reasons for the places that can say why.

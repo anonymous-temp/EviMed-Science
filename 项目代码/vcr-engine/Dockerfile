@@ -1,5 +1,5 @@
 # vcr-engine — the deterministic statistics and simulation engine for
-# 「虚拟临研」 (plan §11.4).
+# 「虚拟临床研究」 (plan §11.4).
 #
 # Hidden knowledge:
 #
@@ -215,7 +215,7 @@ ARG BUILD_CREATED
 ARG RELEASE_ID
 ARG SOURCE_REVISION
 LABEL org.opencontainers.image.title="vcr-engine" \
-      org.opencontainers.image.description="Deterministic statistics and simulation engine for EviMed 虚拟临研" \
+      org.opencontainers.image.description="Deterministic statistics and simulation engine for EviMed 虚拟临床研究" \
       org.opencontainers.image.created="${BUILD_CREATED}" \
       org.opencontainers.image.version="${RELEASE_ID}" \
       org.opencontainers.image.revision="${SOURCE_REVISION}"

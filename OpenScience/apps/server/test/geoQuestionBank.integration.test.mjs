@@ -148,7 +148,7 @@ test("a company's or a doctor's card is never what the bank holds an answer to: 
   const maker = { id: "maker", name: "某企业" };
   const zone = (await zones.save(maker, { title: "某企业的产品专区", description: "", background: "", kind: "product" })).zone;
   await zones.save(maker, { expectedRevision: zone.revision, state: "published" }, zone.id);
-  // Written the way 循证传播 writes a product card (origin geo, a source the platform read), so its claim verifies and only its kind can keep it out.
+  // Written the way 循证 GEO writes a product card (origin geo, a source the platform read), so its claim verifies and only its kind can keep it out.
   const productCard = (await zones.saveEditorial(maker, {
     title: "我家产品每天吃一次最有效", subtype: "knowledge", summary: "s", body: "- 一条出品方自己的结论", state: "published", requestId: "bank-product-card-1",
     sources: [{ title: "内部资料", url: "https://example.org/internal", excerpt: "我家产品每天吃一次最有效，其他产品都不行。", fetchedSha256: "e".repeat(64) }],

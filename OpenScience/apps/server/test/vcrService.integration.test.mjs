@@ -1,4 +1,4 @@
-// 「虚拟临研」's read models on PostgreSQL: the study list, the seven tabs, the
+// 「虚拟临床研究」's read models on PostgreSQL: the study list, the seven tabs, the
 // runtime's reads, and who may see a study at all.
 //
 // The last one is why this suite needs a real database: a study's reader is
@@ -232,7 +232,7 @@ test("the model library answers from the seeded catalogue, and a study may take 
   assert.match(String(fitted.scope), /KEYNOTE-010、OAK/, "its range is written from the trials it was fitted on");
 });
 
-test("deleting a study hides it from 虚拟临研 and keeps what it recorded", options, async () => {
+test("deleting a study hides it from 虚拟临床研究 and keeps what it recorded", options, async () => {
   const { study } = await furnish("delete");
   const before = await store.one("SELECT count(*)::integer AS n FROM evimed_vcr.audit WHERE study_id = $1", [study.id]);
   assert.ok(Number(before.n) > 0, "every write that changes what a reader sees wrote an audit row");

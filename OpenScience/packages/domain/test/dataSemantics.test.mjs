@@ -48,7 +48,7 @@ const confirmed = (/** @type {string} */ statement) => ({ basis: "researcher_con
 /** @param {any} asset @param {string} target */
 const factAt = (asset, target) => semanticFacts(asset).find((item) => item.target === target)?.fact;
 
-test("the value sources are the 虚拟临研 column sources, not a parallel list, and every one has an export spelling", () => {
+test("the value sources are the 虚拟临床研究 column sources, not a parallel list, and every one has an export spelling", () => {
   assert.equal(DATA_VALUE_SOURCES, VCR_COLUMN_SOURCES);
   for (const source of DATA_VALUE_SOURCES) assert.ok(/** @type {Record<string, unknown>} */ (VCR_COLUMN_SOURCE_EXPORT)[source], source);
   // The three bases answer who vouches for a meaning; none of them is a value source.
@@ -198,7 +198,7 @@ test("a bad item is refused by name and every other item is written", () => {
   // A code list is a set: sorted, de-duplicated, so the same codes in another order are the same fact.
   assert.deepEqual(factAt(result.asset, "variable:visits.csv/sex:allowedValues")?.value, [{ code: "F", label: "Female" }, { code: "M" }]);
   assert.equal(factAt(result.asset, "variable:visits.csv/sbp:measuredAt")?.value.timeKind, "occurred_at");
-  // The vocabularies of missing reasons and value sources are the 虚拟临研 ones.
+  // The vocabularies of missing reasons and value sources are the 虚拟临床研究 ones.
   for (const reason of VCR_MISSING_REASONS) {
     assert.deepEqual(applySemanticsPatch(null, { datasetId: "d", ...inferred, variables: [{ table: "t", name: "c", missingness: { tokens: [], reason } }] }, { now: T0, via: "conversation" }).issues, []);
   }

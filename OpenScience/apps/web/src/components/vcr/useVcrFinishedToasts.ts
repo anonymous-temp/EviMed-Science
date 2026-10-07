@@ -8,7 +8,7 @@ import { toast } from "@/lib/toast";
 /** How often the count is asked while the reader is in a study's page or conversation and the tab is visible. The route returns two integers. */
 const POLL_MS = 20_000;
 
-/** The study and tab a 「虚拟临研」 notice opens: its source id is `<studyId>/<tab>[/<item>]` (`vcrNotify.mjs`). */
+/** The study and tab a 「虚拟临床研究」 notice opens: its source id is `<studyId>/<tab>[/<item>]` (`vcrNotify.mjs`). */
 export function vcrNoticeTarget(item: Pick<InboxItem, "source">): { studyId: string; tab: Parameters<typeof vcrTabPath>[1] } | null {
   if (item.source?.type !== "vcr") return null;
   const [studyId, tab] = String(item.source.id).split("/");

@@ -31,7 +31,7 @@
       "credential": "无需通用 key/接口确认",
       "license": "EU 条款",
       "officialUrl": null,
-      "blocker": "EMA 没有发布 CTIS 的 API 文档，通用 MCP 连接器仍没有，不计入可查询连接器。控制面的虚拟临研试验登记读取（trial_registry_record 与证据池）经公共数据源网关读取 CTIS 公开站点自己调用的检索与详情接口，须注明 EMA CTIS 为来源；除此之外，禁止以网页抓取冒充正式接入。",
+      "blocker": "EMA 没有发布 CTIS 的 API 文档，通用 MCP 连接器仍没有，不计入可查询连接器。控制面的虚拟临床研究试验登记读取（trial_registry_record 与证据池）经公共数据源网关读取 CTIS 公开站点自己调用的检索与详情接口，须注明 EMA CTIS 为来源；除此之外，禁止以网页抓取冒充正式接入。",
       "validation": null
     },
     {

@@ -2,7 +2,7 @@ import { presentVcrReview } from "./vcrViewsKit.mjs";
 import { createHash } from "node:crypto";
 import { documentExportDigest } from "@evimed/domain";
 /**
- * What 「虚拟临研」's pages are shown: the presenter (contract 2026-09-29 §5).
+ * What 「虚拟临床研究」's pages are shown: the presenter (contract 2026-09-29 §5).
  *
  * The browser used to read shapes the server never sent — `tier` where the
  * server said `dataTier`, an `overview` nobody built, `criteria` and

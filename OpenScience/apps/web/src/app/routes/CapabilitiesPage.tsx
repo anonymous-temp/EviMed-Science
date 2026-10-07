@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
 import { Search } from "lucide-react";
-import { capabilityListed } from "@evimed/domain";
+import { capabilityListed, searchMatches } from "@evimed/domain";
 import { fetchWebResearchEstimates, webErrorMessage, listWebResearchAgents, type WebAvailabilityState, type WebResearchAgent, type WebResearchEstimate } from "@/lib/apiClient";
 import { researchAgentUi, type CapabilityUi } from "@/lib/researchAgentUi";
 import { capabilityIcon } from "@/lib/capabilityIcons";
@@ -98,7 +98,7 @@ export function CapabilitiesPage() {
     return () => { active = false; };
   }, [reloads]);
 
-  // A capability its own module opens (the 「循证传播」 ones, `display.listed:
+  // A capability its own module opens (the 「循证 GEO」 ones, `display.listed:
   // false`) is not a tool to pick here; it stays public so that module can
   // bind a conversation to it.
   const catalogue = useMemo(() => agents.filter((agent) => capabilityListed(agent.id)).map(researchAgentUi), [agents]);
@@ -122,12 +122,12 @@ export function CapabilitiesPage() {
       .sort((left, right) => categoryRank(left) - categoryRank(right) || left.localeCompare(right, "zh")),
     [catalogue],
   );
-  const needle = query.trim().toLowerCase();
   const groups = useMemo(() => categories
     .filter((name) => category === "all" || name === category)
-    .map((name) => [name, catalogue.filter((ui) => ui.category === name && (!needle
-      || [ui.title, ui.description, ...ui.starterPrompts].some((text) => text.toLowerCase().includes(needle))))] as const)
-    .filter(([, items]) => items.length > 0), [catalogue, categories, category, needle]);
+    .map((name) => [name, catalogue.filter((ui) => ui.category === name
+      // A retired module name still finds the module's tools until 2027-01-07 (`searchMatches`).
+      && searchMatches(query, [ui.title, ui.description, ...ui.starterPrompts]))] as const)
+    .filter(([, items]) => items.length > 0), [catalogue, categories, category, query]);
 
   /**
    * A tool is chosen by opening a conversation that runs it — bound before the

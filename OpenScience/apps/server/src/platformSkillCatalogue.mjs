@@ -25,7 +25,7 @@ import { HttpError } from "./security.mjs";
  * table — and its full text and copy are simply not offered, said plainly
  * instead of failing.
  *
- * The 「循证传播」 method pack is the one root the table cannot name: it is
+ * The 「循证 GEO」 method pack is the one root the table cannot name: it is
  * proprietary and reaches an image only through a gitignored folder. Where
  * that folder is present it is listed under its own group, read from the
  * folder; where it is not, there is no such group. Its skills carry no Chinese

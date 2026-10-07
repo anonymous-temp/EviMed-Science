@@ -25,12 +25,12 @@ const RELEASE_FITTING_SQL = `UPDATE ${VCR_SCHEMA}.jobs j SET state = 'queued', r
       - (SELECT COALESCE(SUM(cpu_seconds_used), 0) + COALESCE(SUM(${CPU_UNKNOWN_SQL}), 0) FROM ${VCR_SCHEMA}.jobs t WHERE t.study_id = j.study_id)
   RETURNING j.id, j.study_id, j.user_id, j.cpu_seconds_limit`;
 /**
- * 「虚拟临研」's deterministic work: the job queue in front of `vcr-engine`
+ * 「虚拟临床研究」's deterministic work: the job queue in front of `vcr-engine`
  * (build plan 2026-09-28 §11.4, integration contract 2026-09-29 §3).
  *
  * A job is not a run. It does not take the study's one run slot, it is not
  * dispatched to a kernel, and a two-hour simulation never blocks the
- * researcher's conversation — that division is the one thing 「循证传播」 said
+ * researcher's conversation — that division is the one thing 「循证 GEO」 said
  * was most worth copying here (attachment E §2.2): the steps that *think* run
  * as AI runs, the steps that *compute* run as platform jobs.
  *

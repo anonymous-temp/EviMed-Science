@@ -1,4 +1,4 @@
-// The firewall between 「循证传播」 and the clinical answer (fusion plan §3.4):
+// The firewall between 「循证 GEO」 and the clinical answer (fusion plan §3.4):
 // the open-domain answer and the clinical-evidence retrieval and ranking never
 // read a GEO client's data or rules. GEO is paid visibility work for a brand;
 // an answer to a clinician that ranked sources by what a client placed, or
@@ -53,7 +53,7 @@ test("the open-domain answer names no GEO tool, in its manifest or its method", 
   assert.ok(read >= 2, `read only ${read} files of the open-domain answer`);
 });
 
-test("only a 「循证传播」 capability may declare a GEO tool; clinical evidence declares none", async () => {
+test("only a 「循证 GEO」 capability may declare a GEO tool; clinical evidence declares none", async () => {
   const directory = path.join(root, "capabilities");
   const entries = (await readdir(directory, { withFileTypes: true })).filter((entry) => entry.isDirectory());
   assert.ok(entries.length >= 20, `read only ${entries.length} capabilities`);
@@ -99,8 +99,8 @@ test("only the GEO modules query the GEO schema, and only the composition, the r
     "clinicalEvidenceQuality.mjs", "agentRuns.mjs"]) {
     const text = await readFile(path.join(serverSource, name), "utf8");
     // RummaGEO (gene expression) is a literature source, not this module.
-    assert.equal(/循证传播|EVIMED_GEO|evimed_geo|\/api\/geo|\bgeo(?:Service|Store|Gateway|Market|Orchestrator|Measure|Metrics|_read|_write)\b/.test(text), false,
-      `${name} knows nothing of 循证传播`);
+    assert.equal(/循证 GEO|EVIMED_GEO|evimed_geo|\/api\/geo|\bgeo(?:Service|Store|Gateway|Market|Orchestrator|Measure|Metrics|_read|_write)\b/.test(text), false,
+      `${name} knows nothing of 循证 GEO`);
   }
 });
 

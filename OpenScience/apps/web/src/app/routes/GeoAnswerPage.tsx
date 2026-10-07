@@ -31,7 +31,7 @@ import { answerPath, CITED_ATTRIBUTE_WORDS, MENTION_ONLY_WORD, mentionOnly, SNAP
 import { TabError, TabSkeleton, useGeoLoad } from "@/components/geo/tabs/geoTabKit";
 
 /** The sentence a direct link lands on where the module is off (the shell's off page says the same). */
-const GEO_OFF_SENTENCE = "循证传播还没有在这个工作空间开放。";
+const GEO_OFF_SENTENCE = "循证 GEO 还没有在这个工作空间开放。";
 
 /**
  * One question, one engine, one day's answer (plan §5.4, mockup g07): on the
@@ -51,7 +51,7 @@ export function GeoAnswerPage() {
   const evidence = useGeoLoad(`evidence:${geoId}`, () => getGeoEvidence(geoId));
 
   if (answer.state.kind === "error" && answer.state.off) {
-    return <Shell title="循证传播" section="循证传播"><EmptyState icon={Radar} title={GEO_OFF_SENTENCE} /></Shell>;
+    return <Shell title="循证 GEO" section="循证 GEO"><EmptyState icon={Radar} title={GEO_OFF_SENTENCE} /></Shell>;
   }
   if (answer.state.kind === "error" && answer.state.missing) {
     return (

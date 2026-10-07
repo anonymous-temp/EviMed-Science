@@ -320,7 +320,7 @@ describe("记忆胶囊", () => {
     expect(await screen.findByText(/信尔美 · 你说的/)).toBeInTheDocument();
   });
 
-  it("lists the studies of 虚拟临研 and the projects of 循证传播 in a group of their own in the dropdown", async () => {
+  it("lists the studies of 虚拟临床研究 and the projects of 循证 GEO in a group of their own in the dropdown", async () => {
     const user = userEvent.setup();
     geo.feature = "on"; geo.projects = [{ projectId: "prj_geo" }];
     vcr.feature = "on"; vcr.studies = [{ projectId: "prj_vcr" }];
@@ -331,8 +331,8 @@ describe("记忆胶囊", () => {
     const menu = await screen.findByRole("menu", { name: "项目" });
     // The researcher's own first; each module's group has its heading, which cannot be chosen.
     await waitFor(() => expect([...menu.querySelectorAll("[role^=menuitem]")].map((item) => item.textContent)).toEqual(
-      ["疳证 Meta 文献检索", "信尔美", "虚拟临研", "糖尿病研究", "循证传播", "波立维"]));
-    expect(within(menu).getByRole("menuitemradio", { name: "虚拟临研" })).toBeDisabled();
+      ["疳证 Meta 文献检索", "信尔美", "虚拟临床研究", "糖尿病研究", "循证 GEO", "波立维"]));
+    expect(within(menu).getByRole("menuitemradio", { name: "虚拟临床研究" })).toBeDisabled();
     expect(within(menu).getByRole("menuitemradio", { name: "波立维" })).not.toBeDisabled();
   });
 
@@ -427,7 +427,7 @@ describe("记忆胶囊", () => {
     searchMemories.mockResolvedValue({
       items: [
         record({ id: "rec_far", kind: "preference", key: "preference.aspirin", value: "研究阿司匹林一级预防的净获益", summary: "研究阿司匹林一级预防的净获益" }),
-        record({ id: "rec_brief", kind: "run_summary", scope: "project", scopeId: "prj_1", key: "run.session.ses_far", value: "{}", summary: "「循证传播」自动运行 · 第 6 步（内容）" }),
+        record({ id: "rec_brief", kind: "run_summary", scope: "project", scopeId: "prj_1", key: "run.session.ses_far", value: "{}", summary: "「循证 GEO」自动运行 · 第 6 步（内容）" }),
       ],
       query: "阿司匹林", semantic: 1, conversations: {}, usage: {},
     });
@@ -436,7 +436,7 @@ describe("记忆胶囊", () => {
     await user.type(screen.getByRole("searchbox", { name: "搜索记忆" }), "阿司匹林");
     await waitFor(() => expect(searchMemories).toHaveBeenCalledWith("阿司匹林"));
     expect(await screen.findByRole("button", { name: /研究阿司匹林一级预防的净获益/ })).toBeInTheDocument();
-    expect(screen.queryByText(/循证传播」自动运行/)).toBeNull();
+    expect(screen.queryByText(/循证 GEO」自动运行/)).toBeNull();
     expect(screen.queryByRole("button", { name: /药学背景/ })).toBeNull();
   });
 

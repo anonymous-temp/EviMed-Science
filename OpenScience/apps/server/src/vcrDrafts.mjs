@@ -1,5 +1,5 @@
 /**
- * The sweep of 「虚拟临研」 drafts: a study nobody ever spoke to is deleted an
+ * The sweep of 「虚拟临床研究」 drafts: a study nobody ever spoke to is deleted an
  * hour after it was made.
  *
  * Hidden knowledge:

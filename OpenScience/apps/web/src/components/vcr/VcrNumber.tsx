@@ -9,7 +9,7 @@ import { intervalText, isPlaceholder, mcseText, sourceLabel, valueSentence, valu
 import { vcrTabPath } from "./vcrTabs";
 
 /**
- * A number on a 「虚拟临研」 page.
+ * A number on a 「虚拟临床研究」 page.
  *
  * Every number here can be drilled into (plan §9.5): a success probability
  * opens the run that produced it — its configuration, its seed and its

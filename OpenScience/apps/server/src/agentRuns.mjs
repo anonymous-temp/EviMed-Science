@@ -279,7 +279,7 @@ function normalizeEffectiveProducts(value, { strict = false } = {}) {
  * orchestrator dispatched and so named none — the ones its own plan declared it
  * would deliver for the capability the conversation is bound to.
  *
- * A native turn bound to a capability that produces several (a 虚拟临研
+ * A native turn bound to a capability that produces several (a 虚拟临床研究
  * conversation) was held to every one of its products, whatever it had planned:
  * a turn that planned the patients alone was marked for the comparability table
  * and the simulation report it never took on. Each planned item names its

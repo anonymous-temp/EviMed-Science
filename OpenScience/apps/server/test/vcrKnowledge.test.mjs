@@ -1,4 +1,4 @@
-// The knowledge package of 「虚拟临研」, without a database: the packs a study works
+// The knowledge package of 「虚拟临床研究」, without a database: the packs a study works
 // from (shipped, AI-drafted, promoted), the account's library of population
 // definitions (saved, versioned, reused, counted) and the comparison of two
 // versions, over stores that keep their rows in memory. `vcrKnowledge.integration.test.mjs`

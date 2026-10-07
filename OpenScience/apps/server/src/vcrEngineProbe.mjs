@@ -1,5 +1,5 @@
 /**
- * Whether 「虚拟临研」's statistics engine is answering, one reading for every
+ * Whether 「虚拟临床研究」's statistics engine is answering, one reading for every
  * place that says so: the job a page shows, readiness, and the capability's
  * availability label.
  *

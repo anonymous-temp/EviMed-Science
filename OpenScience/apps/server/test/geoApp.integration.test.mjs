@@ -1,4 +1,4 @@
-// 循证传播 in the real hosted app over HTTP, against a real PostgreSQL:
+// 循证 GEO in the real hosted app over HTTP, against a real PostgreSQL:
 // creating a GEO project makes a real control-plane project (the same path as
 // `POST /api/projects`), a brand written by the run names it, the audience
 // decides who sees the module, readiness and metrics report it, and deleting
@@ -97,7 +97,7 @@ test("a new GEO project is a real control-plane project, bound as far as this bu
 test("a project made before its brand is known is named by the brand the run writes; a chosen name is kept", options, async () => {
   const created = await call("preview", "POST", "/api/geo/projects", {});
   const { id, projectId } = created.body.data;
-  assert.deepEqual((await rows("SELECT name FROM evimed_control.projects WHERE user_id = $1 AND id = $2", [accounts.preview, projectId]))[0], { name: "新循证传播项目" });
+  assert.deepEqual((await rows("SELECT name FROM evimed_control.projects WHERE user_id = $1 AND id = $2", [accounts.preview, projectId]))[0], { name: "新循证 GEO 项目" });
   const geo = context.app.geo;
   const project = await geo.store.getProject(accounts.preview, id);
   const written = await geoRuntimeWrite({ store: geo.store, project, what: "product", body: { data: { brandName: "玛仕度肽" } }, renameProject: geo.renameProject });
@@ -110,7 +110,7 @@ test("a project made before its brand is known is named by the brand the run wri
     { name: "司美格鲁肽" });
   const page = await call("preview", "GET", `/api/geo/projects/${named.body.data.id}`);
   assert.equal(page.body.data.name, "司美格鲁肽", "the project's own name, not the brand written after it");
-  // A researcher's rename of the project is what 循证传播 calls it from then on.
+  // A researcher's rename of the project is what 循证 GEO calls it from then on.
   const renamed = await call("preview", "PATCH", `/api/projects/${named.body.data.projectId}`, { name: "司美格鲁肽 2026 H1" });
   assert.equal(renamed.status, 200, JSON.stringify(renamed.body));
   assert.equal((await call("preview", "GET", `/api/geo/projects/${named.body.data.id}`)).body.data.name, "司美格鲁肽 2026 H1");

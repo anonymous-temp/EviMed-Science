@@ -1,5 +1,5 @@
 /**
- * The browser's routes for 「虚拟临研」 (`/api/vcr/*`, build contract
+ * The browser's routes for 「虚拟临床研究」 (`/api/vcr/*`, build contract
  * 2026-09-28 §3.1).
  *
  * Hidden knowledge:
@@ -208,8 +208,8 @@ export const VCR_ROUTE_ABILITIES = Object.freeze({
   "POST /studies/:id/data/grants/:grant/revoke": ["manage_data"],
 });
 
-const NOT_ENABLED = () => new HttpError(404, "vcr_not_enabled", "虚拟临研 is not enabled.");
-const UNAVAILABLE = () => new HttpError(503, "vcr_unavailable", "This 虚拟临研 action is not available on this deployment yet.");
+const NOT_ENABLED = () => new HttpError(404, "vcr_not_enabled", "虚拟临床研究 is not enabled.");
+const UNAVAILABLE = () => new HttpError(503, "vcr_unavailable", "This 虚拟临床研究 action is not available on this deployment yet.");
 const ID = /^[A-Za-z0-9_-]{1,80}$/;
 /** A study name is one line; the same ceiling a project name has. */
 const NAME_MAX = 40;
@@ -220,7 +220,7 @@ const CPU_SECONDS_MAX = 10_000_000;
 const roleHolds = (role, ability) => roleAllows(role, ability);
 
 /**
- * The bounded metric label of a 虚拟临研 path: ids are folded so a dashboard
+ * The bounded metric label of a 虚拟临床研究 path: ids are folded so a dashboard
  * row is a route, not a study.
  * @param {string} pathname
  */
@@ -376,10 +376,10 @@ export function createVcrRoutes(dependencies) {
     if (!service.allows(user)) throw NOT_ENABLED();
     let parts;
     try { parts = url.pathname.slice("/api/vcr".length).split("/").filter(Boolean).map(decodeURIComponent); }
-    catch { throw new HttpError(400, "vcr_path_invalid", "Invalid 虚拟临研 path."); }
+    catch { throw new HttpError(400, "vcr_path_invalid", "Invalid 虚拟临床研究 path."); }
     // The generated records are a file: `…/records/<result>.csv` and its sibling `<result>.quality.json` — the one place a path segment has a dot.
     const records = /^\/api\/vcr\/studies\/([A-Za-z0-9_-]{1,80})\/records\/([A-Za-z0-9_-]{1,80})\.(csv|quality\.json)$/.exec(url.pathname);
-    if (!records && parts.some((part) => !ID.test(part))) throw new HttpError(404, "not_found", "虚拟临研 route not found.");
+    if (!records && parts.some((part) => !ID.test(part))) throw new HttpError(404, "not_found", "虚拟临床研究 route not found.");
     const method = req.method ?? "GET";
     const reply = (/** @type {any} */ value, status = 200) => { sendJson(res, status, { data: value }); return true; };
     // Read at request time: packages composed after the routes attach to the
@@ -457,7 +457,7 @@ export function createVcrRoutes(dependencies) {
 
     // --- the generated records, as a file ------------------------------------------------------
     if (records) {
-      if (method !== "GET") throw new HttpError(404, "not_found", "虚拟临研 route not found.");
+      if (method !== "GET") throw new HttpError(404, "not_found", "虚拟临床研究 route not found.");
       const { study } = await authorize(records[1], "read");
       const records_ = dependencies.records ?? service.packages?.records ?? null;
       if (!records_) throw UNAVAILABLE();
@@ -564,13 +564,13 @@ export function createVcrRoutes(dependencies) {
           { detail: String(body.name) }, () => service.adoptModel(user, body));
         return reply(saved, 201);
       }
-      throw new HttpError(404, "not_found", "虚拟临研 route not found.");
+      throw new HttpError(404, "not_found", "虚拟临床研究 route not found.");
     }
     if (parts[0] === "precedents") {
       if (parts.length === 1 && method === "GET") {
         return reply(await service.precedents(user, Object.fromEntries([...url.searchParams].slice(0, 20))));
       }
-      throw new HttpError(404, "not_found", "虚拟临研 route not found.");
+      throw new HttpError(404, "not_found", "虚拟临床研究 route not found.");
     }
     // The packs the account can use, and its library of population definitions: the account's, so no study is named.
     // The author takes their name off a platform pack: the account's own act, so no study is named.
@@ -581,14 +581,14 @@ export function createVcrRoutes(dependencies) {
         () => hooks.knowledge.withdrawPlatformPack(String(user.id), parts[1])));
     }
     if (parts[0] === "packs" || parts[0] === "definitions") {
-      if (method !== "GET" || parts.length > 2) throw new HttpError(404, "not_found", "虚拟临研 route not found.");
+      if (method !== "GET" || parts.length > 2) throw new HttpError(404, "not_found", "虚拟临床研究 route not found.");
       const knowledge = hooks.knowledge;
       if (!knowledge) throw UNAVAILABLE();
       const query = String(url.searchParams.get("q") ?? "").slice(0, 200);
       if (parts[0] === "packs") return reply(parts.length === 1 ? await knowledge.listPacks(String(user.id), query) : await knowledge.getPack(String(user.id), parts[1]));
       return reply(parts.length === 1 ? await knowledge.listLibrary(String(user.id), query) : await knowledge.getLibraryDefinition(String(user.id), parts[1]));
     }
-    if (parts[0] !== "studies") throw new HttpError(404, "not_found", "虚拟临研 route not found.");
+    if (parts[0] !== "studies") throw new HttpError(404, "not_found", "虚拟临床研究 route not found.");
 
     // --- the study list --------------------------------------------------------
     if (parts.length === 1) {
@@ -628,7 +628,7 @@ export function createVcrRoutes(dependencies) {
           });
         return reply(created, 201);
       }
-      throw new HttpError(404, "not_found", "虚拟临研 route not found.");
+      throw new HttpError(404, "not_found", "虚拟临床研究 route not found.");
     }
 
     const id = parts[1];
@@ -685,7 +685,7 @@ export function createVcrRoutes(dependencies) {
           () => service.deleteStudy(user, study.id));
         return reply(result);
       }
-      throw new HttpError(404, "not_found", "虚拟临研 route not found.");
+      throw new HttpError(404, "not_found", "虚拟临床研究 route not found.");
     }
 
     const section = parts[2];
@@ -770,7 +770,7 @@ export function createVcrRoutes(dependencies) {
           () => hooks.knowledge.requestPlatformPromotion(study, String(user.id)));
         return reply(result, result.state === "passed" && !result.existing ? 201 : 200);
       }
-      throw new HttpError(404, "not_found", "虚拟临研 route not found.");
+      throw new HttpError(404, "not_found", "虚拟临床研究 route not found.");
     }
     if (section === "definitions") {
       if (parts.length === 3 && method === "POST") {
@@ -809,7 +809,7 @@ export function createVcrRoutes(dependencies) {
           () => hooks.knowledge.compareVersions(study, user, { ...body, definitionId: parts[3] }));
         return reply(queued, queued.created ? 201 : 200);
       }
-      throw new HttpError(404, "not_found", "虚拟临研 route not found.");
+      throw new HttpError(404, "not_found", "虚拟临床研究 route not found.");
     }
 
     // --- data intake: source → files → field map → snapshot → tables → grants -------------
@@ -959,7 +959,7 @@ export function createVcrRoutes(dependencies) {
           () => plane().revokeGrant({ ...S, grantId: parts[4] }));
         return reply({ grant: revoked });
       }
-      throw new HttpError(404, "not_found", "虚拟临研 route not found.");
+      throw new HttpError(404, "not_found", "虚拟临床研究 route not found.");
     }
 
     // --- 「让 AI 做」 ------------------------------------------------------------
@@ -1021,7 +1021,7 @@ export function createVcrRoutes(dependencies) {
           () => hooks.jobs.cancel(study.id, parts[3], { actor: String(user.id) }));
         return reply(result);
       }
-      throw new HttpError(404, "not_found", "虚拟临研 route not found.");
+      throw new HttpError(404, "not_found", "虚拟临床研究 route not found.");
     }
 
     // --- the second human stop: confirm compute budget ---------------------------
@@ -1185,13 +1185,13 @@ export function createVcrRoutes(dependencies) {
           () => hooks.publications.withdraw(user, study, parts[3]));
         return reply(withdrawn);
       }
-      throw new HttpError(404, "not_found", "虚拟临研 route not found.");
+      throw new HttpError(404, "not_found", "虚拟临床研究 route not found.");
     }
 
     // --- 登记预测: a trial scenario's prediction of a registered trial's primary endpoint, filed with the registry ---------
     if (section === "predictions") {
       if (!hooks.predictions) throw new HttpError(404, "vcr_predictions_not_enabled", "Prediction filing is not enabled.");
-      if (parts.length !== 3 || method !== "POST") throw new HttpError(404, "not_found", "虚拟临研 route not found.");
+      if (parts.length !== 3 || method !== "POST") throw new HttpError(404, "not_found", "虚拟临床研究 route not found.");
       // The body is read by the module, which refuses a number by name; only its size is held here.
       const body = await readJson(req, maxJsonBytes);
       if (!body || typeof body !== "object" || Array.isArray(body)) throw new HttpError(400, "vcr_payload_invalid", "The request is a JSON object.");
@@ -1225,7 +1225,7 @@ export function createVcrRoutes(dependencies) {
         const live = (await hooks.publications.forStudy(study.id)).find((/** @type {any} */ entry) => entry.exportId === parts[3]) ?? null;
         return reply({ ...view, publication: { canPublish: roles.some((role) => roleHolds(role, "manage_study")), live: live ? { id: live.id, publishedAt: live.publishedAt } : null } });
       }
-      throw new HttpError(404, "not_found", "虚拟临研 route not found.");
+      throw new HttpError(404, "not_found", "虚拟临床研究 route not found.");
     }
 
     // --- members ---------------------------------------------------------------------
@@ -1274,7 +1274,7 @@ export function createVcrRoutes(dependencies) {
           });
         return reply(removed);
       }
-      throw new HttpError(404, "not_found", "虚拟临研 route not found.");
+      throw new HttpError(404, "not_found", "虚拟临床研究 route not found.");
     }
 
     // --- the referral ledger; the first human stop is a coordinator confirming one contact --------
@@ -1302,7 +1302,7 @@ export function createVcrRoutes(dependencies) {
         return reply(await audited("vcr.assessment.review", () => ({ code: parts[3] }), { code: parts[3] },
           () => hooks.assessments.reviewAssessment(user, study, { assessmentId: parts[3] })), 201);
       }
-      throw new HttpError(404, "not_found", "虚拟临研 route not found.");
+      throw new HttpError(404, "not_found", "虚拟临床研究 route not found.");
     }
 
     if (section === "referrals") {
@@ -1339,10 +1339,10 @@ export function createVcrRoutes(dependencies) {
         });
         return reply(result);
       }
-      throw new HttpError(404, "not_found", "虚拟临研 route not found.");
+      throw new HttpError(404, "not_found", "虚拟临床研究 route not found.");
     }
 
-    throw new HttpError(404, "not_found", "虚拟临研 route not found.");
+    throw new HttpError(404, "not_found", "虚拟临床研究 route not found.");
   };
 }
 

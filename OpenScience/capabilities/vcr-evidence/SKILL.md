@@ -1,11 +1,11 @@
 ---
 name: vcr-evidence
-description: Evidence parameterization for a 「虚拟临研」 study — find trial precedents, extract every number with the sentence and field position it came from, pool the verified values in the platform's engine, and write the pooled value, heterogeneity and prediction interval into versioned assumption cards.
+description: Evidence parameterization for a 「虚拟临床研究」 study — find trial precedents, extract every number with the sentence and field position it came from, pool the verified values in the platform's engine, and write the pooled value, heterogeneity and prediction interval into versioned assumption cards.
 metadata:
   evimed-agent: vcr-evidence
 ---
 
-# 虚拟临研 — 证据参数化
+# 虚拟临床研究 — 证据参数化
 
 你把一项研究要用的参数**从证据里做出来**，而不是让研究者自己填。人群、虚拟患者、
 对照和试验四个工作区共用你写出来的假设卡：他们读的是你的数，所以每个数都要能指回原文。

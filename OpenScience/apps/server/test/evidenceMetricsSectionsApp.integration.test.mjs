@@ -1,5 +1,5 @@
 // The monthly page's question-bank section in the real hosted app (flywheel review 2026-10-06): composed exactly as a deployment composes it,
-// the section is there only where 循证传播 and its question-bank lever are on, and it reads the module the server made — not a double handed to
+// the section is there only where 循证 GEO and its question-bank lever are on, and it reads the module the server made — not a double handed to
 // the router. One app each, on a database of its own.
 import assert from "node:assert/strict";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -38,7 +38,7 @@ async function boot(questionBank) {
 /** @param {string} base */
 const metricsPage = async (base) => (await fetch(`${base}/evidence/metrics`, { headers: { "user-agent": BROWSER } })).text();
 
-test("with 循证传播 and its question bank composed the page shows the bank's month the module reads; without them there is no section", options, async () => {
+test("with 循证 GEO and its question bank composed the page shows the bank's month the module reads; without them there is no section", options, async () => {
   const on = await boot(true);
   assert.ok(on.app.geo.questionBank, "composed with its lever on");
   const asked = /** @type {any[]} */ ([]);

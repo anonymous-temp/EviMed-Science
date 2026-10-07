@@ -1,5 +1,5 @@
 /**
- * 「虚拟临研」's knowledge side: the disease packs a study works from and the
+ * 「虚拟临床研究」's knowledge side: the disease packs a study works from and the
  * account's library of population definitions (plan 2026-09-28 §3.3, §5.1).
  *
  * Hidden knowledge:

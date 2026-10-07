@@ -115,14 +115,14 @@ export function GeoProjectPage() {
   if (feature === "off" || loaded.kind === "off") return <GeoOffPage />;
   if (loaded.kind === "missing") {
     return (
-      <PageShell title="循证传播" width="wide">
+      <PageShell title="循证 GEO" width="wide">
         <EmptyState icon={Radar} title="这个项目不存在或已删除。" action={<Button variant="secondary" onClick={() => navigate("/app/geo")}>回到项目列表</Button>} />
       </PageShell>
     );
   }
   if (loaded.kind !== "ready") {
     return (
-      <PageShell title="循证传播" width="wide">
+      <PageShell title="循证 GEO" width="wide">
         {loaded.kind === "error" ? <LoadError message={loaded.message} onRetry={reload} /> : <GeoProjectSkeleton />}
       </PageShell>
     );

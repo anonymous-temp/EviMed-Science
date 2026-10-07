@@ -1,5 +1,5 @@
 /**
- * What 「虚拟临研」's pages are served (build contract 2026-09-28 §3.1), the
+ * What 「虚拟临床研究」's pages are served (build contract 2026-09-28 §3.1), the
  * module's switch, readiness and metrics, and the first-version catalogue of
  * models and methods (plan §8.2).
  *
@@ -230,7 +230,7 @@ export const VCR_REFERENCE_MODELS = Object.freeze([
     card: Object.freeze({
       title: "连续终点参考仿真器",
       type: "mathematical_simulation",
-      provider: "EviMed 虚拟临研",
+      provider: "EviMed 虚拟临床研究",
       interface: "vcr-engine patients.continuous",
       inputs: vcrReferenceModelInputs("continuous"),
       outputs: "按给定分布生成的连续终点观测值；输出的是情景推演，不是对任何真实人群的预测。",
@@ -247,7 +247,7 @@ export const VCR_REFERENCE_MODELS = Object.freeze([
     card: Object.freeze({
       title: "二分类终点参考仿真器",
       type: "mathematical_simulation",
-      provider: "EviMed 虚拟临研",
+      provider: "EviMed 虚拟临床研究",
       interface: "vcr-engine patients.binary",
       inputs: vcrReferenceModelInputs("binary"),
       outputs: "按给定事件率生成的二分类观测值；输出的是情景推演，不是对任何真实人群的预测。",
@@ -264,7 +264,7 @@ export const VCR_REFERENCE_MODELS = Object.freeze([
     card: Object.freeze({
       title: "事件时间终点参考仿真器",
       type: "mathematical_simulation",
-      provider: "EviMed 虚拟临研",
+      provider: "EviMed 虚拟临床研究",
       interface: "vcr-engine patients.time_to_event",
       inputs: vcrReferenceModelInputs("time_to_event"),
       outputs: "按给定风险函数生成的事件时间与删失指示；生成的曲线不得画成观察到的 KM 曲线。",
@@ -283,7 +283,7 @@ export const VCR_REFERENCE_MODELS = Object.freeze([
     card: Object.freeze({
       title: "连续终点纵向轨迹参考仿真器",
       type: "mathematical_simulation",
-      provider: "EviMed 虚拟临研",
+      provider: "EviMed 虚拟临床研究",
       interface: "vcr-engine patients.longitudinal",
       inputs: Object.freeze(["两组人数", "随访时间表", "基线水平与对照组的变化速度", "处理效应（每个时间单位变化速度的差）",
         "个体间的差异（截距与斜率的标准差及相关）", "残差标准差", "每次随访前退出的概率", "协变量效应（取自已存人群）"]),
@@ -1164,7 +1164,7 @@ export class VcrService {
     const shape = vcrModelInterfaceOf({ card: object(input.card) });
     if (shape === null) throw failure(400, "vcr_model_invalid", `card.interfaceShape is one of: ${VCR_MODEL_INTERFACES.join(", ")}.`);
     const card = { ...object(input.card), type: shape === "event_history_to_trajectories" ? "generative" : "fitted_prediction_model",
-      provider: study ? `研究 ${study.name}` : "虚拟临研" };
+      provider: study ? `研究 ${study.name}` : "虚拟临床研究" };
     const applicability = { ...object(input.applicability), population: sources.length ? `来源试验的人群：${sources.join("、")}` : "来源试验的人群", sources };
     const validation = object(input.validation);
     const saved = await this.store.saveModel({

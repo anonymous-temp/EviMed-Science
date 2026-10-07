@@ -109,20 +109,20 @@ export const FRAME_VOCABULARY = Object.freeze({
   // Where the researcher's knowledge base is synced in the workspace: the
   // `@` reference tells the model where a cited source's text is.
   knowledgeDir: KNOWLEDGE_DIR,
-  // 循证传播's capabilities: a conversation bound to any of them carries the
-  // module's chip, 「循证传播」, and none of them is offered by `/工具` — the
+  // 循证 GEO's capabilities: a conversation bound to any of them carries the
+  // module's chip, 「循证 GEO」, and none of them is offered by `/工具` — the
   // module is entered from its own sidebar row.
   geo: Object.freeze({
-    title: '循证传播',
+    title: '循证 GEO',
     capabilities: Object.freeze(['geo-insight', 'geo-strategy', 'geo-content', 'geo-proposal']),
   }),
-  // 虚拟临研's capabilities, read the same way: a conversation bound to any of
-  // the five carries 「虚拟临研」 on its chip, and none of them is offered by
+  // 虚拟临床研究's capabilities, read the same way: a conversation bound to any of
+  // the five carries 「虚拟临床研究」 on its chip, and none of them is offered by
   // `/工具` — the module is entered from its own sidebar row (build plan
   // 2026-09-28 §9.3). Unlike GEO's, this entry carries no frame controls:
   // a study's settings are cards on its own page, not chips on the composer.
   vcr: Object.freeze({
-    title: '虚拟临研',
+    title: '虚拟临床研究',
     capabilities: Object.freeze(['vcr-protocol', 'vcr-evidence', 'vcr-analysis', 'vcr-matching', 'vcr-package']),
   }),
   // What a tool call says in the conversation, by the name its row is keyed

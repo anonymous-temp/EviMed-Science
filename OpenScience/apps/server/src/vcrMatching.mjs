@@ -1,5 +1,5 @@
 /**
- * 「虚拟临研」's two-way matching: a trial looking for patients and a patient
+ * 「虚拟临床研究」's two-way matching: a trial looking for patients and a patient
  * looking for trials are the same evaluation run from two ends (plan §7.1).
  *
  * Hidden knowledge:

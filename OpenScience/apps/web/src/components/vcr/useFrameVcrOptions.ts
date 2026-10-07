@@ -11,7 +11,7 @@ export type { FrameVcrOptions } from "./frameVcrOptions";
 const builders = () => import("./frameVcrOptions");
 
 /**
- * 虚拟临研's options in the conversation frame.
+ * 虚拟临床研究's options in the conversation frame.
  *
  * When the conversation on screen is bound to one of the module's
  * capabilities, the shell finds the study the tab's project is (a study is an
@@ -23,7 +23,7 @@ const builders = () => import("./frameVcrOptions");
  * leaving the control lying.
  *
  * What the chip draws is built by `frameVcrOptions.ts`, loaded the first time a
- * 虚拟临研 conversation is on screen. Nothing here decides who may change what:
+ * 虚拟临床研究 conversation is on screen. Nothing here decides who may change what:
  * the routes do (`manage_study` for the intended use, `write` for the start),
  * and the frame is only offered the controls the reader's roles allow.
  *

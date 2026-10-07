@@ -1,6 +1,6 @@
 {
   "id": "gene-expression-analysis",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "title": "Gene Expression Omnibus Differential Expression",
   "description": "Take a public NCBI GEO series, preserve its matrix and platform annotation with their hashes and stated dates, verify the sample, platform and value-scale identities, and compute a Welch t-test per probe between two declared groups with Benjamini-Hochberg adjustment (not limma), as files with receipts.",
   "whenToUse": "研究者给出一个 GEO 数据集编号（GSE…），想比较其中两组样本的基因表达差异时，委派给我；原始测序读段、单细胞数据、三组及以上或配对/协变量设计不在我的范围内。",

@@ -20,7 +20,7 @@ import { createPublicSourceGatewayHandler, PUBLIC_SOURCE_ALLOWED_HOSTS } from ".
 
 // The NCBI Gene Expression Omnibus workflow's seams on the control plane: the three named downloads and their exact address
 // shapes, the two byte limits the gateway enforces and counts, the observation the runtime's tool reports for the four it
-// enforces, and the six config keys that reach the runtime. (The public data resource; nothing here touches 循证传播.)
+// enforces, and the six config keys that reach the runtime. (The public data resource; nothing here touches 循证 GEO.)
 
 const mcpDirectory = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../runtime/mcp/evimed-research");
 

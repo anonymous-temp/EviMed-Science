@@ -1,5 +1,5 @@
 /**
- * The numbers a 虚拟临研 conversation says it computed (R10, 2026-10-07; plan §8.4 item 7).
+ * The numbers a 虚拟临床研究 conversation says it computed (R10, 2026-10-07; plan §8.4 item 7).
  *
  * The write path refuses a model any number it did not compute, and the delivered files are held to the same rule — but a reply in the
  * conversation is read by no code, so the analyst could say 「需要 850 例事件」 for an engine that computed 845. This is the reply

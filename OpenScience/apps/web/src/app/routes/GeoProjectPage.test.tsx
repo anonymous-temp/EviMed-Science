@@ -288,7 +288,7 @@ describe("a GEO project's page", () => {
 
   it("reads as a new project before anything was measured: “—” and a sentence, never a zero", async () => {
     client.getGeoProject.mockResolvedValue({
-      ...GEO_PROJECT, name: "新循证传播项目", steps: {}, budget: null, sessionId: "ses_new",
+      ...GEO_PROJECT, name: "新循证 GEO 项目", steps: {}, budget: null, sessionId: "ses_new",
       overview: { metrics: [], week: [], steps: {} },
     });
     client.getGeoDiagnosis.mockResolvedValue({ round: null, rounds: [], byEngine: [], byPool: [], failureModes: {}, errors: [], noise: null, more: [] });
