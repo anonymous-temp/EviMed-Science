@@ -494,7 +494,7 @@ export class EvimedCreditsService {
     const logical = successful ? autopilotUsageScope(run) : null;
     const runId = logical ? `research_${createHash('sha256').update(`${userId}\0${logical}`).digest('hex')}` : physicalId;
     await migrateEvimedCredits(this.database);
-    // A 虚拟临研 module run also settles what its study's own model calls cost that no run asked for
+    // A 虚拟临床研究 module run also settles what its study's own model calls cost that no run asked for
     // (`vcrUsageScope.mjs`): each request is attributed once, to whichever of the study's runs settles first.
     const studyScope = successful ? vcrRunUsageScope(run) : null;
     const ids = successful ? [...runUsageKeys({ ...run, id: physicalId }), ...(studyScope ? [studyScope] : [])].map(id => productId(id, 'run')) : [physicalId];
@@ -591,7 +591,7 @@ export class EvimedCreditsService {
       // What a run used: all of it for a run that completed (a bounded run's calls sit under its dispatch id, an
       // autopilot episode's under the logical task); only its own two ids for a stop, so a stopped attempt is never
       // charged for a sibling's spend; and only its own id where nothing is charged and the calls are kept as evidence.
-      // A completed 虚拟临研 module run also settles what its study's own model calls cost that no run asked for
+      // A completed 虚拟临床研究 module run also settles what its study's own model calls cost that no run asked for
       // (`vcrUsageScope.mjs`): each request is attributed once, to whichever of the study's runs settles first.
       const studyScope = decision.basis === 'completed' ? vcrRunUsageScope(run) : null;
       const ids = decision.basis === 'completed' ? [...runUsageKeys({ ...run, id: physicalId }), ...(studyScope ? [studyScope] : [])].map(id => productId(id, 'run'))

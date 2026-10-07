@@ -141,7 +141,7 @@ export const GATE_CHECK_IDS = Object.freeze([
   'geo-strategy-shape',
   'geo-article-shape',
   'geo-proposal-shape',
-  // 「虚拟临研」's contracts (`vcrContracts.mjs`), every one of them a notice:
+  // 「虚拟临床研究」's contracts (`vcrContracts.mjs`), every one of them a notice:
   // the blocking budget is spent, and the two findings anyone would reach for
   // first describe legitimate deliveries — a study whose conclusion is
   // 「不可估计」 and a study nobody has reviewed yet.
@@ -854,7 +854,7 @@ const VALIDATORS = Object.freeze({
   'geo-strategy-pack': (input) => validateGeoPack(input, geoStrategyFindings),
   'geo-content-pack': (input) => validateGeoPack(input, geoContentFindings, { ownSafetyRules: true }),
   'geo-proposal-pack': (input) => validateGeoPack(input, geoProposalFindings),
-  // 「虚拟临研」: prose plus the results it renders from (plan §8.3). The
+  // 「虚拟临床研究」: prose plus the results it renders from (plan §8.3). The
   // number-provenance finding is decidable here because the package ships the
   // result file the template bound to.
   'vcr-study-package': (input) => withFindings(validateReportShaped(input, proseFilesOf(input)), vcrStudyPackageFindings(input)),

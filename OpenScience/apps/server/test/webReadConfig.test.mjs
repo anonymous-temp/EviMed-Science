@@ -100,7 +100,7 @@ test("switching web reading off also stops offering the tool to the runtime", as
     };
     // The frontier module is off in this config, so its search tool is not
     // offered either (runtimeManager.mjs, next to the web_read switch).
-    // So are 循证 GEO's three tools and 虚拟临研's six: both modules are off in
+    // So are 循证 GEO's three tools and 虚拟临床研究's six: both modules are off in
     // this config too, and a tool whose module is off can only answer
     // 「未接入」, which is not an answer worth offering.
     const geo = "geo_read,geo_write,social_posts_search";

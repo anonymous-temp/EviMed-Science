@@ -78,7 +78,7 @@ describe("every address people already have still arrives", () => {
     ["/app/frontier", "/app/frontier"],
     ["/app/frontier?view=daily&day=2026-09-21", "/app/frontier?view=daily&day=2026-09-21"],
     ["/app/frontier/events/ev1", "/app/frontier/events/ev1"],
-    // 虚拟临研: the module's home, one study (总览 or a named tab).
+    // 虚拟临床研究: the module's home, one study (总览 or a named tab).
     ["/app/virtual-research", "/app/virtual-research"],
     ["/app/virtual-research/std_1", "/app/virtual-research/std_1"],
     ["/app/virtual-research/std_1/population", "/app/virtual-research/std_1/population"],
@@ -120,7 +120,7 @@ describe("every address people already have still arrives", () => {
   });
 });
 
-describe("虚拟临研's addresses", () => {
+describe("虚拟临床研究's addresses", () => {
   /** The leaf route an address resolves to, and its parameters. */
   function leaf(path: string) {
     const matches = matchRoutes(routes, path) ?? [];

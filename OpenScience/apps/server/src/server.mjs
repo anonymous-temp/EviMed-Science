@@ -317,7 +317,7 @@ import { createSocialCrawlClient } from "./socialCrawlClient.mjs";
 import { GeoOrchestrator, geoRunId } from "./geoOrchestrator.mjs";
 import { GeoWorker, withGeoWorkerWarnings } from "./geoWorker.mjs";
 import { createGeoNotifier } from "./geoNotify.mjs";
-// 「虚拟临研」 (build plan 2026-09-28 §11.2). Composed in one call
+// 「虚拟临床研究」 (build plan 2026-09-28 §11.2). Composed in one call
 // (`vcrComposition.mjs`) so the seven packages behind it never reach this
 // file; off, or without a product database, the whole module is absent and
 // every route answers 404 `vcr_not_enabled`.
@@ -1663,7 +1663,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   let kbIndex = null;
   /** @type {import("./libraryService.mjs").LibraryService | null} */
   let libraryService = null;
-  // The disposable intake container's client, shared by 「虚拟临研」's conversions
+  // The disposable intake container's client, shared by 「虚拟临床研究」's conversions
   // and the source-material read (a PDF's pages, a spreadsheet's cells).
   const intakeController = overrides.vcrIntakeController ?? new RuntimeControllerClient(config);
   const sourceWorker = sourceService && config.sourceIngestionEnabled ? new SourceIngestionWorker({
@@ -1937,7 +1937,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   // only where the feed is (the frontier's zones, a database) and with the same switch; off, the router answers `false` before it does
   // anything and the request is whatever an unknown path is. The per-address limiter is the server's own, keyed apart from the API's.
   const evidencePublicOn = Boolean(frontier && productDatabase && config.evidencePublicWebEnabled);
-  // The 「模拟研究」 column reads what 虚拟临研's study leads published (vcrPublications.mjs). That module is composed further down, so the
+  // The 「模拟研究」 column reads what 虚拟临床研究's study leads published (vcrPublications.mjs). That module is composed further down, so the
   // reader is found when a page is asked for; the module answers one page as a list and the pages read `{ items, next }`. With the
   // module or its publication switch off there is no reader and the column says it is empty.
   /** @type {{ current: { list: (query: { limit?: number, before?: string | null }) => Promise<any[]>, get: (id: string) => Promise<any> } | null }} */
@@ -2089,7 +2089,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       articleRunId: async (project, deliverableId) => (await geoDeliverableRun(project, deliverableId, null))?.id ?? null,
     };
   }
-  // 「虚拟临研」: one call, seven packages (vcrComposition.mjs). Null when the
+  // 「虚拟临床研究」: one call, seven packages (vcrComposition.mjs). Null when the
   // module is off or this deployment has no product database — the schema is
   // the module, and a half-running module is worse than an absent one.
   const vcr = composeVcr({
@@ -2479,7 +2479,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           .sort((a, b) => String(b.startedAt ?? b.createdAt ?? "").localeCompare(String(a.startedAt ?? a.createdAt ?? "")))
           .map((run) => ({ sessionId: run.sessionId, capabilityId: run.effectiveAgentId ?? null, status: run.status, startedAt: run.startedAt ?? run.createdAt ?? null }));
       },
-      // The study's first conversation, bound to a 虚拟临研 capability before
+      // The study's first conversation, bound to a 虚拟临床研究 capability before
       // the study has a step to run: the binding is what puts the module's
       // chip on the composer and what makes the router honour the choice.
       bindSession: async (user, projectId, capabilityId) => {
@@ -2915,7 +2915,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   let review = null;
   if (config.reviewEnabled && productDatabase) {
     const service = new ReviewService({ evolutionSignals,
-      // A 虚拟临研 study's conversation is held against the numbers its engine computed (vcrReplyCheck.mjs).
+      // A 虚拟临床研究 study's conversation is held against the numbers its engine computed (vcrReplyCheck.mjs).
       vcrFacts: vcr?.service ? (identity) => vcr.service.replyCheckFacts(identity) : null,
       config, database: productDatabase, jobs: productJobs, usageLedger, judgeService, runtimeManager, store, agentRegistry,
       attributeRun: (input) => attributeRun(input),
@@ -3324,7 +3324,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           code: typeof error?.code === "string" ? error.code : "evidence_programme_settle_failed",
         }));
       }
-      // A 虚拟临研 run (dispatch id `vcr-…`): its bounded runtime is let go,
+      // A 虚拟临床研究 run (dispatch id `vcr-…`): its bounded runtime is let go,
       // then the orchestrator folds it into the study's steps — the same order
       // a GEO run takes below. Released whether or not the orchestrator is
       // composed: the reservation belongs to the dispatch, not to the module.
@@ -3507,7 +3507,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         void (async () => {
           const stored = await readRunTranscript(project, run.id);
           const reply = stored ? replyOfRun(stored.messages.filter((/** @type {any} */ message) => message.sessionId === run.sessionId), run) : null;
-          // A reply in a 虚拟临研 study's own conversation is also held against the study's computed numbers.
+          // A reply in a 虚拟临床研究 study's own conversation is also held against the study's computed numbers.
           const study = reply && VCR_CAPABILITIES.includes(agentId) ? await vcr?.store?.studyByControlProject?.(project.userId, project.id).catch(() => null) : null;
           if (reply) await review.service.considerReply({ userId: project.userId, projectId: project.id }, run, reply, { studyId: study?.id ?? null });
         })().catch((error) => process.stderr.write(`review reply check not queued: ${typeof error?.code === "string" ? error.code : error?.name ?? "error"}\n`));
@@ -4502,7 +4502,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   });
   // `geo_read` / `geo_write` / `social_posts_search`: the GEO project the
   // runtime's own project is; off, they answer `geo_disabled` (geoGateway.mjs).
-  // 「虚拟临研」's runtime channel: the token decides the account and the study,
+  // 「虚拟临床研究」's runtime channel: the token decides the account and the study,
   // a read answers aggregates and structure only, and a write refuses item by
   // item (build plan §11.2 layer 3).
   const vcrGatewayHandler = createVcrGatewayHandler(config, runtimeManager, {
@@ -4639,7 +4639,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     });
   }
 
-  // 「虚拟临研」's orchestrator and worker, composed after the run dispatcher
+  // 「虚拟临床研究」's orchestrator and worker, composed after the run dispatcher
   // exists. The division is GEO's and the reason is the same: the steps that
   // *think* are runs of the module's capabilities, and the steps that
   // *compute* are platform jobs, so a two-hour simulation never holds the
@@ -4719,7 +4719,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   }
 
   /**
-   * One 虚拟临研 run: the same dispatch as a GEO step — a bounded runtime, a
+   * One 虚拟临床研究 run: the same dispatch as a GEO step — a bounded runtime, a
    * session bound to the capability, `automated` — in the study's own project,
    * so it shows under that project and takes that project's one run slot. A
    * deterministic step is not a run and does not come through here.
@@ -4740,7 +4740,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       throw new HttpError(503, "model_provider_not_configured", "The research model provider is not configured on this EviMed server.");
     }
     const selected = (await agentRegistry)?.get?.(capabilityId) ?? null;
-    if (!selected) throw new HttpError(503, "vcr_unavailable", "This 虚拟临研 capability is not installed on this deployment.");
+    if (!selected) throw new HttpError(503, "vcr_unavailable", "This 虚拟临床研究 capability is not installed on this deployment.");
     const budget = boundedRunBudget({ runLimitCny: 0, dailyLimitCny: 0, weeklyLimitCny: 0, purpose: "vcr", invalidCode: "vcr_unavailable" }, config);
     if (usageLedger) await assertBoundedRunAffordable(usageLedger, user.id, budget);
     // A programme step is researcher-owned work and is charged when it ends, so
@@ -4830,7 +4830,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     const budget = boundedRunBudget({ runLimitCny: 0, dailyLimitCny: 0, weeklyLimitCny: 0, purpose: "geo", invalidCode: "geo_unavailable" }, config);
     if (usageLedger) await assertBoundedRunAffordable(usageLedger, user.id, budget);
     // The same allowance question as a chat run's, for the same reason as the
-    // 虚拟临研 step's: charged at its end, and a refusal leaves the step pending.
+    // 虚拟临床研究 step's: charged at its end, and a refusal leaves the step pending.
     if (credits) await credits.service.assertBalanceForStart(user.id, capabilityId, { unattended: true });
     const interactive = runtimeManager.runtimes.has(runtimeManager.key(project)) && !runtimeManager.boundedRuntimeScope(project);
     const session = interactive ? { id: randomId("session_") } : await runtimeManager.reserveBoundedRuntimeSession(project, { runId: dispatchId, ...budget.scope });
@@ -4970,7 +4970,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       evolution.service.callbacks.handbookSelection = project => platformHandbooks.entries(project.capabilityId??null);
     }
     // What the platform's own modules could not do goes to the evolution module as leads (evolutionLeadSources.mjs, flywheel F20): the evidence programme is read by
-    // the worker's daily scan; 循证 GEO and 虚拟临研 get an `offer` where their modules are composed. Off, nothing is composed and the worker ingests no scan event.
+    // the worker's daily scan; 循证 GEO and 虚拟临床研究 get an `offer` where their modules are composed. Off, nothing is composed and the worker ingests no scan event.
     if (config.evolutionModuleLeadsEnabled) {
       evolutionLeadSources = createEvolutionLeadSources({
         service: evolution.service, perDay: config.evolutionModuleLeadsPerDay, report: code => process.stderr.write(`${code}\n`),
@@ -6606,7 +6606,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
             if (capsuleTransferService) await capsuleTransferService.prepareAccountDeletion(id, client);
             // The account's GEO rows, whether or not the module is on today.
             if (client) geoScreenshots = (await deleteGeoUserRows(client, id)).screenshots;
-            // And its 虚拟临研 rows, on the same terms: the schema outlives the
+            // And its 虚拟临床研究 rows, on the same terms: the schema outlives the
             // switch, so an account deleted while the module is off still
             // leaves nothing behind. The audit rows stay — they are the record
             // that the studies existed (plan §11.3).
@@ -7541,7 +7541,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // 「循证 GEO」: null when the module is off or there is no product database.
     geo,
     geoService: geo?.service ?? null,
-    // 「虚拟临研」, on the same terms.
+    // 「虚拟临床研究」, on the same terms.
     vcr,
     vcrService: vcr?.service ?? null,
     capsuleService,
@@ -8881,7 +8881,7 @@ async function operatorMetricsText({ judgeService = null, config, store, taskMan
   // 循证 GEO: `open_science_geo_enabled 0` when off (geoService.mjs `geoMetricFamilies`).
   const geoSnapshot = geo ? await geoMetricsSnapshot(geo) : null;
   for (const family of geoMetricFamilies(Boolean(geo), geoSnapshot)) addMetric(lines, family.name, family.help, family.type, family.series);
-  // 虚拟临研: `open_science_vcr_enabled 0` when off; queue gauges (queued,
+  // 虚拟临床研究: `open_science_vcr_enabled 0` when off; queue gauges (queued,
   // running, awaiting_budget — the second human stop), studies, the service's
   // and the job queue's counters, the worker's loops (vcrComposition.mjs).
   const vcrSnapshot = vcr ? await vcrMetricsSnapshot(vcr) : null;
@@ -9087,7 +9087,7 @@ async function readinessStatus(config, store, runtimeManager, researchMemory = n
     // evimedCreditsService.mjs `creditsReadiness`); a wallet not answering is a
     // warning. Asking is also how a module that came up broken recovers.
     credits: await readinessCheck(async () => creditsReadiness({ config, credits, database: productDatabase })),
-    // 虚拟临研: red only for its own invariants (vcrService.mjs `vcrReadiness`).
+    // 虚拟临床研究: red only for its own invariants (vcrService.mjs `vcrReadiness`).
     // A missing engine or data plane is a warning, not a failure — the module
     // runs the T0 journey end to end without either (plan §3.2).
     vcr: await readinessCheck(async () => withVcrEngineWarnings(

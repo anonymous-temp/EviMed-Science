@@ -133,7 +133,7 @@ const PHRASES = Object.freeze({
   // the researcher's own documents, and the feed
   kb_search: phrase('检索知识库', ['query']),
   frontier_search: phrase('查前沿动态', ['q', 'query']),
-  // 虚拟临研: the study's own data, the deterministic engine behind a
+  // 虚拟临床研究: the study's own data, the deterministic engine behind a
   // submit/poll pair, and the two evidence tools it parameterizes from.
   vcr_read: phrase('读研究数据', ['what']),
   vcr_write: phrase('写研究对象', ['what']),

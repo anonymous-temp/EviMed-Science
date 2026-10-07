@@ -1,5 +1,5 @@
 /**
- * 「虚拟临研」's model assessment record and the two documents built on it:
+ * 「虚拟临床研究」's model assessment record and the two documents built on it:
  * the 模型分析计划 and the 模型分析报告 of ICH M15 (Step 4, 29 January 2026).
  *
  * Hidden knowledge:

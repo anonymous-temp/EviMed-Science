@@ -5,7 +5,7 @@ const NONE: ReadonlySet<string> = new Set();
 
 /**
  * The control-plane projects the project list must not show as the account's own:
- * `studies` are 虚拟临研 studies (they get the people icon), `drafts` are studies
+ * `studies` are 虚拟临床研究 studies (they get the people icon), `drafts` are studies
  * nobody has described yet (they are not in the list at all).
  */
 export interface VcrProjectSets {
@@ -25,7 +25,7 @@ export function hintVcrDraftProject(projectId: string): void {
 }
 
 /**
- * Which of the account's control-plane projects are 虚拟临研 studies, so the
+ * Which of the account's control-plane projects are 虚拟临床研究 studies, so the
  * project list can give them the people icon (plan §9.1: 「最近」 里它和其他项目
  * 放在一起，图标换成人形) — and which are drafts, so it can leave those out (R10:
  * a study nobody has described is not a project of the account's, and an hour

@@ -1,4 +1,4 @@
-// 「虚拟临研」 for the runtime's `vcr_read`, `vcr_write`, `vcr_simulate`,
+// 「虚拟临床研究」 for the runtime's `vcr_read`, `vcr_write`, `vcr_simulate`,
 // `trial_registry_record` and `evidence_pool` tools (build contract §3.2).
 //
 // The same shape as every internal gateway (layer 3): one path prefix, one
@@ -173,23 +173,23 @@ async function readJsonBody(req, maxBytes) {
   let total = 0;
   for await (const chunk of req) {
     total += chunk.length;
-    if (total > drainLimit) throw gatewayError(413, "vcr_request_too_large", "The 虚拟临研 request was too large.");
+    if (total > drainLimit) throw gatewayError(413, "vcr_request_too_large", "The 虚拟临床研究 request was too large.");
     if (total <= maxBytes) chunks.push(chunk);
   }
-  if (total > maxBytes) throw gatewayError(413, "vcr_request_too_large", "The 虚拟临研 request was too large.");
+  if (total > maxBytes) throw gatewayError(413, "vcr_request_too_large", "The 虚拟临床研究 request was too large.");
   try {
     const value = JSON.parse(Buffer.concat(chunks).toString("utf8"));
     if (value == null || typeof value !== "object" || Array.isArray(value)) throw new Error("not an object");
     return /** @type {Record<string, any>} */ (value);
   } catch {
-    throw gatewayError(400, "vcr_request_invalid", "The 虚拟临研 request was not a JSON object.");
+    throw gatewayError(400, "vcr_request_invalid", "The 虚拟临床研究 request was not a JSON object.");
   }
 }
 
 /** @param {Record<string, any>} body @param {readonly string[]} allowed */
 function onlyFields(body, allowed) {
   if (Object.keys(body).some((key) => !allowed.includes(key))) {
-    throw gatewayError(400, "vcr_request_invalid", `The 虚拟临研 request takes only: ${allowed.join(", ")}.`);
+    throw gatewayError(400, "vcr_request_invalid", `The 虚拟临床研究 request takes only: ${allowed.join(", ")}.`);
   }
 }
 
@@ -1739,17 +1739,17 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
       if (req.method !== "POST" || !operations.includes(operation)) throw gatewayError(404, "not_found", "Not found.");
       const header = String(req.headers?.authorization ?? "").trim();
       const token = /^Bearer\s+(.+)$/i.exec(header)?.[1]?.trim();
-      if (!token) throw gatewayError(401, "vcr_gateway_token_missing", "虚拟临研 gateway authentication failed.");
+      if (!token) throw gatewayError(401, "vcr_gateway_token_missing", "虚拟临床研究 gateway authentication failed.");
       let identity;
       try { identity = runtimeManager.assertActiveModelGatewayToken(token); } catch {
-        throw gatewayError(401, "vcr_gateway_token_invalid", "虚拟临研 gateway authentication failed.");
+        throw gatewayError(401, "vcr_gateway_token_invalid", "虚拟临床研究 gateway authentication failed.");
       }
       if (!config.vcrEnabled || !vcr?.service) {
-        throw gatewayError(503, "vcr_disabled", "虚拟临研 is switched off for this deployment; answer without the platform's study data.");
+        throw gatewayError(503, "vcr_disabled", "虚拟临床研究 is switched off for this deployment; answer without the platform's study data.");
       }
       const user = { id: String(identity.userId) };
       if (!vcr.service.allows(user)) {
-        throw gatewayError(503, "vcr_disabled", "虚拟临研 is not open to this account; answer without the platform's study data.");
+        throw gatewayError(503, "vcr_disabled", "虚拟临床研究 is not open to this account; answer without the platform's study data.");
       }
       const now = Date.now();
       for (const [key, window] of windows) if (window.until <= now) windows.delete(key);
@@ -1757,13 +1757,13 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
       const window = windows.get(key) ?? { until: now + 60_000, count: 0 };
       windows.set(key, window);
       if (++window.count > /** @type {Record<string, number>} */ (windowLimits)[operation]) {
-        throw gatewayError(429, "vcr_gateway_rate_limited", "Too many 虚拟临研 calls in a minute.");
+        throw gatewayError(429, "vcr_gateway_rate_limited", "Too many 虚拟临床研究 calls in a minute.");
       }
       const body = await readJsonBody(req, /** @type {Record<string, number>} */ (requestLimits)[operation]);
       const study = await vcr.store.studyByControlProject(String(identity.userId), String(identity.projectId));
       if (!study) {
         throw gatewayError(404, "vcr_no_study",
-          "This conversation is not in a 虚拟临研 study; open the study's own conversation to read or write its data.");
+          "This conversation is not in a 虚拟临床研究 study; open the study's own conversation to read or write its data.");
       }
 
       /** @type {() => Promise<any>} */
@@ -1850,7 +1850,7 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
       const result = await Promise.race([
         work(),
         new Promise((_, reject) => {
-          timer = setTimeout(() => reject(gatewayError(504, "vcr_gateway_timeout", "The 虚拟临研 gateway timed out.")), budget);
+          timer = setTimeout(() => reject(gatewayError(504, "vcr_gateway_timeout", "The 虚拟临床研究 gateway timed out.")), budget);
           timer.unref?.();
         }),
       ]).finally(() => clearTimeout(timer));
@@ -1876,7 +1876,7 @@ export function createVcrGatewayHandler(config, runtimeManager, { vcr, report = 
       }
       onFailure?.({ code, status });
       sendJson(res, status, {
-        error: known ? /** @type {any} */ (error).message : "The 虚拟临研 gateway is unavailable; go on without the platform's study data.",
+        error: known ? /** @type {any} */ (error).message : "The 虚拟临床研究 gateway is unavailable; go on without the platform's study data.",
         code,
         ...(known && error.alternatives ? { alternatives: error.alternatives } : {}),
         ...(findings.length ? { issues: findings } : {}),

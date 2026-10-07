@@ -115,7 +115,7 @@ class Definition(unittest.TestCase):
             "DATA_TRANSFORM_KINDS", "SEMANTIC_BASES", "DATA_SEMANTICS_ERROR_CODES")
         self.assertEqual(list(data_semantics.VARIABLE_TYPES), types)
         self.assertEqual(list(data_semantics.VARIABLE_ROLES), roles)
-        # The value sources are the 虚拟临研 column sources: one vocabulary, not a parallel one.
+        # The value sources are the 虚拟临床研究 column sources: one vocabulary, not a parallel one.
         self.assertEqual(list(data_semantics.VALUE_SOURCES), sources)
         self.assertEqual(list(data_semantics.MISSING_REASONS), reasons)
         self.assertEqual(list(data_semantics.TIME_KINDS), kinds)

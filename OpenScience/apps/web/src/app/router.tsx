@@ -83,7 +83,7 @@ export const routes: RouteObject[] = [
         // when the module is off here — a bookmark gets one sentence, not a 404.
         { path: "frontier", element: <FrontierPage /> },
         { path: "frontier/events/:eventId", element: <FrontierEventPage /> },
-        // 「虚拟临研」: the module's home, and one study's seven tabs (总览
+        // 「虚拟临床研究」: the module's home, and one study's seven tabs (总览
         // when none is named). A study package is read at `?package=<id>` on
         // the study's own address rather than at a route of its own — it is a
         // view of the study, and a third route would make it a place people

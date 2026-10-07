@@ -246,7 +246,7 @@ test('the GEO chip carries 覆盖周期 and AI 引擎 once the shell has found t
   assert.equal(renderStatic(chip.component), '');
 });
 
-// 虚拟临研: the same chip through its five capabilities, and — once the shell has
+// 虚拟临床研究: the same chip through its five capabilities, and — once the shell has
 // found the study — 起点 and 预期用途 beside it and six single-task starters.
 const VCR_OPTIONS = {
   sessionId: 'session-a', controls: true, canSetUse: true,
@@ -259,10 +259,10 @@ const VCR_OPTIONS = {
   ],
 };
 
-test('a 虚拟临研 conversation reads 「虚拟临研」 whichever of its capabilities it is bound to', () => {
+test('a 虚拟临床研究 conversation reads 「虚拟临床研究」 whichever of its capabilities it is bound to', () => {
   const vcr = FRAME_VOCABULARY.vcr;
   for (const id of vcr.capabilities) {
-    assert.equal(/** @type {any} */ (toolPageModel(CATALOGUE, id, vcr)).title, '虚拟临研');
+    assert.equal(/** @type {any} */ (toolPageModel(CATALOGUE, id, vcr)).title, '虚拟临床研究');
   }
   assert.equal(/** @type {any} */ (toolPageModel(CATALOGUE, 'vcr-protocol', vcr)).vcr, false,
     'the vocabulary alone claims no controls: the body claims them');
@@ -270,12 +270,12 @@ test('a 虚拟临研 conversation reads 「虚拟临研」 whichever of its capa
   const chip = f.ctx.slots.registrations.find((/** @type {any} */ entry) => entry.name === 'conversation.composer.dock' && entry.options.id === 'evimed-tool');
   f.kit.hub.deliver('capability', { capabilityId: 'vcr-analysis', sessionId: 'session-a' });
   const drawn = renderStatic(chip.component);
-  assert.match(drawn, /虚拟临研/);
-  assert.match(drawn, /aria-label="移除「虚拟临研」"/);
+  assert.match(drawn, /虚拟临床研究/);
+  assert.match(drawn, /aria-label="移除「虚拟临床研究」"/);
   assert.doesNotMatch(drawn, /起点|预期用途/, 'no controls before the shell has found the study');
 });
 
-test('the 虚拟临研 chip carries 起点 and 预期用途 once the shell has found the study, and six single-task starters on the blank conversation', () => {
+test('the 虚拟临床研究 chip carries 起点 and 预期用途 once the shell has found the study, and six single-task starters on the blank conversation', () => {
   const f = frame();
   const chip = f.ctx.slots.registrations.find((/** @type {any} */ entry) => entry.name === 'conversation.composer.dock' && entry.options.id === 'evimed-tool');
   const hero = f.ctx.slots.registrations.find((/** @type {any} */ entry) => entry.name === 'conversation.hero.agentPreset');
@@ -291,7 +291,7 @@ test('the 虚拟临研 chip carries 起点 and 预期用途 once the shell has f
   assert.doesNotMatch(docked, /覆盖周期|AI 引擎/, 'GEO\'s controls are GEO\'s');
   assert.doesNotMatch(docked, /估算样本量/, 'the starters live on the blank conversation only');
   const blank = renderStatic(hero.component);
-  assert.match(blank, /虚拟临研/);
+  assert.match(blank, /虚拟临床研究/);
   assert.match(blank, /起点/);
   const labels = [...blank.matchAll(/<button type="button" title="[^"]+"[^>]*><span[^>]*>([^<]+)<\/span><\/button>/g)].map((match) => match[1]);
   assert.deepEqual(labels, ['估算样本量', '外部对照可行性', '找先例和参数', '生成合成数据', '匹配患者', '完整研究']);

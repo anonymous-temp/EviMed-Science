@@ -1,5 +1,5 @@
 /**
- * 「虚拟临研」's seven-step program (build plan 2026-09-28 §4, §6.3, §10):
+ * 「虚拟临床研究」's seven-step program (build plan 2026-09-28 §4, §6.3, §10):
  * which step runs next, decided by platform rules and never by the model.
  *
  * The division of labour is the one 「循证 GEO」 paid for and proved: **the

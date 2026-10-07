@@ -1,5 +1,5 @@
 /**
- * The 模型分析计划 and the 模型分析报告 of a 「虚拟临研」 study (ICH M15 §4,
+ * The 模型分析计划 and the 模型分析报告 of a 「虚拟临床研究」 study (ICH M15 §4,
  * Appendix 2): what the platform writes of them, and the moment it freezes the
  * first.
  *

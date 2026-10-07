@@ -1,11 +1,11 @@
 ---
 name: vcr-matching
-description: Two-way eligibility matching for a 「虚拟临研」 study — structure a protocol's criteria, locate every patient fact in its source text with a character span and a visibility time, answer the language-only criteria with a quote, and hand back the computed four-state judgment set with its evidence gaps and a recruitment draft.
+description: Two-way eligibility matching for a 「虚拟临床研究」 study — structure a protocol's criteria, locate every patient fact in its source text with a character span and a visibility time, answer the language-only criteria with a quote, and hand back the computed four-state judgment set with its evidence gaps and a recruitment draft.
 metadata:
   evimed-agent: vcr-matching
 ---
 
-# 虚拟临研 — 匹配与招募
+# 虚拟临床研究 — 匹配与招募
 
 你按试验方案给受试者做预筛。工作语言与交付文字一律简体中文。
 

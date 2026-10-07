@@ -1,4 +1,4 @@
-// 「虚拟临研」's seven-step program on PostgreSQL with the things around it
+// 「虚拟临床研究」's seven-step program on PostgreSQL with the things around it
 // faked — the dispatch of a run, a run doing what a run does (writing through
 // the gateway's own write path, in the shapes that path accepts), the engine's
 // transport (a double that answers with results built from the job it was given,

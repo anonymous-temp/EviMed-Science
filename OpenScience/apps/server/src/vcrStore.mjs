@@ -1,5 +1,5 @@
 /**
- * 「虚拟临研」's own rows: studies and their definitions, protocols and
+ * 「虚拟临床研究」's own rows: studies and their definitions, protocols and
  * criteria, populations, patient sets, comparator designs, trial scenarios and
  * grids, executions and results, forecasts, lineage, stale marks, reviews,
  * decisions and exports (build plan 2026-09-28 §11.3).
@@ -556,7 +556,7 @@ export class VcrStore extends VcrStoreBase {
     });
   }
 
-  /** Hidden from 虚拟临研; the project's conversations and files stay. @param {string} studyId @param {string} actor */
+  /** Hidden from 虚拟临床研究; the project's conversations and files stay. @param {string} studyId @param {string} actor */
   async softDeleteStudy(studyId, actor = "") {
     return this.transaction(async (client) => {
       const row = (await client.query(`UPDATE ${VCR_SCHEMA}.studies SET deleted_at = now(), updated_at = now()

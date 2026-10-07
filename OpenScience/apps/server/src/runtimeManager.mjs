@@ -1614,7 +1614,7 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
     if (geoGatewayUrl && geoAudienceAllows(config, { id: String(project.userId ?? "") })) {
       environment.EVIMED_GEO_GATEWAY_URL = geoGatewayUrl;
     }
-    // 「虚拟临研」's five tools ride the same token on the same terms: the
+    // 「虚拟临床研究」's five tools ride the same token on the same terms: the
     // module on and open to this account. Whether this project carries a study
     // is the gateway's answer (`vcr_no_study`), not a reason to withhold the
     // address — a runtime that cannot ask cannot be told no.
@@ -1766,7 +1766,7 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
   if (geoDisabled.length) {
     environment.EVIMED_DISABLED_TOOLS = [...new Set([...environment.EVIMED_DISABLED_TOOLS.split(",").filter(Boolean), ...geoDisabled])].join(",");
   }
-  // 「虚拟临研」's likewise, and one step further: without the deterministic
+  // 「虚拟临床研究」's likewise, and one step further: without the deterministic
   // engine `vcr_simulate` could only ever answer 「引擎未接入」, and a tool that
   // can only refuse is not offered. The other four still work — the study, its
   // evidence and its registry records are the control plane's, not the
@@ -1903,7 +1903,7 @@ export function webSearchGatewayProviderUrl(config) {
  */
 export const GEO_RUNTIME_TOOLS = Object.freeze(["geo_read", "geo_write", "social_posts_search"]);
 export const VCR_RUNTIME_TOOLS = Object.freeze(["vcr_read", "vcr_write", "vcr_simulate", "trial_registry_record", "curve_digitize", "evidence_pool"]);
-/** The 虚拟临研 tools that need the deterministic engine itself, not only the gateway. */
+/** The 虚拟临床研究 tools that need the deterministic engine itself, not only the gateway. */
 export const VCR_ENGINE_TOOLS = Object.freeze(["vcr_simulate", "evidence_pool"]);
 
 export function publicSourceGatewayProviderUrl(config) {

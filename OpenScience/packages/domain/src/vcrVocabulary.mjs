@@ -1,5 +1,5 @@
 /**
- * 「虚拟临研」's closed vocabularies (build plan 2026-09-28 §3.5, §3.6, §4, §8.2, §11.3).
+ * 「虚拟临床研究」's closed vocabularies (build plan 2026-09-28 §3.5, §3.6, §4, §8.2, §11.3).
  *
  * Hidden knowledge:
  *
@@ -475,7 +475,7 @@ export const VCR_USER_STUDY_STATUSES = frozen(['active', 'paused', 'archived'])
 /** What a draft study is called until its definition names it. */
 export const VCR_DRAFT_STUDY_NAME = '未命名研究'
 /** The name every study carried before the draft state existed; one that still has it is named on its next definition write. */
-export const VCR_LEGACY_DEFAULT_STUDY_NAME = '新虚拟临研研究'
+export const VCR_LEGACY_DEFAULT_STUDY_NAME = '新虚拟临研研究' // retired-word-ok
 /** The longest a study's name is taken from its question, in characters. */
 export const VCR_STUDY_NAME_FROM_QUESTION_MAX = 24
 

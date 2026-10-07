@@ -781,7 +781,7 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
         incoming.current = message.seq;
         geoOptionsHandler.current?.({ sessionId: message.sessionId, coverageDays: message.coverageDays, engines: message.engines });
       } else if (message.type === "evimed.runtime-ui.vcr-options") {
-        // 起点 or 预期用途 changed beside the 「虚拟临研」 chip; the handler
+        // 起点 or 预期用途 changed beside the 「虚拟临床研究」 chip; the handler
         // validates it again and writes it to this project's study.
         incoming.current = message.seq;
         vcrOptionsHandler.current?.({ sessionId: message.sessionId, start: message.start, intendedUse: message.intendedUse });
@@ -927,7 +927,7 @@ export function RuntimeUiFrame({ projectId, origin, sessionId = null, active = t
   geoOptionsHandler.current = useFrameGeoOptions({
     projectId, sessionId: frameTask, capabilityId: frameCapability, enabled: booted > 0 && !error && Boolean(frameId), post: postGeo,
   });
-  // 虚拟临研's options beside its chip, for a conversation bound to one of the
+  // 虚拟临床研究's options beside its chip, for a conversation bound to one of the
   // module's capabilities (`useFrameVcrOptions`).
   const postVcr = useCallback((payload: object) => postToFrame("vcr", payload), [postToFrame]);
   vcrOptionsHandler.current = useFrameVcrOptions({

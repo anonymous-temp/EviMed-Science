@@ -1,5 +1,5 @@
 /**
- * 「虚拟临研」's notices (build plan 2026-09-28 §10.4). Exactly seven kinds
+ * 「虚拟临床研究」's notices (build plan 2026-09-28 §10.4). Exactly seven kinds
  * reach a person; every other thing a study does is only shown on its page.
  *
  *   1. 研究包完成            info       — a study package finished
@@ -46,7 +46,7 @@ export const VCR_NOTICE_KINDS = VCR_NOTIFICATION_KINDS;
 const SOURCE_PATH = /^[A-Za-z0-9_-]{1,80}(?:\/[A-Za-z0-9_-]{1,80})?$/;
 
 /**
- * Where a 「虚拟临研」 notice opens, as an app path, or null for a source id
+ * Where a 「虚拟临床研究」 notice opens, as an app path, or null for a source id
  * this module does not write.
  * @param {unknown} sourceId
  */
@@ -63,7 +63,7 @@ function clip(value, max) {
 
 /** What a study is called in a notice. @param {any} study */
 export function vcrStudyName(study) {
-  return clip(study?.name || study?.question || "虚拟临研研究", 30);
+  return clip(study?.name || study?.question || "虚拟临床研究", 30);
 }
 
 /** The inbox refuses a replay whose content moved; that event was sent. @param {unknown} error */

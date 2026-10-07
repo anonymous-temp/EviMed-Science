@@ -87,7 +87,7 @@ export function allowanceRefusalSentence({ simulated = false, balanceCny = null,
 }
 
 /**
- * What a programme step of 循证 GEO or 虚拟临研 waits on when the allowance
+ * What a programme step of 循证 GEO or 虚拟临床研究 waits on when the allowance
  * refused its start (2026-10-04): the step stays queued, its run is asked for
  * again every tick, and the page says why. A closed pair, because the step
  * record is read by two stores and two pages: `simulated_allowance` is the

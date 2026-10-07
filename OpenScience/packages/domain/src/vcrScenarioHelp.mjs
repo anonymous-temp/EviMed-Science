@@ -1,5 +1,5 @@
 /**
- * What a model is given to write a 虚拟临研 scenario from: a rendering of the
+ * What a model is given to write a 虚拟临床研究 scenario from: a rendering of the
  * schemas the validator enforces, never a second description of them.
  *
  * Hidden knowledge:

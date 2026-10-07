@@ -22,7 +22,7 @@
  *   still sit, so text-shaped bytes are read for the formats credentials come in (`credentialShapedText`) and a hit
  *   leaves the file out as a named omission. It is a format check, not a reading of language; it never echoes a match.
  * - **Patient rows are not here because nothing here can read them.** The export reads the project's preserved result
- *   versions and nothing else; the 虚拟临研 data plane is not reachable from it.
+ *   versions and nothing else; the 虚拟临床研究 data plane is not reachable from it.
  * - **A package is read, never run.** Nothing in a package is executed, imported or restored by the platform or by
  *   the verifier it ships with: scripts are bytes, a recipe is data, and an identity in the manifest grants no access
  *   to the project it came from.

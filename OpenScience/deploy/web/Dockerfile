@@ -96,7 +96,7 @@ COPY --from=build /app/packages/socket/index.mjs /app/packages/socket/cordis.pat
 COPY --from=build /app/packages/socket/extensions ./packages/socket/extensions
 COPY --from=build /app/packages/socket/plugins ./packages/socket/plugins
 COPY --from=build /app/packages/socket/presets/evimed-universal/agent.cordis.yml ./packages/socket/presets/evimed-universal/agent.cordis.yml
-# 「虚拟临研」's snapshot profiler: the data plane runs it as a child process
+# 「虚拟临床研究」's snapshot profiler: the data plane runs it as a child process
 # (`VCR_PROFILER_SCRIPT` in vcrDataPlane.mjs resolves it from the server's own
 # directory, `../../../scripts/vcr`). Without it every snapshot profile fails on
 # a missing file the day the module first meets real data.

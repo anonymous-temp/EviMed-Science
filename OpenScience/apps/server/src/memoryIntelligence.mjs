@@ -1506,7 +1506,7 @@ export class MemoryIntelligence {
                 // machinery is language, and is said here (principle 5).
                 "Do not store anything about how this platform itself works: its tools, gates, submissions, repair rounds, deliverable files, runs, budgets or injected context blocks — nor any file name, field name, column name or identifier out of the work in progress. Those are the system's own operating notes, not knowledge about the researcher or their research; a research finding stays, stated in research terms.",
                 // The write-side half of the 2026-10-07 audit (plan §3.2.7): ten
-                // project facts written from 虚拟临研 conversations were not facts
+                // project facts written from 虚拟临床研究 conversations were not facts
                 // at all — a conversation's pending state (「待用户提供一句话研究
                 // 问题或上传方案，才能逐条结构化入排条件」) and the platform's own
                 // inventory (「平台现有三份病种知识包：非小细胞肺癌、乳腺癌、2 型

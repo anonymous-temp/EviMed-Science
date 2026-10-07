@@ -1318,7 +1318,7 @@ export { shareNoticeHref } from './src/shareNotice.mjs';
 
 export { validAgendaDate, validateAgendaSchedule, normalizeAgendaSchedule, agendaLocalDate, DISPLAY_TIME_ZONE, agendaDueOccurrence, agendaNextOccurrence } from "./src/agendaSchedule.mjs";
 
-// vcrVocabulary — 132 exports: 「虚拟临研」's closed vocabularies (nine value sources, three scientific
+// vcrVocabulary — 132 exports: 「虚拟临床研究」's closed vocabularies (nine value sources, three scientific
 // conclusions, review states, missing reasons, intended uses, model risk and
 // the study's seven steps and tabs)
 export {
@@ -1479,7 +1479,7 @@ export {
   vcrWeakestSource,
 } from './src/vcrVocabulary.mjs'
 
-// vcrModelAssessment — 「虚拟临研」's model assessment record (ICH M15 Appendix 1: question of interest, context
+// vcrModelAssessment — 「虚拟临床研究」's model assessment record (ICH M15 Appendix 1: question of interest, context
 // of use, model influence, consequence of a wrong decision, the model risk derived from the two, model impact,
 // technical criteria, the evaluation and the outcome), and the section vocabulary of the 模型分析计划 and the
 // 模型分析报告 built on it
@@ -1538,7 +1538,7 @@ export {
   validatePopulationProfile,
 } from './src/vcrPopulationProfile.mjs'
 
-// vcrRules — 16 exports: the two closed rule grammars 「虚拟临研」 uses instead of code: row rules over table
+// vcrRules — 16 exports: the two closed rule grammars 「虚拟临床研究」 uses instead of code: row rules over table
 // columns (three-valued, Kleene) and eligibility requirements over dated facts,
 // with their limits, validators and the row-rule evaluator the parity fixture pins
 export {
@@ -1561,7 +1561,7 @@ export {
   validateRowRule,
 } from './src/vcrRules.mjs'
 
-// vcrKnowledgePack — 25 exports: 「虚拟临研」's disease knowledge pack: the contract a pack is written to
+// vcrKnowledgePack — 25 exports: 「虚拟临床研究」's disease knowledge pack: the contract a pack is written to
 // (sections, closed licence and code-system tables, restricted sources), its validator at two levels, and
 // the pure readers a page and a tool use (entry sources, summary, name search, concept-to-column mapping)
 export {
@@ -1671,7 +1671,7 @@ export {
   reviewStateFor,
 } from './src/vcrLineage.mjs'
 
-// vcrContracts — 14 exports: the five 「虚拟临研」 contracts' own findings — all advisory
+// vcrContracts — 14 exports: the five 「虚拟临床研究」 contracts' own findings — all advisory
 export {
   VCR_BACKSTAGE_FILES,
   VCR_CHECK_IDS,
@@ -1692,7 +1692,7 @@ export {
 export { DOCUMENT_EXPORT_VERSION, DOCUMENT_RENDERER_VERSION, DOCUMENT_EXPORT_FORMATS, DOCUMENT_EXPORT_MIME, DOCUMENT_EXPORT_ERROR_MESSAGES, documentExportFormats, documentExportDigest } from "./src/documentExport.mjs";
 
 // numberBinding — the one mechanism by which a number in a report is resolved from a result, not typed (plan 2026-10-02 §11.3 N06;
-// lifted out of the 「虚拟临研」 renderer, which keeps its own issue codes and sentences).
+// lifted out of the 「虚拟临床研究」 renderer, which keeps its own issue codes and sentences).
 export {
   NUMBER_FORMATS,
   NUMBER_REFERENCE_PATTERN,

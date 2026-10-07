@@ -81,7 +81,7 @@ TASK_FIXTURES = {
     "geo_read": {"what": "project"},
     "geo_write": {"what": "step", "data": {"step": "diagnosis", "status": "none"}},
     "social_posts_search": {"query": "降糖药", "platform": "xhs", "limit": 3},
-    # Added 2026-09-29 with 「虚拟临研」's five tools. None changes anything: the
+    # Added 2026-09-29 with 「虚拟临床研究」's five tools. None changes anything: the
     # probe's project carries no study, so the three module tools answer the
     # warning `vcr_no_study` (the route and the token certified), the registry
     # record is one public read, and the evidence pool only asks after a job

@@ -320,7 +320,7 @@ describe("记忆胶囊", () => {
     expect(await screen.findByText(/信尔美 · 你说的/)).toBeInTheDocument();
   });
 
-  it("lists the studies of 虚拟临研 and the projects of 循证 GEO in a group of their own in the dropdown", async () => {
+  it("lists the studies of 虚拟临床研究 and the projects of 循证 GEO in a group of their own in the dropdown", async () => {
     const user = userEvent.setup();
     geo.feature = "on"; geo.projects = [{ projectId: "prj_geo" }];
     vcr.feature = "on"; vcr.studies = [{ projectId: "prj_vcr" }];
@@ -331,8 +331,8 @@ describe("记忆胶囊", () => {
     const menu = await screen.findByRole("menu", { name: "项目" });
     // The researcher's own first; each module's group has its heading, which cannot be chosen.
     await waitFor(() => expect([...menu.querySelectorAll("[role^=menuitem]")].map((item) => item.textContent)).toEqual(
-      ["疳证 Meta 文献检索", "信尔美", "虚拟临研", "糖尿病研究", "循证 GEO", "波立维"]));
-    expect(within(menu).getByRole("menuitemradio", { name: "虚拟临研" })).toBeDisabled();
+      ["疳证 Meta 文献检索", "信尔美", "虚拟临床研究", "糖尿病研究", "循证 GEO", "波立维"]));
+    expect(within(menu).getByRole("menuitemradio", { name: "虚拟临床研究" })).toBeDisabled();
     expect(within(menu).getByRole("menuitemradio", { name: "波立维" })).not.toBeDisabled();
   });
 

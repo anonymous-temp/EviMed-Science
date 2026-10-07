@@ -334,7 +334,7 @@ class RegistryTailToolsAreCertifiable(unittest.TestCase):
                 if handler.path.startswith("/internal/results/v1/"):
                     status, answer = (200, {"data": {"id": body["jobId"], "state": "succeeded"}}) if body.get("jobId") == self.JOB \
                         else (404, {"error": "The calculation is unavailable.", "code": "result_replay_unavailable"})
-                else:  # the 虚拟临研 gateway of a project that has no study
+                else:  # the 虚拟临床研究 gateway of a project that has no study
                     status, answer = 404, {"error": "no study", "code": "vcr_no_study"}
                 payload = json.dumps(answer).encode()
                 handler.send_response(status)

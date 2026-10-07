@@ -25,7 +25,7 @@ const RESEARCHER_OWNED = [
   "if",                 // POST /api/agent-runs/dispatch — the page's own question
   "dispatchVerification", // autopilot: an independent check of a proactive claim
   "dispatchEpisode",    // autopilot: one budgeted episode
-  "dispatchVcrRun",     // 虚拟临研 programme step
+  "dispatchVcrRun",     // 虚拟临床研究 programme step
   "dispatchGeoRun",     // 循证 GEO programme step
   "dispatchChannelRun", // a question that arrived through a messaging channel
 ];

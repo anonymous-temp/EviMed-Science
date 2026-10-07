@@ -525,7 +525,7 @@ function evidenceUpkeepSettings(overrides) {
  *   document for the eval corpus and an observation on the methods of the run that produced it. Ticked by the learning worker's housekeeping timer, so it
  *   needs the learning loop on; off, no table is read and no timer exists. `OPEN_SCIENCE_LEARNING_EVIDENCE_OUTCOMES_BATCH` (25, at most 200) is the
  *   change-log entries one pass reads: a bound on the database's work, not on how soon an outcome is noticed.
- * - `OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_ENABLED` (off): the platform's own modules (the evidence programme, 循证 GEO, 虚拟临研) hand 循证进化 what they could
+ * - `OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_ENABLED` (off): the platform's own modules (the evidence programme, 循证 GEO, 虚拟临床研究) hand 循证进化 what they could
  *   not do as research leads; needs the evolution module on. `OPEN_SCIENCE_EVOLUTION_MODULE_LEADS_PER_DAY` (5, at most 50) bounds the new leads of these
  *   sources taken in a day, because each lead is a scouting run on the module's own budget.
  * - `OPEN_SCIENCE_LEARNING_PLATFORM_HANDBOOKS_ENABLED` (off): a lesson an account's handbook learned that holds no project fact may go to the platform's skill supply as a
@@ -749,7 +749,7 @@ export const VCR_ENGINE_SECRET_MIN_BYTES = 32;
  * @param {Record<string, any>} overrides
  */
 /**
- * 「虚拟临研」 (build plan 2026-09-28 §11.2): off by default, opened per
+ * 「虚拟临床研究」 (build plan 2026-09-28 §11.2): off by default, opened per
  * account like 「循证 GEO」 and 「前沿动态」 before it.
  *
  * Hidden knowledge: the two ceilings here are not opinions, they are the
@@ -2626,7 +2626,7 @@ export function loadConfig(overrides = {}) {
     ...memorySharingSettings(overrides, overrides.frontierEnabled ?? boolEnv("OPEN_SCIENCE_FRONTIER_ENABLED", false)),
     // --- 循证 GEO and the media marketplace (2026-09-25) ---
     ...geoSettings(overrides),
-    // --- 虚拟临研: the virtual clinical research module (2026-09-28) ---
+    // --- 虚拟临床研究: the virtual clinical research module (2026-09-28) ---
     ...vcrSettings(overrides),
     // --- NCBI Gene Expression Omnibus: the six resource limits (2026-10-04; not 循证 GEO) ---
     ...geneExpressionSettings(overrides),

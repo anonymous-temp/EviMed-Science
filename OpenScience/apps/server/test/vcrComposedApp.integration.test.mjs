@@ -1,4 +1,4 @@
-// 「虚拟临研」 in the real hosted app, over HTTP, against a real PostgreSQL:
+// 「虚拟临床研究」 in the real hosted app, over HTTP, against a real PostgreSQL:
 // `createWebApiApp` with the module on, every `/api/vcr/*` route driven as the
 // owner and as each member role, and the data each write leaves in the module's
 // own schema read back.

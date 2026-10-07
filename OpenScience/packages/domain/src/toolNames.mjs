@@ -113,7 +113,7 @@ export const MCP_TOOL_BASE_NAMES = Object.freeze([
   // the feed of recent medical developments, 「前沿动态」, through the server's
   // gateway (frontier_search.py, 2026-09-22): leads, never evidence
   'frontier_search',
-  // 「虚拟临研」: the study's own data through the control plane's VCR gateway,
+  // 「虚拟临床研究」: the study's own data through the control plane's VCR gateway,
   // the deterministic engine behind a submit/poll pair, a trial registry
   // record as structured fields, and the meta engine's direct pooling entry
   // (vcr_platform.py; build plan 2026-09-28 §11.2). None of them computes in

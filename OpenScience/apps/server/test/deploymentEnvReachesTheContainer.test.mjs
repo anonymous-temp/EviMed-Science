@@ -311,7 +311,7 @@ const operatorLevers = {
   // ask for and every job is turned away.
   OPEN_SCIENCE_ENGINE_MODEL_GATEWAY_ENABLED: ["open-science-web"],
   OPEN_SCIENCE_ENGINE_MODEL_TOKEN_TTL_SECONDS: ["open-science-web"],
-  // 「虚拟临研」 intake conversions (2026-10-04): the controller builds the
+  // 「虚拟临床研究」 intake conversions (2026-10-04): the controller builds the
   // disposable container (memory, deadline, slots) and the API decides what its
   // answer means (pages, characters per page, bytes), so every limit reaches
   // both. A limit that reached only one would be a ceiling the other side

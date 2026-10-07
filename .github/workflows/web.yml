@@ -421,7 +421,7 @@ jobs:
           path: OpenScience/apps/web/src/test/__screenshots__/*.actual.png
           if-no-files-found: ignore
 
-  # 「虚拟临研」's statistics engine (项目代码/vcr-engine), on the operating
+  # 「虚拟临床研究」's statistics engine (项目代码/vcr-engine), on the operating
   # system and R it ships with. Three jobs, because the R library is the slow
   # part and the two things that need it are independent:
   #

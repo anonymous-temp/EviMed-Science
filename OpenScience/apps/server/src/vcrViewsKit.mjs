@@ -1,5 +1,5 @@
 /**
- * The vocabulary of a 「虚拟临研」 page, spoken once: how a stored measure
+ * The vocabulary of a 「虚拟临床研究」 page, spoken once: how a stored measure
  * becomes the `VcrValue` the browser prints, how counts, times and stale marks
  * are worded, and the small pure helpers every page presenter shares
  * (contract 2026-09-29 §5).

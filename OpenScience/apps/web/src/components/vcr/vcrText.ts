@@ -1,5 +1,5 @@
 /**
- * How 「虚拟临研」 says a number.
+ * How 「虚拟临床研究」 says a number.
  *
  * Every label table here is `@evimed/domain`'s: the nine value sources, the
  * three conclusions, the three review states, the four counts, the four

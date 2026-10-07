@@ -235,7 +235,7 @@ its switch is on; the rest are changes inside existing layers.
   `@evimed/domain`'s `geo/metrics.json`; the eight-step program runs the four GEO capabilities
   inside the project; media orders are placed and settled in code. The owner's proprietary
   skill pack reaches the runtime only through the gitignored `runtime/skills/geo-private/`.
-- **「虚拟临研」** (`vcr*.mjs`, schema `evimed_vcr`, `OPEN_SCIENCE_VCR_ENABLED`, opened per
+- **「虚拟临床研究」** (`vcr*.mjs`, schema `evimed_vcr`, `OPEN_SCIENCE_VCR_ENABLED`, opened per
   account): one row per study on top of an ordinary project, `/api/vcr/*` with abilities
   checked per operation; the seven-step programme runs the five vcr capabilities inside the
   project, and every number comes from a job of the R engine `项目代码/vcr-engine` (the methods listed by `VCR_ENGINE_METHODS`

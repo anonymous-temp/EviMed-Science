@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Give the 虚拟临研 results the old conversation path left without a subject the research object they were computed for.
+ * Give the 虚拟临床研究 results the old conversation path left without a subject the research object they were computed for.
  *
  *   node scripts/vcr/backfill-result-subjects.mjs                        # report, for every study that has such results
  *   node scripts/vcr/backfill-result-subjects.mjs --study <std_…>        # report, for one study

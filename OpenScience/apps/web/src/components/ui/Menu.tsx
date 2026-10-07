@@ -34,7 +34,7 @@ export interface MenuItem {
 }
 
 /**
- * A quiet label over a group of items (「我的项目」, 「虚拟临研」): not an item — it takes no focus, is skipped by the
+ * A quiet label over a group of items (「我的项目」, 「虚拟临床研究」): not an item — it takes no focus, is skipped by the
  * arrow keys, and selects nothing.
  */
 export interface MenuHeading {

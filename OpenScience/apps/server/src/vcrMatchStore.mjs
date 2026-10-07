@@ -1,5 +1,5 @@
 /**
- * The business side of 「虚拟临研」 on disk: criteria, matching assessments and
+ * The business side of 「虚拟临床研究」 on disk: criteria, matching assessments and
  * their per-criterion judgments, sites, the referral ledger and its events, and
  * follow-up episodes (plan §7).
  *

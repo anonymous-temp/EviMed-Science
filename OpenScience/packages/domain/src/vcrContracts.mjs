@@ -1,5 +1,5 @@
 /**
- * 「虚拟临研」's five contracts: what a study deliverable claims to be.
+ * 「虚拟临床研究」's five contracts: what a study deliverable claims to be.
  *
  * Hidden knowledge:
  *

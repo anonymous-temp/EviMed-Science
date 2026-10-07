@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Text extraction for a patient record document, run in a disposable container.
 
-「虚拟临研」 accepts hospital records as PDF and Word. They are converted to text
+「虚拟临床研究」 accepts hospital records as PDF and Word. They are converted to text
 INSIDE the deployment: the control plane starts this script in a bounded,
 network-less container (``apps/server/src/vcrIntakeController.mjs``) that sees
 exactly two paths -- ``/input/document.<pdf|docx>``, the one file, read-only, and

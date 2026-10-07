@@ -445,7 +445,7 @@ test("循证 GEO's options come in rebuilt from a closed shape, and a change goe
   f.ctx.dispose();
 });
 
-test("虚拟临研's options come in rebuilt from a closed shape, and a change goes out validated", async () => {
+test("虚拟临床研究's options come in rebuilt from a closed shape, and a change goes out validated", async () => {
   const f = fixture(); const hub = createHub(f.target);
   /** @type {any[]} */ const delivered = [];
   hub.on('vcr', (data) => delivered.push(data));

@@ -1,5 +1,5 @@
 /**
- * The geometry every 「虚拟临研」 chart shares.
+ * The geometry every 「虚拟临床研究」 chart shares.
  *
  * All of it maps a value onto **0–100 in the plot's own box**, never onto
  * pixels: the plot is an SVG with `viewBox="0 0 100 100"` and

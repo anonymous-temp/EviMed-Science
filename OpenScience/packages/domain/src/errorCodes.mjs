@@ -251,7 +251,7 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   "geo_response_invalid",
   "geo_response_too_large",
   "social_posts_unconfigured",
-  // 「虚拟临研」's runtime tools (vcr_platform.py → vcrGateway.mjs) not
+  // 「虚拟临床研究」's runtime tools (vcr_platform.py → vcrGateway.mjs) not
   // answering, read exactly like GEO's: the module off or not open to this
   // account, a conversation outside a study, an outage. The run records that
   // the study's platform data was not reachable and goes on with what it has
@@ -609,7 +609,7 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   "social_posts_platform_invalid",
   "social_posts_sort_invalid",
   "social_posts_limit_invalid",
-  // And 「虚拟临研」's, on the same line: a `what` outside the vocabulary, a
+  // And 「虚拟临床研究」's, on the same line: a `what` outside the vocabulary, a
   // filter or payload the gateway cannot read, a simulate action that is not
   // start or status. A single invalid item of a write is again not one of
   // these — `vcr_write` refuses it in `issues` and writes the rest.
@@ -1192,7 +1192,7 @@ const capsuleTransferErrorCodes = Object.freeze([
  * and so the route tests can prove every code they emit is registered.
  */
 /**
- * Codes the 「虚拟临研」 routes answer with (`vcrRoutes.mjs`, `/api/vcr/*`) and
+ * Codes the 「虚拟临床研究」 routes answer with (`vcrRoutes.mjs`, `/api/vcr/*`) and
  * the codes its runtime channel answers with (`vcrGateway.mjs`,
  * `/internal/vcr/v1`). Registered here for the reason GEO's are: each is held
  * to a Chinese sentence, and the route and gateway tests can prove every code
@@ -1327,7 +1327,7 @@ export const VCR_WRITE_ISSUE_CODES = Object.freeze([
 ])
 
 /**
- * The rest of 「虚拟临研」's codes: refusals and states of the module's own
+ * The rest of 「虚拟临床研究」's codes: refusals and states of the module's own
  * subsystems that a page shows a person (members, access to data, the data
  * plane, the engine channel, the referral ledger and its contact stop) and the
  * background loops' health. None reaches a run's verdict — the gateway hands the
@@ -1822,14 +1822,14 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   geo_member_user_required: '请填写成员的账号。',
   geo_member_owner_fixed: '项目负责人就是创建项目的账号，不能在成员里增减。',
   geo_member_detail_invalid: '成员的补充信息只能写医院、科室、专业、职称、所属机构和备注，每项不超过 120 个字。',
-  // 「虚拟临研」's page refusals. Every one of these is permanent for the request
+  // 「虚拟临床研究」's page refusals. Every one of these is permanent for the request
   // that caused it — retrying the same thing gets the same answer — so none of
   // them says 「稍后再试」, which is what the family sentence for an unknown
   // vcr_ code says and is wrong here. Each says what happened and what to do.
   vcr_study_paused: '这个研究已暂停，继续之后再让 AI 做。',
   vcr_forbidden: '你在这个研究里没有做这件事的权限。',
   vcr_unavailable: '这个操作在当前部署里还没有开放。',
-  vcr_not_enabled: '这个部署没有开通虚拟临研。',
+  vcr_not_enabled: '这个部署没有开通虚拟临床研究。',
   vcr_publications_not_enabled: '这个部署没有开通模拟研究栏目。',
   vcr_publication_not_found: '找不到这条发布，或它已经撤回。',
   vcr_publication_not_ready: '这份报告还没有写完，写完后再发布到模拟研究。',
@@ -1841,7 +1841,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_prediction_not_from_engine: '这个情景还没有引擎算出的、可估计的结果；有了再登记预测。',
   vcr_prediction_unreadable: '结果里这个位置没有“估计值加区间”或“成功概率”：换一个指标，例如 measure(power) 或带区间的效应估计。',
   vcr_pack_not_curated: '只有研究负责人已经标为「已整理」的知识包，才能申请成为平台知识包；先在研究页上确认整理。',
-  vcr_path_invalid: '这个地址不是虚拟临研的页面；从研究列表重新进入。',
+  vcr_path_invalid: '这个地址不是虚拟临床研究的页面；从研究列表重新进入。',
   vcr_payload_invalid: '提交的内容格式不对，没有保存；刷新页面后重新填写。',
   vcr_study_not_found: '找不到这个研究，或它不属于你的账号；从研究列表重新进入。',
   vcr_name_invalid: '研究名要写 1 到 40 个字。',
@@ -1884,10 +1884,10 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   // corrects the item it named.
   // Four the runtime channel already had, which fell through to the family's
   // 「稍后再试」: none is a refusal of the run's request.
-  vcr_unconfigured: '虚拟临研的运行时通道在本部署里没有配置；运行会如实记下这一点，用已有的资料继续。',
-  vcr_upstream_error: '虚拟临研的研究数据这次没能读写；运行会如实记下这一点，用已有的资料继续。',
-  vcr_response_invalid: '虚拟临研返回的内容读不出来，这次没有采用；运行会如实记下，用已有的资料继续。',
-  vcr_response_too_large: '虚拟临研返回的内容太大，这次没有采用；缩小范围再问。',
+  vcr_unconfigured: '虚拟临床研究的运行时通道在本部署里没有配置；运行会如实记下这一点，用已有的资料继续。',
+  vcr_upstream_error: '虚拟临床研究的研究数据这次没能读写；运行会如实记下这一点，用已有的资料继续。',
+  vcr_response_invalid: '虚拟临床研究返回的内容读不出来，这次没有采用；运行会如实记下，用已有的资料继续。',
+  vcr_response_too_large: '虚拟临床研究返回的内容太大，这次没有采用；缩小范围再问。',
   vcr_scenario_help_unavailable: '这个运行环境里没有各计算方法的字段清单；按平台拒绝时给出的字段列表改写，其余研究步骤照常。',
   vcr_write_empty: '这次写入没有任何内容，什么都没有保存。',
   vcr_write_field_forbidden: '这次写入里带了不允许由运行写入的字段，那一项没有保存，其余照常。',
@@ -1997,13 +1997,13 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_site_not_found: '找不到这个中心。',
   vcr_model_exists: '这个名字和版本的模型已经存在；换一个名字或版本。',
   // The module's own health (an operator reads these).
-  vcr_migration_failed: '虚拟临研的数据表升级失败，模块已停用；请联系管理员。',
+  vcr_migration_failed: '虚拟临床研究的数据表升级失败，模块已停用；请联系管理员。',
   vcr_engine_receipt_key_unusable: '配置了计算引擎的回执密钥，但读不到或太短（至少 32 字节）；计算照常进行，结果仍按输出哈希核对，只是没有用密钥验回执。请联系管理员修正。',
-  vcr_loop_failed: '虚拟临研的后台循环出错，已记录并会重试。',
-  vcr_orchestrator_failed: '虚拟临研的自动编排出错，已记录并会重试。',
-  vcr_worker_loop_missing: '虚拟临研的后台循环没有启动；请联系管理员。',
-  vcr_worker_loop_failing: '虚拟临研的后台循环在反复出错；请联系管理员。',
-  vcr_worker_loop_stalled: '虚拟临研的后台循环停住了；请联系管理员。',
+  vcr_loop_failed: '虚拟临床研究的后台循环出错，已记录并会重试。',
+  vcr_orchestrator_failed: '虚拟临床研究的自动编排出错，已记录并会重试。',
+  vcr_worker_loop_missing: '虚拟临床研究的后台循环没有启动；请联系管理员。',
+  vcr_worker_loop_failing: '虚拟临床研究的后台循环在反复出错；请联系管理员。',
+  vcr_worker_loop_stalled: '虚拟临床研究的后台循环停住了；请联系管理员。',
   // The protocol's issues that a person or a model is told by name.
   rule_expression_forbidden: '规则里不能写表达式：入排、筛选和约束都要用封闭语法的规则对象，平台从不把它当代码执行。',
   rule_op_unknown: '规则用了封闭语法里没有的运算；可用 all、any、not、compare、between、in、not_in、missing、present。',
@@ -2474,15 +2474,15 @@ export const ERROR_CODE_FAMILIES = Object.freeze([
   [/^(?:geo_(?:disabled$|no_project$|unconfigured$|gateway_|upstream_|response_|request_|read_|write_)|social_posts_)/,
     '循证 GEO 的项目数据这次没能读写；运行会如实记下这一点，用已有的资料继续。'],
   [/^geo_(?!probe_)/, '循证 GEO 这次没能完成这个操作，稍后再试。'],
-  // 「虚拟临研」, read the same way and for the same reason: a run whose study
+  // 「虚拟临床研究」, read the same way and for the same reason: a run whose study
   // data could not be read carries on with what it has, and a person whose
   // page action was refused tries again. The engine family is separate — a
   // computation that could not run is not a study that could not be read, and
   // the study's other steps are unaffected (plan §10.5).
   [/^vcr_(?:disabled$|no_study$|gateway_|request_|read_|write_|simulate_)/,
-    '虚拟临研的研究数据这次没能读写；运行会如实记下这一点，用已有的资料继续。'],
+    '虚拟临床研究的研究数据这次没能读写；运行会如实记下这一点，用已有的资料继续。'],
   [/^(?:vcr_engine_|engine_unavailable$)/, '确定性计算引擎这次不可用；这一步暂不可用，研究的其余部分照常。'],
-  [/^vcr_/, '虚拟临研这次没能完成这个操作，稍后再试。'],
+  [/^vcr_/, '虚拟临床研究这次没能完成这个操作，稍后再试。'],
   [/^registry_unavailable$/, '试验登记库这次取不到记录；运行会如实记下，不会编造登记信息。'],
   [/^science_connector_/, '科学数据连接器这次没能给出结果。'],
   [/^mr_input_/, '孟德尔随机化的本地输入需要更正后才能继续。'],

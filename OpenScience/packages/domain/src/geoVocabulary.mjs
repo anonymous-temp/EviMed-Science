@@ -222,7 +222,7 @@ export const GEO_PLACEMENT_LABELS = frozen(['advertisement', 'commercial_coopera
 export const GEO_PLACEMENT_LABELS_ZH = Object.freeze({ advertisement: '广告', commercial_cooperation: '商业合作' })
 
 /**
- * Who may do what in a project (flywheel F29, the same shape as 虚拟临研's study members): the account that made the project is its
+ * Who may do what in a project (flywheel F29, the same shape as 虚拟临床研究's study members): the account that made the project is its
  * owner and holds every ability without a row; colleagues and outside agencies are members by role. A role is judged per operation
  * — `geoRoleAllows` — and an account that is neither the owner nor a member reads the project as one that does not exist.
  *

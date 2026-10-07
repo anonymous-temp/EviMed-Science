@@ -1,5 +1,5 @@
 /**
- * The store base every 「虚拟临研」 package shares: one connection discipline,
+ * The store base every 「虚拟临床研究」 package shares: one connection discipline,
  * one id shape, one audit write, one version counter.
  *
  * Hidden knowledge:

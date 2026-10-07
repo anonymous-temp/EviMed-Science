@@ -65,7 +65,7 @@ function source(value) {
   // left the inbox saying a record had changed and offering no way to reach it
   // (review, M4①). `geo` (2026-09-25): a 「循证 GEO」 notice names the page it
   // is about, `<geoId>/<tab>[/<item>]` (geoNotify.mjs). `vcr` (2026-09-28): a
-  // 「虚拟临研」 notice names the study page it is about,
+  // 「虚拟临床研究」 notice names the study page it is about,
   // `<studyId>/<tab>[/<item>]` (vcrNotify.mjs) — without the word here all
   // five of the module's notices throw and are counted as failures.
   if (Object.keys(item).sort().join(",") !== "id,type" || !["run", "thread", "share", "system", "digest", "memory", "geo", "vcr"].includes(item.type)) {

@@ -124,7 +124,7 @@ export function VcrStudyPage() {
   if (feature === "off" || shown.kind === "off") return <VcrOffPage />;
   if (shown.kind === "missing") {
     return (
-      <PageShell title="虚拟临研" width="wide">
+      <PageShell title="虚拟临床研究" width="wide">
         <EmptyState
           icon={UsersRound}
           title="这个研究不存在或已删除。"
@@ -135,7 +135,7 @@ export function VcrStudyPage() {
   }
   if (shown.kind !== "ready") {
     return (
-      <PageShell title="虚拟临研" width="wide">
+      <PageShell title="虚拟临床研究" width="wide">
         {shown.kind === "error" ? <LoadError message={shown.message} onRetry={reload} /> : <VcrStudySkeleton />}
       </PageShell>
     );
@@ -199,7 +199,7 @@ function StudyView({ studyId, study, tab, reload }: { studyId: string; study: Vc
     setDeleting(true);
     void deleteVcrStudy(studyId)
       .then(() => {
-        toast.success("研究已从虚拟临研移除。");
+        toast.success("研究已从虚拟临床研究移除。");
         navigate(VCR_HOME_PATH, { replace: true });
       })
       .catch((error: unknown) => {
@@ -230,7 +230,7 @@ function StudyView({ studyId, study, tab, reload }: { studyId: string; study: Vc
       width="wide"
       back={(
         <Link to={VCR_HOME_PATH} className={buttonClasses({ variant: "text", size: "sm", className: "-ml-2.5" })}>
-          <ChevronLeft size={16} aria-hidden="true" />虚拟临研
+          <ChevronLeft size={16} aria-hidden="true" />虚拟临床研究
         </Link>
       )}
       meta={<StudyTags tier={study.tier} ceiling={study.ceiling} />}
@@ -293,7 +293,7 @@ function StudyView({ studyId, study, tab, reload }: { studyId: string; study: Vc
       {panel === "delete" && (
         <ConfirmDialog
           title={`删除“${study.name}”？`}
-          body="研究会从虚拟临研移除；项目里的对话和文件仍在。"
+          body="研究会从虚拟临床研究移除；项目里的对话和文件仍在。"
           confirmLabel="删除"
           busy={deleting}
           onConfirm={remove}

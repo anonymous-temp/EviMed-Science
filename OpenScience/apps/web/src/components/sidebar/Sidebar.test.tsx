@@ -169,22 +169,22 @@ describe("Sidebar navigation", () => {
     expect(row).toHaveAttribute("aria-current", "page");
   });
 
-  // 「虚拟临研」 sits between 「科研工具」 and 「循证 GEO」, and only where
+  // 「虚拟临床研究」 sits between 「科研工具」 and 「循证 GEO」, and only where
   // `/api/me` offers it (`features.vcr`).
-  it("has no 虚拟临研 row unless the account is offered the module", async () => {
+  it("has no 虚拟临床研究 row unless the account is offered the module", async () => {
     mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [], features: { geo: true } });
     renderSidebar();
     await screen.findByRole("link", { name: "循证 GEO" });
-    expect(screen.queryByRole("link", { name: "虚拟临研" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "虚拟临床研究" })).not.toBeInTheDocument();
   });
 
-  it("puts 虚拟临研 between 科研工具 and 循证 GEO when the account is offered both", async () => {
+  it("puts 虚拟临床研究 between 科研工具 and 循证 GEO when the account is offered both", async () => {
     mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [], features: { frontier: true, vcr: true, geo: true } });
     renderSidebar();
-    const row = await screen.findByRole("link", { name: "虚拟临研" });
+    const row = await screen.findByRole("link", { name: "虚拟临床研究" });
     expect(row).toHaveAttribute("href", "/app/virtual-research");
     const rows = screen.getAllByRole("link").map((link) => link.textContent);
-    expect(rows.slice(0, 8)).toEqual(["新对话", "前沿动态", "科研工具", "虚拟临研", "循证 GEO", "知识库", "记忆胶囊", "定时任务"]);
+    expect(rows.slice(0, 8)).toEqual(["新对话", "前沿动态", "科研工具", "虚拟临床研究", "循证 GEO", "知识库", "记忆胶囊", "定时任务"]);
     await userEvent.click(row);
     expect(screen.getByTestId("location")).toHaveTextContent("/app/virtual-research");
     expect(row).toHaveAttribute("aria-current", "page");
@@ -192,12 +192,12 @@ describe("Sidebar navigation", () => {
 
   // One board offered and the other not: the one that is there keeps its place
   // under 科研工具 rather than inheriting the missing one's.
-  it("puts 虚拟临研 under 科研工具 with no 循证 GEO beside it", async () => {
+  it("puts 虚拟临床研究 under 科研工具 with no 循证 GEO beside it", async () => {
     mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [], features: { vcr: true } });
     renderSidebar();
-    await screen.findByRole("link", { name: "虚拟临研" });
+    await screen.findByRole("link", { name: "虚拟临床研究" });
     const rows = screen.getAllByRole("link").map((link) => link.textContent);
-    expect(rows.slice(0, 6)).toEqual(["新对话", "科研工具", "虚拟临研", "知识库", "记忆胶囊", "定时任务"]);
+    expect(rows.slice(0, 6)).toEqual(["新对话", "科研工具", "虚拟临床研究", "知识库", "记忆胶囊", "定时任务"]);
     expect(screen.queryByRole("link", { name: "循证 GEO" })).not.toBeInTheDocument();
   });
 
@@ -214,7 +214,7 @@ describe("Sidebar navigation", () => {
   it("tells the project list which of the two modules are offered", async () => {
     mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [], features: { vcr: true } });
     renderSidebar();
-    await screen.findByRole("link", { name: "虚拟临研" });
+    await screen.findByRole("link", { name: "虚拟临床研究" });
     await waitFor(() => expect(screen.getByTestId("project-browser")).toHaveAttribute("data-vcr", "true"));
     expect(screen.getByTestId("project-browser")).toHaveAttribute("data-geo", "false");
   });
@@ -222,7 +222,7 @@ describe("Sidebar navigation", () => {
   it("watches for a finished computation only where the module is offered", async () => {
     mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [], features: { vcr: true } });
     renderSidebar();
-    await screen.findByRole("link", { name: "虚拟临研" });
+    await screen.findByRole("link", { name: "虚拟临床研究" });
     await waitFor(() => expect(mocks.finishedToasts).toHaveBeenLastCalledWith(true));
   });
 
@@ -238,7 +238,7 @@ describe("Sidebar navigation", () => {
     renderSidebar();
     await waitFor(() => expect(mocks.fetchWebMe).toHaveBeenCalled());
     expect(screen.queryByRole("link", { name: "前沿动态" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "虚拟临研" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "虚拟临床研究" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "循证 GEO" })).not.toBeInTheDocument();
   });
 

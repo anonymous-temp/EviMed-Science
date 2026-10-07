@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Standard-format import for 「虚拟临研」: FHIR, OMOP CDM and CDISC ADaM into the
+"""Standard-format import for 「虚拟临床研究」: FHIR, OMOP CDM and CDISC ADaM into the
 module's own tables, run in a disposable container.
 
 A hospital platform holds its patients as FHIR resources or OMOP tables, a

@@ -41,7 +41,7 @@
 #   knowledge, AgentBay, SaaS) add to what this one takes away; monitoring and
 #   backup combine with it.
 # - Research runs, learning from runs, proactive research, the frontier feed,
-#   GEO, 虚拟临研 (whose compute engine sits behind the `vcr` profile and is not
+#   GEO, 虚拟临床研究 (whose compute engine sits behind the `vcr` profile and is not
 #   started here) and the reviewer are off: each is a runtime client or a product surface
 #   this deployment does not have. Starting a run answers with the runtime's
 #   own refusal, never with a fake one (the runtime mode stays `kernel`).
@@ -115,7 +115,7 @@ services:
       OPEN_SCIENCE_CAPSULE_SHARE_ENABLED: ${OPEN_SCIENCE_CAPSULE_SHARE_ENABLED:-false}
       OPEN_SCIENCE_REVIEW_ENABLED: ${OPEN_SCIENCE_REVIEW_ENABLED:-false}
       OPEN_SCIENCE_IM_ENABLED: ${OPEN_SCIENCE_IM_ENABLED:-false}
-      # 「虚拟临研」 is a product surface with an engine of its own: off here, and
+      # 「虚拟临床研究」 is a product surface with an engine of its own: off here, and
       # its engine (behind the base file's `vcr` profile) is not started by this
       # shape, so an API-only deployment neither builds nor runs an R image.
       OPEN_SCIENCE_VCR_ENABLED: ${OPEN_SCIENCE_VCR_ENABLED:-false}

@@ -40,7 +40,7 @@ export function SealNote({ seal }: { seal: VcrIntakeSeal }) {
 }
 
 const USES: ReadonlyArray<{ value: string; label: string }> = [
-  { value: "vcr", label: "虚拟临研分析" }, { value: "matching", label: "匹配与招募" },
+  { value: "vcr", label: "虚拟临床研究分析" }, { value: "matching", label: "匹配与招募" },
 ];
 
 /** 登记数据源: whose data it is, what it may be used for, what window of it is visible, how long it is kept. */

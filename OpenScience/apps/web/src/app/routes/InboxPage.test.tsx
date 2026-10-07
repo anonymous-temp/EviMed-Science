@@ -103,10 +103,10 @@ it("opens the whole row: it goes where the notice points and marks it read on th
   expect(screen.getByTestId("where")).toHaveTextContent("/app/runs?run=run_follow");
 });
 
-// A 虚拟临研 notice names `<studyId>[/<tab>]` (vcrNotify.mjs). The study page
+// A 虚拟临床研究 notice names `<studyId>[/<tab>]` (vcrNotify.mjs). The study page
 // has exactly those two segments: anything longer, or anything that is not an
 // id, is not an address and must not become a link (CW-13).
-it("opens a 虚拟临研 notice on its study's tab, and nothing that is not one", async () => {
+it("opens a 虚拟临床研究 notice on its study's tab, and nothing that is not one", async () => {
   const notice = (id: string, title: string, sourceId: string): api.InboxItem => ({
     ...review, id, noticeType: "notify", title, body: "", severity: "attention",
     source: { type: "vcr", id: sourceId }, actions: [{ id: "open", label: "打开", style: "primary" }], readAt: at(1),

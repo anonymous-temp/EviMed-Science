@@ -1,7 +1,7 @@
 {
   "schemaVersion": "1.0.0",
   "capability": "vcr-analysis",
-  "note": "Real briefs, not smoke tests: each is a request somebody would actually bring to 「虚拟临研」's analysis steps, chosen for the specific way an analysis goes wrong while looking finished — a weighted comparison whose effective sample size nobody looked at, a simulation whose null scenario was never run, a synthetic cohort quietly counted as patients. mustDo / mustNotDo are the rubric; the deterministic half (the four counts apart, an mcse on every simulated measure, a named interval kind, a not-estimable verdict with its rule) is the three vcr contracts in @evimed/domain plus this capability's preflight.",
+  "note": "Real briefs, not smoke tests: each is a request somebody would actually bring to 「虚拟临床研究」's analysis steps, chosen for the specific way an analysis goes wrong while looking finished — a weighted comparison whose effective sample size nobody looked at, a simulation whose null scenario was never run, a synthetic cohort quietly counted as patients. mustDo / mustNotDo are the rubric; the deterministic half (the four counts apart, an mcse on every simulated measure, a named interval kind, a not-estimable verdict with its rule) is the three vcr contracts in @evimed/domain plus this capability's preflight.",
   "briefs": [
     {
       "id": "vcr-analysis-001-three-designs-nsclc",

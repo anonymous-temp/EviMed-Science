@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Name the 虚拟临研 studies that still carry no name of their own, from what they already hold.
+ * Name the 虚拟临床研究 studies that still carry no name of their own, from what they already hold.
  *
  *   node scripts/vcr/rename-from-definition.mjs                   # report, for every study that is still unnamed
  *   node scripts/vcr/rename-from-definition.mjs --study <std_…>   # report, for one study

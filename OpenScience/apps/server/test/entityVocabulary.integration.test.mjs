@@ -358,7 +358,7 @@ test("the migrations run on a database that already holds these tables, twice in
   await new VcrStore({ database }).ready();
   await migrateVcr(database);
   // The tagged rows of each module: a GEO project and a VCR study (other tables of those schemas may carry keys of their own, such as
-  // 虚拟临研's platform knowledge packs, and are not this migration's).
+  // 虚拟临床研究's platform knowledge packs, and are not this migration's).
   const columns = (await database.query(`SELECT table_schema, table_name, data_type, is_nullable FROM information_schema.columns
     WHERE column_name = 'entity_keys' AND (table_schema, table_name) IN (('evimed_geo', 'projects'), ('evimed_vcr', 'studies')) ORDER BY 1`)).rows;
   assert.deepEqual(columns.map((row) => [row.table_schema, row.data_type, row.is_nullable]), [["evimed_geo", "ARRAY", "YES"], ["evimed_vcr", "ARRAY", "YES"]]);

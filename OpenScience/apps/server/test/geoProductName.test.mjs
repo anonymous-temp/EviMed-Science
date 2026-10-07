@@ -1,6 +1,6 @@
-// The module is 「循证 GEO」 (the owner's ruling of 2026-10-07, R10 plan §1): it was called
-// 「循证传播」 from 2026-10-06, and that name is retired. No sentence a reader or a model is given may
-// use it again, so this walks the server's strings, the domain's, the capabilities' manifests and
+// The two modules are 「循证 GEO」 and 「虚拟临床研究」 (the owner's rulings of 2026-10-07, R10 plan §1):
+// 「循证传播」 (from 2026-10-06) and 「虚拟临研」 are retired names. No sentence a reader or a model is
+// given may use them again, so this walks the server's strings, the domain's, the capabilities' manifests and
 // skill text, the runtime tools', the frame's and the alert rules'. A comment may name the old name
 // to say why it went, and a line marked `retired-word-ok` holds it as DATA — the search alias in
 // `@evimed/domain`'s `retiredNames.mjs`, the earlier placeholder names a project may still carry —
@@ -12,7 +12,11 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "..");
-const RETIRED_NAME = /循证传播/; // retired-word-ok
+/** The retired names, by the module they named; each line that holds one as DATA says so with retired-word-ok. */
+const RETIRED_NAMES = [
+  ["循证传播", /循证传播/], // retired-word-ok
+  ["虚拟临研", /虚拟临研/], // retired-word-ok
+];
 
 /** A comment line, by the file's own comment marker; prose and JSON have none, so every line of them is read. @param {string} file @param {string} line */
 function isComment(file, line) {
@@ -32,7 +36,7 @@ async function walk(dir, kind) {
   return found;
 }
 
-test("no server, domain, capability or runtime-tool text calls the module 循证传播", async () => {
+test("no server, domain, capability or runtime-tool text uses a retired module name", async () => {
   const roots = [
     ["apps/server/src", /\.mjs$/],
     ["packages/domain/src", /\.(mjs|json)$/],
@@ -51,12 +55,23 @@ test("no server, domain, capability or runtime-tool text calls the module 循证
       if (file.includes(`${path.sep}test${path.sep}`)) continue;
       walked += 1;
       const text = await readFile(file, "utf8");
-      if (text.split("\n").some((line) => RETIRED_NAME.test(line) && !isComment(file, line) && !line.includes("retired-word-ok"))) guilty.push(path.relative(repoRoot, file));
+      for (const [name, pattern] of RETIRED_NAMES) {
+        if (text.split("\n").some((line) => pattern.test(line) && !isComment(file, line) && !line.includes("retired-word-ok"))) guilty.push(`${path.relative(repoRoot, file)}: ${name}`);
+      }
     }
   }
   // A walk that read nothing would pass every assertion.
   assert.ok(walked > 300, `walked ${walked} files`);
   assert.deepEqual(guilty, []);
+});
+
+test("the five 虚拟临床研究 capabilities say the module's name where a reader sees it", async () => {
+  const table = JSON.parse(await readFile(path.join(repoRoot, "packages/domain/src/capability-display.json"), "utf8")).capabilities;
+  for (const id of ["vcr-protocol", "vcr-evidence", "vcr-analysis", "vcr-matching", "vcr-package"]) {
+    const manifest = JSON.parse(await readFile(path.join(repoRoot, "deploy/runtime-dsh/capabilities", `${id}.json`), "utf8"));
+    assert.match(manifest.whenToUse, /虚拟临床研究/, id);
+    assert.doesNotMatch(table[id].category, /虚拟临研/, id); // retired-word-ok
+  }
 });
 
 test("the four 循证 GEO capabilities say the module's name where a reader sees it", async () => {

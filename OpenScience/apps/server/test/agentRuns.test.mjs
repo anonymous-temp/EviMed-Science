@@ -8522,7 +8522,7 @@ test("a plain answer typed into the kernel's page counts the persona its session
 
 test("only a dispatch a person is waiting on asks the runtime to wait for a free slot; a worker's dispatch does not", async () => {
   // 2026-10-05: with every runtime slot taken a researcher's dispatch is a place in line. A worker (autopilot,
-  // GEO, 虚拟临研) defers on its own backoff and must not hold its lease for minutes behind the same wait.
+  // GEO, 虚拟临床研究) defers on its own backoff and must not hold its lease for minutes behind the same wait.
   const root = await mkdtemp(path.join(tmpdir(), "os-run-wait-for-room-"));
   const projectAt = async (id) => {
     const rootDir = path.join(root, id);

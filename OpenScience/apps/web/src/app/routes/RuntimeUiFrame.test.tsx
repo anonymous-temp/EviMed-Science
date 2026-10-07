@@ -44,7 +44,7 @@ vi.mock("@/lib/geoClient", async importOriginal => ({
   ...(await importOriginal<typeof import("@/lib/geoClient")>()),
   listGeoProjects: geo.listGeoProjects, patchGeoProject: geo.patchGeoProject,
 }));
-// 虚拟临研's three calls: which study this project is, what it holds, and writing an option to it.
+// 虚拟临床研究's three calls: which study this project is, what it holds, and writing an option to it.
 const vcr = vi.hoisted(() => ({ getVcrHome: vi.fn(), getVcrStudy: vi.fn(), patchVcrStudy: vi.fn() }));
 vi.mock("@/lib/vcrClient", async importOriginal => ({
   ...(await importOriginal<typeof import("@/lib/vcrClient")>()),
@@ -1601,7 +1601,7 @@ describe("循证 GEO in the conversation", () => {
     view.unmount();
   });
 
-  it("opens 虚拟临研 when the frame asks for it, instead of dropping the destination", async () => {
+  it("opens 虚拟临床研究 when the frame asks for it, instead of dropping the destination", async () => {
     const { view, frame } = await openGeoConversation();
     emit(frame, { type: "evimed.runtime-ui.shell-navigate", seq: 4, destination: "virtual-research" });
     await waitFor(() => expect(screen.getByTestId("path")).toHaveTextContent(/^\/app\/virtual-research$/));
@@ -1609,7 +1609,7 @@ describe("循证 GEO in the conversation", () => {
   });
 });
 
-describe("虚拟临研 in the conversation", () => {
+describe("虚拟临床研究 in the conversation", () => {
   const requested = (...steps: string[]) => Object.fromEntries(
     ["definition", "evidence", "population", "patients", "comparator", "trial", "matching"].map(step => [step, { status: "none", requested: steps.includes(step) }]));
   const lead = ["read", "write", "run", "export", "manage_members", "manage_study", "manage_data", "review_any", "contact_patients", "read_patient_level"];
@@ -1715,7 +1715,7 @@ describe("虚拟临研 in the conversation", () => {
     view.unmount();
   });
 
-  it("sends a conversation that is not a 虚拟临研 one no options, and asks the module nothing", async () => {
+  it("sends a conversation that is not a 虚拟临床研究 one no options, and asks the module nothing", async () => {
     const { view, post, vcrPosts } = await openVcrConversation("adr-analysis");
     await waitFor(() => expect(post.mock.calls.map(call => call[0]).some(data => data.type === "evimed.runtime-ui.capability")).toBe(true));
     expect(vcrPosts()).toHaveLength(0);

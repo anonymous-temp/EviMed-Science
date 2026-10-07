@@ -1,4 +1,4 @@
-// 「虚拟临研」's study members and roles, without a database.
+// 「虚拟临床研究」's study members and roles, without a database.
 //
 // The double below is the member half of `VcrDataStore` with the real store's
 // bounds: `(study, user, role)` is the key, an unknown role is a TypeError,

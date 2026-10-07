@@ -1,5 +1,5 @@
 /**
- * Structured reads of the trial registries 「虚拟临研」 parameterizes from
+ * Structured reads of the trial registries 「虚拟临床研究」 parameterizes from
  * (build plan 2026-09-28 §6.2, §6.4; attachment A2 conclusion 4).
  *
  * Hidden knowledge:

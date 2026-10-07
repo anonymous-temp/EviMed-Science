@@ -1,4 +1,4 @@
-// The CI that runs 「虚拟临研」's engine-backed tests, held to what it claims.
+// The CI that runs 「虚拟临床研究」's engine-backed tests, held to what it claims.
 //
 // CI cannot be run from here, so what can be checked is checked: that the jobs
 // are wired to one R library, that the tests which need R are the ones the

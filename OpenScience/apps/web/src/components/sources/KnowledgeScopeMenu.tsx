@@ -14,7 +14,7 @@ export const SHARED_SCOPE_NAME = "所有项目共享";
 
 /**
  * Whose documents this page lists: a project's, grouped as the sidebar groups them (the account's own projects, the
- * 虚拟临研 studies, the 循证 GEO projects — each of those is an ordinary project underneath), or the documents the
+ * 虚拟临床研究 studies, the 循证 GEO projects — each of those is an ordinary project underneath), or the documents the
  * account made available to every project.
  *
  * Choosing here changes what this page lists and nothing else: it does not move the tab to that project, the sidebar
@@ -40,7 +40,7 @@ export function KnowledgeScopeMenu({ scope, onChange }: { scope: SourceScope; on
     ];
     return [
       ...group("我的项目", own),
-      ...group("虚拟临研", studies),
+      ...group("虚拟临床研究", studies),
       ...group("循证 GEO", communication),
       "separator" as const,
       { label: SHARED_SCOPE_NAME, checked: scope.kind === "shared", onSelect: () => onChange({ kind: "shared" }) },

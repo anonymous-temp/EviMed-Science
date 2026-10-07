@@ -484,7 +484,7 @@ export const SIMULATION_BANNER = "模拟研究的结果是模拟，不是证据�
 export function simulationsPage({ reader, items, next }) {
   return {
     title: `模拟研究 · ${EVIDENCE_SITE_NAME}`,
-    description: "EviMed 的“模拟研究”栏目：虚拟临研的模拟结果。模拟的结果不是证据。",
+    description: "EviMed 的“模拟研究”栏目：虚拟临床研究的模拟结果。模拟的结果不是证据。",
     body: html`<h1>模拟研究</h1>
 <p class="notice warn">${SIMULATION_BANNER}</p>
 ${!reader || !items.length ? html`<p class="muted">这个栏目现在没有公开的模拟研究。</p>` : html`<ul class="list">${items.map((item) => html`<li><h3>${pathLink(evidencePublicPath(`/simulations/${encodeURIComponent(item.id)}`), item.title)}</h3>${item.summary ? html`<p>${clip(item.summary, 200)}</p>` : ""}${item.publishedAt ?? item.createdAt ? html`<p class="meta">${item.producer?.name ? html`${item.producer.name} · ` : ""}${timeTag(item.publishedAt ?? item.createdAt)}</p>` : ""}</li>`)}</ul>${pager(next, evidencePublicPath("/simulations"))}`}`,
@@ -492,7 +492,7 @@ ${!reader || !items.length ? html`<p class="muted">这个栏目现在没有公�
 }
 
 /**
- * One published simulation. The record is what 虚拟临研 stored when its study lead published a report (`vcrPublications.mjs`):
+ * One published simulation. The record is what 虚拟临床研究 stored when its study lead published a report (`vcrPublications.mjs`):
  * sections, each with its text and its numbers, every number carrying the value-source label it had in the study; the
  * intended use and the limitations from the report's cover; the engine receipts. A flat `numbers` list is read too.
  * @param {any} record

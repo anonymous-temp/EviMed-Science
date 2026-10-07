@@ -262,7 +262,7 @@ test("AC-35 the timed T0 run and the other release-time checks are written down 
   // run cannot live there. What can be tested is that the place it does live is
   // not empty and names each check a deployed stack has to make.
   const checklist = await readFile(path.join(repoRoot, "docs/EVIMED_RELEASE_AND_DELIVERY_CHECKLIST.md"), "utf8");
-  const start = checklist.indexOf("## 虚拟临研：只有部署后才能做的检查");
+  const start = checklist.indexOf("## 虚拟临床研究：只有部署后才能做的检查");
   assert.ok(start >= 0, "the release checklist has no section for the module's release-time checks");
   const rest = checklist.slice(start + 3);
   const section = rest.slice(0, rest.indexOf("\n## ") < 0 ? undefined : rest.indexOf("\n## "));

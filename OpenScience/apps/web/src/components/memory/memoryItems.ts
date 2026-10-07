@@ -99,7 +99,7 @@ export function practiceItems(
   };
 }
 
-/** Where a project in the dropdown belongs: the researcher's own, a 虚拟临研 study, or a 循证 GEO project. */
+/** Where a project in the dropdown belongs: the researcher's own, a 虚拟临床研究 study, or a 循证 GEO project. */
 export type ProjectKind = "own" | "vcr" | "geo";
 
 export interface ProjectChoice {

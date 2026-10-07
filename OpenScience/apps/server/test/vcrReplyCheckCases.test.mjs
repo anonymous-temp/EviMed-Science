@@ -1,4 +1,4 @@
-// The labelled cases of the 虚拟临研 reply check (evals/vcr-reply-check/cases.json): given the labelled claims — the language judgement
+// The labelled cases of the 虚拟临床研究 reply check (evals/vcr-reply-check/cases.json): given the labelled claims — the language judgement
 // the reviewer makes — the code half's verdict on every sentence is what the case says. The model half is measured live, never here.
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Rehearse 「虚拟临研」's database migration on a copy of production.
+// Rehearse 「虚拟临床研究」's database migration on a copy of production.
 //
 //   node scripts/vcr/migrate-check.mjs <postgres url of a clone>
 //   OPEN_SCIENCE_VCR_MIGRATE_CHECK_URL=<url> node scripts/vcr/migrate-check.mjs

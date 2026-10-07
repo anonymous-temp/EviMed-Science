@@ -1,4 +1,4 @@
-// 「虚拟临研」's per-operation access judgment, without a database.
+// 「虚拟临床研究」's per-operation access judgment, without a database.
 //
 // The store double below answers exactly what `VcrDataStore` answers — nulls
 // for what is not there, live grants only, roles as a list — and refuses any

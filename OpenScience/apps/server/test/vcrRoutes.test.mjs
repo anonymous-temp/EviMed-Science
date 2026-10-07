@@ -1,4 +1,4 @@
-// The 虚拟临研 routes' plumbing: bounded metric labels, the module invisible when
+// The 虚拟临床研究 routes' plumbing: bounded metric labels, the module invisible when
 // it is off or not open to the account, another account's study reading as one
 // that never existed, ids in a path held to their shape, a role checked per
 // operation on EVERY route, an action whose worker is not composed answering
@@ -65,7 +65,7 @@ function platformStore(shared) {
     get(target, property) {
       if (property in target) return /** @type {any} */ (target)[property];
       if (typeof property === "symbol" || property === "then") return undefined;
-      throw new Error(`the platform's store has no ${String(property)}: a 虚拟临研 data call was made on it`);
+      throw new Error(`the platform's store has no ${String(property)}: a 虚拟临床研究 data call was made on it`);
     },
   });
 }
@@ -167,7 +167,7 @@ test("a person re-judges a criterion and countersigns an assessment as themselve
   assert.deepEqual(calls.find((call) => call[0] === "assessment.review")?.slice(1), [OWNER, "std_1", "asm_1"]);
 });
 
-test("a 虚拟临研 path's metric label folds every id, so a dashboard row is a route", () => {
+test("a 虚拟临床研究 path's metric label folds every id, so a dashboard row is a route", () => {
   for (const [path, label] of [
     ["/api/vcr", "/api/vcr"],
     ["/api/vcr/studies", "/api/vcr/studies"],

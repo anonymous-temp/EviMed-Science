@@ -975,7 +975,7 @@ TOOL_DEFINITIONS.extend(frontier_search.tool_definitions())
 # the module is on and open to the account (EVIMED_GEO_GATEWAY_URL), and used by
 # the GEO capabilities' runs.
 TOOL_DEFINITIONS.extend(geo_platform.tool_definitions())
-# 「虚拟临研」's platform data, its deterministic engine behind a submit/poll
+# 「虚拟临床研究」's platform data, its deterministic engine behind a submit/poll
 # pair, and the two evidence tools it parameterizes from (2026-09-28): offered
 # only where the module is on and open to the account
 # (EVIMED_VCR_GATEWAY_URL), and used by the module's five capabilities' runs.
@@ -1069,7 +1069,7 @@ def disabled_tools():
 # social channel is a separate host a deployment may not have; every research
 # question is answered without them (2026-09-25).
 # vcr_read, vcr_write, vcr_simulate, trial_registry_record, curve_digitize, evidence_pool:
-# 「虚拟临研」 is a module a deployment may not run at all
+# 「虚拟临床研究」 is a module a deployment may not run at all
 # (`OPEN_SCIENCE_VCR_ENABLED`, off by default), and its six tools answer
 # `vcr_disabled` without asking where it is not open to this account; every
 # research question is answered without them (2026-09-28).

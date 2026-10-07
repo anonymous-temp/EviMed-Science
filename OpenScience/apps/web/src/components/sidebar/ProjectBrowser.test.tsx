@@ -724,14 +724,14 @@ describe("ProjectBrowser — GEO projects", () => {
   });
 });
 
-describe("ProjectBrowser — 虚拟临研 studies", () => {
+describe("ProjectBrowser — 虚拟临床研究 studies", () => {
   beforeEach(() => {
     mocks.getVcrHome.mockResolvedValue({ studies: [{ id: "std_1", projectId: "p-heart", name: "EV-201", status: "active" }] });
   });
 
   it("gathers studies in one group at the end, with the people icon on its rows", async () => {
     renderModules({ vcr: true });
-    const group = await screen.findByRole("button", { name: /虚拟临研/ });
+    const group = await screen.findByRole("button", { name: /虚拟临床研究/ });
     expect(group).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByRole("button", { name: "心衰" })).not.toBeInTheDocument();
     await userEvent.click(group);
@@ -745,18 +745,18 @@ describe("ProjectBrowser — 虚拟临研 studies", () => {
     const first = renderModules({ vcr: true });
     await screen.findByRole("button", { name: "Paper 1" });
     await waitFor(() => expect(screen.queryByRole("button", { name: "心衰" })).not.toBeInTheDocument());
-    expect(screen.queryByRole("button", { name: /虚拟临研/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /虚拟临床研究/ })).not.toBeInTheDocument();
     first.unmount();
     mocks.getVcrHome.mockResolvedValue({ studies: [{ id: "std_1", projectId: "p-heart", name: "EV-201" }] });
     renderModules({ vcr: true });
-    expect(await screen.findByRole("button", { name: /虚拟临研/ })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /虚拟临床研究/ })).toBeInTheDocument();
   });
 
   it("keeps the two groups apart, each with its own count and its own remembered state", async () => {
     mocks.listGeoProjects.mockResolvedValue([{ id: "geo_1", projectId: "paper1", name: "Paper 1" }]);
     renderModules({ geo: true, vcr: true });
     const geoGroup = await screen.findByRole("button", { name: /循证 GEO/ });
-    const vcrGroup = await screen.findByRole("button", { name: /虚拟临研/ });
+    const vcrGroup = await screen.findByRole("button", { name: /虚拟临床研究/ });
     expect(geoGroup).toHaveTextContent("1");
     expect(vcrGroup).toHaveTextContent("1");
     await userEvent.click(vcrGroup);

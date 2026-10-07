@@ -4,7 +4,7 @@
  *
  * Hidden knowledge:
  *
- * - **A membership list, not an organization model** — the same decision as 虚拟临研's study members (`vcrMembers.mjs`). The
+ * - **A membership list, not an organization model** — the same decision as 虚拟临床研究's study members (`vcrMembers.mjs`). The
  *   platform has accounts and nothing above them; the brand team, the medical affairs reviewer and the agency need to see one
  *   project together, and that is the whole requirement. The owner is the project's account and holds every ability without a row,
  *   so adding a colleague can never lock the owner out of their own project, and the owner's roles cannot be taken away

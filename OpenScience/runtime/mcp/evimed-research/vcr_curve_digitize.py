@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Deterministic digitization of a published Kaplan-Meier figure.
 
-「虚拟临研」's reconstruction of pseudo-patient data needs the curve's points, and
+「虚拟临床研究」's reconstruction of pseudo-patient data needs the curve's points, and
 a language model that "reads" a chart is several times less accurate than a
 digitizer (0.087 RMSE against 0.014, attachment C1 of the build plan) and cannot
 be audited. This module is the digitizer: the same pixels and the same stated

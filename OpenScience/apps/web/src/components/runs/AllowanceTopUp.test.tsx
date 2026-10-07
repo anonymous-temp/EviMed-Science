@@ -47,7 +47,7 @@ describe("a step waiting on the allowance", () => {
     expect(screen.getByRole("link", { name: "去充值" })).toHaveAttribute("href", "https://pay.example.org/recharge");
   });
 
-  it("is what a 虚拟临研 step's tab says instead of 「正在进行」", () => {
+  it("is what a 虚拟临床研究 step's tab says instead of 「正在进行」", () => {
     const study = readVcrStudy(fixture("empty/study.json"));
     study.steps.evidence = { status: "queued", waiting: "simulated_allowance", note: "等模拟额度" };
     draw(<VcrStepPending studyId={EMPTY_STUDY_ID} study={study} step="evidence" />);
@@ -56,7 +56,7 @@ describe("a step waiting on the allowance", () => {
     expect(screen.queryByText("正在进行，做完会显示在这里。")).not.toBeInTheDocument();
   });
 
-  it("and a queued 虚拟临研 step with no wait is still work under way", () => {
+  it("and a queued 虚拟临床研究 step with no wait is still work under way", () => {
     const study = readVcrStudy(fixture("empty/study.json"));
     study.steps.evidence = { status: "queued" };
     draw(<VcrStepPending studyId={EMPTY_STUDY_ID} study={study} step="evidence" />);

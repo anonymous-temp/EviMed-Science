@@ -770,7 +770,7 @@ export function createRuntimeController(overrides = {}, hooks = {}) {
         return;
       }
       if (req.method === "POST" && ["/v1/vcr/extract", "/v1/vcr/digitize", "/v1/vcr/materials", "/v1/vcr/convert"].includes(url.pathname)) {
-        // 「虚拟临研」 intake (protocol 9), the source-material read (protocol
+        // 「虚拟临床研究」 intake (protocol 9), the source-material read (protocol
         // 10) and the standard-format import (protocol 11): a fixed operation
         // over one staged attempt.
         // A figure, or a knowledge-base source's PDF or spreadsheet, is staged on the

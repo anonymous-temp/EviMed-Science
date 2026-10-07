@@ -1464,7 +1464,7 @@ and recharge, membership, orders and refunds pages of the platform itself
 page request). The start is refused with `simulated_credits_exhausted` (402) when the
 allowance is empty or below the tool's estimate: before a run exists, never in the
 middle of one (a steer into a running turn is never refused). The gate covers the chat
-dispatch, autopilot episodes and checks, a channel question, a GEO or 虚拟临研 programme
+dispatch, autopilot episodes and checks, a channel question, a GEO or 虚拟临床研究 programme
 step (left pending until a top-up), and a turn typed into the kernel window; the
 platform's own learning and source-understanding runs are charged to nobody and asked
 of nobody (`test/balanceGateCoverage.test.mjs` names every way a run is dispatched).

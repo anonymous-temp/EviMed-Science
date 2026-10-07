@@ -1,5 +1,5 @@
 /**
- * The 虚拟临研 side of the prediction registry (flywheel plan §5.6, F25, 2026-10-06): a study files the prediction one of its trial
+ * The 虚拟临床研究 side of the prediction registry (flywheel plan §5.6, F25, 2026-10-06): a study files the prediction one of its trial
  * scenarios makes of a registered trial's primary endpoint, with the timestamp the registry keeps it under until the trial reports.
  *
  * The registry and the scoring belong to the learning package; this module only reads a number out of an engine result and hands it

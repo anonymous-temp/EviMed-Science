@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Everything 「虚拟临研」 can be checked by, in one command.
+# Everything 「虚拟临床研究」 can be checked by, in one command.
 #
 # Hidden knowledge: this script discovers its own work rather than listing it.
 # Seven work packages wrote these tests in parallel, and a hand-kept list would

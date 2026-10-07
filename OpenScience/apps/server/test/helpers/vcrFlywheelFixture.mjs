@@ -1,4 +1,4 @@
-// The composed 虚拟临研 module on a database of its own, the way `vcrEvidenceMatching.integration.test.mjs` composes it, for the
+// The composed 虚拟临床研究 module on a database of its own, the way `vcrEvidenceMatching.integration.test.mjs` composes it, for the
 // flywheel suites (cards as candidates, the 「模拟研究」 column, frontier events, platform packs, prediction filing). Each suite
 // brings its own config and its own ports; the registry answers FLAURA for NCT02296125 and nothing else.
 import assert from "node:assert/strict";

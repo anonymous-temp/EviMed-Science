@@ -7,7 +7,7 @@ import { intervalLabel } from "./vcrText";
 import { bandPath, linePath, posX, posY, scaleOf, spanRect, stepPath, type Point, type VcrScale } from "./vcrScale";
 
 /**
- * The time-series charts of 「虚拟临研」, and the one rule they all obey.
+ * The time-series charts of 「虚拟临床研究」, and the one rule they all obey.
  *
  * **The source decides the shape** (plan §8.3, §9.6), for a trajectory and a
  * survival curve alike:

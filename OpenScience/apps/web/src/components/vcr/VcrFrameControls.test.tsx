@@ -1,4 +1,4 @@
-// The 虚拟临研 chip in a browser DOM: what the two selects and the starters do
+// The 虚拟临床研究 chip in a browser DOM: what the two selects and the starters do
 // when the reader uses them. The body is the one the socket's build serializes
 // into the kernel's page; here it runs against a recording slot registry, the
 // same arrangement `RuntimeUiFrameCards.test.tsx` uses for the GEO chip.
@@ -51,15 +51,15 @@ function vcrFrame() {
   return { components, drafts, kit, sent };
 }
 
-describe("the 虚拟临研 chip", () => {
+describe("the 虚拟临床研究 chip", () => {
   afterEach(() => { cleanup(); });
 
-  it("says 「虚拟临研」, changes where the study starts and what it is for through the shell, and never sends the composer", () => {
+  it("says 「虚拟临床研究」, changes where the study starts and what it is for through the shell, and never sends the composer", () => {
     const f = vcrFrame();
     const Hero = f.components.get("conversation.hero.agentPreset") as (props: Record<string, unknown>) => React.ReactElement;
     const view = render(<Hero />);
     act(() => f.kit.hub.deliver("capability", { capabilityId: "vcr-protocol", sessionId: "session-a" }));
-    expect(view.getByText("虚拟临研")).toBeInTheDocument();
+    expect(view.getByText("虚拟临床研究")).toBeInTheDocument();
     expect(view.queryByRole("combobox", { name: "起点" })).toBeNull();
     act(() => f.kit.hub.deliver("vcr", frameVcrOptions("session-a", study(["read", "write", "manage_study"]))));
 
@@ -110,6 +110,6 @@ describe("the 虚拟临研 chip", () => {
     act(() => f.kit.hub.deliver("vcr", frameVcrOptions("session-a", study(["read"]))));
     expect(view.queryByRole("combobox", { name: "起点" })).toBeNull();
     expect(view.queryByRole("combobox", { name: "预期用途" })).toBeNull();
-    expect(view.getByText("虚拟临研")).toBeInTheDocument();
+    expect(view.getByText("虚拟临床研究")).toBeInTheDocument();
   });
 });

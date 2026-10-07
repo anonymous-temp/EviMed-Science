@@ -68,7 +68,7 @@ const inputPaths = [
   "evals/capability-audit/results/skill-execution-v1-artifacts",
   "scripts/dev/fetch-skills.sh",
   "scripts/dev/patch-ai4s-integrity-auditor.py",
-  // 「虚拟临研」's snapshot profiler, COPYed into the web image beside
+  // 「虚拟临床研究」's snapshot profiler, COPYed into the web image beside
   // scripts/ops (deploy/web/Dockerfile): the data plane runs it as a child
   // process, so a release that changed it must change the manifest.
   "scripts/vcr",

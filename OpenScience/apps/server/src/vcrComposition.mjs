@@ -1,5 +1,5 @@
 /**
- * 「虚拟临研」, composed: the seven packages joined into the one object the
+ * 「虚拟临床研究」, composed: the seven packages joined into the one object the
  * control plane registers (build plan 2026-09-28 §11.2, build contract §2).
  *
  * Hidden knowledge:
@@ -1157,7 +1157,7 @@ export async function vcrMetricsSnapshot(vcr) {
  */
 export function vcrMetricFamilies(enabled, snapshot) {
   /** @type {{ name: string, help: string, type: "gauge" | "counter", series: { value: number, labels?: Record<string, string> }[] }[]} */
-  const families = [{ name: "open_science_vcr_enabled", help: "Whether the 虚拟临研 module is composed in this process.", type: "gauge",
+  const families = [{ name: "open_science_vcr_enabled", help: "Whether the 虚拟临床研究 module is composed in this process.", type: "gauge",
     series: [{ value: enabled && snapshot ? 1 : 0 }] }];
   if (!enabled || !snapshot) return families;
   /** @param {string} name @param {string} help @param {"gauge" | "counter"} type @param {{ value: number, labels?: Record<string, string> }[]} series */
@@ -1211,9 +1211,9 @@ export function vcrMetricFamilies(enabled, snapshot) {
   }
   const loops = Object.entries(snapshot.worker?.loops ?? {}).filter(([, loop]) => loop?.wired);
   if (loops.length) {
-    add("loop_last_ok_timestamp_seconds", "When each 虚拟临研 worker loop last finished without an error (Unix seconds; 0 = not since this process started).",
+    add("loop_last_ok_timestamp_seconds", "When each 虚拟临床研究 worker loop last finished without an error (Unix seconds; 0 = not since this process started).",
       "gauge", loops.map(([loop, state]) => ({ labels: { loop }, value: state.lastOkAt ? Math.floor(Date.parse(state.lastOkAt) / 1000) : 0 })));
-    add("loop_stalled", "Whether a 虚拟临研 worker loop is still running past its lease (OPEN_SCIENCE_VCR_LEASE_MS).", "gauge",
+    add("loop_stalled", "Whether a 虚拟临床研究 worker loop is still running past its lease (OPEN_SCIENCE_VCR_LEASE_MS).", "gauge",
       loops.map(([loop, state]) => ({ labels: { loop }, value: state.stalled ? 1 : 0 })));
   }
   return families;

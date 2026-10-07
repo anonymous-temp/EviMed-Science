@@ -10,7 +10,7 @@
  * unknown number on Thursday, and nothing could say that the second delivery had
  * changed under the analysis. This module is the contract of the thing that
  * remembers: a small, version-bound record of the meaning of the data, in the
- * shape the 虚拟临研 field map already proved (a column, its role, unit, coding,
+ * shape the 虚拟临床研究 field map already proved (a column, its role, unit, coding,
  * missing reason, time kind and value source), generalised to ordinary projects.
  *
  * What the asset holds, and what it never holds:
@@ -37,7 +37,7 @@
  * - **The last check's findings**, as named outcomes with counts and row numbers
  *   — never values and never keys.
  *
- * Provenance vocabulary: a variable's *value source* is the 虚拟临研 one
+ * Provenance vocabulary: a variable's *value source* is the 虚拟临床研究 one
  * (`VCR_COLUMN_SOURCES`: observed / extracted / calculated / imputed, the four
  * a column of a real person's table may carry), reused rather than restated, and
  * the missing reasons and time kinds are the same lists. The three bases above
@@ -83,7 +83,7 @@ const BASIS_RANK = Object.freeze({ model_inferred: 1, dictionary_stated: 2, rese
 export const SEMANTIC_VIAS = frozen(['conversation', 'page'])
 
 /**
- * A variable's value source is the 虚拟临研 column-source vocabulary, not a new
+ * A variable's value source is the 虚拟临床研究 column-source vocabulary, not a new
  * one: how the values of the column came to be (`observed`, `extracted`,
  * `calculated`, `imputed`).
  */
@@ -143,7 +143,7 @@ export const DATA_DRIFT_BOUNDS = Object.freeze({
   scaleRatio: 2,
   /** The share of missing values moved by more than this (absolute). */
   missingRateDelta: 0.1,
-  /** A numeric summary or a vocabulary is recorded only from at least this many values (the 虚拟临研 small-cell floor). */
+  /** A numeric summary or a vocabulary is recorded only from at least this many values (the 虚拟临床研究 small-cell floor). */
   minCell: VCR_MIN_CELL_SIZE,
   /** A column's observed values are offered as a code list only up to this many distinct values. */
   vocabularyMax: 30,

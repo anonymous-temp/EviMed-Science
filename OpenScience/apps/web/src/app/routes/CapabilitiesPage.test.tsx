@@ -272,6 +272,19 @@ describe("CapabilitiesPage", () => {
     expect(screen.queryByText(/循证传播/)).not.toBeInTheDocument();
   });
 
+  it("finds a tool by 虚拟临研, the old name of 虚拟临床研究, and never prints the old name", async () => {
+    mocks.listWebResearchAgents.mockResolvedValue([
+      ...agents,
+      { ...agents[0], id: "custom-sim-tool", title: "样本量估算", category: "临床证据", description: "在虚拟临床研究里估算样本量和功效。", starterPrompts: ["估算一个两组试验的样本量。"] },
+    ]);
+    renderPage();
+    await screen.findByRole("button", { name: /药品安全性分析/ });
+    await userEvent.type(screen.getByRole("searchbox", { name: "搜索工具" }), "虚拟临研");
+    expect(await screen.findByRole("button", { name: /样本量估算/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /药品安全性分析/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/虚拟临研/)).not.toBeInTheDocument();
+  });
+
   // The drawer with its own question box is gone: a card opens the conversation
   // the reader was going to type in anyway, with that tool on.
   it("a card opens a new conversation carrying the tool, and asks nothing here", async () => {

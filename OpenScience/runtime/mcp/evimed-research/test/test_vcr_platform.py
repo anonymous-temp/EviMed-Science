@@ -1,4 +1,4 @@
-"""「虚拟临研」's six runtime tools, against a scripted gateway, and through the
+"""「虚拟临床研究」's six runtime tools, against a scripted gateway, and through the
 server's own `call_tool` -- the path a run takes (a module test that only calls
 the module proves the module, not the tool)."""
 
@@ -305,7 +305,7 @@ class VcrReadWriteTests(_GatewayCase):
         self.assertIn("证据检索未接入。", result["warnings"])
 
     def test_the_gateway_s_own_codes_reach_the_run_and_nothing_else_does(self):
-        _Gateway.answers["read"] = (429, {"error": "Too many 虚拟临研 calls in a minute.", "code": "vcr_gateway_rate_limited"})
+        _Gateway.answers["read"] = (429, {"error": "Too many 虚拟临床研究 calls in a minute.", "code": "vcr_gateway_rate_limited"})
         result = self.server.call_tool("vcr_read", {"what": "study"})
         self.assertEqual(result["error"]["code"], "vcr_gateway_rate_limited")
         self.assertTrue(result["error"]["retryable"])
@@ -317,7 +317,7 @@ class VcrReadWriteTests(_GatewayCase):
 
     def test_a_credential_refusal_is_not_the_run_getting_a_field_wrong(self):
         # `vcr_gateway_token_invalid` ends in `_invalid` like a malformed field does; the run cannot fix it by changing the call.
-        _Gateway.answers["read"] = (401, {"error": "虚拟临研 gateway authentication failed.", "code": "vcr_gateway_token_invalid"})
+        _Gateway.answers["read"] = (401, {"error": "虚拟临床研究 gateway authentication failed.", "code": "vcr_gateway_token_invalid"})
         result = self.server.call_tool("vcr_read", {"what": "study"})
         self.assertEqual(result["error"]["code"], "vcr_gateway_token_invalid")
         self.assertNotEqual(result["error"]["stopReason"], "invalid_input")
@@ -329,8 +329,8 @@ class VcrReadWriteTests(_GatewayCase):
         self.assertEqual(wrong["error"]["stopReason"], "invalid_input")
 
     def test_outside_a_study_a_read_or_write_is_a_warning_that_names_why(self):
-        _Gateway.answers["read"] = (404, {"error": "This conversation is not in a 虚拟临研 study.", "code": "vcr_no_study"})
-        _Gateway.answers["write"] = (404, {"error": "This conversation is not in a 虚拟临研 study.", "code": "vcr_no_study"})
+        _Gateway.answers["read"] = (404, {"error": "This conversation is not in a 虚拟临床研究 study.", "code": "vcr_no_study"})
+        _Gateway.answers["write"] = (404, {"error": "This conversation is not in a 虚拟临床研究 study.", "code": "vcr_no_study"})
         read = self.server.call_tool("vcr_read", {"what": "assumptions"})
         self.assertEqual(read["status"], "warning")
         self.assertEqual(read["data"]["code"], "vcr_no_study")
@@ -575,7 +575,7 @@ class CurveDigitizeTests(_GatewayCase):
         _Gateway.answers["digitize"] = (503, {"error": "off", "code": "vcr_disabled"})
         result = self.call()
         self.assertEqual(result["status"], "warning")
-        self.assertIn("no 虚拟临研 study", result["summary"])
+        self.assertIn("no 虚拟临床研究 study", result["summary"])
 
 
 class EvidencePoolTests(_GatewayCase):

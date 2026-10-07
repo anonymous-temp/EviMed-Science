@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""「虚拟临研」's study data, deterministic compute and trial registry, through
+"""「虚拟临床研究」's study data, deterministic compute and trial registry, through
 the server's gateway (build contract 2026-09-28 §3.2).
 
-Six tools a 虚拟临研 capability's run uses; none is ever forced into a turn.
+Six tools a 虚拟临床研究 capability's run uses; none is ever forced into a turn.
 
 - ``vcr_read`` reads the study in the shapes its pages show: the definition,
   the eligibility criteria, the assumption cards, the population, patient sets,
@@ -152,7 +152,7 @@ def tool_definitions():
         {
             "name": "vcr_read",
             "description": (
-                "Read this 虚拟临研 study: its definition and estimand, structured eligibility criteria, assumption "
+                "Read this 虚拟临床研究 study: its definition and estimand, structured eligibility criteria, assumption "
                 "cards with their sources, verified evidence, population and patient sets, comparator designs, trial "
                 "scenarios, saved results, the report model, the model and method library, and queued jobs. "
                 "Aggregates and structure only -- never a patient-level row, and never a cell speaking for fewer than "
@@ -194,7 +194,7 @@ def tool_definitions():
         {
             "name": "vcr_write",
             "description": (
-                "Write this 虚拟临研 study's definitions and designs: the research definition, a protocol version and "
+                "Write this 虚拟临床研究 study's definitions and designs: the research definition, a protocol version and "
                 "its structured eligibility criteria, assumption cards and their evidence items, precedents, population, "
                 "patient-set, comparator and trial designs, a design grid, a decision record, a fitted literature model, "
                 "a model's ICH M15 assessment record, patient facts, sites and follow-up, or the report text. A disease pack: data {use: <catalogue id>} binds one, "
@@ -228,7 +228,7 @@ def tool_definitions():
         {
             "name": "vcr_simulate",
             "description": (
-                "Queue a deterministic computation on the 虚拟临研 engine and read where it got to. start returns a "
+                "Queue a deterministic computation on the 虚拟临床研究 engine and read where it got to. start returns a "
                 "jobId; status reports state, progress and the saved result; cancel stops it and keeps the completed "
                 "batches. Every number in the answer is the engine's -- never compute one yourself. The scenario is the "
                 "frozen setting of one method (kind). The engine reads only the keys its method names: a key it does not "
@@ -392,7 +392,7 @@ def tool_definitions():
             "name": "evidence_pool",
             "description": (
                 "Pool this study's verified extractions of one parameter into an assumption distribution on the "
-                "虚拟临研 engine (DL / REML / HKSJ random effects or a fixed effect, with a prediction interval). Name "
+                "虚拟临床研究 engine (DL / REML / HKSJ random effects or a fixed effect, with a prediction interval). Name "
                 "the parameter and the endpoint definition it is measured under -- the values pooled are the ones the "
                 "study already holds, checked against their source, never numbers you bring. start returns a jobId "
                 "(or says why nothing was started: no verified evidence, no such parameter) and lists every study it "
@@ -421,7 +421,7 @@ def _gateway():
     if not base:
         raise VcrPlatformError(
             "vcr_disabled",
-            "虚拟临研 is not available in this conversation: the deployment has it switched off or has not opened it "
+            "虚拟临床研究 is not available in this conversation: the deployment has it switched off or has not opened it "
             "to this account. Go on without the platform's study data.",
         )
     try:
@@ -477,7 +477,7 @@ def _post(operation: str, payload: dict, timeout: int = TIMEOUT_SECONDS) -> dict
         if not isinstance(code, str) or not GATEWAY_CODE.match(code):
             code = "vcr_upstream_error"
         if not isinstance(message, str) or not message.strip() or len(message) > 400:
-            message = "The 虚拟临研 gateway returned HTTP %d." % error.code
+            message = "The 虚拟临床研究 gateway returned HTTP %d." % error.code
         raise VcrPlatformError(
             code,
             message,
@@ -486,16 +486,16 @@ def _post(operation: str, payload: dict, timeout: int = TIMEOUT_SECONDS) -> dict
             issues=issues,
         ) from error
     except (urllib.error.URLError, TimeoutError, OSError) as error:
-        raise VcrPlatformError("vcr_gateway_unreachable", "The 虚拟临研 gateway is unreachable.", retryable=True) from error
+        raise VcrPlatformError("vcr_gateway_unreachable", "The 虚拟临床研究 gateway is unreachable.", retryable=True) from error
     if len(body) > MAX_RESPONSE_BYTES:
-        raise VcrPlatformError("vcr_response_too_large", "The 虚拟临研 answer exceeded the client limit.")
+        raise VcrPlatformError("vcr_response_too_large", "The 虚拟临床研究 answer exceeded the client limit.")
     try:
         parsed = json.loads(body.decode("utf-8"))
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
-        raise VcrPlatformError("vcr_response_invalid", "The 虚拟临研 gateway returned a non-JSON answer.") from error
+        raise VcrPlatformError("vcr_response_invalid", "The 虚拟临床研究 gateway returned a non-JSON answer.") from error
     data = parsed.get("data") if isinstance(parsed, dict) else None
     if not isinstance(data, dict):
-        raise VcrPlatformError("vcr_response_invalid", "The 虚拟临研 gateway returned no data.")
+        raise VcrPlatformError("vcr_response_invalid", "The 虚拟临床研究 gateway returned no data.")
     return data
 
 
@@ -505,7 +505,7 @@ def _module_absent(error: VcrPlatformError, what: str, verb: str) -> dict:
     run reads and moves on from, never a failure it has to explain."""
     return {
         "status": "warning",
-        "summary": "There is no 虚拟临研 study in this conversation, so there is no %s to %s." % (what, verb),
+        "summary": "There is no 虚拟临床研究 study in this conversation, so there is no %s to %s." % (what, verb),
         "data": {"what": what, "code": error.code},
         "warnings": [str(error)],
         "next_actions": ["Go on without the platform's study data, or work in the study's own conversation."],
@@ -541,7 +541,7 @@ def read(arguments: dict) -> dict:
         next_actions.append("Do the steps that do not need it, and say in the report what is missing and why.")
     return {
         "status": "warning" if warnings else "success",
-        "summary": "Read %s of this 虚拟临研 study." % what,
+        "summary": "Read %s of this 虚拟临床研究 study." % what,
         "data": data,
         "warnings": warnings,
         "next_actions": next_actions,

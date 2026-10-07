@@ -7,7 +7,7 @@
  * the ones the owner names.
  *
  * Written for the 2026-10-07 page review (plan §3.2 item 7): about ten such rows
- * were written from 虚拟临研 conversations and recalled into later ones as if they
+ * were written from 虚拟临床研究 conversations and recalled into later ones as if they
  * were known. The extraction instructions now keep new ones out
  * (`memoryIntelligence.mjs`); this is the review of the ones already stored.
  * They are the researcher's data, so nothing is deleted on its own judgement:
