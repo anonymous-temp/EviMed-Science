@@ -723,11 +723,16 @@ export const VCR_HUMAN_STOP_LABELS_ZH = Object.freeze({
   contact_patient: '联系真实患者之前', compute_over_budget: '计算超出研究预算', clinical_safety: '出现临床安全问题',
 })
 
-/** The only six notifications this module sends: the five of §10.4 and, since the evidence flywheel (F24, 2026-10-06), new evidence for a card. */
-export const VCR_NOTIFICATION_KINDS = frozen(['package_ready', 'not_estimable', 'budget_confirm', 'new_candidates', 'accrual_off_forecast', 'new_evidence'])
+/**
+ * The only seven notifications this module sends: the five of §10.4, new evidence for a card (the evidence flywheel, F24, 2026-10-06)
+ * and, since R10 (2026-10-07), the end of a computation the researcher asked for — in the conversation or with 「让 AI 做」. The
+ * programme's own recomputation after a changed assumption sends none.
+ */
+export const VCR_NOTIFICATION_KINDS = frozen(['package_ready', 'not_estimable', 'budget_confirm', 'new_candidates', 'accrual_off_forecast', 'new_evidence', 'job_finished'])
 export const VCR_NOTIFICATION_LABELS_ZH = Object.freeze({
   package_ready: '研究包完成', not_estimable: '结论为不可估计或假设冲突', budget_confirm: '计算预算需要确认',
   new_candidates: '有新的匹配候选', accrual_off_forecast: '实际入组偏离预测', new_evidence: '假设卡有了新证据',
+  job_finished: '你要的计算算完了',
 })
 
 /**

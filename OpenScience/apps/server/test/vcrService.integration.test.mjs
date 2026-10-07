@@ -151,7 +151,7 @@ test("every one of the seven tabs answers the page shape, and says plainly what 
   assert.equal(population.stale, null);
 
   const comparator = await service.tab({ id: study.userId }, study.id, "comparator");
-  assert.equal(comparator.routes.length, 5);
+  assert.equal(comparator.routes.length, 4, "the model comparator is not offered: nothing here computes it");
   assert.deepEqual(comparator.routes.filter((route) => route.state === "not_applicable").map((route) => route.route),
     ["prognostic_adjustment", "external_control"], "the routes the data tier cannot reach say so");
   assert.equal(comparator.dimensions.length, 10);

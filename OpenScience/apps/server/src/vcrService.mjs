@@ -404,9 +404,15 @@ export function vcrRouteOptions(dataTier) {
   return VCR_COMPARATOR_ROUTES.map((route) => {
     const minimum = /** @type {Record<string, string>} */ (VCR_ROUTE_MIN_TIER)[route];
     const needed = VCR_DATA_TIERS.indexOf(minimum);
-    return { route, minimumTier: minimum, available: order >= 0 && needed >= 0 && order >= needed };
+    // A route this version has no engine method for is not offered at any tier: it is listed as unsupported (`supported: false`),
+    // and a comparator written for it is refused by name rather than recorded as a verdict about a route nobody could take.
+    const supported = !VCR_UNSUPPORTED_COMPARATOR_ROUTES.includes(route);
+    return { route, minimumTier: minimum, supported, available: supported && order >= 0 && needed >= 0 && order >= needed };
   });
 }
+
+/** The comparator routes this version cannot compute: the model-prediction comparator (the engine's simulators give set values, not predictions for a population). */
+export const VCR_UNSUPPORTED_COMPARATOR_ROUTES = Object.freeze(["model_comparator"]);
 
 /**
  * The accounts the matching page names: whoever countersigned the assessment on
@@ -452,7 +458,7 @@ export class VcrService {
      * (`matching.tab`, `evidence.tab`) answer for the runtime and the deliverable,
      * not for a page.
      */
-    this.packages = { access, dataPlane, evidence, matching, jobs, seal, matchStore, evidenceStore, documents, knowledge, frontierEvents: null, platformPacks: null, predictions: null, engineProbe: null };
+    this.packages = { access, dataPlane, evidence, matching, jobs, seal, matchStore, evidenceStore, documents, knowledge, frontierEvents: null, platformPacks: null, predictions: null, engineProbe: null, records: null };
     this.counters = { studiesCreated: 0, reads: 0, writes: 0, writeIssues: 0, notFound: 0, tabs: 0 };
     /** @type {readonly string[] | null} set by `seedVcrCatalogue` at composition */
     this.engineMismatch = null;
@@ -467,6 +473,31 @@ export class VcrService {
   }
 
   ready() { return this.store.ready(); }
+
+  /**
+   * What a study's conversation is checked against (`vcrReplyCheck.mjs`): every result the engine wrote for it — superseded ones too, a
+   * reply may restate a number that has since been recomputed and was true when it was said — and what the study was set to
+   * (the assumption cards and the objects' own settings), and what each job ran. The study is the one whose conversation this project is.
+   * @param {{ userId: string, projectId: string }} identity
+   * @returns {Promise<{ studyId: string, results: any[], inputs: any[], executions: any[] } | null>}
+   */
+  async replyCheckFacts({ userId, projectId }) {
+    const study = await this.store.studyByControlProject(String(userId), String(projectId));
+    if (!study) return null;
+    const [results, assumptions, scenarios, populations, patientSets, comparators, grid, executions] = await Promise.all([
+      this.store.allResults(study.id), this.store.assumptions(study.id), this.store.trialScenarios(study.id, 100), this.store.populations(study.id, 50),
+      this.store.patientSets(study.id, 50), this.store.comparatorDesigns(study.id, 50), this.store.latestDesignGrid(study.id), this.#executions(study.id),
+    ]);
+    return {
+      studyId: study.id, results,
+      inputs: [
+        assumptions.map((card) => ({ point: card.pointValue, distribution: card.distribution, sensitivity: card.sensitivity, pooling: card.pooling })),
+        scenarios.map((row) => row.configuration), populations.map((row) => row.definition), patientSets.map((row) => row.scenario),
+        comparators.map((row) => row.configuration), grid ? [grid.dimensions, grid.truthScenarios] : [],
+      ],
+      executions: [...executions.values()],
+    };
+  }
 
   /** @param {{ id?: string }} user */
   allows(user) { return vcrAudienceAllows(this.config, user); }
@@ -1486,6 +1517,8 @@ export async function vcrReadiness({ config, vcr, database }) {
   return {
     enabled: true, status: "ok", audience: config.vcrAudience,
     engine,
+    // The one word a page reads: the engine is composed and not known to be down.
+    engineAvailable: composed && engine !== "not_answering",
     ...(engine === "not_answering" && reading?.checkedAt ? { engineCheckedAt: reading.checkedAt } : {}),
     ...(warnings.length ? { warning: warnings[0], warnings } : {}),
   };

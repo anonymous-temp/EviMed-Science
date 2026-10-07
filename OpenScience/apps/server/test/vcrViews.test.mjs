@@ -12,7 +12,7 @@ import test from "node:test";
 import { VCR_ENGINE_METHODS, VCR_JOB_KINDS, VCR_PROGNOSTIC_QUALIFICATION_LABEL_ZH, VCR_VALUE_SOURCES } from "@evimed/domain";
 
 import {
-  JOB_KIND_LABELS, attentionOf, budgetView, conclusionOf, designsSentence, failedExportsOf, jobView, notEstimableDesign, numberString, presentDesigns, presentModelCard,
+  JOB_KIND_LABELS, attentionOf, budgetView, conclusionOf, designsSentence, failedExportsOf, jobView, notEstimableDesign, numberString, presentDesigns, presentModelCard, presentModels,
   presentExport, presentPrecedent, presentStudy, presentSummary, useCeilingOf, valueString, vcrCurrentNodes, vcrDependencies, vcrReviewIsCurrent,
 } from "../src/vcrViews.mjs";
 import { frozenVersion, modelInputs, reportModelFor, resultRows, study as modelStudy } from "./vcrModelDocumentFixtures.mjs";
@@ -176,7 +176,9 @@ test("a value carries the run it came from, so a click can open its seed and err
     execution: { method: "design.simulate", methodVersion: "1.0.0", seed: 5, replicates: 16000, cpuSeconds: 12.4, scenarioHash: "a".repeat(64) },
   });
   assert.equal(value.detail?.kind, "run");
-  assert.deepEqual(value.detail?.fields?.map((field) => field.label), ["方法", "种子", "重复次数", "蒙特卡洛标准误", "计算用时", "情景哈希"]);
+  assert.deepEqual(value.detail?.fields?.map((field) => field.label), ["方法", "种子", "重复次数", "蒙特卡洛标准误", "计算用时"]);
+  assert.equal(value.detail?.fields?.[0]?.value, "方案的模拟运行", "the method in words, never its id or version");
+  assert.doesNotMatch(JSON.stringify(value.detail?.fields), /design\.simulate|1\.0\.0|aaaaaaaa/, "no method id, version or hash");
   assert.deepEqual(value.detail?.ref, { kind: "result", id: "res_1", tab: "trial" });
   assert.equal(value.review, "ai_set");
 });
@@ -289,6 +291,206 @@ test("a design's measures are percentages, its sample size is a setting, and its
   assert.equal(b.measures.sample_size.value, 200);
   assert.equal(b.measures.sample_size.source, "assumed", "a design's size is what somebody set, not something measured");
   assert.deepEqual(designs.map((design) => design.code), ["A", "B", "C"]);
+});
+
+/** Three designs of one study as the conversation leaves them, and the results each design's jobs filed under it. */
+function conversationTrialBundle({ staged = false } = {}) {
+  const at = (/** @type {number} */ minute) => `2026-10-07T11:${String(10 + minute).padStart(2, "0")}:00.000Z`;
+  const design = (/** @type {string} */ id, /** @type {number} */ version, /** @type {string} */ label, /** @type {string} */ kind, /** @type {Record<string, any>} */ plan) =>
+    ({ id, version, label, design: kind, endpointType: "time_to_event", configuration: { design: plan }, assumptionIds: [], resultId: `res_${id}_sim` });
+  const analytic = (/** @type {string} */ id, /** @type {number} */ events, /** @type {number} */ total, /** @type {number} */ minute, /** @type {any[]} */ extra = []) => ({
+    id: `res_${id}_ana`, version: 1, kind: "trial_scenario", subjectId: id, conclusion: "estimable", reviewState: "ai_set", counts: {}, diagnostics: {}, executionId: `ex_${id}_ana`,
+    measures: [{ name: "required_events", value: events, source: "calculated" }, { name: "required_total", value: total, source: "calculated" }, ...extra], createdAt: at(minute) });
+  const simulated = (/** @type {string} */ id, /** @type {number} */ power, /** @type {number} */ minute, /** @type {Record<string, any>} */ check = {}) => ({
+    id: `res_${id}_sim`, version: 2, kind: "trial_scenario", subjectId: id, conclusion: "estimable", reviewState: "ai_set", counts: {}, executionId: `ex_${id}_sim`,
+    diagnostics: { analyticCheck: { name: "power", value: power - 0.003, simulated: power, difference: 0.003, mcse: 0.004, withinTolerance: true, ...check } },
+    measures: [{ name: "power", value: power, simulated: true, mcse: 0.004, source: "synthetic" }], createdAt: at(minute + 5) });
+  const scenarios = [design("scn_a", 1, "A 2:1 固定设计", "two_arm_fixed", { nTreat: 120, nControl: 60 }), design("scn_b", 2, "B 1:1 固定设计", "two_arm_fixed", { nTreat: 90, nControl: 90 }),
+    design("scn_c", 3, "C 1:1 成组序贯", "group_sequential", { nTreat: 90, nControl: 90 })];
+  const boundaries = [{ name: "boundary_1", value: 2.963, source: "calculated" }, { name: "boundary_2", value: 1.969, source: "calculated" }];
+  const rows = [analytic("scn_a", 950, 13764, 1), simulated("scn_a", 0.898, 1), analytic("scn_b", 845, 11799, 2), simulated("scn_b", 0.915, 2),
+    analytic("scn_c", 847, 11840, 3, boundaries), simulated("scn_c", 0.905, 3)];
+  // What the old conversation path left: one result per job, newest first, every one of them a design's own once it has a subject.
+  const allResults = staged
+    ? scenarios.map((scenarioRow, index) => ({ ...rows[index * 2 + 1], measures: [...rows[index * 2].measures, ...rows[index * 2 + 1].measures],
+      diagnostics: { ...rows[index * 2 + 1].diagnostics, stageResults: {
+        analytic: { stage: "analytic", jobId: `job_${scenarioRow.id}_a`, measures: rows[index * 2].measures, diagnostics: {} },
+        simulation: { stage: "simulation", jobId: `job_${scenarioRow.id}_s`, measures: rows[index * 2 + 1].measures, diagnostics: rows[index * 2 + 1].diagnostics } } } }))
+    : [...rows].reverse();
+  const executions = new Map(rows.map((row) => [row.executionId, { id: row.executionId, jobId: `job_${row.executionId.slice(3)}`, method: row.id.endsWith("_ana") ? "design.analytic" : "design.simulate",
+    seed: 7, replicates: row.id.endsWith("_ana") ? null : 5000, cpuSeconds: 30, scenarioHash: "f".repeat(64) }]));
+  if (staged) for (const row of allResults) executions.set(row.executionId, { ...executions.get(row.executionId), jobId: `job_${row.subjectId}_s` });
+  return { ...emptyBundle(), scenarios, results: allResults.filter((row) => !row.supersededBy).slice(0, 3), allResults, executions };
+}
+
+test("a design's numbers are its analytic size and its simulated power, merged from the results filed under it — the three designs of a conversation are three rows with numbers", () => {
+  for (const staged of [false, true]) {
+    const tab = presentTrialTab(conversationTrialBundle({ staged }));
+    const [a, b, c] = tab.designs;
+    assert.deepEqual(tab.designs.map((design) => design.code), ["A", "B", "C"], `staged ${staged}`);
+    assert.equal(a.measures.required_events.value, 950, "the closed form's events");
+    assert.equal(a.measures.sample_size.value, 13764, "the closed form's patients replace the declared size");
+    assert.equal(a.measures.sample_size.source, "calculated");
+    assert.equal(b.measures.power.value, 91.5, "the simulated power is a percentage");
+    assert.equal(b.measures.power.mcse, 0.4, "with its Monte-Carlo error");
+    assert.equal(b.measures.power.source, "synthetic");
+    assert.deepEqual(tab.designs.map((design) => design.method), ["解析 + 模拟", "解析 + 模拟", "解析 + 模拟"]);
+    assert.equal(a.replicates, 5000);
+    assert.equal(b.crossCheck.agrees, true);
+    assert.equal(b.crossCheck.differencePoints, 0.3);
+    assert.match(b.crossCheck.text, /解析功效 91.2%，与模拟相差 0.3 个百分点，在容许范围内/);
+    assert.equal(c.note, "期中界值 z = 2.96", "a group-sequential design says where it stops at the first look");
+    assert.equal(a.note, null);
+    assert.deepEqual(tab.columns.map((column) => column.key).slice(0, 2), ["required_events", "sample_size"]);
+    assert.equal(tab.headline, "方案 A 需要 950 例事件、13,764 名患者；方案 B 需要 845 例事件、11,799 名患者；方案 C 需要 847 例事件、11,840 名患者；已模拟 3 个方案，功效 90%～92%。");
+    // nothing of the run's own record on the page: no method id, no hash, no result id
+    assert.doesNotMatch(JSON.stringify(tab.runRecord), /design\.|f{12}|res_/);
+    assert.match(tab.runRecord[0].title, /方案 A：方案的模拟运行，5,000 次重复/);
+  }
+});
+
+test("a design that has been simulated and not computed in closed form says so, and one that has neither says nothing", () => {
+  const bundle = conversationTrialBundle();
+  const onlySimulated = { ...bundle, allResults: bundle.allResults.filter((row) => !row.id.endsWith("_ana") || row.subjectId !== "scn_a") };
+  const [a, b] = presentTrialTab(onlySimulated).designs;
+  assert.equal(a.method, "模拟");
+  assert.equal(a.measures.required_events, undefined);
+  assert.equal(b.method, "解析 + 模拟");
+  const none = presentTrialTab({ ...bundle, allResults: [], results: [] });
+  assert.ok(none.designs.every((design) => design.method === null && design.replicates === null && design.crossCheck === null));
+  assert.equal(none.headline, null);
+});
+
+test("a registered prediction is shown as the numbers it predicted, never as the ids that make it provable", () => {
+  const now = NOW;
+  const trial = presentTrialTab({ ...conversationTrialBundle(), now, forecasts: [
+    { id: "fct_1", kind: "trial", version: 1, payloadHash: "9f".repeat(32), createdAt: "2026-10-07T11:20:00.000Z", comparedAt: null,
+      prediction: { scenarioId: "scn_b", resultId: "res_scn_b_sim", replicates: 5000, measures: { power: { value: 0.915, mcse: 0.004 }, type_one_error: { value: 0.024, mcse: 0.002 } } }, actual: null },
+    { id: "fct_2", kind: "accrual", version: 1, payloadHash: "ab".repeat(32), createdAt: "2026-10-07T11:21:00.000Z", comparedAt: null,
+      prediction: { resultId: "res_x", measure: "last_patient_in_months", median: 14.2, measures: [{ name: "last_patient_in_months", value: 14.2, unit: "months" }] }, actual: null },
+  ] });
+  const [design, accrual] = trial.forecasts;
+  assert.equal(design.label, "方案预测");
+  assert.deepEqual(design.lines.map((line) => [line.label, line.predicted]), [["功效", "91.5% ±0.4%"], ["I 类错误", "2.4% ±0.2%"]]);
+  assert.equal(accrual.label, "入组预测");
+  assert.equal(accrual.lines[0].predicted, "14.2 个月");
+  assert.equal(design.version, 1);
+  assert.ok(design.frozenAt);
+  const shown = JSON.stringify(trial.forecasts);
+  assert.doesNotMatch(shown, /res_|scn_|9f9f|hash|resultId|scenarioId/, "no result id, no scenario id, no hash");
+});
+
+/** The profile blocks the engine writes beside a generated table (R10 / package ENG): a scenario population, and an empirical one with small cells withheld. */
+const scenarioProfile = [
+  { variable: "age", label: "年龄", kind: "continuous", declared: { family: "normal", params: { mean: 63, sd: 9 }, constraints: [{ kind: "bounds", min: 18, max: 95 }, { kind: "rule", name: "adult", rule: {} }] },
+    n: 1000, missing: 0, mean: 63.01, sd: 8.935, median: 63.05, q1: 56.97, q3: 68.57, min: 35.92, max: 91.06,
+    histogram: { breaks: [35.92, 43.79, 51.67, 59.55, 67.43, 75.31, 83.18, 91.06], counts: [11, 96, 233, 358, 220, 68, 14] } },
+  { variable: "female", label: "女性", kind: "binary", declared: { family: "bernoulli", params: { prob: 0.45 }, constraints: [] }, n: 1000, missing: 0,
+    levels: [{ level: "0", n: 559, p: 0.559 }, { level: "1", n: 441, p: 0.441 }] },
+  { variable: "stage", label: null, kind: "categorical", declared: { family: "categorical", params: { probs: [0.5, 0.3, 0.2] }, constraints: [] }, n: 1000, missing: 0,
+    levels: [{ level: "1", n: 494, p: 0.494 }, { level: "2", n: 324, p: 0.324 }, { level: "3", n: 182, p: 0.182 }] },
+  { variable: "bmi", label: null, kind: "continuous", declared: { family: "lognormal", params: { meanlog: 3.3, sdlog: 0.15 }, constraints: [] }, n: 1000, missing: 94,
+    mean: 27.23, sd: 4.158, median: 26.84, q1: 24.26, q3: 29.88, min: 17.45, max: 40.88, histogram: { breaks: [17.45, 20.8, 24.15, 27.49, 30.84, 34.19, 37.53, 40.88], counts: [40, 180, 280, 225, 120, 45, 16] } },
+];
+const empiricalProfile = [
+  { variable: "age", label: null, kind: "continuous", declared: null, n: 320, missing: 0, mean: 59.75, sd: 9.599, median: 60.36, q1: 53.24, q3: 66.4, min: 30.24, max: 87.71,
+    histogram: { breaks: [30.24, 38.45, 46.66, 54.87, 63.08, 71.29, 79.5, 87.71], counts: [null, 28, 60, 108, 88, 25, null] }, suppressed: ["histogram"] },
+  { variable: "grp", label: null, kind: "categorical", declared: null, n: 320, missing: 0, suppressed: ["levels"],
+    levels: [{ level: "a", n: 148, p: 0.4625 }, { level: "b", n: 109, p: 0.3406 }, { level: "c", n: 49, p: 0.1531 }, { level: "d", n: null, p: null, suppressed: true }, { level: "other", n: null, p: null, suppressed: true }] },
+];
+const populationBundle = (/** @type {Record<string, any>} */ population, /** @type {Record<string, any> | null} */ resultRow) => ({ ...emptyBundle(),
+  populations: [{ id: "pop_1", version: 1, kind: "scenario", name: "情景人群", counts: {}, waterfall: [], profile: {}, quality: {}, allowedUses: ["design", "feasibility"], resultId: "res_pop", reviewState: "ai_set", ...population }],
+  results: resultRow ? [resultRow] : [], allResults: resultRow ? [resultRow] : [] });
+const populationResult = (/** @type {Record<string, any>} */ diagnostics) => ({ id: "res_pop", version: 1, kind: "population", conclusion: "estimable", reviewState: "ai_set", executionId: null,
+  counts: { realPatients: 0, generatedRecords: 1000 }, measures: [], diagnostics });
+
+test("a generated population's tab says what the study set and what came out, variable by variable, from the profile the engine wrote", () => {
+  const tab = presentPopulationTab(populationBundle({}, populationResult({ profile: scenarioProfile, constraintViolations: [{ name: "adult", violations: 0 }, { name: "bounded", violations: 3 }] })));
+  assert.equal(tab.profileKind, "generated");
+  assert.equal(tab.profileNote, null);
+  assert.equal(tab.profileMissing, false);
+  assert.equal(tab.method, "按设定的分布和相关性抽样");
+  assert.deepEqual(tab.allowedUses, [{ key: "design", label: "设计" }, { key: "feasibility", label: "可行性" }]);
+  assert.deepEqual(tab.constraints, [{ label: "adult", violations: 0 }, { label: "bounded", violations: 3 }]);
+  const [age, female, stage, bmi] = tab.profile;
+  assert.equal(age.label, "年龄");
+  assert.equal(age.declaredText, "正态分布，均数 63、标准差 9；限定在 18–95；满足「adult」");
+  assert.equal(age.generatedText, "均数 63.01，标准差 8.935，中位 63.05（四分位 56.97–68.57），范围 35.92–91.06");
+  assert.deepEqual(age.histogram.counts, [11, 96, 233, 358, 220, 68, 14], "the engine's seven bins, passed through");
+  assert.equal(age.histogram.breaks.length, 8);
+  assert.equal(female.declaredText, "二分类，取 1 的概率 45%");
+  assert.equal(female.generatedText, "女性 44.1%");
+  assert.deepEqual(female.levels.map((level) => [level.label, level.percent]), [["否", 55.9], ["是", 44.1]]);
+  assert.equal(stage.label, "stage", "a variable with no label is called by its name");
+  assert.equal(stage.declaredText, "多分类，各水平的概率 0.5、0.3、0.2");
+  assert.equal(stage.generatedText, "1 49.4%，2 32.4%，3 18.2%");
+  assert.equal(bmi.declaredText, "对数正态分布，对数均值 3.3、对数标准差 0.15");
+  assert.equal(bmi.missingText, "缺失 94 条（9.4%）");
+  assert.equal(tab.counts.generatedRecords, 1000);
+});
+
+test("a generated population's small cells stay withheld on the page, and one without a profile offers to be generated again — it computes nothing in the control plane", () => {
+  const empirical = presentPopulationTab(populationBundle({ kind: "empirical_synthetic", allowedUses: ["design"] }, populationResult({ profile: empiricalProfile })));
+  assert.equal(empirical.method, "按真实数据经验合成");
+  const [age, group] = empirical.profile;
+  assert.equal(age.declaredText, null, "an empirical table declares nothing");
+  assert.deepEqual(age.histogram.counts, [null, 28, 60, 108, 88, 25, null], "a hidden bin is still hidden");
+  assert.deepEqual(group.levels.filter((level) => level.suppressed).map((level) => [level.level, level.n, level.percent]), [["d", null, null], ["other", null, null]]);
+  assert.match(group.generatedText, /a 46.3%，b 34.1%，c 15.3%，其余小样本已隐藏/);
+  // a result from before the engine wrote a profile (the owner's population): one sentence, no rows, nothing worked out here
+  const before = presentPopulationTab(populationBundle({}, populationResult({ valueSource: "synthetic" })));
+  assert.deepEqual(before.profile, []);
+  assert.equal(before.profileMissing, true);
+  assert.match(String(before.profileNote), /点“重新生成”/);
+  assert.equal(before.profileKind, null);
+  // a population that has not been computed has nothing to apologise for
+  const waiting = presentPopulationTab(populationBundle({ resultId: null }, null));
+  assert.equal(waiting.profileMissing, false);
+  assert.equal(waiting.profileNote, null);
+  // a profile with an entry the page cannot read is no profile
+  const broken = presentPopulationTab(populationBundle({}, populationResult({ profile: [scenarioProfile[0], { variable: "x", kind: "made_up" }] })));
+  assert.equal(broken.profileMissing, true);
+});
+
+test("a cohort the engine built is read from its result: the waterfall, the three outcomes and the rules that limit it on their own", () => {
+  const steps = [{ rule: "I1", kept: 900, excluded: 100, indeterminate: 0 }, { rule: "I2", kept: 600, excluded: 100, indeterminate: 200 }, { rule: "E1", kept: 580, excluded: 20, indeterminate: 0 }];
+  const impact = [{ rule: "I1", failsAlone: 100, indeterminateAlone: 0 }, { rule: "I2", failsAlone: 150, indeterminateAlone: 260 }, { rule: "E1", failsAlone: 30, indeterminateAlone: 5 }];
+  const row = { ...populationResult({ waterfall: steps, criterionImpact: impact, startingRows: 1000 }),
+    measures: [{ name: "cohort_size", value: 580 }, { name: "cohort_size_strict", value: 580 }, { name: "cohort_size_lenient", value: 790 }] };
+  const bundle = { ...populationBundle({ kind: "real", allowedUses: [] }, row), criteria: [
+    { id: "c1", ordinal: 1, kind: "inclusion", criterionType: "diagnosis", sourceText: "确诊 NSCLC", sourceLocator: {}, reviewState: "ai_set" },
+    { id: "c2", ordinal: 2, kind: "inclusion", criterionType: "biomarker", sourceText: "EGFR 阳性", sourceLocator: {}, reviewState: "ai_set" },
+    { id: "c3", ordinal: 3, kind: "exclusion", criterionType: "comorbidity", sourceText: "无活动性脑转移", sourceLocator: {}, reviewState: "ai_set" }] };
+  const tab = presentPopulationTab(bundle);
+  assert.deepEqual(tab.attrition.map((step) => [step.code, step.remaining, step.unknown, step.removed]), [["I1", 900, 0, 100], ["I2", 600, 200, 100], ["E1", 580, 0, 20]]);
+  assert.deepEqual(tab.outcome, { eligible: 580, insufficient: 210, ineligible: 210 });
+  assert.deepEqual(tab.criteria.map((criterion) => [criterion.code, criterion.kept, criterion.excluded, criterion.unknown]), [["I1", 900, 100, 0], ["I2", 600, 100, 200], ["E1", 580, 20, 0]]);
+  assert.deepEqual(tab.blockers.map((blocker) => [blocker.code, blocker.text, blocker.quote]), [["I2", "无法判断 260", "EGFR 阳性"], ["I1", "排除 100", "确诊 NSCLC"], ["E1", "排除 30", "无活动性脑转移"]],
+    "ranked by what each rule does alone — I2 would drop 410 on its own — not by what is left for it after the rules before it");
+  assert.equal(tab.method, null, "a real cohort is not generated");
+  // criteria the check could not put to the data are not in the count, and the table says so beside them
+  const covered = presentPopulationTab({ ...bundle, populations: [{ ...bundle.populations[0], name: "按方案条件查覆盖",
+    profile: { coverage: { notEvaluated: [{ code: "E1", why: "要看有没有这类事件或诊断的记录，受试者级的列判断不了" }] } } }] });
+  assert.equal(covered.name, "按方案条件查覆盖");
+  assert.deepEqual(covered.criteria.map((criterion) => [criterion.code, criterion.notEvaluated]), [["I1", null], ["I2", null], ["E1", "要看有没有这类事件或诊断的记录，受试者级的列判断不了"]]);
+  assert.deepEqual(covered.profile, [], "a coverage cohort has no profile of its own rows");
+  assert.deepEqual(tab.allowedUses, []);
+});
+
+test("a comparator somebody wrote for the unsupported route is still shown as what it found; the library lists what this version does not do, as 暂不支持", () => {
+  const bundle = { ...emptyBundle(), comparators: [{ id: "cmp_m", version: 1, route: "model_comparator", conclusion: "not_estimable", gapList: [], resultId: null, reviewState: "ai_set" }] };
+  const routes = presentComparatorTab(bundle).routes.map((route) => [route.route, route.state]);
+  assert.ok(routes.some(([route, state]) => route === "model_comparator" && state === "not_estimable"));
+  const library = presentModels({ models: [], methods: [], usedBy: new Map(), engineAvailable: true, engineMismatch: null });
+  assert.deepEqual(library.unsupported.map((entry) => entry.label), ["模型预测比较器", "数字孪生与基线条件化预测模型", "机制模型（QSP、PBPK）", "非劣效设计", "适应性设计", "平台试验设计"]);
+  assert.ok(library.unsupported.every((entry) => entry.note === "暂不支持"));
+});
+
+test("the matching tab offers one direction, from the protocol to the patients, and a request for the other reads the same view", () => {
+  for (const direction of [undefined, "trial_to_patient", "patient_to_trial"]) {
+    const tab = presentMatchingTab(emptyBundle(), { direction });
+    assert.equal(tab.direction ?? "trial_to_patient", "trial_to_patient");
+  }
 });
 
 test("the sentence about the designs names a range and never a winner", () => {
@@ -433,7 +635,8 @@ test("a study with nothing in it gives every tab its empty state, and none of th
   const patients = presentPatientsTab(bundle);
   assert.deepEqual([patients.model, patients.trajectories, patients.example, patients.sensitivity], [null, null, null, null]);
   const comparator = presentComparatorTab(bundle);
-  assert.equal(comparator.routes.length, 5);
+  assert.equal(comparator.routes.length, 4, "the four routes the engine can compute: the model-prediction comparator is not one of the choices");
+  assert.ok(!comparator.routes.some((route) => route.route === "model_comparator"));
   assert.equal(comparator.dimensions.length, 10);
   assert.equal(comparator.gaps, null);
   const trial = presentTrialTab(bundle);
@@ -766,6 +969,19 @@ test("C2-4 a design's number is stale while the design is marked and its result 
   assert.equal(page.stale.queued, true);
 });
 
+test("C2-4 a stage that is carried over says so on each of its numbers: the closed form's are fresh while yesterday's simulated power stays yesterday's", () => {
+  const design = scenario("a", 1, "A", { resultId: "res_a2" });
+  const marked = { node: "trial_scenario:a@1", reason: "assumption_changed", markedAt: "2026-09-28T02:00:00.000Z", queuedJobId: "job_9" };
+  const merged = { ...result("a", [measure("required_events", 300), { ...measure("power", 0.5), simulated: true, mcse: 0.004, stale: true }]),
+    id: "res_a2", version: 2, createdAt: "2026-09-28T03:00:00.000Z",
+    diagnostics: { stageResults: {
+      analytic: { stage: "analytic", jobId: "job_a", stale: false, measures: [measure("required_events", 300)], diagnostics: {} },
+      simulation: { stage: "simulation", jobId: "job_s", stale: true, measures: [{ ...measure("power", 0.5), simulated: true, mcse: 0.004 }], diagnostics: {} } } } };
+  const measures = presentDesigns({ ...emptyBundle(), scenarios: [design], stale: [marked], results: [merged], allResults: [merged] }).designs[0].measures;
+  assert.equal(measures.required_events.stale, false, "what was just recomputed is fresh");
+  assert.equal(measures.power.stale, true, "the stage that made the simulated power has not been redone");
+});
+
 test("C2-4 a stage the recomputation did not run again is not left on the page: it is dropped and said", () => {
   const design = scenario("a", 1, "A", { resultId: "res_a" });
   const dropped = { ...result("a", [measure("power", 0.5)]), diagnostics: { notRerun: [{ stage: "assurance", measures: ["assurance"] }] } };
@@ -773,6 +989,17 @@ test("C2-4 a stage the recomputation did not run again is not left on the page: 
   assert.deepEqual(page.footnotes, ["方案 A：成功把握不再显示——效应假设卡现在没有预测分布，没有可以积分的先验，这一项没有重算。"]);
   const other = { ...dropped, diagnostics: { notRerun: [{ stage: "simulation", measures: ["power"] }] } };
   assert.match(presentTrialTab({ ...emptyBundle(), scenarios: [design], results: [other], allResults: [other] }).footnotes[0], /仿真没有重算/);
+});
+
+test("C2-4 an older result's assurance is not read back once the newest result dropped that stage", () => {
+  const design = scenario("a", 1, "A", { resultId: "res_a2" });
+  const older = { ...result("a", [{ name: "assurance", value: 0.8, source: "calculated" }]), id: "res_a1", subjectId: "a", createdAt: "2026-09-28T01:00:00.000Z" };
+  const newest = { ...result("a", [measure("power", 0.5)]), id: "res_a2", version: 2, subjectId: "a", createdAt: "2026-09-28T03:00:00.000Z",
+    diagnostics: { notRerun: [{ stage: "assurance", measures: ["assurance"] }],
+      stageResults: { simulation: { stage: "simulation", jobId: "job_s", stale: false, measures: [measure("power", 0.5)], diagnostics: {} } } } };
+  const measures = presentDesigns({ ...emptyBundle(), scenarios: [design], results: [newest], allResults: [newest, older] }).designs[0].measures;
+  assert.equal(measures.power.value, 50);
+  assert.equal(measures.assurance, undefined, "no prior to integrate over any more: the old assurance is not left beside the new numbers");
 });
 
 test("C3-11 the run record says an analytic value is an approximation and what tolerance the simulation was held to", () => {

@@ -437,12 +437,12 @@ function runDetail({ label, measure, result, execution, mcse, tab }) {
   if (!result && !execution) return null;
   /** @type {Array<{ label: string, value: string }>} */
   const fields = [];
-  if (execution?.method) fields.push({ label: "方法", value: `${execution.method}${execution.methodVersion ? ` v${execution.methodVersion}` : ""}` });
+  // The method in the reader's words: the engine's method id and its version number are the run's own record.
+  if (execution?.method) fields.push({ label: "方法", value: METHOD_LABELS[String(execution.method)] ?? "引擎计算" });
   if (execution?.seed != null) fields.push({ label: "种子", value: String(execution.seed) });
   if (execution?.replicates != null) fields.push({ label: "重复次数", value: Number(execution.replicates).toLocaleString("en-US") });
   if (mcse !== null) fields.push({ label: "蒙特卡洛标准误", value: String(roundTo(mcse, 6)) });
   if (execution?.cpuSeconds != null) fields.push({ label: "计算用时", value: cpuText(Number(execution.cpuSeconds)) });
-  if (execution?.scenarioHash) fields.push({ label: "情景哈希", value: String(execution.scenarioHash).slice(0, 12) });
   if (measure?.simulated !== true && !fields.length) return null;
   return {
     kind: "run",

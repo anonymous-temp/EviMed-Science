@@ -43,7 +43,7 @@ describe("the readers over the server's own pages", () => {
     expect(patients.sensitivity?.base?.value).toBe(0.41);
 
     const comparator = await getVcrComparator(STUDY_ID);
-    expect(comparator.routes).toHaveLength(5);
+    expect(comparator.routes).toHaveLength(4);
     expect(comparator.dimensions).toHaveLength(10);
     expect(comparator.gaps?.items).toHaveLength(3);
     expect(comparator.curves.every((curve) => curve.points.length > 0)).toBe(true);

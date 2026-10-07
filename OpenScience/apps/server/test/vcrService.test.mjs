@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   VcrService, VCR_READ_WHATS, VCR_REFERENCE_INPUTS, VCR_REFERENCE_MODELS, VCR_WRITE_WHATS, seedVcrCatalogue, vcrAudienceAllows, vcrCountBand,
-  vcrDominatedScenarios, vcrPatientScenarioKeys, vcrReadiness, vcrReferenceModelInputs, vcrRouteOptions,
+  vcrDominatedScenarios, vcrPatientScenarioKeys, vcrReadiness, vcrReferenceModelInputs, vcrRouteOptions, VCR_UNSUPPORTED_COMPARATOR_ROUTES,
 } from "../src/vcrService.mjs";
 import {
   VCR_COUNT_KEYS, VCR_ENDPOINT_TYPES, VCR_ENGINE_METHODS, VCR_ROUTE_MIN_TIER, VCR_SCENARIO_SCHEMAS, VCR_TABS, intendedUseCeiling, missingModelEvidence, validateScenario,
@@ -39,12 +39,18 @@ test("AC-01 the study page has exactly seven tabs, and the runtime's vocabularie
 test("which comparator routes a data tier can reach is deterministic, not a model's opinion", () => {
   const t0 = vcrRouteOptions("T0");
   assert.deepEqual(t0.filter((option) => option.available).map((option) => option.route),
-    ["literature_control", "model_comparator", "hybrid_control"]);
+    ["literature_control", "hybrid_control"]);
   const t2 = vcrRouteOptions("T2");
   assert.deepEqual(t2.filter((option) => option.available).map((option) => option.route),
-    ["external_control", "literature_control", "model_comparator", "hybrid_control"]);
+    ["external_control", "literature_control", "hybrid_control"]);
   const t3 = vcrRouteOptions("T3");
-  assert.equal(t3.every((option) => option.available), true, "T3 reaches every route");
+  assert.deepEqual(t3.filter((option) => !option.available).map((option) => option.route), ["model_comparator"], "T3 reaches every route the engine can compute");
+  // The model-prediction comparator is listed and never offered, at any tier.
+  for (const tier of ["T0", "T1", "T2", "T3"]) {
+    const model = vcrRouteOptions(tier).find((option) => option.route === "model_comparator");
+    assert.deepEqual([model?.supported, model?.available], [false, false], tier);
+  }
+  assert.deepEqual([...VCR_UNSUPPORTED_COMPARATOR_ROUTES], ["model_comparator"]);
   // The table is the domain's, not this module's second copy of it.
   for (const option of t0) assert.equal(option.minimumTier, VCR_ROUTE_MIN_TIER[option.route]);
 });
@@ -257,6 +263,13 @@ test("readiness is red only for this module's own invariants; a missing engine i
   assert.equal(ready.status, "ok");
   assert.deepEqual(ready.warnings, ["vcr_engine_not_composed", "vcr_data_plane_not_configured"]);
   assert.equal(ready.warning, "vcr_engine_not_composed");
+  assert.equal(ready.engineAvailable, false, "no engine composed: the page says the engine is not there");
+  // composed and not known to be down is available; composed and down is not
+  for (const [state, available] of /** @type {Array<[string | null, boolean]>} */ ([["answering", true], [null, true], ["not_answering", false]])) {
+    const reading = await vcrReadiness({ config: { vcrEnabled: true, vcrAudience: "all", vcrDataPlaneDir: "/plane" },
+      vcr: { service: { async ready() { return true; }, engineMismatch: null }, engine: { configured: () => true }, engineProbe: { snapshot: () => (state ? { state, checkedAt: null } : null) } }, database: {} });
+    assert.equal(reading.engineAvailable, available, String(state));
+  }
 });
 
 test('legacy public prediction flags are not presented as a publication capability', async () => {

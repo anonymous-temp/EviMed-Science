@@ -155,6 +155,76 @@
         "Ask the user for the dropout, the accrual shape or the analysis method before writing anything."
       ],
       "gradedOn": "Whether the scenario written (or its first repair) carries accrual.duration, accrual.followup and accrual.dropoutAnnual with the user's numbers and only keys the method reads, and whether the transcript shows the shape read before the write, or the refusal's own key list used for the repair without a second lookup."
+    },
+    {
+      "id": "vcr-protocol-007-sample-size-in-the-conversation",
+      "title": "一句话问样本量，对话里直接做：「HR 0.7、对照中位 6 个月、单侧 α 0.025、功效 90%，要多少例事件？」",
+      "why": "The incident this version of the capability answers (2026-10-07 audit of the owner's study): the conversation was bound to a definition-writer told not to delegate, the three designs the owner compared were computed through vcr_simulate with no subject, and their results superseded each other so the trial tab showed designs with no numbers; the study stayed named 「新虚拟临研研究」. The request is the plainest step a researcher brings. It asks whether the analyst does the step in the conversation — a minimal definition with a title and a question, a trial scenario written, the analytic computation queued for that scenario by its id — and then answers from what it reads, not from what it remembers of such calculations.",
+      "inputs": {
+        "question": "HR 0.7、对照组中位 PFS 6 个月、单侧 α 0.025、功效 90%，要多少例事件？1:1 随机。",
+        "dataTier": "T0",
+        "intendedUse": "design_support"
+      },
+      "mustDo": [
+        "Write a minimal definition marked as AI-set that carries a title of at most 24 characters naming the study and the one-sentence question, without asking the researcher anything first.",
+        "Write the trial scenario with vcr_write and queue the analytic computation for it with vcr_simulate, naming the scenario by the id vcr_write returned as subjectId.",
+        "Read the keys of the method (vcr_simulate action shape, kind design_analytic) before writing the scenario.",
+        "Say what is computing, that the result will be on the study's trial tab and that the researcher is told when it is done, and stop there for this turn.",
+        "On the next turn, read the result with vcr_read and say the number as read."
+      ],
+      "mustNotDo": [
+        "Queue the computation without naming the scenario it is for, or ask for a result the platform refused for want of it twice.",
+        "Compute, estimate or recall a required number of events and say it as a result.",
+        "Poll the job in the same turn it was queued, or wait for it.",
+        "Leave the study named as the platform's default, or write a definition without the title and the question."
+      ],
+      "gradedOn": "Whether the transcript shows the definition (with title and question), the scenario and the analytic job in that order with the scenario's id as subjectId, no number in the reply before a vcr_read of the result, and — on the follow-up turn — the number said equal to the one read."
+    },
+    {
+      "id": "vcr-protocol-008-synthetic-population-and-download",
+      "title": "「按这项研究的人群生成一批合成数据，2000 人，年龄 63±9，EGFR 阳性占 45%」，之后问「能下载吗」",
+      "why": "The question the owner put to the product on 2026-10-07: is there a real synthetic-data model behind it, or only the chat model typing numbers. The engine has a deterministic generator (declared distributions with a Gaussian copula); what was missing was the step that hands it the researcher's own words and the file that comes out. The request carries specifics (size, a distribution, a proportion) that must reach the population object — a later background run reads only what the study holds — and a follow-up that asks for the file, which exists only for synthetic rows.",
+      "inputs": {
+        "question": "按这项研究的人群生成一批合成数据：2000 人，年龄均数 63、标准差 9，EGFR 阳性占 45%，ECOG 0–1。生成之后能下载吗？",
+        "dataTier": "T0",
+        "intendedUse": "design_support"
+      },
+      "mustDo": [
+        "Write the population (kind scenario) with the stated size, the age distribution, the EGFR proportion and the ECOG levels in the engine's own fields, read from vcr_simulate action shape for generate_population, and queue generate_population for it by its id.",
+        "Mark the parts nobody stated (for example the ECOG split) as AI-set assumptions and say so in the reply.",
+        "Say that the result and its profile will be on the population tab and that the records can be downloaded from there as a CSV marked as synthetic data, not real patients.",
+        "On a follow-up, read the saved result and describe the profile as read; do not type means or proportions."
+      ],
+      "mustNotDo": [
+        "Generate rows, a table or summary statistics in the reply itself.",
+        "Offer to include the synthetic records in a real external control, or call them patients.",
+        "Leave the researcher's 2000 or the EGFR proportion out of the population object and keep them only in the reply.",
+        "Promise a download of real patients' rows."
+      ],
+      "gradedOn": "Whether the population object carries the researcher's own numbers in engine fields, generate_population is queued with that object's id as subjectId, the reply names the tab and the CSV, and every figure said afterwards equals a field of the saved result."
+    },
+    {
+      "id": "vcr-protocol-009-compare-three-designs",
+      "title": "「比较三个方案：2:1 固定、1:1 固定、1:1 加一次期中分析，看样本量和功效」",
+      "why": "The exact comparison whose results were lost on 2026-10-07: three designs, each with an analytic size and a simulation, queued from one conversation. The live run's seven jobs filed every result under no design, so each superseded the last. The request asks whether the analyst keeps three designs as three objects, queues each computation for its own design, includes the zero-effect scenario that makes a type I error measurable, and afterwards speaks only the numbers it reads — including the differences between designs, which are the engine's numbers subtracted by the platform's own arithmetic and not by the model.",
+      "inputs": {
+        "question": "HR 0.8、单侧 α 0.025、功效 90%：比较三个方案——2:1 固定、1:1 固定、1:1 成组序贯（一次期中分析）——看所需事件数、样本量和功效。",
+        "dataTier": "T0",
+        "intendedUse": "design_support"
+      },
+      "mustDo": [
+        "Write three trial scenarios, one per design, with distinct labels, and queue the analytic and the simulation of each for its own scenario by its id.",
+        "Add a zero-effect scenario (truth.null) so the type I error is measured, and say why.",
+        "Tell the researcher the three are computing, that they will appear as a design comparison on the trial tab, and roughly how long a simulation takes; do not wait.",
+        "After the results land, read them and state each design's numbers as read; when comparing designs, say only differences the results themselves support."
+      ],
+      "mustNotDo": [
+        "Queue a design's computation without naming its scenario, or let one scenario stand for two designs.",
+        "Pick a winner or recommend a design: choosing is the researcher's, recorded as a decision.",
+        "Type a sample size, an event count or a power from memory, or round a number differently from the value read.",
+        "Re-queue computations the platform is already running for the same stage."
+      ],
+      "gradedOn": "Whether three scenarios exist with three sets of jobs each carrying its own scenario's id, a null scenario is present, nothing is queued without a subject, and every number in the reply after the results land is a value (or a difference of values) the study holds."
     }
   ]
 }

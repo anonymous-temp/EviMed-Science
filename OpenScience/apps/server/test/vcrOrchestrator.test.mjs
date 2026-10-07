@@ -280,10 +280,49 @@ test("a runtime reserved for another dispatch is not the export's run; the resea
   assert.equal((await orchestrator.exportDispatch("std_1", {}))?.exportId, "exp_9");
 });
 
-test("there are exactly six notices, and they are the domain's six: the five of the plan and the new-evidence notice of the flywheel (F24)", () => {
+test("there are exactly seven notices, and they are the domain's seven: the five of the plan, the new-evidence notice of the flywheel (F24) and the end of a computation somebody asked for (R10)", () => {
   assert.equal(VCR_NOTICE_KINDS, VCR_NOTIFICATION_KINDS);
   assert.deepEqual([...VCR_NOTICE_KINDS],
-    ["package_ready", "not_estimable", "budget_confirm", "new_candidates", "accrual_off_forecast", "new_evidence"]);
+    ["package_ready", "not_estimable", "budget_confirm", "new_candidates", "accrual_off_forecast", "new_evidence", "job_finished"]);
+});
+
+test("a finished computation says what was computed and the one number a reader wants first, from the engine's own measures", async () => {
+  const { sent, notifier } = notifierFixture();
+  const measures = [{ name: "power", value: 0.915, simulated: true, mcse: 0.004 }];
+  await notifier.jobFinished(study, { jobId: "job_1", resultKind: "trial_scenario", stage: "simulation", label: "B 1:1 固定设计", state: "succeeded",
+    result: { conclusion: "estimable", measures } });
+  assert.equal(sent[0].title, "方案模拟完成：1:1 固定设计功效 91.5%", "the design's letter is the page's, the number is the result's");
+  assert.match(sent[0].body, /EV-201 二线 NSCLC/);
+  assert.match(sent[0].body, /「试验」页/);
+  assert.deepEqual(sent[0].source, { type: "vcr", id: "std_1/trial" }, "the notice carries the study and the tab it opens");
+  assert.equal(sent[0].severity, "info");
+  assert.equal(sent[0].idempotencyKey, "vcr:std_1:job:job_1:u1");
+  assert.equal(vcrNoticeHref(sent[0].source.id), "/app/virtual-research/std_1/trial");
+
+  await notifier.jobFinished(study, { jobId: "job_2", resultKind: "trial_scenario", stage: "analytic", label: "A 2:1 固定设计", state: "succeeded",
+    result: { measures: [{ name: "required_events", value: 950 }, { name: "required_total", value: 13764 }] } });
+  assert.equal(sent[1].title, "方案计算完成：2:1 固定设计 所需事件数 950 例 所需样本量 13,764 例");
+  await notifier.jobFinished(study, { jobId: "job_3", resultKind: "population", label: "情景人群", state: "succeeded",
+    result: { counts: { realPatients: 0, generatedRecords: 1000 } } });
+  assert.equal(sent[2].title, "人群生成完成：1,000 条生成记录");
+  assert.equal(sent[2].source.id, "std_1/population");
+  assert.equal(notifier.counts.job_finished, 3);
+  // no number is invented when the result has none
+  await notifier.jobFinished(study, { jobId: "job_4", resultKind: "patient_set", state: "succeeded", result: { measures: [], counts: {} } });
+  assert.equal(sent[3].title, "虚拟患者生成完成");
+  // a comparator that is not estimable has the notice of its own
+  assert.equal(await notifier.jobFinished(study, { jobId: "job_5", resultKind: "comparator", state: "succeeded", result: { conclusion: "not_estimable" } }), true);
+  assert.equal(sent.length, 4);
+});
+
+test("a computation that failed is said, with the reason in the reader's words and what to do", async () => {
+  const { sent, notifier } = notifierFixture();
+  await notifier.jobFinished(study, { jobId: "job_9", resultKind: "trial_scenario", stage: "simulation", label: "B 1:1 固定设计", state: "failed",
+    error: { code: "vcr_engine_unconfigured", message: "engine absent" } });
+  assert.equal(sent[0].title, "方案模拟没有算完：1:1 固定设计");
+  assert.equal(sent[0].severity, "attention");
+  assert.match(sent[0].body, /已经算出的部分保留着/);
+  assert.doesNotMatch(sent[0].body, /vcr_|engine absent/, "never a code, never the engine's own words");
 });
 
 test("a notice opens the page it is about", () => {
@@ -783,7 +822,9 @@ test("every example in the skill is a shape the platform accepts: the objects bu
   const blocks = [...skill.matchAll(/```json vcr:(\S+)\n([\s\S]*?)```/g)].map((match) => ({ kind: match[1], body: JSON.parse(match[2]) }));
   assert.ok(blocks.length >= 7, `the skill teaches supported designs by example (${blocks.length} blocks)`);
   const t2 = { ...context, study: { ...seedStudy, dataTier: "T2" },
-    populations: [{ id: "pop_example", resultId: "res_example" }] };
+    populations: [{ id: "pop_example", resultId: "res_example" }],
+    // the skill's trajectory example names the longitudinal reference model, which the platform seeds beside the time-to-event one
+    models: [...context.models, { id: "mdl_longitudinal", name: "reference-longitudinal", version: "1.0.0", endpointType: "continuous", applicability: { endpoints: ["continuous"] }, card: {} }] };
   const kinds = new Set();
   for (const { kind, body } of blocks) {
     kinds.add(kind);

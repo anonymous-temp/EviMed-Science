@@ -2,28 +2,28 @@
   "headline": "已模拟 3 个方案，成功把握 58%～74%。",
   "ademp": [
     {
-      "key": "a",
+      "key": "aim",
       "label": "目的",
       "text": "单臂 II 期加外部对照行不行，还是必须做随机？"
     },
     {
-      "key": "d",
-      "label": "数据生成机制",
+      "key": "data",
+      "label": "怎么生成数据",
       "text": "事件时间 · 真实 HR 0.6 · 对照组中位 4.1"
     },
     {
-      "key": "e",
-      "label": "估计目标",
+      "key": "estimate",
+      "label": "估计什么",
       "text": "试验人群的无进展生存（PFS）"
     },
     {
-      "key": "m",
-      "label": "分析方法",
+      "key": "analysis",
+      "label": "怎么分析",
       "text": "logrank · α = 0.025 · 1 侧"
     },
     {
-      "key": "p",
-      "label": "性能指标",
+      "key": "measures",
+      "label": "看哪些指标",
       "text": "功效、I 类错误、期望样本量"
     }
   ],
@@ -73,7 +73,7 @@
             "fields": [
               {
                 "label": "方法",
-                "value": "design.simulate v1.0.0"
+                "value": "方案的模拟运行"
               },
               {
                 "label": "种子",
@@ -90,64 +90,6 @@
               {
                 "label": "计算用时",
                 "value": "12 秒"
-              },
-              {
-                "label": "情景哈希",
-                "value": "369fdd79b239"
-              }
-            ],
-            "quote": null,
-            "quoteSource": null,
-            "ref": {
-              "kind": "result",
-              "id": "res_1",
-              "tab": "trial"
-            }
-          }
-        },
-        "assurance": {
-          "value": 58,
-          "text": null,
-          "unit": "%",
-          "source": "predicted",
-          "interval": {
-            "kind": "monte_carlo",
-            "low": 57.216,
-            "high": 58.784,
-            "level": 95
-          },
-          "mcse": 0.4,
-          "review": "ai_set",
-          "precision": 1,
-          "reason": null,
-          "stale": false,
-          "detail": {
-            "kind": "run",
-            "title": "成功把握",
-            "fields": [
-              {
-                "label": "方法",
-                "value": "design.simulate v1.0.0"
-              },
-              {
-                "label": "种子",
-                "value": "5"
-              },
-              {
-                "label": "重复次数",
-                "value": "16,000"
-              },
-              {
-                "label": "蒙特卡洛标准误",
-                "value": "0.4"
-              },
-              {
-                "label": "计算用时",
-                "value": "12 秒"
-              },
-              {
-                "label": "情景哈希",
-                "value": "369fdd79b239"
               }
             ],
             "quote": null,
@@ -181,7 +123,7 @@
             "fields": [
               {
                 "label": "方法",
-                "value": "design.simulate v1.0.0"
+                "value": "方案的模拟运行"
               },
               {
                 "label": "种子",
@@ -198,10 +140,56 @@
               {
                 "label": "计算用时",
                 "value": "12 秒"
+              }
+            ],
+            "quote": null,
+            "quoteSource": null,
+            "ref": {
+              "kind": "result",
+              "id": "res_1",
+              "tab": "trial"
+            }
+          }
+        },
+        "assurance": {
+          "value": 58,
+          "text": null,
+          "unit": "%",
+          "source": "predicted",
+          "interval": {
+            "kind": "monte_carlo",
+            "low": 57.216,
+            "high": 58.784,
+            "level": 95
+          },
+          "mcse": 0.4,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": {
+            "kind": "run",
+            "title": "成功把握",
+            "fields": [
+              {
+                "label": "方法",
+                "value": "方案的模拟运行"
               },
               {
-                "label": "情景哈希",
-                "value": "369fdd79b239"
+                "label": "种子",
+                "value": "5"
+              },
+              {
+                "label": "重复次数",
+                "value": "16,000"
+              },
+              {
+                "label": "蒙特卡洛标准误",
+                "value": "0.4"
+              },
+              {
+                "label": "计算用时",
+                "value": "12 秒"
               }
             ],
             "quote": null,
@@ -260,6 +248,16 @@
           "stale": false,
           "detail": null
         }
+      },
+      "method": "模拟",
+      "replicates": 16000,
+      "crossCheck": {
+        "name": "power",
+        "analytic": 80,
+        "simulated": 81,
+        "differencePoints": 0.4,
+        "agrees": true,
+        "text": "解析功效 80%，与模拟相差 0.4 个百分点，在容许范围内"
       }
     },
     {
@@ -306,7 +304,7 @@
             "fields": [
               {
                 "label": "方法",
-                "value": "design.simulate v1.0.0"
+                "value": "方案的模拟运行"
               },
               {
                 "label": "种子",
@@ -323,64 +321,6 @@
               {
                 "label": "计算用时",
                 "value": "12 秒"
-              },
-              {
-                "label": "情景哈希",
-                "value": "d29caf5152eb"
-              }
-            ],
-            "quote": null,
-            "quoteSource": null,
-            "ref": {
-              "kind": "result",
-              "id": "res_2",
-              "tab": "trial"
-            }
-          }
-        },
-        "assurance": {
-          "value": 71,
-          "text": null,
-          "unit": "%",
-          "source": "predicted",
-          "interval": {
-            "kind": "monte_carlo",
-            "low": 70.216,
-            "high": 71.784,
-            "level": 95
-          },
-          "mcse": 0.4,
-          "review": "ai_set",
-          "precision": 1,
-          "reason": null,
-          "stale": false,
-          "detail": {
-            "kind": "run",
-            "title": "成功把握",
-            "fields": [
-              {
-                "label": "方法",
-                "value": "design.simulate v1.0.0"
-              },
-              {
-                "label": "种子",
-                "value": "5"
-              },
-              {
-                "label": "重复次数",
-                "value": "16,000"
-              },
-              {
-                "label": "蒙特卡洛标准误",
-                "value": "0.4"
-              },
-              {
-                "label": "计算用时",
-                "value": "12 秒"
-              },
-              {
-                "label": "情景哈希",
-                "value": "d29caf5152eb"
               }
             ],
             "quote": null,
@@ -414,7 +354,7 @@
             "fields": [
               {
                 "label": "方法",
-                "value": "design.simulate v1.0.0"
+                "value": "方案的模拟运行"
               },
               {
                 "label": "种子",
@@ -431,10 +371,6 @@
               {
                 "label": "计算用时",
                 "value": "12 秒"
-              },
-              {
-                "label": "情景哈希",
-                "value": "d29caf5152eb"
               }
             ],
             "quote": null,
@@ -468,7 +404,7 @@
             "fields": [
               {
                 "label": "方法",
-                "value": "design.simulate v1.0.0"
+                "value": "方案的模拟运行"
               },
               {
                 "label": "种子",
@@ -485,10 +421,56 @@
               {
                 "label": "计算用时",
                 "value": "12 秒"
+              }
+            ],
+            "quote": null,
+            "quoteSource": null,
+            "ref": {
+              "kind": "result",
+              "id": "res_2",
+              "tab": "trial"
+            }
+          }
+        },
+        "assurance": {
+          "value": 71,
+          "text": null,
+          "unit": "%",
+          "source": "predicted",
+          "interval": {
+            "kind": "monte_carlo",
+            "low": 70.216,
+            "high": 71.784,
+            "level": 95
+          },
+          "mcse": 0.4,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": {
+            "kind": "run",
+            "title": "成功把握",
+            "fields": [
+              {
+                "label": "方法",
+                "value": "方案的模拟运行"
               },
               {
-                "label": "情景哈希",
-                "value": "d29caf5152eb"
+                "label": "种子",
+                "value": "5"
+              },
+              {
+                "label": "重复次数",
+                "value": "16,000"
+              },
+              {
+                "label": "蒙特卡洛标准误",
+                "value": "0.4"
+              },
+              {
+                "label": "计算用时",
+                "value": "12 秒"
               }
             ],
             "quote": null,
@@ -547,6 +529,16 @@
           "stale": false,
           "detail": null
         }
+      },
+      "method": "模拟",
+      "replicates": 16000,
+      "crossCheck": {
+        "name": "power",
+        "analytic": 80,
+        "simulated": 81,
+        "differencePoints": 0.4,
+        "agrees": true,
+        "text": "解析功效 80%，与模拟相差 0.4 个百分点，在容许范围内"
       }
     },
     {
@@ -593,7 +585,7 @@
             "fields": [
               {
                 "label": "方法",
-                "value": "design.simulate v1.0.0"
+                "value": "方案的模拟运行"
               },
               {
                 "label": "种子",
@@ -610,64 +602,6 @@
               {
                 "label": "计算用时",
                 "value": "12 秒"
-              },
-              {
-                "label": "情景哈希",
-                "value": "eac3400a03b3"
-              }
-            ],
-            "quote": null,
-            "quoteSource": null,
-            "ref": {
-              "kind": "result",
-              "id": "res_3",
-              "tab": "trial"
-            }
-          }
-        },
-        "assurance": {
-          "value": 74,
-          "text": null,
-          "unit": "%",
-          "source": "predicted",
-          "interval": {
-            "kind": "monte_carlo",
-            "low": 73.216,
-            "high": 74.784,
-            "level": 95
-          },
-          "mcse": 0.4,
-          "review": "ai_set",
-          "precision": 1,
-          "reason": null,
-          "stale": false,
-          "detail": {
-            "kind": "run",
-            "title": "成功把握",
-            "fields": [
-              {
-                "label": "方法",
-                "value": "design.simulate v1.0.0"
-              },
-              {
-                "label": "种子",
-                "value": "5"
-              },
-              {
-                "label": "重复次数",
-                "value": "16,000"
-              },
-              {
-                "label": "蒙特卡洛标准误",
-                "value": "0.4"
-              },
-              {
-                "label": "计算用时",
-                "value": "12 秒"
-              },
-              {
-                "label": "情景哈希",
-                "value": "eac3400a03b3"
               }
             ],
             "quote": null,
@@ -701,7 +635,7 @@
             "fields": [
               {
                 "label": "方法",
-                "value": "design.simulate v1.0.0"
+                "value": "方案的模拟运行"
               },
               {
                 "label": "种子",
@@ -718,10 +652,6 @@
               {
                 "label": "计算用时",
                 "value": "12 秒"
-              },
-              {
-                "label": "情景哈希",
-                "value": "eac3400a03b3"
               }
             ],
             "quote": null,
@@ -755,7 +685,7 @@
             "fields": [
               {
                 "label": "方法",
-                "value": "design.simulate v1.0.0"
+                "value": "方案的模拟运行"
               },
               {
                 "label": "种子",
@@ -772,10 +702,56 @@
               {
                 "label": "计算用时",
                 "value": "12 秒"
+              }
+            ],
+            "quote": null,
+            "quoteSource": null,
+            "ref": {
+              "kind": "result",
+              "id": "res_3",
+              "tab": "trial"
+            }
+          }
+        },
+        "assurance": {
+          "value": 74,
+          "text": null,
+          "unit": "%",
+          "source": "predicted",
+          "interval": {
+            "kind": "monte_carlo",
+            "low": 73.216,
+            "high": 74.784,
+            "level": 95
+          },
+          "mcse": 0.4,
+          "review": "ai_set",
+          "precision": 1,
+          "reason": null,
+          "stale": false,
+          "detail": {
+            "kind": "run",
+            "title": "成功把握",
+            "fields": [
+              {
+                "label": "方法",
+                "value": "方案的模拟运行"
               },
               {
-                "label": "情景哈希",
-                "value": "eac3400a03b3"
+                "label": "种子",
+                "value": "5"
+              },
+              {
+                "label": "重复次数",
+                "value": "16,000"
+              },
+              {
+                "label": "蒙特卡洛标准误",
+                "value": "0.4"
+              },
+              {
+                "label": "计算用时",
+                "value": "12 秒"
               }
             ],
             "quote": null,
@@ -834,6 +810,16 @@
           "stale": false,
           "detail": null
         }
+      },
+      "method": "模拟",
+      "replicates": 16000,
+      "crossCheck": {
+        "name": "power",
+        "analytic": 80,
+        "simulated": 81,
+        "differencePoints": 0.4,
+        "agrees": true,
+        "text": "解析功效 80%，与模拟相差 0.4 个百分点，在容许范围内"
       }
     },
     {
@@ -844,7 +830,10 @@
       "dominatedBy": "C",
       "chosen": false,
       "note": "在比较目标的全部指标上都不优于 C",
-      "measures": {}
+      "measures": {},
+      "method": null,
+      "replicates": null,
+      "crossCheck": null
     }
   ],
   "columns": [
@@ -1094,25 +1083,25 @@
   "runRecord": [
     {
       "key": "run_A",
-      "title": "方案 A：design.simulate，16,000 次重复",
+      "title": "方案 A：方案的模拟运行，16,000 次重复",
       "detail": "种子 5 · 解析值与仿真值一致（差 0.4 个百分点，在 3 倍蒙特卡洛标准误内）",
       "ok": true
     },
     {
       "key": "run_B",
-      "title": "方案 B：design.simulate，16,000 次重复",
+      "title": "方案 B：方案的模拟运行，16,000 次重复",
       "detail": "种子 5 · 解析值与仿真值一致（差 0.4 个百分点，在 3 倍蒙特卡洛标准误内）",
       "ok": true
     },
     {
       "key": "run_C",
-      "title": "方案 C：design.simulate，16,000 次重复",
+      "title": "方案 C：方案的模拟运行，16,000 次重复",
       "detail": "种子 5 · 解析值与仿真值一致（差 0.4 个百分点，在 3 倍蒙特卡洛标准误内）",
       "ok": true
     },
     {
       "key": "run_D",
-      "title": "方案 D：design.simulate，16,000 次重复",
+      "title": "方案 D：方案的模拟运行，16,000 次重复",
       "detail": "种子 5 · 解析值与仿真值一致（差 0.4 个百分点，在 3 倍蒙特卡洛标准误内）",
       "ok": true
     }
@@ -1122,7 +1111,6 @@
       "id": "fct_1",
       "label": "入组预测",
       "version": 1,
-      "hash": "HASH",
       "frozenAt": "今天 09:07",
       "comparedAt": null,
       "lines": [

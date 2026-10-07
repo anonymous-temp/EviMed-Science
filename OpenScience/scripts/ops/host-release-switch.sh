@@ -99,7 +99,21 @@ BACKUP_CONTAINER="${PROJECT}-open-science-backup-1"
 # Compose reads `.env` from the project directory itself. Sourcing it in bash
 # must not be attempted: `OPEN_SCIENCE_OIDC_SCOPES=openid profile email` is a
 # legal compose value and an illegal shell assignment.
-export COMPOSE_PROFILES="${COMPOSE_PROFILES:-$(env -u COMPOSE_PROFILES node --env-file="${REL}/OpenScience/deploy/web/.env" -e 'process.stdout.write(process.env.COMPOSE_PROFILES || "backup,monitoring,receipt,web-search")')}"
+#
+# The 虚拟临研 statistics engine rides the `vcr` profile, and a module that is on without its engine answers every computation with
+# 「计算引擎暂不可用」: so the profile list a release runs by default — the one `.env` names, or the built-in one — gets `vcr` added when
+# the deployment turns the module on (`OPEN_SCIENCE_VCR_ENABLED`); it is no longer a line somebody must remember to put in `.env`. A
+# deployment that leaves the module off, as the default is, starts no R image; and a list the operator exports in the shell is theirs, as it
+# always was, and is used as it stands.
+# --- compose profiles ---
+if [ -z "${COMPOSE_PROFILES:-}" ]; then
+  COMPOSE_PROFILES="$(env -u COMPOSE_PROFILES node --env-file="${REL}/OpenScience/deploy/web/.env" -e 'process.stdout.write(process.env.COMPOSE_PROFILES || "backup,monitoring,receipt,web-search")')"
+  case "$(env -u OPEN_SCIENCE_VCR_ENABLED node --env-file="${REL}/OpenScience/deploy/web/.env" -e 'process.stdout.write(String(process.env.OPEN_SCIENCE_VCR_ENABLED || "").trim().toLowerCase())')" in
+    true|1|yes|on) case ",${COMPOSE_PROFILES}," in *,vcr,*) ;; *) COMPOSE_PROFILES="${COMPOSE_PROFILES},vcr" ;; esac ;;
+  esac
+fi
+export COMPOSE_PROFILES
+# --- end compose profiles ---
 
 # The backup's readiness code once the switch has read it (item 10); `ok`
 # until then. Every way the switch ends after the release is live goes

@@ -9,7 +9,7 @@ import { createVcrGatewayHandler } from '../src/vcrGateway.mjs';
 import { createGeoTestDatabase } from './helpers/geoTestDatabase.mjs';
 const url=process.env.OPEN_SCIENCE_TEST_POSTGRES_URL;
 const options={skip:!url && 'A local PostgreSQL is required.'};
-let isolated,database,store,study,handler;
+let isolated,database,store,study,handler,population;
 const valid={n:500,population:{variables:[{name:'age',family:'normal',mean:65,sd:10}]}};
 before(async()=>{
   if(!url)return;
@@ -17,6 +17,8 @@ before(async()=>{
   database=new ControlPlaneDatabase({databaseUrl:isolated.url,databasePoolMax:4,databaseConnectionTimeoutMs:5000});
   store=new VcrStore({database});await store.ready();
   study=await store.createStudy({userId:'alice',projectId:'boundary',name:'Population boundary'});
+  // A computation of a population names the population it is for (R10): the hostile payloads are asked for one that exists.
+  population=await store.savePopulation({studyId:study.id,userId:'alice',name:'boundary',kind:'scenario',definition:valid});
   const config={vcrEnabled:true,vcrAudience:'all',vcrJobCpuSeconds:60,vcrStudyCpuBudget:1200,vcrMaxConcurrentJobs:1,modelGatewayInternalUrl:'http://127.0.0.1/internal/models/v1'};
   const service=new VcrService({store,config});
   const jobs=new VcrJobs({store,config,engine:{configured:()=>true}});
@@ -24,7 +26,7 @@ before(async()=>{
 });
 after(async()=>{await database?.close();await isolated?.drop();});
 async function ask(scenario,inputs=[]){
-  const req=Object.assign(Readable.from([Buffer.from(JSON.stringify({action:'start',kind:'generate_population',scenario,inputs}))]),
+  const req=Object.assign(Readable.from([Buffer.from(JSON.stringify({action:'start',kind:'generate_population',scenario,inputs,subjectId:population.id}))]),
     {method:'POST',url:'/internal/vcr/v1/simulate',headers:{authorization:'Bearer test','content-type':'application/json'}});
   const res={status:0,body:'',writeHead(status){this.status=status;},end(body){this.body=body.toString();}};
   await handler(req,res);return {status:res.status,body:JSON.parse(res.body)};

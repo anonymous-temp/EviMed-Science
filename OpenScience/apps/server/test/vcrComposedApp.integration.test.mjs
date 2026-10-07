@@ -198,6 +198,9 @@ function requests(target, ids) {
     "POST /studies/:id/decisions": async () => ["POST", `${S}/decisions`, { question: "选哪个设计", chosen: { design: "B" }, rationale: "功效更高" }],
     "POST /studies/:id/export": async () => ["POST", `${S}/export`, { kind: "study_package" }],
     "GET /studies/:id/export/:export": async () => ["GET", `${S}/export/${ids.exportId}`, undefined],
+    // The generated records as a file: the study holds no such result, so a reader is answered 404 by name, and a role that reads no page 403.
+    "GET /studies/:id/records/:result.csv": async () => ["GET", `${S}/records/res_none.csv`, undefined],
+    "GET /studies/:id/records/:result.quality.json": async () => ["GET", `${S}/records/res_none.quality.json`, undefined],
     // 模拟研究: the lead alone. A study package is not a report the column takes, so the lead's request is answered 400 by name.
     "GET /studies/:id/publications": async () => ["GET", `${S}/publications`, undefined],
     "POST /studies/:id/predictions": async () => ["POST", `${S}/predictions`, { scenarioId: "scn_none", registryId: "NCT02296125", endpoint: "PFS", resultPath: "measure(power)" }],
@@ -761,8 +764,9 @@ test("DL-13 DL-15 readiness names the module and its engine; the metrics carry t
   const ready = await (await fetch(`${context.base}/api/ready`)).json();
   const vcr = ready.data.checks.vcr;
   assert.equal(vcr.ok, true, JSON.stringify(vcr));
-  // Composed, and either not asked yet (`wired`) or answering: a study page read since the last probe asks the engine's /health.
-  assert.ok(["wired", "answering"].includes(vcr.engine), String(vcr.engine));
+  // `wired` until something has asked the engine, `answering` once a study page (which reads the engine's presence, R10) or a job has.
+  assert.ok(["wired", "answering"].includes(vcr.engine), `the engine is composed and not known to be down: ${vcr.engine}`);
+  assert.equal(vcr.engineAvailable, true);
   assert.equal(vcr.warnings?.includes("vcr_engine_unconfigured") ?? false, false);
   const text = await (await fetch(`${context.base}/api/ops/metrics`, { headers: { authorization: "Bearer test-only-metrics-token" } })).text();
   for (const line of [/^open_science_vcr_enabled 1$/m, /^open_science_vcr_tables_readable 1$/m, /^open_science_vcr_engine_configured 1$/m,

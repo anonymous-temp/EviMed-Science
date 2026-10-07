@@ -92,7 +92,7 @@ export const VCR_READING_ROLES = Object.freeze(VCR_MEMBER_ROLES.filter((role) =>
 /** A study's step record, all seven present. @param {unknown} value */
 export function normalizedVcrSteps(value) {
   const raw = object(value);
-  /** @type {Record<string, { status: string, requested: boolean, runId: string | null, jobId: string | null, updatedAt: string | null, note: string | null, waiting: string | null }>} */
+  /** @type {Record<string, { status: string, requested: boolean, askedAt: string | null, runId: string | null, jobId: string | null, updatedAt: string | null, note: string | null, waiting: string | null }>} */
   const steps = {};
   for (const step of VCR_STEPS) {
     const entry = object(raw[step]);
@@ -100,6 +100,8 @@ export function normalizedVcrSteps(value) {
     steps[step] = {
       status,
       requested: entry.requested === true,
+      // When a person last asked for this step with 「让 AI 做」: what tells a computation somebody waits for from the programme's own.
+      askedAt: text(entry.askedAt),
       runId: text(entry.runId),
       jobId: text(entry.jobId),
       updatedAt: text(entry.updatedAt),
@@ -569,8 +571,8 @@ export class VcrStore extends VcrStoreBase {
   /**
    * One step's record. Merged into `steps`, never replacing it, so two
    * packages writing different steps do not overwrite each other.
-   * @param {string} studyId @param {string} step @param {{ status?: string, requested?: boolean, runId?: string | null,
-   *   jobId?: string | null, note?: string | null }} fields
+   * @param {string} studyId @param {string} step @param {{ status?: string, requested?: boolean, askedAt?: string | null, runId?: string | null,
+   *   jobId?: string | null, note?: string | null, waiting?: string | null }} fields
    */
   async setStep(studyId, step, fields) {
     if (!VCR_STEPS.includes(step)) throw new TypeError(`setStep: unknown step ${JSON.stringify(step)}`);
@@ -579,7 +581,7 @@ export class VcrStore extends VcrStoreBase {
     }
     /** @type {Record<string, any>} */
     const entry = { updatedAt: new Date().toISOString() };
-    for (const key of ["status", "requested", "runId", "jobId", "note", "waiting"]) {
+    for (const key of ["status", "requested", "askedAt", "runId", "jobId", "note", "waiting"]) {
       if (fields[/** @type {keyof typeof fields} */ (key)] !== undefined) entry[key] = fields[/** @type {keyof typeof fields} */ (key)];
     }
     const row = await this.one(`UPDATE ${VCR_SCHEMA}.studies
@@ -620,7 +622,8 @@ export class VcrStore extends VcrStoreBase {
    *
    * @param {{ studyId: string, userId: string, pico?: Record<string, any>, estimand?: Record<string, any>,
    *   endpointType?: string | null, intendedUse?: string, fieldSources?: Record<string, any>, reviewState?: string,
-   *   title?: string | null, question?: string | null }} input
+   *   title?: string | null, question?: string | null }} input `title` (the study's name) and `question` (the one sentence it asks) are the writer's
+   *   own words for the definition, empty when it gave none
    */
   async saveDefinition(input) {
     const before = await this.studyById(input.studyId);
@@ -659,12 +662,12 @@ export class VcrStore extends VcrStoreBase {
       }
       if (entityKeys) await client.query(`UPDATE ${VCR_SCHEMA}.studies SET entity_keys = $2::text[] WHERE id = $1`, [input.studyId, entityKeys]);
       const row = (await client.query(`INSERT INTO ${VCR_SCHEMA}.study_definitions
-        (id, study_id, user_id, version, pico, estimand, endpoint_type, intended_use, field_sources, review_state)
-        VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7, $8, $9::jsonb, $10) RETURNING *`,
+        (id, study_id, user_id, version, pico, estimand, endpoint_type, intended_use, field_sources, review_state, title, question)
+        VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb, $7, $8, $9::jsonb, $10, $11, $12) RETURNING *`,
       [vcrId("definition"), input.studyId, String(input.userId), version, JSON.stringify(input.pico ?? {}),
         JSON.stringify(input.estimand ?? {}), input.endpointType ?? null,
         VCR_INTENDED_USES.includes(String(input.intendedUse)) ? String(input.intendedUse) : "exploratory",
-        JSON.stringify(input.fieldSources ?? {}), input.reviewState ?? "ai_set"])).rows[0];
+        JSON.stringify(input.fieldSources ?? {}), input.reviewState ?? "ai_set", String(input.title ?? "").trim(), String(input.question ?? "").trim()])).rows[0];
       await this.audit({ client, studyId: input.studyId, userId: String(input.userId), action: "vcr.definition.save",
         object: String(row.id), detail: { version } });
       return { definition: this.#definitionFromRow(row), named };
@@ -690,6 +693,7 @@ export class VcrStore extends VcrStoreBase {
       id: String(row.id), studyId: String(row.study_id), version: Number(row.version), pico: object(row.pico),
       estimand: object(row.estimand), endpointType: text(row.endpoint_type), intendedUse: String(row.intended_use ?? "exploratory"),
       fieldSources: object(row.field_sources), reviewState: String(row.review_state ?? "ai_set"), createdAt: iso(row.created_at),
+      title: String(row.title ?? ""), question: String(row.question ?? ""),
     };
   }
 

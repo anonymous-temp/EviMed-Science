@@ -33,7 +33,9 @@ import { createVcrCurveEvidence } from "../src/vcrCurveEvidence.mjs";
 import { VcrEvidenceStore } from "../src/vcrEvidenceStore.mjs";
 import { VcrDataStore } from "../src/vcrDataStore.mjs";
 import { VcrAccess } from "../src/vcrAccess.mjs";
-import { vcrRuntimeWrite } from "../src/vcrGateway.mjs";
+import { createVcrGatewayHandler, vcrRuntimeWrite } from "../src/vcrGateway.mjs";
+import { backfillResultSubjects } from "../src/vcrSubjects.mjs";
+import { Readable } from "node:stream";
 import { VCR_ACCRUAL_MEASURES } from "../src/vcrRecruit.mjs";
 import { VCR_ENGINE_METHODS, VCR_EXPORT_KINDS, VCR_MODEL_DOCUMENT_KINDS, VCR_MODEL_DOCUMENT_SECTIONS, VCR_STEPS, lineageNode } from "@evimed/domain";
 
@@ -594,7 +596,15 @@ test("an export whose run leaves no document ends failed and is said on the stud
 test("PB-21 a study created without saying what it is about waits for its question; a run on an empty brief is never dispatched", options, async () => {
   const module = compose();
   const study = await store.createStudy({ userId: "u_empty", projectId: "prj_empty", name: "空研究", question: "", dataTier: "T0" });
-  await module.orchestrator.runStep({ id: study.userId }, study, "definition");
+  // 「让 AI 做」 on it is answered with what the study is waiting for — not 「已排队」 for a run that cannot go out — and asks for nothing.
+  for (const step of ["definition", "population", "trial"]) {
+    await assert.rejects(module.orchestrator.runStep({ id: study.userId }, study, step),
+      { status: 409, code: "vcr_definition_missing", message: "先说一句要研究什么：在对话里写下问题，或上传方案。" });
+  }
+  assert.equal((await store.studyById(study.id)).steps.population.requested, false, "nothing was requested");
+  // The study as 「新建研究」 makes it asks for the whole programme and has nothing to write a definition from.
+  for (const step of VCR_STEPS) await store.setStep(study.id, step, { requested: true });
+  await module.orchestrator.advance(study.id);
   assert.equal(module.dispatched.length, 0, "nothing to write a definition from");
   assert.match((await store.studyById(study.id)).steps.definition.note, /先说一句/);
   await store.updateStudy(study.id, { question: "样本量怎么定？" }, study.userId);
@@ -602,6 +612,247 @@ test("PB-21 a study created without saying what it is about waits for its questi
   assert.equal(module.dispatched.length, 1);
   assert.equal(module.dispatched[0].capabilityId, "vcr-protocol");
   assert.equal((await store.studyById(study.id)).steps.definition.note, null, "and the note that asked for it is gone");
+});
+
+test("R10 no background run goes out before there is a definition: nothing is said, nothing is dispatched, and a question alone gets the definition run only", options, async () => {
+  // A study nobody has said anything about, asked for in full (the home page's 「新建研究」): the evidence run used to go out on
+  // the study's name and an empty question, and the analysis run on the same (B §1.4).
+  const silent = compose();
+  const empty = await store.createStudy({ userId: "u_silent", projectId: "prj_silent", name: "未命名研究", question: "", dataTier: "T0" });
+  for (const step of VCR_STEPS) await store.setStep(empty.id, step, { requested: true });
+  await silent.orchestrator.advance(empty.id);
+  await silent.orchestrator.advance(empty.id);
+  assert.equal(silent.dispatched.length, 0, "no run for a study with no question and no definition");
+  assert.match((await store.studyById(empty.id)).steps.definition.note, /先说一句/);
+  assert.equal(await store.rows(`SELECT 1 FROM evimed_vcr.schedule_marks WHERE study_id = $1 AND kind = 'run'`, [empty.id]).then((rows) => rows.length), 0,
+    "and no run mark either: nothing was claimed");
+
+  // With a question the definition is written from it, and nothing else goes out until that definition exists — a definition run
+  // that ends without writing one does not release the evidence, analysis and matching runs.
+  const asked = compose();
+  const study = await makeStudy("predefinition");
+  for (const step of VCR_STEPS) await store.setStep(study.id, step, { requested: true });
+  await asked.orchestrator.advance(study.id);
+  assert.deepEqual(asked.dispatched.map((input) => input.capabilityId), ["vcr-protocol"]);
+  await asked.orchestrator.onRunFinished({ userId: study.userId, id: study.projectId }, { id: "run_1", dispatchId: asked.dispatched[0].dispatchId, status: "succeeded" });
+  await asked.orchestrator.advance(study.id);
+  assert.ok(asked.dispatched.every((input) => input.capabilityId === "vcr-protocol"),
+    `only the definition is sent while there is none: ${asked.dispatched.map((input) => input.capabilityId).join(", ")}`);
+
+  // The definition exists: the programme goes on as it always did.
+  await vcrRuntimeWrite({ store, service: asked.service, orchestrator: asked.orchestrator, study, what: "definition", items: null, data: definition });
+  const last = asked.dispatched.length - 1;
+  await asked.orchestrator.onRunFinished({ userId: study.userId, id: study.projectId }, { id: `run_${last + 1}`, dispatchId: asked.dispatched[last].dispatchId, status: "succeeded" });
+  await asked.orchestrator.advance(study.id);
+  assert.ok(asked.dispatched.some((input) => input.capabilityId === "vcr-evidence"), "the evidence run follows the definition");
+});
+
+/**
+ * The conversation's side of the runtime gateway, composed from the module under test: the real handler, a token that names the
+ * study's account and project, and nothing else faked.
+ * @param {any} module @param {any} study
+ */
+function conversationGateway(module, study) {
+  const runtimeManager = { assertActiveModelGatewayToken: () => ({ userId: study.userId, projectId: study.projectId }) };
+  const handler = createVcrGatewayHandler({ vcrEnabled: true, vcrAudience: "all", modelGatewayInternalUrl: "http://127.0.0.1:8788/internal/models/v1" }, runtimeManager,
+    { vcr: { service: module.service, store, jobs: module.jobs, orchestrator: module.orchestrator } });
+  return async (/** @type {string} */ operation, /** @type {Record<string, any>} */ body) => {
+    const req = Object.assign(Readable.from([Buffer.from(JSON.stringify(body))]), { method: "POST", url: `/internal/vcr/v1/${operation}`, headers: { authorization: "Bearer t" } });
+    const res = { status: 0, body: "", writeHead(/** @type {number} */ status) { this.status = status; return this; }, end(/** @type {string} */ chunk = "") { this.body = String(chunk); } };
+    await handler(req, res);
+    return { status: res.status, ...JSON.parse(res.body) };
+  };
+}
+
+/** The three designs a conversation compares: 2:1, 1:1 and 1:1 with an interim look. */
+const conversationDesigns = [
+  { label: "A 2:1 固定设计", design: "two_arm_fixed", endpointType: "time_to_event",
+    configuration: { design: { nTreat: 120, nControl: 60, allocation: 0.6667 }, analysis: { method: "logrank", alpha: 0.025, sided: 1, power: 0.9 }, accrual: { kind: "uniform", duration: 12, followup: 12 }, performance: ["power"] } },
+  { label: "B 1:1 固定设计", design: "two_arm_fixed", endpointType: "time_to_event",
+    configuration: { design: { nTreat: 90, nControl: 90, allocation: 0.5 }, analysis: { method: "logrank", alpha: 0.025, sided: 1, power: 0.9 }, accrual: { kind: "uniform", duration: 12, followup: 12 }, performance: ["power"] } },
+  { label: "C 1:1 加一次期中分析", design: "group_sequential", endpointType: "time_to_event",
+    configuration: { design: { nTreat: 90, nControl: 90, allocation: 0.5, informationRates: [0.5, 1], spending: "obrien_fleming" }, analysis: { method: "logrank", alpha: 0.025, sided: 1, power: 0.9 },
+      accrual: { kind: "uniform", duration: 12, followup: 12 }, truth: { hazardRatio: 0.7, controlMedian: 6 } } },
+];
+
+/** @param {number} at the design @param {string} kind the computation, as a run states the scenario to the engine (each method reads its own keys) */
+function engineScenario(at, kind) {
+  const own = conversationDesigns[at];
+  const base = { endpoint: { type: own.endpointType }, truth: { hazardRatio: 0.7, controlMedian: 6 } };
+  const looks = own.configuration.design.informationRates ? { informationRates: own.configuration.design.informationRates, spending: "obrien_fleming" } : {};
+  return kind === "design_analytic"
+    ? { ...base, design: { kind: own.design, allocation: own.configuration.design.allocation, ...looks }, analysis: { alpha: 0.025, power: 0.9, sided: 1 }, accrual: { duration: 24, followup: 12 } }
+    : { ...base, design: { nTreat: own.configuration.design.nTreat, nControl: own.configuration.design.nControl, kind: own.design, ...looks },
+      analysis: { method: "logrank", alpha: 0.025, sided: 1 }, accrual: { kind: "uniform", duration: 12, followup: 12 } };
+}
+
+test("R10 a computation a conversation queues is filed under the design it was queued for: three designs are three results, each with its analytic and simulated numbers, the notices say so once, and the programme does not queue the same stage again", options, async () => {
+  const module = compose();
+  const study = await makeStudy("conversation");
+  const write = (/** @type {string} */ what, /** @type {any} */ data) => vcrRuntimeWrite({ store, service: module.service, orchestrator: module.orchestrator,
+    study, what, items: Array.isArray(data) ? data : null, data: Array.isArray(data) ? null : data });
+  const defined = await write("definition", { ...definition, title: "二线肺癌 EV 的样本量", question: "单臂 II 期能不能用外部对照？" });
+  assert.equal(defined.ok, true);
+  const latest = await store.latestDefinition(study.id);
+  assert.deepEqual([latest.title, latest.question], ["二线肺癌 EV 的样本量", "单臂 II 期能不能用外部对照？"], "the conversation's own name and sentence are kept with the definition");
+  await write("assumption", [{ key: "hazard_ratio", name: "风险比", pointValue: 0.7, sourceKind: "expert_set", valueSource: "assumed" },
+    { key: "control_median_pfs", name: "对照组中位 PFS", pointValue: 6, sourceKind: "expert_set", valueSource: "assumed" }]);
+  const written = await write("trial_scenario", conversationDesigns);
+  assert.equal(written.ids.length, 3);
+  const [a, b, c] = written.ids;
+  const gateway = conversationGateway(module, study);
+
+  // No subject, and the scenario fits two designs equally: refused by name, and nothing is queued.
+  const several = await gateway("simulate", { action: "start", kind: "design_simulation", scenario: { design: { allocation: 0.5 }, endpoint: { type: "time_to_event" } } });
+  assert.equal(several.status, 400);
+  assert.equal(several.code, "vcr_simulate_subject_required");
+  assert.deepEqual(await store.jobs(study.id), []);
+
+  // The conversation asks for each design's analytic size and its simulation, naming the design.
+  /** @type {Record<string, any>} */
+  const started = {};
+  const asked = engineScenario;
+  for (const [id, at] of /** @type {Array<[string, number]>} */ ([[a, 0], [b, 1]])) {
+    for (const kind of ["design_analytic", "design_simulation"]) {
+      const answer = await gateway("simulate", { action: "start", kind, subjectId: id, scenario: asked(at, kind) });
+      assert.equal(answer.status, 200, JSON.stringify(answer));
+      assert.equal(answer.data.subject.id, id);
+      started[`${id}:${kind}`] = answer.data.jobId;
+    }
+  }
+  // The programme's next pass takes what the conversation did not: it does not queue the stages the conversation holds.
+  await module.orchestrator.advance(study.id);
+  const analyticJobs = (await store.jobs(study.id)).filter((job) => job.kind === "design_analytic");
+  assert.equal(analyticJobs.filter((job) => job.checkpoint.subjectId === a).length, 1, "the programme did not queue the analytic stage of a design the conversation already did");
+  const simulationOfA = (await store.jobs(study.id)).filter((job) => job.kind === "design_simulation" && job.checkpoint.subjectId === a);
+  assert.equal(simulationOfA.length, 1);
+  // and a run that asks again for a stage in flight is given that job, not a second one
+  const again = await gateway("simulate", { action: "start", kind: "design_simulation", subjectId: a, scenario: asked(0, "design_simulation") });
+  assert.equal(again.data.alreadyRunning, true);
+  assert.equal(again.data.jobId, started[`${a}:design_simulation`]);
+
+  await drainJobs(module, study);
+
+  // Three designs are three results. Each design holds its own, and nobody is superseded by another design.
+  const current = await store.results(study.id, "trial_scenario");
+  assert.deepEqual(current.map((row) => row.subjectId).sort(), [a, b, c].sort(), "one current result per design, filed under it");
+  for (const id of [a, b]) {
+    const row = current.find((entry) => entry.subjectId === id);
+    const names = row.measures.map((/** @type {any} */ measure) => measure.name);
+    assert.ok(names.includes("required_events") && names.includes("power"), `design ${id} holds its analytic and its simulated numbers: ${names.join(",")}`);
+    const scenarioRow = (await store.trialScenarios(study.id)).find((entry) => entry.id === id);
+    assert.equal(scenarioRow.resultId, row.id, "the result lands on the design, which is where the trial tab reads it");
+  }
+  const all = await store.allResults(study.id);
+  assert.equal(all.filter((row) => row.kind === "trial_scenario" && row.subjectId === null).length, 0, "no result is left without a design");
+  for (const row of all.filter((entry) => entry.kind === "trial_scenario" && entry.supersededBy)) {
+    const successor = all.find((entry) => entry.id === row.supersededBy);
+    assert.equal(successor?.subjectId, row.subjectId, "a result is superseded only by a result of the same design");
+  }
+
+  // One notice per computation the conversation asked for, in the researcher's words; none for the programme's own stages.
+  const titles = notices_of(module).map((notice) => notice.title);
+  assert.equal(titles.filter((title) => title.startsWith("方案计算完成")).length, 2);
+  assert.ok(titles.some((title) => /^方案模拟完成：1:1 固定设计功效 71\.2%$/.test(title)), `the simulation says its number: ${titles.join(" | ")}`);
+  assert.ok(notices_of(module).every((notice) => notice.source.id === `${study.id}/trial` || !String(notice.title).includes("完成")));
+  const simulationNotices = notices_of(module).filter((notice) => notice.title.startsWith("方案模拟完成"));
+  assert.equal(simulationNotices.length, 2, "two simulations were asked for, and C was the programme's own");
+});
+
+/** The notices the inbox double took from a composed module that are about a finished computation. @param {any} module */
+function notices_of(module) {
+  return module.notices.filter((/** @type {any} */ notice) => /完成/.test(String(notice.title)) && notice.source?.type === "vcr");
+}
+
+test("R10 the backfill gives the results the old path left without a subject the design they were computed for, undoes the supersessions that crossed designs, and a second run changes nothing", options, async () => {
+  const module = compose({ dispatch: false });
+  const study = await makeStudy("backfill");
+  await store.updateStudy(study.id, { status: "paused" }, study.userId);
+  const written = await vcrRuntimeWrite({ store, service: module.service, orchestrator: module.orchestrator, study, what: "trial_scenario", items: conversationDesigns, data: null });
+  const [a, b, c] = written.ids;
+
+  // What the conversation did on 2026-10-07: three analytic jobs and four simulations, each with its own scenario and no subject.
+  /** @param {string} kind @param {number} at @param {Record<string, any>} scenario @param {Record<string, any>} measure */
+  const legacy = async (kind, at, scenario, measure) => {
+    const { job } = await module.jobs.enqueue({ studyId: study.id, userId: study.userId, kind, scenario, inputs: [], internal: true,
+      idempotencyKey: `legacy:${kind}:${at}:${JSON.stringify(scenario).length}:${Math.random()}`, detail: { subjectId: null, origin: "runtime" } });
+    const execution = await store.recordExecution({ jobId: job.id, studyId: study.id, userId: study.userId, method: job.method, methodVersion: "1.0.0", scenarioHash: "h".repeat(16),
+      inputs: [], environment: {}, seed: 1, replicates: null, outputHash: null, receipt: {}, cpuSeconds: 1, startedAt: null, finishedAt: null });
+    return store.recordResult({ studyId: study.id, userId: study.userId, executionId: execution.id, kind: "trial_scenario", subjectId: null,
+      conclusion: "estimable", counts: {}, measures: [measure], diagnostics: {}, tables: [] });
+  };
+  const designOf = engineScenario;
+  const analytic = (/** @type {number} */ value) => ({ name: "required_events", value, source: "calculated" });
+  const power = (/** @type {number} */ value) => ({ name: "power", value, simulated: true, mcse: 0.004, source: "synthetic" });
+  const made = [];
+  made.push(await legacy("design_analytic", 0, designOf(0, "design_analytic"), analytic(950)));
+  made.push(await legacy("design_analytic", 1, designOf(1, "design_analytic"), analytic(845)));
+  made.push(await legacy("design_analytic", 2, designOf(2, "design_analytic"), analytic(841)));
+  made.push(await legacy("design_simulation", 0, designOf(0, "design_simulation"), power(0.898)));
+  made.push(await legacy("design_simulation", 1, designOf(1, "design_simulation"), power(0.915)));
+  made.push(await legacy("design_simulation", 2, designOf(2, "design_simulation"), power(0.905)));
+  made.push(await legacy("design_simulation", 1, { ...designOf(1, "design_simulation"), accrual: { kind: "uniform", duration: 18, followup: 12 } }, power(0.917)));
+  assert.equal((await store.results(study.id, "trial_scenario")).length, 1, "the old path: seven results, one of them current, whichever design it was for");
+
+  const report = await backfillResultSubjects({ store, studyId: study.id });
+  assert.equal(report.apply, false);
+  const only = report.studies[0];
+  assert.equal(only.assigned.length, 7);
+  assert.deepEqual(only.unmatched, []);
+  assert.deepEqual(only.assigned.filter((row) => row.subjectId === b).length, 3, "design B has an analytic and two simulations");
+  assert.equal((await store.results(study.id, "trial_scenario")).length, 1, "a report changes nothing");
+
+  const applied = await backfillResultSubjects({ store, studyId: study.id, apply: true });
+  assert.equal(applied.studies[0].assigned.length, 7);
+  const current = await store.results(study.id, "trial_scenario");
+  assert.deepEqual(current.map((row) => row.subjectId).sort(), [a, b, c].sort(), "one current result per design");
+  const all = await store.allResults(study.id);
+  for (const row of all.filter((entry) => entry.supersededBy)) {
+    assert.equal(all.find((entry) => entry.id === row.supersededBy)?.subjectId, row.subjectId, "a result is superseded only within its design");
+  }
+  const rows = await store.trialScenarios(study.id);
+  for (const id of [a, b, c]) assert.equal(rows.find((row) => row.id === id).resultId, current.find((row) => row.subjectId === id).id, "the design points at its current result");
+  // B's newest result is the second simulation; its earlier analytic and simulation are kept, superseded by it.
+  assert.equal(current.find((row) => row.subjectId === b).id, made[6].id);
+  assert.equal(all.filter((row) => row.subjectId === b && row.supersededBy === made[6].id).length, 2);
+
+  for (const second of [await backfillResultSubjects({ store, studyId: study.id, apply: true }), await backfillResultSubjects({ store, studyId: study.id })]) {
+    const [none] = second.studies;
+    assert.deepEqual([none.assigned, none.unmatched, none.unsuperseded, none.resuperseded, none.landed], [[], [], [], [], []], "a second run changes nothing and reports nothing");
+  }
+  const everyStudy = await backfillResultSubjects({ store });
+  assert.ok(!everyStudy.studies.some((entry) => entry.studyId === study.id), "and the study is no longer one with results left to give a subject");
+});
+
+test("R10 a computation of a step the researcher asked for with 「让 AI 做」 ends in one notice when the design's last stage lands; the programme's own recomputation after a change tells nobody", options, async () => {
+  const module = compose();
+  const study = await makeStudy("asked");
+  const write = (/** @type {string} */ what, /** @type {any} */ data) => vcrRuntimeWrite({ store, service: module.service, orchestrator: module.orchestrator,
+    study, what, items: Array.isArray(data) ? data : null, data: Array.isArray(data) ? null : data });
+  await write("definition", definition);
+  await write("assumption", [
+    { key: "control_median_pfs", name: "对照组中位 PFS", pointValue: 6, sourceKind: "expert_set", valueSource: "assumed" },
+    { key: "hazard_ratio", name: "风险比", pointValue: 0.7, sourceKind: "expert_set", valueSource: "assumed" },
+    { key: "dropout_rate", name: "脱落率", pointValue: 0.1, sourceKind: "expert_set", valueSource: "assumed" },
+  ]);
+  // The researcher asks for the trial step: the page stamps when, and the programme's jobs for it are theirs.
+  await module.orchestrator.runStep({ id: study.userId }, study, "trial");
+  assert.ok((await store.studyById(study.id)).steps.trial.askedAt, "the click is remembered");
+  assert.equal(JSON.stringify(await module.service.studyView({ id: study.userId }, study.id)).includes("askedAt"), false, "and never shown on the page");
+  await write("trial_scenario", trialA);
+  await module.orchestrator.advance(study.id);
+  await drainJobs(module, study);
+  const first = notices_of(module);
+  assert.equal(first.length, 1, `one notice for the design, not one per stage: ${first.map((notice) => notice.title).join(" | ")}`);
+  assert.match(first[0].title, /^方案(模拟|计算)完成/);
+  assert.equal(first[0].source.id, `${study.id}/trial`);
+
+  // A changed assumption recomputes the design: the programme's own work, which tells nobody.
+  const before = notices_of(module).length;
+  await write("assumption", [{ key: "dropout_rate", name: "脱落率", pointValue: 0.15, sourceKind: "expert_set", valueSource: "assumed" }]);
+  await drainJobs(module, study);
+  assert.equal((await store.jobs(study.id)).filter((job) => job.kind === "design_simulation").length, 2, "it was recomputed");
+  assert.equal(notices_of(module).length, before, "and nobody was told");
 });
 
 test("AC-33 everything the run set carries the AI-set label until a person countersigns it", options, async () => {

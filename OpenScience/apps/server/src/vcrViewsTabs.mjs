@@ -38,17 +38,19 @@ import {
   VCR_ANALYSIS_TABLE_LABELS_ZH, VCR_MEMBER_ROLE_LABELS_ZH, VCR_MISSING_REASONS, VCR_MISSING_REASON_LABELS_ZH,
   VCR_QUALITY_CATEGORY_LABELS_ZH, VCR_TIME_KINDS, VCR_TIME_KIND_LABELS_ZH, VCR_VALUE_SOURCE_LABELS_ZH,
   VCR_PROGNOSTIC_QUALIFICATION, VCR_PROGNOSTIC_QUALIFICATION_LABEL_ZH, VCR_ROBUSTNESS_STAGES, VCR_ROBUSTNESS_STAGE_LABELS_ZH,
-  VCR_MODEL_RISK_RULE_LABELS_ZH, VCR_RATING_LABELS_ZH, vcrAssessmentIssues, vcrAssessmentRows,
+  VCR_MODEL_RISK_RULE_LABELS_ZH, VCR_RATING_LABELS_ZH, VCR_SYNTHETIC_USE_LABELS_ZH, vcrAssessmentIssues, vcrAssessmentRows,
 } from "@evimed/domain";
 
 import { vcrObjectNode } from "./vcrStore.mjs";
+import { VCR_UNSUPPORTED_COMPARATOR_ROUTES } from "./vcrService.mjs";
+import { POPULATION_METHOD_WORDS, PROFILE_MISSING_SENTENCE, constraintRows, generatedProfileRows } from "./vcrPopulationProfileView.mjs";
 import {
   abilitiesOf, assumptionSummary, assumptionValue, designsSentence, nodeLabel, notEstimableDesign, presentDesigns,
   presentModelCard, resultNode, scenarioName, valueString,
 } from "./vcrViews.mjs";
 import {
   allResultsOf, countsView, finite, intervalView, letterCode, list, markFor, measureLabel, measureValue, naturalScale, numeric, object,
-  personName, plainText, PARAMETER_LABELS, roundTo, scaledSeries, staleNote, text, zhDate, zhTime, VCR_ROBUSTNESS_MEASURES,
+  personName, plainText, PARAMETER_LABELS, METHOD_LABELS, roundTo, scaledSeries, staleNote, text, zhDate, zhTime, VCR_ROBUSTNESS_MEASURES,
 } from "./vcrViewsKit.mjs";
 
 /** A plain value (a number or `{ value, unit, … }` a row stored) as a page value. @param {unknown} raw @param {Record<string, any>} defaults */
@@ -142,10 +144,12 @@ export function criterionCodes(criteria) {
 /** @param {Record<string, any>} entry @param {number} index */
 function waterfallEntry(entry, index) {
   const row = object(entry);
+  // The engine's own steps name the rule they applied (`rule`); a rule written from a criterion is named by its code (「I1」, 「E2」).
+  const rule = text(row.rule);
   return {
-    key: text(row.key) ?? text(row.criterionId) ?? text(row.code) ?? `step_${index}`,
-    label: text(row.label) ?? text(row.step) ?? text(row.name) ?? `第 ${index + 1} 步`,
-    code: text(row.code),
+    key: text(row.key) ?? text(row.criterionId) ?? text(row.code) ?? rule ?? `step_${index}`,
+    label: text(row.label) ?? text(row.step) ?? text(row.name) ?? rule ?? `第 ${index + 1} 步`,
+    code: text(row.code) ?? (rule && /^[IE]\d+$/.test(rule) ? rule : null),
     criterionId: text(row.criterionId),
     ordinal: numeric(row.ordinal),
     remaining: numeric(row.remaining ?? row.kept ?? row.n),
@@ -224,7 +228,13 @@ export function presentPopulationTab(bundle) {
   const result = current ? resultById(bundle, current.resultId) : null;
   const marks = current ? [markFor(stale, vcrObjectNode("population", current)), result ? markFor(stale, resultNode(result)) : null] : [];
   const codes = criterionCodes(criteria);
-  const steps = current ? list(current.waterfall).map(waterfallEntry) : [];
+  // What the engine wrote beside the table is what the tab reads: the population row carries what was written when the object was, and
+  // nothing copies a finished job's waterfall, counts or quality back onto it.
+  const diagnostics = object(result?.diagnostics);
+  const rowOrResult = (/** @type {unknown} */ held, /** @type {unknown} */ computed) => (Array.isArray(held) ? held.length : Object.keys(object(held)).length) ? held : computed;
+  const waterfall = current ? rowOrResult(current.waterfall, diagnostics.waterfall) : [];
+  const heldCounts = current ? rowOrResult(current.counts, result?.counts) : {};
+  const steps = current ? list(waterfall).map(waterfallEntry) : [];
   const byCriterion = (/** @type {any} */ criterion) => steps.find((entry) => entry.criterionId === criterion.id || entry.code === codes.get(criterion.id)
     || (entry.ordinal !== null && entry.ordinal === Number(criterion.ordinal)));
   const kindSource = current ? ({ real: "observed", literature: "aggregate", scenario: "assumed", empirical_synthetic: "synthetic" }[/** @type {"real"} */ (current.kind)] ?? "assumed") : "assumed";
@@ -247,11 +257,14 @@ export function presentPopulationTab(bundle) {
       } : null;
     })(),
   } : { version: null, kind: null, versions: [], definition: null };
+  // The criteria a coverage check could not put to this data (no column, an event only a record can carry): not in the count, said by name.
+  const notEvaluated = new Map(list(object(object(current?.profile).coverage).notEvaluated).map(object).map((entry) => [String(entry.code), text(entry.why)]));
   const rows = criteria.map((/** @type {any} */ criterion) => {
     const entry = byCriterion(criterion);
     return {
       id: criterion.id,
       code: codes.get(criterion.id) ?? "",
+      notEvaluated: notEvaluated.get(codes.get(criterion.id) ?? "") ?? null,
       name: (/** @type {Record<string, string>} */ (VCR_CRITERION_TYPE_LABELS_ZH))[criterion.criterionType] ?? "其他",
       quote: text(criterion.sourceText),
       quoteSource: vcrLocatorText(criterion.sourceLocator, { draftPack: bundle.knowledge?.pack?.status === "ai-draft" }),
@@ -264,16 +277,25 @@ export function presentPopulationTab(bundle) {
       changed: null,
     };
   });
-  const outcomeCounts = object(current?.counts);
+  const outcomeCounts = object(heldCounts);
+  // A cohort the engine built says it in measures: everyone who met every rule, everyone who met or could not be judged on each, and
+  // how many were looked at.
+  const cohortMeasure = (/** @type {string} */ name) => numeric(object(list(result?.measures).find((entry) => object(entry).name === name)).value);
+  const strict = cohortMeasure("cohort_size_strict");
+  const lenient = cohortMeasure("cohort_size_lenient");
+  const looked = numeric(diagnostics.startingRows);
   const outcome = current && (numeric(outcomeCounts.eligible ?? outcomeCounts.kept) !== null
     || numeric(outcomeCounts.insufficient ?? outcomeCounts.indeterminate) !== null || numeric(outcomeCounts.ineligible ?? outcomeCounts.excluded) !== null)
     ? {
       eligible: numeric(outcomeCounts.eligible ?? outcomeCounts.kept),
       insufficient: numeric(outcomeCounts.insufficient ?? outcomeCounts.indeterminate),
       ineligible: numeric(outcomeCounts.ineligible ?? outcomeCounts.excluded),
-    } : null;
+    } : (strict !== null && lenient !== null && looked !== null ? { eligible: strict, insufficient: lenient - strict, ineligible: looked - lenient } : null);
   const profile = object(current?.profile);
-  const profileView = profileRows(profile).map((entry, index) => {
+  // A generated population is described variable by variable by the engine (`diagnostics.profile`); a real cohort is compared with the
+  // published one, row by row.
+  const generated = current && current.kind !== "real" ? generatedProfileRows(diagnostics.profile) : null;
+  const profileView = generated ?? profileRows(profile).map((entry, index) => {
     const row = object(entry);
     const smd = finite(row.smd ?? row.smdAdjusted);
     return {
@@ -286,13 +308,20 @@ export function presentPopulationTab(bundle) {
       note: text(row.note),
     };
   });
+  // What limits a cohort is what each rule would do on its own, not what is left for it after the rules before it: the engine states
+  // both, and the independent count is the one that ranks.
+  const impact = new Map(list(diagnostics.criterionImpact).map(object).map((entry) => [String(entry.rule), entry]));
+  const alone = (/** @type {Record<string, any>} */ row) => {
+    const own = impact.get(row.code);
+    return own ? { excluded: numeric(own.failsAlone) ?? 0, unknown: numeric(own.indeterminateAlone) ?? 0 } : { excluded: row.excluded ?? 0, unknown: row.unknown ?? 0 };
+  };
   const blockers = rows
-    .map((row) => ({ row, hit: (row.excluded ?? 0) + (row.unknown ?? 0) }))
+    .map((full) => { const row = { ...full, ...alone(full) }; return { row, hit: row.excluded + row.unknown }; })
     .filter((entry) => entry.hit > 0)
     .sort((a, b) => b.hit - a.hit)
     .slice(0, 3)
     .map(({ row }) => ({
-      code: row.code, label: row.name,
+      code: row.code, label: row.name, quote: row.quote,
       text: (row.unknown ?? 0) >= (row.excluded ?? 0) ? `无法判断 ${row.unknown}` : `排除 ${row.excluded}`,
       tone: (row.unknown ?? 0) >= (row.excluded ?? 0) ? "attention" : "neutral",
     }));
@@ -314,6 +343,8 @@ export function presentPopulationTab(bundle) {
   return {
     version: view.version,
     kind: view.kind,
+    // What the study called this population: 「按方案条件查覆盖」 for the one made from the protocol's own criteria.
+    name: current ? text(current.name) : null,
     versions: view.versions,
     definition: view.definition,
     criteria: rows,
@@ -323,10 +354,20 @@ export function presentPopulationTab(bundle) {
     })),
     outcome,
     profile: profileView,
-    profileNote: profileView.length ? "标准化差异 |SMD| 超过 0.1 的特征已标出，它只说明两个人群不同，不说明谁对。" : null,
+    // `generated`: one row per variable, set beside what came out of it; `comparison`: ours against the published cohort.
+    profileKind: generated ? "generated" : profileView.length ? "comparison" : null,
+    profileNote: generated ? null : profileView.length ? "标准化差异 |SMD| 超过 0.1 的特征已标出，它只说明两个人群不同，不说明谁对。"
+      // A generated population whose result has no profile was generated before the engine wrote one: one sentence, and the way to get it.
+      : current && current.kind !== "real" && result ? PROFILE_MISSING_SENTENCE : null,
+    profileMissing: Boolean(current && current.kind !== "real" && result && !generated),
+    // How it was made and what it may be used for: the two things a reader needs before using a synthetic table.
+    method: current ? (POPULATION_METHOD_WORDS[String(current.kind)] ?? null) : null,
+    allowedUses: current && current.kind !== "real"
+      ? list(current.allowedUses).map(String).map((use) => ({ key: use, label: (/** @type {Record<string, string>} */ (VCR_SYNTHETIC_USE_LABELS_ZH))[use] ?? use })) : [],
+    constraints: current && current.kind !== "real" ? constraintRows(diagnostics.constraintViolations) : [],
     unknownReasons: [...reasons.values()].map((reason) => ({ key: reason.key, label: reason.label, detail: reason.detail, count: reason.count })),
     blockers,
-    quality: current ? qualityReportView(current.quality) : null,
+    quality: current ? qualityReportView(Object.keys(object(current.quality)).length ? current.quality : diagnostics.quality) : null,
     counts: current ? countsView(result?.counts && Object.keys(result.counts).length ? result.counts : current.counts, { tier: study.dataTier }) : null,
     conclusion: result?.conclusion ?? null,
     headline: outcome && total !== null && outcome.eligible !== null && outcome.insufficient !== null
@@ -527,7 +568,8 @@ export function presentComparatorTab(bundle) {
   const tierIndex = VCR_DATA_TIERS.indexOf(study.dataTier);
   const latestByRoute = new Map();
   for (const design of comparators) if (!latestByRoute.has(design.route)) latestByRoute.set(design.route, design);
-  const routes = VCR_COMPARATOR_ROUTES.map((route) => {
+  // A route this version cannot compute is not one of the choices — unless a design somebody wrote earlier names it, which is then shown as what it found.
+  const routes = VCR_COMPARATOR_ROUTES.filter((route) => !VCR_UNSUPPORTED_COMPARATOR_ROUTES.includes(route) || latestByRoute.has(route)).map((route) => {
     const minimum = /** @type {Record<string, string>} */ (VCR_ROUTE_MIN_TIER)[route];
     const reachable = tierIndex >= 0 && tierIndex >= VCR_DATA_TIERS.indexOf(minimum);
     const design = latestByRoute.get(route) ?? null;
@@ -712,22 +754,22 @@ function adempOf(bundle, scenario) {
   const designWord = scenario ? (/** @type {Record<string, string>} */ (VCR_ESTIMAND_LABELS_ZH))[String(object(definition?.estimand).kind)] : null;
   /** @type {Array<{ key: string, label: string, text: string }>} */
   const lines = [];
-  if (text(study.question)) lines.push({ key: "a", label: "目的", text: String(study.question) });
+  if (text(study.question)) lines.push({ key: "aim", label: "目的", text: String(study.question) });
   if (scenario) {
     const dataGeneration = [
       (/** @type {Record<string, string>} */ (VCR_ENDPOINT_TYPE_LABELS_ZH))[scenario.endpointType] ?? scenario.endpointType,
       ...Object.entries(truth).filter(([, value]) => typeof value === "number").map(([key, value]) => `${TRUTH_LABELS[key] ?? key} ${value}`),
     ].join(" · ");
-    lines.push({ key: "d", label: "数据生成机制", text: dataGeneration });
+    lines.push({ key: "data", label: "怎么生成数据", text: dataGeneration });
   }
   const estimand = text(object(definition?.estimand).text) ?? text(object(definition?.estimand).variable) ?? designWord;
-  if (estimand) lines.push({ key: "e", label: "估计目标", text: estimand });
+  if (estimand) lines.push({ key: "estimate", label: "估计什么", text: estimand });
   if (Object.keys(analysis).length) {
-    lines.push({ key: "m", label: "分析方法", text: [text(analysis.method), numeric(analysis.alpha) !== null ? `α = ${analysis.alpha}` : null,
+    lines.push({ key: "analysis", label: "怎么分析", text: [text(analysis.method), numeric(analysis.alpha) !== null ? `α = ${analysis.alpha}` : null,
       numeric(analysis.sided) !== null ? `${analysis.sided} 侧` : null].filter(Boolean).join(" · ") || "已设定" });
   }
   if (performance.length) {
-    lines.push({ key: "p", label: "性能指标", text: performance.map((name) => (/** @type {Record<string, string>} */ (VCR_PERFORMANCE_MEASURE_LABELS_ZH))[name] ?? measureLabel(name)).join("、") });
+    lines.push({ key: "measures", label: "看哪些指标", text: performance.map((name) => (/** @type {Record<string, string>} */ (VCR_PERFORMANCE_MEASURE_LABELS_ZH))[name] ?? measureLabel(name)).join("、") });
   }
   return lines;
 }
@@ -735,6 +777,24 @@ function adempOf(bundle, scenario) {
 const TRUTH_LABELS = Object.freeze(/** @type {Record<string, string>} */ ({
   effect: "真实效应", sd: "标准差", hazardRatio: "真实 HR", controlMedian: "对照组中位", controlRate: "对照事件率", treatmentRate: "试验事件率",
 }));
+
+/**
+ * The trial tab's first sentence: what each design needs where the closed form computed it, then how the designs did where they
+ * were simulated. Every number is a measure of the design's own results, formatted here.
+ * @param {ReadonlyArray<Record<string, any>>} designs
+ */
+export function trialHeadline(designs) {
+  const needs = designs.filter((design) => !design.dominated).map((design) => {
+    const events = numeric(design.measures.required_events?.value);
+    const patients = design.measures.sample_size?.source === "calculated" ? numeric(design.measures.sample_size?.value) : null;
+    if (events === null && patients === null) return null;
+    return `方案 ${design.code} 需要 ${[events !== null ? `${Math.round(events).toLocaleString("en-US")} 例事件` : null,
+      patients !== null ? `${Math.round(patients).toLocaleString("en-US")} 名患者` : null].filter(Boolean).join("、")}`;
+  }).filter(Boolean).slice(0, 3);
+  const sentence = designsSentence(designs);
+  const parts = [...needs, ...(sentence && designs.some((design) => design.measures.power || design.measures.assurance) ? [sentence] : [])];
+  return parts.length ? `${parts.join("；")}。` : (sentence ? `${sentence}。` : null);
+}
 
 /**
  * `GET /api/vcr/studies/:id/trial`.
@@ -748,7 +808,7 @@ export function presentTrialTab(bundle) {
   const headlineRow = designRows.find((row) => row.chosen && row._result) ?? [...designRows].reverse().find((row) => !row.dominated && row._result) ?? null;
   const decision = decisions[0] ?? null;
   const columnSpec = [
-    ["sample_size", "样本量", "例"], ["expected_events", "期望事件数", null], ["power", "功效", "%"], ["assurance", "成功把握", "%"],
+    ["required_events", "所需事件数", "例"], ["sample_size", "样本量", "例"], ["expected_events", "期望事件数", null], ["power", "功效", "%"], ["assurance", "成功把握", "%"],
     ["type_one_error", "I 类错误", "%"], ["expected_sample_size", "期望样本量", "例"], ["duration_months", "末例入组中位", "月"], ["cost", "成本", "万元"],
   ];
   const columns = columnSpec
@@ -774,7 +834,7 @@ export function presentTrialTab(bundle) {
     const allowedPoints = numeric(check.tolerance) !== null ? roundTo(Number(check.tolerance) * 100, 1) : null;
     return {
       key: `run_${row.code}`,
-      title: `方案 ${row.code}：${execution ? `${execution.method}${execution.replicates != null ? `，${Number(execution.replicates).toLocaleString("en-US")} 次重复` : ""}` : "已运行"}`,
+      title: `方案 ${row.code}：${execution ? `${METHOD_LABELS[String(execution.method)] ?? "已运行"}${execution.replicates != null ? `，${Number(execution.replicates).toLocaleString("en-US")} 次重复` : ""}` : "已运行"}`,
       detail: [
         execution?.seed != null ? `种子 ${execution.seed}` : null,
         within === true && differencePoints !== null
@@ -795,7 +855,7 @@ export function presentTrialTab(bundle) {
   }));
   const goal = text(decision?.question) ?? text(object(grid?.comparisonGoal).text) ?? null;
   return {
-    headline: designsSentence(designs) ? `${designsSentence(designs)}。` : null,
+    headline: trialHeadline(designs),
     ademp: adempOf(bundle, headlineRow?._scenario ?? scenarios[0] ?? null),
     ademReview: headlineRow?._result?.reviewState ?? null,
     designs,
@@ -912,20 +972,37 @@ function gridView(grid, designs) {
   };
 }
 
-/** One registered forecast: the hash and the time, the prediction, and — once it exists — the actual beside it. @param {Record<string, any>} forecast @param {Date} now */
+/**
+ * One registered forecast, as a reader sees it: when it was made, the numbers it predicted and — once it exists — the actual beside
+ * them. The registered prediction is the result's own measures (`{ measures: { power: { value, mcse } } }`, or the accrual forecast's
+ * median and interval); the ids, the hash and the replicate count that make it provable are the registry's, and stay there.
+ * @param {Record<string, any>} forecast @param {Date} now
+ */
 function forecastView(forecast, now) {
   const prediction = object(forecast.prediction);
   const actual = forecast.actual == null ? null : object(forecast.actual);
   /** @type {Array<{ key: string, label: string, predicted: string, actual: string | null }>} */
-  const lines = Object.entries(prediction).filter(([, value]) => typeof value === "number" || typeof value === "string")
-    .slice(0, 6).map(([key, value]) => ({
-      key, label: measureLabel(key), predicted: plainText(key, value), actual: actual && actual[key] != null ? plainText(key, actual[key]) : null,
-    }));
+  const lines = [];
+  /** @type {Array<[string, Record<string, any>]>} */
+  const measures = Array.isArray(prediction.measures)
+    ? prediction.measures.map(object).map((entry) => [String(entry.name ?? ""), entry])
+    : Object.entries(object(prediction.measures)).map(([name, entry]) => [name, object(entry)]);
+  for (const [name, entry] of measures) {
+    const value = finite(entry.value);
+    if (!name || value === null) continue;
+    const mcse = finite(entry.mcse);
+    lines.push({ key: name, label: measureLabel(name), predicted: `${plainText(name, value)}${mcse !== null ? ` ±${plainText(name, mcse).replace(/^-/, "")}` : ""}`,
+      actual: actual && actual[name] != null ? plainText(name, actual[name]) : null });
+  }
+  // What an accrual forecast and an older registration state at the top level, in words: never an id.
+  const named = lines.length ? [] : Object.entries(prediction).filter(([key, value]) => typeof value === "number" && !["version", "replicates"].includes(key)).slice(0, 6);
+  for (const [key, value] of named) {
+    lines.push({ key, label: measureLabel(key), predicted: plainText(key, value), actual: actual && actual[key] != null ? plainText(key, actual[key]) : null });
+  }
   return {
     id: String(forecast.id),
-    label: forecast.kind === "accrual" ? "入组预测" : String(forecast.kind),
+    label: forecast.kind === "accrual" ? "入组预测" : forecast.kind === "trial" ? "方案预测" : String(forecast.kind),
     version: Number(forecast.version),
-    hash: String(forecast.payloadHash ?? "").slice(0, 12),
     frozenAt: zhTime(forecast.createdAt, now),
     comparedAt: forecast.comparedAt ? zhTime(forecast.comparedAt, now) : null,
     lines,
@@ -1132,8 +1209,10 @@ export function presentMatchingTab(bundle, query = {}) {
     available: true,
     headline: total ? `${total.toLocaleString("en-US")} 人已评估，${(eligible ?? 0).toLocaleString("en-US")} 人全部满足，${insufficient.toLocaleString("en-US")} 人至少有 1 条未知或待复评。` : null,
     partner: total ? { name: null, candidates: total, tier: study.dataTier, snapshotAt: match.snapshotAt ? zhDate(match.snapshotAt, now) : null } : null,
-    direction: ["trial_to_patient", "patient_to_trial"].includes(String(query.direction)) ? String(query.direction)
-      : (subjects[0]?.direction === "patient_to_trial" ? "patient_to_trial" : "trial_to_patient"),
+    // One direction: from the protocol to the patients. 「给患者找试验」 has no data path (the evaluator only ever writes this direction), so
+    // it is not offered and a request for it reads the same view.
+    direction: "trial_to_patient",
+    directions: ["trial_to_patient"],
     funnel,
     candidates,
     selected,
