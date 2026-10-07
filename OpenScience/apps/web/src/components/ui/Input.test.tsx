@@ -4,6 +4,31 @@ import { createRef } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { Input, inputClasses, Textarea, textareaClasses } from "./Input";
 
+describe("Input trailing", () => {
+  it("holds a control inside the field's right edge, and the text stops before it", () => {
+    render(<Input label="密码" type="password" trailing={<button type="button">显示密码</button>} />);
+    const input = screen.getByLabelText("密码");
+    expect(input).toHaveClass("pr-11");
+    expect(input.parentElement).toContainElement(screen.getByRole("button", { name: "显示密码" }));
+    // The control is not inside the label's text or the error line.
+    expect(screen.getByText("密码").tagName).toBe("LABEL");
+    expect(screen.getByText("密码")).not.toContainElement(screen.getByRole("button", { name: "显示密码" }));
+  });
+
+  it("is the bare control when there is nothing trailing: no wrapper, no extra padding", () => {
+    const { container } = render(<Input aria-label="账号" />);
+    expect(container.firstElementChild?.tagName).toBe("INPUT");
+    expect(screen.getByLabelText("账号")).not.toHaveClass("pr-11");
+  });
+
+  it("keeps a caller's class and the error styling beside the trailing control", () => {
+    render(<Input label="密码" error="太短" className="font-mono" trailing={<span>x</span>} />);
+    const input = screen.getByLabelText("密码");
+    expect(input).toHaveClass("font-mono", "pr-11", "border-error");
+    expect(screen.getByRole("alert")).toHaveTextContent("太短");
+  });
+});
+
 describe("Input", () => {
   it("associates the label with the control via id", () => {
     render(<Input label="账号" placeholder="请输入账号" />);

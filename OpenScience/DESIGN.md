@@ -296,7 +296,10 @@ no rule under a card's title.
 `h-sm` / `h-control` / `h-form-primary` / `h-tag`, not steps of the spacing scale. Controls on one
 line share a height. Icons are **16 inline / 20 in the chrome**, one stroke (1.5, read from
 `--icon-stroke` on `svg.lucide`; it splits the difference between the kernel's 1.75 and EviMed's
-hand-drawn 1.4). Minimum hit area 24×24 CSS px (WCAG 2.2 SC 2.5.8).
+hand-drawn 1.4). Minimum hit area 24×24 CSS px (WCAG 2.2 SC 2.5.8); under a finger
+(`coarse:`, `pointer: coarse`) an `IconButton` and a filter chip widen their hit area to 40 with an invisible box and keep
+their drawn size. A table or grid that scrolls sideways (`DataTable`, `HeatGrid`, a Markdown table) freezes its row-header
+column and is a named, focusable region while it overflows (`ScrollRegion`).
 
 `Button` sizes map onto that: `sm` 28 with 13 px text, `md` 36 (the default), `lg` 44.
 `IconButton` is 28 in a row and 36 in a header. `Input`, `Textarea` and `SearchInput` are 36 (28

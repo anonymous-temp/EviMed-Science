@@ -103,3 +103,33 @@ describe("MarkdownViewer line breaks", () => {
     expect(ps[1]).toHaveTextContent("第二段");
   });
 });
+
+// axe `scrollable-region-focusable` (2026-10-07 audit): a table wider than the column scrolls in its own box, and WebKit and
+// Firefox on the Mac do not put that box in the tab order.
+describe("MarkdownViewer tables", () => {
+  const TABLE = "| 结局 | 风险比 |\n| --- | --- |\n| 复发 | 0.62 |";
+
+  it("scrolls a wide table in a named region the keyboard reaches, and leaves a table that fits out of the tab order", () => {
+    const { unmount } = render(<MarkdownViewer variant="document">{TABLE}</MarkdownViewer>);
+    expect(screen.getByRole("table")).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "表格" })).not.toBeInTheDocument();
+    unmount();
+
+    const scroll = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollWidth");
+    const client = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientWidth");
+    Object.defineProperty(HTMLElement.prototype, "scrollWidth", { configurable: true, get: () => 700 });
+    Object.defineProperty(HTMLElement.prototype, "clientWidth", { configurable: true, get: () => 340 });
+    try {
+      render(<MarkdownViewer variant="document">{TABLE}</MarkdownViewer>);
+      const region = screen.getByRole("region", { name: "表格" });
+      expect(region).toHaveAttribute("tabindex", "0");
+      expect(region).toHaveClass("overflow-x-auto");
+      expect(region).toContainElement(screen.getByRole("table"));
+    } finally {
+      if (scroll) Object.defineProperty(HTMLElement.prototype, "scrollWidth", scroll);
+      else delete (HTMLElement.prototype as unknown as Record<string, unknown>).scrollWidth;
+      if (client) Object.defineProperty(HTMLElement.prototype, "clientWidth", client);
+      else delete (HTMLElement.prototype as unknown as Record<string, unknown>).clientWidth;
+    }
+  });
+});

@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import { Navigate, Outlet, useLocation } from "react-router";
 import { Loader2, PanelLeft } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -14,18 +14,43 @@ import { useProjectStore } from "@/lib/projects";
 import { useUiStore } from "@/lib/store";
 import { fetchWebMe, WEB_SESSION_ENDED_EVENT, WEB_SESSION_STARTED_EVENT } from "@/lib/apiClient";
 
+/** Below Tailwind's `lg` the sidebar is a drawer over the content; from `lg` up it is a column beside it. */
+const DRAWER_LAYOUT = "(max-width: 1023px)";
+
+function useDrawerLayout(): boolean {
+  return useSyncExternalStore(
+    (notify) => {
+      const query = window.matchMedia(DRAWER_LAYOUT);
+      query.addEventListener("change", notify);
+      return () => query.removeEventListener("change", notify);
+    },
+    () => window.matchMedia(DRAWER_LAYOUT).matches,
+    () => false,
+  );
+}
+
 export function AppShell() {
   const { sidebarCollapsed, setSidebarCollapsed } = useUiStore();
   const currentProjectId = useProjectStore((state) => state.currentId);
   const location = useLocation();
   const onChat = isChatPath(location.pathname);
-  const onTasks = /^\/app\/autopilot\/?$/.test(location.pathname);
   const [authState, setAuthState] = useState<"checking" | "authenticated" | "unauthenticated">("checking");
   // Inside the EviMed Vue shell (`?embed=1`): the content area and nothing
   // else — the host draws the sidebar. Decided once, from the entry address,
   // because a link inside an embedded page drops the query string.
   const [embedded] = useState(() => isEmbeddedShell(location.search));
   const mainRef = useRef<HTMLElement>(null);
+  // Where keyboard focus goes when the sidebar closes or opens, for the cases the DOM cannot tell afterwards: the scrim button and
+  // the Escape key close it with focus on something that is gone or not in it, and a reader who opens it wants to be in it.
+  const expandRef = useRef<HTMLButtonElement>(null);
+  const focusAfter = useRef<"expand" | "nav" | null>(null);
+  const drawerLayout = useDrawerLayout();
+  // The sidebar over the content (below `lg`, open): the page behind it is not there to be reached.
+  const drawerOpen = !embedded && drawerLayout && !sidebarCollapsed;
+  const closeSidebar = () => {
+    focusAfter.current = "expand";
+    setSidebarCollapsed(true);
+  };
 
   // Below `lg` the sidebar is a drawer over the content, not a column beside
   // it, so it starts closed: at 390 px it kept its full width and left the
@@ -40,16 +65,49 @@ export function AppShell() {
   // Cmd/Ctrl+B toggles the sidebar, matching the button's tooltip. An
   // embedded shell has no sidebar to toggle, and the key is the host's.
   useEffect(() => {
-    if (embedded || onTasks) return undefined;
+    if (embedded) return undefined;
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "b") {
         e.preventDefault();
+        // Opening it by key puts the reader in it; closing it leaves focus where the page has it unless it was in the sidebar.
+        focusAfter.current = sidebarCollapsed ? "nav" : null;
         useUiStore.getState().toggleSidebar();
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [embedded, onTasks]);
+  }, [embedded, sidebarCollapsed]);
+
+  // Escape closes the drawer, as it closes every other layer over the page — unless a layer above it (a menu, a rename field, a
+  // tooltip) has already taken the key.
+  useEffect(() => {
+    if (!drawerOpen) return undefined;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape" || event.defaultPrevented) return;
+      focusAfter.current = "expand";
+      setSidebarCollapsed(true);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [drawerOpen, setSidebarCollapsed]);
+
+  // Focus follows the sidebar. Closed, it is `inert` and what was focused in it is unreachable, so the reader lands on the button
+  // that opens it again; opened by the expand button or the key, on its first destination. `preventScroll`: the column is still
+  // 0 wide when this runs, and focusing into a clipped box would scroll it sideways.
+  const wasCollapsed = useRef(sidebarCollapsed);
+  useLayoutEffect(() => {
+    if (wasCollapsed.current === sidebarCollapsed) return;
+    wasCollapsed.current = sidebarCollapsed;
+    const wanted = focusAfter.current;
+    focusAfter.current = null;
+    if (embedded) return;
+    if (sidebarCollapsed) {
+      const inSidebar = document.activeElement instanceof Element && document.activeElement.closest("[data-sidebar]") !== null;
+      if (wanted === "expand" || inSidebar) expandRef.current?.focus({ preventScroll: true });
+    } else if (wanted === "nav") {
+      document.querySelector<HTMLElement>("[data-sidebar] nav a")?.focus({ preventScroll: true });
+    }
+  }, [sidebarCollapsed, embedded]);
 
   useEffect(() => {
     const clearSession = () => {
@@ -113,7 +171,7 @@ export function AppShell() {
           跳到主要内容
         </a>
       )}
-      {!embedded && !onTasks && (
+      {!embedded && (
         <>
           {/* The drawer's backdrop, below `lg` only, where the sidebar overlays
               the content. On the drawer tier and before the sidebar in the
@@ -122,23 +180,27 @@ export function AppShell() {
             <button
               type="button"
               aria-label="关闭侧边栏"
-              onClick={() => setSidebarCollapsed(true)}
+              onClick={closeSidebar}
               className="fixed inset-0 z-drawer bg-scrim lg:hidden"
             />
           )}
           <Sidebar />
         </>
       )}
-      <main id="main" ref={mainRef} tabIndex={-1} className="flex min-w-0 flex-1 flex-col focus:outline-none">
-        {!embedded && !onTasks && sidebarCollapsed && (
+      <main id="main" ref={mainRef} tabIndex={-1} inert={drawerOpen} className="flex min-w-0 flex-1 flex-col focus:outline-none">
+        {!embedded && sidebarCollapsed && (
           <div className="flex h-12 shrink-0 items-center pl-2">
             {/* The chrome's 36 px icon button: below `lg` this is the only
                 way off a page a phone was sent to. */}
             <IconButton
+              ref={expandRef}
               icon={PanelLeft}
               label="展开侧边栏"
               title={`展开侧边栏 (${isMac ? "⌘B" : "Ctrl+B"})`}
-              onClick={() => setSidebarCollapsed(false)}
+              onClick={() => {
+                focusAfter.current = "nav";
+                setSidebarCollapsed(false);
+              }}
               className="fade-in text-text"
             />
           </div>

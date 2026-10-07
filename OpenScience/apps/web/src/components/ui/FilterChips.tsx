@@ -15,6 +15,9 @@ import { Menu } from "@/components/ui/Menu";
  * single-choice dimension is `FilterChips` (six chips at most, the rest in
  * “更多 ▾”), another dimension is a `FilterSelect` at the row's end, and an
  * on/off filter is a `FilterChip` with `pressed`.
+ *
+ * The chip is drawn 28 high on every device; under a finger (`coarse:`) its hit
+ * area is 40 high, which the neighbouring chips 4 px away do not share.
  */
 
 export interface FilterOption<V extends string = string> {
@@ -27,6 +30,8 @@ export interface FilterOption<V extends string = string> {
 export function filterChipClasses({ selected = false, className }: { selected?: boolean; className?: string } = {}): string {
   return cn(
     "inline-flex h-sm shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-3 text-compact outline-none transition-colors duration-fast",
+    // Under a finger the hit area is 40 high; chips sit 4 px apart, so it grows up and down only.
+    "relative coarse:before:absolute coarse:before:-inset-y-1.5 coarse:before:inset-x-0",
     selected ? "bg-surface-2 font-medium text-text hover:bg-surface-3" : "text-text-2 hover:bg-surface-2 hover:text-text",
     className,
   );

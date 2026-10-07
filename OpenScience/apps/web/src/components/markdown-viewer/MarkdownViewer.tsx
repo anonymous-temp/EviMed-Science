@@ -8,6 +8,7 @@ import { CodeBlock } from "./CodeBlock";
 import { ClaimCitation, type ClaimReading } from "./ClaimCitation";
 import { claimIdsFromHref, linkClaimMarkers, type ClaimEvidence } from "@/lib/claimCitations";
 import { sanitizeAssistantText } from "@/lib/sanitizeAssistantText";
+import { ScrollRegion } from "@/components/ui/ScrollRegion";
 
 /** Two contexts render markdown: chat-sized prose, and a delivered report
  *  (the "document"). Both read from the design tokens and follow the theme. */
@@ -150,10 +151,11 @@ export const MarkdownViewer = memo(function MarkdownViewer({
     h4: ({ children }) => <h4 className={s.h4}>{children}</h4>,
     blockquote: ({ children }) => <blockquote className={s.blockquote}>{children}</blockquote>,
     hr: () => <hr className={s.hr} />,
+    // A table wider than the column scrolls in its own box, which takes keyboard focus (and a name) where the browser does not give it one.
     table: ({ children }) => (
-      <div className="my-4 overflow-x-auto">
+      <ScrollRegion label="表格" className="my-4">
         <table className={s.table}>{children}</table>
-      </div>
+      </ScrollRegion>
     ),
     th: ({ children }) => <th className={s.th}>{children}</th>,
     td: ({ children }) => <td className={s.td}>{children}</td>,

@@ -76,6 +76,7 @@ describe("AppShell hosted authentication gate", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.useUiStore.mockReturnValue({ sidebarCollapsed: false, setSidebarCollapsed: vi.fn() });
   });
 
   it("redirects an unauthenticated browser to the standalone login page", async () => {
@@ -92,15 +93,25 @@ describe("AppShell hosted authentication gate", () => {
 
     expect(await screen.findByText("Chat workspace")).toBeInTheDocument();
   });
-  it.each(["/app/autopilot", "/app/autopilot/"])("uses %s task context as its only sidebar without a second workbench toggle", async (path) => {
+  // 2026-10-07 audit (live A01): the rebuilt 定时任务 page kept the old own-shell hack and dropped the global sidebar, the expand
+  // button and Ctrl+B — a dead end with no way to any other page. It is an ordinary page of the workbench.
+  it.each(["/app/autopilot", "/app/autopilot/"])("keeps the workbench sidebar and its toggle on %s, as on every other page", async (path) => {
     mocks.fetchWebMe.mockResolvedValue({ user: { id: "alice", name: "Alice" } });
     const router = renderRoute(path);
     expect(await screen.findByLabelText("定时任务列表")).toBeInTheDocument();
-    expect(screen.queryByText("Sidebar")).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "展开侧边栏" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "关闭侧边栏" })).not.toBeInTheDocument();
+    expect(screen.getByText("Sidebar")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "关闭侧边栏" })).toBeInTheDocument();
     await router.navigate("/app/chat");
     expect(await screen.findByText("Sidebar")).toBeInTheDocument();
+  });
+
+  it("offers the expand button on 定时任务 when the sidebar is collapsed", async () => {
+    mocks.fetchWebMe.mockResolvedValue({ user: { id: "alice", name: "Alice" } });
+    mocks.useUiStore.mockReturnValue({ sidebarCollapsed: true, setSidebarCollapsed: vi.fn() });
+    renderRoute("/app/autopilot");
+    expect(await screen.findByLabelText("定时任务列表")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "展开侧边栏" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "关闭侧边栏" })).not.toBeInTheDocument();
   });
 
   // Spec §10.3, appendix E #3: the first thing Tab reaches is a way past the

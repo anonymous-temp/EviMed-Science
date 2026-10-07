@@ -51,4 +51,64 @@ describe("Tabs", () => {
     expect(screen.getByRole("tab", { name: "对照 需要留意" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "总览" }), "a tab with no dot is named by its label alone").toBeInTheDocument();
   });
+
+  // 2026-10-07: 「定义与证据」 read 进行中 on a study where nothing was running — the ring said work under way for "some steps done".
+  it("has a fifth dot for a stage that is partly done and not running, spoken 「部分完成」, a different mark from the running ring", () => {
+    render(
+      <Tabs
+        label="研究视图"
+        items={[
+          { value: "a", label: "定义与证据", dot: "partial" },
+          { value: "b", label: "试验", dot: "active" },
+        ]}
+        value="a"
+        onChange={() => {}}
+      />,
+    );
+    expect(screen.getByRole("tab", { name: "定义与证据 部分完成" })).toBeInTheDocument();
+    const [partial, active] = [...document.querySelectorAll("[data-tab-dot]")];
+    expect(partial).toHaveAttribute("data-tab-dot", "partial");
+    expect(partial).toHaveClass("ring-2", "ring-accent", "bg-accent-soft");
+    expect(active).toHaveClass("ring-2", "ring-accent", "bg-surface");
+    expect(partial.className).not.toBe(active.className);
+  });
+
+  // The phone shows four of seven tabs; the fourth was cut mid-word and read as clipped, not as a row that scrolls.
+  describe("a row wider than its box", () => {
+    function withLayout(scrollWidth: number, clientWidth: number, scrollLeft: number, run: () => void) {
+      const saved = ["scrollWidth", "clientWidth", "scrollLeft"].map((name) => [name, Object.getOwnPropertyDescriptor(HTMLElement.prototype, name)] as const);
+      Object.defineProperty(HTMLElement.prototype, "scrollWidth", { configurable: true, get: () => scrollWidth });
+      Object.defineProperty(HTMLElement.prototype, "clientWidth", { configurable: true, get: () => clientWidth });
+      Object.defineProperty(HTMLElement.prototype, "scrollLeft", { configurable: true, get: () => scrollLeft });
+      try {
+        run();
+      } finally {
+        for (const [name, descriptor] of saved) {
+          if (descriptor) Object.defineProperty(HTMLElement.prototype, name, descriptor);
+          else delete (HTMLElement.prototype as unknown as Record<string, unknown>)[name];
+        }
+      }
+    }
+    const items = [{ value: "a", label: "总览" }, { value: "b", label: "试验" }];
+
+    it("fades at the end that still has tabs, with a mask that needs no ground colour", () => {
+      withLayout(900, 360, 0, () => {
+        render(<Tabs label="视图" items={items} value="a" onChange={() => {}} />);
+        const list = screen.getByRole("tablist", { name: "视图" });
+        expect(list.getAttribute("style")).toMatch(/mask-image: linear-gradient\(to right, black calc\(100% - 2rem\), transparent\)/);
+        expect(list).toHaveClass("overflow-x-auto", "scroll-px-6");
+      });
+    });
+
+    it("does not fade at the end of the row, nor when everything fits", () => {
+      withLayout(900, 360, 540, () => {
+        render(<Tabs label="视图" items={items} value="a" onChange={() => {}} />);
+        expect(screen.getByRole("tablist", { name: "视图" })).not.toHaveAttribute("style");
+      });
+      withLayout(300, 360, 0, () => {
+        render(<Tabs label="适合" items={items} value="a" onChange={() => {}} />);
+        expect(screen.getByRole("tablist", { name: "适合" })).not.toHaveAttribute("style");
+      });
+    });
+  });
 });

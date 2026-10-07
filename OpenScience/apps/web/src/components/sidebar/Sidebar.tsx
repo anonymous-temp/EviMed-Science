@@ -161,7 +161,14 @@ export function Sidebar() {
   const width = dragWidth ?? sidebarWidth;
 
   return (
-    <div
+    // The landmark is the whole box — the column, the divider and all — so nothing of the sidebar sits outside it (axe `region` on every
+    // page of the audit: the divider was a child of a plain box beside the `<aside>`). Collapsed, it is `inert`: the column is 0 wide
+    // and clipped, not gone, and its 46 links and buttons were still tab stops the reader could not see (2026-10-07 audit B-02). While a
+    // drag is in flight it stays live, because the drag may re-open it.
+    <aside
+      aria-label="侧栏"
+      data-sidebar=""
+      inert={sidebarCollapsed && !dragging}
       className={cn(
         "relative h-full shrink-0 overflow-hidden",
         // Below `lg` there is no room for a persistent column — at 390 px this
@@ -176,7 +183,7 @@ export function Sidebar() {
     >
       {/* The grey ground is the whole edge: no rule down the right side
         * (2026-09-23 plan §5.2), the same grey as the kernel's own column. */}
-      <aside className="flex h-full max-w-full flex-col bg-surface-1" style={{ width }}>
+      <div className="flex h-full max-w-full flex-col bg-surface-1" style={{ width }}>
         <div className="px-4 pb-3 pt-4">
           <div className="flex items-center gap-1.5">
             <EviMedMark className="h-5 w-5 shrink-0" />
@@ -228,7 +235,7 @@ export function Sidebar() {
             </Link>
           </Tooltip>
         </div>
-      </aside>
+      </div>
 
       {/* Drag divider: resize within [SIDEBAR_MIN, SIDEBAR_MAX]; dragging far
           left snaps the sidebar closed. Kept mounted while collapsed so an
@@ -276,7 +283,7 @@ export function Sidebar() {
           )}
         />
       </div>
-    </div>
+    </aside>
   );
 }
 

@@ -26,5 +26,11 @@ import preset from "@evimed/design-tokens/tailwind";
 export default {
   presets: [preset],
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
-  plugins: [],
+  plugins: [
+    // `coarse:` is a finger, not a width: a phone, a tablet, a touch laptop's
+    // screen. The controls keep their drawn sizes (28 / 36, DESIGN.md) and only
+    // widen their hit area there — an invisible `before:` box — so a tap beside a
+    // small control still lands on it (2026-10-07 audit B-02).
+    ({ addVariant }) => addVariant("coarse", "@media (pointer: coarse)"),
+  ],
 };

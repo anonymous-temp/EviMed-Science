@@ -1,9 +1,9 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
-import { useState } from "react";
+import { createRef, useState } from "react";
 import { Pencil } from "lucide-react";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, onTestFinished, vi } from "vitest";
 import { FilterChip, FilterChips, FilterSelect } from "./FilterChips";
 import { IconButton } from "./IconButton";
 import { List, ListRow } from "./ListRow";
@@ -46,6 +46,24 @@ describe("IconButton", () => {
     await userEvent.click(button);
     expect(onClick).toHaveBeenCalledOnce();
   });
+
+  // 2026-10-07 audit B-02. The drawn sizes are the contract (28 / 36, DESIGN.md) and do not change; under a finger the hit area
+  // grows through an invisible `before:` box. Icon buttons sit 4 px apart, so it grows 2 px sideways and more up and down.
+  it("widens its hit area under a finger only, and keeps its drawn size", () => {
+    render(<><IconButton icon={Pencil} label="编辑" size="sm" /><IconButton icon={Pencil} label="设置" /></>);
+    const small = screen.getByRole("button", { name: "编辑" });
+    expect(small).toHaveClass("h-sm", "w-7", "relative", "coarse:before:absolute", "coarse:before:-inset-y-1.5", "coarse:before:-inset-x-0.5");
+    expect(screen.getByRole("button", { name: "设置" })).toHaveClass("h-control", "w-9", "coarse:before:-inset-y-1");
+    // None of it applies to a mouse: every hit-area class is behind the `coarse:` variant.
+    expect(small.className.split(/\s+/).filter((name) => name.includes("before:") && !name.startsWith("coarse:"))).toEqual([]);
+  });
+
+  it("lets a caller position it, which replaces the anchor class instead of fighting it", () => {
+    render(<IconButton icon={Pencil} label="清除" size="sm" className="absolute right-1" />);
+    const button = screen.getByRole("button", { name: "清除" });
+    expect(button).toHaveClass("absolute");
+    expect(button).not.toHaveClass("relative");
+  });
 });
 
 describe("FilterChips", () => {
@@ -69,6 +87,8 @@ describe("FilterChips", () => {
     for (const chip of chips) expect(chip.className).not.toMatch(BORDER);
     // 28 px and 13 px text (spec §20.3, appendix E #10).
     for (const chip of chips) expect(chip).toHaveClass("h-sm", "text-compact");
+    // Under a finger the hit area is 40 high; chips sit 4 px apart, so it grows up and down and never sideways.
+    for (const chip of chips) expect(chip).toHaveClass("coarse:before:-inset-y-1.5", "coarse:before:inset-x-0");
     expect(screen.getByRole("button", { name: "全部" })).toHaveAttribute("aria-pressed", "true");
 
     await userEvent.click(screen.getByRole("button", { name: /更多/ }));
@@ -244,5 +264,73 @@ describe("SearchInput", () => {
     expect(box).toHaveClass("h-control", "bg-surface-2");
     render(<SearchInput label="搜索记忆" size="sm" />);
     expect(screen.getByRole("searchbox", { name: "搜索记忆" })).toHaveClass("h-sm");
+  });
+
+  // At 390 px a 256 px box stood in a 342 px column (frontier, zones: 2026-10-07 audit).
+  it("is 256 px wide, and the width of its column on a phone", () => {
+    render(<SearchInput label="搜索工具" />);
+    const box = screen.getByRole("searchbox", { name: "搜索工具" }).closest("label");
+    expect(box).toHaveClass("w-64", "max-sm:w-full");
+  });
+
+  it("keeps a caller's width from sm up and still fills the column on a phone", () => {
+    render(<SearchInput label="搜索工具" className="w-72" />);
+    const box = screen.getByRole("searchbox", { name: "搜索工具" }).closest("label");
+    expect(box).toHaveClass("w-72", "max-sm:w-full");
+    expect(box).not.toHaveClass("w-64");
+  });
+
+  it("can share a row on a phone when the caller says so", () => {
+    render(<SearchInput label="搜索" className="min-w-0 flex-1 sm:w-64 sm:flex-none" />);
+    expect(screen.getByRole("searchbox", { name: "搜索" }).closest("label")).toHaveClass("flex-1", "sm:w-64", "sm:flex-none");
+  });
+
+  it("offers no clear button unless the caller can clear", () => {
+    render(<SearchInput label="搜索" value="肥胖" onChange={() => {}} />);
+    expect(screen.queryByRole("button", { name: "清除搜索" })).not.toBeInTheDocument();
+  });
+
+  function Controlled({ onClear }: { onClear: () => void }) {
+    const [value, setValue] = useState("");
+    return <SearchInput label="搜索" value={value} onChange={(event) => setValue(event.target.value)} onClear={() => { onClear(); setValue(""); }} />;
+  }
+
+  it("clears the query from a button that exists only while there is one, and keeps the focus in the box", async () => {
+    const onClear = vi.fn();
+    render(<Controlled onClear={onClear} />);
+    const box = screen.getByRole("searchbox", { name: "搜索" });
+    expect(screen.queryByRole("button", { name: "清除搜索" })).not.toBeInTheDocument();
+    await userEvent.type(box, "肥胖");
+    expect(box).toHaveClass("pr-9");
+    await userEvent.click(screen.getByRole("button", { name: "清除搜索" }));
+    expect(onClear).toHaveBeenCalledOnce();
+    expect(box).toHaveValue("");
+    expect(box).toHaveFocus();
+    expect(screen.queryByRole("button", { name: "清除搜索" })).not.toBeInTheDocument();
+  });
+
+  it("clears on Escape without that Escape reaching the page, and lets an empty box's Escape through", async () => {
+    const onClear = vi.fn();
+    const pageEscape = vi.fn();
+    // The page's own Escape listener (a drawer, a dialog) sits on the document.
+    const onKey = (event: KeyboardEvent) => { if (event.key === "Escape") pageEscape(); };
+    document.addEventListener("keydown", onKey);
+    onTestFinished(() => document.removeEventListener("keydown", onKey));
+    render(<Controlled onClear={onClear} />);
+    const box = screen.getByRole("searchbox", { name: "搜索" });
+    await userEvent.type(box, "肥胖");
+    await userEvent.keyboard("{Escape}");
+    expect(onClear).toHaveBeenCalledOnce();
+    expect(box).toHaveValue("");
+    expect(pageEscape, "the key cleared the query; it is not also the page's").not.toHaveBeenCalled();
+    await userEvent.keyboard("{Escape}");
+    expect(onClear).toHaveBeenCalledOnce();
+    expect(pageEscape).toHaveBeenCalledOnce();
+  });
+
+  it("still hands its input to a ref", () => {
+    const ref = createRef<HTMLInputElement>();
+    render(<SearchInput ref={ref} label="搜索" onClear={() => {}} />);
+    expect(ref.current).toBe(screen.getByRole("searchbox", { name: "搜索" }));
   });
 });

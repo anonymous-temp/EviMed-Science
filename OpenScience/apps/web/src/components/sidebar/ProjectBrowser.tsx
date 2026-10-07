@@ -20,7 +20,7 @@ import { navItemClasses } from "@/components/ui/NavItem";
 import { isRunning, useProjectRuns, type ProjectRuns } from "@/components/sidebar/useProjectRuns";
 import { useGeoProjectIds } from "@/components/geo/useGeoProjectIds";
 import { useVcrProjects } from "@/components/vcr/useVcrProjectIds";
-import { Tooltip } from "@/components/ui/Tooltip";
+import { isTruncated, Tooltip } from "@/components/ui/Tooltip";
 
 /** Conversation rows a group shows before 「展开其余 N 条对话」 — the kernel's own
  *  workspace list folds at the same count (`COLLAPSED_SESSION_LIMIT`). */
@@ -867,6 +867,11 @@ function TaskRow({
   useEffect(() => {
     if (active) markRunSeen(run);
   }, [active, run]);
+  // The dates beside two conversations that began alike tell them apart, but the title is cut at the row's edge: the whole of it is the
+  // tooltip's, opened while it is cut (pointer or keyboard focus). A row of another project already says where a click goes, so it
+  // measures its line when the pointer or the focus arrives and adds the title to that sentence.
+  const [cut, setCut] = useState(false);
+  const measure = (element: Element) => setCut(isTruncated(element));
   const target = taskTarget(run);
   if (!target) return null;
   const running = conversation.runs.some(isRunning);
@@ -887,31 +892,34 @@ function TaskRow({
       )}
     </>
   );
+  const title = runTitle(conversation.titleRun);
   const row = current ? (
-    <Link
-      to={target}
-      data-task-key={taskKey(projectId, run)}
-      aria-current={active ? "page" : undefined}
-      onClick={(event) => {
-        // A modified click is the browser's to handle — that is the whole
-        // point of this being a link.
-        if (event.defaultPrevented || event.button !== 0) return;
-        if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
-        event.preventDefault();
-        onOpen(event.currentTarget);
-      }}
-      className={className}
-    >
-      {content}
-    </Link>
+    <Tooltip content={title} kind="label" whenTruncated>
+      <Link
+        to={target}
+        data-task-key={taskKey(projectId, run)}
+        aria-current={active ? "page" : undefined}
+        onClick={(event) => {
+          // A modified click is the browser's to handle — that is the whole
+          // point of this being a link.
+          if (event.defaultPrevented || event.button !== 0) return;
+          if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+          event.preventDefault();
+          onOpen(event.currentTarget);
+        }}
+        className={className}
+      >
+        {content}
+      </Link>
+    </Tooltip>
   ) : (
-    <Tooltip content={`切换到“${projectName}”并打开`}>
+    <Tooltip content={cut ? `${title} · 切换到“${projectName}”并打开` : `切换到“${projectName}”并打开`}>
       <button
         type="button"
         data-task-key={taskKey(projectId, run)}
         onClick={(event) => onOpen(event.currentTarget)}
-        onPointerEnter={onWarm}
-        onFocus={onWarm}
+        onPointerEnter={(event) => { measure(event.currentTarget); onWarm?.(); }}
+        onFocus={(event) => { measure(event.currentTarget); onWarm?.(); }}
         className={className}
       >
         {content}

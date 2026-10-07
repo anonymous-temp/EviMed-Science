@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -487,6 +487,66 @@ describe("ProjectBrowser — task rows", () => {
     renderBrowser();
     expect(await screen.findByRole("link", { name: /阿司匹林一级预防（≥70 岁）/ })).toBeInTheDocument();
     expect(screen.queryByText(/请以“/)).not.toBeInTheDocument();
+  });
+});
+
+// 2026-10-07 audit B02: five conversations of one project read 「儿童疳证中医药…」 and nothing said which was which. The date at the
+// row's end tells them apart; the title is the tooltip's while it is cut.
+describe("ProjectBrowser — a cut title", () => {
+  const LONG = "儿童疳证中医药干预的系统评价与荟萃分析：纳入随机对照试验的证据质量";
+  /** jsdom lays nothing out: say the line is wider than its box. */
+  function cutOff(title: HTMLElement) {
+    Object.defineProperty(title, "scrollWidth", { configurable: true, value: 360 });
+    Object.defineProperty(title, "clientWidth", { configurable: true, value: 180 });
+  }
+  // Every icon button on the page has a tooltip of its own; the one that is open is the one that is not hidden.
+  const tip = () => [...document.querySelectorAll<HTMLElement>("[role='tooltip']")].find((node) => !node.hidden) ?? null;
+  const open = () => tip() !== null;
+  // jsdom has no PointerEvent, so the pointer's type is set on the event (as the tooltip's own test does).
+  const hover = (element: HTMLElement) => fireEvent.pointerEnter(element, { pointerType: "mouse" });
+
+  it("shows the whole title of a conversation of this project while the line is cut, to the pointer and to the keyboard", async () => {
+    mocks.runs.default = [run({ id: "long", title: LONG })];
+    renderBrowser();
+    const link = await screen.findByRole("link", { name: new RegExp(LONG) });
+    cutOff(within(link).getByText(LONG));
+    hover(link);
+    await waitFor(() => expect(open()).toBe(true));
+    expect(tip()).toHaveTextContent(LONG);
+    // It is the line's own text, so it is shown and not announced a second time.
+    expect(tip()).toHaveAttribute("aria-hidden", "true");
+    fireEvent.pointerLeave(link, { pointerType: "mouse" });
+    await waitFor(() => expect(open()).toBe(false));
+    act(() => { link.focus(); });
+    await waitFor(() => expect(open()).toBe(true));
+    expect(tip()).toHaveTextContent(LONG);
+  });
+
+  it("says nothing more while the title is whole", async () => {
+    mocks.runs.default = [run({ id: "short", title: "阿司匹林一级预防" })];
+    renderBrowser();
+    const link = await screen.findByRole("link", { name: /阿司匹林一级预防/ });
+    hover(link);
+    await new Promise((resolve) => setTimeout(resolve, 450));
+    expect(open()).toBe(false);
+  });
+
+  it("adds the title to where a click goes, on a conversation of another project, only while it is cut", async () => {
+    mocks.runs.paper1 = [run({ id: "p1-long", title: LONG }), run({ id: "p1-short", title: "短标题" })];
+    renderBrowser();
+    await userEvent.click(await screen.findByRole("button", { name: "Paper 1" }));
+    const long = await screen.findByRole("button", { name: new RegExp(LONG) });
+    cutOff(within(long).getByText(LONG));
+    hover(long);
+    await waitFor(() => expect(open()).toBe(true));
+    expect(tip()).toHaveTextContent(`${LONG} · 切换到“Paper 1”并打开`);
+    fireEvent.pointerLeave(long, { pointerType: "mouse" });
+    await waitFor(() => expect(open()).toBe(false));
+    const short = screen.getByRole("button", { name: /短标题/ });
+    hover(short);
+    await waitFor(() => expect(open()).toBe(true));
+    expect(tip()).toHaveTextContent("切换到“Paper 1”并打开");
+    expect(tip()).not.toHaveTextContent("短标题");
   });
 });
 
