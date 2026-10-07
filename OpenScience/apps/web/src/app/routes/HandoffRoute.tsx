@@ -4,8 +4,10 @@ import { useLocation, useNavigate } from "react-router";
 import { EmptyState } from "@/components/cards/EmptyState";
 import { LoadError } from "@/components/cards/LoadError";
 import { PageTitle } from "@/components/layout/PageTitle";
+import { Button } from "@/components/ui/Button";
 import { useProjectStore } from "@/lib/projects";
 import { createResearchHandoff, handoffFromFragment, handoffIntent } from "@/lib/researchHandoff";
+import { newRuntimeUiIntent } from "@/lib/runtimeUiNavigation";
 
 import { FrameSkeleton } from "./RuntimeUiFrame";
 
@@ -15,6 +17,13 @@ import { FrameSkeleton } from "./RuntimeUiFrame";
  * it and writes the first message with the 「来自 AI 搜索」 card; this page moves
  * the shell to the chosen project and opens the conversation with that message
  * in its composer, for the person to send. Nothing is sent from here.
+ *
+ * An address with no hand-off in it has one thing worth offering, the same
+ * thing 「新对话」 in the sidebar does: a blank conversation. A fragment that is
+ * there but cannot be read (cut short in a mail client, edited by hand) says
+ * the link is no good instead of claiming there was no question: the question
+ * lived only in that fragment, and the page that made it is another origin
+ * this one knows nothing about, so there is no way back to offer.
  */
 export function HandoffRoute() {
   const location = useLocation();
@@ -36,10 +45,14 @@ export function HandoffRoute() {
   }, [payload, attempt, navigate]);
 
   if (!payload) {
+    const damaged = location.hash.length > 1;
     return (
       <>
         <PageTitle page="转为深度研究" />
-        <EmptyState title="没有要转入的问题" />
+        <EmptyState
+          title={damaged ? "这条转入链接已失效" : "没有要转入的问题"}
+          action={<Button onClick={() => navigate("/app/chat", { state: { runtimeUiIntent: newRuntimeUiIntent() } })}>开始新对话</Button>}
+        />
       </>
     );
   }
