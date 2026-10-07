@@ -27,7 +27,7 @@ import { TaskForm } from "@/components/autopilot/TaskForm";
 import { TaskGroup } from "@/components/autopilot/TaskGroup";
 import { TaskTimeline } from "@/components/autopilot/TaskTimeline";
 import { activeAgenda, needsMaterial, pauseNotes, recurrence, RECOMMENDATIONS, resumableByReply, revisionConflict, scheduleOf, scheduleStatus, type Recommendation } from "@/components/autopilot/taskPresentation";
-import { KNOWLEDGE_BASE_ACCEPT, KNOWLEDGE_BASE_UPLOAD_HINT, partitionKnowledgeBaseFiles } from "./FilesPage";
+import { KNOWLEDGE_BASE_ACCEPT, KNOWLEDGE_BASE_UPLOAD_HINT, partitionKnowledgeBaseFiles } from "@/lib/knowledgeBaseFiles";
 
 /** Where an upload lands: the project's knowledge base, which registers it as a source. */
 const KNOWLEDGE_ROOT = "knowledge-base";

@@ -22,36 +22,17 @@
  * @module @evimed/domain/analysis
  */
 
+import { SOURCE_TYPES } from './sourceVocabulary.mjs'
+
 /**
- * The twenty-two source types.
- *
- * Defined once here; the extractor registry, the tidying bench and the Python
- * analysis package all derive from this list rather than restating it.
+ * The source types. One list — the knowledge base's vocabulary
+ * (`sourceVocabulary.mjs`), where each type also says its Chinese name, the
+ * chip it is counted under and the understanding schema it is read with. The
+ * control plane's list and this layer's list used to differ in spelling and in
+ * what they knew (this one carried recordings the upload refuses and no
+ * regulatory, contractual or web material); they are the same list now.
  */
-export const SOURCE_TYPES = Object.freeze([
-  'published-paper-own',
-  'published-paper-other',
-  'preprint-or-draft',
-  'review-or-guideline',
-  'book-or-chapter',
-  'conference-abstract',
-  'grant-application',
-  'protocol-or-sop',
-  'review-comments-written',
-  'review-comments-received',
-  'tcm-case-record',
-  'clinical-case',
-  'cohort-data',
-  'statistical-output',
-  'lecture-slides',
-  'audio-recording',
-  'video',
-  'course-pack',
-  'note',
-  'email-or-chat-export',
-  'administrative-or-financial',
-  'image-or-figure',
-])
+export { SOURCE_TYPES }
 
 /** How deeply a source is read. */
 export const ANALYSIS_DEPTHS = Object.freeze(['skip', 'index_only', 'structured', 'deep'])
@@ -122,28 +103,31 @@ export const CONNECTOR_CAPABILITY_FIELDS = Object.freeze(['providerHash', 'chang
  * classifier, and free.
  */
 export const DEFAULT_DEPTH_BY_TYPE = Object.freeze({
-  'published-paper-own': 'deep',
-  'protocol-or-sop': 'deep',
-  'review-comments-written': 'deep',
+  'research-protocol': 'deep',
+  'peer-review': 'deep',
   'lecture-slides': 'deep',
-  'tcm-case-record': 'deep',
-  'clinical-case': 'deep',
-  'grant-application': 'deep',
-  'course-pack': 'deep',
-  'published-paper-other': 'structured',
-  'review-or-guideline': 'structured',
-  'book-or-chapter': 'structured',
-  'preprint-or-draft': 'structured',
+  'medical-case': 'deep',
+  'patient-record': 'deep',
+  'grant-proposal': 'deep',
+  'course-bundle': 'deep',
+  'published-paper': 'structured',
+  'preprint-manuscript': 'structured',
+  'review-guideline': 'structured',
+  'book-chapter': 'structured',
+  'policy-document': 'structured',
+  'drug-label': 'structured',
+  'document': 'structured',
+  'dataset': 'structured',
+  'webpage': 'structured',
   'cohort-data': 'structured',
   'statistical-output': 'structured',
-  'audio-recording': 'structured',
-  'video': 'structured',
-  'review-comments-received': 'structured',
-  'conference-abstract': 'index_only',
-  'note': 'index_only',
-  'email-or-chat-export': 'index_only',
-  'image-or-figure': 'index_only',
-  'administrative-or-financial': 'skip',
+  'conference-material': 'index_only',
+  'note-memo': 'index_only',
+  'message-export': 'index_only',
+  'image-figure': 'index_only',
+  'certificate-scan': 'index_only',
+  'code': 'index_only',
+  'administrative-record': 'skip',
 })
 
 /**
@@ -267,10 +251,8 @@ export function distillationCompleteness(audits, depth) {
  * a paper that yielded two claims was not a thin paper, it was a bad read.
  */
 export const EXPECTED_OUTPUT_FLOORS = Object.freeze({
-  'published-paper-own': { claims: 5, slots: ['design', 'population', 'intervention', 'outcome'] },
-  'published-paper-other': { claims: 5, slots: ['design', 'population', 'outcome'] },
+  'published-paper': { claims: 5, slots: ['design', 'population', 'outcome'] },
   'lecture-slides': { perSlide: 1 },
-  'audio-recording': { perTenMinutes: 1 },
   'cohort-data': { codebookColumnFraction: 0.9 },
 })
 

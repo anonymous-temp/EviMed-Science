@@ -912,6 +912,17 @@ back (recall never serves them). Deleting or archiving one memory record and
 deleting a source never called the index: they queue one record job in their own
 transaction, which the worker retries.
 
+### The knowledge base's document types after R10
+
+Until R10 the first pass called every PDF or Word file a published paper, every table 「队列数据」 and read a file named `review` or
+`方案` as a peer review or a protocol; the page shows what the type says. Bring the stored types onto the one list with
+`node scripts/ops/reclassify-sources.mjs` (a report; `--apply` writes, `--user <id>` and `--limit <n>` bound it, `--no-judge` takes
+the format's type without asking). For each document whose type nobody decided — not set by the researcher, not named by the
+judge — it asks J7 on the stored text (a fraction of a cent) or, when that cannot settle, gives the type its format says. It never
+re-runs an understanding, never reads a file again and never changes a depth, a status or a word of content; a document the
+researcher or the judge already typed is left alone, and a second run reports nothing to do. Run it once after the release and read the
+report's `format` count: those documents were not named by the judge, and a 「重新读取」 on one reads it under its new type.
+
 ### Specialist job slots on a small host
 
 The six engines (MR, bibliometric, research-topic, peer-review, drug-safety

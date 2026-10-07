@@ -28,9 +28,11 @@ export async function uploadFilesToWorkspace(
   files: File[],
   targetDir = "",
   root: FileRoot = "workspace",
+  /** The project the files go to, when it is not the tab's own (the knowledge base page adding to the project it lists). */
+  projectId?: string,
 ): Promise<string[]> {
   if (!hasWebApi) return [];
-  return uploadBrowserFiles(files, targetDir, root);
+  return uploadBrowserFiles(files, targetDir, root, projectId);
 }
 
 /**
@@ -43,20 +45,14 @@ export async function pickFiles(accept?: string): Promise<File[]> {
   return pickBrowserFiles(accept);
 }
 
-async function uploadBrowserFiles(files: File[], targetDir: string, root: FileRoot): Promise<string[]> {
+async function uploadBrowserFiles(files: File[], targetDir: string, root: FileRoot, projectId?: string): Promise<string[]> {
   const uploaded: string[] = [];
   const prefix = targetDir.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
   for (const file of files) {
     const data = await fileToBase64(file);
     const filename = prefix ? `${prefix}/${file.name}` : file.name;
-    uploaded.push(
-      await invokeCommand<string>("upload_file", {
-        root,
-        filename,
-        encoding: "base64",
-        data,
-      }),
-    );
+    const args = { root, filename, encoding: "base64", data };
+    uploaded.push(projectId ? await invokeCommand<string>("upload_file", args, { projectId }) : await invokeCommand<string>("upload_file", args));
   }
   return uploaded;
 }

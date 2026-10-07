@@ -87,6 +87,29 @@ test("real PostgreSQL recovery freezes complete input, reuses one dispatch, publ
   assert.equal((await f.sources.understandingHistory(f.userId, f.source.id)).items.length, 1);
 });
 
+test("an understanding comes with the pages of the text its anchors point into, and with none when the parse had none", options, async t => {
+  const withPages = await fixture(t, "deep");
+  // The parse names two pages; the capture folds the CRLF, and the map the understanding is read with moves with it.
+  withPages.parser.parse = async () => ({ text: "Record the outcome.\r\nKeep the original notes.", summary: "Research notes",
+    extractor: { name: "fixture", version: "1", parser: "fallback" }, units: [{ id: "page1", unitType: "page", status: "extracted", itemIds: [] }],
+    pageMap: [{ page: 1, start: 0, end: 21, status: "ok" }, { page: 2, start: 21, end: 45, status: "ok" }] });
+  await withPages.worker().tick(); await withPages.worker().tick();
+  assert.equal((await withPages.sources.getUnderstanding(withPages.userId, withPages.source.id)).pageMap, null, "nothing is understood yet, so there is nothing to place on a page");
+  withPages.state.complete = true; await withPages.due(); await withPages.worker().tick();
+  const detail = await withPages.sources.getUnderstanding(withPages.userId, withPages.source.id);
+  assert.ok(detail.current);
+  assert.deepEqual(detail.pageMap, [{ page: 1, start: 0, end: 20 }, { page: 2, start: 20, end: 44 }]);
+  const anchor = detail.current.claims[0].evidence[0];
+  assert.equal(detail.pageMap.find((entry) => anchor.start >= entry.start && anchor.start < entry.end)?.page, 1);
+
+  const plain = await fixture(t, "deep");
+  await plain.worker().tick(); await plain.worker().tick();
+  plain.state.complete = true; await plain.due(); await plain.worker().tick();
+  const unpaged = await plain.sources.getUnderstanding(plain.userId, plain.source.id);
+  assert.ok(unpaged.current);
+  assert.equal(unpaged.pageMap, null);
+});
+
 test("skip and index_only perform genuinely different work without calling a model", options, async t => {
   for (const depth of ["skip", "index_only"]) {
     const f = await fixture(t, depth); await f.worker().tick(); await f.worker().tick();

@@ -381,6 +381,23 @@ test('a body leaves only through a closed vocabulary, and an artifact path canno
   assert.equal(hub.send('open-artifact', { runId: 'run_abc', path: 'a.md' }), false, 'the channel closes with the bridge');
 });
 
+test('a delivered file is saved into the knowledge base by naming the run and a path that climbs nowhere, and nothing else', async () => {
+  const f = fixture(); const hub = createHub(f.target);
+  apply(f.ctx, {}, f.target, undefined, { hub }); await settle();
+  hub.send('save-to-knowledge-base', { runId: 'run_abc', path: 'deliverables/evidence/clinical-evidence-report.md', anchor: 'CLM-001', destination: 'knowledge-base/../x', projectId: 'other' });
+  for (const path of ['../secrets/key', '/etc/passwd', 'a\\b.md', '', 'a/./b.md', 'x'.repeat(1025)]) hub.send('save-to-knowledge-base', { runId: 'run_abc', path });
+  hub.send('save-to-knowledge-base', { runId: 'bad id', path: 'deliverables/x.md' });
+  hub.send('save-to-knowledge-base', { path: 'deliverables/x.md' });
+  const saved = f.sent.filter(row => row.message.type === 'evimed.runtime-ui.save-to-knowledge-base').map(row => row.message);
+  assert.equal(saved.length, 1);
+  assert.equal(saved[0].runId, 'run_abc');
+  assert.equal(saved[0].path, 'deliverables/evidence/clinical-evidence-report.md');
+  // The frame names a file of a run; it names no anchor, destination or project.
+  assert.deepEqual(Object.keys(saved[0]).filter(key => !['type', 'version', 'frameId', 'projectId', 'seq'].includes(key)).sort(), ['path', 'runId']);
+  assert.notEqual(saved[0].projectId, 'other');
+  f.ctx.dispose();
+});
+
 // The tool chip's × and `/工具` send `bind-capability`; until 2026-09-25 it was
 // not in the closed list and every one of them was dropped at this exit.
 test('choosing or leaving a tool reaches the shell, validated', async () => {

@@ -517,14 +517,14 @@ test("withdrawing a verdict undoes exactly that claim's latest adopt or reject, 
 
 test("triage picks a depth for a reason it can state, and indexing is complete by construction", async () => {
   const { chooseDepth, indexCompleteness, distillationCompleteness, outputBelowFloor } = await import("../index.mjs");
-  const own = chooseDepth({ sourceType: "published-paper-other", authorship: "self", value: {} });
+  const own = chooseDepth({ sourceType: "published-paper", authorship: "self", value: {} });
   assert.equal(own.depth, "deep");
   assert.ok(own.reasons.some((reason) => reason.includes("本人")));
 
-  const duplicate = chooseDepth({ sourceType: "published-paper-own", value: {}, duplicateOf: "v1.pdf" });
+  const duplicate = chooseDepth({ sourceType: "published-paper", value: {}, duplicateOf: "v1.pdf" });
   assert.equal(duplicate.depth, "skip");
 
-  const thin = chooseDepth({ sourceType: "published-paper-other", value: { knowledgeValue: 0.2 } });
+  const thin = chooseDepth({ sourceType: "published-paper", value: { knowledgeValue: 0.2 } });
   assert.equal(thin.depth, "index_only");
 
   assert.deepEqual(
@@ -535,10 +535,10 @@ test("triage picks a depth for a reason it can state, and indexing is complete b
   assert.equal(audited.withinTarget, false, "one miss in two is far above the deep target");
   assert.equal(distillationCompleteness([], "deep").withinTarget, true);
 
-  assert.equal(outputBelowFloor({ sourceType: "published-paper-own", claims: 2 }).suspicious, true);
-  assert.equal(outputBelowFloor({ sourceType: "published-paper-own", claims: 7 }).suspicious, false);
+  assert.equal(outputBelowFloor({ sourceType: "published-paper", claims: 2 }).suspicious, true);
+  assert.equal(outputBelowFloor({ sourceType: "published-paper", claims: 7 }).suspicious, false);
   assert.equal(outputBelowFloor({ sourceType: "lecture-slides", slides: 30, slidesCovered: 12 }).suspicious, true);
-  assert.equal(outputBelowFloor({ sourceType: "note" }).suspicious, false);
+  assert.equal(outputBelowFloor({ sourceType: "note-memo" }).suspicious, false);
 });
 
 // §7.1.1 (decision 2026-08-24 #20): the ledger's own vocabulary has four

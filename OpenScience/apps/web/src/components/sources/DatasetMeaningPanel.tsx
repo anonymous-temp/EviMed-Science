@@ -1,7 +1,6 @@
 import { EvolutionPanel } from '@/components/evolution/EvolutionPanel';
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { semanticFacts } from "@evimed/domain";
-import { getWebProjectId } from "@/lib/apiClient";
 import { confirmDatasetMeaning, getDatasetMeaning, listDatasetMeanings, type DatasetMeaning, type DatasetMeaningAsset } from "@/lib/dataSemanticsClient";
 import { basisLabel, facetLabel, factSource, factText, findingSubject, notCheckedLabel, outcomeLabel, type SemanticFactSummary } from "@/lib/dataSemanticsView";
 import { productErrorMessage } from "@/lib/productClient";
@@ -30,7 +29,7 @@ export function DatasetMeaningPanel({ projectId, path, sha256 }: { projectId: st
     let disposed = false;
     setIds([]); setError(null);
     void listDatasetMeanings(projectId).then((page) => {
-      if (disposed || getWebProjectId() !== projectId) return;
+      if (disposed) return;
       // This file is a dataset when a recorded table was read from these bytes, or from this path (an earlier delivery of it).
       setIds(page.items.filter((item) => item.tables.some((table) => (sha256 && table.sha256 === sha256) || table.path === path)).map((item) => item.datasetId));
     }).catch((failure: unknown) => { if (!disposed) setError(`无法加载数据含义：${productErrorMessage(failure)}`); });
@@ -49,7 +48,7 @@ function DatasetMeaningView({ projectId, datasetId, path, sha256 }: { projectId:
 
   useEffect(() => {
     let disposed = false;
-    void getDatasetMeaning(projectId, datasetId).then((value) => { if (!disposed && getWebProjectId() === projectId) { setMeaning(value); setError(null); } })
+    void getDatasetMeaning(projectId, datasetId).then((value) => { if (!disposed) { setMeaning(value); setError(null); } })
       .catch((failure: unknown) => { if (!disposed) setError(`无法加载数据含义：${productErrorMessage(failure)}`); });
     return () => { disposed = true; };
   }, [projectId, datasetId, attempt]);

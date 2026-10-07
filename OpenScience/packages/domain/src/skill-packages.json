@@ -958,11 +958,11 @@
       "id": "capability/source-understanding",
       "name": "source-understanding",
       "origin": "capability",
-      "version": "1.1.0",
+      "version": "1.2.0",
       "source": {"kind":"release"},
-      "digest": "sha256:2c233511a9fb8f5a3c30db0d636051e8e1f048f64028480801847be312800a08",
+      "digest": "sha256:0d05ef287edb13340b1ac7a3b1a218b816937f8301ae8bb93ffbfb5b5b299a09",
       "digestAlgorithm": "release-directory-v1",
-      "references": [{"path":"capability.yaml","sha256":"50709804cbaaceba8b27432cb0ca962799ea6e13ee21e62677d46fa2f2d373e7"}],
+      "references": [{"path":"capability.yaml","sha256":"73c50ee0d6f680aae0759f16363bfceb9328126feff50f0ec32745adef1a08fe"}],
       "operations": [
         {
           "name": "source-understanding",

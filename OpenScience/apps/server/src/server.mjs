@@ -193,6 +193,7 @@ import { EvidenceZoneSubscriptions, createEvidenceLinkStates, subscriptionsForAu
 import { reownOperatorImportedZones } from "./evidenceReown.mjs";
 import { createCapsuleRoutes } from "./capsuleRoutes.mjs";
 import { SourceService, assertKnowledgeBaseFormat, projectSourceManifestRecord, sourceIndexDocument } from "./sourceService.mjs";
+import { createKnowledgeBaseEntries } from "./knowledgeBaseEntries.mjs";
 import { verifySourceMetadata } from "./sourceMetadata.mjs";
 // Knowledge-base search (2026-09-20): the index, its embedder and its gateway.
 import { KB_RERANK_INSTRUCT, KnowledgeBaseIndex } from "./kbIndex.mjs";
@@ -1578,7 +1579,17 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const openListConnector = openListClient
     ? new OpenListSourceConnector(openListClient, { tenantRoot: config.openListTenantRoot,
       probeTimeoutMs: config.openListProbeTimeoutMs, probeCacheMs: config.openListProbeCacheMs }) : null;
-  const sourceRoutes = createSourceRoutes({ store, service: sourceService, openList: openListConnector, maxJsonBytes: config.maxJsonBytes });
+  // 「添加网页链接」 and 「新建笔记」: a page or a note becomes a file in the project's knowledge base and is registered the way an
+  // upload is (`writeProjectUpload`); the page is read by the public-web reader every run's `web_read` uses. Both are reached
+  // through closures: the write path and the reader are built further down this function.
+  const knowledgeEntries = sourceService ? createKnowledgeBaseEntries({
+    sources: sourceService,
+    write: ({ user, project, rel, buffer, meta, register }) => writeProjectUpload({ config, user, project }, { root: "base", rel, buffer, meta, register }),
+    readWeb: (url, options) => webReader.read(url, options),
+    readFile: (project, rel) => readFileNoFollow(project.baseDir, resolveScopedPath(project.baseDir, rel)),
+    readTimeoutMs: config.webReadTimeoutMs,
+  }) : null;
+  const sourceRoutes = createSourceRoutes({ store, service: sourceService, openList: openListConnector, knowledge: knowledgeEntries, maxJsonBytes: config.maxJsonBytes });
   // One admission for every way a file reaches `knowledge-base/`: the upload
   // route and the upload command both refuse a format the knowledge base
   // cannot read before a byte is written, and both register what they wrote.
@@ -1591,7 +1602,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     /** @param {string} rel */
     admit: (rel) => assertKnowledgeBaseFormat(rel),
     /** @param {any} ctx @param {string} rel @param {Buffer} buffer */
-    register: async (ctx, rel, buffer) => {
+    register: async (ctx, rel, buffer, meta = null) => {
       if (!sourceService) return null;
       const registered = await sourceService.register(ctx.user.id, {
         projectId: ctx.project.id,
@@ -1601,6 +1612,9 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         mtime: new Date().toISOString(),
         mimeType: mimeFor(rel),
         sha256: createHash("sha256").update(buffer).digest("hex"),
+        // What a saved page or a note says about itself beyond its bytes (`knowledgeBaseEntries.mjs`).
+        ...(meta?.title ? { title: meta.title } : {}),
+        ...(meta?.link ? { link: meta.link } : {}),
       });
       await audit(ctx, "source.register", "completed", { target: registered.source.id, duplicate: registered.duplicate });
       return registered;
@@ -1614,9 +1628,11 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
    * write, the mirror into a running runtime, the audit line, and the source
    * registration that parses and indexes it. Returns the registration, or null
    * outside `knowledge-base/`.
-   * @param {{ config: any, user: any, project: any }} ctx @param {{ root: string, rel: string, buffer: Buffer }} file
+   * `meta` is the title and link a registered page or note carries; `register: false` keeps the bytes in the knowledge base's
+   * folder without making them a source (the original HTML beside a page's text snapshot).
+   * @param {{ config: any, user: any, project: any }} ctx @param {{ root: string, rel: string, buffer: Buffer, meta?: Record<string, any>, register?: boolean }} file
    */
-  const writeProjectUpload = async (ctx, { root, rel, buffer }) => {
+  const writeProjectUpload = async (ctx, { root, rel, buffer, meta = undefined, register = true }) => {
     if (buffer.length > config.maxFileBytes) throw new HttpError(413, "file_too_large", "file is too large.");
     const base = root === "base" ? ctx.project.baseDir : ctx.project.workspaceDir;
     const full = resolveScopedPath(base, rel);
@@ -1629,7 +1645,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     // rt: a running remote runtime sees the upload now (plan §3.1 #4).
     await runtimeManager.mirrorWorkspaceUpload(ctx.project, full, buffer);
     await audit(ctx, "file.upload", "completed", { target: root === "base" ? `${root}:${rel}` : rel, bytes: buffer.length });
-    return knowledge ? knowledgeBaseUploads.register(ctx, rel, buffer) : null;
+    return knowledge && register ? knowledgeBaseUploads.register(ctx, rel, buffer, meta) : null;
   };
   const sourceProject = async (job) => {
     const user = await store.userById(job.userId);

@@ -1019,6 +1019,22 @@ export {
   sourceFormatRoute,
   sourcePageForOffset,
 } from './src/sourceDocuments.mjs'
+// sourceVocabulary — what a document in the knowledge base is: its types with their Chinese names, the chip each is counted under, the understanding schema it is read with, where it came from, and the format-only first guess
+export {
+  SOURCE_DOC_TYPES,
+  SOURCE_FOLDERS,
+  SOURCE_KINDS,
+  SOURCE_ORIGINS,
+  sourceDocTypeIsDeep,
+  sourceDocTypeLabel,
+  sourceDocTypeShort,
+  sourceDocTypesOfSchema,
+  sourceFirstPassType,
+  sourceKindLabel,
+  sourceKindOf,
+  sourceOriginLabel,
+  sourceOriginOf,
+} from './src/sourceVocabulary.mjs'
 // sourceMaterials — 26 exports: what a parsed document's tables, figures and spreadsheets say about themselves (cell addresses, closed-format values, captions, footnotes, continuations), derived from the parser's text and never guessed
 export {
   SOURCE_CONTINUATION_BASES,

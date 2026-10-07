@@ -8,7 +8,7 @@ import { createSourceRoutes } from "../src/sourceRoutes.mjs";
 import { HttpError, sendError } from "../src/security.mjs";
 import { startFakeOpenList } from "./fakeOpenList.mjs";
 
-async function fixture(t, { withOpenList = false, connector = null } = {}) {
+async function fixture(t, { withOpenList = false, connector = null, withKnowledge = true } = {}) {
   const calls = [];
   const service = {
     list: async (userId, options) => { calls.push({ method: "list", userId, options }); return { items: [], nextCursor: null }; },
@@ -54,7 +54,14 @@ async function fixture(t, { withOpenList = false, connector = null } = {}) {
       : { path: "/paper.pdf", name: "paper.pdf", entryType: "file", size: 7,
         mtime: "2026-09-06T00:00:00.000Z", providerHash: `sha256:${"a".repeat(64)}` }),
   } : null);
-  const route = createSourceRoutes({ store, service, openList, maxJsonBytes: 64 * 1024 });
+  const knowledge = withKnowledge ? {
+    addLink: async (input) => { calls.push({ method: "addLink", userId: input.user.id, projectId: input.project.id, url: input.url }); return { source: { id: "src_link", kind: "source", payload: { status: "queued", paths: [], reasons: [] } }, duplicate: false, changed: true, job: { id: "job-link", leaseToken: "secret" } }; },
+    addNote: async (input) => { calls.push({ method: "addNote", userId: input.user.id, projectId: input.project.id, title: input.title, body: input.body }); return { source: { id: "src_note", kind: "source", payload: { status: "queued", paths: [], reasons: [] } }, duplicate: false, job: { id: "job-note" } }; },
+    readNote: async (input) => { calls.push({ method: "readNote", sourceId: input.source.id, projectId: input.project.id }); return { title: "组会", body: "确定分组。" }; },
+    saveNote: async (input) => { calls.push({ method: "saveNote", sourceId: input.source.id, title: input.title, body: input.body }); return { source: { id: "src_note_2", kind: "source", payload: { status: "queued", paths: [], reasons: [] } }, duplicate: false, changed: true, job: null }; },
+    refetchLink: async (input) => { calls.push({ method: "refetchLink", sourceId: input.source.id }); return { source: { id: "src_link", kind: "source", payload: { status: "queued", paths: [], reasons: [] } }, duplicate: true, changed: false, job: null }; },
+  } : null;
+  const route = createSourceRoutes({ store, service, openList, knowledge, maxJsonBytes: 64 * 1024 });
   const server = createServer((req, res) => {
     route(req, res).then((handled) => { if (!handled) { res.writeHead(404); res.end(); } }).catch((error) => sendError(res, error));
   });
@@ -75,8 +82,68 @@ test("source listing is project scoped before the service sees the request", asy
   assert.equal(response.status, 200);
   assert.equal(calls.length, 1);
   assert.deepEqual(calls[0], { method: "list", userId: "owner", options: {
-    projectId: "owned-project", status: "needs_attention", familyId: null, limit: 50, cursor: null,
+    projectId: "owned-project", shared: false, status: "needs_attention", kind: null, q: null, familyId: null, limit: 50, cursor: null,
   } });
+});
+
+test("the list takes a search, a chip and a page, and the shared scope belongs to no project", async (t) => {
+  const { base, headers, calls } = await fixture(t);
+  const searched = await fetch(`${base}/api/sources?projectId=owned-project&q=${encodeURIComponent("幽门螺杆菌")}&kind=literature&limit=20&cursor=opaque`, { headers });
+  assert.equal(searched.status, 200);
+  assert.deepEqual(calls.at(-1).options, { projectId: "owned-project", shared: false, status: null, kind: "literature", q: "幽门螺杆菌", familyId: null, limit: 20, cursor: "opaque" });
+  // The account's own shared documents are listed without naming a project, and a project is not checked for them.
+  const shared = await fetch(`${base}/api/sources?scope=shared&kind=table`, { headers });
+  assert.equal(shared.status, 200);
+  assert.deepEqual(calls.at(-1).options, { projectId: null, shared: true, status: null, kind: "table", q: null, familyId: null, limit: 50, cursor: null });
+  assert.equal((await fetch(`${base}/api/sources?scope=everything`, { headers })).status, 400);
+  assert.equal((await fetch(`${base}/api/sources`, { headers })).status, 400, "a project scope still names its project");
+  assert.equal((await fetch(`${base}/api/sources?scope=shared`)).status, 401);
+});
+
+test("adding a page or a note names a project the caller owns, and the worker's job never reaches the browser", async (t) => {
+  const { base, headers, calls } = await fixture(t);
+  const post = (path, body) => fetch(`${base}${path}`, { method: "POST", headers, body: JSON.stringify(body) });
+  const link = await post("/api/sources/links", { projectId: "owned-project", url: "https://www.nmpa.gov.cn/notice" });
+  assert.equal(link.status, 201);
+  const linked = (await link.json()).data;
+  assert.equal(linked.source.id, "src_link");
+  assert.equal(linked.job, undefined);
+  assert.deepEqual(calls.find((call) => call.method === "addLink"), { method: "addLink", userId: "owner", projectId: "owned-project", url: "https://www.nmpa.gov.cn/notice" });
+  assert.equal((await post("/api/sources/links", { projectId: "other", url: "https://example.org" })).status, 404);
+  assert.equal((await post("/api/sources/links", { projectId: "owned-project", url: "https://example.org", userId: "other" })).status, 400);
+  const note = await post("/api/sources/notes", { projectId: "owned-project", title: "组会", body: "确定分组。" });
+  assert.equal(note.status, 201);
+  assert.equal((await note.json()).data.job, undefined);
+  assert.deepEqual(calls.find((call) => call.method === "addNote"), { method: "addNote", userId: "owner", projectId: "owned-project", title: "组会", body: "确定分组。" });
+  assert.equal((await post("/api/sources/notes", { projectId: "other", title: "x", body: "" })).status, 404);
+  assert.equal((await fetch(`${base}/api/sources/links`, { method: "POST", body: "{}" })).status, 401);
+});
+
+test("a note is read and saved, and a link is read again, through the source's own project", async (t) => {
+  const { base, headers, calls } = await fixture(t);
+  const read = await fetch(`${base}/api/sources/src_note/note`, { headers });
+  assert.equal(read.status, 200);
+  assert.deepEqual((await read.json()).data, { title: "组会", body: "确定分组。" });
+  const saved = await fetch(`${base}/api/sources/src_note/note`, { method: "PUT", headers, body: JSON.stringify({ title: "组会记录", body: "新的正文" }) });
+  assert.equal(saved.status, 200);
+  const savedBody = (await saved.json()).data;
+  assert.equal(savedBody.source.id, "src_note_2");
+  assert.equal(savedBody.changed, true);
+  assert.deepEqual(calls.find((call) => call.method === "saveNote"), { method: "saveNote", sourceId: "src_note", title: "组会记录", body: "新的正文" });
+  const again = await fetch(`${base}/api/sources/src_link/refetch`, { method: "POST", headers, body: "{}" });
+  assert.equal(again.status, 200);
+  assert.equal((await again.json()).data.changed, false);
+  assert.ok(calls.some((call) => call.method === "refetchLink" && call.sourceId === "src_link"));
+  // Nothing else is writable on a note, and an unauthenticated caller reads nothing.
+  assert.equal((await fetch(`${base}/api/sources/src_note/note`, { method: "DELETE", headers })).status, 404);
+  assert.equal((await fetch(`${base}/api/sources/src_note/note`)).status, 401);
+});
+
+test("without the knowledge base's storage a page or a note says so by name", async (t) => {
+  const { base, headers } = await fixture(t, { withKnowledge: false });
+  const response = await fetch(`${base}/api/sources/links`, { method: "POST", headers, body: JSON.stringify({ projectId: "owned-project", url: "https://example.org" }) });
+  assert.equal(response.status, 503);
+  assert.equal((await response.json()).code, "source_state_unavailable");
 });
 
 test("understanding current and history use the authenticated source project and bounded page contract", async t => {
