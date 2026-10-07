@@ -1,0 +1,348 @@
+{
+  "description": "How the skills the runtime image ships are shown to a researcher: a Chinese name, the one line a list row carries, the sentence that says when the skill is used, and the group it is listed under. Keyed by the skill's own name (the folder name in its root). The order of the keys is the order a group lists them in, so the first four of a group are the ones a researcher is most likely to want. skillDisplay.mjs reads this and a test holds it equal to the shipped skill set.",
+  "groups": ["科研分析", "写作与核查", "办公文档", "社区", "循证传播"],
+  "skills": {
+    "open-domain-answer": {
+      "group": "科研分析",
+      "title": "医学与科研问答",
+      "use": "直接回答医学和科学问题：先给结论，按需深入，写明证据强弱，引用带编号。",
+      "when": "你在对话里问一个具体的医学或科研问题，不需要一份完整报告时。"
+    },
+    "deep-research": {
+      "group": "科研分析",
+      "title": "深度检索综述",
+      "use": "多轮、多来源地检索并综合证据，留下可复现的检索记录，并说明不确定之处。",
+      "when": "你要一份有出处的综述式调查，而不是一个简短回答时。"
+    },
+    "statistical-analysis": {
+      "group": "科研分析",
+      "title": "统计分析",
+      "use": "规划并执行可复现的统计分析：模型选择、假设检验、效应量、缺失数据和敏感性分析。",
+      "when": "你上传了研究数据，或要选统计方法、检查假设、解释效应量时。"
+    },
+    "survival-analysis": {
+      "group": "科研分析",
+      "title": "生存分析",
+      "use": "时间到事件数据的删失处理、竞争风险、Cox 与参数模型、校准和敏感性分析。",
+      "when": "你提到生存时间、风险比、中位生存期，或上传了随访数据时。"
+    },
+    "statistical-power": {
+      "group": "科研分析",
+      "title": "样本量与统计功效",
+      "use": "估算所需样本量、最小可检测效应，画功效曲线，为申请书和方案说明依据。",
+      "when": "你问“需要多少例”，或要为基金、伦理申请、预注册写样本量依据时。"
+    },
+    "experimental-design": {
+      "group": "科研分析",
+      "title": "研究设计",
+      "use": "在收集数据之前定好假设、估计目标、对照、随机化、样本量依据和分析计划。",
+      "when": "你要设计实验、观察性研究或模拟研究，还没开始收集数据时。"
+    },
+    "exploratory-data-analysis": {
+      "group": "科研分析",
+      "title": "数据探查",
+      "use": "建模之前剖析并校验研究数据：数据字典、缺失、范围、重复、分布、离群和队列流程。",
+      "when": "你刚拿到一份数据，想先弄清它的质量和结构时。"
+    },
+    "bayesian-modeling": {
+      "group": "科研分析",
+      "title": "贝叶斯建模",
+      "use": "设定、拟合、诊断并比较贝叶斯模型：先验、层级模型、后验预测和决策分析。",
+      "when": "你要用贝叶斯方法，或需要对不确定性做完整的概率描述时。"
+    },
+    "clinical-machine-learning": {
+      "group": "科研分析",
+      "title": "临床预测模型",
+      "use": "开发并评估可审计的诊断或预后预测模型：时间验证、校准、可解释性和公平性。",
+      "when": "你要建诊断或预后预测模型，并需要说明它能否用于临床时。"
+    },
+    "biomedical-database-search": {
+      "group": "科研分析",
+      "title": "生物医学数据库检索",
+      "use": "跨文献、术语、监管、基因组、蛋白、通路和公共卫生来源检索记录并解析标识符。",
+      "when": "你要在多个公共数据库里找记录，并要求每条都能追溯到来源时。"
+    },
+    "hypothesis-development": {
+      "group": "科研分析",
+      "title": "科学假设构建",
+      "use": "从观察和证据缺口出发，提出可证伪的假设、竞争解释和能区分它们的实验。",
+      "when": "你有一批观察或证据缺口，要把它们变成可检验的研究假设时。"
+    },
+    "bulk-rna-seq": {
+      "group": "科研分析",
+      "title": "批量 RNA-seq 分析",
+      "use": "从计数矩阵到差异表达和通路分析的可复现流程：设计公式、对比、质控和批次处理。",
+      "when": "你有批量转录组的计数矩阵和样本信息，要做差异表达时。"
+    },
+    "single-cell-analysis": {
+      "group": "科研分析",
+      "title": "单细胞分析",
+      "use": "单细胞 RNA 或多组学数据的质控、整合、聚类、注释和差异检验，按样本层面做重复。",
+      "when": "你有 AnnData、Scanpy 或 CELLxGENE 来源的单细胞数据时。"
+    },
+    "pathway-enrichment": {
+      "group": "科研分析",
+      "title": "通路富集分析",
+      "use": "对基因列表或排序后的基因做通路与基因集富集，并解读哪些通路被富集。",
+      "when": "你有一组差异基因、筛选命中或聚类标志基因，想知道涉及哪些通路时。"
+    },
+    "genome-variant-analysis": {
+      "group": "科研分析",
+      "title": "基因组变异分析",
+      "use": "VCF、BCF 变异的规范化、等位基因协调、队列质控、注释和区间运算。",
+      "when": "你的工作涉及基因组版本、变异文件或基因型衍生的分析时。"
+    },
+    "biosequence-analysis": {
+      "group": "科研分析",
+      "title": "生物序列分析",
+      "use": "分析本地核酸或蛋白序列：FASTA、GenBank 解析与校验、翻译、基序和特征汇总。",
+      "when": "你有序列文件，或要查询公共序列记录并写出可复现的序列报告时。"
+    },
+    "phylogenetic-analysis": {
+      "group": "科研分析",
+      "title": "系统发育分析",
+      "use": "序列比对与建树，评估分支支持度，用于进化关系和分子流行病学。",
+      "when": "你要推断进化树、重建祖先序列或追踪传播关系时。"
+    },
+    "cancer-functional-genomics": {
+      "group": "科研分析",
+      "title": "肿瘤功能基因组学",
+      "use": "分析 DepMap 类依赖筛选数据：基因效应、细胞系谱系、生物标志物关联和混杂检查。",
+      "when": "你要在细胞系筛选数据里找基因依赖和生物标志物时。"
+    },
+    "mass-spectrometry-analysis": {
+      "group": "科研分析",
+      "title": "质谱分析",
+      "use": "蛋白组和代谢组数据：mzML、MGF 检查、特征对齐、鉴定、定量、质控和 FDR 控制。",
+      "when": "你有质谱原始或鉴定结果文件，要做定量和质控时。"
+    },
+    "metabolic-network-modeling": {
+      "group": "科研分析",
+      "title": "代谢网络建模",
+      "use": "基于约束的代谢网络：SBML 校验、通量平衡分析、通量变异性、基因敲除和培养基约束。",
+      "when": "你要模拟细胞代谢，或比较不同代谢模型时。"
+    },
+    "flow-cytometry-analysis": {
+      "group": "科研分析",
+      "title": "流式细胞术分析",
+      "use": "FCS 文件的补偿、光谱解混、数据转换、设门、批次校正、群体发现和质控。",
+      "when": "你有流式或质谱流式数据，要设门并汇总各细胞群时。"
+    },
+    "digital-pathology-analysis": {
+      "group": "科研分析",
+      "title": "数字病理分析",
+      "use": "全切片图像的切块、染色归一、组织分割、形态学和切片级机器学习流程。",
+      "when": "你有病理切片图像，要做组织分割或切片层面的预测时。"
+    },
+    "medical-imaging-data": {
+      "group": "科研分析",
+      "title": "医学影像数据",
+      "use": "检查并分析 DICOM 或科研影像数据集：元数据清点、序列选择、质控、转换规划，保护隐私并保留来源。",
+      "when": "你要整理或分析一批 DICOM 影像时。"
+    },
+    "biomedical-signal-analysis": {
+      "group": "科研分析",
+      "title": "生理信号分析",
+      "use": "处理 ECG、PPG、EEG、EMG、皮电、呼吸和可穿戴信号：事件检测、质控和特征提取。",
+      "when": "你有生理信号的时间序列，要检测事件或提取特征时。"
+    },
+    "biomedical-knowledge-graph": {
+      "group": "科研分析",
+      "title": "生物医学知识图谱",
+      "use": "构建并分析保留出处的知识图谱：实体归一、证据边、本体映射和网络分析。",
+      "when": "你要把多个来源的生物医学关系整合成可追溯的图谱时。"
+    },
+    "cheminformatics": {
+      "group": "科研分析",
+      "title": "化学信息学",
+      "use": "规范化并分析化学结构和化合物表：PubChem、ChEBI 记录，SMILES、描述符、指纹、相似性和子结构。",
+      "when": "你有化合物表或结构式，要计算性质或做相似性检索时。"
+    },
+    "drug-discovery-data": {
+      "group": "科研分析",
+      "title": "药物发现数据集",
+      "use": "准备并评估药物发现的数据集与基准：分子或生物学划分、泄漏控制、基线模型和指标。",
+      "when": "你要为药物发现任务建立可复现的评测基准时。"
+    },
+    "materials-science-analysis": {
+      "group": "科研分析",
+      "title": "材料科学分析",
+      "use": "分析晶体结构、成分、相图、电子结构和材料性质，可查询材料数据库。",
+      "when": "你有 CIF 或 POSCAR 数据，或要查材料性质时。"
+    },
+    "astronomy-data-analysis": {
+      "group": "科研分析",
+      "title": "天文数据分析",
+      "use": "处理天文观测与模拟：FITS、WCS 坐标、测光、光谱、光变曲线、星表和不确定度传递。",
+      "when": "你有 FITS 文件，或要做 Astropy 风格的分析时。"
+    },
+    "geospatial-analysis": {
+      "group": "科研分析",
+      "title": "空间数据分析",
+      "use": "带坐标、几何或栅格的数据：坐标系转换、空间连接、距离计算、地图、暴露面和地理流行病学。",
+      "when": "你的数据有经纬度、区域或空间相关性时。"
+    },
+    "time-series-forecasting": {
+      "group": "科研分析",
+      "title": "时间序列预测",
+      "use": "设计、拟合并回测时间序列预测：基线、层级序列、干预、不确定区间和漂移监测。",
+      "when": "你要预测随时间变化的指标，并比较不同预测方法时。"
+    },
+    "simulation-optimization": {
+      "group": "科研分析",
+      "title": "模拟与优化",
+      "use": "构建并验证机理、离散事件、随机或多目标模拟：敏感性分析、参数校准、设计空间搜索和 Pareto 优化。",
+      "when": "你要用模拟回答“如果……会怎样”，或在多个目标之间权衡时。"
+    },
+    "scientific-deep-learning": {
+      "group": "科研分析",
+      "title": "科学深度学习",
+      "use": "为科学数据开发并评估深度学习模型：PyTorch、Transformer、图神经网络、GPU 训练和微调。",
+      "when": "你要在科学数据上训练或微调神经网络时。"
+    },
+    "scientific-data-engineering": {
+      "group": "科研分析",
+      "title": "科研大数据处理",
+      "use": "为大型表格、数组和分区数据设计可扩展的处理流程：Polars、Dask、Arrow、Zarr 和格式转换。",
+      "when": "你的数据大到内存放不下，或要在科学数据格式之间转换时。"
+    },
+    "reproducible-workflows": {
+      "group": "科研分析",
+      "title": "可复现工作流",
+      "use": "设计可移植、可追溯的科研流程：DAG、环境锁定、容器、缓存、断点和从本地到集群的执行。",
+      "when": "你要把一次性的分析整理成别人能重跑的流程时。"
+    },
+    "quantum-computing-analysis": {
+      "group": "科研分析",
+      "title": "量子计算分析",
+      "use": "设计、模拟并评估量子线路与算法：Qiskit、Cirq、PennyLane、噪声模型和与经典基线的比较。",
+      "when": "你在做量子线路或量子算法的研究时。"
+    },
+    "publication-figures": {
+      "group": "科研分析",
+      "title": "论文图表样式",
+      "use": "用统一的发表级样式画 matplotlib 或 seaborn 图，配色与平台内的图表一致。",
+      "when": "你在对话里画图、做图表时，会自动使用。"
+    },
+    "matplotlib": {
+      "group": "科研分析",
+      "title": "Matplotlib 精细绘图",
+      "use": "需要精细控制每个图元素时的底层绘图，可导出 PNG、PDF 或 SVG 用于发表。",
+      "when": "你要画特殊图形，或对图的每个细节都有要求时。"
+    },
+    "large-file": {
+      "group": "科研分析",
+      "title": "大文件速览",
+      "use": "读取大数据文件之前先取表头、规模、样本和关键数字，不把整份文件塞进对话。",
+      "when": "你要读取 CSV、Parquet、基因组或大型日志等可能很大的文件之前。"
+    },
+    "remote-compute": {
+      "group": "科研分析",
+      "title": "远程服务器计算",
+      "use": "通过 SSH 在你自己的 GPU 或 CPU 服务器上运行任务，跟踪进度并取回结果。",
+      "when": "你要在自己的服务器、工作站或集群上跑任务时。"
+    },
+    "hpc-slurm": {
+      "group": "科研分析",
+      "title": "Slurm 集群作业",
+      "use": "写 Slurm 批处理脚本，用你自己的密钥提交到集群，跟踪作业并取回结果。",
+      "when": "你提到集群、sbatch 或登录节点，要提交、查看或取消作业时。"
+    },
+    "modal-run": {
+      "group": "科研分析",
+      "title": "Modal 云端计算",
+      "use": "把重计算或 GPU 任务交给你自己的 Modal 账号运行，并把结果带回工作区。",
+      "when": "你要在 Modal 上跑重计算，而手边没有 Slurm 集群时。"
+    },
+    "citation-integrity": {
+      "group": "写作与核查",
+      "title": "引用核对",
+      "use": "核对 DOI 与 PMID、按标题还原论文、去重，检查论断与来源是否一致、有无撤稿或更正，导出 BibTeX。",
+      "when": "你要整理参考文献，或核对一份稿件的引用是否可靠时。"
+    },
+    "traceability-review": {
+      "group": "写作与核查",
+      "title": "可追溯性审阅",
+      "use": "检查报告或稿件：引用能否解析、数字有无出处、图表是否与生成它的代码一致。",
+      "when": "你要审阅、核对一份报告或稿件的出处时。只核对可追溯性，不判断结论对错。"
+    },
+    "stats-integrity": {
+      "group": "写作与核查",
+      "title": "统计分析规范核查",
+      "use": "社会科学统计分析的规范检查：对照预注册计划防止事后改假设，核对随机种子，复现 Stata 与 SPSS 的估计。",
+      "when": "你做回归、假设检验、计量分析，或读取 Stata、SPSS 数据时，会自动使用。"
+    },
+    "domain-check": {
+      "group": "写作与核查",
+      "title": "领域正确性检查",
+      "use": "在分析代码运行前后检查能运行但科学上不对的问题：单位、坐标系、坐标起点和链方向等。",
+      "when": "你在对话里写或运行物理、地学、生物、化学、社科的分析代码时，会自动使用。"
+    },
+    "research-grant-development": {
+      "group": "写作与核查",
+      "title": "基金申请书撰写",
+      "use": "写有证据支撑的科研基金申请：研究目标、意义、创新、研究方案、里程碑、可行性、风险和预算。",
+      "when": "你要写或审一份基金申请书时。"
+    },
+    "markdown-mermaid-writing": {
+      "group": "写作与核查",
+      "title": "Markdown 与图示写作",
+      "use": "用 Markdown 和 Mermaid 写科学文档与图示，附样式指南、24 种图示和 9 种文档模板。",
+      "when": "你要写科学文档、报告或流程图，并希望图示是可编辑的文本时。"
+    },
+    "manuscript-humanize": {
+      "group": "写作与核查",
+      "title": "稿件润色",
+      "use": "给写完的学术稿去机器腔，同时逐字保留引文、数字、引用编号和结论标记。",
+      "when": "稿件和证据工作都完成之后，作为最后一步。"
+    },
+    "humanizer": {
+      "group": "写作与核查",
+      "title": "英文去机器腔",
+      "use": "去掉英文文本里的 AI 写作痕迹，让文字更自然。",
+      "when": "你要润色或审阅英文文本，让它读起来像人写的时。"
+    },
+    "humanizer-zh": {
+      "group": "写作与核查",
+      "title": "中文去机器腔",
+      "use": "去掉中文文本里的 AI 写作痕迹，让文字更自然。",
+      "when": "你要润色或审阅中文文本，让它读起来像人写的时。"
+    },
+    "docx": {
+      "group": "办公文档",
+      "title": "Word 文档",
+      "use": "把工作区里的文本生成标准的 DOCX 文档。",
+      "when": "你要一份 Word 文件时。"
+    },
+    "pdf": {
+      "group": "办公文档",
+      "title": "PDF 文档",
+      "use": "把 Markdown 生成支持中文的 PDF。",
+      "when": "你要一份可以直接打印或发送的 PDF 时。"
+    },
+    "pptx": {
+      "group": "办公文档",
+      "title": "PowerPoint 演示稿",
+      "use": "生成简单、标准的 PPTX 演示文稿。",
+      "when": "你要一份 PowerPoint 文件时。"
+    },
+    "xlsx": {
+      "group": "办公文档",
+      "title": "Excel 表格",
+      "use": "把 CSV 或表格数据导出为标准的 XLSX 工作簿。",
+      "when": "你要把表格数据整理成 Excel 文件时。"
+    },
+    "dsh-ppt": {
+      "group": "社区",
+      "title": "一键演示稿",
+      "use": "一句话或一份 Markdown 生成完整的网页幻灯片和可编辑的 PPTX，内置 5 套主题，支持中英文。",
+      "when": "你要做汇报、提案、路演或培训材料，或想把一份文档变成演示稿时。"
+    },
+    "deep-structural-analysis": {
+      "group": "社区",
+      "title": "多视角结构分析",
+      "use": "对复杂的社会、经济、哲学和系统性问题做多视角分析，结论分层，并标明依据的强弱。",
+      "when": "你要对一个复杂问题做深入分析、多角度探讨，或套用具体分析框架时。"
+    }
+  }
+}
