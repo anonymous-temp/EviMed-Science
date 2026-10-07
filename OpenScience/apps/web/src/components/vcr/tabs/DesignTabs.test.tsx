@@ -606,11 +606,12 @@ describe("对照", () => {
     expect(container.querySelector("[data-vcr-route='external_control']")).toHaveTextContent("缺 3 项数据，见下方清单");
   });
 
-  it("names the five routes in plan order with the state each has at this tier", async () => {
+  it("names the four routes this version computes, in plan order, with the state each has at this tier", async () => {
     const { container } = draw(<ComparatorTab studyId={STUDY_ID} study={ev201()} />);
     await screen.findByText("对照路线");
     const routes = [...container.querySelectorAll("[data-vcr-route]")].map((node) => node.getAttribute("data-vcr-route"));
-    expect(routes).toEqual(["prognostic_adjustment", "external_control", "literature_control", "model_comparator", "hybrid_control"]);
+    // the model-prediction comparator is not computed by this version: the server does not offer it as a route (it is listed as 暂不支持 in the method library)
+    expect(routes).toEqual(["prognostic_adjustment", "external_control", "literature_control", "hybrid_control"]);
     expect(container.querySelector("[data-vcr-route='prognostic_adjustment']")).toHaveTextContent("不适用");
     expect(container.querySelector("[data-vcr-route='prognostic_adjustment']")).toHaveTextContent("需要 T3 随机试验个体数据");
   });
@@ -938,6 +939,9 @@ describe("试验", () => {
     });
 
     it("draws neither column where nobody has the number", async () => {
+      const raw = fixture("ev201/trial.json");
+      for (const design of raw.designs) { design.replicates = null; design.method = null; }
+      installVcrServer(network.productRequest, { [tab("trial")]: raw });
       draw(<TrialTab studyId={STUDY_ID} study={ev201()} />);
       await trialDrawn();
       expect(screen.queryByRole("columnheader", { name: "模拟次数" })).toBeNull();
