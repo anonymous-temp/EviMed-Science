@@ -787,6 +787,23 @@ owned successful preparation job; the base runtime image a generation was
 prepared against; and the live probe after apply, which rolls back. A missing
 `extensions-deployment.json` is nothing configured.
 
+The extension centre's discovery list (插件与技能 → 插件 → 「可以添加」) is exactly
+that file's `catalogue`, so a deployment that never wrote one lists nothing and the
+page draws no discovery group at all. To offer a package that has been reviewed
+(for an isolated tool: measured by the acceptance run, which is where its
+descriptor, artifact and surface rows come from), run, from the web image or the
+checkout, `node scripts/ops/extension-catalogue.mjs list`, `add <reviewed-package.json>`
+or `remove <id>` (`--data-dir` defaults to `OPEN_SCIENCE_DATA_DIR`). `add` merges
+the package into `<dataDir>/.openscience/extensions-deployment.json`, then reads the
+result back through the platform's own loader and writes the file only if the loader
+accepts it; an id already listed is refused until it is removed. It never reviews or
+downloads a package and never writes a qualification record. The loader refuses a
+file a package could have written, so after each write the command prints the two
+commands that finish the job: `sudo chown root:<the control plane's group> <file>`
+and `sudo chmod 0440 <file>`. The file is read once at start-up, so restart the web
+service after changing it. `--restamp` re-measures the file's `policy` label (use
+it after the reviewed package was assessed against the code that is deployed now).
+
 A production release manifest that disagrees with the deployment configuration
 (or a controller started without one) no longer refuses a runtime launch either.
 It fails readiness (`release`, or `runtime` for the controller's own manifest);
