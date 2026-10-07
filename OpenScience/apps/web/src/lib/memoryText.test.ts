@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { PLATFORM_CONTEXT_TAGS } from "@evimed/domain";
 import {
-  STATED_BASES, evidenceSourceLabel, isInference, looksInjected, memoryExcerpt, readableMemory,
+  evidenceSourceLabel, looksInjected, memoryExcerpt, memoryOrigin, readableMemory,
 } from "./memoryText";
 
 describe("a stored memory that is really a machine's own text", () => {
@@ -48,26 +48,27 @@ describe("a stored memory that is really a machine's own text", () => {
   });
 });
 
-// 「推断」 is the one mark a memory row keeps (2026-09-23 plan §5.6): whatever
-// the researcher did not say, confirm or correct themselves.
-describe("whether a memory is an inference", () => {
+// Whose words a memory is, said once in its drawer (principle 18): what the
+// researcher said, confirmed or corrected is theirs; the rest is what EviMed
+// learned from their conversations.
+describe("whose words a memory is", () => {
   const provenance = (basis: "stated" | "confirmed" | "edited" | "inferred" | "tool" | "assistant") =>
     ({ basis, observations: 1, runs: 1, conversations: 1 });
 
-  it("is anything the researcher did not say, confirm or correct", () => {
-    for (const basis of ["stated", "confirmed", "edited"] as const) {
-      expect(STATED_BASES.has(basis)).toBe(true);
-      expect(isInference({ provenance: provenance(basis), summary: "我是临床药师" })).toBe(false);
-    }
+  it("names what the researcher said, confirmed or changed as theirs, and everything else as learned", () => {
+    expect(memoryOrigin({ provenance: provenance("stated"), summary: "我是临床药师" })).toBe("你说的");
+    expect(memoryOrigin({ provenance: provenance("confirmed"), summary: "我是临床药师" })).toBe("你确认的");
+    expect(memoryOrigin({ provenance: provenance("edited"), summary: "我是临床药师" })).toBe("你改过的");
     for (const basis of ["inferred", "tool", "assistant"] as const) {
-      expect(isInference({ provenance: provenance(basis), summary: "常做老年用药研究" })).toBe(true);
+      expect(memoryOrigin({ provenance: provenance(basis), summary: "常做老年用药研究" })).toBe("从对话中学到");
     }
   });
 
   it("reads a record without provenance by its origin, and a machine envelope as never the researcher's word", () => {
-    expect(isInference({ origin: "explicit", summary: "我是临床药师" })).toBe(false);
-    expect(isInference({ origin: "inferred", summary: "常做老年用药研究" })).toBe(true);
-    expect(isInference({ provenance: provenance("stated"), summary: "<evimed-brief>请以某某为题完成证据评审。</evimed-brief>" })).toBe(true);
+    expect(memoryOrigin({ origin: "explicit", summary: "我是临床药师" })).toBe("你说的");
+    expect(memoryOrigin({ origin: "manual", summary: "我是临床药师" })).toBe("你改过的");
+    expect(memoryOrigin({ origin: "inferred", summary: "常做老年用药研究" })).toBe("从对话中学到");
+    expect(memoryOrigin({ provenance: provenance("stated"), summary: "<evimed-brief>请以某某为题完成证据评审。</evimed-brief>" })).toBe("从对话中学到");
   });
 });
 

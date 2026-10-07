@@ -387,6 +387,27 @@ test("a stored value is the fact itself, not a note that it was reinforced", asy
   assert.match(system, /A reused key gets the complete current value/);
 });
 
+test("the instructions keep a conversation's pending state, the platform's inventory and process notes out of memory", async () => {
+  // 2026-10-07 audit (plan §3.2.7): about ten project facts from 虚拟临研
+  // conversations were 「待用户提供一句话研究问题或上传方案…」 and 「平台现有三份
+  // 病种知识包…」 — a conversation waiting, and the platform listing what it
+  // offers. Whether a sentence is that is language, so the rule is in the
+  // prompt and not in a filter (principle 5); what code can hold is that the
+  // prompt says it, and that nothing else decides what is stored.
+  let system = "";
+  const intelligence = new MemoryIntelligence(config, new MemoryStoreDouble(), {
+    fetchImpl: async (_input, init) => {
+      system = JSON.parse(String(init.body)).messages[0].content;
+      return Response.json({ choices: [{ message: { content: JSON.stringify({ candidates: [] }) } }] });
+    },
+  });
+  await intelligence.recordRun(project(), run("run_pending"), [message("m1", "帮我做一个糖尿病的虚拟研究。")]);
+  assert.match(system, /Store only durable facts about the person and about the project: what will still be true once this conversation has ended\./);
+  assert.match(system, /Never store the pending state of a conversation — what the assistant is waiting for the user to provide or upload/);
+  assert.match(system, /never the platform's own inventory of what it currently offers/);
+  assert.match(system, /never notes about how the work is being carried out/);
+});
+
 test("a researcher who paused learning, for the account or for this project, gets nothing written", async () => {
   // 2026-09-16 review, M4④. No run summary and no model call: paused means no
   // memory is written, and the notice path reads "paused" as a setting.

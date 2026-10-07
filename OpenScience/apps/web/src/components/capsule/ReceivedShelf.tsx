@@ -122,8 +122,8 @@ export function ReceivedShelf() {
  * project the shell is in and nowhere else (build spec §9.4 #6), are in its
  * 「⋯」. The switch reads "in force here": account-wide, or in this project.
  *
- * Said only when it matters (2026-09-23 inventory §1.7): a publisher this
- * service cannot verify, and what the automatic scan dropped. When it was
+ * Said only when it matters (2026-09-23 inventory §1.7): a source this
+ * service cannot verify, and what the automatic scan left out. When it was
  * received, that a signature checked out, and how far the scan got are the
  * back office's.
  */
@@ -192,13 +192,13 @@ function ReceivedPacks() {
                   <p>{[
                     pack.card?.author ? fromSender(pack.card.author) : null,
                     pack.card?.summary || contents(pack),
-                    pack.issuerTrust === "verified" ? null : "发布者未验证",
+                    pack.issuerTrust === "verified" ? null : "来源未验证",
                     pack.enabledIn === "project" && project ? `只在“${project.name}”启用` : null,
                   ].filter(Boolean).join(" · ")}</p>
                   {pack.upgradedAt && pack.card?.changelog && <p>{formatDay(pack.upgradedAt)}更新：{pack.card.changelog}</p>}
                   {pack.methods.length > 0 && <p className="truncate">{pack.methods.join("、")}</p>}
                   {dropped.length > 0 && (
-                    <Disclosure summary={`已剔除 ${dropped.length} 条`} summaryClassName="text-caption" className="mt-1">
+                    <Disclosure summary={`${dropped.length} 条没有带上`} summaryClassName="text-caption" className="mt-1">
                       <ul className="space-y-1.5 border-l border-border pl-3">
                         {dropped.map((item) => (
                           <li key={item.id}>

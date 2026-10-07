@@ -62,28 +62,33 @@ export function methodTitle(method: Pick<WebMethod, "title" | "name">): string {
   return method.title || method.name;
 }
 
-/** Account-wide outcomes from the durable learning ledger, independent of pagination. */
-export interface LearningSummary {
-  methods: Record<string, number>;
-  uses: Record<string, number>;
-  lessons: { byTrigger: Record<string, number>; succeeded: number; failed: number };
-  results: Record<string, number>;
-  handbookCandidates: number;
-  handbooks?: {
-    dispositions: Record<string, number>;
-    applied: number; unmeasured: number; evaluated: number; verifiedImprovement: number;
-    attached: number; used: number; outcomes: number;
-    recent: { id: string; title: string; capabilityId: string; version: number; verification: "unmeasured" | "evaluated";
-      appliedAt: string; evaluationVerdict?: string | null; source: { projectId: string; runId: string; sessionId?: string | null } }[];
-  } | null;
-  spend24hCny: number | null;
-}
-
 export function listMethods(status?: string, cursor?: string | null) {
   const params = new URLSearchParams({ limit: "50" });
   if (status) params.set("status", status);
   if (cursor) params.set("cursor", cursor);
-  return productRequest<{ items: WebMethod[]; nextCursor: string | null; summary?: LearningSummary | null }>(`/methods?${params}`);
+  return productRequest<{ items: WebMethod[]; nextCursor: string | null }>(`/methods?${params}`);
+}
+
+/**
+ * How many pages a whole list reads at most: 40 of 50, far above any account's methods — the bound is there so a server
+ * that kept answering with a cursor could not make a page read forever.
+ */
+const LIST_PAGES = 40;
+
+/**
+ * Every method of a status, page after page to the end. The memory page read the first page and ignored `nextCursor`
+ * (2026-10-07 walk, D-P1-2): an account past fifty methods saw fifty, and nothing said so.
+ */
+export async function listAllMethods(status?: string): Promise<WebMethod[]> {
+  const items: WebMethod[] = [];
+  let cursor: string | null = null;
+  for (let page = 0; page < LIST_PAGES; page += 1) {
+    const result: { items: WebMethod[]; nextCursor: string | null } = await listMethods(status, cursor);
+    items.push(...result.items);
+    cursor = result.nextCursor;
+    if (!cursor) break;
+  }
+  return items;
 }
 
 /**
@@ -104,13 +109,33 @@ export function retireMethod(method: WebMethod, reason?: string) {
   });
 }
 
-/** One body a method has held, as 「历史版本」 lists it. */
+/**
+ * One body a method has held, as 「以前的版本」 lists it, with what a researcher reads to see what it said: its sentence, when it
+ * applied and its steps — or its text, when it has no steps.
+ */
 export interface MethodVersion {
   version: number;
   revision: number;
   at: string | null;
   title: string | null;
+  summary?: string | null;
+  whenToUse?: string;
+  steps?: string | null;
+  body?: string;
   current: boolean;
+}
+
+/** A conversation a method or handbook was learned from, as 「从哪里学到的」 links it. */
+export interface ConversationSource {
+  projectId: string;
+  sessionId: string;
+  title: string;
+  at: string | null;
+}
+
+/** The conversations that taught a method, newest lesson first; empty when none can be found. */
+export function methodSources(method: Pick<WebMethod, "id">) {
+  return productRequest<{ items: ConversationSource[] }>(`/methods/${encodeURIComponent(method.id)}/sources`);
 }
 
 /** The bodies a method has held, newest first — never a counter write. */

@@ -12,6 +12,7 @@ answered with another keyword (principles 5 and 6).
 | `default-project-follow-up` | five assistant-floated directions filed as 「我的研究」 to-dos | code (kind × project); also refused at write time since 2026-09-27 |
 | `near-duplicates` | three keys for 「说明书核对口径为转载页」 | code (record count) |
 | `platform-brief-as-user-words` | the GEO brief stored as `explicit` | code (the tagged brief never reaches the extractor) |
+| `pending-state-and-inventory` | 「待用户提供一句话研究问题或上传方案…」, 「平台现有三份病种知识包…」 from 虚拟临研 conversations | judgement |
 
 `written` is copied from the audit's captures, never paraphrased. A `replay` is
 the conversation the case is run against; one marked `reconstructed` was

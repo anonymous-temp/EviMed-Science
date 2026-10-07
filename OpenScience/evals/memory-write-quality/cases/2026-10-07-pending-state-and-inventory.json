@@ -1,0 +1,21 @@
+{
+  "id": "2026-10-07-pending-state-and-inventory",
+  "class": "pending-state-and-inventory",
+  "observedIn": "production, account cdss-access (虚拟临研 study projects); page and module review 2026-10-07, plan §3.1 and §3.2 item 7",
+  "written": [
+    { "kind": "project_fact", "scope": "project", "summary": "待用户提供一句话研究问题或上传方案，才能逐条结构化入排条件" },
+    { "kind": "project_fact", "scope": "project", "summary": "平台现有三份病种知识包：非小细胞肺癌、乳腺癌、2 型糖尿病" }
+  ],
+  "whyItIsWrong": "The first is what the assistant was waiting for in one conversation, and the second is what the platform offered that day. Neither is a fact about the researcher or the project; both are stale by the next conversation and were recalled into later ones as if they were known.",
+  "expected": "Nothing is written from these sentences: what a conversation is waiting for, and what the platform currently offers, are not memory.",
+  "decidable": false,
+  "replay": {
+    "reconstructed": true,
+    "projectId": "vcr-eval",
+    "messages": [
+      { "id": "u1", "role": "user", "text": "我想做一个虚拟临床研究，帮我开个头。" },
+      { "id": "a1", "role": "assistant", "text": "平台现有三份病种知识包：非小细胞肺癌、乳腺癌、2 型糖尿病。请先告诉我你的研究问题；待用户提供一句话研究问题或上传方案，才能逐条结构化入排条件。" }
+    ]
+  },
+  "judge": "Is any written record what a conversation is waiting for, what the platform currently offers, or a note about how the work is being carried out, rather than a durable fact about the person or the project? Any such record is a failure."
+}

@@ -6,6 +6,9 @@ import { DOCUMENT_MEMORY_LAYER, documentEntryProjects } from "./derivedMemory.mj
 import { HttpError } from "./security.mjs";
 import { productId, productInteger } from "./productPersistence.mjs";
 
+/** How many entries one list of `mine` reads at most — a researcher's notes number in the hundreds; the bound is there so one account that has thousands cannot make a page read forever. */
+export const CAPSULE_MINE_LIMIT = 2000;
+
 /** @param {unknown} value @param {string} name @param {number} max @param {boolean} required */
 function text(value, name, max, required = true) {
   if ((!required && value == null)) return "";
@@ -125,7 +128,8 @@ export class CapsuleService {
    * Everything in the researcher's own capsules, as one: the account capsule,
    * the notes each project's runs wrote, and any capsule made by hand before
    * there was only one. Borrowed capsules are not in it — they are the
-   * received shelf. Entries in force only; a retired one is on the timeline.
+   * received shelf. `entries` are the ones in force; `forgotten` the ones the
+   * researcher retired, which 「已忘记的内容」 lists and restores.
    *
    * What a knowledge-base document yielded is not a memory the page lists
    * (2026-09-24): it belongs to its document and is shown there, and it is
@@ -134,30 +138,42 @@ export class CapsuleService {
    * PDF put thirty rows on the page, crowding the researcher's own out of the
    * hundred each capsule showed. So the page reads every other layer, each
    * newest first, and never the document layer.
+   *
+   * Every page of each layer is read, to `limit` entries per list: the read
+   * took the first hundred of a capsule and dropped the rest without a word,
+   * so a researcher with a hundred and one notes could not see the newest
+   * that was not among them.
    * @param {string} userId @param {{ limit?: number }} [options]
    */
-  async mine(userId, { limit = 300 } = {}) {
+  async mine(userId, { limit = CAPSULE_MINE_LIMIT } = {}) {
     const own = (await this.documents.list(userId, "capsule", { limit: 100 })).items
       .filter((/** @type {any} */ capsule) => !capsule.payload.imported);
     const capsule = await this.ownCapsule(userId);
-    /** @type {any[]} */
-    const entries = [];
-    for (const item of own) {
-      if (entries.length >= limit) break;
+    /** @param {string} status */
+    const read = async (status) => {
       /** @type {any[]} */
-      const found = [];
-      for (const layer of CAPSULE_LAYERS) {
-        if (layer === DOCUMENT_MEMORY_LAYER) continue;
-        const page = await this.documents.list(userId, "fact", { limit: 100, filter: { capsuleId: item.id, status: "approved", layer } });
-        found.push(...page.items);
+      const entries = [];
+      for (const item of own) {
+        for (const layer of CAPSULE_LAYERS) {
+          if (layer === DOCUMENT_MEMORY_LAYER) continue;
+          /** @type {string | null} */
+          let cursor = null;
+          do {
+            const page = await this.documents.list(userId, "fact", { limit: 100, cursor, filter: { capsuleId: item.id, status, layer } });
+            entries.push(...page.items);
+            cursor = page.nextCursor ?? null;
+          } while (cursor && entries.length < limit);
+        }
       }
-      found.sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt)) || String(right.id).localeCompare(String(left.id)));
-      entries.push(...found.slice(0, 100));
-    }
+      return entries
+        .sort((left, right) => String(right.createdAt).localeCompare(String(left.createdAt)) || String(right.id).localeCompare(String(left.id)))
+        .slice(0, limit);
+    };
     return {
       capsule,
       capsules: own.map((/** @type {any} */ item) => ({ id: item.id, title: item.payload.title, projectId: item.projectId ?? null, revision: item.revision })),
-      entries: entries.slice(0, limit),
+      entries: await read("approved"),
+      forgotten: await read("retired"),
     };
   }
 

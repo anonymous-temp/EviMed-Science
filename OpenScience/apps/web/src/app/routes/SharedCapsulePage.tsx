@@ -76,13 +76,13 @@ export function SharedCapsulePage() {
             {preview.card?.title && <p className="text-ui font-semibold text-text">{preview.card.title}</p>}
             <p className="text-ui text-text-2">{[sender ? fromSender(sender) : null, preview.card?.summary ?? `${preview.entries.length} 条`].filter(Boolean).join(" · ")}</p>
             {shared?.link && <p className="text-caption text-text-3">这个链接还能用 {shared.link.usesLeft} 次。</p>}
-            {dropped.length > 0 && <p className="text-caption text-text-3">会剔除 {dropped.length} 条没有通过自动检查的内容。</p>}
+            {dropped.length > 0 && <p className="text-caption text-text-3">不会带上 {dropped.length} 条没有通过自动检查的内容。</p>}
           </div>
           <ul className="space-y-1">
             {preview.entries.map((entry) => {
               const drop = dropped.find((item) => item.id === entry.id);
               return <li key={entry.id}>
-                <Disclosure summary={`${capsuleEntryLabel(entry.factKind)}${drop ? ` · 会被剔除：${CAPSULE_SCAN_REASONS[drop.code] ?? "没有通过自动检查"}` : ""}`}>
+                <Disclosure summary={`${capsuleEntryLabel(entry.factKind)}${drop ? ` · 不会带上：${CAPSULE_SCAN_REASONS[drop.code] ?? "没有通过自动检查"}` : ""}`}>
                   <p className="max-w-measure whitespace-pre-wrap text-ui text-text">{entry.content}</p>
                 </Disclosure>
               </li>;
