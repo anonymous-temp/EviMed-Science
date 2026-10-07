@@ -229,7 +229,9 @@ function StudyView({ studyId, study, tab, reload }: { studyId: string; study: Vc
       title={study.name}
       width="wide"
       back={(
-        <Link to={VCR_HOME_PATH} className={buttonClasses({ variant: "text", size: "sm", className: "-ml-2.5" })}>
+        // No left padding: the link's own box starts on the page's one left edge. It used to be padded 10 px and pulled back by -10 px, so
+        // the chevron sat on the edge and the box 10 px outside it — the second left edge the release walk found on every tab.
+        <Link to={VCR_HOME_PATH} className={buttonClasses({ variant: "text", size: "sm", className: "pl-0" })}>
           <ChevronLeft size={16} aria-hidden="true" />虚拟临床研究
         </Link>
       )}
