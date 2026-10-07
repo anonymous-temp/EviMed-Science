@@ -223,7 +223,7 @@
       }
     },
     "geo-content": {
-      "title": "循证传播 · 分层稿件",
+      "title": "循证 GEO · 分层稿件",
       "category": "写作与传播",
       "description": "从结论库写出四层稿件和纠错材料，逐篇审核后去 AI 味。",
       "listed": false,
@@ -254,12 +254,12 @@
       }
     },
     "geo-insight": {
-      "title": "循证传播",
+      "title": "循证 GEO",
       "category": "写作与传播",
       "description": "核对产品与说明书，建结论库，画患者旅程并锁定测量问句。",
       "listed": false,
       "starterPrompts": [
-        "为信尔美（玛仕度肽注射液）做一套完整的循证传播方案。",
+        "为信尔美（玛仕度肽注射液）做一套完整的循证 GEO 方案。",
         "AI 现在怎么说诺和盈（司美格鲁肽注射液）？先把证据和问题做出来。",
         "只列问题：给连花清瘟胶囊出一版 30 个问句的最小测量集。"
       ],
@@ -285,7 +285,7 @@
       }
     },
     "geo-proposal": {
-      "title": "循证传播 · 提案资料包",
+      "title": "循证 GEO · 提案资料包",
       "category": "写作与传播",
       "description": "用项目冻结的数据导出提案资料包或每周周报。",
       "listed": false,
@@ -313,7 +313,7 @@
       }
     },
     "geo-strategy": {
-      "title": "循证传播 · 信源与目标",
+      "title": "循证 GEO · 信源与目标",
       "category": "写作与传播",
       "description": "读懂各引擎引用谁、缺什么，定主战场和三档目标。",
       "listed": false,

@@ -1,6 +1,6 @@
 {
   "description": "What each tool of the research tool set (the evimed MCP server, MCP_TOOL_BASE_NAMES) does, in one sentence a researcher can read, and the group the plugins page lists it under. The key is the tool's base name. researchToolDisplay.mjs reads this and a test holds it equal to the published tool list, so a tool added without a sentence fails there.",
-  "groups": ["文献与指南检索", "试验登记", "药品与安全", "基因与分子", "计算与分析", "网页与资料", "循证传播", "虚拟临研", "公共数据", "其他"],
+  "groups": ["文献与指南检索", "试验登记", "药品与安全", "基因与分子", "计算与分析", "网页与资料", "循证 GEO", "虚拟临研", "公共数据", "其他"],
   "tools": {
     "literature_search": { "group": "文献与指南检索", "use": "按关键词、检索式或关系在 PubMed 等文献库里查论文。" },
     "reference_list": { "group": "文献与指南检索", "use": "查一篇论文引用了哪些文献，或被哪些论文引用。" },
@@ -47,10 +47,10 @@
     "data_source_catalog": { "group": "网页与资料", "use": "查询平台审核过的数据源目录，包括凭据要求和许可。" },
     "biomedical_source_search": { "group": "网页与资料", "use": "查询一个经过审核的公共生物医学数据源。" },
 
-    "geo_visibility_probe": { "group": "循证传播", "use": "像患者一样向主流 AI 助手提问并记录回答，用来测量产品的可见度。" },
-    "geo_read": { "group": "循证传播", "use": "读取当前循证传播项目的数据：产品、问题、测量结果、稿件和证据卡。" },
-    "geo_write": { "group": "循证传播", "use": "写入当前循证传播项目的产品信息、策略、稿件和步骤状态。" },
-    "social_posts_search": { "group": "循证传播", "use": "收集真实用户在中文社交平台上怎样描述健康问题。" },
+    "geo_visibility_probe": { "group": "循证 GEO", "use": "像患者一样向主流 AI 助手提问并记录回答，用来测量产品的可见度。" },
+    "geo_read": { "group": "循证 GEO", "use": "读取当前循证 GEO 项目的数据：产品、问题、测量结果、稿件和证据卡。" },
+    "geo_write": { "group": "循证 GEO", "use": "写入当前循证 GEO 项目的产品信息、策略、稿件和步骤状态。" },
+    "social_posts_search": { "group": "循证 GEO", "use": "收集真实用户在中文社交平台上怎样描述健康问题。" },
 
     "vcr_read": { "group": "虚拟临研", "use": "读取当前虚拟临研研究的定义、入排条件、证据、人群、方案和已保存的结果。" },
     "vcr_write": { "group": "虚拟临研", "use": "写入当前虚拟临研研究的定义、入排条件、假设和各类设计。" },

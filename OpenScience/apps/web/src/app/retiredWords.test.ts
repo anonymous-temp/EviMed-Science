@@ -25,7 +25,7 @@ const RETIRED: ReadonlyArray<readonly [string, string]> = [
   ["待你复核", "the verdict says what is true (some conclusions were not matched word for word), not what a person owes"],
   ["待人工复核", "same"],
   ["自证未通过", "same"],
-  ["主张", "the gate's word for a claim; a reader sees 结论 (spec §12.4), 循证传播's evidence tab included"],
+  ["主张", "the gate's word for a claim; a reader sees 结论 (spec §12.4), 循证 GEO's evidence tab included"],
   ["改线", "a tool is chosen before the conversation, not switched after a dispatch"],
   ["按哪条线处理", "same"],
   // The memory page's banned words (build spec 2026-09-21 §10.6): each is the
@@ -34,11 +34,10 @@ const RETIRED: ReadonlyArray<readonly [string, string]> = [
   ["候选", "nothing waits for approval any more; a memory takes effect labelled as what it is"],
   ["蒸馏", "how a method is learned is the platform's business; the reader sees the method"],
   ["采纳", "there is no adoption step on the page; a learned method is simply in force until stopped"],
-  // The module's name since 2026-10-06 (evidence-flywheel plan §5.6): 「GEO」 was
-  // the optimisation industry's word and the regulators' word for poisoning,
-  // and NCBI's expression database is also called GEO. The code keeps `geo`.
-  ["循证 GEO", "the module is 循证传播; its measurement screens are 「AI 回答监测」"],
-  ["循证GEO", "same"],
+  // The module is 「循证 GEO」 again (R10 plan §1, the owner's ruling of 2026-10-07); 「循证传播」
+  // was its name from 2026-10-06. A search still reads the old name as the new one until
+  // 2027-01-07 — `@evimed/domain`'s `retiredNames.mjs`, on lines marked retired-word-ok.
+  ["循证传播", "renamed 2026-10-07 by the owner: the module is 「循证 GEO」; its measurement screens are still 「AI 回答监测」"],
 ];
 
 /**

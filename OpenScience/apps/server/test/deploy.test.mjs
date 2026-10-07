@@ -427,7 +427,7 @@ test("web Dockerfile only copies sources that exist in the build context", async
 
 test("every evals/ file the server reads at run time is in the web image", async () => {
   // 2026-10-07: 循证进化's module loops read three development case files the image never
-  // carried, so each 前沿动态, 循证传播 and 主动科研 mission would have stopped on ENOENT. The
+  // carried, so each 前沿动态, 循证 GEO and 主动科研 mission would have stopped on ENOENT. The
   // evolution packaging test watched paper-gold only; this derives every literal read.
   const dockerfile = await readFile(path.join(repoRoot, "deploy/web/Dockerfile"), "utf8");
   const copied = dockerfile.split("\n").filter((line) => line.startsWith("COPY --from=build "))

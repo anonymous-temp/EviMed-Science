@@ -119,7 +119,7 @@ const DROPPED_TEXT = Symbol("droppedSourceText");
 /**
  * A source whose text the card does not keep (no public address) keeps the passages the card's own claims quote from it,
  * each found verbatim in the text the platform read, as its excerpt beside the read receipt — so those claims stay ✓
- * whichever writer saved them (2026-10-06: a 循证传播 card written from a project's preserved label lost every check
+ * whichever writer saved them (2026-10-06: a 循证 GEO card written from a project's preserved label lost every check
  * mark when its text was dropped; the result publisher did this for itself, now every writer has it). A quotation the
  * text does not hold is never added: its claim stays ⚠, as it would have against the full text.
  * @param {any[]} list @param {any[]} claims

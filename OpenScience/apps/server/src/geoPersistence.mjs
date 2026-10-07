@@ -1,5 +1,5 @@
 /**
- * 「循证传播」's own schema, `evimed_geo` (build spec 2026-09-25 §2).
+ * 「循证 GEO」's own schema, `evimed_geo` (build spec 2026-09-25 §2).
  *
  * Hidden knowledge:
  *

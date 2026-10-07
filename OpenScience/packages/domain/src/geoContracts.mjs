@@ -1,5 +1,5 @@
 /**
- * The four 「循证传播」 contracts' own findings: `geo-insight-pack`,
+ * The four 「循证 GEO」 contracts' own findings: `geo-insight-pack`,
  * `geo-strategy-pack`, `geo-content-pack` and `geo-proposal-pack`.
  *
  * Hidden knowledge: which of these findings may be `required`, and why so few.

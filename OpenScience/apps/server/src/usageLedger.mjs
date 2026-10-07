@@ -26,7 +26,7 @@ const openCostWindowValues = new Set(Object.values(openCostWindows));
  *  public feed on its own schedule, billed to an operator's internal project
  *  and held by the module's own daily budget: counted against that operator's
  *  caps, the feed would spend their research allowance, and their research
- *  would starve the feed. 「循证传播」's rows (`geo`) are the same: the
+ *  would starve the feed. 「循证 GEO」's rows (`geo`) are the same: the
  *  platform parsing and judging measured answers on its own schedule, held by
  *  the module's own daily budget. So are the evidence programme's (`evidence`,
  *  2026-10-05): the publisher account's own research, held by its own daily

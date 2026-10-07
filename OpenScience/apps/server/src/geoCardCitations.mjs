@@ -1,5 +1,5 @@
 /**
- * Which evidence cards 循证传播 articles cite (evidence-flywheel plan §11, 2026-10-06): one of the five signals of the flywheel's north star, read from the
+ * Which evidence cards 循证 GEO articles cite (evidence-flywheel plan §11, 2026-10-06): one of the five signals of the flywheel's north star, read from the
  * module's own tables by the module's own file, because no module outside GEO reads them (`geoFirewall.test.mjs`).
  *
  * Hidden knowledge:

@@ -1,6 +1,6 @@
 """NCBI Gene Expression Omnibus (GEO) series to a differential-expression table: parse, verify, compute.
 
-This is the public data resource at ncbi.nlm.nih.gov/geo, not the platform's 循证传播 module: every name that
+This is the public data resource at ncbi.nlm.nih.gov/geo, not the platform's 循证 GEO module: every name that
 belongs to it here is `gene_expression` / `ncbi_geo`, and nothing in this file reaches `geo_read`/`geo_write`.
 
 One self-contained module on purpose. The control plane's receipt names the code that produced a result by its

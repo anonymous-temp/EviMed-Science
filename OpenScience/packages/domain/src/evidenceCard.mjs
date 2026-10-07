@@ -79,7 +79,7 @@ const invalid = (detail) => new EvidenceCardError(
  * long-standing `evidence_invalid`.
  */
 export const EVIDENCE_CARD_ERROR_MESSAGES_ZH = Object.freeze({
-  evidence_write_origin_refused: '这个专区不接受这种来源的写入：官方专区只由平台写，产品专区只由出品方本人或其循证传播项目写，用户专区只由所有者及其研究结果写。',
+  evidence_write_origin_refused: '这个专区不接受这种来源的写入：官方专区只由平台写，产品专区只由出品方本人或其循证 GEO 项目写，用户专区只由所有者及其研究结果写。',
   evidence_value_source_refused: '证据卡里不能出现“预测”“假设”“合成”的数值；“插补”“重建”的数值只能出现在写明方法的推算类结论里。这张卡没有保存。',
   evidence_producer_required: '这个专区里的证据卡必须写明出品方，以及出品方和所涉产品的关系。',
   evidence_producer_name_reserved: '“EviMed 证据中心”是平台自己的署名，只有平台的发布账号可以使用，请换一个出品方名称。',
@@ -154,7 +154,7 @@ export const EVIDENCE_OUTCOME_ROLES = frozen(['benefit', 'harm'])
 /** The six writers of a zone (plan §4.3 rule 1); `evidenceWriteAllowed` says which may write where. */
 export const EVIDENCE_WRITE_ORIGINS = frozen(['owner', 'import', 'model', 'programme', 'result', 'geo'])
 export const EVIDENCE_WRITE_ORIGIN_LABELS_ZH = Object.freeze({
-  owner: '所有者本人', import: '运营者导入', model: 'AI 编辑', programme: '平台议程', result: '研究结果发布', geo: '循证传播项目',
+  owner: '所有者本人', import: '运营者导入', model: 'AI 编辑', programme: '平台议程', result: '研究结果发布', geo: '循证 GEO 项目',
 })
 
 /**

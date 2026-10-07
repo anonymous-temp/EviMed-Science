@@ -1123,7 +1123,7 @@ test("a GEO content pack is judged on the articles its index names, which the ga
   // judge an index pointing at files it never opened.
   const GEO_CONTENT = Object.freeze({
     id: "geo-content",
-    persona: "你是循证传播的内容作者。",
+    persona: "你是循证 GEO 的内容作者。",
     skills: ["geo-content"],
     tools: ["mcp__evimed__drug_label_search"],
     produces: [{

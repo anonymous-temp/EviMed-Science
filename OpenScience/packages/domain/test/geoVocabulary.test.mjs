@@ -1,4 +1,4 @@
-// 「循证传播」's shared words: the closed vocabularies every package reads, the
+// 「循证 GEO」's shared words: the closed vocabularies every package reads, the
 // three runtime tools as published research tools, the error codes they and
 // the routes answer with, and how the tools narrate.
 import assert from "node:assert/strict";
@@ -109,9 +109,9 @@ test("the three GEO tools are published research tools, delegated rather than ro
 });
 
 test("the tools narrate in the page's words, and an unknown `what` narrates as data", () => {
-  assert.equal(narrateToolCall("mcp__evimed__geo_read", { what: "diagnosis" }).text, "读取循证传播项目：诊断");
-  assert.equal(narrateToolCall("mcp__evimed__geo_write", { what: "lock_questions" }).text, "写入循证传播项目：锁定测量问句");
-  assert.equal(narrateToolCall("mcp__evimed__geo_write", { what: "toString" }).text, "写入循证传播项目：数据");
+  assert.equal(narrateToolCall("mcp__evimed__geo_read", { what: "diagnosis" }).text, "读取循证 GEO 项目：诊断");
+  assert.equal(narrateToolCall("mcp__evimed__geo_write", { what: "lock_questions" }).text, "写入循证 GEO 项目：锁定测量问句");
+  assert.equal(narrateToolCall("mcp__evimed__geo_write", { what: "toString" }).text, "写入循证 GEO 项目：数据");
   assert.equal(narrateToolCall("mcp__evimed__social_posts_search", { query: "降糖药" }, { data: { posts: [{}, {}] } }).text,
     "采集社媒真实问法：「降糖药」 → 2 条");
 });

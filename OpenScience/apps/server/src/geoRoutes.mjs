@@ -7,7 +7,7 @@ import {
 import { HttpError, readJson, sendJson } from "./security.mjs";
 
 /**
- * The browser's routes for 「循证传播」 (`/api/geo/*`, build spec 2026-09-25 §3).
+ * The browser's routes for 「循证 GEO」 (`/api/geo/*`, build spec 2026-09-25 §3).
  *
  * Hidden knowledge:
  *
@@ -34,7 +34,7 @@ import { HttpError, readJson, sendJson } from "./security.mjs";
  * @module geoRoutes
  */
 
-const NOT_ENABLED = () => new HttpError(404, "geo_not_enabled", "循证传播 is not enabled.");
+const NOT_ENABLED = () => new HttpError(404, "geo_not_enabled", "循证 GEO is not enabled.");
 const UNAVAILABLE = () => new HttpError(503, "geo_unavailable", "This GEO action is not available on this deployment yet.");
 /** A project name is 1–40 characters (`projectDisplayName`); a brand given at creation becomes it. */
 const BRAND_NAME_MAX = 40;

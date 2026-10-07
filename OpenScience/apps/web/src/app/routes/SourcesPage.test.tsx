@@ -360,7 +360,7 @@ describe("知识库", () => {
       const menu = await screen.findByRole("menu", { name: "选择范围" });
       await waitFor(() => expect(within(menu).getByText("虚拟临研")).toBeInTheDocument());
       expect(within(menu).getByText("我的项目")).toBeInTheDocument();
-      expect(within(menu).getByText("循证传播")).toBeInTheDocument();
+      expect(within(menu).getByText("循证 GEO")).toBeInTheDocument();
       expect(within(menu).getAllByRole("menuitemradio").map((item) => item.textContent)).toEqual(["我的研究", "疳证 Meta 文献检索", "新虚拟临研研究", "波立维", "所有项目共享"]);
       expect(within(menu).getByRole("menuitemradio", { name: "我的研究" })).toHaveAttribute("aria-checked", "true");
     });

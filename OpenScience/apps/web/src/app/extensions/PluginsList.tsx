@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ChevronRight, Puzzle } from "lucide-react";
+import { searchMatches } from "@evimed/domain";
 import { Button } from "@/components/ui/Button";
 import { List, ListRow } from "@/components/ui/ListRow";
 import { Switch } from "@/components/ui/Switch";
@@ -58,7 +59,8 @@ export function PluginsList({ inventory, citation, extensions, allCatalogue, que
 }) {
   const [allEngines, setAllEngines] = useState(false);
   const needle = query.trim().toLowerCase();
-  const show = (...texts: string[]) => !needle || texts.some(text => text.toLowerCase().includes(needle));
+  // A retired module name still finds the module's rows until 2027-01-07 (`searchMatches`).
+  const show = (...texts: string[]) => searchMatches(query, texts);
   const cite = PLUGIN_COPY["dsh-cite"];
   // What else is on: web reading where the deployment offers it, and the two browser-side packs unless it turned them off.
   const infoIds = [

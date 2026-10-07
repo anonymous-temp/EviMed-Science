@@ -1,5 +1,5 @@
 /**
- * 「循证传播」's product zone and the cards its verified claims become (flywheel F21, F28, 2026-10-06).
+ * 「循证 GEO」's product zone and the cards its verified claims become (flywheel F21, F28, 2026-10-06).
  *
  * Hidden knowledge:
  *

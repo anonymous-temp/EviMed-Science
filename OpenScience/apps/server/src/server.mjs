@@ -298,7 +298,7 @@ import { FrontierNotifications } from "./frontierNotifications.mjs";
 import { FrontierProfiles } from "./frontierProfiles.mjs";
 import { FrontierActions } from "./frontierActions.mjs";
 import { FrontierComposer } from "./frontierComposer.mjs";
-// 「循证传播」 (build spec 2026-09-25): the schema's content store, the pages'
+// 「循证 GEO」 (build spec 2026-09-25): the schema's content store, the pages'
 // service and routes, the runtime tools' gateway and the social channel. The
 // measurement, market and orchestration packages attach to the composed
 // `geo` object (`geo.worker`, `geo.orchestrator`, `geo.market`, `geo.exporter`).
@@ -308,7 +308,7 @@ import { GeoCards } from "./geoCards.mjs";
 import { GeoMembers } from "./geoMembers.mjs";
 import { createGeoQuestionBank, questionBankSummary } from "./geoQuestionBank.mjs";
 import { geoArticleGateOf } from "./geoWrites.mjs";
-import { GEO_DEFAULT_PROJECT_NAME, GeoService, geoAudienceAllows, geoMetricFamilies, geoMetricsSnapshot, geoReadiness } from "./geoService.mjs";
+import { GeoService, geoAudienceAllows, isGeoPlaceholderName, geoMetricFamilies, geoMetricsSnapshot, geoReadiness } from "./geoService.mjs";
 import { createGeoRoutes, geoRoutePattern } from "./geoRoutes.mjs";
 import { GEO_GATEWAY_PATH, createGeoGatewayHandler, geoGatewayRoutePattern } from "./geoGateway.mjs";
 import { createSocialCrawlClient } from "./socialCrawlClient.mjs";
@@ -1019,7 +1019,7 @@ function clientAddress(req, config) {
  */
 /**
  * A file of a project's workspace by its path relative to it, read without following links; null when it cannot be read.
- * What 「循证传播」 reads a claim's preserved source and an article's text with.
+ * What 「循证 GEO」 reads a claim's preserved source and an article's text with.
  * @param {{ workspaceDir: string }} controlProject
  */
 function geoSourceReaderOf(controlProject) {
@@ -1949,7 +1949,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     },
     get: async (/** @type {string} */ id) => (vcrSimulations.current ? vcrSimulations.current.get(id) : null),
   };
-  // The monthly page's two optional sections are found the same way (evidencePublicMetrics.mjs): the question bank's month where 循证传播 and its
+  // The monthly page's two optional sections are found the same way (evidencePublicMetrics.mjs): the question bank's month where 循证 GEO and its
   // question-bank lever are composed, and the prediction registry's calibration where its switches are. Neither exists yet here; each is set where
   // its module is made, and until then (or without it) the section answers nothing and is not rendered.
   /** @type {{ questionBank: ((query: { month: string }) => Promise<any>) | null, predictionCalibration: (() => Promise<any>) | null }} */
@@ -2023,7 +2023,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     await audit({ config, user, project }, "project.create", "completed", { target: id });
     return data;
   }
-  // 「循证传播」 (geoService.mjs): composed only when switched on and a
+  // 「循证 GEO」 (geoService.mjs): composed only when switched on and a
   // product database exists; otherwise its routes answer 404 `geo_not_enabled`,
   // its tools are not offered and nothing of it runs. The other packages attach
   // here: `geo.worker` (the leased loops, started and stopped with the rest),
@@ -2076,7 +2076,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
         const owner = await store.userById(userId);
         if (!owner) return;
         const current = (await store.listProjects(owner)).find((project) => project.id === projectId);
-        if (current?.name === GEO_DEFAULT_PROJECT_NAME) await store.renameProject(owner, projectId, [...name].slice(0, 40).join(""));
+        if (isGeoPlaceholderName(current?.name)) await store.renameProject(owner, projectId, [...name].slice(0, 40).join(""));
       },
       // An article's gate is the run ledger's verdict on the deliverable it
       // was written in — the newest run of the project holding that
@@ -4505,7 +4505,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
   const geoGatewayHandler = createGeoGatewayHandler(config, runtimeManager, {
     geo, report: (code) => process.stderr.write(`geo gateway: ${code}\n`),
   });
-  // 「循证传播」's moving parts, composed into the slots the routes read at
+  // 「循证 GEO」's moving parts, composed into the slots the routes read at
   // request time: the market's hooks (C), the orchestrator (F) that dispatches
   // runs inside the GEO project and enqueues the measurement's rounds (B), the
   // exporter, and one worker whose loops are B's, C's and F's ticks. Off, none
@@ -4964,7 +4964,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       evolution.service.callbacks.handbookSelection = project => platformHandbooks.entries(project.capabilityId??null);
     }
     // What the platform's own modules could not do goes to the evolution module as leads (evolutionLeadSources.mjs, flywheel F20): the evidence programme is read by
-    // the worker's daily scan; 循证传播 and 虚拟临研 get an `offer` where their modules are composed. Off, nothing is composed and the worker ingests no scan event.
+    // the worker's daily scan; 循证 GEO and 虚拟临研 get an `offer` where their modules are composed. Off, nothing is composed and the worker ingests no scan event.
     if (config.evolutionModuleLeadsEnabled) {
       evolutionLeadSources = createEvolutionLeadSources({
         service: evolution.service, perDay: config.evolutionModuleLeadsPerDay, report: code => process.stderr.write(`${code}\n`),
@@ -5002,7 +5002,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
       citationReaders: { communication: geo ? createGeoCardCitationReader({ database: productDatabase }) : null },
       predictionCalibration: predictionRegistry ? () => predictionRegistry?.predictionCalibration() : null,
       evolutionTools: evolution ? async () => (await evolution?.service.tools() ?? []).map((/** @type {any} */ row) => row.payload) : null,
-      // The platform's question bank (循证传播, F22): this month's rounds and the share of the assistants' cited answers that cited an EviMed page.
+      // The platform's question bank (循证 GEO, F22): this month's rounds and the share of the assistants' cited answers that cited an EviMed page.
       assistantCoverage: geo && config.geoQuestionBankEnabled ? async () => {
         const summary = await questionBankSummary(productDatabase, { publicUrl: config.publicUrl });
         if (!summary.available) return { rounds: null, citedShare: null };
@@ -7532,7 +7532,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
     review,
     reviewService: review?.service ?? null,
     reviewWorker: review?.worker ?? null,
-    // 「循证传播」: null when the module is off or there is no product database.
+    // 「循证 GEO」: null when the module is off or there is no product database.
     geo,
     geoService: geo?.service ?? null,
     // 「虚拟临研」, on the same terms.
@@ -7582,7 +7582,7 @@ export function createWebApiApp(overrides = {}, {extensionIntegrationFactory = c
           process.stderr.write(`frontier migration failed: ${typeof error?.code === "string" ? error.code : error?.name ?? "frontier_migration_failed"}\n`);
         });
       }
-      // The same for 循证传播: a failed migration turns `geo` red.
+      // The same for 循证 GEO: a failed migration turns `geo` red.
       if (geo) {
         await geo.service.ready().catch((error) => {
           process.stderr.write(`geo migration failed: ${typeof error?.code === "string" ? error.code : error?.name ?? "geo_migration_failed"}\n`);
@@ -8872,7 +8872,7 @@ async function operatorMetricsText({ judgeService = null, config, store, taskMan
   // The entity vocabulary the frontier, the zones, agendas, products and studies share: the glossary's size and what
   // the taggings found (entityVocabulary.mjs `entityVocabularyMetricFamilies`).
   for (const family of entityVocabularyMetricFamilies(entityVocabulary?.stats() ?? null)) addMetric(lines, family.name, family.help, family.type, family.series);
-  // 循证传播: `open_science_geo_enabled 0` when off (geoService.mjs `geoMetricFamilies`).
+  // 循证 GEO: `open_science_geo_enabled 0` when off (geoService.mjs `geoMetricFamilies`).
   const geoSnapshot = geo ? await geoMetricsSnapshot(geo) : null;
   for (const family of geoMetricFamilies(Boolean(geo), geoSnapshot)) addMetric(lines, family.name, family.help, family.type, family.series);
   // 虚拟临研: `open_science_vcr_enabled 0` when off; queue gauges (queued,
@@ -8911,7 +8911,7 @@ async function operatorMetricsText({ judgeService = null, config, store, taskMan
   const credentialMissing = publicSourceCredentialMissingMetricFamily();
   addMetric(lines, credentialMissing.name, credentialMissing.help, credentialMissing.type, credentialMissing.series);
   // The NCBI Gene Expression Omnibus workflow's six resource limits and its named downloads (geneExpressionMetrics.mjs;
-  // two limits counted by the gateway as bytes arrive, four reported by the runtime's tool). Not 循证传播's.
+  // two limits counted by the gateway as bytes arrive, four reported by the runtime's tool). Not 循证 GEO's.
   for (const family of geneExpressionMetricFamilies()) addMetric(lines, family.name, family.help, family.type, family.series);
   // Model requests booked uncertain, by why (usageLedger.mjs): a burst is a
   // provider or a caller losing calls, and shows here while it happens.
@@ -9074,7 +9074,7 @@ async function readinessStatus(config, store, runtimeManager, researchMemory = n
     review: await readinessCheck(async () => (review ? review.service.readiness() : config.reviewEnabled
       ? Promise.reject(readinessFailure("review_unavailable", { reason: productDatabase ? "not_composed" : "no_product_database" }))
       : { required: false, enabled: false })),
-    // 循证传播: red only for its own invariants (geoService.mjs `geoReadiness`).
+    // 循证 GEO: red only for its own invariants (geoService.mjs `geoReadiness`).
     geo: await readinessCheck(async () => withGeoWorkerWarnings(await geoReadiness({ config, geo, database: productDatabase }), geo?.worker ?? null)),
     // The research allowance's wallet: red only for its own invariants (the
     // schema, the policy's activation, a configuration it refused —

@@ -336,7 +336,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
       return { sessionId: data.sessionId, checks };
     },
     /**
-     * 循证传播's options for the conversation on screen: the project's
+     * 循证 GEO's options for the conversation on screen: the project's
      * coverage window and engines (with `controls` when there is a GEO project
      * to write them to), the engines on offer with their names, and the
      * single-step starters. Rebuilt from a closed shape; `clear` drops them.
@@ -468,7 +468,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
    * anything else.
    */
   const SHELL_DESTINATIONS = ['new-task', 'runs', 'knowledge', 'memory', 'capabilities', 'account', 'geo', 'virtual-research'];
-  /** The tabs of a 循证传播 project a `geo` destination may name; the project is the shell's to know. */
+  /** The tabs of a 循证 GEO project a `geo` destination may name; the project is the shell's to know. */
   const GEO_TABS = ['overview', 'evidence', 'journey', 'questions', 'diagnosis', 'sources', 'content', 'distribution', 'monitoring'];
 
   /**
@@ -549,7 +549,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
       return { capabilityId, sessionId: validId(fields.sessionId) ? fields.sessionId : null, draft };
     },
     /**
-     * A 循证传播 option the reader changed beside the chip: the coverage
+     * A 循证 GEO option the reader changed beside the chip: the coverage
      * window in days, or the engines. The shell writes it to the project.
      * @param {any} fields
      */

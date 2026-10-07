@@ -38,7 +38,7 @@ MINIMUM_CAPABILITIES = 16
 
 DELIVERY_STATUSES = ("accepted", "failed", "not-run")
 # `platform-job`: dispatched by one of the control plane's own workers (the
-# 循证传播 orchestrator, the learning loop, the source pipeline) rather than by
+# 循证 GEO orchestrator, the learning loop, the source pipeline) rather than by
 # a person's message or an acceptance script. The three internal capabilities
 # are only ever run that way, and none of the other three words is true of them.
 DELIVERY_SURFACES = ("native-ui", "http-api", "harness", "platform-job")

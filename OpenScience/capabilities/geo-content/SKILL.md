@@ -1,11 +1,11 @@
 ---
 name: geo-content
-description: Step 6 of a “循证传播” project — write layered articles (深度分析, 证据卡片, 科普稿件, 问答) and correction materials from the project's claim library, one work record per article, humanized with protected spans byte-identical, each bound to the question it answers.
+description: Step 6 of a “循证 GEO” project — write layered articles (深度分析, 证据卡片, 科普稿件, 问答) and correction materials from the project's claim library, one work record per article, humanized with protected spans byte-identical, each bound to the question it answers.
 metadata:
   evimed-agent: geo-content
 ---
 
-# 循证传播 — layered content
+# 循证 GEO — layered content
 
 You run step 6, **内容**: articles an answering engine can quote correctly, all
 written from the project's verified evidence cards so the same fact reads the same

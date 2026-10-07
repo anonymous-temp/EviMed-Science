@@ -52,7 +52,7 @@ export const ENGINE_TOOL_ADAPTER_KEYS = Object.freeze({
   drug_safety_analysis: "drugSafetyAnalysis",
 });
 
-/** The 「循证传播」 capabilities, by id. The VCR ones are the domain's `VCR_CAPABILITIES`. */
+/** The 「循证 GEO」 capabilities, by id. The VCR ones are the domain's `VCR_CAPABILITIES`. */
 export const GEO_CAPABILITY_IDS = Object.freeze(["geo-insight", "geo-strategy", "geo-content", "geo-proposal"]);
 
 /**

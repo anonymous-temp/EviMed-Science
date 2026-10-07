@@ -147,44 +147,44 @@ describe("Sidebar navigation", () => {
     expect(row).toHaveAttribute("aria-current", "page");
   });
 
-  // 「循证传播」 is a row directly below 「科研工具」, and only where `/api/me`
+  // 「循证 GEO」 is a row directly below 「科研工具」, and only where `/api/me`
   // offers the module to this account (`features.geo`).
-  it("has no 循证传播 row unless the account is offered the module", async () => {
+  it("has no 循证 GEO row unless the account is offered the module", async () => {
     mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [], features: { frontier: true, geo: false } });
     renderSidebar();
     await screen.findByRole("link", { name: "前沿动态" });
-    expect(screen.queryByRole("link", { name: "循证传播" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "循证 GEO" })).not.toBeInTheDocument();
   });
 
-  it("puts 循证传播 directly below 科研工具 when the account is offered it", async () => {
+  it("puts 循证 GEO directly below 科研工具 when the account is offered it", async () => {
     mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [], features: { frontier: true, geo: true } });
     renderSidebar();
-    const row = await screen.findByRole("link", { name: "循证传播" });
+    const row = await screen.findByRole("link", { name: "循证 GEO" });
     expect(row).toHaveAttribute("href", "/app/geo");
     await screen.findByRole("link", { name: "前沿动态" });
     const rows = screen.getAllByRole("link").map((link) => link.textContent);
-    expect(rows.slice(0, 7)).toEqual(["新对话", "前沿动态", "科研工具", "循证传播", "知识库", "记忆胶囊", "定时任务"]);
+    expect(rows.slice(0, 7)).toEqual(["新对话", "前沿动态", "科研工具", "循证 GEO", "知识库", "记忆胶囊", "定时任务"]);
     await userEvent.click(row);
     expect(screen.getByTestId("location")).toHaveTextContent("/app/geo");
     expect(row).toHaveAttribute("aria-current", "page");
   });
 
-  // 「虚拟临研」 sits between 「科研工具」 and 「循证传播」, and only where
+  // 「虚拟临研」 sits between 「科研工具」 and 「循证 GEO」, and only where
   // `/api/me` offers it (`features.vcr`).
   it("has no 虚拟临研 row unless the account is offered the module", async () => {
     mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [], features: { geo: true } });
     renderSidebar();
-    await screen.findByRole("link", { name: "循证传播" });
+    await screen.findByRole("link", { name: "循证 GEO" });
     expect(screen.queryByRole("link", { name: "虚拟临研" })).not.toBeInTheDocument();
   });
 
-  it("puts 虚拟临研 between 科研工具 and 循证传播 when the account is offered both", async () => {
+  it("puts 虚拟临研 between 科研工具 and 循证 GEO when the account is offered both", async () => {
     mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [], features: { frontier: true, vcr: true, geo: true } });
     renderSidebar();
     const row = await screen.findByRole("link", { name: "虚拟临研" });
     expect(row).toHaveAttribute("href", "/app/virtual-research");
     const rows = screen.getAllByRole("link").map((link) => link.textContent);
-    expect(rows.slice(0, 8)).toEqual(["新对话", "前沿动态", "科研工具", "虚拟临研", "循证传播", "知识库", "记忆胶囊", "定时任务"]);
+    expect(rows.slice(0, 8)).toEqual(["新对话", "前沿动态", "科研工具", "虚拟临研", "循证 GEO", "知识库", "记忆胶囊", "定时任务"]);
     await userEvent.click(row);
     expect(screen.getByTestId("location")).toHaveTextContent("/app/virtual-research");
     expect(row).toHaveAttribute("aria-current", "page");
@@ -192,21 +192,21 @@ describe("Sidebar navigation", () => {
 
   // One board offered and the other not: the one that is there keeps its place
   // under 科研工具 rather than inheriting the missing one's.
-  it("puts 虚拟临研 under 科研工具 with no 循证传播 beside it", async () => {
+  it("puts 虚拟临研 under 科研工具 with no 循证 GEO beside it", async () => {
     mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [], features: { vcr: true } });
     renderSidebar();
     await screen.findByRole("link", { name: "虚拟临研" });
     const rows = screen.getAllByRole("link").map((link) => link.textContent);
     expect(rows.slice(0, 6)).toEqual(["新对话", "科研工具", "虚拟临研", "知识库", "记忆胶囊", "定时任务"]);
-    expect(screen.queryByRole("link", { name: "循证传播" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "循证 GEO" })).not.toBeInTheDocument();
   });
 
-  it("puts 循证传播 below 科研工具 without the frontier feed too", async () => {
+  it("puts 循证 GEO below 科研工具 without the frontier feed too", async () => {
     mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [], features: { geo: true } });
     renderSidebar();
-    await screen.findByRole("link", { name: "循证传播" });
+    await screen.findByRole("link", { name: "循证 GEO" });
     const rows = screen.getAllByRole("link").map((link) => link.textContent);
-    expect(rows.slice(0, 6)).toEqual(["新对话", "科研工具", "循证传播", "知识库", "记忆胶囊", "定时任务"]);
+    expect(rows.slice(0, 6)).toEqual(["新对话", "科研工具", "循证 GEO", "知识库", "记忆胶囊", "定时任务"]);
   });
 
   // The people icon on a study in 「最近」: the project list is told which
@@ -229,7 +229,7 @@ describe("Sidebar navigation", () => {
   it("does not watch for one where it is not", async () => {
     mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [], features: { geo: true } });
     renderSidebar();
-    await screen.findByRole("link", { name: "循证传播" });
+    await screen.findByRole("link", { name: "循证 GEO" });
     expect(mocks.finishedToasts).not.toHaveBeenCalledWith(true);
   });
 
@@ -239,7 +239,7 @@ describe("Sidebar navigation", () => {
     await waitFor(() => expect(mocks.fetchWebMe).toHaveBeenCalled());
     expect(screen.queryByRole("link", { name: "前沿动态" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "虚拟临研" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("link", { name: "循证传播" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "循证 GEO" })).not.toBeInTheDocument();
   });
 
   // The footer is who is signed in and a gear (2026-09-23 plan §5.2). The

@@ -42,8 +42,8 @@
  *    (`kb-query` → `kb-result`), which answers from the sources this project
  *    already parsed.
  *
- * A 循证传播 conversation (bound to any of the module's capabilities) reads
- * 「循证传播」 on its chip whether or not the catalogue lists the capability —
+ * A 循证 GEO conversation (bound to any of the module's capabilities) reads
+ * 「循证 GEO」 on its chip whether or not the catalogue lists the capability —
  * the module hides them from 科研工具 — and, once the shell has found the
  * GEO project this conversation belongs to (`geo`), carries two optional
  * controls beside the chip, 覆盖周期 and AI 引擎, which report a change back
@@ -82,7 +82,7 @@ export const inject = ['slots', 'sessions', 'conversation'];
 /**
  * The slash popup's rows: every public tool a researcher picks from, in
  * catalogue order (which is by category), the category first in the detail
- * line. A tool its own module opens (`listed: false`, the 「循证传播」
+ * line. A tool its own module opens (`listed: false`, the 「循证 GEO」
  * capabilities) stays in the catalogue for its chip and is not a row here;
  * `hidden` names any other tool entered elsewhere.
  * @param {any[]} capabilities the frame's validated catalogue
@@ -105,7 +105,7 @@ export function capabilityOptions(capabilities, hidden = []) {
  * what it hands back, needs and cannot do stays on 科研工具, where the tool
  * was chosen.
  *
- * A conversation bound to one of 循证传播's capabilities reads 「循证传播」
+ * A conversation bound to one of 循证 GEO's capabilities reads 「循证 GEO」
  * whichever of them it is, and whether or not the catalogue lists it: the
  * module hides its capabilities from 科研工具 with a display flag, and the
  * chip must still say what the conversation runs.
@@ -272,7 +272,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
   }), 'evimed-commands: bound capability');
   ctx.effect(() => kit.hub.on('session', () => { setTool(null); setGeoOptions(null); setVcrOptions(null); }), 'evimed-commands: capability follows the conversation');
 
-  // 循证传播's two options for the project this conversation belongs to —
+  // 循证 GEO's two options for the project this conversation belongs to —
   // 覆盖周期 and AI 引擎 — and its single-step starters, as the shell reads them
   // from the control plane (`geo`). The frame shows them and reports a change
   // (`geo-options`); the shell writes it to the project. Nothing here decides.
@@ -406,7 +406,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
         }, '×'));
     };
 
-    // 循证传播's two options beside its chip: quiet 24 px text controls in the
+    // 循证 GEO's two options beside its chip: quiet 24 px text controls in the
     // secondary ink, as the kernel's own composer controls are.
     const optionStyle = {
       ...textButton, display: 'inline-flex', alignItems: 'center', gap: '2px', height: '24px', lineHeight: '24px',
@@ -420,7 +420,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
     };
 
     /**
-     * 覆盖周期 and AI 引擎, for a 循证传播 conversation whose project the shell
+     * 覆盖周期 and AI 引擎, for a 循证 GEO conversation whose project the shell
      * has found. Both optional: a project that is never touched here measures
      * 90 days on the default five engines. The engine list is a native
      * disclosure — a keyboard opens it like any other — and one engine always
@@ -503,7 +503,7 @@ export function apply(ctx, _config, target = globalThis, _require = undefined, k
       const vcrState = useVcrOptions();
       const model = modelOf(id);
       if (!model) return null;
-      // A module's single steps (循证传播's, 虚拟临研's single tasks): a short
+      // A module's single steps (循证 GEO's, 虚拟临研's single tasks): a short
       // name on the pill, a whole sentence into the composer — never sent.
       if (model.geo || model.vcr) {
         const options = model.geo ? geoState : vcrState;

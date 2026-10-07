@@ -16,7 +16,7 @@ const BASE = '/opt/evimed/socket/presets/evimed-universal/skills'
 export const SCOPED_SKILL_ROOTS = Object.freeze([
   ...['core', 'evimed', 'curated-scientific', 'office'].map(name => Object.freeze({ root: `${BASE}/${name}`, source: 'builtin', duplicate: true })),
   Object.freeze({ root: `${BASE}/community`, source: 'community', duplicate: true }),
-  // The private 「循证传播」 method pack sits one level down (`skills/<name>/`, beside its shared layer), the way the preset's
+  // The private 「循证 GEO」 method pack sits one level down (`skills/<name>/`, beside its shared layer), the way the preset's
   // own skill directories list it. Without a row here its skills read as an unconfirmed source and a preview fails. It is the
   // owner's pack, not a template: listed and readable, never copied into an account.
   Object.freeze({ root: `${BASE}/geo-private/skills`, source: 'builtin', duplicate: false }),

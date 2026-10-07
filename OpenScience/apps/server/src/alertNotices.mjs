@@ -72,9 +72,9 @@ export const ALERT_NOTICES = Object.freeze({
   JevCalibrationDrift: { title: "判定服务的一致率持续偏低", sentence: "有一个判定站点的一致率连续七天低于校准基线，请先核对模型和提示再动阈值。" },
   MemoryRerankFailing: { title: "记忆重排序失败偏多", sentence: "召回结果的重排序失败多于成功，记忆仍可用，但排序退回到向量顺序。" },
 
-  // 循证传播.
-  GeoUrgentFindingsOpen: { title: "循证传播有严重的回答偏差未处理", sentence: "有 AI 引擎把客户药品讲错，严重度为 S3 或 S4，可能影响用药安全，请尽快处理或关闭。" },
-  GeoProbeLoopStalled: { title: "循证传播的探测停了", sentence: "探测循环超过三十分钟没有成功跑完一轮，可见度和准确度的数据停在了上一轮。" },
+  // 循证 GEO.
+  GeoUrgentFindingsOpen: { title: "循证 GEO 有严重的回答偏差未处理", sentence: "有 AI 引擎把客户药品讲错，严重度为 S3 或 S4，可能影响用药安全，请尽快处理或关闭。" },
+  GeoProbeLoopStalled: { title: "循证 GEO 的探测停了", sentence: "探测循环超过三十分钟没有成功跑完一轮，可见度和准确度的数据停在了上一轮。" },
   GeoProbeEnginesPaused: { title: "有 AI 引擎被暂停探测", sentence: "探测主机上有引擎被暂停超过一小时，多半是被登出了，请到探测主机重新登录。" },
 });
 

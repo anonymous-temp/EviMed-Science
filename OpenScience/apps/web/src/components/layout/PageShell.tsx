@@ -13,7 +13,7 @@ import { cn } from "@/lib/cn";
  * in two containers stepped sideways as it scrolled.
  *
  * `width="wide"` is the dashboard column (1200, DESIGN.md): a data page
- * squeezed into a document column is half of why 循证传播 looked cheap.
+ * squeezed into a document column is half of why 循证 GEO looked cheap.
  * `width="full"` is for the page that lays itself out (a split view) and
  * still shares the gutter. The retired names `narrow` and `content` resolve
  * to the list column.

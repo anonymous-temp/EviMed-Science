@@ -6,7 +6,7 @@
  * - **One list per word, read by everyone.** The control plane's schema CHECKs,
  *   the routes' validation, the runtime gateway's per-item checks, the MCP
  *   tools' schemas, the engine's scenario validator and the page's labels all
- *   derive from these arrays. 「循证传播」 learned this the expensive way: a
+ *   derive from these arrays. 「循证 GEO」 learned this the expensive way: a
  *   second copy is the one that drifts, and the drift shows up as a row the
  *   ledger refuses.
  * - **Nine value sources, not seven.** The owner's v1.0 had seven; literature

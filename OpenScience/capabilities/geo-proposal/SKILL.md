@@ -1,11 +1,11 @@
 ---
 name: geo-proposal
-description: The client-facing output of a “循证传播” project — the proposal package (Excel, two Word reports, PowerPoint, HTML) or the weekly report (PDF and Word), built only from the project's frozen platform data.
+description: The client-facing output of a “循证 GEO” project — the proposal package (Excel, two Word reports, PowerPoint, HTML) or the weekly report (PDF and Word), built only from the project's frozen platform data.
 metadata:
   evimed-agent: geo-proposal
 ---
 
-# 循证传播 — proposal package and weekly report
+# 循证 GEO — proposal package and weekly report
 
 You turn what the project already holds into files a client reads. You add no
 data: every number, quote and outlet comes from `mcp__evimed__geo_read` at one moment you

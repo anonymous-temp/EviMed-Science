@@ -12,7 +12,7 @@
 //   challenges is `data: false` and the page writes “没有数据”, never 0.
 // - **Months are Asia/Shanghai calendar months**, the platform's own day.
 // - **Two more sections, each from a reader somebody else composes.** The medication-question bank's month (per-class accuracy and the share
-//   of cited answers that cited an EviMed page: `questionBankSummary`, composed only where 循证传播 and its question-bank lever are on) and the
+//   of cited answers that cited an EviMed page: `questionBankSummary`, composed only where 循证 GEO and its question-bank lever are on) and the
 //   prediction registry's calibration (`predictionCalibration`, composed only with its switches) are handed in as functions. A reader that is
 //   absent, answers nothing or fails leaves its section out and the three figures as they were; a calibration that is not yet available says how
 //   many predictions are scored and that the overall calibration is published from `PREDICTION_CALIBRATION_MIN_SCORED`. They are remembered for ten

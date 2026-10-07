@@ -9,7 +9,7 @@ import { isClinicalContractKind } from '../../../packages/domain/src/contractKin
 import { runGate } from '../../../packages/domain/src/contractRegistry.mjs';
 import { GENE_EXPRESSION_CAPABILITY_ID, GENE_EXPRESSION_CONTRACT_KIND, GENE_EXPRESSION_RESULT_FILES, MCP_TOOL_BASE_NAMES } from '@evimed/domain';
 
-// The gene-expression-analysis capability (the public NCBI Gene Expression Omnibus; not 循证传播): its manifest, its skill, its
+// The gene-expression-analysis capability (the public NCBI Gene Expression Omnibus; not 循证 GEO): its manifest, its skill, its
 // contract and the names that keep it apart from the pharma module.
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');

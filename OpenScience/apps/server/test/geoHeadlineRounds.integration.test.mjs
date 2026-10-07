@@ -1,4 +1,4 @@
-// The headline numbers of 「循证传播」 come from full measurements only: a
+// The headline numbers of 「循证 GEO」 come from full measurements only: a
 // baseline, a weekly re-measure or a single step's round. A sentinel (ten
 // questions on two engines), a post-publication check, a confirmation or a
 // noise round measures a sliver, and its project-scope rows must never

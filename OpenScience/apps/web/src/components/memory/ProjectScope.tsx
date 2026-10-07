@@ -3,12 +3,12 @@ import { FilterChip } from "@/components/ui/FilterChips";
 import { type ProjectChoice, type ProjectKind } from "./memoryItems";
 
 /** The heading of each group the dropdown lists: the researcher's own projects need none. */
-const GROUP_HEADINGS: Record<ProjectKind, string | null> = { own: null, vcr: "虚拟临研", geo: "循证传播" };
+const GROUP_HEADINGS: Record<ProjectKind, string | null> = { own: null, vcr: "虚拟临研", geo: "循证 GEO" };
 
 /**
  * The 项目 tab's one control: which project's facts the list shows
  * (2026-10-07 plan §3.2). The researcher's own projects come first; the studies
- * of 虚拟临研 and the projects of 循证传播 — each an ordinary project underneath
+ * of 虚拟临研 and the projects of 循证 GEO — each an ordinary project underneath
  * — are listed in a group of their own, as the sidebar and the knowledge base
  * list them, so two studies with the same name are never mistaken for the
  * researcher's own projects.

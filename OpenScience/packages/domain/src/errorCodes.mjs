@@ -233,7 +233,7 @@ export const recoverableEvidenceSourceErrorCodes = new Set([
   "frontier_search_response_too_large",
   "frontier_search_gateway_token_missing",
   "frontier_search_gateway_token_invalid",
-  // 「循证传播」's runtime tools (geo_platform.py → geoGateway.mjs) not
+  // 「循证 GEO」's runtime tools (geo_platform.py → geoGateway.mjs) not
   // answering: the module off or not open to this account, a conversation
   // outside a GEO project, the social channel not configured, an outage. The
   // run records that the platform's data was not reachable and goes on with
@@ -595,7 +595,7 @@ export const terminalEvidenceSourceErrorCodes = new Set([
   "frontier_search_limit_invalid",
   "frontier_search_request_invalid",
   "frontier_search_request_too_large",
-  // And for 「循证传播」's tools: a `what` outside the tool's vocabulary, a
+  // And for 「循证 GEO」's tools: a `what` outside the tool's vocabulary, a
   // filter or payload the gateway cannot read, a social query it cannot send.
   // A single invalid item of a write is not one of these — it is refused in the
   // answer's `issues` while the rest are written (principle 14).
@@ -1182,7 +1182,7 @@ const capsuleTransferErrorCodes = Object.freeze([
 ])
 
 /**
- * Codes the 「循证传播」 routes answer with (`geoRoutes.mjs`, `/api/geo/*`):
+ * Codes the 「循证 GEO」 routes answer with (`geoRoutes.mjs`, `/api/geo/*`):
  * the module off, a project that is not this account's, a request the page
  * built wrong, an action whose worker is not composed. The page reads them
  * (it never shows one); they are here so each is held to a Chinese sentence
@@ -2449,12 +2449,12 @@ export const ERROR_CODE_FAMILIES = Object.freeze([
   // family and not 64 sentences: a table that size is the table nobody keeps
   // current, which is the failure the family mechanism exists to prevent.
   [/^geo_probe_/, '生成式检索的可见度探测这次没能完成，报告会把它记为限制。'],
-  // 「循证传播」's runtime tools, then its routes. The tool family comes first:
+  // 「循证 GEO」's runtime tools, then its routes. The tool family comes first:
   // a run reading the platform's data has a different next step (go on with
   // what it has) from a person whose page action was refused (try again).
   [/^(?:geo_(?:disabled$|no_project$|unconfigured$|gateway_|upstream_|response_|request_|read_|write_)|social_posts_)/,
-    '循证传播的项目数据这次没能读写；运行会如实记下这一点，用已有的资料继续。'],
-  [/^geo_(?!probe_)/, '循证传播这次没能完成这个操作，稍后再试。'],
+    '循证 GEO 的项目数据这次没能读写；运行会如实记下这一点，用已有的资料继续。'],
+  [/^geo_(?!probe_)/, '循证 GEO 这次没能完成这个操作，稍后再试。'],
   // 「虚拟临研」, read the same way and for the same reason: a run whose study
   // data could not be read carries on with what it has, and a person whose
   // page action was refused tries again. The engine family is separate — a
@@ -2732,7 +2732,7 @@ export function errorCodeOutcome(code) {
   if (EXTENSION_ERROR_CODES.includes(text)) return 'upstream'
   if (text === 'managed_browser_busy') return 'capped'
   if (MANAGED_BROWSER_ERROR_CODES.includes(text)) return 'upstream'
-  // 循证传播's page refusals are about the module and what it holds — a
+  // 循证 GEO's page refusals are about the module and what it holds — a
   // project, a round, an order that is not there to act on, a worker not yet
   // composed — never a verdict on a run.
   if (Object.hasOwn(DOCUMENT_EXPORT_ERROR_MESSAGES, text)) return 'upstream'

@@ -416,7 +416,7 @@ test('choosing or leaving a tool reaches the shell, validated', async () => {
   f.ctx.dispose();
 });
 
-test("循证传播's options come in rebuilt from a closed shape, and a change goes out validated", async () => {
+test("循证 GEO's options come in rebuilt from a closed shape, and a change goes out validated", async () => {
   const f = fixture(); const hub = createHub(f.target);
   /** @type {any[]} */ const delivered = [];
   hub.on('geo', (data) => delivered.push(data));
@@ -424,11 +424,11 @@ test("循证传播's options come in rebuilt from a closed shape, and a change g
   shellSends(f, { type: 'evimed.runtime-ui.geo', seq: 1, sessionId: 'session-a', controls: true, coverageDays: 90,
     coverageOptions: [30, 60, 90, 180, -1, 1.5], engines: ['doubao', 'kimi', 'EVIL', 'baidu'],
     offered: [{ id: 'doubao', name: '豆包' }, { id: 'kimi', name: 'Kimi' }, { id: '<b>', name: 'x' }, { id: 'qianwen' }],
-    starters: [{ label: '完整方案', draft: '做一套完整的循证传播方案'.repeat(40) }, { label: '', draft: 'x' }], extra: 'dropped' });
+    starters: [{ label: '完整方案', draft: '做一套完整的循证 GEO 方案'.repeat(40) }, { label: '', draft: 'x' }], extra: 'dropped' });
   assert.deepEqual(delivered[0], {
     sessionId: 'session-a', controls: true, coverageDays: 90, coverageOptions: [30, 60, 90, 180],
     engines: ['doubao', 'kimi'], offered: [{ id: 'doubao', name: '豆包' }, { id: 'kimi', name: 'Kimi' }],
-    starters: [{ label: '完整方案', draft: '做一套完整的循证传播方案'.repeat(40).slice(0, 400) }],
+    starters: [{ label: '完整方案', draft: '做一套完整的循证 GEO 方案'.repeat(40).slice(0, 400) }],
   });
   shellSends(f, { type: 'evimed.runtime-ui.geo', seq: 2, sessionId: 'session-a', clear: true });
   assert.deepEqual(delivered[1], { sessionId: 'session-a', starters: null });
@@ -483,7 +483,7 @@ test("虚拟临研's options come in rebuilt from a closed shape, and a change g
   f.ctx.dispose();
 });
 
-test('the frame can send the reader to 循证传播, at a tab named from a closed list', async () => {
+test('the frame can send the reader to 循证 GEO, at a tab named from a closed list', async () => {
   const f = fixture(); apply(f.ctx, {}, f.target); await settle();
   const shell = /** @type {any} */ (f.target).__EVIMED_SHELL__;
   shell.navigate('geo', undefined, { tab: 'diagnosis' });

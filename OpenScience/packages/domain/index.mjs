@@ -277,6 +277,15 @@ export {
   capabilityTitle,
 } from './src/capabilityDisplay.mjs'
 
+// retiredNames — 4 exports: the two module names replaced on 2026-10-07, and the search alias that reads them as the
+// new names until 2027-01-07
+export {
+  RETIRED_MODULE_NAMES,
+  RETIRED_NAME_SEARCH_UNTIL,
+  searchMatches,
+  searchNeedles,
+} from './src/retiredNames.mjs'
+
 // capabilityAvailability — 17 exports: whether a capability, tool, skill or extension has really run on this
 // deployment, as a label (source-planned / installed / executable / limited / unavailable / unverified)
 export {
@@ -1171,7 +1180,7 @@ export {
   FRONTIER_SOURCE_DISPLAY_NAMES,
   frontierSourceDisplayName,
 } from './src/frontierSourceNames.mjs'
-// geoVocabulary — 81 exports: 「循证传播」's closed vocabularies (pools, engines,
+// geoVocabulary — 81 exports: 「循证 GEO」's closed vocabularies (pools, engines,
 // steps, measurement and error states, source and article words, order and
 // ledger states, the social channel, the runtime tools' words), their Chinese
 // labels, the metric ids the platform's own views read, and the one
@@ -1273,7 +1282,7 @@ export {
   geoSpecifiedInfoAccuracy,
   isGeoValue,
 } from './src/geoVocabulary.mjs'
-// geoMetrics — 20 exports: 「循证传播」's metric table (the owner's
+// geoMetrics — 20 exports: 「循证 GEO」's metric table (the owner's
 // geo-skills metrics.yaml as `geo/metrics.json`, with its constants and their
 // provenance), the probe sanity markers (`geo/sanity.json`), and the pure
 // computation — per-scope cells with Wilson intervals and the no-fake-number
@@ -1863,7 +1872,7 @@ export {
 export { EVOLUTION_TOOL_HARM_TEST } from './src/evolution.mjs'
 
 // geneExpression — NCBI Gene Expression Omnibus series to differential expression (plan 2026-10-02 §11.3 N17): the
-// accessions, the six limits, the tool's refusals and the advisory findings over its package. Not 「循证传播」.
+// accessions, the six limits, the tool's refusals and the advisory findings over its package. Not 「循证 GEO」.
 export {
   GENE_EXPRESSION_ACCESSIONS,
   GENE_EXPRESSION_CAPABILITY_ID,
@@ -1889,7 +1898,7 @@ export {
 
 export { EVOLUTION_ERROR_MESSAGES, EVOLUTION_TRACKS, EVOLUTION_DATA_LEVELS, EVOLUTION_VALIDATION_LEVELS, EVOLUTION_DECISION_CLASSES, EVOLUTION_GAP_CODES, EVOLUTION_LEAD_SOURCES, EVOLUTION_ORIGINS, EVOLUTION_BUILD_FORMS, EVOLUTION_CASE_GROUPS, EVOLUTION_TOOL_STATES, EVOLUTION_JOB_KINDS, EVOLUTION_EXECUTABLE_OPERATIONS, EVOLUTION_ONE_WAY_OPERATIONS, evolutionDecisionClass, evolutionAdaptiveClass, evolutionValidationLevel, evolutionToolVisible, evolutionMethodFields, evolutionDataMatch, validateEvolutionDataRequirements } from './src/evolution.mjs'
 
-// geoEvidenceChain — 「循证传播」 as one evidence chain (flywheel F21, F28, 2026-10-06): the product zone's cards made from a
+// geoEvidenceChain — 「循证 GEO」 as one evidence chain (flywheel F21, F28, 2026-10-06): the product zone's cards made from a
 // project's verified claims, the closed vocabulary of how a difference is known, the producer settings and the disclosure's
 // people, and the claim-reference grammar the lower layers cite the cards by
 export {

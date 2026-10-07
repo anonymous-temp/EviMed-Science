@@ -5,7 +5,7 @@
 // whole of the choice. `geo-content` declared `signal-monitoring` for GEO
 // citation monitoring while the table sent that type to adverse-event analysis:
 // a GEO agenda item ran `adr-analysis`, and GEO monitoring never ran (build spec
-// 2026-09-25 §1). Monitoring is now the 「循证传播」 module's own scheduler. This
+// 2026-09-25 §1). Monitoring is now the 「循证 GEO」 module's own scheduler. This
 // file holds the table and the declarations together so the next capability
 // that declares a type the table sends elsewhere is a red test, not a quiet
 // misroute.

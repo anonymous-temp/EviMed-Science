@@ -24,7 +24,7 @@
  *  costs is never folded into a researcher's spend. `review` is the
  *  independent reviewer the control plane calls on a researcher's delivery
  *  (a model of another family, never the kernel's): charged to the run it
- *  reviewed, so a report's price includes its review. `geo` is 「循证传播」's
+ *  reviewed, so a report's price includes its review. `geo` is 「循证 GEO」's
  *  own model calls outside a run — parsing and judging measured answers —
  *  held by the module's own daily budget like `frontier`, never by a
  *  researcher's caps. `web-search` is the web-search gateway's own model call
@@ -82,7 +82,7 @@ export const USAGE_PURPOSE_LABELS_ZH = /** @type {Readonly<Record<UsagePurpose, 
   autopilot: '主动科研规划',
   frontier: '前沿动态',
   review: '成果审查',
-  geo: '循证传播',
+  geo: '循证 GEO',
   vcr: '虚拟临研',
   'web-search': '联网搜索',
   evolution: '循证进化',

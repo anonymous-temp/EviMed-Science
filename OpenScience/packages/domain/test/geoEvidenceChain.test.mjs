@@ -1,4 +1,4 @@
-// 「循证传播」's evidence chain, the card side (flywheel F21, F28): a project's claims become the cards of its product zone —
+// 「循证 GEO」's evidence chain, the card side (flywheel F21, F28): a project's claims become the cards of its product zone —
 // only the claims the card's own ruler marks ✓, one card per clinical question on the patient journey, every closed word
 // from the domain's vocabulary, nothing typed by hand.
 import assert from 'node:assert/strict'

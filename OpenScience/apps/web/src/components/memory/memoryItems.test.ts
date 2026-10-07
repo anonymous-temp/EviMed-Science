@@ -103,7 +103,7 @@ describe("the projects the 项目 tab can show", () => {
   const projects = [{ id: "p1", name: "疳证 Meta" }, { id: "p2", name: "信尔美" }, { id: "v1", name: "糖尿病研究" }, { id: "g1", name: "波立维" }];
   const sets = { vcr: new Set(["v1"]), geo: new Set(["g1"]) };
 
-  it("lists the researcher's own first, then the studies, then the 循证传播 projects, each with its kind", () => {
+  it("lists the researcher's own first, then the studies, then the 循证 GEO projects, each with its kind", () => {
     expect(projectChoices(projects, sets, []).map((choice) => [choice.name, choice.kind])).toEqual([
       ["疳证 Meta", "own"], ["信尔美", "own"], ["糖尿病研究", "vcr"], ["波立维", "geo"],
     ]);

@@ -116,7 +116,7 @@ type Destination = () => { to: string; state?: unknown };
  * (`useProjectRuns`); which groups are open survives a reload.
  */
 export function ProjectBrowser({ geo = false, vcr = false }: {
-  /** Whether 「循证传播」 is offered: its projects then sit in their own group at the end, with the radar icon. */
+  /** Whether 「循证 GEO」 is offered: its projects then sit in their own group at the end, with the radar icon. */
   geo?: boolean;
   /** Whether 「虚拟临研」 is offered: its studies then sit in their own group at the end, with the people icon. */
   vcr?: boolean;
@@ -539,7 +539,7 @@ export function ProjectBrowser({ geo = false, vcr = false }: {
                 {(["geo", "vcr"] as const).map((name) => moduleProjects[name].length > 0 && (
                   <ModuleGroup
                     key={name}
-                    label={name === "geo" ? "循证传播" : "虚拟临研"}
+                    label={name === "geo" ? "循证 GEO" : "虚拟临研"}
                     icon={name === "geo" ? Radar : UsersRound}
                     count={moduleProjects[name].length}
                     open={isModuleOpen(name)}
@@ -559,7 +559,7 @@ export function ProjectBrowser({ geo = false, vcr = false }: {
 }
 
 /**
- * One of the two groups at the end of the project list — 「循证传播」 and 「虚拟临研」 — holding the projects those modules made, as
+ * One of the two groups at the end of the project list — 「循证 GEO」 and 「虚拟临研」 — holding the projects those modules made, as
  * a header with a count that opens into the same rows an ordinary project has. Closed until the reader opens it (or they are in one
  * of its projects), and remembered, as the project groups are.
  */

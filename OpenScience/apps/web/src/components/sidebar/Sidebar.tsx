@@ -76,17 +76,17 @@ const NAV: NavItem[] = [
 const FRONTIER_NAV: NavItem = { to: "/app/frontier", label: "前沿动态", icon: <Newspaper size={16} aria-hidden="true" /> };
 
 /**
- * 「虚拟临研」 and 「循证传播」, in that order directly below 「科研工具」 — and,
+ * 「虚拟临研」 and 「循证 GEO」, in that order directly below 「科研工具」 — and,
  * like the frontier feed, only where `/api/me` offers the module to this
  * account (`features.vcr`, `features.geo`). A row that led to 「还没有开放」
  * would be a destination that is not one.
  */
 const VCR_NAV: NavItem = { to: "/app/virtual-research", label: "虚拟临研", icon: <UsersRound size={16} aria-hidden="true" /> };
-const GEO_NAV: NavItem = { to: "/app/geo", label: "循证传播", icon: <Radar size={16} aria-hidden="true" /> };
+const GEO_NAV: NavItem = { to: "/app/geo", label: "循证 GEO", icon: <Radar size={16} aria-hidden="true" /> };
 
 /**
  * The rows in order: the frontier feed after 「新对话」, then 「虚拟临研」 and
- * 「循证传播」 after 「科研工具」, in that order — the two boards sit together,
+ * 「循证 GEO」 after 「科研工具」, in that order — the two boards sit together,
  * and the one this account may not have simply is not there.
  */
 function navRows({ frontier, vcr, geo }: { frontier: boolean; vcr: boolean; geo: boolean }): NavItem[] {

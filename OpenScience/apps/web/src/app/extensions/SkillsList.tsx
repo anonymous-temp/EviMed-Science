@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ChevronRight } from "lucide-react";
+import { searchMatches } from "@evimed/domain";
 import { Button } from "@/components/ui/Button";
 import { List, ListRow } from "@/components/ui/ListRow";
 import { PendingSkillTransfers } from "./SkillImport";
@@ -34,10 +35,11 @@ export function SkillsList({ personal, platform, query, hasMore, loadingMore, on
 }) {
   const [open, setOpen] = useState<ReadonlySet<string>>(() => new Set());
   const needle = query.trim().toLowerCase();
-  const matches = (...texts: string[]) => !needle || texts.some(text => text.toLowerCase().includes(needle));
+  // A retired module name still finds the module's rows until 2027-01-07 (`searchMatches`).
+  const matches = (...texts: string[]) => searchMatches(query, texts);
   const mine = personal.filter(skill => matches(skill.payload.title, skill.payload.description));
   const groups = (platform?.groups ?? [])
-    .map(name => ({ name, items: (platform?.items ?? []).filter(item => item.group === name && matches(item.title, item.use)) }))
+    .map(name => ({ name, items: (platform?.items ?? []).filter(item => item.group === name && matches(item.title, item.use, item.group)) }))
     .filter(group => group.items.length > 0);
   const nothing = !!needle && mine.length === 0 && groups.length === 0;
   return (

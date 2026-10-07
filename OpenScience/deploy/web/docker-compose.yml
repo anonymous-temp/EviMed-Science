@@ -607,7 +607,7 @@ services:
       OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_ENABLED:
       OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_MAX_PER_PROJECT:
       OPEN_SCIENCE_EVIDENCE_ZONE_SUBSCRIPTION_MAX_ITEMS:
-      # 「循证传播」 (geoService.mjs) and the media marketplace it places orders
+      # 「循证 GEO」 (geoService.mjs) and the media marketplace it places orders
       # through. Value-less: unset keeps config.mjs's defaults — the module off,
       # open to operators once on, no social channel, no marketplace. The
       # marketplace key is the host file bound below.
@@ -936,7 +936,7 @@ services:
       OPEN_SCIENCE_GEO_PROBE_SIGNING_SECRET_FILE: ${OPEN_SCIENCE_GEO_PROBE_SIGNING_SECRET_FILE:-}
       OPEN_SCIENCE_PUBLIC_SOURCE_GATEWAY_TIMEOUT_MS: ${OPEN_SCIENCE_PUBLIC_SOURCE_GATEWAY_TIMEOUT_MS:-60000}
       OPEN_SCIENCE_PUBLIC_SOURCE_GATEWAY_MAX_RESPONSE_BYTES: ${OPEN_SCIENCE_PUBLIC_SOURCE_GATEWAY_MAX_RESPONSE_BYTES:-16777216}
-      # The NCBI Gene Expression Omnibus workflow's six resource limits (config.mjs `geneExpression*`; not 循证传播). The two
+      # The NCBI Gene Expression Omnibus workflow's six resource limits (config.mjs `geneExpression*`; not 循证 GEO). The two
       # byte limits are enforced by the public-source gateway as a download streams; every limit also reaches the runtime
       # as EVIMED_GENE_EXPRESSION_*, where the tools refuse an input over one for that computation. Counters:
       # open_science_gene_expression_limits_total{limit,action}.

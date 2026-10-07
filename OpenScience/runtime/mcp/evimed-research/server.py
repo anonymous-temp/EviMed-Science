@@ -971,7 +971,7 @@ TOOL_DEFINITIONS.extend(kb_search.tool_definitions())
 # The feed of recent medical developments (「前沿动态」, 2026-09-22): leads a
 # model may look up when a question is about what is new, never evidence.
 TOOL_DEFINITIONS.extend(frontier_search.tool_definitions())
-# 「循证传播」's platform data and social channel (2026-09-25): offered only where
+# 「循证 GEO」's platform data and social channel (2026-09-25): offered only where
 # the module is on and open to the account (EVIMED_GEO_GATEWAY_URL), and used by
 # the GEO capabilities' runs.
 TOOL_DEFINITIONS.extend(geo_platform.tool_definitions())
@@ -987,7 +987,7 @@ TOOL_DEFINITIONS.extend(research_calculate.tool_definitions())
 # warning and `check` still runs on what the call declares, so it is not an optional tool.
 TOOL_DEFINITIONS.extend(data_semantics.tool_definitions())
 # The NCBI Gene Expression Omnibus workflow (2026-10-04, N17): a series preserved and identity-checked, and the
-# differential-expression computation the platform's engine does (never the model). Not the 循证传播 module.
+# differential-expression computation the platform's engine does (never the model). Not the 循证 GEO module.
 TOOL_DEFINITIONS.extend(gene_expression_tools.tool_definitions())
 
 
@@ -1064,7 +1064,7 @@ def disabled_tools():
 # frontier_search: 「前沿动态」 is a module a deployment may not run at all
 # (`OPEN_SCIENCE_FRONTIER_ENABLED`, off by default), and its results were only
 # ever leads; without it every question is still answered (2026-09-22).
-# geo_read, geo_write, social_posts_search: 「循证传播」 is a module a deployment
+# geo_read, geo_write, social_posts_search: 「循证 GEO」 is a module a deployment
 # may not run at all (`OPEN_SCIENCE_GEO_ENABLED`, off by default), and the
 # social channel is a separate host a deployment may not have; every research
 # question is answered without them (2026-09-25).

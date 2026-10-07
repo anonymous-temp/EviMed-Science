@@ -1,5 +1,5 @@
 /**
- * 「循证传播」's project members and their roles (flywheel F29, 2026-10-06): the way an enterprise brings colleagues and an outside
+ * 「循证 GEO」's project members and their roles (flywheel F29, 2026-10-06): the way an enterprise brings colleagues and an outside
  * agency into one project, and the people a product card names as its author and its reviewing doctor.
  *
  * Hidden knowledge:

@@ -1,4 +1,4 @@
-// 「循证传播」's judge against the cards (flywheel F21): the verified card claims are what an answer is held to, the specified
+// 「循证 GEO」's judge against the cards (flywheel F21): the verified card claims are what an answer is held to, the specified
 // information (indication, dosage, contraindication, adverse reaction) is judged first, the three checks — beyond the label, safety
 // left out, what a cited link says — are re-verified by what code can decide, and every verdict records the card revision it was judged
 // against, from the claim and not from the model.

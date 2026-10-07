@@ -1530,7 +1530,7 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
   const gateways = plan.gateways ?? null;
   // Neither a container nor a remote session can see a path on this host.
   const containerized = plan.sandboxMode === "docker" || plan.sandboxMode === "agentbay";
-  // The six resource limits of the NCBI Gene Expression Omnibus workflow (not 循证传播): the tools enforce in the runtime what
+  // The six resource limits of the NCBI Gene Expression Omnibus workflow (not 循证 GEO): the tools enforce in the runtime what
   // only the runtime can see (samples and probes a matrix holds, memory, time), from the same config keys the gateway
   // enforces the two byte limits with.
   for (const spec of Object.values(GENE_EXPRESSION_LIMITS)) environment[`EVIMED_${spec.env}`] = String(config[spec.configKey] ?? spec.default);
@@ -1606,7 +1606,7 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
     if (frontierGatewayUrl && frontierAudienceAllows(config, { id: String(project.userId ?? "") })) {
       environment.EVIMED_FRONTIER_GATEWAY_URL = frontierGatewayUrl;
     }
-    // 「循证传播」's three tools ride the same token, and are given an address
+    // 「循证 GEO」's three tools ride the same token, and are given an address
     // on the same terms as the frontier's: the module on and open to this
     // account. Whether the project is a GEO project is the gateway's answer
     // (`geo_no_project`), not a reason to leave the address out.
@@ -1756,7 +1756,7 @@ function evimedMcpEnvironment(config, project, plan, { workloadTokenPath } = {})
   if (!environment.EVIMED_FRONTIER_GATEWAY_URL) {
     environment.EVIMED_DISABLED_TOOLS = [...new Set([...environment.EVIMED_DISABLED_TOOLS.split(",").filter(Boolean), "frontier_search"])].join(",");
   }
-  // 「循证传播」's tools likewise: offered only where their gateway address
+  // 「循证 GEO」's tools likewise: offered only where their gateway address
   // was given above, and the social search only where the deployment has a
   // social channel — a tool that can only answer 「无信号」 is not offered.
   // `OPTIONAL_TOOLS` in the MCP server lets the release audit count them.

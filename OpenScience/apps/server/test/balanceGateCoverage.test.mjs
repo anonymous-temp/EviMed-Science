@@ -26,7 +26,7 @@ const RESEARCHER_OWNED = [
   "dispatchVerification", // autopilot: an independent check of a proactive claim
   "dispatchEpisode",    // autopilot: one budgeted episode
   "dispatchVcrRun",     // 虚拟临研 programme step
-  "dispatchGeoRun",     // 循证传播 programme step
+  "dispatchGeoRun",     // 循证 GEO programme step
   "dispatchChannelRun", // a question that arrived through a messaging channel
 ];
 /** The platform's own background work: charged to nobody, so asked of nobody. */

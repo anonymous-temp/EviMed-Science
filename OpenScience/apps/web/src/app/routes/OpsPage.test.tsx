@@ -23,7 +23,7 @@ vi.mock("@/components/settings/WebTasksCard", async () => {
   return { WebTasksCard: () => { useEffect(() => { mounts.tasks += 1; }, []); return null; } };
 });
 
-vi.mock("@/components/settings/GeoMarketCard", () => ({ GeoMarketCard: () => <div>循证传播投放</div> }));
+vi.mock("@/components/settings/GeoMarketCard", () => ({ GeoMarketCard: () => <div>循证 GEO 投放</div> }));
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -45,7 +45,7 @@ describe("运维: the deployment's console and the evolution engine", () => {
     api.fetchWebMe.mockResolvedValue({ project: { id: "alpha" } });
     render(<OpsPage />);
     expect(screen.getByText("部署就绪检查")).toBeInTheDocument();
-    expect(screen.getByText("循证传播投放")).toBeInTheDocument();
+    expect(screen.getByText("循证 GEO 投放")).toBeInTheDocument();
     expect(screen.getByText("循证进化面板")).toBeInTheDocument();
     expect(screen.getByRole("note")).toHaveTextContent("停止或重启会中断进行中的研究");
     expect(screen.queryByText(/项目插件/)).not.toBeInTheDocument();

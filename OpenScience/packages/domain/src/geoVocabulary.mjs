@@ -1,5 +1,5 @@
 /**
- * 「循证传播」's closed vocabularies (build spec 2026-09-25 §2, §4).
+ * 「循证 GEO」's closed vocabularies (build spec 2026-09-25 §2, §4).
  *
  * Hidden knowledge:
  *

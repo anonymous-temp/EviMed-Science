@@ -11,7 +11,7 @@
  *   execution (jobs, executions, results, forecasts), the business side
  *   (matching, referrals, sites, follow-up) and governance (lineage, stale
  *   marks, reviews, decisions, regulatory contacts, audit, schedule marks) are
- *   all created here — the shape 「循证传播」 settled on, for the same reason:
+ *   all created here — the shape 「循证 GEO」 settled on, for the same reason:
  *   so no package migrates a table another one reads. Additive and idempotent.
  * - **Tenancy is a column, checked in code**, and here it is not enough on its
  *   own: a study has members, so a row's reader is decided by

@@ -94,7 +94,7 @@ export const routes: RouteObject[] = [
         { path: "frontier/zones/:zoneId", element: <EvidenceZonePage /> },
         { path: "frontier/zones/:zoneId/evidence/:cardId", element: <EvidenceReadingPage /> },
         { path: "frontier/authors/:authorId", element: <EvidenceAuthorPage /> },
-        // 「循证传播」: the projects, one project's tabs (概览 when none is
+        // 「循证 GEO」: the projects, one project's tabs (概览 when none is
         // named), and one AI answer. Like the frontier feed, each answers for
         // itself when the module is off here.
         { path: "geo", element: <GeoHomePage /> },

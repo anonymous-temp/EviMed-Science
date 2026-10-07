@@ -60,7 +60,7 @@ export const MCP_TOOL_BASE_NAMES = Object.freeze([
   'dailymed_label',
   // The NCBI Gene Expression Omnibus workflow (2026-10-04, N17): a series preserved and identity-checked, and the
   // differential-expression computation the platform's engine does, never the model (gene_expression_tools.py).
-  // Not 「循证传播」: those are geo_read / geo_write below.
+  // Not 「循证 GEO」: those are geo_read / geo_write below.
   'gene_expression_series',
   'gene_expression_differential',
   // full text and pages
@@ -71,7 +71,7 @@ export const MCP_TOOL_BASE_NAMES = Object.freeze([
   'locate_quote',
   // measured visibility (the consumer LLM front-ends, not the record)
   'geo_visibility_probe',
-  // 「循证传播」: the project's own data through the control plane's GEO
+  // 「循证 GEO」: the project's own data through the control plane's GEO
   // gateway, and the social channel real phrasings are collected from
   // (geo_platform.py; build spec 2026-09-25 §4)
   'geo_read',

@@ -16,7 +16,7 @@ import { describe, expect, it } from "vitest";
  *  - interface copy types a half-width space between Chinese and a Latin
  *    letter or a digit (“共 29 条”, “打开 PubMed 检索”), except inside a
  *    formatted date (“9月26日”);
- *  - 循证传播 sets its Chinese at 400 or 600: no `font-medium`, no
+ *  - 循证 GEO sets its Chinese at 400 or 600: no `font-medium`, no
  *    `font-bold` (the lead's 2026-09-27 GEO sweep; the rest of the shell
  *    still sets a field label at 500, spec §5.3 rule 2).
  *
@@ -26,13 +26,13 @@ import { describe, expect, it } from "vitest";
  * sentence, not a pattern, and stays with review.
  *
  * The whole shell is in scope. The knowledge-base pages, the settings row that
- * imports from a network drive, 循证传播 and its charts were held out while
+ * imports from a network drive, 循证 GEO and its charts were held out while
  * they were being rewritten (appendix E.6 #10) and were swept on 2026-09-27;
  * GEO's own copy test was folded in here the same day, so there is one rule
  * test and one walk.
  */
 const SRC = fileURLToPath(new URL("..", import.meta.url));
-/** 循证传播: where the 400 / 600 weight rule is held. */
+/** 循证 GEO: where the 400 / 600 weight rule is held. */
 const GEO_SCOPE = [/^components\/geo\//, /^components\/charts\//, /^lib\/geoClient\.ts$/, /^app\/routes\/Geo/];
 
 function files(path: string): string[] {
@@ -122,7 +122,7 @@ describe("copy follows the writing rules", () => {
     expect(offenders((text) => UNSPACED.test(text.replace(DATE_PARTS, "")))).toEqual([]);
   });
 
-  it("sets 循证传播's Chinese at 400 or 600 only", () => {
+  it("sets 循证 GEO's Chinese at 400 or 600 only", () => {
     expect(offenders((text) => WEIGHT_500_OR_700.test(text), geoSources)).toEqual([]);
   });
 

@@ -3,7 +3,7 @@ import { EmptyState } from "@/components/cards/EmptyState";
 import { PageShell } from "@/components/layout/PageShell";
 
 /** The sentence a direct link lands on where the module is off, or not offered to this account. */
-export const GEO_OFF_SENTENCE = "循证传播还没有在这个工作空间开放。";
+export const GEO_OFF_SENTENCE = "循证 GEO 还没有在这个工作空间开放。";
 
 /**
  * The module-off page: one sentence, nothing to click. The navigation row is
@@ -12,7 +12,7 @@ export const GEO_OFF_SENTENCE = "循证传播还没有在这个工作空间开�
  */
 export function GeoOffPage() {
   return (
-    <PageShell title="循证传播">
+    <PageShell title="循证 GEO">
       <EmptyState icon={Radar} title={GEO_OFF_SENTENCE} />
     </PageShell>
   );

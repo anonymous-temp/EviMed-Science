@@ -18,7 +18,7 @@ vi.mock("@/lib/apiClient", async original => ({ ...(await original<object>()), .
 
 const row = (name: string, group: string, extra: object = {}) => ({ id: `curated:${name}`, name, title: `${group}技能 ${name}`, use: `${name} 的一句话用途`, group, source: "platform", canCopy: true, ...extra });
 const platformList = {
-  groups: ["科研分析", "写作与核查", "办公文档", "社区", "循证传播"], geoGroup: "循证传播",
+  groups: ["科研分析", "写作与核查", "办公文档", "社区", "循证 GEO"], geoGroup: "循证 GEO",
   items: [
     ...["a", "b", "c", "d", "e", "f"].map(name => row(name, "科研分析")),
     row("check", "写作与核查"),
@@ -76,7 +76,7 @@ it("lists the platform's skills by use with the reader's own first, four to a gr
   await userEvent.click(within(analysis).getByRole("button", { name: "收起" }));
   expect(within(analysis).getAllByRole("listitem")).toHaveLength(4);
   expect(screen.getByRole("region", { name: "写作与核查" })).toBeInTheDocument();
-  expect(screen.queryByRole("region", { name: "循证传播" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: "循证 GEO" })).not.toBeInTheDocument();
   // Each row is the Chinese name, one line of use and where it comes from — never an identifier.
   expect(within(analysis).getByText("a 的一句话用途")).toBeInTheDocument();
   // The community group names itself once in its heading and once as the source of its row.
@@ -115,6 +115,17 @@ it("a search shows every match across the groups, unfolded", async () => {
   await userEvent.clear(screen.getByRole("searchbox", { name: "搜索" }));
   await userEvent.type(screen.getByRole("searchbox", { name: "搜索" }), "没有这个");
   expect(await screen.findByText("没有找到技能")).toBeInTheDocument();
+});
+
+it("a module's retired name still finds the module's skills, as its current name, and is never shown back", async () => {
+  skills.listPlatformSkills.mockResolvedValue({ ...platformList, items: [...platformList.items, row("geo-x", "循证 GEO", { id: "geo-private:geo-x", canCopy: false })] });
+  open("/app/extensions/skills");
+  await screen.findByRole("region", { name: "科研分析" });
+  await userEvent.type(screen.getByRole("searchbox", { name: "搜索" }), "循证传播");
+  const pack = await screen.findByRole("region", { name: "循证 GEO" });
+  expect(within(pack).getAllByRole("listitem")).toHaveLength(1);
+  expect(screen.queryByRole("region", { name: "科研分析" })).not.toBeInTheDocument();
+  expect(screen.queryByText(/循证传播/)).not.toBeInTheDocument();
 });
 
 it("a row opens its drawer on what it does, when it is used and its full text, and copies it as the reader's own", async () => {

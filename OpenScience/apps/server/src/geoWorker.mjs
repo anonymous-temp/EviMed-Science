@@ -1,5 +1,5 @@
 /**
- * 「循证传播」's background work: one timer, many loops (build spec 2026-09-25
+ * 「循证 GEO」's background work: one timer, many loops (build spec 2026-09-25
  * §5). The loops are other modules' tick functions — measurement (probe,
  * parse, metrics, errors), the marketplace (catalogue, orders, poll, verify,
  * reconcile, top-ups) and the orchestrator (program, schedules) — and this

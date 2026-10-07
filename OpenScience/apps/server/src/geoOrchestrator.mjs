@@ -4,7 +4,7 @@ import { geoProjectFromRow } from "./geoStore.mjs";
 import { HttpError, randomId } from "./security.mjs";
 
 /**
- * 「循证传播」's program state machine (build spec 2026-09-25 §5; plan §6):
+ * 「循证 GEO」's program state machine (build spec 2026-09-25 §5; plan §6):
  * which step runs next, decided by platform rules and never by the model.
  *
  * The eight steps (`projects.steps`) are the program as the page reads it.
@@ -370,7 +370,7 @@ export function measurementFreshness(rows, engines, now, timeZone) {
  * @param {any} project @param {{ scope: Array<{ step: string, fidelity: "full" | "minimal" }>, target: string | null, full: boolean }} plan
  */
 export function insightBrief(project, { scope, target, full }) {
-  const lines = [`“循证传播”自动运行 · ${full ? "完整方案" : "单步"} · 第 1–3 步（证据、旅程、问题）`, productLine(project), scopeLine(project)];
+  const lines = [`“循证 GEO”自动运行 · ${full ? "完整方案" : "单步"} · 第 1–3 步（证据、旅程、问题）`, productLine(project), scopeLine(project)];
   if (!full && target) {
     lines.push(`单步模式：用户要的是“${stepLabel(target)}”。只补它需要的最小上游，报告里写明哪些部分是最小版、完整版还会补什么。`);
   }
@@ -404,7 +404,7 @@ export function insightBrief(project, { scope, target, full }) {
  */
 export function strategyBrief(project, { minimal, freshness = null }) {
   return [
-    `“循证传播”自动运行 · 第 5 步（信源）`,
+    `“循证 GEO”自动运行 · 第 5 步（信源）`,
     productLine(project), scopeLine(project),
     `诊断已经测完${minimal ? "（最小版：30 个问句测一轮，数字只代表这 30 个问句，报告里写明）" : "（基线）"}。先用 geo_read 读 diagnosis、metrics、snapshots、sources、errors。`,
     ...(freshness ? [freshness] : []),
@@ -425,7 +425,7 @@ export function strategyBrief(project, { minimal, freshness = null }) {
  *   errors: Array<{ engine: string, statement: string | null }>, reason: "first" | "next" | "single", size: number }} batch
  */
 export function contentBrief(project, { number, groups, errors, reason, size }) {
-  const lines = [`“循证传播”自动运行 · 第 6 步（内容）· ${typeof number === "number" ? `第 ${number} 批` : number}`, productLine(project)];
+  const lines = [`“循证 GEO”自动运行 · 第 6 步（内容）· ${typeof number === "number" ? `第 ${number} 批` : number}`, productLine(project)];
   if (reason === "next") lines.push("这是每周复测之后的下一轮：补离目标还差的语义群、投了没被引用的主题、复测里还在的讲错我方。");
   lines.push(`这一批最多 ${size} 篇，先写主战场语义群，再写纠错材料：`);
   for (const group of groups) {
@@ -448,7 +448,7 @@ export function contentBrief(project, { number, groups, errors, reason, size }) 
 export function exportBrief(project, { kind, week = null, freshness = null }) {
   if (kind === "weekly") {
     return [
-      `“循证传播”自动运行 · 周报${week ? `（${week} 这一周）` : ""}`,
+      `“循证 GEO”自动运行 · 周报${week ? `（${week} 这一周）` : ""}`,
       productLine(project),
       "用周报模式出一份 PDF 和一份 Word：本周复测、投放组和对照组的净效应、被 AI 引用的稿件、新出现的讲错我方、下一轮做什么。",
       "所有数字都来自 geo_read，不补测、不编数；样本不足 30 写“样本不足”，没测的引擎写“未测”。",
@@ -457,7 +457,7 @@ export function exportBrief(project, { kind, week = null, freshness = null }) {
     ].join("\n");
   }
   return [
-    "“循证传播” · 导出提案资料包",
+    "“循证 GEO” · 导出提案资料包",
     productLine(project),
     "出一套提案资料包：一个 Excel、两份 Word、一份 PPT、一份 HTML。只用项目已有的数据（geo_read），没做的步骤写“未做”。",
     ...(freshness ? [freshness] : []),

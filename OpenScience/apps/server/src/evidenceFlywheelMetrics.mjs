@@ -9,7 +9,7 @@
  *   `{ value, ... }` or `{ value: null, reason }`; a module another package adds (a question bank, a card reference in a study) is probed
  *   for in `information_schema` first and reads `null` until it exists.
  * - **The north star is cards, de-duplicated, not events.** A verified card is used in a week when at least one of five signals names it
- *   — read, cited by another account's research, cited by a 循证传播 article, cited by a 虚拟临研 study, cited by an AI assistant — and a card
+ *   — read, cited by another account's research, cited by a 循证 GEO article, cited by a 虚拟临研 study, cited by an AI assistant — and a card
  *   named by three signals counts once. The ways are reported beside it so a change in the star can be traced to the signal that moved.
  *   Card count, page views and words generated are deliberately not outcomes and appear nowhere here.
  * - **Signals other modules own are read through readers they provide**, never by this module reaching into their tables (`geoFirewall.test.mjs` forbids it for the

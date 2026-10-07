@@ -1,4 +1,4 @@
-// 「循证传播」's orchestrator on PostgreSQL with everything around it faked —
+// 「循证 GEO」's orchestrator on PostgreSQL with everything around it faked —
 // the dispatch of a run, a run finishing (by writing what a run writes through
 // geo_write, then the ledger's completion), a round being enqueued and
 // finishing, the inbox: the full program from nothing to monitoring, a single

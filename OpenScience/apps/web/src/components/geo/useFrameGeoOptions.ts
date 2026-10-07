@@ -23,7 +23,7 @@ export async function geoProjectPath(projectId: string, tab: string | null): Pro
 }
 
 /**
- * 循证传播's options in the conversation frame.
+ * 循证 GEO's options in the conversation frame.
  *
  * When the conversation on screen is bound to a GEO capability, the shell
  * finds the GEO project the tab's project is (a GEO project is an ordinary
