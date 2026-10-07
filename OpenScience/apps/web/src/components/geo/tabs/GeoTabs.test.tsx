@@ -421,7 +421,7 @@ describe("准确与安全", () => {
     client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
     client.getGeoMonitoring.mockResolvedValue(monitoringFilled);
     renderTab(<AccuracyTab {...props()} />);
-    const accuracy = await screen.findByRole("region", { name: "事实准确率" });
+    const accuracy = await screen.findByRole("group", { name: "事实准确率" });
     expect(accuracy).toHaveTextContent("92");
     expect(accuracy).toHaveTextContent("目标 98%");
     // The denominator is declared once for the whole band.
@@ -442,7 +442,7 @@ describe("准确与安全", () => {
     client.getGeoDiagnosis.mockResolvedValue(diagnosisFilled);
     client.getGeoMonitoring.mockResolvedValue(monitoringFilled);
     renderTab(<AccuracyTab {...props()} />);
-    await screen.findByRole("region", { name: "事实准确率" });
+    await screen.findByRole("group", { name: "事实准确率" });
     expect(screen.queryByRole("button", { name: "问 AI" })).not.toBeInTheDocument();
     await userEvent.click(screen.getAllByRole("button", { name: "写纠错稿" })[0]);
     await waitFor(() => expect(store.select).toHaveBeenCalledWith("prj_geo_1", expect.any(Function)));

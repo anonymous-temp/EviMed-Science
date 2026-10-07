@@ -139,21 +139,21 @@ describe("a GEO project's page", () => {
 
     // The index takes two cells, with where we stand, the target, and the
     // rival ahead of us (fusion plan §4.8).
-    const gvi = screen.getByRole("region", { name: "综合可见度指数" });
+    const gvi = screen.getByRole("group", { name: "综合可见度指数" });
     expect(gvi).toHaveTextContent("38");
     expect(gvi).toHaveTextContent("目标 55");
     expect(gvi).toHaveTextContent("提及率第 2 / 2");
     expect(gvi).toHaveTextContent("司美格鲁肽 提及率 48%");
     expect(gvi).toHaveClass("sm:col-span-2");
-    const mention = screen.getByRole("region", { name: "品牌提及率" });
+    const mention = screen.getByRole("group", { name: "品牌提及率" });
     expect(mention).toHaveTextContent("18");
     expect(mention).toHaveTextContent("目标 35%");
     // 24 answers: the rate is withheld and the number never printed.
-    const citation = screen.getByRole("region", { name: "引用命中率" });
+    const citation = screen.getByRole("group", { name: "引用命中率" });
     expect(citation).toHaveTextContent("样本不足");
     expect(citation).not.toHaveTextContent("6%");
     // The safety cell is the one red number, and it counts S3 and above only.
-    expect(screen.getByRole("region", { name: "用药安全" })).toHaveTextContent("1");
+    expect(screen.getByRole("group", { name: "用药安全" })).toHaveTextContent("1");
 
     // The denominator is declared once for the band, not in每 cell.
     const band = screen.getByRole("region", { name: "本轮指标" });
@@ -297,7 +297,7 @@ describe("a GEO project's page", () => {
     const rail = await screen.findByRole("list", { name: "进度" });
     expect([...rail.querySelectorAll("[data-rail-state]")].map((step) => step.getAttribute("data-rail-state"))).toEqual(Array(8).fill("todo"));
     expect(await screen.findByText(/还没有测过各家 AI 怎么回答这个产品/)).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "品牌提及率" })).toHaveTextContent("—");
+    expect(screen.getByRole("group", { name: "品牌提及率" })).toHaveTextContent("—");
     expect(screen.queryByRole("button", { name: "问 AI" })).not.toBeInTheDocument();
   });
 

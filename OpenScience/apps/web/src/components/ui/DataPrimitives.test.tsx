@@ -70,7 +70,7 @@ describe("StatTile", () => {
         lead
       />,
     );
-    const tile = screen.getByRole("region", { name: "综合可见度" });
+    const tile = screen.getByRole("group", { name: "综合可见度" });
     expect(tile).toHaveTextContent("61");
     expect(tile).toHaveTextContent("第 3 / 6");
     expect(tile).toHaveTextContent("较基线 · 目标 65");
@@ -84,7 +84,43 @@ describe("StatTile", () => {
     const { container, rerender } = render(<StatTile label="引用命中率" value="样本不足" loading />);
     expect(container.querySelector(".animate-pulse")).not.toBeNull();
     rerender(<StatTile label="引用命中率" value="样本不足" />);
-    expect(screen.getByRole("region", { name: "引用命中率" })).toHaveTextContent("样本不足");
+    expect(screen.getByRole("group", { name: "引用命中率" })).toHaveTextContent("样本不足");
+  });
+
+  // axe `heading-order`, 2026-10-07 audit B-04: the tile's label was an <h3> in a <section>, so every tile was a landmark and the
+  // outline went from the page title to level three. A tile is data: a named group, its label a paragraph.
+  it("is a named group whose label is not a heading, so it takes no place in the page's outline", () => {
+    render(<StatTile label="品牌提及率" value="43" unit="%" />);
+    expect(screen.queryByRole("heading")).not.toBeInTheDocument();
+    expect(screen.queryByRole("region")).not.toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "品牌提及率" })).toHaveTextContent("品牌提及率");
+  });
+
+  it("has a dense variant for a band of small counts: padded and sized down on a phone only, the ordinary tile from sm up", () => {
+    const { rerender } = render(<StatTile label="可发布" value="37" />);
+    const ordinary = screen.getByRole("group", { name: "可发布" });
+    expect(ordinary).toHaveClass("p-4");
+    expect(ordinary.className).not.toMatch(/max-sm:/);
+    expect(within(ordinary).getByText("37").className).not.toMatch(/max-sm:/);
+    rerender(<StatTile label="可发布" value="37" dense />);
+    const dense = screen.getByRole("group", { name: "可发布" });
+    // The base classes are unchanged, so from `sm` up it is the same tile.
+    expect(dense).toHaveClass("p-4", "max-sm:p-3");
+    expect(within(dense).getByText("37")).toHaveClass("text-metric", "max-sm:text-heading");
+    // A leading metric and a word standing in for a number keep their own sizes.
+    rerender(<StatTile label="可发布" value="37" dense lead />);
+    expect(within(screen.getByRole("group", { name: "可发布" })).getByText("37")).not.toHaveClass("max-sm:text-heading");
+    rerender(<StatTile label="可发布" value="未测" dense placeholder />);
+    expect(within(screen.getByRole("group", { name: "可发布" })).getByText("未测")).not.toHaveClass("max-sm:text-heading");
+  });
+
+  it("puts a dense band two tiles to a row on a phone, and leaves every other band in one column", () => {
+    const { rerender } = render(<StatBand label="本周" columns={4}><StatTile label="A" value="1" /></StatBand>);
+    const grid = () => screen.getByRole("region", { name: "本周" }).firstElementChild as HTMLElement;
+    expect(grid()).toHaveClass("grid-cols-1", "sm:grid-cols-2", "lg:grid-cols-4");
+    rerender(<StatBand label="本周" columns={4} dense><StatTile label="A" value="1" dense /></StatBand>);
+    expect(grid()).toHaveClass("grid-cols-2", "sm:grid-cols-2", "lg:grid-cols-4");
+    expect(grid()).not.toHaveClass("grid-cols-1");
   });
 
   it("declares the band's denominator once, under the band", () => {
@@ -215,6 +251,52 @@ describe("DataTable", () => {
     expect(retry).toHaveBeenCalled();
   });
 
+  // DESIGN.md: "tables scroll horizontally with the first column frozen" — and nothing did it (2026-10-07 audit B-03).
+  describe("sideways", () => {
+    it("freezes the row header at the left edge, with a ground of its own so what scrolls under it is covered", () => {
+      render(<DataTable label="同类药" columns={columns} rows={rows} rowKey={(row) => row.id} highlight={(row) => row.ours} />);
+      const table = screen.getByRole("table", { name: "同类药" });
+      // Borders live on the cells: a collapsed border stays behind when a cell sticks.
+      expect(table).toHaveClass("border-separate", "border-spacing-0");
+      const [corner, last] = within(table).getAllByRole("columnheader");
+      expect(corner).toHaveClass("sticky", "left-0", "z-sticky", "bg-bg");
+      expect(last).not.toHaveClass("left-0");
+      const [plain, ours] = within(table).getAllByRole("rowheader");
+      expect(plain).toHaveClass("sticky", "left-0", "bg-bg");
+      expect(ours, "our own row's frozen cell is the accent ground, opaque").toHaveClass("sticky", "left-0", "bg-accent-soft");
+      expect(ours).not.toHaveClass("bg-bg");
+      // The other cells scroll.
+      for (const cell of within(table).getAllByRole("cell")) expect(cell).not.toHaveClass("sticky");
+    });
+
+    it("paints the card's ground when the table is on one", () => {
+      render(<DataTable label="同类药" ground="surface" columns={columns} rows={rows} rowKey={(row) => row.id} />);
+      const table = screen.getByRole("table", { name: "同类药" });
+      expect(within(table).getAllByRole("columnheader")[0]).toHaveClass("bg-surface");
+      expect(within(table).getAllByRole("rowheader")[0]).toHaveClass("bg-surface");
+    });
+
+    it("freezes nothing when no column is the row header, or when the row header is not the first column", () => {
+      const plain = [{ key: "value", header: "提及率", cell: (row: Row) => `${row.value}%` }, { ...columns[0], key: "second" }];
+      render(<DataTable label="无行头" columns={plain} rows={rows} rowKey={(row) => row.id} />);
+      const table = screen.getByRole("table", { name: "无行头" });
+      for (const cell of [...within(table).getAllByRole("rowheader"), ...within(table).getAllByRole("cell")]) expect(cell).not.toHaveClass("left-0");
+    });
+
+    it("scrolls in a labelled region a keyboard reaches, only while it overflows", () => {
+      const { unmount } = render(<DataTable label="同类药" columns={columns} rows={rows} rowKey={(row) => row.id} />);
+      expect(screen.queryByRole("region", { name: "同类药" }), "a table that fits is not another stop in the tab order").not.toBeInTheDocument();
+      unmount();
+      overflowing(() => {
+        render(<DataTable label="同类药" columns={columns} rows={rows} rowKey={(row) => row.id} />);
+        const region = screen.getByRole("region", { name: "同类药" });
+        expect(region).toHaveAttribute("tabindex", "0");
+        expect(region).toHaveClass("overflow-x-auto");
+        expect(region).toContainElement(screen.getByRole("table", { name: "同类药" }));
+      });
+    });
+  });
+
   it("paints an inline bar in the brand only when the row is ours", () => {
     const { container } = render(
       <>
@@ -227,6 +309,20 @@ describe("DataTable", () => {
     expect(rival.firstElementChild).not.toHaveClass("bg-accent");
   });
 });
+
+/** jsdom has no layout: say a box is 400 wide holding 900. */
+function overflowing(run: () => void): void {
+  const scroll = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "scrollWidth");
+  const client = Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientWidth");
+  Object.defineProperty(HTMLElement.prototype, "scrollWidth", { configurable: true, get: () => 900 });
+  Object.defineProperty(HTMLElement.prototype, "clientWidth", { configurable: true, get: () => 400 });
+  try {
+    run();
+  } finally {
+    if (scroll) Object.defineProperty(HTMLElement.prototype, "scrollWidth", scroll); else delete (HTMLElement.prototype as unknown as Record<string, unknown>).scrollWidth;
+    if (client) Object.defineProperty(HTMLElement.prototype, "clientWidth", client); else delete (HTMLElement.prototype as unknown as Record<string, unknown>).clientWidth;
+  }
+}
 
 describe("ProgressRail", () => {
   const steps = [
@@ -263,6 +359,42 @@ describe("ProgressRail", () => {
     expect(container.querySelector("[data-stat-value]")).toHaveClass("text-metric-lg");
   });
 
+});
+
+describe("HeatGrid sideways", () => {
+  const props = {
+    label: "引擎 × 指标",
+    columns: [{ key: "a", header: "提及" }, { key: "b", header: "准确" }],
+    rows: [
+      { key: "kimi", header: "Kimi", cells: [{ value: 10, text: "10" }, { value: 30, text: "30" }] },
+      { key: "off", header: "豆包", cells: [], unmeasured: "未测" },
+    ],
+  };
+
+  it("freezes the row names at the left edge on the card's ground", () => {
+    render(<HeatGrid {...props} />);
+    const table = screen.getByRole("table", { name: "引擎 × 指标" });
+    expect(within(table).getAllByRole("rowheader").map((header) => header.textContent)).toEqual(["Kimi", "豆包"]);
+    for (const header of within(table).getAllByRole("rowheader")) expect(header).toHaveClass("sticky", "left-0", "bg-surface");
+    // The corner is above the column heads that slide under it.
+    expect(within(table).getAllByRole("columnheader")[0]).toHaveClass("sticky", "left-0", "z-sticky", "bg-surface");
+    expect(within(table).getAllByRole("columnheader")[1]).not.toHaveClass("sticky");
+  });
+
+  it("takes the page's ground when it is drawn on the page", () => {
+    render(<HeatGrid {...props} ground="bg" />);
+    for (const header of within(screen.getByRole("table")).getAllByRole("rowheader")) expect(header).toHaveClass("bg-bg");
+  });
+
+  it("scrolls in a labelled region a keyboard reaches, only while it overflows", () => {
+    const { unmount } = render(<HeatGrid {...props} />);
+    expect(screen.queryByRole("region", { name: "引擎 × 指标" })).not.toBeInTheDocument();
+    unmount();
+    overflowing(() => {
+      render(<HeatGrid {...props} />);
+      expect(screen.getByRole("region", { name: "引擎 × 指标" })).toHaveAttribute("tabindex", "0");
+    });
+  });
 });
 
 describe("colour that is the data keeps it in a Windows contrast theme (spec §10.9 rule 6)", () => {

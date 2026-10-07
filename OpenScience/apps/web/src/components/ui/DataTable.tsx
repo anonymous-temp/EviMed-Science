@@ -2,12 +2,22 @@ import type { ReactNode } from "react";
 import { RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/cn";
+import { ScrollRegion } from "@/components/ui/ScrollRegion";
 
 /**
  * The data page's table: a sticky header, numbers right-aligned in tabular
  * figures, one row optionally marked as ours, and inline bars where a number
  * wants a length (appendix E §4.1: a ranking is a table with bars, never a
  * pie and never a chart library).
+ *
+ * **Sideways, the row's name stays.** Below its `minWidth` the table scrolls in
+ * its own box, and the first column — when it is the row header — is frozen at
+ * the left edge, so a number is never read without the name of its row
+ * (DESIGN.md, 2026-10-07 audit B-03). The box is a labelled region that takes
+ * keyboard focus (`ScrollRegion`), so a reader without a pointer can move it too. A frozen cell
+ * must paint over what scrolls under it, so the table keeps its borders on the
+ * cells (`border-separate`: a collapsed border stays behind when a cell moves)
+ * and says what ground it sits on (`ground`).
  *
  * **A column nothing fills is not drawn.** The source table shipped with three
  * of seven columns reading 「—」 in every row, which is the cheapest thing a
@@ -52,6 +62,7 @@ export function DataTable<T>({
   onRetry,
   footnote,
   minWidth = "min-w-[36rem]",
+  ground = "bg",
   className,
 }: {
   /** The table's accessible name. */
@@ -71,6 +82,12 @@ export function DataTable<T>({
   footnote?: ReactNode;
   /** The width below which the table scrolls sideways instead of crushing. */
   minWidth?: string;
+  /**
+   * The ground the table is drawn on: the page (`bg`, the default) or a card
+   * (`surface`). The frozen column and the header paint it, so they cover what
+   * scrolls under them instead of showing it through.
+   */
+  ground?: "bg" | "surface";
   className?: string;
 }) {
   if (state === "loading") {
@@ -101,19 +118,23 @@ export function DataTable<T>({
     return <p className={cn("py-6 text-ui text-text-3", className)}>{emptyText ?? "还没有可以看的数据。"}</p>;
   }
   const drawn = drawnColumns(columns, rows);
+  const groundClass = ground === "surface" ? "bg-surface" : "bg-bg";
   return (
     <div className={className}>
-      <div className="overflow-x-auto">
-        <table className={cn("w-full border-collapse", minWidth)}>
+      <ScrollRegion label={label}>
+        <table className={cn("w-full border-separate border-spacing-0", minWidth)}>
           <caption className="sr-only">{label}</caption>
           <thead>
-            <tr className="border-b border-border">
-              {drawn.map((column) => (
+            <tr>
+              {drawn.map((column, index) => (
                 <th
                   key={column.key}
                   scope="col"
                   className={cn(
-                    "sticky top-0 z-sticky bg-bg px-2 pb-2 pt-1 text-compact font-normal text-text-3",
+                    "sticky top-0 border-b border-border px-2 pb-2 pt-1 text-compact font-normal text-text-3",
+                    groundClass,
+                    // The corner is above the headers that slide under it.
+                    frozenAt(column, index) ? "left-0 z-sticky" : "z-page",
                     column.align === "right" ? "text-right" : "text-left",
                     column.width,
                   )}
@@ -131,17 +152,31 @@ export function DataTable<T>({
                   key={rowKey(row)}
                   {...(rowAttrs?.(row) ?? {})}
                   data-row-ours={ours ? "" : undefined}
-                  className={cn("border-b border-faint", ours && "bg-accent-soft")}
+                  className={cn(ours && "bg-accent-soft")}
                 >
-                  {drawn.map((column) => {
+                  {drawn.map((column, index) => {
                     const body = column.cell(row);
                     const shared = cn(
-                      "px-2 py-2.5 align-middle text-ui",
+                      "border-b border-faint px-2 py-2.5 align-middle text-ui",
                       column.align === "right" ? "text-right tabular-nums" : "text-left",
                       ours ? "font-medium text-text" : "text-text",
                     );
                     return column.rowHeader
-                      ? <th key={column.key} scope="row" className={cn(shared, "font-normal", ours && "font-medium")}>{body}</th>
+                      ? (
+                        <th
+                          key={column.key}
+                          scope="row"
+                          className={cn(
+                            shared,
+                            "font-normal",
+                            ours && "font-medium",
+                            // Frozen: opaque, in the row's own ground.
+                            frozenAt(column, index) && cn("sticky left-0 z-page", ours ? "bg-accent-soft" : groundClass),
+                          )}
+                        >
+                          {body}
+                        </th>
+                      )
                       : <td key={column.key} className={shared}>{body}</td>;
                   })}
                 </tr>
@@ -149,10 +184,15 @@ export function DataTable<T>({
             })}
           </tbody>
         </table>
-      </div>
+      </ScrollRegion>
       {footnote != null && <p className="mt-2 text-caption text-text-3">{footnote}</p>}
     </div>
   );
+}
+
+/** The column that is frozen at the left edge: the row header, when it is also the first one drawn. */
+function frozenAt<T>(column: DataColumn<T>, index: number): boolean {
+  return index === 0 && column.rowHeader === true;
 }
 
 /**
