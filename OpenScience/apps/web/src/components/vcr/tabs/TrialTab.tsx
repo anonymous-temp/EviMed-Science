@@ -8,25 +8,40 @@ import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { ChartCard } from "@/components/ui/ChartCard";
 import { DataTable, type DataColumn } from "@/components/ui/DataTable";
+import { Drawer } from "@/components/ui/Drawer";
 import { Textarea } from "@/components/ui/Input";
 import { Tag } from "@/components/ui/Tag";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { HeatGrid } from "@/components/charts/HeatGrid";
-import { VcrCountsBand } from "../VcrCounts";
 import { VcrSeriesLegend, VcrTrajectoryChart } from "../VcrCharts";
 import { VcrMilestoneTimeline, VcrTradeoffScatter } from "../VcrDiagrams";
 import { ReviewChip } from "../VcrMarks";
 import { VcrFilePrediction } from "../VcrFilePrediction";
 import { VcrNumber } from "../VcrNumber";
+import { VcrSettingsDrawer } from "../VcrSettingsDrawer";
 import { PartialResultNote, Stale, VcrStepFailed, VcrStepPending, VcrTabSkeleton } from "../VcrStates";
-import { useVcrLoad, VcrHeadline, VcrSection, VcrTabError } from "../vcrTabKit";
-import { intervalText, mcseText, valueText } from "../vcrText";
+import { useOpenVcrConversation } from "../useOpenVcrConversation";
+import { useVcrLoad, VcrHeadline, VcrTabError } from "../vcrTabKit";
+import { intervalText, mcseText, numberText, valueText } from "../vcrText";
 
 /** What the decision card says under its button, when the server does not say it itself. */
 const NO_AUTO_PICK = "平台不自动选定方案。";
 
 /**
+ * What 「加一个方案」 and 「改假设」 put in the conversation's composer — never sent. A design is described and a hypothesis argued
+ * in a sentence, which is the conversation's work (the model writes the structure, the platform computes it); the page's own edit
+ * of a design is a number on its row (「改设定」).
+ */
+export const VCR_ADD_DESIGN_DRAFT = "再加一个试验方案：";
+export const VCR_CHANGE_ASSUMPTION_DRAFT = "我想改一下试验的假设：";
+
+/**
  * 试验: what each design would actually do, and what choosing one costs.
+ *
+ * The page is a conclusion and a table. The conclusion is one sentence — what each design needs and how the designs did — with
+ * the three things a reader does about it beside it: 选定方案, 加一个方案, 改假设. The table under it is the comparison: events,
+ * patients, simulated power with its Monte-Carlo error, how many replicates, and what the numbers come from. Everything that
+ * explains the table (the simulation's setup, the power curve, the grid, the trade-offs, the milestones, the forecasts) follows it.
  *
  * Four rules hold this page together.
  *
@@ -41,11 +56,14 @@ const NO_AUTO_PICK = "平台不自动选定方案。";
  *    goal first, then chooses and says why; 「写入决策记录」 stays inert until
  *    both the goal and a choice are there.
  *  - **Forecasts are registered before their outcome** (plan §5.4): each one
- *    carries the hash and the time it was frozen at, and — once the actual
- *    data arrive — the prediction beside what happened.
+ *    carries the time it was frozen at and — once the actual data arrive —
+ *    the prediction beside what happened.
  */
 export function TrialTab({ studyId, study }: { studyId: string; study: VcrStudy }) {
   const { state, reload } = useVcrLoad(`${studyId}:trial`, () => getVcrTrial(studyId));
+  const [choosing, setChoosing] = useState(false);
+  const [editing, setEditing] = useState<VcrDesign | null>(null);
+  const openConversation = useOpenVcrConversation();
   if (state.kind === "loading") return <VcrTabSkeleton />;
   if (state.kind === "error") return <VcrTabError message={state.message} onRetry={reload} />;
   const data = state.data;
@@ -57,6 +75,14 @@ export function TrialTab({ studyId, study }: { studyId: string; study: VcrStudy 
       : <VcrStepPending studyId={studyId} study={study} step="trial" />;
   }
   const chosenCodes = data.designs.filter((design) => design.chosen).map((design) => design.code);
+  const canWrite = study.abilities.includes("write");
+  const decided = Boolean(data.decision?.chosen);
+
+  // 「加一个方案」 and 「改假设」 say it in the conversation: the draft waits in the composer, and the reader sends it.
+  const draft = (text: string) => {
+    void openConversation({ projectId: study.projectId, sessionId: study.sessionId }, text)
+      .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "对话暂时无法打开，请稍后重试。" })));
+  };
 
   return (
     <div className="flex flex-col gap-6">
@@ -66,36 +92,27 @@ export function TrialTab({ studyId, study }: { studyId: string; study: VcrStudy 
 
       <Stale note={data.stale}>
         <div className="flex flex-col gap-6">
-          {data.headline && <VcrHeadline>{data.headline}</VcrHeadline>}
-
-          {data.ademp.length > 0 && (
-            <Card
-              header={(
-                <div className="flex flex-wrap items-center gap-2">
-                  <h2 className="text-section font-semibold text-text">模拟设定</h2>
-                  <Tag title="目的 · 数据生成机制 · 估计目标 · 分析方法 · 性能指标">ADEMP</Tag>
-                  <span className="flex-1" />
-                  <ReviewChip state={data.ademReview ?? null} />
-                </div>
-              )}
-            >
-              <dl className="divide-y divide-faint">
-                {data.ademp.map((line) => (
-                  <div key={line.key} className="grid grid-cols-[1.5rem_6rem_1fr] gap-3 py-2">
-                    <dt aria-hidden="true" className="text-caption font-medium tabular-nums text-text-3">{line.key.toUpperCase()}</dt>
-                    <dt className="text-caption text-text-3">{line.label}</dt>
-                    <dd className="min-w-0 text-ui text-text">{line.text}</dd>
-                  </div>
-                ))}
-              </dl>
-            </Card>
-          )}
+          <section data-vcr-conclusion="" className="rounded-card border border-border bg-surface p-5">
+            {data.headline && <VcrHeadline>{data.headline}</VcrHeadline>}
+            {decided && data.decision?.recordedAt && (
+              <p data-vcr-decided="" className="mt-2 text-ui text-text-2">
+                {`已选定${data.decision.chosenLabel ? `：${data.decision.chosenLabel}` : ""}${data.decision.rationale ? `，理由：${data.decision.rationale}` : ""}`}
+              </p>
+            )}
+            {canWrite && (
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <Button variant={decided ? "secondary" : "primary"} onClick={() => setChoosing(true)}>{decided ? "改选方案" : "选定方案"}</Button>
+                <Button variant="text" onClick={() => draft(VCR_ADD_DESIGN_DRAFT)}>加一个方案</Button>
+                <Button variant="text" onClick={() => draft(VCR_CHANGE_ASSUMPTION_DRAFT)}>改假设</Button>
+              </div>
+            )}
+          </section>
 
           {data.designs.length > 0 && (
-            <VcrSection title="方案的运行特征" meta="± 为蒙特卡洛标准误">
+            <div>
               <DataTable
-                label="方案的运行特征"
-                columns={designColumns(data)}
+                label="方案的对比"
+                columns={designColumns(data, canWrite ? setEditing : null)}
                 rows={data.designs}
                 rowKey={(design) => design.id}
                 highlight={(design) => Boolean(design.chosen)}
@@ -105,13 +122,14 @@ export function TrialTab({ studyId, study }: { studyId: string; study: VcrStudy 
                   ...(design.chosen ? { "data-vcr-chosen": "" } : {}),
                 })}
               />
+              <p className="mt-2 text-caption text-text-3">功效后的 ± 是蒙特卡洛标准误。点任一个数，看它用了哪些假设、哪次运行。</p>
               {data.footnotes?.map((note, index) => (
                 <p key={note} className="mt-1.5 text-caption text-text-3">
                   <span aria-hidden="true" className="mr-1 tabular-nums">{index + 1}</span>
                   {note}
                 </p>
               ))}
-            </VcrSection>
+            </div>
           )}
 
           {(data.powerCurve || (data.grid && data.grid.rows.length > 0)) && (
@@ -178,26 +196,32 @@ export function TrialTab({ studyId, study }: { studyId: string; study: VcrStudy 
               )}
             </div>
           )}
+
+          {data.ademp.length > 0 && (
+            <Card
+              header={(
+                <div className="flex flex-wrap items-center gap-2">
+                  <h2 className="text-section font-semibold text-text">模拟设定</h2>
+                  <span className="flex-1" />
+                  <ReviewChip state={data.ademReview ?? null} />
+                </div>
+              )}
+            >
+              <dl data-vcr-setup="" className="divide-y divide-faint">
+                {data.ademp.map((line) => (
+                  <div key={line.key} className="grid grid-cols-[7rem_1fr] gap-3 py-2">
+                    <dt className="text-caption text-text-3">{line.label}</dt>
+                    <dd className="min-w-0 text-ui text-text">{line.text}</dd>
+                  </div>
+                ))}
+              </dl>
+            </Card>
+          )}
         </div>
       </Stale>
 
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-        {data.designs.length > 0
-          ? (
-            <DecisionCard
-              // A recorded decision comes back from the server; the card
-              // starts again from what was recorded rather than from what was
-              // typed before it.
-              key={data.decision?.recordedAt ?? "none"}
-              studyId={studyId}
-              decision={data.decision}
-              designs={data.designs}
-              canWrite={study.abilities.includes("write")}
-              onRecorded={reload}
-            />
-          )
-          : <span />}
-        <div className="flex flex-col gap-4">
+      {(data.forecasts.length > 0 || data.runRecord.length > 0 || (study.features?.predictions && study.abilities.includes("manage_study"))) && (
+        <div className="grid gap-4 xl:grid-cols-2">
           {study.features?.predictions && study.abilities.includes("manage_study") && <VcrFilePrediction studyId={studyId} designs={data.designs} />}
           {data.forecasts.length > 0 && <ForecastRegistry forecasts={data.forecasts} />}
           {data.runRecord.length > 0 && (
@@ -216,9 +240,31 @@ export function TrialTab({ studyId, study }: { studyId: string; study: VcrStudy 
             </Card>
           )}
         </div>
-      </div>
+      )}
 
-      <VcrCountsBand counts={data.counts} />
+      {choosing && (
+        <Drawer title="选定方案" description="平台不自动选定方案：先写比较目标，再选一个，并说明理由。" onClose={() => setChoosing(false)} widthClassName="max-w-md">
+          <DecisionForm
+            // A recorded decision comes back from the server; the form starts again from what was recorded rather than from what was typed.
+            key={data.decision?.recordedAt ?? "none"}
+            studyId={studyId}
+            decision={data.decision}
+            designs={data.designs}
+            onRecorded={() => { setChoosing(false); reload(); }}
+          />
+        </Drawer>
+      )}
+
+      {editing && (
+        <VcrSettingsDrawer
+          studyId={studyId}
+          kind="trial_scenario"
+          objectId={editing.id}
+          title={`改设定：${editing.code} ${editing.name}`}
+          onClose={() => setEditing(null)}
+          onSaved={reload}
+        />
+      )}
     </div>
   );
 }
@@ -232,7 +278,7 @@ function dominatedSentence(design: VcrDesign): string {
  * The grid's columns, from the payload's own list. A dominated design prints
  * one sentence across the measure columns instead of numbers.
  */
-function designColumns(data: TrialData): Array<DataColumn<VcrDesign>> {
+function designColumns(data: TrialData, onEdit: ((design: VcrDesign) => void) | null): Array<DataColumn<VcrDesign>> {
   return [
     {
       key: "design",
@@ -286,13 +332,37 @@ function designColumns(data: TrialData): Array<DataColumn<VcrDesign>> {
         );
       },
     })),
+    {
+      key: "replicates",
+      header: "模拟次数",
+      align: "right",
+      isEmpty: (design) => design.dominated === true || design.replicates == null,
+      cell: (design) => (design.replicates == null || design.dominated
+        ? <span className="text-text-3">—</span>
+        : <span data-vcr-replicates="" className="tabular-nums text-text-2">{numberText(design.replicates, 0)}</span>),
+    },
+    {
+      key: "method",
+      header: "来源",
+      isEmpty: (design) => !design.method || design.dominated === true,
+      cell: (design) => (design.method && !design.dominated ? <span data-vcr-method="" className="text-caption text-text-3">{design.method}</span> : null),
+    },
+    ...(onEdit ? [{
+      key: "edit",
+      header: <span className="sr-only">操作</span>,
+      align: "right" as const,
+      cell: (design: VcrDesign) => (
+        <Button size="sm" variant="text" data-vcr-edit={design.code} onClick={() => onEdit(design)} aria-label={`改设定：方案 ${design.code}`}>改设定</Button>
+      ),
+    }] : []),
   ];
 }
 
 /**
- * 预测登记: every forecast frozen before the data it predicts, with the hash
- * and the time that prove it was, and — once the actual data are in — what
- * was predicted beside what happened (plan §5.4, AC-23).
+ * 预测登记: every forecast frozen before the data it predicts, with the time
+ * it was frozen at, and — once the actual data are in — what was predicted
+ * beside what happened (plan §5.4, AC-23). The hash that proves it is the
+ * registry's, and stays there.
  */
 function ForecastRegistry({ forecasts }: { forecasts: readonly VcrForecast[] }) {
   return (
@@ -304,8 +374,6 @@ function ForecastRegistry({ forecasts }: { forecasts: readonly VcrForecast[] }) 
             <li key={forecast.id} data-vcr-forecast={forecast.id}>
               <p className="flex flex-wrap items-center gap-2">
                 <span className="text-ui font-medium text-text">{forecast.label}</span>
-                <Tag>{`v${forecast.version}`}</Tag>
-                <span data-vcr-forecast-hash="" className="text-caption tabular-nums text-text-3">{`哈希 ${forecast.hash.slice(0, 8)}`}</span>
               </p>
               {(forecast.frozenAt || forecast.comparedAt) && (
                 <p className="mt-0.5 text-caption text-text-3">
@@ -343,20 +411,18 @@ function ForecastRegistry({ forecasts }: { forecasts: readonly VcrForecast[] }) 
 }
 
 /**
- * The decision: the reader's comparison goal, the design they chose, and why.
+ * 选定方案: the reader's comparison goal, the design they chose, and why — in a drawer opened from the conclusion.
  *
  * The goal comes first and is required — a decision with no goal is a pick,
  * not a decision (plan §5.4) — and the other reasonable designs are recorded
  * beside the choice. The platform records the decision; it does not make it,
- * and the brand blue on the page follows the record, never this card's own
+ * and the brand blue on the page follows the record, never this form's own
  * state. One request at a time: a decision written twice is two records.
  */
-function DecisionCard({ studyId, decision, designs, canWrite, onRecorded }: {
+function DecisionForm({ studyId, decision, designs, onRecorded }: {
   studyId: string;
   decision: TrialData["decision"];
   designs: readonly VcrDesign[];
-  /** Writing a decision is `write`'s; a reader without it sees the record and no button that would be refused. */
-  canWrite: boolean;
   onRecorded: () => void;
 }) {
   const [goal, setGoal] = useState(decision?.goal ?? "");
@@ -402,45 +468,21 @@ function DecisionCard({ studyId, decision, designs, canWrite, onRecorded }: {
       });
   };
 
-  // Without `write` the card is the record and nothing to fill in: a form whose
-  // only button would be refused is not offered.
-  if (!canWrite) {
-    if (!decision?.recordedAt) return null;
-    return (
-      <Card title="决策">
-        <dl data-vcr-decision-record="" className="divide-y divide-faint">
-          {[
-            { label: "比较目标", value: decision.goal },
-            { label: "选定方案", value: decision.chosenLabel ?? options.find((option) => option.id === decision.chosen)?.label },
-            { label: "选择理由", value: decision.rationale },
-          ].filter((row) => row.value).map((row) => (
-            <div key={row.label} className="grid grid-cols-[6rem_1fr] gap-3 py-2">
-              <dt className="text-caption text-text-3">{row.label}</dt>
-              <dd className="min-w-0 text-ui text-text">{row.value}</dd>
-            </div>
-          ))}
-        </dl>
-        <p className="mt-2 text-caption tabular-nums text-text-3">{`记录于 ${decision.recordedAt}`}</p>
-      </Card>
-    );
-  }
-
   return (
-    <Card title="决策">
-      <div data-vcr-decision="" className="flex flex-col gap-3">
-        <Textarea
-          id="vcr-decision-goal"
-          label="比较目标"
-          value={goal}
-          onChange={(event) => setGoal(event.target.value)}
-          rows={3}
-          placeholder="例如：成功把握不低于 70% 的前提下，末例入组不晚于 18 个月，成本最低……"
-        />
-        <fieldset>
-          <legend className="text-caption text-text-3">选定方案</legend>
-          <div className="mt-1.5 flex flex-wrap gap-2">
-            {options.map((option) => (
-              <Tooltip key={option.id} content={option.name ?? option.label}>
+    <form data-vcr-decision="" className="flex flex-col gap-4" onSubmit={(event) => { event.preventDefault(); save(); }}>
+      <Textarea
+        id="vcr-decision-goal"
+        label="比较目标"
+        value={goal}
+        onChange={(event) => setGoal(event.target.value)}
+        rows={3}
+        placeholder="例如：成功把握不低于 70% 的前提下，末例入组不晚于 18 个月，成本最低……"
+      />
+      <fieldset>
+        <legend className="text-caption text-text-3">选定方案</legend>
+        <div className="mt-1.5 flex flex-wrap gap-2">
+          {options.map((option) => (
+            <Tooltip key={option.id} content={option.name ?? option.label}>
               <label
                 className={cn(
                   "inline-flex h-control cursor-pointer items-center gap-1.5 rounded px-3 text-ui",
@@ -458,23 +500,22 @@ function DecisionCard({ studyId, decision, designs, canWrite, onRecorded }: {
                 />
                 {option.label}
               </label>
-              </Tooltip>
-            ))}
-          </div>
-        </fieldset>
-        <Textarea
-          id="vcr-decision-rationale"
-          label="选择理由"
-          value={rationale}
-          onChange={(event) => setRationale(event.target.value)}
-          rows={2}
-        />
-        <div className="flex flex-wrap items-center gap-3">
-          <Button variant="secondary" disabled={!ready || busy} loading={busy} onClick={save}>写入决策记录</Button>
-          <span className="text-caption text-text-3">{decision?.note ?? NO_AUTO_PICK}</span>
-          {decision?.recordedAt && <span className="text-caption tabular-nums text-text-3">{`上次记录于 ${decision.recordedAt}`}</span>}
+            </Tooltip>
+          ))}
         </div>
+      </fieldset>
+      <Textarea
+        id="vcr-decision-rationale"
+        label="选择理由"
+        value={rationale}
+        onChange={(event) => setRationale(event.target.value)}
+        rows={2}
+      />
+      <div className="flex flex-wrap items-center gap-3">
+        <Button type="submit" disabled={!ready || busy} loading={busy}>写入决策记录</Button>
+        <span className="text-caption text-text-3">{decision?.note ?? NO_AUTO_PICK}</span>
+        {decision?.recordedAt && <span className="text-caption tabular-nums text-text-3">{`上次记录于 ${decision.recordedAt}`}</span>}
       </div>
-    </Card>
+    </form>
   );
 }

@@ -3,7 +3,7 @@ import { cn } from "@/lib/cn";
 import { Drawer } from "@/components/ui/Drawer";
 import { Tag, tagClasses } from "@/components/ui/Tag";
 import { Tooltip } from "@/components/ui/Tooltip";
-import type { VcrCeiling, VcrConclusion, VcrDataTier, VcrIntendedUse, VcrReviewState, VcrValueSource } from "@/lib/vcrClient";
+import type { VcrCeiling, VcrConclusion, VcrDataTier, VcrReviewState, VcrValueSource } from "@/lib/vcrClient";
 import { conclusionLabel, reviewLabel, sourceLabel, tierLabel, intendedUseLabel } from "./vcrText";
 
 /**
@@ -130,17 +130,18 @@ export function ConclusionChip({ state, className }: { state: VcrConclusion | nu
 }
 
 /**
- * The two tags in a study page's header: the data tier and the intended use.
+ * The tags in a study page's header: the data tier, and — only when it matters — the intended use.
  *
  * The intended use is what the results may actually carry, not what was asked
  * for (plan §8.2, §10.2). When the models or the review behind them cannot
  * support the use the study asked for, the tag says both — 「指定研究分析 →
  * 研究设计支持」 — and opens the reasons; a tag that printed the request alone
- * would claim a standing the results have not got.
+ * would claim a standing the results have not got. When the results do carry the
+ * use that was asked for there is nothing to warn of, and the header is the name
+ * and the tier: the use itself is a line of the definition card.
  */
-export function StudyTags({ tier, intendedUse, ceiling }: {
+export function StudyTags({ tier, ceiling }: {
   tier: VcrDataTier;
-  intendedUse: VcrIntendedUse;
   ceiling?: VcrCeiling | null;
 }) {
   const [open, setOpen] = useState(false);
@@ -148,7 +149,7 @@ export function StudyTags({ tier, intendedUse, ceiling }: {
   return (
     <>
       <Tag>{tierLabel(tier)}</Tag>
-      {downgraded ? (
+      {downgraded && (
         <button
           type="button"
           data-vcr-ceiling="downgraded"
@@ -158,8 +159,6 @@ export function StudyTags({ tier, intendedUse, ceiling }: {
         >
           {`${intendedUseLabel(downgraded.requested)} → ${intendedUseLabel(downgraded.ceiling)}`}
         </button>
-      ) : (
-        <Tag>{intendedUseLabel(intendedUse)}</Tag>
       )}
       {open && downgraded && (
         <Drawer title="预期用途" onClose={() => setOpen(false)} widthClassName="max-w-md">

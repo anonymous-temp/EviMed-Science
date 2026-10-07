@@ -5,7 +5,6 @@ import { cn } from "@/lib/cn";
 import { Card } from "@/components/ui/Card";
 import { ChartCard } from "@/components/ui/ChartCard";
 import { Tag } from "@/components/ui/Tag";
-import { VcrCountsBand } from "../VcrCounts";
 import { VcrSeriesLegend, VcrSurvivalChart } from "../VcrCharts";
 import { VcrSmdDot } from "../VcrDiagrams";
 import { ConclusionChip, markKindOf, ReviewChip, SourceTag } from "../VcrMarks";
@@ -201,7 +200,6 @@ export function ComparatorTab({ studyId, study }: { studyId: string; study: VcrS
             />
           )}
 
-          <VcrCountsBand counts={data.counts} />
 
           {data.verdict && (
             <p data-vcr-verdict="" className="flex flex-wrap items-center gap-2 text-caption text-text-3">

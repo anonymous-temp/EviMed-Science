@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { CircleDashed, History, TriangleAlert, UsersRound } from "lucide-react";
 import { runVcrStep, type VcrPartial, type VcrStaleNote, type VcrStepKey, type VcrStudy } from "@/lib/vcrClient";
 import { cn } from "@/lib/cn";
@@ -8,8 +8,12 @@ import { Button } from "@/components/ui/Button";
 import { allowanceWaitingSentence } from "@evimed/domain";
 import { stepAllowanceWait } from "@/lib/allowanceWait";
 import { AllowanceTopUp } from "@/components/runs/AllowanceTopUp";
+import { webErrorMessage } from "@/lib/apiClient";
+import { toast } from "@/lib/toast";
+import { useOpenVcrConversation } from "./useOpenVcrConversation";
 import { useVcrRun } from "./useVcrRun";
-import { staleSentence, stepLabel, VCR_STEP_EMPTY, VCR_STEP_WAITING } from "./vcrText";
+import { staleSentence, stepLabel, VCR_NO_DEFINITION, VCR_STEP_EMPTY, VCR_STEP_QUEUED } from "./vcrText";
+import { hasDefinition } from "./vcrTabs";
 
 /**
  * The states every 「虚拟临研」 surface shares.
@@ -128,10 +132,38 @@ export function VcrStepPending({ studyId, study, step }: { studyId: string; stud
     );
   }
   if (state?.status === "failed") return <VcrStepFailed studyId={studyId} study={study} step={step} />;
+  // Nothing waits in a queue for a study nobody has described: the one thing missing is the first sentence, and it is said that way.
+  if (!hasDefinition(study)) return <VcrNoDefinition study={study} />;
   if (state?.status === "none" && state.requested === true) {
-    return <p data-vcr-step-waiting={step} className="py-12 text-center text-ui text-text-3">{VCR_STEP_WAITING[step]}</p>;
+    return <p data-vcr-step-waiting={step} className="py-12 text-center text-ui text-text-3">{VCR_STEP_QUEUED}</p>;
   }
   return <VcrStepAsk studyId={studyId} study={study} step={step} />;
+}
+
+/**
+ * What every empty tab of a study with no definition says: the study is waiting for its first sentence, which is said in the
+ * conversation — and a way into it. Not 「正在排队」: nothing is queued.
+ */
+export function VcrNoDefinition({ study }: { study: Pick<VcrStudy, "projectId" | "sessionId" | "abilities"> }) {
+  const open = useOpenVcrConversation();
+  const [opening, setOpening] = useState(false);
+  const go = () => {
+    if (opening) return;
+    setOpening(true);
+    void open({ projectId: study.projectId, sessionId: study.sessionId })
+      .catch((error: unknown) => toast.error(webErrorMessage(error, { fallback: "对话暂时无法打开，请稍后重试。" })))
+      .finally(() => setOpening(false));
+  };
+  return (
+    <div data-vcr-no-definition="" className="flex flex-col items-center gap-4 py-12 text-center">
+      <p className="max-w-measure text-ui text-text-2">{VCR_NO_DEFINITION}</p>
+      <div className="flex flex-wrap items-center justify-center gap-2">
+        {/* There is nothing for the AI to start from yet: the button is there, and says why it is not pressable. */}
+        {study.abilities.includes("run") && <Button disabled title={VCR_NO_DEFINITION}>让 AI 做</Button>}
+        <Button variant="secondary" onClick={go} loading={opening}>去对话</Button>
+      </div>
+    </div>
+  );
 }
 
 /** 「让 AI 做」: one sentence about the step and the button that starts it. */
@@ -175,7 +207,7 @@ export function VcrStepFailed({ studyId, study, step, partial }: {
       {study.abilities.includes("run") && (
         <div className="mt-3">
           <Button variant="secondary" loading={busy} onClick={() => run(() => runVcrStep(studyId, step), "这一步无法继续，请稍后重试。")}>
-            从检查点续跑
+            接着做
           </Button>
         </div>
       )}

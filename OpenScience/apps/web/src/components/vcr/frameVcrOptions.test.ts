@@ -6,8 +6,8 @@ import { frameVcrOptions, isIntendedUse, isStart, startOf, VCR_STARTERS, VCR_STA
 const requested = (...steps: string[]) => Object.fromEntries(VCR_STEPS.map((step) => [step, { status: "none", requested: steps.includes(step) }])) as VcrStudy["steps"];
 const study = (abilities: string[], steps: VcrStudy["steps"] = requested(...VCR_STEPS)): VcrStudy => ({
   id: "std_1", projectId: "p", name: "EV-201", question: null, tier: "T0", intendedUse: "design_support", status: "active",
-  steps, sessionId: null, abilities, budget: null, jobs: [], ceiling: null,
-  overview: { headline: null, metrics: [], counts: null, designs: [], attention: [], changes: [], deliverables: [] },
+  steps, sessionId: null, definition: null, abilities, budget: null, jobs: [], ceiling: null,
+  overview: { headline: null, metrics: [], counts: null, designs: [], attention: [], changes: [], reviews: [], deliverables: [] },
 });
 
 describe("where a study starts, read from what it asks for", () => {
@@ -31,9 +31,9 @@ describe("where a study starts, read from what it asks for", () => {
 });
 
 describe("what the chip draws", () => {
-  it("is the plan's five starting points and six single tasks, in order", () => {
+  it("is the plan's five starting points and the six starting points of a new study, in order", () => {
     expect(VCR_START_OPTIONS.map((option) => option.label)).toEqual(["自动", "队列", "患者", "对照", "试验"]);
-    expect(VCR_STARTERS.map((starter) => starter.label)).toEqual(["估算样本量", "外部对照可行性", "找先例和参数", "生成合成数据", "匹配患者", "完整研究"]);
+    expect(VCR_STARTERS.map((starter) => starter.label)).toEqual(["估算样本量", "生成合成人群", "外部对照可行性", "模拟试验方案", "找先例与参数", "匹配患者"]);
     // The bridge carries a sentence of at most 400 characters and a name of at most 24.
     for (const starter of VCR_STARTERS) {
       expect(starter.draft.length).toBeLessThanOrEqual(400);

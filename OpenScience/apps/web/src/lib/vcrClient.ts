@@ -34,7 +34,7 @@
  *    vcr-views/` are the same bytes the server tests compare against.
  */
 import { useEffect, useState } from "react";
-import { fetchWebMe, WebApiError, type WebMe } from "./apiClient";
+import { fetchWebMe, fetchWithWebAuth, WebApiError, webApiBase, type WebMe } from "./apiClient";
 import { productRequest } from "./productClient";
 import {
   assessmentBody, assessmentReviewBody, assumptionBody, budgetBody, cancelBody, contactBody, decisionBody, definitionCompareBody, definitionSaveBody,
@@ -67,7 +67,7 @@ export type VcrIntendedUse = "exploratory" | "design_support" | "specified_analy
 export type VcrModelTier = "scenario" | "literature" | "data" | "validated";
 export type VcrModelRisk = "none" | "low" | "medium" | "high";
 export type VcrIntervalKind = "confidence" | "credible" | "prediction" | "monte_carlo";
-export type VcrStudyStatus = "active" | "paused" | "archived";
+export type VcrStudyStatus = "draft" | "active" | "paused" | "archived";
 /** The seven steps, in order (`VCR_STEPS`). */
 export type VcrStepKey = "definition" | "evidence" | "population" | "patients" | "comparator" | "trial" | "matching";
 export const VCR_STEP_KEYS: readonly VcrStepKey[] = Object.freeze([
@@ -277,8 +277,7 @@ export interface VcrRecruitTodo {
 export interface VcrReviewSummary {
   id: string; reviewerKind: "ai" | "human"; role: string; label: string; state: string;
   status: "queued" | "running" | "done" | "failed"; current: boolean;
-  by?: string | null; at?: string | null; configurationRevision?: string | null;
-  configuredModel?: string | null; inputDigest?: string | null; note: string;
+  by?: string | null; at?: string | null; note: string;
   findings: Array<{ id?: string; kind?: string; location?: string; evidence?: string; message?: string; fix?: string; response?: string | null }>;
 }
 
@@ -298,6 +297,8 @@ export interface VcrHome {
   /** Present only for an account with `contact_patients`; absent otherwise. */
   todos?: VcrRecruitTodo[];
   reviews?: VcrReviewNote[];
+  /** The projects of the account's drafts (studies nobody has described yet): not in the list, and the sidebar leaves them out. */
+  draftProjectIds: string[];
 }
 
 /** One section of a package as a document. */
@@ -365,6 +366,10 @@ export interface VcrDesign {
   chosen?: boolean;
   /** The reason a design is dominated, from the server's rule. */
   note?: string | null;
+  /** What its numbers come from, in words: 「解析」「模拟」「解析 + 模拟」. */
+  method?: string | null;
+  /** How many replicates the simulation ran. */
+  replicates?: number | null;
   measures: Record<string, VcrValue>;
 }
 
@@ -376,6 +381,8 @@ export interface VcrOverview {
   designs: VcrDesign[];
   attention: VcrAttention[];
   changes: VcrChange[];
+  /** The AI reviews and the people's, for 「变更记录」. */
+  reviews: VcrReviewSummary[];
   deliverables: VcrDeliverable[];
 }
 
@@ -437,6 +444,20 @@ export interface VcrTierOffer {
   basis: { subjects: number; treatment: boolean; outcomes: boolean };
 }
 
+/** The study's definition in the reader's words: each line is absent when the definition does not state it. */
+export interface VcrDefinitionCard {
+  population: string | null;
+  intervention: string | null;
+  comparator: string | null;
+  outcome: string | null;
+  estimand: string | null;
+  endpoint: string | null;
+  intendedUse: string | null;
+}
+
+/** What the server knows of the engine (`VcrService.engineState`). */
+export type VcrEngineState = "missing" | "wired" | "answering" | "not_answering";
+
 /** One study (`GET /api/vcr/studies/:id`). */
 export interface VcrStudy {
   id: string;
@@ -447,8 +468,12 @@ export interface VcrStudy {
   intendedUse: VcrIntendedUse;
   status: VcrStudyStatus;
   steps: VcrSteps;
-  /** The latest conversation in the project; null before there is one. */
+  /** The conversation the study was opened with (its 「对话」); null before there is one. */
   sessionId: string | null;
+  /** What the definition says, as words; null until one has been written. */
+  definition: VcrDefinitionCard | null;
+  /** Whether the computation engine is there: `missing` and `not_answering` are the page's one line at the top. */
+  engine?: VcrEngineState;
   /** What this reader may do here (`VCR_ROLE_ABILITIES`); the routes check for themselves. */
   abilities: string[];
   /** The tier the frozen data supports above the study's own, for the lead who may move it; null (or absent) when there is none. */
@@ -512,6 +537,19 @@ export interface VcrProfileRow {
   note?: string | null;
 }
 
+/** One variable of a generated population: what the study set for it, what came out, and a small histogram of it. */
+export interface VcrGeneratedRow {
+  key: string;
+  label: string;
+  kind: "continuous" | "binary" | "categorical" | null;
+  /** 「正态分布，均数 58、标准差 10」; null for a table made from real data (nothing was declared). */
+  declared: string | null;
+  /** 「均数 58.2，标准差 9.8」 / 「是 44.6%」. */
+  result: string | null;
+  missing: string | null;
+  histogram: { breaks: number[]; counts: number[] } | null;
+}
+
 /** The quality report that travels with a synthetic population: values, never a verdict (plan §5.1). */
 export interface VcrQualityReport {
   /** 「合成 · 探索性」. */
@@ -537,8 +575,22 @@ export interface VcrPopulationTab {
   attrition: VcrAttritionStep[];
   /** The three totals under the waterfall. */
   outcome: { eligible: number | null; insufficient: number | null; ineligible: number | null } | null;
+  /** A real cohort against the published one, row by row; empty for a generated population (its rows are `generated`). */
   profile: VcrProfileRow[];
   profileNote?: string | null;
+  /** `generated`: one row per variable, set beside what came out; `comparison`: ours against the comparator's. */
+  profileKind?: "generated" | "comparison" | null;
+  /** A generated population whose result carries no profile (it was generated before the engine wrote one): the tab offers 「重新生成」. */
+  profileMissing?: boolean;
+  generated: VcrGeneratedRow[];
+  /** How a generated population was made: 「按设定的分布和相关性抽样」. */
+  method?: string | null;
+  /** What it may be used for, as the reader's words. */
+  allowedUses: Array<{ key: string; label: string }>;
+  /** How many generated records broke each declared constraint. */
+  constraints: Array<{ label: string; violations: number }>;
+  /** Where the generated records can be downloaded from, when there are any to offer. */
+  download?: { path: string; rows: number | null } | null;
   /** Why the undecidable ones are undecidable. */
   unknownReasons: Array<{ key: string; label: string; detail?: string | null; count: number | null }>;
   /** 「最卡人的三条」. */
@@ -1303,6 +1355,8 @@ function readDesign(raw: unknown): VcrDesign {
     dominatedBy: text(value.dominatedBy),
     chosen: value.chosen === true,
     note: text(value.note),
+    method: text(value.method),
+    replicates: finite(value.replicates),
     measures: Object.fromEntries(Object.entries(measures).map(([key, cell]) => [key, readVcrValue(cell)])),
   };
 }
@@ -1320,6 +1374,7 @@ function readOverview(raw: unknown): VcrOverview {
     designs: arr(value.designs).map(readDesign),
     attention: readAttention(value.attention),
     changes: arr(value.changes).filter((item) => typeof item.text === "string") as unknown as VcrChange[],
+    reviews: arr(value.reviews).filter((item) => typeof item.label === "string") as unknown as VcrReviewSummary[],
     deliverables: arr(value.deliverables).filter((item) => typeof item.title === "string") as unknown as VcrDeliverable[],
   };
 }
@@ -1339,6 +1394,15 @@ function readTierOffer(raw: unknown): VcrTierOffer | null {
   };
 }
 
+function readDefinitionCard(raw: unknown): VcrDefinitionCard | null {
+  const value = obj(raw);
+  if (!Object.keys(value).length) return null;
+  return {
+    population: text(value.population), intervention: text(value.intervention), comparator: text(value.comparator), outcome: text(value.outcome),
+    estimand: text(value.estimand), endpoint: text(value.endpoint), intendedUse: text(value.intendedUse),
+  };
+}
+
 export function readVcrStudy(raw: unknown): VcrStudy {
   const value = obj(raw);
   return {
@@ -1351,6 +1415,8 @@ export function readVcrStudy(raw: unknown): VcrStudy {
     ceiling: value.ceiling && typeof value.ceiling === "object"
       ? { ...(value.ceiling as VcrCeiling), reasons: arr(obj(value.ceiling).reasons) as unknown as VcrCeiling["reasons"] } : null,
     sessionId: text(value.sessionId),
+    definition: readDefinitionCard(value.definition),
+    engine: ["missing", "wired", "answering", "not_answering"].includes(String(value.engine)) ? value.engine as VcrEngineState : undefined,
     overview: readOverview(value.overview),
     knowledge: readVcrKnowledge(value.knowledge),
   };
@@ -1372,6 +1438,7 @@ export function readVcrHome(raw: unknown): VcrHome {
     studies: arr(value.studies).map(readVcrSummary),
     ...(Array.isArray(value.todos) ? { todos: arr(value.todos) as unknown as VcrRecruitTodo[] } : {}),
     ...(Array.isArray(value.reviews) ? { reviews: arr(value.reviews) as unknown as VcrReviewNote[] } : {}),
+    draftProjectIds: strings(value.draftProjectIds),
   };
 }
 
@@ -1411,16 +1478,42 @@ export function readVcrModelCard(raw: unknown): VcrModelCard {
   };
 }
 
+function readGeneratedRow(raw: unknown): VcrGeneratedRow {
+  const value = obj(raw);
+  const histogram = obj(value.histogram);
+  const counts = arr(histogram.counts as unknown).length ? (histogram.counts as unknown[]) : [];
+  const numbers = (items: unknown[]) => items.map((item) => (typeof item === "number" && Number.isFinite(item) ? item : 0));
+  return {
+    key: text(value.key) ?? text(value.variable) ?? "",
+    label: text(value.label) ?? text(value.variable) ?? "",
+    kind: value.kind === "continuous" || value.kind === "binary" || value.kind === "categorical" ? value.kind : null,
+    declared: text(value.declaredText) ?? text(value.declared),
+    result: text(value.generatedText) ?? text(value.result),
+    missing: text(value.missingText),
+    histogram: counts.length ? { breaks: numbers(Array.isArray(histogram.breaks) ? histogram.breaks : []), counts: numbers(counts) } : null,
+  };
+}
+
 export function readVcrPopulation(raw: unknown): VcrPopulationTab {
   const value = obj(raw);
   const quality = obj(value.quality);
+  const generatedKind = value.profileKind === "generated";
+  const download = obj(value.download);
   return {
     ...(value as unknown as VcrPopulationTab),
     versions: arr(value.versions).map((item) => ({ ...(item as unknown as VcrPopulationTab["versions"][number]), counts: readVcrCounts(item.counts) })),
     criteria: arr(value.criteria) as unknown as VcrCriterion[],
     attrition: arr(value.attrition) as unknown as VcrAttritionStep[],
     outcome: value.outcome && typeof value.outcome === "object" ? value.outcome as VcrPopulationTab["outcome"] : null,
-    profile: arr(value.profile).map(readProfileRow),
+    profile: generatedKind ? [] : arr(value.profile).map(readProfileRow),
+    profileKind: value.profileKind === "generated" || value.profileKind === "comparison" ? value.profileKind : null,
+    profileMissing: value.profileMissing === true,
+    generated: generatedKind ? arr(value.profile).map(readGeneratedRow) : [],
+    method: text(value.method),
+    allowedUses: arr(value.allowedUses).filter((item) => typeof item.label === "string").map((item) => ({ key: text(item.key) ?? "", label: String(item.label) })),
+    constraints: arr(value.constraints).filter((item) => typeof item.label === "string" && finite(item.violations) !== null)
+      .map((item) => ({ label: String(item.label), violations: Number(item.violations) })),
+    download: typeof download.path === "string" ? { path: download.path, rows: finite(download.rows) } : null,
     unknownReasons: arr(value.unknownReasons) as unknown as VcrPopulationTab["unknownReasons"],
     blockers: arr(value.blockers) as unknown as VcrPopulationTab["blockers"],
     quality: Object.keys(quality).length ? {
@@ -1735,9 +1828,12 @@ export async function getVcrHome(): Promise<VcrHome> {
   return readVcrHome(await productRequest<unknown>("/vcr/studies"));
 }
 
-/** 「新建研究」 and the four action cards: the study, its project and its conversation. */
+/**
+ * 「新建研究」: a draft study, its project and its conversation — nothing on the list until the first definition names it. A study
+ * made with a name or a question is an active one.
+ */
 export function createVcrStudy(input: VcrCreateBody = {}) {
-  return productRequest<{ id: string; projectId: string; sessionId: string | null }>("/vcr/studies", "POST", studyCreateBody(input));
+  return productRequest<{ id: string; projectId: string; sessionId: string | null; status?: VcrStudyStatus }>("/vcr/studies", "POST", studyCreateBody(input));
 }
 
 export async function getVcrStudy(studyId: string): Promise<VcrStudy> {
@@ -1750,6 +1846,98 @@ export function patchVcrStudy(studyId: string, input: VcrPatchBody) {
 
 export function deleteVcrStudy(studyId: string) {
   return productRequest<unknown>(study(studyId), "DELETE");
+}
+
+/**
+ * 「下载记录（CSV）」: the generated records of the study's population, as a file. The route is the records route's own and answers a
+ * refusal by name (a real cohort's rows never leave the data plane), so the file is fetched and handed over only when it came: a
+ * plain link would save an error page under the file's name.
+ */
+export async function downloadVcrRecords(studyId: string, path: string): Promise<void> {
+  const root = webApiBase.endsWith("/api") ? webApiBase : `${webApiBase}/api`;
+  const response = await fetchWithWebAuth(`${root}${study(studyId)}/${path.split("/").map(id).join("/")}`);
+  if (!response.ok) {
+    const value = await response.json().catch(() => null) as { error?: string; code?: string; requestId?: string } | null;
+    throw new WebApiError(value?.error ?? "The records were unavailable.", { status: response.status, code: value?.code, requestId: value?.requestId });
+  }
+  const blob = await response.blob();
+  const named = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(response.headers.get("content-disposition") ?? "")?.[1];
+  const url = URL.createObjectURL(blob);
+  try {
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = named ? decodeURIComponent(named) : "synthetic-records.csv";
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+/** 「重命名」: the study's name, and the project's with it. */
+export function renameVcrStudy(studyId: string, name: string) {
+  return patchVcrStudy(studyId, { name });
+}
+
+/** One conversation the programme opened in the study's project, as 「AI 运行」 lists it. */
+export interface VcrBackgroundRun {
+  sessionId: string;
+  /** The capability's product name: 「虚拟临研 · 证据」. */
+  label: string;
+  state: "running" | "finished" | "stopped";
+  /** 「今天 14:32」. */
+  at: string | null;
+}
+
+export async function getVcrBackgroundRuns(studyId: string): Promise<VcrBackgroundRun[]> {
+  const value = obj(await productRequest<unknown>(`${study(studyId)}/runs`));
+  return arr(value.runs).filter((item) => typeof item.sessionId === "string").map((item) => ({
+    sessionId: String(item.sessionId), label: text(item.label) ?? "后台分析",
+    state: item.state === "running" || item.state === "finished" ? item.state : "stopped", at: text(item.at),
+  }));
+}
+
+/** What a page form may change in one of the study's objects: the numbers it offers, named, with the range each takes. */
+export type VcrCardKind = "population" | "trial_scenario" | "criteria";
+
+export interface VcrCardSetting {
+  /** The setting's address inside the object; sent back as it came. */
+  path: string;
+  label: string;
+  value: number;
+  unit: string | null;
+  integer: boolean;
+  min: number | null;
+  max: number | null;
+}
+
+export interface VcrCardSettings {
+  kind: VcrCardKind;
+  objectId: string;
+  title: string;
+  settings: VcrCardSetting[];
+}
+
+export async function getVcrCardSettings(studyId: string, kind: VcrCardKind, objectId?: string | null): Promise<VcrCardSettings> {
+  const query = new URLSearchParams({ kind, ...(objectId ? { object: objectId } : {}) });
+  const value = obj(await productRequest<unknown>(`${study(studyId)}/cards?${query}`));
+  return {
+    kind, objectId: text(value.objectId) ?? "", title: text(value.title) ?? "",
+    settings: arr(value.settings).filter((item) => typeof item.path === "string" && finite(item.value) !== null).map((item) => ({
+      path: String(item.path), label: text(item.label) ?? String(item.path), value: Number(item.value), unit: text(item.unit),
+      integer: item.integer === true, min: finite(item.min), max: finite(item.max),
+    })),
+  };
+}
+
+/** Write the object's next version with the typed numbers; what stood on the old version is recomputed. */
+export function editVcrCard(studyId: string, input: { kind: VcrCardKind; objectId?: string | null; set?: Record<string, number>; regenerate?: boolean }) {
+  return productRequest<{ kind: VcrCardKind; id: string; version: number; changed: number }>(`${study(studyId)}/cards`, "POST", {
+    kind: input.kind, ...(input.objectId ? { objectId: input.objectId } : {}),
+    // `regenerate` is the population again with the settings it has; otherwise the typed numbers.
+    ...(input.regenerate ? { regenerate: true } : { set: input.set ?? {} }),
+  });
 }
 
 /** One tab's payload. The tab key is the route's own word (contract §3.1). */
@@ -2082,7 +2270,6 @@ export function useVcrFeature(): VcrFeature {
 // is total over what it might send. Bodies are built by `vcrIntakeBodies.ts`,
 // which is exactly the routes' allow-lists.
 
-import { fetchWithWebAuth, webApiBase } from "./apiClient";
 import {
   confirmFieldMapBody, fieldMapBody, freezeBody, grantBody, importQuery, sourceBody, uploadQuery,
   type VcrFieldMapEntry, type VcrGrantBody, type VcrImportFormat, type VcrSourceBody,
