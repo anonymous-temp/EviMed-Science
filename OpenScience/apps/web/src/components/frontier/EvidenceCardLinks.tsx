@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { Button } from "@/components/ui/Button";
+import { Tooltip } from "@/components/ui/Tooltip";
+import type { EvidenceFrom } from "./FrontierBack";
 import {
   continueResearchFromCard,
   evidenceErrorMessage,
@@ -24,7 +26,8 @@ export function continuationIntent(continuation: EvidenceContinuation): RuntimeU
 
 /**
  * 「用这张卡继续研究」: a project, the card's primary sources in its knowledge base and the question, written and not sent. It
- * adds to 「问这条证据」 and replaces nothing. A source that could not be saved is said before the conversation opens.
+ * adds to 「问这条证据」 and replaces nothing — that one asks in the project the reader is in, this one starts a new project — and the
+ * hover line says which. A source that could not be saved is said before the conversation opens.
  */
 export function EvidenceContinueAction({ evidence }: { evidence: Pick<EvidenceCard, "id" | "canResearch"> }) {
   const navigate = useNavigate();
@@ -52,9 +55,11 @@ export function EvidenceContinueAction({ evidence }: { evidence: Pick<EvidenceCa
   };
   return (
     <div className="space-y-2">
-      <Button variant="secondary" loading={busy} onClick={() => void start()}>
-        用这张卡继续研究
-      </Button>
+      <Tooltip content="新建研究，并把主要来源存入知识库">
+        <Button variant="secondary" loading={busy} onClick={() => void start()}>
+          用这张卡继续研究
+        </Button>
+      </Tooltip>
       {error && <p role="alert" className="text-ui text-error">{error}</p>}
       {pending && (
         <div role="status" className="space-y-2 text-ui text-text-2">
@@ -79,9 +84,10 @@ function CardLine({ card, label }: { card: EvidenceCardRef; label: string }) {
 /**
  * What a card points to and what points to it: its author, the card its research began from, the card it follows, and the
  * published cards that follow it or began from it. Quiet when there is nothing to say; a read that fails is said once, with
- * a retry, and never replaces the card.
+ * a retry, and never replaces the card. The author's link carries `from` — the card the reader is on — in its router state
+ * (`evidenceFrom`), so the author's page can say its way back to this card.
  */
-export function EvidenceCardLinks({ cardId }: { cardId: string }) {
+export function EvidenceCardLinks({ cardId, from }: { cardId: string; from?: EvidenceFrom }) {
   const [links, setLinks] = useState<Links | null>(null);
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
@@ -111,7 +117,7 @@ export function EvidenceCardLinks({ cardId }: { cardId: string }) {
     <section className="space-y-3" aria-label="关联">
       <p className="text-ui text-text-2">
         <span className="text-text-3">作者 · </span>
-        <Link className="text-accent hover:underline" to={`/app/frontier/authors/${encodeURIComponent(links.author.id)}`}>{links.author.name}</Link>
+        <Link className="text-accent hover:underline" to={`/app/frontier/authors/${encodeURIComponent(links.author.id)}`} state={from ? { evidenceFrom: from } : undefined}>{links.author.name}</Link>
       </p>
       {lines.length > 0 && <ul className="space-y-1">{lines}</ul>}
     </section>

@@ -4,7 +4,7 @@ import type { EvidenceCard, EvidenceClaim, EvidenceClaimMark } from "@/lib/evide
 import type { EvidenceChallengeView } from "@/lib/evidenceUpkeepClient";
 import { EvidenceChallenge } from "./EvidenceChallenge";
 import { EvidenceReferences } from "./EvidenceContent";
-import { evidenceDate } from "./evidenceDate";
+import { evidenceDay } from "./evidenceDate";
 
 /** What a ⚠ means for one quotation, in a sentence. */
 const STATUS_TEXT: Record<string, string> = {
@@ -109,17 +109,20 @@ export function EvidenceClaims({ evidence, challenges }: { evidence: EvidenceCar
   );
 }
 
-/** How the card was made and who stands behind it: model, dates, the steps an AI took, authors and reviewers. */
+/**
+ * How the card was made and who stands behind it: the steps an AI took, the dates, authors and reviewers. It is in the fold of 「编写与核查」
+ * on the reading page. The name of the model is not on it: a reader is told what the AI did and who answers for the card, and a model's
+ * name is back office (the card still carries it; it is the page that does not show it).
+ */
 export function EvidenceDisclosure({ evidence }: { evidence: EvidenceCard }) {
   const disclosure = evidence.disclosure;
   if (!disclosure) return null;
   const people = (list: Array<{ name: string; affiliation?: string; title?: string }>) => list.map((person) => [person.name, person.title, person.affiliation].filter(Boolean).join("，")).join("；");
   const steps = disclosure.aiSteps.map((step) => (EVIDENCE_AI_STEP_LABELS_ZH as Record<string, string>)[step] ?? step).join("、");
   const rows: Array<[string, string]> = [];
-  if (disclosure.model) rows.push(["AI 模型", `${disclosure.model}${disclosure.modelVersion ? ` ${disclosure.modelVersion}` : ""}`]);
   if (steps) rows.push(["AI 做了", steps]);
-  if (disclosure.generatedAt) rows.push(["生成于", evidenceDate(disclosure.generatedAt)]);
-  if (disclosure.lastCheckedAt) rows.push(["最后核对", evidenceDate(disclosure.lastCheckedAt)]);
+  if (disclosure.generatedAt) rows.push(["生成于", evidenceDay(disclosure.generatedAt)]);
+  if (disclosure.lastCheckedAt) rows.push(["最后核对", evidenceDay(disclosure.lastCheckedAt)]);
   if (disclosure.authors.length) rows.push(["作者", people(disclosure.authors)]);
   if (disclosure.reviewers.length) rows.push(["审核", people(disclosure.reviewers)]);
   if (!rows.length) return null;

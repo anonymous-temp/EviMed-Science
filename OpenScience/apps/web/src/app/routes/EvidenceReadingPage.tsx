@@ -6,15 +6,26 @@ import {
 } from "@/components/frontier/useEvidenceScope";
 import { CardEditor } from "@/components/frontier/EvidenceEditors";
 import { Textarea, inputClasses } from "@/components/ui/Input";
+import { Disclosure } from "@/components/ui/Disclosure";
+import { Menu } from "@/components/ui/Menu";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { PageShell } from "@/components/layout/PageShell";
 import { FrontierBack } from "@/components/frontier/FrontierBack";
 import { FrontierSkeleton } from "@/components/frontier/FrontierSkeleton";
 import { EvidenceReading } from "@/components/frontier/EvidenceReading";
+import {
+  EvidenceDiscussionList,
+  EvidenceReviews,
+  EvidenceRevisions,
+  evidenceDiscussionCount,
+} from "@/components/frontier/EvidenceDiscussion";
 import { EvidenceCardLinks, EvidenceContinueAction } from "@/components/frontier/EvidenceCardLinks";
 import { EvidenceChangeLog } from "@/components/frontier/EvidenceChangeLog";
 import { useEvidenceFeatures } from "@/components/frontier/useEvidenceFeatures";
 import { listMyEvidenceChallenges, type EvidenceChallengeView } from "@/lib/evidenceUpkeepClient";
 import { EmptyState } from "@/components/cards/EmptyState";
+import { WebApiError } from "@/lib/apiClient";
+import { fetchFrontierItem } from "@/lib/frontierClient";
 import { Button } from "@/components/ui/Button";
 import {
   fetchEvidenceZone,
@@ -66,6 +77,26 @@ function EvidenceReadingContent({
   const features = useEvidenceFeatures();
   const [challenges, setChallenges] = useState<EvidenceChallengeView[] | undefined>(undefined);
   const challengeable = features.upkeep && evidence?.state === "published";
+  // 「更新记录」 is read when the reader opens it, not with every card.
+  const [logOpened, setLogOpened] = useState(false);
+  // The feed item the card was written from: 「回到相关动态」 is offered while the item can still be read.
+  const sourceItemId = evidence?.sourceItemId ?? null;
+  const [sourceItemLive, setSourceItemLive] = useState(false);
+  useEffect(() => {
+    setSourceItemLive(false);
+    if (!sourceItemId) return;
+    let active = true;
+    fetchFrontierItem(sourceItemId)
+      .then(() => active && setSourceItemLive(true))
+      .catch((reason) => {
+        // An item that was taken down is gone for good; any other failure says nothing about it, and the link stays.
+        const gone = reason instanceof WebApiError && reason.status === 404 && reason.code === "frontier_item_not_found";
+        if (active) setSourceItemLive(!gone);
+      });
+    return () => {
+      active = false;
+    };
+  }, [sourceItemId]);
   useEffect(() => {
     if (!challengeable) {
       setChallenges(undefined);
@@ -121,66 +152,68 @@ function EvidenceReadingContent({
       if (current()) setBusy(false);
     }
   };
+  const question = evidence ? evidence.content?.question || evidence.title : null;
+  const zonePath = `/app/frontier/zones/${encodeURIComponent(zoneId)}`;
+  const askable = !!zone?.canResearch && !!evidence?.canResearch;
+  const publishable = !!evidence && !(evidence.state === "draft" && (!evidence.body.trim() || !evidence.sources.length));
+  const publishCard = () => {
+    if (!evidence) return;
+    const current = capture();
+    setBusy(true);
+    setError(null);
+    publishEvidenceCard(
+      evidence,
+      evidence.state === "published" ? "draft" : "published",
+    )
+      .then((card) => {
+        if (current()) setEvidence(card);
+      })
+      .catch((reason) => {
+        if (current()) setError(evidenceErrorMessage(reason));
+      })
+      .finally(() => {
+        if (current()) setBusy(false);
+      });
+  };
+  const upkeepLog = features.upkeep && evidence?.state === "published";
+  const hasRevisions = (evidence?.revisions?.length ?? 0) > 1;
   return (
-    <PageShell title="证据专区" back={<FrontierBack />}>
-      <div className="my-4 flex items-center justify-between gap-3">
-        <Link
-          className="text-caption text-accent"
-          to={`/app/frontier/zones/${encodeURIComponent(zoneId)}`}
-        >
-          返回{zone?.title || "专区"}
-        </Link>
-        {zone?.canResearch && evidence?.canResearch && (
-          <Button loading={busy} onClick={() => void research()}>
-            问这条证据
-          </Button>
-        )}
-      </div>
-      {evidence?.canEdit && (
-        <div className="mb-4 flex gap-2">
-          <Button
-            variant="text"
-            disabled={editing}
-            onClick={() => setEditing(true)}
-          >
-            编辑证据
-          </Button>
-          <Button
-            variant="secondary"
-            loading={busy}
-            disabled={
-              editing ||
-              (evidence.state === "draft" &&
-                (!evidence.body.trim() || !evidence.sources.length))
-            }
-            onClick={() => {
-              const current = capture();
-              setBusy(true);
-              setError(null);
-              publishEvidenceCard(
-                evidence,
-                evidence.state === "published" ? "draft" : "published",
-              )
-                .then((card) => {
-                  if (current()) setEvidence(card);
-                })
-                .catch((reason) => {
-                  if (current()) setError(evidenceErrorMessage(reason));
-                })
-                .finally(() => {
-                  if (current()) setBusy(false);
-                });
-            }}
-          >
-            {evidence.state === "published" ? "撤回证据" : "发布证据"}
-          </Button>
-          {evidence.state === "draft" &&
-            (!evidence.body.trim() || !evidence.sources.length) && (
-              <span className="text-caption text-text-3">
-                发布前请填写正文并添加来源
-              </span>
+    <PageShell
+      title={question ?? "证据卡"}
+      back={<FrontierBack trail={[{ label: zone?.title || "专区", to: zonePath }]} />}
+      actions={
+        (askable || evidence?.canEdit) && (
+          <>
+            {askable && (
+              <Tooltip content="在当前项目里带着这张卡提问">
+                <Button loading={busy} onClick={() => void research()}>
+                  问这条证据
+                </Button>
+              </Tooltip>
             )}
-        </div>
+            {evidence?.canEdit && (
+              <Menu
+                label="更多操作"
+                items={[
+                  {
+                    label: "编辑证据",
+                    disabled: editing,
+                    onSelect: () => setEditing(true),
+                  },
+                  {
+                    label: evidence.state === "published" ? "撤回证据" : "发布证据",
+                    disabled: editing || busy || !publishable,
+                    onSelect: publishCard,
+                  },
+                ]}
+              />
+            )}
+          </>
+        )
+      }
+    >
+      {evidence?.canEdit && evidence.state === "draft" && !publishable && (
+        <p className="mb-4 text-caption text-text-3">发布前请填写正文并添加来源</p>
       )}
       {editing && evidence?.canEdit && (
         <div className="mb-4">
@@ -217,144 +250,167 @@ function EvidenceReadingContent({
             <EvidenceReading
               evidence={evidence}
               challenges={challengeable ? (challenges ?? []) : undefined}
-              onDeleteComment={(id) => {
-                const current = capture();
-                setBusy(true);
-                deleteEvidenceComment(evidence, id)
-                  .then(async () => {
-                    const updated = await fetchZoneEvidence(zoneId, cardId);
-                    if (current()) setEvidence(updated);
-                  })
-                  .catch((reason) => {
-                    if (current()) setError(evidenceErrorMessage(reason));
-                  })
-                  .finally(() => {
-                    if (current()) setBusy(false);
-                  });
-              }}
+              afterAnswer={<EvidenceContinueAction evidence={evidence} />}
             />
-            {evidence.sourceItemId && (
-              <Link
-                className="mt-4 inline-block text-caption text-accent"
-                to={`/app/frontier?item=${encodeURIComponent(evidence.sourceItemId)}`}
-              >
-                回到相关动态
-              </Link>
-            )}
-            {features.upkeep && evidence.state === "published" && (
-              <section className="mt-6" aria-label="这张卡的变更记录">
-                <h3 className="mb-2 text-ui font-medium text-text">变更记录</h3>
-                <EvidenceChangeLog zoneId={zoneId} cardId={evidence.id} pageSize={10} />
-              </section>
-            )}
-            <div className="mt-6 space-y-4">
-              <EvidenceContinueAction evidence={evidence} />
-              <EvidenceCardLinks cardId={evidence.id} />
+            <div className="mt-6 max-w-measure-body space-y-4">
+              {sourceItemLive && (
+                <Link
+                  className="inline-block text-caption text-accent"
+                  to={`/app/frontier?item=${encodeURIComponent(evidence.sourceItemId ?? "")}`}
+                >
+                  回到相关动态
+                </Link>
+              )}
+              <EvidenceCardLinks
+                cardId={evidence.id}
+                from={{ to: `${zonePath}/evidence/${encodeURIComponent(cardId)}`, label: question ?? evidence.title }}
+              />
+              <Disclosure summary={`评议与讨论（${evidenceDiscussionCount(evidence)}）`}>
+                <div className="space-y-6">
+                  <EvidenceReviews evidence={evidence} />
+                  <EvidenceDiscussionList
+                    evidence={evidence}
+                    onDeleteComment={(id) => {
+                      const current = capture();
+                      setBusy(true);
+                      deleteEvidenceComment(evidence, id)
+                        .then(async () => {
+                          const updated = await fetchZoneEvidence(zoneId, cardId);
+                          if (current()) setEvidence(updated);
+                        })
+                        .catch((reason) => {
+                          if (current()) setError(evidenceErrorMessage(reason));
+                        })
+                        .finally(() => {
+                          if (current()) setBusy(false);
+                        });
+                    }}
+                  />
+                  {evidence.canReview && (
+                    <form
+                      className="max-w-measure space-y-3"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        const current = capture();
+                        setBusy(true);
+                        setError(null);
+                        reviewEvidenceCard(evidence, Number(score), reviewText.trim())
+                          .then(async () => {
+                            const updated = await fetchZoneEvidence(zoneId, cardId);
+                            if (current()) {
+                              setEvidence(updated);
+                              setReviewText("");
+                            }
+                          })
+                          .catch((reason) => {
+                            if (current()) setError(evidenceErrorMessage(reason));
+                          })
+                          .finally(() => {
+                            if (current()) setBusy(false);
+                          });
+                      }}
+                    >
+                      <label className="block text-ui text-text">
+                        学术评议评分
+                        <select
+                          className={inputClasses({ className: "mt-2" })}
+                          required
+                          value={score}
+                          onChange={(event) =>
+                            setScore(
+                              event.target.value ? Number(event.target.value) : "",
+                            )
+                          }
+                        >
+                          <option value="">请选择评分</option>
+                          {[1, 2, 3, 4, 5].map((value) => (
+                            <option key={value} value={value}>
+                              {value} / 5
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <Textarea
+                        label="评议意见"
+                        maxLength={4000}
+                        value={reviewText}
+                        onChange={(event) => setReviewText(event.target.value)}
+                      />
+                      <Button
+                        type="submit"
+                        variant="secondary"
+                        loading={busy}
+                        disabled={!reviewText.trim() || score === ""}
+                      >
+                        发布评议
+                      </Button>
+                    </form>
+                  )}
+                  {evidence.state === "published" && (
+                    <form
+                      className="max-w-measure space-y-3"
+                      onSubmit={(event) => {
+                        event.preventDefault();
+                        const current = capture();
+                        setBusy(true);
+                        setError(null);
+                        commentEvidenceCard(
+                          evidence,
+                          comment.trim(),
+                          commentRequestId(`${evidence.id}:${comment.trim()}`),
+                        )
+                          .then(async () => {
+                            const updated = await fetchZoneEvidence(zoneId, cardId);
+                            if (current()) {
+                              setEvidence(updated);
+                              setComment("");
+                            }
+                          })
+                          .catch((reason) => {
+                            if (current()) setError(evidenceErrorMessage(reason));
+                          })
+                          .finally(() => {
+                            if (current()) setBusy(false);
+                          });
+                      }}
+                    >
+                      <Textarea
+                        label="参与讨论"
+                        maxLength={4000}
+                        value={comment}
+                        onChange={(event) => setComment(event.target.value)}
+                      />
+                      <Button
+                        type="submit"
+                        variant="secondary"
+                        loading={busy}
+                        disabled={!comment.trim()}
+                      >
+                        发布讨论
+                      </Button>
+                    </form>
+                  )}
+                </div>
+              </Disclosure>
+              {(hasRevisions || upkeepLog) && (
+                <Disclosure
+                  summary="更新记录"
+                  onToggle={(open) => {
+                    if (open) setLogOpened(true);
+                  }}
+                >
+                  <div className="space-y-6">
+                    <EvidenceRevisions evidence={evidence} />
+                    {upkeepLog && logOpened && (
+                      <section aria-label="这张卡的变更记录">
+                        <h3 className="mb-2 text-ui font-medium text-text">变更记录</h3>
+                        <EvidenceChangeLog zoneId={zoneId} cardId={evidence.id} pageSize={10} />
+                      </section>
+                    )}
+                  </div>
+                </Disclosure>
+              )}
             </div>
-            {evidence.canReview && (
-              <form
-                className="mt-6 max-w-measure space-y-3"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  const current = capture();
-                  setBusy(true);
-                  setError(null);
-                  reviewEvidenceCard(evidence, Number(score), reviewText.trim())
-                    .then(async () => {
-                      const updated = await fetchZoneEvidence(zoneId, cardId);
-                      if (current()) {
-                        setEvidence(updated);
-                        setReviewText("");
-                      }
-                    })
-                    .catch((reason) => {
-                      if (current()) setError(evidenceErrorMessage(reason));
-                    })
-                    .finally(() => {
-                      if (current()) setBusy(false);
-                    });
-                }}
-              >
-                <label className="block text-ui text-text">
-                  学术评议评分
-                  <select
-                    className={inputClasses({ className: "mt-2" })}
-                    required
-                    value={score}
-                    onChange={(event) =>
-                      setScore(
-                        event.target.value ? Number(event.target.value) : "",
-                      )
-                    }
-                  >
-                    <option value="">请选择评分</option>
-                    {[1, 2, 3, 4, 5].map((value) => (
-                      <option key={value} value={value}>
-                        {value} / 5
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <Textarea
-                  label="评议意见"
-                  maxLength={4000}
-                  value={reviewText}
-                  onChange={(event) => setReviewText(event.target.value)}
-                />
-                <Button
-                  type="submit"
-                  variant="secondary"
-                  loading={busy}
-                  disabled={!reviewText.trim() || score === ""}
-                >
-                  发布评议
-                </Button>
-              </form>
-            )}
-            {evidence.state === "published" && (
-              <form
-                className="mt-6 max-w-measure space-y-3"
-                onSubmit={(event) => {
-                  event.preventDefault();
-                  const current = capture();
-                  setBusy(true);
-                  setError(null);
-                  commentEvidenceCard(
-                    evidence,
-                    comment.trim(),
-                    commentRequestId(`${evidence.id}:${comment.trim()}`),
-                  )
-                    .then(async () => {
-                      const updated = await fetchZoneEvidence(zoneId, cardId);
-                      if (current()) {
-                        setEvidence(updated);
-                        setComment("");
-                      }
-                    })
-                    .catch((reason) => {
-                      if (current()) setError(evidenceErrorMessage(reason));
-                    })
-                    .finally(() => {
-                      if (current()) setBusy(false);
-                    });
-                }}
-              >
-                <Textarea
-                  label="参与讨论"
-                  maxLength={4000}
-                  value={comment}
-                  onChange={(event) => setComment(event.target.value)}
-                />
-                <Button
-                  type="submit"
-                  variant="secondary"
-                  loading={busy}
-                  disabled={!comment.trim()}
-                >
-                  发布讨论
-                </Button>
-              </form>
-            )}
           </>
         )
       )}

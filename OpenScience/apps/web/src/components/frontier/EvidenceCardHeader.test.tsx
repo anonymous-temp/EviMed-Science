@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import { EvidenceCardHeader, evidenceVerificationTally } from "./EvidenceCardHeader";
+import { EvidenceCardHeader, evidenceNatureLabel, evidenceVerificationTally } from "./EvidenceCardHeader";
 import { card } from "./__fixtures__/evidenceCards";
 
 describe("the top of a card", () => {
@@ -29,5 +29,28 @@ describe("the top of a card", () => {
     expect(evidenceVerificationTally({ claimVerification: null })).toBeNull();
     const { container } = render(<EvidenceCardHeader evidence={{ ...card, producer: null, originality: null, claimVerification: null }} />);
     expect(container).toBeEmptyDOMElement();
+  });
+  it("is one wrapping row — the producer, the tags and the day of the last update — not a stack of lines", () => {
+    render(<EvidenceCardHeader evidence={card} updatedAt="2026-10-04T12:00:00Z" />);
+    const header = screen.getByTestId("evidence-card-header");
+    expect(header).toHaveClass("flex-wrap");
+    expect(header.children).toHaveLength(4);
+    expect(screen.getByText("更新于 2026/10/4")).toBeInTheDocument();
+    expect(header.lastElementChild).toHaveTextContent("更新于 2026/10/4");
+  });
+  it("marks a draft, and draws a row for a card that has only that or only a day", () => {
+    const bare = { ...card, producer: null, originality: null, claimVerification: null, currency: undefined };
+    const { container, rerender } = render(<EvidenceCardHeader evidence={bare} />);
+    expect(container).toBeEmptyDOMElement();
+    rerender(<EvidenceCardHeader evidence={{ ...bare, state: "draft" }} />);
+    expect(screen.getByText("草稿")).toBeInTheDocument();
+    rerender(<EvidenceCardHeader evidence={bare} updatedAt="2026-10-04T12:00:00Z" />);
+    expect(screen.getByText("更新于 2026/10/4")).toBeInTheDocument();
+  });
+  it("tells the 性质 of a card in one phrase, for the header's tag and a list's line alike", () => {
+    expect(evidenceNatureLabel({ originality: "synthesis", primary: false })).toBe("解读 · 综合");
+    expect(evidenceNatureLabel({ originality: "original_research", primary: true })).toBe("一手 · 原创研究");
+    expect(evidenceNatureLabel({ originality: null, primary: false })).toBeNull();
+    expect(evidenceNatureLabel({ originality: "no-such-kind" as never, primary: false })).toBeNull();
   });
 });

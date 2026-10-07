@@ -10,6 +10,7 @@ const upkeep = vi.hoisted(() => ({ fetchEvidenceFeatures: vi.fn(), listMyEvidenc
 vi.mock("@/lib/evidenceZoneClient", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/evidenceZoneClient")>()), ...client }));
 vi.mock("@/lib/evidenceUpkeepClient", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/evidenceUpkeepClient")>()), ...upkeep }));
 vi.mock("@/lib/projects", () => ({ useProjectStore: { getState: () => ({ select: async () => {} }) } }));
+vi.mock("@/lib/frontierClient", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/frontierClient")>()), fetchFrontierItem: vi.fn() }));
 
 const mount = () => render(
   <MemoryRouter initialEntries={[`/app/frontier/zones/ez_1/evidence/${card.id}`]}>
@@ -39,9 +40,13 @@ describe("a card's page where the deployment keeps evidence current", () => {
     await userEvent.type(screen.getByRole("textbox", { name: /说明你认为哪里不对/ }), "原文里没有这句话");
     await userEvent.click(screen.getByRole("button", { name: "提交质疑" }));
     expect(upkeep.submitEvidenceChallenge).toHaveBeenCalledWith(card.id, "CLM-002", "原文里没有这句话");
+    expect(upkeep.listMyEvidenceChallenges).toHaveBeenCalledWith(card.id);
+    // The card's own change log is in the folded 「更新记录」 and is read when the reader opens it, not with the card.
+    expect(upkeep.fetchEvidenceChanges).not.toHaveBeenCalled();
+    await userEvent.click(screen.getByText("更新记录"));
     expect(await screen.findByText("读者对结论 CLM-002 提出质疑。")).toBeInTheDocument();
     expect(upkeep.fetchEvidenceChanges).toHaveBeenCalledWith("ez_1", expect.objectContaining({ cardId: card.id }));
-    expect(upkeep.listMyEvidenceChallenges).toHaveBeenCalledWith(card.id);
+    expect(screen.getByRole("region", { name: "这张卡的变更记录" })).toBeInTheDocument();
   });
 
   it("shows where the reader's earlier challenge on a claim stands", async () => {
@@ -59,6 +64,7 @@ describe("a card's page where the deployment keeps evidence current", () => {
     await screen.findByTestId("evidence-card-header");
     expect(screen.queryByRole("button", { name: /质疑结论/ })).toBeNull();
     expect(screen.queryByRole("region", { name: "这张卡的变更记录" })).toBeNull();
+    expect(screen.queryByText("更新记录")).toBeNull();
     expect(upkeep.listMyEvidenceChallenges).not.toHaveBeenCalled();
     expect(upkeep.fetchEvidenceChanges).not.toHaveBeenCalled();
   });
