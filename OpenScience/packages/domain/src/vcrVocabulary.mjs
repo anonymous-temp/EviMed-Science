@@ -451,7 +451,7 @@ export const VCR_STEP_NEEDS = Object.freeze({
 export const VCR_TABS = frozen(['overview', 'population', 'patients', 'comparator', 'trial', 'matching', 'data'])
 export const VCR_TAB_LABELS_ZH = Object.freeze({
   overview: '总览', population: '人群', patients: '虚拟患者', comparator: '对照', trial: '试验',
-  matching: '匹配与招募', data: '数据与证据',
+  matching: '匹配与招募', data: '定义与证据',
 })
 
 /** The four action cards on the module's home page (§9.2), and where each starts. */

@@ -343,6 +343,24 @@ export function vcrRequestedSteps(action) {
   return step ? Object.freeze([step]) : VCR_STEPS;
 }
 
+/**
+ * Where the generated records of the study's current population can be downloaded from, or `null` where there are none to offer: a
+ * cohort of real patients never leaves the data plane, and a population that has not been computed has no table. The path is the
+ * records route's (`GET …/records/:result.csv`); whether the file may leave is that route's own judgement, said by name when it
+ * does not (a button that is offered is a button that answers).
+ * @param {Record<string, any>} bundle
+ * @returns {{ path: string, rows: number | null } | null}
+ */
+export function populationDownload(bundle) {
+  const current = bundle.populations?.[0] ?? null;
+  if (!current || current.kind === "real" || !current.resultId) return null;
+  const result = list(bundle.allResults).find((row) => row.id === current.resultId) ?? null;
+  const kept = list(result?.tables).some((table) => String(object(table).location ?? "").startsWith("derived/"));
+  if (!kept) return null;
+  const generated = Number(object(result?.counts).generatedRecords);
+  return { path: `records/${encodeURIComponent(String(current.resultId))}.csv`, rows: Number.isFinite(generated) ? generated : null };
+}
+
 /** The four counts, read apart, never folded (plan §3.5). @param {Record<string, any>} counts */
 export function vcrCountBand(counts) {
   const row = object(counts);
@@ -625,7 +643,7 @@ export class VcrService {
     const needs = vcrTierNeedsSupport(tier);
     throw failure(409, "vcr_tier_unsupported",
       `研究里已冻结的数据还达不到「${labels[needs] ?? needs}」：${support.tier === "T0" ? "还没有可用的患者级数据" : `现有数据只到「${labels[support.tier] ?? support.tier}」`}。`
-      + `先在「数据与证据」里接入并冻结数据，再升档位。`);
+      + `先在「定义与证据」里接入并冻结数据，再升档位。`);
   }
 
   /** `PATCH /api/vcr/studies/:id`. @param {{ id: string }} user @param {string} id @param {Record<string, any>} patch */
@@ -776,7 +794,7 @@ export class VcrService {
     const bundle = await this.#bundle(study, user, tab, asked);
     switch (tab) {
       case "overview": return presentStudy(bundle);
-      case "population": return presentPopulationTab(bundle);
+      case "population": return { ...presentPopulationTab(bundle), download: populationDownload(bundle) };
       case "patients": return presentPatientsTab(bundle);
       case "comparator": return presentComparatorTab(bundle);
       case "trial": return presentTrialTab(bundle);

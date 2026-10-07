@@ -676,13 +676,14 @@ export function createVcrRoutes(dependencies) {
         if (objectId != null && !ID.test(objectId)) throw new HttpError(400, "vcr_payload_invalid", "object is the id of one of the study's objects.");
         return reply(await cards.read(study, kind, objectId));
       }
-      const body = await bodyOf(req, maxJsonBytes, ["kind", "objectId", "set"]);
+      const body = await bodyOf(req, maxJsonBytes, ["kind", "objectId", "set", "regenerate"]);
       if (typeof body.kind !== "string" || !VCR_CARD_KINDS.includes(body.kind)) throw new HttpError(400, "vcr_payload_invalid", `kind is one of: ${VCR_CARD_KINDS.join(", ")}.`);
       if (body.objectId != null && (typeof body.objectId !== "string" || !ID.test(body.objectId))) throw new HttpError(400, "vcr_payload_invalid", "objectId is the id of one of the study's objects.");
-      if (!body.set || typeof body.set !== "object" || Array.isArray(body.set)) throw new HttpError(400, "vcr_payload_invalid", "set is { setting: number }.");
+      if (body.regenerate != null && typeof body.regenerate !== "boolean") throw new HttpError(400, "vcr_payload_invalid", "regenerate is true or false.");
+      if (body.regenerate !== true && (!body.set || typeof body.set !== "object" || Array.isArray(body.set))) throw new HttpError(400, "vcr_payload_invalid", "set is { setting: number }.");
       const { study } = await authorize(id, "write");
       const written = await audited("vcr.card.edit", (result) => ({ code: id, detail: `${result.kind}@${result.version}` }), { code: id, detail: body.kind },
-        () => cards.apply(study, user, { kind: body.kind, objectId: body.objectId ?? null, set: body.set }));
+        () => cards.apply(study, user, { kind: body.kind, objectId: body.objectId ?? null, set: body.set, regenerate: body.regenerate === true }));
       return reply(written, 201);
     }
 

@@ -606,6 +606,8 @@ export function presentStudy(bundle) {
     projectId: study.projectId,
     name: study.name,
     question: text(study.question),
+    // The definition card of 「定义与证据」: what the study is about, as words (null before anything has been said).
+    definition: presentDefinition(bundle.definition),
     tier: study.dataTier,
     intendedUse: study.intendedUse,
     status: study.status,
@@ -622,6 +624,29 @@ export function presentStudy(bundle) {
     overview,
     updatedAt: zhTime(study.updatedAt, now),
     createdAt: study.createdAt,
+  };
+}
+
+/**
+ * The study's definition as the page reads it: the four PICO lines, the estimand's own sentence, the endpoint and the intended use,
+ * each one line of the reader's words. A field the definition does not state is absent; no definition is `null`.
+ * @param {Record<string, any> | null | undefined} definition
+ */
+export function presentDefinition(definition) {
+  if (!definition) return null;
+  const pico = object(definition.pico);
+  const estimand = object(definition.estimand);
+  /** @param {unknown} value */
+  const line = (value) => {
+    if (typeof value === "string") return text(value.trim() || null);
+    if (Array.isArray(value)) return text(value.map((entry) => (typeof entry === "string" ? entry : text(object(entry).name) ?? "")).filter(Boolean).join("、") || null);
+    return null;
+  };
+  const endpoint = /** @type {Record<string, string>} */ (VCR_ENDPOINT_TYPE_LABELS_ZH)[String(definition.endpointType)] ?? null;
+  const use = /** @type {Record<string, string>} */ (VCR_INTENDED_USE_LABELS_ZH)[String(definition.intendedUse)] ?? null;
+  return {
+    population: line(pico.population), intervention: line(pico.intervention), comparator: line(pico.comparator), outcome: line(pico.outcome),
+    estimand: text(estimand.text) ?? text(estimand.variable), endpoint, intendedUse: use,
   };
 }
 

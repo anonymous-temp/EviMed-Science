@@ -137,6 +137,19 @@ test("editing a population writes its next version, asks for the step and marks 
   await assert.rejects(cards.apply(study, { id: userId }, { kind: "population", objectId: old.id, set: { n: 1 } }), { code: "vcr_card_not_current" });
 });
 
+test("regenerating a population writes its next version with the same settings, so the programme computes it again", options, async () => {
+  const { study, userId, population, cards, heard } = await furnish();
+  const written = await cards.apply(study, { id: userId }, { kind: "population", objectId: population.id, regenerate: true });
+  assert.equal(written.changed, 0);
+  const [next, old] = await store.populations(study.id, 5);
+  assert.equal(next.id, written.id);
+  assert.deepEqual(next.definition, old.definition, "the same numbers");
+  assert.equal(next.version, old.version + 1);
+  assert.equal(heard.length, 1, "what stood on the old version is told");
+  assert.equal((await store.studyById(study.id))?.steps.population.requested, true);
+  await assert.rejects(cards.apply(study, { id: userId }, { kind: "trial_scenario", objectId: "scn_x", regenerate: true }), { code: "vcr_card_edit_refused" }, "only a population is regenerated");
+});
+
 test("a value the engine's schema refuses, a setting the object does not offer and a change that changes nothing write nothing", options, async () => {
   const { study, userId, population, cards, heard } = await furnish();
   const before = (await store.populations(study.id, 10)).length;

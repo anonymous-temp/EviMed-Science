@@ -545,5 +545,6 @@
     "queued": true,
     "since": "2026-09-28T02:11:00.000Z"
   },
-  "partial": null
+  "partial": null,
+  "download": null
 }

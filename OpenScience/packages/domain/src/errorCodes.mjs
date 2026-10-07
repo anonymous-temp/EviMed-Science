@@ -1807,7 +1807,7 @@ export const ERROR_CODE_MESSAGES = Object.freeze({
   vcr_study_not_found: '找不到这个研究，或它不属于你的账号；从研究列表重新进入。',
   vcr_name_invalid: '研究名要写 1 到 40 个字。',
   vcr_tier_invalid: '数据档位只能选 T0 到 T3 之一。',
-  vcr_tier_unsupported: '研究里已冻结的数据还支持不了这个档位；先在「数据与证据」里接入并冻结数据，再升档位。',
+  vcr_tier_unsupported: '研究里已冻结的数据还支持不了这个档位；先在「定义与证据」里接入并冻结数据，再升档位。',
   vcr_intended_use_invalid: '预期用途只能选：探索、研究设计支持、指定研究分析、申报准备。',
   vcr_status_invalid: '研究状态只能是进行中、已暂停或已归档。',
   vcr_step_invalid: '没有这一步；研究的步骤是定义、证据、人群、患者、对照、试验、匹配。',

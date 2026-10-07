@@ -3,6 +3,15 @@
   "projectId": "prj_ev201",
   "name": "EV-201 二线 NSCLC：单臂 II 期还是随机",
   "question": "单臂 II 期加外部对照行不行，还是必须做随机？",
+  "definition": {
+    "population": "EGFR/ALK 阴性晚期非小细胞肺癌，一线含铂化疗 ± 免疫治疗后进展",
+    "intervention": "EV-201",
+    "comparator": "多西他赛",
+    "outcome": "PFS",
+    "estimand": "试验人群的无进展生存（PFS）",
+    "endpoint": "事件时间",
+    "intendedUse": "研究设计支持"
+  },
   "tier": "T0",
   "intendedUse": "design_support",
   "status": "active",

@@ -280,11 +280,14 @@ export function createVcrCardEdits({ store, matchStore = null, orchestrator = nu
   /**
    * Version the object with the typed numbers, mark what was computed from the old version stale and let the programme
    * recompute it. Answers what was written.
-   * @param {any} study @param {{ id: string }} user @param {{ kind: string, objectId?: string | null, set: Record<string, any> }} edit
+   * `regenerate` writes the population's next version with the settings it has: the same numbers, computed again — the way to a
+   * profile a population generated before the engine wrote profiles never had.
+   * @param {any} study @param {{ id: string }} user @param {{ kind: string, objectId?: string | null, set?: Record<string, any>, regenerate?: boolean }} edit
    */
   async function apply(study, user, edit) {
+    if (edit.regenerate === true && edit.kind !== "population") throw new HttpError(400, "vcr_card_edit_refused", "只有人群可以按原来的设定重新生成。");
     const found = await target(study, edit.kind, edit.objectId ?? null);
-    const changes = changesOf(edit.set, found.settings);
+    const changes = edit.regenerate === true ? [] : changesOf(edit.set ?? {}, found.settings);
     const actor = String(user.id);
     /** @type {{ id: string, version: number }} */
     let saved;

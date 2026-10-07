@@ -3,6 +3,7 @@
   "projectId": "prj_empty",
   "name": "GLP-1 周制剂 III 期：样本量与脱落情景",
   "question": null,
+  "definition": null,
   "tier": "T0",
   "intendedUse": "exploratory",
   "status": "active",
