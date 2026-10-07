@@ -31,6 +31,17 @@ function needed(connector: WebConnector) {
   return !connected(connector) && !connector.keyless && connector.capabilities.length > 0;
 }
 
+/**
+ * What a source that works without a key says in place of 「X需要」: what a key gives, in the source's own sentence
+ * (`unlocks` — for each keyless source the registry's sentence already says it works without one). The fallback is
+ * true of every keyless source, whose definition is that the upstream serves without a key, only with a lower ceiling.
+ */
+const KEYLESS_FALLBACK = "不填也能用，填写自己的密钥可以提高请求上限";
+
+function keylessNote(connector: WebConnector): string {
+  return connector.unlocks || KEYLESS_FALLBACK;
+}
+
 /** 「孟德尔随机化需要」: the capabilities that depend on it, by their product names. */
 function neededBy(connector: WebConnector): string | null {
   const names = connector.capabilities.map((id) => capabilityTitle(id) ?? id);
@@ -65,9 +76,11 @@ function savedMessage(connector: WebConnector, saved: SavedConnectorCredential):
  * A source with no credential is the researcher's to configure when they use it
  * (2026-10-04), so this page is no longer the only place that asks: the
  * conversation whose run went without one offers the same field
- * (`ConnectorCredentialForm`). Here a source that works without a key is
- * 未配置 like the rest and takes one too — a saved NCBI, openFDA or Unpaywall
- * credential is used now, where it used to sit unread.
+ * (`ConnectorCredentialForm`). A source that works without a key is 可选 —
+ * not 未配置, which reads as something missing — with its own line saying what
+ * a key of one's own gives, and takes one too: a saved NCBI, openFDA or
+ * Semantic Scholar credential is used now, where it used to sit unread. Only a
+ * source some capability cannot work without says 未配置 and 「X需要」.
  *
  * Values go in and are never shown again: a row reports a state, never a
  * credential. Beside a researcher's own credential is what the source said when
@@ -127,7 +140,10 @@ export function ConnectorsSection() {
     const expiry = own?.expired && own.expiresAt ? `已于 ${day(own.expiresAt)} 过期`
       : connector.source === "user" && own?.expiresAt ? `有效期至 ${day(own.expiresAt)}`
         : null;
-    const description = [neededBy(connector), expiry].filter(Boolean).join(" · ") || null;
+    // A source nothing depends on is 「可选」 and says what a key of one's own gives; only a source some capability cannot work
+    // without says 「X需要」. A keyless source never claims a capability needs it, whatever the registry lists beside it.
+    const optionalNote = connector.keyless && !connected(connector) ? keylessNote(connector) : null;
+    const description = [connector.keyless ? optionalNote : neededBy(connector), expiry].filter(Boolean).join(" · ") || null;
     // The researcher's own credential is theirs to replace or remove whichever
     // source is winning, so they can see and correct it; the deployment's is not.
     const menu: MenuEntry[] = !own ? [] : [
@@ -139,12 +155,12 @@ export function ConnectorsSection() {
     return (
       <PanelRow
         key={connector.id}
-        label={connector.unlocks ? <Tooltip content={connector.unlocks}><span>{connector.title}</span></Tooltip> : connector.title}
+        label={connector.unlocks && connector.unlocks !== optionalNote ? <Tooltip content={connector.unlocks}><span>{connector.title}</span></Tooltip> : connector.title}
         description={description}
         control={(
           <>
             {check && <Tag tone={check.tone}>{check.label}</Tag>}
-            {connected(connector) ? "已配置" : "未配置"}
+            {connected(connector) ? "已配置" : connector.keyless ? "可选" : "未配置"}
             {!connected(connector) && !open && <Button variant="secondary" onClick={() => setEditing(connector.id)}>设置</Button>}
             {menu.length > 0 && <Menu label={`${connector.title} 凭据`} items={menu} />}
           </>

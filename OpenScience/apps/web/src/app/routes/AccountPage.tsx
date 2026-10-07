@@ -57,8 +57,9 @@ export function AccountPage() {
   const [params] = useSearchParams();
   const [operator, setOperator] = useState(false);
   const { enabled: billing } = useResearchBilling();
-  // Feishu exists only where the deployment runs the IM module: a row for a
-  // switched-off subsystem would offer a scan that cannot work.
+  // Feishu exists only where the deployment runs the IM module (it is dealt
+  // with under 通知): a row for a switched-off subsystem would offer a scan
+  // that cannot work.
   const [imEnabled, setImEnabled] = useState(false);
 
   useEffect(() => {
@@ -100,7 +101,7 @@ export function AccountPage() {
           </ul>
         </nav>
         <div className="min-w-0 flex-1">
-          {active.key === "account" && <AccountSection imEnabled={imEnabled} />}
+          {active.key === "account" && <AccountSection />}
           {active.key === "appearance" && <AppearanceSection />}
           {active.key === "notifications" && <NotificationsSection imEnabled={imEnabled} />}
           {active.key === "usage" && <UsageSection />}

@@ -11,7 +11,7 @@ import { GeoMarketCard } from "@/components/settings/GeoMarketCard";
 
 /**
  * 「运维」 in 设置: the deployment's console, offered only to an operator
- * account — readiness, resources, the three operations ledgers, and
+ * account — the runtime's state, the configuration check, the three operations ledgers, and
  * 「循证进化」, the evolution engine's tools and plans (it sat under the
  * research-tool grid until 2026-10-07: an operator's panel beneath a
  * researcher's page, and it had no business there). The project plugins that
@@ -46,8 +46,9 @@ export function OpsPage() {
   return (
     <div>
       <p role="note" className="text-caption text-text-3">这里的操作作用于整个部署：停止或重启会中断进行中的研究。</p>
-      <WebReadinessCard />
+      {/* What is running now first; whether the configuration holds second — the order an operator asks in. */}
       <WebResourcesCard key={`resources-${projectId}`} />
+      <WebReadinessCard />
       <WebTasksCard key={`tasks-${projectId}`} />
       <WebAuditCard key={`audit-${projectId}`} />
       <WebErrorsCard key={`errors-${projectId}`} />

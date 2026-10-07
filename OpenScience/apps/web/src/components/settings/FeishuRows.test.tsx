@@ -2,7 +2,7 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { FeishuAccountRow, FeishuPushRow, FeishuQrCode } from "./FeishuRows";
+import { FeishuQrCode, FeishuRow, useImStatus } from "./FeishuRows";
 
 const mocks = vi.hoisted(() => ({
   fetchImStatus: vi.fn(),
@@ -32,10 +32,15 @@ const bound = {
   },
 };
 
-const account = () => render(<MemoryRouter><FeishuAccountRow /></MemoryRouter>);
-const push = () => render(<MemoryRouter><FeishuPushRow /></MemoryRouter>);
+/** The row as 通知 draws it: the section reads the status once and hands it down. */
+function Row() {
+  const im = useImStatus();
+  return <FeishuRow im={im} />;
+}
+const account = () => render(<MemoryRouter><Row /></MemoryRouter>);
+const push = account;
 
-describe("飞书 under 账户", () => {
+describe("飞书 under 通知: binding", () => {
   beforeEach(() => { vi.clearAllMocks(); });
   afterEach(() => { vi.useRealTimers(); });
 
@@ -44,7 +49,7 @@ describe("飞书 under 账户", () => {
     mocks.startFeishuRegistration.mockResolvedValue({ state: "polling", qrCodeUrl: QR_URL, remainingSeconds: 590 });
     mocks.fetchFeishuRegistration.mockResolvedValue({ state: "succeeded", result: { botName: "bot", pendingApproval: false, tenantBrand: "feishu" } });
     account();
-    expect(await screen.findByText("研究完成和每日前沿推送到飞书")).toBeInTheDocument();
+    expect(await screen.findByText("绑定后，研究完成和每日前沿也会推送到飞书")).toBeInTheDocument();
     const start = screen.getByRole("button", { name: "绑定" });
     vi.useFakeTimers();
     await act(async () => { fireEvent.click(start); });
@@ -115,7 +120,7 @@ describe("飞书 under 账户", () => {
   });
 });
 
-describe("飞书 under 通知", () => {
+describe("飞书 under 通知: the push", () => {
   beforeEach(() => { vi.clearAllMocks(); });
 
   it("turns pushes off and on with a switch", async () => {
@@ -128,10 +133,29 @@ describe("飞书 under 通知", () => {
     expect(mocks.setFeishuNotifications).toHaveBeenCalledWith(false);
   });
 
-  it("sends an account that has not bound Feishu to 账户 to do it", async () => {
+  it("is bound in the same row that switches it: the state, the switch, and no link to another tab", async () => {
+    mocks.fetchImStatus.mockResolvedValue(bound);
+    push();
+    expect(await screen.findByText("已连接")).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "推送到飞书" })).toBeInTheDocument();
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
+
+  it("offers 绑定 in place for an account that has not bound Feishu, with no switch to turn on", async () => {
     mocks.fetchImStatus.mockResolvedValue(unbound);
     push();
-    expect(await screen.findByRole("link", { name: "绑定" })).toHaveAttribute("href", "/app/account");
+    expect(await screen.findByRole("button", { name: "绑定" })).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "绑定" })).not.toBeInTheDocument();
     expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+  });
+
+  it("keeps the switch as it was, and says so, when the push cannot be changed", async () => {
+    mocks.fetchImStatus.mockResolvedValue(bound);
+    mocks.setFeishuNotifications.mockRejectedValue(new Error("down"));
+    push();
+    const toggle = await screen.findByRole("switch", { name: "推送到飞书" });
+    await act(async () => { fireEvent.click(toggle); });
+    expect(mocks.setFeishuNotifications).toHaveBeenCalledWith(false);
+    expect(screen.getByRole("switch", { name: "推送到飞书" })).toHaveAttribute("aria-checked", "true");
   });
 });

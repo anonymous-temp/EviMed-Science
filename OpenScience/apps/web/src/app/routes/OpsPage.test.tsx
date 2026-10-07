@@ -11,8 +11,8 @@ vi.mock("@/lib/apiClient", async (original) => ({
   hasWebApi: true,
 }));
 vi.mock("@/components/evolution/EvolutionPanel", () => ({ EvolutionPanel: () => <div>循证进化面板</div> }));
-vi.mock("@/components/settings/WebReadinessCard", () => ({ WebReadinessCard: () => <div>部署就绪检查</div> }));
-vi.mock("@/components/settings/WebResourcesCard", () => ({ WebResourcesCard: () => null }));
+vi.mock("@/components/settings/WebReadinessCard", () => ({ WebReadinessCard: () => <div>部署配置检查</div> }));
+vi.mock("@/components/settings/WebResourcesCard", () => ({ WebResourcesCard: () => <div>运行状况</div> }));
 vi.mock("@/components/settings/WebAuditCard", () => ({ WebAuditCard: () => null }));
 vi.mock("@/components/settings/WebErrorsCard", () => ({ WebErrorsCard: () => null }));
 vi.mock("@/components/settings/WebSecurityCard", () => ({ WebSecurityCard: () => null }));
@@ -44,13 +44,21 @@ describe("运维: the deployment's console and the evolution engine", () => {
   it("holds the console and 循证进化, with one line on what its controls do, and no project plugins", async () => {
     api.fetchWebMe.mockResolvedValue({ project: { id: "alpha" } });
     render(<OpsPage />);
-    expect(screen.getByText("部署就绪检查")).toBeInTheDocument();
+    expect(screen.getByText("部署配置检查")).toBeInTheDocument();
     expect(screen.getByText("循证 GEO 投放")).toBeInTheDocument();
     expect(screen.getByText("循证进化面板")).toBeInTheDocument();
     expect(screen.getByRole("note")).toHaveTextContent("停止或重启会中断进行中的研究");
     expect(screen.queryByText(/项目插件/)).not.toBeInTheDocument();
     await waitFor(() => expect(api.fetchWebMe).toHaveBeenCalled());
     expect(mounts.tasks).toBe(1);
+  });
+
+  it("puts what is running now before whether the configuration holds", () => {
+    api.fetchWebMe.mockResolvedValue({ project: { id: "alpha" } });
+    render(<OpsPage />);
+    const running = screen.getByText("运行状况");
+    const configuration = screen.getByText("部署配置检查");
+    expect(running.compareDocumentPosition(configuration) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("uses the server's resolved project when the remembered project no longer exists", async () => {

@@ -43,6 +43,14 @@ describe("the daily's switch under 通知", () => {
     expect(screen.queryByText(/不含你的个人信息|只推给近两周/)).not.toBeInTheDocument();
   });
 
+  it("says where the notice is delivered when it is told, and a read that failed says so in its place", async () => {
+    client.fetchFrontierDigestSwitch.mockRejectedValueOnce(new WebApiError("down", { status: 503, code: null }));
+    render(<FrontierDigestRow feature="on" description="每天的医学前沿日报，发到收件箱" />);
+    expect(screen.getByText("每天的医学前沿日报，发到收件箱")).toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent("服务暂时不可用，请稍后重试。");
+    expect(screen.queryByText("每天的医学前沿日报，发到收件箱")).not.toBeInTheDocument();
+  });
+
   it("turns the push off and on through the inbox preferences", async () => {
     client.setFrontierDigestSwitch.mockResolvedValueOnce(false).mockResolvedValueOnce(true);
     renderRow();

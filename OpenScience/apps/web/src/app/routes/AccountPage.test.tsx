@@ -27,9 +27,9 @@ vi.mock("@/lib/imClient", async () => {
 // asks which of its two bodies the deployment has, and it shares that answer
 // with this page's tab label — and its two bodies are the slots.
 vi.mock("@/components/settings/AccountSection", () => ({
-  AccountSection: ({ imEnabled }: { imEnabled: boolean }) => <div>账户分区{imEnabled ? "（含飞书）" : ""}</div>,
+  AccountSection: () => <div>账户分区</div>,
 }));
-vi.mock("@/components/settings/NotificationsSection", () => ({ NotificationsSection: () => <div>通知分区</div> }));
+vi.mock("@/components/settings/NotificationsSection", () => ({ NotificationsSection: ({ imEnabled }: { imEnabled: boolean }) => <div>通知分区{imEnabled ? "（含飞书）" : ""}</div> }));
 vi.mock("@/components/settings/MonthlyUsage", () => ({ MonthlyUsage: () => <div>用量分区</div> }));
 vi.mock("@/components/settings/ResearchAllowance", () => ({ ResearchAllowance: () => <div>科研额度分区</div> }));
 vi.mock("@/components/settings/ConnectorsSection", () => ({ ConnectorsSection: () => <div>数据源分区</div> }));
@@ -206,10 +206,10 @@ describe("设置", () => {
     expect(await screen.findByText("账户分区")).toBeInTheDocument();
   });
 
-  it("offers Feishu under 账户 only where the deployment runs the IM module", async () => {
+  it("offers Feishu under 通知, and only where the deployment runs the IM module", async () => {
     mocks.fetchImStatus.mockResolvedValue({ enabled: true, available: true, channels: [], feishu: { bound: false }, registration: null });
-    open();
-    expect(await screen.findByText("账户分区（含飞书）")).toBeInTheDocument();
+    open("/app/account?tab=notifications");
+    expect(await screen.findByText("通知分区（含飞书）")).toBeInTheDocument();
   });
 
   // 「循证进化」 is an operator's: a researcher has nothing to look at in it.

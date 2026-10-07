@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { ClipboardList, RefreshCw } from "lucide-react";
 import { webErrorMessage, listWebAuditLog, type WebAuditRecord } from "@/lib/apiClient";
 import { cn } from "@/lib/cn";
-import { LEDGER_STATUS_LABEL, labelFor } from "@/lib/statusLabel";
+import { LEDGER_STATUS_LABEL, auditActionLabel, labelFor } from "@/lib/statusLabel";
 import { toast } from "@/lib/toast";
 import { formatClock, humanSize } from "@/lib/format";
 import { iconButtonClasses } from "@/components/ui/IconButton";
@@ -59,9 +59,10 @@ export function WebAuditCard() {
                 )}
               >
                 <ClipboardList size={16} className={cn("shrink-0", statusTone(event.status))} aria-hidden="true" />
-                <Tooltip content={event.action ?? "操作"} kind="label" whenTruncated>
-                  <span className="w-24 shrink-0 truncate font-mono text-caption text-text">
-                    {event.action ?? "操作"}
+                {/* The ledger's own name for the action stays in the tooltip, for whoever has to search the log. */}
+                <Tooltip content={event.action ?? "操作"}>
+                  <span className="w-28 shrink-0 truncate text-caption text-text">
+                    {auditActionLabel(event.action)}
                   </span>
                 </Tooltip>
                 <Tooltip content={event.status}>

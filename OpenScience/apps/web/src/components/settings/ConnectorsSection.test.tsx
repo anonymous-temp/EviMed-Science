@@ -69,9 +69,11 @@ describe("数据源", () => {
     // The capabilities that depend on it are the row's one line.
     expect(within(rowOf("OpenGWAS")).getByText("孟德尔随机化需要")).toBeInTheDocument();
     expect(within(rowOf("OpenGWAS")).getByRole("button", { name: "设置" })).toBeInTheDocument();
-    // A source that works without a key is 未配置 like the rest and takes one
-    // too: a saved NCBI, openFDA or Unpaywall credential is used now.
-    expect(within(rowOf("Semantic Scholar")).getByText("未配置")).toBeInTheDocument();
+    // A source that works without a key is 可选, not 未配置 (which reads as something missing), says what a key of one's own gives,
+    // and takes one too: a saved NCBI, openFDA or Semantic Scholar credential is used now.
+    expect(within(rowOf("Semantic Scholar")).getByText("可选")).toBeInTheDocument();
+    expect(within(rowOf("Semantic Scholar")).queryByText("未配置")).not.toBeInTheDocument();
+    expect(within(rowOf("Semantic Scholar")).getByText("文献检索。")).toBeInTheDocument();
     expect(within(rowOf("Semantic Scholar")).getByRole("button", { name: "设置" })).toBeInTheDocument();
     // No field anywhere until one is asked for.
     expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
@@ -79,6 +81,19 @@ describe("数据源", () => {
     for (const gone of [/凭据加密保存/, /平台已配置/, /无需凭据/, /已连接/, /无需设置/, /个数据源本部署没有配置凭据/]) {
       expect(screen.queryByText(gone)).not.toBeInTheDocument();
     }
+  });
+
+  it("never says a capability needs a source that works without a key, and has a sentence for one that says nothing", async () => {
+    mocks.fetchWebConnectors.mockResolvedValue([
+      connector({ id: "openfda", title: "openFDA", kind: "api-key", unlocks: "不良事件检索的更高请求配额；没有也能用。", capabilities: ["adr-analysis"], keyless: true, needsAttention: false }),
+      connector({ id: "ncbi", title: "NCBI E-utilities", kind: "api-key", unlocks: "", capabilities: [], keyless: true, needsAttention: false }),
+    ]);
+    render(<ConnectorsSection />);
+    await screen.findByText("openFDA");
+    expect(within(rowOf("openFDA")).getByText("可选")).toBeInTheDocument();
+    expect(within(rowOf("openFDA")).getByText("不良事件检索的更高请求配额；没有也能用。")).toBeInTheDocument();
+    expect(screen.queryByText(/需要$/)).not.toBeInTheDocument();
+    expect(within(rowOf("NCBI E-utilities")).getByText("不填也能用，填写自己的密钥可以提高请求上限")).toBeInTheDocument();
   });
 
   it("folds the optional sources until they are asked for", async () => {
