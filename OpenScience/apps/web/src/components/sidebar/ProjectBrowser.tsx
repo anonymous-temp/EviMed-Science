@@ -115,17 +115,26 @@ type Destination = () => { to: string; state?: unknown };
  * Conversations are read per project and only once a group is open
  * (`useProjectRuns`); which groups are open survives a reload.
  */
-export function ProjectBrowser({ geo = false, vcr = false }: {
+export function ProjectBrowser({ geo = false, vcr = false, onCurrentModule }: {
   /** Whether 「循证 GEO」 is offered: its projects then sit in their own group at the end, with the radar icon. */
   geo?: boolean;
   /** Whether 「虚拟临床研究」 is offered: its studies then sit in their own group at the end, with the people icon. */
   vcr?: boolean;
+  /**
+   * Which module the tab's project belongs to (a GEO project, a study — a draft included), or none. The sidebar reads it so that the
+   * destination marked current in a module's conversation is the module, not 「新对话」: this list is where the account's projects are
+   * told apart, so it is where the answer is known.
+   */
+  onCurrentModule?: (module: ModuleName | null) => void;
 } = {}) {
   const { projects, currentId, switching, loading, error, load, select, create, rename } = useProjectStore();
   const projectsKey = projects.map((project) => project.id).join("\u0000");
   const geoProjectIds = useGeoProjectIds(geo, projectsKey);
   // A draft study (「新建研究」 before the first thing is said in it) is not one of the account's projects yet: it is left out of the list.
   const { studies: vcrProjectIds, drafts: vcrDraftIds } = useVcrProjects(vcr, projectsKey);
+  // A project is one module's at most, GEO first — the order the list below sorts them in.
+  const currentModule: ModuleName | null = geoProjectIds.has(currentId) ? "geo" : vcrProjectIds.has(currentId) || vcrDraftIds.has(currentId) ? "vcr" : null;
+  useEffect(() => { onCurrentModule?.(currentModule); }, [currentModule, onCurrentModule]);
   const navigate = useNavigate();
   const location = useLocation();
   const headingId = useId();

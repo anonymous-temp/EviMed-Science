@@ -43,6 +43,17 @@ test("every page the budget table names is a page the walk visits", () => {
   assert.equal(pageFindings("files", "desktop", clean({ controlKinds: 11 }), []).failures.length, 1);
 });
 
+test("the evidence zones' home may draw the four kinds of border it was measured at, the daily nine controls — and no more", () => {
+  const zones = (overrides) => pageFindings("frontier-zones", "desktop", clean({ controlKinds: 8, colorKinds: 5, ...overrides }), []).failures;
+  assert.deepEqual(zones({ borderKinds: 4 }), []);
+  assert.deepEqual(zones({ borderKinds: 5 }), ["frontier-zones@desktop: 5 kinds of border (budget 4)"]);
+  // The feed's own pages keep the reading page's three.
+  assert.deepEqual(pageFindings("frontier", "desktop", clean({ controlKinds: 8, borderKinds: 4 }), []).failures, ["frontier@desktop: 4 kinds of border (budget 3)"]);
+  const daily = (controlKinds) => pageFindings("frontier-daily", "desktop", clean({ controlKinds }), []).failures;
+  assert.deepEqual(daily(9), []);
+  assert.deepEqual(daily(10), ["frontier-daily@desktop: 10 kinds of control (budget 9)"]);
+});
+
 test("every page the router serves at a fixed address is walked, or says why it is not", async () => {
   // The extension centre's two pages and the evidence zones' home shipped
   // without the walk ever opening them (found 2026-10-03): the route list is

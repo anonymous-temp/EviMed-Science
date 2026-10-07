@@ -44,11 +44,17 @@ vi.mock("@/lib/store", () => ({
 
 // The projects and their tasks read the store and the ledgers on mount and
 // have their own tests (ProjectBrowser.test.tsx); here the section is a slot.
-vi.mock("@/components/sidebar/ProjectBrowser", () => ({
-  ProjectBrowser: ({ geo, vcr }: { geo?: boolean; vcr?: boolean }) => (
-    <section aria-label="项目" data-testid="project-browser" data-geo={String(Boolean(geo))} data-vcr={String(Boolean(vcr))} />
-  ),
-}));
+// The module the tab's project belongs to is the list's answer (`onCurrentModule`): here a test says it with `projectModule.current`.
+const projectModule = vi.hoisted(() => ({ current: null as "geo" | "vcr" | null }));
+vi.mock("@/components/sidebar/ProjectBrowser", async () => {
+  const { useEffect } = await import("react");
+  return {
+    ProjectBrowser: ({ geo, vcr, onCurrentModule }: { geo?: boolean; vcr?: boolean; onCurrentModule?: (module: "geo" | "vcr" | null) => void }) => {
+      useEffect(() => { onCurrentModule?.(projectModule.current); }, [onCurrentModule]);
+      return <section aria-label="项目" data-testid="project-browser" data-geo={String(Boolean(geo))} data-vcr={String(Boolean(vcr))} />;
+    },
+  };
+});
 
 function LocationProbe() {
   const location = useLocation();
@@ -75,6 +81,7 @@ function renderSidebar(initialPath = "/app/chat") {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  projectModule.current = null;
   mocks.fetchInboxUnreadCount.mockResolvedValue({ unreadTotal: 0, safetyUnread: 0 });
   mocks.fetchWebConnectors.mockResolvedValue([]);
   // A control plane that says nothing about 前沿动态 has not got it.
@@ -188,6 +195,45 @@ describe("Sidebar navigation", () => {
     await userEvent.click(row);
     expect(screen.getByTestId("location")).toHaveTextContent("/app/virtual-research");
     expect(row).toHaveAttribute("aria-current", "page");
+  });
+
+  // A conversation is `/app/chat/:sessionId` in whatever project it is in; the destination marked current follows the project's module.
+  it("marks 虚拟临床研究, not 新对话, in a conversation of a study — a draft study too", async () => {
+    mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [], features: { vcr: true, geo: true } });
+    projectModule.current = "vcr";
+    renderSidebar("/app/chat/ses_1");
+    const row = await screen.findByRole("link", { name: "虚拟临床研究" });
+    await waitFor(() => expect(row).toHaveAttribute("aria-current", "page"));
+    expect(screen.getByRole("link", { name: "新对话" })).not.toHaveAttribute("aria-current");
+    expect(screen.getByRole("link", { name: "循证 GEO" })).not.toHaveAttribute("aria-current");
+  });
+
+  it("marks 循证 GEO in a conversation of a GEO project", async () => {
+    mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [], features: { vcr: true, geo: true } });
+    projectModule.current = "geo";
+    renderSidebar("/app/chat/ses_2");
+    const row = await screen.findByRole("link", { name: "循证 GEO" });
+    await waitFor(() => expect(row).toHaveAttribute("aria-current", "page"));
+    expect(screen.getByRole("link", { name: "新对话" })).not.toHaveAttribute("aria-current");
+    expect(screen.getByRole("link", { name: "虚拟临床研究" })).not.toHaveAttribute("aria-current");
+  });
+
+  it("keeps 新对话 current in a conversation of an ordinary project, and on the blank conversation", async () => {
+    mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [], features: { vcr: true, geo: true } });
+    renderSidebar("/app/chat/ses_3");
+    await screen.findByRole("link", { name: "虚拟临床研究" });
+    expect(screen.getByRole("link", { name: "新对话" })).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "虚拟临床研究" })).not.toHaveAttribute("aria-current");
+  });
+
+  it("marks a module's row on its own pages whatever the project, and only the one row", async () => {
+    mocks.fetchWebMe.mockResolvedValue({ user: { id: "u", name: "u" }, project: { id: "default", name: "我的研究" }, projects: [], features: { vcr: true, geo: true } });
+    projectModule.current = "vcr";
+    renderSidebar("/app/geo/geo_1/visibility");
+    const geoRow = await screen.findByRole("link", { name: "循证 GEO" });
+    expect(geoRow).toHaveAttribute("aria-current", "page");
+    expect(screen.getByRole("link", { name: "虚拟临床研究" })).not.toHaveAttribute("aria-current");
+    expect(screen.getByRole("link", { name: "新对话" })).not.toHaveAttribute("aria-current");
   });
 
   // One board offered and the other not: the one that is there keeps its place

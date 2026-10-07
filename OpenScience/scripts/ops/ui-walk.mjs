@@ -23,7 +23,9 @@
  *     section than its budget says (SECTION_SHAPES_BY_PAGE; rule 1), and
  *     clicking the first row of each of its lists shows a drawer, a new page
  *     or an opened row — a row that looks clickable does something where the
- *     reader is looking (rule 6);
+ *     reader is looking (rule 6); a row whose title is a link to an outside
+ *     address in a new tab (a feed headline) declares what it opens and is
+ *     not silent for the browser reporting no popup;
  *   - at 390 px nothing overflows horizontally;
  *   - at the desktop width, the style budget of §7: at most 8 kinds of
  *     control (9 on the frontier feed, whose headlines are links; 10 on a
@@ -32,7 +34,8 @@
  *     data page) and 3 kinds of border (6 on a GEO project's tabs, the
  *     measured number — see GEO_BUDGET), with each kind of control named in
  *     the report by its first example; the title and the page
- *     body's blocks start on one left edge; within a list, every row's title
+ *     body's blocks — the way back over the title, and the body that follows
+ *     the header — start on one left edge; within a list, every row's title
  *     (`[data-row-title]`) starts on one left edge;
  *   - no page is replaced by the router's English error page, and a lazy page
  *     whose chunk is gone (the state an open tab is in after a release) keeps
@@ -222,8 +225,11 @@ export const VCR_TABS_WALK = [
 const EXTENSION_BUDGET = { controls: 9, borders: 5 };
 export const BUDGET_BY_PAGE = {
   frontier: FRONTIER_BUDGET, "frontier-hot": FRONTIER_BUDGET, "frontier-daily": FRONTIER_BUDGET, "frontier-all": FRONTIER_BUDGET,
-  // The zones' home is a frontier page: the same rail and tabs, measured at nine.
-  "frontier-zones": FRONTIER_BUDGET,
+  // The zones' home is a frontier page: the same rail and tabs, measured at nine. It also draws four kinds of border where the feed
+  // draws two — the tab row's hairline and the selected tab's underline, the rule between zones, and the frame of the topic request's
+  // field — the measured number of the first live walk of R10 (2026-10-07), not a wish: the field is the page's one input, and the
+  // other three are the tabs' and the list's own. A fifth is a new kind of border, which is what this budget is for.
+  "frontier-zones": { ...FRONTIER_BUDGET, borders: 4 },
   "extensions-plugins": EXTENSION_BUDGET, "extensions-skills": EXTENSION_BUDGET,
   geo: DATA_BUDGET,
   ...Object.fromEntries(GEO_TABS.map(([name]) => [name, GEO_BUDGET])),

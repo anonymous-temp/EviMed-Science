@@ -724,6 +724,34 @@ describe("ProjectBrowser — GEO projects", () => {
   });
 });
 
+// The sidebar marks the module a conversation belongs to as the current destination; the list is where projects are told apart.
+describe("ProjectBrowser — the module the tab's project belongs to", () => {
+  it("says none for an ordinary project, vcr for a study — a draft included — and geo for a GEO project", async () => {
+    const seen = vi.fn();
+    mocks.getVcrHome.mockResolvedValue({ studies: [], draftProjectIds: ["p-heart"] });
+    mocks.listGeoProjects.mockResolvedValue([{ id: "geo_1", projectId: "paper1", name: "Paper 1" }]);
+    render(<MemoryRouter initialEntries={["/app/chat"]}><ProjectBrowser geo vcr onCurrentModule={seen} /></MemoryRouter>);
+    await screen.findByRole("button", { name: /循证 GEO/ });
+    await waitFor(() => expect(seen).toHaveBeenLastCalledWith(null));
+    // The draft nobody has spoken in is not in the list, and its conversation still belongs to the module.
+    await act(async () => { await useProjectStore.getState().select("p-heart"); });
+    await waitFor(() => expect(seen).toHaveBeenLastCalledWith("vcr"));
+    await act(async () => { await useProjectStore.getState().select("paper1"); });
+    await waitFor(() => expect(seen).toHaveBeenLastCalledWith("geo"));
+    await act(async () => { await useProjectStore.getState().select("default"); });
+    await waitFor(() => expect(seen).toHaveBeenLastCalledWith(null));
+  });
+
+  it("says none where no module is offered, whatever the project", async () => {
+    const seen = vi.fn();
+    render(<MemoryRouter initialEntries={["/app/chat"]}><ProjectBrowser onCurrentModule={seen} /></MemoryRouter>);
+    await screen.findByRole("button", { name: "心衰" });
+    await act(async () => { await useProjectStore.getState().select("p-heart"); });
+    expect(seen).toHaveBeenLastCalledWith(null);
+    expect(seen).not.toHaveBeenCalledWith("vcr");
+  });
+});
+
 describe("ProjectBrowser — 虚拟临床研究 studies", () => {
   beforeEach(() => {
     mocks.getVcrHome.mockResolvedValue({ studies: [{ id: "std_1", projectId: "p-heart", name: "EV-201", status: "active" }] });
