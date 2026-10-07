@@ -412,7 +412,7 @@
               "fields": [
                 {
                   "label": "方法",
-                  "value": "patients.time_to_event v1.0.0"
+                  "value": "虚拟患者（事件时间终点）"
                 },
                 {
                   "label": "种子",
@@ -425,10 +425,6 @@
                 {
                   "label": "计算用时",
                   "value": "12 秒"
-                },
-                {
-                  "label": "情景哈希",
-                  "value": "c6a7ebf1df7f"
                 }
               ],
               "quote": null,
@@ -465,7 +461,7 @@
               "fields": [
                 {
                   "label": "方法",
-                  "value": "patients.time_to_event v1.0.0"
+                  "value": "虚拟患者（事件时间终点）"
                 },
                 {
                   "label": "种子",
@@ -482,10 +478,6 @@
                 {
                   "label": "计算用时",
                   "value": "12 秒"
-                },
-                {
-                  "label": "情景哈希",
-                  "value": "c6a7ebf1df7f"
                 }
               ],
               "quote": null,

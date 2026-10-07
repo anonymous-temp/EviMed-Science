@@ -157,7 +157,7 @@
         "fields": [
           {
             "label": "方法",
-            "value": "evidence.reconstruct_km v1.0.0"
+            "value": "生存曲线重建（Guyot）"
           },
           {
             "label": "种子",
@@ -166,10 +166,6 @@
           {
             "label": "计算用时",
             "value": "12 秒"
-          },
-          {
-            "label": "情景哈希",
-            "value": "4c790cf26d1a"
           }
         ],
         "quote": null,
@@ -201,7 +197,7 @@
       "fields": [
         {
           "label": "方法",
-          "value": "evidence.reconstruct_km v1.0.0"
+          "value": "生存曲线重建（Guyot）"
         },
         {
           "label": "种子",
@@ -210,10 +206,6 @@
         {
           "label": "计算用时",
           "value": "12 秒"
-        },
-        {
-          "label": "情景哈希",
-          "value": "4c790cf26d1a"
         }
       ],
       "quote": null,

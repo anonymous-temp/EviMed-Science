@@ -480,7 +480,7 @@ export function presentSummary({ study, results, allResults, stale, jobs, assump
     tier: study.dataTier,
     intendedUse: study.intendedUse,
     status: study.status,
-    steps: study.steps,
+    steps: publicSteps(study.steps),
     conclusion: conclusionOf({ designs, results, allResults, comparators }),
     attention: attentionOf({ assumptions, scenarios, comparators, results, allResults, stale, jobs, steps: study.steps, exports }),
     updatedAt: zhTime(study.updatedAt, now) ?? "",
@@ -577,6 +577,18 @@ export function nodeLabel(node) {
 // --- the study page --------------------------------------------------------------------------------------------------
 
 /**
+ * The step record a page reads: what each step is and how far it is. When a person last asked for it is the orchestrator's own bookkeeping
+ * (what makes the end of a computation a notice) and not something a page shows.
+ * @param {Record<string, any>} steps
+ */
+function publicSteps(steps) {
+  return Object.fromEntries(Object.entries(steps ?? {}).map(([step, entry]) => {
+    const { askedAt: _askedAt, ...rest } = object(entry);
+    return [step, rest];
+  }));
+}
+
+/**
  * `GET /api/vcr/studies/:id`: the header, the seven-step rail and the overview.
  *
  * @param {Record<string, any>} bundle what `VcrService` gathered
@@ -607,7 +619,7 @@ export function presentStudy(bundle) {
     tier: study.dataTier,
     intendedUse: study.intendedUse,
     status: study.status,
-    steps: study.steps,
+    steps: publicSteps(study.steps),
     sessionId: null,
     abilities: abilitiesOf(roles ?? []),
     // What the study's frozen data would let it claim above its own tier, for a lead who may move it (`#tierOffer`); one confirmation.
@@ -772,10 +784,101 @@ export function presentDeliverable(row, index, all, now) {
 
 // --- designs (shared by the overview and the trial tab) ------------------------------------------------------------------
 
+/** The measure names a design's table reads, whichever stage computed them. */
+const DESIGN_MEASURES = Object.freeze(["power", "type_one_error", "assurance", "expected_sample_size", "expected_events", "required_total", "required_events", "cost"]);
+
+/**
+ * What a design has been computed with, by stage: the analytic size, the simulated operating characteristics and the success
+ * assurance. A result the programme or a conversation filed in stages carries each stage's own measures
+ * (`diagnostics.stageResults`); one filed whole — the old conversation path's — holds the measures of the one job that made it, and
+ * a design's several jobs are several results of the same subject. The newest result that has a stage is that stage's.
+ * A measure that is simulated (it carries its Monte-Carlo error) is the simulation's; one the engine calculated in closed form is the
+ * analytic stage's, unless it is the assurance.
+ * @param {Record<string, any>} scenario @param {ReadonlyArray<Record<string, any>>} results every result of the study
+ * @returns {{ stages: Record<string, { result: Record<string, any>, measures: any[], diagnostics: Record<string, any>, jobId: string | null }>,
+ *   latest: Record<string, any> | null }}
+ */
+function designStages(scenario, results) {
+  const mine = results.filter((result) => (result.kind === "trial_scenario" && result.subjectId === scenario.id) || result.id === scenario.resultId)
+    .sort((a, b) => Date.parse(String(b.createdAt)) - Date.parse(String(a.createdAt)) || Number(b.version) - Number(a.version));
+  /** @type {Record<string, { result: Record<string, any>, measures: any[], diagnostics: Record<string, any>, jobId: string | null }>} */
+  const stages = {};
+  for (const result of mine) {
+    const staged = object(object(result.diagnostics).stageResults);
+    if (Object.keys(staged).length) {
+      for (const [name, entry] of Object.entries(staged)) {
+        if (stages[name]) continue;
+        const stage = object(entry);
+        stages[name] = { result, measures: list(stage.measures), diagnostics: object(stage.diagnostics), jobId: text(stage.jobId) };
+      }
+      continue;
+    }
+    /** @type {Record<string, any[]>} */
+    const held = {};
+    for (const measure of list(result.measures)) {
+      const entry = object(measure);
+      const name = String(entry.name ?? "");
+      const stage = name === "assurance" ? "assurance" : (entry.simulated === true || finite(entry.mcse) !== null) ? "simulation" : "analytic";
+      (held[stage] ??= []).push(measure);
+    }
+    for (const [name, measures] of Object.entries(held)) {
+      if (!stages[name]) stages[name] = { result, measures, diagnostics: object(result.diagnostics), jobId: null };
+    }
+  }
+  return { stages, latest: mine[0] ?? null };
+}
+
+/**
+ * What a design's numbers come from, in the reader's words: the closed form, the simulation, or both.
+ * @param {ReturnType<typeof designStages>["stages"]} stages
+ */
+function designMethod(stages) {
+  const analytic = Boolean(stages.analytic);
+  const simulation = Boolean(stages.simulation);
+  return analytic && simulation ? "解析 + 模拟" : analytic ? "解析" : simulation ? "模拟" : null;
+}
+
+/**
+ * The one line under a design that is not a number of the table: where a group-sequential design stops for efficacy at its first
+ * interim look, from the boundaries the engine computed — a critical value, never a probability.
+ * @param {ReturnType<typeof designStages>["stages"]} stages
+ */
+function designNote(stages) {
+  const boundaries = (stages.analytic?.measures ?? []).map(object).filter((measure) => /^boundary_\d+$/.test(String(measure.name)) && finite(measure.value) !== null)
+    .sort((a, b) => Number(String(a.name).slice(9)) - Number(String(b.name).slice(9)));
+  return boundaries.length > 1 ? `期中界值 z = ${roundTo(Number(boundaries[0].value), 2)}` : null;
+}
+
+/**
+ * The closed form held against the simulation, when the engine computed both for the same size: the analytic value, the simulated
+ * one, how far apart they are in percentage points, and whether the engine calls that within what the simulation's own error (plus a
+ * first-order approximation's documented bias) allows.
+ * @param {ReturnType<typeof designStages>["stages"]} stages
+ */
+function crossCheckOf(stages) {
+  const check = object(stages.simulation?.diagnostics?.analyticCheck);
+  const analytic = finite(check.value);
+  const simulated = finite(check.simulated);
+  const difference = finite(check.difference);
+  if (analytic === null || simulated === null || difference === null) return null;
+  const name = String(check.name ?? "power");
+  const agrees = typeof check.withinTolerance === "boolean" ? check.withinTolerance : typeof check.withinThreeMcse === "boolean" ? check.withinThreeMcse : null;
+  const points = roundTo(Math.abs(difference) * 100, 1);
+  const word = measureLabel(name);
+  return {
+    name, analytic: roundTo(analytic * 100, 1), simulated: roundTo(simulated * 100, 1), differencePoints: points, agrees,
+    text: `解析${word} ${roundTo(analytic * 100, 1)}%，与模拟相差 ${points} 个百分点${agrees === true ? "，在容许范围内" : agrees === false ? "，超出容许范围" : ""}`,
+  };
+}
+
 /**
  * The trial scenarios as designs: the latest row of each label, with the
  * measures its own result carries. Dominance is the deterministic judgement on
  * the team's written goal; `chosen` is a recorded decision or nothing.
+ *
+ * A design's numbers are the stages of its results, analytic first (the size the design needs) and the simulation beside it (the power
+ * it has, with its Monte-Carlo error, and the difference from the closed form where one exists): `method` says which stages are
+ * there, `replicates` how many the simulation ran, `crossCheck` the analytic value held against it.
  * @param {Record<string, any>} bundle
  * @returns {{ designs: Array<Record<string, any>>, rows: Array<Record<string, any>> }}
  */
@@ -789,14 +892,28 @@ export function presentDesigns(bundle) {
     if (!latest.has(key)) latest.set(key, scenario);
   }
   const ordered = [...latest.values()].sort((a, b) => Number(a.version) - Number(b.version));
-  const known = new Map(allResultsOf(bundle).map((/** @type {any} */ result) => [result.id, result]));
-  const resultOf = (/** @type {any} */ scenario) => known.get(scenario.resultId) ?? null;
+  const everyResult = allResultsOf(bundle);
+  const staged = new Map(ordered.map((scenario) => [scenario.id, designStages(scenario, everyResult)]));
+  // The result a design is read through: the simulation's (it carries the counts, the power curve and the run), else the
+  // analytic stage's, else whatever the design's row points at — with the measures of every stage, the simulation's first.
+  const resultOf = (/** @type {any} */ scenario) => {
+    const { stages, latest } = /** @type {ReturnType<typeof designStages>} */ (staged.get(scenario.id));
+    const main = stages.simulation?.result ?? stages.analytic?.result ?? stages.assurance?.result ?? latest;
+    if (!main) return null;
+    /** @type {Map<string, any>} */
+    const byName = new Map();
+    for (const name of ["analytic", "simulation", "assurance"]) {
+      for (const measure of stages[name]?.measures ?? []) byName.set(String(object(measure).name), measure);
+    }
+    return { ...main, measures: [...byName.values()] };
+  };
   const dominated = grid?.comparisonGoal ? dominatedOf(ordered, resultOf, grid.comparisonGoal) : new Map();
   const decision = decisions[0] ?? null;
   const chosenId = text(object(decision?.chosen).id) ?? text(object(decision?.chosen).scenarioId);
   const chosenCode = text(object(decision?.chosen).code);
   const rows = ordered.map((scenario, index) => {
     const result = resultOf(scenario);
+    const { stages } = /** @type {ReturnType<typeof designStages>} */ (staged.get(scenario.id));
     const code = String.fromCharCode(65 + (index % 26)) + (index >= 26 ? String(Math.floor(index / 26)) : "");
     // A number is stale when its own result version is marked, and also while the design it
     // belongs to is: a recomputation lands one stage at a time, each stage a new result
@@ -810,6 +927,13 @@ export function presentDesigns(bundle) {
     const olderThanChange = designMark && Date.parse(String(result.createdAt)) < Date.parse(String(designMark.markedAt));
     const staleMark = resultMark ?? (olderThanChange ? designMark : null);
     const execution = result?.executionId ? executions.get(result.executionId) ?? null : null;
+    /** What ran a stage: the execution of its own job, else the one of the result it is in. @param {string} name */
+    const executionOfStage = (name) => {
+      const stage = stages[name];
+      if (!stage) return null;
+      const byJob = stage.jobId ? [...executions.values()].find((/** @type {any} */ run) => run.jobId === stage.jobId) : null;
+      return byJob ?? (stage.result.executionId ? executions.get(stage.result.executionId) ?? null : null);
+    };
     /** @type {Record<string, any>} */
     const measures = {};
     const design = object(object(scenario.configuration).design);
@@ -818,12 +942,16 @@ export function presentDesigns(bundle) {
       measures.sample_size = { value: sample, text: null, unit: "例", source: "assumed", interval: null, mcse: null,
         review: null, precision: 0, reason: null, stale: false, detail: null };
     }
-    if (result) {
-      for (const measure of list(result.measures)) {
-        const name = String(object(measure).name ?? "");
-        if (["power", "type_one_error", "assurance", "expected_sample_size", "expected_events", "required_total", "required_events"].includes(name)) {
-          measures[name === "required_total" ? "sample_size" : name] = measureValue(measure, { kind: "trial_scenario", result, execution, staleMark, tab: "trial" });
-        }
+    // Analytic first, then the simulation, then the assurance: where two stages state the same measure (the power the closed form
+    // gives at the stated size and the one the simulation measures) the simulation's — which carries its error — is the one shown.
+    for (const name of ["analytic", "simulation", "assurance"]) {
+      const stage = stages[name];
+      if (!stage) continue;
+      for (const measure of stage.measures) {
+        const measureName = String(object(measure).name ?? "");
+        if (!DESIGN_MEASURES.includes(measureName)) continue;
+        measures[measureName === "required_total" ? "sample_size" : measureName] = measureValue(measure, {
+          kind: "trial_scenario", result: stage.result, execution: executionOfStage(name) ?? execution, staleMark, tab: "trial" });
       }
     }
     // Duration comes from the accrual forecast filed for this design, never
@@ -834,7 +962,7 @@ export function presentDesigns(bundle) {
       measures.duration_months = measureValue(lastPatient, { kind: "accrual_forecast", result: forecast, tab: "trial" });
     }
     const cost = numeric(object(scenario.configuration).cost ?? object(object(scenario.configuration).cost).value);
-    if (cost !== null) {
+    if (cost !== null && !measures.cost) {
       measures.cost = { value: cost, text: null, unit: "万元", source: "assumed", interval: null, mcse: null, review: null, precision: 0,
         reason: null, stale: false, detail: null };
     }
@@ -846,8 +974,11 @@ export function presentDesigns(bundle) {
       dominated: Boolean(beaten),
       dominatedBy: beaten ? beaten.code : null,
       chosen: chosenId ? chosenId === scenario.id : chosenCode ? chosenCode === code : false,
-      note: beaten ? `在比较目标的全部指标上都不优于 ${beaten.code}` : null,
+      note: beaten ? `在比较目标的全部指标上都不优于 ${beaten.code}` : designNote(stages),
       measures: beaten ? {} : measures,
+      method: beaten ? null : designMethod(stages),
+      replicates: beaten ? null : (executionOfStage("simulation")?.replicates ?? null),
+      crossCheck: beaten ? null : crossCheckOf(stages),
       _scenario: scenario,
       _result: result,
       _stale: resultMark ?? designMark,

@@ -176,7 +176,9 @@ test("a value carries the run it came from, so a click can open its seed and err
     execution: { method: "design.simulate", methodVersion: "1.0.0", seed: 5, replicates: 16000, cpuSeconds: 12.4, scenarioHash: "a".repeat(64) },
   });
   assert.equal(value.detail?.kind, "run");
-  assert.deepEqual(value.detail?.fields?.map((field) => field.label), ["方法", "种子", "重复次数", "蒙特卡洛标准误", "计算用时", "情景哈希"]);
+  assert.deepEqual(value.detail?.fields?.map((field) => field.label), ["方法", "种子", "重复次数", "蒙特卡洛标准误", "计算用时"]);
+  assert.equal(value.detail?.fields?.[0]?.value, "方案的模拟运行", "the method in words, never its id or version");
+  assert.doesNotMatch(JSON.stringify(value.detail?.fields), /design\.simulate|1\.0\.0|aaaaaaaa/, "no method id, version or hash");
   assert.deepEqual(value.detail?.ref, { kind: "result", id: "res_1", tab: "trial" });
   assert.equal(value.review, "ai_set");
 });
@@ -289,6 +291,93 @@ test("a design's measures are percentages, its sample size is a setting, and its
   assert.equal(b.measures.sample_size.value, 200);
   assert.equal(b.measures.sample_size.source, "assumed", "a design's size is what somebody set, not something measured");
   assert.deepEqual(designs.map((design) => design.code), ["A", "B", "C"]);
+});
+
+/** Three designs of one study as the conversation leaves them, and the results each design's jobs filed under it. */
+function conversationTrialBundle({ staged = false } = {}) {
+  const at = (/** @type {number} */ minute) => `2026-10-07T11:${String(10 + minute).padStart(2, "0")}:00.000Z`;
+  const design = (/** @type {string} */ id, /** @type {number} */ version, /** @type {string} */ label, /** @type {string} */ kind, /** @type {Record<string, any>} */ plan) =>
+    ({ id, version, label, design: kind, endpointType: "time_to_event", configuration: { design: plan }, assumptionIds: [], resultId: `res_${id}_sim` });
+  const analytic = (/** @type {string} */ id, /** @type {number} */ events, /** @type {number} */ total, /** @type {number} */ minute, /** @type {any[]} */ extra = []) => ({
+    id: `res_${id}_ana`, version: 1, kind: "trial_scenario", subjectId: id, conclusion: "estimable", reviewState: "ai_set", counts: {}, diagnostics: {}, executionId: `ex_${id}_ana`,
+    measures: [{ name: "required_events", value: events, source: "calculated" }, { name: "required_total", value: total, source: "calculated" }, ...extra], createdAt: at(minute) });
+  const simulated = (/** @type {string} */ id, /** @type {number} */ power, /** @type {number} */ minute, /** @type {Record<string, any>} */ check = {}) => ({
+    id: `res_${id}_sim`, version: 2, kind: "trial_scenario", subjectId: id, conclusion: "estimable", reviewState: "ai_set", counts: {}, executionId: `ex_${id}_sim`,
+    diagnostics: { analyticCheck: { name: "power", value: power - 0.003, simulated: power, difference: 0.003, mcse: 0.004, withinTolerance: true, ...check } },
+    measures: [{ name: "power", value: power, simulated: true, mcse: 0.004, source: "synthetic" }], createdAt: at(minute + 5) });
+  const scenarios = [design("scn_a", 1, "A 2:1 固定设计", "two_arm_fixed", { nTreat: 120, nControl: 60 }), design("scn_b", 2, "B 1:1 固定设计", "two_arm_fixed", { nTreat: 90, nControl: 90 }),
+    design("scn_c", 3, "C 1:1 成组序贯", "group_sequential", { nTreat: 90, nControl: 90 })];
+  const boundaries = [{ name: "boundary_1", value: 2.963, source: "calculated" }, { name: "boundary_2", value: 1.969, source: "calculated" }];
+  const rows = [analytic("scn_a", 950, 13764, 1), simulated("scn_a", 0.898, 1), analytic("scn_b", 845, 11799, 2), simulated("scn_b", 0.915, 2),
+    analytic("scn_c", 847, 11840, 3, boundaries), simulated("scn_c", 0.905, 3)];
+  // What the old conversation path left: one result per job, newest first, every one of them a design's own once it has a subject.
+  const allResults = staged
+    ? scenarios.map((scenarioRow, index) => ({ ...rows[index * 2 + 1], measures: [...rows[index * 2].measures, ...rows[index * 2 + 1].measures],
+      diagnostics: { ...rows[index * 2 + 1].diagnostics, stageResults: {
+        analytic: { stage: "analytic", jobId: `job_${scenarioRow.id}_a`, measures: rows[index * 2].measures, diagnostics: {} },
+        simulation: { stage: "simulation", jobId: `job_${scenarioRow.id}_s`, measures: rows[index * 2 + 1].measures, diagnostics: rows[index * 2 + 1].diagnostics } } } }))
+    : [...rows].reverse();
+  const executions = new Map(rows.map((row) => [row.executionId, { id: row.executionId, jobId: `job_${row.executionId.slice(3)}`, method: row.id.endsWith("_ana") ? "design.analytic" : "design.simulate",
+    seed: 7, replicates: row.id.endsWith("_ana") ? null : 5000, cpuSeconds: 30, scenarioHash: "f".repeat(64) }]));
+  if (staged) for (const row of allResults) executions.set(row.executionId, { ...executions.get(row.executionId), jobId: `job_${row.subjectId}_s` });
+  return { ...emptyBundle(), scenarios, results: allResults.filter((row) => !row.supersededBy).slice(0, 3), allResults, executions };
+}
+
+test("a design's numbers are its analytic size and its simulated power, merged from the results filed under it — the three designs of a conversation are three rows with numbers", () => {
+  for (const staged of [false, true]) {
+    const tab = presentTrialTab(conversationTrialBundle({ staged }));
+    const [a, b, c] = tab.designs;
+    assert.deepEqual(tab.designs.map((design) => design.code), ["A", "B", "C"], `staged ${staged}`);
+    assert.equal(a.measures.required_events.value, 950, "the closed form's events");
+    assert.equal(a.measures.sample_size.value, 13764, "the closed form's patients replace the declared size");
+    assert.equal(a.measures.sample_size.source, "calculated");
+    assert.equal(b.measures.power.value, 91.5, "the simulated power is a percentage");
+    assert.equal(b.measures.power.mcse, 0.4, "with its Monte-Carlo error");
+    assert.equal(b.measures.power.source, "synthetic");
+    assert.deepEqual(tab.designs.map((design) => design.method), ["解析 + 模拟", "解析 + 模拟", "解析 + 模拟"]);
+    assert.equal(a.replicates, 5000);
+    assert.equal(b.crossCheck.agrees, true);
+    assert.equal(b.crossCheck.differencePoints, 0.3);
+    assert.match(b.crossCheck.text, /解析功效 91.2%，与模拟相差 0.3 个百分点，在容许范围内/);
+    assert.equal(c.note, "期中界值 z = 2.96", "a group-sequential design says where it stops at the first look");
+    assert.equal(a.note, null);
+    assert.deepEqual(tab.columns.map((column) => column.key).slice(0, 2), ["required_events", "sample_size"]);
+    assert.equal(tab.headline, "方案 A 需要 950 例事件、13,764 名患者；方案 B 需要 845 例事件、11,799 名患者；方案 C 需要 847 例事件、11,840 名患者；已模拟 3 个方案，功效 90%～92%。");
+    // nothing of the run's own record on the page: no method id, no hash, no result id
+    assert.doesNotMatch(JSON.stringify(tab.runRecord), /design\.|f{12}|res_/);
+    assert.match(tab.runRecord[0].title, /方案 A：方案的模拟运行，5,000 次重复/);
+  }
+});
+
+test("a design that has been simulated and not computed in closed form says so, and one that has neither says nothing", () => {
+  const bundle = conversationTrialBundle();
+  const onlySimulated = { ...bundle, allResults: bundle.allResults.filter((row) => !row.id.endsWith("_ana") || row.subjectId !== "scn_a") };
+  const [a, b] = presentTrialTab(onlySimulated).designs;
+  assert.equal(a.method, "模拟");
+  assert.equal(a.measures.required_events, undefined);
+  assert.equal(b.method, "解析 + 模拟");
+  const none = presentTrialTab({ ...bundle, allResults: [], results: [] });
+  assert.ok(none.designs.every((design) => design.method === null && design.replicates === null && design.crossCheck === null));
+  assert.equal(none.headline, null);
+});
+
+test("a registered prediction is shown as the numbers it predicted, never as the ids that make it provable", () => {
+  const now = NOW;
+  const trial = presentTrialTab({ ...conversationTrialBundle(), now, forecasts: [
+    { id: "fct_1", kind: "trial", version: 1, payloadHash: "9f".repeat(32), createdAt: "2026-10-07T11:20:00.000Z", comparedAt: null,
+      prediction: { scenarioId: "scn_b", resultId: "res_scn_b_sim", replicates: 5000, measures: { power: { value: 0.915, mcse: 0.004 }, type_one_error: { value: 0.024, mcse: 0.002 } } }, actual: null },
+    { id: "fct_2", kind: "accrual", version: 1, payloadHash: "ab".repeat(32), createdAt: "2026-10-07T11:21:00.000Z", comparedAt: null,
+      prediction: { resultId: "res_x", measure: "last_patient_in_months", median: 14.2, measures: [{ name: "last_patient_in_months", value: 14.2, unit: "months" }] }, actual: null },
+  ] });
+  const [design, accrual] = trial.forecasts;
+  assert.equal(design.label, "方案预测");
+  assert.deepEqual(design.lines.map((line) => [line.label, line.predicted]), [["功效", "91.5% ±0.4%"], ["I 类错误", "2.4% ±0.2%"]]);
+  assert.equal(accrual.label, "入组预测");
+  assert.equal(accrual.lines[0].predicted, "14.2 个月");
+  assert.equal(design.version, 1);
+  assert.ok(design.frozenAt);
+  const shown = JSON.stringify(trial.forecasts);
+  assert.doesNotMatch(shown, /res_|scn_|9f9f|hash|resultId|scenarioId/, "no result id, no scenario id, no hash");
 });
 
 test("the sentence about the designs names a range and never a winner", () => {

@@ -48,7 +48,7 @@ import {
 } from "./vcrViews.mjs";
 import {
   allResultsOf, countsView, finite, intervalView, letterCode, list, markFor, measureLabel, measureValue, naturalScale, numeric, object,
-  personName, plainText, PARAMETER_LABELS, roundTo, scaledSeries, staleNote, text, zhDate, zhTime, VCR_ROBUSTNESS_MEASURES,
+  personName, plainText, PARAMETER_LABELS, METHOD_LABELS, roundTo, scaledSeries, staleNote, text, zhDate, zhTime, VCR_ROBUSTNESS_MEASURES,
 } from "./vcrViewsKit.mjs";
 
 /** A plain value (a number or `{ value, unit, … }` a row stored) as a page value. @param {unknown} raw @param {Record<string, any>} defaults */
@@ -712,22 +712,22 @@ function adempOf(bundle, scenario) {
   const designWord = scenario ? (/** @type {Record<string, string>} */ (VCR_ESTIMAND_LABELS_ZH))[String(object(definition?.estimand).kind)] : null;
   /** @type {Array<{ key: string, label: string, text: string }>} */
   const lines = [];
-  if (text(study.question)) lines.push({ key: "a", label: "目的", text: String(study.question) });
+  if (text(study.question)) lines.push({ key: "aim", label: "目的", text: String(study.question) });
   if (scenario) {
     const dataGeneration = [
       (/** @type {Record<string, string>} */ (VCR_ENDPOINT_TYPE_LABELS_ZH))[scenario.endpointType] ?? scenario.endpointType,
       ...Object.entries(truth).filter(([, value]) => typeof value === "number").map(([key, value]) => `${TRUTH_LABELS[key] ?? key} ${value}`),
     ].join(" · ");
-    lines.push({ key: "d", label: "数据生成机制", text: dataGeneration });
+    lines.push({ key: "data", label: "怎么生成数据", text: dataGeneration });
   }
   const estimand = text(object(definition?.estimand).text) ?? text(object(definition?.estimand).variable) ?? designWord;
-  if (estimand) lines.push({ key: "e", label: "估计目标", text: estimand });
+  if (estimand) lines.push({ key: "estimate", label: "估计什么", text: estimand });
   if (Object.keys(analysis).length) {
-    lines.push({ key: "m", label: "分析方法", text: [text(analysis.method), numeric(analysis.alpha) !== null ? `α = ${analysis.alpha}` : null,
+    lines.push({ key: "analysis", label: "怎么分析", text: [text(analysis.method), numeric(analysis.alpha) !== null ? `α = ${analysis.alpha}` : null,
       numeric(analysis.sided) !== null ? `${analysis.sided} 侧` : null].filter(Boolean).join(" · ") || "已设定" });
   }
   if (performance.length) {
-    lines.push({ key: "p", label: "性能指标", text: performance.map((name) => (/** @type {Record<string, string>} */ (VCR_PERFORMANCE_MEASURE_LABELS_ZH))[name] ?? measureLabel(name)).join("、") });
+    lines.push({ key: "measures", label: "看哪些指标", text: performance.map((name) => (/** @type {Record<string, string>} */ (VCR_PERFORMANCE_MEASURE_LABELS_ZH))[name] ?? measureLabel(name)).join("、") });
   }
   return lines;
 }
@@ -735,6 +735,24 @@ function adempOf(bundle, scenario) {
 const TRUTH_LABELS = Object.freeze(/** @type {Record<string, string>} */ ({
   effect: "真实效应", sd: "标准差", hazardRatio: "真实 HR", controlMedian: "对照组中位", controlRate: "对照事件率", treatmentRate: "试验事件率",
 }));
+
+/**
+ * The trial tab's first sentence: what each design needs where the closed form computed it, then how the designs did where they
+ * were simulated. Every number is a measure of the design's own results, formatted here.
+ * @param {ReadonlyArray<Record<string, any>>} designs
+ */
+export function trialHeadline(designs) {
+  const needs = designs.filter((design) => !design.dominated).map((design) => {
+    const events = numeric(design.measures.required_events?.value);
+    const patients = design.measures.sample_size?.source === "calculated" ? numeric(design.measures.sample_size?.value) : null;
+    if (events === null && patients === null) return null;
+    return `方案 ${design.code} 需要 ${[events !== null ? `${Math.round(events).toLocaleString("en-US")} 例事件` : null,
+      patients !== null ? `${Math.round(patients).toLocaleString("en-US")} 名患者` : null].filter(Boolean).join("、")}`;
+  }).filter(Boolean).slice(0, 3);
+  const sentence = designsSentence(designs);
+  const parts = [...needs, ...(sentence && designs.some((design) => design.measures.power || design.measures.assurance) ? [sentence] : [])];
+  return parts.length ? `${parts.join("；")}。` : (sentence ? `${sentence}。` : null);
+}
 
 /**
  * `GET /api/vcr/studies/:id/trial`.
@@ -748,7 +766,7 @@ export function presentTrialTab(bundle) {
   const headlineRow = designRows.find((row) => row.chosen && row._result) ?? [...designRows].reverse().find((row) => !row.dominated && row._result) ?? null;
   const decision = decisions[0] ?? null;
   const columnSpec = [
-    ["sample_size", "样本量", "例"], ["expected_events", "期望事件数", null], ["power", "功效", "%"], ["assurance", "成功把握", "%"],
+    ["required_events", "所需事件数", "例"], ["sample_size", "样本量", "例"], ["expected_events", "期望事件数", null], ["power", "功效", "%"], ["assurance", "成功把握", "%"],
     ["type_one_error", "I 类错误", "%"], ["expected_sample_size", "期望样本量", "例"], ["duration_months", "末例入组中位", "月"], ["cost", "成本", "万元"],
   ];
   const columns = columnSpec
@@ -774,7 +792,7 @@ export function presentTrialTab(bundle) {
     const allowedPoints = numeric(check.tolerance) !== null ? roundTo(Number(check.tolerance) * 100, 1) : null;
     return {
       key: `run_${row.code}`,
-      title: `方案 ${row.code}：${execution ? `${execution.method}${execution.replicates != null ? `，${Number(execution.replicates).toLocaleString("en-US")} 次重复` : ""}` : "已运行"}`,
+      title: `方案 ${row.code}：${execution ? `${METHOD_LABELS[String(execution.method)] ?? "已运行"}${execution.replicates != null ? `，${Number(execution.replicates).toLocaleString("en-US")} 次重复` : ""}` : "已运行"}`,
       detail: [
         execution?.seed != null ? `种子 ${execution.seed}` : null,
         within === true && differencePoints !== null
@@ -795,7 +813,7 @@ export function presentTrialTab(bundle) {
   }));
   const goal = text(decision?.question) ?? text(object(grid?.comparisonGoal).text) ?? null;
   return {
-    headline: designsSentence(designs) ? `${designsSentence(designs)}。` : null,
+    headline: trialHeadline(designs),
     ademp: adempOf(bundle, headlineRow?._scenario ?? scenarios[0] ?? null),
     ademReview: headlineRow?._result?.reviewState ?? null,
     designs,
@@ -912,20 +930,36 @@ function gridView(grid, designs) {
   };
 }
 
-/** One registered forecast: the hash and the time, the prediction, and — once it exists — the actual beside it. @param {Record<string, any>} forecast @param {Date} now */
+/**
+ * One registered forecast, as a reader sees it: when it was made, the numbers it predicted and — once it exists — the actual beside
+ * them. The registered prediction is the result's own measures (`{ measures: { power: { value, mcse } } }`, or the accrual forecast's
+ * median and interval); the ids, the hash and the replicate count that make it provable are the registry's, and stay there.
+ * @param {Record<string, any>} forecast @param {Date} now
+ */
 function forecastView(forecast, now) {
   const prediction = object(forecast.prediction);
   const actual = forecast.actual == null ? null : object(forecast.actual);
   /** @type {Array<{ key: string, label: string, predicted: string, actual: string | null }>} */
-  const lines = Object.entries(prediction).filter(([, value]) => typeof value === "number" || typeof value === "string")
-    .slice(0, 6).map(([key, value]) => ({
-      key, label: measureLabel(key), predicted: plainText(key, value), actual: actual && actual[key] != null ? plainText(key, actual[key]) : null,
-    }));
+  const lines = [];
+  const measures = Array.isArray(prediction.measures)
+    ? prediction.measures.map(object).map((entry) => [String(entry.name ?? ""), entry])
+    : Object.entries(object(prediction.measures)).map(([name, entry]) => [name, object(entry)]);
+  for (const [name, entry] of measures) {
+    const value = finite(entry.value);
+    if (!name || value === null) continue;
+    const mcse = finite(entry.mcse);
+    lines.push({ key: name, label: measureLabel(name), predicted: `${plainText(name, value)}${mcse !== null ? ` ±${plainText(name, mcse).replace(/^-/, "")}` : ""}`,
+      actual: actual && actual[name] != null ? plainText(name, actual[name]) : null });
+  }
+  // What an accrual forecast and an older registration state at the top level, in words: never an id.
+  const named = lines.length ? [] : Object.entries(prediction).filter(([key, value]) => typeof value === "number" && !["version", "replicates"].includes(key)).slice(0, 6);
+  for (const [key, value] of named) {
+    lines.push({ key, label: measureLabel(key), predicted: plainText(key, value), actual: actual && actual[key] != null ? plainText(key, actual[key]) : null });
+  }
   return {
     id: String(forecast.id),
-    label: forecast.kind === "accrual" ? "入组预测" : String(forecast.kind),
+    label: forecast.kind === "accrual" ? "入组预测" : forecast.kind === "trial" ? "方案预测" : String(forecast.kind),
     version: Number(forecast.version),
-    hash: String(forecast.payloadHash ?? "").slice(0, 12),
     frozenAt: zhTime(forecast.createdAt, now),
     comparedAt: forecast.comparedAt ? zhTime(forecast.comparedAt, now) : null,
     lines,
