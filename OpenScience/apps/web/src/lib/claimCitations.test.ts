@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { claimEvidenceSources, claimVerification } from "@evimed/domain/clinical-evidence";
 import {
-  CLAIM_STATUS_TEXT, claimGuidance, claimIdsFromHref, claimMatrixPathFor, claimSources, claimStatuses, claimVerificationSummary, isClaimMatrixPath,
-  linkClaimMarkers, parseClaimMatrix, parseClaimMatrixDocument, reportPathForMatrix, safeWorkspacePath, sourceLocationText,
+  CLAIM_STATUS_TEXT, claimCheckMark, claimGuidance, claimIdsFromHref, claimMatrixPathFor, claimMatrixSearchText, claimNeedsReview, claimSources, claimStatuses,
+  claimTypeLabel, claimVerificationSummary, isClaimMatrixPath, linkClaimMarkers, parseClaimMatrix, parseClaimMatrixDocument, reportPathForMatrix, safeWorkspacePath, sourceCheckMark, sourceLocationText,
 } from "./claimCitations";
 
 // Marker and matrix shapes copied from a production report (2026-09-16,
@@ -197,5 +197,54 @@ describe("where a quotation sits in its source", () => {
   it("says nothing when no location was computed: an older verification asked nothing, and an unknown it never looked for is not claimed", () => {
     expect(sourceLocationText(undefined)).toBeNull();
     expect(sourceLocationText(null)).toBeNull();
+  });
+});
+
+describe("the matrix's check mark", () => {
+  const direct = { claimType: "direct" };
+  const check = (status: string) => ({ claimId: "CLM-001", claimType: "direct", status, sources: [] });
+
+  it("lets a check speak for itself, in any state", () => {
+    for (const state of ["loading", "ready", "unavailable"] as const) {
+      expect(claimCheckMark(direct, check("verified"), state)).toMatchObject({ kind: "verified", text: "✓ 已核对", tone: "ok" });
+    }
+    expect(claimCheckMark(direct, check("quote_not_found"))).toMatchObject({ kind: "attention", text: "⚠ 原文中未找到", tone: "warn" });
+    expect(claimCheckMark(direct, check("source_unavailable"))).toMatchObject({ kind: "attention", text: "⚠ 原文未保存" });
+    expect(claimCheckMark(direct, check("no_quote"))).toMatchObject({ kind: "attention", text: "⚠ 无引文" });
+  });
+
+  // 「未核对」 is a statement about the report: it may be made only once the checks were read and this claim is not among them.
+  it("says 未核对 only when the checks were read and this claim is not among them", () => {
+    expect(claimCheckMark(direct, undefined, "loading").text).toBe("核对中");
+    expect(claimCheckMark(direct, undefined, "unavailable").text).toBe("暂无核对结果");
+    expect(claimCheckMark(direct, undefined, "ready")).toMatchObject({ kind: "unchecked", text: "未核对" });
+    // A status this table does not know reads as unchecked, never as verified.
+    expect(claimCheckMark(direct, check("something_new"))).toMatchObject({ kind: "unchecked", text: "未核对" });
+  });
+
+  it("knows a derived claim has no quotation to check, whatever the state", () => {
+    for (const state of ["loading", "ready", "unavailable"] as const) {
+      expect(claimCheckMark({ claimType: "derived" }, undefined, state)).toMatchObject({ kind: "derived", text: "推导，无引文" });
+    }
+  });
+
+  it("sends everything but a verified or derived claim to review", () => {
+    expect(claimNeedsReview(claimCheckMark(direct, check("verified")))).toBe(false);
+    expect(claimNeedsReview(claimCheckMark({ claimType: "derived" }, check("derived")))).toBe(false);
+    expect(claimNeedsReview(claimCheckMark(direct, check("quote_not_found")))).toBe(true);
+    expect(claimNeedsReview(claimCheckMark(direct, undefined, "ready"))).toBe(true);
+    expect(sourceCheckMark(undefined).text).toBe("未核对");
+  });
+
+  it("names the kind of claim, and folds everything a reader might type into one lower-case string", () => {
+    expect(claimTypeLabel("synthesized")).toBe("综合结论");
+    expect(claimTypeLabel("something_else")).toBe("结论");
+    const claim = parseClaimMatrix(JSON.stringify({ claims: [
+      { claimId: "CLM-007", claim: "不降低 MACE。", claimType: "synthesized", supportingSources: [
+        { sourceTitle: "ASPREE Trial", identifier: "doi:10.1056/X", supportQuote: "Did Not Result" }, { sourceTitle: "ARRIVE", supportQuote: "event rate" },
+      ] },
+    ] })).get("CLM-007")!;
+    const text = claimMatrixSearchText(claim);
+    for (const part of ["clm-007", "mace", "aspree trial", "doi:10.1056/x", "did not result", "arrive", "event rate"]) expect(text).toContain(part);
   });
 });
