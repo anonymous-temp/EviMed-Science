@@ -171,6 +171,16 @@ test("a stopped run is charged what had run when the stop arrived; a failed run,
   // Only the researcher's own work is ever charged: the platform's own, however it ends, is not.
   const platform = await w.finish({ effectiveAgentId: "method-distillation", capabilityId: "method-distillation" }, { costs: [9] });
   assert.equal(platform.result.reason, "platform_work");
+  // It is nothing the researcher asked for, and a statement names a run by its subject: the platform's own work, and a run that
+  // produced nothing to bill, are not on it (an operator's English smoke-test prompt used to read as the researcher's own research).
+  // The reasons that answer 「为什么这次没收费」 for a run they did start stay.
+  const nothing = await w.finish({}, { costs: [] });
+  assert.equal(nothing.result.reason, "no_usage");
+  const statement = (await w.service.statements(w.userId, { limit: 100 })).items;
+  assert.equal(statement.some((item) => item.runId === platform.runId), false, "platform work is not a line");
+  assert.equal(statement.some((item) => item.runId === nothing.runId), false, "a run with no usage is not a line");
+  assert.ok(statement.some((item) => item.runId === stopped.runId), "a charged stop is");
+  assert.equal(statement.filter((item) => item.notChargedCode === "not_delivered").length, 2, "a failure and a timeout still say why they cost nothing");
   // A stop is charged for the run's own calls only: another run's are never its.
   const sibling = `run_${randomUUID()}`;
   await usage.recordSettled({ id: `usage_${randomUUID()}`, userId: w.userId, projectId: w.projectId, runId: sibling, purpose: "kernel", model: "m", priceVersion: "p", currency: "CNY",

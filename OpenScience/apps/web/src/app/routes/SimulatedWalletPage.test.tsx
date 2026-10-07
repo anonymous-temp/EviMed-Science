@@ -23,8 +23,8 @@ const simulated = {
   enabled: true, simulated: true, currency: "CNY", status: "ready", available: 200, held: null, balances: null, membership: null,
   lowThreshold: 20, month: { since: "2026-10-01T00:00:00.000Z", paid: 4, pending: 0 },
   commerce: {
-    rechargeUrl: SIMULATED_WALLET_PAGES.recharge, membershipUrl: SIMULATED_WALLET_PAGES.membership,
-    ordersUrl: SIMULATED_WALLET_PAGES.orders, refundsUrl: SIMULATED_WALLET_PAGES.refunds,
+    rechargeUrl: SIMULATED_WALLET_PAGES.recharge, membershipUrl: null,
+    ordersUrl: SIMULATED_WALLET_PAGES.orders, refundsUrl: null,
   },
 };
 /** …on one that bills research from a real wallet, on one that does not bill at all, and from a control plane older than the simulated wallet. */
@@ -75,8 +75,8 @@ beforeEach(() => {
   mocks.orders.mockResolvedValue({ simulated: true, currency: "CNY", items: [], nextCursor: null });
 });
 
-describe("the simulated wallet's four pages", () => {
-  const PAGES = [["recharge", "模拟充值"], ["membership", "模拟会员"], ["orders", "模拟订单"], ["refunds", "模拟退款"]] as const;
+describe("the simulated wallet's two pages", () => {
+  const PAGES = [["recharge", "模拟充值"], ["orders", "模拟订单"]] as const;
 
   it("are the pages the domain names, and no others", () => {
     expect(Object.keys(SIMULATED_WALLET_PAGES).sort()).toEqual(PAGES.map(([name]) => name).sort());
@@ -94,7 +94,7 @@ describe("the simulated wallet's four pages", () => {
   });
 
   it("follows the way back in place", async () => {
-    open(SIMULATED_WALLET_PAGES.membership);
+    open(SIMULATED_WALLET_PAGES.orders);
     await userEvent.click(await screen.findByRole("link", { name: "返回科研额度" }));
     expect(screen.getByTestId("where")).toHaveTextContent("/app/account?tab=usage");
   });
@@ -107,17 +107,13 @@ describe("the simulated wallet's four pages", () => {
     expect(mocks.allowance).not.toHaveBeenCalled();
   });
 
-  it.each([
-    ["membership", "这里的会员只是演示：没有可以开通的套餐，也不会发放任何会员权益。"],
-    ["refunds", "这里的退款只是演示：不会退回任何额度，也没有资金流动。"],
-  ] as const)("%s says in one paragraph that it is a demonstration, and does nothing", async (name, sentence) => {
-    open(SIMULATED_WALLET_PAGES[name]);
-    expect(await screen.findByText(sentence)).toBeInTheDocument();
-    expect(screen.queryByRole("button")).not.toBeInTheDocument();
-    expect(screen.queryByText(/¥/)).not.toBeInTheDocument();
+  // They were a sentence saying they were a demonstration, with no plan to open and no money to return (2026-10-07 audit).
+  it.each(["membership", "refunds"])("has no %s page: an address from before is not found, and asks the deployment nothing", async (name) => {
+    open(`/app/account/simulated/${name}`);
+    expect(await screen.findByText("页面不存在")).toBeInTheDocument();
+    expect(screen.queryByText(/只是演示/)).not.toBeInTheDocument();
     await settle();
-    expect(mocks.topUp).not.toHaveBeenCalled();
-    expect(mocks.orders).not.toHaveBeenCalled();
+    expect(mocks.allowance).not.toHaveBeenCalled();
   });
 });
 
@@ -127,6 +123,13 @@ describe("模拟充值", () => {
     await screen.findByText("可用科研额度");
     return view;
   };
+
+  it("says what a pressed amount does, under the amounts: booked at once, and a purchase does not expire", async () => {
+    await openRecharge();
+    const line = screen.getByText("点选金额后，模拟额度立即入账；充值额度不会过期。");
+    expect(line.previousElementSibling).toBe(screen.getByRole("region", { name: "充值额度" }).querySelector(".flex-wrap"));
+    expect(mocks.topUp).not.toHaveBeenCalled();
+  });
 
   it("shows the balance, marked, and one button per package of the domain's list", async () => {
     await openRecharge();
@@ -282,7 +285,7 @@ describe("模拟充值", () => {
   // The balance moves, so the page reads it again on opening rather than
   // drawing the one another surface left behind.
   it("reads the balance again when it opens, with a skeleton until it comes", async () => {
-    const first = open(SIMULATED_WALLET_PAGES.membership);
+    const first = open(SIMULATED_WALLET_PAGES.orders);
     await screen.findByText("模拟数据，不涉及真实资金");
     first.unmount();
     expect(mocks.allowance).toHaveBeenCalledTimes(1);
@@ -437,12 +440,11 @@ describe("the pages while the deployment's answer is read", () => {
   });
 
   it("ask nothing again on a page that draws no balance, once the answer is held", async () => {
-    const first = open(SIMULATED_WALLET_PAGES.membership);
+    const first = open(SIMULATED_WALLET_PAGES.orders);
     await screen.findByText("模拟数据，不涉及真实资金");
     first.unmount();
-    const { container } = open(SIMULATED_WALLET_PAGES.refunds);
-    // Drawn at once from the answer held: no skeleton, no second read.
-    expect(container.querySelector(".animate-pulse")).toBeNull();
+    open(SIMULATED_WALLET_PAGES.orders);
+    // Drawn at once from the answer held: the line is there before anything is awaited, and there is no second read.
     expect(screen.getByText("模拟数据，不涉及真实资金")).toBeInTheDocument();
     await settle();
     expect(mocks.allowance).toHaveBeenCalledTimes(1);

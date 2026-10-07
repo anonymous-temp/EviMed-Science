@@ -28,20 +28,22 @@ export const WALLET_CONTRACT_EXACT = 'precision-v1';
  *
  * A simulated wallet exists so the owner can look at the whole allowance
  * experience before a real wallet exists. Nothing here is money, so every
- * amount a surface draws from it carries `SIMULATED_WALLET_LABEL`, and the four
+ * amount a surface draws from it carries `SIMULATED_WALLET_LABEL`, and its
  * commerce destinations are pages of this platform rather than anyone's checkout.
+ * There are two, because there are two things a simulated wallet can do: take a
+ * top-up and list the orders it made. A membership or a refund page would have
+ * nothing behind it — no plan to open, no money to return — and a page that only
+ * says it is a demonstration is a placeholder (2026-10-07 audit), so there is none.
  */
 export const SIMULATED_WALLET_LABEL = '模拟'
 /** What a first read of an account's simulated wallet grants, in whole credits (one credit is one CNY). */
 export const SIMULATED_START_CREDITS = 200
 /** At or below this many whole credits the allowance reads as low. */
 export const SIMULATED_LOW_CREDITS = 20
-/** The simulated recharge, membership, order and refund destinations — routes of the web app. */
+/** The simulated recharge and order destinations — routes of the web app. */
 export const SIMULATED_WALLET_PAGES = Object.freeze({
   recharge: '/app/account/simulated/recharge',
-  membership: '/app/account/simulated/membership',
   orders: '/app/account/simulated/orders',
-  refunds: '/app/account/simulated/refunds',
 })
 /** The only amounts a simulated top-up can be for, in whole credits. A closed list: the request names a package, never a number. */
 export const SIMULATED_TOPUP_PACKAGES = Object.freeze([

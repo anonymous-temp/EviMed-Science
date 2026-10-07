@@ -396,18 +396,25 @@ test("on a live wallet nothing reads the platform wallet's tables: settle, state
   // A settlement reads the usage ledger's table, which in a database of its own nothing else has made yet.
   await migrateUsageLedger(database);
   const client = upstream();
+  /** @type {Record<string, number>} */
+  const costs = {};
   const service = new EvimedCreditsService({ config: { evimedCreditsEnabled: true, evimedCreditsPerCny: 1, researchBillingEnabled: true },
-    database: guarded, client, usageLedger: ledger({}), evimedUserIdOf });
+    database: guarded, client, usageLedger: ledger(costs), evimedUserIdOf });
   await service.ready();
   const accountCreatedAt = (await database.query("SELECT created_at::text AS epoch FROM evimed_control.users WHERE id=$1", [userId])).rows[0].epoch;
   const finish = (/** @type {Record<string, any>} */ run) => service.settleRun({ userId, projectId, dispatchId: null, subject: "A live line", startedAt: new Date().toISOString(),
     accountCreatedAt, capabilityId: "adr-analysis", ...run });
   const completed = `run_${randomUUID()}`;
   const failed = `run_${randomUUID()}`;
+  // A run with nothing to bill is not a line of the statement, so the lines this checks are runs that spent something.
+  costs[completed] = 1.2;
+  costs[failed] = 0.5;
   const first = await finish({ runId: completed, status: "succeeded" });
   assert.notEqual(first.status, "error", JSON.stringify(first));
   assert.notEqual((await finish({ runId: failed, status: "failed" })).status, "error");
-  assert.notEqual((await finish({ runId: `run_${randomUUID()}`, status: "canceled", canceledBy: "user" })).status, "error", "a cancellation is free on a live wallet");
+  const stopped = `run_${randomUUID()}`;
+  costs[stopped] = 0.3;
+  assert.notEqual((await finish({ runId: stopped, status: "canceled", canceledBy: "user" })).status, "error", "a cancellation is free on a live wallet");
   const statements = await service.statements(userId, { limit: 50 });
   assert.ok(statements.items.some((item) => item.id === completed), "the statement reads, ordered by run id, with no wallet table");
   assert.ok(statements.items.length >= 3);

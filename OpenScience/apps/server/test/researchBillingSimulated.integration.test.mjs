@@ -105,8 +105,8 @@ test("a balance from the first read, an estimate, an exact charge from what a ta
   assert.deepEqual([first.balances, first.held], [{ purchased: "0.00000000", gifted: "60.00000000" }, "0.00000000"]);
   assert.deepEqual([first.nextExpiry.amount, Number.isFinite(Date.parse(first.nextExpiry.at))], ["60.00000000", true]);
   assert.deepEqual(first.month, { since: first.month.since, paid: 0, pending: 0 });
-  assert.deepEqual(first.commerce, { rechargeUrl: SIMULATED_WALLET_PAGES.recharge, membershipUrl: SIMULATED_WALLET_PAGES.membership,
-    ordersUrl: SIMULATED_WALLET_PAGES.orders, refundsUrl: SIMULATED_WALLET_PAGES.refunds });
+  assert.deepEqual(first.commerce, { rechargeUrl: SIMULATED_WALLET_PAGES.recharge, membershipUrl: null,
+    ordersUrl: SIMULATED_WALLET_PAGES.orders, refundsUrl: null });
   // The first read granted the sign-up gift, once: reading again changes nothing.
   assert.equal((await f.get("/api/account/allowance", owner)).body.data.available, "60.00000000");
   const opening = (await f.get("/api/account/allowance/statements", owner)).body.data;

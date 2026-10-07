@@ -117,11 +117,12 @@ export const routes: RouteObject[] = [
         { path: "inbox", element: <InboxPage /> },
         { path: "capabilities", element: <CapabilitiesPage /> },
         { path: "account", element: <AccountPage /> },
-        // The simulated wallet's four commerce pages — 模拟充值, 模拟会员, 模拟订单,
-        // 模拟退款 — at the addresses the domain names (`SIMULATED_WALLET_PAGES`),
-        // which is where the control plane's commerce links point on a
-        // deployment whose wallet is simulated. The page answers for itself
-        // where the wallet is not: one sentence, not a 404.
+        // The simulated wallet's two commerce pages — 模拟充值 and 模拟订单 — at the
+        // addresses the domain names (`SIMULATED_WALLET_PAGES`), which is where
+        // the control plane's commerce links point on a deployment whose wallet is
+        // simulated. The page answers for itself where the wallet is not: one
+        // sentence, not a 404. 模拟会员 and 模拟退款 had nothing behind them and
+        // were removed (2026-10-07): their addresses are not found.
         { path: "account/simulated/:page", element: <SimulatedWalletPage /> },
         { path: "extensions", element: <Navigate to="/app/extensions/skills" replace /> },
         // 插件与技能: one element for both tabs and the open item (`skills/:skillId`, `plugins/:extensionId`), so switching tabs keeps what was read.

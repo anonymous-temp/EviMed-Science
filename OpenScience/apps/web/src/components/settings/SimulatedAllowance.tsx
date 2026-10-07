@@ -34,17 +34,22 @@ export function SimulatedDataLine({ className }: { className?: string }) {
 
 /**
  * One amount of an allowance, for the value side of a row. Marked when the
- * wallet behind it is simulated; an amount that is not there is said so —
- * never drawn as zero — and has nothing to mark.
+ * wallet behind it is simulated and nothing above it already says so (`mark`);
+ * an amount that is not there is said so — never drawn as zero — and has nothing to mark.
  *
  * Drawn by the domain's one display rule (`formatCredits`: two decimals, a small
  * amount with its first two significant digits and never as 0.00). What is held is
  * drawn rounded down, so a page never shows more than the account has; pass
  * `rounding="nearest"` for a charge.
  */
-export function AllowanceAmount({ value, simulated, className, rounding = "down", sign = "" }: {
+export function AllowanceAmount({ value, simulated, mark = simulated, className, rounding = "down", sign = "" }: {
   value: WebAmount | null | undefined;
   simulated: boolean;
+  /**
+   * Whether this amount carries the mark itself. A group whose header carries it (「科研额度」, 「充值与订单」, the statement)
+   * says 「模拟」 once, and its amounts do not say it again; an amount that stands alone does, as it always did.
+   */
+  mark?: boolean;
   className?: string;
   rounding?: "down" | "nearest";
   /** "+" for credits going in, "−" for credits going out. */
@@ -52,7 +57,7 @@ export function AllowanceAmount({ value, simulated, className, rounding = "down"
 }) {
   const text = allowanceText(value, rounding);
   return <>
-    {simulated && text && <SimulatedMark />}
+    {mark && text && <SimulatedMark />}
     <span className={cn("tabular-nums", className)}>{text ? `${sign}${text}` : "暂不可用"}</span>
   </>;
 }

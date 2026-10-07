@@ -181,8 +181,8 @@ test("every allowance answer on a simulated deployment says so, and the four com
   assert.equal(data.available, 188);
   assert.equal(data.lowThreshold, SIMULATED_LOW_CREDITS);
   assert.deepEqual(data.month, { since: "2026-09-30T16:00:00.000Z", paid: 12, pending: 0 });
-  assert.deepEqual(data.commerce, { rechargeUrl: SIMULATED_WALLET_PAGES.recharge, membershipUrl: SIMULATED_WALLET_PAGES.membership,
-    ordersUrl: SIMULATED_WALLET_PAGES.orders, refundsUrl: SIMULATED_WALLET_PAGES.refunds });
+  assert.deepEqual(data.commerce, { rechargeUrl: SIMULATED_WALLET_PAGES.recharge, membershipUrl: null,
+    ordersUrl: SIMULATED_WALLET_PAGES.orders, refundsUrl: null });
   const statements = response();
   await routes(request("GET", "/api/account/allowance/statements"), statements);
   assert.equal(statements.json().simulated, true);
@@ -296,14 +296,16 @@ test("without a simulated wallet the routes are a named 404 before a session is 
 
 // ---- the commerce and the release check ------------------------------------------------
 
-test("a simulated deployment's commerce is the platform's own pages, ignores every configured checkout, and is never a real handoff", () => {
+test("a simulated deployment's commerce is the platform's own two pages, ignores every configured checkout, and is never a real handoff", () => {
   const hosted = { researchCommerceEnabled: true, researchCommerceTrustedOrigins: ["https://account.evimed.com"], researchCommerceRechargeUrl: "https://account.evimed.com/recharge" };
   const commerce = createResearchCommerce({ ...hosted, ...config });
-  assert.deepEqual(commerce.links(), { rechargeUrl: "/app/account/simulated/recharge", membershipUrl: "/app/account/simulated/membership",
-    ordersUrl: "/app/account/simulated/orders", refundsUrl: "/app/account/simulated/refunds" });
+  // A top-up and the orders it made are what a simulated wallet does; membership and refunds have nothing behind them, so no link.
+  assert.deepEqual(commerce.links(), { rechargeUrl: "/app/account/simulated/recharge", membershipUrl: null,
+    ordersUrl: "/app/account/simulated/orders", refundsUrl: null });
   const status = commerce.status();
   assert.deepEqual([status.mode, status.simulated, status.walletAuthority], ["simulated", true, "simulated"]);
-  for (const feature of Object.values(status.features)) assert.deepEqual(feature, { status: "simulated", method: "simulated", verified: false });
+  for (const action of ["recharge", "orders"]) assert.deepEqual(status.features[action], { status: "simulated", method: "simulated", verified: false });
+  for (const action of ["membership", "refunds"]) assert.deepEqual(status.features[action], { status: "disabled", method: "simulated", verified: false });
   assert.ok(Object.values(status.upstreamContracts).every((value) => value === "simulated"));
   assert.ok(Object.isFrozen(commerce.links()));
   status.features.recharge.status = "configured";
